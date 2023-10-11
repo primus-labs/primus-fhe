@@ -5,9 +5,9 @@ pub mod algebra;
 pub mod modulo;
 pub mod number_theory;
 
-mod primitive;
-pub mod slice;
+pub mod error;
 
 pub mod constants;
 
-pub(crate) use primitive::BigIntHelperMethods;
+mod primitive;
+pub(crate) use primitive::Widening;

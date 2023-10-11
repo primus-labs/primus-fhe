@@ -19,3 +19,4 @@ pub trait NegModuloAssign<Modulus> {
     /// - `self < modulus`
     fn neg_modulo_assign(&mut self, modulus: Modulus);
 }
+

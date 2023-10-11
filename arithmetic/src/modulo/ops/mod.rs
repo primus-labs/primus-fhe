@@ -1,19 +1,17 @@
 mod add;
-mod add_mul;
-mod dot_product;
-mod inverse;
-mod multiply;
+mod div;
+mod inv;
+mod mul;
 mod neg;
 mod pow;
 mod sub;
 
 pub use add::{FastAddModulo, FastAddModuloAssign};
-// pub use add_mul::{AddMulModulo, AddMulModuloAssign};
-// pub use dot_product::DotProductModulo;
-pub use pow::PowerModulo;
-// pub use inverse::TryInverse;
-pub use multiply::{MulModulo, MulModuloAssign, MulModuloFactor};
+pub use div::{DivModulo, DivModuloAssign};
+pub use inv::{InvModulo, InvModuloAssign, TryInvModulo};
+pub use mul::{MulModulo, MulModuloAssign};
 pub use neg::{NegModulo, NegModuloAssign};
+pub use pow::PowModulo;
 pub use sub::{FastSubModulo, FastSubModuloAssign};
 
 /// The modulo operation.

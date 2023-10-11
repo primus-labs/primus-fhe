@@ -20,19 +20,12 @@
 //! 3. If `r ≥ m` do: `r ← r − m`.
 //! 4. Return(`r`).
 
-// pub mod prelude;
+mod ops;
 
-mod traits;
+mod primitive;
 
-mod modulus;
 mod prime_modulus;
 
-// mod multiply;
-mod pow;
+pub use ops::*;
 
-pub use traits::*;
-
-pub use modulus::Modulus;
 pub use prime_modulus::PrimeModulus;
-
-
