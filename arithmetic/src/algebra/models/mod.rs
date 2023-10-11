@@ -1,4 +1,4 @@
-//! This place defimes some concrete implement of the field.
+//! This place defines some concrete implement of the field.
 
 mod finite_field;
 
