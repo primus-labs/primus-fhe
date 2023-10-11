@@ -5,6 +5,7 @@ use crate::{
     Widening,
 };
 
+/// The trait defines some function for prime number
 pub trait Prime {
     /// Check whether the `modulus`'s value is a prime number through Miller-Rabin primality test algorithm.
     ///

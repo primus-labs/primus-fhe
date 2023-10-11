@@ -1,7 +1,6 @@
 use crate::error::ModuloError;
 use crate::modulo::{
-    FastAddModulo, FastAddModuloAssign, FastSubModulo, FastSubModuloAssign, InvModulo, NegModulo,
-    NegModuloAssign,
+    AddModulo, AddModuloAssign, InvModulo, NegModulo, NegModuloAssign, SubModulo, SubModuloAssign,
 };
 use crate::number_theory::ExtendedGCD;
 
@@ -9,7 +8,7 @@ use super::TryInvModulo;
 
 macro_rules! impl_modulo_ops_for_primitive {
     ($($t:ty),*) => {$(
-        impl FastAddModulo<$t> for $t {
+        impl AddModulo<$t> for $t {
             type Output = $t;
 
             fn add_modulo(self, rhs: Self, modulus: $t) -> Self::Output {
@@ -22,7 +21,7 @@ macro_rules! impl_modulo_ops_for_primitive {
             }
         }
 
-        impl FastAddModuloAssign<$t> for $t {
+        impl AddModuloAssign<$t> for $t {
             fn add_modulo_assign(&mut self, rhs: Self, modulus: $t) {
                 let r = *self + rhs;
                 *self = if r >= modulus {
@@ -33,7 +32,7 @@ macro_rules! impl_modulo_ops_for_primitive {
             }
         }
 
-        impl FastSubModulo<$t> for $t {
+        impl SubModulo<$t> for $t {
             type Output = $t;
 
             fn sub_modulo(self, rhs: Self, modulus: $t) -> Self::Output {
@@ -45,7 +44,7 @@ macro_rules! impl_modulo_ops_for_primitive {
             }
         }
 
-        impl FastSubModuloAssign<$t> for $t {
+        impl SubModuloAssign<$t> for $t {
             fn sub_modulo_assign(&mut self, rhs: Self, modulus: $t) {
                 if *self >= rhs {
                     *self -= rhs;

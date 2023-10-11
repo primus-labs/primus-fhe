@@ -6,7 +6,7 @@ mod ops;
 /// A prime modulus, using barrett reduction algorithm.
 ///
 /// The struct stores the modulus number and some precomputed
-/// data. Here, `b` = T::BITS
+/// data. Here, `b` = 2^T::BITS
 ///
 /// It's efficient if many reductions are performed with a single modulus.
 #[derive(Clone)]
@@ -20,11 +20,13 @@ pub struct PrimeModulus<T> {
 }
 
 impl<T: Copy> PrimeModulus<T> {
+    /// Returns the value of this [`PrimeModulus<T>`].
     #[inline]
     pub fn value(&self) -> T {
         self.value
     }
 
+    /// Returns the ratio of this [`PrimeModulus<T>`].
     #[inline]
     pub fn ratio(&self) -> [T; 2] {
         self.ratio
@@ -32,6 +34,7 @@ impl<T: Copy> PrimeModulus<T> {
 }
 
 impl<T> PrimeModulus<T> {
+    /// Returns the bit count of this [`PrimeModulus<T>`].
     #[inline]
     pub fn bit_count(&self) -> u32 {
         self.bit_count

@@ -6,13 +6,13 @@ mod neg;
 mod pow;
 mod sub;
 
-pub use add::{FastAddModulo, FastAddModuloAssign};
+pub use add::{AddModulo, AddModuloAssign};
 pub use div::{DivModulo, DivModuloAssign};
 pub use inv::{InvModulo, InvModuloAssign, TryInvModulo};
 pub use mul::{MulModulo, MulModuloAssign};
 pub use neg::{NegModulo, NegModuloAssign};
 pub use pow::PowModulo;
-pub use sub::{FastSubModulo, FastSubModuloAssign};
+pub use sub::{SubModulo, SubModuloAssign};
 
 /// The modulo operation.
 pub trait Modulo<Modulus>: Sized {

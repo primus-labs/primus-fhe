@@ -1,8 +1,8 @@
 use std::ops::{Add, Sub};
 
-use crate::modulo::{FastAddModulo, FastAddModuloAssign, PrimeModulus};
+use crate::modulo::{AddModulo, AddModuloAssign, PrimeModulus};
 
-impl<T> FastAddModulo<&PrimeModulus<T>> for T
+impl<T> AddModulo<&PrimeModulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
@@ -18,7 +18,7 @@ where
     }
 }
 
-impl<T> FastAddModuloAssign<&PrimeModulus<T>> for T
+impl<T> AddModuloAssign<&PrimeModulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {

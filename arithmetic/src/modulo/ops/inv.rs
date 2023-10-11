@@ -6,13 +6,13 @@ pub trait InvModulo<Modulus = Self>: Sized {
     fn inv_modulo(self, modulus: Modulus) -> Self;
 }
 
-/// The modular inversion assignment.
+/// The modular inversion assignment for a field.
 pub trait InvModuloAssign<Modulus = Self> {
     /// Calculates `self^(-1) mod modulus`
     fn inv_modulo_assign(&mut self, modulus: Modulus);
 }
 
-/// Try to calculate the inverse element.
+/// Try to calculate the inverse element when there is not a field.
 pub trait TryInvModulo<Modulus = Self>: Sized {
     /// Try to calculate the multiplicative inverse of `self modulo modulus`.
     ///

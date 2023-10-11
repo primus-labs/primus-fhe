@@ -1,5 +1,5 @@
 /// The modular addition.
-pub trait FastAddModulo<Modulus, Rhs = Self> {
+pub trait AddModulo<Modulus, Rhs = Self> {
     type Output;
 
     /// Calculates `self + rhs mod modulus`
@@ -12,7 +12,7 @@ pub trait FastAddModulo<Modulus, Rhs = Self> {
 }
 
 /// The modular addition assignment.
-pub trait FastAddModuloAssign<Modulus, Rhs = Self> {
+pub trait AddModuloAssign<Modulus, Rhs = Self> {
     /// Calculates `self += rhs mod modulus`
     ///
     /// # Correctness

@@ -1,5 +1,5 @@
 /// The modular subtraction.
-pub trait FastSubModulo<Modulus, Rhs = Self> {
+pub trait SubModulo<Modulus, Rhs = Self> {
     type Output;
 
     /// Calculates `self - rhs mod modulus`
@@ -12,7 +12,7 @@ pub trait FastSubModulo<Modulus, Rhs = Self> {
 }
 
 /// The modular subtraction assignment.
-pub trait FastSubModuloAssign<Modulus, Rhs = Self> {
+pub trait SubModuloAssign<Modulus, Rhs = Self> {
     /// Calculates `self -= rhs mod modulus`
     ///
     /// # Correctness

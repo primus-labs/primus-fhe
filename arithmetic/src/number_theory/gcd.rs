@@ -1,10 +1,15 @@
+/// Greatest common divisor and Bézout coefficients
 pub trait ExtendedGCD {
     type SignedT;
 
+    /// Calculates the Greatest Common Divisor (GCD) of the number and `other`. The
+    /// result is always non-negative.
     fn gcd(self, other: Self) -> Self;
 
+    /// Check whether two numbers are coprime.
     fn coprime(self, other: Self) -> bool;
 
+    /// Check whether two numbers are not coprime.
     fn not_coprime(self, other: Self) -> bool;
 
     /// Greatest common divisor and Bézout coefficients.

@@ -1,6 +1,13 @@
 macro_rules! impl_prime_modulus {
     (impl PrimeModulus<$SelfT:ty>; WideType: $WideT:ty) => {
         impl PrimeModulus<$SelfT> {
+            /// Creates a [`PrimeModulus<T>`] instance.
+            ///
+            /// - `value`: The value of the modulus.
+            ///
+            /// # Panics
+            ///
+            #[doc = concat!("The `value`'s `bit_count` should be at most ", stringify!($SelfT::BITS - 1), ", others will panic.")]
             pub const fn new(value: $SelfT) -> Self {
                 const HALF_BITS: u32 = <$SelfT>::BITS >> 1;
                 const HALF: $SelfT = (1 << HALF_BITS) - 1;
@@ -341,7 +348,8 @@ macro_rules! impl_prime_modulus {
                 //   |   q3   |
                 //   +--------+
                 let tmp = (*self as $WideT * ratio[0] as $WideT) >> <$SelfT>::BITS; // tmp1
-                let tmp = ((*self as $WideT * ratio[1] as $WideT + tmp) >> <$SelfT>::BITS) as $SelfT; // q3
+                let tmp =
+                    ((*self as $WideT * ratio[1] as $WideT + tmp) >> <$SelfT>::BITS) as $SelfT; // q3
 
                 // Step 2.
                 *self = self.wrapping_sub(tmp.wrapping_mul(modulus.value())); // r = r1 -r2
