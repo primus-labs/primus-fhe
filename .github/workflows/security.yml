@@ -16,14 +16,10 @@ on:
 permissions: read-all
 
 jobs:
-  audit:
+  security_audit:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/audit@v1
-        name: Audit Rust Dependencies
+      - uses: actions/checkout@v3
+      - uses: rustsec/audit-check@v1.4.1
         with:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
