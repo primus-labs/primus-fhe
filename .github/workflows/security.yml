@@ -7,13 +7,8 @@ on:
     - cron: "0 19 * * 5"
   push:
     paths:
-      # Run if workflow changes
-      - ".github/workflows/security.yml"
-      # Run on changed dependencies
       - "**/Cargo.toml"
       - "**/Cargo.lock"
-
-permissions: read-all
 
 jobs:
   security_audit:
