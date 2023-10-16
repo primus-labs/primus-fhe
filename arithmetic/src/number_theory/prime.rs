@@ -1,7 +1,7 @@
 use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, thread_rng, SeedableRng};
 
 use crate::{
-    modulo::{Modulo, PowModulo, Modulus},
+    modulo::{Modulo, Modulus, PowModulo},
     Widening,
 };
 
