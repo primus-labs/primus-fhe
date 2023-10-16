@@ -16,6 +16,7 @@ pub use sub::{SubModulo, SubModuloAssign};
 
 /// The modulo operation.
 pub trait Modulo<Modulus>: Sized {
+    /// Output type.
     type Output;
 
     /// Caculates `self (mod modulus)`.
