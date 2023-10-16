@@ -8,7 +8,12 @@ use thiserror::Error;
 pub enum ModuloError {
     /// Error that occurs when the given value has no inverse element with the given modulus.
     #[error("Value {value} has no inverse element with the modulus {modulus}!")]
-    NoModuloInverse { value: String, modulus: String },
+    NoModuloInverse {
+        /// The value being inverted.
+        value: String,
+        /// The modulus.
+        modulus: String,
+    },
     /// Error that occurs when user ask to generate a modulus with invalid bit count.
     #[error("The bit count of desired coeff modulus is not valid")]
     BitCountError,

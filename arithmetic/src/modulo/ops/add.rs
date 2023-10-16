@@ -1,5 +1,6 @@
 /// The modular addition.
 pub trait AddModulo<Modulus, Rhs = Self> {
+    /// Output type.
     type Output;
 
     /// Calculates `self + rhs mod modulus`

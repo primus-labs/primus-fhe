@@ -1,5 +1,6 @@
 /// Greatest common divisor and Bézout coefficients
 pub trait ExtendedGCD {
+    /// Signed type for extended GCD.
     type SignedT;
 
     /// Calculates the Greatest Common Divisor (GCD) of the number and `other`. The
