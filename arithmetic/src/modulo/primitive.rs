@@ -57,12 +57,14 @@ macro_rules! impl_modulo_ops_for_primitive {
         impl NegModulo<$t> for $t {
             type Output = $t;
 
+            #[inline]
             fn neg_modulo(self, modulus: $t) -> Self::Output {
                 modulus - self
             }
         }
 
         impl NegModuloAssign<$t> for $t {
+            #[inline]
             fn neg_modulo_assign(&mut self, modulus: $t) {
                 *self = modulus - *self;
             }

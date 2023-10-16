@@ -24,8 +24,8 @@ mod ops;
 
 mod primitive;
 
-mod prime_modulus;
+mod modulus;
 
 pub use ops::*;
 
-pub use prime_modulus::PrimeModulus;
+pub use modulus::Modulus;

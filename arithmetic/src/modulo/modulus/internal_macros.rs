@@ -1,7 +1,7 @@
 macro_rules! impl_prime_modulus {
-    (impl PrimeModulus<$SelfT:ty>; WideType: $WideT:ty) => {
-        impl PrimeModulus<$SelfT> {
-            /// Creates a [`PrimeModulus<T>`] instance.
+    (impl Modulus<$SelfT:ty>; WideType: $WideT:ty) => {
+        impl Modulus<$SelfT> {
+            /// Creates a [`Modulus<T>`] instance.
             ///
             /// - `value`: The value of the modulus.
             ///
@@ -71,7 +71,7 @@ macro_rules! impl_prime_modulus {
                     0 | 1 => panic!("modulus can't be 0 or 1."),
                     _ => {
                         let bit_count = <$SelfT>::BITS - value.leading_zeros();
-                        assert!(bit_count < <$SelfT>::BITS);
+                        assert!(bit_count < <$SelfT>::BITS - 1);
 
                         let (numerator, _) = div_inplace(value);
 
@@ -85,7 +85,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo::Modulo<&PrimeModulus<$SelfT>> for $SelfT {
+        impl crate::modulo::Modulo<&Modulus<$SelfT>> for $SelfT {
             type Output = Self;
 
             /// Caculates `self (mod modulus)`.
@@ -112,7 +112,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn modulo(self, modulus: &PrimeModulus<$SelfT>) -> Self::Output {
+            fn modulo(self, modulus: &Modulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -144,7 +144,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo::Modulo<&PrimeModulus<$SelfT>> for [$SelfT; 2] {
+        impl crate::modulo::Modulo<&Modulus<$SelfT>> for [$SelfT; 2] {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)`.
@@ -171,7 +171,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn modulo(self, modulus: &PrimeModulus<$SelfT>) -> Self::Output {
+            fn modulo(self, modulus: &Modulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -214,7 +214,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo::Modulo<&PrimeModulus<$SelfT>> for ($SelfT, $SelfT) {
+        impl crate::modulo::Modulo<&Modulus<$SelfT>> for ($SelfT, $SelfT) {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)`.
@@ -241,7 +241,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn modulo(self, modulus: &PrimeModulus<$SelfT>) -> Self::Output {
+            fn modulo(self, modulus: &Modulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -284,11 +284,11 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo::Modulo<&PrimeModulus<$SelfT>> for &[$SelfT] {
+        impl crate::modulo::Modulo<&Modulus<$SelfT>> for &[$SelfT] {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)` when value's length > 0.
-            fn modulo(self, modulus: &PrimeModulus<$SelfT>) -> Self::Output {
+            fn modulo(self, modulus: &Modulus<$SelfT>) -> Self::Output {
                 match self {
                     &[] => unreachable!(),
                     &[v] => {
@@ -305,7 +305,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo::ModuloAssign<&PrimeModulus<$SelfT>> for $SelfT {
+        impl crate::modulo::ModuloAssign<&Modulus<$SelfT>> for $SelfT {
             /// Caculates `self (mod modulus)`.
             ///
             /// ## Procedure
@@ -330,7 +330,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn modulo_assign(&mut self, modulus: &PrimeModulus<$SelfT>) {
+            fn modulo_assign(&mut self, modulus: &Modulus<$SelfT>) {
                 let ratio = modulus.ratio();
 
                 // Step 1.

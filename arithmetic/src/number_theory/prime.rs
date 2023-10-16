@@ -1,7 +1,7 @@
 use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, thread_rng, SeedableRng};
 
 use crate::{
-    modulo::{Modulo, PowModulo, PrimeModulus},
+    modulo::{Modulo, PowModulo, Modulus},
     Widening,
 };
 
@@ -16,8 +16,8 @@ pub trait Prime {
 }
 
 macro_rules! impl_prime_check {
-    (impl Prime for PrimeModulus<$SelfT:ty>; PRIME_BIT_MASK = $Mask:expr) => {
-        impl Prime for PrimeModulus<$SelfT> {
+    (impl Prime for Modulus<$SelfT:ty>; PRIME_BIT_MASK = $Mask:expr) => {
+        impl Prime for Modulus<$SelfT> {
             fn probably_prime(&self, rounds: usize) -> bool {
                 /// Records the primes < 64.
                 const PRIME_BIT_MASK: u64 = $Mask;
@@ -91,7 +91,7 @@ macro_rules! impl_prime_check {
     };
 }
 
-impl_prime_check!(impl Prime for PrimeModulus<u64>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for Modulus<u64>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
@@ -111,7 +111,7 @@ impl_prime_check!(impl Prime for PrimeModulus<u64>; PRIME_BIT_MASK = 1 << 2
 | 1 << 61
 );
 
-impl_prime_check!(impl Prime for PrimeModulus<u32>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for Modulus<u32>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
@@ -124,7 +124,7 @@ impl_prime_check!(impl Prime for PrimeModulus<u32>; PRIME_BIT_MASK = 1 << 2
 | 1 << 31
 );
 
-impl_prime_check!(impl Prime for PrimeModulus<u16>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for Modulus<u16>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
@@ -132,8 +132,45 @@ impl_prime_check!(impl Prime for PrimeModulus<u16>; PRIME_BIT_MASK = 1 << 2
 | 1 << 13
 );
 
-impl_prime_check!(impl Prime for PrimeModulus<u8>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for Modulus<u8>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
 );
+
+#[cfg(test)]
+mod tests {
+    use rand::{prelude::*, thread_rng};
+
+    use super::*;
+
+    fn simple_prime_test(modulus: u64) -> bool {
+        let root = (modulus as f64).sqrt().ceil() as u64;
+
+        if modulus.rem_euclid(2) == 0 {
+            return false;
+        }
+        for r in (3..=root).step_by(2) {
+            if modulus.rem_euclid(r) == 0 {
+                return false;
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn test_prime_test() {
+        let mut r = thread_rng();
+        let mut count = 0;
+        for _ in 0..10 {
+            let m = r.gen_range(2..=(u64::MAX >> 2));
+            let modulus = Modulus::<u64>::new(m);
+            let is_prime = modulus.probably_prime(40);
+            assert_eq!(is_prime, simple_prime_test(m));
+            if is_prime {
+                count += 1;
+            }
+        }
+        println!("{count}");
+    }
+}

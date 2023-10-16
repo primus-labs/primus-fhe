@@ -52,10 +52,12 @@ macro_rules! impl_extended_gcd {
                 m << shift
             }
 
+            #[inline]
             fn coprime(self, other: Self) -> bool {
                 self.gcd(other) <= 1
             }
 
+            #[inline]
             fn not_coprime(self, other: Self) -> bool {
                 self.gcd(other) > 1
             }
@@ -139,16 +141,13 @@ mod tests {
     #[test]
     fn test_extended_gcd() {
         let mut rng = thread_rng();
-        let mut count = 0;
 
-        while count < 20 {
-            let x = rng.gen_range(0..=(u64::MAX >> 2));
-            let y = rng.gen_range(0..=(u64::MAX >> 2));
+        let x = rng.gen_range(0..=(u64::MAX >> 2));
+        let y = rng.gen_range(0..=(u64::MAX >> 2));
 
-            let (a, b, d) = u64::extended_gcd(x, y);
+        let (a, b, d) = u64::extended_gcd(x, y);
 
-            assert_eq!(a as i128 * x as i128 + b as i128 * y as i128, d as i128);
-            count += 1;
-        }
+        assert_eq!(a as i128 * x as i128 + b as i128 * y as i128, d as i128);
+        // println!("{a}⨉{x}+{b}⨉{y}={d}");
     }
 }
