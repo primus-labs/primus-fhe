@@ -26,4 +26,4 @@ jobs:
       - uses: actions-rust-lang/audit@v1
         name: Audit Rust Dependencies
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
