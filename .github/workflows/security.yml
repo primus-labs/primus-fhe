@@ -1,32 +1,20 @@
 name: Security audit
 
 on:
-  push:
-    paths:
-      # Run if workflow changes
-      - ".github/workflows/security.yml"
-      # Run on changed dependencies
-      - "**/Cargo.toml"
-      - "**/Cargo.lock"
-  schedule:
-    - cron: "0 19 * * 5"
   # Run manually
   workflow_dispatch:
-
-permissions: read-all
-
-# env:
-#   CARGO_TERM_COLOR: always
+  schedule:
+    - cron: "0 19 * * 5"
+  push:
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
 
 jobs:
-  audit:
+  security_audit:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/audit@v1
-        name: Audit Rust Dependencies
-        # with:
-        #   # Comma separated list of issues to ignore
-        #   ignore: RUSTSEC-2020-0036
+      - uses: actions/checkout@v3
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
