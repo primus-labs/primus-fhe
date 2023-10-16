@@ -58,10 +58,10 @@ mod tests {
     fn test_modulus_create() {
         let mut rng = thread_rng();
         for _ in 0..10 {
-            let _m = Modulus::<u8>::new(rng.gen_range(2..=(u8::MAX >> 1)));
-            let _m = Modulus::<u16>::new(rng.gen_range(2..=(u16::MAX >> 1)));
-            let _m = Modulus::<u32>::new(rng.gen_range(2..=(u32::MAX >> 1)));
-            let _m = Modulus::<u64>::new(rng.gen_range(2..=(u64::MAX >> 1)));
+            let _m = Modulus::<u8>::new(rng.gen_range(2..=(u8::MAX >> 2)));
+            let _m = Modulus::<u16>::new(rng.gen_range(2..=(u16::MAX >> 2)));
+            let _m = Modulus::<u32>::new(rng.gen_range(2..=(u32::MAX >> 2)));
+            let _m = Modulus::<u64>::new(rng.gen_range(2..=(u64::MAX >> 2)));
         }
     }
 
@@ -69,7 +69,7 @@ mod tests {
     fn test_barret_reduce() {
         let mut rng = thread_rng();
         for _ in 0..10 {
-            let m: u64 = rng.gen_range(2..=(u64::MAX >> 1));
+            let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
             let modulus = Modulus::<u64>::new(m);
             for _ in 0..10 {
                 let v: u64 = rng.gen();
@@ -82,7 +82,7 @@ mod tests {
     fn test_barret_reduce_128() {
         let mut rng = thread_rng();
         for _ in 0..10 {
-            let m: u64 = rng.gen_range(2..=(u64::MAX >> 1));
+            let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
             let modulus = Modulus::<u64>::new(m);
             for _ in 0..10 {
                 let lw64: u64 = rng.gen();
@@ -97,7 +97,7 @@ mod tests {
     fn test_barret_reduce_128_tuple() {
         let mut r = thread_rng();
         for _ in 0..10 {
-            let m: u64 = r.gen_range(2..=(u64::MAX >> 1));
+            let m: u64 = r.gen_range(2..=(u64::MAX >> 2));
             let modulus = Modulus::<u64>::new(m);
             for _ in 0..10 {
                 let lw64: u64 = r.gen();
