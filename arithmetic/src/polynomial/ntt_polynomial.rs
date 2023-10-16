@@ -3,7 +3,7 @@ use std::{
     slice::{Iter, IterMut},
 };
 
-use num_traits::Zero;
+use num_traits::{One, Zero};
 
 use crate::algebra::models::{Fp, FpElement};
 
@@ -29,25 +29,52 @@ impl<const N: usize, const P: FpElement> NTTPolynomial<N, P> {
         assert_eq!(data.len(), N);
         Self { data }
     }
+}
 
-    /// Instantiates with provided length,
-    /// all coefficients are 0.
-    pub fn zero() -> Self {
+impl<const N: usize, const P: FpElement> AsRef<[Fp<P>]> for NTTPolynomial<N, P> {
+    fn as_ref(&self) -> &[Fp<P>] {
+        self.data.as_ref()
+    }
+}
+
+impl<const N: usize, const P: FpElement> AsMut<[Fp<P>]> for NTTPolynomial<N, P> {
+    fn as_mut(&mut self) -> &mut [Fp<P>] {
+        self.data.as_mut()
+    }
+}
+
+impl<const N: usize, const P: FpElement> Zero for NTTPolynomial<N, P> {
+    fn zero() -> Self {
         Self {
             data: vec![Zero::zero(); N],
         }
     }
 
-    /// Returns a reference to the poly of this [`NTTPolynomial<N, P>`].
-    #[inline]
-    pub fn data(&self) -> &[Fp<P>] {
-        self.data.as_ref()
+    fn is_zero(&self) -> bool {
+        self.data.iter().all(Zero::is_zero)
     }
 
-    /// Returns a mutable reference to the poly of this [`NTTPolynomial<N, P>`].
-    #[inline]
-    pub fn data_mut(&mut self) -> &mut [Fp<P>] {
-        self.data.as_mut_slice()
+    fn set_zero(&mut self) {
+        self.data = vec![Zero::zero(); N];
+    }
+}
+
+impl<const N: usize, const P: FpElement> One for NTTPolynomial<N, P> {
+    fn one() -> Self {
+        Self {
+            data: vec![One::one(); N],
+        }
+    }
+
+    fn set_one(&mut self) {
+        self.data = vec![One::one(); N];
+    }
+
+    fn is_one(&self) -> bool
+    where
+        Self: PartialEq,
+    {
+        self.data.iter().all(One::is_one)
     }
 }
 

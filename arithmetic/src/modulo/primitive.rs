@@ -74,7 +74,9 @@ macro_rules! impl_modulo_ops_for_primitive {
             fn inv_modulo(self, modulus: Self) -> Self {
                 assert!(self < modulus);
 
-                let (_, inv, _gcd) = Self::extended_gcd(modulus, self);
+                let (_, inv, gcd) = Self::extended_gcd(modulus, self);
+
+                assert_eq!(gcd, 1);
 
                 if inv > 0 {
                     inv as $t

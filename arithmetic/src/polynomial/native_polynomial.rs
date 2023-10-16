@@ -30,30 +30,33 @@ impl<const N: usize, const P: FpElement> Polynomial<N, P> {
         assert_eq!(poly.len(), N);
         Self { data: poly }
     }
+}
 
-    /// Instantiates with provided length,
-    /// all coefficients are 0.
-    pub fn zero() -> Self {
+impl<const N: usize, const P: FpElement> AsRef<[Fp<P>]> for Polynomial<N, P> {
+    fn as_ref(&self) -> &[Fp<P>] {
+        self.data.as_ref()
+    }
+}
+
+impl<const N: usize, const P: FpElement> AsMut<[Fp<P>]> for Polynomial<N, P> {
+    fn as_mut(&mut self) -> &mut [Fp<P>] {
+        self.data.as_mut()
+    }
+}
+
+impl<const N: usize, const P: FpElement> Zero for Polynomial<N, P> {
+    fn zero() -> Self {
         Self {
             data: vec![Zero::zero(); N],
         }
     }
 
-    /// Sets all coefficients of this [`Polynomial<N, P>`] to zero.
-    pub fn set_zero(&mut self) {
-        self.data.fill(Zero::zero());
+    fn is_zero(&self) -> bool {
+        self.data.iter().all(Zero::is_zero)
     }
 
-    /// Returns a reference to the data of this [`Polynomial<N, P>`].
-    #[inline]
-    pub fn data(&self) -> &[Fp<P>] {
-        self.data.as_ref()
-    }
-
-    /// Returns a mutable reference to the data of this [`Polynomial<N, P>`].
-    #[inline]
-    pub fn data_mut(&mut self) -> &mut [Fp<P>] {
-        self.data.as_mut_slice()
+    fn set_zero(&mut self) {
+        self.data = vec![Zero::zero(); N];
     }
 }
 
