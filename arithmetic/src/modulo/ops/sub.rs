@@ -1,5 +1,6 @@
 /// The modular subtraction.
 pub trait SubModulo<Modulus, Rhs = Self> {
+    /// Output type.
     type Output;
 
     /// Calculates `self - rhs mod modulus`

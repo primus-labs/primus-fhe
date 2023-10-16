@@ -1,5 +1,6 @@
 /// The modular division.
 pub trait DivModulo<Modulus, Rhs = Self> {
+    /// Output type.
     type Output;
 
     /// Calculates `self / rhs mod modulus`.

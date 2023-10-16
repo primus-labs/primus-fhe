@@ -1,5 +1,6 @@
 /// The modular multiplication.
 pub trait MulModulo<Modulus, Rhs = Self> {
+    /// Output type.
     type Output;
 
     /// Calculates `self * rhs mod modulus`.
