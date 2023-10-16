@@ -107,18 +107,4 @@ mod tests {
             }
         }
     }
-
-    // #[test]
-    // fn test_barret_reduce_slice() {
-    //     let mut r = thread_rng();
-    //     for _ in 0..10 {
-    //         let value: u64 = r.gen_range(2..=(u64::MAX >> 2));
-    //         let modulus = Modulus::<u64>::new(value);
-    //         for _ in 0..10 {
-    //             let mut x: [u64; 4] = [r.gen(), r.gen(), r.gen(), r.gen()];
-    //             let rem = x.modulo(&modulus);
-    //             assert_eq!(rem, slice_div_value_inplace(&mut x, value));
-    //         }
-    //     }
-    // }
 }
