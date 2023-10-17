@@ -8,8 +8,6 @@ use crate::field::Field;
 use super::Poly;
 
 /// The most basic polynomial, it stores the coefficients of the polynomial.
-///
-/// Due to efficiency, only addition and subtraction are supported, not multiplication.
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct Polynomial<F: Field> {
     data: Vec<F>,

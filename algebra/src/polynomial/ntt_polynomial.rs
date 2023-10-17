@@ -9,8 +9,6 @@ use crate::field::Field;
 use super::Poly;
 
 /// A polynomial in ntt form, it stores the values of the polynomial at some particular points.
-///
-/// It supports addition, subtraction, and multiplication.
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct NTTPolynomial<F: Field> {
     data: Vec<F>,
