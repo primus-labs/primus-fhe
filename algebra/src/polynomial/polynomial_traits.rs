@@ -1,6 +1,6 @@
 use std::slice::{Iter, IterMut};
 
-use crate::algebra::models::{Fp, FpElement};
+use crate::field::prime_fields::{Fp, FpElement};
 
 /// A trait to indicate polynomial in coefficient form,
 /// which can perform `modulo`, `add_modulo` and `sub_modulo`.

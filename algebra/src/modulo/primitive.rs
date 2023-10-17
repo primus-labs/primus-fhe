@@ -2,7 +2,7 @@ use crate::error::ModuloError;
 use crate::modulo::{
     AddModulo, AddModuloAssign, InvModulo, NegModulo, NegModuloAssign, SubModulo, SubModuloAssign,
 };
-use crate::number_theory::ExtendedGCD;
+use crate::utils::ExtendedGCD;
 
 use super::TryInvModulo;
 

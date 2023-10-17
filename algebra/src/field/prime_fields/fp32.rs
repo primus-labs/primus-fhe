@@ -3,11 +3,12 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 use num_traits::{Inv, One, Zero};
 
 use crate::{
+    field::Field,
     modulo::{
         AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, Modulus, MulModulo,
         MulModuloAssign, NegModulo, SubModulo, SubModuloAssign,
     },
-    number_theory::Prime,
+    utils::Prime,
 };
 
 /// The inner element type of [`Fp<P>`].
@@ -48,6 +49,8 @@ impl<const P: FpElement> Fp<P> {
         Self(value)
     }
 }
+
+impl<const P: FpElement> Field for Fp<P> {}
 
 impl<const P: FpElement> From<FpElement> for Fp<P> {
     #[inline]
@@ -181,7 +184,7 @@ impl<const P: FpElement> Inv for Fp<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{algebra::Field, modulo::PowModulo};
+    use crate::{field::Field, modulo::PowModulo};
     use rand::{prelude::*, thread_rng};
 
     #[test]

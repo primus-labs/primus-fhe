@@ -4,7 +4,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 
 use num_traits::{Inv, One, Zero};
 
-pub mod models;
+pub mod prime_fields;
 
 /// A simple math field trait
 pub trait Field:
@@ -29,21 +29,3 @@ pub trait Field:
     }
 }
 
-impl<F> Field for F where
-    F: Sized
-        + PartialEq
-        + PartialOrd
-        + Zero
-        + One
-        + Add<Self, Output = Self>
-        + Sub<Self, Output = Self>
-        + Mul<Self, Output = Self>
-        + Div<Self, Output = Self>
-        + AddAssign
-        + SubAssign
-        + MulAssign
-        + DivAssign
-        + Neg<Output = Self>
-        + Inv<Output = Self>
-{
-}

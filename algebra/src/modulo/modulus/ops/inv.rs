@@ -24,7 +24,7 @@ where
 mod tests {
     use rand::{prelude::*, thread_rng};
 
-    use crate::{modulo::MulModulo, number_theory::Prime};
+    use crate::{modulo::MulModulo, utils::Prime};
 
     use super::*;
 

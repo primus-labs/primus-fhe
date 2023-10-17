@@ -5,7 +5,7 @@ use std::{
 
 use num_traits::Zero;
 
-use crate::algebra::models::{Fp, FpElement};
+use crate::field::prime_fields::{Fp, FpElement};
 
 use super::Poly;
 
