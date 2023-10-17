@@ -308,3 +308,40 @@ impl<F: Field> Neg for Polynomial<F> {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::field::prime_fields::Fp32;
+
+    use super::*;
+
+    #[test]
+    fn test_native_poly() {
+        const P: u32 = 1000000513;
+        type Fp = Fp32<P>;
+        type PolyFp = Polynomial<Fp>;
+
+        let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);
+        let b = PolyFp::new(vec![Fp::new(P - 1), Fp::new(1)]);
+
+        let mul_result = PolyFp::new(vec![Fp::new(0), Fp::new(2)]);
+        assert_eq!(&a * &b, mul_result);
+        assert_eq!(&a * b.clone(), mul_result);
+        assert_eq!(a.clone() * &b, mul_result);
+        assert_eq!(a.clone() * b.clone(), mul_result);
+
+        let add_result = PolyFp::new(vec![Fp::new(0), Fp::new(0)]);
+        assert_eq!(&a + &b, add_result);
+        assert_eq!(&a + b.clone(), add_result);
+        assert_eq!(a.clone() + &b, add_result);
+        assert_eq!(a.clone() + b.clone(), add_result);
+
+        let sub_result = PolyFp::new(vec![Fp::new(2), Fp::new(P - 2)]);
+        assert_eq!(&a - &b, sub_result);
+        assert_eq!(&a - b.clone(), sub_result);
+        assert_eq!(a.clone() - &b, sub_result);
+        assert_eq!(a.clone() - b.clone(), sub_result);
+
+        assert_eq!(-a, b);
+    }
+}
