@@ -24,6 +24,7 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
 {
+    /// Check the field is well-defined or not.
     fn check_field_trait() -> bool {
         true
     }

@@ -1,5 +1,6 @@
 /// The modular exponentiation.
 pub trait PowModulo<Modulus> {
+    /// Exponent type.
     type Exponent;
 
     /// Calcualtes `self^exp (mod modulus)`.

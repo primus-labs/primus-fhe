@@ -1,5 +1,6 @@
 /// The modular negation.
 pub trait NegModulo<Modulus> {
+    /// Output type.
     type Output;
 
     /// Calculates `(-self) mod modulus`
