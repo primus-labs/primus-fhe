@@ -1,188 +1,196 @@
-use std::{
-    ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign},
-    slice::{Iter, IterMut},
-};
+use std::hash::Hash;
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::slice::{Iter, IterMut};
 
-use num_traits::{One, Zero};
+use num_traits::Zero;
 
-use crate::field::prime_fields::{Fp, FpElement};
+use crate::field::Field;
 
 use super::Poly;
 
 /// A polynomial in ntt form, it stores the values of the polynomial at some particular points.
 ///
 /// It supports addition, subtraction, and multiplication.
-#[derive(Clone, Default)]
-pub struct NTTPolynomial<const N: usize, const P: FpElement> {
-    data: Vec<Fp<P>>,
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+pub struct NTTPolynomial<F: Field> {
+    data: Vec<F>,
 }
 
-impl<const N: usize, const P: FpElement> AsRef<NTTPolynomial<N, P>> for NTTPolynomial<N, P> {
-    fn as_ref(&self) -> &NTTPolynomial<N, P> {
-        self
-    }
-}
-
-impl<const N: usize, const P: FpElement> NTTPolynomial<N, P> {
-    /// Creates a new [`NTTPolynomial<N, P>`].
-    pub fn new(data: Vec<Fp<P>>) -> Self {
-        assert_eq!(data.len(), N);
+impl<F: Field> NTTPolynomial<F> {
+    /// Creates a new [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn new(data: Vec<F>) -> Self {
         Self { data }
     }
 }
 
-impl<const N: usize, const P: FpElement> AsRef<[Fp<P>]> for NTTPolynomial<N, P> {
-    fn as_ref(&self) -> &[Fp<P>] {
+impl<F: Field> AsRef<NTTPolynomial<F>> for NTTPolynomial<F> {
+    #[inline]
+    fn as_ref(&self) -> &NTTPolynomial<F> {
+        self
+    }
+}
+
+impl<F: Field> AsRef<[F]> for NTTPolynomial<F> {
+    #[inline]
+    fn as_ref(&self) -> &[F] {
         self.data.as_ref()
     }
 }
 
-impl<const N: usize, const P: FpElement> AsMut<[Fp<P>]> for NTTPolynomial<N, P> {
-    fn as_mut(&mut self) -> &mut [Fp<P>] {
+impl<F: Field> AsMut<[F]> for NTTPolynomial<F> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [F] {
         self.data.as_mut()
     }
 }
 
-impl<const N: usize, const P: FpElement> Zero for NTTPolynomial<N, P> {
+impl<F: Field> Zero for NTTPolynomial<F> {
+    #[inline]
     fn zero() -> Self {
-        Self {
-            data: vec![Zero::zero(); N],
-        }
+        Self { data: Vec::new() }
     }
 
+    #[inline]
     fn is_zero(&self) -> bool {
-        self.data.iter().all(Zero::is_zero)
+        self.data.is_empty() || self.data.iter().all(Zero::is_zero)
     }
 
+    #[inline]
     fn set_zero(&mut self) {
-        self.data = vec![Zero::zero(); N];
+        self.data = Vec::new();
     }
 }
 
-impl<const N: usize, const P: FpElement> One for NTTPolynomial<N, P> {
-    fn one() -> Self {
-        Self {
-            data: vec![One::one(); N],
-        }
-    }
-
-    fn set_one(&mut self) {
-        self.data = vec![One::one(); N];
-    }
-
-    fn is_one(&self) -> bool
-    where
-        Self: PartialEq,
-    {
-        self.data.iter().all(One::is_one)
-    }
-}
-
-impl<const N: usize, const P: FpElement> IntoIterator for NTTPolynomial<N, P> {
-    type Item = Fp<P>;
+impl<F: Field> IntoIterator for NTTPolynomial<F> {
+    type Item = F;
 
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.data.into_iter()
     }
 }
 
-impl<const N: usize, const P: FpElement> Poly<N, P> for NTTPolynomial<N, P> {
+impl<F: Field> Poly<F> for NTTPolynomial<F> {
+    #[inline]
     fn coeff_count(&self) -> usize {
-        N
+        self.data.len()
     }
 
-    fn iter(&self) -> Iter<Fp<P>> {
+    #[inline]
+    fn from_slice(poly: &[F]) -> Self {
+        Self::from_vec(poly.to_vec())
+    }
+
+    #[inline]
+    fn from_vec(poly: Vec<F>) -> Self {
+        Self { data: poly }
+    }
+
+    #[inline]
+    fn iter(&self) -> Iter<F> {
         self.data.iter()
     }
 
-    fn iter_mut(&mut self) -> IterMut<Fp<P>> {
+    #[inline]
+    fn iter_mut(&mut self) -> IterMut<F> {
         self.data.iter_mut()
     }
 }
 
-impl<const N: usize, const P: FpElement> AddAssign<&NTTPolynomial<N, P>> for NTTPolynomial<N, P> {
-    fn add_assign(&mut self, rhs: &NTTPolynomial<N, P>) {
+impl<F: Field> AddAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
+    #[inline]
+    fn add_assign(&mut self, rhs: &NTTPolynomial<F>) {
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l += r);
     }
 }
 
-impl<const N: usize, const P: FpElement> AddAssign for NTTPolynomial<N, P> {
-    fn add_assign(&mut self, rhs: NTTPolynomial<N, P>) {
-        *self += &rhs;
+impl<F: Field> AddAssign for NTTPolynomial<F> {
+    #[inline]
+    fn add_assign(&mut self, rhs: NTTPolynomial<F>) {
+        AddAssign::add_assign(self, &rhs);
     }
 }
 
-impl<const N: usize, const P: FpElement> Add for NTTPolynomial<N, P> {
+impl<F: Field> Add for NTTPolynomial<F> {
     type Output = Self;
 
+    #[inline]
     fn add(mut self, rhs: Self) -> Self::Output {
-        self += rhs;
+        AddAssign::add_assign(&mut self, &rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Add<&NTTPolynomial<N, P>> for NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Add<&NTTPolynomial<F>> for NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn add(mut self, rhs: &NTTPolynomial<N, P>) -> Self::Output {
-        self += rhs;
+    #[inline]
+    fn add(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
+        AddAssign::add_assign(&mut self, rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Add<NTTPolynomial<N, P>> for &NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Add<NTTPolynomial<F>> for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn add(self, mut rhs: NTTPolynomial<N, P>) -> Self::Output {
-        rhs += self;
+    #[inline]
+    fn add(self, mut rhs: NTTPolynomial<F>) -> Self::Output {
+        AddAssign::add_assign(&mut rhs, self);
         rhs
     }
 }
 
-impl<const N: usize, const P: FpElement> Add<&NTTPolynomial<N, P>> for &NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Add<&NTTPolynomial<F>> for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn add(self, rhs: &NTTPolynomial<N, P>) -> Self::Output {
+    #[inline]
+    fn add(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
-        NTTPolynomial::<N, P>::new(poly)
+        NTTPolynomial::<F>::new(poly)
     }
 }
 
-impl<const N: usize, const P: FpElement> SubAssign for NTTPolynomial<N, P> {
-    fn sub_assign(&mut self, rhs: NTTPolynomial<N, P>) {
-        *self -= &rhs;
+impl<F: Field> SubAssign for NTTPolynomial<F> {
+    #[inline]
+    fn sub_assign(&mut self, rhs: NTTPolynomial<F>) {
+        SubAssign::sub_assign(self, &rhs);
     }
 }
-impl<const N: usize, const P: FpElement> SubAssign<&NTTPolynomial<N, P>> for NTTPolynomial<N, P> {
-    fn sub_assign(&mut self, rhs: &NTTPolynomial<N, P>) {
+impl<F: Field> SubAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
+    #[inline]
+    fn sub_assign(&mut self, rhs: &NTTPolynomial<F>) {
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l -= r);
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub for NTTPolynomial<N, P> {
+impl<F: Field> Sub for NTTPolynomial<F> {
     type Output = Self;
 
+    #[inline]
     fn sub(mut self, rhs: Self) -> Self::Output {
-        self -= rhs;
+        SubAssign::sub_assign(&mut self, &rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub<&NTTPolynomial<N, P>> for NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Sub<&NTTPolynomial<F>> for NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn sub(mut self, rhs: &NTTPolynomial<N, P>) -> Self::Output {
-        self -= rhs;
+    #[inline]
+    fn sub(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
+        SubAssign::sub_assign(&mut self, rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub<NTTPolynomial<N, P>> for &NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Sub<NTTPolynomial<F>> for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn sub(self, mut rhs: NTTPolynomial<N, P>) -> Self::Output {
+    fn sub(self, mut rhs: NTTPolynomial<F>) -> Self::Output {
         rhs.iter_mut()
             .zip(self.iter())
             .for_each(|(r, &l)| *r = l - *r);
@@ -191,59 +199,78 @@ impl<const N: usize, const P: FpElement> Sub<NTTPolynomial<N, P>> for &NTTPolyno
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub<&NTTPolynomial<N, P>> for &NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Sub<&NTTPolynomial<F>> for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn sub(self, rhs: &NTTPolynomial<N, P>) -> Self::Output {
+    #[inline]
+    fn sub(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
-        NTTPolynomial::<N, P>::new(poly)
+        NTTPolynomial::<F>::new(poly)
     }
 }
 
-impl<const N: usize, const P: FpElement> MulAssign<&NTTPolynomial<N, P>> for NTTPolynomial<N, P> {
-    fn mul_assign(&mut self, rhs: &NTTPolynomial<N, P>) {
+impl<F: Field> MulAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: &NTTPolynomial<F>) {
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l *= r);
     }
 }
 
-impl<const N: usize, const P: FpElement> MulAssign for NTTPolynomial<N, P> {
+impl<F: Field> MulAssign for NTTPolynomial<F> {
+    #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        *self *= &rhs;
+        MulAssign::mul_assign(self, &rhs);
     }
 }
 
-impl<const N: usize, const P: FpElement> Mul for NTTPolynomial<N, P> {
+impl<F: Field> Mul for NTTPolynomial<F> {
     type Output = Self;
 
+    #[inline]
     fn mul(mut self, rhs: Self) -> Self::Output {
-        self *= rhs;
+        MulAssign::mul_assign(&mut self, &rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Mul<&NTTPolynomial<N, P>> for NTTPolynomial<N, P> {
+impl<F: Field> Mul<&NTTPolynomial<F>> for NTTPolynomial<F> {
     type Output = Self;
 
-    fn mul(mut self, rhs: &NTTPolynomial<N, P>) -> Self::Output {
-        self *= rhs;
+    #[inline]
+    fn mul(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut self, rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Mul<NTTPolynomial<N, P>> for &NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Mul<NTTPolynomial<F>> for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn mul(self, mut rhs: NTTPolynomial<N, P>) -> Self::Output {
-        rhs *= self;
+    #[inline]
+    fn mul(self, mut rhs: NTTPolynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut rhs, self);
         rhs
     }
 }
 
-impl<const N: usize, const P: FpElement> Mul for &NTTPolynomial<N, P> {
-    type Output = NTTPolynomial<N, P>;
+impl<F: Field> Mul for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
 
-    fn mul(self, rhs: &NTTPolynomial<N, P>) -> Self::Output {
+    #[inline]
+    fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l * r).collect();
-        NTTPolynomial::<N, P>::new(poly)
+        NTTPolynomial::<F>::new(poly)
+    }
+}
+
+impl<F: Field> Neg for NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn neg(mut self) -> Self::Output {
+        self.data.iter_mut().for_each(|e| {
+            *e = -*e;
+        });
+        self
     }
 }

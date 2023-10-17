@@ -1,79 +1,77 @@
+use std::fmt::Display;
+use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Zero};
 
-use crate::{
-    field::Field,
-    modulo::{
-        AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, Modulus, MulModulo,
-        MulModuloAssign, NegModulo, SubModulo, SubModuloAssign,
-    },
-    utils::Prime,
+use crate::field::Field;
+use crate::modulo::{
+    AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, Modulus, MulModulo,
+    MulModuloAssign, NegModulo, SubModulo, SubModuloAssign,
 };
+use crate::utils::Prime;
 
-/// The inner element type of [`Fp<P>`].
-pub type FpElement = u32;
-
-/// A finite Field type, whose inner size is defined by [`FpElement`].
+/// A finite Field type, whose inner size is 32bits.
 ///
 /// Now, it's focused on the prime field.
-#[derive(Clone, Copy, Debug)]
-pub struct Fp<const P: FpElement>(FpElement);
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+pub struct Fp32<const P: u32>(u32);
+
+impl<const P: u32> Hash for Fp32<P> {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        P.hash(state);
+    }
+}
+
+impl<const P: u32> Field for Fp32<P> {}
+
+impl<const P: u32> Display for Fp32<P> {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[({})_{}]", self.0, P)
+    }
+}
 
 /// A helper trait to get the modulus of the field.
-pub trait FpModulus<const P: FpElement> {
+pub trait BarrettConfig<const P: u32> {
     /// The modulus of the field.
-    const MODULUS: Modulus<FpElement>;
+    const MODULUS: Modulus<u32>;
 
     /// Get the modulus of the field.
     #[inline]
-    fn modulus() -> Modulus<FpElement> {
+    fn modulus() -> Modulus<u32> {
         Self::MODULUS
     }
 
     /// Check [`Self`] is a prime field.
     #[inline]
     fn is_field() -> bool {
-        P.is_power_of_two() || Self::MODULUS.probably_prime(40)
+        Self::MODULUS.probably_prime(20)
     }
 }
 
-impl<const P: FpElement> FpModulus<P> for Fp<P> {
-    const MODULUS: Modulus<FpElement> = Modulus::<FpElement>::new(P);
+impl<const P: u32> BarrettConfig<P> for Fp32<P> {
+    const MODULUS: Modulus<u32> = Modulus::<u32>::new(P);
 }
 
-impl<const P: FpElement> Fp<P> {
+impl<const P: u32> Fp32<P> {
     /// Creates a new [`Fp<P>`].
     #[inline]
-    pub fn new(value: FpElement) -> Self {
+    pub fn new(value: u32) -> Self {
         Self(value)
     }
 }
 
-impl<const P: FpElement> Field for Fp<P> {}
-
-impl<const P: FpElement> From<FpElement> for Fp<P> {
+impl<const P: u32> From<u32> for Fp32<P> {
     #[inline]
-    fn from(value: FpElement) -> Self {
+    fn from(value: u32) -> Self {
         Self(value)
     }
 }
 
-impl<const P: FpElement> PartialEq for Fp<P> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl<const P: FpElement> PartialOrd for Fp<P> {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl<const P: FpElement> Zero for Fp<P> {
+impl<const P: u32> Zero for Fp32<P> {
     #[inline]
     fn zero() -> Self {
         Self(Zero::zero())
@@ -85,14 +83,14 @@ impl<const P: FpElement> Zero for Fp<P> {
     }
 }
 
-impl<const P: FpElement> One for Fp<P> {
+impl<const P: u32> One for Fp32<P> {
     #[inline]
     fn one() -> Self {
         Self(One::one())
     }
 }
 
-impl<const P: FpElement> Add<Self> for Fp<P> {
+impl<const P: u32> Add<Self> for Fp32<P> {
     type Output = Self;
 
     #[inline]
@@ -101,14 +99,30 @@ impl<const P: FpElement> Add<Self> for Fp<P> {
     }
 }
 
-impl<const P: FpElement> AddAssign<Self> for Fp<P> {
+impl<const P: u32> Add<&Self> for Fp32<P> {
+    type Output = Self;
+
+    #[inline]
+    fn add(self, rhs: &Self) -> Self::Output {
+        Self(self.0.add_modulo(rhs.0, P))
+    }
+}
+
+impl<const P: u32> AddAssign<Self> for Fp32<P> {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.0.add_modulo_assign(rhs.0, P)
     }
 }
 
-impl<const P: FpElement> Sub<Self> for Fp<P> {
+impl<const P: u32> AddAssign<&Self> for Fp32<P> {
+    #[inline]
+    fn add_assign(&mut self, rhs: &Self) {
+        self.0.add_modulo_assign(rhs.0, P)
+    }
+}
+
+impl<const P: u32> Sub<Self> for Fp32<P> {
     type Output = Self;
 
     #[inline]
@@ -117,53 +131,110 @@ impl<const P: FpElement> Sub<Self> for Fp<P> {
     }
 }
 
-impl<const P: FpElement> SubAssign<Self> for Fp<P> {
+impl<const P: u32> Sub<&Self> for Fp32<P> {
+    type Output = Self;
+
+    #[inline]
+    fn sub(self, rhs: &Self) -> Self::Output {
+        Self(self.0.sub_modulo(rhs.0, P))
+    }
+}
+
+impl<const P: u32> SubAssign<Self> for Fp32<P> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         self.0.sub_modulo_assign(rhs.0, P)
     }
 }
 
-impl<const P: FpElement> Mul<Self> for Fp<P> {
+impl<const P: u32> SubAssign<&Self> for Fp32<P> {
+    #[inline]
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.0.sub_modulo_assign(rhs.0, P)
+    }
+}
+
+impl<const P: u32> Mul<Self> for Fp32<P> {
     type Output = Self;
 
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         Self(
             self.0
-                .mul_modulo(rhs.0, &<Fp<P> as FpModulus<P>>::modulus()),
+                .mul_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
         )
     }
 }
-impl<const P: FpElement> MulAssign<Self> for Fp<P> {
+
+impl<const P: u32> Mul<&Self> for Fp32<P> {
+    type Output = Self;
+
     #[inline]
-    fn mul_assign(&mut self, rhs: Self) {
-        self.0
-            .mul_modulo_assign(rhs.0, &<Fp<P> as FpModulus<P>>::modulus())
+    fn mul(self, rhs: &Self) -> Self::Output {
+        Self(
+            self.0
+                .mul_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
+        )
     }
 }
 
-impl<const P: FpElement> Div<Self> for Fp<P> {
+impl<const P: u32> MulAssign<Self> for Fp32<P> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        self.0
+            .mul_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus())
+    }
+}
+
+impl<const P: u32> MulAssign<&Self> for Fp32<P> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: &Self) {
+        self.0
+            .mul_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus())
+    }
+}
+
+impl<const P: u32> Div<Self> for Fp32<P> {
     type Output = Self;
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
         Self(
             self.0
-                .div_modulo(rhs.0, &<Fp<P> as FpModulus<P>>::modulus()),
+                .div_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
         )
     }
 }
 
-impl<const P: FpElement> DivAssign<Self> for Fp<P> {
+impl<const P: u32> Div<&Self> for Fp32<P> {
+    type Output = Self;
+
     #[inline]
-    fn div_assign(&mut self, rhs: Self) {
-        self.0
-            .div_modulo_assign(rhs.0, &<Fp<P> as FpModulus<P>>::modulus());
+    fn div(self, rhs: &Self) -> Self::Output {
+        Self(
+            self.0
+                .div_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
+        )
     }
 }
 
-impl<const P: FpElement> Neg for Fp<P> {
+impl<const P: u32> DivAssign<Self> for Fp32<P> {
+    #[inline]
+    fn div_assign(&mut self, rhs: Self) {
+        self.0
+            .div_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus());
+    }
+}
+
+impl<const P: u32> DivAssign<&Self> for Fp32<P> {
+    #[inline]
+    fn div_assign(&mut self, rhs: &Self) {
+        self.0
+            .div_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus());
+    }
+}
+
+impl<const P: u32> Neg for Fp32<P> {
     type Output = Self;
 
     #[inline]
@@ -172,7 +243,7 @@ impl<const P: FpElement> Neg for Fp<P> {
     }
 }
 
-impl<const P: FpElement> Inv for Fp<P> {
+impl<const P: u32> Inv for Fp32<P> {
     type Output = Self;
 
     #[inline]
@@ -184,17 +255,15 @@ impl<const P: FpElement> Inv for Fp<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{field::Field, modulo::PowModulo};
+    use crate::modulo::PowModulo;
     use rand::{prelude::*, thread_rng};
 
     #[test]
     fn test_fp_basic() {
-        type F6 = Fp<6>;
-        assert!(F6::check_field_trait());
+        type F6 = Fp32<6>;
         assert!(!F6::is_field());
 
-        type F5 = Fp<5>;
-        assert!(F5::check_field_trait());
+        type F5 = Fp32<5>;
         assert!(F5::is_field());
         assert_eq!(F5::from(4) + F5::from(3), F5::from(2));
         assert_eq!(F5::from(4) * F5::from(3), F5::from(2));
@@ -211,8 +280,7 @@ mod tests {
         let distr = rand::distributions::Uniform::new_inclusive(0, P);
         let mut rng = thread_rng();
 
-        type FF = Fp<P>;
-        assert!(FF::check_field_trait());
+        type FF = Fp32<P>;
         assert!(FF::is_field());
 
         // add
@@ -275,7 +343,7 @@ mod tests {
         for _ in 0..100 {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
-            let b_inv = b.pow_modulo(P - 2, &Modulus::<FpElement>::new(P));
+            let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
             let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
             assert_eq!(FF::from(a) / FF::from(b), FF::from(c));
         }
@@ -284,7 +352,7 @@ mod tests {
         for _ in 0..100 {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
-            let b_inv = b.pow_modulo(P - 2, &Modulus::<FpElement>::new(P));
+            let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
             let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
 
             let mut a = FF::from(a);
@@ -303,7 +371,7 @@ mod tests {
         // inv
         for _ in 0..100 {
             let a = rng.sample(distr);
-            let a_inv = a.pow_modulo(P - 2, &Modulus::<FpElement>::new(P));
+            let a_inv = a.pow_modulo(P - 2, &Modulus::<u32>::new(P));
 
             assert_eq!(FF::from(a).inv(), FF::from(a_inv));
             assert_eq!(FF::from(a) * FF::from(a_inv), One::one());

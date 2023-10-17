@@ -1,170 +1,195 @@
-use std::{
-    ops::{Add, AddAssign, Sub, SubAssign},
-    slice::{Iter, IterMut},
-};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::prime_fields::{Fp, FpElement};
+use crate::field::Field;
 
 use super::Poly;
 
 /// The most basic polynomial, it stores the coefficients of the polynomial.
 ///
 /// Due to efficiency, only addition and subtraction are supported, not multiplication.
-#[derive(Clone, Default)]
-pub struct Polynomial<const N: usize, const P: FpElement> {
-    data: Vec<Fp<P>>,
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+pub struct Polynomial<F: Field> {
+    data: Vec<F>,
 }
 
-impl<const N: usize, const P: FpElement> AsRef<Polynomial<N, P>> for Polynomial<N, P> {
+impl<F: Field> Polynomial<F> {
+    /// Creates a new [`Polynomial<F>`].
     #[inline]
-    fn as_ref(&self) -> &Polynomial<N, P> {
-        self
-    }
-}
-
-impl<const N: usize, const P: FpElement> Polynomial<N, P> {
-    /// Creates a new [`Polynomial<N, P>`].
-    pub fn new(poly: Vec<Fp<P>>) -> Self {
-        assert_eq!(poly.len(), N);
+    pub fn new(poly: Vec<F>) -> Self {
         Self { data: poly }
     }
 }
 
-impl<const N: usize, const P: FpElement> AsRef<[Fp<P>]> for Polynomial<N, P> {
-    fn as_ref(&self) -> &[Fp<P>] {
+impl<F: Field> AsRef<Polynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn as_ref(&self) -> &Polynomial<F> {
+        self
+    }
+}
+
+impl<F: Field> AsRef<[F]> for Polynomial<F> {
+    #[inline]
+    fn as_ref(&self) -> &[F] {
         self.data.as_ref()
     }
 }
 
-impl<const N: usize, const P: FpElement> AsMut<[Fp<P>]> for Polynomial<N, P> {
-    fn as_mut(&mut self) -> &mut [Fp<P>] {
+impl<F: Field> AsMut<[F]> for Polynomial<F> {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [F] {
         self.data.as_mut()
     }
 }
 
-impl<const N: usize, const P: FpElement> Zero for Polynomial<N, P> {
+impl<F: Field> Zero for Polynomial<F> {
+    #[inline]
     fn zero() -> Self {
-        Self {
-            data: vec![Zero::zero(); N],
-        }
+        Self { data: Vec::new() }
     }
 
+    #[inline]
     fn is_zero(&self) -> bool {
-        self.data.iter().all(Zero::is_zero)
+        self.data.is_empty() || self.data.iter().all(Zero::is_zero)
     }
 
+    #[inline]
     fn set_zero(&mut self) {
-        self.data = vec![Zero::zero(); N];
+        self.data = Vec::new();
     }
 }
 
-impl<const N: usize, const P: FpElement> IntoIterator for Polynomial<N, P> {
-    type Item = Fp<P>;
+impl<F: Field> IntoIterator for Polynomial<F> {
+    type Item = F;
 
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.data.into_iter()
     }
 }
 
-impl<const N: usize, const P: FpElement> Poly<N, P> for Polynomial<N, P> {
+impl<F: Field> Poly<F> for Polynomial<F> {
+    #[inline]
     fn coeff_count(&self) -> usize {
-        N
+        self.data.len()
     }
 
-    fn iter(&self) -> Iter<Fp<P>> {
+    #[inline]
+    fn from_slice(poly: &[F]) -> Self {
+        Self::from_vec(poly.to_vec())
+    }
+
+    #[inline]
+    fn from_vec(poly: Vec<F>) -> Self {
+        Self { data: poly }
+    }
+
+    #[inline]
+    fn iter(&self) -> Iter<F> {
         self.data.iter()
     }
 
-    fn iter_mut(&mut self) -> IterMut<Fp<P>> {
+    #[inline]
+    fn iter_mut(&mut self) -> IterMut<F> {
         self.data.iter_mut()
     }
 }
 
-impl<const N: usize, const P: FpElement> AddAssign<&Polynomial<N, P>> for Polynomial<N, P> {
-    fn add_assign(&mut self, rhs: &Polynomial<N, P>) {
+impl<F: Field> AddAssign<&Polynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn add_assign(&mut self, rhs: &Polynomial<F>) {
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l += r);
     }
 }
 
-impl<const N: usize, const P: FpElement> AddAssign for Polynomial<N, P> {
-    fn add_assign(&mut self, rhs: Polynomial<N, P>) {
-        *self += &rhs;
+impl<F: Field> AddAssign for Polynomial<F> {
+    #[inline]
+    fn add_assign(&mut self, rhs: Polynomial<F>) {
+        AddAssign::add_assign(self, &rhs)
     }
 }
 
-impl<const N: usize, const P: FpElement> Add for Polynomial<N, P> {
+impl<F: Field> Add for Polynomial<F> {
     type Output = Self;
 
+    #[inline]
     fn add(mut self, rhs: Self) -> Self::Output {
-        self += rhs;
+        AddAssign::add_assign(&mut self, &rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Add<&Polynomial<N, P>> for Polynomial<N, P> {
-    type Output = Polynomial<N, P>;
+impl<F: Field> Add<&Polynomial<F>> for Polynomial<F> {
+    type Output = Polynomial<F>;
 
-    fn add(mut self, rhs: &Polynomial<N, P>) -> Self::Output {
-        self += rhs;
+    #[inline]
+    fn add(mut self, rhs: &Polynomial<F>) -> Self::Output {
+        AddAssign::add_assign(&mut self, rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Add<Polynomial<N, P>> for &Polynomial<N, P> {
-    type Output = Polynomial<N, P>;
+impl<F: Field> Add<Polynomial<F>> for &Polynomial<F> {
+    type Output = Polynomial<F>;
 
-    fn add(self, mut rhs: Polynomial<N, P>) -> Self::Output {
-        rhs += self;
+    #[inline]
+    fn add(self, mut rhs: Polynomial<F>) -> Self::Output {
+        AddAssign::add_assign(&mut rhs, self);
         rhs
     }
 }
 
-impl<const N: usize, const P: FpElement> Add<&Polynomial<N, P>> for &Polynomial<N, P> {
-    type Output = Polynomial<N, P>;
+impl<F: Field> Add<&Polynomial<F>> for &Polynomial<F> {
+    type Output = Polynomial<F>;
 
-    fn add(self, rhs: &Polynomial<N, P>) -> Self::Output {
+    #[inline]
+    fn add(self, rhs: &Polynomial<F>) -> Self::Output {
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
-        Polynomial::<N, P>::new(poly)
+        Polynomial::<F>::new(poly)
     }
 }
 
-impl<const N: usize, const P: FpElement> SubAssign for Polynomial<N, P> {
-    fn sub_assign(&mut self, rhs: Polynomial<N, P>) {
-        *self -= &rhs;
+impl<F: Field> SubAssign for Polynomial<F> {
+    #[inline]
+    fn sub_assign(&mut self, rhs: Polynomial<F>) {
+        SubAssign::sub_assign(self, &rhs);
     }
 }
-impl<const N: usize, const P: FpElement> SubAssign<&Polynomial<N, P>> for Polynomial<N, P> {
-    fn sub_assign(&mut self, rhs: &Polynomial<N, P>) {
+impl<F: Field> SubAssign<&Polynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn sub_assign(&mut self, rhs: &Polynomial<F>) {
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l -= r);
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub for Polynomial<N, P> {
+impl<F: Field> Sub for Polynomial<F> {
     type Output = Self;
 
+    #[inline]
     fn sub(mut self, rhs: Self) -> Self::Output {
-        self -= rhs;
+        SubAssign::sub_assign(&mut self, &rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub<&Polynomial<N, P>> for Polynomial<N, P> {
-    type Output = Polynomial<N, P>;
+impl<F: Field> Sub<&Polynomial<F>> for Polynomial<F> {
+    type Output = Polynomial<F>;
 
-    fn sub(mut self, rhs: &Polynomial<N, P>) -> Self::Output {
-        self -= rhs;
+    #[inline]
+    fn sub(mut self, rhs: &Polynomial<F>) -> Self::Output {
+        SubAssign::sub_assign(&mut self, rhs);
         self
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub<Polynomial<N, P>> for &Polynomial<N, P> {
-    type Output = Polynomial<N, P>;
+impl<F: Field> Sub<Polynomial<F>> for &Polynomial<F> {
+    type Output = Polynomial<F>;
 
-    fn sub(self, mut rhs: Polynomial<N, P>) -> Self::Output {
+    fn sub(self, mut rhs: Polynomial<F>) -> Self::Output {
         rhs.iter_mut()
             .zip(self.iter())
             .for_each(|(r, &l)| *r = l - *r);
@@ -173,11 +198,76 @@ impl<const N: usize, const P: FpElement> Sub<Polynomial<N, P>> for &Polynomial<N
     }
 }
 
-impl<const N: usize, const P: FpElement> Sub<&Polynomial<N, P>> for &Polynomial<N, P> {
-    type Output = Polynomial<N, P>;
+impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
+    type Output = Polynomial<F>;
 
-    fn sub(self, rhs: &Polynomial<N, P>) -> Self::Output {
+    #[inline]
+    fn sub(self, rhs: &Polynomial<F>) -> Self::Output {
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
-        Polynomial::<N, P>::new(poly)
+        Polynomial::<F>::new(poly)
+    }
+}
+
+impl<F: Field> MulAssign<&Polynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, _rhs: &Polynomial<F>) {
+        todo!()
+    }
+}
+
+impl<F: Field> MulAssign<Polynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Polynomial<F>) {
+        MulAssign::mul_assign(self, &rhs);
+    }
+}
+
+impl<F: Field> Mul<Polynomial<F>> for Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn mul(mut self, rhs: Polynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut self, &rhs);
+        self
+    }
+}
+
+impl<F: Field> Mul<&Polynomial<F>> for Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn mul(mut self, rhs: &Polynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut self, rhs);
+        self
+    }
+}
+
+impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn mul(self, mut rhs: Polynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut rhs, self);
+        rhs
+    }
+}
+
+impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    fn mul(self, _rhs: &Polynomial<F>) -> Self::Output {
+        todo!()
+    }
+}
+
+impl<F: Field> Neg for Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn neg(mut self) -> Self::Output {
+        self.data.iter_mut().for_each(|e| {
+            *e = -*e;
+        });
+        self
     }
 }

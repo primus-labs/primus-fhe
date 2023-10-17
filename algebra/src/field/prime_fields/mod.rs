@@ -2,4 +2,4 @@
 
 mod fp32;
 
-pub use fp32::{Fp, FpElement, FpModulus};
+pub use fp32::{BarrettConfig, Fp32};

@@ -1,3 +1,5 @@
+//! Definition and implementation of polynomials.
+
 mod polynomial_traits;
 
 mod native_polynomial;
