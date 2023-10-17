@@ -57,7 +57,7 @@ impl<const P: u32> BarrettConfig<P> for Fp32<P> {
 }
 
 impl<const P: u32> Fp32<P> {
-    /// Creates a new [`Fp<P>`].
+    /// Creates a new \[`Fp32<P>`\].
     #[inline]
     pub fn new(value: u32) -> Self {
         Self(value)
