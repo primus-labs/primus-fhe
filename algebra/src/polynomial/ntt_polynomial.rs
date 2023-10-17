@@ -104,6 +104,21 @@ impl<F: Field> Poly<F> for NTTPolynomial<F> {
     fn iter_mut(&mut self) -> IterMut<F> {
         self.data.iter_mut()
     }
+
+    #[inline]
+    fn alter_degree(&mut self, new_degree: usize, value: F) {
+        self.data.resize(new_degree, value);
+        self.degree = new_degree;
+    }
+
+    #[inline]
+    fn alter_degree_with<FN>(&mut self, new_degree: usize, f: FN)
+    where
+        FN: FnMut() -> F,
+    {
+        self.data.resize_with(new_degree, f);
+        self.degree = new_degree;
+    }
 }
 
 impl<F: Field> AddAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
