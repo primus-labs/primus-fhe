@@ -230,15 +230,14 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
 impl<F: Field> MulAssign<&Polynomial<F>> for Polynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Polynomial<F>) {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
-        todo!()
+        *self = Mul::mul(&*self, rhs)
     }
 }
 
 impl<F: Field> MulAssign<Polynomial<F>> for Polynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: Polynomial<F>) {
-        MulAssign::mul_assign(self, &rhs);
+        *self = Mul::mul(&*self, &rhs)
     }
 }
 
@@ -246,9 +245,8 @@ impl<F: Field> Mul<Polynomial<F>> for Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
-    fn mul(mut self, rhs: Polynomial<F>) -> Self::Output {
-        MulAssign::mul_assign(&mut self, &rhs);
-        self
+    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+        Mul::mul(&self, &rhs)
     }
 }
 
@@ -256,9 +254,8 @@ impl<F: Field> Mul<&Polynomial<F>> for Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
-    fn mul(mut self, rhs: &Polynomial<F>) -> Self::Output {
-        MulAssign::mul_assign(&mut self, rhs);
-        self
+    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+        Mul::mul(&self, rhs)
     }
 }
 
@@ -266,9 +263,8 @@ impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
-    fn mul(self, mut rhs: Polynomial<F>) -> Self::Output {
-        MulAssign::mul_assign(&mut rhs, self);
-        rhs
+    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+        Mul::mul(self, &rhs)
     }
 }
 
@@ -277,7 +273,27 @@ impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
 
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
-        todo!()
+        let coeff_count = self.coeff_count();
+
+        let mut result = vec![F::zero(); coeff_count];
+        let poly1: &[F] = self.as_ref();
+        let poly2: &[F] = rhs.as_ref();
+
+        for i in 0..coeff_count {
+            for j in 0..=i {
+                result[i] += poly1[j] * poly2[i - j];
+            }
+        }
+
+        // mod (x^n + 1)
+        for i in coeff_count..coeff_count * 2 - 1 {
+            let k = i - coeff_count;
+            for j in i - coeff_count + 1..coeff_count {
+                result[k] -= poly1[j] * poly2[i - j]
+            }
+        }
+
+        Polynomial::<F>::new(result)
     }
 }
 
