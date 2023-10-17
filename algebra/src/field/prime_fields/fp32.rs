@@ -2,12 +2,12 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use num_traits::{Inv, One, Zero};
+use num_traits::{Inv, One, Pow, Zero};
 
 use crate::field::Field;
 use crate::modulo::{
     AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, Modulus, MulModulo,
-    MulModuloAssign, NegModulo, SubModulo, SubModuloAssign,
+    MulModuloAssign, NegModulo, PowModulo, SubModulo, SubModuloAssign,
 };
 use crate::utils::Prime;
 
@@ -249,6 +249,17 @@ impl<const P: u32> Inv for Fp32<P> {
     #[inline]
     fn inv(self) -> Self::Output {
         Self(self.0.inv_modulo(P))
+    }
+}
+
+impl<const P: u32> Pow<u32> for Fp32<P> {
+    type Output = Self;
+
+    fn pow(self, rhs: u32) -> Self::Output {
+        Self(
+            self.0
+                .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),
+        )
     }
 }
 

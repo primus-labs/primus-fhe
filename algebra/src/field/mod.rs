@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use num_traits::{Inv, One, Zero};
+use num_traits::{Inv, One, Pow, Zero};
 
 pub mod prime_fields;
 
@@ -41,6 +41,7 @@ pub trait Field:
     + for<'a> DivAssign<&'a Self>
     + Neg<Output = Self>
     + Inv<Output = Self>
+    + Pow<u32, Output = Self>
 {
     /// Returns `self + self`.
     #[inline]
@@ -95,5 +96,9 @@ pub trait Field:
             *self = self.inv();
             Some(self)
         }
+    }
+    /// Returns `self ^ exp`
+    fn pow(&self, exp: u32) -> Self {
+        Pow::pow(*self, exp)
     }
 }

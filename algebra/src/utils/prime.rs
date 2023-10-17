@@ -56,7 +56,7 @@ macro_rules! impl_prime_check {
 
                 let value_sub_one: $SelfT = value - 1;
                 let r: $SelfT = value_sub_one.trailing_zeros() as $SelfT;
-                let q = value_sub_one >> r;
+                let q = (value_sub_one >> r) as u32;
 
                 let distribution: Uniform<$SelfT> = Uniform::from(3..=value_sub_one);
                 let mut rng = StdRng::from_rng(thread_rng()).unwrap();

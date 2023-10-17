@@ -1,20 +1,12 @@
-use std::ops::{BitAnd, ShrAssign};
-
 use num_traits::{One, Zero};
 
 use crate::modulo::{Modulus, MulModulo, PowModulo};
 
 impl<T> PowModulo<&Modulus<T>> for T
 where
-    T: Copy
-        + Zero
-        + One
-        + PartialOrd
-        + BitAnd<Output = Self>
-        + ShrAssign<u32>
-        + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
+    T: Copy + One + PartialOrd + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
 {
-    type Exponent = Self;
+    type Exponent = u32;
 
     fn pow_modulo(self, mut exp: Self::Exponent, modulus: &Modulus<T>) -> Self {
         if exp.is_zero() {
@@ -30,7 +22,7 @@ where
         let mut power: Self = self;
         let mut intermediate: Self = Self::one();
         loop {
-            if !(exp & Self::one()).is_zero() {
+            if !(exp & u32::one()).is_zero() {
                 intermediate = intermediate.mul_modulo(power, modulus);
             }
             exp >>= 1;
