@@ -46,11 +46,11 @@ pub trait Poly<F: Field>:
     /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
     fn iter_mut(&mut self) -> IterMut<F>;
 
-    /// Alter the degree of the polynomial.
-    fn alter_degree(&mut self, new_degree: usize, value: F);
+    /// Alter the coefficient count of the polynomial.
+    fn resize(&mut self, new_degree: usize, value: F);
 
-    /// Alter the degree of the polynomial.
-    fn alter_degree_with<FN>(&mut self, new_degree: usize, f: FN)
+    /// Alter the coefficient count of the polynomial.
+    fn resize_with<FN>(&mut self, new_degree: usize, f: FN)
     where
         FN: FnMut() -> F;
 }
