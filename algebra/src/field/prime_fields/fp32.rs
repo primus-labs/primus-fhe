@@ -258,7 +258,7 @@ impl<const P: u32> Pow<u32> for Fp32<P> {
     fn pow(self, rhs: u32) -> Self::Output {
         Self(
             self.0
-                .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),
+                .pow_modulo(rhs as u64, &<Fp32<P> as BarrettConfig<P>>::modulus()),
         )
     }
 }
@@ -356,7 +356,7 @@ mod tests {
         for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
-            let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
+            let b_inv = b.pow_modulo(P as u64 - 2, &Modulus::<u32>::new(P));
             let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
             assert_eq!(FF::from(a) / FF::from(b), FF::from(c));
         }
@@ -365,7 +365,7 @@ mod tests {
         for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
-            let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
+            let b_inv = b.pow_modulo(P as u64 - 2, &Modulus::<u32>::new(P));
             let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
 
             let mut a = FF::from(a);
@@ -384,7 +384,7 @@ mod tests {
         // inv
         for _ in 0..round {
             let a = rng.sample(distr);
-            let a_inv = a.pow_modulo(P - 2, &Modulus::<u32>::new(P));
+            let a_inv = a.pow_modulo(P as u64 - 2, &Modulus::<u32>::new(P));
 
             assert_eq!(FF::from(a).inv(), FF::from(a_inv));
             assert_eq!(FF::from(a) * FF::from(a_inv), One::one());

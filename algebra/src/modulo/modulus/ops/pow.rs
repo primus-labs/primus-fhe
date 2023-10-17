@@ -6,7 +6,7 @@ impl<T> PowModulo<&Modulus<T>> for T
 where
     T: Copy + One + PartialOrd + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
 {
-    type Exponent = u32;
+    type Exponent = u64;
 
     fn pow_modulo(self, mut exp: Self::Exponent, modulus: &Modulus<T>) -> Self {
         if exp.is_zero() {
@@ -22,7 +22,7 @@ where
         let mut power: Self = self;
         let mut intermediate: Self = Self::one();
         loop {
-            if !(exp & u32::one()).is_zero() {
+            if !(exp & Self::Exponent::one()).is_zero() {
                 intermediate = intermediate.mul_modulo(power, modulus);
             }
             exp >>= 1;
@@ -58,7 +58,7 @@ mod tests {
 
             assert_eq!(
                 simple_pow(base, exp, P),
-                base.pow_modulo(exp as T, &modulus)
+                base.pow_modulo(exp as u64, &modulus)
             );
         }
     }
