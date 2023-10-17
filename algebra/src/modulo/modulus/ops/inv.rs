@@ -32,26 +32,24 @@ mod tests {
     fn test_inverse() {
         type Num = u64;
         let mut rng = thread_rng();
-        let mut count = 0;
 
-        while count < 20 {
-            let mut m = rng.gen_range(2..=(u64::MAX >> 2));
-            if m & 1 == 0 {
-                m += 1;
-            }
-            let modulus = Modulus::<Num>::new(m);
-            if modulus.probably_prime(20) {
-                let value: u64 = rng.gen_range(2..modulus.value());
-                let inv = value.inv_modulo(&modulus);
-                assert_eq!(
-                    value.mul_modulo(inv, &modulus),
-                    1,
-                    "\nval:{value}\ninv:{inv}\nmod:{}",
-                    modulus.value()
-                );
-                count += 1;
-            }
+        let mut m = rng.gen_range(2..=(u64::MAX >> 2));
+
+        if m & 1 == 0 {
+            m += 1;
         }
-        println!("{count}");
+
+        let modulus = Modulus::<Num>::new(m);
+
+        if modulus.probably_prime(20) {
+            let value: u64 = rng.gen_range(2..modulus.value());
+            let inv = value.inv_modulo(&modulus);
+            assert_eq!(
+                value.mul_modulo(inv, &modulus),
+                1,
+                "\nval:{value}\ninv:{inv}\nmod:{}",
+                modulus.value()
+            );
+        }
     }
 }

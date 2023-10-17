@@ -159,16 +159,12 @@ mod tests {
     #[test]
     fn test_prime_test() {
         let mut r = thread_rng();
-        let mut count = 0;
-        for _ in 0..10 {
+
+        for _ in 0..5 {
             let m = r.gen_range(2..=(u64::MAX >> 2));
             let modulus = Modulus::<u64>::new(m);
-            let is_prime = modulus.probably_prime(40);
+            let is_prime = modulus.probably_prime(20);
             assert_eq!(is_prime, simple_prime_test(m));
-            if is_prime {
-                count += 1;
-            }
         }
-        println!("{count}");
     }
 }

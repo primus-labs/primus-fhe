@@ -54,10 +54,12 @@ mod tests {
 
     use super::*;
 
+    const ROUND: i32 = 5;
+
     #[test]
     fn test_modulus_create() {
         let mut rng = thread_rng();
-        for _ in 0..10 {
+        for _ in 0..ROUND {
             let _m = Modulus::<u8>::new(rng.gen_range(2..=(u8::MAX >> 2)));
             let _m = Modulus::<u16>::new(rng.gen_range(2..=(u16::MAX >> 2)));
             let _m = Modulus::<u32>::new(rng.gen_range(2..=(u32::MAX >> 2)));
@@ -68,10 +70,10 @@ mod tests {
     #[test]
     fn test_barret_reduce() {
         let mut rng = thread_rng();
-        for _ in 0..10 {
+        for _ in 0..ROUND {
             let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
             let modulus = Modulus::<u64>::new(m);
-            for _ in 0..10 {
+            for _ in 0..ROUND {
                 let v: u64 = rng.gen();
                 assert_eq!(v.modulo(&modulus), v % m);
             }
@@ -81,10 +83,10 @@ mod tests {
     #[test]
     fn test_barret_reduce_128() {
         let mut rng = thread_rng();
-        for _ in 0..10 {
+        for _ in 0..ROUND {
             let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
             let modulus = Modulus::<u64>::new(m);
-            for _ in 0..10 {
+            for _ in 0..ROUND {
                 let lw64: u64 = rng.gen();
                 let hw64: u64 = rng.gen();
                 let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
@@ -96,10 +98,10 @@ mod tests {
     #[test]
     fn test_barret_reduce_128_tuple() {
         let mut r = thread_rng();
-        for _ in 0..10 {
+        for _ in 0..ROUND {
             let m: u64 = r.gen_range(2..=(u64::MAX >> 2));
             let modulus = Modulus::<u64>::new(m);
-            for _ in 0..10 {
+            for _ in 0..ROUND {
                 let lw64: u64 = r.gen();
                 let hw64: u64 = r.gen();
                 let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);

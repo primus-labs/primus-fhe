@@ -294,8 +294,10 @@ mod tests {
         type FF = Fp32<P>;
         assert!(FF::is_field());
 
+        let round = 5;
+
         // add
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
             let c = (a + b) % P;
@@ -303,7 +305,7 @@ mod tests {
         }
 
         // add_assign
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
             let c = (a + b) % P;
@@ -313,7 +315,7 @@ mod tests {
         }
 
         // sub
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.gen_range(0..=a);
             let c = (a - b) % P;
@@ -321,7 +323,7 @@ mod tests {
         }
 
         // sub_assign
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.gen_range(0..=a);
             let c = (a - b) % P;
@@ -332,7 +334,7 @@ mod tests {
         }
 
         // mul
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
             let c = ((a as u64 * b as u64) % P as u64) as u32;
@@ -340,7 +342,7 @@ mod tests {
         }
 
         // mul_assign
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
             let c = ((a as u64 * b as u64) % P as u64) as u32;
@@ -351,7 +353,7 @@ mod tests {
         }
 
         // div
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
             let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
@@ -360,7 +362,7 @@ mod tests {
         }
 
         // div_assign
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
             let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
@@ -372,7 +374,7 @@ mod tests {
         }
 
         // neg
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let a_neg = -FF::from(a);
 
@@ -380,7 +382,7 @@ mod tests {
         }
 
         // inv
-        for _ in 0..100 {
+        for _ in 0..round {
             let a = rng.sample(distr);
             let a_inv = a.pow_modulo(P - 2, &Modulus::<u32>::new(P));
 

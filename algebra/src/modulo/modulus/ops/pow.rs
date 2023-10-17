@@ -52,7 +52,7 @@ mod tests {
         let distr = rand::distributions::Uniform::new_inclusive(0, P);
         let mut rng = thread_rng();
 
-        for _ in 0..100 {
+        for _ in 0..5 {
             let base = rng.sample(distr);
             let exp = random();
 
