@@ -13,13 +13,15 @@ use super::Poly;
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct Polynomial<F: Field> {
     data: Vec<F>,
+    degree: usize,
 }
 
 impl<F: Field> Polynomial<F> {
     /// Creates a new [`Polynomial<F>`].
     #[inline]
     pub fn new(poly: Vec<F>) -> Self {
-        Self { data: poly }
+        let degree = poly.len();
+        Self { data: poly, degree }
     }
 }
 
@@ -47,7 +49,10 @@ impl<F: Field> AsMut<[F]> for Polynomial<F> {
 impl<F: Field> Zero for Polynomial<F> {
     #[inline]
     fn zero() -> Self {
-        Self { data: Vec::new() }
+        Self {
+            data: Vec::new(),
+            degree: 0,
+        }
     }
 
     #[inline]
@@ -57,7 +62,7 @@ impl<F: Field> Zero for Polynomial<F> {
 
     #[inline]
     fn set_zero(&mut self) {
-        self.data = Vec::new();
+        self.data = vec![Zero::zero(); self.degree];
     }
 }
 
@@ -75,7 +80,7 @@ impl<F: Field> IntoIterator for Polynomial<F> {
 impl<F: Field> Poly<F> for Polynomial<F> {
     #[inline]
     fn coeff_count(&self) -> usize {
-        self.data.len()
+        self.degree
     }
 
     #[inline]
@@ -85,7 +90,8 @@ impl<F: Field> Poly<F> for Polynomial<F> {
 
     #[inline]
     fn from_vec(poly: Vec<F>) -> Self {
-        Self { data: poly }
+        let degree = poly.len();
+        Self { data: poly, degree }
     }
 
     #[inline]
@@ -102,6 +108,7 @@ impl<F: Field> Poly<F> for Polynomial<F> {
 impl<F: Field> AddAssign<&Polynomial<F>> for Polynomial<F> {
     #[inline]
     fn add_assign(&mut self, rhs: &Polynomial<F>) {
+        assert_eq!(self.degree, rhs.degree);
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l += r);
     }
 }
@@ -148,6 +155,7 @@ impl<F: Field> Add<&Polynomial<F>> for &Polynomial<F> {
 
     #[inline]
     fn add(self, rhs: &Polynomial<F>) -> Self::Output {
+        assert_eq!(self.degree, rhs.degree);
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
         Polynomial::<F>::new(poly)
     }
@@ -162,6 +170,7 @@ impl<F: Field> SubAssign for Polynomial<F> {
 impl<F: Field> SubAssign<&Polynomial<F>> for Polynomial<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: &Polynomial<F>) {
+        assert_eq!(self.degree, rhs.degree);
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l -= r);
     }
 }
@@ -190,6 +199,7 @@ impl<F: Field> Sub<Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
     fn sub(self, mut rhs: Polynomial<F>) -> Self::Output {
+        assert_eq!(self.degree, rhs.degree);
         rhs.iter_mut()
             .zip(self.iter())
             .for_each(|(r, &l)| *r = l - *r);
@@ -203,6 +213,7 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
 
     #[inline]
     fn sub(self, rhs: &Polynomial<F>) -> Self::Output {
+        assert_eq!(self.degree, rhs.degree);
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
         Polynomial::<F>::new(poly)
     }
@@ -210,7 +221,8 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
 
 impl<F: Field> MulAssign<&Polynomial<F>> for Polynomial<F> {
     #[inline]
-    fn mul_assign(&mut self, _rhs: &Polynomial<F>) {
+    fn mul_assign(&mut self, rhs: &Polynomial<F>) {
+        assert_eq!(self.degree, rhs.degree);
         todo!()
     }
 }
@@ -255,7 +267,8 @@ impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
 impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
-    fn mul(self, _rhs: &Polynomial<F>) -> Self::Output {
+    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+        assert_eq!(self.degree, rhs.degree);
         todo!()
     }
 }
