@@ -12,61 +12,72 @@ env:
 
 jobs:
   check:
+    name: Basic check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo check --workspace --lib --bins --examples --all-features
+
+  doc:
+    name: Document
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --doc --all-features
+      - run: cargo doc --no-deps --workspace --lib --document-private-items --all-features
+
+  test:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    name: Check
+    name: Test
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo check --workspace --all-targets --all-features
-      - run: cargo test --all-targets --all-features 
-      - run: cargo test --doc
-      - run: cargo doc --no-deps --workspace --lib --document-private-items --examples
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo test --all-targets --all-features
-
-  doc:
-    name: Test document
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo test --doc
-
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: rustfmt
-      # - run: cargo fmt --all --check
-      - name: Rustfmt Check
-        uses: actions-rust-lang/rustfmt@v1
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: clippy
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --lib --bins --tests --examples --all-features
 
   build:
+    strategy:
+      matrix:
+        platform:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            command: both
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            command: both
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            command: both
+
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            command: both
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            command: build
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo build
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: ${{ matrix.platform.command }}
+          target: ${{ matrix.platform.target }}
+          # args: "--locked --release"
+          # strip: true
+      - uses: Swatinem/rust-cache@v2
