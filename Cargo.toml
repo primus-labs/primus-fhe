@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["arithmetic"]
+members = ["algebra"]
 
 resolver = "2"
 

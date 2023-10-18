@@ -48,3 +48,47 @@ uint_widening_impl! { u8, u16 }
 uint_widening_impl! { u16, u32 }
 uint_widening_impl! { u32, u64 }
 uint_widening_impl! { u64, u128 }
+
+/// Extension trait to provide access to bits of integers.
+pub(crate) trait Bits {
+    /// The number of bits this type has.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// assert_eq!(u8::N_BITS, 8);
+    /// assert_eq!(i64::N_BITS, 64);
+    /// ```
+    const N_BITS: u32;
+}
+
+macro_rules! bits {
+    ($t:tt, $n:tt) => {
+        impl Bits for $t {
+            const N_BITS: u32 = $n;
+        }
+    };
+}
+
+bits!(i8, 8);
+bits!(u8, 8);
+bits!(i16, 16);
+bits!(u16, 16);
+bits!(i32, 32);
+bits!(u32, 32);
+bits!(i64, 64);
+bits!(u64, 64);
+bits!(i128, 128);
+bits!(u128, 128);
+
+#[cfg(target_pointer_width = "32")]
+bits!(isize, 32);
+
+#[cfg(target_pointer_width = "32")]
+bits!(usize, 32);
+
+#[cfg(target_pointer_width = "64")]
+bits!(isize, 64);
+
+#[cfg(target_pointer_width = "64")]
+bits!(usize, 64);

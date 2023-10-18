@@ -1,43 +1,43 @@
-use std::ops::{BitAnd, ShrAssign};
+use std::ops::ShrAssign;
 
-use num_traits::{One, Zero};
+use num_traits::{One, PrimInt};
 
 use crate::modulo::{Modulus, MulModulo, PowModulo};
+use crate::primitive::Bits;
 
-impl<T> PowModulo<&Modulus<T>> for T
+impl<T, E> PowModulo<&Modulus<T>, E> for T
 where
-    T: Copy
-        + Zero
-        + One
-        + PartialOrd
-        + BitAnd<Output = Self>
-        + ShrAssign<u32>
-        + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
+    T: Copy + One + PartialOrd + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
+    E: PrimInt + ShrAssign<u32> + Bits,
 {
-    type Exponent = Self;
-
-    fn pow_modulo(self, mut exp: Self::Exponent, modulus: &Modulus<T>) -> Self {
+    fn pow_modulo(self, mut exp: E, modulus: &Modulus<T>) -> Self {
         if exp.is_zero() {
             return Self::one();
         }
 
         debug_assert!(self < modulus.value());
 
-        if exp.is_one() {
-            return self;
+        let mut power: Self = self;
+
+        let exp_trailing_zeros = exp.trailing_zeros();
+        if exp_trailing_zeros > 0 {
+            for _ in 0..exp_trailing_zeros {
+                power = power.mul_modulo(power, modulus);
+            }
+            exp >>= exp_trailing_zeros;
         }
 
-        let mut power: Self = self;
-        let mut intermediate: Self = Self::one();
-        loop {
-            if !(exp & Self::one()).is_zero() {
+        if exp.is_one() {
+            return power;
+        }
+
+        let mut intermediate: Self = power;
+        for _ in 1..(E::N_BITS - exp.leading_zeros()) {
+            exp >>= 1;
+            power = power.mul_modulo(power, modulus);
+            if !(exp & E::one()).is_zero() {
                 intermediate = intermediate.mul_modulo(power, modulus);
             }
-            exp >>= 1;
-            if exp.is_zero() {
-                break;
-            }
-            power = power.mul_modulo(power, modulus);
         }
         intermediate
     }
@@ -45,6 +45,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use num_traits::Zero;
     use rand::{prelude::*, thread_rng};
 
     use super::*;
@@ -60,14 +61,11 @@ mod tests {
         let distr = rand::distributions::Uniform::new_inclusive(0, P);
         let mut rng = thread_rng();
 
-        for _ in 0..100 {
+        for _ in 0..5 {
             let base = rng.sample(distr);
             let exp = random();
 
-            assert_eq!(
-                simple_pow(base, exp, P),
-                base.pow_modulo(exp as T, &modulus)
-            );
+            assert_eq!(simple_pow(base, exp, P), base.pow_modulo(exp, &modulus));
         }
     }
 

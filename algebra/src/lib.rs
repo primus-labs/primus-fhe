@@ -3,11 +3,13 @@
 
 //! Define arithmetic operations.
 
-pub mod algebra;
+pub mod field;
 pub mod modulo;
-pub mod number_theory;
+pub mod utils;
 
 pub mod error;
+
+pub mod polynomial;
 
 mod primitive;
 pub(crate) use primitive::Widening;
