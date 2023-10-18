@@ -1,4 +1,3 @@
-use std::hash::Hash;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
 
@@ -9,7 +8,7 @@ use crate::field::Field;
 use super::Poly;
 
 /// A polynomial in ntt form, it stores the values of the polynomial at some particular points.
-#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct NTTPolynomial<F: Field> {
     data: Vec<F>,
 }

@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::hash::Hash;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
 
@@ -13,7 +12,6 @@ pub trait Poly<F: Field>:
     Sized
     + Clone
     + Debug
-    + Hash
     + PartialEq
     + Eq
     + Zero

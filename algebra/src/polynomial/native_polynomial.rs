@@ -8,7 +8,7 @@ use crate::field::Field;
 use super::Poly;
 
 /// The most basic polynomial, it stores the coefficients of the polynomial.
-#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Polynomial<F: Field> {
     data: Vec<F>,
 }

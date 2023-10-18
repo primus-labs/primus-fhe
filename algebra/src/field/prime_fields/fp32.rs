@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, Zero};
@@ -16,14 +15,6 @@ use crate::utils::Prime;
 /// Now, it's focused on the prime field.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Fp32<const P: u32>(u32);
-
-impl<const P: u32> Hash for Fp32<P> {
-    #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-        P.hash(state);
-    }
-}
 
 impl<const P: u32> Field for Fp32<P> {}
 

@@ -1,7 +1,6 @@
 //! This place defimes some concrete implement of the algebra.
 
 use std::fmt::{Debug, Display};
-use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, Zero};
@@ -20,7 +19,6 @@ pub trait Field:
     + PartialEq
     + Ord
     + PartialOrd
-    + Hash
     + Zero
     + One
     + Add<Self, Output = Self>
