@@ -1,14 +1,15 @@
+use std::ops::{BitAnd, ShrAssign};
+
 use num_traits::{One, Zero};
 
 use crate::modulo::{Modulus, MulModulo, PowModulo};
 
-impl<T> PowModulo<&Modulus<T>> for T
+impl<T, E> PowModulo<&Modulus<T>, E> for T
 where
     T: Copy + One + PartialOrd + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
+    E: Copy + Zero + One + PartialEq + BitAnd<Output = E> + ShrAssign<i32>,
 {
-    type Exponent = u64;
-
-    fn pow_modulo(self, mut exp: Self::Exponent, modulus: &Modulus<T>) -> Self {
+    fn pow_modulo(self, mut exp: E, modulus: &Modulus<T>) -> Self {
         if exp.is_zero() {
             return Self::one();
         }
@@ -22,7 +23,7 @@ where
         let mut power: Self = self;
         let mut intermediate: Self = Self::one();
         loop {
-            if !(exp & Self::Exponent::one()).is_zero() {
+            if !(exp & E::one()).is_zero() {
                 intermediate = intermediate.mul_modulo(power, modulus);
             }
             exp >>= 1;
@@ -56,10 +57,7 @@ mod tests {
             let base = rng.sample(distr);
             let exp = random();
 
-            assert_eq!(
-                simple_pow(base, exp, P),
-                base.pow_modulo(exp as u64, &modulus)
-            );
+            assert_eq!(simple_pow(base, exp, P), base.pow_modulo(exp, &modulus));
         }
     }
 

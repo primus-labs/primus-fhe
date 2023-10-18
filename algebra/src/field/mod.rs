@@ -41,7 +41,11 @@ pub trait Field:
     + for<'a> DivAssign<&'a Self>
     + Neg<Output = Self>
     + Inv<Output = Self>
+    + Pow<u8, Output = Self>
+    + Pow<u16, Output = Self>
     + Pow<u32, Output = Self>
+    + Pow<u64, Output = Self>
+    + Pow<u128, Output = Self>
 {
     /// Returns `self + self`.
     #[inline]
@@ -96,9 +100,5 @@ pub trait Field:
             *self = self.inv();
             Some(self)
         }
-    }
-    /// Returns `self ^ exp`
-    fn pow(&self, exp: u32) -> Self {
-        Pow::pow(*self, exp)
     }
 }

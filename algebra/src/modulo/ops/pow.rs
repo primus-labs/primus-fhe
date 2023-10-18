@@ -1,8 +1,5 @@
 /// The modular exponentiation.
-pub trait PowModulo<Modulus> {
-    /// Exponent type.
-    type Exponent;
-
+pub trait PowModulo<Modulus, Exponent> {
     /// Calcualtes `self^exp (mod modulus)`.
-    fn pow_modulo(self, exp: Self::Exponent, modulus: Modulus) -> Self;
+    fn pow_modulo(self, exp: Exponent, modulus: Modulus) -> Self;
 }
