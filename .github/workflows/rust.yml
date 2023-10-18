@@ -21,8 +21,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo check --workspace --lib --bins --examples --all-features
+      - run: cargo check --workspace --all-targets --all-features
+      - run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
 
   doc:
     name: Document
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --doc --all-features
+      - run: cargo test --workspace --doc --all-features
       - run: cargo doc --no-deps --workspace --lib --document-private-items --all-features
 
   test:
@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --lib --bins --tests --examples --all-features
+      - run: cargo test --workspace --lib --bins --tests --examples --all-features
 
   build:
     strategy:
@@ -52,11 +52,11 @@ jobs:
         platform:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            command: both
+            command: build
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            command: both
+            command: build
 
           - os: macos-latest
             target: x86_64-apple-darwin
