@@ -1,13 +1,14 @@
-use std::ops::{BitAnd, ShrAssign};
+use std::ops::ShrAssign;
 
-use num_traits::{One, Zero};
+use num_traits::{One, PrimInt};
 
 use crate::modulo::{Modulus, MulModulo, PowModulo};
+use crate::primitive::Bits;
 
 impl<T, E> PowModulo<&Modulus<T>, E> for T
 where
     T: Copy + One + PartialOrd + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
-    E: Copy + Zero + One + PartialEq + BitAnd<Output = E> + ShrAssign<i32>,
+    E: PrimInt + ShrAssign<u32> + Bits,
 {
     fn pow_modulo(self, mut exp: E, modulus: &Modulus<T>) -> Self {
         if exp.is_zero() {
@@ -16,21 +17,27 @@ where
 
         debug_assert!(self < modulus.value());
 
-        if exp.is_one() {
-            return self;
+        let mut power: Self = self;
+
+        let exp_trailing_zeros = exp.trailing_zeros();
+        if exp_trailing_zeros > 0 {
+            for _ in 0..exp_trailing_zeros {
+                power = power.mul_modulo(power, modulus);
+            }
+            exp >>= exp_trailing_zeros;
         }
 
-        let mut power: Self = self;
-        let mut intermediate: Self = Self::one();
-        loop {
+        if exp.is_one() {
+            return power;
+        }
+
+        let mut intermediate: Self = power;
+        for _ in 1..(E::N_BITS - exp.leading_zeros()) {
+            exp >>= 1;
+            power = power.mul_modulo(power, modulus);
             if !(exp & E::one()).is_zero() {
                 intermediate = intermediate.mul_modulo(power, modulus);
             }
-            exp >>= 1;
-            if exp.is_zero() {
-                break;
-            }
-            power = power.mul_modulo(power, modulus);
         }
         intermediate
     }
@@ -38,6 +45,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use num_traits::Zero;
     use rand::{prelude::*, thread_rng};
 
     use super::*;

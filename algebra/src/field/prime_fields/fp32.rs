@@ -16,7 +16,9 @@ use crate::utils::Prime;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Fp32<const P: u32>(u32);
 
-impl<const P: u32> Field for Fp32<P> {}
+impl<const P: u32> Field for Fp32<P> {
+    type Order = u32;
+}
 
 impl<const P: u32> Display for Fp32<P> {
     #[inline]
@@ -243,53 +245,10 @@ impl<const P: u32> Inv for Fp32<P> {
     }
 }
 
-impl<const P: u32> Pow<u8> for Fp32<P> {
+impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
     type Output = Self;
 
-    fn pow(self, rhs: u8) -> Self::Output {
-        Self(
-            self.0
-                .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
-    }
-}
-
-impl<const P: u32> Pow<u16> for Fp32<P> {
-    type Output = Self;
-
-    fn pow(self, rhs: u16) -> Self::Output {
-        Self(
-            self.0
-                .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
-    }
-}
-
-impl<const P: u32> Pow<u32> for Fp32<P> {
-    type Output = Self;
-
-    fn pow(self, rhs: u32) -> Self::Output {
-        Self(
-            self.0
-                .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
-    }
-}
-impl<const P: u32> Pow<u64> for Fp32<P> {
-    type Output = Self;
-
-    fn pow(self, rhs: u64) -> Self::Output {
-        Self(
-            self.0
-                .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
-    }
-}
-
-impl<const P: u32> Pow<u128> for Fp32<P> {
-    type Output = Self;
-
-    fn pow(self, rhs: u128) -> Self::Output {
+    fn pow(self, rhs: <Self as Field>::Order) -> Self::Output {
         Self(
             self.0
                 .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),

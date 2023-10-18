@@ -39,12 +39,11 @@ pub trait Field:
     + for<'a> DivAssign<&'a Self>
     + Neg<Output = Self>
     + Inv<Output = Self>
-    + Pow<u8, Output = Self>
-    + Pow<u16, Output = Self>
-    + Pow<u32, Output = Self>
-    + Pow<u64, Output = Self>
-    + Pow<u128, Output = Self>
+    + Pow<Self::Order, Output = Self>
 {
+    /// The type of the field's order.
+    type Order;
+
     /// Returns `self + self`.
     #[inline]
     fn double(&self) -> Self {
