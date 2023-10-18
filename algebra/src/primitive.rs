@@ -52,13 +52,6 @@ uint_widening_impl! { u64, u128 }
 /// Extension trait to provide access to bits of integers.
 pub(crate) trait Bits {
     /// The number of bits this type has.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// assert_eq!(u8::N_BITS, 8);
-    /// assert_eq!(i64::N_BITS, 64);
-    /// ```
     const N_BITS: u32;
 }
 

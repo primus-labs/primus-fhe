@@ -1,7 +1,6 @@
 name: Security audit
 
 on:
-  # Run manually
   workflow_dispatch:
   schedule:
     - cron: "0 19 * * 5"

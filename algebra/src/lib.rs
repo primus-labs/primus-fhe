@@ -12,4 +12,5 @@ pub mod error;
 pub mod polynomial;
 
 mod primitive;
-pub(crate) use primitive::Widening;
+
+pub(crate) use primitive::{Bits, Widening};
