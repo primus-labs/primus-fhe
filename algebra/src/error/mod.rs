@@ -14,6 +14,14 @@ pub enum ModuloError {
         /// The modulus.
         modulus: String,
     },
+    /// Error that occurs when the given modulus has no primitive root with the given degree.
+    #[error("There is no primitive root with the degree {degree} and the modulus {modulus}!")]
+    NoPrimitiveRoot {
+        /// the degree for the primitive root
+        degree: String,
+        /// The modulus.
+        modulus: String,
+    },
     /// Error that occurs when user ask to generate a modulus with invalid bit count.
     #[error("The bit count of desired coeff modulus is not valid")]
     BitCountError,

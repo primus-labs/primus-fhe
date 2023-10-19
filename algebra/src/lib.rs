@@ -10,6 +10,7 @@ pub mod utils;
 pub mod error;
 
 pub mod polynomial;
+pub mod transformation;
 
 mod primitive;
 

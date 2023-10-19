@@ -2,7 +2,9 @@ use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, Zero};
+use rand::{thread_rng, Rng};
 
+use crate::error::ModuloError;
 use crate::field::Field;
 use crate::modulo::{
     AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, Modulus, MulModulo,
@@ -11,6 +13,8 @@ use crate::modulo::{
 use crate::utils::Prime;
 
 use super::PrimeField;
+
+use super::PrimitiveRoot;
 
 /// A finite Field type, whose inner size is 32bits.
 ///
@@ -55,7 +59,7 @@ pub trait BarrettConfig<const P: u32> {
 
     /// Check [`Self`] is a prime field.
     #[inline]
-    fn is_field() -> bool {
+    fn is_prime_field() -> bool {
         Self::MODULUS.probably_prime(20)
     }
 }
@@ -271,6 +275,83 @@ impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
     }
 }
 
+impl<const P: u32> PrimitiveRoot for Fp32<P> {
+    type Degree = u32;
+
+    fn is_primitive_root(root: Self, degree: Self::Degree) -> bool {
+        debug_assert!(root.0 < P);
+        debug_assert!(
+            degree > 1 && degree.is_power_of_two(),
+            "degree must be a power of two and bigger than 1"
+        );
+
+        if root.is_zero() {
+            return false;
+        }
+
+        root.pow(degree >> 1).0 == P - 1
+    }
+
+    fn try_primitive_root(degree: Self::Degree) -> Result<Self, ModuloError> {
+        // p-1
+        let modulus_sub_one = P - 1;
+
+        // (p-1)/n
+        let quotient = modulus_sub_one / degree;
+
+        // (p-1) must be divisible by n
+        if modulus_sub_one != quotient * degree {
+            return Err(ModuloError::NoPrimitiveRoot {
+                degree: degree.to_string(),
+                modulus: P.to_string(),
+            });
+        }
+
+        let mut rng = thread_rng();
+
+        let mut g;
+        let mut attempt_counter: i32 = 0;
+        let attempt_counter_max: i32 = 100;
+
+        let distr = rand::distributions::Uniform::new_inclusive(2, P - 1);
+        loop {
+            attempt_counter += 1;
+
+            g = rng.sample(distr);
+
+            let w = Self(g).pow(quotient);
+
+            if Self::is_primitive_root(w, degree) {
+                break Ok(w);
+            }
+
+            if attempt_counter >= attempt_counter_max {
+                break Err(ModuloError::NoPrimitiveRoot {
+                    degree: degree.to_string(),
+                    modulus: P.to_string(),
+                });
+            }
+        }
+    }
+
+    fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, ModuloError> {
+        let mut root = Self::try_primitive_root(degree)?;
+
+        let generator_sq = root.square();
+        let mut current_generator = root;
+
+        for _ in 0..degree {
+            if current_generator < root {
+                root = current_generator;
+            }
+
+            current_generator = current_generator * generator_sq;
+        }
+
+        Ok(root)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,10 +361,10 @@ mod tests {
     #[test]
     fn test_fp_basic() {
         type F6 = Fp32<6>;
-        assert!(!F6::is_field());
+        assert!(!F6::is_prime_field());
 
         type F5 = Fp32<5>;
-        assert!(F5::is_field());
+        assert!(F5::is_prime_field());
         assert_eq!(F5::from(4) + F5::from(3), F5::from(2));
         assert_eq!(F5::from(4) * F5::from(3), F5::from(2));
         assert_eq!(F5::from(4) - F5::from(3), F5::from(1));
@@ -300,7 +381,7 @@ mod tests {
         let mut rng = thread_rng();
 
         type FF = Fp32<P>;
-        assert!(FF::is_field());
+        assert!(FF::is_prime_field());
 
         let round = 5;
 
