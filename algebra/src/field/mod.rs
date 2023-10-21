@@ -6,6 +6,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 use num_traits::{Inv, One, Pow, Zero};
 
 pub mod prime_fields;
+pub mod ntt_field;
 
 /// A simple math field trait
 pub trait Field:

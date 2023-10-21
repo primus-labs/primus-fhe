@@ -10,6 +10,8 @@ use crate::modulo::{
 };
 use crate::utils::Prime;
 
+use super::PrimeField;
+
 /// A finite Field type, whose inner size is 32bits.
 ///
 /// Now, it's focused on the prime field.
@@ -30,6 +32,8 @@ impl<const P: u32> Field for Fp32<P> {
         P
     }
 }
+
+impl<const P: u32> PrimeField for Fp32<P> {}
 
 impl<const P: u32> Display for Fp32<P> {
     #[inline]
