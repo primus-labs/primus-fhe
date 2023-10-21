@@ -44,6 +44,15 @@ pub trait Field:
     /// The type of the field's order.
     type Order;
 
+    /// The type of the field's modulus
+    type Modulus;
+
+    /// Returns the order of the field.
+    fn order(&self) -> Self::Order;
+
+    /// Returns the modulus of the field.
+    fn modulus(&self) -> Self::Modulus;
+
     /// Returns `self + self`.
     #[inline]
     fn double(&self) -> Self {

@@ -18,6 +18,17 @@ pub struct Fp32<const P: u32>(u32);
 
 impl<const P: u32> Field for Fp32<P> {
     type Order = u32;
+    type Modulus = u32;
+
+    #[inline]
+    fn order(&self) -> Self::Order {
+        P
+    }
+
+    #[inline]
+    fn modulus(&self) -> Self::Modulus {
+        P
+    }
 }
 
 impl<const P: u32> Display for Fp32<P> {
