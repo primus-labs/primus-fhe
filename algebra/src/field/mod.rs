@@ -5,6 +5,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 
 use num_traits::{Inv, One, Pow, Zero};
 
+pub mod ntt_fields;
 pub mod prime_fields;
 
 /// A simple math field trait
@@ -43,6 +44,15 @@ pub trait Field:
 {
     /// The type of the field's order.
     type Order;
+
+    /// The type of the field's modulus
+    type Modulus;
+
+    /// Returns the order of the field.
+    fn order(&self) -> Self::Order;
+
+    /// Returns the modulus of the field.
+    fn modulus(&self) -> Self::Modulus;
 
     /// Returns `self + self`.
     #[inline]
