@@ -362,3 +362,181 @@ macro_rules! impl_prime_modulus {
         }
     };
 }
+
+macro_rules! impl_mul_modulo_factor {
+    (impl MulModuloFactor<$SelfT:ty>; WideType: $WideT:ty) => {
+        impl MulModuloFactor<$SelfT> {
+            /// Constructs a [`MulModuloFactor`].
+            ///
+            /// * `value` must be less than `modulus`.
+            #[inline]
+            pub fn new(value: $SelfT, modulus: $SelfT) -> Self {
+                Self {
+                    value,
+                    quotient: (((value as $WideT) << <$SelfT>::BITS) / modulus as $WideT) as $SelfT,
+                }
+            }
+
+            /// Resets the `modulus` of [`MulModuloFactor`].
+            #[inline]
+            pub fn set_modulus(&mut self, modulus: $SelfT) {
+                self.quotient =
+                    (((self.value as $WideT) << <$SelfT>::BITS) / modulus as $WideT) as $SelfT;
+            }
+
+            /// Resets the content of [`MulModuloFactor`].
+            ///
+            /// * `value` must be less than `modulus`.
+            pub fn set(&mut self, value: $SelfT, modulus: $SelfT) {
+                self.value = value;
+                self.set_modulus(modulus);
+            }
+
+            /// Calculates `rhs * self.value mod modulus`.
+            ///
+            /// The result is in [0, 2 * `modulus`).
+            ///
+            /// # Proof
+            ///
+            /// Let `x = rhs`, `w = self.value`, `w' = self.quotient`, `p = modulus` and `β = 2^(64)`.
+            ///
+            /// By definition, `w' = ⌊wβ/p⌋`. Let `q = ⌊w'x/β⌋`.
+            ///
+            /// Then, `0 ≤ wβ/p − w' < 1`, `0 ≤ w'x/β - q < 1`.
+            ///
+            /// Multiplying by `xp/β` and `p` respectively, and adding, yields
+            ///
+            /// `0 ≤ wx − qp < xp/β + p < 2p < β`
+            #[inline]
+            pub fn mul_modulo_lazy(&self, rhs: $SelfT, modulus: $SelfT) -> $SelfT {
+                let (_, hw64) = self.quotient.widen_mul(rhs);
+                self.value
+                    .wrapping_mul(rhs)
+                    .wrapping_sub(hw64.wrapping_mul(modulus))
+            }
+        }
+    };
+}
+
+macro_rules! impl_mul_modulo_factor_ops {
+    (impl MulModuloFactor<$SelfT:ty>) => {
+        impl MulModulo<$SelfT, MulModuloFactor<$SelfT>> for $SelfT {
+            type Output = Self;
+
+            /// Calculates `self * rhs mod modulus`
+            ///
+            /// The result is in `[0, modulus)`
+            ///
+            /// # Correctness
+            ///
+            /// `rhs.value` must be less than `modulus`.
+            #[inline]
+            fn mul_modulo(self, rhs: MulModuloFactor<$SelfT>, modulus: $SelfT) -> Self::Output {
+                let (_, hw64) = self.widen_mul(rhs.quotient);
+                let tmp = self
+                    .wrapping_mul(rhs.value)
+                    .wrapping_sub(hw64.wrapping_mul(modulus));
+
+                if tmp >= modulus {
+                    tmp - modulus
+                } else {
+                    tmp
+                }
+            }
+        }
+
+        impl MulModulo<&Modulus<$SelfT>, MulModuloFactor<$SelfT>> for $SelfT {
+            type Output = Self;
+
+            /// Calculates `self * rhs mod modulus`
+            ///
+            /// The result is in `[0, modulus)`
+            ///
+            /// # Correctness
+            ///
+            /// `rhs.value` must be less than `modulus`.
+            #[inline]
+            fn mul_modulo(
+                self,
+                rhs: MulModuloFactor<$SelfT>,
+                modulus: &Modulus<$SelfT>,
+            ) -> Self::Output {
+                MulModulo::mul_modulo(self, rhs, modulus.value())
+            }
+        }
+
+        impl MulModulo<$SelfT, $SelfT> for MulModuloFactor<$SelfT> {
+            type Output = $SelfT;
+
+            /// Calculates `self.value * rhs mod modulus`.
+            ///
+            /// The result is in `[0, modulus)`.
+            #[inline]
+            fn mul_modulo(self, rhs: $SelfT, modulus: $SelfT) -> Self::Output {
+                let (_, hw64) = self.quotient.widen_mul(rhs);
+                let tmp = self
+                    .value
+                    .wrapping_mul(rhs)
+                    .wrapping_sub(hw64.wrapping_mul(modulus));
+
+                if tmp >= modulus {
+                    tmp - modulus
+                } else {
+                    tmp
+                }
+            }
+        }
+
+        impl MulModulo<&Modulus<$SelfT>, $SelfT> for MulModuloFactor<$SelfT> {
+            type Output = $SelfT;
+
+            /// Calculates `self.value * rhs mod modulus`.
+            ///
+            /// The result is in `[0, modulus)`.
+            ///
+            /// # Correctness
+            ///
+            /// `self.value` must be less than `modulus`.
+            #[inline]
+            fn mul_modulo(self, rhs: $SelfT, modulus: &Modulus<$SelfT>) -> Self::Output {
+                MulModulo::mul_modulo(self, rhs, modulus.value())
+            }
+        }
+
+        impl MulModuloAssign<$SelfT, MulModuloFactor<$SelfT>> for $SelfT {
+            /// Calculates `self *= rhs mod modulus`.
+            ///
+            /// The result is in `[0, modulus)`.
+            ///
+            /// # Correctness
+            ///
+            /// `rhs.value` must be less than `modulus`.
+            #[inline]
+            fn mul_modulo_assign(&mut self, rhs: MulModuloFactor<$SelfT>, modulus: $SelfT) {
+                let (_, hw64) = self.widen_mul(rhs.quotient);
+                let tmp = self
+                    .wrapping_mul(rhs.value)
+                    .wrapping_sub(hw64.wrapping_mul(modulus));
+                *self = if tmp >= modulus { tmp - modulus } else { tmp };
+            }
+        }
+
+        impl MulModuloAssign<&Modulus<$SelfT>, MulModuloFactor<$SelfT>> for $SelfT {
+            /// Calculates `self *= rhs mod modulus`.
+            ///
+            /// The result is in `[0, modulus)`.
+            ///
+            /// # Correctness
+            ///
+            /// `rhs.value` must be less than `modulus`.
+            #[inline]
+            fn mul_modulo_assign(
+                &mut self,
+                rhs: MulModuloFactor<$SelfT>,
+                modulus: &Modulus<$SelfT>,
+            ) {
+                MulModuloAssign::mul_modulo_assign(self, rhs, modulus.value());
+            }
+        }
+    };
+}

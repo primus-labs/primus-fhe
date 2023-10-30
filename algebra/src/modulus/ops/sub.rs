@@ -1,6 +1,7 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
-use crate::modulo::{Modulus, SubModulo, SubModuloAssign};
+use crate::modulo::{SubModulo, SubModuloAssign};
+use crate::modulus::Modulus;
 
 impl<T> SubModulo<&Modulus<T>> for T
 where

@@ -24,8 +24,4 @@ mod ops;
 
 mod primitive;
 
-mod modulus;
-
 pub use ops::*;
-
-pub use modulus::Modulus;

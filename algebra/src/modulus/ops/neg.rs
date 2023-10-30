@@ -1,6 +1,7 @@
 use std::ops::Sub;
 
-use crate::modulo::{Modulus, NegModulo, NegModuloAssign};
+use crate::modulo::{NegModulo, NegModuloAssign};
+use crate::modulus::Modulus;
 
 impl<T> NegModulo<&Modulus<T>> for T
 where

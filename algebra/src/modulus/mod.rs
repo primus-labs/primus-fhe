@@ -1,3 +1,8 @@
+//! define a modulus
+
+use crate::modulo::{MulModulo, MulModuloAssign};
+use crate::primitive::Widening;
+
 #[macro_use]
 mod internal_macros;
 
@@ -45,6 +50,40 @@ impl_prime_modulus!(impl Modulus<u8>; WideType: u16);
 impl_prime_modulus!(impl Modulus<u16>; WideType: u32);
 impl_prime_modulus!(impl Modulus<u32>; WideType: u64);
 impl_prime_modulus!(impl Modulus<u64>; WideType: u128);
+
+/// A number used for fast modular multiplication.
+///
+/// This is efficient if many operations are multiplied by
+/// the same number and then reduced with the same modulus.
+#[derive(Clone, Copy, Default)]
+pub struct MulModuloFactor<T> {
+    value: T,
+    quotient: T,
+}
+
+impl<T: Copy> MulModuloFactor<T> {
+    /// Returns the value of this [`MulModuloFactor`].
+    #[inline]
+    pub fn value(&self) -> T {
+        self.value
+    }
+
+    /// Returns the quotient of this [`MulModuloFactor`].
+    #[inline]
+    pub fn quotient(&self) -> T {
+        self.quotient
+    }
+}
+
+impl_mul_modulo_factor!(impl MulModuloFactor<u8>; WideType: u16);
+impl_mul_modulo_factor!(impl MulModuloFactor<u16>; WideType: u32);
+impl_mul_modulo_factor!(impl MulModuloFactor<u32>; WideType: u64);
+impl_mul_modulo_factor!(impl MulModuloFactor<u64>; WideType: u128);
+
+impl_mul_modulo_factor_ops!(impl MulModuloFactor<u8>);
+impl_mul_modulo_factor_ops!(impl MulModuloFactor<u16>);
+impl_mul_modulo_factor_ops!(impl MulModuloFactor<u32>);
+impl_mul_modulo_factor_ops!(impl MulModuloFactor<u64>);
 
 #[cfg(test)]
 mod tests {

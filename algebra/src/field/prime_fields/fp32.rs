@@ -7,14 +7,13 @@ use rand::{thread_rng, Rng};
 use crate::error::ModuloError;
 use crate::field::Field;
 use crate::modulo::{
-    AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, Modulus, MulModulo,
-    MulModuloAssign, NegModulo, PowModulo, SubModulo, SubModuloAssign,
+    AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo, MulModuloAssign,
+    NegModulo, PowModulo, SubModulo, SubModuloAssign,
 };
+use crate::modulus::Modulus;
 use crate::utils::Prime;
 
-use super::PrimeField;
-
-use super::PrimitiveRoot;
+use super::{PrimeField, PrimitiveRoot};
 
 /// A finite Field type, whose inner size is 32bits.
 ///

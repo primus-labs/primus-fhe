@@ -8,6 +8,8 @@ use num_traits::{Inv, One, Pow, Zero};
 pub mod ntt_fields;
 pub mod prime_fields;
 
+pub use prime_fields::PrimeField;
+
 /// A simple math field trait
 pub trait Field:
     Sized

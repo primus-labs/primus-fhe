@@ -1,6 +1,11 @@
-//! Define `NttField`` trait
+//! Define `NTTField`` trait
 
-use super::prime_fields::PrimeField;
+use super::PrimeField;
 
-/// Define `NttField` trait
-pub trait NttField: PrimeField {}
+/// A helper trait  for number theory transform
+///
+/// It's optimized for the vector with the length of power of two.
+pub trait NTTField: PrimeField {
+    /// NTT table type
+    type NTTTable;
+}

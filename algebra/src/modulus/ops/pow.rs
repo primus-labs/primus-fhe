@@ -2,7 +2,8 @@ use std::ops::ShrAssign;
 
 use num_traits::{One, PrimInt};
 
-use crate::modulo::{Modulus, MulModulo, PowModulo};
+use crate::modulo::{MulModulo, PowModulo};
+use crate::modulus::Modulus;
 use crate::Bits;
 
 impl<T, E> PowModulo<&Modulus<T>, E> for T

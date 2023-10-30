@@ -1,4 +1,5 @@
-use crate::modulo::{InvModulo, InvModuloAssign, Modulus};
+use crate::modulo::{InvModulo, InvModuloAssign};
+use crate::modulus::Modulus;
 
 impl<T> InvModulo<&Modulus<T>> for T
 where

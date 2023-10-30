@@ -5,6 +5,7 @@
 
 pub mod field;
 pub mod modulo;
+pub mod modulus;
 pub mod utils;
 
 pub mod error;

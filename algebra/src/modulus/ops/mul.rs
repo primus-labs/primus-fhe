@@ -1,4 +1,5 @@
-use crate::modulo::{Modulo, Modulus, MulModulo, MulModuloAssign};
+use crate::modulo::{Modulo, MulModulo, MulModuloAssign};
+use crate::modulus::Modulus;
 use crate::Widening;
 
 impl<T> MulModulo<&Modulus<T>> for T

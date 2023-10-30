@@ -7,7 +7,7 @@ pub use fp32::{BarrettConfig, Fp32};
 use super::Field;
 
 /// Define `PrimeField` trait
-pub trait PrimeField: Field {}
+pub trait PrimeField: Field + PrimitiveRoot {}
 
 use crate::error::ModuloError;
 
