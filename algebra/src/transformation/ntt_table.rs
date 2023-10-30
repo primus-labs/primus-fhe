@@ -1,4 +1,4 @@
-use crate::{field::Field, modulo::Modulus};
+use crate::modulo::Modulus;
 
 /// This struct store the pre-computed data for number theory transform and
 /// inverse number theory transform.

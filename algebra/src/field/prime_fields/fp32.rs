@@ -345,7 +345,7 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
                 root = current_generator;
             }
 
-            current_generator = current_generator * generator_sq;
+            current_generator *= generator_sq;
         }
 
         Ok(root)
@@ -356,7 +356,7 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
 mod tests {
     use super::*;
     use crate::modulo::PowModulo;
-    use rand::{prelude::*, thread_rng};
+    use rand::thread_rng;
 
     #[test]
     fn test_fp_basic() {
