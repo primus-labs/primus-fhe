@@ -1,5 +1,3 @@
-use crate::error::ModuloError;
-
 /// Calculate the inverse element for a field.
 pub trait InvModulo<Modulus = Self>: Sized {
     /// Calculate the multiplicative inverse of `self modulo modulus`.
@@ -19,5 +17,5 @@ pub trait TryInvModulo<Modulus = Self>: Sized {
     /// # Errors
     ///
     /// If there dose not exist the such inverse, a [`ModuloError`] will be returned.
-    fn try_inv_modulo(self, modulus: Modulus) -> Result<Self, ModuloError>;
+    fn try_inv_modulo(self, modulus: Modulus) -> Result<Self, crate::Error>;
 }

@@ -4,14 +4,14 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 use num_traits::{Inv, One, Pow, Zero};
 use rand::{thread_rng, Rng};
 
-use crate::error::ModuloError;
-use crate::field::Field;
+use crate::field::{Field, NTTField};
 use crate::modulo::{
     AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo, MulModuloAssign,
     NegModulo, PowModulo, SubModulo, SubModuloAssign,
 };
-use crate::modulus::Modulus;
-use crate::utils::Prime;
+use crate::modulus::{Modulus, MulModuloFactor};
+use crate::transformation::NTTTable;
+use crate::utils::{Prime, ReverseLsbs};
 
 use super::{PrimeField, PrimitiveRoot};
 
@@ -291,7 +291,7 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
         root.pow(degree >> 1).0 == P - 1
     }
 
-    fn try_primitive_root(degree: Self::Degree) -> Result<Self, ModuloError> {
+    fn try_primitive_root(degree: Self::Degree) -> Result<Self, crate::Error> {
         // p-1
         let modulus_sub_one = P - 1;
 
@@ -300,7 +300,7 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
 
         // (p-1) must be divisible by n
         if modulus_sub_one != quotient * degree {
-            return Err(ModuloError::NoPrimitiveRoot {
+            return Err(crate::Error::NoPrimitiveRoot {
                 degree: degree.to_string(),
                 modulus: P.to_string(),
             });
@@ -325,7 +325,7 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
             }
 
             if attempt_counter >= attempt_counter_max {
-                break Err(ModuloError::NoPrimitiveRoot {
+                break Err(crate::Error::NoPrimitiveRoot {
                     degree: degree.to_string(),
                     modulus: P.to_string(),
                 });
@@ -333,7 +333,7 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
         }
     }
 
-    fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, ModuloError> {
+    fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, crate::Error> {
         let mut root = Self::try_primitive_root(degree)?;
 
         let generator_sq = root.square();
@@ -348,6 +348,112 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
         }
 
         Ok(root)
+    }
+}
+
+impl<const P: u32> NTTField for Fp32<P> {
+    type NTTTable = NTTTable<Self>;
+
+    type Root = MulFactor<Self>;
+
+    fn generate_ntt_table(log_n: u32) -> Result<NTTTable<Self>, crate::Error> {
+        let n = 1usize << log_n;
+
+        let root = Self::try_minimal_primitive_root((2 * n).try_into().unwrap())?;
+        let inv_root = root.inv();
+
+        let root_factor = Self::Root::new(root);
+        let mut power = root;
+
+        let mut root_powers = vec![Self::Root::default(); n];
+        root_powers[0].set(Self::one());
+        for i in 1..n {
+            root_powers[i.reverse_lsbs(log_n)].set(power);
+            power *= root_factor;
+        }
+
+        let inv_root_factor = Self::Root::new(inv_root);
+        let mut inv_root_powers = vec![Self::Root::default(); n];
+        power = inv_root;
+
+        inv_root_powers[0].set(Self::one());
+        for i in 1..n {
+            inv_root_powers[(i - 1).reverse_lsbs(log_n) + 1].set(power);
+            power *= inv_root_factor;
+        }
+        let inv_degree_modulo = Self::Root::new(Self(n as u32).inv());
+
+        Ok(NTTTable::new(
+            root,
+            inv_root,
+            log_n,
+            n,
+            inv_degree_modulo,
+            root_powers,
+            inv_root_powers,
+        ))
+    }
+}
+
+/// A factor for multiply many times
+#[derive(Clone, Copy, Default)]
+pub struct MulFactor<F> {
+    value: F,
+    quotient: F,
+}
+
+impl<const P: u32> MulFactor<Fp32<P>> {
+    /// Constructs a [`MulFactor`].
+    #[inline]
+    pub fn new(value: Fp32<P>) -> Self {
+        Self {
+            value,
+            quotient: Fp32((((value.0 as u64) << 32) / P as u64) as u32),
+        }
+    }
+
+    /// Resets the content of [`MulFactor`].
+    #[inline]
+    pub fn set(&mut self, value: Fp32<P>) {
+        self.value = value;
+        self.quotient = Fp32((((value.0 as u64) << 32) / P as u64) as u32);
+    }
+}
+
+impl<F: Copy> MulFactor<F> {
+    /// Returns the value of this [`MulModuloFactor`].
+    #[inline]
+    pub fn value(&self) -> F {
+        self.value
+    }
+
+    /// Returns the quotient of this [`MulModuloFactor`].
+    #[inline]
+    pub fn quotient(&self) -> F {
+        self.quotient
+    }
+}
+
+impl<const P: u32> Mul<MulFactor<Self>> for Fp32<P> {
+    type Output = Self;
+
+    fn mul(self, rhs: MulFactor<Self>) -> Self::Output {
+        let r = MulModuloFactor::<u32> {
+            value: rhs.value.0,
+            quotient: rhs.quotient.0,
+        };
+
+        Self(self.0.mul_modulo(r, P))
+    }
+}
+
+impl<const P: u32> MulAssign<MulFactor<Self>> for Fp32<P> {
+    fn mul_assign(&mut self, rhs: MulFactor<Self>) {
+        let r = MulModuloFactor::<u32> {
+            value: rhs.value.0,
+            quotient: rhs.quotient.0,
+        };
+        self.0 = self.0.mul_modulo(r, P);
     }
 }
 

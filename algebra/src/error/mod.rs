@@ -3,9 +3,9 @@
 
 use thiserror::Error;
 
-/// Errors that may occur when it comes to Modular operations.
+/// Errors that may occur.
 #[derive(Error, Debug)]
-pub enum ModuloError {
+pub enum Error {
     /// Error that occurs when the given value has no inverse element with the given modulus.
     #[error("Value {value} has no inverse element with the modulus {modulus}!")]
     NoModuloInverse {

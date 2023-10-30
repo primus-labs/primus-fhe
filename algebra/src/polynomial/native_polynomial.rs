@@ -3,9 +3,9 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::Field;
+use crate::field::{Field, NTTField};
 
-use super::Poly;
+use super::{NTTPolynomial, Poly};
 
 /// The most basic polynomial, it stores the coefficients of the polynomial.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -304,6 +304,34 @@ impl<F: Field> Neg for Polynomial<F> {
             *e = -*e;
         });
         self
+    }
+}
+
+impl<F: NTTField> Polynomial<F> {
+    /// Perform a fast number theory transform in place.
+    ///
+    /// This function transforms a polynomial to a vector.
+    ///
+    /// All the elements of the vector are in the range `[0, self.modulus)`.
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - inputs in normal order, outputs in bit-reversed order
+    pub fn transform_inplace(self, _ntt_table: &<F as NTTField>::NTTTable) -> NTTPolynomial<F> {
+        todo!()
+    }
+
+    /// Perform a fast number theory transform in place.
+    ///
+    /// This function transforms a polynomial to a vector.
+    ///
+    /// All the elements of the vector are in the range `[0, self.modulus)`.
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - inputs in normal order, outputs in bit-reversed order
+    pub fn transform(&self, _ntt_table: &<F as NTTField>::NTTTable) -> NTTPolynomial<F> {
+        todo!()
     }
 }
 

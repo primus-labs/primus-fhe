@@ -4,7 +4,7 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::Field;
+use crate::field::{Field, NTTField};
 
 /// A trait to indicate polynomial in coefficient form,
 /// which can perform `modulo`, `add_modulo` and `sub_modulo`.
@@ -51,4 +51,29 @@ pub trait Poly<F: Field>:
     fn resize_with<FN>(&mut self, new_degree: usize, f: FN)
     where
         FN: FnMut() -> F;
+}
+
+/// A trait for transformation between polynomial and vector
+pub trait NTTPoly<F: NTTField> {
+    /// Perform a fast number theory transform in place.
+    ///
+    /// This function transforms a polynomial to a vector.
+    ///
+    /// All the elements of the vector are in the range `[0, self.modulus)`.
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - inputs in normal order, outputs in bit-reversed order
+    fn transform(&mut self, ntt_table: &<F as NTTField>::NTTTable);
+
+    /// Perform a fast inverse number theory transform in place.
+    ///
+    /// This function transforms a vector to a polynomial.
+    ///
+    /// All the elements of the polynomial are in the range `[0, self.modulus)`.
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - inputs in bit-reversed order, outputs in normal order
+    fn inverse_transform(&mut self, ntt_table: &<F as NTTField>::NTTTable);
 }

@@ -57,8 +57,11 @@ impl_prime_modulus!(impl Modulus<u64>; WideType: u128);
 /// the same number and then reduced with the same modulus.
 #[derive(Clone, Copy, Default)]
 pub struct MulModuloFactor<T> {
-    value: T,
-    quotient: T,
+    /// value
+    pub value: T,
+
+    /// quotient
+    pub quotient: T,
 }
 
 impl<T: Copy> MulModuloFactor<T> {

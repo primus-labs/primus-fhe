@@ -1,4 +1,3 @@
-use crate::error::ModuloError;
 use crate::modulo::{
     AddModulo, AddModuloAssign, InvModulo, NegModulo, NegModuloAssign, SubModulo, SubModuloAssign,
 };
@@ -87,7 +86,7 @@ macro_rules! impl_modulo_ops_for_primitive {
         }
 
         impl TryInvModulo for $t {
-            fn try_inv_modulo(self, modulus: Self) -> Result<Self, crate::error::ModuloError> {
+            fn try_inv_modulo(self, modulus: Self) -> Result<Self, crate::Error> {
                 assert!(self < modulus);
 
                 let (_, inv, gcd) = Self::extended_gcd(modulus, self);
@@ -99,7 +98,7 @@ macro_rules! impl_modulo_ops_for_primitive {
                         Ok((inv + modulus as <Self as ExtendedGCD>::SignedT) as Self)
                     }
                 } else {
-                    Err(ModuloError::NoModuloInverse {
+                    Err(crate::Error::NoModuloInverse {
                         value: self.to_string(),
                         modulus: modulus.to_string(),
                     })

@@ -2,14 +2,12 @@
 
 mod fp32;
 
-pub use fp32::{BarrettConfig, Fp32};
+pub use fp32::{BarrettConfig, Fp32, MulFactor};
 
 use super::Field;
 
 /// Define `PrimeField` trait
 pub trait PrimeField: Field + PrimitiveRoot {}
-
-use crate::error::ModuloError;
 
 /// For ease of introduction we use `n` for `degreee` and `p` for prime number.
 ///
@@ -33,8 +31,8 @@ pub trait PrimitiveRoot: Sized {
     fn is_primitive_root(root: Self, degree: Self::Degree) -> bool;
 
     /// Try to get a primitive `degree`-th root of unity modulo `p`.
-    fn try_primitive_root(degree: Self::Degree) -> Result<Self, ModuloError>;
+    fn try_primitive_root(degree: Self::Degree) -> Result<Self, crate::Error>;
 
     /// Try to get the minimal primitive `degree`-th root of unity modulo `p`.
-    fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, ModuloError>;
+    fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, crate::Error>;
 }

@@ -1,4 +1,4 @@
-use crate::modulus::Modulus;
+use crate::field::prime_fields::MulFactor;
 
 /// This struct store the pre-computed data for number theory transform and
 /// inverse number theory transform.
@@ -23,12 +23,34 @@ use crate::modulus::Modulus;
 ///                         ----------  ----  -
 /// ```
 pub struct NTTTable<F> {
-    root: u64,
-    inv_root: u64,
+    root: F,
+    inv_root: F,
     coeff_count_power: u32,
     coeff_count: usize,
-    modulus: Modulus<F>,
-    // inv_degree_modulo: MulModuloFactor,
-    // root_powers: Vec<MulModuloFactor>,
-    // inv_root_powers: Vec<MulModuloFactor>,
+    inv_degree_modulo: MulFactor<F>,
+    root_powers: Vec<MulFactor<F>>,
+    inv_root_powers: Vec<MulFactor<F>>,
+}
+
+impl<F> NTTTable<F> {
+    /// Creates a new [`NTTTable<F>`].
+    pub fn new(
+        root: F,
+        inv_root: F,
+        coeff_count_power: u32,
+        coeff_count: usize,
+        inv_degree_modulo: MulFactor<F>,
+        root_powers: Vec<MulFactor<F>>,
+        inv_root_powers: Vec<MulFactor<F>>,
+    ) -> Self {
+        Self {
+            root,
+            inv_root,
+            coeff_count_power,
+            coeff_count,
+            inv_degree_modulo,
+            root_powers,
+            inv_root_powers,
+        }
+    }
 }

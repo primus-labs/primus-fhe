@@ -8,4 +8,10 @@ use super::PrimeField;
 pub trait NTTField: PrimeField {
     /// NTT table type
     type NTTTable;
+
+    /// Root type
+    type Root;
+
+    /// generate the ntt table of the ntt field
+    fn generate_ntt_table(log_n: u32) -> Result<Self::NTTTable, crate::Error>;
 }

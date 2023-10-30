@@ -6,3 +6,5 @@
 //! of polynomials, large integers, and so on.
 
 mod ntt_table;
+
+pub use ntt_table::NTTTable;

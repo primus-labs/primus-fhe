@@ -3,9 +3,9 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::Field;
+use crate::field::{Field, NTTField};
 
-use super::Poly;
+use super::{Poly, Polynomial};
 
 /// A polynomial in ntt form, it stores the values of the polynomial at some particular points.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -290,6 +290,37 @@ impl<F: Field> Neg for NTTPolynomial<F> {
             *e = -*e;
         });
         self
+    }
+}
+
+impl<F: NTTField> NTTPolynomial<F> {
+    /// Perform a fast inverse number theory transform in place.
+    ///
+    /// This function transforms a vector to a polynomial.
+    ///
+    /// All the elements of the polynomial are in the range `[0, self.modulus)`.
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - inputs in bit-reversed order, outputs in normal order
+    pub fn inverse_transform_inplace(
+        &self,
+        _ntt_table: &<F as NTTField>::NTTTable,
+    ) -> Polynomial<F> {
+        todo!()
+    }
+
+    /// Perform a fast inverse number theory transform in place.
+    ///
+    /// This function transforms a vector to a polynomial.
+    ///
+    /// All the elements of the polynomial are in the range `[0, self.modulus)`.
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - inputs in bit-reversed order, outputs in normal order
+    pub fn inverse_transform(&self, _ntt_table: &<F as NTTField>::NTTTable) -> Polynomial<F> {
+        todo!()
     }
 }
 
