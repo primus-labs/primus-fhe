@@ -52,28 +52,3 @@ pub trait Poly<F: Field>:
     where
         FN: FnMut() -> F;
 }
-
-/// A trait for transformation between polynomial and vector
-pub trait NTTPoly<F: NTTField> {
-    /// Perform a fast number theory transform in place.
-    ///
-    /// This function transforms a polynomial to a vector.
-    ///
-    /// All the elements of the vector are in the range `[0, self.modulus)`.
-    ///
-    /// # Arguments
-    ///
-    /// * `values` - inputs in normal order, outputs in bit-reversed order
-    fn transform(&mut self, ntt_table: &<F as NTTField>::NTTTable);
-
-    /// Perform a fast inverse number theory transform in place.
-    ///
-    /// This function transforms a vector to a polynomial.
-    ///
-    /// All the elements of the polynomial are in the range `[0, self.modulus)`.
-    ///
-    /// # Arguments
-    ///
-    /// * `values` - inputs in bit-reversed order, outputs in normal order
-    fn inverse_transform(&mut self, ntt_table: &<F as NTTField>::NTTTable);
-}

@@ -27,7 +27,7 @@ pub struct NTTTable<F> {
     inv_root: F,
     coeff_count_power: u32,
     coeff_count: usize,
-    inv_degree_modulo: MulFactor<F>,
+    inv_degree: MulFactor<F>,
     root_powers: Vec<MulFactor<F>>,
     inv_root_powers: Vec<MulFactor<F>>,
 }
@@ -39,7 +39,7 @@ impl<F> NTTTable<F> {
         inv_root: F,
         coeff_count_power: u32,
         coeff_count: usize,
-        inv_degree_modulo: MulFactor<F>,
+        inv_degree: MulFactor<F>,
         root_powers: Vec<MulFactor<F>>,
         inv_root_powers: Vec<MulFactor<F>>,
     ) -> Self {
@@ -48,7 +48,7 @@ impl<F> NTTTable<F> {
             inv_root,
             coeff_count_power,
             coeff_count,
-            inv_degree_modulo,
+            inv_degree,
             root_powers,
             inv_root_powers,
         }

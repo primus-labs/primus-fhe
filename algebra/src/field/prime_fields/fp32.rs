@@ -381,14 +381,14 @@ impl<const P: u32> NTTField for Fp32<P> {
             inv_root_powers[(i - 1).reverse_lsbs(log_n) + 1].set(power);
             power *= inv_root_factor;
         }
-        let inv_degree_modulo = Self::Root::new(Self(n as u32).inv());
+        let inv_degree = Self::Root::new(Self(n as u32).inv());
 
         Ok(NTTTable::new(
             root,
             inv_root,
             log_n,
             n,
-            inv_degree_modulo,
+            inv_degree,
             root_powers,
             inv_root_powers,
         ))
@@ -437,6 +437,7 @@ impl<F: Copy> MulFactor<F> {
 impl<const P: u32> Mul<MulFactor<Self>> for Fp32<P> {
     type Output = Self;
 
+    #[inline]
     fn mul(self, rhs: MulFactor<Self>) -> Self::Output {
         let r = MulModuloFactor::<u32> {
             value: rhs.value.0,
@@ -448,6 +449,7 @@ impl<const P: u32> Mul<MulFactor<Self>> for Fp32<P> {
 }
 
 impl<const P: u32> MulAssign<MulFactor<Self>> for Fp32<P> {
+    #[inline]
     fn mul_assign(&mut self, rhs: MulFactor<Self>) {
         let r = MulModuloFactor::<u32> {
             value: rhs.value.0,
