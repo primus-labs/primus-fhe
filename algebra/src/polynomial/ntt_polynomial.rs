@@ -21,6 +21,11 @@ impl<F: Field> NTTPolynomial<F> {
     pub fn new(data: Vec<F>) -> Self {
         Self { data }
     }
+
+    /// Drop self, and return the data
+    pub fn data(self) -> Vec<F> {
+        self.data
+    }
 }
 
 impl<F: Field> AsRef<NTTPolynomial<F>> for NTTPolynomial<F> {

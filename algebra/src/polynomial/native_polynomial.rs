@@ -21,6 +21,11 @@ impl<F: Field> Polynomial<F> {
     pub fn new(poly: Vec<F>) -> Self {
         Self { data: poly }
     }
+
+    /// Drop self, and return the data
+    pub fn data(self) -> Vec<F> {
+        self.data
+    }
 }
 
 impl<F: Field> AsRef<Polynomial<F>> for Polynomial<F> {

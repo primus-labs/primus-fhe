@@ -15,6 +15,13 @@ rand = "0.8"
 [features]
 default = []
 
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "ntt_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 # enable unstable features in the documentation
