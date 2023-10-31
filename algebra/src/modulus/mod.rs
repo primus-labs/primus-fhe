@@ -20,7 +20,7 @@
 //! 3. If `r ≥ m` do: `r ← r − m`.
 //! 4. Return(`r`).
 
-use crate::modulo::{MulModulo, MulModuloAssign};
+use crate::modulo_traits::{MulModulo, MulModuloAssign};
 use crate::primitive::Widening;
 
 #[macro_use]
@@ -112,7 +112,7 @@ impl_mul_modulo_factor_ops!(impl MulModuloFactor<u64>);
 mod tests {
     use rand::{prelude::*, thread_rng};
 
-    use crate::modulo::Modulo;
+    use crate::modulo_traits::Modulo;
 
     use super::*;
 
@@ -137,7 +137,7 @@ mod tests {
             let modulus = Modulus::<u64>::new(m);
             for _ in 0..ROUND {
                 let v: u64 = rng.gen();
-                assert_eq!(v.modulo(&modulus), v % m);
+                assert_eq!(v.reduce(&modulus), v % m);
             }
         }
     }
@@ -152,7 +152,7 @@ mod tests {
                 let lw64: u64 = rng.gen();
                 let hw64: u64 = rng.gen();
                 let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
-                assert_eq!([lw64, hw64].modulo(&modulus), (v % (m as u128)) as u64);
+                assert_eq!([lw64, hw64].reduce(&modulus), (v % (m as u128)) as u64);
             }
         }
     }
@@ -167,7 +167,7 @@ mod tests {
                 let lw64: u64 = r.gen();
                 let hw64: u64 = r.gen();
                 let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
-                assert_eq!((lw64, hw64).modulo(&modulus), (v % (m as u128)) as u64);
+                assert_eq!((lw64, hw64).reduce(&modulus), (v % (m as u128)) as u64);
             }
         }
     }

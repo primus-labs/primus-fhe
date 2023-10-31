@@ -1,4 +1,4 @@
-use crate::modulo::{Modulo, MulModulo, MulModuloAssign};
+use crate::modulo_traits::{Modulo, MulModulo, MulModuloAssign};
 use crate::modulus::Modulus;
 use crate::Widening;
 
@@ -10,8 +10,8 @@ where
     type Output = Self;
 
     #[inline]
-    fn mul_modulo(self, rhs: Self, modulus: &Modulus<T>) -> Self::Output {
-        self.widen_mul(rhs).modulo(modulus)
+    fn mul_reduce(self, rhs: Self, modulus: &Modulus<T>) -> Self::Output {
+        self.widen_mul(rhs).reduce(modulus)
     }
 }
 
@@ -21,7 +21,7 @@ where
     (T, T): for<'m> Modulo<&'m Modulus<T>, Output = T>,
 {
     #[inline]
-    fn mul_modulo_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
-        *self = self.widen_mul(rhs).modulo(modulus);
+    fn mul_reduce_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
+        *self = self.widen_mul(rhs).reduce(modulus);
     }
 }

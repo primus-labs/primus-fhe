@@ -2,7 +2,7 @@ use std::ops::ShrAssign;
 
 use num_traits::{One, PrimInt};
 
-use crate::modulo::{MulModulo, PowModulo};
+use crate::modulo_traits::{MulModulo, PowModulo};
 use crate::modulus::Modulus;
 use crate::Bits;
 
@@ -11,7 +11,7 @@ where
     T: Copy + One + PartialOrd + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
     E: PrimInt + ShrAssign<u32> + Bits,
 {
-    fn pow_modulo(self, mut exp: E, modulus: &Modulus<T>) -> Self {
+    fn pow_reduce(self, mut exp: E, modulus: &Modulus<T>) -> Self {
         if exp.is_zero() {
             return Self::one();
         }
@@ -23,7 +23,7 @@ where
         let exp_trailing_zeros = exp.trailing_zeros();
         if exp_trailing_zeros > 0 {
             for _ in 0..exp_trailing_zeros {
-                power = power.mul_modulo(power, modulus);
+                power = power.mul_reduce(power, modulus);
             }
             exp >>= exp_trailing_zeros;
         }
@@ -35,9 +35,9 @@ where
         let mut intermediate: Self = power;
         for _ in 1..(E::N_BITS - exp.leading_zeros()) {
             exp >>= 1;
-            power = power.mul_modulo(power, modulus);
+            power = power.mul_reduce(power, modulus);
             if !(exp & E::one()).is_zero() {
-                intermediate = intermediate.mul_modulo(power, modulus);
+                intermediate = intermediate.mul_reduce(power, modulus);
             }
         }
         intermediate
@@ -66,7 +66,7 @@ mod tests {
             let base = rng.sample(distr);
             let exp = random();
 
-            assert_eq!(simple_pow(base, exp, P), base.pow_modulo(exp, &modulus));
+            assert_eq!(simple_pow(base, exp, P), base.pow_reduce(exp, &modulus));
         }
     }
 

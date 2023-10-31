@@ -4,7 +4,7 @@
 //! Define arithmetic operations.
 
 pub mod field;
-pub mod modulo;
+pub mod modulo_traits;
 pub mod modulus;
 pub mod utils;
 

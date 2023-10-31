@@ -1,6 +1,6 @@
 use std::ops::Sub;
 
-use crate::modulo::{NegModulo, NegModuloAssign};
+use crate::modulo_traits::{NegModulo, NegModuloAssign};
 use crate::modulus::Modulus;
 
 impl<T> NegModulo<&Modulus<T>> for T
@@ -10,7 +10,7 @@ where
     type Output = T;
 
     #[inline]
-    fn neg_modulo(self, modulus: &Modulus<T>) -> Self::Output {
+    fn neg_reduce(self, modulus: &Modulus<T>) -> Self::Output {
         modulus.value() - self
     }
 }
@@ -20,7 +20,7 @@ where
     T: Copy + Sub<Output = Self>,
 {
     #[inline]
-    fn neg_modulo_assign(&mut self, modulus: &Modulus<T>) {
+    fn neg_reduce_assign(&mut self, modulus: &Modulus<T>) {
         *self = modulus.value() - *self;
     }
 }

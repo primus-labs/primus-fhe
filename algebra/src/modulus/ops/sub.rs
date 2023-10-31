@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
-use crate::modulo::{SubModulo, SubModuloAssign};
+use crate::modulo_traits::{SubModulo, SubModuloAssign};
 use crate::modulus::Modulus;
 
 impl<T> SubModulo<&Modulus<T>> for T
@@ -9,7 +9,7 @@ where
 {
     type Output = T;
 
-    fn sub_modulo(self, rhs: Self, modulus: &Modulus<T>) -> Self::Output {
+    fn sub_reduce(self, rhs: Self, modulus: &Modulus<T>) -> Self::Output {
         if self >= rhs {
             self - rhs
         } else {
@@ -22,7 +22,7 @@ impl<T> SubModuloAssign<&Modulus<T>> for T
 where
     T: Copy + AddAssign + SubAssign + Sub<Output = Self> + PartialOrd,
 {
-    fn sub_modulo_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
+    fn sub_reduce_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
         if *self >= rhs {
             *self -= rhs;
         } else {

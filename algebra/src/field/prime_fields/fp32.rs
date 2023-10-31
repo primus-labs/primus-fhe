@@ -5,7 +5,7 @@ use num_traits::{Inv, One, Pow, Zero};
 use rand::{thread_rng, Rng};
 
 use crate::field::{Field, NTTField};
-use crate::modulo::{
+use crate::modulo_traits::{
     AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo, MulModuloAssign,
     NegModulo, PowModulo, SubModulo, SubModuloAssign,
 };
@@ -83,7 +83,7 @@ impl<const P: u32> Add<Self> for Fp32<P> {
 
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0.add_modulo(rhs.0, P))
+        Self(self.0.add_reduce(rhs.0, P))
     }
 }
 
@@ -92,21 +92,21 @@ impl<const P: u32> Add<&Self> for Fp32<P> {
 
     #[inline]
     fn add(self, rhs: &Self) -> Self::Output {
-        Self(self.0.add_modulo(rhs.0, P))
+        Self(self.0.add_reduce(rhs.0, P))
     }
 }
 
 impl<const P: u32> AddAssign<Self> for Fp32<P> {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
-        self.0.add_modulo_assign(rhs.0, P)
+        self.0.add_reduce_assign(rhs.0, P)
     }
 }
 
 impl<const P: u32> AddAssign<&Self> for Fp32<P> {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
-        self.0.add_modulo_assign(rhs.0, P)
+        self.0.add_reduce_assign(rhs.0, P)
     }
 }
 
@@ -115,7 +115,7 @@ impl<const P: u32> Sub<Self> for Fp32<P> {
 
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0.sub_modulo(rhs.0, P))
+        Self(self.0.sub_reduce(rhs.0, P))
     }
 }
 
@@ -124,21 +124,21 @@ impl<const P: u32> Sub<&Self> for Fp32<P> {
 
     #[inline]
     fn sub(self, rhs: &Self) -> Self::Output {
-        Self(self.0.sub_modulo(rhs.0, P))
+        Self(self.0.sub_reduce(rhs.0, P))
     }
 }
 
 impl<const P: u32> SubAssign<Self> for Fp32<P> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        self.0.sub_modulo_assign(rhs.0, P)
+        self.0.sub_reduce_assign(rhs.0, P)
     }
 }
 
 impl<const P: u32> SubAssign<&Self> for Fp32<P> {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
-        self.0.sub_modulo_assign(rhs.0, P)
+        self.0.sub_reduce_assign(rhs.0, P)
     }
 }
 
@@ -147,7 +147,7 @@ impl<const P: u32> Mul<Self> for Fp32<P> {
 
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        Self(self.0.mul_modulo(rhs.0, &Self::BARRETT_MODULUS))
+        Self(self.0.mul_reduce(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
@@ -156,21 +156,21 @@ impl<const P: u32> Mul<&Self> for Fp32<P> {
 
     #[inline]
     fn mul(self, rhs: &Self) -> Self::Output {
-        Self(self.0.mul_modulo(rhs.0, &Self::BARRETT_MODULUS))
+        Self(self.0.mul_reduce(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
 impl<const P: u32> MulAssign<Self> for Fp32<P> {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        self.0.mul_modulo_assign(rhs.0, &Self::BARRETT_MODULUS)
+        self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
     }
 }
 
 impl<const P: u32> MulAssign<&Self> for Fp32<P> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
-        self.0.mul_modulo_assign(rhs.0, &Self::BARRETT_MODULUS)
+        self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
     }
 }
 
@@ -179,7 +179,7 @@ impl<const P: u32> Div<Self> for Fp32<P> {
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        Self(self.0.div_modulo(rhs.0, &Self::BARRETT_MODULUS))
+        Self(self.0.div_reduce(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
@@ -188,21 +188,21 @@ impl<const P: u32> Div<&Self> for Fp32<P> {
 
     #[inline]
     fn div(self, rhs: &Self) -> Self::Output {
-        Self(self.0.div_modulo(rhs.0, &Self::BARRETT_MODULUS))
+        Self(self.0.div_reduce(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
 impl<const P: u32> DivAssign<Self> for Fp32<P> {
     #[inline]
     fn div_assign(&mut self, rhs: Self) {
-        self.0.div_modulo_assign(rhs.0, &Self::BARRETT_MODULUS);
+        self.0.div_reduce_assign(rhs.0, &Self::BARRETT_MODULUS);
     }
 }
 
 impl<const P: u32> DivAssign<&Self> for Fp32<P> {
     #[inline]
     fn div_assign(&mut self, rhs: &Self) {
-        self.0.div_modulo_assign(rhs.0, &Self::BARRETT_MODULUS);
+        self.0.div_reduce_assign(rhs.0, &Self::BARRETT_MODULUS);
     }
 }
 
@@ -211,7 +211,7 @@ impl<const P: u32> Neg for Fp32<P> {
 
     #[inline]
     fn neg(self) -> Self::Output {
-        Self(self.0.neg_modulo(P))
+        Self(self.0.neg_reduce(P))
     }
 }
 
@@ -220,7 +220,7 @@ impl<const P: u32> Inv for Fp32<P> {
 
     #[inline]
     fn inv(self) -> Self::Output {
-        Self(self.0.inv_modulo(P))
+        Self(self.0.inv_reduce(P))
     }
 }
 
@@ -229,7 +229,7 @@ impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
 
     #[inline]
     fn pow(self, rhs: <Self as Field>::Order) -> Self::Output {
-        Self(self.0.pow_modulo(rhs, &Self::BARRETT_MODULUS))
+        Self(self.0.pow_reduce(rhs, &Self::BARRETT_MODULUS))
     }
 }
 
@@ -424,7 +424,7 @@ impl<const P: u32> Mul<MulFactor<Self>> for Fp32<P> {
             quotient: rhs.quotient.0,
         };
 
-        Self(self.0.mul_modulo(r, P))
+        Self(self.0.mul_reduce(r, P))
     }
 }
 
@@ -436,14 +436,14 @@ impl<const P: u32> MulAssign<MulFactor<Self>> for Fp32<P> {
             quotient: rhs.quotient.0,
         };
 
-        self.0.mul_modulo_assign(r, P);
+        self.0.mul_reduce_assign(r, P);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modulo::PowModulo;
+    use crate::modulo_traits::PowModulo;
     use rand::thread_rng;
 
     #[test]
@@ -533,7 +533,7 @@ mod tests {
         for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
-            let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
+            let b_inv = b.pow_reduce(P - 2, &Modulus::<u32>::new(P));
             let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
             assert_eq!(FF::from(a) / FF::from(b), FF::from(c));
         }
@@ -542,7 +542,7 @@ mod tests {
         for _ in 0..round {
             let a = rng.sample(distr);
             let b = rng.sample(distr);
-            let b_inv = b.pow_modulo(P - 2, &Modulus::<u32>::new(P));
+            let b_inv = b.pow_reduce(P - 2, &Modulus::<u32>::new(P));
             let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
 
             let mut a = FF::from(a);
@@ -561,7 +561,7 @@ mod tests {
         // inv
         for _ in 0..round {
             let a = rng.sample(distr);
-            let a_inv = a.pow_modulo(P - 2, &Modulus::<u32>::new(P));
+            let a_inv = a.pow_reduce(P - 2, &Modulus::<u32>::new(P));
 
             assert_eq!(FF::from(a).inv(), FF::from(a_inv));
             assert_eq!(FF::from(a) * FF::from(a_inv), One::one());
