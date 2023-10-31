@@ -317,8 +317,6 @@ where
     ///
     /// This function transforms a polynomial to a vector.
     ///
-    /// All the elements of the vector are in the range `[0, self.modulus)`.
-    ///
     /// # Arguments
     ///
     /// * `self` - inputs in normal order, outputs in bit-reversed order
@@ -386,11 +384,9 @@ where
         NTTPolynomial::<F>::new(self.data)
     }
 
-    /// Perform a fast number theory transform in place.
+    /// Perform a fast number theory transform.
     ///
     /// This function transforms a polynomial to a vector.
-    ///
-    /// All the elements of the vector are in the range `[0, self.modulus)`.
     ///
     /// # Arguments
     ///

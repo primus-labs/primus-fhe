@@ -304,8 +304,6 @@ where
     ///
     /// This function transforms a vector to a polynomial.
     ///
-    /// All the elements of the polynomial are in the range `[0, self.modulus)`.
-    ///
     /// # Arguments
     ///
     /// * `self` - inputs in bit-reversed order, outputs in normal order
@@ -395,11 +393,9 @@ where
         Polynomial::<F>::new(self.data)
     }
 
-    /// Perform a fast inverse number theory transform in place.
+    /// Perform a fast inverse number theory transform.
     ///
     /// This function transforms a vector to a polynomial.
-    ///
-    /// All the elements of the polynomial are in the range `[0, self.modulus)`.
     ///
     /// # Arguments
     ///
