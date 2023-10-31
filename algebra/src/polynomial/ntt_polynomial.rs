@@ -3,7 +3,9 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
+use crate::field::prime_fields::{MulFactor, RootFactor};
 use crate::field::{Field, NTTField};
+use crate::transformation::NTTTable;
 
 use super::{Poly, Polynomial};
 
@@ -293,7 +295,11 @@ impl<F: Field> Neg for NTTPolynomial<F> {
     }
 }
 
-impl<F: NTTField> NTTPolynomial<F> {
+impl<F: NTTField<NTTTableType = NTTTable<F>, RootType = MulFactor<F>>> NTTPolynomial<F>
+where
+    F: Mul<<F as NTTField>::RootType, Output = F>,
+    MulFactor<F>: RootFactor<F>,
+{
     /// Perform a fast inverse number theory transform in place.
     ///
     /// This function transforms a vector to a polynomial.
@@ -302,12 +308,91 @@ impl<F: NTTField> NTTPolynomial<F> {
     ///
     /// # Arguments
     ///
-    /// * `values` - inputs in bit-reversed order, outputs in normal order
-    pub fn inverse_transform_inplace(
-        &self,
-        _ntt_table: &<F as NTTField>::NTTTable,
-    ) -> Polynomial<F> {
-        todo!()
+    /// * `self` - inputs in bit-reversed order, outputs in normal order
+    pub fn inverse_transform_inplace(mut self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
+        let values = self.as_mut();
+        let log_n = ntt_table.coeff_count_power();
+
+        debug_assert_eq!(values.len(), 1 << log_n);
+
+        let mut root: MulFactor<F>;
+        let mut u: F;
+        let mut v: F;
+
+        let roots = ntt_table.inv_root_powers();
+        let mut root_iter = roots[1..].iter();
+
+        for gap in (0..=1).map(|x| 1usize << x) {
+            for vc in values.chunks_exact_mut(gap << 1) {
+                root = *root_iter.next().unwrap();
+                let (v0, v1) = vc.split_at_mut(gap);
+                for (i, j) in std::iter::zip(v0, v1) {
+                    u = *i;
+                    v = *j;
+                    *i = u + v;
+                    *j = (u - v) * root;
+                }
+            }
+        }
+
+        for gap in (2..log_n - 1).map(|x| 1usize << x) {
+            for vc in values.chunks_exact_mut(gap << 1) {
+                root = *root_iter.next().unwrap();
+                let (v0, v1) = vc.split_at_mut(gap);
+                for (i, j) in std::iter::zip(v0.chunks_exact_mut(4), v1.chunks_exact_mut(4)) {
+                    u = i[0];
+                    v = j[0];
+                    i[0] = u + v;
+                    j[0] = (u - v) * root;
+
+                    u = i[1];
+                    v = j[1];
+                    i[1] = u + v;
+                    j[1] = (u - v) * root;
+
+                    u = i[2];
+                    v = j[2];
+                    i[2] = u + v;
+                    j[2] = (u - v) * root;
+
+                    u = i[3];
+                    v = j[3];
+                    i[3] = u + v;
+                    j[3] = (u - v) * root;
+                }
+            }
+        }
+
+        let gap = 1 << (log_n - 1);
+
+        let scalar = *ntt_table.inv_degree();
+
+        root = *root_iter.next().unwrap();
+        let scaled_r = MulFactor::<F>::new(root.value() * scalar);
+        let (v0, v1) = values.split_at_mut(gap);
+        for (i, j) in std::iter::zip(v0.chunks_exact_mut(4), v1.chunks_exact_mut(4)) {
+            u = i[0];
+            v = j[0];
+            i[0] = (u + v) * scalar;
+            j[0] = (u - v) * scaled_r;
+
+            u = i[1];
+            v = j[1];
+            i[1] = (u + v) * scalar;
+            j[1] = (u - v) * scaled_r;
+
+            u = i[2];
+            v = j[2];
+            i[2] = (u + v) * scalar;
+            j[2] = (u - v) * scaled_r;
+
+            u = i[3];
+            v = j[3];
+            i[3] = (u + v) * scalar;
+            j[3] = (u - v) * scaled_r;
+        }
+
+        Polynomial::<F>::new(self.data)
     }
 
     /// Perform a fast inverse number theory transform in place.
@@ -318,9 +403,9 @@ impl<F: NTTField> NTTPolynomial<F> {
     ///
     /// # Arguments
     ///
-    /// * `values` - inputs in bit-reversed order, outputs in normal order
-    pub fn inverse_transform(&self, _ntt_table: &<F as NTTField>::NTTTable) -> Polynomial<F> {
-        todo!()
+    /// * `self` - inputs in bit-reversed order, outputs in normal order
+    pub fn inverse_transform(&self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
+        self.clone().inverse_transform_inplace(ntt_table)
     }
 }
 

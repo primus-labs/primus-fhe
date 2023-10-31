@@ -4,7 +4,7 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::{Field, NTTField};
+use crate::field::Field;
 
 /// A trait to indicate polynomial in coefficient form,
 /// which can perform `modulo`, `add_modulo` and `sub_modulo`.

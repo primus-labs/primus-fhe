@@ -409,10 +409,10 @@ macro_rules! impl_mul_modulo_factor {
             /// `0 ≤ wx − qp < xp/β + p < 2p < β`
             #[inline]
             pub fn mul_modulo_lazy(&self, rhs: $SelfT, modulus: $SelfT) -> $SelfT {
-                let (_, hw64) = self.quotient.widen_mul(rhs);
+                let (_, hw) = self.quotient.widen_mul(rhs);
                 self.value
                     .wrapping_mul(rhs)
-                    .wrapping_sub(hw64.wrapping_mul(modulus))
+                    .wrapping_sub(hw.wrapping_mul(modulus))
             }
         }
     };
@@ -432,10 +432,10 @@ macro_rules! impl_mul_modulo_factor_ops {
             /// `rhs.value` must be less than `modulus`.
             #[inline]
             fn mul_modulo(self, rhs: MulModuloFactor<$SelfT>, modulus: $SelfT) -> Self::Output {
-                let (_, hw64) = self.widen_mul(rhs.quotient);
+                let (_, hw) = self.widen_mul(rhs.quotient);
                 let tmp = self
                     .wrapping_mul(rhs.value)
-                    .wrapping_sub(hw64.wrapping_mul(modulus));
+                    .wrapping_sub(hw.wrapping_mul(modulus));
 
                 if tmp >= modulus {
                     tmp - modulus
@@ -473,11 +473,11 @@ macro_rules! impl_mul_modulo_factor_ops {
             /// The result is in `[0, modulus)`.
             #[inline]
             fn mul_modulo(self, rhs: $SelfT, modulus: $SelfT) -> Self::Output {
-                let (_, hw64) = self.quotient.widen_mul(rhs);
+                let (_, hw) = self.quotient.widen_mul(rhs);
                 let tmp = self
                     .value
                     .wrapping_mul(rhs)
-                    .wrapping_sub(hw64.wrapping_mul(modulus));
+                    .wrapping_sub(hw.wrapping_mul(modulus));
 
                 if tmp >= modulus {
                     tmp - modulus
@@ -513,10 +513,10 @@ macro_rules! impl_mul_modulo_factor_ops {
             /// `rhs.value` must be less than `modulus`.
             #[inline]
             fn mul_modulo_assign(&mut self, rhs: MulModuloFactor<$SelfT>, modulus: $SelfT) {
-                let (_, hw64) = self.widen_mul(rhs.quotient);
+                let (_, hw) = self.widen_mul(rhs.quotient);
                 let tmp = self
                     .wrapping_mul(rhs.value)
-                    .wrapping_sub(hw64.wrapping_mul(modulus));
+                    .wrapping_sub(hw.wrapping_mul(modulus));
                 *self = if tmp >= modulus { tmp - modulus } else { tmp };
             }
         }

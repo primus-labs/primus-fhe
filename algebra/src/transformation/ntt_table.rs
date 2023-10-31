@@ -53,4 +53,39 @@ impl<F> NTTTable<F> {
             inv_root_powers,
         }
     }
+
+    /// Returns a reference to the root of this [`NTTTable<F>`].
+    pub fn root(&self) -> &F {
+        &self.root
+    }
+
+    /// Returns a reference to the inv root of this [`NTTTable<F>`].
+    pub fn inv_root(&self) -> &F {
+        &self.inv_root
+    }
+
+    /// Returns the coeff count power of this [`NTTTable<F>`].
+    pub fn coeff_count_power(&self) -> u32 {
+        self.coeff_count_power
+    }
+
+    /// Returns the coeff count of this [`NTTTable<F>`].
+    pub fn coeff_count(&self) -> usize {
+        self.coeff_count
+    }
+
+    /// Returns a reference to the inv degree of this [`NTTTable<F>`].
+    pub fn inv_degree(&self) -> &MulFactor<F> {
+        &self.inv_degree
+    }
+
+    /// Returns a reference to the root powers of this [`NTTTable<F>`].
+    pub fn root_powers(&self) -> &[MulFactor<F>] {
+        self.root_powers.as_ref()
+    }
+
+    /// Returns a reference to the inv root powers of this [`NTTTable<F>`].
+    pub fn inv_root_powers(&self) -> &[MulFactor<F>] {
+        self.inv_root_powers.as_ref()
+    }
 }

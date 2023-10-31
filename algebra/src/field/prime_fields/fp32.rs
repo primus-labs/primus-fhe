@@ -26,12 +26,12 @@ impl<const P: u32> Field for Fp32<P> {
     type Modulus = u32;
 
     #[inline]
-    fn order(&self) -> Self::Order {
+    fn order() -> Self::Order {
         P
     }
 
     #[inline]
-    fn modulus(&self) -> Self::Modulus {
+    fn modulus() -> Self::Modulus {
         P
     }
 }
@@ -52,7 +52,7 @@ pub trait BarrettConfig<const P: u32> {
 
     /// Get the modulus of the field.
     #[inline]
-    fn modulus() -> Modulus<u32> {
+    fn barrett_modulus() -> Modulus<u32> {
         Self::MODULUS
     }
 
@@ -170,10 +170,7 @@ impl<const P: u32> Mul<Self> for Fp32<P> {
 
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        Self(
-            self.0
-                .mul_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
+        Self(self.0.mul_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
     }
 }
 
@@ -182,10 +179,7 @@ impl<const P: u32> Mul<&Self> for Fp32<P> {
 
     #[inline]
     fn mul(self, rhs: &Self) -> Self::Output {
-        Self(
-            self.0
-                .mul_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
+        Self(self.0.mul_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
     }
 }
 
@@ -193,7 +187,7 @@ impl<const P: u32> MulAssign<Self> for Fp32<P> {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         self.0
-            .mul_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus())
+            .mul_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus())
     }
 }
 
@@ -201,7 +195,7 @@ impl<const P: u32> MulAssign<&Self> for Fp32<P> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
         self.0
-            .mul_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus())
+            .mul_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus())
     }
 }
 
@@ -210,10 +204,7 @@ impl<const P: u32> Div<Self> for Fp32<P> {
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        Self(
-            self.0
-                .div_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
+        Self(self.0.div_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
     }
 }
 
@@ -222,10 +213,7 @@ impl<const P: u32> Div<&Self> for Fp32<P> {
 
     #[inline]
     fn div(self, rhs: &Self) -> Self::Output {
-        Self(
-            self.0
-                .div_modulo(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
+        Self(self.0.div_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
     }
 }
 
@@ -233,7 +221,7 @@ impl<const P: u32> DivAssign<Self> for Fp32<P> {
     #[inline]
     fn div_assign(&mut self, rhs: Self) {
         self.0
-            .div_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus());
+            .div_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus());
     }
 }
 
@@ -241,7 +229,7 @@ impl<const P: u32> DivAssign<&Self> for Fp32<P> {
     #[inline]
     fn div_assign(&mut self, rhs: &Self) {
         self.0
-            .div_modulo_assign(rhs.0, &<Fp32<P> as BarrettConfig<P>>::modulus());
+            .div_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus());
     }
 }
 
@@ -267,10 +255,7 @@ impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
     type Output = Self;
 
     fn pow(self, rhs: <Self as Field>::Order) -> Self::Output {
-        Self(
-            self.0
-                .pow_modulo(rhs, &<Fp32<P> as BarrettConfig<P>>::modulus()),
-        )
+        Self(self.0.pow_modulo(rhs, &Fp32::<P>::barrett_modulus()))
     }
 }
 
@@ -352,28 +337,28 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
 }
 
 impl<const P: u32> NTTField for Fp32<P> {
-    type NTTTable = NTTTable<Self>;
+    type NTTTableType = NTTTable<Self>;
 
-    type Root = MulFactor<Self>;
+    type RootType = MulFactor<Self>;
 
     fn generate_ntt_table(log_n: u32) -> Result<NTTTable<Self>, crate::Error> {
         let n = 1usize << log_n;
 
-        let root = Self::try_minimal_primitive_root((2 * n).try_into().unwrap())?;
+        let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
         let inv_root = root.inv();
 
-        let root_factor = Self::Root::new(root);
+        let root_factor = <Self as NTTField>::RootType::new(root);
         let mut power = root;
 
-        let mut root_powers = vec![Self::Root::default(); n];
+        let mut root_powers = vec![<Self as NTTField>::RootType::default(); n];
         root_powers[0].set(Self::one());
         for i in 1..n {
             root_powers[i.reverse_lsbs(log_n)].set(power);
             power *= root_factor;
         }
 
-        let inv_root_factor = Self::Root::new(inv_root);
-        let mut inv_root_powers = vec![Self::Root::default(); n];
+        let inv_root_factor = <Self as NTTField>::RootType::new(inv_root);
+        let mut inv_root_powers = vec![<Self as NTTField>::RootType::default(); n];
         power = inv_root;
 
         inv_root_powers[0].set(Self::one());
@@ -381,7 +366,7 @@ impl<const P: u32> NTTField for Fp32<P> {
             inv_root_powers[(i - 1).reverse_lsbs(log_n) + 1].set(power);
             power *= inv_root_factor;
         }
-        let inv_degree = Self::Root::new(Self(n as u32).inv());
+        let inv_degree = <Self as NTTField>::RootType::new(Self(n as u32).inv());
 
         Ok(NTTTable::new(
             root,
@@ -402,32 +387,40 @@ pub struct MulFactor<F> {
     quotient: F,
 }
 
-impl<const P: u32> MulFactor<Fp32<P>> {
-    /// Constructs a [`MulFactor`].
+/// A helper trait
+pub trait RootFactor<F> {
+    /// Constructs a struct
+    fn new(value: F) -> Self;
+    /// Reset the struct
+    fn set(&mut self, value: F);
+}
+
+impl<const P: u32> RootFactor<Fp32<P>> for MulFactor<Fp32<P>> {
+    /// Constructs a [`MulFactor<Fp32<P>>`].
     #[inline]
-    pub fn new(value: Fp32<P>) -> Self {
+    fn new(value: Fp32<P>) -> Self {
         Self {
             value,
             quotient: Fp32((((value.0 as u64) << 32) / P as u64) as u32),
         }
     }
 
-    /// Resets the content of [`MulFactor`].
+    /// Resets the content of [`MulFactor<Fp32<P>>`].
     #[inline]
-    pub fn set(&mut self, value: Fp32<P>) {
+    fn set(&mut self, value: Fp32<P>) {
         self.value = value;
         self.quotient = Fp32((((value.0 as u64) << 32) / P as u64) as u32);
     }
 }
 
 impl<F: Copy> MulFactor<F> {
-    /// Returns the value of this [`MulModuloFactor`].
+    /// Returns the value of this [`MulFactor<F>`].
     #[inline]
     pub fn value(&self) -> F {
         self.value
     }
 
-    /// Returns the quotient of this [`MulModuloFactor`].
+    /// Returns the quotient of this [`MulFactor<F>`].
     #[inline]
     pub fn quotient(&self) -> F {
         self.quotient
@@ -455,7 +448,8 @@ impl<const P: u32> MulAssign<MulFactor<Self>> for Fp32<P> {
             value: rhs.value.0,
             quotient: rhs.quotient.0,
         };
-        self.0 = self.0.mul_modulo(r, P);
+
+        self.0.mul_modulo_assign(r, P);
     }
 }
 

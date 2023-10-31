@@ -7,11 +7,11 @@ use super::PrimeField;
 /// It's optimized for the vector with the length of power of two.
 pub trait NTTField: PrimeField {
     /// NTT table type
-    type NTTTable;
+    type NTTTableType;
 
     /// Root type
-    type Root;
+    type RootType;
 
     /// generate the ntt table of the ntt field
-    fn generate_ntt_table(log_n: u32) -> Result<Self::NTTTable, crate::Error>;
+    fn generate_ntt_table(log_n: u32) -> Result<Self::NTTTableType, crate::Error>;
 }

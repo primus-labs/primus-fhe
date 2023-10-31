@@ -52,10 +52,10 @@ pub trait Field:
     type Modulus;
 
     /// Returns the order of the field.
-    fn order(&self) -> Self::Order;
+    fn order() -> Self::Order;
 
     /// Returns the modulus of the field.
-    fn modulus(&self) -> Self::Modulus;
+    fn modulus() -> Self::Modulus;
 
     /// Returns `self + self`.
     #[inline]
