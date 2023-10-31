@@ -5,7 +5,7 @@ use thiserror::Error;
 
 /// Errors that may occur.
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum AlgebraError {
     /// Error that occurs when the given value has no inverse element with the given modulus.
     #[error("Value {value} has no inverse element with the modulus {modulus}!")]
     NoModuloInverse {

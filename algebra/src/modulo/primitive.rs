@@ -86,7 +86,7 @@ macro_rules! impl_modulo_ops_for_primitive {
         }
 
         impl TryInvModulo for $t {
-            fn try_inv_modulo(self, modulus: Self) -> Result<Self, crate::Error> {
+            fn try_inv_modulo(self, modulus: Self) -> Result<Self, crate::AlgebraError> {
                 assert!(self < modulus);
 
                 let (_, inv, gcd) = Self::extended_gcd(modulus, self);
@@ -98,7 +98,7 @@ macro_rules! impl_modulo_ops_for_primitive {
                         Ok((inv + modulus as <Self as ExtendedGCD>::SignedT) as Self)
                     }
                 } else {
-                    Err(crate::Error::NoModuloInverse {
+                    Err(crate::AlgebraError::NoModuloInverse {
                         value: self.to_string(),
                         modulus: modulus.to_string(),
                     })

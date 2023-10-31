@@ -17,5 +17,5 @@ pub trait TryInvModulo<Modulus = Self>: Sized {
     /// # Errors
     ///
     /// If there dose not exist the such inverse, a [`ModuloError`] will be returned.
-    fn try_inv_modulo(self, modulus: Modulus) -> Result<Self, crate::Error>;
+    fn try_inv_modulo(self, modulus: Modulus) -> Result<Self, crate::AlgebraError>;
 }

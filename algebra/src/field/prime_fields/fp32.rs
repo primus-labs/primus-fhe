@@ -13,7 +13,7 @@ use crate::modulus::{Modulus, MulModuloFactor};
 use crate::transformation::NTTTable;
 use crate::utils::{Prime, ReverseLsbs};
 
-use super::{PrimeField, PrimitiveRoot};
+use super::PrimeField;
 
 /// A finite Field type, whose inner size is 32bits.
 ///
@@ -233,75 +233,6 @@ impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
     }
 }
 
-impl<const P: u32> PrimitiveRoot for Fp32<P> {
-    type Degree = u32;
-
-    #[inline]
-    fn is_primitive_root(root: Self, degree: Self::Degree) -> bool {
-        debug_assert!(root.0 < P);
-        debug_assert!(
-            degree > 1 && degree.is_power_of_two(),
-            "degree must be a power of two and bigger than 1"
-        );
-
-        if root.is_zero() {
-            return false;
-        }
-
-        root.pow(degree >> 1).0 == P - 1
-    }
-
-    fn try_primitive_root(degree: Self::Degree) -> Result<Self, crate::Error> {
-        // p-1
-        let modulus_sub_one = P - 1;
-
-        // (p-1)/n
-        let quotient = modulus_sub_one / degree;
-
-        // (p-1) must be divisible by n
-        if modulus_sub_one != quotient * degree {
-            return Err(crate::Error::NoPrimitiveRoot {
-                degree: degree.to_string(),
-                modulus: P.to_string(),
-            });
-        }
-
-        let mut rng = thread_rng();
-        let distr = rand::distributions::Uniform::new_inclusive(2, P - 1);
-
-        let mut w = Zero::zero();
-
-        if (0..100).any(|_| {
-            w = Self(rng.sample(distr)).pow(quotient);
-            Self::is_primitive_root(w, degree)
-        }) {
-            Ok(w)
-        } else {
-            Err(crate::Error::NoPrimitiveRoot {
-                degree: degree.to_string(),
-                modulus: P.to_string(),
-            })
-        }
-    }
-
-    fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, crate::Error> {
-        let mut root = Self::try_primitive_root(degree)?;
-
-        let generator_sq = root.square();
-        let mut current_generator = root;
-
-        for _ in 0..degree {
-            if current_generator < root {
-                root = current_generator;
-            }
-
-            current_generator *= generator_sq;
-        }
-
-        Ok(root)
-    }
-}
-
 impl<const P: u32> Field for Fp32<P> {
     type Order = u32;
     type Modulus = u32;
@@ -330,7 +261,74 @@ impl<const P: u32> NTTField for Fp32<P> {
 
     type RootType = MulFactor<Self>;
 
-    fn generate_ntt_table(log_n: u32) -> Result<NTTTable<Self>, crate::Error> {
+    type Degree = u32;
+
+    #[inline]
+    fn is_primitive_root(root: Self, degree: Self::Degree) -> bool {
+        debug_assert!(root.0 < P);
+        assert!(
+            degree > 1 && degree.is_power_of_two(),
+            "degree must be a power of two and bigger than 1"
+        );
+
+        if root.is_zero() {
+            return false;
+        }
+
+        root.pow(degree >> 1).0 == P - 1
+    }
+
+    fn try_primitive_root(degree: Self::Degree) -> Result<Self, crate::AlgebraError> {
+        // p-1
+        let modulus_sub_one = P - 1;
+
+        // (p-1)/n
+        let quotient = modulus_sub_one / degree;
+
+        // (p-1) must be divisible by n
+        if modulus_sub_one != quotient * degree {
+            return Err(crate::AlgebraError::NoPrimitiveRoot {
+                degree: degree.to_string(),
+                modulus: P.to_string(),
+            });
+        }
+
+        let mut rng = thread_rng();
+        let distr = rand::distributions::Uniform::new_inclusive(2, P - 1);
+
+        let mut w = Zero::zero();
+
+        if (0..100).any(|_| {
+            w = Self(rng.sample(distr)).pow(quotient);
+            Self::is_primitive_root(w, degree)
+        }) {
+            Ok(w)
+        } else {
+            Err(crate::AlgebraError::NoPrimitiveRoot {
+                degree: degree.to_string(),
+                modulus: P.to_string(),
+            })
+        }
+    }
+
+    fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, crate::AlgebraError> {
+        let mut root = Self::try_primitive_root(degree)?;
+
+        let generator_sq = root.square();
+        let mut current_generator = root;
+
+        for _ in 0..degree {
+            if current_generator < root {
+                root = current_generator;
+            }
+
+            current_generator *= generator_sq;
+        }
+
+        Ok(root)
+    }
+
+    fn generate_ntt_table(log_n: u32) -> Result<NTTTable<Self>, crate::AlgebraError> {
         let n = 1usize << log_n;
 
         let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;

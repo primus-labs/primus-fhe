@@ -15,6 +15,6 @@ pub mod transformation;
 
 mod primitive;
 
-pub use error::Error;
+pub use error::AlgebraError;
 
 pub(crate) use primitive::{Bits, Widening};
