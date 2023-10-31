@@ -21,23 +21,6 @@ use super::{PrimeField, PrimitiveRoot};
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Fp32<const P: u32>(u32);
 
-impl<const P: u32> Field for Fp32<P> {
-    type Order = u32;
-    type Modulus = u32;
-
-    #[inline]
-    fn order() -> Self::Order {
-        P
-    }
-
-    #[inline]
-    fn modulus() -> Self::Modulus {
-        P
-    }
-}
-
-impl<const P: u32> PrimeField for Fp32<P> {}
-
 impl<const P: u32> Display for Fp32<P> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -48,23 +31,17 @@ impl<const P: u32> Display for Fp32<P> {
 /// A helper trait to get the modulus of the field.
 pub trait BarrettConfig<const P: u32> {
     /// The modulus of the field.
-    const MODULUS: Modulus<u32>;
+    const BARRETT_MODULUS: Modulus<u32>;
 
     /// Get the modulus of the field.
     #[inline]
     fn barrett_modulus() -> Modulus<u32> {
-        Self::MODULUS
-    }
-
-    /// Check [`Self`] is a prime field.
-    #[inline]
-    fn is_prime_field() -> bool {
-        Self::MODULUS.probably_prime(20)
+        Self::BARRETT_MODULUS
     }
 }
 
 impl<const P: u32> BarrettConfig<P> for Fp32<P> {
-    const MODULUS: Modulus<u32> = Modulus::<u32>::new(P);
+    const BARRETT_MODULUS: Modulus<u32> = Modulus::<u32>::new(P);
 }
 
 impl<const P: u32> Fp32<P> {
@@ -170,7 +147,7 @@ impl<const P: u32> Mul<Self> for Fp32<P> {
 
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        Self(self.0.mul_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
+        Self(self.0.mul_modulo(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
@@ -179,23 +156,21 @@ impl<const P: u32> Mul<&Self> for Fp32<P> {
 
     #[inline]
     fn mul(self, rhs: &Self) -> Self::Output {
-        Self(self.0.mul_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
+        Self(self.0.mul_modulo(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
 impl<const P: u32> MulAssign<Self> for Fp32<P> {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        self.0
-            .mul_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus())
+        self.0.mul_modulo_assign(rhs.0, &Self::BARRETT_MODULUS)
     }
 }
 
 impl<const P: u32> MulAssign<&Self> for Fp32<P> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
-        self.0
-            .mul_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus())
+        self.0.mul_modulo_assign(rhs.0, &Self::BARRETT_MODULUS)
     }
 }
 
@@ -204,7 +179,7 @@ impl<const P: u32> Div<Self> for Fp32<P> {
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        Self(self.0.div_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
+        Self(self.0.div_modulo(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
@@ -213,23 +188,21 @@ impl<const P: u32> Div<&Self> for Fp32<P> {
 
     #[inline]
     fn div(self, rhs: &Self) -> Self::Output {
-        Self(self.0.div_modulo(rhs.0, &Fp32::<P>::barrett_modulus()))
+        Self(self.0.div_modulo(rhs.0, &Self::BARRETT_MODULUS))
     }
 }
 
 impl<const P: u32> DivAssign<Self> for Fp32<P> {
     #[inline]
     fn div_assign(&mut self, rhs: Self) {
-        self.0
-            .div_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus());
+        self.0.div_modulo_assign(rhs.0, &Self::BARRETT_MODULUS);
     }
 }
 
 impl<const P: u32> DivAssign<&Self> for Fp32<P> {
     #[inline]
     fn div_assign(&mut self, rhs: &Self) {
-        self.0
-            .div_modulo_assign(rhs.0, &Fp32::<P>::barrett_modulus());
+        self.0.div_modulo_assign(rhs.0, &Self::BARRETT_MODULUS);
     }
 }
 
@@ -254,14 +227,16 @@ impl<const P: u32> Inv for Fp32<P> {
 impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
     type Output = Self;
 
+    #[inline]
     fn pow(self, rhs: <Self as Field>::Order) -> Self::Output {
-        Self(self.0.pow_modulo(rhs, &Fp32::<P>::barrett_modulus()))
+        Self(self.0.pow_modulo(rhs, &Self::BARRETT_MODULUS))
     }
 }
 
 impl<const P: u32> PrimitiveRoot for Fp32<P> {
     type Degree = u32;
 
+    #[inline]
     fn is_primitive_root(root: Self, degree: Self::Degree) -> bool {
         debug_assert!(root.0 < P);
         debug_assert!(
@@ -292,29 +267,20 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
         }
 
         let mut rng = thread_rng();
-
-        let mut g;
-        let mut attempt_counter: i32 = 0;
-        let attempt_counter_max: i32 = 100;
-
         let distr = rand::distributions::Uniform::new_inclusive(2, P - 1);
-        loop {
-            attempt_counter += 1;
 
-            g = rng.sample(distr);
+        let mut w = Zero::zero();
 
-            let w = Self(g).pow(quotient);
-
-            if Self::is_primitive_root(w, degree) {
-                break Ok(w);
-            }
-
-            if attempt_counter >= attempt_counter_max {
-                break Err(crate::Error::NoPrimitiveRoot {
-                    degree: degree.to_string(),
-                    modulus: P.to_string(),
-                });
-            }
+        if (0..100).any(|_| {
+            w = Self(rng.sample(distr)).pow(quotient);
+            Self::is_primitive_root(w, degree)
+        }) {
+            Ok(w)
+        } else {
+            Err(crate::Error::NoPrimitiveRoot {
+                degree: degree.to_string(),
+                modulus: P.to_string(),
+            })
         }
     }
 
@@ -333,6 +299,29 @@ impl<const P: u32> PrimitiveRoot for Fp32<P> {
         }
 
         Ok(root)
+    }
+}
+
+impl<const P: u32> Field for Fp32<P> {
+    type Order = u32;
+    type Modulus = u32;
+
+    #[inline]
+    fn order() -> Self::Order {
+        P
+    }
+
+    #[inline]
+    fn modulus() -> Self::Modulus {
+        P
+    }
+}
+
+impl<const P: u32> PrimeField for Fp32<P> {
+    /// Check [`Self`] is a prime field.
+    #[inline]
+    fn is_prime_field() -> bool {
+        <Self as BarrettConfig<P>>::BARRETT_MODULUS.probably_prime(20)
     }
 }
 

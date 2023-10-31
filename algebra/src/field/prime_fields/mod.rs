@@ -7,7 +7,10 @@ pub use fp32::{BarrettConfig, Fp32, MulFactor, RootFactor};
 use super::Field;
 
 /// Define `PrimeField` trait
-pub trait PrimeField: Field + PrimitiveRoot {}
+pub trait PrimeField: Field + PrimitiveRoot<Degree = <Self as Field>::Order> {
+    /// Check [`Self`] is a prime field.
+    fn is_prime_field() -> bool;
+}
 
 /// For ease of introduction we use `n` for `degreee` and `p` for prime number.
 ///
