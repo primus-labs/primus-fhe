@@ -303,8 +303,7 @@ impl<F: Field> Neg for NTTPolynomial<F> {
 
 impl<F> NTTPolynomial<F>
 where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>
-        + Mul<<F as NTTField>::Root, Output = F>,
+    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>> + Mul<<F as NTTField>::Root, Output = F>,
     MulFactor<F>: RootFactor<F>,
 {
     /// Perform a fast inverse number theory transform in place.
