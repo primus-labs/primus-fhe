@@ -23,6 +23,7 @@ impl<F: Field> Polynomial<F> {
     }
 
     /// Drop self, and return the data
+    #[inline]
     pub fn data(self) -> Vec<F> {
         self.data
     }
@@ -314,9 +315,9 @@ impl<F: Field> Neg for Polynomial<F> {
     }
 }
 
-impl<F: NTTField<NTTTableType = NTTTable<F>, RootType = MulFactor<F>>> Polynomial<F>
+impl<F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>> Polynomial<F>
 where
-    F: Mul<<F as NTTField>::RootType, Output = F>,
+    F: Mul<<F as NTTField>::Root, Output = F>,
 {
     /// Perform a fast number theory transform in place.
     ///

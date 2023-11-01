@@ -3,12 +3,12 @@
 
 //! Define arithmetic operations.
 
+mod error;
+
 pub mod field;
 pub mod modulo_traits;
 pub mod modulus;
 pub mod utils;
-
-pub mod error;
 
 pub mod polynomial;
 pub mod transformation;

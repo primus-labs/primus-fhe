@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, Zero};
@@ -21,7 +20,7 @@ use super::PrimeField;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Fp32<const P: u32>(u32);
 
-impl<const P: u32> Display for Fp32<P> {
+impl<const P: u32> std::fmt::Display for Fp32<P> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[({})_{}]", self.0, P)
@@ -257,9 +256,9 @@ impl<const P: u32> PrimeField for Fp32<P> {
 }
 
 impl<const P: u32> NTTField for Fp32<P> {
-    type NTTTableType = NTTTable<Self>;
+    type Table = NTTTable<Self>;
 
-    type RootType = MulFactor<Self>;
+    type Root = MulFactor<Self>;
 
     type Degree = u32;
 
@@ -334,18 +333,18 @@ impl<const P: u32> NTTField for Fp32<P> {
         let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
         let inv_root = root.inv();
 
-        let root_factor = <Self as NTTField>::RootType::new(root);
+        let root_factor = <Self as NTTField>::Root::new(root);
         let mut power = root;
 
-        let mut root_powers = vec![<Self as NTTField>::RootType::default(); n];
+        let mut root_powers = vec![<Self as NTTField>::Root::default(); n];
         root_powers[0].set(Self::one());
         for i in 1..n {
             root_powers[i.reverse_lsbs(log_n)].set(power);
             power *= root_factor;
         }
 
-        let inv_root_factor = <Self as NTTField>::RootType::new(inv_root);
-        let mut inv_root_powers = vec![<Self as NTTField>::RootType::default(); n];
+        let inv_root_factor = <Self as NTTField>::Root::new(inv_root);
+        let mut inv_root_powers = vec![<Self as NTTField>::Root::default(); n];
         power = inv_root;
 
         inv_root_powers[0].set(Self::one());
@@ -353,7 +352,7 @@ impl<const P: u32> NTTField for Fp32<P> {
             inv_root_powers[(i - 1).reverse_lsbs(log_n) + 1].set(power);
             power *= inv_root_factor;
         }
-        let inv_degree = <Self as NTTField>::RootType::new(Self(n as u32).inv());
+        let inv_degree = <Self as NTTField>::Root::new(Self(n as u32).inv());
 
         Ok(NTTTable::new(
             root,
