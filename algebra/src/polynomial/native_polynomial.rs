@@ -1,9 +1,9 @@
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::prime_fields::MulFactor;
+use crate::field::prime_fields::{MulFactor, RootFactor};
 use crate::field::{Field, NTTField};
 use crate::transformation::NTTTable;
 
@@ -233,75 +233,75 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     }
 }
 
-impl<F: Field> MulAssign<&Polynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: &Polynomial<F>) {
-        *self = Mul::mul(&*self, rhs)
-    }
-}
+// impl<F: Field> MulAssign<&Polynomial<F>> for Polynomial<F> {
+//     #[inline]
+//     fn mul_assign(&mut self, rhs: &Polynomial<F>) {
+//         *self = Mul::mul(&*self, rhs)
+//     }
+// }
 
-impl<F: Field> MulAssign<Polynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: Polynomial<F>) {
-        *self = Mul::mul(&*self, &rhs)
-    }
-}
+// impl<F: Field> MulAssign<Polynomial<F>> for Polynomial<F> {
+//     #[inline]
+//     fn mul_assign(&mut self, rhs: Polynomial<F>) {
+//         *self = Mul::mul(&*self, &rhs)
+//     }
+// }
 
-impl<F: Field> Mul<Polynomial<F>> for Polynomial<F> {
-    type Output = Polynomial<F>;
+// impl<F: Field> Mul<Polynomial<F>> for Polynomial<F> {
+//     type Output = Polynomial<F>;
 
-    #[inline]
-    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-        Mul::mul(&self, &rhs)
-    }
-}
+//     #[inline]
+//     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+//         Mul::mul(&self, &rhs)
+//     }
+// }
 
-impl<F: Field> Mul<&Polynomial<F>> for Polynomial<F> {
-    type Output = Polynomial<F>;
+// impl<F: Field> Mul<&Polynomial<F>> for Polynomial<F> {
+//     type Output = Polynomial<F>;
 
-    #[inline]
-    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
-        Mul::mul(&self, rhs)
-    }
-}
+//     #[inline]
+//     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+//         Mul::mul(&self, rhs)
+//     }
+// }
 
-impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
-    type Output = Polynomial<F>;
+// impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
+//     type Output = Polynomial<F>;
 
-    #[inline]
-    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-        Mul::mul(self, &rhs)
-    }
-}
+//     #[inline]
+//     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+//         Mul::mul(self, &rhs)
+//     }
+// }
 
-impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
-    type Output = Polynomial<F>;
+// impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
+//     type Output = Polynomial<F>;
 
-    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let coeff_count = self.coeff_count();
+//     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+//         assert_eq!(self.coeff_count(), rhs.coeff_count());
+//         let coeff_count = self.coeff_count();
 
-        let mut result = vec![F::zero(); coeff_count];
-        let poly1: &[F] = self.as_ref();
-        let poly2: &[F] = rhs.as_ref();
+//         let mut result = vec![F::zero(); coeff_count];
+//         let poly1: &[F] = self.as_ref();
+//         let poly2: &[F] = rhs.as_ref();
 
-        for i in 0..coeff_count {
-            for j in 0..=i {
-                result[i] += poly1[j] * poly2[i - j];
-            }
-        }
+//         for i in 0..coeff_count {
+//             for j in 0..=i {
+//                 result[i] += poly1[j] * poly2[i - j];
+//             }
+//         }
 
-        // mod (x^n + 1)
-        for i in coeff_count..coeff_count * 2 - 1 {
-            let k = i - coeff_count;
-            for j in i - coeff_count + 1..coeff_count {
-                result[k] -= poly1[j] * poly2[i - j]
-            }
-        }
+//         // mod (x^n + 1)
+//         for i in coeff_count..coeff_count * 2 - 1 {
+//             let k = i - coeff_count;
+//             for j in i - coeff_count + 1..coeff_count {
+//                 result[k] -= poly1[j] * poly2[i - j]
+//             }
+//         }
 
-        Polynomial::<F>::new(result)
-    }
-}
+//         Polynomial::<F>::new(result)
+//     }
+// }
 
 impl<F: Field> Neg for Polynomial<F> {
     type Output = Polynomial<F>;
@@ -402,6 +402,23 @@ where
     }
 }
 
+impl<F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>> Polynomial<F>
+where
+    F: Mul<<F as NTTField>::Root, Output = F>,
+    MulFactor<F>: RootFactor<F>,
+{
+    /// The polynomial multiplication
+    pub fn mul(&self, rhs: &Self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
+        (self.transform(ntt_table) * rhs.transform(ntt_table)).inverse_transform_inplace(ntt_table)
+    }
+
+    /// The polynomial multiplication assignment
+    pub fn mul_assign(&mut self, rhs: &Self, ntt_table: &NTTTable<F>) {
+        *self = (self.transform(ntt_table) * rhs.transform(ntt_table))
+            .inverse_transform_inplace(ntt_table);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::field::prime_fields::Fp32;
@@ -417,12 +434,6 @@ mod tests {
         let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);
         let b = PolyFp::new(vec![Fp::new(P - 1), Fp::new(1)]);
 
-        let mul_result = PolyFp::new(vec![Fp::new(0), Fp::new(2)]);
-        assert_eq!(&a * &b, mul_result);
-        assert_eq!(&a * b.clone(), mul_result);
-        assert_eq!(a.clone() * &b, mul_result);
-        assert_eq!(a.clone() * b.clone(), mul_result);
-
         let add_result = PolyFp::new(vec![Fp::new(0), Fp::new(0)]);
         assert_eq!(&a + &b, add_result);
         assert_eq!(&a + b.clone(), add_result);
@@ -436,5 +447,47 @@ mod tests {
         assert_eq!(a.clone() - b.clone(), sub_result);
 
         assert_eq!(-a, b);
+    }
+
+    #[test]
+    fn test_ntt_mul() {
+        const P: u32 = 1000000513;
+        type Fp = Fp32<P>;
+        type PolyFp = Polynomial<Fp>;
+
+        let ntt_table = Fp::generate_ntt_table(3).unwrap();
+
+        let a = PolyFp::new(vec![
+            Fp::new(1),
+            Fp::new(1),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+        ]);
+        let b = PolyFp::new(vec![
+            Fp::new(1),
+            Fp::new(1),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+        ]);
+
+        let mul_result = PolyFp::new(vec![
+            Fp::new(1),
+            Fp::new(2),
+            Fp::new(1),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+            Fp::new(0),
+        ]);
+        assert_eq!(a.mul(&b, &ntt_table), mul_result);
     }
 }

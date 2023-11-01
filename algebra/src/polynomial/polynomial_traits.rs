@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
@@ -18,16 +18,16 @@ pub trait Poly<F: Field>:
     + Neg
     + Add<Self, Output = Self>
     + Sub<Self, Output = Self>
-    + Mul<Self, Output = Self>
+    // + Mul<Self, Output = Self>
     + AddAssign<Self>
     + SubAssign<Self>
-    + MulAssign<Self>
+    // + MulAssign<Self>
     + for<'a> Add<&'a Self, Output = Self>
     + for<'a> Sub<&'a Self, Output = Self>
-    + for<'a> Mul<&'a Self, Output = Self>
+    // + for<'a> Mul<&'a Self, Output = Self>
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
-    + for<'a> MulAssign<&'a Self>
+    // + for<'a> MulAssign<&'a Self>
 {
     /// Get the coefficient counts of polynomial.
     fn coeff_count(&self) -> usize;
