@@ -7,7 +7,7 @@ use crate::modulo_traits::{
     MulModulo, MulModuloAssign, NegModulo, NegModuloAssign, PowModulo, SubModulo, SubModuloAssign,
 };
 use crate::modulus::Modulus;
-use crate::primitive::{Bits, Widening};
+use crate::{Bits, Widening};
 
 impl<T> AddModulo<&Modulus<T>> for T
 where
