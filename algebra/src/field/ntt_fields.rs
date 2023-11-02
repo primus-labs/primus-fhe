@@ -20,7 +20,7 @@ use super::PrimeField;
 /// `ω^(n/2) = -1 mod p`.
 ///
 /// We can get a minimal root `ω` with one more iteration.
-pub trait NTTField: PrimeField {
+pub trait NTTField: PrimeField + std::ops::Mul<Self::Root, Output = Self> {
     /// NTT table type
     type Table;
 

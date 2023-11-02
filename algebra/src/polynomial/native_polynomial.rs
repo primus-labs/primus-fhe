@@ -247,7 +247,7 @@ impl<F: Field> Neg for Polynomial<F> {
 
 impl<F> Polynomial<F>
 where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>> + Mul<<F as NTTField>::Root, Output = F>,
+    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>,
     MulFactor<F>: RootFactor<F>,
 {
     /// The polynomial multiplication
@@ -264,7 +264,7 @@ where
 
 impl<F> Polynomial<F>
 where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>> + Mul<<F as NTTField>::Root, Output = F>,
+    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>,
 {
     /// Convert self into [`NTTPolynomial<F>`]
     pub fn to_ntt_polynomial(self, ntt_table: &NTTTable<F>) -> NTTPolynomial<F> {
