@@ -7,7 +7,7 @@ use crate::field::prime_fields::{MulFactor, RootFactor};
 use crate::field::{Field, NTTField};
 use crate::transformation::NTTTable;
 
-use super::Poly;
+use super::{NTTPolynomial, Poly};
 
 /// The most basic polynomial, it stores the coefficients of the polynomial.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -233,76 +233,6 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     }
 }
 
-// impl<F: Field> MulAssign<&Polynomial<F>> for Polynomial<F> {
-//     #[inline]
-//     fn mul_assign(&mut self, rhs: &Polynomial<F>) {
-//         *self = Mul::mul(&*self, rhs)
-//     }
-// }
-
-// impl<F: Field> MulAssign<Polynomial<F>> for Polynomial<F> {
-//     #[inline]
-//     fn mul_assign(&mut self, rhs: Polynomial<F>) {
-//         *self = Mul::mul(&*self, &rhs)
-//     }
-// }
-
-// impl<F: Field> Mul<Polynomial<F>> for Polynomial<F> {
-//     type Output = Polynomial<F>;
-
-//     #[inline]
-//     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-//         Mul::mul(&self, &rhs)
-//     }
-// }
-
-// impl<F: Field> Mul<&Polynomial<F>> for Polynomial<F> {
-//     type Output = Polynomial<F>;
-
-//     #[inline]
-//     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
-//         Mul::mul(&self, rhs)
-//     }
-// }
-
-// impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
-//     type Output = Polynomial<F>;
-
-//     #[inline]
-//     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-//         Mul::mul(self, &rhs)
-//     }
-// }
-
-// impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
-//     type Output = Polynomial<F>;
-
-//     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
-//         assert_eq!(self.coeff_count(), rhs.coeff_count());
-//         let coeff_count = self.coeff_count();
-
-//         let mut result = vec![F::zero(); coeff_count];
-//         let poly1: &[F] = self.as_ref();
-//         let poly2: &[F] = rhs.as_ref();
-
-//         for i in 0..coeff_count {
-//             for j in 0..=i {
-//                 result[i] += poly1[j] * poly2[i - j];
-//             }
-//         }
-
-//         // mod (x^n + 1)
-//         for i in coeff_count..coeff_count * 2 - 1 {
-//             let k = i - coeff_count;
-//             for j in i - coeff_count + 1..coeff_count {
-//                 result[k] -= poly1[j] * poly2[i - j]
-//             }
-//         }
-
-//         Polynomial::<F>::new(result)
-//     }
-// }
-
 impl<F: Field> Neg for Polynomial<F> {
     type Output = Polynomial<F>;
 
@@ -315,20 +245,30 @@ impl<F: Field> Neg for Polynomial<F> {
     }
 }
 
-impl<F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>> Polynomial<F>
+impl<F> Polynomial<F>
 where
-    F: Mul<<F as NTTField>::Root, Output = F>,
+    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>> + Mul<<F as NTTField>::Root, Output = F>,
     MulFactor<F>: RootFactor<F>,
 {
     /// The polynomial multiplication
-    pub fn mul(&self, rhs: &Self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
+    pub fn ntt_mul(&self, rhs: &Self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
         ntt_table.inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs))
     }
 
     /// The polynomial multiplication assignment
-    pub fn mul_assign(&mut self, rhs: &Self, ntt_table: &NTTTable<F>) {
+    pub fn ntt_mul_assign(&mut self, rhs: &Self, ntt_table: &NTTTable<F>) {
         *self = ntt_table
             .inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs));
+    }
+}
+
+impl<F> Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>> + Mul<<F as NTTField>::Root, Output = F>,
+{
+    /// Convert self into [`NTTPolynomial<F>`]
+    pub fn to_ntt_polynomial(self, ntt_table: &NTTTable<F>) -> NTTPolynomial<F> {
+        ntt_table.transform_inplace(self)
     }
 }
 
@@ -401,6 +341,6 @@ mod tests {
             Fp::new(0),
             Fp::new(0),
         ]);
-        assert_eq!(a.mul(&b, &ntt_table), mul_result);
+        assert_eq!(a.ntt_mul(&b, &ntt_table), mul_result);
     }
 }

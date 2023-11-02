@@ -42,6 +42,7 @@ pub struct NTTTable<F> {
 
 impl<F> NTTTable<F> {
     /// Creates a new [`NTTTable<F>`].
+    #[inline]
     pub fn new(
         root: F,
         inv_root: F,
@@ -63,36 +64,43 @@ impl<F> NTTTable<F> {
     }
 
     /// Returns a reference to the root of this [`NTTTable<F>`].
+    #[inline]
     pub fn root(&self) -> &F {
         &self.root
     }
 
     /// Returns a reference to the inv root of this [`NTTTable<F>`].
+    #[inline]
     pub fn inv_root(&self) -> &F {
         &self.inv_root
     }
 
     /// Returns the coeff count power of this [`NTTTable<F>`].
+    #[inline]
     pub fn coeff_count_power(&self) -> u32 {
         self.coeff_count_power
     }
 
     /// Returns the coeff count of this [`NTTTable<F>`].
+    #[inline]
     pub fn coeff_count(&self) -> usize {
         self.coeff_count
     }
 
     /// Returns a reference to the inv degree of this [`NTTTable<F>`].
+    #[inline]
     pub fn inv_degree(&self) -> &MulFactor<F> {
         &self.inv_degree
     }
 
     /// Returns a reference to the root powers of this [`NTTTable<F>`].
+    #[inline]
     pub fn root_powers(&self) -> &[MulFactor<F>] {
         self.root_powers.as_ref()
     }
 
     /// Returns a reference to the inv root powers of this [`NTTTable<F>`].
+    #[inline]
     pub fn inv_root_powers(&self) -> &[MulFactor<F>] {
         self.inv_root_powers.as_ref()
     }
@@ -180,6 +188,7 @@ where
     /// # Arguments
     ///
     /// * `self` - inputs in normal order, outputs in bit-reversed order
+    #[inline]
     pub fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
         self.transform_inplace(poly.clone())
     }
@@ -290,6 +299,7 @@ where
     /// # Arguments
     ///
     /// * `self` - inputs in bit-reversed order, outputs in normal order
+    #[inline]
     pub fn inverse_transform(&self, poly: &NTTPolynomial<F>) -> Polynomial<F> {
         self.inverse_transform_inplace(poly.clone())
     }

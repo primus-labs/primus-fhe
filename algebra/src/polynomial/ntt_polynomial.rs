@@ -3,9 +3,11 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::Field;
+use crate::field::prime_fields::{MulFactor, RootFactor};
+use crate::field::{Field, NTTField};
+use crate::transformation::NTTTable;
 
-use super::Poly;
+use super::{Poly, Polynomial};
 
 /// A polynomial in ntt form, it stores the values of the polynomial at some particular points.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -296,6 +298,17 @@ impl<F: Field> Neg for NTTPolynomial<F> {
             *e = -*e;
         });
         self
+    }
+}
+
+impl<F> NTTPolynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>> + Mul<<F as NTTField>::Root, Output = F>,
+    MulFactor<F>: RootFactor<F>,
+{
+    /// Convert self into [`Polynomial<F>`]
+    pub fn to_ntt_polynomial(self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
+        ntt_table.inverse_transform_inplace(self)
     }
 }
 
