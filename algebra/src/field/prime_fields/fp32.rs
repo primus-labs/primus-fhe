@@ -12,7 +12,7 @@ use crate::modulus::{Modulus, MulModuloFactor};
 use crate::transformation::NTTTable;
 use crate::utils::{Prime, ReverseLsbs};
 
-use super::PrimeField;
+use super::{PrimeField, MulFactor, RootFactor};
 
 /// A finite Field type, whose inner size is 32bits.
 ///
@@ -366,21 +366,6 @@ impl<const P: u32> NTTField for Fp32<P> {
     }
 }
 
-/// A factor for multiply many times
-#[derive(Clone, Copy, Default)]
-pub struct MulFactor<F> {
-    value: F,
-    quotient: F,
-}
-
-/// A helper trait
-pub trait RootFactor<F> {
-    /// Constructs a struct
-    fn new(value: F) -> Self;
-    /// Reset the struct
-    fn set(&mut self, value: F);
-}
-
 impl<const P: u32> RootFactor<Fp32<P>> for MulFactor<Fp32<P>> {
     /// Constructs a [`MulFactor<Fp32<P>>`].
     #[inline]
@@ -396,20 +381,6 @@ impl<const P: u32> RootFactor<Fp32<P>> for MulFactor<Fp32<P>> {
     fn set(&mut self, value: Fp32<P>) {
         self.value = value;
         self.quotient = Fp32((((value.0 as u64) << 32) / P as u64) as u32);
-    }
-}
-
-impl<F: Copy> MulFactor<F> {
-    /// Returns the value of this [`MulFactor<F>`].
-    #[inline]
-    pub fn value(&self) -> F {
-        self.value
-    }
-
-    /// Returns the quotient of this [`MulFactor<F>`].
-    #[inline]
-    pub fn quotient(&self) -> F {
-        self.quotient
     }
 }
 
