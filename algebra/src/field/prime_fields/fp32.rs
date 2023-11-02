@@ -12,7 +12,7 @@ use crate::modulus::{Modulus, MulModuloFactor};
 use crate::transformation::NTTTable;
 use crate::utils::{Prime, ReverseLsbs};
 
-use super::{PrimeField, MulFactor, RootFactor};
+use super::{MulFactor, PrimeField, RootFactor};
 
 /// A finite Field type, whose inner size is 32bits.
 ///

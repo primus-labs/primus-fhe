@@ -1,5 +1,3 @@
-use std::ops::Mul;
-
 use crate::{
     field::{
         prime_fields::{MulFactor, RootFactor},
