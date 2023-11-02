@@ -34,11 +34,11 @@ mod tests {
             Fp::new(7),
             Fp::new(8),
         ]);
-        let b = a.transform_inplace(&ntt_table);
+        let b = ntt_table.transform_inplace(a);
 
         println!("{:?}", b);
 
-        let c = b.inverse_transform_inplace(&ntt_table);
+        let c = ntt_table.inverse_transform_inplace(b);
 
         println!("{:?}", c);
     }

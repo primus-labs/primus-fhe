@@ -22,7 +22,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function(&format!("ntt {}", n), |b| {
         b.iter(|| {
-            poly.transform(&ntt_table);
+            ntt_table.transform(&poly);
         })
     });
 
@@ -30,7 +30,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function(&format!("intt {}", n), |b| {
         b.iter(|| {
-            poly.inverse_transform(&ntt_table);
+            ntt_table.inverse_transform(&poly);
         })
     });
 }
