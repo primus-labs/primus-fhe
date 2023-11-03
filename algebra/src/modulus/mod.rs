@@ -85,13 +85,13 @@ pub struct MulModuloFactor<T> {
 }
 
 impl<T: Copy> MulModuloFactor<T> {
-    /// Returns the value of this [`MulModuloFactor`].
+    /// Returns the value of this [`MulModuloFactor<T>`].
     #[inline]
     pub fn value(&self) -> T {
         self.value
     }
 
-    /// Returns the quotient of this [`MulModuloFactor`].
+    /// Returns the quotient of this [`MulModuloFactor<T>`].
     #[inline]
     pub fn quotient(&self) -> T {
         self.quotient

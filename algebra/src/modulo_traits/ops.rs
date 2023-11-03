@@ -1,3 +1,5 @@
+use crate::AlgebraError;
+
 /// The modulo operation.
 pub trait Modulo<Modulus>: Sized {
     /// Output type.
@@ -127,8 +129,8 @@ pub trait TryInvModulo<Modulus = Self>: Sized {
     ///
     /// # Errors
     ///
-    /// If there dose not exist the such inverse, a [`ModuloError`] will be returned.
-    fn try_inv_reduce(self, modulus: Modulus) -> Result<Self, crate::AlgebraError>;
+    /// If there dose not exist the such inverse, a [`AlgebraError`] will be returned.
+    fn try_inv_reduce(self, modulus: Modulus) -> Result<Self, AlgebraError>;
 }
 
 /// The modular division.
