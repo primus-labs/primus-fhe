@@ -2,6 +2,8 @@
 
 mod gcd;
 mod prime;
+mod reverse;
 
 pub use gcd::*;
 pub use prime::*;
+pub use reverse::*;

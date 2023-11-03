@@ -1,5 +1,4 @@
-use crate::error::ModuloError;
-use crate::modulo::{
+use crate::modulo_traits::{
     AddModulo, AddModuloAssign, InvModulo, NegModulo, NegModuloAssign, SubModulo, SubModuloAssign,
 };
 use crate::utils::ExtendedGCD;
@@ -11,7 +10,8 @@ macro_rules! impl_modulo_ops_for_primitive {
         impl AddModulo<$t> for $t {
             type Output = $t;
 
-            fn add_modulo(self, rhs: Self, modulus: $t) -> Self::Output {
+            #[inline]
+            fn add_reduce(self, rhs: Self, modulus: $t) -> Self::Output {
                 let r = self + rhs;
                 if r >= modulus {
                     r - modulus
@@ -22,7 +22,8 @@ macro_rules! impl_modulo_ops_for_primitive {
         }
 
         impl AddModuloAssign<$t> for $t {
-            fn add_modulo_assign(&mut self, rhs: Self, modulus: $t) {
+            #[inline]
+            fn add_reduce_assign(&mut self, rhs: Self, modulus: $t) {
                 let r = *self + rhs;
                 *self = if r >= modulus {
                     r - modulus
@@ -35,7 +36,8 @@ macro_rules! impl_modulo_ops_for_primitive {
         impl SubModulo<$t> for $t {
             type Output = $t;
 
-            fn sub_modulo(self, rhs: Self, modulus: $t) -> Self::Output {
+            #[inline]
+            fn sub_reduce(self, rhs: Self, modulus: $t) -> Self::Output {
                 if self >= rhs {
                     self - rhs
                 } else {
@@ -45,7 +47,8 @@ macro_rules! impl_modulo_ops_for_primitive {
         }
 
         impl SubModuloAssign<$t> for $t {
-            fn sub_modulo_assign(&mut self, rhs: Self, modulus: $t) {
+            #[inline]
+            fn sub_reduce_assign(&mut self, rhs: Self, modulus: $t) {
                 if *self >= rhs {
                     *self -= rhs;
                 } else {
@@ -58,20 +61,20 @@ macro_rules! impl_modulo_ops_for_primitive {
             type Output = $t;
 
             #[inline]
-            fn neg_modulo(self, modulus: $t) -> Self::Output {
+            fn neg_reduce(self, modulus: $t) -> Self::Output {
                 modulus - self
             }
         }
 
         impl NegModuloAssign<$t> for $t {
             #[inline]
-            fn neg_modulo_assign(&mut self, modulus: $t) {
+            fn neg_reduce_assign(&mut self, modulus: $t) {
                 *self = modulus - *self;
             }
         }
 
         impl InvModulo for $t {
-            fn inv_modulo(self, modulus: Self) -> Self {
+            fn inv_reduce(self, modulus: Self) -> Self {
                 assert!(self < modulus);
 
                 let (_, inv, gcd) = Self::extended_gcd(modulus, self);
@@ -87,7 +90,7 @@ macro_rules! impl_modulo_ops_for_primitive {
         }
 
         impl TryInvModulo for $t {
-            fn try_inv_modulo(self, modulus: Self) -> Result<Self, crate::error::ModuloError> {
+            fn try_inv_reduce(self, modulus: Self) -> Result<Self, crate::AlgebraError> {
                 assert!(self < modulus);
 
                 let (_, inv, gcd) = Self::extended_gcd(modulus, self);
@@ -99,7 +102,7 @@ macro_rules! impl_modulo_ops_for_primitive {
                         Ok((inv + modulus as <Self as ExtendedGCD>::SignedT) as Self)
                     }
                 } else {
-                    Err(ModuloError::NoModuloInverse {
+                    Err(crate::AlgebraError::NoModuloInverse {
                         value: self.to_string(),
                         modulus: modulus.to_string(),
                     })

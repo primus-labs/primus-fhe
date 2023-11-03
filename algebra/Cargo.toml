@@ -12,8 +12,17 @@ num-traits = "0.2"
 
 rand = "0.8"
 
+once_cell = "1.18"
+
 [features]
 default = []
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "ntt_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

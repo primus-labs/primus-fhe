@@ -1,6 +1,7 @@
 use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, thread_rng, SeedableRng};
 
-use crate::modulo::{Modulo, Modulus, PowModulo};
+use crate::modulo_traits::{Modulo, PowModulo};
+use crate::modulus::Modulus;
 use crate::Widening;
 
 /// The trait defines some function for prime number
@@ -67,13 +68,13 @@ macro_rules! impl_prime_check {
                     } else {
                         2
                     };
-                    let mut x: $SelfT = a.pow_modulo(q, self);
+                    let mut x: $SelfT = a.pow_reduce(q, self);
                     if x == 1 || x == value_sub_one {
                         continue;
                     }
 
                     for _ in 1..r {
-                        x = x.widen_mul(x).modulo(self);
+                        x = x.widen_mul(x).reduce(self);
                         if x == value_sub_one {
                             break 'next_round;
                         }

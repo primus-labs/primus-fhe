@@ -3,9 +3,10 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::Field;
+use crate::field::{Field, NTTField};
+use crate::transformation::NTTTable;
 
-use super::Poly;
+use super::{Poly, Polynomial};
 
 /// A polynomial in ntt form, it stores the values of the polynomial at some particular points.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -18,6 +19,12 @@ impl<F: Field> NTTPolynomial<F> {
     #[inline]
     pub fn new(data: Vec<F>) -> Self {
         Self { data }
+    }
+
+    /// Drop self, and return the data
+    #[inline]
+    pub fn data(self) -> Vec<F> {
+        self.data
     }
 }
 
@@ -204,6 +211,7 @@ impl<F: Field> Sub<&NTTPolynomial<F>> for NTTPolynomial<F> {
 impl<F: Field> Sub<NTTPolynomial<F>> for &NTTPolynomial<F> {
     type Output = NTTPolynomial<F>;
 
+    #[inline]
     fn sub(self, mut rhs: NTTPolynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         rhs.iter_mut()
@@ -293,16 +301,31 @@ impl<F: Field> Neg for NTTPolynomial<F> {
     }
 }
 
+impl<F> NTTPolynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    /// Convert self into [`Polynomial<F>`]
+    #[inline]
+    pub fn to_native_polynomial(self) -> Polynomial<F> {
+        debug_assert!(self.coeff_count().is_power_of_two());
+
+        let ntt_table = F::get_ntt_table(self.coeff_count().trailing_zeros()).unwrap();
+
+        ntt_table.inverse_transform_inplace(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::field::prime_fields::Fp32;
+    use crate::field::prime_fields::{BarrettConfig, Fp32};
 
     use super::*;
 
     #[test]
     fn test_ntt_poly() {
-        const P: u32 = 1000000513;
-        type Fp = Fp32<P>;
+        type Fp = Fp32;
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
         type PolyFp = NTTPolynomial<Fp>;
 
         let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);

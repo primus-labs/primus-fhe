@@ -3,14 +3,18 @@
 
 //! Define arithmetic operations.
 
+mod error;
+
 pub mod field;
-pub mod modulo;
+pub mod modulo_traits;
+pub mod modulus;
 pub mod utils;
 
-pub mod error;
-
 pub mod polynomial;
+pub mod transformation;
 
 mod primitive;
+
+pub use error::AlgebraError;
 
 pub(crate) use primitive::{Bits, Widening};

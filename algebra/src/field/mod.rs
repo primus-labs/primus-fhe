@@ -8,6 +8,9 @@ use num_traits::{Inv, One, Pow, Zero};
 pub mod ntt_fields;
 pub mod prime_fields;
 
+pub use ntt_fields::NTTField;
+pub use prime_fields::PrimeField;
+
 /// A simple math field trait
 pub trait Field:
     Sized
@@ -49,10 +52,10 @@ pub trait Field:
     type Modulus;
 
     /// Returns the order of the field.
-    fn order(&self) -> Self::Order;
+    fn order() -> Self::Order;
 
     /// Returns the modulus of the field.
-    fn modulus(&self) -> Self::Modulus;
+    fn modulus() -> Self::Modulus;
 
     /// Returns `self + self`.
     #[inline]

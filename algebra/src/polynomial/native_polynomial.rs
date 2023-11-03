@@ -3,9 +3,10 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::Field;
+use crate::field::{Field, NTTField};
+use crate::transformation::NTTTable;
 
-use super::Poly;
+use super::{NTTPolynomial, Poly};
 
 /// The most basic polynomial, it stores the coefficients of the polynomial.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -18,6 +19,12 @@ impl<F: Field> Polynomial<F> {
     #[inline]
     pub fn new(poly: Vec<F>) -> Self {
         Self { data: poly }
+    }
+
+    /// Drop self, and return the data
+    #[inline]
+    pub fn data(self) -> Vec<F> {
+        self.data
     }
 }
 
@@ -225,21 +232,30 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     }
 }
 
-impl<F: Field> MulAssign<&Polynomial<F>> for Polynomial<F> {
+impl<F> MulAssign<&Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     #[inline]
     fn mul_assign(&mut self, rhs: &Polynomial<F>) {
         *self = Mul::mul(&*self, rhs)
     }
 }
 
-impl<F: Field> MulAssign<Polynomial<F>> for Polynomial<F> {
+impl<F> MulAssign<Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     #[inline]
     fn mul_assign(&mut self, rhs: Polynomial<F>) {
         *self = Mul::mul(&*self, &rhs)
     }
 }
 
-impl<F: Field> Mul<Polynomial<F>> for Polynomial<F> {
+impl<F> Mul<Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     type Output = Polynomial<F>;
 
     #[inline]
@@ -248,7 +264,10 @@ impl<F: Field> Mul<Polynomial<F>> for Polynomial<F> {
     }
 }
 
-impl<F: Field> Mul<&Polynomial<F>> for Polynomial<F> {
+impl<F> Mul<&Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     type Output = Polynomial<F>;
 
     #[inline]
@@ -257,7 +276,10 @@ impl<F: Field> Mul<&Polynomial<F>> for Polynomial<F> {
     }
 }
 
-impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
+impl<F> Mul<Polynomial<F>> for &Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     type Output = Polynomial<F>;
 
     #[inline]
@@ -266,15 +288,119 @@ impl<F: Field> Mul<Polynomial<F>> for &Polynomial<F> {
     }
 }
 
-impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
+impl<F> Mul<&Polynomial<F>> for &Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     type Output = Polynomial<F>;
 
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let coeff_count = self.coeff_count();
+        assert!(self.coeff_count().is_power_of_two());
+
+        let log_n = self.coeff_count().trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        ntt_table.inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs))
+    }
+}
+
+impl<F: Field> Neg for Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn neg(mut self) -> Self::Output {
+        self.data.iter_mut().for_each(|e| {
+            *e = -*e;
+        });
+        self
+    }
+}
+
+impl<F> Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    /// Convert self into [`NTTPolynomial<F>`]
+    #[inline]
+    pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
+        debug_assert!(self.coeff_count().is_power_of_two());
+
+        let ntt_table = F::get_ntt_table(self.coeff_count().trailing_zeros()).unwrap();
+
+        ntt_table.transform_inplace(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::prelude::*;
+
+    use crate::field::prime_fields::{BarrettConfig, Fp32};
+
+    use super::*;
+
+    #[test]
+    fn test_native_poly() {
+        type Fp = Fp32;
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
+        type PolyFp = Polynomial<Fp>;
+
+        let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);
+        let b = PolyFp::new(vec![Fp::new(P - 1), Fp::new(1)]);
+
+        let add_result = PolyFp::new(vec![Fp::new(0), Fp::new(0)]);
+        assert_eq!(&a + &b, add_result);
+        assert_eq!(&a + b.clone(), add_result);
+        assert_eq!(a.clone() + &b, add_result);
+        assert_eq!(a.clone() + b.clone(), add_result);
+
+        let sub_result = PolyFp::new(vec![Fp::new(2), Fp::new(P - 2)]);
+        assert_eq!(&a - &b, sub_result);
+        assert_eq!(&a - b.clone(), sub_result);
+        assert_eq!(a.clone() - &b, sub_result);
+        assert_eq!(a.clone() - b.clone(), sub_result);
+
+        assert_eq!(-a, b);
+    }
+
+    #[test]
+    fn test_native_poly_mul() {
+        type Fp = Fp32;
+        type PolyFp = Polynomial<Fp>;
+
+        let p = Fp32::BARRETT_MODULUS.value();
+        let log_n = 3;
+
+        Fp::init_ntt_table(&[log_n]).unwrap();
+
+        let distr = rand::distributions::Uniform::new(0, p);
+        let mut rng = thread_rng();
+
+        let coeffs1 = distr
+            .sample_iter(&mut rng)
+            .take(1 << log_n)
+            .map(Fp32::new)
+            .collect();
+
+        let coeffs2 = distr
+            .sample_iter(&mut rng)
+            .take(1 << log_n)
+            .map(Fp32::new)
+            .collect();
+
+        let a = PolyFp::new(coeffs1);
+        let b = PolyFp::new(coeffs2);
+
+        let mul_result = simple_mul(&a, &b);
+        assert_eq!(a.mul(&b), mul_result);
+    }
+
+    fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<F> {
+        assert_eq!(lhs.coeff_count(), rhs.coeff_count());
+        let coeff_count = lhs.coeff_count();
 
         let mut result = vec![F::zero(); coeff_count];
-        let poly1: &[F] = self.as_ref();
+        let poly1: &[F] = lhs.as_ref();
         let poly2: &[F] = rhs.as_ref();
 
         for i in 0..coeff_count {
@@ -292,54 +418,5 @@ impl<F: Field> Mul<&Polynomial<F>> for &Polynomial<F> {
         }
 
         Polynomial::<F>::new(result)
-    }
-}
-
-impl<F: Field> Neg for Polynomial<F> {
-    type Output = Polynomial<F>;
-
-    #[inline]
-    fn neg(mut self) -> Self::Output {
-        self.data.iter_mut().for_each(|e| {
-            *e = -*e;
-        });
-        self
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::field::prime_fields::Fp32;
-
-    use super::*;
-
-    #[test]
-    fn test_native_poly() {
-        const P: u32 = 1000000513;
-        type Fp = Fp32<P>;
-        type PolyFp = Polynomial<Fp>;
-
-        let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);
-        let b = PolyFp::new(vec![Fp::new(P - 1), Fp::new(1)]);
-
-        let mul_result = PolyFp::new(vec![Fp::new(0), Fp::new(2)]);
-        assert_eq!(&a * &b, mul_result);
-        assert_eq!(&a * b.clone(), mul_result);
-        assert_eq!(a.clone() * &b, mul_result);
-        assert_eq!(a.clone() * b.clone(), mul_result);
-
-        let add_result = PolyFp::new(vec![Fp::new(0), Fp::new(0)]);
-        assert_eq!(&a + &b, add_result);
-        assert_eq!(&a + b.clone(), add_result);
-        assert_eq!(a.clone() + &b, add_result);
-        assert_eq!(a.clone() + b.clone(), add_result);
-
-        let sub_result = PolyFp::new(vec![Fp::new(2), Fp::new(P - 2)]);
-        assert_eq!(&a - &b, sub_result);
-        assert_eq!(&a - b.clone(), sub_result);
-        assert_eq!(a.clone() - &b, sub_result);
-        assert_eq!(a.clone() - b.clone(), sub_result);
-
-        assert_eq!(-a, b);
     }
 }
