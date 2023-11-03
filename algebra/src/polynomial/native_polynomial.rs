@@ -364,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mul() {
+    fn test_native_poly_mul() {
         type Fp = Fp32;
         type PolyFp = Polynomial<Fp>;
 

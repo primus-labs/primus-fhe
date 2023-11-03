@@ -124,52 +124,17 @@ where
         let roots = self.root_powers();
         let mut root_iter = roots[1..].iter();
 
-        for gap in (2..=log_n - 1).rev().map(|x| 1usize << x) {
+        for gap in (0..=log_n - 1).rev().map(|x| 1usize << x) {
             for vc in values.chunks_exact_mut(gap << 1) {
                 root = *root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
-                for (i, j) in std::iter::zip(v0.chunks_exact_mut(4), v1.chunks_exact_mut(4)) {
-                    u = i[0];
-                    v = NTTField::mul_root(&j[0], root);
-                    i[0] = u + v;
-                    j[0] = u - v;
-
-                    u = i[1];
-                    v = NTTField::mul_root(&j[1], root);
-                    i[1] = u + v;
-                    j[1] = u - v;
-
-                    u = i[2];
-                    v = NTTField::mul_root(&j[2], root);
-                    i[2] = u + v;
-                    j[2] = u - v;
-
-                    u = i[3];
-                    v = NTTField::mul_root(&j[3], root);
-                    i[3] = u + v;
-                    j[3] = u - v;
+                for (i, j) in std::iter::zip(v0, v1) {
+                    u = *i;
+                    v = NTTField::mul_root(j, root);
+                    *i = u + v;
+                    *j = u - v;
                 }
             }
-        }
-
-        for vc in values.chunks_exact_mut(4) {
-            root = *root_iter.next().unwrap();
-            let (v0, v1) = vc.split_at_mut(2);
-            for (i, j) in std::iter::zip(v0, v1) {
-                u = *i;
-                v = NTTField::mul_root(j, root);
-                *i = u + v;
-                *j = u - v;
-            }
-        }
-
-        for vc in values.chunks_exact_mut(2) {
-            root = *root_iter.next().unwrap();
-
-            u = vc[0];
-            v = NTTField::mul_root(&vc[1], root);
-            vc[0] = u + v;
-            vc[1] = u - v;
         }
 
         NTTPolynomial::<F>::new(poly.data())
@@ -207,7 +172,7 @@ where
         let roots = self.inv_root_powers();
         let mut root_iter = roots[1..].iter();
 
-        for gap in (0..=1).map(|x| 1usize << x) {
+        for gap in (0..log_n - 1).map(|x| 1usize << x) {
             for vc in values.chunks_exact_mut(gap << 1) {
                 root = *root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
@@ -220,34 +185,6 @@ where
             }
         }
 
-        for gap in (2..log_n - 1).map(|x| 1usize << x) {
-            for vc in values.chunks_exact_mut(gap << 1) {
-                root = *root_iter.next().unwrap();
-                let (v0, v1) = vc.split_at_mut(gap);
-                for (i, j) in std::iter::zip(v0.chunks_exact_mut(4), v1.chunks_exact_mut(4)) {
-                    u = i[0];
-                    v = j[0];
-                    i[0] = u + v;
-                    j[0] = NTTField::mul_root(&(u - v), root);
-
-                    u = i[1];
-                    v = j[1];
-                    i[1] = u + v;
-                    j[1] = NTTField::mul_root(&(u - v), root);
-
-                    u = i[2];
-                    v = j[2];
-                    i[2] = u + v;
-                    j[2] = NTTField::mul_root(&(u - v), root);
-
-                    u = i[3];
-                    v = j[3];
-                    i[3] = u + v;
-                    j[3] = NTTField::mul_root(&(u - v), root);
-                }
-            }
-        }
-
         let gap = 1 << (log_n - 1);
 
         let scalar = *self.inv_degree();
@@ -256,26 +193,11 @@ where
 
         let scaled_r = NTTField::mul_root(&F::from_root(root), scalar).to_root();
         let (v0, v1) = values.split_at_mut(gap);
-        for (i, j) in std::iter::zip(v0.chunks_exact_mut(4), v1.chunks_exact_mut(4)) {
-            u = i[0];
-            v = j[0];
-            i[0] = NTTField::mul_root(&(u + v), scalar);
-            j[0] = NTTField::mul_root(&(u - v), scaled_r);
-
-            u = i[1];
-            v = j[1];
-            i[1] = NTTField::mul_root(&(u + v), scalar);
-            j[1] = NTTField::mul_root(&(u - v), scaled_r);
-
-            u = i[2];
-            v = j[2];
-            i[2] = NTTField::mul_root(&(u + v), scalar);
-            j[2] = NTTField::mul_root(&(u - v), scaled_r);
-
-            u = i[3];
-            v = j[3];
-            i[3] = NTTField::mul_root(&(u + v), scalar);
-            j[3] = NTTField::mul_root(&(u - v), scaled_r);
+        for (i, j) in std::iter::zip(v0, v1) {
+            u = *i;
+            v = *j;
+            *i = NTTField::mul_root(&(u + v), scalar);
+            *j = NTTField::mul_root(&(u - v), scaled_r);
         }
 
         Polynomial::<F>::new(poly.data())
