@@ -332,6 +332,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use rand::prelude::*;
+
     use crate::field::prime_fields::{BarrettConfig, Fp32};
 
     use super::*;
@@ -365,39 +367,55 @@ mod tests {
         type Fp = Fp32;
         type PolyFp = Polynomial<Fp>;
 
-        Fp::init_ntt_table(&[3]).unwrap();
+        let p = Fp32::BARRETT_MODULUS.value();
+        let log_n = 3;
 
-        let a = PolyFp::new(vec![
-            Fp::new(1),
-            Fp::new(1),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-        ]);
-        let b = PolyFp::new(vec![
-            Fp::new(1),
-            Fp::new(1),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-        ]);
+        Fp::init_ntt_table(&[log_n]).unwrap();
 
-        let mul_result = PolyFp::new(vec![
-            Fp::new(1),
-            Fp::new(2),
-            Fp::new(1),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-            Fp::new(0),
-        ]);
+        let distr = rand::distributions::Uniform::new(0, p);
+        let mut rng = thread_rng();
+
+        let coeffs1 = distr
+            .sample_iter(&mut rng)
+            .take(1 << log_n)
+            .map(Fp32::new)
+            .collect();
+
+        let coeffs2 = distr
+            .sample_iter(&mut rng)
+            .take(1 << log_n)
+            .map(Fp32::new)
+            .collect();
+
+        let a = PolyFp::new(coeffs1);
+        let b = PolyFp::new(coeffs2);
+
+        let mul_result = simple_mul(&a, &b);
         assert_eq!(a.mul(&b), mul_result);
+    }
+
+    fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<F> {
+        assert_eq!(lhs.coeff_count(), rhs.coeff_count());
+        let coeff_count = lhs.coeff_count();
+
+        let mut result = vec![F::zero(); coeff_count];
+        let poly1: &[F] = lhs.as_ref();
+        let poly2: &[F] = rhs.as_ref();
+
+        for i in 0..coeff_count {
+            for j in 0..=i {
+                result[i] += poly1[j] * poly2[i - j];
+            }
+        }
+
+        // mod (x^n + 1)
+        for i in coeff_count..coeff_count * 2 - 1 {
+            let k = i - coeff_count;
+            for j in i - coeff_count + 1..coeff_count {
+                result[k] -= poly1[j] * poly2[i - j]
+            }
+        }
+
+        Polynomial::<F>::new(result)
     }
 }

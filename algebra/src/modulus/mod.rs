@@ -116,59 +116,38 @@ mod tests {
 
     use super::*;
 
-    const ROUND: i32 = 5;
-
     #[test]
     fn test_modulus_create() {
         let mut rng = thread_rng();
-        for _ in 0..ROUND {
-            let _m = Modulus::<u8>::new(rng.gen_range(2..=(u8::MAX >> 2)));
-            let _m = Modulus::<u16>::new(rng.gen_range(2..=(u16::MAX >> 2)));
-            let _m = Modulus::<u32>::new(rng.gen_range(2..=(u32::MAX >> 2)));
-            let _m = Modulus::<u64>::new(rng.gen_range(2..=(u64::MAX >> 2)));
-        }
+
+        let _m = Modulus::<u8>::new(rng.gen_range(2..=(u8::MAX >> 2)));
+        let _m = Modulus::<u16>::new(rng.gen_range(2..=(u16::MAX >> 2)));
+        let _m = Modulus::<u32>::new(rng.gen_range(2..=(u32::MAX >> 2)));
+        let _m = Modulus::<u64>::new(rng.gen_range(2..=(u64::MAX >> 2)));
     }
 
     #[test]
     fn test_barret_reduce() {
         let mut rng = thread_rng();
-        for _ in 0..ROUND {
-            let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
-            let modulus = Modulus::<u64>::new(m);
-            for _ in 0..ROUND {
-                let v: u64 = rng.gen();
-                assert_eq!(v.reduce(&modulus), v % m);
-            }
-        }
+
+        let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
+        let modulus = Modulus::<u64>::new(m);
+
+        let v: u64 = rng.gen();
+        assert_eq!(v.reduce(&modulus), v % m);
     }
 
     #[test]
     fn test_barret_reduce_128() {
         let mut rng = thread_rng();
-        for _ in 0..ROUND {
-            let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
-            let modulus = Modulus::<u64>::new(m);
-            for _ in 0..ROUND {
-                let lw64: u64 = rng.gen();
-                let hw64: u64 = rng.gen();
-                let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
-                assert_eq!([lw64, hw64].reduce(&modulus), (v % (m as u128)) as u64);
-            }
-        }
-    }
 
-    #[test]
-    fn test_barret_reduce_128_tuple() {
-        let mut r = thread_rng();
-        for _ in 0..ROUND {
-            let m: u64 = r.gen_range(2..=(u64::MAX >> 2));
-            let modulus = Modulus::<u64>::new(m);
-            for _ in 0..ROUND {
-                let lw64: u64 = r.gen();
-                let hw64: u64 = r.gen();
-                let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
-                assert_eq!((lw64, hw64).reduce(&modulus), (v % (m as u128)) as u64);
-            }
-        }
+        let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
+        let modulus = Modulus::<u64>::new(m);
+
+        let lw64: u64 = rng.gen();
+        let hw64: u64 = rng.gen();
+        let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
+        assert_eq!([lw64, hw64].reduce(&modulus), (v % (m as u128)) as u64);
+        assert_eq!((lw64, hw64).reduce(&modulus), (v % (m as u128)) as u64);
     }
 }

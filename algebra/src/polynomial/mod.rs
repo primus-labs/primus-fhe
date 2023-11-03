@@ -14,10 +14,8 @@ pub use ntt_polynomial::*;
 mod tests {
     use rand::prelude::*;
 
-    use crate::field::{
-        prime_fields::{BarrettConfig, Fp32},
-        NTTField,
-    };
+    use crate::field::prime_fields::{BarrettConfig, Fp32};
+    use crate::field::NTTField;
 
     use super::*;
 
@@ -42,7 +40,9 @@ mod tests {
 
         let a = PolyFp::new(coeffs);
         let b = a.clone().to_ntt_polynomial();
-        let c = b.to_native_polynomial();
-        assert_eq!(a, c)
+        let c = b.clone().to_native_polynomial();
+        let d = c.clone().to_ntt_polynomial();
+        assert_eq!(a, c);
+        assert_eq!(b, d);
     }
 }

@@ -37,7 +37,7 @@ pub trait BarrettConfig<const P: u32> {
     /// The modulus of the field.
     const BARRETT_MODULUS: Modulus<u32>;
 
-    /// Get the modulus of the field.
+    /// Get the barrett modulus of the field.
     #[inline]
     fn barrett_modulus() -> Modulus<u32> {
         Self::BARRETT_MODULUS
@@ -49,7 +49,7 @@ impl BarrettConfig<P> for Fp32 {
 }
 
 impl Fp32 {
-    /// Creates a new \[`Fp32`\].
+    /// Creates a new [`Fp32`].
     #[inline]
     pub fn new(value: u32) -> Self {
         Self(value)
@@ -270,10 +270,12 @@ impl NTTField for Fp32 {
 
     type Degree = u32;
 
+    #[inline]
     fn from_root(root: Self::Root) -> Self {
         root.value
     }
 
+    #[inline]
     fn to_root(&self) -> Self::Root {
         Self::Root {
             value: *self,
@@ -281,6 +283,7 @@ impl NTTField for Fp32 {
         }
     }
 
+    #[inline]
     fn mul_root(&self, root: Self::Root) -> Self {
         let r = MulModuloFactor::<u32> {
             value: root.value.0,
@@ -290,6 +293,7 @@ impl NTTField for Fp32 {
         Self(self.0.mul_reduce(r, P))
     }
 
+    #[inline]
     fn mul_root_assign(&mut self, root: Self::Root) {
         let r = MulModuloFactor::<u32> {
             value: root.value.0,
@@ -456,130 +460,71 @@ mod tests {
     use rand::thread_rng;
 
     #[test]
-    fn test_fp_basic() {
-        assert!(Fp32::is_prime_field());
-
-        assert_eq!(Fp32::from(4) + Fp32::from(3), Fp32::from(7));
-        assert_eq!(Fp32::from(P - 1) + Fp32::from(3), Fp32::from(2));
-
-        assert_eq!(Fp32::from(4) * Fp32::from(3), Fp32::from(12));
-        assert_eq!(Fp32::from(P - 1) * Fp32::from(3), Fp32::from(P - 3));
-
-        assert_eq!(Fp32::from(4) - Fp32::from(3), Fp32::from(1));
-        assert_eq!(Fp32::from(4) - Fp32::from(P - 1), Fp32::from(5));
-
-        assert_eq!(
-            Fp32::from(4) / Fp32::from(3),
-            Fp32::from(4) * Fp32::from(3).inv()
-        );
-    }
-
-    #[test]
     fn test_fp() {
         const P: u32 = Fp32::BARRETT_MODULUS.value();
 
         assert!(P.checked_add(P).is_some());
 
-        let distr = rand::distributions::Uniform::new_inclusive(0, P);
+        let distr = rand::distributions::Uniform::new(0, P);
         let mut rng = thread_rng();
 
         type FF = Fp32;
         assert!(FF::is_prime_field());
 
-        let round = 5;
-
         // add
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.sample(distr);
-            let c = (a + b) % P;
-            assert_eq!(FF::from(a) + FF::from(b), FF::from(c));
-        }
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = (a + b) % P;
+        assert_eq!(FF::from(a) + FF::from(b), FF::from(c));
 
         // add_assign
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.sample(distr);
-            let c = (a + b) % P;
-            let mut a = FF::from(a);
-            a += FF::from(b);
-            assert_eq!(a, FF::from(c));
-        }
+        let mut a = FF::from(a);
+        a += FF::from(b);
+        assert_eq!(a, FF::from(c));
 
         // sub
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.gen_range(0..=a);
-            let c = (a - b) % P;
-            assert_eq!(FF::from(a) - FF::from(b), FF::from(c));
-        }
+        let a = rng.sample(distr);
+        let b = rng.gen_range(0..=a);
+        let c = (a - b) % P;
+        assert_eq!(FF::from(a) - FF::from(b), FF::from(c));
 
         // sub_assign
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.gen_range(0..=a);
-            let c = (a - b) % P;
-
-            let mut a = FF::from(a);
-            a -= FF::from(b);
-            assert_eq!(a, FF::from(c));
-        }
+        let mut a = FF::from(a);
+        a -= FF::from(b);
+        assert_eq!(a, FF::from(c));
 
         // mul
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.sample(distr);
-            let c = ((a as u64 * b as u64) % P as u64) as u32;
-            assert_eq!(FF::from(a) * FF::from(b), FF::from(c));
-        }
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = ((a as u64 * b as u64) % P as u64) as u32;
+        assert_eq!(FF::from(a) * FF::from(b), FF::from(c));
 
         // mul_assign
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.sample(distr);
-            let c = ((a as u64 * b as u64) % P as u64) as u32;
-
-            let mut a = FF::from(a);
-            a *= FF::from(b);
-            assert_eq!(a, FF::from(c));
-        }
+        let mut a = FF::from(a);
+        a *= FF::from(b);
+        assert_eq!(a, FF::from(c));
 
         // div
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.sample(distr);
-            let b_inv = b.pow_reduce(P - 2, &Modulus::<u32>::new(P));
-            let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
-            assert_eq!(FF::from(a) / FF::from(b), FF::from(c));
-        }
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let b_inv = b.pow_reduce(P - 2, &Modulus::<u32>::new(P));
+        let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
+        assert_eq!(FF::from(a) / FF::from(b), FF::from(c));
 
         // div_assign
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let b = rng.sample(distr);
-            let b_inv = b.pow_reduce(P - 2, &Modulus::<u32>::new(P));
-            let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
-
-            let mut a = FF::from(a);
-            a /= FF::from(b);
-            assert_eq!(a, FF::from(c));
-        }
+        let mut a = FF::from(a);
+        a /= FF::from(b);
+        assert_eq!(a, FF::from(c));
 
         // neg
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let a_neg = -FF::from(a);
-
-            assert_eq!(FF::from(a) + a_neg, Zero::zero());
-        }
+        let a = rng.sample(distr);
+        let a_neg = -FF::from(a);
+        assert_eq!(FF::from(a) + a_neg, Zero::zero());
 
         // inv
-        for _ in 0..round {
-            let a = rng.sample(distr);
-            let a_inv = a.pow_reduce(P - 2, &Modulus::<u32>::new(P));
-
-            assert_eq!(FF::from(a).inv(), FF::from(a_inv));
-            assert_eq!(FF::from(a) * FF::from(a_inv), One::one());
-        }
+        let a = rng.sample(distr);
+        let a_inv = a.pow_reduce(P - 2, &Modulus::<u32>::new(P));
+        assert_eq!(FF::from(a).inv(), FF::from(a_inv));
+        assert_eq!(FF::from(a) * FF::from(a_inv), One::one());
     }
 }

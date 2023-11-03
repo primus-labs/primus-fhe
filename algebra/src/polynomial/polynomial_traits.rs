@@ -1,12 +1,12 @@
 use std::fmt::Debug;
-use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::Field;
+use crate::field::{Field, NTTField};
 
-/// A trait to indicate polynomial in coefficient form,
+/// A trait to indicate polynomial,
 /// which can perform `modulo`, `add_modulo` and `sub_modulo`.
 pub trait Poly<F: Field>:
     Sized
@@ -18,16 +18,12 @@ pub trait Poly<F: Field>:
     + Neg
     + Add<Self, Output = Self>
     + Sub<Self, Output = Self>
-    // + Mul<Self, Output = Self>
     + AddAssign<Self>
     + SubAssign<Self>
-    // + MulAssign<Self>
     + for<'a> Add<&'a Self, Output = Self>
     + for<'a> Sub<&'a Self, Output = Self>
-    // + for<'a> Mul<&'a Self, Output = Self>
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
-    // + for<'a> MulAssign<&'a Self>
 {
     /// Get the coefficient counts of polynomial.
     fn coeff_count(&self) -> usize;
@@ -51,4 +47,14 @@ pub trait Poly<F: Field>:
     fn resize_with<FN>(&mut self, new_degree: usize, f: FN)
     where
         FN: FnMut() -> F;
+}
+
+/// A trait to indicate polynomial which can perform multiplication.
+pub trait NTTPoly<F: NTTField>:
+    Poly<F>
+    + Mul<Self, Output = Self>
+    + MulAssign<Self>
+    + for<'a> Mul<&'a Self, Output = Self>
+    + for<'a> MulAssign<&'a Self>
+{
 }
