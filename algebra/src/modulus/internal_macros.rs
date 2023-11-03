@@ -387,6 +387,7 @@ macro_rules! impl_mul_modulo_factor {
             /// Resets the content of [`MulModuloFactor`].
             ///
             /// * `value` must be less than `modulus`.
+            #[inline]
             pub fn set(&mut self, value: $SelfT, modulus: $SelfT) {
                 self.value = value;
                 self.set_modulus(modulus);

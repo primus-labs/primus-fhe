@@ -211,6 +211,7 @@ impl<F: Field> Sub<&NTTPolynomial<F>> for NTTPolynomial<F> {
 impl<F: Field> Sub<NTTPolynomial<F>> for &NTTPolynomial<F> {
     type Output = NTTPolynomial<F>;
 
+    #[inline]
     fn sub(self, mut rhs: NTTPolynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         rhs.iter_mut()
@@ -305,6 +306,7 @@ where
     F: NTTField<Table = NTTTable<F>>,
 {
     /// Convert self into [`Polynomial<F>`]
+    #[inline]
     pub fn to_native_polynomial(self) -> Polynomial<F> {
         debug_assert!(self.coeff_count().is_power_of_two());
 

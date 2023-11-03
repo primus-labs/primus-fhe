@@ -321,6 +321,7 @@ where
     F: NTTField<Table = NTTTable<F>>,
 {
     /// Convert self into [`NTTPolynomial<F>`]
+    #[inline]
     pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
         debug_assert!(self.coeff_count().is_power_of_two());
 

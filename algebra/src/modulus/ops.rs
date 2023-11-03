@@ -15,6 +15,7 @@ where
 {
     type Output = T;
 
+    #[inline]
     fn add_reduce(self, rhs: Self, modulus: &Modulus<T>) -> Self::Output {
         let r = self + rhs;
         if r >= modulus.value() {
@@ -29,6 +30,7 @@ impl<T> AddModuloAssign<&Modulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
+    #[inline]
     fn add_reduce_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
         let r = *self + rhs;
         *self = if r >= modulus.value() {
@@ -45,6 +47,7 @@ where
 {
     type Output = T;
 
+    #[inline]
     fn sub_reduce(self, rhs: Self, modulus: &Modulus<T>) -> Self::Output {
         if self >= rhs {
             self - rhs
@@ -58,6 +61,7 @@ impl<T> SubModuloAssign<&Modulus<T>> for T
 where
     T: Copy + AddAssign + SubAssign + Sub<Output = Self> + PartialOrd,
 {
+    #[inline]
     fn sub_reduce_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
         if *self >= rhs {
             *self -= rhs;
