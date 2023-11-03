@@ -1,10 +1,5 @@
-use crate::{
-    field::{
-        prime_fields::{MulFactor, RootFactor},
-        NTTField,
-    },
-    polynomial::{NTTPolynomial, Polynomial},
-};
+use crate::field::NTTField;
+use crate::polynomial::{NTTPolynomial, Polynomial};
 
 /// This struct store the pre-computed data for number theory transform and
 /// inverse number theory transform.
@@ -14,7 +9,7 @@ use crate::{
 /// 1. `coeff_count` = 1 << `coeff_count_power`
 /// 1. `root` ^ `2 * coeff_count` = -1 mod `modulus`
 /// 1. `root` * `inv_root` = 1 mod `modulus`
-/// 1. `coeff_count` * `inv_degree_modulo` = 1 mod `modulus`
+/// 1. `coeff_count` * `inv_degree` = 1 mod `modulus`
 /// 1. `root_powers` holds 1~(n-1)-th powers of root in bit-reversed order, the 0-th power is left unset.
 /// 1. `inv_root_powers` holds 1~(n-1)-th powers of inverse root in scrambled order, the 0-th power is left unset.
 ///
@@ -28,17 +23,23 @@ use crate::{
 /// scrambled order:     0  1  5  3  7  2  6  4
 ///                         ----------  ----  -
 /// ```
-pub struct NTTTable<F> {
+pub struct NTTTable<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     root: F,
     inv_root: F,
     coeff_count_power: u32,
     coeff_count: usize,
-    inv_degree: MulFactor<F>,
-    root_powers: Vec<MulFactor<F>>,
-    inv_root_powers: Vec<MulFactor<F>>,
+    inv_degree: <F as NTTField>::Root,
+    root_powers: Vec<<F as NTTField>::Root>,
+    inv_root_powers: Vec<<F as NTTField>::Root>,
 }
 
-impl<F> NTTTable<F> {
+impl<F> NTTTable<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
     /// Creates a new [`NTTTable<F>`].
     #[inline]
     pub fn new(
@@ -46,9 +47,9 @@ impl<F> NTTTable<F> {
         inv_root: F,
         coeff_count_power: u32,
         coeff_count: usize,
-        inv_degree: MulFactor<F>,
-        root_powers: Vec<MulFactor<F>>,
-        inv_root_powers: Vec<MulFactor<F>>,
+        inv_degree: <F as NTTField>::Root,
+        root_powers: Vec<<F as NTTField>::Root>,
+        inv_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
         Self {
             root,
@@ -87,27 +88,22 @@ impl<F> NTTTable<F> {
 
     /// Returns a reference to the inv degree of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_degree(&self) -> &MulFactor<F> {
+    pub fn inv_degree(&self) -> &<F as NTTField>::Root {
         &self.inv_degree
     }
 
     /// Returns a reference to the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn root_powers(&self) -> &[MulFactor<F>] {
+    pub fn root_powers(&self) -> &[<F as NTTField>::Root] {
         self.root_powers.as_ref()
     }
 
     /// Returns a reference to the inv root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_root_powers(&self) -> &[MulFactor<F>] {
+    pub fn inv_root_powers(&self) -> &[<F as NTTField>::Root] {
         self.inv_root_powers.as_ref()
     }
-}
 
-impl<F> NTTTable<F>
-where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>,
-{
     /// Perform a fast number theory transform in place.
     ///
     /// This function transforms a polynomial to a vector.
@@ -121,7 +117,7 @@ where
 
         debug_assert_eq!(values.len(), 1 << log_n);
 
-        let mut root: MulFactor<F>;
+        let mut root: <F as NTTField>::Root;
         let mut u: F;
         let mut v: F;
 
@@ -134,22 +130,22 @@ where
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0.chunks_exact_mut(4), v1.chunks_exact_mut(4)) {
                     u = i[0];
-                    v = j[0] * root;
+                    v = NTTField::mul_root(&j[0], root);
                     i[0] = u + v;
                     j[0] = u - v;
 
                     u = i[1];
-                    v = j[1] * root;
+                    v = NTTField::mul_root(&j[1], root);
                     i[1] = u + v;
                     j[1] = u - v;
 
                     u = i[2];
-                    v = j[2] * root;
+                    v = NTTField::mul_root(&j[2], root);
                     i[2] = u + v;
                     j[2] = u - v;
 
                     u = i[3];
-                    v = j[3] * root;
+                    v = NTTField::mul_root(&j[3], root);
                     i[3] = u + v;
                     j[3] = u - v;
                 }
@@ -161,7 +157,7 @@ where
             let (v0, v1) = vc.split_at_mut(2);
             for (i, j) in std::iter::zip(v0, v1) {
                 u = *i;
-                v = *j * root;
+                v = NTTField::mul_root(j, root);
                 *i = u + v;
                 *j = u - v;
             }
@@ -171,7 +167,7 @@ where
             root = *root_iter.next().unwrap();
 
             u = vc[0];
-            v = vc[1] * root;
+            v = NTTField::mul_root(&vc[1], root);
             vc[0] = u + v;
             vc[1] = u - v;
         }
@@ -190,13 +186,7 @@ where
     pub fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
         self.transform_inplace(poly.clone())
     }
-}
 
-impl<F> NTTTable<F>
-where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>,
-    MulFactor<F>: RootFactor<F>,
-{
     /// Perform a fast inverse number theory transform in place.
     ///
     /// This function transforms a vector to a polynomial.
@@ -210,7 +200,7 @@ where
 
         debug_assert_eq!(values.len(), 1 << log_n);
 
-        let mut root: MulFactor<F>;
+        let mut root: <F as NTTField>::Root;
         let mut u: F;
         let mut v: F;
 
@@ -225,7 +215,7 @@ where
                     u = *i;
                     v = *j;
                     *i = u + v;
-                    *j = (u - v) * root;
+                    *j = NTTField::mul_root(&(u - v), root);
                 }
             }
         }
@@ -238,22 +228,22 @@ where
                     u = i[0];
                     v = j[0];
                     i[0] = u + v;
-                    j[0] = (u - v) * root;
+                    j[0] = NTTField::mul_root(&(u - v), root);
 
                     u = i[1];
                     v = j[1];
                     i[1] = u + v;
-                    j[1] = (u - v) * root;
+                    j[1] = NTTField::mul_root(&(u - v), root);
 
                     u = i[2];
                     v = j[2];
                     i[2] = u + v;
-                    j[2] = (u - v) * root;
+                    j[2] = NTTField::mul_root(&(u - v), root);
 
                     u = i[3];
                     v = j[3];
                     i[3] = u + v;
-                    j[3] = (u - v) * root;
+                    j[3] = NTTField::mul_root(&(u - v), root);
                 }
             }
         }
@@ -263,28 +253,29 @@ where
         let scalar = *self.inv_degree();
 
         root = *root_iter.next().unwrap();
-        let scaled_r = MulFactor::<F>::new(root.value() * scalar);
+
+        let scaled_r = NTTField::mul_root(&F::from_root(root), scalar).to_root();
         let (v0, v1) = values.split_at_mut(gap);
         for (i, j) in std::iter::zip(v0.chunks_exact_mut(4), v1.chunks_exact_mut(4)) {
             u = i[0];
             v = j[0];
-            i[0] = (u + v) * scalar;
-            j[0] = (u - v) * scaled_r;
+            i[0] = NTTField::mul_root(&(u + v), scalar);
+            j[0] = NTTField::mul_root(&(u - v), scaled_r);
 
             u = i[1];
             v = j[1];
-            i[1] = (u + v) * scalar;
-            j[1] = (u - v) * scaled_r;
+            i[1] = NTTField::mul_root(&(u + v), scalar);
+            j[1] = NTTField::mul_root(&(u - v), scaled_r);
 
             u = i[2];
             v = j[2];
-            i[2] = (u + v) * scalar;
-            j[2] = (u - v) * scaled_r;
+            i[2] = NTTField::mul_root(&(u + v), scalar);
+            j[2] = NTTField::mul_root(&(u - v), scaled_r);
 
             u = i[3];
             v = j[3];
-            i[3] = (u + v) * scalar;
-            j[3] = (u - v) * scaled_r;
+            i[3] = NTTField::mul_root(&(u + v), scalar);
+            j[3] = NTTField::mul_root(&(u - v), scaled_r);
         }
 
         Polynomial::<F>::new(poly.data())

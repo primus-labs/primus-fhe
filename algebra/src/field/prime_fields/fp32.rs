@@ -1,6 +1,9 @@
+use std::collections::{HashMap, HashSet};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::sync::{Arc, Mutex};
 
 use num_traits::{Inv, One, Pow, Zero};
+use once_cell::sync::OnceCell;
 use rand::{thread_rng, Rng};
 
 use crate::field::{Field, NTTField};
@@ -12,15 +15,17 @@ use crate::modulus::{Modulus, MulModuloFactor};
 use crate::transformation::NTTTable;
 use crate::utils::{Prime, ReverseLsbs};
 
-use super::{MulFactor, PrimeField, RootFactor};
+use super::{MulFactor, PrimeField};
+
+const P: u32 = 0x7e00001;
 
 /// A finite Field type, whose inner size is 32bits.
 ///
 /// Now, it's focused on the prime field.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
-pub struct Fp32<const P: u32>(u32);
+pub struct Fp32(u32);
 
-impl<const P: u32> std::fmt::Display for Fp32<P> {
+impl std::fmt::Display for Fp32 {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[({})_{}]", self.0, P)
@@ -39,26 +44,26 @@ pub trait BarrettConfig<const P: u32> {
     }
 }
 
-impl<const P: u32> BarrettConfig<P> for Fp32<P> {
+impl BarrettConfig<P> for Fp32 {
     const BARRETT_MODULUS: Modulus<u32> = Modulus::<u32>::new(P);
 }
 
-impl<const P: u32> Fp32<P> {
-    /// Creates a new \[`Fp32<P>`\].
+impl Fp32 {
+    /// Creates a new \[`Fp32`\].
     #[inline]
     pub fn new(value: u32) -> Self {
         Self(value)
     }
 }
 
-impl<const P: u32> From<u32> for Fp32<P> {
+impl From<u32> for Fp32 {
     #[inline]
     fn from(value: u32) -> Self {
         Self(value)
     }
 }
 
-impl<const P: u32> Zero for Fp32<P> {
+impl Zero for Fp32 {
     #[inline]
     fn zero() -> Self {
         Self(Zero::zero())
@@ -70,14 +75,14 @@ impl<const P: u32> Zero for Fp32<P> {
     }
 }
 
-impl<const P: u32> One for Fp32<P> {
+impl One for Fp32 {
     #[inline]
     fn one() -> Self {
         Self(One::one())
     }
 }
 
-impl<const P: u32> Add<Self> for Fp32<P> {
+impl Add<Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -86,7 +91,7 @@ impl<const P: u32> Add<Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> Add<&Self> for Fp32<P> {
+impl Add<&Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -95,21 +100,21 @@ impl<const P: u32> Add<&Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> AddAssign<Self> for Fp32<P> {
+impl AddAssign<Self> for Fp32 {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         self.0.add_reduce_assign(rhs.0, P)
     }
 }
 
-impl<const P: u32> AddAssign<&Self> for Fp32<P> {
+impl AddAssign<&Self> for Fp32 {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
         self.0.add_reduce_assign(rhs.0, P)
     }
 }
 
-impl<const P: u32> Sub<Self> for Fp32<P> {
+impl Sub<Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -118,7 +123,7 @@ impl<const P: u32> Sub<Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> Sub<&Self> for Fp32<P> {
+impl Sub<&Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -127,21 +132,21 @@ impl<const P: u32> Sub<&Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> SubAssign<Self> for Fp32<P> {
+impl SubAssign<Self> for Fp32 {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         self.0.sub_reduce_assign(rhs.0, P)
     }
 }
 
-impl<const P: u32> SubAssign<&Self> for Fp32<P> {
+impl SubAssign<&Self> for Fp32 {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
         self.0.sub_reduce_assign(rhs.0, P)
     }
 }
 
-impl<const P: u32> Mul<Self> for Fp32<P> {
+impl Mul<Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -150,7 +155,7 @@ impl<const P: u32> Mul<Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> Mul<&Self> for Fp32<P> {
+impl Mul<&Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -159,21 +164,21 @@ impl<const P: u32> Mul<&Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> MulAssign<Self> for Fp32<P> {
+impl MulAssign<Self> for Fp32 {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
     }
 }
 
-impl<const P: u32> MulAssign<&Self> for Fp32<P> {
+impl MulAssign<&Self> for Fp32 {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
         self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
     }
 }
 
-impl<const P: u32> Div<Self> for Fp32<P> {
+impl Div<Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -182,7 +187,7 @@ impl<const P: u32> Div<Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> Div<&Self> for Fp32<P> {
+impl Div<&Self> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -191,21 +196,21 @@ impl<const P: u32> Div<&Self> for Fp32<P> {
     }
 }
 
-impl<const P: u32> DivAssign<Self> for Fp32<P> {
+impl DivAssign<Self> for Fp32 {
     #[inline]
     fn div_assign(&mut self, rhs: Self) {
         self.0.div_reduce_assign(rhs.0, &Self::BARRETT_MODULUS);
     }
 }
 
-impl<const P: u32> DivAssign<&Self> for Fp32<P> {
+impl DivAssign<&Self> for Fp32 {
     #[inline]
     fn div_assign(&mut self, rhs: &Self) {
         self.0.div_reduce_assign(rhs.0, &Self::BARRETT_MODULUS);
     }
 }
 
-impl<const P: u32> Neg for Fp32<P> {
+impl Neg for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -214,7 +219,7 @@ impl<const P: u32> Neg for Fp32<P> {
     }
 }
 
-impl<const P: u32> Inv for Fp32<P> {
+impl Inv for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -223,7 +228,7 @@ impl<const P: u32> Inv for Fp32<P> {
     }
 }
 
-impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
+impl Pow<<Self as Field>::Order> for Fp32 {
     type Output = Self;
 
     #[inline]
@@ -232,7 +237,7 @@ impl<const P: u32> Pow<<Self as Field>::Order> for Fp32<P> {
     }
 }
 
-impl<const P: u32> Field for Fp32<P> {
+impl Field for Fp32 {
     type Order = u32;
     type Modulus = u32;
 
@@ -247,7 +252,7 @@ impl<const P: u32> Field for Fp32<P> {
     }
 }
 
-impl<const P: u32> PrimeField for Fp32<P> {
+impl PrimeField for Fp32 {
     /// Check [`Self`] is a prime field.
     #[inline]
     fn is_prime_field() -> bool {
@@ -255,12 +260,44 @@ impl<const P: u32> PrimeField for Fp32<P> {
     }
 }
 
-impl<const P: u32> NTTField for Fp32<P> {
+static mut NTT_TABLE: OnceCell<HashMap<u32, Arc<NTTTable<Fp32>>>> = OnceCell::new();
+static NTT_MUTEX: Mutex<()> = Mutex::new(());
+
+impl NTTField for Fp32 {
     type Table = NTTTable<Self>;
 
     type Root = MulFactor<Self>;
 
     type Degree = u32;
+
+    fn from_root(root: Self::Root) -> Self {
+        root.value
+    }
+
+    fn to_root(&self) -> Self::Root {
+        Self::Root {
+            value: *self,
+            quotient: Fp32((((self.0 as u64) << 32) / P as u64) as u32),
+        }
+    }
+
+    fn mul_root(&self, root: Self::Root) -> Self {
+        let r = MulModuloFactor::<u32> {
+            value: root.value.0,
+            quotient: root.quotient.0,
+        };
+
+        Self(self.0.mul_reduce(r, P))
+    }
+
+    fn mul_root_assign(&mut self, root: Self::Root) {
+        let r = MulModuloFactor::<u32> {
+            value: root.value.0,
+            quotient: root.quotient.0,
+        };
+
+        self.0.mul_reduce_assign(r, P);
+    }
 
     #[inline]
     fn is_primitive_root(root: Self, degree: Self::Degree) -> bool {
@@ -333,26 +370,26 @@ impl<const P: u32> NTTField for Fp32<P> {
         let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
         let inv_root = root.inv();
 
-        let root_factor = <Self as NTTField>::Root::new(root);
+        let root_factor = root.to_root();
         let mut power = root;
 
         let mut root_powers = vec![<Self as NTTField>::Root::default(); n];
-        root_powers[0].set(Self::one());
+        root_powers[0] = Self::one().to_root();
         for i in 1..n {
-            root_powers[i.reverse_lsbs(log_n)].set(power);
-            power *= root_factor;
+            root_powers[i.reverse_lsbs(log_n)] = power.to_root();
+            power.mul_root_assign(root_factor);
         }
 
-        let inv_root_factor = <Self as NTTField>::Root::new(inv_root);
+        let inv_root_factor = inv_root.to_root();
         let mut inv_root_powers = vec![<Self as NTTField>::Root::default(); n];
         power = inv_root;
 
-        inv_root_powers[0].set(Self::one());
+        inv_root_powers[0] = Self::one().to_root();
         for i in 1..n {
-            inv_root_powers[(i - 1).reverse_lsbs(log_n) + 1].set(power);
-            power *= inv_root_factor;
+            inv_root_powers[(i - 1).reverse_lsbs(log_n) + 1] = power.to_root();
+            power.mul_root_assign(inv_root_factor);
         }
-        let inv_degree = <Self as NTTField>::Root::new(Self(n as u32).inv());
+        let inv_degree = Self(n as u32).inv().to_root();
 
         Ok(NTTTable::new(
             root,
@@ -364,49 +401,51 @@ impl<const P: u32> NTTField for Fp32<P> {
             inv_root_powers,
         ))
     }
-}
 
-impl<const P: u32> RootFactor<Fp32<P>> for MulFactor<Fp32<P>> {
-    /// Constructs a [`MulFactor<Fp32<P>>`].
-    #[inline]
-    fn new(value: Fp32<P>) -> Self {
-        Self {
-            value,
-            quotient: Fp32((((value.0 as u64) << 32) / P as u64) as u32),
+    fn get_ntt_table(log_n: u32) -> Result<Arc<Self::Table>, crate::AlgebraError> {
+        if let Some(tables) = unsafe { NTT_TABLE.get() } {
+            if let Some(t) = tables.get(&log_n) {
+                return Ok(Arc::clone(t));
+            }
         }
+
+        Self::init_ntt_table(&[log_n])?;
+        Ok(Arc::clone(unsafe {
+            NTT_TABLE.get().unwrap().get(&log_n).unwrap()
+        }))
     }
 
-    /// Resets the content of [`MulFactor<Fp32<P>>`].
-    #[inline]
-    fn set(&mut self, value: Fp32<P>) {
-        self.value = value;
-        self.quotient = Fp32((((value.0 as u64) << 32) / P as u64) as u32);
-    }
-}
+    fn init_ntt_table(log_ns: &[u32]) -> Result<(), crate::AlgebraError> {
+        let _g = NTT_MUTEX.lock().unwrap();
+        match unsafe { NTT_TABLE.get_mut() } {
+            Some(tables) => {
+                let new_log_ns: HashSet<u32> = log_ns.iter().copied().collect();
+                let old_log_ns: HashSet<u32> = tables.keys().copied().collect();
+                let difference = new_log_ns.difference(&old_log_ns);
 
-impl<const P: u32> Mul<MulFactor<Self>> for Fp32<P> {
-    type Output = Self;
+                for &log_n in difference {
+                    let temp_table = Self::generate_ntt_table(log_n)?;
+                    tables.insert(log_n, Arc::new(temp_table));
+                }
 
-    #[inline]
-    fn mul(self, rhs: MulFactor<Self>) -> Self::Output {
-        let r = MulModuloFactor::<u32> {
-            value: rhs.value.0,
-            quotient: rhs.quotient.0,
-        };
+                Ok(())
+            }
+            None => {
+                let log_ns: HashSet<u32> = log_ns.iter().copied().collect();
+                let mut map = HashMap::with_capacity(log_ns.len());
 
-        Self(self.0.mul_reduce(r, P))
-    }
-}
+                for log_n in log_ns {
+                    let temp_table = Self::generate_ntt_table(log_n)?;
+                    map.insert(log_n, Arc::new(temp_table));
+                }
 
-impl<const P: u32> MulAssign<MulFactor<Self>> for Fp32<P> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: MulFactor<Self>) {
-        let r = MulModuloFactor::<u32> {
-            value: rhs.value.0,
-            quotient: rhs.quotient.0,
-        };
-
-        self.0.mul_reduce_assign(r, P);
+                if unsafe { NTT_TABLE.set(map).is_err() } {
+                    Err(crate::AlgebraError::NTTTableError)
+                } else {
+                    Ok(())
+                }
+            }
+        }
     }
 }
 
@@ -418,27 +457,33 @@ mod tests {
 
     #[test]
     fn test_fp_basic() {
-        type F6 = Fp32<6>;
-        assert!(!F6::is_prime_field());
+        assert!(Fp32::is_prime_field());
 
-        type F5 = Fp32<5>;
-        assert!(F5::is_prime_field());
-        assert_eq!(F5::from(4) + F5::from(3), F5::from(2));
-        assert_eq!(F5::from(4) * F5::from(3), F5::from(2));
-        assert_eq!(F5::from(4) - F5::from(3), F5::from(1));
-        assert_eq!(F5::from(4) / F5::from(3), F5::from(3));
+        assert_eq!(Fp32::from(4) + Fp32::from(3), Fp32::from(7));
+        assert_eq!(Fp32::from(P - 1) + Fp32::from(3), Fp32::from(2));
+
+        assert_eq!(Fp32::from(4) * Fp32::from(3), Fp32::from(12));
+        assert_eq!(Fp32::from(P - 1) * Fp32::from(3), Fp32::from(P - 3));
+
+        assert_eq!(Fp32::from(4) - Fp32::from(3), Fp32::from(1));
+        assert_eq!(Fp32::from(4) - Fp32::from(P - 1), Fp32::from(5));
+
+        assert_eq!(
+            Fp32::from(4) / Fp32::from(3),
+            Fp32::from(4) * Fp32::from(3).inv()
+        );
     }
 
     #[test]
     fn test_fp() {
-        const P: u32 = 1000000513;
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
 
         assert!(P.checked_add(P).is_some());
 
         let distr = rand::distributions::Uniform::new_inclusive(0, P);
         let mut rng = thread_rng();
 
-        type FF = Fp32<P>;
+        type FF = Fp32;
         assert!(FF::is_prime_field());
 
         let round = 5;

@@ -3,7 +3,6 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::prime_fields::{MulFactor, RootFactor};
 use crate::field::{Field, NTTField};
 use crate::transformation::NTTTable;
 
@@ -303,25 +302,28 @@ impl<F: Field> Neg for NTTPolynomial<F> {
 
 impl<F> NTTPolynomial<F>
 where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>,
-    MulFactor<F>: RootFactor<F>,
+    F: NTTField<Table = NTTTable<F>>,
 {
     /// Convert self into [`Polynomial<F>`]
-    pub fn to_ntt_polynomial(self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
+    pub fn to_native_polynomial(self) -> Polynomial<F> {
+        debug_assert!(self.coeff_count().is_power_of_two());
+
+        let ntt_table = F::get_ntt_table(self.coeff_count().trailing_zeros()).unwrap();
+
         ntt_table.inverse_transform_inplace(self)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::field::prime_fields::Fp32;
+    use crate::field::prime_fields::{BarrettConfig, Fp32};
 
     use super::*;
 
     #[test]
     fn test_ntt_poly() {
-        const P: u32 = 1000000513;
-        type Fp = Fp32<P>;
+        type Fp = Fp32;
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
         type PolyFp = NTTPolynomial<Fp>;
 
         let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);

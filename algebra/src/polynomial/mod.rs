@@ -12,34 +12,37 @@ pub use ntt_polynomial::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::field::{prime_fields::Fp32, NTTField};
+    use rand::prelude::*;
+
+    use crate::field::{
+        prime_fields::{BarrettConfig, Fp32},
+        NTTField,
+    };
 
     use super::*;
 
     #[test]
     fn test_transform() {
-        const P: u32 = 1000000513;
-        type Fp = Fp32<P>;
+        type Fp = Fp32;
         type PolyFp = Polynomial<Fp>;
 
-        let ntt_table = Fp::generate_ntt_table(3).unwrap();
+        let p = Fp32::BARRETT_MODULUS.value();
+        let log_n = 3;
 
-        let a = PolyFp::new(vec![
-            Fp::new(1),
-            Fp::new(2),
-            Fp::new(3),
-            Fp::new(4),
-            Fp::new(5),
-            Fp::new(6),
-            Fp::new(7),
-            Fp::new(8),
-        ]);
-        let b = ntt_table.transform_inplace(a);
+        Fp::init_ntt_table(&[log_n]).unwrap();
 
-        println!("{:?}", b);
+        let distr = rand::distributions::Uniform::new(0, p);
+        let rng = thread_rng();
 
-        let c = ntt_table.inverse_transform_inplace(b);
+        let coeffs = rng
+            .sample_iter(distr)
+            .take(1 << log_n)
+            .map(Fp32::new)
+            .collect();
 
-        println!("{:?}", c);
+        let a = PolyFp::new(coeffs);
+        let b = a.clone().to_ntt_polynomial();
+        let c = b.to_native_polynomial();
+        assert_eq!(a, c)
     }
 }

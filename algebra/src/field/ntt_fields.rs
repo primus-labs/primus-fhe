@@ -1,5 +1,7 @@
 //! Define `NTTField`` trait
 
+use std::sync::Arc;
+
 use super::PrimeField;
 
 /// A helper trait  for number theory transform
@@ -20,15 +22,27 @@ use super::PrimeField;
 /// `ω^(n/2) = -1 mod p`.
 ///
 /// We can get a minimal root `ω` with one more iteration.
-pub trait NTTField: PrimeField + std::ops::Mul<Self::Root, Output = Self> {
+pub trait NTTField: PrimeField {
     /// NTT table type
     type Table;
 
     /// Root type
-    type Root;
+    type Root: Copy;
 
     /// Degree type
     type Degree;
+
+    /// Convert `root` into Self type
+    fn from_root(root: Self::Root) -> Self;
+
+    /// Convert `self` into Self::Root type.
+    fn to_root(&self) -> Self::Root;
+
+    /// mul self with Root
+    fn mul_root(&self, root: Self::Root) -> Self;
+
+    /// mul assign self with Root
+    fn mul_root_assign(&mut self, root: Self::Root);
 
     /// Check if `root` is a primitive `degree`-th root of unity in integers reduce `p`.
     fn is_primitive_root(root: Self, degree: Self::Degree) -> bool;
@@ -39,6 +53,12 @@ pub trait NTTField: PrimeField + std::ops::Mul<Self::Root, Output = Self> {
     /// Try to get the minimal primitive `degree`-th root of unity reduce `p`.
     fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, crate::AlgebraError>;
 
-    /// generate the ntt table of the ntt field
+    /// Generate the ntt table of the ntt field
     fn generate_ntt_table(log_n: u32) -> Result<Self::Table, crate::AlgebraError>;
+
+    /// Get the ntt table of the ntt field
+    fn get_ntt_table(log_n: u32) -> Result<Arc<Self::Table>, crate::AlgebraError>;
+
+    /// Init ntt table
+    fn init_ntt_table(log_ns: &[u32]) -> Result<(), crate::AlgebraError>;
 }

@@ -1,9 +1,8 @@
-use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 
-use crate::field::prime_fields::{MulFactor, RootFactor};
 use crate::field::{Field, NTTField};
 use crate::transformation::NTTTable;
 
@@ -233,6 +232,78 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     }
 }
 
+impl<F> MulAssign<&Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    #[inline]
+    fn mul_assign(&mut self, rhs: &Polynomial<F>) {
+        *self = Mul::mul(&*self, rhs)
+    }
+}
+
+impl<F> MulAssign<Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    #[inline]
+    fn mul_assign(&mut self, rhs: Polynomial<F>) {
+        *self = Mul::mul(&*self, &rhs)
+    }
+}
+
+impl<F> Mul<Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+        Mul::mul(&self, &rhs)
+    }
+}
+
+impl<F> Mul<&Polynomial<F>> for Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+        Mul::mul(&self, rhs)
+    }
+}
+
+impl<F> Mul<Polynomial<F>> for &Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+        Mul::mul(self, &rhs)
+    }
+}
+
+impl<F> Mul<&Polynomial<F>> for &Polynomial<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    type Output = Polynomial<F>;
+
+    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        assert!(self.coeff_count().is_power_of_two());
+
+        let log_n = self.coeff_count().trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        ntt_table.inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs))
+    }
+}
+
 impl<F: Field> Neg for Polynomial<F> {
     type Output = Polynomial<F>;
 
@@ -247,41 +318,28 @@ impl<F: Field> Neg for Polynomial<F> {
 
 impl<F> Polynomial<F>
 where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>,
-    MulFactor<F>: RootFactor<F>,
-{
-    /// The polynomial multiplication
-    pub fn ntt_mul(&self, rhs: &Self, ntt_table: &NTTTable<F>) -> Polynomial<F> {
-        ntt_table.inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs))
-    }
-
-    /// The polynomial multiplication assignment
-    pub fn ntt_mul_assign(&mut self, rhs: &Self, ntt_table: &NTTTable<F>) {
-        *self = ntt_table
-            .inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs));
-    }
-}
-
-impl<F> Polynomial<F>
-where
-    F: NTTField<Table = NTTTable<F>, Root = MulFactor<F>>,
+    F: NTTField<Table = NTTTable<F>>,
 {
     /// Convert self into [`NTTPolynomial<F>`]
-    pub fn to_ntt_polynomial(self, ntt_table: &NTTTable<F>) -> NTTPolynomial<F> {
+    pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
+        debug_assert!(self.coeff_count().is_power_of_two());
+
+        let ntt_table = F::get_ntt_table(self.coeff_count().trailing_zeros()).unwrap();
+
         ntt_table.transform_inplace(self)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::field::prime_fields::Fp32;
+    use crate::field::prime_fields::{BarrettConfig, Fp32};
 
     use super::*;
 
     #[test]
     fn test_native_poly() {
-        const P: u32 = 1000000513;
-        type Fp = Fp32<P>;
+        type Fp = Fp32;
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
         type PolyFp = Polynomial<Fp>;
 
         let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);
@@ -303,12 +361,11 @@ mod tests {
     }
 
     #[test]
-    fn test_ntt_mul() {
-        const P: u32 = 1000000513;
-        type Fp = Fp32<P>;
+    fn test_mul() {
+        type Fp = Fp32;
         type PolyFp = Polynomial<Fp>;
 
-        let ntt_table = Fp::generate_ntt_table(3).unwrap();
+        Fp::init_ntt_table(&[3]).unwrap();
 
         let a = PolyFp::new(vec![
             Fp::new(1),
@@ -341,6 +398,6 @@ mod tests {
             Fp::new(0),
             Fp::new(0),
         ]);
-        assert_eq!(a.ntt_mul(&b, &ntt_table), mul_result);
+        assert_eq!(a.mul(&b), mul_result);
     }
 }

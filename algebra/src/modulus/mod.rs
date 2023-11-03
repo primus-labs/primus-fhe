@@ -47,13 +47,13 @@ pub struct Modulus<T> {
 impl<T: Copy> Modulus<T> {
     /// Returns the value of this [`Modulus<T>`].
     #[inline]
-    pub fn value(&self) -> T {
+    pub const fn value(&self) -> T {
         self.value
     }
 
     /// Returns the ratio of this [`Modulus<T>`].
     #[inline]
-    pub fn ratio(&self) -> [T; 2] {
+    pub const fn ratio(&self) -> [T; 2] {
         self.ratio
     }
 }

@@ -25,4 +25,7 @@ pub enum AlgebraError {
     /// Error that occurs when user ask to generate a modulus with invalid bit count.
     #[error("The bit count of desired coeff modulus is not valid")]
     BitCountError,
+    /// Error that occurs when fails to generate the ntt table.
+    #[error("Fail to generate the desired ntt table.")]
+    NTTTableError,
 }

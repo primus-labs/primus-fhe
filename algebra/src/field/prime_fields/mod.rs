@@ -19,14 +19,6 @@ pub struct MulFactor<F> {
     quotient: F,
 }
 
-/// A helper trait
-pub trait RootFactor<F> {
-    /// Constructs a struct
-    fn new(value: F) -> Self;
-    /// Reset the struct
-    fn set(&mut self, value: F);
-}
-
 impl<F: Copy> MulFactor<F> {
     /// Returns the value of this [`MulFactor<F>`].
     #[inline]
