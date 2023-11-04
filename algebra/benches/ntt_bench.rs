@@ -1,5 +1,5 @@
-use algebra::field::prime_fields::{BarrettConfig, Fp32};
 use algebra::field::NTTField;
+use algebra::field::{BarrettConfig, Fp32};
 use algebra::polynomial::{NTTPolynomial, Polynomial};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Uniform, prelude::*, thread_rng};

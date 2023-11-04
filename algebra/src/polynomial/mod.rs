@@ -14,8 +14,8 @@ pub use ntt_polynomial::*;
 mod tests {
     use rand::prelude::*;
 
-    use crate::field::prime_fields::{BarrettConfig, Fp32};
     use crate::field::NTTField;
+    use crate::field::{BarrettConfig, Fp32};
 
     use super::*;
 
