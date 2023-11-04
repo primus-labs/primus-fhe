@@ -21,6 +21,7 @@ impl<F: Copy> MulFactor<F> {
     pub fn new(value: F, quotient: F) -> Self {
         MulFactor { value, quotient }
     }
+
     /// Returns the value of this [`MulFactor<F>`].
     #[inline]
     pub fn value(&self) -> F {

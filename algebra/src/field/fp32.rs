@@ -2,6 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::sync::{Arc, Mutex};
 
+use num_traits::{Inv, One, Pow, Zero};
+use once_cell::sync::OnceCell;
+use rand::{thread_rng, Rng};
+
 use crate::field::{prime_fields::MulFactor, Field, NTTField, PrimeField};
 use crate::modulo_traits::{
     AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo, MulModuloAssign,
@@ -10,9 +14,6 @@ use crate::modulo_traits::{
 use crate::modulus::{Modulus, MulModuloFactor};
 use crate::transformation::NTTTable;
 use crate::utils::{Prime, ReverseLsbs};
-use num_traits::{Inv, One, Pow, Zero};
-use once_cell::sync::OnceCell;
-use rand::{thread_rng, Rng};
 
 const P: u32 = 0x7e00001;
 
