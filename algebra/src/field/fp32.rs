@@ -6,14 +6,16 @@ use num_traits::{Inv, One, Pow, Zero};
 use once_cell::sync::OnceCell;
 use rand::{thread_rng, Rng};
 
-use crate::field::{prime_fields::MulFactor, Field, NTTField, PrimeField};
-use crate::modulo_traits::{
-    AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo, MulModuloAssign,
-    NegModulo, PowModulo, SubModulo, SubModuloAssign,
+use crate::{
+    field::{prime_fields::MulFactor, Field, NTTField, PrimeField},
+    modulo_traits::{
+        AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo,
+        MulModuloAssign, NegModulo, PowModulo, SubModulo, SubModuloAssign,
+    },
+    modulus::{Modulus, MulModuloFactor},
+    transformation::NTTTable,
+    utils::{Prime, ReverseLsbs},
 };
-use crate::modulus::{Modulus, MulModuloFactor};
-use crate::transformation::NTTTable;
-use crate::utils::{Prime, ReverseLsbs};
 
 const P: u32 = 0x7e00001;
 
