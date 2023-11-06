@@ -6,16 +6,16 @@ use num_traits::{Inv, One, Pow, Zero};
 use once_cell::sync::OnceCell;
 use rand::{thread_rng, Rng};
 
-use crate::field::{Field, NTTField};
-use crate::modulo_traits::{
-    AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo, MulModuloAssign,
-    NegModulo, PowModulo, SubModulo, SubModuloAssign,
+use crate::{
+    field::{prime_fields::MulFactor, Field, NTTField, PrimeField},
+    modulo_traits::{
+        AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo,
+        MulModuloAssign, NegModulo, PowModulo, SubModulo, SubModuloAssign,
+    },
+    modulus::{Modulus, MulModuloFactor},
+    transformation::NTTTable,
+    utils::{Prime, ReverseLsbs},
 };
-use crate::modulus::{Modulus, MulModuloFactor};
-use crate::transformation::NTTTable;
-use crate::utils::{Prime, ReverseLsbs};
-
-use super::{MulFactor, PrimeField};
 
 const P: u32 = 0x7e00001;
 
@@ -272,22 +272,19 @@ impl NTTField for Fp32 {
 
     #[inline]
     fn from_root(root: Self::Root) -> Self {
-        root.value
+        root.value()
     }
 
     #[inline]
     fn to_root(&self) -> Self::Root {
-        Self::Root {
-            value: *self,
-            quotient: Fp32((((self.0 as u64) << 32) / P as u64) as u32),
-        }
+        Self::Root::new(*self, Fp32((((self.0 as u64) << 32) / P as u64) as u32))
     }
 
     #[inline]
     fn mul_root(&self, root: Self::Root) -> Self {
         let r = MulModuloFactor::<u32> {
-            value: root.value.0,
-            quotient: root.quotient.0,
+            value: root.value().0,
+            quotient: root.quotient().0,
         };
 
         Self(self.0.mul_reduce(r, P))
@@ -296,8 +293,8 @@ impl NTTField for Fp32 {
     #[inline]
     fn mul_root_assign(&mut self, root: Self::Root) {
         let r = MulModuloFactor::<u32> {
-            value: root.value.0,
-            quotient: root.quotient.0,
+            value: root.value().0,
+            quotient: root.quotient().0,
         };
 
         self.0.mul_reduce_assign(r, P);

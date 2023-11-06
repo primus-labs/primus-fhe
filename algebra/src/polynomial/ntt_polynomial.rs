@@ -318,7 +318,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::field::prime_fields::{BarrettConfig, Fp32};
+    use crate::field::{BarrettConfig, Fp32};
 
     use super::*;
 

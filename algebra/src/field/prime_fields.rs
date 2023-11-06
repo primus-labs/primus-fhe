@@ -1,9 +1,5 @@
 //! This place defines some concrete implement of the field.
 
-mod fp32;
-
-pub use fp32::{BarrettConfig, Fp32};
-
 use super::Field;
 
 /// Define `PrimeField` trait
@@ -20,6 +16,12 @@ pub struct MulFactor<F> {
 }
 
 impl<F: Copy> MulFactor<F> {
+    /// Creates a new instance.
+    #[inline]
+    pub fn new(value: F, quotient: F) -> Self {
+        MulFactor { value, quotient }
+    }
+
     /// Returns the value of this [`MulFactor<F>`].
     #[inline]
     pub fn value(&self) -> F {
