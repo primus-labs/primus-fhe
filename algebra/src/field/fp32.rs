@@ -6,6 +6,7 @@ use num_traits::{Inv, One, Pow, Zero};
 use once_cell::sync::OnceCell;
 use rand::{thread_rng, Rng};
 
+use crate::ring::Ring;
 use crate::{
     field::{prime_fields::MulFactor, Field, NTTField, PrimeField},
     modulo_traits::{
@@ -228,23 +229,33 @@ impl Inv for Fp32 {
     }
 }
 
-impl Pow<<Self as Field>::Order> for Fp32 {
+impl Pow<<Self as Ring>::Order> for Fp32 {
     type Output = Self;
 
     #[inline]
-    fn pow(self, rhs: <Self as Field>::Order) -> Self::Output {
+    fn pow(self, rhs: <Self as Ring>::Order) -> Self::Output {
         Self(self.0.pow_reduce(rhs, &Self::BARRETT_MODULUS))
     }
 }
 
-impl Field for Fp32 {
+impl Ring for Fp32 {
+    type Scalar = u32;
+
     type Order = u32;
-    type Modulus = u32;
 
     #[inline]
     fn order() -> Self::Order {
         P
     }
+
+    #[inline]
+    fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
+        Self(self.0.mul_reduce(scalar, &Self::BARRETT_MODULUS))
+    }
+}
+
+impl Field for Fp32 {
+    type Modulus = u32;
 
     #[inline]
     fn modulus() -> Self::Modulus {

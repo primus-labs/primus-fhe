@@ -5,6 +5,7 @@
 
 mod error;
 
+pub mod ring;
 pub mod field;
 pub mod modulo_traits;
 pub mod modulus;
