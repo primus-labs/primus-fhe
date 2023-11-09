@@ -2,7 +2,7 @@
 
 use std::ops::{Div, DivAssign};
 
-use num_traits::{Inv, Zero};
+use num_traits::Inv;
 
 mod fp32;
 pub mod ntt_fields;

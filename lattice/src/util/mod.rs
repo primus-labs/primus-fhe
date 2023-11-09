@@ -36,7 +36,7 @@ impl<Element: Ring> Add<Vector<Element>> for Vector<Element> {
     fn add(mut self, rhs: Vector<Element>) -> Self::Output {
         self.0
             .iter_mut()
-            .zip(rhs.0.into_iter())
+            .zip(rhs.0)
             .for_each(|(a, b)| a.add_assign(b));
         self
     }
@@ -62,7 +62,7 @@ impl<Element: Ring> Sub<Vector<Element>> for Vector<Element> {
     fn sub(mut self, rhs: Vector<Element>) -> Self::Output {
         self.0
             .iter_mut()
-            .zip(rhs.0.into_iter())
+            .zip(rhs.0)
             .for_each(|(a, b)| a.sub_assign(b));
         self
     }
@@ -88,7 +88,7 @@ impl<Element: Ring> Mul<Vector<Element>> for Vector<Element> {
     fn mul(mut self, rhs: Vector<Element>) -> Self::Output {
         self.0
             .iter_mut()
-            .zip(rhs.0.into_iter())
+            .zip(rhs.0)
             .for_each(|(a, b)| a.mul_assign(b));
         self
     }
@@ -112,7 +112,7 @@ impl<Element: Ring> AddAssign<Vector<Element>> for Vector<Element> {
     fn add_assign(&mut self, rhs: Vector<Element>) {
         self.0
             .iter_mut()
-            .zip(rhs.0.into_iter())
+            .zip(rhs.0)
             .for_each(|(a, b)| a.add_assign(b));
     }
 }
@@ -132,7 +132,7 @@ impl<Element: Ring> SubAssign<Vector<Element>> for Vector<Element> {
     fn sub_assign(&mut self, rhs: Vector<Element>) {
         self.0
             .iter_mut()
-            .zip(rhs.0.into_iter())
+            .zip(rhs.0)
             .for_each(|(a, b)| a.sub_assign(b));
     }
 }
@@ -152,7 +152,7 @@ impl<Element: Ring> MulAssign<Vector<Element>> for Vector<Element> {
     fn mul_assign(&mut self, rhs: Vector<Element>) {
         self.0
             .iter_mut()
-            .zip(rhs.0.into_iter())
+            .zip(rhs.0)
             .for_each(|(a, b)| a.mul_assign(b));
     }
 }

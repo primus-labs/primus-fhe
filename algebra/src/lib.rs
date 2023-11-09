@@ -5,10 +5,10 @@
 
 mod error;
 
-pub mod ring;
 pub mod field;
 pub mod modulo_traits;
 pub mod modulus;
+pub mod ring;
 pub mod utils;
 
 pub mod polynomial;

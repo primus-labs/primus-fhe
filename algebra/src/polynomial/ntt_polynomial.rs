@@ -4,7 +4,7 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 
 use crate::field::{Field, NTTField};
-use crate::transformation::NTTTable;
+use crate::transformation::AbstractTable;
 
 use super::{Poly, Polynomial};
 
@@ -303,16 +303,40 @@ impl<F: Field> Neg for NTTPolynomial<F> {
 
 impl<F> NTTPolynomial<F>
 where
-    F: NTTField<Table = NTTTable<F>>,
+    F: NTTField,
 {
-    /// Convert self into [`Polynomial<F>`]
+    /// Convert `self` from [`NTTPolynomial<F>`] into [`Polynomial<F>`]
     #[inline]
     pub fn to_native_polynomial(self) -> Polynomial<F> {
-        debug_assert!(self.coeff_count().is_power_of_two());
+        self.into()
+    }
+}
 
-        let ntt_table = F::get_ntt_table(self.coeff_count().trailing_zeros()).unwrap();
+impl<F> From<Polynomial<F>> for NTTPolynomial<F>
+where
+    F: NTTField,
+{
+    #[inline]
+    fn from(poly: Polynomial<F>) -> Self {
+        debug_assert!(poly.coeff_count().is_power_of_two());
 
-        ntt_table.inverse_transform_inplace(self)
+        let ntt_table = F::get_ntt_table(poly.coeff_count().trailing_zeros()).unwrap();
+
+        ntt_table.transform_inplace(poly)
+    }
+}
+
+impl<F> From<&Polynomial<F>> for NTTPolynomial<F>
+where
+    F: NTTField,
+{
+    #[inline]
+    fn from(poly: &Polynomial<F>) -> Self {
+        debug_assert!(poly.coeff_count().is_power_of_two());
+
+        let ntt_table = F::get_ntt_table(poly.coeff_count().trailing_zeros()).unwrap();
+
+        ntt_table.transform(poly)
     }
 }
 

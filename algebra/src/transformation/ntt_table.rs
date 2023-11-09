@@ -1,6 +1,8 @@
 use crate::field::NTTField;
 use crate::polynomial::{NTTPolynomial, Polynomial};
 
+use super::AbstractTable;
+
 /// This struct store the pre-computed data for number theory transform and
 /// inverse number theory transform.
 ///
@@ -103,15 +105,13 @@ where
     pub fn inv_root_powers(&self) -> &[<F as NTTField>::Root] {
         self.inv_root_powers.as_ref()
     }
+}
 
-    /// Perform a fast number theory transform in place.
-    ///
-    /// This function transforms a polynomial to a vector.
-    ///
-    /// # Arguments
-    ///
-    /// * `self` - inputs in normal order, outputs in bit-reversed order
-    pub fn transform_inplace(&self, mut poly: Polynomial<F>) -> NTTPolynomial<F> {
+impl<F> AbstractTable<F> for NTTTable<F>
+where
+    F: NTTField<Table = NTTTable<F>>,
+{
+    fn transform_inplace(&self, mut poly: Polynomial<F>) -> NTTPolynomial<F> {
         let values = poly.as_mut();
         let log_n = self.coeff_count_power();
 
@@ -140,26 +140,12 @@ where
         NTTPolynomial::<F>::new(poly.data())
     }
 
-    /// Perform a fast number theory transform.
-    ///
-    /// This function transforms a polynomial to a vector.
-    ///
-    /// # Arguments
-    ///
-    /// * `self` - inputs in normal order, outputs in bit-reversed order
     #[inline]
-    pub fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
+    fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
         self.transform_inplace(poly.clone())
     }
 
-    /// Perform a fast inverse number theory transform in place.
-    ///
-    /// This function transforms a vector to a polynomial.
-    ///
-    /// # Arguments
-    ///
-    /// * `self` - inputs in bit-reversed order, outputs in normal order
-    pub fn inverse_transform_inplace(&self, mut poly: NTTPolynomial<F>) -> Polynomial<F> {
+    fn inverse_transform_inplace(&self, mut poly: NTTPolynomial<F>) -> Polynomial<F> {
         let values = poly.as_mut();
         let log_n = self.coeff_count_power();
 
@@ -203,15 +189,8 @@ where
         Polynomial::<F>::new(poly.data())
     }
 
-    /// Perform a fast inverse number theory transform.
-    ///
-    /// This function transforms a vector to a polynomial.
-    ///
-    /// # Arguments
-    ///
-    /// * `self` - inputs in bit-reversed order, outputs in normal order
     #[inline]
-    pub fn inverse_transform(&self, poly: &NTTPolynomial<F>) -> Polynomial<F> {
+    fn inverse_transform(&self, poly: &NTTPolynomial<F>) -> Polynomial<F> {
         self.inverse_transform_inplace(poly.clone())
     }
 }
