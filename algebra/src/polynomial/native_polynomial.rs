@@ -26,6 +26,36 @@ impl<F: Field> Polynomial<F> {
     pub fn data(self) -> Vec<F> {
         self.data
     }
+
+    /// Constructs a new, empty [`Polynomial<F>`] with at least the specified capacity.
+    #[inline]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: Vec::with_capacity(capacity),
+        }
+    }
+
+    /// Appends an element to the back of a [`Polynomial<F>`].
+    pub fn push(&mut self, value: F) {
+        self.data.push(value)
+    }
+}
+
+impl<F: NTTField> Polynomial<F> {
+    /// Decompose `self` according to `basis`.
+    pub fn decompose(&self, basis: F::Modulus) -> Vec<Self> {
+        let decompose_len = F::decompose_len(basis.clone());
+
+        let mut ret: Vec<Self> = vec![Self::with_capacity(self.coeff_count()); decompose_len];
+        for coeff in self.iter() {
+            let decompose_res = F::decompose(coeff, basis.clone());
+            ret.iter_mut()
+                .zip(decompose_res.into_iter())
+                .for_each(|(d_p, d_c)| d_p.push(d_c));
+        }
+
+        ret
+    }
 }
 
 impl<F: Field> AsRef<Polynomial<F>> for Polynomial<F> {
@@ -232,30 +262,21 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     }
 }
 
-impl<F> MulAssign<&Polynomial<F>> for Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> MulAssign<&Polynomial<F>> for Polynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Polynomial<F>) {
         *self = Mul::mul(&*self, rhs)
     }
 }
 
-impl<F> MulAssign<Polynomial<F>> for Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> MulAssign<Polynomial<F>> for Polynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: Polynomial<F>) {
         *self = Mul::mul(&*self, &rhs)
     }
 }
 
-impl<F> Mul<Polynomial<F>> for Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> Mul<Polynomial<F>> for Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
@@ -264,10 +285,7 @@ where
     }
 }
 
-impl<F> Mul<&Polynomial<F>> for Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> Mul<&Polynomial<F>> for Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
@@ -276,10 +294,7 @@ where
     }
 }
 
-impl<F> Mul<Polynomial<F>> for &Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> Mul<Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
@@ -288,10 +303,7 @@ where
     }
 }
 
-impl<F> Mul<&Polynomial<F>> for &Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> Mul<&Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
@@ -301,6 +313,50 @@ where
         let log_n = self.coeff_count().trailing_zeros();
         let ntt_table = F::get_ntt_table(log_n).unwrap();
         ntt_table.inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs))
+    }
+}
+
+impl<F: NTTField> Mul<NTTPolynomial<F>> for Polynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
+        Mul::mul(&self, &rhs)
+    }
+}
+
+impl<F: NTTField> Mul<&NTTPolynomial<F>> for Polynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
+        Mul::mul(&self, rhs)
+    }
+}
+
+impl<F: NTTField> Mul<NTTPolynomial<F>> for &Polynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
+        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        assert!(self.coeff_count().is_power_of_two());
+
+        let log_n = self.coeff_count().trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        ntt_table.transform(self) * rhs
+    }
+}
+
+impl<F: NTTField> Mul<&NTTPolynomial<F>> for &Polynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
+        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        assert!(self.coeff_count().is_power_of_two());
+
+        let log_n = self.coeff_count().trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        ntt_table.transform(self) * rhs
     }
 }
 

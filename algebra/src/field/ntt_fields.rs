@@ -34,6 +34,12 @@ pub trait NTTField: PrimeField {
     /// Degree type
     type Degree;
 
+    /// Get the length of decompose vec.
+    fn decompose_len(basis: Self::Modulus) -> usize;
+
+    /// Decompose `self` according to `basis`.
+    fn decompose(&self, basis: Self::Modulus) -> Vec<Self>;
+
     /// Convert `root` into `Self` type.
     fn from_root(root: Self::Root) -> Self;
 

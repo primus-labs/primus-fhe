@@ -248,7 +248,7 @@ impl<F: Field> MulAssign for NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> Mul for NTTPolynomial<F> {
+impl<F: Field> Mul<NTTPolynomial<F>> for NTTPolynomial<F> {
     type Output = Self;
 
     #[inline]
@@ -278,7 +278,7 @@ impl<F: Field> Mul<NTTPolynomial<F>> for &NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> Mul for &NTTPolynomial<F> {
+impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     type Output = NTTPolynomial<F>;
 
     #[inline]
@@ -286,6 +286,58 @@ impl<F: Field> Mul for &NTTPolynomial<F> {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l * r).collect();
         NTTPolynomial::<F>::new(poly)
+    }
+}
+
+impl<F: NTTField> Mul<Polynomial<F>> for NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+        Mul::mul(&self, rhs)
+    }
+}
+
+impl<F: NTTField> Mul<&Polynomial<F>> for NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+        Mul::mul(&self, rhs.clone())
+    }
+}
+
+impl<F: NTTField> Mul<Polynomial<F>> for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
+        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        assert!(self.coeff_count().is_power_of_two());
+
+        let log_n = self.coeff_count().trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        ntt_table.transform_inplace(rhs) * self
+    }
+}
+
+impl<F: NTTField> Mul<&Polynomial<F>> for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
+        Mul::mul(self, rhs.clone())
+    }
+}
+
+impl<F: NTTField> MulAssign<Polynomial<F>> for NTTPolynomial<F> {
+    fn mul_assign(&mut self, rhs: Polynomial<F>) {
+        *self = Mul::mul(&*self, rhs);
+    }
+}
+
+impl<F: NTTField> MulAssign<&Polynomial<F>> for NTTPolynomial<F> {
+    fn mul_assign(&mut self, rhs: &Polynomial<F>) {
+        *self = Mul::mul(&*self, rhs.clone());
     }
 }
 

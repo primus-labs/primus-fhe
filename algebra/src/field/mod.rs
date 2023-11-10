@@ -24,7 +24,7 @@ pub trait Field:
     + Inv<Output = Self>
 {
     /// The type of the modulus.
-    type Modulus;
+    type Modulus: Clone;
 
     /// Returns the modulus.
     fn modulus() -> Self::Modulus;
