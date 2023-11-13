@@ -27,6 +27,14 @@ impl<F: Field> Polynomial<F> {
         self.data
     }
 
+    /// Creates a [`NTTPolynomial<F>`] with all coefficients equal to zero.
+    #[inline]
+    pub fn zero_with_coeff_count(coeff_count: usize) -> Self {
+        Self {
+            data: vec![Zero::zero(); coeff_count],
+        }
+    }
+
     /// Constructs a new, empty [`Polynomial<F>`] with at least the specified capacity.
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
@@ -262,26 +270,19 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     }
 }
 
-impl<F: NTTField> MulAssign<&Polynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: &Polynomial<F>) {
-        *self = Mul::mul(&*self, rhs)
-    }
-}
-
-impl<F: NTTField> MulAssign<Polynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: Polynomial<F>) {
-        *self = Mul::mul(&*self, &rhs)
-    }
-}
-
 impl<F: NTTField> Mul<Polynomial<F>> for Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-        Mul::mul(&self, &rhs)
+        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        assert!(self.coeff_count().is_power_of_two());
+
+        let log_n = self.coeff_count().trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        ntt_table.inverse_transform_inplace(
+            ntt_table.transform_inplace(self) * ntt_table.transform_inplace(rhs),
+        )
     }
 }
 
@@ -290,7 +291,7 @@ impl<F: NTTField> Mul<&Polynomial<F>> for Polynomial<F> {
 
     #[inline]
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
-        Mul::mul(&self, rhs)
+        Mul::mul(self, rhs.clone())
     }
 }
 
@@ -299,7 +300,7 @@ impl<F: NTTField> Mul<Polynomial<F>> for &Polynomial<F> {
 
     #[inline]
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-        Mul::mul(self, &rhs)
+        Mul::mul(self.clone(), rhs)
     }
 }
 
@@ -307,12 +308,21 @@ impl<F: NTTField> Mul<&Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
-        assert!(self.coeff_count().is_power_of_two());
+        Mul::mul(self.clone(), rhs.clone())
+    }
+}
 
-        let log_n = self.coeff_count().trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-        ntt_table.inverse_transform_inplace(ntt_table.transform(self) * ntt_table.transform(rhs))
+impl<F: NTTField> MulAssign<&Polynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: &Polynomial<F>) {
+        *self = Mul::mul(self.clone(), rhs.clone())
+    }
+}
+
+impl<F: NTTField> MulAssign<Polynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Polynomial<F>) {
+        *self = Mul::mul(self.clone(), rhs)
     }
 }
 
@@ -321,7 +331,7 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for Polynomial<F> {
 
     #[inline]
     fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
-        Mul::mul(&self, &rhs)
+        Mul::mul(self, &rhs)
     }
 }
 
@@ -330,7 +340,12 @@ impl<F: NTTField> Mul<&NTTPolynomial<F>> for Polynomial<F> {
 
     #[inline]
     fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        Mul::mul(&self, rhs)
+        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        assert!(self.coeff_count().is_power_of_two());
+
+        let log_n = self.coeff_count().trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        ntt_table.transform_inplace(self) * rhs
     }
 }
 
@@ -338,12 +353,7 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for &Polynomial<F> {
     type Output = NTTPolynomial<F>;
 
     fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
-        assert!(self.coeff_count().is_power_of_two());
-
-        let log_n = self.coeff_count().trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-        ntt_table.transform(self) * rhs
+        Mul::mul(self.clone(), &rhs)
     }
 }
 
@@ -351,12 +361,21 @@ impl<F: NTTField> Mul<&NTTPolynomial<F>> for &Polynomial<F> {
     type Output = NTTPolynomial<F>;
 
     fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
-        assert!(self.coeff_count().is_power_of_two());
+        Mul::mul(self.clone(), rhs)
+    }
+}
 
-        let log_n = self.coeff_count().trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-        ntt_table.transform(self) * rhs
+impl<F: NTTField> MulAssign<NTTPolynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: NTTPolynomial<F>) {
+        *self = <Polynomial<F>>::from(Mul::mul(self.clone(), rhs));
+    }
+}
+
+impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: &NTTPolynomial<F>) {
+        *self = <Polynomial<F>>::from(Mul::mul(self.clone(), rhs.clone()));
     }
 }
 
@@ -372,21 +391,15 @@ impl<F: Field> Neg for Polynomial<F> {
     }
 }
 
-impl<F> Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> Polynomial<F> {
     /// Convert `self` from [`Polynomial<F>`] into [`NTTPolynomial<F>`]
     #[inline]
     pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
-        self.into()
+        <NTTPolynomial<F>>::from(self)
     }
 }
 
-impl<F> From<NTTPolynomial<F>> for Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> From<NTTPolynomial<F>> for Polynomial<F> {
     #[inline]
     fn from(vec: NTTPolynomial<F>) -> Self {
         debug_assert!(vec.coeff_count().is_power_of_two());
@@ -397,17 +410,10 @@ where
     }
 }
 
-impl<F> From<&NTTPolynomial<F>> for Polynomial<F>
-where
-    F: NTTField,
-{
+impl<F: NTTField> From<&NTTPolynomial<F>> for Polynomial<F> {
     #[inline]
     fn from(vec: &NTTPolynomial<F>) -> Self {
-        debug_assert!(vec.coeff_count().is_power_of_two());
-
-        let ntt_table = F::get_ntt_table(vec.coeff_count().trailing_zeros()).unwrap();
-
-        ntt_table.inverse_transform(vec)
+        <Polynomial<F>>::from(vec.clone())
     }
 }
 

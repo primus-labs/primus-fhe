@@ -9,8 +9,8 @@ use super::RlweModeCoef;
 
 #[derive(Clone)]
 pub struct RlweModeNTT<F: NTTField> {
-    pub(in crate::rlwe) a: NTTPolynomial<F>,
-    pub(in crate::rlwe) b: NTTPolynomial<F>,
+    pub(crate) a: NTTPolynomial<F>,
+    pub(crate) b: NTTPolynomial<F>,
 }
 
 impl<F: NTTField> RlweModeNTT<F> {
@@ -106,8 +106,8 @@ impl<F: NTTField> Mul<Self> for RlweModeNTT<F> {
         let Self { a: a0, b: b0 } = self;
         let Self { a: a1, b: b1 } = rhs;
         Self {
-            a: a0.mul(a1),
-            b: b0.mul(b1),
+            a: a0 * a1,
+            b: b0 * b1,
         }
     }
 }
@@ -120,8 +120,8 @@ impl<F: NTTField> Mul<&Self> for RlweModeNTT<F> {
         let Self { a: a0, b: b0 } = self;
         let Self { a: a1, b: b1 } = rhs;
         Self {
-            a: a0.mul(a1),
-            b: b0.mul(b1),
+            a: a0 * a1,
+            b: b0 * b1,
         }
     }
 }
@@ -329,7 +329,7 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for RlweModeNTT<F> {
     fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
         Self {
             a: self.a * &rhs,
-            b: self.b * rhs,
+            b: self.b * &rhs,
         }
     }
 }
@@ -350,7 +350,7 @@ impl<F: NTTField> MulAssign<NTTPolynomial<F>> for RlweModeNTT<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: NTTPolynomial<F>) {
         self.a *= &rhs;
-        self.b *= rhs;
+        self.b *= &rhs;
     }
 }
 

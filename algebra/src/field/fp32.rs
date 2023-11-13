@@ -296,7 +296,7 @@ impl NTTField for Fp32 {
             temp = Self(temp.0 / basis);
         }
 
-        ret.resize_with(len, || Zero::zero());
+        ret.resize_with(len, Zero::zero);
 
         ret
     }

@@ -3,5 +3,6 @@ mod rgsw;
 mod rlwe;
 mod util;
 
-pub use lwe::Lwe;
-pub use rlwe::Rlwe;
+pub use lwe::LWE;
+pub use rgsw::RGSW;
+pub use rlwe::{GadgetRlwe, RLWE};

@@ -6,19 +6,19 @@ use crate::util::Vector;
 
 /// A generic lwe struct type.
 #[derive(Clone)]
-pub struct Lwe<R: Ring> {
+pub struct LWE<R: Ring> {
     a: Vector<R>,
     b: R,
 }
 
-impl<R: Ring> Lwe<R> {
-    /// Creates a new [`Lwe<R>`].
+impl<R: Ring> LWE<R> {
+    /// Creates a new [`LWE<R>`].
     #[inline]
     pub fn new(a: Vector<R>, b: R) -> Self {
         Self { a, b }
     }
 
-    /// Decrypt the [`Lwe<R>`] by the secret `s`.
+    /// Decrypt the [`LWE<R>`] by the secret `s`.
     ///
     /// Return the encoded message.
     #[inline]
@@ -27,7 +27,7 @@ impl<R: Ring> Lwe<R> {
     }
 }
 
-impl<R: Ring> Add<Self> for Lwe<R> {
+impl<R: Ring> Add<Self> for LWE<R> {
     type Output = Self;
 
     #[inline]
@@ -41,7 +41,7 @@ impl<R: Ring> Add<Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> Add<&Self> for Lwe<R> {
+impl<R: Ring> Add<&Self> for LWE<R> {
     type Output = Self;
 
     #[inline]
@@ -55,7 +55,7 @@ impl<R: Ring> Add<&Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> Sub<Self> for Lwe<R> {
+impl<R: Ring> Sub<Self> for LWE<R> {
     type Output = Self;
 
     #[inline]
@@ -69,7 +69,7 @@ impl<R: Ring> Sub<Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> Sub<&Self> for Lwe<R> {
+impl<R: Ring> Sub<&Self> for LWE<R> {
     type Output = Self;
 
     #[inline]
@@ -83,7 +83,7 @@ impl<R: Ring> Sub<&Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> Mul<Self> for Lwe<R> {
+impl<R: Ring> Mul<Self> for LWE<R> {
     type Output = Self;
 
     #[inline]
@@ -97,7 +97,7 @@ impl<R: Ring> Mul<Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> Mul<&Self> for Lwe<R> {
+impl<R: Ring> Mul<&Self> for LWE<R> {
     type Output = Self;
 
     #[inline]
@@ -111,7 +111,7 @@ impl<R: Ring> Mul<&Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> AddAssign<Self> for Lwe<R> {
+impl<R: Ring> AddAssign<Self> for LWE<R> {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         let Self { a: a0, b: b0 } = self;
@@ -121,7 +121,7 @@ impl<R: Ring> AddAssign<Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> AddAssign<&Self> for Lwe<R> {
+impl<R: Ring> AddAssign<&Self> for LWE<R> {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
         let Self { a: a0, b: b0 } = self;
@@ -131,7 +131,7 @@ impl<R: Ring> AddAssign<&Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> SubAssign<Self> for Lwe<R> {
+impl<R: Ring> SubAssign<Self> for LWE<R> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         let Self { a: a0, b: b0 } = self;
@@ -141,7 +141,7 @@ impl<R: Ring> SubAssign<Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> SubAssign<&Self> for Lwe<R> {
+impl<R: Ring> SubAssign<&Self> for LWE<R> {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
         let Self { a: a0, b: b0 } = self;
@@ -151,7 +151,7 @@ impl<R: Ring> SubAssign<&Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> MulAssign<Self> for Lwe<R> {
+impl<R: Ring> MulAssign<Self> for LWE<R> {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         let Self { a: a0, b: b0 } = self;
@@ -161,7 +161,7 @@ impl<R: Ring> MulAssign<Self> for Lwe<R> {
     }
 }
 
-impl<R: Ring> MulAssign<&Self> for Lwe<R> {
+impl<R: Ring> MulAssign<&Self> for LWE<R> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
         let Self { a: a0, b: b0 } = self;

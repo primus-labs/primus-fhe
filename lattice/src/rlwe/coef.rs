@@ -9,8 +9,8 @@ use super::RlweModeNTT;
 
 #[derive(Clone)]
 pub struct RlweModeCoef<F: NTTField> {
-    pub(in crate::rlwe) a: Polynomial<F>,
-    pub(in crate::rlwe) b: Polynomial<F>,
+    pub(crate) a: Polynomial<F>,
+    pub(crate) b: Polynomial<F>,
 }
 
 impl<F: NTTField> RlweModeCoef<F> {
@@ -374,7 +374,7 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for RlweModeCoef<F> {
     fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
         RlweModeNTT {
             a: self.a * &rhs,
-            b: self.b * rhs,
+            b: self.b * &rhs,
         }
     }
 }
@@ -395,7 +395,7 @@ impl<F: NTTField> MulAssign<NTTPolynomial<F>> for RlweModeCoef<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: NTTPolynomial<F>) {
         self.a = (self.a() * &rhs).into();
-        self.b = (self.b() * rhs).into();
+        self.b = (self.b() * &rhs).into();
     }
 }
 
