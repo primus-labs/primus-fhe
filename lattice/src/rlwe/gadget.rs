@@ -8,12 +8,12 @@ use algebra::{
 use crate::RLWE;
 
 #[derive(Clone)]
-pub struct GadgetRlwe<F: NTTField> {
+pub struct GadgetRLWE<F: NTTField> {
     data: Vec<RLWE<F>>,
     basis: F::Modulus,
 }
 
-impl<F: NTTField> IntoIterator for GadgetRlwe<F> {
+impl<F: NTTField> IntoIterator for GadgetRLWE<F> {
     type Item = RLWE<F>;
 
     type IntoIter = std::vec::IntoIter<Self::Item>;
@@ -24,14 +24,14 @@ impl<F: NTTField> IntoIterator for GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> GadgetRlwe<F> {
-    /// Creates a new [`GadgetRlwe<F>`].
+impl<F: NTTField> GadgetRLWE<F> {
+    /// Creates a new [`GadgetRLWE<F>`].
     #[inline]
     pub fn new(data: Vec<RLWE<F>>, basis: F::Modulus) -> Self {
         Self { data, basis }
     }
 
-    /// Returns a reference to the data of this [`GadgetRlwe<F>`].
+    /// Returns a reference to the data of this [`GadgetRLWE<F>`].
     #[inline]
     pub fn data(&self) -> &[RLWE<F>] {
         self.data.as_ref()
@@ -49,13 +49,13 @@ impl<F: NTTField> GadgetRlwe<F> {
         self.data.iter_mut()
     }
 
-    /// Returns a reference to the basis of this [`GadgetRlwe<F>`].
+    /// Returns a reference to the basis of this [`GadgetRLWE<F>`].
     pub fn basis(&self) -> &F::Modulus {
         &self.basis
     }
 }
 
-impl<F: NTTField> Mul<Polynomial<F>> for GadgetRlwe<F> {
+impl<F: NTTField> Mul<Polynomial<F>> for GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
@@ -70,7 +70,7 @@ impl<F: NTTField> Mul<Polynomial<F>> for GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> Mul<&Polynomial<F>> for GadgetRlwe<F> {
+impl<F: NTTField> Mul<&Polynomial<F>> for GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
@@ -85,7 +85,7 @@ impl<F: NTTField> Mul<&Polynomial<F>> for GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> Mul<Polynomial<F>> for &GadgetRlwe<F> {
+impl<F: NTTField> Mul<Polynomial<F>> for &GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
@@ -100,7 +100,7 @@ impl<F: NTTField> Mul<Polynomial<F>> for &GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> Mul<&Polynomial<F>> for &GadgetRlwe<F> {
+impl<F: NTTField> Mul<&Polynomial<F>> for &GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
@@ -115,7 +115,7 @@ impl<F: NTTField> Mul<&Polynomial<F>> for &GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> Mul<NTTPolynomial<F>> for GadgetRlwe<F> {
+impl<F: NTTField> Mul<NTTPolynomial<F>> for GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     #[inline]
@@ -124,7 +124,7 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> Mul<&NTTPolynomial<F>> for GadgetRlwe<F> {
+impl<F: NTTField> Mul<&NTTPolynomial<F>> for GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     #[inline]
@@ -133,7 +133,7 @@ impl<F: NTTField> Mul<&NTTPolynomial<F>> for GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> Mul<NTTPolynomial<F>> for &GadgetRlwe<F> {
+impl<F: NTTField> Mul<NTTPolynomial<F>> for &GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     #[inline]
@@ -142,7 +142,7 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for &GadgetRlwe<F> {
     }
 }
 
-impl<F: NTTField> Mul<&NTTPolynomial<F>> for &GadgetRlwe<F> {
+impl<F: NTTField> Mul<&NTTPolynomial<F>> for &GadgetRLWE<F> {
     type Output = RLWE<F>;
 
     #[inline]

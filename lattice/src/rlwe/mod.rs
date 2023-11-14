@@ -7,7 +7,7 @@ mod coef;
 mod gadget;
 mod ntt;
 
-pub use {coef::RlweModeCoef, gadget::GadgetRlwe, ntt::RlweModeNTT};
+pub use {coef::RlweModeCoef, gadget::GadgetRLWE, ntt::RlweModeNTT};
 
 /// A generic rlwe struct type.
 #[derive(Clone)]

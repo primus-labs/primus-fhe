@@ -4,7 +4,7 @@ use algebra::ring::Ring;
 
 use crate::util::Vector;
 
-/// A generic lwe struct type.
+/// A generic LWE struct type.
 #[derive(Clone)]
 pub struct LWE<R: Ring> {
     a: Vector<R>,

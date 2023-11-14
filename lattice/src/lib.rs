@@ -5,4 +5,4 @@ mod util;
 
 pub use lwe::LWE;
 pub use rgsw::RGSW;
-pub use rlwe::{GadgetRlwe, RLWE};
+pub use rlwe::{GadgetRLWE, RLWE};

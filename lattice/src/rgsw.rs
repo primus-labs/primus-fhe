@@ -4,18 +4,19 @@ use algebra::field::NTTField;
 
 use crate::{
     rlwe::{RlweModeCoef, RlweModeNTT},
-    GadgetRlwe, RLWE,
+    GadgetRLWE, RLWE,
 };
 
+/// A generic rgsw struct type.
 pub struct RGSW<F: NTTField> {
-    d0: GadgetRlwe<F>,
-    d1: GadgetRlwe<F>,
+    d0: GadgetRLWE<F>,
+    d1: GadgetRLWE<F>,
 }
 
 impl<F: NTTField> RGSW<F> {
     /// Creates a new [`RGSW<F>`].
     #[inline]
-    pub fn new(d0: GadgetRlwe<F>, d1: GadgetRlwe<F>) -> Self {
+    pub fn new(d0: GadgetRLWE<F>, d1: GadgetRLWE<F>) -> Self {
         Self { d0, d1 }
     }
 
@@ -102,10 +103,10 @@ impl<F: NTTField> Mul<&RGSW<F>> for &RGSW<F> {
         let basis = self.basis().clone();
 
         let nwe_d0_data: Vec<RLWE<F>> = rhs.d0.iter().map(|r| self * r).collect();
-        let new_d0 = GadgetRlwe::new(nwe_d0_data, basis.clone());
+        let new_d0 = GadgetRLWE::new(nwe_d0_data, basis.clone());
 
         let nwe_d1_data: Vec<RLWE<F>> = rhs.d1.iter().map(|r| self * r).collect();
-        let new_d1 = GadgetRlwe::new(nwe_d1_data, basis.clone());
+        let new_d1 = GadgetRLWE::new(nwe_d1_data, basis.clone());
 
         <RGSW<F>>::new(new_d0, new_d1)
     }
