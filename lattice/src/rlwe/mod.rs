@@ -9,25 +9,33 @@ mod ntt;
 
 pub use {coef::RlweModeCoef, gadget::GadgetRLWE, ntt::RlweModeNTT};
 
-/// A generic rlwe struct type.
+/// A generic RLWE struct type, which has two inner type.
+///
+/// One is coefficients mode, all data is the polynomial coefficients.
+/// The other is ntt mode, the data is in the vector type.
 #[derive(Clone)]
 pub enum RLWE<F: NTTField> {
+    /// A RLWE with coefficients
     CoefMode(RlweModeCoef<F>),
+    /// A RLWE with values
     NttMode(RlweModeNTT<F>),
 }
 
 impl<F: NTTField> RLWE<F> {
+    #[inline]
     pub(crate) fn zero_with_coeff_count(coeff_count: usize) -> Self {
         let a = NTTPolynomial::zero_with_coeff_count(coeff_count);
         let b = NTTPolynomial::zero_with_coeff_count(coeff_count);
         Self::NttMode(RlweModeNTT { a, b })
     }
 
+    /// Creates a new [`RLWE<F>`] of coefficients mode.
     #[inline]
     pub fn from_coef_mode(a: Polynomial<F>, b: Polynomial<F>) -> Self {
         Self::CoefMode(RlweModeCoef { a, b })
     }
 
+    /// Creates a new [`RLWE<F>`] of ntt mode.
     #[inline]
     pub fn from_ntt_mode(a: NTTPolynomial<F>, b: NTTPolynomial<F>) -> Self {
         Self::NttMode(RlweModeNTT { a, b })

@@ -7,6 +7,7 @@ use algebra::{
 
 use crate::RLWE;
 
+/// A special RLWE type, which stores a message with different basis.
 #[derive(Clone)]
 pub struct GadgetRLWE<F: NTTField> {
     data: Vec<RLWE<F>>,

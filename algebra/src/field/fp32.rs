@@ -554,5 +554,38 @@ mod tests {
         let a_inv = a.pow_reduce(P - 2, &Modulus::<u32>::new(P));
         assert_eq!(FF::from(a).inv(), FF::from(a_inv));
         assert_eq!(FF::from(a) * FF::from(a_inv), One::one());
+
+        // associative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (FF::from(a) + FF::from(b)) + FF::from(c),
+            FF::from(a) + (FF::from(b) + FF::from(c))
+        );
+        assert_eq!(
+            (FF::from(a) * FF::from(b)) * FF::from(c),
+            FF::from(a) * (FF::from(b) * FF::from(c))
+        );
+
+        // commutative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        assert_eq!(FF::from(a) + FF::from(b), FF::from(b) + FF::from(a));
+        assert_eq!(FF::from(a) * FF::from(b), FF::from(b) * FF::from(a));
+
+        // identity
+        let a = rng.sample(distr);
+        assert_eq!(FF::from(a) + FF::from(0), FF::from(a));
+        assert_eq!(FF::from(a) * FF::from(1), FF::from(a));
+
+        // distribute
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (FF::from(a) + FF::from(b)) * FF::from(c),
+            (FF::from(a) * FF::from(c)) + (FF::from(b) * FF::from(c))
+        );
     }
 }

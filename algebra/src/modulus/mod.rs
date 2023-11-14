@@ -28,7 +28,7 @@ mod internal_macros;
 
 mod ops;
 
-/// A prime modulus, using barrett reduction algorithm.
+/// A modulus, using barrett reduction algorithm.
 ///
 /// The struct stores the modulus number and some precomputed
 /// data. Here, `b` = 2^T::BITS

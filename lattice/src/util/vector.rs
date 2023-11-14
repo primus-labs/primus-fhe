@@ -206,9 +206,6 @@ mod tests {
         ]);
         assert_eq!(a.clone() * &b, c);
 
-        assert_eq!(
-            a.dot_product(&b),
-            Fp32::new(1 * 16 + 2 * 32 + 4 * 64 + 8 * 128)
-        );
+        assert_eq!(a.dot_product(&b), Fp32::new(16 + 2 * 32 + 4 * 64 + 8 * 128));
     }
 }
