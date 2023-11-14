@@ -31,13 +31,13 @@ impl<F: NTTField> RLWE<F> {
 
     /// Creates a new [`RLWE<F>`] of coefficients mode.
     #[inline]
-    pub fn from_coef_mode(a: Polynomial<F>, b: Polynomial<F>) -> Self {
+    pub fn from_polynomial(a: Polynomial<F>, b: Polynomial<F>) -> Self {
         Self::CoefMode(CoefRLWE { a, b })
     }
 
     /// Creates a new [`RLWE<F>`] of ntt mode.
     #[inline]
-    pub fn from_ntt_mode(a: NTTPolynomial<F>, b: NTTPolynomial<F>) -> Self {
+    pub fn from_ntt_polynomial(a: NTTPolynomial<F>, b: NTTPolynomial<F>) -> Self {
         Self::NttMode(NttRLWE { a, b })
     }
 }
@@ -49,11 +49,11 @@ macro_rules! binary_op {
             (RLWE::NttMode(c0), RLWE::NttMode(c1)) => RLWE::NttMode(c0 $op c1),
             (RLWE::CoefMode(c0), RLWE::CoefMode(c1)) => RLWE::CoefMode(c0 $op c1),
             (RLWE::CoefMode(c0), RLWE::NttMode(c1)) => {
-                let c0: NttRLWE<F> = c0.into();
+                let c0 = <NttRLWE<F>>::from(c0);
                 RLWE::NttMode(c0 $op c1)
             }
             (RLWE::NttMode(c0), RLWE::CoefMode(c1)) => {
-                let c1: NttRLWE<F> = c1.into();
+                let c1 = <NttRLWE<F>>::from(c1);
                 RLWE::NttMode(c0 $op c1)
             }
         }
@@ -66,16 +66,16 @@ macro_rules! binary_mul {
             // prefer ntt mode
             (RLWE::NttMode(c0), RLWE::NttMode(c1)) => RLWE::NttMode(c0 * c1),
             (RLWE::CoefMode(c0), RLWE::CoefMode(c1)) => {
-                let c0: NttRLWE<F> = c0.into();
-                let c1: NttRLWE<F> = c1.into();
+                let c0 = <NttRLWE<F>>::from(c0);
+                let c1 = <NttRLWE<F>>::from(c1);
                 RLWE::NttMode(c0 * c1)
             }
             (RLWE::CoefMode(c0), RLWE::NttMode(c1)) => {
-                let c0: NttRLWE<F> = c0.into();
+                let c0 = <NttRLWE<F>>::from(c0);
                 RLWE::NttMode(c0 * c1)
             }
             (RLWE::NttMode(c0), RLWE::CoefMode(c1)) => {
-                let c1: NttRLWE<F> = c1.into();
+                let c1 = <NttRLWE<F>>::from(c1);
                 RLWE::NttMode(c0 * c1)
             }
         }
@@ -88,11 +88,11 @@ macro_rules! assign_op {
             (RLWE::NttMode(c0), RLWE::NttMode(c1)) => c0.$assign_method(c1),
             (RLWE::CoefMode(c0), RLWE::CoefMode(c1)) => c0.$assign_method(c1),
             (RLWE::CoefMode(c0), RLWE::NttMode(c1)) => {
-                let c1: CoefRLWE<F> = c1.into();
+                let c1 = <CoefRLWE<F>>::from(c1);
                 c0.$assign_method(c1)
             }
             (RLWE::NttMode(c0), RLWE::CoefMode(c1)) => {
-                let c1: NttRLWE<F> = c1.into();
+                let c1 = <NttRLWE<F>>::from(c1);
                 c0.$assign_method(c1)
             }
         }
@@ -195,8 +195,9 @@ macro_rules! op_poly {
 impl<F: NTTField> Add<Polynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn add(mut self, rhs: Polynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, add_assign);
+        AddAssign::add_assign(&mut self, rhs);
         self
     }
 }
@@ -204,8 +205,9 @@ impl<F: NTTField> Add<Polynomial<F>> for RLWE<F> {
 impl<F: NTTField> Add<&Polynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn add(mut self, rhs: &Polynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, add_assign);
+        AddAssign::add_assign(&mut self, rhs);
         self
     }
 }
@@ -213,8 +215,9 @@ impl<F: NTTField> Add<&Polynomial<F>> for RLWE<F> {
 impl<F: NTTField> Add<NTTPolynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn add(mut self, rhs: NTTPolynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, add_assign);
+        AddAssign::add_assign(&mut self, rhs);
         self
     }
 }
@@ -222,8 +225,9 @@ impl<F: NTTField> Add<NTTPolynomial<F>> for RLWE<F> {
 impl<F: NTTField> Add<&NTTPolynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn add(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, add_assign);
+        AddAssign::add_assign(&mut self, rhs);
         self
     }
 }
@@ -231,8 +235,9 @@ impl<F: NTTField> Add<&NTTPolynomial<F>> for RLWE<F> {
 impl<F: NTTField> Sub<Polynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn sub(mut self, rhs: Polynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, sub_assign);
+        SubAssign::sub_assign(&mut self, rhs);
         self
     }
 }
@@ -240,8 +245,9 @@ impl<F: NTTField> Sub<Polynomial<F>> for RLWE<F> {
 impl<F: NTTField> Sub<&Polynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn sub(mut self, rhs: &Polynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, sub_assign);
+        SubAssign::sub_assign(&mut self, rhs);
         self
     }
 }
@@ -249,8 +255,9 @@ impl<F: NTTField> Sub<&Polynomial<F>> for RLWE<F> {
 impl<F: NTTField> Sub<NTTPolynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn sub(mut self, rhs: NTTPolynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, sub_assign);
+        SubAssign::sub_assign(&mut self, rhs);
         self
     }
 }
@@ -258,8 +265,9 @@ impl<F: NTTField> Sub<NTTPolynomial<F>> for RLWE<F> {
 impl<F: NTTField> Sub<&NTTPolynomial<F>> for RLWE<F> {
     type Output = Self;
 
+    #[inline]
     fn sub(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, sub_assign);
+        SubAssign::sub_assign(&mut self, rhs);
         self
     }
 }
@@ -267,8 +275,9 @@ impl<F: NTTField> Sub<&NTTPolynomial<F>> for RLWE<F> {
 impl<F: NTTField> Mul<Polynomial<F>> for RLWE<F> {
     type Output = RLWE<F>;
 
+    #[inline]
     fn mul(mut self, rhs: Polynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, mul_assign);
+        MulAssign::mul_assign(&mut self, rhs);
         self
     }
 }
@@ -276,8 +285,9 @@ impl<F: NTTField> Mul<Polynomial<F>> for RLWE<F> {
 impl<F: NTTField> Mul<&Polynomial<F>> for RLWE<F> {
     type Output = RLWE<F>;
 
+    #[inline]
     fn mul(mut self, rhs: &Polynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, mul_assign);
+        MulAssign::mul_assign(&mut self, rhs);
         self
     }
 }
@@ -285,8 +295,9 @@ impl<F: NTTField> Mul<&Polynomial<F>> for RLWE<F> {
 impl<F: NTTField> Mul<NTTPolynomial<F>> for RLWE<F> {
     type Output = RLWE<F>;
 
+    #[inline]
     fn mul(mut self, rhs: NTTPolynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, mul_assign);
+        MulAssign::mul_assign(&mut self, rhs);
         self
     }
 }
@@ -294,57 +305,80 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for RLWE<F> {
 impl<F: NTTField> Mul<&NTTPolynomial<F>> for RLWE<F> {
     type Output = RLWE<F>;
 
+    #[inline]
     fn mul(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        op_poly!(self, rhs, mul_assign);
+        MulAssign::mul_assign(&mut self, rhs);
         self
     }
 }
 
 impl<F: NTTField> AddAssign<Polynomial<F>> for RLWE<F> {
+    #[inline]
     fn add_assign(&mut self, rhs: Polynomial<F>) {
         op_poly!(self, rhs, add_assign);
     }
 }
 
 impl<F: NTTField> AddAssign<&Polynomial<F>> for RLWE<F> {
+    #[inline]
     fn add_assign(&mut self, rhs: &Polynomial<F>) {
         op_poly!(self, rhs, add_assign);
     }
 }
 
 impl<F: NTTField> AddAssign<NTTPolynomial<F>> for RLWE<F> {
+    #[inline]
     fn add_assign(&mut self, rhs: NTTPolynomial<F>) {
         op_poly!(self, rhs, add_assign);
     }
 }
 
 impl<F: NTTField> AddAssign<&NTTPolynomial<F>> for RLWE<F> {
+    #[inline]
     fn add_assign(&mut self, rhs: &NTTPolynomial<F>) {
         op_poly!(self, rhs, add_assign);
     }
 }
 
 impl<F: NTTField> SubAssign<Polynomial<F>> for RLWE<F> {
+    #[inline]
     fn sub_assign(&mut self, rhs: Polynomial<F>) {
         op_poly!(self, rhs, sub_assign);
     }
 }
 
 impl<F: NTTField> SubAssign<&Polynomial<F>> for RLWE<F> {
+    #[inline]
     fn sub_assign(&mut self, rhs: &Polynomial<F>) {
         op_poly!(self, rhs, sub_assign);
     }
 }
 
 impl<F: NTTField> SubAssign<NTTPolynomial<F>> for RLWE<F> {
+    #[inline]
     fn sub_assign(&mut self, rhs: NTTPolynomial<F>) {
         op_poly!(self, rhs, sub_assign);
     }
 }
 
 impl<F: NTTField> SubAssign<&NTTPolynomial<F>> for RLWE<F> {
+    #[inline]
     fn sub_assign(&mut self, rhs: &NTTPolynomial<F>) {
         op_poly!(self, rhs, sub_assign);
+    }
+}
+
+impl<F: NTTField> MulAssign<Polynomial<F>> for RLWE<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Polynomial<F>) {
+        MulAssign::mul_assign(self, <NTTPolynomial<F>>::from(rhs))
+    }
+}
+
+impl<F: NTTField> MulAssign<&Polynomial<F>> for RLWE<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: &Polynomial<F>) {
+        MulAssign::mul_assign(self, <NTTPolynomial<F>>::from(rhs))
     }
 }
 

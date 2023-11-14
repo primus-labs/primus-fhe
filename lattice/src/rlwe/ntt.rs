@@ -7,6 +7,7 @@ use algebra::{
 
 use super::CoefRLWE;
 
+/// A RLWE type whose data is [`NTTPolynomial`]
 #[derive(Clone)]
 pub struct NttRLWE<F: NTTField> {
     pub(crate) a: NTTPolynomial<F>,
@@ -14,9 +15,20 @@ pub struct NttRLWE<F: NTTField> {
 }
 
 impl<F: NTTField> NttRLWE<F> {
+    /// Creates a new [`NttRLWE<F>`].
     #[inline]
     pub fn new(a: NTTPolynomial<F>, b: NTTPolynomial<F>) -> Self {
         Self { a, b }
+    }
+
+    /// Returns a reference to the a of this [`NttRLWE<F>`].
+    pub fn a(&self) -> &NTTPolynomial<F> {
+        self.a.as_ref()
+    }
+
+    /// Returns a reference to the b of this [`NttRLWE<F>`].
+    pub fn b(&self) -> &NTTPolynomial<F> {
+        self.b.as_ref()
     }
 }
 
@@ -25,8 +37,8 @@ impl<F: NTTField> From<CoefRLWE<F>> for NttRLWE<F> {
     fn from(rlwe: CoefRLWE<F>) -> Self {
         let CoefRLWE { a, b } = rlwe;
         Self {
-            a: a.into(),
-            b: b.into(),
+            a: <NTTPolynomial<F>>::from(a),
+            b: <NTTPolynomial<F>>::from(b),
         }
     }
 }
@@ -36,8 +48,8 @@ impl<F: NTTField> From<&CoefRLWE<F>> for NttRLWE<F> {
     fn from(rlwe: &CoefRLWE<F>) -> Self {
         let CoefRLWE { a, b } = rlwe;
         Self {
-            a: a.into(),
-            b: b.into(),
+            a: <NTTPolynomial<F>>::from(a),
+            b: <NTTPolynomial<F>>::from(b),
         }
     }
 }

@@ -7,6 +7,7 @@ use algebra::{
 
 use super::NttRLWE;
 
+/// A RLWE type whose data is [`Polynomial`]
 #[derive(Clone)]
 pub struct CoefRLWE<F: NTTField> {
     pub(crate) a: Polynomial<F>,
@@ -38,8 +39,8 @@ impl<F: NTTField> From<NttRLWE<F>> for CoefRLWE<F> {
     fn from(rlwe: NttRLWE<F>) -> Self {
         let NttRLWE { a, b } = rlwe;
         Self {
-            a: a.into(),
-            b: b.into(),
+            a: <Polynomial<F>>::from(a),
+            b: <Polynomial<F>>::from(b),
         }
     }
 }
@@ -49,8 +50,8 @@ impl<F: NTTField> From<&NttRLWE<F>> for CoefRLWE<F> {
     fn from(rlwe: &NttRLWE<F>) -> Self {
         let NttRLWE { a, b } = rlwe;
         Self {
-            a: a.into(),
-            b: b.into(),
+            a: <Polynomial<F>>::from(a),
+            b: <Polynomial<F>>::from(b),
         }
     }
 }
@@ -394,15 +395,15 @@ impl<F: NTTField> Mul<&NTTPolynomial<F>> for CoefRLWE<F> {
 impl<F: NTTField> MulAssign<NTTPolynomial<F>> for CoefRLWE<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: NTTPolynomial<F>) {
-        self.a = (self.a() * &rhs).into();
-        self.b = (self.b() * &rhs).into();
+        self.a = <Polynomial<F>>::from(self.a() * &rhs);
+        self.b = <Polynomial<F>>::from(self.b() * &rhs);
     }
 }
 
 impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for CoefRLWE<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: &NTTPolynomial<F>) {
-        self.a = (self.a() * rhs).into();
-        self.b = (self.b() * rhs).into();
+        self.a = <Polynomial<F>>::from(self.a() * rhs);
+        self.b = <Polynomial<F>>::from(self.b() * rhs);
     }
 }
