@@ -3,7 +3,7 @@ use std::ops::Mul;
 use algebra::field::NTTField;
 
 use crate::{
-    rlwe::{RlweModeCoef, RlweModeNTT},
+    rlwe::{CoefRLWE, NttRLWE},
     GadgetRLWE, RLWE,
 };
 
@@ -42,8 +42,8 @@ impl<F: NTTField> Mul<&RLWE<F>> for RGSW<F> {
     #[inline]
     fn mul(self, rhs: &RLWE<F>) -> Self::Output {
         match rhs {
-            RLWE::CoefMode(RlweModeCoef { a, b }) => self.d0 * a + self.d1 * b,
-            RLWE::NttMode(RlweModeNTT { a, b }) => self.d0 * a + self.d1 * b,
+            RLWE::CoefMode(CoefRLWE { a, b }) => self.d0 * a + self.d1 * b,
+            RLWE::NttMode(NttRLWE { a, b }) => self.d0 * a + self.d1 * b,
         }
     }
 }
@@ -63,8 +63,8 @@ impl<F: NTTField> Mul<&RLWE<F>> for &RGSW<F> {
     #[inline]
     fn mul(self, rhs: &RLWE<F>) -> Self::Output {
         match rhs {
-            RLWE::CoefMode(RlweModeCoef { a, b }) => &self.d0 * a + &self.d1 * b,
-            RLWE::NttMode(RlweModeNTT { a, b }) => &self.d0 * a + &self.d1 * b,
+            RLWE::CoefMode(CoefRLWE { a, b }) => &self.d0 * a + &self.d1 * b,
+            RLWE::NttMode(NttRLWE { a, b }) => &self.d0 * a + &self.d1 * b,
         }
     }
 }

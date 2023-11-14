@@ -7,7 +7,7 @@ mod coef;
 mod gadget;
 mod ntt;
 
-pub use {coef::RlweModeCoef, gadget::GadgetRLWE, ntt::RlweModeNTT};
+pub use {coef::CoefRLWE, gadget::GadgetRLWE, ntt::NttRLWE};
 
 /// A generic RLWE struct type, which has two inner type.
 ///
@@ -16,29 +16,29 @@ pub use {coef::RlweModeCoef, gadget::GadgetRLWE, ntt::RlweModeNTT};
 #[derive(Clone)]
 pub enum RLWE<F: NTTField> {
     /// A RLWE with coefficients
-    CoefMode(RlweModeCoef<F>),
+    CoefMode(CoefRLWE<F>),
     /// A RLWE with values
-    NttMode(RlweModeNTT<F>),
+    NttMode(NttRLWE<F>),
 }
 
 impl<F: NTTField> RLWE<F> {
     #[inline]
-    pub(crate) fn zero_with_coeff_count(coeff_count: usize) -> Self {
+    pub(crate) fn zero(coeff_count: usize) -> Self {
         let a = NTTPolynomial::zero_with_coeff_count(coeff_count);
         let b = NTTPolynomial::zero_with_coeff_count(coeff_count);
-        Self::NttMode(RlweModeNTT { a, b })
+        Self::NttMode(NttRLWE { a, b })
     }
 
     /// Creates a new [`RLWE<F>`] of coefficients mode.
     #[inline]
     pub fn from_coef_mode(a: Polynomial<F>, b: Polynomial<F>) -> Self {
-        Self::CoefMode(RlweModeCoef { a, b })
+        Self::CoefMode(CoefRLWE { a, b })
     }
 
     /// Creates a new [`RLWE<F>`] of ntt mode.
     #[inline]
     pub fn from_ntt_mode(a: NTTPolynomial<F>, b: NTTPolynomial<F>) -> Self {
-        Self::NttMode(RlweModeNTT { a, b })
+        Self::NttMode(NttRLWE { a, b })
     }
 }
 
@@ -49,11 +49,11 @@ macro_rules! binary_op {
             (RLWE::NttMode(c0), RLWE::NttMode(c1)) => RLWE::NttMode(c0 $op c1),
             (RLWE::CoefMode(c0), RLWE::CoefMode(c1)) => RLWE::CoefMode(c0 $op c1),
             (RLWE::CoefMode(c0), RLWE::NttMode(c1)) => {
-                let c0: RlweModeNTT<F> = c0.into();
+                let c0: NttRLWE<F> = c0.into();
                 RLWE::NttMode(c0 $op c1)
             }
             (RLWE::NttMode(c0), RLWE::CoefMode(c1)) => {
-                let c1: RlweModeNTT<F> = c1.into();
+                let c1: NttRLWE<F> = c1.into();
                 RLWE::NttMode(c0 $op c1)
             }
         }
@@ -66,16 +66,16 @@ macro_rules! binary_mul {
             // prefer ntt mode
             (RLWE::NttMode(c0), RLWE::NttMode(c1)) => RLWE::NttMode(c0 * c1),
             (RLWE::CoefMode(c0), RLWE::CoefMode(c1)) => {
-                let c0: RlweModeNTT<F> = c0.into();
-                let c1: RlweModeNTT<F> = c1.into();
+                let c0: NttRLWE<F> = c0.into();
+                let c1: NttRLWE<F> = c1.into();
                 RLWE::NttMode(c0 * c1)
             }
             (RLWE::CoefMode(c0), RLWE::NttMode(c1)) => {
-                let c0: RlweModeNTT<F> = c0.into();
+                let c0: NttRLWE<F> = c0.into();
                 RLWE::NttMode(c0 * c1)
             }
             (RLWE::NttMode(c0), RLWE::CoefMode(c1)) => {
-                let c1: RlweModeNTT<F> = c1.into();
+                let c1: NttRLWE<F> = c1.into();
                 RLWE::NttMode(c0 * c1)
             }
         }
@@ -88,11 +88,11 @@ macro_rules! assign_op {
             (RLWE::NttMode(c0), RLWE::NttMode(c1)) => c0.$assign_method(c1),
             (RLWE::CoefMode(c0), RLWE::CoefMode(c1)) => c0.$assign_method(c1),
             (RLWE::CoefMode(c0), RLWE::NttMode(c1)) => {
-                let c1: RlweModeCoef<F> = c1.into();
+                let c1: CoefRLWE<F> = c1.into();
                 c0.$assign_method(c1)
             }
             (RLWE::NttMode(c0), RLWE::CoefMode(c1)) => {
-                let c1: RlweModeNTT<F> = c1.into();
+                let c1: NttRLWE<F> = c1.into();
                 c0.$assign_method(c1)
             }
         }
@@ -352,7 +352,7 @@ impl<F: NTTField> MulAssign<NTTPolynomial<F>> for RLWE<F> {
     fn mul_assign(&mut self, rhs: NTTPolynomial<F>) {
         match self {
             RLWE::CoefMode(c) => {
-                *self = RLWE::NttMode(RlweModeNTT {
+                *self = RLWE::NttMode(NttRLWE {
                     a: &rhs * c.a(),
                     b: rhs * c.b(),
                 });
@@ -366,7 +366,7 @@ impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for RLWE<F> {
     fn mul_assign(&mut self, rhs: &NTTPolynomial<F>) {
         match self {
             RLWE::CoefMode(c) => {
-                *self = RLWE::NttMode(RlweModeNTT {
+                *self = RLWE::NttMode(NttRLWE {
                     a: rhs * c.a(),
                     b: rhs * c.b(),
                 });

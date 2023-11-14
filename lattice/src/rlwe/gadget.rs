@@ -62,7 +62,7 @@ impl<F: NTTField> Mul<Polynomial<F>> for GadgetRLWE<F> {
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
         let n = rhs.coeff_count();
 
-        let inti_zero = RLWE::zero_with_coeff_count(n);
+        let inti_zero = RLWE::zero(n);
         let decompose = rhs.decompose(self.basis);
         self.data
             .into_iter()
@@ -77,7 +77,7 @@ impl<F: NTTField> Mul<&Polynomial<F>> for GadgetRLWE<F> {
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
         let n = rhs.coeff_count();
 
-        let inti_zero = RLWE::zero_with_coeff_count(n);
+        let inti_zero = RLWE::zero(n);
         let decompose = rhs.decompose(self.basis);
         self.data
             .into_iter()
@@ -92,7 +92,7 @@ impl<F: NTTField> Mul<Polynomial<F>> for &GadgetRLWE<F> {
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
         let n = rhs.coeff_count();
 
-        let inti_zero = RLWE::zero_with_coeff_count(n);
+        let inti_zero = RLWE::zero(n);
         let decompose = rhs.decompose(self.basis.clone());
         self.data
             .iter()
@@ -107,7 +107,7 @@ impl<F: NTTField> Mul<&Polynomial<F>> for &GadgetRLWE<F> {
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
         let n = rhs.coeff_count();
 
-        let inti_zero = RLWE::zero_with_coeff_count(n);
+        let inti_zero = RLWE::zero(n);
         let decompose = rhs.decompose(self.basis.clone());
         self.data
             .iter()
