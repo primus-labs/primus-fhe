@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::transformation::AbstractTable;
+use crate::transformation::AbstractNTT;
 
 use super::PrimeField;
 
@@ -26,7 +26,7 @@ use super::PrimeField;
 /// We can get a minimal root `ω` with one more iteration.
 pub trait NTTField: PrimeField {
     /// NTT table type
-    type Table: AbstractTable<Self>;
+    type Table: AbstractNTT<Self>;
 
     /// Root type
     type Root: Copy;

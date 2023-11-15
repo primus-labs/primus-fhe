@@ -2,13 +2,14 @@
 #![deny(missing_docs)]
 
 //! This crate defines some concrete struct types
-//! for LWE and RLWE.
+//! for LWE, RLWE, RGSW.
 
+mod gadget;
 mod lwe;
 mod rgsw;
 mod rlwe;
-mod util;
 
+pub use gadget::GadgetRLWE;
 pub use lwe::LWE;
 pub use rgsw::RGSW;
-pub use rlwe::{GadgetRLWE, RLWE};
+pub use rlwe::RLWE;

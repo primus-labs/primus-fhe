@@ -4,7 +4,7 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 
 use crate::field::{Field, NTTField};
-use crate::transformation::AbstractTable;
+use crate::transformation::AbstractNTT;
 
 use super::{Poly, Polynomial};
 

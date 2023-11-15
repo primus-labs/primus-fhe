@@ -1,7 +1,7 @@
 use crate::field::NTTField;
 use crate::polynomial::{NTTPolynomial, Polynomial};
 
-use super::AbstractTable;
+use super::AbstractNTT;
 
 /// This struct store the pre-computed data for number theory transform and
 /// inverse number theory transform.
@@ -107,7 +107,7 @@ where
     }
 }
 
-impl<F> AbstractTable<F> for NTTTable<F>
+impl<F> AbstractNTT<F> for NTTTable<F>
 where
     F: NTTField<Table = NTTTable<F>>,
 {

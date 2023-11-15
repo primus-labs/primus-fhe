@@ -1,113 +1,102 @@
-use std::ops::Mul;
+use algebra::{field::NTTField, polynomial::NTTPolynomial};
 
-use algebra::field::NTTField;
-
-use crate::{
-    rlwe::{CoefRLWE, NttRLWE},
-    GadgetRLWE, RLWE,
-};
+use crate::{GadgetRLWE, RLWE};
 
 /// A generic rgsw struct type.
 pub struct RGSW<F: NTTField> {
-    d0: GadgetRLWE<F>,
-    d1: GadgetRLWE<F>,
+    c0: GadgetRLWE<F>,
+    c1: GadgetRLWE<F>,
 }
 
 impl<F: NTTField> RGSW<F> {
     /// Creates a new [`RGSW<F>`].
     #[inline]
-    pub fn new(d0: GadgetRLWE<F>, d1: GadgetRLWE<F>) -> Self {
-        Self { d0, d1 }
+    pub fn new(c0: GadgetRLWE<F>, c1: GadgetRLWE<F>) -> Self {
+        Self { c0, c1 }
+    }
+
+    /// Returns a reference to the `c0` of this [`RGSW<F>`].
+    pub fn c0(&self) -> &GadgetRLWE<F> {
+        &self.c0
+    }
+
+    /// Returns a reference to the `c1` of this [`RGSW<F>`].
+    pub fn c1(&self) -> &GadgetRLWE<F> {
+        &self.c1
     }
 
     /// Returns a reference to the basis of this [`RGSW<F>`].
     #[inline]
     pub fn basis(&self) -> &F::Modulus {
-        self.d0.basis()
+        self.c0.basis()
     }
-}
 
-impl<F: NTTField> Mul<RLWE<F>> for RGSW<F> {
-    type Output = RLWE<F>;
-
+    /// Performs a multiplication on the `self` [`RGSW<F>`] with another `rlwe` [`RLWE<F>`],
+    /// return a [`RLWE<F>`].
     #[inline]
-    fn mul(self, rhs: RLWE<F>) -> Self::Output {
-        Mul::mul(self, &rhs)
+    pub fn mul_with_rlwe(&self, rlwe: &RLWE<F>) -> RLWE<F> {
+        self.c0()
+            .mul_with_polynomial(rlwe.a())
+            .add_element_wise(&self.c1().mul_with_polynomial(rlwe.b()))
     }
-}
 
-impl<F: NTTField> Mul<&RLWE<F>> for RGSW<F> {
-    type Output = RLWE<F>;
-
+    /// Performs a multiplication on the `self` [`RGSW<F>`] with another `rgsw` [`RGSW<F>`],
+    /// return a [`RGSW<F>`].
     #[inline]
-    fn mul(self, rhs: &RLWE<F>) -> Self::Output {
-        match rhs {
-            RLWE::CoefMode(CoefRLWE { a, b }) => self.d0 * a + self.d1 * b,
-            RLWE::NttMode(NttRLWE { a, b }) => self.d0 * a + self.d1 * b,
-        }
-    }
-}
-
-impl<F: NTTField> Mul<RLWE<F>> for &RGSW<F> {
-    type Output = RLWE<F>;
-
-    #[inline]
-    fn mul(self, rhs: RLWE<F>) -> Self::Output {
-        Mul::mul(self, &rhs)
-    }
-}
-
-impl<F: NTTField> Mul<&RLWE<F>> for &RGSW<F> {
-    type Output = RLWE<F>;
-
-    #[inline]
-    fn mul(self, rhs: &RLWE<F>) -> Self::Output {
-        match rhs {
-            RLWE::CoefMode(CoefRLWE { a, b }) => &self.d0 * a + &self.d1 * b,
-            RLWE::NttMode(NttRLWE { a, b }) => &self.d0 * a + &self.d1 * b,
-        }
-    }
-}
-
-impl<F: NTTField> Mul<RGSW<F>> for RGSW<F> {
-    type Output = RGSW<F>;
-
-    #[inline]
-    fn mul(self, rhs: RGSW<F>) -> Self::Output {
-        Mul::mul(&self, &rhs)
-    }
-}
-
-impl<F: NTTField> Mul<&RGSW<F>> for RGSW<F> {
-    type Output = RGSW<F>;
-
-    #[inline]
-    fn mul(self, rhs: &RGSW<F>) -> Self::Output {
-        Mul::mul(&self, rhs)
-    }
-}
-
-impl<F: NTTField> Mul<RGSW<F>> for &RGSW<F> {
-    type Output = RGSW<F>;
-
-    #[inline]
-    fn mul(self, rhs: RGSW<F>) -> Self::Output {
-        Mul::mul(self, &rhs)
-    }
-}
-
-impl<F: NTTField> Mul<&RGSW<F>> for &RGSW<F> {
-    type Output = RGSW<F>;
-
-    fn mul(self, rhs: &RGSW<F>) -> Self::Output {
+    pub fn mul_with_rgsw(&self, rgsw: &RGSW<F>) -> RGSW<F> {
         let basis = self.basis().clone();
 
-        let nwe_d0_data: Vec<RLWE<F>> = rhs.d0.iter().map(|r| self * r).collect();
-        let new_d0 = GadgetRLWE::new(nwe_d0_data, basis.clone());
+        let ntt_c0 = self.c0().to_ntt_poly();
+        let ntt_c1 = self.c1().to_ntt_poly();
 
-        let nwe_d1_data: Vec<RLWE<F>> = rhs.d1.iter().map(|r| self * r).collect();
-        let new_d1 = GadgetRLWE::new(nwe_d1_data, basis.clone());
+        let c0_data: Vec<RLWE<F>> = rgsw
+            .c0()
+            .iter()
+            .map(|rlwe| ntt_rgsw_mul_rlwe(&ntt_c0, &ntt_c1, rlwe, basis.clone()))
+            .collect();
+        let c0 = GadgetRLWE::new(c0_data, basis.clone());
 
-        <RGSW<F>>::new(new_d0, new_d1)
+        let c1_data: Vec<RLWE<F>> = rgsw
+            .c1()
+            .iter()
+            .map(|rlwe| ntt_rgsw_mul_rlwe(&ntt_c0, &ntt_c1, rlwe, basis.clone()))
+            .collect();
+        let c1 = GadgetRLWE::new(c1_data, basis);
+
+        RGSW::new(c0, c1)
     }
+}
+
+/// An optimized version `rgsw * rlwe`, the rgsw input is its ntt polynomials.
+///
+/// This method can decrease the numbers of conversion from [`Polynomial<F>`] to [`NTTPolynomial<F>`].
+fn ntt_rgsw_mul_rlwe<F: NTTField>(
+    c0: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
+    c1: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
+    rlwe: &RLWE<F>,
+    basis: F::Modulus,
+) -> RLWE<F> {
+    let decomposed = rlwe.a().decompose(basis.clone());
+    let intermediate = match (c0, decomposed.as_slice()) {
+        ([first_rlwe, other_rlwes @ ..], [first_poly, other_polys @ ..]) => {
+            let init = (&first_rlwe.0 * first_poly, &first_rlwe.1 * first_poly);
+            other_rlwes
+                .iter()
+                .zip(other_polys)
+                .fold(init, |acc, (r, p)| {
+                    let p = <NTTPolynomial<F>>::from(p);
+                    (acc.0 + &r.0 * &p, acc.1 + &r.1 * p)
+                })
+        }
+        _ => unreachable!(),
+    };
+
+    let decompose = rlwe.b().decompose(basis.clone());
+    c1.iter()
+        .zip(decompose)
+        .fold(intermediate, |acc, (r, p)| {
+            let p = <NTTPolynomial<F>>::from(p);
+            (acc.0 + &r.0 * &p, acc.1 + &r.1 * p)
+        })
+        .into()
 }

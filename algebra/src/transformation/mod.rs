@@ -13,7 +13,7 @@ use crate::field::NTTField;
 use crate::polynomial::{NTTPolynomial, Polynomial};
 
 /// An abstract layer for ntt table
-pub trait AbstractTable<F: NTTField> {
+pub trait AbstractNTT<F: NTTField> {
     /// Perform a fast number theory transform in place.
     ///
     /// This function transforms a polynomial to a vector.
