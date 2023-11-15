@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use num_traits::{Inv, One, Pow, Zero};
 use once_cell::sync::OnceCell;
+use rand::distributions::uniform::{SampleUniform, UniformInt, UniformSampler};
+use rand::distributions::{Distribution, Standard, Uniform};
 use rand::{thread_rng, Rng};
 
 use crate::ring::Ring;
@@ -81,6 +83,57 @@ impl One for Fp32 {
     fn one() -> Self {
         Self(One::one())
     }
+}
+
+impl Distribution<Fp32> for Standard {
+    #[inline]
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        Fp32(Uniform::new_inclusive(0, P - 1).sample(rng))
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct UniformFp32(UniformInt<u32>);
+
+impl UniformSampler for UniformFp32 {
+    type X = Fp32;
+
+    #[inline]
+    fn new<B1, B2>(low: B1, high: B2) -> Self
+    where
+        B1: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+        B2: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+    {
+        let high = if high.borrow().0 >= P {
+            P
+        } else {
+            high.borrow().0
+        };
+        UniformFp32(UniformInt::<u32>::new_inclusive(low.borrow().0, high - 1))
+    }
+
+    #[inline]
+    fn new_inclusive<B1, B2>(low: B1, high: B2) -> Self
+    where
+        B1: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+        B2: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+    {
+        let high = if high.borrow().0 >= P - 1 {
+            P - 1
+        } else {
+            high.borrow().0
+        };
+        UniformFp32(UniformInt::<u32>::new_inclusive(low.borrow().0, high))
+    }
+
+    #[inline]
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Self::X {
+        Fp32(self.0.sample(rng))
+    }
+}
+
+impl SampleUniform for Fp32 {
+    type Sampler = UniformFp32;
 }
 
 impl Add<Self> for Fp32 {
@@ -362,12 +415,12 @@ impl NTTField for Fp32 {
         }
 
         let mut rng = thread_rng();
-        let distr = rand::distributions::Uniform::new_inclusive(2, P - 1);
+        let distr = rand::distributions::Uniform::new_inclusive(Self(2), Self(P - 1));
 
         let mut w = Zero::zero();
 
         if (0..100).any(|_| {
-            w = Self(rng.sample(distr)).pow(quotient);
+            w = rng.sample(distr).pow(quotient);
             Self::is_primitive_root(w, degree)
         }) {
             Ok(w)
