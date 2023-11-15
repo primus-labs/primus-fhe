@@ -335,7 +335,26 @@ impl NTTField for Fp32 {
     type Degree = u32;
 
     fn decompose_len(basis: Self::Modulus) -> usize {
-        Self::modulus().ilog(basis) as usize
+        let modulus = Self::modulus();
+        match basis {
+            2 => (Self::Modulus::BITS - modulus.leading_zeros()) as usize,
+            10 => {
+                let mut deg = modulus.ilog10();
+                if 10u32.pow(deg) < modulus {
+                    deg += 1;
+                }
+
+                deg as usize
+            }
+            b => {
+                let mut deg = modulus.ilog(b);
+                if b.pow(deg) < modulus {
+                    deg += 1;
+                }
+
+                deg as usize
+            }
+        }
     }
 
     fn decompose(&self, basis: Self::Modulus) -> Vec<Self> {
