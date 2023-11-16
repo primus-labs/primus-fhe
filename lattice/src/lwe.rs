@@ -1,13 +1,14 @@
 use algebra::ring::Ring;
 
 /// A generic LWE struct type.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LWE<R: Ring> {
     a: Vec<R>,
     b: R,
 }
 
 impl<R: Ring> From<(Vec<R>, R)> for LWE<R> {
+    #[inline]
     fn from((a, b): (Vec<R>, R)) -> Self {
         Self { a, b }
     }
@@ -21,21 +22,25 @@ impl<R: Ring> LWE<R> {
     }
 
     /// Returns a reference to the `a` of this [`LWE<R>`].
+    #[inline]
     pub fn a(&self) -> &[R] {
         self.a.as_ref()
     }
 
     /// Returns a mutable reference to the `a` of this [`LWE<R>`].
+    #[inline]
     pub fn a_mut(&mut self) -> &mut Vec<R> {
         &mut self.a
     }
 
     /// Returns the `b` of this [`LWE<R>`].
+    #[inline]
     pub fn b(&self) -> R {
         self.b
     }
 
     /// Returns a mutable reference to the `b` of this [`LWE<R>`].
+    #[inline]
     pub fn b_mut(&mut self) -> &mut R {
         &mut self.b
     }

@@ -8,7 +8,7 @@ mod fp32;
 pub mod ntt_fields;
 pub mod prime_fields;
 
-pub use fp32::{BarrettConfig, Fp32};
+pub use fp32::{BarrettConfig, Fp32, NormalFp32, TernaryFp32};
 pub use ntt_fields::NTTField;
 pub use prime_fields::PrimeField;
 

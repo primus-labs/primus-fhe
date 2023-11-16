@@ -3,12 +3,14 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 use std::sync::{Arc, Mutex};
 
 use num_traits::{Inv, One, Pow, Zero};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use rand::distributions::uniform::{SampleUniform, UniformInt, UniformSampler};
 use rand::distributions::{Distribution, Standard, Uniform};
 use rand::{thread_rng, Rng};
+use rand_distr::{Normal, WeightedIndex};
 
 use crate::ring::Ring;
+use crate::AlgebraError;
 use crate::{
     field::{prime_fields::MulFactor, Field, NTTField, PrimeField},
     modulo_traits::{
@@ -85,10 +87,30 @@ impl One for Fp32 {
     }
 }
 
+static STANDARD_FP32: Lazy<Uniform<Fp32>> =
+    Lazy::new(|| Uniform::new_inclusive(Fp32::zero(), Fp32(P - 1)));
+
 impl Distribution<Fp32> for Standard {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
-        Fp32(Uniform::new_inclusive(0, P - 1).sample(rng))
+        STANDARD_FP32.sample(rng)
+    }
+}
+
+/// The ternary distribution for [`Fp32`].
+///
+/// prob[1]=prob[-1]=0.25
+/// prob[0]=0.5
+#[derive(Clone, Copy, Debug)]
+pub struct TernaryFp32;
+
+static TENRNARY_FP32: Lazy<WeightedIndex<u8>> =
+    Lazy::new(|| WeightedIndex::new([1, 2, 1]).unwrap());
+
+impl Distribution<Fp32> for TernaryFp32 {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        const VALUES: [Fp32; 3] = [Fp32(P - 1), Fp32(0), Fp32(1)];
+        VALUES[TENRNARY_FP32.sample(rng)]
     }
 }
 
@@ -104,12 +126,10 @@ impl UniformSampler for UniformFp32 {
         B1: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
         B2: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
     {
-        let high = if high.borrow().0 >= P {
-            P
-        } else {
-            high.borrow().0
-        };
-        UniformFp32(UniformInt::<u32>::new_inclusive(low.borrow().0, high - 1))
+        UniformFp32(UniformInt::<u32>::new_inclusive(
+            low.borrow().0,
+            high.borrow().0 - 1,
+        ))
     }
 
     #[inline]
@@ -134,6 +154,54 @@ impl UniformSampler for UniformFp32 {
 
 impl SampleUniform for Fp32 {
     type Sampler = UniformFp32;
+}
+
+/// The normal distribution `N(mean, std_dev**2)` for [`Fp32`].
+#[derive(Clone, Copy, Debug)]
+pub struct NormalFp32 {
+    inner: Normal<f64>,
+}
+
+impl NormalFp32 {
+    /// Construct, from mean and standard deviation
+    ///
+    /// Parameters:
+    ///
+    /// -   mean (`μ`, unrestricted)
+    /// -   standard deviation (`σ`, must be finite)
+    #[inline]
+    pub fn new(mean: f64, std_dev: f64) -> Result<NormalFp32, AlgebraError> {
+        match Normal::new(mean, std_dev) {
+            Ok(inner) => Ok(NormalFp32 { inner }),
+            Err(_) => Err(AlgebraError::DistributionError),
+        }
+    }
+
+    /// Returns the mean (`μ`) of the distribution.
+    #[inline]
+    pub fn mean(&self) -> f64 {
+        self.inner.mean()
+    }
+
+    /// Returns the standard deviation (`σ`) of the distribution.
+    #[inline]
+    pub fn std_dev(&self) -> f64 {
+        self.inner.std_dev()
+    }
+}
+
+impl Distribution<Fp32> for NormalFp32 {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        const FLOAT_P: f64 = P as f64;
+        let mut value = self.inner.sample(rng);
+        while value < 0. {
+            value += FLOAT_P;
+        }
+        while value >= FLOAT_P {
+            value -= FLOAT_P;
+        }
+        Fp32(value as u32)
+    }
 }
 
 impl Add<Self> for Fp32 {
@@ -339,20 +407,20 @@ impl NTTField for Fp32 {
         match basis {
             2 => (Self::Modulus::BITS - modulus.leading_zeros()) as usize,
             10 => {
-                let mut deg = modulus.ilog10();
-                if 10u32.pow(deg) < modulus {
-                    deg += 1;
+                let exp = modulus.ilog10();
+                if 10u32.pow(exp) < modulus {
+                    (exp + 1) as usize
+                } else {
+                    exp as usize
                 }
-
-                deg as usize
             }
-            b => {
-                let mut deg = modulus.ilog(b);
-                if b.pow(deg) < modulus {
-                    deg += 1;
+            base => {
+                let exp = modulus.ilog(base);
+                if base.pow(exp) < modulus {
+                    (exp + 1) as usize
+                } else {
+                    exp as usize
                 }
-
-                deg as usize
             }
         }
     }

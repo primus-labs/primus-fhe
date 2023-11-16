@@ -28,4 +28,7 @@ pub enum AlgebraError {
     /// Error that occurs when fails to generate the ntt table.
     #[error("Fail to generate the desired ntt table.")]
     NTTTableError,
+    /// Error that occurs when fails to generate the distribution.
+    #[error("Fail to generate the desired distribution.")]
+    DistributionError,
 }

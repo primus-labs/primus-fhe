@@ -16,11 +16,13 @@ impl<F: NTTField> RGSW<F> {
     }
 
     /// Returns a reference to the `c0` of this [`RGSW<F>`].
+    #[inline]
     pub fn c0(&self) -> &GadgetRLWE<F> {
         &self.c0
     }
 
     /// Returns a reference to the `c1` of this [`RGSW<F>`].
+    #[inline]
     pub fn c1(&self) -> &GadgetRLWE<F> {
         &self.c1
     }

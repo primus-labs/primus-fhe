@@ -1,8 +1,6 @@
 use algebra::field::NTTField;
 use algebra::polynomial::{NTTPolynomial, Polynomial};
 
-// mod gadget;
-
 /// A RLWE type whose data is [`Polynomial<F>`]
 #[derive(Clone)]
 pub struct RLWE<F: NTTField> {
@@ -11,12 +9,14 @@ pub struct RLWE<F: NTTField> {
 }
 
 impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
+    #[inline]
     fn from((a, b): (Polynomial<F>, Polynomial<F>)) -> Self {
         Self { a, b }
     }
 }
 
 impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
+    #[inline]
     fn from((a, b): (NTTPolynomial<F>, NTTPolynomial<F>)) -> Self {
         Self {
             a: a.into(),
@@ -33,21 +33,25 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Returns a reference to the `a` of this [`RLWE<F>`].
+    #[inline]
     pub fn a(&self) -> &Polynomial<F> {
         self.a.as_ref()
     }
 
     /// Returns a mutable reference to the `a` of this [`RLWE<F>`].
+    #[inline]
     pub fn a_mut(&mut self) -> &mut Polynomial<F> {
         &mut self.a
     }
 
     /// Returns a reference to the `b` of this [`RLWE<F>`].
+    #[inline]
     pub fn b(&self) -> &Polynomial<F> {
         self.b.as_ref()
     }
 
     /// Returns a mutable reference to the `b` of this [`RLWE<F>`].
+    #[inline]
     pub fn b_mut(&mut self) -> &mut Polynomial<F> {
         &mut self.b
     }
