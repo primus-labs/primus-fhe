@@ -162,8 +162,11 @@ impl<F: NTTField> RLWE<F> {
 
 #[cfg(test)]
 mod tests {
-    use algebra::field::Fp32;
-    use rand::{distributions::Standard, prelude::*};
+    use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
+    use rand::{
+        distributions::{Standard, Uniform},
+        prelude::*,
+    };
 
     use super::*;
 
@@ -193,5 +196,60 @@ mod tests {
             rlwe2
         );
         assert_eq!(rlwe1.mul_with_polynomial(&r), rlwe3);
+    }
+
+    #[test]
+    fn test_rlwe_he() {
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
+        const N: usize = 1024;
+        const T: u32 = 128;
+        let rng = &mut rand::thread_rng();
+
+        let chi = Fp32::normal_distribution(0., 3.2).unwrap();
+
+        fn encode(m: u32) -> Fp32 {
+            Fp32::new((m as f64 * P as f64 / T as f64).round() as u32)
+        }
+
+        fn decode(c: Fp32) -> u32 {
+            (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
+        }
+
+        let dis = Uniform::new(0, T);
+
+        let v0: Vec<u32> = rng.sample_iter(dis).take(N).collect();
+        let v1: Vec<u32> = rng.sample_iter(dis).take(N).collect();
+
+        let v_r: Vec<u32> = v0
+            .iter()
+            .zip(v1.iter())
+            .map(|(a, b)| (*a + b) % T)
+            .collect();
+
+        let v0 = Polynomial::new(v0.into_iter().map(encode).collect::<Vec<Fp32>>());
+        let v1 = Polynomial::new(v1.into_iter().map(encode).collect::<Vec<Fp32>>());
+
+        let s = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+
+        let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+        let b = &a * &s + v0 + e;
+
+        let rlwe1 = RLWE::new(a, b);
+
+        let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+        let b = &a * &s + v1 + e;
+
+        let rlwe2 = RLWE::new(a, b);
+
+        let rlwe_r = rlwe1.add_element_wise(&rlwe2);
+
+        let r = (rlwe_r.b() - rlwe_r.a() * &s)
+            .into_iter()
+            .map(decode)
+            .collect::<Vec<u32>>();
+
+        assert_eq!(r, v_r);
     }
 }

@@ -103,7 +103,7 @@ impl<R: Ring> LWE<R> {
 
 #[cfg(test)]
 mod tests {
-    use algebra::field::{FieldDistribution, Fp32};
+    use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
     use rand::distributions::Standard;
     use rand::prelude::*;
 
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_lwe_he() {
-        const P: u32 = 0x7e00001;
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
         const N: usize = 8;
         const T: u32 = 4;
         let rng = &mut rand::thread_rng();
