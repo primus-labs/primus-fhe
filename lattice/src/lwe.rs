@@ -103,8 +103,9 @@ impl<R: Ring> LWE<R> {
 
 #[cfg(test)]
 mod tests {
-    use algebra::field::Fp32;
-    use rand::{distributions::Standard, Rng};
+    use algebra::field::{FieldDistribution, Fp32};
+    use rand::distributions::Standard;
+    use rand::prelude::*;
 
     use super::*;
 
@@ -130,5 +131,48 @@ mod tests {
         let lwe3 = LWE::new(a3, b3);
         assert_eq!(lwe1.clone().add_component_wise(&lwe2), lwe3);
         assert_eq!(lwe3.clone().sub_component_wise(&lwe2), lwe1);
+    }
+
+    #[test]
+    fn test_lwe_he() {
+        const P: u32 = 0x7e00001;
+        const N: usize = 8;
+        const T: u32 = 4;
+        let rng = &mut rand::thread_rng();
+
+        let chi = Fp32::normal_distribution(0., 3.2).unwrap();
+
+        fn encode(m: u32) -> Fp32 {
+            Fp32::new((m as f64 * P as f64 / T as f64).round() as u32)
+        }
+
+        fn decode(c: Fp32) -> u32 {
+            (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
+        }
+
+        fn dot_product<R: Ring>(u: &[R], v: &[R]) -> R {
+            u.iter()
+                .zip(v.iter())
+                .fold(R::zero(), |acc, (x, y)| acc + *x * y)
+        }
+
+        let v0: u32 = rng.gen_range(0..T);
+        let v1: u32 = rng.gen_range(0..T);
+
+        let s = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
+
+        let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
+        let b: Fp32 = dot_product(&a, &s) + encode(v0) + chi.sample(rng);
+
+        let lwe1 = LWE::new(a, b);
+
+        let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
+        let b: Fp32 = dot_product(&a, &s) + encode(v1) + chi.sample(rng);
+
+        let lwe2 = LWE::new(a, b);
+
+        let ret = lwe1.add_component_wise(&lwe2);
+        let decrypted = decode(ret.b() - dot_product(ret.a(), &s));
+        assert_eq!(decrypted, (v0 + v1) % T);
     }
 }

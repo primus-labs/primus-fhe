@@ -59,6 +59,12 @@ impl Fp32 {
     pub fn new(value: u32) -> Self {
         Self(value)
     }
+
+    /// Return inner value
+    #[inline]
+    pub fn inner(self) -> u32 {
+        self.0
+    }
 }
 
 impl From<u32> for Fp32 {
