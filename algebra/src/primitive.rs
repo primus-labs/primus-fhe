@@ -1,12 +1,45 @@
 pub(crate) trait Widening: Sized {
     type WideT;
 
+    /// Calculates `self` + `rhs` + `carry` and checks for overflow.
+    ///
+    /// Performs “ternary addition” of two integer operands and a carry-in bit,
+    /// and returns a tuple of the sum along with a boolean indicating
+    /// whether an arithmetic overflow would occur. On overflow, the wrapped value is returned.
+    ///
+    /// This allows chaining together multiple additions to create a wider addition,
+    /// and can be useful for bignum addition.
+    /// This method should only be used for the most significant word.
+    ///
+    /// The output boolean returned by this method is not a carry flag,
+    /// and should not be added to a more significant word.
+    ///
+    /// If the input carry is false, this method is equivalent to overflowing_add.
     fn carry_add(self, rhs: Self, carry: bool) -> (Self, bool);
 
+    /// Calculates `self` − `rhs` − `borrow` and returns a tuple containing
+    /// the difference and the output borrow.
+    ///
+    /// Performs "ternary subtraction" by subtracting both an integer operand and a borrow-in bit from self,
+    /// and returns an output integer and a borrow-out bit. This allows chaining together multiple subtractions
+    /// to create a wider subtraction, and can be useful for bignum subtraction.
     fn borrow_sub(self, rhs: Self, borrow: bool) -> (Self, bool);
 
+    /// Calculates the complete product `self` * `rhs` without the possibility to overflow.
+    ///
+    /// This returns the low-order (wrapping) bits and the high-order (overflow) bits
+    /// of the result as two separate values, in that order.
     fn widen_mul(self, rhs: Self) -> (Self, Self);
 
+    /// Calculates the "full multiplication" `self` * `rhs` + `carry` without
+    /// the possibility to overflow.
+    ///
+    /// This returns the low-order (wrapping) bits and the high-order (overflow) bits
+    /// of the result as two separate values, in that order.
+    ///
+    /// Performs "long multiplication" which takes in an extra amount to add, and may return
+    /// an additional amount of overflow. This allows for chaining together multiple multiplications
+    /// to create "big integers" which represent larger values.
     fn carry_mul(self, rhs: Self, carry: Self) -> (Self, Self);
 }
 

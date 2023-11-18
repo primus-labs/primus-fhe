@@ -8,7 +8,25 @@ use crate::transformation::AbstractNTT;
 
 use super::{Poly, Polynomial};
 
-/// A polynomial in ntt form, it stores the values of the polynomial at some particular points.
+/// A representation of a polynomial in Number Theoretic Transform (NTT) form.
+///
+/// The [`NTTPolynomial`] struct holds the coefficients of a polynomial after it has been transformed
+/// using the NTT. NTT is an efficient algorithm for computing the discrete Fourier transform (DFT)
+/// modulo a prime number, which can significantly speed up polynomial multiplication, especially
+/// in the context of implementing fast modular multiplication for cryptographic applications.
+///
+/// The struct is generic over a type `F` that must implement the `Field` trait. This ensures that
+/// the polynomial coefficients are elements of a finite field, which is a necessary condition for
+/// the NTT to be applicable. The `Field` trait provides operations like addition, subtraction, and
+/// multiplication modulo a prime, which are used in the NTT algorithm.
+///
+/// The vector `data` stores the coefficients of the polynomial in NTT form. This structure allows for
+/// the use of non-recursive NTT algorithms for efficiency and is optimized for cases where multiple
+/// polynomial products are computed in a batch or in cryptographic schemes like lattice-based encryption
+/// or signatures.
+///
+/// # Fields
+/// * `data: Vec<F>` - A vector that contains the coefficients of the polynomial in NTT form.
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct NTTPolynomial<F: Field> {
     data: Vec<F>,

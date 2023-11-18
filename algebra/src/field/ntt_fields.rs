@@ -6,39 +6,33 @@ use crate::transformation::AbstractNTT;
 
 use super::PrimeField;
 
-/// A helper trait  for number theory transform
-///
+/// A trait for fields where Number Theoretic Transforms (NTT) can be performed.
 /// It's optimized for the vector with the length of power of two.
 ///
-/// For ease of introduction we use `n` for `degreee` and `p` for prime number.
+/// The `NTTField` trait extends `PrimeField` to provide additional structure and operations
+/// necessary for efficiently performing NTTs, which are the modular arithmetic equivalent of
+/// the Fast Fourier Transform (FFT). NTTs are used extensively in polynomial multiplication,
+/// particularly in cryptographic protocols like lattice-based cryptography.
 ///
-/// Let `n` be a power of 2 and `p` a prime with `p ≡ 1 (mod 2n)`.
-///
-/// This trait define the function to get the primitive `n`-th root of unity  reduce `p`.
-///
-/// let `ω` be a primitive `n`-th root of unity in `Z_p`, which means that `ω^n ≡ 1 (mod p)`
-///
-/// We start try to get a primitive `p-1`-th root `g` for `p`. So, `g^(p-1) = 1 mod p`.
-///
-/// Next, we get `ω` = `g^((p-1)/n)`. It should satisfy the formula that
-/// `ω^(n/2) = -1 mod p`.
-///
-/// We can get a minimal root `ω` with one more iteration.
+/// Implementing types must provide functionality to work with roots of unity, decompose elements
+/// with respect to a basis, and generate and manage tables for NTT operations.
 pub trait NTTField: PrimeField {
-    /// NTT table type
+    /// An abstraction over the data structure used to store precomputed values for NTT.
     type Table: AbstractNTT<Self>;
 
-    /// Root type
+    /// The type representing the roots of unity within the field.
     type Root: Copy;
 
     /// Degree type
     type Degree;
 
     /// Get the length of decompose vec.
-    fn decompose_len(basis: Self::Modulus) -> usize;
+    fn decompose_len(basis: Self::Base) -> usize;
 
     /// Decompose `self` according to `basis`.
-    fn decompose(&self, basis: Self::Modulus) -> Vec<Self>;
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose(&self, basis: Self::Base) -> Vec<Self>;
 
     /// Convert `root` into `Self` type.
     fn from_root(root: Self::Root) -> Self;
@@ -59,6 +53,21 @@ pub trait NTTField: PrimeField {
     fn try_primitive_root(degree: Self::Degree) -> Result<Self, crate::AlgebraError>;
 
     /// Try to get the minimal primitive `degree`-th root of unity reduce `p`.
+    ///
+    /// For ease of introduction we use `n` for `degreee` and `p` for prime number.
+    ///
+    /// Let `n` be a power of 2 and `p` a prime with `p ≡ 1 (mod 2n)`.
+    ///
+    /// This trait define the function to get the primitive `n`-th root of unity  reduce `p`.
+    ///
+    /// let `ω` be a primitive `n`-th root of unity in `Z_p`, which means that `ω^n ≡ 1 (mod p)`
+    ///
+    /// We start try to get a primitive `p-1`-th root `g` for `p`. So, `g^(p-1) = 1 mod p`.
+    ///
+    /// Next, we get `ω` = `g^((p-1)/n)`. It should satisfy the formula that
+    /// `ω^(n/2) = -1 mod p`.
+    ///
+    /// We can get a minimal root `ω` with one more iteration.
     fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, crate::AlgebraError>;
 
     /// Generate the ntt table of the ntt field with desired `log_n`.

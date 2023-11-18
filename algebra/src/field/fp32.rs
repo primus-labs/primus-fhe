@@ -7,12 +7,12 @@ use once_cell::sync::{Lazy, OnceCell};
 use rand::distributions::uniform::{SampleUniform, UniformInt, UniformSampler};
 use rand::distributions::{Distribution, Standard, Uniform};
 use rand::{thread_rng, Rng};
-use rand_distr::{Normal, WeightedIndex};
+use rand_distr::{Bernoulli, Normal, WeightedIndex};
 
 use crate::ring::Ring;
 use crate::AlgebraError;
 use crate::{
-    field::{prime_fields::MulFactor, Field, NTTField, PrimeField},
+    field::{prime_fields::MulFactor, Field, FieldDistribution, NTTField, PrimeField},
     modulo_traits::{
         AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo,
         MulModuloAssign, NegModulo, PowModulo, SubModulo, SubModuloAssign,
@@ -71,24 +71,24 @@ impl From<u32> for Fp32 {
 impl Zero for Fp32 {
     #[inline]
     fn zero() -> Self {
-        Self(Zero::zero())
+        Self(0)
     }
 
     #[inline]
     fn is_zero(&self) -> bool {
-        Zero::is_zero(&self.0)
+        0 == self.0
     }
 }
 
 impl One for Fp32 {
     #[inline]
     fn one() -> Self {
-        Self(One::one())
+        Self(1)
     }
 }
 
 static STANDARD_FP32: Lazy<Uniform<Fp32>> =
-    Lazy::new(|| Uniform::new_inclusive(Fp32::zero(), Fp32(P - 1)));
+    Lazy::new(|| Uniform::new_inclusive(Fp32(0), Fp32(P - 1)));
 
 impl Distribution<Fp32> for Standard {
     #[inline]
@@ -97,20 +97,71 @@ impl Distribution<Fp32> for Standard {
     }
 }
 
+/// The binary distribution for [`Fp32`].
+///
+/// prob\[1] = prob\[0] = 0.5
+#[derive(Clone, Copy, Debug)]
+pub struct BinaryFp32 {
+    inner: Bernoulli,
+}
+
+impl BinaryFp32 {
+    /// Creates a new [`BinaryFp32`].
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            inner: Bernoulli::new(0.5).unwrap(),
+        }
+    }
+}
+
+impl Default for BinaryFp32 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Distribution<Fp32> for BinaryFp32 {
+    #[inline]
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        if self.inner.sample(rng) {
+            Fp32(1)
+        } else {
+            Fp32(0)
+        }
+    }
+}
+
 /// The ternary distribution for [`Fp32`].
 ///
-/// prob[1]=prob[-1]=0.25
-/// prob[0]=0.5
-#[derive(Clone, Copy, Debug)]
-pub struct TernaryFp32;
+/// prob\[1] = prob\[-1] = 0.25
+///
+/// prob\[0] = 0.5
+#[derive(Clone, Debug)]
+pub struct TernaryFp32 {
+    inner: WeightedIndex<usize>,
+}
 
-static TENRNARY_FP32: Lazy<WeightedIndex<u8>> =
-    Lazy::new(|| WeightedIndex::new([1, 2, 1]).unwrap());
+impl TernaryFp32 {
+    /// Creates a new [`TernaryFp32`].
+    pub fn new() -> Self {
+        Self {
+            inner: WeightedIndex::new([1, 2, 1]).unwrap(),
+        }
+    }
+}
+
+impl Default for TernaryFp32 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Distribution<Fp32> for TernaryFp32 {
+    #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
         const VALUES: [Fp32; 3] = [Fp32(P - 1), Fp32(0), Fp32(1)];
-        VALUES[TENRNARY_FP32.sample(rng)]
+        VALUES[self.inner.sample(rng)]
     }
 }
 
@@ -201,6 +252,32 @@ impl Distribution<Fp32> for NormalFp32 {
             value -= FLOAT_P;
         }
         Fp32(value as u32)
+    }
+}
+
+impl FieldDistribution for Fp32 {
+    type BinaryDistribution = BinaryFp32;
+
+    type TernaryDistribution = TernaryFp32;
+
+    type NormalDistribution = NormalFp32;
+
+    #[inline]
+    fn binary_distribution() -> Self::BinaryDistribution {
+        BinaryFp32::new()
+    }
+
+    #[inline]
+    fn ternary_distribution() -> Self::TernaryDistribution {
+        TernaryFp32::new()
+    }
+
+    #[inline]
+    fn normal_distribution(
+        mean: f64,
+        std_dev: f64,
+    ) -> Result<Self::NormalDistribution, AlgebraError> {
+        NormalFp32::new(mean, std_dev)
     }
 }
 
@@ -364,6 +441,8 @@ impl Ring for Fp32 {
 
     type Order = u32;
 
+    type Base = u32;
+
     #[inline]
     fn order() -> Self::Order {
         P
@@ -402,41 +481,28 @@ impl NTTField for Fp32 {
 
     type Degree = u32;
 
-    fn decompose_len(basis: Self::Modulus) -> usize {
-        let modulus = Self::modulus();
-        match basis {
-            2 => (Self::Modulus::BITS - modulus.leading_zeros()) as usize,
-            10 => {
-                let exp = modulus.ilog10();
-                if 10u32.pow(exp) < modulus {
-                    (exp + 1) as usize
-                } else {
-                    exp as usize
-                }
-            }
-            base => {
-                let exp = modulus.ilog(base);
-                if base.pow(exp) < modulus {
-                    (exp + 1) as usize
-                } else {
-                    exp as usize
-                }
-            }
-        }
+    #[inline]
+    fn decompose_len(basis: Self::Base) -> usize {
+        debug_assert!(basis.is_power_of_two());
+        Self::barrett_modulus()
+            .bit_count()
+            .div_ceil(basis.trailing_zeros()) as usize
     }
 
-    fn decompose(&self, basis: Self::Modulus) -> Vec<Self> {
-        let mut temp = *self;
+    fn decompose(&self, basis: Self::Base) -> Vec<Self> {
+        let mut temp = self.0;
+        let bits = basis.trailing_zeros();
 
         let len = Self::decompose_len(basis);
-
+        let mask = u32::MAX >> (u32::BITS - bits);
         let mut ret: Vec<Self> = Vec::with_capacity(len);
+
         while !temp.is_zero() {
-            ret.push(Self(temp.0 % basis));
-            temp = Self(temp.0 / basis);
+            ret.push(Self(temp & mask));
+            temp >>= bits;
         }
 
-        ret.resize_with(len, Zero::zero);
+        ret.resize(len, Fp32(0));
 
         ret
     }

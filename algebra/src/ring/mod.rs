@@ -5,7 +5,25 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{One, Pow, Zero};
 
-/// A simple math commutative ring trait
+/// A trait defining the algebraic structure of a mathematical ring.
+///
+/// This trait encapsulates the properties and operations that define a ring in algebra.
+/// Rings are sets equipped with two binary operations: addition and multiplication,
+/// satisfying certain axioms. In addition to these, this trait provides additional
+/// utility methods and traits to work with ring elements in a Rust program.
+///
+/// The `Ring` trait extends various Rust standard library traits to ensure ring elements
+/// can be copied, cloned, debugged, displayed, compared, and have a sense of 'zero' and 'one'.
+/// Additionally, it supports standard arithmetic operations like addition, subtraction,
+/// multiplication, and exponentiation, as well as assignment versions of these operations.
+///
+/// Types implementing `Ring` must provide implementations for scalar multiplication,
+/// negation, doubling, and squaring operations, both as returning new instances and
+/// mutating the current instance in place.
+///
+/// Implementing this trait enables types to be used within mathematical constructs and
+/// algorithms that require ring properties, such as many cryptographic systems, coding theory,
+/// and computational number theory.
 pub trait Ring:
     Sized
     + Copy
@@ -39,6 +57,10 @@ pub trait Ring:
 
     /// The type of the ring's order.
     type Order: Copy;
+
+    /// The type of the ring's base,
+    /// which is used to decompose the element of the ring.
+    type Base: Copy + Debug;
 
     /// Returns the order of the ring.
     fn order() -> Self::Order;

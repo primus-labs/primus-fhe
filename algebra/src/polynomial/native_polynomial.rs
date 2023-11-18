@@ -8,7 +8,29 @@ use crate::transformation::AbstractNTT;
 
 use super::{NTTPolynomial, Poly};
 
-/// The most basic polynomial, it stores the coefficients of the polynomial.
+/// Represents a polynomial where coefficients are elements of a specified field `F`.
+///
+/// The `Polynomial` struct is generic over a type `F` that must implement the `Field` trait, ensuring
+/// that the polynomial coefficients can support field operations such as addition, subtraction,
+/// multiplication, and division, where division is by a non-zero element. These operations are
+/// fundamental in various areas of mathematics and computer science, especially in algorithms that involve
+/// polynomial arithmetic in fields, such as error-correcting codes, cryptography, and numerical analysis.
+///
+/// The coefficients of the polynomial are stored in a vector `data`, with the `i`-th element
+/// representing the coefficient of the `x^i` term. The vector is ordered from the constant term
+/// at index 0 to the highest non-zero term. This struct can represent both dense and sparse polynomials,
+/// but it doesn't inherently optimize for sparse representations.
+///
+/// # Fields
+/// * `data: Vec<F>` - A vector of field elements representing the coefficients of the polynomial.
+///
+/// # Examples
+/// ```ignore
+/// // Assuming `F` implements `Field` and `Polynomial` is correctly defined.
+/// let coeffs = vec![1, 2, 3];
+/// let poly = Polynomial::new(coeffs);
+/// // `poly` now represents the polynomial 1 + 2x + 3x^2.
+/// ```
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Polynomial<F: Field> {
     data: Vec<F>,
@@ -51,12 +73,12 @@ impl<F: Field> Polynomial<F> {
 
 impl<F: NTTField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
-    pub fn decompose(&self, basis: F::Modulus) -> Vec<Self> {
-        let decompose_len = F::decompose_len(basis.clone());
+    pub fn decompose(&self, basis: F::Base) -> Vec<Self> {
+        let decompose_len = F::decompose_len(basis);
 
         let mut ret: Vec<Self> = vec![Self::with_capacity(self.coeff_count()); decompose_len];
         for coeff in self.iter() {
-            let decompose_res = F::decompose(coeff, basis.clone());
+            let decompose_res = F::decompose(coeff, basis);
             ret.iter_mut()
                 .zip(decompose_res.into_iter())
                 .for_each(|(d_p, d_c)| d_p.push(d_c));

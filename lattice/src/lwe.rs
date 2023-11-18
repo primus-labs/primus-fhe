@@ -1,7 +1,14 @@
 use algebra::ring::Ring;
 
-/// A generic LWE struct type.
-#[derive(Clone, Debug)]
+/// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
+/// The LWE problem is a fundamental component in modern cryptography, often used to build
+/// secure cryptographic systems that are considered hard to crack by quantum computers.
+///
+/// This structure contains two main components:
+/// - `a`: A vector of elements of `R`, representing the public vector part of the LWE instance.
+/// - `b`: An element of `R`, representing the response value which is computed as
+///        the dot product of `a` with a secret vector, plus some noise.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LWE<R: Ring> {
     a: Vec<R>,
     b: R,
@@ -81,5 +88,37 @@ impl<R: Ring> LWE<R> {
             .zip(rhs.a())
             .for_each(|(v0, v1)| *v0 -= *v1);
         *self.b_mut() -= rhs.b();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use algebra::field::Fp32;
+    use rand::{distributions::Standard, Rng};
+
+    use super::*;
+
+    #[test]
+    fn test_lwe() {
+        const N: usize = 4;
+        let rng = &mut rand::thread_rng();
+
+        let a1 = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
+        let a2 = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
+        let a3 = a1
+            .iter()
+            .zip(a2.iter())
+            .map(|(u, v)| *u + v)
+            .collect::<Vec<Fp32>>();
+
+        let b1: Fp32 = rng.gen();
+        let b2: Fp32 = rng.gen();
+        let b3: Fp32 = b1 + b2;
+
+        let lwe1 = LWE::new(a1, b1);
+        let lwe2 = LWE::new(a2, b2);
+        let lwe3 = LWE::new(a3, b3);
+        assert_eq!(lwe1.clone().add_component_wise(&lwe2), lwe3);
+        assert_eq!(lwe3.clone().sub_component_wise(&lwe2), lwe1);
     }
 }

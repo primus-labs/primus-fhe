@@ -1,8 +1,26 @@
 use algebra::field::NTTField;
 use algebra::polynomial::{NTTPolynomial, Polynomial};
 
-/// A RLWE type whose data is [`Polynomial<F>`]
-#[derive(Clone)]
+/// A cryptographic structure for Ring Learning with Errors (RLWE).
+/// This structure is used in advanced cryptographic systems and protocols, particularly
+/// those that require efficient homomorphic encryption properties. It consists of two polynomials
+/// `a` and `b` over a finite field that supports Number Theoretic Transforms (NTT), which is
+/// often necessary for efficient polynomial multiplication.
+///
+/// The `RLWE` struct is generic over a type `F` which is bounded by the `NTTField` trait, ensuring
+/// that the operations of addition, subtraction, and multiplication are performed in a field suitable
+/// for NTT. This is crucial for the security and correctness of cryptographic operations based on RLWE.
+///
+/// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
+/// accessible through public API functions that enforce any necessary invariants. They represent the
+/// public key and error term respectively in the RLWE scheme.
+///
+/// # Fields
+/// * `a`: [`Polynomial<F>`] - Represents the first component or the public key in the RLWE structure.
+/// It is a polynomial where the coefficients are elements of the field `F`.
+/// * `b`: [`Polynomial<F>`] - Represents the second component or the error term in the RLWE structure.
+/// It's also a polynomial with coefficients in the field `F`.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RLWE<F: NTTField> {
     pub(crate) a: Polynomial<F>,
     pub(crate) b: Polynomial<F>,
@@ -99,5 +117,41 @@ impl<F: NTTField> RLWE<F> {
             a: self.a * ntt_poly,
             b: self.b * ntt_poly,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use algebra::field::Fp32;
+    use rand::{distributions::Standard, prelude::*};
+
+    use super::*;
+
+    #[test]
+    fn test_rlwe() {
+        const N: usize = 8;
+        let rng = &mut rand::thread_rng();
+
+        let r: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+
+        let a1: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let a2: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let a3: Polynomial<Fp32> = &a1 * &r;
+
+        let b1: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let b2: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let b3: Polynomial<Fp32> = &b1 * &r;
+
+        let rlwe1 = RLWE::new(a1, b1);
+        let rlwe2 = RLWE::new(a2, b2);
+        let rlwe3 = RLWE::new(a3, b3);
+        assert_eq!(
+            rlwe1
+                .clone()
+                .add_element_wise(&rlwe2)
+                .sub_element_wise(&rlwe1),
+            rlwe2
+        );
+        assert_eq!(rlwe1.mul_with_polynomial(&r), rlwe3);
     }
 }
