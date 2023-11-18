@@ -16,14 +16,14 @@ pub struct LWE<R: Ring> {
 
 impl<R: Ring> From<(Vec<R>, R)> for LWE<R> {
     /// Converts a tuple `(a, b)` into an instance of `Self`.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `a` - A vector of type `R`.
     /// * `b` - An instance of type `R`.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// An instance of `Self`.
     #[inline]
     fn from((a, b): (Vec<R>, R)) -> Self {
