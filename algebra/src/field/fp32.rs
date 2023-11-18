@@ -63,6 +63,15 @@ impl Fp32 {
 
 impl From<u32> for Fp32 {
     #[inline]
+    /// Converts an unsigned 32-bit integer into a [`Fp32`] value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The unsigned 32-bit integer to convert.
+    ///
+    /// # Returns
+    ///
+    /// The converted [`Fp32`] value.
     fn from(value: u32) -> Self {
         Self(value)
     }

@@ -1,6 +1,6 @@
 use algebra::{
     field::NTTField,
-    polynomial::{NTTPolynomial, Polynomial},
+    polynomial::{NTTPolynomial, Poly, Polynomial},
 };
 
 use crate::RLWE;
@@ -73,19 +73,14 @@ impl<F: NTTField> GadgetRLWE<F> {
     pub fn mul_with_decomposed_polynomial(&self, decomposed: &[Polynomial<F>]) -> RLWE<F> {
         assert_eq!(self.data().len(), decomposed.len());
 
-        match (self.data(), decomposed) {
-            ([first_rlwe, other_rlwes @ ..], [first_poly, other_polys @ ..]) => {
-                let init = first_rlwe.clone().mul_with_polynomial(first_poly);
+        let coeff_count = decomposed[0].coeff_count();
 
-                other_rlwes
-                    .iter()
-                    .zip(other_polys)
-                    .fold(init, |acc, (r, p)| {
-                        acc.add_element_wise(&r.clone().mul_with_polynomial(p))
-                    })
-            }
-            _ => unreachable!(),
-        }
+        self.data()
+            .iter()
+            .zip(decomposed)
+            .fold(RLWE::zero(coeff_count), |acc, (r, p)| {
+                acc.add_element_wise(&r.clone().mul_with_polynomial(p))
+            })
     }
 
     /// Convert this [`GadgetRLWE<F>`] to [`NTTPolynomial<F>`] vector.

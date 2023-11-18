@@ -59,14 +59,14 @@ impl<F: Field> Polynomial<F> {
 
     /// Constructs a new, empty [`Polynomial<F>`] with at least the specified capacity.
     #[inline]
-    pub fn with_capacity(capacity: usize) -> Self {
+    fn with_capacity(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
         }
     }
 
     /// Appends an element to the back of a [`Polynomial<F>`].
-    pub fn push(&mut self, value: F) {
+    fn push(&mut self, value: F) {
         self.data.push(value)
     }
 }

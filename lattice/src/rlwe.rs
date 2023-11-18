@@ -27,6 +27,16 @@ pub struct RLWE<F: NTTField> {
 }
 
 impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
+    /// Converts a tuple of polynomials into an instance of `Self`.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - The first polynomial.
+    /// * `b` - The second polynomial.
+    ///
+    /// # Returns
+    ///
+    /// An instance of `Self` containing the converted polynomials.
     #[inline]
     fn from((a, b): (Polynomial<F>, Polynomial<F>)) -> Self {
         Self { a, b }
@@ -34,6 +44,16 @@ impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
 }
 
 impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
+    /// Converts a tuple of NTTPolynomials into an instance of Self.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - The first NTTPolynomial.
+    /// * `b` - The second NTTPolynomial.
+    ///
+    /// # Returns
+    ///
+    /// An instance of [`RLWE<F>`].
     #[inline]
     fn from((a, b): (NTTPolynomial<F>, NTTPolynomial<F>)) -> Self {
         Self {
@@ -48,6 +68,26 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn new(a: Polynomial<F>, b: Polynomial<F>) -> Self {
         Self { a, b }
+    }
+
+    /// Creates a new [`RLWE<F>`] that is initialized to zero.
+    ///
+    /// The `coeff_count` parameter specifies the number of coefficients in the polynomial.
+    /// Both `a` and `b` polynomials of the `RLWE<F>` are initialized with zero coefficients.
+    ///
+    /// # Arguments
+    ///
+    /// * `coeff_count` - The number of coefficients in the polynomial.
+    ///
+    /// # Returns
+    ///
+    /// A new `RLWE<F>` where both `a` and `b` polynomials are initialized to zero.
+    #[inline]
+    pub fn zero(coeff_count: usize) -> Self {
+        Self {
+            a: Polynomial::zero_with_coeff_count(coeff_count),
+            b: Polynomial::zero_with_coeff_count(coeff_count),
+        }
     }
 
     /// Returns a reference to the `a` of this [`RLWE<F>`].

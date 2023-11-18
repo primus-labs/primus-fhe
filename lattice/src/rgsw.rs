@@ -1,4 +1,7 @@
-use algebra::{field::NTTField, polynomial::NTTPolynomial};
+use algebra::{
+    field::NTTField,
+    polynomial::{NTTPolynomial, Poly},
+};
 
 use crate::{GadgetRLWE, RLWE};
 
@@ -99,19 +102,19 @@ fn ntt_rgsw_mul_rlwe<F: NTTField>(
     basis: F::Base,
 ) -> RLWE<F> {
     let decomposed = rlwe.a().decompose(basis);
-    let intermediate = match (ntt_c_neg_s_m, decomposed.as_slice()) {
-        ([first_rlwe, other_rlwes @ ..], [first_poly, other_polys @ ..]) => {
-            let init = (&first_rlwe.0 * first_poly, &first_rlwe.1 * first_poly);
-            other_rlwes
-                .iter()
-                .zip(other_polys)
-                .fold(init, |acc, (r, p)| {
-                    let p = <NTTPolynomial<F>>::from(p);
-                    (acc.0 + &r.0 * &p, acc.1 + &r.1 * p)
-                })
-        }
-        _ => unreachable!(),
-    };
+    let coeff_count = decomposed[0].coeff_count();
+    let init = (
+        NTTPolynomial::zero_with_coeff_count(coeff_count),
+        NTTPolynomial::zero_with_coeff_count(coeff_count),
+    );
+
+    let intermediate = ntt_c_neg_s_m
+        .iter()
+        .zip(decomposed)
+        .fold(init, |acc, (r, p)| {
+            let p = <NTTPolynomial<F>>::from(p);
+            (acc.0 + &r.0 * &p, acc.1 + &r.1 * p)
+        });
 
     let decompose = rlwe.b().decompose(basis);
     ntt_c_m

@@ -27,10 +27,6 @@ use crate::AlgebraError;
 /// * `ternary_distribution()`: Returns an instance of the ternary distribution type.
 /// * `normal_distribution(mean, std_dev)`: Returns an instance of the normal distribution type, parameterized by the specified mean and standard deviation.
 ///   This method may fail, indicated by returning an `AlgebraError`, if the parameters do not result in a valid distribution.
-///
-/// Implementors of this trait can be used to generate field elements according to the specified distributions,
-/// which is often required for initializing cryptographic protocols, error generation in error-correcting codes,
-/// or any domain where probabilistic sampling is necessary.
 pub trait FieldDistribution: Sized + SampleUniform {
     /// The type of the binary distribution.
     type BinaryDistribution: Distribution<Self>;

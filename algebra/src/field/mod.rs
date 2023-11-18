@@ -27,13 +27,6 @@ use crate::ring::Ring;
 /// The `Field` trait includes division and division assignment operations, including
 /// their reference-based variants. This allows for division of field elements in an
 /// ergonomic manner consistent with Rust's ownership and borrowing principles.
-///
-/// Types implementing `Field` must also provide a method to retrieve the modulus,
-/// which typically defines the size of the finite field.
-///
-/// Implementing this trait enables the use of types in contexts that require field properties,
-/// such as certain cryptographic protocols, error-correcting codes, and other mathematical
-/// applications where division and inverses within a finite set are necessary operations.
 pub trait Field:
     Ring
     + Div<Self, Output = Self>
