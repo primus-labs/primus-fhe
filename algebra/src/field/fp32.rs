@@ -498,10 +498,17 @@ impl NTTField for Fp32 {
 
     #[inline]
     fn decompose_len(basis: Self::Base) -> usize {
+        const fn div_ceil(lhs: u32, rhs: u32) -> u32 {
+            let d = lhs / rhs;
+            let r = lhs % rhs;
+            if r > 0 {
+                d + 1
+            } else {
+                d
+            }
+        }
         debug_assert!(basis.is_power_of_two());
-        Self::barrett_modulus()
-            .bit_count()
-            .div_ceil(basis.trailing_zeros()) as usize
+        div_ceil(Self::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
     }
 
     fn decompose(&self, basis: Self::Base) -> Vec<Self> {
