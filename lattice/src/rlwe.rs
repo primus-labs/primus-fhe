@@ -200,13 +200,6 @@ mod tests {
 
     #[test]
     fn test_rlwe_he() {
-        const P: u32 = Fp32::BARRETT_MODULUS.value();
-        const N: usize = 1024;
-        const T: u32 = 128;
-        let rng = &mut rand::thread_rng();
-
-        let chi = Fp32::normal_distribution(0., 3.2).unwrap();
-
         fn encode(m: u32) -> Fp32 {
             Fp32::new((m as f64 * P as f64 / T as f64).round() as u32)
         }
@@ -215,12 +208,18 @@ mod tests {
             (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
         }
 
+        const P: u32 = Fp32::BARRETT_MODULUS.value();
+        const N: usize = 1024;
+        const T: u32 = 128;
+
+        let rng = &mut rand::thread_rng();
+        let chi = Fp32::normal_distribution(0., 3.2).unwrap();
         let dis = Uniform::new(0, T);
 
         let v0: Vec<u32> = rng.sample_iter(dis).take(N).collect();
         let v1: Vec<u32> = rng.sample_iter(dis).take(N).collect();
 
-        let v_r: Vec<u32> = v0
+        let v_add: Vec<u32> = v0
             .iter()
             .zip(v1.iter())
             .map(|(a, b)| (*a + b) % T)
@@ -231,25 +230,27 @@ mod tests {
 
         let s = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
-        let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-        let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
-        let b = &a * &s + v0 + e;
+        let rlwe0 = {
+            let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+            let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+            let b = &a * &s + v0 + e;
+            RLWE::new(a, b)
+        };
 
-        let rlwe1 = RLWE::new(a, b);
+        let rlwe1 = {
+            let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+            let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+            let b = &a * &s + v1 + e;
+            RLWE::new(a, b)
+        };
 
-        let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-        let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
-        let b = &a * &s + v1 + e;
+        let rlwe_add = rlwe0.add_element_wise(&rlwe1);
 
-        let rlwe2 = RLWE::new(a, b);
-
-        let rlwe_r = rlwe1.add_element_wise(&rlwe2);
-
-        let r = (rlwe_r.b() - rlwe_r.a() * &s)
+        let decrypted_add = (rlwe_add.b() - rlwe_add.a() * &s)
             .into_iter()
             .map(decode)
             .collect::<Vec<u32>>();
 
-        assert_eq!(r, v_r);
+        assert_eq!(decrypted_add, v_add);
     }
 }

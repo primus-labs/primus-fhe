@@ -102,49 +102,54 @@ mod tests {
     #[test]
     fn test_gadget_rlwe() {
         fn min_to_zero(value: Fp32) -> u32 {
-            (value.inner() - 0).min(P - value.inner())
+            value.inner().min(P - value.inner())
+        }
+
+        fn decode(c: Fp32) -> u32 {
+            (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
         }
 
         const P: u32 = Fp32::BARRETT_MODULUS.value();
         const N: usize = 1 << 3;
         const BASE: u32 = 1 << 1;
-        let rng = &mut rand::thread_rng();
+        const T: u32 = 128;
 
+        let rng = &mut rand::thread_rng();
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
-        let encoded_m = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let m = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
         let poly = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
 
-        let poly_mul_encoded_m = &poly * &encoded_m;
+        let poly_mul_m = &poly * &m;
 
         let s = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
         let decompose_len = Fp32::decompose_len(BASE);
 
-        let encoded_m_base_power = (0..decompose_len)
+        let m_base_power = (0..decompose_len)
             .map(|i| {
                 let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
                 let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
-                let b = &a * &s + encoded_m.mul_scalar(BASE.pow(i as u32)) + e;
+                let b = &a * &s + m.mul_scalar(BASE.pow(i as u32)) + e;
 
                 RLWE::new(a, b)
             })
             .collect::<Vec<RLWE<Fp32>>>();
 
-        let bad_rlwe_mul = encoded_m_base_power[0].clone().mul_with_polynomial(&poly);
+        let bad_rlwe_mul = m_base_power[0].clone().mul_with_polynomial(&poly);
         let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
 
-        let gadget_rlwe = GadgetRLWE::new(encoded_m_base_power, BASE);
+        let gadget_rlwe = GadgetRLWE::new(m_base_power, BASE);
 
         let good_rlwe_mul = gadget_rlwe.mul_with_polynomial(&poly);
         let good_mul = good_rlwe_mul.b() - good_rlwe_mul.a() * s;
 
-        let diff: Vec<u32> = (&poly_mul_encoded_m - good_mul)
+        let diff: Vec<u32> = (&poly_mul_m - &good_mul)
             .into_iter()
             .map(min_to_zero)
             .collect();
 
-        let bad_diff: Vec<u32> = (poly_mul_encoded_m - bad_mul)
+        let bad_diff: Vec<u32> = (&poly_mul_m - &bad_mul)
             .into_iter()
             .map(min_to_zero)
             .collect();
@@ -160,5 +165,9 @@ mod tests {
             .sqrt();
 
         assert!(diff_std_dev < bad_diff_std_dev);
+
+        let decrypted: Vec<u32> = good_mul.into_iter().map(decode).collect();
+        let decoded: Vec<u32> = poly_mul_m.into_iter().map(decode).collect();
+        assert_eq!(decrypted, decoded);
     }
 }
