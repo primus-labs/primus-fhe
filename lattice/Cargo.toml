@@ -9,4 +9,5 @@ edition = "2021"
 algebra = { path = "../algebra" }
 
 [dev-dependencies]
+num-traits = "0.2"
 rand = "0.8"

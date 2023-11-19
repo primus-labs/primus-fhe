@@ -69,6 +69,12 @@ impl<F: Field> Polynomial<F> {
     fn push(&mut self, value: F) {
         self.data.push(value)
     }
+
+    /// Multipile `self` with the a scalar.
+    #[inline]
+    pub fn mul_scalar(&self, scalar: F::Scalar) -> Self {
+        Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+    }
 }
 
 impl<F: NTTField> Polynomial<F> {
@@ -442,6 +448,7 @@ impl<F: NTTField> From<&NTTPolynomial<F>> for Polynomial<F> {
 #[cfg(test)]
 mod tests {
     use rand::prelude::*;
+    use rand_distr::Standard;
 
     use crate::field::{BarrettConfig, Fp32};
 
@@ -526,5 +533,42 @@ mod tests {
         }
 
         Polynomial::<F>::new(result)
+    }
+
+    #[test]
+    fn test_poly_decompose() {
+        const N: usize = 1 << 3;
+        const B: u32 = 1 << 3;
+        let rng = &mut thread_rng();
+        let poly: Polynomial<Fp32> = Polynomial::new(Standard.sample_iter(rng).take(N).collect());
+        let decompose = poly.decompose(B);
+        let compose = decompose
+            .into_iter()
+            .enumerate()
+            .fold(Polynomial::zero_with_coeff_count(N), |acc, (i, d)| {
+                acc + d.mul_scalar(B.pow(i as u32))
+            });
+        assert_eq!(compose, poly);
+    }
+
+    #[test]
+    fn test_poly_decompose_mul() {
+        const N: usize = 1 << 3;
+        const B: u32 = 1 << 3;
+        let rng = &mut thread_rng();
+
+        let poly1: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let poly2: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+
+        let mul_result = &poly1 * &poly2;
+
+        let decompose = poly1.decompose(B);
+        let compose_mul_result = decompose
+            .into_iter()
+            .enumerate()
+            .fold(Polynomial::zero_with_coeff_count(N), |acc, (i, d)| {
+                acc + d * poly2.mul_scalar(B.pow(i as u32))
+            });
+        assert_eq!(compose_mul_result, mul_result);
     }
 }

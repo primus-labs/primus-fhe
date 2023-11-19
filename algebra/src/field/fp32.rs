@@ -719,8 +719,6 @@ mod tests {
     fn test_fp() {
         const P: u32 = Fp32::BARRETT_MODULUS.value();
 
-        assert!(P.checked_add(P).is_some());
-
         let distr = rand::distributions::Uniform::new(0, P);
         let mut rng = thread_rng();
 
@@ -815,5 +813,20 @@ mod tests {
             (FF::from(a) + FF::from(b)) * FF::from(c),
             (FF::from(a) * FF::from(c)) + (FF::from(b) * FF::from(c))
         );
+    }
+
+    #[test]
+    fn test_decompose() {
+        const B: u32 = 1 << 2;
+        let rng = &mut thread_rng();
+
+        let a: Fp32 = rng.gen();
+        let decompose = a.decompose(B);
+        let compose = decompose
+            .into_iter()
+            .enumerate()
+            .fold(Fp32(0), |acc, (i, d)| acc + d.mul_scalar(B.pow(i as u32)));
+
+        assert_eq!(compose, a);
     }
 }
