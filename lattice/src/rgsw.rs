@@ -150,6 +150,7 @@ mod tests {
         //     value.inner().min(P - value.inner())
         // }
 
+        #[inline]
         fn decode(c: Fp32) -> u32 {
             (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
         }
@@ -231,6 +232,7 @@ mod tests {
 
     #[test]
     fn test_rgsw_mul_rgsw() {
+        #[inline]
         fn decode(c: Fp32) -> u32 {
             (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
         }

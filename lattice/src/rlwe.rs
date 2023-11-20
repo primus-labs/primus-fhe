@@ -200,10 +200,12 @@ mod tests {
 
     #[test]
     fn test_rlwe_he() {
+        #[inline]
         fn encode(m: u32) -> Fp32 {
             Fp32::new((m as f64 * P as f64 / T as f64).round() as u32)
         }
 
+        #[inline]
         fn decode(c: Fp32) -> u32 {
             (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
         }

@@ -356,12 +356,14 @@ impl<F: NTTField> Mul<&Polynomial<F>> for &NTTPolynomial<F> {
 }
 
 impl<F: NTTField> MulAssign<Polynomial<F>> for NTTPolynomial<F> {
+    #[inline]
     fn mul_assign(&mut self, rhs: Polynomial<F>) {
         *self = Mul::mul(&*self, rhs);
     }
 }
 
 impl<F: NTTField> MulAssign<&Polynomial<F>> for NTTPolynomial<F> {
+    #[inline]
     fn mul_assign(&mut self, rhs: &Polynomial<F>) {
         *self = Mul::mul(&*self, rhs.clone());
     }

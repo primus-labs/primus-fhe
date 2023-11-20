@@ -66,6 +66,7 @@ impl<F: Field> Polynomial<F> {
     }
 
     /// Appends an element to the back of a [`Polynomial<F>`].
+    #[inline]
     fn push(&mut self, value: F) {
         self.data.push(value)
     }
@@ -335,6 +336,7 @@ impl<F: NTTField> Mul<Polynomial<F>> for &Polynomial<F> {
 impl<F: NTTField> Mul<&Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
+    #[inline]
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
         Mul::mul(self.clone(), rhs.clone())
     }
@@ -380,6 +382,7 @@ impl<F: NTTField> Mul<&NTTPolynomial<F>> for Polynomial<F> {
 impl<F: NTTField> Mul<NTTPolynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
+    #[inline]
     fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
         Mul::mul(self.clone(), &rhs)
     }
@@ -388,6 +391,7 @@ impl<F: NTTField> Mul<NTTPolynomial<F>> for &Polynomial<F> {
 impl<F: NTTField> Mul<&NTTPolynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
+    #[inline]
     fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         Mul::mul(self.clone(), rhs)
     }

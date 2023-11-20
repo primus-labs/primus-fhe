@@ -68,7 +68,6 @@ impl Fp32 {
 }
 
 impl From<u32> for Fp32 {
-    #[inline]
     /// Converts an unsigned 32-bit integer into a [`Fp32`] value.
     ///
     /// # Arguments
@@ -78,6 +77,7 @@ impl From<u32> for Fp32 {
     /// # Returns
     ///
     /// The converted [`Fp32`] value.
+    #[inline]
     fn from(value: u32) -> Self {
         Self(value)
     }
@@ -131,6 +131,7 @@ impl BinaryFp32 {
 }
 
 impl Default for BinaryFp32 {
+    #[inline]
     fn default() -> Self {
         Self::new()
     }
@@ -159,6 +160,7 @@ pub struct TernaryFp32 {
 
 impl TernaryFp32 {
     /// Creates a new [`TernaryFp32`].
+    #[inline]
     pub fn new() -> Self {
         Self {
             inner: WeightedIndex::new([1, 2, 1]).unwrap(),
@@ -167,6 +169,7 @@ impl TernaryFp32 {
 }
 
 impl Default for TernaryFp32 {
+    #[inline]
     fn default() -> Self {
         Self::new()
     }

@@ -142,14 +142,17 @@ mod tests {
 
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
+        #[inline]
         fn encode(m: u32) -> Fp32 {
             Fp32::new((m as f64 * P as f64 / T as f64).round() as u32)
         }
 
+        #[inline]
         fn decode(c: Fp32) -> u32 {
             (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
         }
 
+        #[inline]
         fn dot_product<R: Ring>(u: &[R], v: &[R]) -> R {
             u.iter()
                 .zip(v.iter())

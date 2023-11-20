@@ -101,10 +101,12 @@ mod tests {
 
     #[test]
     fn test_gadget_rlwe() {
+        #[inline]
         fn min_to_zero(value: Fp32) -> u32 {
             value.inner().min(P - value.inner())
         }
 
+        #[inline]
         fn decode(c: Fp32) -> u32 {
             (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
         }
