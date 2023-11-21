@@ -13,7 +13,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut r = thread_rng();
     let data: Vec<_> = Standard.sample_iter(&mut r).take(n).collect();
 
-    let poly = Polynomial::<Fp32>::new(data.clone());
+    let poly = Polynomial::<Fp32>::new(&data);
 
     // let ntt_table = Fp32::get_ntt_table(log_n).unwrap();
 

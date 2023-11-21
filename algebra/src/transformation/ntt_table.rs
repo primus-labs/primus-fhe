@@ -186,7 +186,7 @@ where
             *j = NTTField::mul_root(&(u - v), scaled_r);
         }
 
-        Polynomial::<F>::new(poly.data())
+        Polynomial::<F>::new(&poly.data())
     }
 
     #[inline]

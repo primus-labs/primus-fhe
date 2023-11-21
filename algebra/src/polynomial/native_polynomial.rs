@@ -39,8 +39,10 @@ pub struct Polynomial<F: Field> {
 impl<F: Field> Polynomial<F> {
     /// Creates a new [`Polynomial<F>`].
     #[inline]
-    pub fn new(poly: Vec<F>) -> Self {
-        Self { data: poly }
+    pub fn new(poly: &[F]) -> Self {
+        Self {
+            data: poly.to_vec(),
+        }
     }
 
     /// Drop self, and return the data
@@ -74,7 +76,12 @@ impl<F: Field> Polynomial<F> {
     /// Multipile `self` with the a scalar.
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Scalar) -> Self {
-        Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+        Self::new(
+            &(self
+                .iter()
+                .map(|v| v.mul_scalar(scalar))
+                .collect::<Vec<F>>()),
+        )
     }
 }
 
@@ -236,8 +243,8 @@ impl<F: Field> Add<&Polynomial<F>> for &Polynomial<F> {
     #[inline]
     fn add(self, rhs: &Polynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
-        Polynomial::<F>::new(poly)
+        let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
+        Polynomial::<F>::new(&poly)
     }
 }
 
@@ -294,8 +301,8 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     #[inline]
     fn sub(self, rhs: &Polynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let poly = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
-        Polynomial::<F>::new(poly)
+        let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
+        Polynomial::<F>::new(&poly)
     }
 }
 
@@ -464,16 +471,16 @@ mod tests {
         const P: u32 = Fp32::BARRETT_MODULUS.value();
         type PolyFp = Polynomial<Fp>;
 
-        let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);
-        let b = PolyFp::new(vec![Fp::new(P - 1), Fp::new(1)]);
+        let a = PolyFp::new(&vec![Fp::new(1), Fp::new(P - 1)]);
+        let b = PolyFp::new(&vec![Fp::new(P - 1), Fp::new(1)]);
 
-        let add_result = PolyFp::new(vec![Fp::new(0), Fp::new(0)]);
+        let add_result = PolyFp::new(&vec![Fp::new(0), Fp::new(0)]);
         assert_eq!(&a + &b, add_result);
         assert_eq!(&a + b.clone(), add_result);
         assert_eq!(a.clone() + &b, add_result);
         assert_eq!(a.clone() + b.clone(), add_result);
 
-        let sub_result = PolyFp::new(vec![Fp::new(2), Fp::new(P - 2)]);
+        let sub_result = PolyFp::new(&vec![Fp::new(2), Fp::new(P - 2)]);
         assert_eq!(&a - &b, sub_result);
         assert_eq!(&a - b.clone(), sub_result);
         assert_eq!(a.clone() - &b, sub_result);
@@ -495,20 +502,20 @@ mod tests {
         let distr = rand::distributions::Uniform::new(0, p);
         let mut rng = thread_rng();
 
-        let coeffs1 = distr
+        let coeffs1: Vec<Fp32> = distr
             .sample_iter(&mut rng)
             .take(1 << log_n)
             .map(Fp32::new)
             .collect();
 
-        let coeffs2 = distr
+        let coeffs2: Vec<Fp32> = distr
             .sample_iter(&mut rng)
             .take(1 << log_n)
             .map(Fp32::new)
             .collect();
 
-        let a = PolyFp::new(coeffs1);
-        let b = PolyFp::new(coeffs2);
+        let a = PolyFp::new(&coeffs1);
+        let b = PolyFp::new(&coeffs2);
 
         let mul_result = simple_mul(&a, &b);
         assert_eq!(a.mul(&b), mul_result);
@@ -536,7 +543,7 @@ mod tests {
             }
         }
 
-        Polynomial::<F>::new(result)
+        Polynomial::<F>::new(&result)
     }
 
     #[test]
@@ -544,7 +551,8 @@ mod tests {
         const N: usize = 1 << 3;
         const B: u32 = 1 << 3;
         let rng = &mut thread_rng();
-        let poly: Polynomial<Fp32> = Polynomial::new(Standard.sample_iter(rng).take(N).collect());
+        let poly: Polynomial<Fp32> =
+            Polynomial::new(&Standard.sample_iter(rng).take(N).collect::<Vec<Fp32>>());
         let decompose = poly.decompose(B);
         let compose = decompose
             .into_iter()
@@ -561,8 +569,10 @@ mod tests {
         const B: u32 = 1 << 3;
         let rng = &mut thread_rng();
 
-        let poly1: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let poly2: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let poly1: Polynomial<Fp32> =
+            Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let poly2: Polynomial<Fp32> =
+            Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
         let mul_result = &poly1 * &poly2;
 

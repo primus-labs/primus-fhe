@@ -119,19 +119,19 @@ mod tests {
         let rng = &mut rand::thread_rng();
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
-        let m = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let poly = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let m = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let poly = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
         let poly_mul_m = &poly * &m;
 
-        let s = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let s = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
         let decompose_len = Fp32::decompose_len(BASE);
 
         let m_base_power = (0..decompose_len)
             .map(|i| {
-                let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+                let a = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+                let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                 let b = &a * &s + m.mul_scalar(BASE.pow(i as u32)) + e;
 
                 RLWE::new(a, b)

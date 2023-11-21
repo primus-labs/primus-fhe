@@ -160,12 +160,12 @@ mod tests {
         let ternary = Fp32::ternary_distribution();
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
-        let m0 = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let m1 = Polynomial::new(rng.sample_iter(ternary).take(N).collect());
+        let m0 = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let m1 = Polynomial::new(&rng.sample_iter(ternary).take(N).collect::<Vec<Fp32>>());
 
         let m0m1 = &m0 * &m1;
 
-        let s = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let s = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
         let decompose_len = Fp32::decompose_len(BASE);
 
@@ -173,8 +173,8 @@ mod tests {
             let m1_base_power = (0..decompose_len)
                 .map(|i| {
                     let a =
-                        Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                    let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+                        Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+                    let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + m1.mul_scalar(BASE.pow(i as u32)) + e;
 
                     RLWE::new(a, b)
@@ -184,8 +184,8 @@ mod tests {
             let neg_sm1_base_power = (0..decompose_len)
                 .map(|i| {
                     let a =
-                        Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                    let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+                        Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+                    let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + e;
 
                     RLWE::new(a + m1.mul_scalar(BASE.pow(i as u32)), b)
@@ -199,8 +199,8 @@ mod tests {
         };
 
         let (rlwe, _e) = {
-            let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-            let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+            let a = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+            let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
             let b = &a * &s + m0 + &e;
 
             (RLWE::new(a, b), e)
@@ -230,12 +230,12 @@ mod tests {
         let ternary = Fp32::ternary_distribution();
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
-        let m0 = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let m1 = Polynomial::new(rng.sample_iter(ternary).take(N).collect());
+        let m0 = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let m1 = Polynomial::new(&rng.sample_iter(ternary).take(N).collect::<Vec<Fp32>>());
 
         let m0m1 = &m0 * &m1;
 
-        let s = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let s = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
         let decompose_len = Fp32::decompose_len(BASE);
 
@@ -243,8 +243,8 @@ mod tests {
             let m1_base_power = (0..decompose_len)
                 .map(|i| {
                     let a =
-                        Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                    let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+                        Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+                    let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + m1.mul_scalar(BASE.pow(i as u32)) + e;
 
                     RLWE::new(a, b)
@@ -254,8 +254,8 @@ mod tests {
             let neg_sm1_base_power = (0..decompose_len)
                 .map(|i| {
                     let a =
-                        Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                    let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+                        Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+                    let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + e;
 
                     RLWE::new(a + m1.mul_scalar(BASE.pow(i as u32)), b)
@@ -272,8 +272,8 @@ mod tests {
             let m0_base_power = (0..decompose_len)
                 .map(|i| {
                     let a =
-                        Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                    let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+                        Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+                    let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + m0.mul_scalar(BASE.pow(i as u32)) + e;
 
                     RLWE::new(a, b)
@@ -283,8 +283,8 @@ mod tests {
             let neg_sm0_base_power = (0..decompose_len)
                 .map(|i| {
                     let a =
-                        Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                    let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
+                        Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+                    let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + e;
 
                     RLWE::new(a + m0.mul_scalar(BASE.pow(i as u32)), b)
