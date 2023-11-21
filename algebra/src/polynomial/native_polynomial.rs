@@ -474,7 +474,7 @@ mod tests {
         let a = PolyFp::new(&[Fp::new(1), Fp::new(P - 1)]);
         let b = PolyFp::new(&[Fp::new(P - 1), Fp::new(1)]);
 
-        let add_result = PolyFp::new(&vec![Fp::new(0), Fp::new(0)]);
+        let add_result = PolyFp::new(&[Fp::new(0), Fp::new(0)]);
         assert_eq!(&a + &b, add_result);
         assert_eq!(&a + b.clone(), add_result);
         assert_eq!(a.clone() + &b, add_result);
