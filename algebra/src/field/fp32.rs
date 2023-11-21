@@ -3,11 +3,16 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 use std::sync::{Arc, Mutex};
 
 use num_traits::{Inv, One, Pow, Zero};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
+use rand::distributions::uniform::{SampleUniform, UniformInt, UniformSampler};
+use rand::distributions::{Distribution, Standard, Uniform};
 use rand::{thread_rng, Rng};
+use rand_distr::{Bernoulli, Normal, WeightedIndex};
 
+use crate::ring::Ring;
+use crate::AlgebraError;
 use crate::{
-    field::{prime_fields::MulFactor, Field, NTTField, PrimeField},
+    field::{prime_fields::MulFactor, Field, FieldDistribution, NTTField, PrimeField},
     modulo_traits::{
         AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo,
         MulModuloAssign, NegModulo, PowModulo, SubModulo, SubModuloAssign,
@@ -54,9 +59,24 @@ impl Fp32 {
     pub fn new(value: u32) -> Self {
         Self(value)
     }
+
+    /// Return inner value
+    #[inline]
+    pub fn inner(self) -> u32 {
+        self.0
+    }
 }
 
 impl From<u32> for Fp32 {
+    /// Converts an unsigned 32-bit integer into a [`Fp32`] value.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The unsigned 32-bit integer to convert.
+    ///
+    /// # Returns
+    ///
+    /// The converted [`Fp32`] value.
     #[inline]
     fn from(value: u32) -> Self {
         Self(value)
@@ -66,19 +86,216 @@ impl From<u32> for Fp32 {
 impl Zero for Fp32 {
     #[inline]
     fn zero() -> Self {
-        Self(Zero::zero())
+        Self(0)
     }
 
     #[inline]
     fn is_zero(&self) -> bool {
-        Zero::is_zero(&self.0)
+        0 == self.0
     }
 }
 
 impl One for Fp32 {
     #[inline]
     fn one() -> Self {
-        Self(One::one())
+        Self(1)
+    }
+}
+
+static STANDARD_FP32: Lazy<Uniform<Fp32>> =
+    Lazy::new(|| Uniform::new_inclusive(Fp32(0), Fp32(P - 1)));
+
+impl Distribution<Fp32> for Standard {
+    #[inline]
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        STANDARD_FP32.sample(rng)
+    }
+}
+
+/// The binary distribution for [`Fp32`].
+///
+/// prob\[1] = prob\[0] = 0.5
+#[derive(Clone, Copy, Debug)]
+pub struct BinaryFp32 {
+    inner: Bernoulli,
+}
+
+impl BinaryFp32 {
+    /// Creates a new [`BinaryFp32`].
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            inner: Bernoulli::new(0.5).unwrap(),
+        }
+    }
+}
+
+impl Default for BinaryFp32 {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Distribution<Fp32> for BinaryFp32 {
+    #[inline]
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        if self.inner.sample(rng) {
+            Fp32(1)
+        } else {
+            Fp32(0)
+        }
+    }
+}
+
+/// The ternary distribution for [`Fp32`].
+///
+/// prob\[1] = prob\[-1] = 0.25
+///
+/// prob\[0] = 0.5
+#[derive(Clone, Debug)]
+pub struct TernaryFp32 {
+    inner: WeightedIndex<usize>,
+}
+
+impl TernaryFp32 {
+    /// Creates a new [`TernaryFp32`].
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            inner: WeightedIndex::new([1, 2, 1]).unwrap(),
+        }
+    }
+}
+
+impl Default for TernaryFp32 {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Distribution<Fp32> for TernaryFp32 {
+    #[inline]
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        const VALUES: [Fp32; 3] = [Fp32(P - 1), Fp32(0), Fp32(1)];
+        VALUES[self.inner.sample(rng)]
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct UniformFp32(UniformInt<u32>);
+
+impl UniformSampler for UniformFp32 {
+    type X = Fp32;
+
+    #[inline]
+    fn new<B1, B2>(low: B1, high: B2) -> Self
+    where
+        B1: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+        B2: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+    {
+        UniformFp32(UniformInt::<u32>::new_inclusive(
+            low.borrow().0,
+            high.borrow().0 - 1,
+        ))
+    }
+
+    #[inline]
+    fn new_inclusive<B1, B2>(low: B1, high: B2) -> Self
+    where
+        B1: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+        B2: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+    {
+        let high = if high.borrow().0 >= P - 1 {
+            P - 1
+        } else {
+            high.borrow().0
+        };
+        UniformFp32(UniformInt::<u32>::new_inclusive(low.borrow().0, high))
+    }
+
+    #[inline]
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Self::X {
+        Fp32(self.0.sample(rng))
+    }
+}
+
+impl SampleUniform for Fp32 {
+    type Sampler = UniformFp32;
+}
+
+/// The normal distribution `N(mean, std_dev**2)` for [`Fp32`].
+#[derive(Clone, Copy, Debug)]
+pub struct NormalFp32 {
+    inner: Normal<f64>,
+}
+
+impl NormalFp32 {
+    /// Construct, from mean and standard deviation
+    ///
+    /// Parameters:
+    ///
+    /// -   mean (`μ`, unrestricted)
+    /// -   standard deviation (`σ`, must be finite)
+    #[inline]
+    pub fn new(mean: f64, std_dev: f64) -> Result<NormalFp32, AlgebraError> {
+        match Normal::new(mean, std_dev) {
+            Ok(inner) => Ok(NormalFp32 { inner }),
+            Err(_) => Err(AlgebraError::DistributionError),
+        }
+    }
+
+    /// Returns the mean (`μ`) of the distribution.
+    #[inline]
+    pub fn mean(&self) -> f64 {
+        self.inner.mean()
+    }
+
+    /// Returns the standard deviation (`σ`) of the distribution.
+    #[inline]
+    pub fn std_dev(&self) -> f64 {
+        self.inner.std_dev()
+    }
+}
+
+impl Distribution<Fp32> for NormalFp32 {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Fp32 {
+        const FLOAT_P: f64 = P as f64;
+        let mut value = self.inner.sample(rng);
+        while value < 0. {
+            value += FLOAT_P;
+        }
+        while value >= FLOAT_P {
+            value -= FLOAT_P;
+        }
+        Fp32(value as u32)
+    }
+}
+
+impl FieldDistribution for Fp32 {
+    type BinaryDistribution = BinaryFp32;
+
+    type TernaryDistribution = TernaryFp32;
+
+    type NormalDistribution = NormalFp32;
+
+    #[inline]
+    fn binary_distribution() -> Self::BinaryDistribution {
+        BinaryFp32::new()
+    }
+
+    #[inline]
+    fn ternary_distribution() -> Self::TernaryDistribution {
+        TernaryFp32::new()
+    }
+
+    #[inline]
+    fn normal_distribution(
+        mean: f64,
+        std_dev: f64,
+    ) -> Result<Self::NormalDistribution, AlgebraError> {
+        NormalFp32::new(mean, std_dev)
     }
 }
 
@@ -228,23 +445,35 @@ impl Inv for Fp32 {
     }
 }
 
-impl Pow<<Self as Field>::Order> for Fp32 {
+impl Pow<<Self as Ring>::Order> for Fp32 {
     type Output = Self;
 
     #[inline]
-    fn pow(self, rhs: <Self as Field>::Order) -> Self::Output {
+    fn pow(self, rhs: <Self as Ring>::Order) -> Self::Output {
         Self(self.0.pow_reduce(rhs, &Self::BARRETT_MODULUS))
     }
 }
 
-impl Field for Fp32 {
+impl Ring for Fp32 {
+    type Scalar = u32;
+
     type Order = u32;
-    type Modulus = u32;
+
+    type Base = u32;
 
     #[inline]
     fn order() -> Self::Order {
         P
     }
+
+    #[inline]
+    fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
+        Self(self.0.mul_reduce(scalar, &Self::BARRETT_MODULUS))
+    }
+}
+
+impl Field for Fp32 {
+    type Modulus = u32;
 
     #[inline]
     fn modulus() -> Self::Modulus {
@@ -269,6 +498,39 @@ impl NTTField for Fp32 {
     type Root = MulFactor<Self>;
 
     type Degree = u32;
+
+    #[inline]
+    fn decompose_len(basis: Self::Base) -> usize {
+        const fn div_ceil(lhs: u32, rhs: u32) -> u32 {
+            let d = lhs / rhs;
+            let r = lhs % rhs;
+            if r > 0 {
+                d + 1
+            } else {
+                d
+            }
+        }
+        debug_assert!(basis.is_power_of_two());
+        div_ceil(Self::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
+    }
+
+    fn decompose(&self, basis: Self::Base) -> Vec<Self> {
+        let mut temp = self.0;
+        let bits = basis.trailing_zeros();
+
+        let len = Self::decompose_len(basis);
+        let mask = u32::MAX >> (u32::BITS - bits);
+        let mut ret: Vec<Self> = Vec::with_capacity(len);
+
+        while !temp.is_zero() {
+            ret.push(Self(temp & mask));
+            temp >>= bits;
+        }
+
+        ret.resize(len, Fp32(0));
+
+        ret
+    }
 
     #[inline]
     fn from_root(root: Self::Root) -> Self {
@@ -331,12 +593,12 @@ impl NTTField for Fp32 {
         }
 
         let mut rng = thread_rng();
-        let distr = rand::distributions::Uniform::new_inclusive(2, P - 1);
+        let distr = rand::distributions::Uniform::new_inclusive(Self(2), Self(P - 1));
 
         let mut w = Zero::zero();
 
         if (0..100).any(|_| {
-            w = Self(rng.sample(distr)).pow(quotient);
+            w = rng.sample(distr).pow(quotient);
             Self::is_primitive_root(w, degree)
         }) {
             Ok(w)
@@ -460,8 +722,6 @@ mod tests {
     fn test_fp() {
         const P: u32 = Fp32::BARRETT_MODULUS.value();
 
-        assert!(P.checked_add(P).is_some());
-
         let distr = rand::distributions::Uniform::new(0, P);
         let mut rng = thread_rng();
 
@@ -523,5 +783,53 @@ mod tests {
         let a_inv = a.pow_reduce(P - 2, &Modulus::<u32>::new(P));
         assert_eq!(FF::from(a).inv(), FF::from(a_inv));
         assert_eq!(FF::from(a) * FF::from(a_inv), One::one());
+
+        // associative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (FF::from(a) + FF::from(b)) + FF::from(c),
+            FF::from(a) + (FF::from(b) + FF::from(c))
+        );
+        assert_eq!(
+            (FF::from(a) * FF::from(b)) * FF::from(c),
+            FF::from(a) * (FF::from(b) * FF::from(c))
+        );
+
+        // commutative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        assert_eq!(FF::from(a) + FF::from(b), FF::from(b) + FF::from(a));
+        assert_eq!(FF::from(a) * FF::from(b), FF::from(b) * FF::from(a));
+
+        // identity
+        let a = rng.sample(distr);
+        assert_eq!(FF::from(a) + FF::from(0), FF::from(a));
+        assert_eq!(FF::from(a) * FF::from(1), FF::from(a));
+
+        // distribute
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (FF::from(a) + FF::from(b)) * FF::from(c),
+            (FF::from(a) * FF::from(c)) + (FF::from(b) * FF::from(c))
+        );
+    }
+
+    #[test]
+    fn test_decompose() {
+        const B: u32 = 1 << 2;
+        let rng = &mut thread_rng();
+
+        let a: Fp32 = rng.gen();
+        let decompose = a.decompose(B);
+        let compose = decompose
+            .into_iter()
+            .enumerate()
+            .fold(Fp32(0), |acc, (i, d)| acc + d.mul_scalar(B.pow(i as u32)));
+
+        assert_eq!(compose, a);
     }
 }

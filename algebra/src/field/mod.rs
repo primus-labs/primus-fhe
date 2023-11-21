@@ -1,96 +1,45 @@
-//! This place defimes some concrete implement of the algebra.
+//! This place defines some concrete implement of field of the algebra.
 
-use std::fmt::{Debug, Display};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Div, DivAssign};
 
-use num_traits::{Inv, One, Pow, Zero};
+use num_traits::Inv;
 
+mod distribution;
 mod fp32;
 pub mod ntt_fields;
 pub mod prime_fields;
 
-pub use fp32::{BarrettConfig, Fp32};
+pub use distribution::FieldDistribution;
+pub use fp32::{BarrettConfig, Fp32, NormalFp32, TernaryFp32};
 pub use ntt_fields::NTTField;
 pub use prime_fields::PrimeField;
 
-/// A simple math field trait
+use crate::ring::Ring;
+
+/// A trait that extends the algebraic structure of a `Ring` to a `Field`.
+///
+/// Fields are algebraic structures with two operations: addition and multiplication,
+/// where every nonzero element has a multiplicative inverse. This trait builds upon
+/// the `Ring` trait, adding division and multiplicative inverse operations, thereby
+/// extending the ring into a field. In a field, division by any non-zero element is
+/// possible and every element except zero has an inverse.
+///
+/// The `Field` trait includes division and division assignment operations, including
+/// their reference-based variants. This allows for division of field elements in an
+/// ergonomic manner consistent with Rust's ownership and borrowing principles.
 pub trait Field:
-    Sized
-    + Copy
-    + Clone
-    + Debug
-    + Display
-    + Default
-    + Eq
-    + PartialEq
-    + Ord
-    + PartialOrd
-    + Zero
-    + One
-    + Add<Self, Output = Self>
-    + Sub<Self, Output = Self>
-    + Mul<Self, Output = Self>
+    Ring
     + Div<Self, Output = Self>
-    + AddAssign<Self>
-    + SubAssign<Self>
-    + MulAssign<Self>
     + DivAssign<Self>
-    + for<'a> Add<&'a Self, Output = Self>
-    + for<'a> Sub<&'a Self, Output = Self>
-    + for<'a> Mul<&'a Self, Output = Self>
     + for<'a> Div<&'a Self, Output = Self>
-    + for<'a> AddAssign<&'a Self>
-    + for<'a> SubAssign<&'a Self>
-    + for<'a> MulAssign<&'a Self>
     + for<'a> DivAssign<&'a Self>
-    + Neg<Output = Self>
     + Inv<Output = Self>
-    + Pow<Self::Order, Output = Self>
 {
-    /// The type of the field's order.
-    type Order;
+    /// The type of the modulus.
+    type Modulus: Clone;
 
-    /// The type of the field's modulus
-    type Modulus;
-
-    /// Returns the order of the field.
-    fn order() -> Self::Order;
-
-    /// Returns the modulus of the field.
+    /// Returns the modulus.
     fn modulus() -> Self::Modulus;
-
-    /// Returns `self + self`.
-    #[inline]
-    fn double(&self) -> Self {
-        *self + self
-    }
-
-    /// Doubles `self` in place.
-    #[inline]
-    fn double_in_place(&mut self) -> &mut Self {
-        *self += *self;
-        self
-    }
-
-    /// Negates `self` in place.
-    #[inline]
-    fn neg_in_place(&mut self) -> &mut Self {
-        *self = -*self;
-        self
-    }
-
-    /// Returns `self * self`.
-    #[inline]
-    fn square(&self) -> Self {
-        *self * self
-    }
-
-    /// Squares `self` in place.
-    #[inline]
-    fn square_in_place(&mut self) -> &mut Self {
-        *self *= *self;
-        self
-    }
 
     /// Computes the multiplicative inverse of `self` if `self` is nonzero.
     #[inline]

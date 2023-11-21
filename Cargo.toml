@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["algebra"]
+members = ["algebra", "lattice"]
 
 resolver = "2"
 
