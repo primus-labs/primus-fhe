@@ -27,6 +27,12 @@ pub struct GadgetRLWE<F: NTTField> {
     basis: F::Base,
 }
 
+impl<F: NTTField> From<(Vec<RLWE<F>>, F::Base)> for GadgetRLWE<F> {
+    fn from((data, basis): (Vec<RLWE<F>>, F::Base)) -> Self {
+        Self { data, basis }
+    }
+}
+
 impl<F: NTTField> GadgetRLWE<F> {
     /// Creates a new [`GadgetRLWE<F>`].
     #[inline]
