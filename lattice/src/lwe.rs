@@ -35,10 +35,7 @@ impl<R: Ring> LWE<R> {
     /// Creates a new [`LWE<R>`].
     #[inline]
     pub fn new(a: &[R], b: R) -> Self {
-        Self {
-            a: a.to_vec(),
-            b,
-        }
+        Self { a: a.to_vec(), b }
     }
 
     /// Returns a reference to the `a` of this [`LWE<R>`].
