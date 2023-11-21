@@ -471,8 +471,8 @@ mod tests {
         const P: u32 = Fp32::BARRETT_MODULUS.value();
         type PolyFp = Polynomial<Fp>;
 
-        let a = PolyFp::new(&vec![Fp::new(1), Fp::new(P - 1)]);
-        let b = PolyFp::new(&vec![Fp::new(P - 1), Fp::new(1)]);
+        let a = PolyFp::new(&[Fp::new(1), Fp::new(P - 1)]);
+        let b = PolyFp::new(&[Fp::new(P - 1), Fp::new(1)]);
 
         let add_result = PolyFp::new(&vec![Fp::new(0), Fp::new(0)]);
         assert_eq!(&a + &b, add_result);
@@ -480,7 +480,7 @@ mod tests {
         assert_eq!(a.clone() + &b, add_result);
         assert_eq!(a.clone() + b.clone(), add_result);
 
-        let sub_result = PolyFp::new(&vec![Fp::new(2), Fp::new(P - 2)]);
+        let sub_result = PolyFp::new(&[Fp::new(2), Fp::new(P - 2)]);
         assert_eq!(&a - &b, sub_result);
         assert_eq!(&a - b.clone(), sub_result);
         assert_eq!(a.clone() - &b, sub_result);
