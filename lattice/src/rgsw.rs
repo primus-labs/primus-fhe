@@ -146,10 +146,6 @@ mod tests {
 
     #[test]
     fn test_rgsw_mul_rlwe() {
-        // fn min_to_zero(value: Fp32) -> u32 {
-        //     value.inner().min(P - value.inner())
-        // }
-
         #[inline]
         fn decode(c: Fp32) -> u32 {
             (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
@@ -212,18 +208,6 @@ mod tests {
 
         let rlwe_mul = rgsw.mul_with_rlwe(&rlwe);
         let decrypt_mul = rlwe_mul.b() - rlwe_mul.a() * &s;
-
-        // let diff: Vec<u32> = (&m0m1 + e * m1 - &decrypt_mul)
-        //     .into_iter()
-        //     .map(min_to_zero)
-        //     .collect();
-        // println!("{:?}", diff);
-
-        // let diff: Vec<u32> = (&m0m1 - &decrypt_mul)
-        //     .into_iter()
-        //     .map(min_to_zero)
-        //     .collect();
-        // println!("{:?}", diff);
 
         let decoded_m0m1: Vec<u32> = m0m1.into_iter().map(decode).collect();
         let decoded_decrypt: Vec<u32> = decrypt_mul.into_iter().map(decode).collect();
