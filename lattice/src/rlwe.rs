@@ -166,11 +166,11 @@ impl<F: NTTField> RLWE<F> {
 
     /// Extract an LWE sample from RLWE.
     #[inline]
-    pub fn extract_lwe(self) -> LWE<F> {
-        let mut a = self.a.data();
+    pub fn extract_lwe(&self) -> LWE<F> {
+        let mut a = self.a().clone().data();
         a[1..].iter_mut().for_each(|x| *x = -(*x));
         a[1..].reverse();
-        LWE::<F>::from((a, self.b.data()[0]))
+        LWE::<F>::from((a, self.b().clone().data()[0]))
     }
 }
 
