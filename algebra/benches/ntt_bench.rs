@@ -24,7 +24,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    let poly = NTTPolynomial::<Fp32>::new(data);
+    let poly = NTTPolynomial::<Fp32>::new(&data);
 
     c.bench_function(&format!("intt {}", n), |b| {
         b.iter(|| {

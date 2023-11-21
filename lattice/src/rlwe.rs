@@ -68,8 +68,11 @@ impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
 impl<F: NTTField> RLWE<F> {
     /// Creates a new [`RLWE<F>`].
     #[inline]
-    pub fn new(a: Polynomial<F>, b: Polynomial<F>) -> Self {
-        Self { a, b }
+    pub fn new(a: &Polynomial<F>, b: &Polynomial<F>) -> Self {
+        Self {
+            a: a.clone(),
+            b: b.clone(),
+        }
     }
 
     /// Creates a new [`RLWE<F>`] that is initialized to zero.
@@ -173,12 +176,12 @@ impl<F: NTTField> RLWE<F> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
     use rand::{
         distributions::{Standard, Uniform},
         prelude::*,
     };
-    use super::*;
 
     #[test]
     fn test_rlwe() {
@@ -200,9 +203,9 @@ mod tests {
             Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
         let b3: Polynomial<Fp32> = &b1 * &r;
 
-        let rlwe1 = RLWE::new(a1, b1);
-        let rlwe2 = RLWE::new(a2, b2);
-        let rlwe3 = RLWE::new(a3, b3);
+        let rlwe1 = RLWE::new(&a1, &b1);
+        let rlwe2 = RLWE::new(&a2, &b2);
+        let rlwe3 = RLWE::new(&a3, &b3);
         assert_eq!(
             rlwe1
                 .clone()
@@ -251,14 +254,14 @@ mod tests {
             let a = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
             let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
             let b = &a * &s + v0 + e;
-            RLWE::new(a, b)
+            RLWE::new(&a, &b)
         };
 
         let rlwe1 = {
             let a = Polynomial::new(&rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
             let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
             let b = &a * &s + v1 + e;
-            RLWE::new(a, b)
+            RLWE::new(&a, &b)
         };
 
         let rlwe_add = rlwe0.add_element_wise(&rlwe1);
@@ -283,7 +286,7 @@ mod tests {
 
         let b = &a * &s;
 
-        let rlwe_sample = RLWE::new(a, b);
+        let rlwe_sample = RLWE::new(&a, &b);
         let lwe_sample = rlwe_sample.extract_lwe();
 
         let inner_a = lwe_sample

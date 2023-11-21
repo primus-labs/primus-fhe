@@ -137,7 +137,7 @@ where
             }
         }
 
-        NTTPolynomial::<F>::new(poly.data())
+        NTTPolynomial::<F>::new(&poly.data())
     }
 
     #[inline]

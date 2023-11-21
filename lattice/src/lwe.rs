@@ -34,8 +34,11 @@ impl<R: Ring> From<(Vec<R>, R)> for LWE<R> {
 impl<R: Ring> LWE<R> {
     /// Creates a new [`LWE<R>`].
     #[inline]
-    pub fn new(a: Vec<R>, b: R) -> Self {
-        Self { a, b }
+    pub fn new(a: &[R], b: &R) -> Self {
+        Self {
+            a: a.to_vec(),
+            b: *b,
+        }
     }
 
     /// Returns a reference to the `a` of this [`LWE<R>`].
@@ -126,9 +129,9 @@ mod tests {
         let b2: Fp32 = rng.gen();
         let b3: Fp32 = b1 + b2;
 
-        let lwe1 = LWE::new(a1, b1);
-        let lwe2 = LWE::new(a2, b2);
-        let lwe3 = LWE::new(a3, b3);
+        let lwe1 = LWE::new(&a1, &b1);
+        let lwe2 = LWE::new(&a2, &b2);
+        let lwe3 = LWE::new(&a3, &b3);
         assert_eq!(lwe1.clone().add_component_wise(&lwe2), lwe3);
         assert_eq!(lwe3.clone().sub_component_wise(&lwe2), lwe1);
     }
@@ -167,12 +170,12 @@ mod tests {
         let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
         let b: Fp32 = dot_product(&a, &s) + encode(v0) + chi.sample(rng);
 
-        let lwe1 = LWE::new(a, b);
+        let lwe1 = LWE::new(&a, &b);
 
         let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
         let b: Fp32 = dot_product(&a, &s) + encode(v1) + chi.sample(rng);
 
-        let lwe2 = LWE::new(a, b);
+        let lwe2 = LWE::new(&a, &b);
 
         let ret = lwe1.add_component_wise(&lwe2);
         let decrypted = decode(ret.b() - dot_product(ret.a(), &s));

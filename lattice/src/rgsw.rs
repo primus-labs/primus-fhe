@@ -31,11 +31,30 @@ pub struct RGSW<F: NTTField> {
     c_m: GadgetRLWE<F>,
 }
 
+impl<F: NTTField> From<(GadgetRLWE<F>, GadgetRLWE<F>)> for RGSW<F> {
+    /// Converts a tuple of GadgetRLWE into an instance of `Self`.
+    ///
+    /// # Arguments
+    ///
+    /// * `c_neg_s_m` - The first GadgetRLWE sample.
+    /// * `c_m` - The second GadgetRLWE sample.
+    ///
+    /// # Returns
+    ///
+    /// An instance of `Self` containing the converted polynomials.
+    fn from((c_neg_s_m, c_m): (GadgetRLWE<F>, GadgetRLWE<F>)) -> Self {
+        Self { c_neg_s_m, c_m }
+    }
+}
+
 impl<F: NTTField> RGSW<F> {
     /// Creates a new [`RGSW<F>`].
     #[inline]
-    pub fn new(c_neg_s_m: GadgetRLWE<F>, c_m: GadgetRLWE<F>) -> Self {
-        Self { c_neg_s_m, c_m }
+    pub fn new(c_neg_s_m: &GadgetRLWE<F>, c_m: &GadgetRLWE<F>) -> Self {
+        Self {
+            c_neg_s_m: c_neg_s_m.clone(),
+            c_m: c_m.clone(),
+        }
     }
 
     /// Returns a reference to the `c_neg_s_m` of this [`RGSW<F>`].
@@ -85,16 +104,16 @@ impl<F: NTTField> RGSW<F> {
             .iter()
             .map(|rlwe| ntt_rgsw_mul_rlwe(&ntt_c_neg_s_m, &ntt_c_m, rlwe, basis))
             .collect();
-        let c_neg_s_m = GadgetRLWE::new(c0_data, basis);
+        let c_neg_s_m = GadgetRLWE::new(&c0_data, basis);
 
         let c1_data: Vec<RLWE<F>> = self
             .c_m()
             .iter()
             .map(|rlwe| ntt_rgsw_mul_rlwe(&ntt_c_neg_s_m, &ntt_c_m, rlwe, basis))
             .collect();
-        let c_m = GadgetRLWE::new(c1_data, basis);
+        let c_m = GadgetRLWE::new(&c1_data, basis);
 
-        RGSW::new(c_neg_s_m, c_m)
+        RGSW::from((c_neg_s_m, c_m))
     }
 }
 
@@ -177,7 +196,7 @@ mod tests {
                     let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + m1.mul_scalar(BASE.pow(i as u32)) + e;
 
-                    RLWE::new(a, b)
+                    RLWE::new(&a, &b)
                 })
                 .collect::<Vec<RLWE<Fp32>>>();
 
@@ -188,13 +207,13 @@ mod tests {
                     let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + e;
 
-                    RLWE::new(a + m1.mul_scalar(BASE.pow(i as u32)), b)
+                    RLWE::new(&(a + m1.mul_scalar(BASE.pow(i as u32))), &b)
                 })
                 .collect::<Vec<RLWE<Fp32>>>();
 
             RGSW::new(
-                GadgetRLWE::new(neg_sm1_base_power, BASE),
-                GadgetRLWE::new(m1_base_power, BASE),
+                &GadgetRLWE::new(&neg_sm1_base_power, BASE),
+                &GadgetRLWE::new(&m1_base_power, BASE),
             )
         };
 
@@ -203,7 +222,7 @@ mod tests {
             let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
             let b = &a * &s + m0 + &e;
 
-            (RLWE::new(a, b), e)
+            (RLWE::new(&a, &b), e)
         };
 
         let rlwe_mul = rgsw.mul_with_rlwe(&rlwe);
@@ -247,7 +266,7 @@ mod tests {
                     let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + m1.mul_scalar(BASE.pow(i as u32)) + e;
 
-                    RLWE::new(a, b)
+                    RLWE::new(&a, &b)
                 })
                 .collect::<Vec<RLWE<Fp32>>>();
 
@@ -258,13 +277,13 @@ mod tests {
                     let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + e;
 
-                    RLWE::new(a + m1.mul_scalar(BASE.pow(i as u32)), b)
+                    RLWE::new(&(a + m1.mul_scalar(BASE.pow(i as u32))), &b)
                 })
                 .collect::<Vec<RLWE<Fp32>>>();
 
             RGSW::new(
-                GadgetRLWE::new(neg_sm1_base_power, BASE),
-                GadgetRLWE::new(m1_base_power, BASE),
+                &GadgetRLWE::new(&neg_sm1_base_power, BASE),
+                &GadgetRLWE::new(&m1_base_power, BASE),
             )
         };
 
@@ -276,7 +295,7 @@ mod tests {
                     let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + m0.mul_scalar(BASE.pow(i as u32)) + e;
 
-                    RLWE::new(a, b)
+                    RLWE::new(&a, &b)
                 })
                 .collect::<Vec<RLWE<Fp32>>>();
 
@@ -287,13 +306,13 @@ mod tests {
                     let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                     let b = &a * &s + e;
 
-                    RLWE::new(a + m0.mul_scalar(BASE.pow(i as u32)), b)
+                    RLWE::new(&(a + m0.mul_scalar(BASE.pow(i as u32))), &b)
                 })
                 .collect::<Vec<RLWE<Fp32>>>();
 
             RGSW::new(
-                GadgetRLWE::new(neg_sm0_base_power, BASE),
-                GadgetRLWE::new(m0_base_power, BASE),
+                &GadgetRLWE::new(&neg_sm0_base_power, BASE),
+                &GadgetRLWE::new(&m0_base_power, BASE),
             )
         };
 

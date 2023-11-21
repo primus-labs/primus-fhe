@@ -30,8 +30,11 @@ pub struct GadgetRLWE<F: NTTField> {
 impl<F: NTTField> GadgetRLWE<F> {
     /// Creates a new [`GadgetRLWE<F>`].
     #[inline]
-    pub fn new(data: Vec<RLWE<F>>, basis: F::Base) -> Self {
-        Self { data, basis }
+    pub fn new(data: &[RLWE<F>], basis: F::Base) -> Self {
+        Self {
+            data: data.to_vec(),
+            basis,
+        }
     }
 
     /// Returns a reference to the `data` of this [`GadgetRLWE<F>`].
@@ -134,14 +137,14 @@ mod tests {
                 let e = Polynomial::new(&rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
                 let b = &a * &s + m.mul_scalar(BASE.pow(i as u32)) + e;
 
-                RLWE::new(a, b)
+                RLWE::new(&a, &b)
             })
             .collect::<Vec<RLWE<Fp32>>>();
 
         let bad_rlwe_mul = m_base_power[0].clone().mul_with_polynomial(&poly);
         let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
 
-        let gadget_rlwe = GadgetRLWE::new(m_base_power, BASE);
+        let gadget_rlwe = GadgetRLWE::new(&m_base_power, BASE);
 
         let good_rlwe_mul = gadget_rlwe.mul_with_polynomial(&poly);
         let good_mul = good_rlwe_mul.b() - good_rlwe_mul.a() * s;
