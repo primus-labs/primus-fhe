@@ -54,6 +54,15 @@ impl<F: NTTField> RGSW<F> {
         Self { c_neg_s_m, c_m }
     }
 
+    /// Creates a new [`RGSW<F>`] with reference.
+    #[inline]
+    pub fn from_ref(c_neg_s_m: &GadgetRLWE<F>, c_m: &GadgetRLWE<F>) -> Self {
+        Self {
+            c_neg_s_m: c_neg_s_m.clone(),
+            c_m: c_m.clone(),
+        }
+    }
+
     /// Returns a reference to the `c_neg_s_m` of this [`RGSW<F>`].
     #[inline]
     pub fn c_neg_s_m(&self) -> &GadgetRLWE<F> {

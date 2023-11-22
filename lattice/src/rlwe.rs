@@ -72,6 +72,15 @@ impl<F: NTTField> RLWE<F> {
         Self { a, b }
     }
 
+    /// Creates a new [`RLWE<F>`] with reference of [`Polynomial<F>`].
+    #[inline]
+    pub fn from_ref(a: &Polynomial<F>, b: &Polynomial<F>) -> Self {
+        Self {
+            a: a.clone(),
+            b: b.clone(),
+        }
+    }
+
     /// Creates a new [`RLWE<F>`] that is initialized to zero.
     ///
     /// The `coeff_count` parameter specifies the number of coefficients in the polynomial.

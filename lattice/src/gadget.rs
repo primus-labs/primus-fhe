@@ -40,6 +40,15 @@ impl<F: NTTField> GadgetRLWE<F> {
         Self { data, basis }
     }
 
+    /// Creates a new [`GadgetRLWE<F>`] with reference.
+    #[inline]
+    pub fn from_ref(data: &[RLWE<F>], basis: F::Base) -> Self {
+        Self {
+            data: data.to_vec(),
+            basis,
+        }
+    }
+
     /// Returns a reference to the `data` of this [`GadgetRLWE<F>`].
     #[inline]
     pub fn data(&self) -> &[RLWE<F>] {

@@ -38,6 +38,12 @@ impl<R: Ring> LWE<R> {
         Self { a, b }
     }
 
+    /// Creates a new [`LWE<R>`] with reference.
+    #[inline]
+    pub fn from_ref(a: &[R], b: R) -> Self {
+        Self { a: a.to_vec(), b }
+    }
+
     /// Returns a reference to the `a` of this [`LWE<R>`].
     #[inline]
     pub fn a(&self) -> &[R] {
