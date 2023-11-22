@@ -1,5 +1,5 @@
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use std::slice::{Iter, IterMut};
+use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::slice::{Iter, IterMut, SliceIndex};
 
 use num_traits::Zero;
 
@@ -82,6 +82,22 @@ impl<F: Field> Polynomial<F> {
                 .map(|v| v.mul_scalar(scalar))
                 .collect::<Vec<F>>()),
         )
+    }
+}
+
+impl<F: Field, I: SliceIndex<[F]>> IndexMut<I> for Polynomial<F> {
+    #[inline]
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        IndexMut::index_mut(&mut *self.data, index)
+    }
+}
+
+impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
+    type Output = I::Output;
+
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        Index::index(&*self.data, index)
     }
 }
 

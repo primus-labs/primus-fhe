@@ -1,5 +1,6 @@
 use algebra::field::Fp32;
 use algebra::field::NTTField;
+use algebra::polynomial::Poly;
 use algebra::polynomial::{NTTPolynomial, Polynomial};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Standard, prelude::*, thread_rng};
@@ -13,7 +14,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut r = thread_rng();
     let data: Vec<_> = Standard.sample_iter(&mut r).take(n).collect();
 
-    let poly = Polynomial::<Fp32>::new(&data);
+    let poly = Polynomial::<Fp32>::from_slice(&data);
 
     // let ntt_table = Fp32::get_ntt_table(log_n).unwrap();
 
@@ -24,7 +25,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    let poly = NTTPolynomial::<Fp32>::new(&data);
+    let poly = NTTPolynomial::<Fp32>::from_vec(data);
 
     c.bench_function(&format!("intt {}", n), |b| {
         b.iter(|| {

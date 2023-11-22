@@ -1,5 +1,5 @@
 use algebra::field::NTTField;
-use algebra::polynomial::{NTTPolynomial, Polynomial};
+use algebra::polynomial::{NTTPolynomial, Poly, Polynomial};
 
 use crate::LWE;
 
@@ -167,11 +167,12 @@ impl<F: NTTField> RLWE<F> {
     /// Extract an LWE sample from RLWE.
     #[inline]
     pub fn extract_lwe(&self) -> LWE<F> {
-        let mut a = self.a().clone().data();
-        a[1..].iter_mut().for_each(|x| *x = -(*x));
-        a[1..].reverse();
-        let b: &[F] = self.b().as_ref();
-        LWE::<F>::from((a, b[0]))
+        let a = std::iter::once(self.a()[0])
+            .chain(self.a().iter().skip(1).rev().copied().map(|x| -x))
+            .collect();
+        let b = self.b()[0];
+
+        LWE::<F>::from((a, b))
     }
 }
 

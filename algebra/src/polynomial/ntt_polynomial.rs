@@ -1,5 +1,5 @@
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use std::slice::{Iter, IterMut};
+use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::slice::{Iter, IterMut, SliceIndex};
 
 use num_traits::Zero;
 
@@ -53,6 +53,22 @@ impl<F: Field> NTTPolynomial<F> {
         Self {
             data: vec![Zero::zero(); coeff_count],
         }
+    }
+}
+
+impl<F: Field, I: SliceIndex<[F]>> IndexMut<I> for NTTPolynomial<F> {
+    #[inline]
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        IndexMut::index_mut(&mut *self.data, index)
+    }
+}
+
+impl<F: Field, I: SliceIndex<[F]>> Index<I> for NTTPolynomial<F> {
+    type Output = I::Output;
+
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        Index::index(&*self.data, index)
     }
 }
 
