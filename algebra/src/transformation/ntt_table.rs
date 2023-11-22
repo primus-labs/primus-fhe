@@ -111,8 +111,29 @@ impl<F> AbstractNTT<F> for NTTTable<F>
 where
     F: NTTField<Table = NTTTable<F>>,
 {
+    #[inline]
+    fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
+        self.transform_inplace(poly.clone())
+    }
+
+    #[inline]
     fn transform_inplace(&self, mut poly: Polynomial<F>) -> NTTPolynomial<F> {
-        let values = poly.as_mut();
+        self.transform_slice(poly.as_mut());
+        NTTPolynomial::<F>::new(poly.data())
+    }
+
+    #[inline]
+    fn inverse_transform(&self, poly: &NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_inplace(poly.clone())
+    }
+
+    #[inline]
+    fn inverse_transform_inplace(&self, mut poly: NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_slice(poly.as_mut());
+        Polynomial::<F>::new(poly.data())
+    }
+
+    fn transform_slice(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
@@ -136,17 +157,9 @@ where
                 }
             }
         }
-
-        NTTPolynomial::<F>::new(poly.data())
     }
 
-    #[inline]
-    fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_inplace(poly.clone())
-    }
-
-    fn inverse_transform_inplace(&self, mut poly: NTTPolynomial<F>) -> Polynomial<F> {
-        let values = poly.as_mut();
+    fn inverse_transform_slice(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
@@ -185,12 +198,5 @@ where
             *i = NTTField::mul_root(&(u + v), scalar);
             *j = NTTField::mul_root(&(u - v), scaled_r);
         }
-
-        Polynomial::<F>::new(poly.data())
-    }
-
-    #[inline]
-    fn inverse_transform(&self, poly: &NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_inplace(poly.clone())
     }
 }

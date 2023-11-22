@@ -110,7 +110,7 @@ impl<F: NTTField> RGSW<F> {
             .collect();
         let c_m = GadgetRLWE::new(c1_data, basis);
 
-        RGSW::from((c_neg_s_m, c_m))
+        RGSW::new(c_neg_s_m, c_m)
     }
 }
 
