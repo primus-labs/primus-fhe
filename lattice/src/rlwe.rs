@@ -174,7 +174,7 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn extract_lwe(&self) -> LWE<F> {
         let a = std::iter::once(self.a()[0])
-            .chain(self.a().iter().skip(1).rev().copied().map(|x| -x))
+            .chain(self.a().iter().skip(1).rev().map(|&x| -x))
             .collect();
         let b = self.b()[0];
 
