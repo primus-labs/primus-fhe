@@ -32,13 +32,17 @@ pub struct NTTPolynomial<F: Field> {
     data: Vec<F>,
 }
 
+impl<F: Field> From<Vec<F>> for NTTPolynomial<F> {
+    fn from(value: Vec<F>) -> Self {
+        Self { data: value }
+    }
+}
+
 impl<F: Field> NTTPolynomial<F> {
     /// Creates a new [`NTTPolynomial<F>`].
     #[inline]
-    pub fn new(data: &[F]) -> Self {
-        Self {
-            data: data.to_vec(),
-        }
+    pub fn new(data: Vec<F>) -> Self {
+        Self { data }
     }
 
     /// Drop self, and return the data
@@ -214,7 +218,7 @@ impl<F: Field> Add<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     fn add(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
-        NTTPolynomial::<F>::new(&poly)
+        NTTPolynomial::<F>::new(poly)
     }
 }
 
@@ -273,7 +277,7 @@ impl<F: Field> Sub<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     fn sub(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
-        NTTPolynomial::<F>::new(&poly)
+        NTTPolynomial::<F>::new(poly)
     }
 }
 
@@ -314,7 +318,7 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l * r).collect();
-        NTTPolynomial::<F>::new(&poly)
+        NTTPolynomial::<F>::new(poly)
     }
 }
 
@@ -437,22 +441,22 @@ mod tests {
         const P: u32 = Fp32::BARRETT_MODULUS.value();
         type PolyFp = NTTPolynomial<Fp>;
 
-        let a = PolyFp::new(&[Fp::new(1), Fp::new(P - 1)]);
-        let b = PolyFp::new(&[Fp::new(P - 1), Fp::new(1)]);
+        let a = PolyFp::new(vec![Fp::new(1), Fp::new(P - 1)]);
+        let b = PolyFp::new(vec![Fp::new(P - 1), Fp::new(1)]);
 
-        let mul_result = PolyFp::new(&[Fp::new(P - 1), Fp::new(P - 1)]);
+        let mul_result = PolyFp::new(vec![Fp::new(P - 1), Fp::new(P - 1)]);
         assert_eq!(&a * &b, mul_result);
         assert_eq!(&a * b.clone(), mul_result);
         assert_eq!(a.clone() * &b, mul_result);
         assert_eq!(a.clone() * b.clone(), mul_result);
 
-        let add_result = PolyFp::new(&[Fp::new(0), Fp::new(0)]);
+        let add_result = PolyFp::new(vec![Fp::new(0), Fp::new(0)]);
         assert_eq!(&a + &b, add_result);
         assert_eq!(&a + b.clone(), add_result);
         assert_eq!(a.clone() + &b, add_result);
         assert_eq!(a.clone() + b.clone(), add_result);
 
-        let sub_result = PolyFp::new(&[Fp::new(2), Fp::new(P - 2)]);
+        let sub_result = PolyFp::new(vec![Fp::new(2), Fp::new(P - 2)]);
         assert_eq!(&a - &b, sub_result);
         assert_eq!(&a - b.clone(), sub_result);
         assert_eq!(a.clone() - &b, sub_result);

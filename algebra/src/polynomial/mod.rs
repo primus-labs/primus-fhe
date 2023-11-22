@@ -38,7 +38,7 @@ mod tests {
             .map(Fp32::new)
             .collect::<Vec<Fp32>>();
 
-        let a = PolyFp::new(&coeffs);
+        let a = PolyFp::new(coeffs);
         let b = a.clone().to_ntt_polynomial();
         let c = b.clone().to_native_polynomial();
         let d = c.clone().to_ntt_polynomial();
