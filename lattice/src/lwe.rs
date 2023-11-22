@@ -38,6 +38,12 @@ impl<R: Ring> LWE<R> {
         Self { a, b }
     }
 
+    /// Creates a new [`LWE<R>`] with reference.
+    #[inline]
+    pub fn from_ref(a: &[R], b: R) -> Self {
+        Self { a: a.to_vec(), b }
+    }
+
     /// Returns a reference to the `a` of this [`LWE<R>`].
     #[inline]
     pub fn a(&self) -> &[R] {
@@ -164,15 +170,19 @@ mod tests {
 
         let s = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
 
-        let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
-        let b: Fp32 = dot_product(&a, &s) + encode(v0) + chi.sample(rng);
+        let lwe1 = {
+            let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
+            let b: Fp32 = dot_product(&a, &s) + encode(v0) + chi.sample(rng);
 
-        let lwe1 = LWE::new(a, b);
+            LWE::new(a, b)
+        };
 
-        let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
-        let b: Fp32 = dot_product(&a, &s) + encode(v1) + chi.sample(rng);
+        let lwe2 = {
+            let a = rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>();
+            let b: Fp32 = dot_product(&a, &s) + encode(v1) + chi.sample(rng);
 
-        let lwe2 = LWE::new(a, b);
+            LWE::new(a, b)
+        };
 
         let ret = lwe1.add_component_wise(&lwe2);
         let decrypted = decode(ret.b() - dot_product(ret.a(), &s));

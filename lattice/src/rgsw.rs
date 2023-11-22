@@ -31,11 +31,36 @@ pub struct RGSW<F: NTTField> {
     c_m: GadgetRLWE<F>,
 }
 
+impl<F: NTTField> From<(GadgetRLWE<F>, GadgetRLWE<F>)> for RGSW<F> {
+    /// Converts a tuple of GadgetRLWE into an instance of `Self`.
+    ///
+    /// # Arguments
+    ///
+    /// * `c_neg_s_m` - The first GadgetRLWE sample.
+    /// * `c_m` - The second GadgetRLWE sample.
+    ///
+    /// # Returns
+    ///
+    /// An instance of `Self` containing the converted polynomials.
+    fn from((c_neg_s_m, c_m): (GadgetRLWE<F>, GadgetRLWE<F>)) -> Self {
+        Self { c_neg_s_m, c_m }
+    }
+}
+
 impl<F: NTTField> RGSW<F> {
     /// Creates a new [`RGSW<F>`].
     #[inline]
     pub fn new(c_neg_s_m: GadgetRLWE<F>, c_m: GadgetRLWE<F>) -> Self {
         Self { c_neg_s_m, c_m }
+    }
+
+    /// Creates a new [`RGSW<F>`] with reference.
+    #[inline]
+    pub fn from_ref(c_neg_s_m: &GadgetRLWE<F>, c_m: &GadgetRLWE<F>) -> Self {
+        Self {
+            c_neg_s_m: c_neg_s_m.clone(),
+            c_m: c_m.clone(),
+        }
     }
 
     /// Returns a reference to the `c_neg_s_m` of this [`RGSW<F>`].
@@ -160,8 +185,8 @@ mod tests {
         let ternary = Fp32::ternary_distribution();
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
-        let m0 = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let m1 = Polynomial::new(rng.sample_iter(ternary).take(N).collect());
+        let m0 = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let m1 = Polynomial::new(rng.sample_iter(ternary).take(N).collect::<Vec<Fp32>>());
 
         let m0m1 = &m0 * &m1;
 
@@ -230,8 +255,8 @@ mod tests {
         let ternary = Fp32::ternary_distribution();
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
-        let m0 = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let m1 = Polynomial::new(rng.sample_iter(ternary).take(N).collect());
+        let m0 = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let m1 = Polynomial::new(rng.sample_iter(ternary).take(N).collect::<Vec<Fp32>>());
 
         let m0m1 = &m0 * &m1;
 

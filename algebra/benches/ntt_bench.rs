@@ -1,6 +1,6 @@
 use algebra::field::Fp32;
 use algebra::field::NTTField;
-use algebra::polynomial::{NTTPolynomial, Polynomial};
+use algebra::transformation::AbstractNTT;
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Standard, prelude::*, thread_rng};
 
@@ -11,25 +11,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     Fp32::init_ntt_table(&[log_n]).unwrap();
 
     let mut r = thread_rng();
-    let data: Vec<_> = Standard.sample_iter(&mut r).take(n).collect();
+    let mut data: Vec<_> = Standard.sample_iter(&mut r).take(n).collect();
 
-    let poly = Polynomial::<Fp32>::new(data.clone());
-
-    // let ntt_table = Fp32::get_ntt_table(log_n).unwrap();
+    let ntt_table = Fp32::get_ntt_table(log_n).unwrap();
 
     c.bench_function(&format!("ntt {}", n), |b| {
         b.iter(|| {
-            // ntt_table.transform(&poly);
-            poly.clone().to_ntt_polynomial();
+            ntt_table.transform_slice(data.as_mut_slice());
         })
     });
 
-    let poly = NTTPolynomial::<Fp32>::new(data);
-
     c.bench_function(&format!("intt {}", n), |b| {
         b.iter(|| {
-            // ntt_table.inverse_transform(&poly);
-            poly.clone().to_native_polynomial();
+            ntt_table.inverse_transform_slice(data.as_mut_slice());
         })
     });
 }

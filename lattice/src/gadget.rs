@@ -27,11 +27,26 @@ pub struct GadgetRLWE<F: NTTField> {
     basis: F::Base,
 }
 
+impl<F: NTTField> From<(Vec<RLWE<F>>, F::Base)> for GadgetRLWE<F> {
+    fn from((data, basis): (Vec<RLWE<F>>, F::Base)) -> Self {
+        Self { data, basis }
+    }
+}
+
 impl<F: NTTField> GadgetRLWE<F> {
     /// Creates a new [`GadgetRLWE<F>`].
     #[inline]
     pub fn new(data: Vec<RLWE<F>>, basis: F::Base) -> Self {
         Self { data, basis }
+    }
+
+    /// Creates a new [`GadgetRLWE<F>`] with reference.
+    #[inline]
+    pub fn from_ref(data: &[RLWE<F>], basis: F::Base) -> Self {
+        Self {
+            data: data.to_vec(),
+            basis,
+        }
     }
 
     /// Returns a reference to the `data` of this [`GadgetRLWE<F>`].
@@ -119,8 +134,8 @@ mod tests {
         let rng = &mut rand::thread_rng();
         let chi = Fp32::normal_distribution(0., 3.2).unwrap();
 
-        let m = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let poly = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let m = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let poly = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
         let poly_mul_m = &poly * &m;
 

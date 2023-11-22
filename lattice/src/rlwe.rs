@@ -1,5 +1,7 @@
 use algebra::field::NTTField;
-use algebra::polynomial::{NTTPolynomial, Polynomial};
+use algebra::polynomial::{NTTPolynomial, Poly, Polynomial};
+
+use crate::LWE;
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly
@@ -68,6 +70,15 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn new(a: Polynomial<F>, b: Polynomial<F>) -> Self {
         Self { a, b }
+    }
+
+    /// Creates a new [`RLWE<F>`] with reference of [`Polynomial<F>`].
+    #[inline]
+    pub fn from_ref(a: &Polynomial<F>, b: &Polynomial<F>) -> Self {
+        Self {
+            a: a.clone(),
+            b: b.clone(),
+        }
     }
 
     /// Creates a new [`RLWE<F>`] that is initialized to zero.
@@ -158,31 +169,46 @@ impl<F: NTTField> RLWE<F> {
             b: self.b * ntt_poly,
         }
     }
+
+    /// Extract an LWE sample from RLWE.
+    #[inline]
+    pub fn extract_lwe(&self) -> LWE<F> {
+        let a = std::iter::once(self.a()[0])
+            .chain(self.a().iter().skip(1).rev().map(|&x| -x))
+            .collect();
+        let b = self.b()[0];
+
+        LWE::<F>::from((a, b))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
     use rand::{
         distributions::{Standard, Uniform},
         prelude::*,
     };
 
-    use super::*;
-
     #[test]
     fn test_rlwe() {
         const N: usize = 8;
         let rng = &mut rand::thread_rng();
 
-        let r: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let r: Polynomial<Fp32> =
+            Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
 
-        let a1: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let a2: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let a1: Polynomial<Fp32> =
+            Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let a2: Polynomial<Fp32> =
+            Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
         let a3: Polynomial<Fp32> = &a1 * &r;
 
-        let b1: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
-        let b2: Polynomial<Fp32> = Polynomial::new(rng.sample_iter(Standard).take(N).collect());
+        let b1: Polynomial<Fp32> =
+            Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
+        let b2: Polynomial<Fp32> =
+            Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
         let b3: Polynomial<Fp32> = &b1 * &r;
 
         let rlwe1 = RLWE::new(a1, b1);
@@ -254,5 +280,29 @@ mod tests {
             .collect::<Vec<u32>>();
 
         assert_eq!(decrypted_add, v_add);
+    }
+
+    #[test]
+    fn extract_lwe_test() {
+        const N: usize = 8;
+        let rng = &mut thread_rng();
+        let s_vec: Vec<Fp32> = rng.sample_iter(Standard).take(N).collect();
+        let a_vec: Vec<Fp32> = rng.sample_iter(Standard).take(N).collect();
+
+        let s = Polynomial::from_slice(&s_vec);
+        let a = Polynomial::new(a_vec);
+
+        let b = &a * &s;
+
+        let rlwe_sample = RLWE::new(a, b);
+        let lwe_sample = rlwe_sample.extract_lwe();
+
+        let inner_a = lwe_sample
+            .a()
+            .iter()
+            .zip(s_vec.iter())
+            .fold(Fp32::new(0), |acc, (&x, &y)| acc + x * y);
+
+        assert_eq!(inner_a, lwe_sample.b());
     }
 }

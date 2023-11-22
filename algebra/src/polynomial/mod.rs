@@ -36,7 +36,7 @@ mod tests {
             .sample_iter(distr)
             .take(1 << log_n)
             .map(Fp32::new)
-            .collect();
+            .collect::<Vec<Fp32>>();
 
         let a = PolyFp::new(coeffs);
         let b = a.clone().to_ntt_polynomial();
