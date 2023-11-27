@@ -1,7 +1,7 @@
 use syn::{Attribute, Expr, Lit, LitInt, Meta, Result};
 
 pub(crate) struct Attrs {
-    pub modulus: Option<LitInt>,
+    pub(crate) modulus: Option<LitInt>,
 }
 
 pub fn get(input: &[Attribute]) -> Result<Attrs> {

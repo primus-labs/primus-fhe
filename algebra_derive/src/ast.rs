@@ -4,17 +4,17 @@ use syn::{DeriveInput, Error, Generics, Index, Member, Result, Type};
 use crate::attr::{self, Attrs};
 
 pub(crate) struct Input<'a> {
-    pub original: &'a DeriveInput,
-    pub attrs: Attrs,
-    pub ident: Ident,
-    pub generics: &'a Generics,
-    pub field: Field<'a>,
+    pub(crate) original: &'a DeriveInput,
+    pub(crate) attrs: Attrs,
+    pub(crate) ident: Ident,
+    pub(crate) generics: &'a Generics,
+    pub(crate) field: Field<'a>,
 }
 
 pub(crate) struct Field<'a> {
-    pub original: &'a syn::Field,
-    pub member: Member,
-    pub ty: &'a Type,
+    pub(crate) original: &'a syn::Field,
+    pub(crate) member: Member,
+    pub(crate) ty: &'a Type,
 }
 
 impl<'a> Input<'a> {
@@ -27,8 +27,8 @@ impl<'a> Input<'a> {
                     return Err(Error::new_spanned(node, "modulus should supplied"));
                 }
 
-                let first = match &data.fields.iter().next() {
-                    Some(f) => *f,
+                let first = match data.fields.iter().next() {
+                    Some(f) => f,
                     None => {
                         return Err(Error::new_spanned(
                             node,
