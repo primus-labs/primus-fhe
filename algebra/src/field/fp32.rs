@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Div, DivAssign};
 use std::sync::{Arc, Mutex};
 
 use num_traits::{Inv, One, Pow, Zero};
@@ -9,8 +9,8 @@ use rand::distributions::{Distribution, Standard, Uniform};
 use rand::{thread_rng, Rng};
 use rand_distr::{Bernoulli, Normal, WeightedIndex};
 
-use crate::ring::Ring;
 use crate::AlgebraError;
+use crate::Ring;
 use crate::{
     field::{prime_fields::MulFactor, Field, FieldDistribution, NTTField, PrimeField},
     modulo_traits::{
@@ -27,30 +27,20 @@ const P: u32 = 0x7e00001;
 /// A finite Field type, whose inner size is 32bits.
 ///
 /// Now, it's focused on the prime field.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, algebra_derive::Ring)]
+#[modulus = 132120577]
 pub struct Fp32(u32);
 
-impl std::fmt::Display for Fp32 {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[({})_{}]", self.0, P)
-    }
-}
-
 /// A helper trait to get the modulus of the field.
-pub trait BarrettConfig<const P: u32> {
+pub trait BarrettConfig<T> {
     /// The modulus of the field.
-    const BARRETT_MODULUS: Modulus<u32>;
+    const BARRETT_MODULUS: Modulus<T>;
 
     /// Get the barrett modulus of the field.
     #[inline]
-    fn barrett_modulus() -> Modulus<u32> {
+    fn barrett_modulus() -> Modulus<T> {
         Self::BARRETT_MODULUS
     }
-}
-
-impl BarrettConfig<P> for Fp32 {
-    const BARRETT_MODULUS: Modulus<u32> = Modulus::<u32>::new(P);
 }
 
 impl Fp32 {
@@ -299,102 +289,6 @@ impl FieldDistribution for Fp32 {
     }
 }
 
-impl Add<Self> for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0.add_reduce(rhs.0, P))
-    }
-}
-
-impl Add<&Self> for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn add(self, rhs: &Self) -> Self::Output {
-        Self(self.0.add_reduce(rhs.0, P))
-    }
-}
-
-impl AddAssign<Self> for Fp32 {
-    #[inline]
-    fn add_assign(&mut self, rhs: Self) {
-        self.0.add_reduce_assign(rhs.0, P)
-    }
-}
-
-impl AddAssign<&Self> for Fp32 {
-    #[inline]
-    fn add_assign(&mut self, rhs: &Self) {
-        self.0.add_reduce_assign(rhs.0, P)
-    }
-}
-
-impl Sub<Self> for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0.sub_reduce(rhs.0, P))
-    }
-}
-
-impl Sub<&Self> for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn sub(self, rhs: &Self) -> Self::Output {
-        Self(self.0.sub_reduce(rhs.0, P))
-    }
-}
-
-impl SubAssign<Self> for Fp32 {
-    #[inline]
-    fn sub_assign(&mut self, rhs: Self) {
-        self.0.sub_reduce_assign(rhs.0, P)
-    }
-}
-
-impl SubAssign<&Self> for Fp32 {
-    #[inline]
-    fn sub_assign(&mut self, rhs: &Self) {
-        self.0.sub_reduce_assign(rhs.0, P)
-    }
-}
-
-impl Mul<Self> for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self(self.0.mul_reduce(rhs.0, &Self::BARRETT_MODULUS))
-    }
-}
-
-impl Mul<&Self> for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn mul(self, rhs: &Self) -> Self::Output {
-        Self(self.0.mul_reduce(rhs.0, &Self::BARRETT_MODULUS))
-    }
-}
-
-impl MulAssign<Self> for Fp32 {
-    #[inline]
-    fn mul_assign(&mut self, rhs: Self) {
-        self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
-    }
-}
-
-impl MulAssign<&Self> for Fp32 {
-    #[inline]
-    fn mul_assign(&mut self, rhs: &Self) {
-        self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
-    }
-}
-
 impl Div<Self> for Fp32 {
     type Output = Self;
 
@@ -427,48 +321,12 @@ impl DivAssign<&Self> for Fp32 {
     }
 }
 
-impl Neg for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn neg(self) -> Self::Output {
-        Self(self.0.neg_reduce(P))
-    }
-}
-
 impl Inv for Fp32 {
     type Output = Self;
 
     #[inline]
     fn inv(self) -> Self::Output {
         Self(self.0.inv_reduce(P))
-    }
-}
-
-impl Pow<<Self as Ring>::Order> for Fp32 {
-    type Output = Self;
-
-    #[inline]
-    fn pow(self, rhs: <Self as Ring>::Order) -> Self::Output {
-        Self(self.0.pow_reduce(rhs, &Self::BARRETT_MODULUS))
-    }
-}
-
-impl Ring for Fp32 {
-    type Scalar = u32;
-
-    type Order = u32;
-
-    type Base = u32;
-
-    #[inline]
-    fn order() -> Self::Order {
-        P
-    }
-
-    #[inline]
-    fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
-        Self(self.0.mul_reduce(scalar, &Self::BARRETT_MODULUS))
     }
 }
 
@@ -485,7 +343,7 @@ impl PrimeField for Fp32 {
     /// Check [`Self`] is a prime field.
     #[inline]
     fn is_prime_field() -> bool {
-        <Self as BarrettConfig<P>>::BARRETT_MODULUS.probably_prime(20)
+        <Self as BarrettConfig<u32>>::BARRETT_MODULUS.probably_prime(20)
     }
 }
 

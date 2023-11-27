@@ -14,7 +14,7 @@ pub use fp32::{BarrettConfig, Fp32, NormalFp32, TernaryFp32};
 pub use ntt_fields::NTTField;
 pub use prime_fields::PrimeField;
 
-use crate::ring::Ring;
+use crate::Ring;
 
 /// A trait that extends the algebraic structure of a `Ring` to a `Field`.
 ///

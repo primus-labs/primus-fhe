@@ -17,5 +17,6 @@ pub mod transformation;
 mod primitive;
 
 pub use error::AlgebraError;
+pub use ring::Ring;
 
 pub(crate) use primitive::{Bits, Widening};

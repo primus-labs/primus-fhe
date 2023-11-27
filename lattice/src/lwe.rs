@@ -1,4 +1,4 @@
-use algebra::ring::Ring;
+use algebra::Ring;
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
