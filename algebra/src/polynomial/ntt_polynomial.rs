@@ -431,9 +431,29 @@ impl<F: NTTField> From<&Polynomial<F>> for NTTPolynomial<F> {
 
 #[cfg(test)]
 mod tests {
-    use crate::field::{BarrettConfig, Fp32};
+    use crate::field::BarrettConfig;
 
     use super::*;
+
+    use algebra_derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        PartialOrd,
+        Ord,
+        Ring,
+        Field,
+        AlgebraRandom,
+        Prime,
+        NTTField,
+    )]
+    #[modulus = 132120577]
+    pub struct Fp32(u32);
 
     #[test]
     fn test_ntt_poly() {

@@ -5,16 +5,28 @@ use std::ops::{Div, DivAssign};
 use num_traits::Inv;
 
 mod distribution;
-mod fp32;
+// mod fp32;
 pub mod ntt_fields;
 pub mod prime_fields;
 
 pub use distribution::FieldDistribution;
-pub use fp32::{BarrettConfig, Fp32, NormalFp32, TernaryFp32};
+// pub use fp32::{Fp32, NormalFp32, TernaryFp32};
 pub use ntt_fields::NTTField;
-pub use prime_fields::PrimeField;
+pub use prime_fields::{MulFactor, PrimeField};
 
-use crate::Ring;
+use crate::{modulus::Modulus, ring::Ring};
+
+/// A helper trait to get the modulus of the field.
+pub trait BarrettConfig<T> {
+    /// The modulus of the field.
+    const BARRETT_MODULUS: Modulus<T>;
+
+    /// Get the barrett modulus of the field.
+    #[inline]
+    fn barrett_modulus() -> Modulus<T> {
+        Self::BARRETT_MODULUS
+    }
+}
 
 /// A trait that extends the algebraic structure of a `Ring` to a `Field`.
 ///

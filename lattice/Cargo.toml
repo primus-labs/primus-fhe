@@ -8,6 +8,10 @@ edition = "2021"
 [dependencies]
 algebra = { path = "../algebra" }
 
+once_cell = "1.18"
+
+rand_distr = "0.4"
+
 [dev-dependencies]
 num-traits = "0.2"
 rand = "0.8"

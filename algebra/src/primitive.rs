@@ -1,4 +1,6 @@
-pub(crate) trait Widening: Sized {
+/// A trait for big number calculation
+pub trait Widening: Sized {
+    /// A wider type for multiplication
     type WideT;
 
     /// Calculates `self` + `rhs` + `carry` and checks for overflow.
@@ -83,7 +85,7 @@ uint_widening_impl! { u32, u64 }
 uint_widening_impl! { u64, u128 }
 
 /// Extension trait to provide access to bits of integers.
-pub(crate) trait Bits {
+pub trait Bits {
     /// The number of bits this type has.
     const N_BITS: u32;
 }

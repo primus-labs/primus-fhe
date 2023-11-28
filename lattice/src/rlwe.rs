@@ -185,11 +185,31 @@ impl<F: NTTField> RLWE<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
+    use algebra::field::{BarrettConfig, FieldDistribution};
     use rand::{
         distributions::{Standard, Uniform},
         prelude::*,
     };
+
+    use algebra::{AlgebraRandom, Field, NTTField, Prime, Ring};
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        PartialOrd,
+        Ord,
+        Ring,
+        Field,
+        AlgebraRandom,
+        Prime,
+        NTTField,
+    )]
+    #[modulus = 132120577]
+    pub struct Fp32(u32);
 
     #[test]
     fn test_rlwe() {

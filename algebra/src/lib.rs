@@ -3,6 +3,8 @@
 
 //! Define arithmetic operations.
 
+extern crate self as algebra;
+
 mod error;
 
 pub mod field;
@@ -17,6 +19,7 @@ pub mod transformation;
 mod primitive;
 
 pub use error::AlgebraError;
-pub use ring::Ring;
 
-pub(crate) use primitive::{Bits, Widening};
+pub use primitive::{Bits, Widening};
+
+pub use algebra_derive::{AlgebraRandom, Field, NTTField, Prime, Ring};

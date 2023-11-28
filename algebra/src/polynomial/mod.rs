@@ -14,10 +14,30 @@ pub use ntt_polynomial::*;
 mod tests {
     use rand::prelude::*;
 
+    use crate::field::BarrettConfig;
     use crate::field::NTTField;
-    use crate::field::{BarrettConfig, Fp32};
 
     use super::*;
+
+    use algebra_derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        PartialOrd,
+        Ord,
+        Ring,
+        Field,
+        AlgebraRandom,
+        Prime,
+        NTTField,
+    )]
+    #[modulus = 132120577]
+    pub struct Fp32(u32);
 
     #[test]
     fn test_transform() {

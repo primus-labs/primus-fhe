@@ -162,12 +162,32 @@ fn ntt_rgsw_mul_rlwe<F: NTTField>(
 
 #[cfg(test)]
 mod tests {
-    use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
+    use algebra::field::{BarrettConfig, FieldDistribution};
     use algebra::polynomial::Polynomial;
     use rand::distributions::Standard;
     use rand::prelude::*;
 
     use super::*;
+
+    use algebra::{AlgebraRandom, Field, NTTField, Prime, Ring};
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        PartialOrd,
+        Ord,
+        Ring,
+        Field,
+        AlgebraRandom,
+        Prime,
+        NTTField,
+    )]
+    #[modulus = 132120577]
+    pub struct Fp32(u32);
 
     #[test]
     fn test_rgsw_mul_rlwe() {

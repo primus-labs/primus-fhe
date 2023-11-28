@@ -1,21 +1,4 @@
-use algebra_derive::NTTField;
-use algebra_derive::{AlgebraRandom, Field, Prime, Ring};
-use num_traits::{Inv, One, Pow, Zero};
-use rand::Rng;
-
-use crate::AlgebraError;
-use crate::Ring;
-use crate::Widening;
-use crate::{
-    field::{prime_fields::MulFactor, Field, FieldDistribution, NTTField, PrimeField},
-    modulo_traits::{
-        AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, MulModulo,
-        MulModuloAssign, NegModulo, PowModulo, SubModulo, SubModuloAssign,
-    },
-    modulus::{Modulus, MulModuloFactor},
-    transformation::NTTTable,
-    utils::{Prime, ReverseLsbs},
-};
+use algebra_derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
 
 /// A finite Field type, whose inner size is 32bits.
 ///
@@ -41,8 +24,16 @@ pub struct Fp32(u32);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::modulo_traits::PowModulo;
+
+    use algebra::field::BarrettConfig;
+    use algebra::field::NTTField;
+    use algebra::field::PrimeField;
+    use algebra::modulo_traits::*;
+    use algebra::modulus::Modulus;
+    use algebra::ring::Ring;
+    use num_traits::Inv;
     use rand::thread_rng;
+    use rand::Rng;
 
     #[test]
     fn test_fp() {
@@ -102,13 +93,13 @@ mod tests {
         // neg
         let a = rng.sample(distr);
         let a_neg = -FF::new(a);
-        assert_eq!(FF::new(a) + a_neg, Zero::zero());
+        assert_eq!(FF::new(a) + a_neg, num_traits::Zero::zero());
 
         // inv
         let a = rng.sample(distr);
         let a_inv = a.pow_reduce(P - 2, &Modulus::<u32>::new(P));
         assert_eq!(FF::new(a).inv(), FF::new(a_inv));
-        assert_eq!(FF::new(a) * FF::new(a_inv), One::one());
+        assert_eq!(FF::new(a) * FF::new(a_inv), num_traits::One::one());
 
         // associative
         let a = rng.sample(distr);

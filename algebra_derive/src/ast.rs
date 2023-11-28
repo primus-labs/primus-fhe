@@ -4,31 +4,31 @@ use syn::{DeriveInput, Error, Generics, Index, Member, Result, Type};
 use crate::attr::{self, Attrs};
 
 pub(crate) struct Input<'a> {
-    pub(crate) original: &'a DeriveInput,
+    pub(crate) _original: &'a DeriveInput,
     pub(crate) attrs: Attrs,
     pub(crate) ident: Ident,
-    pub(crate) generics: &'a Generics,
+    pub(crate) _generics: &'a Generics,
     pub(crate) field: Field<'a>,
 }
 
 pub(crate) struct Field<'a> {
-    pub(crate) original: &'a syn::Field,
-    pub(crate) member: Member,
+    pub(crate) _original: &'a syn::Field,
+    pub(crate) _member: Member,
     pub(crate) ty: &'a Type,
 }
 
 impl<'a> Input<'a> {
     pub(crate) fn from_syn(node: &'a DeriveInput) -> Result<Self> {
-        match &node.data {
-            syn::Data::Struct(data) => {
-                let attrs = attr::get(&node.attrs)?;
+        let attrs = attr::get(&node.attrs)?;
 
-                if attrs.modulus.is_none() {
-                    return Err(Error::new_spanned(node, "modulus should supplied"));
-                }
+        if attrs.modulus.is_none() {
+            return Err(Error::new_spanned(node, "modulus should supplied"));
+        }
 
-                let first = match data.fields.iter().next() {
-                    Some(f) => f,
+        match node.data {
+            syn::Data::Struct(ref data) => {
+                let field = match data.fields.iter().next() {
+                    Some(field) => field,
                     None => {
                         return Err(Error::new_spanned(
                             node,
@@ -36,13 +36,13 @@ impl<'a> Input<'a> {
                         ))
                     }
                 };
-                let field = Field::from_syn(first)?;
+                let field = Field::from_syn(field)?;
 
                 Ok(Input {
-                    original: node,
+                    _original: node,
                     attrs,
                     ident: node.ident.clone(),
-                    generics: &node.generics,
+                    _generics: &node.generics,
                     field,
                 })
             }
@@ -54,8 +54,8 @@ impl<'a> Input<'a> {
 impl<'a> Field<'a> {
     fn from_syn(node: &'a syn::Field) -> Result<Self> {
         Ok(Field {
-            original: node,
-            member: node.ident.clone().map(Member::Named).unwrap_or_else(|| {
+            _original: node,
+            _member: node.ident.clone().map(Member::Named).unwrap_or_else(|| {
                 Member::Unnamed(Index {
                     index: 0,
                     span: Span::call_site(),

@@ -1,182 +1,85 @@
-use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{DeriveInput, Result};
+use proc_macro2::{Ident, TokenStream};
+use quote::{quote, ToTokens};
+use syn::{DeriveInput, LitInt, Result, Type};
 
-use crate::ast::Input;
+use crate::{ast::Input, basic::*, ops::*};
 
 #[inline]
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
-    Ok(impl_ring(Input::from_syn(input)?))
+    Ok(impl_ring_with_ops(Input::from_syn(input)?))
 }
 
-fn impl_ring(input: Input) -> TokenStream {
-    let name = &input.ident;
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+enum FieldType {
+    U8,
+    U16,
+    U32,
+    U64,
+    Unsupported,
+}
 
-    let inner_ty = input.field.ty;
+fn impl_ring_with_ops(input: Input) -> TokenStream {
+    let name = &input.ident;
+
+    let field_ty = input.field.ty;
 
     let modulus = input.attrs.modulus.unwrap();
 
-    let impl_display = quote! {
-        impl #impl_generics core::fmt::Display for #name #ty_generics #where_clause {
-            #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "[({})_{}]", self.0, #modulus)
+    let modulus_number: u128 = modulus
+        .base10_digits()
+        .parse()
+        .expect("Modulus should be a number");
+
+    let tralling_zeros = modulus_number.trailing_zeros();
+
+    let pow_of_two = modulus_number.is_power_of_two();
+    let field_type: FieldType;
+    match field_ty {
+        Type::Path(type_path) => {
+            if type_path.clone().into_token_stream().to_string() == "u8" {
+                field_type = FieldType::U8;
+                let mask = 1u8 << tralling_zeros - 1;
+            } else if type_path.clone().into_token_stream().to_string() == "u16" {
+                field_type = FieldType::U16;
+            } else if type_path.clone().into_token_stream().to_string() == "u32" {
+                field_type = FieldType::U32;
+            } else if type_path.clone().into_token_stream().to_string() == "u64" {
+                field_type = FieldType::U64
+            } else {
+                field_type = FieldType::Unsupported
             }
         }
-    };
+        _ => field_type = FieldType::Unsupported,
+    }
 
-    let impl_barrett = quote! {
-        impl #impl_generics BarrettConfig<#inner_ty> for #name #ty_generics #where_clause {
-            const BARRETT_MODULUS: Modulus<#inner_ty> = Modulus::<#inner_ty>::new(#modulus);
-        }
-    };
+    let impl_basic = basic(name, field_ty, &modulus);
 
-    let impl_add = quote! {
-        impl #impl_generics core::ops::Add<Self> for #name #ty_generics #where_clause {
-            type Output = Self;
+    let impl_display = display(name, &modulus);
 
-            #[inline]
-            fn add(self, rhs: Self) -> Self::Output {
-                Self(self.0.add_reduce(rhs.0, #modulus))
-            }
-        }
+    let impl_zero = impl_zero(name);
 
-        impl #impl_generics core::ops::Add<&Self> for #name #ty_generics #where_clause {
-            type Output = Self;
+    let impl_one = impl_one(name);
 
-            #[inline]
-            fn add(self, rhs: &Self) -> Self::Output {
-                Self(self.0.add_reduce(rhs.0, #modulus))
-            }
-        }
+    let impl_barrett = barrett(name, field_ty, &modulus);
 
-        impl #impl_generics core::ops::AddAssign<Self> for #name #ty_generics #where_clause {
-            #[inline]
-            fn add_assign(&mut self, rhs: Self) {
-                self.0.add_reduce_assign(rhs.0, #modulus)
-            }
-        }
+    let impl_add = add_reduce_ops(name, &modulus);
 
-        impl #impl_generics core::ops::AddAssign<&Self> for #name #ty_generics #where_clause {
-            #[inline]
-            fn add_assign(&mut self, rhs: &Self) {
-                self.0.add_reduce_assign(rhs.0, #modulus)
-            }
-        }
-    };
+    let impl_sub = sub_reduce_ops(name, &modulus);
 
-    let impl_sub = quote! {
-        impl #impl_generics core::ops::Sub<Self> for #name #ty_generics #where_clause {
-            type Output = Self;
+    let impl_mul = mul_reduce_ops(name, field_ty);
 
-            #[inline]
-            fn sub(self, rhs: Self) -> Self::Output {
-                Self(self.0.sub_reduce(rhs.0, #modulus))
-            }
-        }
+    let impl_neg = neg_reduce_ops(name, &modulus);
 
-        impl #impl_generics core::ops::Sub<&Self> for #name #ty_generics #where_clause {
-            type Output = Self;
+    let impl_pow = pow_reduce_ops(name, field_ty);
 
-            #[inline]
-            fn sub(self, rhs: &Self) -> Self::Output {
-                Self(self.0.sub_reduce(rhs.0, #modulus))
-            }
-        }
-
-        impl #impl_generics core::ops::SubAssign<Self> for #name #ty_generics #where_clause {
-            #[inline]
-            fn sub_assign(&mut self, rhs: Self) {
-                self.0.sub_reduce_assign(rhs.0, #modulus)
-            }
-        }
-
-        impl #impl_generics core::ops::SubAssign<&Self> for #name #ty_generics #where_clause {
-            #[inline]
-            fn sub_assign(&mut self, rhs: &Self) {
-                self.0.sub_reduce_assign(rhs.0, #modulus)
-            }
-        }
-    };
-
-    let impl_mul = quote! {
-        impl #impl_generics core::ops::Mul<Self> for #name #ty_generics #where_clause {
-            type Output = Self;
-
-            #[inline]
-            fn mul(self, rhs: Self) -> Self::Output {
-                Self(self.0.mul_reduce(rhs.0, &Self::BARRETT_MODULUS))
-            }
-        }
-
-        impl #impl_generics core::ops::Mul<&Self> for #name #ty_generics #where_clause {
-            type Output = Self;
-
-            #[inline]
-            fn mul(self, rhs: &Self) -> Self::Output {
-                Self(self.0.mul_reduce(rhs.0, &Self::BARRETT_MODULUS))
-            }
-        }
-
-        impl #impl_generics core::ops::MulAssign<Self> for #name #ty_generics #where_clause {
-            #[inline]
-            fn mul_assign(&mut self, rhs: Self) {
-                self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
-            }
-        }
-
-        impl #impl_generics core::ops::MulAssign<&Self> for #name #ty_generics #where_clause {
-            #[inline]
-            fn mul_assign(&mut self, rhs: &Self) {
-                self.0.mul_reduce_assign(rhs.0, &Self::BARRETT_MODULUS)
-            }
-        }
-    };
-
-    let impl_neg = quote! {
-        impl #impl_generics core::ops::Neg for #name #ty_generics #where_clause {
-            type Output = Self;
-
-            #[inline]
-            fn neg(self) -> Self::Output {
-                Self(self.0.neg_reduce(#modulus))
-            }
-        }
-    };
-
-    let impl_pow = quote! {
-        impl #impl_generics num_traits::Pow<<Self as Ring>::Order> for #name #ty_generics #where_clause {
-            type Output = Self;
-
-            #[inline]
-            fn pow(self, rhs: <Self as Ring>::Order) -> Self::Output {
-                Self(self.0.pow_reduce(rhs, &Self::BARRETT_MODULUS))
-            }
-        }
-    };
-
-    let impl_ring = quote! {
-        impl #impl_generics Ring for #name #ty_generics #where_clause {
-            type Scalar = #inner_ty;
-
-            type Order = #inner_ty;
-
-            type Base = #inner_ty;
-
-            #[inline]
-            fn order() -> Self::Order {
-                #modulus
-            }
-
-            #[inline]
-            fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
-                Self(self.0.mul_reduce(scalar, &Self::BARRETT_MODULUS))
-            }
-        }
-    };
+    let impl_ring = impl_ring(name, field_ty, &modulus);
 
     quote! {
+        #impl_basic
+
+        #impl_zero
+
+        #impl_one
+
         #impl_display
 
         #impl_barrett
@@ -192,5 +95,28 @@ fn impl_ring(input: Input) -> TokenStream {
         #impl_pow
 
         #impl_ring
+    }
+}
+
+fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
+    quote! {
+        impl algebra::ring::Ring for #name {
+            type Scalar = #field_ty;
+
+            type Order = #field_ty;
+
+            type Base = #field_ty;
+
+            #[inline]
+            fn order() -> Self::Order {
+                #modulus
+            }
+
+            #[inline]
+            fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
+                use algebra::modulo_traits::MulModulo;
+                Self(self.0.mul_reduce(scalar, &<Self as algebra::field::BarrettConfig<#field_ty>>::BARRETT_MODULUS))
+            }
+        }
     }
 }

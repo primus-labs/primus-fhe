@@ -1,4 +1,4 @@
-use algebra::Ring;
+use algebra::ring::Ring;
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
@@ -109,11 +109,31 @@ impl<R: Ring> LWE<R> {
 
 #[cfg(test)]
 mod tests {
-    use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
+    use algebra::field::{BarrettConfig, FieldDistribution};
     use rand::distributions::Standard;
     use rand::prelude::*;
 
     use super::*;
+
+    use algebra::{AlgebraRandom, Field, NTTField, Prime, Ring};
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        PartialOrd,
+        Ord,
+        Ring,
+        Field,
+        AlgebraRandom,
+        Prime,
+        NTTField,
+    )]
+    #[modulus = 132120577]
+    pub struct Fp32(u32);
 
     #[test]
     fn test_lwe() {

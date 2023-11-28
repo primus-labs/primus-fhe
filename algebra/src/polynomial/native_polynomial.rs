@@ -480,9 +480,29 @@ mod tests {
     use rand::prelude::*;
     use rand_distr::Standard;
 
-    use crate::field::{BarrettConfig, Fp32};
+    use crate::field::BarrettConfig;
 
     use super::*;
+
+    use algebra_derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
+
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        Eq,
+        PartialEq,
+        PartialOrd,
+        Ord,
+        Ring,
+        Field,
+        AlgebraRandom,
+        Prime,
+        NTTField,
+    )]
+    #[modulus = 132120577]
+    pub struct Fp32(u32);
 
     #[test]
     fn test_native_poly() {
