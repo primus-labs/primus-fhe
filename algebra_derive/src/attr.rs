@@ -4,7 +4,7 @@ pub(crate) struct Attrs {
     pub(crate) modulus: Option<LitInt>,
 }
 
-pub fn get(input: &[Attribute]) -> Result<Attrs> {
+pub(crate) fn get(input: &[Attribute]) -> Result<Attrs> {
     let mut attrs = Attrs { modulus: None };
 
     for attr in input {
