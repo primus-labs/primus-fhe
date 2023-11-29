@@ -4,7 +4,7 @@ use syn::{DeriveInput, Error, Generics, Index, Member, Result, Type};
 use crate::attr::{self, Attrs};
 
 pub(crate) struct Input<'a> {
-    pub(crate) _original: &'a DeriveInput,
+    pub(crate) original: &'a DeriveInput,
     pub(crate) attrs: Attrs,
     pub(crate) ident: Ident,
     pub(crate) _generics: &'a Generics,
@@ -12,7 +12,7 @@ pub(crate) struct Input<'a> {
 }
 
 pub(crate) struct Field<'a> {
-    pub(crate) _original: &'a syn::Field,
+    pub(crate) original: &'a syn::Field,
     pub(crate) _member: Member,
     pub(crate) ty: &'a Type,
 }
@@ -39,7 +39,7 @@ impl<'a> Input<'a> {
                 let field = Field::from_syn(field)?;
 
                 Ok(Input {
-                    _original: node,
+                    original: node,
                     attrs,
                     ident: node.ident.clone(),
                     _generics: &node.generics,
@@ -54,7 +54,7 @@ impl<'a> Input<'a> {
 impl<'a> Field<'a> {
     fn from_syn(node: &'a syn::Field) -> Result<Self> {
         Ok(Field {
-            _original: node,
+            original: node,
             _member: node.ident.clone().map(Member::Named).unwrap_or_else(|| {
                 Member::Unnamed(Index {
                     index: 0,

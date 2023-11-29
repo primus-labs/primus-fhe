@@ -1,4 +1,4 @@
-use algebra_derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
+use algebra::derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
 
 /// A finite Field type, whose inner size is 32bits.
 ///
@@ -20,6 +20,10 @@ use algebra_derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
 )]
 #[modulus = 132120577]
 pub struct Fp32(u32);
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, AlgebraRandom)]
+#[modulus = 512]
+pub struct R512(u32);
 
 #[cfg(test)]
 mod tests {
@@ -148,5 +152,87 @@ mod tests {
             .fold(Fp32(0), |acc, (i, d)| acc + d.mul_scalar(B.pow(i as u32)));
 
         assert_eq!(compose, a);
+    }
+
+    #[test]
+    fn test_ring() {
+        let max = R512::max().0;
+        let m = max + 1;
+
+        let distr = rand::distributions::Uniform::new_inclusive(0, max);
+        let mut rng = thread_rng();
+
+        type RR = R512;
+
+        // add
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = (a + b) % m;
+        assert_eq!(RR::new(a) + RR::new(b), RR::new(c));
+
+        // add_assign
+        let mut a = RR::new(a);
+        a += RR::new(b);
+        assert_eq!(a, RR::new(c));
+
+        // sub
+        let a = rng.sample(distr);
+        let b = rng.gen_range(0..=a);
+        let c = (a - b) % m;
+        assert_eq!(RR::new(a) - RR::new(b), RR::new(c));
+
+        // sub_assign
+        let mut a = RR::new(a);
+        a -= RR::new(b);
+        assert_eq!(a, RR::new(c));
+
+        // mul
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = ((a as u64 * b as u64) % m as u64) as u32;
+        assert_eq!(RR::new(a) * RR::new(b), RR::new(c));
+
+        // mul_assign
+        let mut a = RR::new(a);
+        a *= RR::new(b);
+        assert_eq!(a, RR::new(c));
+
+        // neg
+        let a = rng.sample(distr);
+        let a_neg = -RR::new(a);
+        assert_eq!(RR::new(a) + a_neg, num_traits::Zero::zero());
+
+        // associative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (RR::new(a) + RR::new(b)) + RR::new(c),
+            RR::new(a) + (RR::new(b) + RR::new(c))
+        );
+        assert_eq!(
+            (RR::new(a) * RR::new(b)) * RR::new(c),
+            RR::new(a) * (RR::new(b) * RR::new(c))
+        );
+
+        // commutative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        assert_eq!(RR::new(a) + RR::new(b), RR::new(b) + RR::new(a));
+        assert_eq!(RR::new(a) * RR::new(b), RR::new(b) * RR::new(a));
+
+        // identity
+        let a = rng.sample(distr);
+        assert_eq!(RR::new(a) + RR::new(0), RR::new(a));
+        assert_eq!(RR::new(a) * RR::new(1), RR::new(a));
+
+        // distribute
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (RR::new(a) + RR::new(b)) * RR::new(c),
+            (RR::new(a) * RR::new(c)) + (RR::new(b) * RR::new(c))
+        );
     }
 }

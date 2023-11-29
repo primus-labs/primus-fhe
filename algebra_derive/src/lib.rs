@@ -11,7 +11,7 @@ mod ring;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
-#[proc_macro_derive(Ring, attributes(backend, modulus))]
+#[proc_macro_derive(Ring, attributes(modulus))]
 pub fn derive_ring(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -20,7 +20,7 @@ pub fn derive_ring(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(Field, attributes(backend, modulus))]
+#[proc_macro_derive(Field, attributes(modulus))]
 pub fn derive_field(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -29,7 +29,7 @@ pub fn derive_field(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(AlgebraRandom, attributes(backend, modulus))]
+#[proc_macro_derive(AlgebraRandom, attributes(modulus))]
 pub fn derive_random(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -38,7 +38,7 @@ pub fn derive_random(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(Prime, attributes(backend, modulus))]
+#[proc_macro_derive(Prime, attributes(modulus))]
 pub fn derive_prime(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -47,7 +47,7 @@ pub fn derive_prime(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(NTTField, attributes(backend, modulus))]
+#[proc_macro_derive(NTTField, attributes(modulus))]
 pub fn derive_ntt(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 

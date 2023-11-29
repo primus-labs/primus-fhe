@@ -169,7 +169,7 @@ mod tests {
 
     use super::*;
 
-    use algebra::{AlgebraRandom, Field, NTTField, Prime, Ring};
+    use algebra::derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
 
     #[derive(
         Clone,
