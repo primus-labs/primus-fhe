@@ -3,8 +3,6 @@
 
 //! Define arithmetic operations.
 
-extern crate self as algebra;
-
 mod error;
 
 pub mod derive;
