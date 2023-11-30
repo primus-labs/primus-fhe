@@ -214,7 +214,7 @@ mod tests {
         const P: T = 1000000513;
         let modulus = Modulus::<T>::new(P);
 
-        let distr = rand::distributions::Uniform::new_inclusive(0, P);
+        let distr = rand::distributions::Uniform::new_inclusive(0, P - 1);
         let mut rng = thread_rng();
 
         for _ in 0..5 {
@@ -256,17 +256,17 @@ mod tests {
         type Num = u64;
         let mut rng = thread_rng();
 
-        let mut m = rng.gen_range(2..=(u64::MAX >> 2));
+        let mut m = rng.gen_range(2..=(Num::MAX >> 2));
 
         if m & 1 == 0 {
-            m += 1;
+            m |= 1;
         }
 
         let modulus = Modulus::<Num>::new(m);
 
         if modulus.probably_prime(20) {
-            let value: u64 = rng.gen_range(2..modulus.value());
-            let inv = value.inv_reduce(&modulus);
+            let value: Num = rng.gen_range(2..modulus.value());
+            let inv: Num = value.inv_reduce(&modulus);
             assert_eq!(
                 value.mul_reduce(inv, &modulus),
                 1,

@@ -29,7 +29,7 @@ pub fn derive_field(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(AlgebraRandom, attributes(modulus))]
+#[proc_macro_derive(Random, attributes(modulus))]
 pub fn derive_random(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -47,7 +47,7 @@ pub fn derive_prime(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(NTTField, attributes(modulus))]
+#[proc_macro_derive(NTT, attributes(modulus))]
 pub fn derive_ntt(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 

@@ -1,4 +1,4 @@
-//! This place defines some concrete implement of the field.
+//! This place defines some concrete implement of the prime field.
 
 use super::Field;
 

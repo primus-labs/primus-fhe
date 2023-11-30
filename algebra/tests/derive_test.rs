@@ -1,29 +1,14 @@
-use algebra::derive::{AlgebraRandom, Field, NTTField, Prime, Ring};
+use algebra::derive::{Field, Prime, Random, Ring, NTT};
 
-/// A finite Field type, whose inner size is 32bits.
-///
-/// Now, it's focused on the prime field.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Random)]
+#[modulus = 512]
+pub struct R512(u32);
+
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Eq,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Ring,
-    Field,
-    AlgebraRandom,
-    Prime,
-    NTTField,
+    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
 )]
 #[modulus = 132120577]
 pub struct Fp32(u32);
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, AlgebraRandom)]
-#[modulus = 512]
-pub struct R512(u32);
 
 #[cfg(test)]
 mod tests {
@@ -36,23 +21,28 @@ mod tests {
     use algebra::modulus::Modulus;
     use algebra::ring::Ring;
     use num_traits::Inv;
+    use rand::distributions::Uniform;
     use rand::thread_rng;
     use rand::Rng;
 
+    type FF = Fp32;
+    type RR = R512;
+    type T = u32;
+    type W = u64;
+
     #[test]
     fn test_fp() {
-        const P: u32 = Fp32::BARRETT_MODULUS.value();
+        let p = FF::BARRETT_MODULUS.value();
 
-        let distr = rand::distributions::Uniform::new(0, P);
+        let distr = Uniform::new(0, p);
         let mut rng = thread_rng();
 
-        type FF = Fp32;
         assert!(FF::is_prime_field());
 
         // add
         let a = rng.sample(distr);
         let b = rng.sample(distr);
-        let c = (a + b) % P;
+        let c = (a + b) % p;
         assert_eq!(FF::new(a) + FF::new(b), FF::new(c));
 
         // add_assign
@@ -63,7 +53,7 @@ mod tests {
         // sub
         let a = rng.sample(distr);
         let b = rng.gen_range(0..=a);
-        let c = (a - b) % P;
+        let c = (a - b) % p;
         assert_eq!(FF::new(a) - FF::new(b), FF::new(c));
 
         // sub_assign
@@ -74,7 +64,7 @@ mod tests {
         // mul
         let a = rng.sample(distr);
         let b = rng.sample(distr);
-        let c = ((a as u64 * b as u64) % P as u64) as u32;
+        let c = ((a as W * b as W) % p as W) as T;
         assert_eq!(FF::new(a) * FF::new(b), FF::new(c));
 
         // mul_assign
@@ -85,8 +75,8 @@ mod tests {
         // div
         let a = rng.sample(distr);
         let b = rng.sample(distr);
-        let b_inv = b.pow_reduce(P - 2, &Modulus::<u32>::new(P));
-        let c = ((a as u64 * b_inv as u64) % P as u64) as u32;
+        let b_inv = b.pow_reduce(p - 2, &Modulus::<T>::new(p));
+        let c = ((a as W * b_inv as W) % p as W) as T;
         assert_eq!(FF::new(a) / FF::new(b), FF::new(c));
 
         // div_assign
@@ -101,7 +91,7 @@ mod tests {
 
         // inv
         let a = rng.sample(distr);
-        let a_inv = a.pow_reduce(P - 2, &Modulus::<u32>::new(P));
+        let a_inv = a.pow_reduce(p - 2, &Modulus::<T>::new(p));
         assert_eq!(FF::new(a).inv(), FF::new(a_inv));
         assert_eq!(FF::new(a) * FF::new(a_inv), num_traits::One::one());
 
@@ -144,25 +134,23 @@ mod tests {
         const B: u32 = 1 << 2;
         let rng = &mut thread_rng();
 
-        let a: Fp32 = rng.gen();
+        let a: FF = rng.gen();
         let decompose = a.decompose(B);
         let compose = decompose
             .into_iter()
             .enumerate()
-            .fold(Fp32(0), |acc, (i, d)| acc + d.mul_scalar(B.pow(i as u32)));
+            .fold(FF::new(0), |acc, (i, d)| acc + d.mul_scalar(B.pow(i as T)));
 
         assert_eq!(compose, a);
     }
 
     #[test]
     fn test_ring() {
-        let max = R512::max().0;
+        let max = RR::max().0;
         let m = max + 1;
 
-        let distr = rand::distributions::Uniform::new_inclusive(0, max);
+        let distr = Uniform::new_inclusive(0, max);
         let mut rng = thread_rng();
-
-        type RR = R512;
 
         // add
         let a = rng.sample(distr);
@@ -189,7 +177,7 @@ mod tests {
         // mul
         let a = rng.sample(distr);
         let b = rng.sample(distr);
-        let c = ((a as u64 * b as u64) % m as u64) as u32;
+        let c = ((a as W * b as W) % m as W) as T;
         assert_eq!(RR::new(a) * RR::new(b), RR::new(c));
 
         // mul_assign
