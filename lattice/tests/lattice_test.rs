@@ -48,7 +48,7 @@ fn test_lwe() {
     let lwe2 = LWE::new(a2, b2);
     let lwe3 = LWE::new(a3, b3);
     assert_eq!(lwe1.clone().add_component_wise(&lwe2), lwe3);
-    assert_eq!(lwe3.clone().sub_component_wise(&lwe2), lwe1);
+    assert_eq!(lwe3.sub_component_wise(&lwe2), lwe1);
 }
 
 #[test]
