@@ -20,14 +20,12 @@ use crate::{GadgetRLWE, RLWE};
 /// The struct is generic over a type `F` that must implement the `NTTField` trait, indicating that field
 /// operations are compatible with Number Theoretic Transforms. This is essential for the efficient polynomial
 /// arithmetic required by the encryption scheme.
-///
-/// # Fields
-/// * `c_neg_s_m: GadgetRLWE<F>` - The first part of the RGSW ciphertext, which is often used for homomorphic operations
-///   and can represent the encrypted data multiplied by some secret value.
-/// * `c_m: GadgetRLWE<F>` - The second part of the RGSW ciphertext, typically representing the encrypted data.
 #[derive(Debug, Clone)]
 pub struct RGSW<F: NTTField> {
+    /// The first part of the RGSW ciphertext, which is often used for homomorphic operations
+    /// and can represent the encrypted data multiplied by some secret value.
     c_neg_s_m: GadgetRLWE<F>,
+    /// The second part of the RGSW ciphertext, typically representing the encrypted data.
     c_m: GadgetRLWE<F>,
 }
 

@@ -17,13 +17,11 @@ use crate::RLWE;
 /// The struct is generic over a type `F` that must implement the `NTTField` trait, which ensures that
 /// the field operations are compatible with Number Theoretic Transforms, a key requirement for
 /// efficient polynomial operations in RLWE-based cryptography.
-///
-/// # Fields
-/// * `data: Vec<RLWE<F>>` - A vector of RLWE ciphertexts, each encrypted message with a different power of the `basis`.
-/// * `basis: F::Base` - The base with respect to which the ciphertexts are scaled.
 #[derive(Debug, Clone)]
 pub struct GadgetRLWE<F: NTTField> {
+    /// A vector of RLWE ciphertexts, each encrypted message with a different power of the `basis`.
     data: Vec<RLWE<F>>,
+    /// The base with respect to which the ciphertexts are scaled.
     basis: F::Base,
 }
 

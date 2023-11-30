@@ -14,17 +14,14 @@ use crate::LWE;
 /// for NTT. This is crucial for the security and correctness of cryptographic operations based on RLWE.
 ///
 /// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
-/// accessible through public API functions that enforce any necessary invariants. They represent the
-/// public key and error term respectively in the RLWE scheme.
-///
-/// # Fields
-/// * `a`: [`Polynomial<F>`] - Represents the first component or the public key in the RLWE structure.
-/// It is a polynomial where the coefficients are elements of the field `F`.
-/// * `b`: [`Polynomial<F>`] - Represents the second component or the error term in the RLWE structure.
-/// It's also a polynomial with coefficients in the field `F`.
+/// accessible through public API functions that enforce any necessary invariants.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RLWE<F: NTTField> {
+    /// Represents the first component in the RLWE structure.
+    /// It is a polynomial where the coefficients are elements of the field `F`.
     pub(crate) a: Polynomial<F>,
+    /// Represents the second component in the RLWE structure.
+    /// It's also a polynomial with coefficients in the field `F`.
     pub(crate) b: Polynomial<F>,
 }
 

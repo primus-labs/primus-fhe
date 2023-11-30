@@ -3,14 +3,12 @@ use algebra::ring::Ring;
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
 /// secure cryptographic systems that are considered hard to crack by quantum computers.
-///
-/// This structure contains two main components:
-/// - `a`: A vector of elements of `R`, representing the public vector part of the LWE instance.
-/// - `b`: An element of `R`, representing the response value which is computed as
-///        the dot product of `a` with a secret vector, plus some noise.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LWE<R: Ring> {
+    /// A vector of elements of `R`, representing the public vector part of the LWE instance.
     a: Vec<R>,
+    /// An element of `R`, representing the value which is computed as
+    /// the dot product of `a` with a secret vector, plus message and some noise.
     b: R,
 }
 
