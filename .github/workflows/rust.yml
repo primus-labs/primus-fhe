@@ -11,14 +11,27 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  compatibility_check:
     name: Basic check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable 6 months ago
+          toolchain: stable minus 2 releases
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo check --workspace --all-targets --all-features
+      - run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
+
+  stable_check:
+    name: Basic check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
@@ -35,7 +48,7 @@ jobs:
       - run: cargo test --workspace --doc --all-features
       - run: cargo doc --no-deps --workspace --lib --document-private-items --all-features
 
-  test:
+  compatibility_test:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -45,7 +58,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable 6 months ago
+          toolchain: stable minus 2 releases
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --lib --bins --tests --examples --all-features
+
+  stable_test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    name: Test
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --lib --bins --tests --examples --all-features
 
