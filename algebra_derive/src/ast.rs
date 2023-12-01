@@ -1,5 +1,5 @@
-use proc_macro2::{Ident, Span};
-use syn::{DeriveInput, Error, Generics, Index, Member, Result, Type};
+use proc_macro2::Ident;
+use syn::{DeriveInput, Error, Generics, Result, Type};
 
 use crate::attr::{self, Attrs};
 
@@ -13,7 +13,6 @@ pub(crate) struct Input<'a> {
 
 pub(crate) struct Field<'a> {
     pub(crate) original: &'a syn::Field,
-    pub(crate) _member: Member,
     pub(crate) ty: &'a Type,
 }
 
@@ -27,15 +26,17 @@ impl<'a> Input<'a> {
 
         match node.data {
             syn::Data::Struct(ref data) => {
-                let field = match data.fields.iter().next() {
+                let mut field_iter = data.fields.iter();
+                let field = match field_iter.next() {
                     Some(field) => field,
-                    None => {
-                        return Err(Error::new_spanned(
-                            node,
-                            "one element in struct is necessary",
-                        ))
-                    }
+                    None => return Err(Error::new_spanned(node, "One element is necessary.")),
                 };
+                if let Some(second_field) = field_iter.next() {
+                    return Err(Error::new_spanned(
+                        second_field,
+                        "Only one element is enough. Do not supply more elements.",
+                    ));
+                }
                 let field = Field::from_syn(field)?;
 
                 Ok(Input {
@@ -46,21 +47,21 @@ impl<'a> Input<'a> {
                     field,
                 })
             }
-            _ => Err(Error::new_spanned(node, "only struct is supported")),
+            _ => Err(Error::new_spanned(node, "Only struct is supported.")),
         }
     }
 }
 
 impl<'a> Field<'a> {
     fn from_syn(node: &'a syn::Field) -> Result<Self> {
+        if let Some(ident) = node.ident.as_ref() {
+            return Err(Error::new_spanned(
+                ident,
+                "Named field like `self.x` is not supported. You should use an unnamed field like `self.0`.",
+            ));
+        }
         Ok(Field {
             original: node,
-            _member: node.ident.clone().map(Member::Named).unwrap_or_else(|| {
-                Member::Unnamed(Index {
-                    index: 0,
-                    span: Span::call_site(),
-                })
-            }),
             ty: &node.ty,
         })
     }
