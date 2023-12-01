@@ -19,7 +19,7 @@ fn impl_ntt(input: Input) -> TokenStream {
     let ntt_mutex = format_ident!("NTT_MUTEX{}", name.to_string().to_uppercase());
 
     quote! {
-        static mut #ntt_table: once_cell::sync::OnceCell<std::collections::HashMap<#field_ty, std::sync::Arc<algebra::transformation::NTTTable<#name>>>>
+        static mut #ntt_table: once_cell::sync::OnceCell<std::collections::HashMap<u32, std::sync::Arc<algebra::transformation::NTTTable<#name>>>>
             = once_cell::sync::OnceCell::new();
         static #ntt_mutex: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -32,17 +32,8 @@ fn impl_ntt(input: Input) -> TokenStream {
 
             #[inline]
             fn decompose_len(basis: Self::Base) -> usize {
-                const fn div_ceil(lhs: #field_ty, rhs: #field_ty) -> #field_ty {
-                    let d = lhs / rhs;
-                    let r = lhs % rhs;
-                    if r > 0 {
-                        d + 1
-                    } else {
-                        d
-                    }
-                }
                 debug_assert!(basis.is_power_of_two());
-                div_ceil(<Self as algebra::field::BarrettConfig<#field_ty>>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
+                algebra::div_ceil(<Self as algebra::field::BarrettConfig<#field_ty>>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
             fn decompose(&self, basis: Self::Base) -> Vec<Self> {
@@ -53,7 +44,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let mask = #field_ty::MAX >> (#field_ty::BITS - bits);
                 let mut ret: Vec<Self> = Vec::with_capacity(len);
 
-                while !num_traits::Zero::is_zero(&temp) {
+                while temp != 0 {
                     ret.push(Self(temp & mask));
                     temp >>= bits;
                 }
@@ -128,7 +119,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let mut rng = rand::thread_rng();
                 let distr = rand::distributions::Uniform::new_inclusive(Self(2), Self(#modulus - 1));
 
-                let mut w = num_traits::Zero::zero();
+                let mut w = Self(0);
 
                 if (0..100).any(|_| {
                     w = num_traits::Pow::pow(rand::Rng::sample(&mut rng, distr), quotient);
@@ -160,7 +151,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 Ok(root)
             }
 
-            fn generate_ntt_table(log_n: #field_ty) -> Result<algebra::transformation::NTTTable<Self>, algebra::AlgebraError> {
+            fn generate_ntt_table(log_n: u32) -> Result<algebra::transformation::NTTTable<Self>, algebra::AlgebraError> {
                 let n = 1usize << log_n;
 
                 let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
@@ -170,7 +161,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let mut power = root;
 
                 let mut root_powers = vec![<Self as algebra::field::NTTField>::Root::default(); n];
-                root_powers[0] = <Self as num_traits::One>::one().to_root();
+                root_powers[0] = Self(1).to_root();
                 for i in 1..n {
                     root_powers[algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = power.to_root();
                     power.mul_root_assign(root_factor);
@@ -180,7 +171,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let mut inv_root_powers = vec![<Self as algebra::field::NTTField>::Root::default(); n];
                 power = inv_root;
 
-                inv_root_powers[0] = <Self as num_traits::One>::one().to_root();
+                inv_root_powers[0] = Self(1).to_root();
                 for i in 1..n {
                     inv_root_powers[algebra::utils::ReverseLsbs::reverse_lsbs(i - 1, log_n) + 1] = power.to_root();
                     power.mul_root_assign(inv_root_factor);
@@ -198,7 +189,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 ))
             }
 
-            fn get_ntt_table(log_n: #field_ty) -> Result<std::sync::Arc<Self::Table>, algebra::AlgebraError> {
+            fn get_ntt_table(log_n: u32) -> Result<std::sync::Arc<Self::Table>, algebra::AlgebraError> {
                 if let Some(tables) = unsafe { #ntt_table.get() } {
                     if let Some(t) = tables.get(&log_n) {
                         return Ok(std::sync::Arc::clone(t));
@@ -211,12 +202,12 @@ fn impl_ntt(input: Input) -> TokenStream {
                 }))
             }
 
-            fn init_ntt_table(log_ns: &[#field_ty]) -> Result<(), algebra::AlgebraError> {
+            fn init_ntt_table(log_ns: &[u32]) -> Result<(), algebra::AlgebraError> {
                 let _g = #ntt_mutex.lock().unwrap();
                 match unsafe { #ntt_table.get_mut() } {
                     Some(tables) => {
-                        let new_log_ns: std::collections::HashSet<#field_ty> = log_ns.iter().copied().collect();
-                        let old_log_ns: std::collections::HashSet<#field_ty> = tables.keys().copied().collect();
+                        let new_log_ns: std::collections::HashSet<u32> = log_ns.iter().copied().collect();
+                        let old_log_ns: std::collections::HashSet<u32> = tables.keys().copied().collect();
                         let difference = new_log_ns.difference(&old_log_ns);
 
                         for &log_n in difference {
@@ -227,7 +218,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                         Ok(())
                     }
                     None => {
-                        let log_ns: std::collections::HashSet<#field_ty> = log_ns.iter().copied().collect();
+                        let log_ns: std::collections::HashSet<u32> = log_ns.iter().copied().collect();
                         let mut map = std::collections::HashMap::with_capacity(log_ns.len());
 
                         for log_n in log_ns {

@@ -24,7 +24,7 @@ use syn::{parse_macro_input, DeriveInput};
 /// But it will note generating impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 /// You need to make it by yourself.
 ///
-/// It can used for unnamed struct with only one element in `u8`, `u16`, `u32`, `u64`.
+/// It can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 ///
 /// # Example
 ///
@@ -46,7 +46,7 @@ pub fn derive_ring(input: TokenStream) -> TokenStream {
 ///
 /// This also generating some compitation for it, e.g. `Div` and `Inv`.
 ///
-/// It can used for unnamed struct with only one element in `u8`, `u16`, `u32`, `u64`.
+/// It can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 ///
 /// # Example
 ///

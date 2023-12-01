@@ -120,3 +120,23 @@ bits!(isize, 64);
 
 #[cfg(target_pointer_width = "64")]
 bits!(usize, 64);
+
+#[doc = " Calculates the quotient of `self` and `rhs`, rounding the result towards positive infinity."]
+#[doc = ""]
+#[doc = " # Panics"]
+#[doc = ""]
+#[doc = " This function will panic if `rhs` is zero."]
+#[doc = ""]
+#[doc = " ## Overflow behavior"]
+#[doc = ""]
+#[doc = " On overflow, this function will panic if overflow checks are enabled (default in debug"]
+#[doc = " mode) and wrap if overflow checks are disabled (default in release mode)."]
+pub const fn div_ceil(lhs: u32, rhs: u32) -> u32 {
+    let d = lhs / rhs;
+    let r = lhs % rhs;
+    if r > 0 {
+        d + 1
+    } else {
+        d
+    }
+}

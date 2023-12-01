@@ -56,6 +56,11 @@ pub(crate) fn impl_zero(name: &Ident) -> TokenStream {
             fn is_zero(&self) -> bool {
                 self.0 == 0
             }
+
+            #[inline]
+            fn set_zero(&mut self) {
+                self.0 = 0;
+            }
         }
     }
 }
@@ -66,6 +71,17 @@ pub(crate) fn impl_one(name: &Ident) -> TokenStream {
             #[inline]
             fn one() -> Self {
                 Self(1)
+            }
+
+            #[inline]
+            fn set_one(&mut self) {
+                self.0 = 1;
+            }
+
+            #[inline]
+            fn is_one(&self) -> bool
+            {
+                self.0 == 1
             }
         }
     }

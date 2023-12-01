@@ -10,8 +10,7 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     Ok(impl_random(input))
 }
 
-fn standard(name: &Ident) -> TokenStream {
-    let standard_name = format_ident!("STANDARD_{}", name.to_string().to_uppercase());
+fn standard(name: &Ident, standard_name: &Ident) -> TokenStream {
     quote! {
         static #standard_name: once_cell::sync::Lazy<rand::distributions::Uniform<#name>> =
             once_cell::sync::Lazy::new(|| rand::distributions::Uniform::new_inclusive(#name(0), #name::max()));
@@ -213,11 +212,12 @@ fn impl_random(input: Input) -> TokenStream {
     let modulus = input.attrs.modulus.unwrap();
     let field_ty = input.field.ty;
 
+    let standard_name = format_ident!("STANDARD_{}", name.to_string().to_uppercase());
     let binary_name = format_ident!("Binary{}", name);
     let ternary_name = format_ident!("Ternary{}", name);
     let normal_name = format_ident!("Normal{}", name);
 
-    let impl_standard = standard(name);
+    let impl_standard = standard(name, &standard_name);
     let impl_binary = binary(name, &binary_name);
     let impl_ternary = ternary(name, &ternary_name);
     let impl_uniform = uniform(name, field_ty, &modulus);
@@ -234,12 +234,27 @@ fn impl_random(input: Input) -> TokenStream {
 
         #impl_normal
 
+        impl #name {
+            #[doc = concat!("Get a random value of [`", stringify!(#name), "`].")]
+            #[inline]
+            fn random() -> Self {
+                rand::random()
+            }
+        }
+
         impl algebra::field::FieldDistribution for #name {
+            type StandardDistribution = rand::distributions::Uniform<#name>;
+
             type BinaryDistribution = #binary_name;
 
             type TernaryDistribution = #ternary_name;
 
             type NormalDistribution = #normal_name;
+
+            #[inline]
+            fn standard_distribution() -> &'static Self::StandardDistribution {
+                & #standard_name
+            }
 
             #[inline]
             fn binary_distribution() -> Self::BinaryDistribution {
