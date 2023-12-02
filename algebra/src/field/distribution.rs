@@ -43,7 +43,7 @@ pub trait FieldDistribution: Sized + SampleUniform {
     type NormalDistribution: Distribution<Self>;
 
     /// Get the standard distribution.
-    fn standard_distribution() -> &'static Self::StandardDistribution;
+    fn standard_distribution() -> Self::StandardDistribution;
 
     /// Get the binary distribution.
     fn binary_distribution() -> Self::BinaryDistribution;

@@ -3,8 +3,8 @@ use algebra::{
     field::{BarrettConfig, Field, NTTField},
     polynomial::{NTTPolynomial, Polynomial},
 };
-use rand::{distributions::Uniform, prelude::*, thread_rng};
-use rand_distr::Standard;
+use num_traits::{One, Zero};
+use rand::thread_rng;
 
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
@@ -26,12 +26,7 @@ const P: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
 fn test_transform() {
     FF::init_ntt_table(&[LOG_N as u32]).unwrap();
 
-    let distr = Uniform::new(0, P);
-    let rng = thread_rng();
-
-    let coeffs = rng.sample_iter(distr).take(N).map(FF::new).collect();
-
-    let a = PolyFF::new(coeffs);
+    let a = PolyFF::random(N, thread_rng());
     let b = a.clone().to_ntt_polynomial();
     let c = b.clone().to_native_polynomial();
     let d = c.clone().to_ntt_polynomial();
@@ -63,15 +58,10 @@ fn test_native_poly() {
 fn test_native_poly_mul() {
     FF::init_ntt_table(&[LOG_N as u32]).unwrap();
 
-    let distr = Uniform::new(0, P);
     let mut rng = thread_rng();
 
-    let coeffs1: Vec<FF> = distr.sample_iter(&mut rng).take(N).map(FF::new).collect();
-
-    let coeffs2: Vec<FF> = distr.sample_iter(&mut rng).take(N).map(FF::new).collect();
-
-    let a = PolyFF::new(coeffs1);
-    let b = PolyFF::new(coeffs2);
+    let a = PolyFF::random(N, &mut rng);
+    let b = PolyFF::random(N, &mut rng);
 
     let mul_result = simple_mul(&a, &b);
     assert_eq!(a * b, mul_result);
@@ -105,7 +95,7 @@ fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<
 #[test]
 fn test_poly_decompose() {
     let rng = &mut thread_rng();
-    let poly = PolyFF::new(Standard.sample_iter(rng).take(N).collect());
+    let poly = PolyFF::random(N, rng);
     let decompose = poly.decompose(B);
     let compose = decompose
         .into_iter()
@@ -118,10 +108,10 @@ fn test_poly_decompose() {
 
 #[test]
 fn test_poly_decompose_mul() {
-    let rng = &mut thread_rng();
+    let mut rng = thread_rng();
 
-    let poly1 = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-    let poly2 = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let poly1 = PolyFF::random(N, &mut rng);
+    let poly2 = PolyFF::random(N, &mut rng);
 
     let mul_result = &poly1 * &poly2;
 
@@ -159,4 +149,26 @@ fn test_ntt_poly() {
     assert_eq!(a.clone() - b.clone(), sub_result);
 
     assert_eq!(-a, b);
+}
+
+#[test]
+fn test_poly_eval() {
+    let rng = &mut thread_rng();
+    let poly = PolyFF::random(N, rng);
+
+    assert_eq!(
+        poly.evaluate(FF::max()),
+        poly.iter()
+            .enumerate()
+            .fold(FF::zero(), |acc, (i, a)| if i & 1 == 0 {
+                acc + a
+            } else {
+                acc - a
+            })
+    );
+    assert_eq!(poly.evaluate(FF::zero()), poly[0]);
+    assert_eq!(
+        poly.evaluate(FF::one()),
+        poly.iter().fold(FF::zero(), |acc, a| acc + a)
+    );
 }

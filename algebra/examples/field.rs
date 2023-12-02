@@ -68,7 +68,7 @@ fn main() -> Result<(), algebra::AlgebraError> {
     b.set_zero();
 
     // uniform random on all values of [`FF`]
-    let mut a = FF::random();
+    let mut a = FF::random(&mut rng);
     let b: FF = rand::random();
     let _a: FF = rng.gen();
     let _a: FF = Standard.sample(&mut rng);
@@ -121,18 +121,8 @@ fn main() -> Result<(), algebra::AlgebraError> {
     // through NTT, you can comput polynomial multiplication
     type PolyFF = Polynomial<FF>;
     const N: usize = 8;
-    let a = PolyFF::new(
-        FF::standard_distribution()
-            .sample_iter(&mut rng)
-            .take(N)
-            .collect(),
-    );
-    let b = PolyFF::new(
-        FF::standard_distribution()
-            .sample_iter(&mut rng)
-            .take(N)
-            .collect(),
-    );
+    let a = PolyFF::random(N, &mut rng);
+    let b = PolyFF::random(N, &mut rng);
 
     let _c = a * b;
 

@@ -103,16 +103,16 @@ fn test_lwe_he() {
 
 #[test]
 fn test_rlwe() {
-    let rng = &mut rand::thread_rng();
+    let mut rng = rand::thread_rng();
 
-    let r: PolyFF = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let r: PolyFF = PolyFF::random(N, &mut rng);
 
-    let a1: PolyFF = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-    let a2: PolyFF = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let a1: PolyFF = PolyFF::random(N, &mut rng);
+    let a2: PolyFF = PolyFF::random(N, &mut rng);
     let a3: PolyFF = &a1 * &r;
 
-    let b1: PolyFF = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-    let b2: PolyFF = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let b1: PolyFF = PolyFF::random(N, &mut rng);
+    let b2: PolyFF = PolyFF::random(N, &mut rng);
     let b3: PolyFF = &b1 * &r;
 
     let rlwe1 = RLWE::new(a1, b1);
@@ -145,12 +145,12 @@ fn min_to_zero(value: FF) -> Inner {
 
 #[test]
 fn test_rlwe_he() {
-    let rng = &mut rand::thread_rng();
+    let mut rng = rand::thread_rng();
     let chi = FF::normal_distribution(0., 3.2).unwrap();
     let dis = Uniform::new(0, FT);
 
-    let v0: Vec<Inner> = rng.sample_iter(dis).take(N).collect();
-    let v1: Vec<Inner> = rng.sample_iter(dis).take(N).collect();
+    let v0: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
+    let v1: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
 
     let v_add: Vec<Inner> = v0
         .iter()
@@ -161,18 +161,18 @@ fn test_rlwe_he() {
     let v0 = PolyFF::new(v0.into_iter().map(encode).collect());
     let v1 = PolyFF::new(v1.into_iter().map(encode).collect());
 
-    let s = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let s = PolyFF::random(N, &mut rng);
 
     let rlwe0 = {
-        let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-        let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+        let a = PolyFF::random(N, &mut rng);
+        let e = PolyFF::random_with_dis(N, &mut rng, chi);
         let b = &a * &s + v0 + e;
         RLWE::new(a, b)
     };
 
     let rlwe1 = {
-        let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-        let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+        let a = PolyFF::random(N, &mut rng);
+        let e = PolyFF::random_with_dis(N, &mut rng, chi);
         let b = &a * &s + v1 + e;
         RLWE::new(a, b)
     };
@@ -212,22 +212,22 @@ fn extract_lwe_test() {
 
 #[test]
 fn test_gadget_rlwe() {
-    let rng = &mut rand::thread_rng();
+    let mut rng = rand::thread_rng();
     let chi = FF::normal_distribution(0., 3.2).unwrap();
 
-    let m = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-    let poly = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let m = PolyFF::random(N, &mut rng);
+    let poly = PolyFF::random(N, &mut rng);
 
     let poly_mul_m = &poly * &m;
 
-    let s = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let s = PolyFF::random(N, &mut rng);
 
     let decompose_len = FF::decompose_len(B);
 
     let m_base_power = (0..decompose_len)
         .map(|i| {
-            let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-            let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+            let a = PolyFF::random(N, &mut rng);
+            let e = PolyFF::random_with_dis(N, &mut rng, chi);
             let b = &a * &s + m.mul_scalar(B.pow(i as u32)) + e;
 
             RLWE::new(a, b)
@@ -271,24 +271,24 @@ fn test_gadget_rlwe() {
 
 #[test]
 fn test_rgsw_mul_rlwe() {
-    let rng = &mut rand::thread_rng();
+    let mut rng = rand::thread_rng();
     let ternary = FF::ternary_distribution();
     let chi = FF::normal_distribution(0., 3.2).unwrap();
 
-    let m0 = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-    let m1 = PolyFF::new(rng.sample_iter(ternary).take(N).collect());
+    let m0 = PolyFF::random(N, &mut rng);
+    let m1 = PolyFF::random_with_dis(N, &mut rng, ternary);
 
     let m0m1 = &m0 * &m1;
 
-    let s = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let s = PolyFF::random(N, &mut rng);
 
     let decompose_len = FF::decompose_len(B);
 
     let rgsw = {
         let m1_base_power = (0..decompose_len)
             .map(|i| {
-                let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-                let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+                let a = PolyFF::random(N, &mut rng);
+                let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + m1.mul_scalar(B.pow(i as u32)) + e;
 
                 RLWE::new(a, b)
@@ -297,8 +297,8 @@ fn test_rgsw_mul_rlwe() {
 
         let neg_sm1_base_power = (0..decompose_len)
             .map(|i| {
-                let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-                let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+                let a = PolyFF::random(N, &mut rng);
+                let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
                 RLWE::new(a + m1.mul_scalar(B.pow(i as u32)), b)
@@ -312,8 +312,8 @@ fn test_rgsw_mul_rlwe() {
     };
 
     let (rlwe, _e) = {
-        let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-        let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+        let a = PolyFF::random(N, &mut rng);
+        let e = PolyFF::random_with_dis(N, &mut rng, chi);
         let b = &a * &s + m0 + &e;
 
         (RLWE::new(a, b), e)
@@ -329,24 +329,24 @@ fn test_rgsw_mul_rlwe() {
 
 #[test]
 fn test_rgsw_mul_rgsw() {
-    let rng = &mut rand::thread_rng();
+    let mut rng = rand::thread_rng();
     let ternary = FF::ternary_distribution();
     let chi = FF::normal_distribution(0., 3.2).unwrap();
 
-    let m0 = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-    let m1 = PolyFF::new(rng.sample_iter(ternary).take(N).collect());
+    let m0 = PolyFF::random(N, &mut rng);
+    let m1 = PolyFF::random_with_dis(N, &mut rng, ternary);
 
     let m0m1 = &m0 * &m1;
 
-    let s = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
+    let s = PolyFF::random(N, &mut rng);
 
     let decompose_len = FF::decompose_len(B);
 
     let rgsw_m1 = {
         let m1_base_power = (0..decompose_len)
             .map(|i| {
-                let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-                let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+                let a = PolyFF::random(N, &mut rng);
+                let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + m1.mul_scalar(B.pow(i as u32)) + e;
 
                 RLWE::new(a, b)
@@ -355,8 +355,8 @@ fn test_rgsw_mul_rgsw() {
 
         let neg_sm1_base_power = (0..decompose_len)
             .map(|i| {
-                let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-                let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+                let a = PolyFF::random(N, &mut rng);
+                let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
                 RLWE::new(a + m1.mul_scalar(B.pow(i as u32)), b)
@@ -372,8 +372,8 @@ fn test_rgsw_mul_rgsw() {
     let rgsw_m0 = {
         let m0_base_power = (0..decompose_len)
             .map(|i| {
-                let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-                let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+                let a = PolyFF::random(N, &mut rng);
+                let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + m0.mul_scalar(B.pow(i as u32)) + e;
 
                 RLWE::new(a, b)
@@ -382,8 +382,8 @@ fn test_rgsw_mul_rgsw() {
 
         let neg_sm0_base_power = (0..decompose_len)
             .map(|i| {
-                let a = PolyFF::new(rng.sample_iter(Standard).take(N).collect());
-                let e = PolyFF::new(rng.sample_iter(chi).take(N).collect());
+                let a = PolyFF::random(N, &mut rng);
+                let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
                 RLWE::new(a + m0.mul_scalar(B.pow(i as u32)), b)

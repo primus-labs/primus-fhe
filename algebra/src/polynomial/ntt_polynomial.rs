@@ -2,8 +2,9 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 
 use num_traits::Zero;
+use rand_distr::Distribution;
 
-use crate::field::{Field, NTTField};
+use crate::field::{Field, FieldDistribution, NTTField};
 use crate::transformation::AbstractNTT;
 
 use super::Polynomial;
@@ -118,11 +119,51 @@ impl<F: Field> NTTPolynomial<F> {
     }
 }
 
+impl<F: Field + FieldDistribution> NTTPolynomial<F> {
+    /// Generate a random [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn random<R>(n: usize, rng: R) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self {
+            data: F::standard_distribution()
+                .sample_iter(rng)
+                .take(n)
+                .collect(),
+        }
+    }
+
+    /// Generate a random [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+        D: Distribution<F>,
+    {
+        Self {
+            data: dis.sample_iter(rng).take(n).collect(),
+        }
+    }
+}
+
 impl<F: NTTField> NTTPolynomial<F> {
     /// Convert `self` from [`NTTPolynomial<F>`] to [`Polynomial<F>`]
     #[inline]
     pub fn to_native_polynomial(self) -> Polynomial<F> {
         <Polynomial<F>>::from(self)
+    }
+
+    /// Given `x`, outputs `f(x)`
+    ///
+    /// # Attention
+    ///
+    /// If you want to evaluate same poly with different `x`,
+    /// you would better transform this [`NTTPolynomial<F>`] to [`Polynomial<F>`] first.
+    /// And then, you use that [`Polynomial<F>`] to evaluate with different `x`.
+    #[inline]
+    pub fn evaluate(&self, x: F) -> F {
+        self.clone().to_native_polynomial().evaluate(x)
     }
 }
 

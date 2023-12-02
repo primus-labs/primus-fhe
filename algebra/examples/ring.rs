@@ -50,7 +50,7 @@ fn main() -> Result<(), algebra::AlgebraError> {
     b.set_zero();
 
     // uniform random on all values of [`RR`]
-    let mut a = RR::random();
+    let mut a = RR::random(rng);
     let b: RR = rand::random();
     let _a: RR = rng.gen();
     let _a: RR = Standard.sample(rng);

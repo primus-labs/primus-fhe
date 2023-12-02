@@ -237,8 +237,12 @@ fn impl_random(input: Input) -> TokenStream {
         impl #name {
             #[doc = concat!("Get a random value of [`", stringify!(#name), "`].")]
             #[inline]
-            fn random() -> Self {
-                rand::random()
+            pub fn random<R>(rng: &mut R) -> Self
+            where
+                R: rand::Rng + rand::CryptoRng,
+            {
+                use rand::distributions::Distribution;
+                #standard_name.sample(rng)
             }
         }
 
@@ -252,8 +256,8 @@ fn impl_random(input: Input) -> TokenStream {
             type NormalDistribution = #normal_name;
 
             #[inline]
-            fn standard_distribution() -> &'static Self::StandardDistribution {
-                & #standard_name
+            fn standard_distribution() -> Self::StandardDistribution {
+                #standard_name.clone()
             }
 
             #[inline]

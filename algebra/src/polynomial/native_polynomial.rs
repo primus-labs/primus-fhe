@@ -2,8 +2,9 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 
 use num_traits::Zero;
+use rand_distr::Distribution;
 
-use crate::field::{Field, NTTField};
+use crate::field::{Field, FieldDistribution, NTTField};
 use crate::transformation::AbstractNTT;
 
 use super::NTTPolynomial;
@@ -139,6 +140,40 @@ impl<F: Field> Polynomial<F> {
         FN: FnMut() -> F,
     {
         self.data.resize_with(new_degree, f);
+    }
+
+    /// Given `x`, outputs `f(x)`
+    #[inline]
+    pub fn evaluate(&self, x: F) -> F {
+        self.data.iter().rev().fold(F::zero(), |acc, a| acc * x + a)
+    }
+}
+
+impl<F: Field + FieldDistribution> Polynomial<F> {
+    /// Generate a random [`Polynomial<F>`].
+    #[inline]
+    pub fn random<R>(n: usize, rng: R) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self {
+            data: F::standard_distribution()
+                .sample_iter(rng)
+                .take(n)
+                .collect(),
+        }
+    }
+
+    /// Generate a random [`Polynomial<F>`].
+    #[inline]
+    pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+        D: Distribution<F>,
+    {
+        Self {
+            data: dis.sample_iter(rng).take(n).collect(),
+        }
     }
 }
 
