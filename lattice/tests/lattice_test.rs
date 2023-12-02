@@ -1,6 +1,6 @@
 use algebra::derive::{Field, Prime, Random, Ring, NTT};
 use algebra::field::{BarrettConfig, FieldDistribution, NTTField};
-use algebra::polynomial::{Poly, Polynomial};
+use algebra::polynomial::Polynomial;
 use algebra::ring::Ring;
 use lattice::*;
 use rand::prelude::*;

@@ -1,7 +1,7 @@
 use algebra::{
     derive::{Field, Prime, Random, Ring, NTT},
     field::{BarrettConfig, Field, NTTField},
-    polynomial::{NTTPolynomial, Poly, Polynomial},
+    polynomial::{NTTPolynomial, Polynomial},
 };
 use rand::{distributions::Uniform, prelude::*, thread_rng};
 use rand_distr::Standard;

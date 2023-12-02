@@ -1,6 +1,6 @@
 use algebra::{
     field::NTTField,
-    polynomial::{NTTPolynomial, Poly, Polynomial},
+    polynomial::{NTTPolynomial, Polynomial},
 };
 
 use crate::RLWE;

@@ -101,7 +101,8 @@ fn main() -> Result<(), algebra::AlgebraError> {
     // neg operation
     a = -a;
     a.neg_in_place(); // a = -a;
-                      // inv operation
+
+    // inv operation
     a = a.inv(); // a = 1 / a;
     a = a.inverse().unwrap();
     a.inverse_in_place();

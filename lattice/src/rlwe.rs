@@ -1,5 +1,5 @@
 use algebra::field::NTTField;
-use algebra::polynomial::{NTTPolynomial, Poly, Polynomial};
+use algebra::polynomial::{NTTPolynomial, Polynomial};
 
 use crate::LWE;
 

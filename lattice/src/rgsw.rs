@@ -1,7 +1,4 @@
-use algebra::{
-    field::NTTField,
-    polynomial::{NTTPolynomial, Poly},
-};
+use algebra::{field::NTTField, polynomial::NTTPolynomial};
 
 use crate::{GadgetRLWE, RLWE};
 

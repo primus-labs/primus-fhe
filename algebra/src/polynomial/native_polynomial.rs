@@ -6,7 +6,7 @@ use num_traits::Zero;
 use crate::field::{Field, NTTField};
 use crate::transformation::AbstractNTT;
 
-use super::{NTTPolynomial, Poly};
+use super::NTTPolynomial;
 
 /// Represents a polynomial where coefficients are elements of a specified field `F`.
 ///
@@ -37,8 +37,27 @@ pub struct Polynomial<F: Field> {
 }
 
 impl<F: Field> From<Vec<F>> for Polynomial<F> {
+    #[inline]
     fn from(value: Vec<F>) -> Self {
         Self { data: value }
+    }
+}
+
+impl<F: NTTField> From<NTTPolynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn from(vec: NTTPolynomial<F>) -> Self {
+        debug_assert!(vec.coeff_count().is_power_of_two());
+
+        let ntt_table = F::get_ntt_table(vec.coeff_count().trailing_zeros()).unwrap();
+
+        ntt_table.inverse_transform_inplace(vec)
+    }
+}
+
+impl<F: NTTField> From<&NTTPolynomial<F>> for Polynomial<F> {
+    #[inline]
+    fn from(vec: &NTTPolynomial<F>) -> Self {
+        <Polynomial<F>>::from(vec.clone())
     }
 }
 
@@ -49,17 +68,23 @@ impl<F: Field> Polynomial<F> {
         Self { data: poly }
     }
 
+    /// Constructs a new polynomial from a slice.
+    #[inline]
+    pub fn from_slice(poly: &[F]) -> Self {
+        Self::new(poly.to_vec())
+    }
+
     /// Drop self, and return the data
     #[inline]
     pub fn data(self) -> Vec<F> {
         self.data
     }
 
-    /// Creates a [`NTTPolynomial<F>`] with all coefficients equal to zero.
+    /// Creates a [`Polynomial<F>`] with all coefficients equal to zero.
     #[inline]
     pub fn zero_with_coeff_count(coeff_count: usize) -> Self {
         Self {
-            data: vec![Zero::zero(); coeff_count],
+            data: vec![F::zero(); coeff_count],
         }
     }
 
@@ -80,11 +105,48 @@ impl<F: Field> Polynomial<F> {
     /// Multipile `self` with the a scalar.
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Scalar) -> Self {
-        Self::new(
-            self.iter()
-                .map(|v| v.mul_scalar(scalar))
-                .collect::<Vec<F>>(),
-        )
+        Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+    }
+
+    /// Get the coefficient counts of polynomial.
+    #[inline]
+    pub fn coeff_count(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
+    #[inline]
+    pub fn iter(&self) -> Iter<F> {
+        self.data.iter()
+    }
+
+    /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<F> {
+        self.data.iter_mut()
+    }
+
+    /// Alter the coefficient count of the polynomial.
+    #[inline]
+    pub fn resize(&mut self, new_degree: usize, value: F) {
+        self.data.resize(new_degree, value);
+    }
+
+    /// Alter the coefficient count of the polynomial.
+    #[inline]
+    pub fn resize_with<FN>(&mut self, new_degree: usize, f: FN)
+    where
+        FN: FnMut() -> F,
+    {
+        self.data.resize_with(new_degree, f);
+    }
+}
+
+impl<F: NTTField> Polynomial<F> {
+    /// Convert `self` from [`Polynomial<F>`] to [`NTTPolynomial<F>`]
+    #[inline]
+    pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
+        <NTTPolynomial<F>>::from(self)
     }
 }
 
@@ -150,13 +212,13 @@ impl<F: Field> Zero for Polynomial<F> {
 
     #[inline]
     fn is_zero(&self) -> bool {
-        self.data.is_empty() || self.data.iter().all(Zero::is_zero)
+        self.data.is_empty() || self.data.iter().all(F::is_zero)
     }
 
     #[inline]
     fn set_zero(&mut self) {
         let coeff_count = self.coeff_count();
-        self.data = vec![Zero::zero(); coeff_count];
+        self.data = vec![F::zero(); coeff_count];
     }
 }
 
@@ -168,46 +230,6 @@ impl<F: Field> IntoIterator for Polynomial<F> {
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.data.into_iter()
-    }
-}
-
-impl<F: Field> Poly<F> for Polynomial<F> {
-    #[inline]
-    fn coeff_count(&self) -> usize {
-        self.data.len()
-    }
-
-    #[inline]
-    fn from_slice(poly: &[F]) -> Self {
-        Self::from_vec(poly.to_vec())
-    }
-
-    #[inline]
-    fn from_vec(poly: Vec<F>) -> Self {
-        Self { data: poly }
-    }
-
-    #[inline]
-    fn iter(&self) -> Iter<F> {
-        self.data.iter()
-    }
-
-    #[inline]
-    fn iter_mut(&mut self) -> IterMut<F> {
-        self.data.iter_mut()
-    }
-
-    #[inline]
-    fn resize(&mut self, new_degree: usize, value: F) {
-        self.data.resize(new_degree, value);
-    }
-
-    #[inline]
-    fn resize_with<FN>(&mut self, new_degree: usize, f: FN)
-    where
-        FN: FnMut() -> F,
-    {
-        self.data.resize_with(new_degree, f);
     }
 }
 
@@ -263,7 +285,7 @@ impl<F: Field> Add<&Polynomial<F>> for &Polynomial<F> {
     fn add(self, rhs: &Polynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
-        Polynomial::<F>::new(poly)
+        <Polynomial<F>>::new(poly)
     }
 }
 
@@ -321,7 +343,7 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     fn sub(self, rhs: &Polynomial<F>) -> Self::Output {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
-        Polynomial::<F>::new(poly)
+        <Polynomial<F>>::new(poly)
     }
 }
 
@@ -446,31 +468,5 @@ impl<F: Field> Neg for Polynomial<F> {
             *e = -*e;
         });
         self
-    }
-}
-
-impl<F: NTTField> Polynomial<F> {
-    /// Convert `self` from [`Polynomial<F>`] into [`NTTPolynomial<F>`]
-    #[inline]
-    pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
-        <NTTPolynomial<F>>::from(self)
-    }
-}
-
-impl<F: NTTField> From<NTTPolynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn from(vec: NTTPolynomial<F>) -> Self {
-        debug_assert!(vec.coeff_count().is_power_of_two());
-
-        let ntt_table = F::get_ntt_table(vec.coeff_count().trailing_zeros()).unwrap();
-
-        ntt_table.inverse_transform_inplace(vec)
-    }
-}
-
-impl<F: NTTField> From<&NTTPolynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn from(vec: &NTTPolynomial<F>) -> Self {
-        <Polynomial<F>>::from(vec.clone())
     }
 }
