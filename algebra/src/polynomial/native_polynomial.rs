@@ -164,7 +164,7 @@ impl<F: Field + FieldDistribution> Polynomial<F> {
         }
     }
 
-    /// Generate a random [`Polynomial<F>`].
+    /// Generate a random [`Polynomial<F>`] with a specified distribution `dis`.
     #[inline]
     pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
     where

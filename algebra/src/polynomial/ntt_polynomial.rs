@@ -134,7 +134,7 @@ impl<F: Field + FieldDistribution> NTTPolynomial<F> {
         }
     }
 
-    /// Generate a random [`NTTPolynomial<F>`].
+    /// Generate a random [`NTTPolynomial<F>`]  with a specified distribution `dis`.
     #[inline]
     pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
     where
