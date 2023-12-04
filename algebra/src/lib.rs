@@ -5,6 +5,8 @@
 
 mod error;
 
+pub mod derive;
+
 pub mod field;
 pub mod modulo_traits;
 pub mod modulus;
@@ -18,4 +20,4 @@ mod primitive;
 
 pub use error::AlgebraError;
 
-pub(crate) use primitive::{Bits, Widening};
+pub use primitive::{div_ceil, Bits, Widening};

@@ -1,4 +1,6 @@
-pub(crate) trait Widening: Sized {
+/// A trait for big number calculation
+pub trait Widening: Sized {
+    /// A wider type for multiplication
     type WideT;
 
     /// Calculates `self` + `rhs` + `carry` and checks for overflow.
@@ -83,7 +85,7 @@ uint_widening_impl! { u32, u64 }
 uint_widening_impl! { u64, u128 }
 
 /// Extension trait to provide access to bits of integers.
-pub(crate) trait Bits {
+pub trait Bits {
     /// The number of bits this type has.
     const N_BITS: u32;
 }
@@ -118,3 +120,23 @@ bits!(isize, 64);
 
 #[cfg(target_pointer_width = "64")]
 bits!(usize, 64);
+
+#[doc = " Calculates the quotient of `self` and `rhs`, rounding the result towards positive infinity."]
+#[doc = ""]
+#[doc = " # Panics"]
+#[doc = ""]
+#[doc = " This function will panic if `rhs` is zero."]
+#[doc = ""]
+#[doc = " ## Overflow behavior"]
+#[doc = ""]
+#[doc = " On overflow, this function will panic if overflow checks are enabled (default in debug"]
+#[doc = " mode) and wrap if overflow checks are disabled (default in release mode)."]
+pub const fn div_ceil(lhs: u32, rhs: u32) -> u32 {
+    let d = lhs / rhs;
+    let r = lhs % rhs;
+    if r > 0 {
+        d + 1
+    } else {
+        d
+    }
+}

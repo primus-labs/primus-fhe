@@ -18,16 +18,21 @@ use crate::AlgebraError;
 /// distributions in a generic manner.
 ///
 /// # Associated Types
+/// * `StandardDistribution`: A distribution that produces all values uniformly.
 /// * `BinaryDistribution`: A distribution that produces binary (0 or 1) samples.
 /// * `TernaryDistribution`: A distribution that produces ternary (-1, 0, or 1) samples.
 /// * `NormalDistribution`: A distribution that produces samples according to a normal (Gaussian) distribution.
 ///
 /// # Methods
+/// * `standard_distribution()`: Returns an instance of the standard distribution type.
 /// * `binary_distribution()`: Returns an instance of the binary distribution type.
 /// * `ternary_distribution()`: Returns an instance of the ternary distribution type.
 /// * `normal_distribution(mean, std_dev)`: Returns an instance of the normal distribution type, parameterized by the specified mean and standard deviation.
 ///   This method may fail, indicated by returning an `AlgebraError`, if the parameters do not result in a valid distribution.
 pub trait FieldDistribution: Sized + SampleUniform {
+    /// The thpe of the standard distribution.
+    type StandardDistribution: Distribution<Self>;
+
     /// The type of the binary distribution.
     type BinaryDistribution: Distribution<Self>;
 
@@ -36,6 +41,9 @@ pub trait FieldDistribution: Sized + SampleUniform {
 
     /// The type of the normal distribution.
     type NormalDistribution: Distribution<Self>;
+
+    /// Get the standard distribution.
+    fn standard_distribution() -> Self::StandardDistribution;
 
     /// Get the binary distribution.
     fn binary_distribution() -> Self::BinaryDistribution;

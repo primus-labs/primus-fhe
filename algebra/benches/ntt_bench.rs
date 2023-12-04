@@ -1,8 +1,14 @@
-use algebra::field::Fp32;
 use algebra::field::NTTField;
 use algebra::transformation::AbstractNTT;
+use algebra_derive::{Field, Prime, Random, Ring, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Standard, prelude::*, thread_rng};
+
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
+)]
+#[modulus = 132120577]
+pub struct Fp32(u32);
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let log_n = 10;

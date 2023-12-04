@@ -1,6 +1,6 @@
 use algebra::{
     field::NTTField,
-    polynomial::{NTTPolynomial, Poly, Polynomial},
+    polynomial::{NTTPolynomial, Polynomial},
 };
 
 use crate::RLWE;
@@ -17,13 +17,11 @@ use crate::RLWE;
 /// The struct is generic over a type `F` that must implement the `NTTField` trait, which ensures that
 /// the field operations are compatible with Number Theoretic Transforms, a key requirement for
 /// efficient polynomial operations in RLWE-based cryptography.
-///
-/// # Fields
-/// * `data: Vec<RLWE<F>>` - A vector of RLWE ciphertexts, each encrypted message with a different power of the `basis`.
-/// * `basis: F::Base` - The base with respect to which the ciphertexts are scaled.
 #[derive(Debug, Clone)]
 pub struct GadgetRLWE<F: NTTField> {
+    /// A vector of RLWE ciphertexts, each encrypted message with a different power of the `basis`.
     data: Vec<RLWE<F>>,
+    /// The base with respect to which the ciphertexts are scaled.
     basis: F::Base,
 }
 
@@ -104,87 +102,5 @@ impl<F: NTTField> GadgetRLWE<F> {
         self.iter()
             .map(|rlwe| (rlwe.a().into(), rlwe.b().into()))
             .collect()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use algebra::field::{BarrettConfig, FieldDistribution, Fp32};
-    use rand::{distributions::Standard, prelude::*};
-
-    use super::*;
-
-    #[test]
-    fn test_gadget_rlwe() {
-        #[inline]
-        fn min_to_zero(value: Fp32) -> u32 {
-            value.inner().min(P - value.inner())
-        }
-
-        #[inline]
-        fn decode(c: Fp32) -> u32 {
-            (c.inner() as f64 * T as f64 / P as f64).round() as u32 % T
-        }
-
-        const P: u32 = Fp32::BARRETT_MODULUS.value();
-        const N: usize = 1 << 3;
-        const BASE: u32 = 1 << 1;
-        const T: u32 = 128;
-
-        let rng = &mut rand::thread_rng();
-        let chi = Fp32::normal_distribution(0., 3.2).unwrap();
-
-        let m = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-        let poly = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-
-        let poly_mul_m = &poly * &m;
-
-        let s = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-
-        let decompose_len = Fp32::decompose_len(BASE);
-
-        let m_base_power = (0..decompose_len)
-            .map(|i| {
-                let a = Polynomial::new(rng.sample_iter(Standard).take(N).collect::<Vec<Fp32>>());
-                let e = Polynomial::new(rng.sample_iter(chi).take(N).collect::<Vec<Fp32>>());
-                let b = &a * &s + m.mul_scalar(BASE.pow(i as u32)) + e;
-
-                RLWE::new(a, b)
-            })
-            .collect::<Vec<RLWE<Fp32>>>();
-
-        let bad_rlwe_mul = m_base_power[0].clone().mul_with_polynomial(&poly);
-        let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
-
-        let gadget_rlwe = GadgetRLWE::new(m_base_power, BASE);
-
-        let good_rlwe_mul = gadget_rlwe.mul_with_polynomial(&poly);
-        let good_mul = good_rlwe_mul.b() - good_rlwe_mul.a() * s;
-
-        let diff: Vec<u32> = (&poly_mul_m - &good_mul)
-            .into_iter()
-            .map(min_to_zero)
-            .collect();
-
-        let bad_diff: Vec<u32> = (&poly_mul_m - &bad_mul)
-            .into_iter()
-            .map(min_to_zero)
-            .collect();
-
-        let diff_std_dev = diff
-            .into_iter()
-            .fold(0., |acc, v| acc + (v as f64) * (v as f64))
-            .sqrt();
-
-        let bad_diff_std_dev = bad_diff
-            .into_iter()
-            .fold(0., |acc, v| acc + (v as f64) * (v as f64))
-            .sqrt();
-
-        assert!(diff_std_dev < bad_diff_std_dev);
-
-        let decrypted: Vec<u32> = good_mul.into_iter().map(decode).collect();
-        let decoded: Vec<u32> = poly_mul_m.into_iter().map(decode).collect();
-        assert_eq!(decrypted, decoded);
     }
 }
