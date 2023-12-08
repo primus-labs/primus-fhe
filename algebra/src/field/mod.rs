@@ -4,7 +4,6 @@ use std::ops::{Div, DivAssign};
 
 use num_traits::Inv;
 
-use crate::modulus::Modulus;
 use crate::ring::Ring;
 
 mod distribution;
@@ -16,13 +15,16 @@ pub use ntt_fields::NTTField;
 pub use prime_fields::{MulFactor, PrimeField};
 
 /// A helper trait to get the modulus of the ring or field.
-pub trait BarrettConfig<T> {
+pub trait BarrettConfig {
+    /// Barrett Modulus type
+    type BarrettModulus;
+
     /// The modulus of the ring or field.
-    const BARRETT_MODULUS: Modulus<T>;
+    const BARRETT_MODULUS: Self::BarrettModulus;
 
     /// Get the barrett modulus of the ring or field.
     #[inline]
-    fn barrett_modulus() -> Modulus<T> {
+    fn barrett_modulus() -> Self::BarrettModulus {
         Self::BARRETT_MODULUS
     }
 }
@@ -46,12 +48,6 @@ pub trait Field:
     + for<'a> DivAssign<&'a Self>
     + Inv<Output = Self>
 {
-    /// The type of the modulus.
-    type Modulus: Clone;
-
-    /// Returns the modulus.
-    fn modulus() -> Self::Modulus;
-
     /// Computes the multiplicative inverse of `self` if `self` is nonzero.
     #[inline]
     fn inverse(&self) -> Option<Self> {
@@ -74,3 +70,6 @@ pub trait Field:
         }
     }
 }
+
+/// A trait combine [`NTTField`] with random property.
+pub trait RandomNTTField: NTTField + FieldDistribution {}

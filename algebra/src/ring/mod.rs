@@ -5,6 +5,8 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{One, Pow, Zero};
 
+use crate::field::FieldDistribution;
+
 /// A trait defining the algebraic structure of a mathematical ring.
 ///
 /// This trait encapsulates the properties and operations that define a ring in algebra.
@@ -52,6 +54,9 @@ pub trait Ring:
     + Neg<Output = Self>
     + Pow<Self::Order, Output = Self>
 {
+    /// The inner type of this ring.
+    type Inner: Copy;
+
     /// The type of the scalar for this ring.
     type Scalar: Copy;
 
@@ -61,6 +66,12 @@ pub trait Ring:
     /// The type of the ring's base,
     /// which is used to decompose the element of the ring.
     type Base: Copy + Debug;
+
+    /// The type of the modulus.
+    type Modulus: Copy;
+
+    /// Returns the modulus.
+    fn modulus() -> Self::Modulus;
 
     /// Returns the order of the ring.
     fn order() -> Self::Order;
@@ -101,3 +112,6 @@ pub trait Ring:
         self
     }
 }
+
+/// A trait combine [`Ring`] with random property.
+pub trait RandomRing: Ring + FieldDistribution {}

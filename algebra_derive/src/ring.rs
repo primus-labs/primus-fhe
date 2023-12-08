@@ -121,11 +121,11 @@ fn impl_ring_with_ops(input: Input) -> Result<TokenStream> {
 
         let impl_sub = sub_reduce_ops(name, &modulus);
 
-        let impl_mul = mul_reduce_ops(name, field_ty);
+        let impl_mul = mul_reduce_ops(name);
 
         let impl_neg = neg_reduce_ops(name, &modulus);
 
-        let impl_pow = pow_reduce_ops(name, field_ty);
+        let impl_pow = pow_reduce_ops(name);
 
         let impl_ring = impl_ring(name, field_ty, &modulus);
 
@@ -158,11 +158,20 @@ fn impl_ring_with_ops(input: Input) -> Result<TokenStream> {
 fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
         impl algebra::ring::Ring for #name {
+            type Inner =#field_ty;
+
             type Scalar = #field_ty;
 
             type Order = #field_ty;
 
             type Base = #field_ty;
+
+            type Modulus = #field_ty;
+
+            #[inline]
+            fn modulus() -> Self::Modulus {
+                #modulus
+            }
 
             #[inline]
             fn order() -> Self::Order {
@@ -172,7 +181,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             #[inline]
             fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
                 use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(scalar, &<Self as algebra::field::BarrettConfig<#field_ty>>::BARRETT_MODULUS))
+                Self(self.0.mul_reduce(scalar, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
             }
         }
     }
@@ -186,11 +195,20 @@ fn impl_and_ring(
 ) -> TokenStream {
     quote! {
         impl algebra::ring::Ring for #name {
+            type Inner =#field_ty;
+
             type Scalar = #field_ty;
 
             type Order = #field_ty;
 
             type Base = #field_ty;
+
+            type Modulus = #field_ty;
+
+            #[inline]
+            fn modulus() -> Self::Modulus {
+                #modulus
+            }
 
             #[inline]
             fn order() -> Self::Order {

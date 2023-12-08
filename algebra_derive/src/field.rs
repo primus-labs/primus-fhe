@@ -13,15 +13,15 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
 fn impl_field_with_ops(input: Input) -> TokenStream {
     let name = &input.ident;
 
-    let field_ty = input.field.ty;
+    // let _field_ty = input.field.ty;
 
     let modulus = input.attrs.modulus.unwrap();
 
-    let impl_div = div_reduce_ops(name, field_ty);
+    let impl_div = div_reduce_ops(name);
 
     let impl_inv = inv_reduce_ops(name, &modulus);
 
-    let impl_field = impl_field(name, field_ty, &modulus);
+    let impl_field = impl_field(name);
 
     quote! {
         #impl_div
@@ -32,19 +32,8 @@ fn impl_field_with_ops(input: Input) -> TokenStream {
     }
 }
 
-fn impl_field(
-    name: &proc_macro2::Ident,
-    field_ty: &syn::Type,
-    modulus: &syn::LitInt,
-) -> TokenStream {
+fn impl_field(name: &proc_macro2::Ident) -> TokenStream {
     quote! {
-        impl algebra::field::Field for #name {
-            type Modulus = #field_ty;
-
-            #[inline]
-            fn modulus() -> Self::Modulus {
-                #modulus
-            }
-        }
+        impl algebra::field::Field for #name {}
     }
 }

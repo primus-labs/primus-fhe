@@ -33,7 +33,7 @@ fn impl_ntt(input: Input) -> TokenStream {
             #[inline]
             fn decompose_len(basis: Self::Base) -> usize {
                 debug_assert!(basis.is_power_of_two());
-                algebra::div_ceil(<Self as algebra::field::BarrettConfig<#field_ty>>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
+                algebra::div_ceil(<Self as algebra::field::BarrettConfig>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
             fn decompose(&self, basis: Self::Base) -> Vec<Self> {
