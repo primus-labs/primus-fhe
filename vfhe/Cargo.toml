@@ -7,4 +7,16 @@ edition = "2021"
 
 [dependencies]
 algebra = { path = "../algebra" }
+
 rand_distr = "0.4"
+rand = "0.8"
+
+[dev-dependencies]
+num-traits = "0.2"
+once_cell = "1.19"
+
+[package.metadata.docs.rs]
+all-features = true
+# enable unstable features in the documentation
+rustdoc-args = ["--cfg", "docsrs"]
+# RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --no-deps
