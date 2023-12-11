@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["algebra", "lattice", "algebra_derive"]
+members = ["algebra", "lattice", "algebra_derive","vfhe"]
 
 resolver = "2"
 
