@@ -6,6 +6,7 @@ use rand_distr::Distribution;
 use crate::seckey::SecretKey;
 
 /// key generator
+#[derive(Debug, Clone)]
 pub struct KeyGenerator<R: Ring> {
     len: usize,
     marker: PhantomData<R>,
@@ -13,6 +14,7 @@ pub struct KeyGenerator<R: Ring> {
 
 impl<R: Ring> KeyGenerator<R> {
     /// Creates a new [`KeyGenerator<R>`].
+    #[inline]
     pub fn new(len: usize) -> Self {
         Self {
             len,

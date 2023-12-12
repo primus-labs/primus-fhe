@@ -31,16 +31,16 @@ use crate::AlgebraError;
 ///   This method may fail, indicated by returning an `AlgebraError`, if the parameters do not result in a valid distribution.
 pub trait FieldDistribution: Sized + SampleUniform {
     /// The thpe of the standard distribution.
-    type StandardDistribution: Distribution<Self>;
+    type StandardDistribution: Distribution<Self> + Copy;
 
     /// The type of the binary distribution.
-    type BinaryDistribution: Distribution<Self>;
+    type BinaryDistribution: Distribution<Self> + Copy;
 
     /// The type of the ternary distribution.
     type TernaryDistribution: Distribution<Self>;
 
     /// The type of the normal distribution.
-    type NormalDistribution: Distribution<Self>;
+    type NormalDistribution: Distribution<Self> + Copy;
 
     /// Get the standard distribution.
     fn standard_distribution() -> Self::StandardDistribution;

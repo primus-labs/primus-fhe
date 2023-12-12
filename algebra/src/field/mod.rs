@@ -73,3 +73,5 @@ pub trait Field:
 
 /// A trait combine [`NTTField`] with random property.
 pub trait RandomNTTField: NTTField + FieldDistribution {}
+
+impl<F> RandomNTTField for F where F: NTTField + FieldDistribution {}

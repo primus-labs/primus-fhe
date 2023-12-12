@@ -10,13 +10,15 @@ mod cipher;
 mod plain;
 
 mod keygen;
+mod pubkey;
 mod seckey;
-// mod pubkey;
 
 pub use params::{Param, Params};
 pub use scheme::Vfhe;
 
+pub use cipher::Ciphertext;
 pub use plain::Plaintext;
 
 pub use keygen::KeyGenerator;
+pub use pubkey::PublicKey;
 pub use seckey::SecretKey;

@@ -115,3 +115,5 @@ pub trait Ring:
 
 /// A trait combine [`Ring`] with random property.
 pub trait RandomRing: Ring + FieldDistribution {}
+
+impl<R> RandomRing for R where R: Ring + FieldDistribution {}
