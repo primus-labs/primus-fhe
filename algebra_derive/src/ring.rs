@@ -166,8 +166,6 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
 
             type Base = #field_ty;
 
-            type Modulus = #field_ty;
-
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
             fn new(value: #field_ty) -> Self {
@@ -180,8 +178,18 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 self.0
             }
 
+            /// cast inner to [`usize`]
+            fn cast_into_usize(value: Self::Inner) -> usize {
+                value as usize
+            }
+
+            /// cast inner from [`usize`]
+            fn cast_from_usize(value: usize) -> Self {
+                Self::new(value as #field_ty)
+            }
+
             #[inline]
-            fn modulus() -> Self::Modulus {
+            fn modulus() -> Self::Inner {
                 #modulus
             }
 
@@ -215,8 +223,6 @@ fn impl_and_ring(
 
             type Base = #field_ty;
 
-            type Modulus = #field_ty;
-
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
             fn new(value: #field_ty) -> Self {
@@ -229,8 +235,18 @@ fn impl_and_ring(
                 self.0
             }
 
+            /// cast inner to [`usize`]
+            fn cast_into_usize(value: Self::Inner) -> usize {
+                value as usize
+            }
+
+            /// cast inner from [`usize`]
+            fn cast_from_usize(value: usize) -> Self {
+                Self::new(value as #field_ty)
+            }
+
             #[inline]
-            fn modulus() -> Self::Modulus {
+            fn modulus() -> Self::Inner {
                 #modulus
             }
 

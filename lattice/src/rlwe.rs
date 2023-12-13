@@ -25,6 +25,17 @@ pub struct RLWE<F: NTTField> {
     pub(crate) b: Polynomial<F>,
 }
 
+impl<F: NTTField> From<Polynomial<F>> for RLWE<F> {
+    #[inline]
+    fn from(value: Polynomial<F>) -> Self {
+        let n = value.coeff_count();
+        Self {
+            a: Polynomial::zero_with_coeff_count(n),
+            b: value,
+        }
+    }
+}
+
 impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
     /// Converts a tuple of polynomials into an instance of `Self`.
     ///

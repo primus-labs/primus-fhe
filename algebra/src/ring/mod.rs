@@ -3,7 +3,7 @@
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use num_traits::{One, Pow, Zero};
+use num_traits::{One, Pow, PrimInt, Zero};
 
 use crate::field::FieldDistribution;
 use crate::RoundedDiv;
@@ -57,14 +57,7 @@ pub trait Ring:
     + From<Self::Inner>
 {
     /// The inner type of this ring.
-    type Inner: Copy
-        + Debug
-        + Zero
-        + PartialOrd
-        + Mul<Output = Self::Inner>
-        + RoundedDiv<Output = Self::Inner>
-        + Mul<Self::Modulus, Output = Self::Inner>
-        + RoundedDiv<Self::Modulus, Output = Self::Inner>;
+    type Inner: Debug + PrimInt + RoundedDiv<Output = Self::Inner>;
 
     /// The type of the scalar for this ring.
     type Scalar: Copy;
@@ -76,17 +69,20 @@ pub trait Ring:
     /// which is used to decompose the element of the ring.
     type Base: Copy + Debug;
 
-    /// The type of the modulus.
-    type Modulus: Copy;
-
     /// Creates a new instance.
     fn new(value: Self::Inner) -> Self;
 
     /// Return inner value
     fn inner(self) -> Self::Inner;
 
+    /// cast inner to [`usize`]
+    fn cast_into_usize(value: Self::Inner) -> usize;
+
+    /// cast inner from [`usize`]
+    fn cast_from_usize(value: usize) -> Self;
+
     /// Returns the modulus.
-    fn modulus() -> Self::Modulus;
+    fn modulus() -> Self::Inner;
 
     /// Returns the order of the ring.
     fn order() -> Self::Order;

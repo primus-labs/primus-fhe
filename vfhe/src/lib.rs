@@ -9,16 +9,14 @@ mod scheme;
 mod cipher;
 mod plain;
 
-// mod keygen;
 mod pubkey;
 mod seckey;
 
-pub use params::LweParam;
+pub use params::{LWEParam, RLWEParam};
 pub use scheme::Vfhe;
 
-pub use cipher::Ciphertext;
-pub use plain::Plaintext;
+pub use cipher::{LWECiphertext, RLWECiphertext};
+pub use plain::{LWEPlaintext, RLWEPlaintext};
 
-// pub use keygen::KeyGenerator;
-pub use pubkey::PublicKey;
-pub use seckey::{SecretKey, SecretKeyDistribution};
+pub use pubkey::{LWEPublicKey, RLWEPublicKey};
+pub use seckey::{LWESecretKey, LWESecretKeyDistribution, RLWESecretKey};

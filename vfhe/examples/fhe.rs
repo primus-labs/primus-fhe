@@ -1,16 +1,22 @@
 use algebra::derive::*;
-use vfhe::{LweParam, Vfhe};
+use vfhe::{LWEParam, RLWEParam, Vfhe};
 
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let lwe_param = <LweParam<RR>>::new(1024, 4, 512, 3.20);
-    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe_param);
+    let lwe_param = <LWEParam<RR>>::new(512, 4, 512, 3.20);
+    let rlwe_param = <RLWEParam<FF>>::new(1024, 132120577, 3.20);
+    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe_param, rlwe_param);
 
-    let sk = vfhe.generate_ternary_sk(&mut rng);
-    let pk = vfhe.generate_pk(&sk, &mut rng);
+    let sk = vfhe.generate_ternary_lwe_sk(&mut rng);
+    let pk = vfhe.generate_lwe_pk(&sk, &mut rng);
     vfhe.set_secret_key(Some(sk));
     vfhe.set_public_key(pk);
+
+    let rlwe_sk = vfhe.rlwe_param().generate_sk(&mut rng);
+    let rlwe_pk = vfhe.rlwe_param().generate_pk(&rlwe_sk, &mut rng);
+    vfhe.rlwe_param_mut().set_secret_key(Some(rlwe_sk));
+    vfhe.rlwe_param_mut().set_public_key(rlwe_pk);
 
     let v = 0;
     let m = vfhe.encode(v);
