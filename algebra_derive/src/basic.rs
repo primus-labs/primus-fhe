@@ -5,18 +5,6 @@ use syn::LitInt;
 pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> TokenStream {
     quote! {
         impl #name {
-            #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
-            #[inline]
-            pub fn new(value: #field_ty) -> Self {
-                Self(value)
-            }
-
-            /// Return inner value
-            #[inline]
-            pub fn inner(self) -> #field_ty {
-                self.0
-            }
-
             /// Return max value
             #[inline]
             pub const fn max() -> Self {

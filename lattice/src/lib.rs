@@ -33,8 +33,10 @@ mod gadget;
 mod lwe;
 mod rgsw;
 mod rlwe;
+mod utils;
 
 pub use gadget::GadgetRLWE;
 pub use lwe::LWE;
 pub use rgsw::RGSW;
 pub use rlwe::RLWE;
+pub use utils::*;

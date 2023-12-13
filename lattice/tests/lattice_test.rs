@@ -70,13 +70,6 @@ fn test_lwe_he() {
 
     let chi = RR::normal_distribution(0., 3.2).unwrap();
 
-    #[inline]
-    fn dot_product<R: Ring>(u: &[R], v: &[R]) -> R {
-        u.iter()
-            .zip(v.iter())
-            .fold(R::zero(), |acc, (x, y)| acc + *x * y)
-    }
-
     let v0: Inner = rng.gen_range(0..RT);
     let v1: Inner = rng.gen_range(0..RT);
 

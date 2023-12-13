@@ -20,4 +20,4 @@ mod primitive;
 
 pub use error::AlgebraError;
 
-pub use primitive::{div_ceil, Bits, Widening};
+pub use primitive::{div_ceil, Bits, RoundedDiv, Widening};

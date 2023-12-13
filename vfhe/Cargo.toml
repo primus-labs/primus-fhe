@@ -12,8 +12,9 @@ lattice = { path = "../lattice" }
 rand_distr = "0.4"
 rand = "0.8"
 
-[dev-dependencies]
 num-traits = "0.2"
+
+[dev-dependencies]
 once_cell = "1.19"
 
 [package.metadata.docs.rs]

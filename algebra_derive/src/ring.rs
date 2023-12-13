@@ -168,6 +168,18 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
 
             type Modulus = #field_ty;
 
+            #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
+            #[inline]
+            fn new(value: #field_ty) -> Self {
+                Self(value)
+            }
+
+            /// Return inner value
+            #[inline]
+            fn inner(self) -> #field_ty {
+                self.0
+            }
+
             #[inline]
             fn modulus() -> Self::Modulus {
                 #modulus
@@ -204,6 +216,18 @@ fn impl_and_ring(
             type Base = #field_ty;
 
             type Modulus = #field_ty;
+
+            #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
+            #[inline]
+            fn new(value: #field_ty) -> Self {
+                Self(value)
+            }
+
+            /// Return inner value
+            #[inline]
+            fn inner(self) -> #field_ty {
+                self.0
+            }
 
             #[inline]
             fn modulus() -> Self::Modulus {

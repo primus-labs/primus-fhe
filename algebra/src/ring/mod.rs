@@ -6,6 +6,7 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use num_traits::{One, Pow, Zero};
 
 use crate::field::FieldDistribution;
+use crate::RoundedDiv;
 
 /// A trait defining the algebraic structure of a mathematical ring.
 ///
@@ -53,9 +54,17 @@ pub trait Ring:
     + for<'a> MulAssign<&'a Self>
     + Neg<Output = Self>
     + Pow<Self::Order, Output = Self>
+    + From<Self::Inner>
 {
     /// The inner type of this ring.
-    type Inner: Copy;
+    type Inner: Copy
+        + Debug
+        + Zero
+        + PartialOrd
+        + Mul<Output = Self::Inner>
+        + RoundedDiv<Output = Self::Inner>
+        + Mul<Self::Modulus, Output = Self::Inner>
+        + RoundedDiv<Self::Modulus, Output = Self::Inner>;
 
     /// The type of the scalar for this ring.
     type Scalar: Copy;
@@ -69,6 +78,12 @@ pub trait Ring:
 
     /// The type of the modulus.
     type Modulus: Copy;
+
+    /// Creates a new instance.
+    fn new(value: Self::Inner) -> Self;
+
+    /// Return inner value
+    fn inner(self) -> Self::Inner;
 
     /// Returns the modulus.
     fn modulus() -> Self::Modulus;

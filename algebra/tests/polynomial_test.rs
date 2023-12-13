@@ -2,6 +2,7 @@ use algebra::{
     derive::{Field, Prime, Random, Ring, NTT},
     field::{BarrettConfig, Field, NTTField},
     polynomial::{NTTPolynomial, Polynomial},
+    ring::Ring,
 };
 use num_traits::{One, Zero};
 use rand::thread_rng;
