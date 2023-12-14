@@ -12,6 +12,8 @@ mod plain;
 mod pubkey;
 mod seckey;
 
+mod functional_bootstrapping;
+
 pub use params::{LWEParam, RLWEParam};
 pub use scheme::Vfhe;
 

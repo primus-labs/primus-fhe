@@ -1,14 +1,15 @@
 use algebra::{
     field::{NTTField, RandomNTTField},
-    polynomial::Polynomial,
     ring::{RandomRing, Ring},
 };
 use lattice::{dot_product, RLWE};
-use num_traits::cast;
 use rand::seq::SliceRandom;
 use rand_distr::Distribution;
 
-use crate::{LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey, LWESecretKey, RLWEParam};
+use crate::{
+    functional_bootstrapping::init_nand_acc, LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey,
+    LWESecretKey, RLWEParam,
+};
 
 /// fhe scheme
 #[derive(Debug, Clone)]
@@ -165,28 +166,13 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     pub fn nand(&self, c0: LWECiphertext<R>, c1: &LWECiphertext<R>) -> Self {
         let add = c0.no_boot_add(c1);
 
-        let mut b = add.data().b();
+        let b = add.data().b();
 
         let q = self.lwe_param().q();
         let big_q = self.rlwe_param().q();
         let big_n = self.rlwe_param().n();
 
-        let mut v = Polynomial::zero_with_coeff_count(big_n);
-
-        let step = self.rlwe_param().n() * 2 / R::cast_into_usize(q);
-        let step_r = R::cast_from_usize(step);
-        let l = (cast::<u8, <R as Ring>::Inner>(3).unwrap() * q) >> 3;
-        let r = (cast::<u8, <R as Ring>::Inner>(7).unwrap() * q) >> 3;
-        v.iter_mut().step_by(step).for_each(|a| {
-            if (l..r).contains(&b.inner()) {
-                *a = F::from(big_q >> 3);
-            } else {
-                *a = -F::from(big_q >> 3);
-            }
-            b -= step_r;
-        });
-
-        let _acc = RLWE::from(v);
+        let _acc: RLWE<F> = init_nand_acc(b, q, big_n, big_q);
         todo!()
     }
 }
