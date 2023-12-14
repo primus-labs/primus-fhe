@@ -38,9 +38,7 @@ use rand_distr::Standard;
 //
 // It's based the Derive macro `Prime`.
 
-#[derive(
-    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
-)]
+#[derive(Ring, Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct FF(u64);
 

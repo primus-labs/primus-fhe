@@ -23,7 +23,7 @@ use rand_distr::Standard;
 // Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
 // ternary distribution and normal distribution.
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Random)]
+#[derive(Ring, Random)]
 #[modulus = 512]
 pub struct RR(u32);
 

@@ -6,13 +6,11 @@ use lattice::*;
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Random)]
+#[derive(Ring, Random)]
 #[modulus = 512]
 pub struct R512(u32);
 
-#[derive(
-    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
-)]
+#[derive(Ring, Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 

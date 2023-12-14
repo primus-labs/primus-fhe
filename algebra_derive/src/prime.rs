@@ -12,7 +12,6 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
 
 fn impl_prime(input: Input) -> TokenStream {
     let name = &input.ident;
-    // let field_ty = input.field.ty;
 
     quote! {
         impl algebra::field::PrimeField for #name {

@@ -32,6 +32,7 @@ fn impl_field_with_ops(input: Input) -> TokenStream {
     }
 }
 
+#[inline]
 fn impl_field(name: &proc_macro2::Ident) -> TokenStream {
     quote! {
         impl algebra::field::Field for #name {}

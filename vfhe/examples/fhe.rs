@@ -35,12 +35,10 @@ fn main() {
     assert_eq!(v_2, (v + v1) % 4);
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Random)]
+#[derive(Ring, Random)]
 #[modulus = 512]
 pub struct RR(u32);
 
-#[derive(
-    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
-)]
+#[derive(Ring, Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct FF(u32);
