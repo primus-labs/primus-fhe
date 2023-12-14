@@ -61,7 +61,7 @@ impl<T: Copy> Modulus<T> {
 impl<T> Modulus<T> {
     /// Returns the bit count of this [`Modulus<T>`].
     #[inline]
-    pub fn bit_count(&self) -> u32 {
+    pub const fn bit_count(&self) -> u32 {
         self.bit_count
     }
 }
@@ -87,13 +87,13 @@ pub struct MulModuloFactor<T> {
 impl<T: Copy> MulModuloFactor<T> {
     /// Returns the value of this [`MulModuloFactor<T>`].
     #[inline]
-    pub fn value(&self) -> T {
+    pub const fn value(&self) -> T {
         self.value
     }
 
     /// Returns the quotient of this [`MulModuloFactor<T>`].
     #[inline]
-    pub fn quotient(&self) -> T {
+    pub const fn quotient(&self) -> T {
         self.quotient
     }
 }

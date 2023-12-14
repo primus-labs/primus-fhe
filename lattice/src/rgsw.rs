@@ -27,12 +27,12 @@ pub struct RGSW<F: NTTField> {
 }
 
 impl<F: NTTField> From<(GadgetRLWE<F>, GadgetRLWE<F>)> for RGSW<F> {
-    /// Converts a tuple of GadgetRLWE into an instance of `Self`.
+    /// Converts a tuple of `GadgetRLWE` into an instance of `Self`.
     ///
     /// # Arguments
     ///
-    /// * `c_neg_s_m` - The first GadgetRLWE sample.
-    /// * `c_m` - The second GadgetRLWE sample.
+    /// * `c_neg_s_m` - The first `GadgetRLWE` sample.
+    /// * `c_m` - The second `GadgetRLWE` sample.
     ///
     /// # Returns
     ///
@@ -94,7 +94,7 @@ impl<F: NTTField> RGSW<F> {
     /// # Attention
     /// The message of **`rhs`** is restricted to small messages `m`, typically `m = ±X^v`
     #[inline]
-    pub fn mul_with_rgsw(&self, rhs: &RGSW<F>) -> RGSW<F> {
+    pub fn mul_with_rgsw(&self, rhs: &Self) -> Self {
         let basis = self.basis();
 
         let ntt_c_neg_s_m = rhs.c_neg_s_m().to_ntt_poly();
@@ -114,7 +114,7 @@ impl<F: NTTField> RGSW<F> {
             .collect();
         let c_m = GadgetRLWE::new(c1_data, basis);
 
-        RGSW::new(c_neg_s_m, c_m)
+        Self::new(c_neg_s_m, c_m)
     }
 }
 

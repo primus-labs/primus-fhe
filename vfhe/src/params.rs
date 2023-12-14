@@ -164,7 +164,7 @@ impl<F: NTTField> RLWEParam<F> {
             q,
             err_std_dev,
             secret_key: None,
-            public_key: Default::default(),
+            public_key: RLWEPublicKey::default(),
         }
     }
 

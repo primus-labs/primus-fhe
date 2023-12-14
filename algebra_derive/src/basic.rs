@@ -23,7 +23,7 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
         impl Clone for #name {
             #[inline]
             fn clone(&self) -> Self {
-                Self(self.0)
+                *self
             }
         }
 
@@ -46,7 +46,7 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
         impl PartialOrd for #name {
             #[inline]
             fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                self.0.partial_cmp(&other.0)
+                Some(self.cmp(other))
             }
         }
 

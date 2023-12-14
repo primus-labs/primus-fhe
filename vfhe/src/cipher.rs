@@ -1,8 +1,6 @@
 use algebra::{field::NTTField, polynomial::Polynomial, ring::Ring};
 use lattice::{LWE, RLWE};
 
-use crate::Vfhe;
-
 /// cipher text
 #[derive(Debug, Clone)]
 pub struct LWECiphertext<R: Ring> {
@@ -40,7 +38,7 @@ impl<R: Ring> LWECiphertext<R> {
 
     /// Perform component-wise addition.
     #[inline]
-    pub fn no_boot_add(self, rhs: &LWECiphertext<R>) -> Self {
+    pub fn no_boot_add(self, rhs: &Self) -> Self {
         Self {
             data: self.data.add_component_wise(rhs.data()),
         }

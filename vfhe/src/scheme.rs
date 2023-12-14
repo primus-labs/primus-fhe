@@ -146,16 +146,16 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
             .public_key()
             .data()
             .choose_multiple(&mut rng, 4)
-            .fold(c, |acc, pk| acc.no_boot_add(pk))
+            .fold(c, LWECiphertext::no_boot_add)
     }
 
     /// decrypt
     pub fn decrypt(&self, ciphertext: &LWECiphertext<R>) -> LWEPlaintext<R> {
         let lwe = ciphertext.data();
-        match self.lwe_param.secret_key() {
-            Some(sk) => LWEPlaintext::new(lwe.b() - dot_product(lwe.a(), sk.data())),
-            None => panic!("Decryption should supply secret key"),
-        }
+        self.lwe_param.secret_key().map_or_else(
+            || panic!("Decryption should supply secret key"),
+            |sk| LWEPlaintext::new(lwe.b() - dot_product(lwe.a(), sk.data())),
+        )
     }
 }
 
@@ -175,8 +175,8 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
 
         let step = self.rlwe_param().n() * 2 / R::cast_into_usize(q);
         let step_r = R::cast_from_usize(step);
-        let l = cast::<u8, <R as Ring>::Inner>(3).unwrap() * q >> 3;
-        let r = cast::<u8, <R as Ring>::Inner>(7).unwrap() * q >> 3;
+        let l = (cast::<u8, <R as Ring>::Inner>(3).unwrap() * q) >> 3;
+        let r = (cast::<u8, <R as Ring>::Inner>(7).unwrap() * q) >> 3;
         v.iter_mut().step_by(step).for_each(|a| {
             if (l..r).contains(&b.inner()) {
                 *a = F::from(big_q >> 3);
@@ -186,7 +186,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
             b -= step_r;
         });
 
-        let acc = RLWE::from(v);
+        let _acc = RLWE::from(v);
         todo!()
     }
 }

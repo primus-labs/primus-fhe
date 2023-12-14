@@ -40,7 +40,7 @@ where
 
 impl<F> NTTTable<F>
 where
-    F: NTTField<Table = NTTTable<F>>,
+    F: NTTField<Table = Self>,
 {
     /// Creates a new [`NTTTable<F>`].
     #[inline]
@@ -109,7 +109,7 @@ where
 
 impl<F> AbstractNTT<F> for NTTTable<F>
 where
-    F: NTTField<Table = NTTTable<F>>,
+    F: NTTField<Table = Self>,
 {
     #[inline]
     fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
@@ -145,7 +145,7 @@ where
         let roots = self.root_powers();
         let mut root_iter = roots[1..].iter();
 
-        for gap in (0..=log_n - 1).rev().map(|x| 1usize << x) {
+        for gap in (0..log_n).rev().map(|x| 1usize << x) {
             for vc in values.chunks_exact_mut(gap << 1) {
                 root = *root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);

@@ -54,7 +54,7 @@ impl<F: NTTField> From<Polynomial<F>> for NTTPolynomial<F> {
 impl<F: NTTField> From<&Polynomial<F>> for NTTPolynomial<F> {
     #[inline]
     fn from(poly: &Polynomial<F>) -> Self {
-        <NTTPolynomial<F>>::from(poly.clone())
+        Self::from(poly.clone())
     }
 }
 
@@ -183,9 +183,9 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> AsRef<NTTPolynomial<F>> for NTTPolynomial<F> {
+impl<F: Field> AsRef<Self> for NTTPolynomial<F> {
     #[inline]
-    fn as_ref(&self) -> &NTTPolynomial<F> {
+    fn as_ref(&self) -> &Self {
         self
     }
 }
@@ -233,9 +233,9 @@ impl<F: Field> IntoIterator for NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> AddAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
+impl<F: Field> AddAssign<&Self> for NTTPolynomial<F> {
     #[inline]
-    fn add_assign(&mut self, rhs: &NTTPolynomial<F>) {
+    fn add_assign(&mut self, rhs: &Self) {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l += r);
     }
@@ -243,7 +243,7 @@ impl<F: Field> AddAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
 
 impl<F: Field> AddAssign for NTTPolynomial<F> {
     #[inline]
-    fn add_assign(&mut self, rhs: NTTPolynomial<F>) {
+    fn add_assign(&mut self, rhs: Self) {
         AddAssign::add_assign(self, &rhs);
     }
 }
@@ -258,11 +258,11 @@ impl<F: Field> Add for NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> Add<&NTTPolynomial<F>> for NTTPolynomial<F> {
-    type Output = NTTPolynomial<F>;
+impl<F: Field> Add<&Self> for NTTPolynomial<F> {
+    type Output = Self;
 
     #[inline]
-    fn add(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
+    fn add(mut self, rhs: &Self) -> Self::Output {
         AddAssign::add_assign(&mut self, rhs);
         self
     }
@@ -291,13 +291,13 @@ impl<F: Field> Add<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 
 impl<F: Field> SubAssign for NTTPolynomial<F> {
     #[inline]
-    fn sub_assign(&mut self, rhs: NTTPolynomial<F>) {
+    fn sub_assign(&mut self, rhs: Self) {
         SubAssign::sub_assign(self, &rhs);
     }
 }
-impl<F: Field> SubAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
+impl<F: Field> SubAssign<&Self> for NTTPolynomial<F> {
     #[inline]
-    fn sub_assign(&mut self, rhs: &NTTPolynomial<F>) {
+    fn sub_assign(&mut self, rhs: &Self) {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l -= r);
     }
@@ -313,11 +313,11 @@ impl<F: Field> Sub for NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> Sub<&NTTPolynomial<F>> for NTTPolynomial<F> {
-    type Output = NTTPolynomial<F>;
+impl<F: Field> Sub<&Self> for NTTPolynomial<F> {
+    type Output = Self;
 
     #[inline]
-    fn sub(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
+    fn sub(mut self, rhs: &Self) -> Self::Output {
         SubAssign::sub_assign(&mut self, rhs);
         self
     }
@@ -348,21 +348,21 @@ impl<F: Field> Sub<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> Mul<NTTPolynomial<F>> for NTTPolynomial<F> {
+impl<F: Field> Mul<Self> for NTTPolynomial<F> {
     type Output = Self;
 
     #[inline]
-    fn mul(mut self, rhs: NTTPolynomial<F>) -> Self::Output {
+    fn mul(mut self, rhs: Self) -> Self::Output {
         MulAssign::mul_assign(&mut self, &rhs);
         self
     }
 }
 
-impl<F: Field> Mul<&NTTPolynomial<F>> for NTTPolynomial<F> {
+impl<F: Field> Mul<&Self> for NTTPolynomial<F> {
     type Output = Self;
 
     #[inline]
-    fn mul(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
+    fn mul(mut self, rhs: &Self) -> Self::Output {
         MulAssign::mul_assign(&mut self, rhs);
         self
     }
@@ -389,9 +389,9 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     }
 }
 
-impl<F: Field> MulAssign<&NTTPolynomial<F>> for NTTPolynomial<F> {
+impl<F: Field> MulAssign<&Self> for NTTPolynomial<F> {
     #[inline]
-    fn mul_assign(&mut self, rhs: &NTTPolynomial<F>) {
+    fn mul_assign(&mut self, rhs: &Self) {
         assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l *= r);
     }
@@ -405,7 +405,7 @@ impl<F: Field> MulAssign for NTTPolynomial<F> {
 }
 
 impl<F: NTTField> Mul<Polynomial<F>> for NTTPolynomial<F> {
-    type Output = NTTPolynomial<F>;
+    type Output = Self;
 
     #[inline]
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
@@ -414,7 +414,7 @@ impl<F: NTTField> Mul<Polynomial<F>> for NTTPolynomial<F> {
 }
 
 impl<F: NTTField> Mul<&Polynomial<F>> for NTTPolynomial<F> {
-    type Output = NTTPolynomial<F>;
+    type Output = Self;
 
     #[inline]
     fn mul(self, rhs: &Polynomial<F>) -> Self::Output {
@@ -459,7 +459,7 @@ impl<F: NTTField> MulAssign<&Polynomial<F>> for NTTPolynomial<F> {
 }
 
 impl<F: Field> Neg for NTTPolynomial<F> {
-    type Output = NTTPolynomial<F>;
+    type Output = Self;
 
     #[inline]
     fn neg(mut self) -> Self::Output {

@@ -16,7 +16,7 @@ pub trait Widening: Sized {
     /// The output boolean returned by this method is not a carry flag,
     /// and should not be added to a more significant word.
     ///
-    /// If the input carry is false, this method is equivalent to overflowing_add.
+    /// If the input carry is false, this method is equivalent to `overflowing_add`.
     fn carry_add(self, rhs: Self, carry: bool) -> (Self, bool);
 
     /// Calculates `self` − `rhs` − `borrow` and returns a tuple containing

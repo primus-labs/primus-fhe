@@ -193,7 +193,7 @@ where
 {
     #[inline]
     fn div_reduce_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
-        self.mul_reduce_assign(rhs.inv_reduce(modulus), modulus)
+        self.mul_reduce_assign(rhs.inv_reduce(modulus), modulus);
     }
 }
 

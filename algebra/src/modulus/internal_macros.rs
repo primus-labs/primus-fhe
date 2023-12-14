@@ -370,7 +370,7 @@ macro_rules! impl_mul_modulo_factor {
             ///
             /// * `value` must be less than `modulus`.
             #[inline]
-            pub fn new(value: $SelfT, modulus: $SelfT) -> Self {
+            pub const fn new(value: $SelfT, modulus: $SelfT) -> Self {
                 Self {
                     value,
                     quotient: (((value as $WideT) << <$SelfT>::BITS) / modulus as $WideT) as $SelfT,

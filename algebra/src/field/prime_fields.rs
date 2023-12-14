@@ -32,19 +32,19 @@ pub struct MulFactor<F> {
 impl<F: Copy> MulFactor<F> {
     /// Creates a new instance.
     #[inline]
-    pub fn new(value: F, quotient: F) -> Self {
-        MulFactor { value, quotient }
+    pub const fn new(value: F, quotient: F) -> Self {
+        Self { value, quotient }
     }
 
     /// Returns the value of this [`MulFactor<F>`].
     #[inline]
-    pub fn value(&self) -> F {
+    pub const fn value(&self) -> F {
         self.value
     }
 
     /// Returns the quotient of this [`MulFactor<F>`].
     #[inline]
-    pub fn quotient(&self) -> F {
+    pub const fn quotient(&self) -> F {
         self.quotient
     }
 }
