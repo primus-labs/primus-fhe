@@ -6,7 +6,7 @@ fn main() {
 
     let lwe_param = <LWEParam<RR>>::new(512, 4, 512, 3.20);
     let rlwe_param = <RLWEParam<FF>>::new(1024, 132120577, 3.20);
-    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe_param, rlwe_param);
+    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe_param, rlwe_param, 2);
 
     let sk = vfhe.generate_ternary_lwe_sk(&mut rng);
     let pk = vfhe.generate_lwe_pk(&sk, &mut rng);

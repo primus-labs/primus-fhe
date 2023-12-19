@@ -16,15 +16,17 @@ use crate::{
 pub struct Vfhe<R: Ring, F: NTTField> {
     lwe_param: LWEParam<R>,
     rlwe_param: RLWEParam<F>,
+    bootstrapping_key_base: F::Base,
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
     #[inline]
-    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RLWEParam<F>) -> Self {
+    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RLWEParam<F>, base: F::Base) -> Self {
         Self {
             lwe_param,
             rlwe_param,
+            bootstrapping_key_base: base,
         }
     }
 
@@ -84,6 +86,11 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
     #[inline]
     pub fn decode(&self, plaintext: LWEPlaintext<R>) -> R::Inner {
         self.lwe_param.decode(plaintext)
+    }
+
+    /// Returns the bootstrapping key base of this [`Vfhe<R, F>`].
+    pub fn bootstrapping_key_base(&self) -> <F as Ring>::Base {
+        self.bootstrapping_key_base
     }
 }
 

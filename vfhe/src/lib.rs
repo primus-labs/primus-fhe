@@ -22,3 +22,7 @@ pub use plain::{LWEPlaintext, RLWEPlaintext};
 
 pub use pubkey::{LWEPublicKey, RLWEPublicKey};
 pub use seckey::{LWESecretKey, LWESecretKeyDistribution, RLWESecretKey};
+
+pub use functional_bootstrapping::{
+    FHEWGaussianBootstrappingKey, TFHEBinaryBootStrappingKey, TFHETernaryBootStrappingKey,
+};
