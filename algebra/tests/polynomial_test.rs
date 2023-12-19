@@ -18,7 +18,7 @@ type NTTPolyFF = NTTPolynomial<FF>;
 
 const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
-const B: Inner = 1 << 3; // base
+const B: usize = 1 << 3; // base
 const P: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
 
 #[test]
@@ -100,7 +100,7 @@ fn test_poly_decompose() {
         .into_iter()
         .enumerate()
         .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + d.mul_scalar(B.pow(i as u32))
+            acc + d.mul_scalar(B.pow(i as u32) as Inner)
         });
     assert_eq!(compose, poly);
 }
@@ -119,7 +119,7 @@ fn test_poly_decompose_mul() {
         .into_iter()
         .enumerate()
         .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + d * poly2.mul_scalar(B.pow(i as u32))
+            acc + d * poly2.mul_scalar(B.pow(i as u32) as Inner)
         });
     assert_eq!(compose_mul_result, mul_result);
 }

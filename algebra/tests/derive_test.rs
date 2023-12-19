@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_decompose() {
-        const B: u32 = 1 << 2;
+        const B: usize = 1 << 2;
         let rng = &mut thread_rng();
 
         let a: FF = rng.gen();
@@ -136,7 +136,9 @@ mod tests {
         let compose = decompose
             .into_iter()
             .enumerate()
-            .fold(FF::new(0), |acc, (i, d)| acc + d.mul_scalar(B.pow(i as T)));
+            .fold(FF::new(0), |acc, (i, d)| {
+                acc + d.mul_scalar(B.pow(i as T) as T)
+            });
 
         assert_eq!(compose, a);
     }

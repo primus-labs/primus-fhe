@@ -72,7 +72,7 @@ impl<F: NTTField> RGSW<F> {
 
     /// Returns a reference to the basis of this [`RGSW<F>`].
     #[inline]
-    pub fn basis(&self) -> F::Base {
+    pub fn basis(&self) -> usize {
         self.c_neg_s_m.basis()
     }
 
@@ -125,7 +125,7 @@ fn ntt_rgsw_mul_rlwe<F: NTTField>(
     ntt_c_neg_s_m: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
     ntt_c_m: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
     rlwe: &RLWE<F>,
-    basis: F::Base,
+    basis: usize,
 ) -> RLWE<F> {
     let decomposed = rlwe.a().decompose(basis);
     let coeff_count = decomposed[0].coeff_count();

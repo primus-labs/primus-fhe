@@ -158,13 +158,11 @@ fn impl_ring_with_ops(input: Input) -> Result<TokenStream> {
 fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
         impl algebra::ring::Ring for #name {
-            type Inner =#field_ty;
+            type Inner = #field_ty;
 
             type Scalar = #field_ty;
 
             type Order = #field_ty;
-
-            type Base = #field_ty;
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
@@ -201,12 +199,12 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn decompose_len(basis: Self::Base) -> usize {
+            fn decompose_len(basis: usize) -> usize {
                 debug_assert!(basis.is_power_of_two());
                 algebra::div_ceil(<Self as algebra::field::BarrettConfig>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: Self::Base) -> Vec<Self> {
+            fn decompose(&self, basis: usize) -> Vec<Self> {
                 let mut temp = self.0;
                 let bits = basis.trailing_zeros();
 
@@ -241,13 +239,11 @@ fn impl_and_ring(
 ) -> TokenStream {
     quote! {
         impl algebra::ring::Ring for #name {
-            type Inner =#field_ty;
+            type Inner = #field_ty;
 
             type Scalar = #field_ty;
 
             type Order = #field_ty;
-
-            type Base = #field_ty;
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
@@ -284,12 +280,12 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn decompose_len(basis: Self::Base) -> usize {
+            fn decompose_len(basis: usize) -> usize {
                 debug_assert!(basis.is_power_of_two());
                 algebra::div_ceil(Self::modulus().trailing_zeros(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: Self::Base) -> Vec<Self> {
+            fn decompose(&self, basis: usize) -> Vec<Self> {
                 let mut temp = self.0;
                 let bits = basis.trailing_zeros();
 

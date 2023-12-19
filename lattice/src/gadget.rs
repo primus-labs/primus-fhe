@@ -22,11 +22,11 @@ pub struct GadgetRLWE<F: NTTField> {
     /// A vector of RLWE ciphertexts, each encrypted message with a different power of the `basis`.
     data: Vec<RLWE<F>>,
     /// The base with respect to which the ciphertexts are scaled.
-    basis: F::Base,
+    basis: usize,
 }
 
-impl<F: NTTField> From<(Vec<RLWE<F>>, F::Base)> for GadgetRLWE<F> {
-    fn from((data, basis): (Vec<RLWE<F>>, F::Base)) -> Self {
+impl<F: NTTField> From<(Vec<RLWE<F>>, usize)> for GadgetRLWE<F> {
+    fn from((data, basis): (Vec<RLWE<F>>, usize)) -> Self {
         Self { data, basis }
     }
 }
@@ -34,13 +34,13 @@ impl<F: NTTField> From<(Vec<RLWE<F>>, F::Base)> for GadgetRLWE<F> {
 impl<F: NTTField> GadgetRLWE<F> {
     /// Creates a new [`GadgetRLWE<F>`].
     #[inline]
-    pub fn new(data: Vec<RLWE<F>>, basis: F::Base) -> Self {
+    pub fn new(data: Vec<RLWE<F>>, basis: usize) -> Self {
         Self { data, basis }
     }
 
     /// Creates a new [`GadgetRLWE<F>`] with reference.
     #[inline]
-    pub fn from_ref(data: &[RLWE<F>], basis: F::Base) -> Self {
+    pub fn from_ref(data: &[RLWE<F>], basis: usize) -> Self {
         Self {
             data: data.to_vec(),
             basis,
@@ -55,7 +55,7 @@ impl<F: NTTField> GadgetRLWE<F> {
 
     /// Returns the basis of this [`GadgetRLWE<F>`].
     #[inline]
-    pub fn basis(&self) -> F::Base {
+    pub fn basis(&self) -> usize {
         self.basis
     }
 

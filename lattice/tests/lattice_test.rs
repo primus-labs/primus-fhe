@@ -21,7 +21,7 @@ type PolyFF = Polynomial<FF>;
 
 const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
-const B: u32 = 1 << 3; // base
+const B: usize = 1 << 3; // base
 
 const FP: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
 const FT: Inner = 4; // message space
@@ -219,7 +219,7 @@ fn test_gadget_rlwe() {
         .map(|i| {
             let a = PolyFF::random(N, &mut rng);
             let e = PolyFF::random_with_dis(N, &mut rng, chi);
-            let b = &a * &s + m.mul_scalar(B.pow(i as u32)) + e;
+            let b = &a * &s + m.mul_scalar(B.pow(i as u32) as Inner) + e;
 
             RLWE::new(a, b)
         })
@@ -280,7 +280,7 @@ fn test_rgsw_mul_rlwe() {
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
-                let b = &a * &s + m1.mul_scalar(B.pow(i as u32)) + e;
+                let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
             })
@@ -292,7 +292,7 @@ fn test_rgsw_mul_rlwe() {
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m1.mul_scalar(B.pow(i as u32)), b)
+                RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
@@ -338,7 +338,7 @@ fn test_rgsw_mul_rgsw() {
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
-                let b = &a * &s + m1.mul_scalar(B.pow(i as u32)) + e;
+                let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
             })
@@ -350,7 +350,7 @@ fn test_rgsw_mul_rgsw() {
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m1.mul_scalar(B.pow(i as u32)), b)
+                RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
@@ -365,7 +365,7 @@ fn test_rgsw_mul_rgsw() {
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
-                let b = &a * &s + m0.mul_scalar(B.pow(i as u32)) + e;
+                let b = &a * &s + m0.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
             })
@@ -377,7 +377,7 @@ fn test_rgsw_mul_rgsw() {
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m0.mul_scalar(B.pow(i as u32)), b)
+                RLWE::new(a + m0.mul_scalar(B.pow(i as u32) as Inner), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 

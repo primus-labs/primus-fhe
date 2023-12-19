@@ -203,7 +203,7 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
 
 impl<F: NTTField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
-    pub fn decompose(&self, basis: F::Base) -> Vec<Self> {
+    pub fn decompose(&self, basis: usize) -> Vec<Self> {
         let decompose_len = F::decompose_len(basis);
 
         let mut ret: Vec<Self> = vec![Self::with_capacity(self.coeff_count()); decompose_len];
