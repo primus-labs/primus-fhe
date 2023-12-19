@@ -201,6 +201,30 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
+            fn decompose_len(basis: Self::Base) -> usize {
+                debug_assert!(basis.is_power_of_two());
+                algebra::div_ceil(<Self as algebra::field::BarrettConfig>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
+            }
+
+            fn decompose(&self, basis: Self::Base) -> Vec<Self> {
+                let mut temp = self.0;
+                let bits = basis.trailing_zeros();
+
+                let len = Self::decompose_len(basis);
+                let mask = #field_ty::MAX >> (#field_ty::BITS - bits);
+                let mut ret: Vec<Self> = Vec::with_capacity(len);
+
+                while temp != 0 {
+                    ret.push(Self(temp & mask));
+                    temp >>= bits;
+                }
+
+                ret.resize(len, #name(0));
+
+                ret
+            }
+
+            #[inline]
             fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
                 use algebra::modulo_traits::MulModulo;
                 Self(self.0.mul_reduce(scalar, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
@@ -257,6 +281,30 @@ fn impl_and_ring(
             #[inline]
             fn order() -> Self::Order {
                 #modulus
+            }
+
+            #[inline]
+            fn decompose_len(basis: Self::Base) -> usize {
+                debug_assert!(basis.is_power_of_two());
+                algebra::div_ceil(Self::modulus().trailing_zeros(), basis.trailing_zeros()) as usize
+            }
+
+            fn decompose(&self, basis: Self::Base) -> Vec<Self> {
+                let mut temp = self.0;
+                let bits = basis.trailing_zeros();
+
+                let len = Self::decompose_len(basis);
+                let mask = #field_ty::MAX >> (#field_ty::BITS - bits);
+                let mut ret: Vec<Self> = Vec::with_capacity(len);
+
+                while temp != 0 {
+                    ret.push(Self(temp & mask));
+                    temp >>= bits;
+                }
+
+                ret.resize(len, #name(0));
+
+                ret
             }
 
             #[inline]

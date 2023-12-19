@@ -7,7 +7,7 @@ use rand::seq::SliceRandom;
 use rand_distr::Distribution;
 
 use crate::{
-    functional_bootstrapping::init_nand_acc, LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey,
+    functional_bootstrapping::nand_acc, LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey,
     LWESecretKey, RLWEParam,
 };
 
@@ -16,13 +16,13 @@ use crate::{
 pub struct Vfhe<R: Ring, F: NTTField> {
     lwe_param: LWEParam<R>,
     rlwe_param: RLWEParam<F>,
-    bootstrapping_key_base: F::Base,
+    bootstrapping_key_base: R::Base,
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
     #[inline]
-    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RLWEParam<F>, base: F::Base) -> Self {
+    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RLWEParam<F>, base: R::Base) -> Self {
         Self {
             lwe_param,
             rlwe_param,
@@ -89,7 +89,7 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
     }
 
     /// Returns the bootstrapping key base of this [`Vfhe<R, F>`].
-    pub fn bootstrapping_key_base(&self) -> <F as Ring>::Base {
+    pub fn bootstrapping_key_base(&self) -> <R as Ring>::Base {
         self.bootstrapping_key_base
     }
 }
@@ -179,7 +179,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         let big_q = self.rlwe_param().q();
         let big_n = self.rlwe_param().n();
 
-        let _acc: RLWE<F> = init_nand_acc(b, q, big_n, big_q);
+        let _acc: RLWE<F> = nand_acc(b, q, big_n, big_q);
         todo!()
     }
 }

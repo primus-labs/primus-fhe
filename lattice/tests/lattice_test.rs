@@ -1,5 +1,5 @@
 use algebra::derive::{Field, Prime, Random, Ring, NTT};
-use algebra::field::{BarrettConfig, FieldDistribution, NTTField};
+use algebra::field::{BarrettConfig, FieldDistribution};
 use algebra::polynomial::Polynomial;
 use algebra::ring::Ring;
 use lattice::*;

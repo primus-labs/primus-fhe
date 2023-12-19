@@ -3,26 +3,27 @@
 
 //! This library contains an implementation of a fully homomorphic encryption scheme.
 
-mod params;
+mod parameter;
 mod scheme;
 
-mod cipher;
-mod plain;
+mod ciphertext;
+mod plaintext;
 
-mod pubkey;
-mod seckey;
+mod publickey;
+mod secretkey;
 
 mod functional_bootstrapping;
 
-pub use params::{LWEParam, RLWEParam};
+pub use parameter::{LWEParam, RLWEParam};
 pub use scheme::Vfhe;
 
-pub use cipher::{LWECiphertext, RLWECiphertext};
-pub use plain::{LWEPlaintext, RLWEPlaintext};
+pub use ciphertext::{LWECiphertext, RLWECiphertext};
+pub use plaintext::{LWEPlaintext, RLWEPlaintext};
 
-pub use pubkey::{LWEPublicKey, RLWEPublicKey};
-pub use seckey::{LWESecretKey, LWESecretKeyDistribution, RLWESecretKey};
+pub use publickey::{LWEPublicKey, RLWEPublicKey};
+pub use secretkey::{LWESecretKey, LWESecretKeyDistribution, RLWESecretKey};
 
 pub use functional_bootstrapping::{
-    FHEWGaussianBootstrappingKey, TFHEBinaryBootStrappingKey, TFHETernaryBootStrappingKey,
+    FHEWGaussianBootstrappingKey, FunctionalBootstrappingKey, TFHEBinaryBootStrappingKey,
+    TFHETernaryBootStrappingKey,
 };

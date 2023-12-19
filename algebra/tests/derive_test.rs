@@ -13,7 +13,6 @@ mod tests {
     use super::*;
 
     use algebra::field::BarrettConfig;
-    use algebra::field::NTTField;
     use algebra::field::PrimeField;
     use algebra::modulo_traits::*;
     use algebra::modulus::Modulus;

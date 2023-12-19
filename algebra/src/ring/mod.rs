@@ -3,7 +3,7 @@
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use num_traits::{One, Pow, PrimInt, Zero};
+use num_traits::{NumCast, One, Pow, PrimInt, Zero};
 
 use crate::field::FieldDistribution;
 use crate::RoundedDiv;
@@ -67,7 +67,7 @@ pub trait Ring:
 
     /// The type of the ring's base,
     /// which is used to decompose the element of the ring.
-    type Base: Copy + Debug;
+    type Base: Copy + Debug + NumCast;
 
     /// Creates a new instance.
     fn new(value: Self::Inner) -> Self;
@@ -86,6 +86,14 @@ pub trait Ring:
 
     /// Returns the order of the ring.
     fn order() -> Self::Order;
+
+    /// Get the length of decompose vec.
+    fn decompose_len(basis: Self::Base) -> usize;
+
+    /// Decompose `self` according to `basis`.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose(&self, basis: Self::Base) -> Vec<Self>;
 
     /// Return `self * scalar`.
     fn mul_scalar(&self, scalar: Self::Scalar) -> Self;

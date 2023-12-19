@@ -31,30 +31,6 @@ fn impl_ntt(input: Input) -> TokenStream {
             type Degree = #field_ty;
 
             #[inline]
-            fn decompose_len(basis: Self::Base) -> usize {
-                debug_assert!(basis.is_power_of_two());
-                algebra::div_ceil(<Self as algebra::field::BarrettConfig>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
-            }
-
-            fn decompose(&self, basis: Self::Base) -> Vec<Self> {
-                let mut temp = self.0;
-                let bits = basis.trailing_zeros();
-
-                let len = Self::decompose_len(basis);
-                let mask = #field_ty::MAX >> (#field_ty::BITS - bits);
-                let mut ret: Vec<Self> = Vec::with_capacity(len);
-
-                while temp != 0 {
-                    ret.push(Self(temp & mask));
-                    temp >>= bits;
-                }
-
-                ret.resize(len, #name(0));
-
-                ret
-            }
-
-            #[inline]
             fn from_root(root: Self::Root) -> Self {
                 root.value()
             }
