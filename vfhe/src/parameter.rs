@@ -10,8 +10,8 @@ use num_traits::Zero;
 use rand_distr::Distribution;
 
 use crate::{
-    LWEPlaintext, LWEPublicKey, LWESecretKey, LWESecretKeyDistribution, RLWEPublicKey,
-    RLWESecretKey,
+    LWEPlaintext, LWEPublicKey, LWESecretKey, LWESecretKeyDistribution, RLWECiphertext,
+    RLWEPlaintext, RLWEPublicKey, RLWESecretKey,
 };
 
 /// lwe parameter
@@ -138,6 +138,19 @@ impl<R: RandomRing> LWEParam<R> {
             .collect();
         LWESecretKey::new(secret_key, LWESecretKeyDistribution::Ternary)
     }
+
+    /// generate gaussian secret key
+    pub fn generate_gaussian_sk<Rng: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: Rng,
+    ) -> LWESecretKey<R> {
+        let secret_key = R::normal_distribution(0.0, self.err_std_dev())
+            .unwrap()
+            .sample_iter(rng)
+            .take(self.n)
+            .collect();
+        LWESecretKey::new(secret_key, LWESecretKeyDistribution::Gaussian)
+    }
 }
 
 /// rlwe parameter
@@ -209,6 +222,17 @@ impl<F: NTTField> RLWEParam<F> {
     pub fn set_public_key(&mut self, public_key: RLWEPublicKey<F>) {
         self.public_key = public_key;
     }
+
+    /// decrypt
+    pub fn decrypt(&self, ciphertext: RLWECiphertext<F>) -> RLWEPlaintext<F> {
+        (ciphertext.b()
+            - ciphertext.a()
+                * self.secret_key().map_or_else(
+                    || panic!("`decrypt` should supply secret key"),
+                    |sk| sk.data(),
+                ))
+        .into()
+    }
 }
 
 impl<F: RandomNTTField> RLWEParam<F> {
@@ -229,5 +253,23 @@ impl<F: RandomNTTField> RLWEParam<F> {
         let a = <Polynomial<F>>::random(self.n, &mut rng);
         let b = <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi) + &a * sk.data();
         (a, b).into()
+    }
+
+    /// encrypt by public key
+    pub fn encrypt_by_pk<Rng: rand::Rng + rand::CryptoRng>(
+        &self,
+        plaintext: RLWEPlaintext<F>,
+        mut rng: Rng,
+    ) -> RLWECiphertext<F> {
+        let chi = F::normal_distribution(0.0, self.err_std_dev).unwrap();
+        let v = <Polynomial<F>>::random_with_dis(self.n, &mut rng, F::ternary_distribution());
+
+        let a =
+            &v * self.public_key().a() + <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi);
+        let b = v * self.public_key().b()
+            + plaintext.data()
+            + <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi);
+
+        RLWECiphertext::from((a, b))
     }
 }

@@ -37,7 +37,7 @@ pub trait FieldDistribution: Sized + SampleUniform {
     type BinaryDistribution: Distribution<Self> + Copy;
 
     /// The type of the ternary distribution.
-    type TernaryDistribution: Distribution<Self>;
+    type TernaryDistribution: Distribution<Self> + Copy;
 
     /// The type of the normal distribution.
     type NormalDistribution: Distribution<Self> + Copy;

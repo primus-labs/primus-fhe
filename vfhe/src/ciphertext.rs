@@ -57,6 +57,18 @@ impl<F: NTTField> RLWECiphertext<F> {
     pub fn data(&self) -> &RLWE<F> {
         &self.data
     }
+
+    /// Returns a reference to the a of this [`RLWECiphertext<F>`].
+    #[inline]
+    pub fn a(&self) -> &Polynomial<F> {
+        self.data.a()
+    }
+
+    /// Returns a reference to the b of this [`RLWECiphertext<F>`].
+    #[inline]
+    pub fn b(&self) -> &Polynomial<F> {
+        self.data.b()
+    }
 }
 
 impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWECiphertext<F> {

@@ -71,9 +71,10 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
         /// prob\[1] = prob\[-1] = 0.25
         ///
         /// prob\[0] = 0.5
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Copy, Debug)]
         pub struct #ternary_name {
-            inner: rand_distr::WeightedIndex<usize>,
+            inner1: rand_distr::Bernoulli,
+            inner2: rand_distr::Bernoulli,
         }
 
         impl #ternary_name {
@@ -81,7 +82,8 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
             #[inline]
             pub fn new() -> Self {
                 Self {
-                    inner: rand_distr::WeightedIndex::new([1, 2, 1]).unwrap(),
+                    inner1: rand_distr::Bernoulli::new(0.5).unwrap(),
+                    inner2: rand_distr::Bernoulli::new(0.5).unwrap(),
                 }
             }
         }
@@ -96,8 +98,13 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
         impl rand::distributions::Distribution<#name> for #ternary_name {
             #[inline]
             fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
-                const VALUES: [#name; 3] = [#name::max(), #name(0), #name(1)];
-                VALUES[self.inner.sample(rng)]
+                if self.inner1.sample(rng) {
+                    #name(0)
+                } else if self.inner2.sample(rng) {
+                    #name(1)
+                } else {
+                    #name::max()
+                }
             }
         }
     }

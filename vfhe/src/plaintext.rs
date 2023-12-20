@@ -53,8 +53,8 @@ pub struct RLWEPlaintext<F: NTTField> {
 impl<F: NTTField> RLWEPlaintext<F> {
     /// Returns a reference to the data of this [`RLWEPlaintext<F>`].
     #[inline]
-    pub fn data(&self) -> &[F] {
-        self.data.as_ref()
+    pub fn data(&self) -> &Polynomial<F> {
+        &self.data
     }
 }
 

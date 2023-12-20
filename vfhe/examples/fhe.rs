@@ -20,7 +20,7 @@ fn main() {
 
     let v = 0;
     let m = vfhe.encode(v);
-    let c = vfhe.encrypt(m, &mut rng);
+    let c = vfhe.encrypt_by_pk(m, &mut rng);
     let m_d = vfhe.decrypt(&c);
     let v_d = vfhe.decode(m_d);
 
@@ -28,7 +28,7 @@ fn main() {
 
     let v1 = 1;
     let m1 = vfhe.encode(v1);
-    let c1 = vfhe.encrypt(m1, &mut rng);
+    let c1 = vfhe.encrypt_by_pk(m1, &mut rng);
     let c2 = c.no_boot_add(&c1);
     let m_2 = vfhe.decrypt(&c2);
     let v_2 = vfhe.decode(m_2);

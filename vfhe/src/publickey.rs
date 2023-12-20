@@ -67,4 +67,16 @@ impl<F: NTTField> RLWEPublicKey<F> {
     pub fn data(&self) -> &RLWECiphertext<F> {
         &self.data
     }
+
+    /// Returns a reference to the a of this [`RLWEPublicKey<F>`].
+    #[inline]
+    pub fn a(&self) -> &Polynomial<F> {
+        self.data.a()
+    }
+
+    /// Returns a reference to the b of this [`RLWEPublicKey<F>`].
+    #[inline]
+    pub fn b(&self) -> &Polynomial<F> {
+        self.data.b()
+    }
 }

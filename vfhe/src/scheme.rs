@@ -16,18 +16,18 @@ use crate::{
 pub struct Vfhe<R: Ring, F: NTTField> {
     lwe_param: LWEParam<R>,
     rlwe_param: RLWEParam<F>,
-    bootstrapping_key_base: usize,
+    bootstrapping_key_basis: usize,
     // bootstrapping_key:
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
     #[inline]
-    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RLWEParam<F>, base: usize) -> Self {
+    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RLWEParam<F>, basis: usize) -> Self {
         Self {
             lwe_param,
             rlwe_param,
-            bootstrapping_key_base: base,
+            bootstrapping_key_basis: basis,
         }
     }
 
@@ -44,11 +44,13 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
     }
 
     /// Returns the rlwe param of this [`Vfhe<R, F>`].
+    #[inline]
     pub fn rlwe_param(&self) -> &RLWEParam<F> {
         &self.rlwe_param
     }
 
     /// Returns a mutable reference to the rlwe param of this [`Vfhe<R, F>`].
+    #[inline]
     pub fn rlwe_param_mut(&mut self) -> &mut RLWEParam<F> {
         &mut self.rlwe_param
     }
@@ -89,9 +91,10 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         self.lwe_param.decode(plaintext)
     }
 
-    /// Returns the bootstrapping key base of this [`Vfhe<R, F>`].
-    pub fn bootstrapping_key_base(&self) -> usize {
-        self.bootstrapping_key_base
+    /// Returns the bootstrapping key basis of this [`Vfhe<R, F>`].
+    #[inline]
+    pub fn bootstrapping_key_basis(&self) -> usize {
+        self.bootstrapping_key_basis
     }
 }
 
@@ -112,6 +115,15 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
         rng: Rng,
     ) -> LWESecretKey<R> {
         self.lwe_param.generate_ternary_sk(rng)
+    }
+
+    /// generate gaussian secret key
+    #[inline]
+    pub fn generate_gaussian_lwe_sk<Rng: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: Rng,
+    ) -> LWESecretKey<R> {
+        self.lwe_param.generate_gaussian_sk(rng)
     }
 
     /// generate public key
@@ -137,7 +149,7 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
     }
 
     /// encrypt
-    pub fn encrypt<Rng: rand::Rng + rand::CryptoRng>(
+    pub fn encrypt_by_pk<Rng: rand::Rng + rand::CryptoRng>(
         &self,
         plaintext: LWEPlaintext<R>,
         mut rng: Rng,
@@ -158,6 +170,30 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
             .fold(c, LWECiphertext::no_boot_add)
     }
 
+    /// encrypt
+    pub fn encrypt_by_sk<Rng: rand::Rng + rand::CryptoRng>(
+        &self,
+        plaintext: LWEPlaintext<R>,
+        mut rng: Rng,
+    ) -> LWECiphertext<R> {
+        let dis = R::standard_distribution();
+        let n = self.lwe_param.n();
+        let err = self.lwe_param.err_std_dev();
+        let err_dis = R::normal_distribution(0.0, err).unwrap();
+
+        let a: Vec<R> = dis.sample_iter(&mut rng).take(n).collect();
+        let b = dot_product(
+            &a,
+            self.secret_key().map_or_else(
+                || panic!("`encrypt_by_sk` should supply secret key"),
+                |sk| sk.data(),
+            ),
+        ) + plaintext.data()
+            + err_dis.sample(&mut rng);
+
+        LWECiphertext::from((a, b))
+    }
+
     /// decrypt
     pub fn decrypt(&self, ciphertext: &LWECiphertext<R>) -> LWEPlaintext<R> {
         let lwe = ciphertext.data();
@@ -169,8 +205,21 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
 }
 
 impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
+    /// generate bootstrapping key
+    pub fn generate_bootstrapping_key(&self) {
+        match self.secret_key() {
+            Some(sk) => match sk.distribution() {
+                crate::LWESecretKeyDistribution::Binary => {
+                    
+                    
+                    todo!()},
+                crate::LWESecretKeyDistribution::Ternary => todo!(),
+                crate::LWESecretKeyDistribution::Gaussian => todo!(),
+            },
+            None => panic!("generate bootstrapping key should supply secret key"),
+        }
+    }
     /// Perform addition
-    #[inline]
     pub fn nand(&self, c0: LWECiphertext<R>, c1: &LWECiphertext<R>) -> Self {
         let add = c0.no_boot_add(c1);
 
