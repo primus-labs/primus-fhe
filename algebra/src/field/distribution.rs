@@ -29,7 +29,7 @@ use crate::AlgebraError;
 /// * `ternary_distribution()`: Returns an instance of the ternary distribution type.
 /// * `normal_distribution(mean, std_dev)`: Returns an instance of the normal distribution type, parameterized by the specified mean and standard deviation.
 ///   This method may fail, indicated by returning an `AlgebraError`, if the parameters do not result in a valid distribution.
-pub trait FieldDistribution: Sized + SampleUniform {
+pub trait Random: Sized + SampleUniform {
     /// The thpe of the standard distribution.
     type StandardDistribution: Distribution<Self> + Copy;
 

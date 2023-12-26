@@ -1,4 +1,6 @@
-use algebra::ring::Ring;
+use algebra::{field::NTTField, polynomial::Polynomial, ring::Ring};
+
+use crate::{GadgetRLWE, RLWE};
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
@@ -102,5 +104,46 @@ impl<R: Ring> LWE<R> {
             .zip(rhs.a())
             .for_each(|(v0, v1)| *v0 -= *v1);
         *self.b_mut() -= rhs.b();
+    }
+}
+
+impl<F: NTTField> LWE<F> {
+    /// key switch
+    pub fn key_switch(&self, ksk: &[GadgetRLWE<F>], n: usize) -> LWE<F> {
+        let a_s: Vec<Polynomial<F>> = self
+            .a
+            .chunks_exact(n)
+            .map(|a| {
+                <Polynomial<F>>::new(
+                    std::iter::once(a[0])
+                        .chain(a.iter().skip(1).rev().map(|&x| -x))
+                        .collect(),
+                )
+            })
+            .collect();
+
+        let mut init = RLWE::new(
+            Polynomial::zero_with_coeff_count(n),
+            Polynomial::zero_with_coeff_count(n),
+        );
+        init.b_mut()[0] = self.b;
+
+        ksk.iter()
+            .zip(a_s)
+            .fold(init, |acc, (k_i, a_i)| {
+                acc.sub_element_wise(&k_i.mul_with_polynomial(&a_i))
+            })
+            .extract_lwe()
+    }
+
+    /// modulus switch
+    pub fn modulus_switch<R: Ring>(&self, q: f64, p: f64) -> LWE<R> {
+        let a: Vec<R> = self
+            .a
+            .iter()
+            .map(|&v| R::from_f64((v.as_f64() * q / p).round()))
+            .collect();
+        let b = R::from_f64((self.b.as_f64() * q / p).round());
+        <LWE<R>>::new(a, b)
     }
 }

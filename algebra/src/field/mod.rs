@@ -10,7 +10,7 @@ mod distribution;
 mod ntt_fields;
 mod prime_fields;
 
-pub use distribution::FieldDistribution;
+pub use distribution::Random;
 pub use ntt_fields::NTTField;
 pub use prime_fields::{MulFactor, PrimeField};
 
@@ -72,6 +72,6 @@ pub trait Field:
 }
 
 /// A trait combine [`NTTField`] with random property.
-pub trait RandomNTTField: NTTField + FieldDistribution {}
+pub trait RandomNTTField: NTTField + Random {}
 
-impl<F> RandomNTTField for F where F: NTTField + FieldDistribution {}
+impl<F> RandomNTTField for F where F: NTTField + Random {}

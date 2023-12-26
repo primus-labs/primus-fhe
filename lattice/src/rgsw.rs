@@ -70,6 +70,18 @@ impl<F: NTTField> RGSW<F> {
         &self.c_m
     }
 
+    /// Returns a mutable reference to the c neg s m of this [`RGSW<F>`].
+    #[inline]
+    pub fn c_neg_s_m_mut(&mut self) -> &mut GadgetRLWE<F> {
+        &mut self.c_neg_s_m
+    }
+
+    /// Returns a mutable reference to the c m of this [`RGSW<F>`].
+    #[inline]
+    pub fn c_m_mut(&mut self) -> &mut GadgetRLWE<F> {
+        &mut self.c_m
+    }
+
     /// Returns a reference to the basis of this [`RGSW<F>`].
     #[inline]
     pub fn basis(&self) -> usize {

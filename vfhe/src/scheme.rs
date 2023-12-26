@@ -1,235 +1,286 @@
 use algebra::{
     field::{NTTField, RandomNTTField},
+    polynomial::Polynomial,
     ring::{RandomRing, Ring},
 };
-use lattice::{dot_product, RLWE};
-use rand::seq::SliceRandom;
-use rand_distr::Distribution;
+use lattice::{GadgetRLWE, LWE, RLWE};
+use num_traits::cast;
 
 use crate::{
-    functional_bootstrapping::nand_acc, LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey,
-    LWESecretKey, RLWEParam,
+    functional_bootstrapping::nand_acc, BootstrappingKey, LWECiphertext, LWEParam, LWEPlaintext,
+    LWEPublicKey, LWESecretKey, RLWESecretKey, RingParam,
 };
 
 /// fhe scheme
 #[derive(Debug, Clone)]
 pub struct Vfhe<R: Ring, F: NTTField> {
-    lwe_param: LWEParam<R>,
-    rlwe_param: RLWEParam<F>,
-    bootstrapping_key_basis: usize,
-    // bootstrapping_key:
+    lwe: LWEParam<R>,
+    rlwe: RingParam<F>,
+    q: f64,
+    p: f64,
+    l2divq: usize,
+    bks: BootstrappingKey<F>,
+    ksk: Vec<GadgetRLWE<F>>,
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
     #[inline]
-    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RLWEParam<F>, basis: usize) -> Self {
+    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>) -> Self {
+        let n = rlwe_param.l();
+        let q = R::new(lwe_param.q()).cast_into_usize();
+        let l2divq = (n << 1) / q;
+
+        let q = cast::<<R as Ring>::Inner, f64>(lwe_param.q()).unwrap();
+        let p = cast::<<F as Ring>::Inner, f64>(rlwe_param.p()).unwrap();
+
         Self {
-            lwe_param,
-            rlwe_param,
-            bootstrapping_key_basis: basis,
+            lwe: lwe_param,
+            rlwe: rlwe_param,
+            l2divq,
+            bks: BootstrappingKey::TFHEBinary(Vec::new()),
+            ksk: Vec::new(),
+            q,
+            p,
         }
     }
 
     /// Returns the lwe param of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn lwe_param(&self) -> &LWEParam<R> {
-        &self.lwe_param
+    pub fn lwe(&self) -> &LWEParam<R> {
+        &self.lwe
     }
 
     /// Returns a mutable reference to the lwe param of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn lwe_param_mut(&mut self) -> &mut LWEParam<R> {
-        &mut self.lwe_param
+    pub fn lwe_mut(&mut self) -> &mut LWEParam<R> {
+        &mut self.lwe
     }
 
     /// Returns the rlwe param of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn rlwe_param(&self) -> &RLWEParam<F> {
-        &self.rlwe_param
+    pub fn rlwe(&self) -> &RingParam<F> {
+        &self.rlwe
     }
 
     /// Returns a mutable reference to the rlwe param of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn rlwe_param_mut(&mut self) -> &mut RLWEParam<F> {
-        &mut self.rlwe_param
+    pub fn rlwe_mut(&mut self) -> &mut RingParam<F> {
+        &mut self.rlwe
+    }
+
+    /// Returns the l2divq of this [`Vfhe<R, F>`].
+    #[inline]
+    pub fn l2divq(&self) -> usize {
+        self.l2divq
     }
 
     /// Returns a reference to the public key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn public_key(&self) -> &LWEPublicKey<R> {
-        self.lwe_param.public_key()
+        self.lwe.public_key()
     }
 
     /// Returns the secret key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn secret_key(&self) -> Option<&LWESecretKey<R>> {
-        self.lwe_param.secret_key()
+        self.lwe.secret_key()
     }
 
     /// Sets the public key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn set_public_key(&mut self, public_key: LWEPublicKey<R>) {
-        self.lwe_param.set_public_key(public_key)
+        self.lwe.set_public_key(public_key)
     }
 
     /// Sets the secret key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn set_secret_key(&mut self, secret_key: Option<LWESecretKey<R>>) {
-        self.lwe_param.set_secret_key(secret_key)
+        self.lwe.set_secret_key(secret_key)
     }
 
     /// encode
     #[inline]
     pub fn encode(&self, value: R::Inner) -> LWEPlaintext<R> {
-        self.lwe_param.encode(value)
+        self.lwe.encode(value)
     }
 
     /// decode
     #[inline]
     pub fn decode(&self, plaintext: LWEPlaintext<R>) -> R::Inner {
-        self.lwe_param.decode(plaintext)
+        self.lwe.decode(plaintext)
     }
 
-    /// Returns the bootstrapping key basis of this [`Vfhe<R, F>`].
+    /// Returns the bks of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn bootstrapping_key_basis(&self) -> usize {
-        self.bootstrapping_key_basis
+    pub fn bks(&self) -> &BootstrappingKey<F> {
+        &self.bks
+    }
+
+    /// Sets the bks of this [`Vfhe<R, F>`].
+    #[inline]
+    pub fn set_bks(&mut self, bks: BootstrappingKey<F>) {
+        self.bks = bks;
+    }
+
+    /// Returns the ksk of this [`Vfhe<R, F>`].
+    pub fn ksk(&self) -> &Vec<GadgetRLWE<F>> {
+        &self.ksk
+    }
+
+    /// Sets the ksk of this [`Vfhe<R, F>`].
+    pub fn set_ksk(&mut self, ksk: Vec<GadgetRLWE<F>>) {
+        self.ksk = ksk;
     }
 }
 
 impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
-    /// generate binary secret key
+    /// generate secret key
     #[inline]
-    pub fn generate_binary_lwe_sk<Rng: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: Rng,
-    ) -> LWESecretKey<R> {
-        self.lwe_param.generate_binary_sk(rng)
-    }
-
-    /// generate ternary secret key
-    #[inline]
-    pub fn generate_ternary_lwe_sk<Rng: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: Rng,
-    ) -> LWESecretKey<R> {
-        self.lwe_param.generate_ternary_sk(rng)
-    }
-
-    /// generate gaussian secret key
-    #[inline]
-    pub fn generate_gaussian_lwe_sk<Rng: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: Rng,
-    ) -> LWESecretKey<R> {
-        self.lwe_param.generate_gaussian_sk(rng)
+    pub fn generate_lwe_sk<Rng>(&self, rng: Rng) -> LWESecretKey<R>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        self.lwe.generate_sk(rng)
     }
 
     /// generate public key
-    pub fn generate_lwe_pk<Rng: rand::Rng + rand::CryptoRng>(
-        &self,
-        sk: &LWESecretKey<R>,
-        mut rng: Rng,
-    ) -> LWEPublicKey<R> {
-        let dis = R::standard_distribution();
-        let n = self.lwe_param.n();
-        let err = self.lwe_param.err_std_dev();
-        let err_dis = R::normal_distribution(0.0, err).unwrap();
-
-        (0..64)
-            .map(|_| {
-                let a: Vec<R> = dis.sample_iter(&mut rng).take(n).collect();
-                let b = dot_product(&a, sk.data()) + err_dis.sample(&mut rng);
-                (a, b)
-            })
-            .map(LWECiphertext::from)
-            .collect::<Vec<LWECiphertext<R>>>()
-            .into()
+    #[inline]
+    pub fn generate_lwe_pk<Rng>(&self, sk: &LWESecretKey<R>, rng: Rng) -> LWEPublicKey<R>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        self.lwe.generate_pk(sk, rng)
     }
 
     /// encrypt
-    pub fn encrypt_by_pk<Rng: rand::Rng + rand::CryptoRng>(
-        &self,
-        plaintext: LWEPlaintext<R>,
-        mut rng: Rng,
-    ) -> LWECiphertext<R> {
-        let n = self.lwe_param.n();
-        let err = self.lwe_param.err_std_dev();
-        let err_dis = R::normal_distribution(0.0, err).unwrap();
-
-        let c = LWECiphertext::from((
-            vec![R::zero(); n],
-            plaintext.data() + err_dis.sample(&mut rng),
-        ));
-
-        self.lwe_param
-            .public_key()
-            .data()
-            .choose_multiple(&mut rng, 4)
-            .fold(c, LWECiphertext::no_boot_add)
+    #[inline]
+    pub fn encrypt_by_pk<Rng>(&self, plain: LWEPlaintext<R>, rng: Rng) -> LWECiphertext<R>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        self.lwe.encrypt_by_pk(plain, rng)
     }
 
     /// encrypt
-    pub fn encrypt_by_sk<Rng: rand::Rng + rand::CryptoRng>(
-        &self,
-        plaintext: LWEPlaintext<R>,
-        mut rng: Rng,
-    ) -> LWECiphertext<R> {
-        let dis = R::standard_distribution();
-        let n = self.lwe_param.n();
-        let err = self.lwe_param.err_std_dev();
-        let err_dis = R::normal_distribution(0.0, err).unwrap();
-
-        let a: Vec<R> = dis.sample_iter(&mut rng).take(n).collect();
-        let b = dot_product(
-            &a,
-            self.secret_key().map_or_else(
-                || panic!("`encrypt_by_sk` should supply secret key"),
-                |sk| sk.data(),
-            ),
-        ) + plaintext.data()
-            + err_dis.sample(&mut rng);
-
-        LWECiphertext::from((a, b))
+    #[inline]
+    pub fn encrypt_by_sk<Rng>(&self, plain: LWEPlaintext<R>, rng: Rng) -> LWECiphertext<R>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        self.lwe.encrypt_by_sk(plain, rng)
     }
 
     /// decrypt
-    pub fn decrypt(&self, ciphertext: &LWECiphertext<R>) -> LWEPlaintext<R> {
-        let lwe = ciphertext.data();
-        self.lwe_param.secret_key().map_or_else(
-            || panic!("Decryption should supply secret key"),
-            |sk| LWEPlaintext::new(lwe.b() - dot_product(lwe.a(), sk.data())),
-        )
+    #[inline]
+    pub fn decrypt(&self, cipher: &LWECiphertext<R>) -> LWEPlaintext<R> {
+        self.lwe.decrypt(cipher)
     }
 }
 
 impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     /// generate bootstrapping key
-    pub fn generate_bootstrapping_key(&self) {
+    pub fn generate_bootstrapping_key(&self) -> BootstrappingKey<F> {
+        let rlwe_sk = self.rlwe.secret_key().unwrap();
+        let mut rng = rand::thread_rng();
         match self.secret_key() {
-            Some(sk) => match sk.distribution() {
+            Some(sk) => match self.lwe.secret_key_distribution() {
                 crate::LWESecretKeyDistribution::Binary => {
-                    
-                    
-                    todo!()},
-                crate::LWESecretKeyDistribution::Ternary => todo!(),
+                    let bks = sk
+                        .iter()
+                        .map(|&s| {
+                            let mut bk = self.rlwe.rgsw_zero(&mut rng, rlwe_sk);
+                            if s.is_one() {
+                                self.rlwe.rgsw_zero_to_one(&mut bk);
+                            }
+                            bk
+                        })
+                        .collect();
+                    BootstrappingKey::binary_bootstrapping_key(bks)
+                }
+                crate::LWESecretKeyDistribution::Ternary => {
+                    let neg_one = -R::one();
+
+                    let bks = sk
+                        .iter()
+                        .map(|&s| {
+                            let mut u0 = self.rlwe.rgsw_zero(&mut rng, rlwe_sk);
+                            let mut u1 = self.rlwe.rgsw_zero(&mut rng, rlwe_sk);
+                            if s.is_one() {
+                                self.rlwe.rgsw_zero_to_one(&mut u0);
+                            } else if s == neg_one {
+                                self.rlwe.rgsw_zero_to_one(&mut u1);
+                            } else {
+                                self.rlwe.rgsw_zero_to_one(&mut u0);
+                                self.rlwe.rgsw_zero_to_one(&mut u1);
+                            }
+                            (u0, u1)
+                        })
+                        .collect();
+                    BootstrappingKey::ternary_bootstrapping_key(bks)
+                }
                 crate::LWESecretKeyDistribution::Gaussian => todo!(),
             },
             None => panic!("generate bootstrapping key should supply secret key"),
         }
     }
+
     /// Perform addition
-    pub fn nand(&self, c0: LWECiphertext<R>, c1: &LWECiphertext<R>) -> Self {
-        let add = c0.no_boot_add(c1);
+    pub fn nand(&self, c0: LWE<R>, c1: &LWE<R>) -> LWE<R> {
+        let add = c0.add_component_wise(c1);
 
-        let b = add.data().b();
+        let b = add.b();
 
-        let q = self.lwe_param().q();
-        let big_q = self.rlwe_param().q();
-        let big_n = self.rlwe_param().n();
+        let n = self.lwe.n();
+        let q = self.lwe.q();
+        let p = self.rlwe.p();
+        let l = self.rlwe.l();
 
-        let _acc: RLWE<F> = nand_acc(b, q, big_n, big_q);
-        todo!()
+        let acc: RLWE<F> = nand_acc(b, q, l, p);
+        let acc = self.bks.bootstrapping(acc, add.a(), l, self.l2divq);
+
+        let mut extract = acc.extract_lwe();
+        *extract.b_mut() += F::new(p >> 3);
+        let key_switching = extract.key_switch(&self.ksk, n);
+        key_switching.modulus_switch(self.q, self.p)
+    }
+
+    /// generate key_switching key
+    pub fn generate_key_switching_key<Rng>(
+        &self,
+        rlwe_key: &RLWESecretKey<F>,
+        lwe_key: &LWESecretKey<R>,
+        mut rng: Rng,
+    ) -> Vec<GadgetRLWE<F>>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        let n = lwe_key.len();
+        let b_g = self.rlwe.b();
+        let bs = self.rlwe.bs();
+        let chi = self.rlwe.error_distribution();
+
+        let s = <Polynomial<F>>::new(lwe_key.iter().map(|v| F::from_f64(v.as_f64())).collect());
+
+        AsRef::<[F]>::as_ref(rlwe_key)
+            .chunks(n)
+            .map(|z_i| {
+                let k_i = bs
+                    .iter()
+                    .map(|&b_i| {
+                        let a = <Polynomial<F>>::random(n, &mut rng);
+                        let e = <Polynomial<F>>::random_with_dis(n, &mut rng, chi);
+                        let mut b: Polynomial<F> = &a * &s + e;
+
+                        b.iter_mut().zip(z_i.iter()).for_each(|(b_j, &z_ij)| {
+                            *b_j += z_ij * F::cast_from_usize(b_i);
+                        });
+
+                        RLWE::new(a, b)
+                    })
+                    .collect::<Vec<RLWE<F>>>();
+                GadgetRLWE::new(k_i, b_g)
+            })
+            .collect()
     }
 }

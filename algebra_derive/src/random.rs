@@ -253,7 +253,7 @@ fn impl_random(input: Input) -> TokenStream {
             }
         }
 
-        impl algebra::field::FieldDistribution for #name {
+        impl algebra::field::Random for #name {
             type StandardDistribution = rand::distributions::Uniform<#name>;
 
             type BinaryDistribution = #binary_name;

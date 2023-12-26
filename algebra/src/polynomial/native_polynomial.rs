@@ -4,7 +4,7 @@ use std::slice::{Iter, IterMut, SliceIndex};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::field::{Field, FieldDistribution, NTTField};
+use crate::field::{Field, NTTField, Random};
 use crate::transformation::AbstractNTT;
 
 use super::NTTPolynomial;
@@ -149,7 +149,7 @@ impl<F: Field> Polynomial<F> {
     }
 }
 
-impl<F: Field + FieldDistribution> Polynomial<F> {
+impl<F: Field + Random> Polynomial<F> {
     /// Generate a random [`Polynomial<F>`].
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self

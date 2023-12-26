@@ -14,7 +14,7 @@ mod secretkey;
 
 mod functional_bootstrapping;
 
-pub use parameter::{LWEParam, RLWEParam};
+pub use parameter::{LWEParam, RingParam};
 pub use scheme::Vfhe;
 
 pub use ciphertext::{LWECiphertext, RLWECiphertext};
@@ -23,7 +23,4 @@ pub use plaintext::{LWEPlaintext, RLWEPlaintext};
 pub use publickey::{LWEPublicKey, RLWEPublicKey};
 pub use secretkey::{LWESecretKey, LWESecretKeyDistribution, RLWESecretKey};
 
-pub use functional_bootstrapping::{
-    FHEWGaussianBootstrappingKey, FunctionalBootstrappingKey, TFHEBinaryBootStrappingKey,
-    TFHETernaryBootStrappingKey,
-};
+pub use functional_bootstrapping::{BootstrappingKey, FunctionalBootstrappingKey};

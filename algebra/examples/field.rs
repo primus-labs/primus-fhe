@@ -1,6 +1,6 @@
 use algebra::{
     derive::*,
-    field::{Field, FieldDistribution, PrimeField},
+    field::{Field, PrimeField, Random},
     polynomial::Polynomial,
     ring::Ring,
 };
@@ -19,7 +19,7 @@ use rand_distr::Standard;
 // But it will note generating impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 // You need to make it by yourself.
 
-// Derive macro `Random` generating an impl of the trait `algebra::field::FieldDistribution`.
+// Derive macro `Random` generating an impl of the trait `algebra::field::Random`.
 //
 // Then you can use `rand` crate to generate it randomly.
 //

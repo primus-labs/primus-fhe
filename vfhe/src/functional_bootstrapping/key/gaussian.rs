@@ -103,8 +103,7 @@ impl<F: NTTField> FunctionalBootstrappingKey for FHEWGaussianBootstrappingKey<F>
             let decompose = a_i.decompose(basis);
 
             for (j, a_i_j) in decompose.into_iter().enumerate() {
-                acc = acc
-                    .mul_with_rgsw(&s_i[j * basis + R::cast_into_usize(a_i_j.inner()) * multiple]);
+                acc = acc.mul_with_rgsw(&s_i[j * basis + a_i_j.cast_into_usize() * multiple]);
             }
             acc
         })

@@ -5,7 +5,7 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{One, Pow, PrimInt, Zero};
 
-use crate::field::FieldDistribution;
+use crate::field::Random;
 use crate::RoundedDiv;
 
 /// A trait defining the algebraic structure of a mathematical ring.
@@ -72,10 +72,16 @@ pub trait Ring:
     fn inner(self) -> Self::Inner;
 
     /// cast inner to [`usize`]
-    fn cast_into_usize(value: Self::Inner) -> usize;
+    fn cast_into_usize(self) -> usize;
 
-    /// cast inner from [`usize`]
+    /// cast from [`usize`]
     fn cast_from_usize(value: usize) -> Self;
+
+    /// cast inner to [`f64`]
+    fn as_f64(self) -> f64;
+
+    /// cast from [`f64`]
+    fn from_f64(value: f64) -> Self;
 
     /// Returns the modulus.
     fn modulus() -> Self::Inner;
@@ -129,6 +135,6 @@ pub trait Ring:
 }
 
 /// A trait combine [`Ring`] with random property.
-pub trait RandomRing: Ring + FieldDistribution {}
+pub trait RandomRing: Ring + Random {}
 
-impl<R> RandomRing for R where R: Ring + FieldDistribution {}
+impl<R> RandomRing for R where R: Ring + Random {}

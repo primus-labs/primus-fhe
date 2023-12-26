@@ -74,6 +74,15 @@ impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
     }
 }
 
+impl<F: NTTField> Default for RLWE<F> {
+    fn default() -> Self {
+        Self {
+            a: Polynomial::new(Vec::new()),
+            b: Polynomial::new(Vec::new()),
+        }
+    }
+}
+
 impl<F: NTTField> RLWE<F> {
     /// Creates a new [`RLWE<F>`].
     #[inline]
@@ -192,7 +201,7 @@ impl<F: NTTField> RLWE<F> {
 
     /// Perform [`RLWE<F>`] multiply with `Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
     pub fn mul_with_monic_monomial<R: Ring>(&self, n: usize, n_mul_2_div_q: usize, r: R) -> Self {
-        let r = R::cast_into_usize(r.inner()) * n_mul_2_div_q;
+        let r = r.cast_into_usize() * n_mul_2_div_q;
         if r <= n {
             #[inline]
             fn rotate<F: NTTField>(p: &Polynomial<F>, n_sub_r: usize) -> Polynomial<F> {
@@ -233,7 +242,7 @@ impl<F: NTTField> RLWE<F> {
         n_rlwe_mul_2_div_q_lwe: usize,
         r: R,
     ) -> Self {
-        let r = R::cast_into_usize(r.inner()) * n_rlwe_mul_2_div_q_lwe;
+        let r = r.cast_into_usize() * n_rlwe_mul_2_div_q_lwe;
         if r <= n_rlwe {
             #[inline]
             fn rotate<F: NTTField>(p: &Polynomial<F>, n_sub_r: usize) -> Polynomial<F> {

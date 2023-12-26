@@ -1,5 +1,5 @@
 use algebra::derive::{Random, Ring};
-use algebra::field::FieldDistribution;
+use algebra::field::Random;
 use algebra::ring::Ring;
 use num_traits::{One, Pow, Zero};
 use rand::{prelude::*, thread_rng};
@@ -16,7 +16,7 @@ use rand_distr::Standard;
 // But it will note generating impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 // You need to make it by yourself.
 
-// Derive macro `Random` generating an impl of the trait `algebra::field::FieldDistribution`.
+// Derive macro `Random` generating an impl of the trait `algebra::field::Random`.
 //
 // Then you can use `rand` crate to generate it randomly.
 //

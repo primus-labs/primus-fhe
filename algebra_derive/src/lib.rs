@@ -68,7 +68,7 @@ pub fn derive_field(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro generating an impl of the trait `algebra::field::FieldDistribution`.
+/// Derive macro generating an impl of the trait `algebra::field::Random`.
 ///
 /// Then you can use `rand` crate to generate it randomly.
 ///
