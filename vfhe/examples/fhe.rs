@@ -1,4 +1,4 @@
-use algebra::{derive::*, ring::Ring};
+use algebra::derive::*;
 use vfhe::{LWEParam, LWESecretKeyDistribution, RingParam, Vfhe};
 
 fn main() {
