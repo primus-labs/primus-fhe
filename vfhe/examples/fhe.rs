@@ -1,14 +1,30 @@
-use algebra::derive::*;
+use algebra::{derive::*, ring::Ring};
+use num_traits::{One, Zero};
 use vfhe::{LWEParam, LWESecretKeyDistribution, RingParam, Vfhe};
 
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let lwe_param = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Binary);
+    let lwe_param = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Ternary);
     let rlwe_param = <RingParam<FF>>::new(1024, 2, 3.20);
     let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe_param, rlwe_param);
 
     let sk = vfhe.generate_lwe_sk(&mut rng);
+    match vfhe.lwe().secret_key_distribution() {
+        LWESecretKeyDistribution::Binary => {
+            let num1 = sk.iter().filter(|v| v.is_one()).count();
+            println!("#1:{}", num1);
+        }
+        LWESecretKeyDistribution::Ternary => {
+            let num1 = sk.iter().filter(|v| v.is_one()).count();
+            println!("#1:{}", num1);
+            let num0 = sk.iter().filter(|v| v.is_zero()).count();
+            println!("#-1:{}", vfhe.lwe().n() - num0 - num1);
+            println!("#0:{}", num0);
+        }
+        LWESecretKeyDistribution::Gaussian => unimplemented!(),
+    }
+
     let pk = vfhe.generate_lwe_pk(&sk, &mut rng);
     let rlwe_sk = vfhe.rlwe().generate_sk(&mut rng);
     let rlwe_pk = vfhe.rlwe().generate_pk(&rlwe_sk, &mut rng);
@@ -46,8 +62,8 @@ fn main() {
 
     let nand = vfhe.nand(c, &c1);
 
-    // assert!(nand.a().iter().all(|&v| v.inner() < RR::modulus()));
-    // assert!(nand.b().inner() < RR::modulus());
+    assert!(nand.a().iter().all(|&v| v.inner() < RR::modulus()));
+    assert!(nand.b().inner() < RR::modulus());
 
     let m_3 = vfhe.decrypt(&nand);
     dbg!(m_3);
@@ -58,7 +74,7 @@ fn main() {
 }
 
 #[derive(Ring, Random)]
-#[modulus = 512]
+#[modulus = 1024]
 pub struct RR(u32);
 
 #[derive(Ring, Field, Random, Prime, NTT)]

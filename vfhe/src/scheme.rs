@@ -250,6 +250,9 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
 
         let key_switching = extract.key_switch(&self.ksk, nl);
 
+        assert!(key_switching.a().iter().all(|&v| v.inner() < F::modulus()));
+        assert!(key_switching.b().inner() < F::modulus());
+
         {
             let sk: Vec<F> = self
                 .secret_key()
