@@ -179,13 +179,13 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             /// cast inner to [`usize`]
             #[inline]
             fn cast_into_usize(self) -> usize {
-                self.0 as usize
+                num_traits::cast::<#field_ty, usize>(self.0).unwrap()
             }
 
             /// cast inner from [`usize`]
             #[inline]
             fn cast_from_usize(value: usize) -> Self {
-                Self::new(value as #field_ty)
+                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
             /// cast inner to [`f64`]
@@ -270,13 +270,13 @@ fn impl_and_ring(
             /// cast inner to [`usize`]
             #[inline]
             fn cast_into_usize(self) -> usize {
-                self.0 as usize
+                num_traits::cast::<#field_ty, usize>(self.0).unwrap()
             }
 
             /// cast inner from [`usize`]
             #[inline]
             fn cast_from_usize(value: usize) -> Self {
-                Self::new(value as #field_ty)
+                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
             /// cast inner to [`f64`]

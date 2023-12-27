@@ -27,12 +27,12 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
     #[inline]
     pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>) -> Self {
-        let n = rlwe_param.l();
+        let n = rlwe_param.n();
         let q = R::new(lwe_param.q()).cast_into_usize();
         let l2divq = (n << 1) / q;
 
         let q = cast::<<R as Ring>::Inner, f64>(lwe_param.q()).unwrap();
-        let p = cast::<<F as Ring>::Inner, f64>(rlwe_param.p()).unwrap();
+        let p = cast::<<F as Ring>::Inner, f64>(rlwe_param.q()).unwrap();
 
         Self {
             lwe: lwe_param,
@@ -189,7 +189,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                     let bks = sk
                         .iter()
                         .map(|&s| {
-                            let mut bk = self.rlwe.rgsw_zero(&mut rng, rlwe_sk);
+                            let mut bk = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
                             if s.is_one() {
                                 self.rlwe.rgsw_zero_to_one(&mut bk);
                             }
@@ -204,8 +204,8 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                     let bks = sk
                         .iter()
                         .map(|&s| {
-                            let mut u0 = self.rlwe.rgsw_zero(&mut rng, rlwe_sk);
-                            let mut u1 = self.rlwe.rgsw_zero(&mut rng, rlwe_sk);
+                            let mut u0 = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
+                            let mut u1 = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
                             if s.is_one() {
                                 self.rlwe.rgsw_zero_to_one(&mut u0);
                             } else if s == neg_one {
@@ -233,14 +233,15 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
 
         let n = self.lwe.n();
         let q = self.lwe.q();
-        let p = self.rlwe.p();
-        let l = self.rlwe.l();
+        let p = self.rlwe.q();
+        let l = self.rlwe.n();
 
         let acc: RLWE<F> = nand_acc(b, q, l, p);
         let acc = self.bks.bootstrapping(acc, add.a(), l, self.l2divq);
 
         let mut extract = acc.extract_lwe();
         *extract.b_mut() += F::new(p >> 3);
+
         let key_switching = extract.key_switch(&self.ksk, n);
         key_switching.modulus_switch(self.q, self.p)
     }
@@ -248,21 +249,21 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     /// generate key_switching key
     pub fn generate_key_switching_key<Rng>(
         &self,
-        rlwe_key: &RLWESecretKey<F>,
-        lwe_key: &LWESecretKey<R>,
+        rlwe_sk: &RLWESecretKey<F>,
+        lwe_sk: &LWESecretKey<R>,
         mut rng: Rng,
     ) -> Vec<GadgetRLWE<F>>
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
-        let n = lwe_key.len();
-        let b_g = self.rlwe.b();
-        let bs = self.rlwe.bs();
+        let n = lwe_sk.len();
+        let bg = self.rlwe.bg();
+        let bs = self.rlwe.bgs();
         let chi = self.rlwe.error_distribution();
 
-        let s = <Polynomial<F>>::new(lwe_key.iter().map(|v| F::from_f64(v.as_f64())).collect());
+        let s = <Polynomial<F>>::new(lwe_sk.iter().map(|v| F::from_f64(v.as_f64())).collect());
 
-        AsRef::<[F]>::as_ref(rlwe_key)
+        AsRef::<[F]>::as_ref(rlwe_sk)
             .chunks(n)
             .map(|z_i| {
                 let k_i = bs
@@ -273,13 +274,13 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                         let mut b: Polynomial<F> = &a * &s + e;
 
                         b.iter_mut().zip(z_i.iter()).for_each(|(b_j, &z_ij)| {
-                            *b_j += z_ij * F::cast_from_usize(b_i);
+                            *b_j += z_ij * b_i;
                         });
 
                         RLWE::new(a, b)
                     })
                     .collect::<Vec<RLWE<F>>>();
-                GadgetRLWE::new(k_i, b_g)
+                GadgetRLWE::new(k_i, bg)
             })
             .collect()
     }

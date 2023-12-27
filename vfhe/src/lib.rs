@@ -23,4 +23,4 @@ pub use plaintext::{LWEPlaintext, RLWEPlaintext};
 pub use publickey::{LWEPublicKey, RLWEPublicKey};
 pub use secretkey::{LWESecretKey, LWESecretKeyDistribution, RLWESecretKey};
 
-pub use functional_bootstrapping::{BootstrappingKey, FunctionalBootstrappingKey};
+pub use functional_bootstrapping::BootstrappingKey;

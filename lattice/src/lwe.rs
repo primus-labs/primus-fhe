@@ -137,13 +137,13 @@ impl<F: NTTField> LWE<F> {
     }
 
     /// modulus switch
-    pub fn modulus_switch<R: Ring>(&self, q: f64, p: f64) -> LWE<R> {
+    pub fn modulus_switch<R: Ring>(&self, ql: f64, qr: f64) -> LWE<R> {
         let a: Vec<R> = self
             .a
             .iter()
-            .map(|&v| R::from_f64((v.as_f64() * q / p).round()))
+            .map(|&v| R::from_f64((v.as_f64() * ql / qr).floor()))
             .collect();
-        let b = R::from_f64((self.b.as_f64() * q / p).round());
+        let b = R::from_f64((self.b.as_f64() * ql / qr).floor());
         <LWE<R>>::new(a, b)
     }
 }
