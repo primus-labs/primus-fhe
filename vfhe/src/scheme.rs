@@ -3,7 +3,7 @@ use algebra::{
     polynomial::Polynomial,
     ring::{RandomRing, Ring},
 };
-use lattice::{GadgetRLWE, LWE, RLWE};
+use lattice::{dot_product, GadgetRLWE, LWE, RLWE};
 use num_traits::cast;
 
 use crate::{
@@ -25,7 +25,6 @@ pub struct Vfhe<R: Ring, F: NTTField> {
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
-    #[inline]
     pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>) -> Self {
         let n = rlwe_param.n();
         let q = R::new(lwe_param.q()).cast_into_usize();
@@ -107,8 +106,8 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
 
     /// decode
     #[inline]
-    pub fn decode(&self, plaintext: LWEPlaintext<R>) -> R::Inner {
-        self.lwe.decode(plaintext)
+    pub fn decode(&self, plain: LWEPlaintext<R>) -> R::Inner {
+        self.lwe.decode(plain)
     }
 
     /// Returns the bks of this [`Vfhe<R, F>`].
@@ -217,7 +216,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                         .collect();
                     BootstrappingKey::ternary_bootstrapping_key(bks)
                 }
-                crate::LWESecretKeyDistribution::Gaussian => todo!(),
+                crate::LWESecretKeyDistribution::Gaussian => unimplemented!(),
             },
             None => panic!("generate bootstrapping key should supply secret key"),
         }
@@ -240,30 +239,30 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         let mut extract = acc.extract_lwe();
         *extract.b_mut() += F::new(qr >> 3);
 
-        // {
-        //     let r =
-        //         extract.b() - dot_product(extract.a(), self.rlwe.secret_key().unwrap().as_ref());
-        //     let r = R::from_f64((r.as_f64() * self.ql / self.qr).floor());
-        //     dbg!(r);
-        //     let dec = self.decode(r);
-        //     dbg!(dec);
-        // }
+        {
+            let r =
+                extract.b() - dot_product(extract.a(), self.rlwe.secret_key().unwrap().as_ref());
+            let r = R::from_f64((r.as_f64() * self.ql / self.qr).floor());
+            dbg!(r);
+            let dec = self.decode(r);
+            dbg!(dec);
+        }
 
         let key_switching = extract.key_switch(&self.ksk, nl);
 
-        // {
-        //     let sk: Vec<F> = self
-        //         .secret_key()
-        //         .unwrap()
-        //         .iter()
-        //         .map(|&v| F::from_f64(v.as_f64()))
-        //         .collect();
-        //     let r = key_switching.b() - dot_product(key_switching.a(), &sk);
-        //     let r = R::from_f64((r.as_f64() * self.ql / self.qr).floor());
-        //     dbg!(r);
-        //     let dec = self.decode(r);
-        //     dbg!(dec);
-        // }
+        {
+            let sk: Vec<F> = self
+                .secret_key()
+                .unwrap()
+                .iter()
+                .map(|&v| F::from_f64(v.as_f64()))
+                .collect();
+            let r = key_switching.b() - dot_product(key_switching.a(), &sk);
+            let r = R::from_f64((r.as_f64() * self.ql / self.qr).floor());
+            dbg!(r);
+            let dec = self.decode(r);
+            dbg!(dec);
+        }
 
         key_switching.modulus_switch(self.ql, self.qr)
     }

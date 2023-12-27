@@ -38,14 +38,13 @@ impl<R: Ring> LWEParam<R> {
     pub fn new(
         n: usize,
         t: R::Inner,
-        q: R::Inner,
         err_std_dev: f64,
         secret_key_distribution: LWESecretKeyDistribution,
     ) -> Self {
         Self {
             n,
             t,
-            q,
+            q: R::modulus(),
             err_std_dev,
             secret_key_distribution,
             secret_key: None,
@@ -252,11 +251,11 @@ pub struct RingParam<F: NTTField> {
 impl<F: NTTField> RingParam<F> {
     /// Creates a new [`RingParam<F>`].
     #[inline]
-    pub fn new(n: usize, q: F::Inner, bg: usize, err_std_dev: f64) -> Self {
+    pub fn new(n: usize, bg: usize, err_std_dev: f64) -> Self {
         let dg = F::decompose_len(bg);
         let bf = F::cast_from_usize(bg);
 
-        assert!(bf < F::new(q));
+        assert!(bf < F::new(F::modulus()));
 
         let mut bs = vec![F::zero(); dg];
         let mut temp = F::one();
@@ -267,7 +266,7 @@ impl<F: NTTField> RingParam<F> {
 
         Self {
             n,
-            q,
+            q: F::modulus(),
             bg,
             dg,
             bgs: bs,

@@ -4,8 +4,8 @@ use vfhe::{LWEParam, LWESecretKeyDistribution, RingParam, Vfhe};
 fn main() {
     let mut rng = rand::thread_rng();
 
-    let lwe_param = <LWEParam<RR>>::new(512, 4, 512, 3.20, LWESecretKeyDistribution::Binary);
-    let rlwe_param = <RingParam<FF>>::new(1024, 132120577, 2, 3.20);
+    let lwe_param = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Binary);
+    let rlwe_param = <RingParam<FF>>::new(1024, 2, 3.20);
     let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe_param, rlwe_param);
 
     let sk = vfhe.generate_lwe_sk(&mut rng);
@@ -33,7 +33,7 @@ fn main() {
 
     assert_eq!(v, v_d);
 
-    let v1 = 1;
+    let v1 = 0;
     let m1 = vfhe.encode(v1);
     let c1 = vfhe.encrypt_by_pk(m1, &mut rng);
     let c2 = c.clone().add_component_wise(&c1);
@@ -50,6 +50,8 @@ fn main() {
     // assert!(nand.b().inner() < RR::modulus());
 
     let m_3 = vfhe.decrypt(&nand);
+    dbg!(m_3);
+
     let v_3 = vfhe.decode(m_3);
     let rhs = dbg!(1 - v * v1);
     assert_eq!(v_3, rhs);
@@ -60,5 +62,5 @@ fn main() {
 pub struct RR(u32);
 
 #[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 132120577]
+#[modulus = 1073707009]
 pub struct FF(u32);
