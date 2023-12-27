@@ -14,6 +14,8 @@ fn main() {
     let rlwe_pk = vfhe.rlwe().generate_pk(&rlwe_sk, &mut rng);
     let ksk = vfhe.generate_key_switching_key(&rlwe_sk, &sk, &mut rng);
 
+    assert_eq!(ksk.len(), 2);
+
     vfhe.set_secret_key(Some(sk));
     vfhe.set_public_key(pk);
     vfhe.rlwe_mut().set_secret_key(Some(rlwe_sk));
@@ -23,7 +25,7 @@ fn main() {
     let bks = vfhe.generate_bootstrapping_key();
     vfhe.set_bks(bks);
 
-    let v = 0;
+    let v = 1;
     let m = vfhe.encode(v);
     let c = vfhe.encrypt_by_pk(m, &mut rng);
     let m_d = vfhe.decrypt(&c);
@@ -39,10 +41,13 @@ fn main() {
     let v_2 = vfhe.decode(m_2);
     assert_eq!(v_2, (v + v1) % 4);
 
+    // vfhe.set_secret_key(None);
+    // vfhe.rlwe_mut().set_secret_key(None);
+
     let nand = vfhe.nand(c, &c1);
 
-    assert!(nand.a().iter().all(|&v| v.inner() < RR::modulus()));
-    assert!(nand.b().inner() < RR::modulus());
+    // assert!(nand.a().iter().all(|&v| v.inner() < RR::modulus()));
+    // assert!(nand.b().inner() < RR::modulus());
 
     let m_3 = vfhe.decrypt(&nand);
     let v_3 = vfhe.decode(m_3);

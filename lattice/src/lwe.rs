@@ -109,10 +109,10 @@ impl<R: Ring> LWE<R> {
 
 impl<F: NTTField> LWE<F> {
     /// key switch
-    pub fn key_switch(&self, ksk: &[GadgetRLWE<F>], n: usize) -> LWE<F> {
-        let a_s: Vec<Polynomial<F>> = self
+    pub fn key_switch(&self, ksk: &[GadgetRLWE<F>], nl: usize) -> LWE<F> {
+        let a: Vec<Polynomial<F>> = self
             .a
-            .chunks_exact(n)
+            .chunks_exact(nl)
             .map(|a| {
                 <Polynomial<F>>::new(
                     std::iter::once(a[0])
@@ -123,13 +123,13 @@ impl<F: NTTField> LWE<F> {
             .collect();
 
         let mut init = RLWE::new(
-            Polynomial::zero_with_coeff_count(n),
-            Polynomial::zero_with_coeff_count(n),
+            Polynomial::zero_with_coeff_count(nl),
+            Polynomial::zero_with_coeff_count(nl),
         );
         init.b_mut()[0] = self.b;
 
         ksk.iter()
-            .zip(a_s)
+            .zip(a)
             .fold(init, |acc, (k_i, a_i)| {
                 acc.sub_element_wise(&k_i.mul_with_polynomial(&a_i))
             })
@@ -141,9 +141,9 @@ impl<F: NTTField> LWE<F> {
         let a: Vec<R> = self
             .a
             .iter()
-            .map(|&v| R::from_f64((v.as_f64() * ql / qr).floor()))
+            .map(|&v| R::from_f64((v.as_f64() * ql / qr).round()))
             .collect();
-        let b = R::from_f64((self.b.as_f64() * ql / qr).floor());
+        let b = R::from_f64((self.b.as_f64() * ql / qr).round());
         <LWE<R>>::new(a, b)
     }
 }

@@ -236,14 +236,9 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Perform [`RLWE<F>`] multiply with `Y^r - 1` for functional bootstrapping where `Y = X^(2N/q)`.
-    pub fn mul_with_monic_monomial_sub1<R: Ring>(
-        &self,
-        n_rlwe: usize,
-        n_rlwe_mul_2_div_q_lwe: usize,
-        r: R,
-    ) -> Self {
-        let r = r.cast_into_usize() * n_rlwe_mul_2_div_q_lwe;
-        if r <= n_rlwe {
+    pub fn mul_with_monic_monomial_sub1<R: Ring>(&self, nr: usize, nr2dq: usize, r: R) -> Self {
+        let r = r.cast_into_usize() * nr2dq;
+        if r <= nr {
             #[inline]
             fn rotate<F: NTTField>(p: &Polynomial<F>, n_sub_r: usize) -> Polynomial<F> {
                 p[n_sub_r..]
@@ -255,7 +250,7 @@ impl<F: NTTField> RLWE<F> {
                     .collect::<Vec<F>>()
                     .into()
             }
-            let n_sub_r = n_rlwe - r;
+            let n_sub_r = nr - r;
             Self {
                 a: rotate(self.a(), n_sub_r),
                 b: rotate(self.b(), n_sub_r),
@@ -272,7 +267,7 @@ impl<F: NTTField> RLWE<F> {
                     .collect::<Vec<F>>()
                     .into()
             }
-            let n_mul_2_sub_r = n_rlwe - (r - n_rlwe);
+            let n_mul_2_sub_r = nr - (r - nr);
             Self {
                 a: rotate(self.a(), n_mul_2_sub_r),
                 b: rotate(self.b(), n_mul_2_sub_r),

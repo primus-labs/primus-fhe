@@ -97,6 +97,12 @@ impl<F: Field> Polynomial<F> {
         }
     }
 
+    /// Extracts a slice containing the entire vector.
+    #[inline]
+    pub fn as_slice(&self) -> &[F] {
+        self.data.as_slice()
+    }
+
     /// Appends an element to the back of a [`Polynomial<F>`].
     #[inline]
     fn push(&mut self, value: F) {
@@ -105,7 +111,7 @@ impl<F: Field> Polynomial<F> {
 
     /// Multipile `self` with the a scalar.
     #[inline]
-    pub fn mul_scalar(&self, scalar: F::Scalar) -> Self {
+    pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
         Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
     }
 

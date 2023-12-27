@@ -1,5 +1,5 @@
 mod init;
 mod key;
 
-pub(crate) use init::*;
-pub use key::*;
+pub use init::*;
+pub use key::BootstrappingKey;

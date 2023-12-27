@@ -160,8 +160,6 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
         impl algebra::ring::Ring for #name {
             type Inner = #field_ty;
 
-            type Scalar = #field_ty;
-
             type Order = #field_ty;
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
@@ -233,7 +231,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
+            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
                 use algebra::modulo_traits::MulModulo;
                 Self(self.0.mul_reduce(scalar, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
             }
@@ -250,8 +248,6 @@ fn impl_and_ring(
     quote! {
         impl algebra::ring::Ring for #name {
             type Inner = #field_ty;
-
-            type Scalar = #field_ty;
 
             type Order = #field_ty;
 
@@ -324,7 +320,7 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
+            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
                 Self(self.0.wrapping_mul(scalar) & #mask)
             }
         }

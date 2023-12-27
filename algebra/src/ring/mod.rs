@@ -59,9 +59,6 @@ pub trait Ring:
     /// The inner type of this ring.
     type Inner: Debug + PrimInt + RoundedDiv<Output = Self::Inner>;
 
-    /// The type of the scalar for this ring.
-    type Scalar: Copy;
-
     /// The type of the ring's order.
     type Order: Copy;
 
@@ -98,7 +95,7 @@ pub trait Ring:
     fn decompose(&self, basis: usize) -> Vec<Self>;
 
     /// Return `self * scalar`.
-    fn mul_scalar(&self, scalar: Self::Scalar) -> Self;
+    fn mul_scalar(&self, scalar: Self::Inner) -> Self;
 
     /// Returns `self + self`.
     #[inline]

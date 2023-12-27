@@ -375,6 +375,20 @@ impl<F: RandomNTTField> RingParam<F> {
         <RLWEPublicKey<F>>::new(a, b)
     }
 
+    /// encrypt by secret key
+    pub fn encrypt_by_sk<Rng>(&self, plain: &RLWEPlaintext<F>, mut rng: Rng) -> RLWECiphertext<F>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        let sk = self.secret_key().unwrap();
+        let chi = self.error_distribution();
+
+        let a = <Polynomial<F>>::random_with_dis(self.n, &mut rng, F::standard_distribution());
+        let b = <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi) + plain + &a * sk;
+
+        RLWECiphertext::new(a, b)
+    }
+
     /// encrypt by public key
     pub fn encrypt_by_pk<Rng>(&self, plain: &RLWEPlaintext<F>, mut rng: Rng) -> RLWECiphertext<F>
     where
@@ -412,25 +426,25 @@ impl<F: RandomNTTField> RingParam<F> {
             .collect()
     }
 
-    ///
-    pub fn fresh_zeros_by_pk<Rng>(&self, mut rng: Rng, len: usize) -> Vec<RLWECiphertext<F>>
-    where
-        Rng: rand::Rng + rand::CryptoRng,
-    {
-        let pk = &self.public_key;
-        let chi = self.error_distribution();
-        let t = F::ternary_distribution();
+    // ///
+    // pub fn fresh_zeros_by_pk<Rng>(&self, mut rng: Rng, len: usize) -> Vec<RLWECiphertext<F>>
+    // where
+    //     Rng: rand::Rng + rand::CryptoRng,
+    // {
+    //     let pk = &self.public_key;
+    //     let chi = self.error_distribution();
+    //     let t = F::ternary_distribution();
 
-        (0..len)
-            .map(|_| {
-                let v = <Polynomial<F>>::random_with_dis(self.n, &mut rng, t).to_ntt_polynomial();
+    //     (0..len)
+    //         .map(|_| {
+    //             let v = <Polynomial<F>>::random_with_dis(self.n, &mut rng, t).to_ntt_polynomial();
 
-                let a = <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi) + pk.a() * &v;
-                let b = <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi) + pk.b() * v;
-                <RLWECiphertext<F>>::new(a, b)
-            })
-            .collect()
-    }
+    //             let a = <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi) + pk.a() * &v;
+    //             let b = <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi) + pk.b() * v;
+    //             <RLWECiphertext<F>>::new(a, b)
+    //         })
+    //         .collect()
+    // }
 
     /// Get `RGSW(0)`
     pub fn rgsw_zero_by_sk<Rng>(&self, mut rng: Rng, sk: &RLWESecretKey<F>) -> RGSW<F>
@@ -445,18 +459,18 @@ impl<F: RandomNTTField> RingParam<F> {
         )
     }
 
-    /// Get `RGSW(0)`
-    pub fn rgsw_zero_by_pk<Rng>(&self, mut rng: Rng) -> RGSW<F>
-    where
-        Rng: rand::Rng + rand::CryptoRng,
-    {
-        let m = self.fresh_zeros_by_pk(&mut rng, self.dg);
-        let neg_sm = self.fresh_zeros_by_pk(&mut rng, self.dg);
-        RGSW::new(
-            GadgetRLWE::new(neg_sm, self.bg),
-            GadgetRLWE::new(m, self.bg),
-        )
-    }
+    // /// Get `RGSW(0)`
+    // pub fn rgsw_zero_by_pk<Rng>(&self, mut rng: Rng) -> RGSW<F>
+    // where
+    //     Rng: rand::Rng + rand::CryptoRng,
+    // {
+    //     let m = self.fresh_zeros_by_pk(&mut rng, self.dg);
+    //     let neg_sm = self.fresh_zeros_by_pk(&mut rng, self.dg);
+    //     RGSW::new(
+    //         GadgetRLWE::new(neg_sm, self.bg),
+    //         GadgetRLWE::new(m, self.bg),
+    //     )
+    // }
 
     /// Set `RGSW(0)` to `RGSW(1)`
     pub fn rgsw_zero_to_one(&self, rgsw: &mut RGSW<F>) {
