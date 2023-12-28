@@ -1,4 +1,5 @@
-use algebra::{derive::*, ring::Ring};
+use algebra::derive::*;
+
 use vfhe::{LWEParam, LWESecretKeyDistribution, RingParam, Vfhe};
 
 #[derive(Ring, Random)]
@@ -12,7 +13,7 @@ pub struct FF(u32);
 fn main() {
     // set random generator
     // use rand::SeedableRng;
-    // let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(10);
+    // let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(11);
     let mut rng = rand::thread_rng();
 
     // set parameter
@@ -53,13 +54,53 @@ fn main() {
 
     let nand = vfhe.nand(c, &c1);
 
-    assert!(nand.a().iter().all(|&v| v.inner() < RR::modulus()));
-    assert!(nand.b().inner() < RR::modulus());
+    // {
+    // use lattice::dot_product;
+    // use num_bigint::BigUint;
+    // use num_traits::{ToPrimitive, Zero};
+    //     let sk: Vec<FF> = vfhe
+    //         .secret_key()
+    //         .unwrap()
+    //         .iter()
+    //         .map(|&v| FF::from_f64(v.as_f64()))
+    //         .collect();
+    //     let r = nand.b() - dot_product(nand.a(), &sk);
+    //     let r = RR::from_f64((r.as_f64() * vfhe.ql() / vfhe.qr()).round());
+    //     dbg!(r);
+    //     let dec = vfhe.decode(r);
+    //     dbg!(dec);
+
+    //     let encode = vfhe.encode(dec);
+    //     let e = encode - r;
+    //     dbg!(e);
+
+    //     let right = BigUint::from(r.inner())
+    //         + nand
+    //             .a()
+    //             .iter()
+    //             .zip(sk.iter())
+    //             .fold(BigUint::zero(), |acc, (a, s)| {
+    //                 acc + BigUint::from(a.inner()) * BigUint::from(s.inner())
+    //             });
+
+    //     dbg!(right.clone());
+    //     dbg!(nand.b().as_f64());
+    //     let n = (right.clone().to_f64().unwrap() - nand.b().as_f64()) / vfhe.qr();
+    //     dbg!(n);
+
+    //     // let n = n.to_f64().unwrap();
+    //     let left = (n * vfhe.qr() + nand.b().as_f64()) * vfhe.ql() / vfhe.qr();
+    //     let right = right.to_f64().unwrap() * vfhe.ql() / vfhe.qr();
+
+    //     assert_eq!(left, right);
+    // }
+
+    let nand = nand.modulus_switch(vfhe.ql(), vfhe.qr());
 
     let m_3 = vfhe.decrypt(&nand);
-    dbg!(m_3);
+    // dbg!(m_3);
 
     let v_3 = vfhe.decode(m_3);
-    let rhs = dbg!(1 - v * v1);
+    let rhs = 1 - v * v1;
     assert_eq!(v_3, rhs);
 }

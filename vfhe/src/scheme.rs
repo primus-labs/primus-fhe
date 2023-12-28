@@ -3,7 +3,7 @@ use algebra::{
     polynomial::Polynomial,
     ring::{RandomRing, Ring},
 };
-use lattice::{dot_product, GadgetRLWE, LWE, RLWE};
+use lattice::{GadgetRLWE, LWE, RLWE};
 use num_traits::cast;
 
 use crate::{
@@ -126,13 +126,27 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
     }
 
     /// Returns the key switching key of this [`Vfhe<R, F>`].
+    #[inline]
     pub fn key_switching_key(&self) -> &Vec<GadgetRLWE<F>> {
         &self.key_switching_key
     }
 
     /// Sets the key switching key of this [`Vfhe<R, F>`].
+    #[inline]
     pub fn set_key_switching_key(&mut self, ksk: Vec<GadgetRLWE<F>>) {
         self.key_switching_key = ksk;
+    }
+
+    /// Returns the ql of this [`Vfhe<R, F>`].
+    #[inline]
+    pub fn ql(&self) -> f64 {
+        self.ql
+    }
+
+    /// Returns the qr of this [`Vfhe<R, F>`].
+    #[inline]
+    pub fn qr(&self) -> f64 {
+        self.qr
     }
 }
 
@@ -228,7 +242,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     }
 
     /// Perform addition
-    pub fn nand(&self, c0: LWE<R>, c1: &LWE<R>) -> LWE<R> {
+    pub fn nand(&self, c0: LWE<R>, c1: &LWE<R>) -> LWE<F> {
         let add = c0.add_component_wise(c1);
 
         let b = add.b();
@@ -246,43 +260,21 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         let mut extract = acc.extract_lwe();
         *extract.b_mut() += F::new(qr >> 3);
 
-        {
-            let r =
-                extract.b() - dot_product(extract.a(), self.rlwe.secret_key().unwrap().as_ref());
-            let r = R::from_f64((r.as_f64() * self.ql / self.qr).round());
-            dbg!(r);
-            let dec = self.decode(r);
-            dbg!(dec);
-        }
+        // {
+        //     let r =
+        //         extract.b() - dot_product(extract.a(), self.rlwe.secret_key().unwrap().as_ref());
+        //     let r = R::from_f64((r.as_f64() * self.ql / self.qr).round());
+        //     dbg!(r);
+        //     let dec = self.decode(r);
+        //     dbg!(dec);
+        // }
 
         let key_switching = extract.key_switch(&self.key_switching_key, nl);
 
         assert!(key_switching.a().iter().all(|&v| v.inner() < F::modulus()));
         assert!(key_switching.b().inner() < F::modulus());
 
-        {
-            let sk: Vec<F> = self
-                .secret_key()
-                .unwrap()
-                .iter()
-                .map(|&v| F::from_f64(v.as_f64()))
-                .collect();
-            let r = key_switching.b() - dot_product(key_switching.a(), &sk);
-            let r = R::from_f64((r.as_f64() * self.ql / self.qr).round());
-            dbg!(r);
-            let dec = self.decode(r);
-            dbg!(dec);
-
-            
-        }
-
-        let md = key_switching.modulus_switch(self.ql, self.qr);
-
-        {
-
-        }
-
-        md
+        key_switching
     }
 
     /// generate key_switching key
@@ -299,8 +291,25 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         let bg = self.rlwe.bg();
         let bgs = self.rlwe.bgs();
         let chi = self.rlwe.error_distribution();
+        let r_neg_one = -R::one();
+        let f_neg_one = -F::one();
 
-        let s = <Polynomial<F>>::new(lwe_sk.iter().map(|v| F::from_f64(v.as_f64())).collect());
+        let s = <Polynomial<F>>::new(
+            lwe_sk
+                .iter()
+                .map(|&v| {
+                    if v.is_zero() {
+                        F::zero()
+                    } else if v.is_one() {
+                        F::one()
+                    } else if v == r_neg_one {
+                        f_neg_one
+                    } else {
+                        panic!()
+                    }
+                })
+                .collect(),
+        );
 
         rlwe_sk
             .as_slice()
