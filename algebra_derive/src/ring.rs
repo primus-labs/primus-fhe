@@ -183,8 +183,9 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             /// cast inner from [`usize`]
             #[inline]
             fn cast_from_usize(value: usize) -> Self {
-                use algebra::modulo_traits::Modulo;
-                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap().reduce(&<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                // use algebra::modulo_traits::Modulo;
+                // Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap().reduce(&<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
             /// cast inner to [`f64`]
@@ -194,8 +195,9 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
 
             /// cast from [`f64`]
             fn from_f64(value: f64) -> Self {
-                use algebra::modulo_traits::Modulo;
-                Self::new((value as #field_ty).reduce(&<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                // use algebra::modulo_traits::Modulo;
+                // Self::new((value as #field_ty).reduce(&<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self::new((value as #field_ty))
             }
 
             #[inline]
@@ -274,7 +276,8 @@ fn impl_and_ring(
             /// cast inner from [`usize`]
             #[inline]
             fn cast_from_usize(value: usize) -> Self {
-                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap() & #mask)
+                // Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap() & #mask)
+                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
             /// cast inner to [`f64`]
@@ -284,7 +287,8 @@ fn impl_and_ring(
 
             /// cast from [`f64`]
             fn from_f64(value: f64) -> Self {
-                Self::new(value as #field_ty & #mask)
+                // Self::new(value as #field_ty & #mask)
+                Self::new(value as #field_ty)
             }
 
             #[inline]

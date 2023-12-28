@@ -8,7 +8,7 @@ use num_traits::cast;
 
 use crate::{
     functional_bootstrapping::nand_acc, BootstrappingKey, LWECiphertext, LWEParam, LWEPlaintext,
-    LWEPublicKey, LWESecretKey, RLWESecretKey, RingParam,
+    LWEPublicKey, LWESecretKey, RLWESecretKey, RingParam, secretkey::RLWESecretKeyNTT,
 };
 
 /// fhe scheme
@@ -199,7 +199,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     pub fn generate_bootstrapping_key<Rng>(
         &self,
         lwe_sk: &LWESecretKey<R>,
-        rlwe_sk: &RLWESecretKey<F>,
+        rlwe_sk: &RLWESecretKeyNTT<F>,
         mut rng: Rng,
     ) -> BootstrappingKey<F>
     where
@@ -287,7 +287,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
-        let nl = lwe_sk.len();
+        let nl = self.lwe.n();
         let bg = self.rlwe.bg();
         let bgs = self.rlwe.bgs();
         let chi = self.rlwe.error_distribution();
@@ -298,18 +298,18 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
             lwe_sk
                 .iter()
                 .map(|&v| {
-                    if v.is_zero() {
-                        F::zero()
-                    } else if v.is_one() {
+                    if v.is_one() {
                         F::one()
                     } else if v == r_neg_one {
                         f_neg_one
                     } else {
-                        panic!()
+                        F::zero()
                     }
                 })
                 .collect(),
         );
+
+        let sn = s.to_ntt_polynomial();
 
         rlwe_sk
             .as_slice()
@@ -321,7 +321,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                         let a = <Polynomial<F>>::random(nl, &mut rng);
                         let e = <Polynomial<F>>::random_with_dis(nl, &mut rng, chi);
 
-                        let b = &a * &s + Polynomial::from_slice(z).mul_scalar(b_i.inner()) + e;
+                        let b = &a * &sn + Polynomial::from_slice(z).mul_scalar(b_i.inner()) + e;
 
                         RLWE::new(a, b)
                     })

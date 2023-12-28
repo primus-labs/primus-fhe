@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign, ShrAssign, Sub, SubAssign};
 
-use num_traits::{One, PrimInt, Zero};
+use num_traits::{One, PrimInt};
 
 use crate::modulo_traits::{
     AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, InvModuloAssign, Modulo,
@@ -73,17 +73,13 @@ where
 
 impl<T> NegModulo<&Modulus<T>> for T
 where
-    T: Copy + Sub<Output = Self> + Zero,
+    T: Copy + Sub<Output = Self>,
 {
     type Output = T;
 
     #[inline]
     fn neg_reduce(self, modulus: &Modulus<T>) -> Self::Output {
-        if self.is_zero() {
-            Zero::zero()
-        } else {
-            modulus.value() - self
-        }
+        modulus.value() - self
     }
 }
 

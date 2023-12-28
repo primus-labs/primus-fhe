@@ -109,7 +109,7 @@ impl<R: Ring> LWE<R> {
 
 impl<F: NTTField> LWE<F> {
     /// key switch
-    pub fn key_switch(&self, ksk: &[GadgetRLWE<F>], nl: usize) -> LWE<F> {
+    pub fn key_switch(&self, key_switching_key: &[GadgetRLWE<F>], nl: usize) -> LWE<F> {
         let a: Vec<Polynomial<F>> = self
             .a
             .chunks_exact(nl)
@@ -128,7 +128,7 @@ impl<F: NTTField> LWE<F> {
         );
         init.b_mut()[0] = self.b;
 
-        ksk.iter()
+        key_switching_key.iter()
             .zip(a)
             .fold(init, |acc, (k_i, a_i)| {
                 acc.sub_element_wise(&k_i.mul_with_polynomial(&a_i))

@@ -62,11 +62,7 @@ macro_rules! impl_modulo_ops_for_primitive {
 
             #[inline]
             fn neg_reduce(self, modulus: $t) -> Self::Output {
-                if self == 0 {
-                    0
-                } else {
-                    modulus - self
-                }
+                modulus - self
             }
         }
 

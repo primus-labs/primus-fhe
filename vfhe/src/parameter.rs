@@ -11,7 +11,7 @@ use rand_distr::Distribution;
 
 use crate::{
     LWECiphertext, LWEPlaintext, LWEPublicKey, LWESecretKey, LWESecretKeyDistribution,
-    RLWECiphertext, RLWEPlaintext, RLWEPublicKey, RLWESecretKey,
+    RLWECiphertext, RLWEPlaintext, RLWEPublicKey, RLWESecretKey, secretkey::RLWESecretKeyNTT,
 };
 
 /// lwe parameter
@@ -175,7 +175,7 @@ impl<R: RandomRing> LWEParam<R> {
         let n = self.n;
         let chi = self.error_distribution();
 
-        (0..64)
+        (0..32)
             .map(|_| {
                 let a: Vec<R> = dis.sample_iter(&mut rng).take(n).collect();
                 let b = dot_product(&a, s) + chi.sample(&mut rng);
@@ -364,7 +364,7 @@ impl<F: RandomNTTField> RingParam<F> {
 
     /// generate public key
     #[inline]
-    pub fn generate_pk<Rng>(&self, s: &RLWESecretKey<F>, mut rng: Rng) -> RLWEPublicKey<F>
+    pub fn generate_pk<Rng>(&self, s: &RLWESecretKeyNTT<F>, mut rng: Rng) -> RLWEPublicKey<F>
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
@@ -409,7 +409,7 @@ impl<F: RandomNTTField> RingParam<F> {
     pub fn fresh_zeros_by_sk<Rng>(
         &self,
         mut rng: Rng,
-        sk: &RLWESecretKey<F>,
+        sk: &RLWESecretKeyNTT<F>,
         len: usize,
     ) -> Vec<RLWECiphertext<F>>
     where
@@ -446,7 +446,7 @@ impl<F: RandomNTTField> RingParam<F> {
     // }
 
     /// Get `RGSW(0)`
-    pub fn rgsw_zero_by_sk<Rng>(&self, mut rng: Rng, sk: &RLWESecretKey<F>) -> RGSW<F>
+    pub fn rgsw_zero_by_sk<Rng>(&self, mut rng: Rng, sk: &RLWESecretKeyNTT<F>) -> RGSW<F>
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
