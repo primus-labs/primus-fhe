@@ -182,47 +182,48 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
 
 impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     /// generate bootstrapping key
-    pub fn generate_bootstrapping_key<Rng>(&self, mut rng: Rng) -> BootstrappingKey<F>
+    pub fn generate_bootstrapping_key<Rng>(
+        &self,
+        lwe_sk: &LWESecretKey<R>,
+        rlwe_sk: &RLWESecretKey<F>,
+        mut rng: Rng,
+    ) -> BootstrappingKey<F>
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
-        let rlwe_sk = self.rlwe.secret_key().unwrap();
-        match self.secret_key() {
-            Some(sk) => match self.lwe.secret_key_distribution() {
-                crate::LWESecretKeyDistribution::Binary => {
-                    let bks = sk
-                        .iter()
-                        .map(|&s| {
-                            let mut bk = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
-                            if s.is_one() {
-                                self.rlwe.rgsw_zero_to_one(&mut bk);
-                            }
-                            bk
-                        })
-                        .collect();
-                    BootstrappingKey::binary_bootstrapping_key(bks)
-                }
-                crate::LWESecretKeyDistribution::Ternary => {
-                    let bks = sk
-                        .iter()
-                        .map(|&s| {
-                            let mut u0 = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
-                            let mut u1 = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
-                            if s.is_one() {
-                                self.rlwe.rgsw_zero_to_one(&mut u0);
-                            } else if s.is_zero() {
-                                self.rlwe.rgsw_zero_to_one(&mut u0);
-                                self.rlwe.rgsw_zero_to_one(&mut u1);
-                            } else {
-                                self.rlwe.rgsw_zero_to_one(&mut u1);
-                            }
-                            (u0, u1)
-                        })
-                        .collect();
-                    BootstrappingKey::ternary_bootstrapping_key(bks)
-                } // crate::LWESecretKeyDistribution::Gaussian => unimplemented!(),
-            },
-            None => panic!("generate bootstrapping key should supply secret key"),
+        match self.lwe.secret_key_distribution() {
+            crate::LWESecretKeyDistribution::Binary => {
+                let bks = lwe_sk
+                    .iter()
+                    .map(|&s| {
+                        let mut bk = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
+                        if s.is_one() {
+                            self.rlwe.rgsw_zero_to_one(&mut bk);
+                        }
+                        bk
+                    })
+                    .collect();
+                BootstrappingKey::binary_bootstrapping_key(bks)
+            }
+            crate::LWESecretKeyDistribution::Ternary => {
+                let bks = lwe_sk
+                    .iter()
+                    .map(|&s| {
+                        let mut u0 = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
+                        let mut u1 = self.rlwe.rgsw_zero_by_sk(&mut rng, rlwe_sk);
+                        if s.is_one() {
+                            self.rlwe.rgsw_zero_to_one(&mut u0);
+                        } else if s.is_zero() {
+                            self.rlwe.rgsw_zero_to_one(&mut u0);
+                            self.rlwe.rgsw_zero_to_one(&mut u1);
+                        } else {
+                            self.rlwe.rgsw_zero_to_one(&mut u1);
+                        }
+                        (u0, u1)
+                    })
+                    .collect();
+                BootstrappingKey::ternary_bootstrapping_key(bks)
+            }
         }
     }
 
@@ -271,9 +272,17 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
             dbg!(r);
             let dec = self.decode(r);
             dbg!(dec);
+
+            
         }
 
-        key_switching.modulus_switch(self.ql, self.qr)
+        let md = key_switching.modulus_switch(self.ql, self.qr);
+
+        {
+
+        }
+
+        md
     }
 
     /// generate key_switching key

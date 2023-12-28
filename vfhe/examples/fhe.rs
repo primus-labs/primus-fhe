@@ -1,28 +1,38 @@
 use algebra::{derive::*, ring::Ring};
-use rand::SeedableRng;
 use vfhe::{LWEParam, LWESecretKeyDistribution, RingParam, Vfhe};
 
-fn main() {
-    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(10);
+#[derive(Ring, Random)]
+#[modulus = 1024]
+pub struct RR(u32);
 
+#[derive(Ring, Field, Random, Prime, NTT)]
+#[modulus = 1073707009]
+pub struct FF(u32);
+
+fn main() {
+    // set random generator
+    // use rand::SeedableRng;
+    // let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(10);
+    let mut rng = rand::thread_rng();
+
+    // set parameter
     let lwe = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Ternary);
     let rlwe = <RingParam<FF>>::new(1024, 2, 3.20);
     let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe, rlwe);
 
+    // generate keys
     let sk = vfhe.generate_lwe_sk(&mut rng);
-
     let pk = vfhe.generate_lwe_pk(&sk, &mut rng);
     let rlwe_sk = vfhe.rlwe().generate_sk(&mut rng);
     let rlwe_pk = vfhe.rlwe().generate_pk(&rlwe_sk, &mut rng);
     let ksk = vfhe.generate_key_switching_key(&rlwe_sk, &sk, &mut rng);
+    let bks = vfhe.generate_bootstrapping_key(&sk, &rlwe_sk, &mut rng);
 
     vfhe.set_secret_key(Some(sk));
     vfhe.set_public_key(pk);
     vfhe.rlwe_mut().set_secret_key(Some(rlwe_sk));
     vfhe.rlwe_mut().set_public_key(rlwe_pk);
     vfhe.set_key_switching_key(ksk);
-
-    let bks = vfhe.generate_bootstrapping_key(&mut rng);
     vfhe.set_bootstrapping_key(bks);
 
     let v = 1;
@@ -53,11 +63,3 @@ fn main() {
     let rhs = dbg!(1 - v * v1);
     assert_eq!(v_3, rhs);
 }
-
-#[derive(Ring, Random)]
-#[modulus = 512]
-pub struct RR(u32);
-
-#[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073707009]
-pub struct FF(u32);

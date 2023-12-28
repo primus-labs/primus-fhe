@@ -138,16 +138,7 @@ impl<F: NTTField> LWE<F> {
 
     /// modulus switch
     pub fn modulus_switch<R: Ring>(&self, ql: f64, qr: f64) -> LWE<R> {
-        let c = (qr / ql).round();
-        let switch = |v: F| {
-            let e = (v.as_f64() / c).round();
-            if e >= ql {
-                println!("tick:{e}_{ql}");
-                R::from_f64(e - ql)
-            } else {
-                R::from_f64(e)
-            }
-        };
+        let switch = |v: F| R::from_f64((v.as_f64() * ql / qr).round());
 
         let a: Vec<R> = self.a.iter().map(|&v| v).map(switch).collect();
         let b = switch(self.b);
