@@ -1,45 +1,29 @@
 use algebra::{derive::*, ring::Ring};
-use num_traits::{One, Zero};
+use rand::SeedableRng;
 use vfhe::{LWEParam, LWESecretKeyDistribution, RingParam, Vfhe};
 
 fn main() {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(10);
 
-    let lwe_param = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Ternary);
-    let rlwe_param = <RingParam<FF>>::new(1024, 2, 3.20);
-    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe_param, rlwe_param);
+    let lwe = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Ternary);
+    let rlwe = <RingParam<FF>>::new(1024, 2, 3.20);
+    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe, rlwe);
 
     let sk = vfhe.generate_lwe_sk(&mut rng);
-    match vfhe.lwe().secret_key_distribution() {
-        LWESecretKeyDistribution::Binary => {
-            let num1 = sk.iter().filter(|v| v.is_one()).count();
-            println!("#1:{}", num1);
-        }
-        LWESecretKeyDistribution::Ternary => {
-            let num1 = sk.iter().filter(|v| v.is_one()).count();
-            println!("#1:{}", num1);
-            let num0 = sk.iter().filter(|v| v.is_zero()).count();
-            println!("#-1:{}", vfhe.lwe().n() - num0 - num1);
-            println!("#0:{}", num0);
-        }
-        LWESecretKeyDistribution::Gaussian => unimplemented!(),
-    }
 
     let pk = vfhe.generate_lwe_pk(&sk, &mut rng);
     let rlwe_sk = vfhe.rlwe().generate_sk(&mut rng);
     let rlwe_pk = vfhe.rlwe().generate_pk(&rlwe_sk, &mut rng);
     let ksk = vfhe.generate_key_switching_key(&rlwe_sk, &sk, &mut rng);
 
-    assert_eq!(ksk.len(), 2);
-
     vfhe.set_secret_key(Some(sk));
     vfhe.set_public_key(pk);
     vfhe.rlwe_mut().set_secret_key(Some(rlwe_sk));
     vfhe.rlwe_mut().set_public_key(rlwe_pk);
-    vfhe.set_ksk(ksk);
+    vfhe.set_key_switching_key(ksk);
 
-    let bks = vfhe.generate_bootstrapping_key();
-    vfhe.set_bks(bks);
+    let bks = vfhe.generate_bootstrapping_key(&mut rng);
+    vfhe.set_bootstrapping_key(bks);
 
     let v = 1;
     let m = vfhe.encode(v);
@@ -57,9 +41,6 @@ fn main() {
     let v_2 = vfhe.decode(m_2);
     assert_eq!(v_2, (v + v1) % 4);
 
-    // vfhe.set_secret_key(None);
-    // vfhe.rlwe_mut().set_secret_key(None);
-
     let nand = vfhe.nand(c, &c1);
 
     assert!(nand.a().iter().all(|&v| v.inner() < RR::modulus()));
@@ -74,7 +55,7 @@ fn main() {
 }
 
 #[derive(Ring, Random)]
-#[modulus = 1024]
+#[modulus = 512]
 pub struct RR(u32);
 
 #[derive(Ring, Field, Random, Prime, NTT)]

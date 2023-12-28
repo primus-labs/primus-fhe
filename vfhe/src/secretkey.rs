@@ -5,8 +5,8 @@ pub enum LWESecretKeyDistribution {
     Binary,
     /// Ternary SecretKey Distribution
     Ternary,
-    /// Gaussian SecretKey Distribution
-    Gaussian,
+    // /// Gaussian SecretKey Distribution
+    // Gaussian,
 }
 
 /// lwe secret key

@@ -18,17 +18,20 @@ pub struct Vfhe<R: Ring, F: NTTField> {
     rlwe: RingParam<F>,
     ql: f64,
     qr: f64,
-    nr2divq: usize,
-    bks: BootstrappingKey<F>,
-    ksk: Vec<GadgetRLWE<F>>,
+    nr2divql: usize,
+    bootstrapping_key: BootstrappingKey<F>,
+    key_switching_key: Vec<GadgetRLWE<F>>,
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
     pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>) -> Self {
-        let n = rlwe_param.n();
-        let q = R::new(lwe_param.q()).cast_into_usize();
-        let nr2divq = (n << 1) / q;
+        let nr = rlwe_param.n();
+        let ql: usize = cast::<<R as Ring>::Inner, usize>(lwe_param.q()).unwrap();
+
+        debug_assert!(ql <= (nr << 1));
+
+        let nr2divql = (nr << 1) / ql;
 
         let ql = cast::<<R as Ring>::Inner, f64>(lwe_param.q()).unwrap();
         let qr = cast::<<F as Ring>::Inner, f64>(rlwe_param.q()).unwrap();
@@ -38,40 +41,40 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
             rlwe: rlwe_param,
             ql,
             qr,
-            nr2divq,
-            bks: BootstrappingKey::TFHEBinary(Vec::new()),
-            ksk: Vec::new(),
+            nr2divql,
+            bootstrapping_key: BootstrappingKey::TFHEBinary(Vec::new()),
+            key_switching_key: Vec::new(),
         }
     }
 
-    /// Returns the lwe param of this [`Vfhe<R, F>`].
+    /// Returns the lwe parameter of this [`Vfhe<R, F>`].
     #[inline]
     pub fn lwe(&self) -> &LWEParam<R> {
         &self.lwe
     }
 
-    /// Returns a mutable reference to the lwe param of this [`Vfhe<R, F>`].
+    /// Returns a mutable reference to the lwe parameter of this [`Vfhe<R, F>`].
     #[inline]
     pub fn lwe_mut(&mut self) -> &mut LWEParam<R> {
         &mut self.lwe
     }
 
-    /// Returns the rlwe param of this [`Vfhe<R, F>`].
+    /// Returns the rlwe parameter of this [`Vfhe<R, F>`].
     #[inline]
     pub fn rlwe(&self) -> &RingParam<F> {
         &self.rlwe
     }
 
-    /// Returns a mutable reference to the rlwe param of this [`Vfhe<R, F>`].
+    /// Returns a mutable reference to the rlwe parameter of this [`Vfhe<R, F>`].
     #[inline]
     pub fn rlwe_mut(&mut self) -> &mut RingParam<F> {
         &mut self.rlwe
     }
 
-    /// Returns the l2divq of this [`Vfhe<R, F>`].
+    /// Returns the **`nr * 2 / ql`** of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn l2divq(&self) -> usize {
-        self.nr2divq
+    pub fn nr2divql(&self) -> usize {
+        self.nr2divql
     }
 
     /// Returns a reference to the public key of this [`Vfhe<R, F>`].
@@ -110,26 +113,26 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         self.lwe.decode(plain)
     }
 
-    /// Returns the bks of this [`Vfhe<R, F>`].
+    /// Returns the bootstrapping key of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn bks(&self) -> &BootstrappingKey<F> {
-        &self.bks
+    pub fn bootstrapping_key(&self) -> &BootstrappingKey<F> {
+        &self.bootstrapping_key
     }
 
-    /// Sets the bks of this [`Vfhe<R, F>`].
+    /// Sets the bootstrapping key of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn set_bks(&mut self, bks: BootstrappingKey<F>) {
-        self.bks = bks;
+    pub fn set_bootstrapping_key(&mut self, bks: BootstrappingKey<F>) {
+        self.bootstrapping_key = bks;
     }
 
-    /// Returns the ksk of this [`Vfhe<R, F>`].
-    pub fn ksk(&self) -> &Vec<GadgetRLWE<F>> {
-        &self.ksk
+    /// Returns the key switching key of this [`Vfhe<R, F>`].
+    pub fn key_switching_key(&self) -> &Vec<GadgetRLWE<F>> {
+        &self.key_switching_key
     }
 
-    /// Sets the ksk of this [`Vfhe<R, F>`].
-    pub fn set_ksk(&mut self, ksk: Vec<GadgetRLWE<F>>) {
-        self.ksk = ksk;
+    /// Sets the key switching key of this [`Vfhe<R, F>`].
+    pub fn set_key_switching_key(&mut self, ksk: Vec<GadgetRLWE<F>>) {
+        self.key_switching_key = ksk;
     }
 }
 
@@ -179,9 +182,11 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
 
 impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     /// generate bootstrapping key
-    pub fn generate_bootstrapping_key(&self) -> BootstrappingKey<F> {
+    pub fn generate_bootstrapping_key<Rng>(&self, mut rng: Rng) -> BootstrappingKey<F>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
         let rlwe_sk = self.rlwe.secret_key().unwrap();
-        let mut rng = rand::thread_rng();
         match self.secret_key() {
             Some(sk) => match self.lwe.secret_key_distribution() {
                 crate::LWESecretKeyDistribution::Binary => {
@@ -215,8 +220,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                         })
                         .collect();
                     BootstrappingKey::ternary_bootstrapping_key(bks)
-                }
-                crate::LWESecretKeyDistribution::Gaussian => unimplemented!(),
+                } // crate::LWESecretKeyDistribution::Gaussian => unimplemented!(),
             },
             None => panic!("generate bootstrapping key should supply secret key"),
         }
@@ -233,8 +237,10 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         let nr = self.rlwe.n();
         let qr = self.rlwe.q();
 
-        let acc: RLWE<F> = nand_acc(b, ql, nr, qr, self.nr2divq);
-        let acc = self.bks.bootstrapping(acc, add.a(), nr, self.nr2divq);
+        let acc: RLWE<F> = nand_acc(b, ql, nr, qr, self.nr2divql);
+        let acc = self
+            .bootstrapping_key
+            .bootstrapping(acc, add.a(), nr, self.nr2divql);
 
         let mut extract = acc.extract_lwe();
         *extract.b_mut() += F::new(qr >> 3);
@@ -242,13 +248,13 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         {
             let r =
                 extract.b() - dot_product(extract.a(), self.rlwe.secret_key().unwrap().as_ref());
-            let r = R::from_f64((r.as_f64() * self.ql / self.qr).floor());
+            let r = R::from_f64((r.as_f64() * self.ql / self.qr).round());
             dbg!(r);
             let dec = self.decode(r);
             dbg!(dec);
         }
 
-        let key_switching = extract.key_switch(&self.ksk, nl);
+        let key_switching = extract.key_switch(&self.key_switching_key, nl);
 
         assert!(key_switching.a().iter().all(|&v| v.inner() < F::modulus()));
         assert!(key_switching.b().inner() < F::modulus());
@@ -261,7 +267,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                 .map(|&v| F::from_f64(v.as_f64()))
                 .collect();
             let r = key_switching.b() - dot_product(key_switching.a(), &sk);
-            let r = R::from_f64((r.as_f64() * self.ql / self.qr).floor());
+            let r = R::from_f64((r.as_f64() * self.ql / self.qr).round());
             dbg!(r);
             let dec = self.decode(r);
             dbg!(dec);

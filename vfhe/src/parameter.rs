@@ -108,26 +108,26 @@ impl<R: Ring> LWEParam<R> {
 
     /// encode
     pub fn encode(&self, value: R::Inner) -> LWEPlaintext<R> {
-        debug_assert!(value < self.t);
-        // Todo: `value * R::modulus()` may overflow, need fix
+        assert!(value < self.t);
         R::from(
             value
                 .checked_mul(&R::modulus())
                 .unwrap()
                 .rounded_div(self.t),
         )
-        .into()
     }
 
     /// decode
     pub fn decode(&self, plain: LWEPlaintext<R>) -> R::Inner {
+        assert!(plain.inner() < self.q);
+
         let r = plain
             .inner()
             .checked_mul(&self.t)
             .unwrap()
             .rounded_div(R::modulus());
 
-        debug_assert!(r <= self.t);
+        assert!(r <= self.t);
 
         if r == self.t {
             R::Inner::zero()
@@ -158,11 +158,11 @@ impl<R: RandomRing> LWEParam<R> {
                 .sample_iter(rng)
                 .take(self.n)
                 .collect(),
-            LWESecretKeyDistribution::Gaussian => self
-                .error_distribution()
-                .sample_iter(rng)
-                .take(self.n)
-                .collect(),
+            // LWESecretKeyDistribution::Gaussian => self
+            //     .error_distribution()
+            //     .sample_iter(rng)
+            //     .take(self.n)
+            //     .collect(),
         }
     }
 
