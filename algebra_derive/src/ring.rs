@@ -162,42 +162,59 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
 
             type Order = #field_ty;
 
+            const ONE: Self = #name(1);
+
+            const ZERO: Self = #name(0);
+
+            const NEG_ONE: Self = #name(#modulus - 1);
+
+            const Q_DIV_8: Self = #name(#modulus >> 3);
+
+            const Q3_DIV_8: Self = #name((3 * #modulus) >> 3);
+
+            const Q7_DIV_8: Self = #name((7 * #modulus) >> 3);
+
+            const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
+
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
             fn new(value: #field_ty) -> Self {
                 Self(value)
             }
 
-            /// Return inner value
+            #[inline]
+            fn pow_of_two(pow: u32) -> Self {
+                Self(1 << pow)
+            }
+
+            #[inline]
+            fn mask(bits: u32) -> Self::Inner {
+                #field_ty::MAX >> (#field_ty::BITS - bits)
+            }
+
             #[inline]
             fn inner(self) -> #field_ty {
                 self.0
             }
 
-            /// cast inner to [`usize`]
             #[inline]
             fn cast_into_usize(self) -> usize {
                 num_traits::cast::<#field_ty, usize>(self.0).unwrap()
             }
 
-            /// cast inner from [`usize`]
             #[inline]
             fn cast_from_usize(value: usize) -> Self {
-                // use algebra::modulo_traits::Modulo;
-                // Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap().reduce(&<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
                 Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
-            /// cast inner to [`f64`]
+            #[inline]
             fn as_f64(self) -> f64 {
                 self.0 as f64
             }
 
-            /// cast from [`f64`]
+            #[inline]
             fn from_f64(value: f64) -> Self {
-                // use algebra::modulo_traits::Modulo;
-                // Self::new((value as #field_ty).reduce(&<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
-                Self::new((value as #field_ty))
+                Self::new(value as #field_ty)
             }
 
             #[inline]
@@ -211,25 +228,28 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn decompose_len(basis: usize) -> usize {
-                debug_assert!(basis.is_power_of_two());
+            fn decompose_len(basis: Self::Inner) -> usize {
+                debug_assert!(basis.is_power_of_two() && basis > 1);
                 algebra::div_ceil(<Self as algebra::field::BarrettConfig>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: usize) -> Vec<Self> {
+            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
                 let mut temp = self.0;
-                let bits = basis.trailing_zeros();
 
-                let len = Self::decompose_len(basis);
-                let mask = #field_ty::MAX >> (#field_ty::BITS - bits);
-                let mut ret: Vec<Self> = Vec::with_capacity(len);
+                let len = basis.decompose_len();
+                let mask = basis.mask();
+                let bits = basis.bits();
 
-                while temp != 0 {
-                    ret.push(Self(temp & mask));
-                    temp >>= bits;
+                let mut ret: Vec<Self> = vec![#name(0); len];
+
+                for v in ret.iter_mut() {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
                 }
-
-                ret.resize(len, #name(0));
 
                 ret
             }
@@ -255,39 +275,58 @@ fn impl_and_ring(
 
             type Order = #field_ty;
 
+            const ONE: Self = #name(1);
+
+            const ZERO: Self = #name(0);
+
+            const NEG_ONE: Self = #name(#mask);
+
+            const Q_DIV_8: Self = #name(#modulus >> 3);
+
+            const Q3_DIV_8: Self = #name(3 * (#modulus >> 3));
+
+            const Q7_DIV_8: Self = #name(7 * (#modulus >> 3));
+
+            const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
+
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
             fn new(value: #field_ty) -> Self {
                 Self(value)
             }
 
-            /// Return inner value
+            #[inline]
+            fn pow_of_two(pow: u32) -> Self {
+                Self(1 << pow)
+            }
+
+            #[inline]
+            fn mask(bits: u32) -> Self::Inner {
+                #field_ty::MAX >> (#field_ty::BITS - bits)
+            }
+
             #[inline]
             fn inner(self) -> #field_ty {
                 self.0
             }
 
-            /// cast inner to [`usize`]
             #[inline]
             fn cast_into_usize(self) -> usize {
                 num_traits::cast::<#field_ty, usize>(self.0).unwrap()
             }
 
-            /// cast inner from [`usize`]
             #[inline]
             fn cast_from_usize(value: usize) -> Self {
-                // Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap() & #mask)
                 Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
-            /// cast inner to [`f64`]
+            #[inline]
             fn as_f64(self) -> f64 {
                 self.0 as f64
             }
 
-            /// cast from [`f64`]
+            #[inline]
             fn from_f64(value: f64) -> Self {
-                // Self::new(value as #field_ty & #mask)
                 Self::new(value as #field_ty)
             }
 
@@ -302,25 +341,28 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn decompose_len(basis: usize) -> usize {
-                debug_assert!(basis.is_power_of_two());
+            fn decompose_len(basis: Self::Inner) -> usize {
+                debug_assert!(basis.is_power_of_two() && basis > 1);
                 algebra::div_ceil(Self::modulus().trailing_zeros(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: usize) -> Vec<Self> {
+            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
                 let mut temp = self.0;
-                let bits = basis.trailing_zeros();
 
-                let len = Self::decompose_len(basis);
-                let mask = #field_ty::MAX >> (#field_ty::BITS - bits);
-                let mut ret: Vec<Self> = Vec::with_capacity(len);
+                let len = basis.decompose_len();
+                let mask = basis.mask();
+                let bits = basis.bits();
 
-                while temp != 0 {
-                    ret.push(Self(temp & mask));
-                    temp >>= bits;
+                let mut ret: Vec<Self> = vec![#name(0); len];
+
+                for v in ret.iter_mut() {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
                 }
-
-                ret.resize(len, #name(0));
 
                 ret
             }

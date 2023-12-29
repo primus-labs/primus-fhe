@@ -1,6 +1,7 @@
 use algebra::{
     field::NTTField,
     polynomial::{NTTPolynomial, Polynomial},
+    Basis,
 };
 
 use crate::{NTTRLWE, RLWE};
@@ -22,11 +23,11 @@ pub struct GadgetRLWE<F: NTTField> {
     /// A vector of RLWE ciphertexts, each encrypted message with a different power of the `basis`.
     data: Vec<RLWE<F>>,
     /// The base with respect to which the ciphertexts are scaled.
-    basis: usize,
+    basis: Basis<F>,
 }
 
-impl<F: NTTField> From<(Vec<RLWE<F>>, usize)> for GadgetRLWE<F> {
-    fn from((data, basis): (Vec<RLWE<F>>, usize)) -> Self {
+impl<F: NTTField> From<(Vec<RLWE<F>>, Basis<F>)> for GadgetRLWE<F> {
+    fn from((data, basis): (Vec<RLWE<F>>, Basis<F>)) -> Self {
         Self { data, basis }
     }
 }
@@ -34,13 +35,13 @@ impl<F: NTTField> From<(Vec<RLWE<F>>, usize)> for GadgetRLWE<F> {
 impl<F: NTTField> GadgetRLWE<F> {
     /// Creates a new [`GadgetRLWE<F>`].
     #[inline]
-    pub fn new(data: Vec<RLWE<F>>, basis: usize) -> Self {
+    pub fn new(data: Vec<RLWE<F>>, basis: Basis<F>) -> Self {
         Self { data, basis }
     }
 
     /// Creates a new [`GadgetRLWE<F>`] with reference.
     #[inline]
-    pub fn from_ref(data: &[RLWE<F>], basis: usize) -> Self {
+    pub fn from_ref(data: &[RLWE<F>], basis: Basis<F>) -> Self {
         Self {
             data: data.to_vec(),
             basis,
@@ -55,7 +56,7 @@ impl<F: NTTField> GadgetRLWE<F> {
 
     /// Returns the basis of this [`GadgetRLWE<F>`].
     #[inline]
-    pub fn basis(&self) -> usize {
+    pub fn basis(&self) -> Basis<F> {
         self.basis
     }
 
@@ -111,7 +112,7 @@ pub struct NTTGadgetRLWE<F: NTTField> {
     /// A vector of NTT RLWE ciphertexts, each encrypted message with a different power of the `basis`.
     data: Vec<NTTRLWE<F>>,
     /// The base with respect to which the ciphertexts are scaled.
-    basis: usize,
+    basis: Basis<F>,
 }
 
 impl<F: NTTField> From<GadgetRLWE<F>> for NTTGadgetRLWE<F> {
@@ -124,9 +125,9 @@ impl<F: NTTField> From<GadgetRLWE<F>> for NTTGadgetRLWE<F> {
     }
 }
 
-impl<F: NTTField> From<(Vec<NTTRLWE<F>>, usize)> for NTTGadgetRLWE<F> {
+impl<F: NTTField> From<(Vec<NTTRLWE<F>>, Basis<F>)> for NTTGadgetRLWE<F> {
     #[inline]
-    fn from((data, basis): (Vec<NTTRLWE<F>>, usize)) -> Self {
+    fn from((data, basis): (Vec<NTTRLWE<F>>, Basis<F>)) -> Self {
         Self { data, basis }
     }
 }
@@ -134,13 +135,13 @@ impl<F: NTTField> From<(Vec<NTTRLWE<F>>, usize)> for NTTGadgetRLWE<F> {
 impl<F: NTTField> NTTGadgetRLWE<F> {
     /// Creates a new [`NTTGadgetRLWE<F>`].
     #[inline]
-    pub fn new(data: Vec<NTTRLWE<F>>, basis: usize) -> Self {
+    pub fn new(data: Vec<NTTRLWE<F>>, basis: Basis<F>) -> Self {
         Self { data, basis }
     }
 
     /// Creates a new [`NTTGadgetRLWE<F>`] with reference.
     #[inline]
-    pub fn from_ref(data: &[NTTRLWE<F>], basis: usize) -> Self {
+    pub fn from_ref(data: &[NTTRLWE<F>], basis: Basis<F>) -> Self {
         Self {
             data: data.to_vec(),
             basis,
@@ -155,7 +156,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
     /// Returns the basis of this [`NTTGadgetRLWE<F>`].
     #[inline]
-    pub fn basis(&self) -> usize {
+    pub fn basis(&self) -> Basis<F> {
         self.basis
     }
 

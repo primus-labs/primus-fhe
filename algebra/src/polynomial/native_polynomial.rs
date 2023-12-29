@@ -4,6 +4,7 @@ use std::slice::{Iter, IterMut, SliceIndex};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
+use crate::basis::Basis;
 use crate::field::{Field, NTTField, Random};
 use crate::transformation::AbstractNTT;
 
@@ -209,10 +210,9 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
 
 impl<F: NTTField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
-    pub fn decompose(&self, basis: usize) -> Vec<Self> {
-        let decompose_len = F::decompose_len(basis);
-
-        let mut ret: Vec<Self> = vec![Self::with_capacity(self.coeff_count()); decompose_len];
+    pub fn decompose(&self, basis: Basis<F>) -> Vec<Self> {
+        let mut ret: Vec<Self> =
+            vec![Self::with_capacity(self.coeff_count()); basis.decompose_len()];
         for coeff in self.iter() {
             let decompose_res = F::decompose(coeff, basis);
             ret.iter_mut()

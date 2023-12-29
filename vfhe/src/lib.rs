@@ -17,7 +17,7 @@ mod functional_bootstrapping;
 pub use parameter::{LWEParam, RingParam};
 pub use scheme::Vfhe;
 
-pub use ciphertext::{LWECiphertext, RLWECiphertext};
+pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::{LWEPlaintext, RLWEPlaintext};
 
 pub use publickey::{LWEPublicKey, RLWEPublicKey};

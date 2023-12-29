@@ -1,34 +1,23 @@
 use algebra::{field::NTTField, polynomial::Polynomial, ring::Ring};
 use lattice::RLWE;
-use num_traits::cast;
 
-pub fn nand_acc<R, F>(
-    mut b: R,
-    ql: <R as Ring>::Inner,
-    nr: usize,
-    qr: <F as Ring>::Inner,
-    nr2dql: usize,
-) -> RLWE<F>
+pub fn nand_acc<R, F>(mut b: R, nr: usize, nr2dql: usize) -> RLWE<F>
 where
     R: Ring,
     F: NTTField,
 {
     let mut v = Polynomial::zero_with_coeff_count(nr);
 
-    let l = (cast::<u8, <R as Ring>::Inner>(3).unwrap() * ql) >> 3;
-    let r = (cast::<u8, <R as Ring>::Inner>(7).unwrap() * ql) >> 3;
-
-    let x = F::from(qr >> 3);
-    let y = -x;
-    let one = R::one();
+    let l = R::Q3_DIV_8.inner();
+    let r = R::Q7_DIV_8.inner();
 
     v.iter_mut().step_by(nr2dql).for_each(|a| {
         if (l..r).contains(&b.inner()) {
-            *a = y;
+            *a = F::NRG_Q_DIV_8;
         } else {
-            *a = x;
+            *a = F::Q_DIV_8;
         }
-        b -= one;
+        b -= R::ONE;
     });
     RLWE::new(Polynomial::zero_with_coeff_count(nr), v)
 }

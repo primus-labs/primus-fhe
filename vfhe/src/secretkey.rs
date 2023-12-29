@@ -16,4 +16,4 @@ pub type LWESecretKey<R> = Vec<R>;
 pub type RLWESecretKey<F> = algebra::polynomial::Polynomial<F>;
 
 /// rlwe secret key
-pub type RLWESecretKeyNTT<F> = algebra::polynomial::NTTPolynomial<F>;
+pub type NTTRLWESecretKey<F> = algebra::polynomial::NTTPolynomial<F>;

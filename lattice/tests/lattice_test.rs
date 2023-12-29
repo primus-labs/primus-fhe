@@ -2,6 +2,7 @@ use algebra::derive::{Field, Prime, Random, Ring, NTT};
 use algebra::field::{BarrettConfig, Random};
 use algebra::polynomial::Polynomial;
 use algebra::ring::Ring;
+use algebra::Basis;
 use lattice::*;
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
@@ -21,7 +22,8 @@ type PolyFF = Polynomial<FF>;
 
 const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
-const B: usize = 1 << 3; // base
+const BITS: u32 = 3;
+const B: usize = 1 << BITS; // base
 
 const FP: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
 const FT: Inner = 4; // message space
@@ -212,10 +214,9 @@ fn test_gadget_rlwe() {
     let poly_mul_m = &poly * &m;
 
     let s = PolyFF::random(N, &mut rng);
+    let basis = <Basis<Fp32>>::new(BITS);
 
-    let decompose_len = FF::decompose_len(B);
-
-    let m_base_power = (0..decompose_len)
+    let m_base_power = (0..basis.decompose_len())
         .map(|i| {
             let a = PolyFF::random(N, &mut rng);
             let e = PolyFF::random_with_dis(N, &mut rng, chi);
@@ -228,7 +229,7 @@ fn test_gadget_rlwe() {
     let bad_rlwe_mul = m_base_power[0].clone().mul_with_polynomial(&poly);
     let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
 
-    let gadget_rlwe = GadgetRLWE::new(m_base_power, B);
+    let gadget_rlwe = GadgetRLWE::new(m_base_power, basis);
 
     let good_rlwe_mul = gadget_rlwe.mul_with_polynomial(&poly);
     let good_mul = good_rlwe_mul.b() - good_rlwe_mul.a() * s;
@@ -273,10 +274,10 @@ fn test_rgsw_mul_rlwe() {
 
     let s = PolyFF::random(N, &mut rng);
 
-    let decompose_len = FF::decompose_len(B);
+    let basis = <Basis<Fp32>>::new(BITS);
 
     let rgsw = {
-        let m1_base_power = (0..decompose_len)
+        let m1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
@@ -286,7 +287,7 @@ fn test_rgsw_mul_rlwe() {
             })
             .collect::<Vec<RLWE<FF>>>();
 
-        let neg_sm1_base_power = (0..decompose_len)
+        let neg_sm1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
@@ -297,8 +298,8 @@ fn test_rgsw_mul_rlwe() {
             .collect::<Vec<RLWE<FF>>>();
 
         RGSW::new(
-            GadgetRLWE::new(neg_sm1_base_power, B),
-            GadgetRLWE::new(m1_base_power, B),
+            GadgetRLWE::new(neg_sm1_base_power, basis),
+            GadgetRLWE::new(m1_base_power, basis),
         )
     };
 
@@ -331,10 +332,10 @@ fn test_rgsw_mul_rgsw() {
 
     let s = PolyFF::random(N, &mut rng);
 
-    let decompose_len = FF::decompose_len(B);
+    let basis = <Basis<Fp32>>::new(BITS);
 
     let rgsw_m1 = {
-        let m1_base_power = (0..decompose_len)
+        let m1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
@@ -344,7 +345,7 @@ fn test_rgsw_mul_rgsw() {
             })
             .collect::<Vec<RLWE<FF>>>();
 
-        let neg_sm1_base_power = (0..decompose_len)
+        let neg_sm1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
@@ -355,13 +356,13 @@ fn test_rgsw_mul_rgsw() {
             .collect::<Vec<RLWE<FF>>>();
 
         RGSW::new(
-            GadgetRLWE::new(neg_sm1_base_power, B),
-            GadgetRLWE::new(m1_base_power, B),
+            GadgetRLWE::new(neg_sm1_base_power, basis),
+            GadgetRLWE::new(m1_base_power, basis),
         )
     };
 
     let rgsw_m0 = {
-        let m0_base_power = (0..decompose_len)
+        let m0_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
@@ -371,7 +372,7 @@ fn test_rgsw_mul_rgsw() {
             })
             .collect::<Vec<RLWE<FF>>>();
 
-        let neg_sm0_base_power = (0..decompose_len)
+        let neg_sm0_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
@@ -382,8 +383,8 @@ fn test_rgsw_mul_rgsw() {
             .collect::<Vec<RLWE<FF>>>();
 
         RGSW::new(
-            GadgetRLWE::new(neg_sm0_base_power, B),
-            GadgetRLWE::new(m0_base_power, B),
+            GadgetRLWE::new(neg_sm0_base_power, basis),
+            GadgetRLWE::new(m0_base_power, basis),
         )
     };
 

@@ -13,8 +13,6 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
 fn impl_field_with_ops(input: Input) -> TokenStream {
     let name = &input.ident;
 
-    // let _field_ty = input.field.ty;
-
     let modulus = input.attrs.modulus.unwrap();
 
     let impl_div = div_reduce_ops(name);

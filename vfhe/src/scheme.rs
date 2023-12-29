@@ -2,13 +2,15 @@ use algebra::{
     field::{NTTField, RandomNTTField},
     polynomial::{NTTPolynomial, Polynomial},
     ring::{RandomRing, Ring},
+    Basis,
 };
-use lattice::{NTTGadgetRLWE, LWE, NTTRGSW, NTTRLWE, RLWE};
+use lattice::{NTTGadgetRLWE, NTTRGSW};
 use num_traits::cast;
 
 use crate::{
-    functional_bootstrapping::nand_acc, secretkey::RLWESecretKeyNTT, BootstrappingKey,
-    LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey, LWESecretKey, RLWESecretKey, RingParam,
+    functional_bootstrapping::nand_acc, secretkey::NTTRLWESecretKey, BootstrappingKey,
+    LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey, LWESecretKey, NTTRLWECiphertext,
+    RLWECiphertext, RLWESecretKey, RingParam,
 };
 
 /// fhe scheme
@@ -21,16 +23,14 @@ pub struct Vfhe<R: Ring, F: NTTField> {
     nr2divql: usize,
     bootstrapping_key: BootstrappingKey<F>,
     /// decompose basis for `q` used for key switching
-    bks: usize,
+    bks: Basis<F>,
     bkss: Vec<F>,
-    // /// bks ** dks >= p
-    // dks: usize,
     key_switching_key: Vec<NTTGadgetRLWE<F>>,
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
-    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>, bks: usize) -> Self {
+    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>, bks_bits: u32) -> Self {
         let nr = rlwe_param.n();
         let ql: usize = cast::<<R as Ring>::Inner, usize>(lwe_param.q()).unwrap();
 
@@ -41,8 +41,9 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         let ql = cast::<<R as Ring>::Inner, f64>(lwe_param.q()).unwrap();
         let qr = cast::<<F as Ring>::Inner, f64>(rlwe_param.q()).unwrap();
 
-        let dks = F::decompose_len(bks);
-        let bf = F::cast_from_usize(bks);
+        let bks = <Basis<F>>::new(bks_bits);
+        let dks = bks.decompose_len();
+        let bf = F::new(bks.basis());
 
         assert!(bf < F::new(F::modulus()));
 
@@ -168,6 +169,12 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
     pub fn qr(&self) -> f64 {
         self.qr
     }
+
+    /// decrypt
+    #[inline]
+    pub fn decrypt(&self, cipher: &LWECiphertext<R>) -> LWEPlaintext<R> {
+        self.lwe.decrypt(cipher)
+    }
 }
 
 impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
@@ -206,12 +213,6 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
     {
         self.lwe.encrypt_by_sk(plain, rng)
     }
-
-    /// decrypt
-    #[inline]
-    pub fn decrypt(&self, cipher: &LWECiphertext<R>) -> LWEPlaintext<R> {
-        self.lwe.decrypt(cipher)
-    }
 }
 
 impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
@@ -219,7 +220,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
     pub fn generate_bootstrapping_key<Rng>(
         &self,
         lwe_sk: &LWESecretKey<R>,
-        rlwe_sk: &RLWESecretKeyNTT<F>,
+        rlwe_sk: &NTTRLWESecretKey<F>,
         mut rng: Rng,
     ) -> BootstrappingKey<F>
     where
@@ -261,42 +262,6 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         }
     }
 
-    /// Perform addition
-    pub fn nand(&self, c0: LWE<R>, c1: &LWE<R>) -> LWE<F> {
-        let add = c0.add_component_wise(c1);
-
-        let b = add.b();
-
-        let nl = self.lwe.n();
-        let ql = self.lwe.q();
-        let nr = self.rlwe.n();
-        let qr = self.rlwe.q();
-
-        let acc: RLWE<F> = nand_acc(b, ql, nr, qr, self.nr2divql);
-        let acc = self
-            .bootstrapping_key
-            .bootstrapping(acc, add.a(), nr, self.nr2divql);
-
-        let mut extract = acc.extract_lwe();
-        *extract.b_mut() += F::new(qr >> 3);
-
-        // {
-        //     let r =
-        //         extract.b() - dot_product(extract.a(), self.rlwe.secret_key().unwrap().as_ref());
-        //     let r = R::from_f64((r.as_f64() * self.ql / self.qr).round());
-        //     dbg!(r);
-        //     let dec = self.decode(r);
-        //     dbg!(dec);
-        // }
-
-        let key_switching = extract.key_switch(&self.key_switching_key, nl);
-
-        assert!(key_switching.a().iter().all(|&v| v.inner() < F::modulus()));
-        assert!(key_switching.b().inner() < F::modulus());
-
-        key_switching
-    }
-
     /// generate key_switching key
     pub fn generate_key_switching_key<Rng>(
         &self,
@@ -311,19 +276,16 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         let bks = self.bks;
         let bkss = &self.bkss;
         let chi = self.rlwe.error_distribution();
-        let r_neg_one = -R::one();
-        let f_neg_one = -F::one();
-
         let s = <Polynomial<F>>::new(
             lwe_sk
                 .iter()
                 .map(|&v| {
                     if v.is_one() {
-                        F::one()
-                    } else if v == r_neg_one {
-                        f_neg_one
+                        F::ONE
+                    } else if v == R::NEG_ONE {
+                        F::NEG_ONE
                     } else {
-                        F::zero()
+                        F::ZERO
                     }
                 })
                 .collect(),
@@ -344,11 +306,36 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
 
                         let b = &a * &sn + nzp.mul_scalar(b_i.inner()) + e.to_ntt_polynomial();
 
-                        NTTRLWE::new(a, b)
+                        NTTRLWECiphertext::new(a, b)
                     })
-                    .collect::<Vec<NTTRLWE<F>>>();
+                    .collect::<Vec<NTTRLWECiphertext<F>>>();
                 NTTGadgetRLWE::new(k_i, bks)
             })
             .collect()
+    }
+
+    /// Perform nand operation
+    pub fn nand(&self, c0: LWECiphertext<R>, c1: &LWECiphertext<R>) -> LWECiphertext<F> {
+        let add = c0.add_component_wise(c1);
+
+        let b = add.b();
+
+        let nl = self.lwe.n();
+        let nr = self.rlwe.n();
+
+        let acc: RLWECiphertext<F> = nand_acc(b, nr, self.nr2divql);
+        let acc = self
+            .bootstrapping_key
+            .bootstrapping(acc, add.a(), nr, self.nr2divql);
+
+        let mut extract = acc.extract_lwe();
+        *extract.b_mut() += F::Q_DIV_8;
+
+        let key_switching = extract.key_switch(&self.key_switching_key, nl);
+
+        debug_assert!(key_switching.a().iter().all(|&v| v.inner() < F::modulus()));
+        debug_assert!(key_switching.b().inner() < F::modulus());
+
+        key_switching
     }
 }

@@ -17,6 +17,7 @@ mod tests {
     use algebra::modulo_traits::*;
     use algebra::modulus::Modulus;
     use algebra::ring::Ring;
+    use algebra::Basis;
     use num_traits::Inv;
     use rand::distributions::Uniform;
     use rand::thread_rng;
@@ -128,11 +129,13 @@ mod tests {
 
     #[test]
     fn test_decompose() {
-        const B: usize = 1 << 2;
+        const BITS: u32 = 2;
+        const B: u32 = 1 << BITS;
+        let basis = <Basis<Fp32>>::new(BITS);
         let rng = &mut thread_rng();
 
         let a: FF = rng.gen();
-        let decompose = a.decompose(B);
+        let decompose = a.decompose(basis);
         let compose = decompose
             .into_iter()
             .enumerate()

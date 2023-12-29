@@ -3,6 +3,7 @@ use algebra::{
     field::{BarrettConfig, Field, NTTField},
     polynomial::{NTTPolynomial, Polynomial},
     ring::Ring,
+    Basis,
 };
 use num_traits::{One, Zero};
 use rand::thread_rng;
@@ -18,7 +19,8 @@ type NTTPolyFF = NTTPolynomial<FF>;
 
 const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
-const B: usize = 1 << 3; // base
+const BITS: u32 = 3;
+const B: usize = 1 << BITS; // base
 const P: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
 
 #[test]
@@ -95,7 +97,8 @@ fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<
 fn test_poly_decompose() {
     let rng = &mut thread_rng();
     let poly = PolyFF::random(N, rng);
-    let decompose = poly.decompose(B);
+    let basis = <Basis<Fp32>>::new(BITS);
+    let decompose = poly.decompose(basis);
     let compose = decompose
         .into_iter()
         .enumerate()
@@ -114,7 +117,8 @@ fn test_poly_decompose_mul() {
 
     let mul_result = &poly1 * &poly2;
 
-    let decompose = poly1.decompose(B);
+    let basis = <Basis<Fp32>>::new(BITS);
+    let decompose = poly1.decompose(basis);
     let compose_mul_result = decompose
         .into_iter()
         .enumerate()

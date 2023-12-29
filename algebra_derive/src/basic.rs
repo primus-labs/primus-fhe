@@ -11,6 +11,12 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
             pub const fn max() -> Self {
                 Self(#modulus - 1)
             }
+
+            /// Return -1
+            #[inline]
+            pub const fn neg_one() -> Self {
+                Self(#modulus - 1)
+            }
         }
 
         impl From<#field_ty> for #name {

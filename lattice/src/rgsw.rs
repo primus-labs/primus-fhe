@@ -1,4 +1,4 @@
-use algebra::{field::NTTField, polynomial::NTTPolynomial};
+use algebra::{field::NTTField, polynomial::NTTPolynomial, Basis};
 
 use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
@@ -84,7 +84,7 @@ impl<F: NTTField> RGSW<F> {
 
     /// Returns a reference to the basis of this [`RGSW<F>`].
     #[inline]
-    pub fn basis(&self) -> usize {
+    pub fn basis(&self) -> Basis<F> {
         self.c_neg_s_m.basis()
     }
 
@@ -137,7 +137,7 @@ fn ntt_rgsw_mul_rlwe<F: NTTField>(
     ntt_c_neg_s_m: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
     ntt_c_m: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
     rlwe: &RLWE<F>,
-    basis: usize,
+    basis: Basis<F>,
 ) -> RLWE<F> {
     let decomposed = rlwe.a().decompose(basis);
     let coeff_count = decomposed[0].coeff_count();
@@ -229,7 +229,7 @@ impl<F: NTTField> NTTRGSW<F> {
 
     /// Returns a reference to the basis of this [`NTTRGSW<F>`].
     #[inline]
-    pub fn basis(&self) -> usize {
+    pub fn basis(&self) -> Basis<F> {
         self.c_neg_s_m.basis()
     }
 

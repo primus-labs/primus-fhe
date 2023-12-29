@@ -6,7 +6,7 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use num_traits::{One, Pow, PrimInt, Zero};
 
 use crate::field::Random;
-use crate::RoundedDiv;
+use crate::{Basis, RoundedDiv};
 
 /// A trait defining the algebraic structure of a mathematical ring.
 ///
@@ -62,13 +62,40 @@ pub trait Ring:
     /// The type of the ring's order.
     type Order: Copy;
 
+    /// 1
+    const ONE: Self;
+
+    /// 0
+    const ZERO: Self;
+
+    /// -1
+    const NEG_ONE: Self;
+
+    /// q/8
+    const Q_DIV_8: Self;
+
+    /// 3q/8
+    const Q3_DIV_8: Self;
+
+    /// 7q/8
+    const Q7_DIV_8: Self;
+
+    /// -q/8
+    const NRG_Q_DIV_8: Self;
+
     /// Creates a new instance.
     fn new(value: Self::Inner) -> Self;
+
+    /// power of 2
+    fn pow_of_two(pow: u32) -> Self;
+
+    /// mask
+    fn mask(bits: u32) -> Self::Inner;
 
     /// Return inner value
     fn inner(self) -> Self::Inner;
 
-    /// cast inner to [`usize`]
+    /// cast self to [`usize`]
     fn cast_into_usize(self) -> usize;
 
     /// cast from [`usize`]
@@ -87,12 +114,12 @@ pub trait Ring:
     fn order() -> Self::Order;
 
     /// Get the length of decompose vec.
-    fn decompose_len(basis: usize) -> usize;
+    fn decompose_len(basis: Self::Inner) -> usize;
 
     /// Decompose `self` according to `basis`.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose(&self, basis: usize) -> Vec<Self>;
+    fn decompose(&self, basis: Basis<Self>) -> Vec<Self>;
 
     /// Return `self * scalar`.
     fn mul_scalar(&self, scalar: Self::Inner) -> Self;

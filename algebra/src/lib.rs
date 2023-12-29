@@ -7,6 +7,7 @@ mod error;
 
 pub mod derive;
 
+mod basis;
 pub mod field;
 pub mod modulo_traits;
 pub mod modulus;
@@ -19,5 +20,7 @@ pub mod transformation;
 mod primitive;
 
 pub use error::AlgebraError;
+
+pub use basis::Basis;
 
 pub use primitive::{div_ceil, Bits, RoundedDiv, Widening};

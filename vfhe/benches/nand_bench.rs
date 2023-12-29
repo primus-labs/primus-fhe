@@ -19,8 +19,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     // set parameter
     let lwe = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Ternary);
-    let rlwe = <RingParam<FF>>::new(1024, 32, 3.20);
-    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe, rlwe, 32);
+    let rlwe = <RingParam<FF>>::new(1024, 5, 3.20);
+    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe, rlwe, 5);
 
     // generate keys
     let sk = vfhe.generate_lwe_sk(&mut rng);
@@ -33,7 +33,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     vfhe.set_secret_key(Some(sk));
     vfhe.set_public_key(pk);
-    vfhe.rlwe_mut().set_secret_key(Some(rlwe_sk));
+    vfhe.rlwe_mut().set_secret_key(Some((rlwe_sk, rlwe_sk_ntt)));
     vfhe.rlwe_mut().set_public_key(rlwe_pk);
     vfhe.set_key_switching_key(ksk);
     vfhe.set_bootstrapping_key(bks);

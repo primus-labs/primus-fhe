@@ -103,7 +103,7 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
                 } else if self.inner2.sample(rng) {
                     #name(1)
                 } else {
-                    #name::max()
+                    #name::neg_one()
                 }
             }
         }
