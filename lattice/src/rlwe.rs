@@ -57,8 +57,8 @@ impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
     #[inline]
     fn from((a, b): (NTTPolynomial<F>, NTTPolynomial<F>)) -> Self {
         Self {
-            a: a.into(),
-            b: b.into(),
+            a: <Polynomial<F>>::from(a),
+            b: <Polynomial<F>>::from(b),
         }
     }
 }
@@ -261,6 +261,87 @@ impl<F: NTTField> RLWE<F> {
                 a: rotate(self.a(), n_mul_2_sub_r),
                 b: rotate(self.b(), n_mul_2_sub_r),
             }
+        }
+    }
+}
+
+/// ntt rlwe
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NTTRLWE<F: NTTField> {
+    /// Represents the first component in the RLWE structure.
+    pub(crate) a: NTTPolynomial<F>,
+    /// Represents the second component in the RLWE structure.
+    pub(crate) b: NTTPolynomial<F>,
+}
+
+impl<F: NTTField> From<RLWE<F>> for NTTRLWE<F> {
+    #[inline]
+    fn from(c: RLWE<F>) -> Self {
+        Self {
+            a: <NTTPolynomial<F>>::from(c.a),
+            b: <NTTPolynomial<F>>::from(c.b),
+        }
+    }
+}
+
+impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for NTTRLWE<F> {
+    #[inline]
+    fn from((a, b): (Polynomial<F>, Polynomial<F>)) -> Self {
+        Self {
+            a: <NTTPolynomial<F>>::from(a),
+            b: <NTTPolynomial<F>>::from(b),
+        }
+    }
+}
+
+impl<F: NTTField> NTTRLWE<F> {
+    /// Creates a new [`NTTRLWE<F>`].
+    #[inline]
+    pub fn new(a: NTTPolynomial<F>, b: NTTPolynomial<F>) -> Self {
+        Self { a, b }
+    }
+
+    /// Creates a new [`NTTRLWE<F>`] with reference of [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn from_ref(a: &NTTPolynomial<F>, b: &NTTPolynomial<F>) -> Self {
+        Self {
+            a: a.clone(),
+            b: b.clone(),
+        }
+    }
+
+    /// Returns a reference to the a of this [`NTTRLWE<F>`].
+    #[inline]
+    pub fn a(&self) -> &NTTPolynomial<F> {
+        &self.a
+    }
+
+    /// Returns a mutable reference to the a of this [`NTTRLWE<F>`].
+    #[inline]
+    pub fn a_mut(&mut self) -> &mut NTTPolynomial<F> {
+        &mut self.a
+    }
+
+    /// Returns a reference to the b of this [`NTTRLWE<F>`].
+    #[inline]
+    pub fn b(&self) -> &NTTPolynomial<F> {
+        &self.b
+    }
+
+    /// Returns a mutable reference to the b of this [`NTTRLWE<F>`].
+    #[inline]
+    pub fn b_mut(&mut self) -> &mut NTTPolynomial<F> {
+        &mut self.b
+    }
+
+    /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `poly` [`Polynomial<F>`],
+    /// return a [`RLWE<F>`].
+    #[inline]
+    pub fn mul_with_polynomial(&self, poly: &Polynomial<F>) -> RLWE<F> {
+        let ntt_poly = <NTTPolynomial<F>>::from(poly);
+        RLWE {
+            a: <Polynomial<F>>::from(&ntt_poly * &self.a),
+            b: <Polynomial<F>>::from(ntt_poly * &self.b),
         }
     }
 }

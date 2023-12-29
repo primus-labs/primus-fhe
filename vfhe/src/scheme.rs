@@ -1,14 +1,14 @@
 use algebra::{
     field::{NTTField, RandomNTTField},
-    polynomial::Polynomial,
+    polynomial::{NTTPolynomial, Polynomial},
     ring::{RandomRing, Ring},
 };
-use lattice::{GadgetRLWE, LWE, RLWE};
+use lattice::{NTTGadgetRLWE, LWE, NTTRGSW, NTTRLWE, RLWE};
 use num_traits::cast;
 
 use crate::{
-    functional_bootstrapping::nand_acc, BootstrappingKey, LWECiphertext, LWEParam, LWEPlaintext,
-    LWEPublicKey, LWESecretKey, RLWESecretKey, RingParam, secretkey::RLWESecretKeyNTT,
+    functional_bootstrapping::nand_acc, secretkey::RLWESecretKeyNTT, BootstrappingKey,
+    LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey, LWESecretKey, RLWESecretKey, RingParam,
 };
 
 /// fhe scheme
@@ -20,12 +20,17 @@ pub struct Vfhe<R: Ring, F: NTTField> {
     qr: f64,
     nr2divql: usize,
     bootstrapping_key: BootstrappingKey<F>,
-    key_switching_key: Vec<GadgetRLWE<F>>,
+    /// decompose basis for `q` used for key switching
+    bks: usize,
+    bkss: Vec<F>,
+    // /// bks ** dks >= p
+    // dks: usize,
+    key_switching_key: Vec<NTTGadgetRLWE<F>>,
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
-    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>) -> Self {
+    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>, bks: usize) -> Self {
         let nr = rlwe_param.n();
         let ql: usize = cast::<<R as Ring>::Inner, usize>(lwe_param.q()).unwrap();
 
@@ -36,6 +41,18 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         let ql = cast::<<R as Ring>::Inner, f64>(lwe_param.q()).unwrap();
         let qr = cast::<<F as Ring>::Inner, f64>(rlwe_param.q()).unwrap();
 
+        let dks = F::decompose_len(bks);
+        let bf = F::cast_from_usize(bks);
+
+        assert!(bf < F::new(F::modulus()));
+
+        let mut bkss = vec![F::zero(); dks];
+        let mut temp = F::one();
+        bkss.iter_mut().for_each(|v| {
+            *v = temp;
+            temp *= bf;
+        });
+
         Self {
             lwe: lwe_param,
             rlwe: rlwe_param,
@@ -43,6 +60,9 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
             qr,
             nr2divql,
             bootstrapping_key: BootstrappingKey::TFHEBinary(Vec::new()),
+            bks,
+            bkss,
+            // dks,
             key_switching_key: Vec::new(),
         }
     }
@@ -127,13 +147,13 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
 
     /// Returns the key switching key of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn key_switching_key(&self) -> &Vec<GadgetRLWE<F>> {
+    pub fn key_switching_key(&self) -> &Vec<NTTGadgetRLWE<F>> {
         &self.key_switching_key
     }
 
     /// Sets the key switching key of this [`Vfhe<R, F>`].
     #[inline]
-    pub fn set_key_switching_key(&mut self, ksk: Vec<GadgetRLWE<F>>) {
+    pub fn set_key_switching_key(&mut self, ksk: Vec<NTTGadgetRLWE<F>>) {
         self.key_switching_key = ksk;
     }
 
@@ -214,7 +234,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                         if s.is_one() {
                             self.rlwe.rgsw_zero_to_one(&mut bk);
                         }
-                        bk
+                        NTTRGSW::from(bk)
                     })
                     .collect();
                 BootstrappingKey::binary_bootstrapping_key(bks)
@@ -233,7 +253,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
                         } else {
                             self.rlwe.rgsw_zero_to_one(&mut u1);
                         }
-                        (u0, u1)
+                        (NTTRGSW::from(u0), NTTRGSW::from(u1))
                     })
                     .collect();
                 BootstrappingKey::ternary_bootstrapping_key(bks)
@@ -283,13 +303,13 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         rlwe_sk: &RLWESecretKey<F>,
         lwe_sk: &LWESecretKey<R>,
         mut rng: Rng,
-    ) -> Vec<GadgetRLWE<F>>
+    ) -> Vec<NTTGadgetRLWE<F>>
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
         let nl = self.lwe.n();
-        let bg = self.rlwe.bg();
-        let bgs = self.rlwe.bgs();
+        let bks = self.bks;
+        let bkss = &self.bkss;
         let chi = self.rlwe.error_distribution();
         let r_neg_one = -R::one();
         let f_neg_one = -F::one();
@@ -315,18 +335,19 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
             .as_slice()
             .chunks(nl)
             .map(|z| {
-                let k_i = bgs
+                let nzp = Polynomial::from_slice(z).to_ntt_polynomial();
+                let k_i = bkss
                     .iter()
                     .map(|&b_i| {
-                        let a = <Polynomial<F>>::random(nl, &mut rng);
+                        let a = <NTTPolynomial<F>>::random(nl, &mut rng);
                         let e = <Polynomial<F>>::random_with_dis(nl, &mut rng, chi);
 
-                        let b = &a * &sn + Polynomial::from_slice(z).mul_scalar(b_i.inner()) + e;
+                        let b = &a * &sn + nzp.mul_scalar(b_i.inner()) + e.to_ntt_polynomial();
 
-                        RLWE::new(a, b)
+                        NTTRLWE::new(a, b)
                     })
-                    .collect::<Vec<RLWE<F>>>();
-                GadgetRLWE::new(k_i, bg)
+                    .collect::<Vec<NTTRLWE<F>>>();
+                NTTGadgetRLWE::new(k_i, bks)
             })
             .collect()
     }

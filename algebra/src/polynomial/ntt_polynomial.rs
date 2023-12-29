@@ -91,6 +91,12 @@ impl<F: Field> NTTPolynomial<F> {
         self.data.len()
     }
 
+    /// Multipile `self` with the a scalar.
+    #[inline]
+    pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
+        Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+    }
+
     /// Returns an iterator that allows reading each value or coefficient of the polynomial.
     #[inline]
     pub fn iter(&self) -> Iter<F> {

@@ -10,8 +10,8 @@ use rand::seq::SliceRandom;
 use rand_distr::Distribution;
 
 use crate::{
-    LWECiphertext, LWEPlaintext, LWEPublicKey, LWESecretKey, LWESecretKeyDistribution,
-    RLWECiphertext, RLWEPlaintext, RLWEPublicKey, RLWESecretKey, secretkey::RLWESecretKeyNTT,
+    secretkey::RLWESecretKeyNTT, LWECiphertext, LWEPlaintext, LWEPublicKey, LWESecretKey,
+    LWESecretKeyDistribution, RLWECiphertext, RLWEPlaintext, RLWEPublicKey, RLWESecretKey,
 };
 
 /// lwe parameter
@@ -196,7 +196,7 @@ impl<R: RandomRing> LWEParam<R> {
 
         self.public_key()
             .choose_multiple(&mut rng, 2)
-            .fold(cipher, |acc, choice| acc.add_component_wise(&choice))
+            .fold(cipher, |acc, choice| acc.add_component_wise(choice))
     }
 
     /// encrypt

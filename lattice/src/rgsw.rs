@@ -1,6 +1,6 @@
 use algebra::{field::NTTField, polynomial::NTTPolynomial};
 
-use crate::{GadgetRLWE, RLWE};
+use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
 /// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
 ///
@@ -165,4 +165,83 @@ fn ntt_rgsw_mul_rlwe<F: NTTField>(
             (acc.0 + &r.0 * &p, acc.1 + &r.1 * p)
         })
         .into()
+}
+
+/// NTT RGSW
+#[derive(Debug, Clone)]
+pub struct NTTRGSW<F: NTTField> {
+    /// The first part of the NTT RGSW ciphertext, which is often used for homomorphic operations
+    /// and can represent the encrypted data multiplied by some secret value.
+    c_neg_s_m: NTTGadgetRLWE<F>,
+    /// The second part of the NTT RGSW ciphertext, typically representing the encrypted data.
+    c_m: NTTGadgetRLWE<F>,
+}
+
+impl<F: NTTField> From<RGSW<F>> for NTTRGSW<F> {
+    #[inline]
+    fn from(r: RGSW<F>) -> Self {
+        Self {
+            c_neg_s_m: <NTTGadgetRLWE<F>>::from(r.c_neg_s_m),
+            c_m: <NTTGadgetRLWE<F>>::from(r.c_m),
+        }
+    }
+}
+
+impl<F: NTTField> NTTRGSW<F> {
+    /// Creates a new [`NTTRGSW<F>`].
+    #[inline]
+    pub fn new(c_neg_s_m: NTTGadgetRLWE<F>, c_m: NTTGadgetRLWE<F>) -> Self {
+        Self { c_neg_s_m, c_m }
+    }
+
+    /// Creates a new [`NTTRGSW<F>`] with reference.
+    #[inline]
+    pub fn from_ref(c_neg_s_m: &NTTGadgetRLWE<F>, c_m: &NTTGadgetRLWE<F>) -> Self {
+        Self {
+            c_neg_s_m: c_neg_s_m.clone(),
+            c_m: c_m.clone(),
+        }
+    }
+
+    /// Returns a reference to the c neg s m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_neg_s_m(&self) -> &NTTGadgetRLWE<F> {
+        &self.c_neg_s_m
+    }
+
+    /// Returns a reference to the c m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_m(&self) -> &NTTGadgetRLWE<F> {
+        &self.c_m
+    }
+
+    /// Returns a mutable reference to the c neg s m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_neg_s_m_mut(&mut self) -> &mut NTTGadgetRLWE<F> {
+        &mut self.c_neg_s_m
+    }
+
+    /// Returns a mutable reference to the c m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_m_mut(&mut self) -> &mut NTTGadgetRLWE<F> {
+        &mut self.c_m
+    }
+
+    /// Returns a reference to the basis of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn basis(&self) -> usize {
+        self.c_neg_s_m.basis()
+    }
+
+    /// Performs a multiplication on the `self` [`NTTRGSW<F>`] with another `rlwe` [`RLWE<F>`],
+    /// return a [`RLWE<F>`].
+    ///
+    /// # Attention
+    /// The message of **`self`** is restricted to small messages `m`, typically `m = ±X^v`
+    #[inline]
+    pub fn mul_with_rlwe(&self, rlwe: &RLWE<F>) -> RLWE<F> {
+        self.c_neg_s_m()
+            .mul_with_polynomial(rlwe.a())
+            .add_element_wise(&self.c_m().mul_with_polynomial(rlwe.b()))
+    }
 }

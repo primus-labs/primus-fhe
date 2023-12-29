@@ -1,25 +1,25 @@
 use algebra::{field::NTTField, ring::Ring};
-use lattice::{RGSW, RLWE};
+use lattice::{NTTRGSW, RLWE};
 
 /// bootstrapping key
 #[derive(Debug, Clone)]
 pub enum BootstrappingKey<F: NTTField> {
     /// TFHE binary bootstrapping key
-    TFHEBinary(Vec<RGSW<F>>),
+    TFHEBinary(Vec<NTTRGSW<F>>),
     /// TFHE ternary bootstrapping key
-    TFHETernary(Vec<(RGSW<F>, RGSW<F>)>),
+    TFHETernary(Vec<(NTTRGSW<F>, NTTRGSW<F>)>),
 }
 
 impl<F: NTTField> BootstrappingKey<F> {
     ///
     #[inline]
-    pub fn binary_bootstrapping_key(key: Vec<RGSW<F>>) -> Self {
+    pub fn binary_bootstrapping_key(key: Vec<NTTRGSW<F>>) -> Self {
         Self::TFHEBinary(key)
     }
 
     ///
     #[inline]
-    pub fn ternary_bootstrapping_key(key: Vec<(RGSW<F>, RGSW<F>)>) -> Self {
+    pub fn ternary_bootstrapping_key(key: Vec<(NTTRGSW<F>, NTTRGSW<F>)>) -> Self {
         Self::TFHETernary(key)
     }
 

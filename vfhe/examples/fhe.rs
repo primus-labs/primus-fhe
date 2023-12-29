@@ -17,8 +17,8 @@ fn main() {
 
     // set parameter
     let lwe = <LWEParam<RR>>::new(512, 4, 3.20, LWESecretKeyDistribution::Ternary);
-    let rlwe = <RingParam<FF>>::new(1024, 16, 3.20);
-    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe, rlwe);
+    let rlwe = <RingParam<FF>>::new(1024, 32, 3.20);
+    let mut vfhe: Vfhe<RR, FF> = Vfhe::new(lwe, rlwe, 32);
 
     // generate keys
     let sk = vfhe.generate_lwe_sk(&mut rng);
@@ -48,112 +48,9 @@ fn main() {
 
         let nand = vfhe.nand(c, &c1);
 
-        // {
-        //     use algebra::ring::Ring;
-        //     use lattice::dot_product;
-        //     use num_bigint::BigUint;
-        //     use num_traits::One;
-        //     use num_traits::{ToPrimitive, Zero};
-
-        //     dbg!(v0);
-        //     dbg!(v1);
-        //     dbg!(nand_u32(v0, v1));
-
-        //     let r_neg_one = -RR::one();
-        //     let f_neg_one = -FF::one();
-        //     let sk: Vec<FF> = vfhe
-        //         .secret_key()
-        //         .unwrap()
-        //         .iter()
-        //         .map(|&v| {
-        //             if v.is_zero() {
-        //                 FF::zero()
-        //             } else if v.is_one() {
-        //                 FF::one()
-        //             } else if v == r_neg_one {
-        //                 f_neg_one
-        //             } else {
-        //                 panic!()
-        //             }
-        //         })
-        //         .collect();
-        //     let r0 = nand.b() - dot_product(nand.a(), &sk);
-        //     let r = RR::from_f64((r0.as_f64() * vfhe.ql() / vfhe.qr()).round());
-        //     dbg!(r);
-        //     let dec = vfhe.decode(r);
-        //     dbg!(dec);
-
-        //     let encode = vfhe.encode(dec);
-        //     let e = encode - r;
-        //     dbg!(e);
-
-        //     let right = BigUint::from(r0.inner())
-        //         + nand
-        //             .a()
-        //             .iter()
-        //             .zip(sk.iter())
-        //             .fold(BigUint::zero(), |acc, (a, s)| {
-        //                 acc + BigUint::from(a.inner()) * BigUint::from(s.inner())
-        //             });
-
-        //     dbg!(right.clone());
-        //     dbg!(nand.b().as_f64());
-        //     let n = (right.clone().to_f64().unwrap() - nand.b().as_f64()) / vfhe.qr();
-        //     dbg!(n);
-
-        //     // let n = n.to_f64().unwrap();
-        //     let left = (n * vfhe.qr() + nand.b().as_f64()) * vfhe.ql() / vfhe.qr();
-        //     let right = right.to_f64().unwrap() * vfhe.ql() / vfhe.qr();
-
-        //     assert_eq!(left, right);
-
-        //     let left = n * vfhe.ql() + (nand.b().as_f64() * vfhe.ql() / vfhe.qr()).round();
-        //     let righ = (r0.as_f64() * vfhe.ql() / vfhe.qr()).round()
-        //         + nand.a().iter().zip(vfhe.secret_key().unwrap().iter()).fold(
-        //             0.0,
-        //             |acc, (a, s)| {
-        //                 acc + (a.as_f64() * vfhe.ql() / vfhe.qr()).round()
-        //                     * if s.is_zero() {
-        //                         0.0
-        //                     } else if s.is_one() {
-        //                         1.0
-        //                     } else if *s == r_neg_one {
-        //                         -1.0
-        //                     } else {
-        //                         panic!()
-        //                     }
-        //             },
-        //         );
-        //     dbg!(left);
-        //     dbg!(righ);
-        //     dbg!((left - righ).abs());
-
-        //     let left = n * vfhe.ql() + (nand.b().as_f64() * vfhe.ql() / vfhe.qr()).floor();
-        //     let righ = (r0.as_f64() * vfhe.ql() / vfhe.qr()).floor()
-        //         + nand.a().iter().zip(vfhe.secret_key().unwrap().iter()).fold(
-        //             0.0,
-        //             |acc, (a, s)| {
-        //                 acc + (a.as_f64() * vfhe.ql() / vfhe.qr()).floor()
-        //                     * if s.is_zero() {
-        //                         0.0
-        //                     } else if s.is_one() {
-        //                         1.0
-        //                     } else if *s == r_neg_one {
-        //                         -1.0
-        //                     } else {
-        //                         panic!()
-        //                     }
-        //             },
-        //         );
-        //     dbg!(left);
-        //     dbg!(righ);
-        //     dbg!((left - righ).abs());
-        // }
-
         let nand_round = nand.modulus_switch_round(vfhe.ql(), vfhe.qr());
 
         let m_3 = vfhe.decrypt(&nand_round);
-        // dbg!(m_3);
 
         let v_3 = vfhe.decode(m_3);
         assert_eq!(v_3, nand_u32(v0, v1));
@@ -161,7 +58,6 @@ fn main() {
         let nand_floor = nand.modulus_switch_floor(vfhe.ql(), vfhe.qr());
 
         let m_3 = vfhe.decrypt(&nand_floor);
-        // dbg!(m_3);
 
         let v_3 = vfhe.decode(m_3);
         assert_eq!(v_3, nand_u32(v0, v1));
