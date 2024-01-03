@@ -59,7 +59,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable 6 months ago
-      - uses: Swatinem/rust-cache@v2
+      # - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --lib --bins --tests --examples --all-features
 
   build:
