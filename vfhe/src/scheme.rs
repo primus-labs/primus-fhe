@@ -45,7 +45,7 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         let dks = bks.decompose_len();
         let bf = F::new(bks.basis());
 
-        assert!(bf < F::new(F::modulus()));
+        assert!(bf < F::new(F::modulus_value()));
 
         let mut bkss = vec![F::zero(); dks];
         let mut temp = F::one();
@@ -333,8 +333,11 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
 
         let key_switching = extract.key_switch(&self.key_switching_key, nl);
 
-        debug_assert!(key_switching.a().iter().all(|&v| v.inner() < F::modulus()));
-        debug_assert!(key_switching.b().inner() < F::modulus());
+        debug_assert!(key_switching
+            .a()
+            .iter()
+            .all(|&v| v.inner() < F::modulus_value()));
+        debug_assert!(key_switching.b().inner() < F::modulus_value());
 
         key_switching
     }

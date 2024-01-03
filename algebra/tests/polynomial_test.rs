@@ -1,6 +1,6 @@
 use algebra::{
     derive::{Field, Prime, Random, Ring, NTT},
-    field::{BarrettConfig, Field, NTTField},
+    field::{Field, ModulusConfig, NTTField},
     polynomial::{NTTPolynomial, Polynomial},
     ring::Ring,
     Basis,
@@ -21,7 +21,7 @@ const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
 const BITS: u32 = 3;
 const B: usize = 1 << BITS; // base
-const P: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
+const P: Inner = FF::MODULUS.value(); // ciphertext space
 
 #[test]
 fn test_transform() {

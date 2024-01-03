@@ -183,9 +183,9 @@ pub(crate) fn pow_and_ops(
 
 pub(crate) fn barrett(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
-        impl algebra::field::BarrettConfig for #name {
-            type BarrettModulus = algebra::modulus::Modulus<#field_ty>;
-            const BARRETT_MODULUS: algebra::modulus::Modulus<#field_ty> = algebra::modulus::Modulus::<#field_ty>::new(#modulus);
+        impl algebra::field::ModulusConfig for #name {
+            type Modulus = algebra::modulus::Modulus<#field_ty>;
+            const MODULUS: algebra::modulus::Modulus<#field_ty> = algebra::modulus::Modulus::<#field_ty>::new(#modulus);
         }
     }
 }
@@ -278,7 +278,7 @@ pub(crate) fn mul_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn mul(self, rhs: Self) -> Self::Output {
                 use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
             }
         }
 
@@ -288,7 +288,7 @@ pub(crate) fn mul_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn mul(self, rhs: &Self) -> Self::Output {
                 use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
             }
         }
 
@@ -296,7 +296,7 @@ pub(crate) fn mul_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn mul_assign(&mut self, rhs: Self) {
                 use algebra::modulo_traits::MulModuloAssign;
-                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS)
+                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
             }
         }
 
@@ -304,7 +304,7 @@ pub(crate) fn mul_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn mul_assign(&mut self, rhs: &Self) {
                 use algebra::modulo_traits::MulModuloAssign;
-                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS)
+                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
             }
         }
     }
@@ -332,7 +332,7 @@ pub(crate) fn pow_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn pow(self, rhs: <Self as algebra::ring::Ring>::Order) -> Self::Output {
                 use algebra::modulo_traits::PowModulo;
-                Self(self.0.pow_reduce(rhs, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self(self.0.pow_reduce(rhs, &<Self as algebra::field::ModulusConfig>::MODULUS))
             }
         }
     }
@@ -346,7 +346,7 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn div(self, rhs: Self) -> Self::Output {
                 use algebra::modulo_traits::DivModulo;
-                Self(self.0.div_reduce(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self(self.0.div_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
             }
         }
 
@@ -356,7 +356,7 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn div(self, rhs: &Self) -> Self::Output {
                 use algebra::modulo_traits::DivModulo;
-                Self(self.0.div_reduce(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self(self.0.div_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
             }
         }
 
@@ -364,7 +364,7 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn div_assign(&mut self, rhs: Self) {
                 use algebra::modulo_traits::DivModuloAssign;
-                self.0.div_reduce_assign(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS)
+                self.0.div_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
             }
         }
 
@@ -372,7 +372,7 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
             #[inline]
             fn div_assign(&mut self, rhs: &Self) {
                 use algebra::modulo_traits::DivModuloAssign;
-                self.0.div_reduce_assign(rhs.0, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS)
+                self.0.div_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
             }
         }
     }

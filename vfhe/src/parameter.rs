@@ -44,7 +44,7 @@ impl<R: Ring> LWEParam<R> {
         Self {
             n,
             t,
-            q: R::modulus(),
+            q: R::modulus_value(),
             err_std_dev,
             secret_key_distribution,
             secret_key: None,
@@ -111,7 +111,7 @@ impl<R: Ring> LWEParam<R> {
         debug_assert!(value < self.t);
         R::from(
             value
-                .checked_mul(&R::modulus())
+                .checked_mul(&R::modulus_value())
                 .unwrap()
                 .rounded_div(self.t),
         )
@@ -125,7 +125,7 @@ impl<R: Ring> LWEParam<R> {
             .inner()
             .checked_mul(&self.t)
             .unwrap()
-            .rounded_div(R::modulus());
+            .rounded_div(R::modulus_value());
 
         debug_assert!(r <= self.t);
 
@@ -260,7 +260,7 @@ impl<F: NTTField> RingParam<F> {
 
         Self {
             n,
-            q: F::modulus(),
+            q: F::modulus_value(),
             bg,
             dg,
             bgs: bs,

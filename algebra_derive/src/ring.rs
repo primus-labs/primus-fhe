@@ -218,7 +218,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn modulus() -> Self::Inner {
+            fn modulus_value() -> Self::Inner {
                 #modulus
             }
 
@@ -230,7 +230,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             #[inline]
             fn decompose_len(basis: Self::Inner) -> usize {
                 debug_assert!(basis.is_power_of_two() && basis > 1);
-                algebra::div_ceil(<Self as algebra::field::BarrettConfig>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
+                algebra::div_ceil(<Self as algebra::field::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
             fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
@@ -257,7 +257,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             #[inline]
             fn mul_scalar(&self, scalar: Self::Inner) -> Self {
                 use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(scalar, &<Self as algebra::field::BarrettConfig>::BARRETT_MODULUS))
+                Self(self.0.mul_reduce(scalar, &<Self as algebra::field::ModulusConfig>::MODULUS))
             }
         }
     }
@@ -331,7 +331,7 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn modulus() -> Self::Inner {
+            fn modulus_value() -> Self::Inner {
                 #modulus
             }
 
@@ -343,7 +343,7 @@ fn impl_and_ring(
             #[inline]
             fn decompose_len(basis: Self::Inner) -> usize {
                 debug_assert!(basis.is_power_of_two() && basis > 1);
-                algebra::div_ceil(Self::modulus().trailing_zeros(), basis.trailing_zeros()) as usize
+                algebra::div_ceil(Self::modulus_value().trailing_zeros(), basis.trailing_zeros()) as usize
             }
 
             fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {

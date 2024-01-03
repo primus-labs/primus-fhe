@@ -15,17 +15,17 @@ pub use ntt_fields::NTTField;
 pub use prime_fields::{MulFactor, PrimeField};
 
 /// A helper trait to get the modulus of the ring or field.
-pub trait BarrettConfig {
+pub trait ModulusConfig {
     /// Barrett Modulus type
-    type BarrettModulus;
+    type Modulus;
 
     /// The modulus of the ring or field.
-    const BARRETT_MODULUS: Self::BarrettModulus;
+    const MODULUS: Self::Modulus;
 
     /// Get the barrett modulus of the ring or field.
     #[inline]
-    fn barrett_modulus() -> Self::BarrettModulus {
-        Self::BARRETT_MODULUS
+    fn modulus() -> Self::Modulus {
+        Self::MODULUS
     }
 }
 

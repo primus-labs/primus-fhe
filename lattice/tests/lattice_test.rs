@@ -1,5 +1,5 @@
 use algebra::derive::{Field, Prime, Random, Ring, NTT};
-use algebra::field::{BarrettConfig, Random};
+use algebra::field::{ModulusConfig, Random};
 use algebra::polynomial::Polynomial;
 use algebra::ring::Ring;
 use algebra::Basis;
@@ -25,7 +25,7 @@ const N: usize = 1 << LOG_N; // length
 const BITS: u32 = 3;
 const B: usize = 1 << BITS; // base
 
-const FP: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
+const FP: Inner = FF::MODULUS.value(); // ciphertext space
 const FT: Inner = 4; // message space
 
 #[test]

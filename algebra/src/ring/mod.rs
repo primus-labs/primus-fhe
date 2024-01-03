@@ -107,8 +107,8 @@ pub trait Ring:
     /// cast from [`f64`]
     fn from_f64(value: f64) -> Self;
 
-    /// Returns the modulus.
-    fn modulus() -> Self::Inner;
+    /// Returns the modulus value.
+    fn modulus_value() -> Self::Inner;
 
     /// Returns the order of the ring.
     fn order() -> Self::Order;

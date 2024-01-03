@@ -12,7 +12,7 @@ pub struct Fp32(u32);
 mod tests {
     use super::*;
 
-    use algebra::field::BarrettConfig;
+    use algebra::field::ModulusConfig;
     use algebra::field::PrimeField;
     use algebra::modulo_traits::*;
     use algebra::modulus::Modulus;
@@ -30,7 +30,7 @@ mod tests {
 
     #[test]
     fn test_fp() {
-        let p = FF::BARRETT_MODULUS.value();
+        let p = FF::MODULUS.value();
 
         let distr = Uniform::new(0, p);
         let mut rng = thread_rng();

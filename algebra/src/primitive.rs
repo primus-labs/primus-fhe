@@ -161,8 +161,6 @@ macro_rules! aliases {
                 $name(self, rhs)
             }
         }
-
-        pub use $name as $data;
     };
 }
 
