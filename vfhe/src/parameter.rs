@@ -326,7 +326,7 @@ impl<F: NTTField> RingParam<F> {
         self.public_key = public_key;
     }
 
-    /// Decrypts the [`RLWECiphertext<F>`] back to [`RLWEPlaintext<F>`]
+    /// Decrypts the [`RLWECiphertext<F>`] back to [`RLWEPlaintext<F>`].
     #[inline]
     pub fn decrypt(&self, ciphertext: RLWECiphertext<F>) -> RLWEPlaintext<F> {
         match self.secret_key {
@@ -343,7 +343,7 @@ impl<F: RandomNTTField> RingParam<F> {
         F::normal_distribution(0.0, self.err_std_dev).unwrap()
     }
 
-    /// Generates RLWE Secret Key[`RLWESecretKey<F>`]
+    /// Generates RLWE Secret Key[`RLWESecretKey<F>`].
     #[inline]
     pub fn generate_sk<Rng>(&self, rng: Rng) -> RLWESecretKey<F>
     where
@@ -352,7 +352,7 @@ impl<F: RandomNTTField> RingParam<F> {
         Polynomial::random(self.n, rng)
     }
 
-    /// Generates RLWE Public Key [`RLWEPublicKey<F>`]
+    /// Generates RLWE Public Key [`RLWEPublicKey<F>`].
     #[inline]
     pub fn generate_pk<Rng>(&self, s: &NTTRLWESecretKey<F>, mut rng: Rng) -> RLWEPublicKey<F>
     where
@@ -364,7 +364,7 @@ impl<F: RandomNTTField> RingParam<F> {
         <RLWEPublicKey<F>>::new(a, b)
     }
 
-    /// Encrypts [`RLWEPlaintext<F>`] into [`RLWECiphertext<F>`] by [`NTTRLWESecretKey<F>`]
+    /// Encrypts [`RLWEPlaintext<F>`] into [`RLWECiphertext<F>`] by [`NTTRLWESecretKey<F>`].
     pub fn encrypt_by_sk<Rng>(&self, plain: &RLWEPlaintext<F>, mut rng: Rng) -> RLWECiphertext<F>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -378,7 +378,7 @@ impl<F: RandomNTTField> RingParam<F> {
         RLWECiphertext::new(a, b)
     }
 
-    /// Encrypts [`RLWEPlaintext<F>`] into [`RLWECiphertext<F>`] by [`RLWEPublicKey<F>`]
+    /// Encrypts [`RLWEPlaintext<F>`] into [`RLWECiphertext<F>`] by [`RLWEPublicKey<F>`].
     pub fn encrypt_by_pk<Rng>(&self, plain: &RLWEPlaintext<F>, mut rng: Rng) -> RLWECiphertext<F>
     where
         Rng: rand::Rng + rand::CryptoRng,

@@ -32,13 +32,15 @@ impl<F: NTTField> BootstrappingKey<F> {
         nr2dq: usize,
     ) -> RLWE<F> {
         match self {
-            BootstrappingKey::TFHEBinary(bk) => bk.iter().zip(a).fold(acc, |acc, (s_i, &a_i)| {
-                // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                let median = s_i
-                    .mul_with_rlwe(&acc)
-                    .mul_with_monic_monomial_sub1(nr, nr2dq, -a_i);
-                acc.add_element_wise(&median)
-            }),
+            BootstrappingKey::TFHEBinary(bk) => {
+                bk.iter().zip(a).fold(acc, |acc, (s_i, &a_i)| {
+                    // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
+                    let median = s_i
+                        .mul_with_rlwe(&acc)
+                        .mul_with_monic_monomial_sub1(nr, nr2dq, -a_i);
+                    acc.add_element_wise(&median)
+                })
+            }
             BootstrappingKey::TFHETernary(bk) => {
                 bk.iter().zip(a).fold(acc, |acc, (s_i, &a_i)| {
                     // u = 1

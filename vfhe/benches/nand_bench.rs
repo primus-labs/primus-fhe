@@ -25,9 +25,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // generate keys
     let sk = vfhe.generate_lwe_sk(&mut rng);
     let pk = vfhe.generate_lwe_pk(&sk, &mut rng);
-    let rlwe_sk = vfhe.rlwe().generate_sk(&mut rng);
+    let rlwe_sk = vfhe.generate_rlwe_sk(&mut rng);
     let rlwe_sk_ntt = rlwe_sk.clone().to_ntt_polynomial();
-    let rlwe_pk = vfhe.rlwe().generate_pk(&rlwe_sk_ntt, &mut rng);
+    let rlwe_pk = vfhe.generate_rlwe_pk(&rlwe_sk_ntt, &mut rng);
     let ksk = vfhe.generate_key_switching_key(&rlwe_sk, &sk, &mut rng);
     let bks = vfhe.generate_bootstrapping_key(&sk, &rlwe_sk_ntt, &mut rng);
 
@@ -49,7 +49,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("nand", |b| {
         b.iter(|| {
             let nand = vfhe.nand(c0.clone(), &c1);
-            let _nand_floor: lattice::LWE<RR> = nand.modulus_switch_floor(vfhe.ql(), vfhe.qr());
+            let nand_floor: lattice::LWE<RR> = nand.modulus_switch_floor(vfhe.ql(), vfhe.qr());
+            nand_floor
         })
     });
 }

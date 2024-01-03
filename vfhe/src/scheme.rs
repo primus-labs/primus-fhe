@@ -184,7 +184,7 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
 }
 
 impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
-    /// Generates [`LWESecretKey<R>`] randomly
+    /// Generates [`LWESecretKey<R>`] randomly.
     #[inline]
     pub fn generate_lwe_sk<Rng>(&self, rng: Rng) -> LWESecretKey<R>
     where
@@ -193,7 +193,7 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
         self.lwe.generate_sk(rng)
     }
 
-    /// Generates [`LWEPublicKey<R>`] randomly
+    /// Generates [`LWEPublicKey<R>`] randomly.
     #[inline]
     pub fn generate_lwe_pk<Rng>(&self, sk: &LWESecretKey<R>, rng: Rng) -> LWEPublicKey<R>
     where
@@ -202,7 +202,7 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
         self.lwe.generate_pk(sk, rng)
     }
 
-    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWEPublicKey<R>`]
+    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWEPublicKey<R>`].
     #[inline]
     pub fn encrypt_by_pk<Rng>(&self, plain: LWEPlaintext<R>, rng: Rng) -> LWECiphertext<R>
     where
@@ -211,7 +211,7 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
         self.lwe.encrypt_by_pk(plain, rng)
     }
 
-    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWESecretKey<R>`]
+    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWESecretKey<R>`].
     #[inline]
     pub fn encrypt_by_sk<Rng>(&self, plain: LWEPlaintext<R>, rng: Rng) -> LWECiphertext<R>
     where
@@ -222,7 +222,29 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
 }
 
 impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
-    /// generate bootstrapping key
+    /// Generates RLWE Secret Key[`RLWESecretKey<F>`].
+    #[inline]
+    pub fn generate_rlwe_sk<Rng>(&self, rng: Rng) -> RLWESecretKey<F>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        self.rlwe.generate_sk(rng)
+    }
+
+    /// Generates RLWE Public Key [`RLWEPublicKey<F>`].
+    #[inline]
+    pub fn generate_rlwe_pk<Rng>(
+        &self,
+        sk: &NTTRLWESecretKey<F>,
+        rng: Rng,
+    ) -> crate::RLWEPublicKey<F>
+    where
+        Rng: rand::Rng + rand::CryptoRng,
+    {
+        self.rlwe.generate_pk(sk, rng)
+    }
+
+    /// Generates bootstrapping key.
     pub fn generate_bootstrapping_key<Rng>(
         &self,
         lwe_sk: &LWESecretKey<R>,
@@ -268,7 +290,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
         }
     }
 
-    /// generate key_switching key
+    /// Generates key switching key.
     pub fn generate_key_switching_key<Rng>(
         &self,
         rlwe_sk: &RLWESecretKey<F>,
@@ -320,7 +342,7 @@ impl<R: Ring, F: RandomNTTField> Vfhe<R, F> {
             .collect()
     }
 
-    /// Perform nand operation
+    /// Performs nand operation.
     pub fn nand(&self, c0: LWECiphertext<R>, c1: &LWECiphertext<R>) -> LWECiphertext<F> {
         let add = c0.add_component_wise(c1);
 
