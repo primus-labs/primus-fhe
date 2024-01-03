@@ -8,13 +8,14 @@ mod error;
 pub mod derive;
 
 mod basis;
-pub mod field;
-pub mod modulo_traits;
+mod field;
 pub mod modulus;
-pub mod ring;
+mod random;
+pub mod reduce;
+mod ring;
 pub mod utils;
 
-pub mod polynomial;
+mod polynomial;
 pub mod transformation;
 
 mod primitive;
@@ -22,5 +23,11 @@ mod primitive;
 pub use error::AlgebraError;
 
 pub use basis::Basis;
+pub use field::{Field, MulFactor, NTTField, PrimeField, RandomNTTField};
+pub use random::Random;
+pub use reduce::ModulusConfig;
+pub use ring::{RandomRing, Ring};
+
+pub use polynomial::{NTTPolynomial, Polynomial};
 
 pub use primitive::{div_ceil, Bits, RoundedDiv, Widening};

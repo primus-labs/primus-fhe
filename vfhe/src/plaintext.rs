@@ -1,5 +1,5 @@
-/// LWE Plaintext type
+/// LWE Plain text
 pub type LWEPlaintext<R> = R;
 
-/// RLWE Plaintext type
-pub type RLWEPlaintext<F> = algebra::polynomial::Polynomial<F>;
+/// RLWE Plain text
+pub type RLWEPlaintext<F> = algebra::Polynomial<F>;

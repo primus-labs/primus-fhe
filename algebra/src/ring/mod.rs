@@ -5,8 +5,7 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{One, Pow, PrimInt, Zero};
 
-use crate::field::Random;
-use crate::{Basis, RoundedDiv};
+use crate::{Basis, Random, RoundedDiv};
 
 /// A trait defining the algebraic structure of a mathematical ring.
 ///

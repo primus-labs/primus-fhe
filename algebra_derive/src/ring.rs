@@ -157,7 +157,7 @@ fn impl_ring_with_ops(input: Input) -> Result<TokenStream> {
 
 fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
-        impl algebra::ring::Ring for #name {
+        impl algebra::Ring for #name {
             type Inner = #field_ty;
 
             type Order = #field_ty;
@@ -230,7 +230,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             #[inline]
             fn decompose_len(basis: Self::Inner) -> usize {
                 debug_assert!(basis.is_power_of_two() && basis > 1);
-                algebra::div_ceil(<Self as algebra::field::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
+                algebra::div_ceil(<Self as algebra::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
             fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
@@ -256,8 +256,8 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
 
             #[inline]
             fn mul_scalar(&self, scalar: Self::Inner) -> Self {
-                use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(scalar, &<Self as algebra::field::ModulusConfig>::MODULUS))
+                use algebra::reduce::MulReduce;
+                Self(self.0.mul_reduce(scalar, &<Self as algebra::ModulusConfig>::MODULUS))
             }
         }
     }
@@ -270,7 +270,7 @@ fn impl_and_ring(
     mask: &TokenStream,
 ) -> TokenStream {
     quote! {
-        impl algebra::ring::Ring for #name {
+        impl algebra::Ring for #name {
             type Inner = #field_ty;
 
             type Order = #field_ty;

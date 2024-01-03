@@ -1,4 +1,4 @@
-use algebra::{field::NTTField, polynomial::Polynomial, ring::Ring};
+use algebra::{NTTField, Polynomial, Ring};
 
 use crate::{NTTGadgetRLWE, RLWE};
 
@@ -86,7 +86,7 @@ impl<R: Ring> LWE<R> {
     /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
     #[inline]
     pub fn add_inplace_component_wise(&mut self, rhs: &Self) {
-        assert_eq!(self.a().len(), rhs.a().len());
+        debug_assert_eq!(self.a().len(), rhs.a().len());
         self.a_mut()
             .iter_mut()
             .zip(rhs.a())
@@ -98,7 +98,7 @@ impl<R: Ring> LWE<R> {
     /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
     #[inline]
     pub fn sub_inplace_component_wise(&mut self, rhs: &Self) {
-        assert_eq!(self.a().len(), rhs.a().len());
+        debug_assert_eq!(self.a().len(), rhs.a().len());
         self.a_mut()
             .iter_mut()
             .zip(rhs.a())

@@ -1,10 +1,10 @@
-use algebra::{field::NTTField, polynomial::NTTPolynomial, Basis};
+use algebra::{Basis, NTTField, NTTPolynomial};
 
 use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
 /// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
 ///
-/// The `RGSW` struct holds two components, `c_m` and `c_neg_s_m`, each of type [`GadgetRLWE`]. These components are
+/// The [`RGSW`] struct holds two components, `c_m` and `c_neg_s_m`, each of type [`GadgetRLWE`]. These components are
 /// integral to the RGSW encryption scheme, which is a variant of GSW encryption that operates over polynomial
 /// rings for efficiency. This scheme is often used in lattice-based cryptography for constructing fully
 /// homomorphic encryption systems.
@@ -14,7 +14,7 @@ use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 /// These gadget representations play a crucial role in performing homomorphic operations by controlling noise
 /// growth and enabling efficient arithmetic on encrypted data.
 ///
-/// The struct is generic over a type `F` that must implement the `NTTField` trait, indicating that field
+/// The struct is generic over a type `F` that must implement the [`NTTField`] trait, indicating that field
 /// operations are compatible with Number Theoretic Transforms. This is essential for the efficient polynomial
 /// arithmetic required by the encryption scheme.
 #[derive(Debug, Clone)]
@@ -167,7 +167,21 @@ fn ntt_rgsw_mul_rlwe<F: NTTField>(
         .into()
 }
 
-/// NTT RGSW
+/// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
+///
+/// The [`NTTRGSW`] struct holds two components, `c_m` and `c_neg_s_m`, each of type [`NTTGadgetRLWE`]. These components are
+/// integral to the RGSW encryption scheme, which is a variant of GSW encryption that operates over polynomial
+/// rings for efficiency. This scheme is often used in lattice-based cryptography for constructing fully
+/// homomorphic encryption systems.
+///
+/// The [`NTTGadgetRLWE`] structures `c_m` and `c_neg_s_m` contain encrypted data that, when used together, allow for the
+/// encrypted computation of linear and non-linear operations on ciphertexts without decrypting them.
+/// These gadget representations play a crucial role in performing homomorphic operations by controlling noise
+/// growth and enabling efficient arithmetic on encrypted data.
+///
+/// The struct is generic over a type `F` that must implement the [`NTTField`] trait, indicating that field
+/// operations are compatible with Number Theoretic Transforms. This is essential for the efficient polynomial
+/// arithmetic required by the encryption scheme.
 #[derive(Debug, Clone)]
 pub struct NTTRGSW<F: NTTField> {
     /// The first part of the NTT RGSW ciphertext, which is often used for homomorphic operations

@@ -21,6 +21,6 @@ pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::{LWEPlaintext, RLWEPlaintext};
 
 pub use publickey::{LWEPublicKey, RLWEPublicKey};
-pub use secretkey::{LWESecretKey, LWESecretKeyDistribution, RLWESecretKey};
+pub use secretkey::{LWESecretKey, LWESecretKeyDistribution, NTTRLWESecretKey, RLWESecretKey};
 
 pub use functional_bootstrapping::BootstrappingKey;

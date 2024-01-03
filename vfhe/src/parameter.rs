@@ -1,9 +1,4 @@
-use algebra::{
-    field::{NTTField, Random, RandomNTTField},
-    polynomial::Polynomial,
-    ring::{RandomRing, Ring},
-    Basis, RoundedDiv,
-};
+use algebra::{Basis, NTTField, Polynomial, Random, RandomNTTField, RandomRing, Ring, RoundedDiv};
 use lattice::{dot_product, GadgetRLWE, RGSW};
 use num_traits::{CheckedMul, Zero};
 use rand::seq::SliceRandom;
@@ -14,22 +9,22 @@ use crate::{
     LWESecretKeyDistribution, RLWECiphertext, RLWEPlaintext, RLWEPublicKey, RLWESecretKey,
 };
 
-/// lwe parameter
+/// The parameter for lwe
 #[derive(Debug, Clone)]
 pub struct LWEParam<R: Ring> {
-    /// the length of the vector a of the ciphertext
+    /// The length of the vector `a` of the [`LWECiphertext<R>`]
     n: usize,
-    /// the message space modulus
+    /// The message space modulus value
     t: R::Inner,
-    /// the cipher space modulus
+    /// The cipher space modulus value
     q: R::Inner,
-    /// the noise error's standard deviation
+    /// The noise error's standard deviation
     err_std_dev: f64,
-    /// secret key distribution
+    /// LWE Secret Key distribution
     secret_key_distribution: LWESecretKeyDistribution,
-    /// secret key
+    /// LWE Secret Key
     secret_key: Option<LWESecretKey<R>>,
-    /// public key
+    /// LWE Public Key
     public_key: LWEPublicKey<R>,
 }
 
@@ -106,7 +101,7 @@ impl<R: Ring> LWEParam<R> {
         self.public_key = public_key;
     }
 
-    /// encode
+    /// Encodes a value from message space into LWE Plaintext
     pub fn encode(&self, value: R::Inner) -> LWEPlaintext<R> {
         debug_assert!(value < self.t);
         R::from(
@@ -117,7 +112,7 @@ impl<R: Ring> LWEParam<R> {
         )
     }
 
-    /// decode
+    /// Decodes a LWE Plaintext into a value of message space
     pub fn decode(&self, plain: LWEPlaintext<R>) -> R::Inner {
         debug_assert!(plain.inner() < self.q);
 
@@ -136,7 +131,7 @@ impl<R: Ring> LWEParam<R> {
         }
     }
 
-    /// decrypt
+    /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     pub fn decrypt(&self, cipher: &LWECiphertext<R>) -> LWEPlaintext<R> {
         match self.secret_key {
             Some(ref s) => cipher.b() - dot_product(cipher.a(), s),
@@ -146,13 +141,13 @@ impl<R: Ring> LWEParam<R> {
 }
 
 impl<R: RandomRing> LWEParam<R> {
-    /// error distribution
+    /// Gets the error distribution based on the [`LWEParam<R>`].
     #[inline]
     pub fn error_distribution(&self) -> <R as Random>::NormalDistribution {
         R::normal_distribution(0.0, self.err_std_dev).unwrap()
     }
 
-    /// generate secret key
+    /// Generates [`LWESecretKey<R>`] randomly.
     pub fn generate_sk<Rng>(&self, rng: Rng) -> LWESecretKey<R>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -169,7 +164,7 @@ impl<R: RandomRing> LWEParam<R> {
         }
     }
 
-    /// generate public key
+    /// Generates [`LWEPublicKey<R>`] randomly.
     pub fn generate_pk<Rng>(&self, s: &LWESecretKey<R>, mut rng: Rng) -> LWEPublicKey<R>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -187,7 +182,7 @@ impl<R: RandomRing> LWEParam<R> {
             .collect::<Vec<LWECiphertext<R>>>()
     }
 
-    /// encrypt
+    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWEPublicKey<R>`]
     pub fn encrypt_by_pk<Rng>(&self, plain: LWEPlaintext<R>, mut rng: Rng) -> LWECiphertext<R>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -202,7 +197,7 @@ impl<R: RandomRing> LWEParam<R> {
             .fold(cipher, |acc, choice| acc.add_component_wise(choice))
     }
 
-    /// encrypt
+    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWESecretKey<R>`]
     pub fn encrypt_by_sk<Rng>(&self, plain: LWEPlaintext<R>, mut rng: Rng) -> LWECiphertext<R>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -223,23 +218,24 @@ impl<R: RandomRing> LWEParam<R> {
     }
 }
 
-/// rlwe and rgsw parameter
+/// The parameter for rlwe and rgsw
 #[derive(Debug, Clone)]
 pub struct RingParam<F: NTTField> {
-    /// the length of the vector a of the ciphertext
+    /// The length of the vector `a` of the [`RLWECiphertext`]
     n: usize,
-    /// the cipher space modulus
+    /// The cipher space modulus value, refers to **`Q`** in the paper.
     q: F::Inner,
-    /// decompose basis for `Q` used for bootstrapping accumulator
+    /// Decompose basis for `Q` used for bootstrapping accumulator
     bg: Basis<F>,
+    /// bg's powers
     bgs: Vec<F>,
     /// b ** d >= p
     dg: usize,
-    /// the noise error's standard deviation
+    /// The noise error's standard deviation
     err_std_dev: f64,
-    /// secret key
+    /// RLWE Secret Key
     secret_key: Option<(RLWESecretKey<F>, NTTRLWESecretKey<F>)>,
-    /// public key
+    /// RLWE Public Key
     public_key: RLWEPublicKey<F>,
 }
 
@@ -270,67 +266,67 @@ impl<F: NTTField> RingParam<F> {
         }
     }
 
-    /// Returns the n of this [`RingParam<F>`].
+    /// Returns the n of this [`RingParam<F>`], refers to **`N`** in the paper.
     #[inline]
     pub fn n(&self) -> usize {
         self.n
     }
 
-    /// Returns the q of this [`RingParam<F>`].
+    /// Returns the q of this [`RingParam<F>`], refers to **`Q`** in the paper.
     #[inline]
     pub fn q(&self) -> <F as Ring>::Inner {
         self.q
     }
 
-    /// Returns the bg of this [`RingParam<F>`].
+    /// Returns the gadget basis of this [`RingParam<F>`].
     #[inline]
     pub fn bg(&self) -> Basis<F> {
         self.bg
     }
 
-    /// Returns the dg of this [`RingParam<F>`].
+    /// Returns the gadget basis degree of this [`RingParam<F>`].
     #[inline]
     pub fn dg(&self) -> usize {
         self.dg
     }
 
-    /// Returns a reference to the bgs of this [`RingParam<F>`].
+    /// Returns a reference to the gadget basis powers of this [`RingParam<F>`].
     #[inline]
     pub fn bgs(&self) -> &[F] {
         self.bgs.as_ref()
     }
 
-    /// Returns the err std dev of this [`RingParam<F>`].
+    /// Returns the noise error's standard deviation of this [`RingParam<F>`].
     #[inline]
     pub fn err_std_dev(&self) -> f64 {
         self.err_std_dev
     }
 
-    /// Returns the secret key of this [`RingParam<F>`].
+    /// Returns the RLWE Secret Key of this [`RingParam<F>`].
     #[inline]
     pub fn secret_key(&self) -> Option<&(RLWESecretKey<F>, NTTRLWESecretKey<F>)> {
         self.secret_key.as_ref()
     }
 
-    /// Returns a reference to the public key of this [`RingParam<F>`].
+    /// Returns a reference to the RLWE Public Key of this [`RingParam<F>`].
     #[inline]
     pub fn public_key(&self) -> &RLWEPublicKey<F> {
         &self.public_key
     }
 
-    /// Sets the secret key of this [`RingParam<F>`].
+    /// Sets the RLWE Secret Key of this [`RingParam<F>`].
     #[inline]
     pub fn set_secret_key(&mut self, secret_key: Option<(RLWESecretKey<F>, NTTRLWESecretKey<F>)>) {
         self.secret_key = secret_key;
     }
 
-    /// Sets the public key of this [`RingParam<F>`].
+    /// Sets the RLWE Public Key of this [`RingParam<F>`].
     #[inline]
     pub fn set_public_key(&mut self, public_key: RLWEPublicKey<F>) {
         self.public_key = public_key;
     }
 
-    /// decrypt
+    /// Decrypts the [`RLWECiphertext<F>`] back to [`RLWEPlaintext<F>`]
     #[inline]
     pub fn decrypt(&self, ciphertext: RLWECiphertext<F>) -> RLWEPlaintext<F> {
         match self.secret_key {
@@ -341,13 +337,13 @@ impl<F: NTTField> RingParam<F> {
 }
 
 impl<F: RandomNTTField> RingParam<F> {
-    /// error distribution
+    /// Gets the error distribution based on the [`RingParam<F>`].
     #[inline]
     pub fn error_distribution(&self) -> <F as Random>::NormalDistribution {
         F::normal_distribution(0.0, self.err_std_dev).unwrap()
     }
 
-    /// generate secret key
+    /// Generates RLWE Secret Key[`RLWESecretKey<F>`]
     #[inline]
     pub fn generate_sk<Rng>(&self, rng: Rng) -> RLWESecretKey<F>
     where
@@ -356,7 +352,7 @@ impl<F: RandomNTTField> RingParam<F> {
         Polynomial::random(self.n, rng)
     }
 
-    /// generate public key
+    /// Generates RLWE Public Key [`RLWEPublicKey<F>`]
     #[inline]
     pub fn generate_pk<Rng>(&self, s: &NTTRLWESecretKey<F>, mut rng: Rng) -> RLWEPublicKey<F>
     where
@@ -368,7 +364,7 @@ impl<F: RandomNTTField> RingParam<F> {
         <RLWEPublicKey<F>>::new(a, b)
     }
 
-    /// encrypt by secret key
+    /// Encrypts [`RLWEPlaintext<F>`] into [`RLWECiphertext<F>`] by [`NTTRLWESecretKey<F>`]
     pub fn encrypt_by_sk<Rng>(&self, plain: &RLWEPlaintext<F>, mut rng: Rng) -> RLWECiphertext<F>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -382,7 +378,7 @@ impl<F: RandomNTTField> RingParam<F> {
         RLWECiphertext::new(a, b)
     }
 
-    /// encrypt by public key
+    /// Encrypts [`RLWEPlaintext<F>`] into [`RLWECiphertext<F>`] by [`RLWEPublicKey<F>`]
     pub fn encrypt_by_pk<Rng>(&self, plain: &RLWEPlaintext<F>, mut rng: Rng) -> RLWECiphertext<F>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -399,18 +395,18 @@ impl<F: RandomNTTField> RingParam<F> {
         RLWECiphertext::new(a, b)
     }
 
-    ///
+    /// Generates many RLWE Ciphertext which are encryptions of 0 by [`NTTRLWESecretKey<F>`].
     pub fn fresh_zeros_by_sk<Rng>(
         &self,
         mut rng: Rng,
         sk: &NTTRLWESecretKey<F>,
-        len: usize,
+        num: usize,
     ) -> Vec<RLWECiphertext<F>>
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
         let chi = self.error_distribution();
-        (0..len)
+        (0..num)
             .map(|_| {
                 let a = <Polynomial<F>>::random(self.n, &mut rng);
                 let b = <Polynomial<F>>::random_with_dis(self.n, &mut rng, chi) + &a * sk;
@@ -419,7 +415,7 @@ impl<F: RandomNTTField> RingParam<F> {
             .collect()
     }
 
-    /// Get `RGSW(0)`
+    /// Generates `RGSW(0)` by [`NTTRLWESecretKey<F>`].
     pub fn rgsw_zero_by_sk<Rng>(&self, mut rng: Rng, sk: &NTTRLWESecretKey<F>) -> RGSW<F>
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -432,7 +428,7 @@ impl<F: RandomNTTField> RingParam<F> {
         )
     }
 
-    /// Set `RGSW(0)` to `RGSW(1)`
+    /// Sets `RGSW(0)` to `RGSW(1)`
     pub fn rgsw_zero_to_one(&self, rgsw: &mut RGSW<F>) {
         rgsw.c_m_mut()
             .iter_mut()

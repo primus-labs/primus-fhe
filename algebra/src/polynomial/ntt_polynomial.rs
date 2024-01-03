@@ -4,8 +4,9 @@ use std::slice::{Iter, IterMut, SliceIndex};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::field::{Field, NTTField, Random};
+use crate::field::{Field, NTTField};
 use crate::transformation::AbstractNTT;
+use crate::Random;
 
 use super::Polynomial;
 
@@ -242,7 +243,7 @@ impl<F: Field> IntoIterator for NTTPolynomial<F> {
 impl<F: Field> AddAssign<&Self> for NTTPolynomial<F> {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l += r);
     }
 }
@@ -289,7 +290,7 @@ impl<F: Field> Add<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 
     #[inline]
     fn add(self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
         <NTTPolynomial<F>>::new(poly)
     }
@@ -304,7 +305,7 @@ impl<F: Field> SubAssign for NTTPolynomial<F> {
 impl<F: Field> SubAssign<&Self> for NTTPolynomial<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l -= r);
     }
 }
@@ -334,7 +335,7 @@ impl<F: Field> Sub<NTTPolynomial<F>> for &NTTPolynomial<F> {
 
     #[inline]
     fn sub(self, mut rhs: NTTPolynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         rhs.iter_mut()
             .zip(self.iter())
             .for_each(|(r, &l)| *r = l - *r);
@@ -348,7 +349,7 @@ impl<F: Field> Sub<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 
     #[inline]
     fn sub(self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
         <NTTPolynomial<F>>::new(poly)
     }
@@ -389,7 +390,7 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 
     #[inline]
     fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         let data = self.iter().zip(rhs.iter()).map(|(&l, &r)| l * r).collect();
         <NTTPolynomial<F>>::new(data)
     }
@@ -398,7 +399,7 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 impl<F: Field> MulAssign<&Self> for NTTPolynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l *= r);
     }
 }
@@ -432,8 +433,8 @@ impl<F: NTTField> Mul<Polynomial<F>> for &NTTPolynomial<F> {
     type Output = NTTPolynomial<F>;
 
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-        assert_eq!(self.coeff_count(), rhs.coeff_count());
-        assert!(self.coeff_count().is_power_of_two());
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert!(self.coeff_count().is_power_of_two());
 
         let log_n = self.coeff_count().trailing_zeros();
         let ntt_table = F::get_ntt_table(log_n).unwrap();

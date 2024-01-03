@@ -1,9 +1,6 @@
 use algebra::{
     derive::{Field, Prime, Random, Ring, NTT},
-    field::{Field, ModulusConfig, NTTField},
-    polynomial::{NTTPolynomial, Polynomial},
-    ring::Ring,
-    Basis,
+    Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial, Ring,
 };
 use num_traits::{One, Zero};
 use rand::thread_rng;

@@ -1,21 +1,17 @@
-use algebra::{
-    field::NTTField,
-    polynomial::{NTTPolynomial, Polynomial},
-    Basis,
-};
+use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
 
 use crate::{NTTRLWE, RLWE};
 
 /// A representation of Ring Learning with Errors (RLWE) ciphertexts with respect to different powers
 /// of a base, used to control noise growth in polynomial multiplications.
 ///
-/// [`GadgetRLWE`] stores a sequence of `RLWE` ciphertexts where each [`RLWE<F>`] instance within
+/// [`GadgetRLWE`] stores a sequence of [`RLWE`] ciphertexts where each [`RLWE<F>`] instance within
 /// the `data` vector represents a ciphertext of a scaled version of a message `m` by successive
 /// powers of the `basis`. The first element of `data` is the ciphertext of `m`, the second is `basis * m`,
 /// the third is `basis^2 * m`, and so on. This is particularly useful in cryptographic operations
 /// where reducing the noise growth during the multiplication of RLWE ciphertexts with polynomials is crucial.
 ///
-/// The struct is generic over a type `F` that must implement the `NTTField` trait, which ensures that
+/// The struct is generic over a type `F` that must implement the [`NTTField`] trait, which ensures that
 /// the field operations are compatible with Number Theoretic Transforms, a key requirement for
 /// efficient polynomial operations in RLWE-based cryptography.
 #[derive(Debug, Clone)]
@@ -85,7 +81,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// return a [`RLWE<F>`].
     #[inline]
     pub fn mul_with_decomposed_polynomial(&self, decomposed: &[Polynomial<F>]) -> RLWE<F> {
-        assert_eq!(self.data().len(), decomposed.len());
+        debug_assert_eq!(self.data().len(), decomposed.len());
 
         let coeff_count = decomposed[0].coeff_count();
 
@@ -106,7 +102,18 @@ impl<F: NTTField> GadgetRLWE<F> {
     }
 }
 
-/// ntt gadget rlwe
+/// A representation of Ring Learning with Errors (RLWE) ciphertexts with respect to different powers
+/// of a base, used to control noise growth in polynomial multiplications.
+///
+/// [`NTTGadgetRLWE`] stores a sequence of [`NTTRLWE`] ciphertexts where each [`NTTRLWE<F>`] instance within
+/// the `data` vector represents a ciphertext of a scaled version of a message `m` by successive
+/// powers of the `basis`. The first element of `data` is the ciphertext of `m`, the second is `basis * m`,
+/// the third is `basis^2 * m`, and so on. This is particularly useful in cryptographic operations
+/// where reducing the noise growth during the multiplication of RLWE ciphertexts with polynomials is crucial.
+///
+/// The struct is generic over a type `F` that must implement the [`NTTField`] trait, which ensures that
+/// the field operations are compatible with Number Theoretic Transforms, a key requirement for
+/// efficient polynomial operations in RLWE-based cryptography.
 #[derive(Debug, Clone)]
 pub struct NTTGadgetRLWE<F: NTTField> {
     /// A vector of NTT RLWE ciphertexts, each encrypted message with a different power of the `basis`.
@@ -172,7 +179,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     /// return a [`RLWE<F>`].
     #[inline]
     pub fn mul_with_decomposed_polynomial(&self, decomposed: &[Polynomial<F>]) -> RLWE<F> {
-        assert_eq!(self.data().len(), decomposed.len());
+        debug_assert_eq!(self.data().len(), decomposed.len());
 
         let coeff_count = decomposed[0].coeff_count();
 

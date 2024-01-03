@@ -1,19 +1,17 @@
-/// the distribution type of the secret key
+/// The distribution type of the LWE Secret key
 #[derive(Debug, Clone, Copy)]
 pub enum LWESecretKeyDistribution {
     /// Binary SecretKey Distribution
     Binary,
     /// Ternary SecretKey Distribution
     Ternary,
-    // /// Gaussian SecretKey Distribution
-    // Gaussian,
 }
 
-/// lwe secret key
+/// LWE Secret key
 pub type LWESecretKey<R> = Vec<R>;
 
-/// rlwe secret key
-pub type RLWESecretKey<F> = algebra::polynomial::Polynomial<F>;
+/// RLWE Secret key
+pub type RLWESecretKey<F> = algebra::Polynomial<F>;
 
-/// rlwe secret key
-pub type NTTRLWESecretKey<F> = algebra::polynomial::NTTPolynomial<F>;
+/// NTT version RLWE Secret key
+pub type NTTRLWESecretKey<F> = algebra::NTTPolynomial<F>;

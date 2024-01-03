@@ -1,16 +1,14 @@
-use algebra::field::NTTField;
-use algebra::polynomial::{NTTPolynomial, Polynomial};
-use algebra::ring::Ring;
+use algebra::{NTTField, NTTPolynomial, Polynomial, Ring};
 
 use crate::LWE;
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly
-/// those that require efficient homomorphic encryption properties. It consists of two polynomials
+/// those that require efficient homomorphic encryption properties. It consists of two [`Polynomial<F>`]
 /// `a` and `b` over a finite field that supports Number Theoretic Transforms (NTT), which is
 /// often necessary for efficient polynomial multiplication.
 ///
-/// The `RLWE` struct is generic over a type `F` which is bounded by the `NTTField` trait, ensuring
+/// The [`RLWE`] struct is generic over a type `F` which is bounded by the `NTTField` trait, ensuring
 /// that the operations of addition, subtraction, and multiplication are performed in a field suitable
 /// for NTT. This is crucial for the security and correctness of cryptographic operations based on RLWE.
 ///
@@ -265,7 +263,18 @@ impl<F: NTTField> RLWE<F> {
     }
 }
 
-/// ntt rlwe
+/// A cryptographic structure for Ring Learning with Errors (RLWE).
+/// This structure is used in advanced cryptographic systems and protocols, particularly
+/// those that require efficient homomorphic encryption properties. It consists of two [`NTTPolynomial<F>`]
+/// `a` and `b` over a finite field that supports Number Theoretic Transforms (NTT), which is
+/// often necessary for efficient polynomial multiplication.
+///
+/// The [`NTTRLWE`] struct is generic over a type `F` which is bounded by the `NTTField` trait, ensuring
+/// that the operations of addition, subtraction, and multiplication are performed in a field suitable
+/// for NTT. This is crucial for the security and correctness of cryptographic operations based on RLWE.
+///
+/// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
+/// accessible through public API functions that enforce any necessary invariants.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NTTRLWE<F: NTTField> {
     /// Represents the first component in the RLWE structure.

@@ -142,11 +142,11 @@ pub(crate) fn pow_and_ops(
     mask: &TokenStream,
 ) -> TokenStream {
     quote! {
-        impl num_traits::Pow<<Self as algebra::ring::Ring>::Order> for #name {
+        impl num_traits::Pow<<Self as algebra::Ring>::Order> for #name {
             type Output = Self;
 
             #[inline]
-            fn pow(self, mut exp: <Self as algebra::ring::Ring>::Order) -> Self::Output {
+            fn pow(self, mut exp: <Self as algebra::Ring>::Order) -> Self::Output {
                 if exp == 0 {
                     return Self(1);
                 }
@@ -183,7 +183,7 @@ pub(crate) fn pow_and_ops(
 
 pub(crate) fn barrett(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
-        impl algebra::field::ModulusConfig for #name {
+        impl algebra::ModulusConfig for #name {
             type Modulus = algebra::modulus::Modulus<#field_ty>;
             const MODULUS: algebra::modulus::Modulus<#field_ty> = algebra::modulus::Modulus::<#field_ty>::new(#modulus);
         }
@@ -197,7 +197,7 @@ pub(crate) fn add_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
 
             #[inline]
             fn add(self, rhs: Self) -> Self::Output {
-                use algebra::modulo_traits::AddModulo;
+                use algebra::reduce::AddReduce;
                 Self(self.0.add_reduce(rhs.0, #modulus))
             }
         }
@@ -207,7 +207,7 @@ pub(crate) fn add_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
 
             #[inline]
             fn add(self, rhs: &Self) -> Self::Output {
-                use algebra::modulo_traits::AddModulo;
+                use algebra::reduce::AddReduce;
                 Self(self.0.add_reduce(rhs.0, #modulus))
             }
         }
@@ -215,7 +215,7 @@ pub(crate) fn add_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
         impl ::std::ops::AddAssign<Self> for #name {
             #[inline]
             fn add_assign(&mut self, rhs: Self) {
-                use algebra::modulo_traits::AddModuloAssign;
+                use algebra::reduce::AddReduceAssign;
                 self.0.add_reduce_assign(rhs.0, #modulus)
             }
         }
@@ -223,7 +223,7 @@ pub(crate) fn add_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
         impl ::std::ops::AddAssign<&Self> for #name {
             #[inline]
             fn add_assign(&mut self, rhs: &Self) {
-                use algebra::modulo_traits::AddModuloAssign;
+                use algebra::reduce::AddReduceAssign;
                 self.0.add_reduce_assign(rhs.0, #modulus)
             }
         }
@@ -237,7 +237,7 @@ pub(crate) fn sub_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
 
             #[inline]
             fn sub(self, rhs: Self) -> Self::Output {
-                use algebra::modulo_traits::SubModulo;
+                use algebra::reduce::SubReduce;
                 Self(self.0.sub_reduce(rhs.0, #modulus))
             }
         }
@@ -247,7 +247,7 @@ pub(crate) fn sub_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
 
             #[inline]
             fn sub(self, rhs: &Self) -> Self::Output {
-                use algebra::modulo_traits::SubModulo;
+                use algebra::reduce::SubReduce;
                 Self(self.0.sub_reduce(rhs.0, #modulus))
             }
         }
@@ -255,7 +255,7 @@ pub(crate) fn sub_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
         impl ::std::ops::SubAssign<Self> for #name {
             #[inline]
             fn sub_assign(&mut self, rhs: Self) {
-                use algebra::modulo_traits::SubModuloAssign;
+                use algebra::reduce::SubReduceAssign;
                 self.0.sub_reduce_assign(rhs.0, #modulus)
             }
         }
@@ -263,7 +263,7 @@ pub(crate) fn sub_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
         impl ::std::ops::SubAssign<&Self> for #name {
             #[inline]
             fn sub_assign(&mut self, rhs: &Self) {
-                use algebra::modulo_traits::SubModuloAssign;
+                use algebra::reduce::SubReduceAssign;
                 self.0.sub_reduce_assign(rhs.0, #modulus)
             }
         }
@@ -277,8 +277,8 @@ pub(crate) fn mul_reduce_ops(name: &Ident) -> TokenStream {
 
             #[inline]
             fn mul(self, rhs: Self) -> Self::Output {
-                use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
+                use algebra::reduce::MulReduce;
+                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS))
             }
         }
 
@@ -287,24 +287,24 @@ pub(crate) fn mul_reduce_ops(name: &Ident) -> TokenStream {
 
             #[inline]
             fn mul(self, rhs: &Self) -> Self::Output {
-                use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
+                use algebra::reduce::MulReduce;
+                Self(self.0.mul_reduce(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS))
             }
         }
 
         impl ::std::ops::MulAssign<Self> for #name {
             #[inline]
             fn mul_assign(&mut self, rhs: Self) {
-                use algebra::modulo_traits::MulModuloAssign;
-                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
+                use algebra::reduce::MulReduceAssign;
+                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS)
             }
         }
 
         impl ::std::ops::MulAssign<&Self> for #name {
             #[inline]
             fn mul_assign(&mut self, rhs: &Self) {
-                use algebra::modulo_traits::MulModuloAssign;
-                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
+                use algebra::reduce::MulReduceAssign;
+                self.0.mul_reduce_assign(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS)
             }
         }
     }
@@ -317,7 +317,7 @@ pub(crate) fn neg_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
 
             #[inline]
             fn neg(self) -> Self::Output {
-                use algebra::modulo_traits::NegModulo;
+                use algebra::reduce::NegReduce;
                 Self(self.0.neg_reduce(#modulus))
             }
         }
@@ -326,13 +326,13 @@ pub(crate) fn neg_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
 
 pub(crate) fn pow_reduce_ops(name: &Ident) -> TokenStream {
     quote! {
-        impl num_traits::Pow<<Self as algebra::ring::Ring>::Order> for #name {
+        impl num_traits::Pow<<Self as algebra::Ring>::Order> for #name {
             type Output = Self;
 
             #[inline]
-            fn pow(self, rhs: <Self as algebra::ring::Ring>::Order) -> Self::Output {
-                use algebra::modulo_traits::PowModulo;
-                Self(self.0.pow_reduce(rhs, &<Self as algebra::field::ModulusConfig>::MODULUS))
+            fn pow(self, rhs: <Self as algebra::Ring>::Order) -> Self::Output {
+                use algebra::reduce::PowReduce;
+                Self(self.0.pow_reduce(rhs, &<Self as algebra::ModulusConfig>::MODULUS))
             }
         }
     }
@@ -345,8 +345,8 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
 
             #[inline]
             fn div(self, rhs: Self) -> Self::Output {
-                use algebra::modulo_traits::DivModulo;
-                Self(self.0.div_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
+                use algebra::reduce::DivReduce;
+                Self(self.0.div_reduce(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS))
             }
         }
 
@@ -355,24 +355,24 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
 
             #[inline]
             fn div(self, rhs: &Self) -> Self::Output {
-                use algebra::modulo_traits::DivModulo;
-                Self(self.0.div_reduce(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS))
+                use algebra::reduce::DivReduce;
+                Self(self.0.div_reduce(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS))
             }
         }
 
         impl ::std::ops::DivAssign<Self> for #name {
             #[inline]
             fn div_assign(&mut self, rhs: Self) {
-                use algebra::modulo_traits::DivModuloAssign;
-                self.0.div_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
+                use algebra::reduce::DivReduceAssign;
+                self.0.div_reduce_assign(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS)
             }
         }
 
         impl ::std::ops::DivAssign<&Self> for #name {
             #[inline]
             fn div_assign(&mut self, rhs: &Self) {
-                use algebra::modulo_traits::DivModuloAssign;
-                self.0.div_reduce_assign(rhs.0, &<Self as algebra::field::ModulusConfig>::MODULUS)
+                use algebra::reduce::DivReduceAssign;
+                self.0.div_reduce_assign(rhs.0, &<Self as algebra::ModulusConfig>::MODULUS)
             }
         }
     }
@@ -385,7 +385,7 @@ pub(crate) fn inv_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
 
             #[inline]
             fn inv(self) -> Self::Output {
-                use algebra::modulo_traits::InvModulo;
+                use algebra::reduce::InvReduce;
                 Self(self.0.inv_reduce(#modulus))
             }
         }

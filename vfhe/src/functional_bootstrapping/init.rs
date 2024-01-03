@@ -1,4 +1,4 @@
-use algebra::{field::NTTField, polynomial::Polynomial, ring::Ring};
+use algebra::{NTTField, Polynomial, Ring};
 use lattice::RLWE;
 
 pub fn nand_acc<R, F>(mut b: R, nr: usize, nr2dql: usize) -> RLWE<F>

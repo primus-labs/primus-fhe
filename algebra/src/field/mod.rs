@@ -4,30 +4,13 @@ use std::ops::{Div, DivAssign};
 
 use num_traits::Inv;
 
-use crate::ring::Ring;
+use crate::{Random, Ring};
 
-mod distribution;
 mod ntt_fields;
 mod prime_fields;
 
-pub use distribution::Random;
 pub use ntt_fields::NTTField;
 pub use prime_fields::{MulFactor, PrimeField};
-
-/// A helper trait to get the modulus of the ring or field.
-pub trait ModulusConfig {
-    /// Barrett Modulus type
-    type Modulus;
-
-    /// The modulus of the ring or field.
-    const MODULUS: Self::Modulus;
-
-    /// Get the barrett modulus of the ring or field.
-    #[inline]
-    fn modulus() -> Self::Modulus {
-        Self::MODULUS
-    }
-}
 
 /// A trait that extends the algebraic structure of a `Ring` to a `Field`.
 ///

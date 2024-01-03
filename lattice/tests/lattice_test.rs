@@ -1,8 +1,5 @@
 use algebra::derive::{Field, Prime, Random, Ring, NTT};
-use algebra::field::{ModulusConfig, Random};
-use algebra::polynomial::Polynomial;
-use algebra::ring::Ring;
-use algebra::Basis;
+use algebra::{Basis, ModulusConfig, Polynomial, Random, Ring};
 use lattice::*;
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};

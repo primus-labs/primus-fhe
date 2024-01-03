@@ -1,22 +1,20 @@
 use algebra::derive::{Random, Ring};
-use algebra::field::Random;
-use algebra::ring::Ring;
+use algebra::{Random, Ring};
 use num_traits::{One, Pow, Zero};
 use rand::{prelude::*, thread_rng};
 use rand_distr::Standard;
 
 // algebra's derive macro can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 
-// Derive macro `Ring` generating an impl of the trait `algebra::ring::Ring`.
+// Derive macro `Ring` generates an impl of the trait `algebra::Ring`.
 //
-// This also generating some compitation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
+// This also generates some compitation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
 //
-// By the way, it also generating impl of the trait `Zero`, `One`, `Display`.
+// By the way, it also generates impl of the trait `Zero`, `One`, `Display`.
 //
-// But it will note generating impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
-// You need to make it by yourself.
+// And it will generate impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 
-// Derive macro `Random` generating an impl of the trait `algebra::field::Random`.
+// Derive macro `Random` generats an impl of the trait `algebra::Random`.
 //
 // Then you can use `rand` crate to generate it randomly.
 //

@@ -2,14 +2,14 @@ use std::ops::{Add, AddAssign, ShrAssign, Sub, SubAssign};
 
 use num_traits::{One, PrimInt};
 
-use crate::modulo_traits::{
-    AddModulo, AddModuloAssign, DivModulo, DivModuloAssign, InvModulo, InvModuloAssign, Modulo,
-    MulModulo, MulModuloAssign, NegModulo, NegModuloAssign, PowModulo, SubModulo, SubModuloAssign,
-};
 use crate::modulus::Modulus;
+use crate::reduce::{
+    AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, InvReduceAssign, MulReduce,
+    MulReduceAssign, NegReduce, NegReduceAssign, PowReduce, Reduce, SubReduce, SubReduceAssign,
+};
 use crate::{Bits, Widening};
 
-impl<T> AddModulo<&Modulus<T>> for T
+impl<T> AddReduce<&Modulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
@@ -26,7 +26,7 @@ where
     }
 }
 
-impl<T> AddModuloAssign<&Modulus<T>> for T
+impl<T> AddReduceAssign<&Modulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
@@ -41,7 +41,7 @@ where
     }
 }
 
-impl<T> SubModulo<&Modulus<T>> for T
+impl<T> SubReduce<&Modulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
@@ -57,7 +57,7 @@ where
     }
 }
 
-impl<T> SubModuloAssign<&Modulus<T>> for T
+impl<T> SubReduceAssign<&Modulus<T>> for T
 where
     T: Copy + AddAssign + SubAssign + Sub<Output = Self> + PartialOrd,
 {
@@ -71,7 +71,7 @@ where
     }
 }
 
-impl<T> NegModulo<&Modulus<T>> for T
+impl<T> NegReduce<&Modulus<T>> for T
 where
     T: Copy + Sub<Output = Self>,
 {
@@ -83,7 +83,7 @@ where
     }
 }
 
-impl<T> NegModuloAssign<&Modulus<T>> for T
+impl<T> NegReduceAssign<&Modulus<T>> for T
 where
     T: Copy + Sub<Output = Self>,
 {
@@ -93,10 +93,10 @@ where
     }
 }
 
-impl<T> MulModulo<&Modulus<T>> for T
+impl<T> MulReduce<&Modulus<T>> for T
 where
     T: Widening,
-    (T, T): for<'m> Modulo<&'m Modulus<T>, Output = T>,
+    (T, T): for<'m> Reduce<&'m Modulus<T>, Output = T>,
 {
     type Output = Self;
 
@@ -106,10 +106,10 @@ where
     }
 }
 
-impl<T> MulModuloAssign<&Modulus<T>> for T
+impl<T> MulReduceAssign<&Modulus<T>> for T
 where
     T: Copy + Widening,
-    (T, T): for<'m> Modulo<&'m Modulus<T>, Output = T>,
+    (T, T): for<'m> Reduce<&'m Modulus<T>, Output = T>,
 {
     #[inline]
     fn mul_reduce_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {
@@ -117,9 +117,9 @@ where
     }
 }
 
-impl<T, E> PowModulo<&Modulus<T>, E> for T
+impl<T, E> PowReduce<&Modulus<T>, E> for T
 where
-    T: Copy + One + PartialOrd + for<'m> MulModulo<&'m Modulus<T>, Output = T>,
+    T: Copy + One + PartialOrd + for<'m> MulReduce<&'m Modulus<T>, Output = T>,
     E: PrimInt + ShrAssign<u32> + Bits,
 {
     fn pow_reduce(self, mut exp: E, modulus: &Modulus<T>) -> Self {
@@ -155,9 +155,9 @@ where
     }
 }
 
-impl<T> InvModulo<&Modulus<T>> for T
+impl<T> InvReduce<&Modulus<T>> for T
 where
-    T: Copy + InvModulo<T>,
+    T: Copy + InvReduce<T>,
 {
     #[inline]
     fn inv_reduce(self, modulus: &Modulus<T>) -> Self {
@@ -165,9 +165,9 @@ where
     }
 }
 
-impl<T> InvModuloAssign<&Modulus<T>> for T
+impl<T> InvReduceAssign<&Modulus<T>> for T
 where
-    T: Copy + InvModulo<T>,
+    T: Copy + InvReduce<T>,
 {
     #[inline]
     fn inv_reduce_assign(&mut self, modulus: &Modulus<T>) {
@@ -175,9 +175,9 @@ where
     }
 }
 
-impl<T> DivModulo<&Modulus<T>> for T
+impl<T> DivReduce<&Modulus<T>> for T
 where
-    T: for<'m> MulModulo<&'m Modulus<T>, Output = T> + for<'m> InvModulo<&'m Modulus<T>>,
+    T: for<'m> MulReduce<&'m Modulus<T>, Output = T> + for<'m> InvReduce<&'m Modulus<T>>,
 {
     type Output = T;
 
@@ -187,9 +187,9 @@ where
     }
 }
 
-impl<T> DivModuloAssign<&Modulus<T>> for T
+impl<T> DivReduceAssign<&Modulus<T>> for T
 where
-    T: for<'m> MulModuloAssign<&'m Modulus<T>> + for<'m> InvModulo<&'m Modulus<T>>,
+    T: for<'m> MulReduceAssign<&'m Modulus<T>> + for<'m> InvReduce<&'m Modulus<T>>,
 {
     #[inline]
     fn div_reduce_assign(&mut self, rhs: Self, modulus: &Modulus<T>) {

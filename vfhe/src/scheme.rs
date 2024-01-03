@@ -1,36 +1,43 @@
-use algebra::{
-    field::{NTTField, RandomNTTField},
-    polynomial::{NTTPolynomial, Polynomial},
-    ring::{RandomRing, Ring},
-    Basis,
-};
+use algebra::{Basis, NTTField, NTTPolynomial, Polynomial, RandomNTTField, RandomRing, Ring};
 use lattice::{NTTGadgetRLWE, NTTRGSW};
 use num_traits::cast;
 
 use crate::{
-    functional_bootstrapping::nand_acc, secretkey::NTTRLWESecretKey, BootstrappingKey,
-    LWECiphertext, LWEParam, LWEPlaintext, LWEPublicKey, LWESecretKey, NTTRLWECiphertext,
-    RLWECiphertext, RLWESecretKey, RingParam,
+    functional_bootstrapping::nand_acc, BootstrappingKey, LWECiphertext, LWEParam, LWEPlaintext,
+    LWEPublicKey, LWESecretKey, NTTRLWECiphertext, NTTRLWESecretKey, RLWECiphertext, RLWESecretKey,
+    RingParam,
 };
 
-/// fhe scheme
+/// FHE scheme, which contains the parameters for the entire homomorphic encryption
 #[derive(Debug, Clone)]
 pub struct Vfhe<R: Ring, F: NTTField> {
+    /// The parameter for lwe
     lwe: LWEParam<R>,
+    /// The parameter for rlwe and rgsw
     rlwe: RingParam<F>,
+    /// Modulus value of the lwe, refers to **`q`** in the paper.
     ql: f64,
+    /// Modulus value of the rlwe and rgsw, refers to **`Q`** in the paper.
     qr: f64,
+    /// Refers to **`2N/q`** in the paper.
     nr2divql: usize,
+    /// Bootstrapping key
     bootstrapping_key: BootstrappingKey<F>,
-    /// decompose basis for `q` used for key switching
+    /// Decompose basis for `Q` used for key switching
     bks: Basis<F>,
+    /// bks' powers
     bkss: Vec<F>,
+    /// Key switching key
     key_switching_key: Vec<NTTGadgetRLWE<F>>,
 }
 
 impl<R: Ring, F: NTTField> Vfhe<R, F> {
     /// Creates a new [`Vfhe<R, F>`].
-    pub fn new(lwe_param: LWEParam<R>, rlwe_param: RingParam<F>, bks_bits: u32) -> Self {
+    pub fn new(
+        lwe_param: LWEParam<R>,
+        rlwe_param: RingParam<F>,
+        key_switching_basis_bits: u32,
+    ) -> Self {
         let nr = rlwe_param.n();
         let ql: usize = cast::<<R as Ring>::Inner, usize>(lwe_param.q()).unwrap();
 
@@ -41,11 +48,11 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         let ql = cast::<<R as Ring>::Inner, f64>(lwe_param.q()).unwrap();
         let qr = cast::<<F as Ring>::Inner, f64>(rlwe_param.q()).unwrap();
 
-        let bks = <Basis<F>>::new(bks_bits);
+        let bks = <Basis<F>>::new(key_switching_basis_bits);
         let dks = bks.decompose_len();
         let bf = F::new(bks.basis());
 
-        assert!(bf < F::new(F::modulus_value()));
+        debug_assert!(bf < F::new(F::modulus_value()));
 
         let mut bkss = vec![F::zero(); dks];
         let mut temp = F::one();
@@ -63,7 +70,6 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
             bootstrapping_key: BootstrappingKey::TFHEBinary(Vec::new()),
             bks,
             bkss,
-            // dks,
             key_switching_key: Vec::new(),
         }
     }
@@ -92,43 +98,43 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         &mut self.rlwe
     }
 
-    /// Returns the **`nr * 2 / ql`** of this [`Vfhe<R, F>`].
+    /// Returns the **`nr * 2 / ql`** of this [`Vfhe<R, F>`], refers to **`2N/q`** in the paper.
     #[inline]
     pub fn nr2divql(&self) -> usize {
         self.nr2divql
     }
 
-    /// Returns a reference to the public key of this [`Vfhe<R, F>`].
+    /// Returns a reference to the LWE public key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn public_key(&self) -> &LWEPublicKey<R> {
         self.lwe.public_key()
     }
 
-    /// Returns the secret key of this [`Vfhe<R, F>`].
+    /// Returns the LWE secret key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn secret_key(&self) -> Option<&LWESecretKey<R>> {
         self.lwe.secret_key()
     }
 
-    /// Sets the public key of this [`Vfhe<R, F>`].
+    /// Sets the LWE public key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn set_public_key(&mut self, public_key: LWEPublicKey<R>) {
         self.lwe.set_public_key(public_key)
     }
 
-    /// Sets the secret key of this [`Vfhe<R, F>`].
+    /// Sets the LWE secret key of this [`Vfhe<R, F>`].
     #[inline]
     pub fn set_secret_key(&mut self, secret_key: Option<LWESecretKey<R>>) {
         self.lwe.set_secret_key(secret_key)
     }
 
-    /// encode
+    /// Encodes a value from message space into LWE Plaintext
     #[inline]
     pub fn encode(&self, value: R::Inner) -> LWEPlaintext<R> {
         self.lwe.encode(value)
     }
 
-    /// decode
+    /// Decodes a LWE Plaintext into a value of message space
     #[inline]
     pub fn decode(&self, plain: LWEPlaintext<R>) -> R::Inner {
         self.lwe.decode(plain)
@@ -158,19 +164,19 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
         self.key_switching_key = ksk;
     }
 
-    /// Returns the ql of this [`Vfhe<R, F>`].
+    /// Returns the ql of this [`Vfhe<R, F>`],  refers to **`q`** in the paper.
     #[inline]
     pub fn ql(&self) -> f64 {
         self.ql
     }
 
-    /// Returns the qr of this [`Vfhe<R, F>`].
+    /// Returns the qr of this [`Vfhe<R, F>`], refers to **`Q`** in the paper.
     #[inline]
     pub fn qr(&self) -> f64 {
         self.qr
     }
 
-    /// decrypt
+    /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     #[inline]
     pub fn decrypt(&self, cipher: &LWECiphertext<R>) -> LWEPlaintext<R> {
         self.lwe.decrypt(cipher)
@@ -178,7 +184,7 @@ impl<R: Ring, F: NTTField> Vfhe<R, F> {
 }
 
 impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
-    /// generate secret key
+    /// Generates [`LWESecretKey<R>`] randomly
     #[inline]
     pub fn generate_lwe_sk<Rng>(&self, rng: Rng) -> LWESecretKey<R>
     where
@@ -187,7 +193,7 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
         self.lwe.generate_sk(rng)
     }
 
-    /// generate public key
+    /// Generates [`LWEPublicKey<R>`] randomly
     #[inline]
     pub fn generate_lwe_pk<Rng>(&self, sk: &LWESecretKey<R>, rng: Rng) -> LWEPublicKey<R>
     where
@@ -196,7 +202,7 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
         self.lwe.generate_pk(sk, rng)
     }
 
-    /// encrypt
+    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWEPublicKey<R>`]
     #[inline]
     pub fn encrypt_by_pk<Rng>(&self, plain: LWEPlaintext<R>, rng: Rng) -> LWECiphertext<R>
     where
@@ -205,7 +211,7 @@ impl<R: RandomRing, F: NTTField> Vfhe<R, F> {
         self.lwe.encrypt_by_pk(plain, rng)
     }
 
-    /// encrypt
+    /// Encrypts [`LWEPlaintext<R>`] into [`LWECiphertext<R>`] by [`LWESecretKey<R>`]
     #[inline]
     pub fn encrypt_by_sk<Rng>(&self, plain: LWEPlaintext<R>, rng: Rng) -> LWECiphertext<R>
     where

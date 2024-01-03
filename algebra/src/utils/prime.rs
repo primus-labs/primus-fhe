@@ -1,7 +1,7 @@
 use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, thread_rng, SeedableRng};
 
-use crate::modulo_traits::{Modulo, PowModulo};
 use crate::modulus::Modulus;
+use crate::reduce::{PowReduce, Reduce};
 use crate::Widening;
 
 /// The trait defines some function for prime number

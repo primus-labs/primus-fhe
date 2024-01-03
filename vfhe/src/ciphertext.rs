@@ -1,8 +1,8 @@
-/// cipher text
+/// LWE Cipher text
 pub type LWECiphertext<R> = lattice::LWE<R>;
 
-/// cipher text
+/// RLWE Cipher text
 pub type RLWECiphertext<F> = lattice::RLWE<F>;
 
-/// cipher text
+/// NTT version RLWE Cipher text
 pub type NTTRLWECiphertext<F> = lattice::NTTRLWE<F>;

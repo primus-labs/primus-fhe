@@ -12,12 +12,12 @@ pub struct Fp32(u32);
 mod tests {
     use super::*;
 
-    use algebra::field::ModulusConfig;
-    use algebra::field::PrimeField;
-    use algebra::modulo_traits::*;
     use algebra::modulus::Modulus;
-    use algebra::ring::Ring;
+    use algebra::reduce::*;
     use algebra::Basis;
+    use algebra::ModulusConfig;
+    use algebra::PrimeField;
+    use algebra::Ring;
     use num_traits::Inv;
     use rand::distributions::Uniform;
     use rand::thread_rng;

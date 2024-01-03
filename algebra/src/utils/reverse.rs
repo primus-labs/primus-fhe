@@ -18,7 +18,7 @@ macro_rules! impl_reverse_lsbs_for_unsigned {
         $(impl ReverseLsbs for $T {
             #[inline]
             fn reverse_lsbs(self, bits: u32) -> Self {
-                assert!(bits < Self::BITS);
+                debug_assert!(bits < Self::BITS);
                 if self == 0 || bits == 0 {
                     0
                 } else {

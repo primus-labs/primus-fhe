@@ -1,6 +1,6 @@
 //! basis for decompose
 
-use crate::ring::Ring;
+use crate::Ring;
 
 /// power of two basis
 #[derive(Debug, Clone, Copy)]

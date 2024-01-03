@@ -1,4 +1,4 @@
-use algebra::ring::Ring;
+use algebra::Ring;
 
 /// dot product for two vectors
 #[inline]
