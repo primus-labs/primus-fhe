@@ -1,0 +1,212 @@
+use algebra::{Basis, NTTField, Random, RandomNTTField, RandomRing, Ring};
+
+use num_traits::cast;
+
+use crate::SecretKeyType;
+
+/// The parameters for the fully homomorphic encryption scheme.
+#[derive(Debug, Clone)]
+pub struct Parameters<R: Ring, F: NTTField> {
+    /// LWE message modulus.
+    lwe_message_modulus: R::Inner,
+    /// [`LWECiphertext<R>`] vector dimension, refers to **`n`** in the paper.
+    lwe_dimension: usize,
+    /// LWE cipher modulus, refers to **`q`** in the paper.
+    lwe_modulus: R::Inner,
+    /// The lwe noise error's standard deviation
+    lwe_noise_std_dev: f64,
+    /// LWE Secret Key distribution Type
+    secret_key_type: SecretKeyType,
+
+    /// [`RLWECiphertext<F>`] vector dimension, refers to **`N`** in the paper.
+    rlwe_dimension: usize,
+    /// RLWE cipher modulus, refers to **`Q`** in the paper.
+    rlwe_modulus: F::Inner,
+    /// The rlwe noise error's standard deviation
+    rlwe_noise_std_dev: f64,
+
+    /// LWE cipher modulus, refers to **`q`** in the paper.
+    lwe_modulus_f64: f64,
+    /// RLWE cipher modulus, refers to **`Q`** in the paper.
+    rlwe_modulus_f64: f64,
+    /// Refers to **`2N/q`** in the paper.
+    twice_rlwe_dimension_div_lwe_modulus: usize,
+
+    /// Decompose basis for `Q` used for bootstrapping accumulator
+    gadget_basis: Basis<F>,
+    /// The powers of gadget_basis
+    gadget_basis_powers: Vec<F>,
+
+    /// Decompose basis for `Q` used for key switching
+    key_switching_basis: Basis<F>,
+    /// The powers of key_switch_basis
+    key_switching_basis_powers: Vec<F>,
+}
+
+impl<R: Ring, F: NTTField> Parameters<R, F> {
+    /// Creates a new [`Parameters<R, F>`].
+    pub fn new(
+        lwe_message_modulus: R::Inner,
+        lwe_dimension: usize,
+        rlwe_dimension: usize,
+        secret_key_type: SecretKeyType,
+        gadget_basis_bits: u32,
+        key_switch_basis_bits: u32,
+        lwe_noise_std_dev: f64,
+        rlwe_noise_std_dev: f64,
+    ) -> Self {
+        let lwe_modulus = R::modulus_value();
+        let rlwe_modulus = F::modulus_value();
+
+        let gadget_basis = <Basis<F>>::new(gadget_basis_bits);
+        let bf = F::new(gadget_basis.basis());
+
+        let mut gadget_basis_powers = vec![F::zero(); gadget_basis.decompose_len()];
+        let mut temp = F::one();
+        gadget_basis_powers.iter_mut().for_each(|v| {
+            *v = temp;
+            temp *= bf;
+        });
+
+        let key_switching_basis = <Basis<F>>::new(key_switch_basis_bits);
+        let bf = F::new(key_switching_basis.basis());
+
+        let mut key_switching_basis_powers = vec![F::zero(); key_switching_basis.decompose_len()];
+        let mut temp = F::one();
+        key_switching_basis_powers.iter_mut().for_each(|v| {
+            *v = temp;
+            temp *= bf;
+        });
+
+        Self {
+            lwe_message_modulus,
+            lwe_dimension,
+            lwe_modulus,
+            lwe_noise_std_dev,
+            secret_key_type,
+
+            rlwe_dimension,
+            rlwe_modulus,
+            rlwe_noise_std_dev,
+
+            lwe_modulus_f64: cast::<<R as Ring>::Inner, f64>(lwe_modulus).unwrap(),
+            rlwe_modulus_f64: cast::<<F as Ring>::Inner, f64>(rlwe_modulus).unwrap(),
+            twice_rlwe_dimension_div_lwe_modulus: (rlwe_dimension << 1)
+                / cast::<<R as Ring>::Inner, usize>(lwe_modulus).unwrap(),
+
+            gadget_basis,
+            gadget_basis_powers,
+
+            key_switching_basis,
+            key_switching_basis_powers,
+        }
+    }
+
+    /// Returns the lwe message modulus of this [`Parameters<R, F>`], refers to **`t`** in the paper.
+    #[inline]
+    pub fn lwe_message_modulus(&self) -> <R as Ring>::Inner {
+        self.lwe_message_modulus
+    }
+
+    /// Returns the lwe dimension of this [`Parameters<R, F>`], refers to **`n`** in the paper.
+    #[inline]
+    pub fn lwe_dimension(&self) -> usize {
+        self.lwe_dimension
+    }
+
+    /// Returns the lwe modulus of this [`Parameters<R, F>`], refers to **`q`** in the paper.
+    #[inline]
+    pub fn lwe_modulus(&self) -> <R as Ring>::Inner {
+        self.lwe_modulus
+    }
+
+    /// Returns the lwe noise error's standard deviation of this [`Parameters<R, F>`].
+    #[inline]
+    pub fn lwe_noise_std_dev(&self) -> f64 {
+        self.lwe_noise_std_dev
+    }
+
+    /// Returns the LWE Secret Key distribution Type of this [`Parameters<R, F>`].
+    #[inline]
+    pub fn secret_key_type(&self) -> SecretKeyType {
+        self.secret_key_type
+    }
+
+    /// Returns the rlwe dimension of this [`Parameters<R, F>`], refers to **`N`** in the paper.
+    #[inline]
+    pub fn rlwe_dimension(&self) -> usize {
+        self.rlwe_dimension
+    }
+
+    /// Returns the rlwe modulus of this [`Parameters<R, F>`], refers to **`Q`** in the paper.
+    #[inline]
+    pub fn rlwe_modulus(&self) -> <F as Ring>::Inner {
+        self.rlwe_modulus
+    }
+
+    /// Returns the rlwe noise error's standard deviation of this [`Parameters<R, F>`].
+    #[inline]
+    pub fn rlwe_noise_std_dev(&self) -> f64 {
+        self.rlwe_noise_std_dev
+    }
+
+    /// Returns the lwe modulus f64 value of this [`Parameters<R, F>`], refers to **`q`** in the paper.
+    #[inline]
+    pub fn lwe_modulus_f64(&self) -> f64 {
+        self.lwe_modulus_f64
+    }
+
+    /// Returns the rlwe modulus f64 value of this [`Parameters<R, F>`], refers to **`Q`** in the paper.
+    #[inline]
+    pub fn rlwe_modulus_f64(&self) -> f64 {
+        self.rlwe_modulus_f64
+    }
+
+    /// Returns the twice rlwe dimension divides lwe modulus of this [`Parameters<R, F>`], refers to **`2N/q`** in the paper.
+    #[inline]
+    pub fn twice_rlwe_dimension_div_lwe_modulus(&self) -> usize {
+        self.twice_rlwe_dimension_div_lwe_modulus
+    }
+
+    /// Returns the gadget basis of this [`Parameters<R, F>`],
+    /// which acts as the decompose basis for `Q` used for bootstrapping accumulator.
+    #[inline]
+    pub fn gadget_basis(&self) -> Basis<F> {
+        self.gadget_basis
+    }
+
+    /// Returns the powers of gadget basis of this [`Parameters<R, F>`].
+    #[inline]
+    pub fn gadget_basis_powers(&self) -> &[F] {
+        &self.gadget_basis_powers
+    }
+
+    /// Returns the key switching basis of this [`Parameters<R, F>`],
+    /// which acts as the decompose basis for `Q` used for key switching.
+    #[inline]
+    pub fn key_switching_basis(&self) -> Basis<F> {
+        self.key_switching_basis
+    }
+
+    /// Returns the powers of key switch basis of this [`Parameters<R, F>`].
+    #[inline]
+    pub fn key_switching_basis_powers(&self) -> &[F] {
+        &self.key_switching_basis_powers
+    }
+}
+
+impl<R: RandomRing, F: NTTField> Parameters<R, F> {
+    /// Gets the lwe noise distribution.
+    #[inline]
+    pub fn lwe_noise_distribution(&self) -> <R as Random>::NormalDistribution {
+        R::normal_distribution(0.0, self.lwe_noise_std_dev).unwrap()
+    }
+}
+
+impl<R: Ring, F: RandomNTTField> Parameters<R, F> {
+    /// Gets the rlwe noise distribution.
+    #[inline]
+    pub fn rlwe_noise_distribution(&self) -> <F as Random>::NormalDistribution {
+        F::normal_distribution(0.0, self.rlwe_noise_std_dev).unwrap()
+    }
+}

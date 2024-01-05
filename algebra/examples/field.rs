@@ -5,7 +5,7 @@ use rand_distr::Standard;
 
 // algebra's derive macro can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 
-// Derive macro `Ring` generats an impl of the trait `algebra::Ring`.
+// Derive macro `Ring` generates an impl of the trait `algebra::Ring`.
 //
 // This also generates some computation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
 //
@@ -13,7 +13,7 @@ use rand_distr::Standard;
 //
 // And it will generate impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 
-// Derive macro `Random` generating an impl of the trait `algebra::Random`.
+// Derive macro `Random` generates an impl of the trait `algebra::Random`.
 //
 // Then you can use `rand` crate to generate it randomly.
 //

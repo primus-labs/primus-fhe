@@ -34,13 +34,6 @@ pub struct NTTPolynomial<F: Field> {
     data: Vec<F>,
 }
 
-impl<F: Field> From<Vec<F>> for NTTPolynomial<F> {
-    #[inline]
-    fn from(value: Vec<F>) -> Self {
-        Self { data: value }
-    }
-}
-
 impl<F: NTTField> From<Polynomial<F>> for NTTPolynomial<F> {
     #[inline]
     fn from(poly: Polynomial<F>) -> Self {

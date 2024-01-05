@@ -14,7 +14,7 @@ use rand_distr::Standard;
 //
 // And it will generate impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 
-// Derive macro `Random` generats an impl of the trait `algebra::Random`.
+// Derive macro `Random` generates an impl of the trait `algebra::Random`.
 //
 // Then you can use `rand` crate to generate it randomly.
 //
