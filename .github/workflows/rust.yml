@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      # - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --doc --all-features
       - run: cargo doc --no-deps --workspace --lib --document-private-items --all-features
 
