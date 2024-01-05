@@ -82,6 +82,9 @@ pub trait Ring:
     /// -q/8
     const NRG_Q_DIV_8: Self;
 
+    /// 4
+    const FOUR_INNER: Self::Inner;
+
     /// Creates a new instance.
     fn new(value: Self::Inner) -> Self;
 

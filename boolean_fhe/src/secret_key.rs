@@ -62,7 +62,7 @@ impl<R: Ring, F: NTTField> SecretKeyPack<R, F> {
     pub fn decrypt(&self, cipher_text: &LWECiphertext<R>) -> bool {
         let encoded_message =
             cipher_text.b() - dot_product(cipher_text.a(), self.lwe_secret_key.as_slice());
-        decode(encoded_message, self.parameters.lwe_message_modulus())
+        decode(encoded_message)
     }
 }
 
@@ -79,7 +79,7 @@ impl<R: RandomRing, F: NTTField> SecretKeyPack<R, F> {
 
         let a: Vec<R> = dis.sample_iter(&mut rng).take(lwe_dimension).collect();
         let b = dot_product(&a, self.lwe_secret_key.as_slice())
-            + encode::<R>(message, self.parameters.lwe_message_modulus())
+            + encode::<R>(message)
             + chi.sample(&mut rng);
 
         LWECiphertext::new(a, b)
@@ -119,23 +119,23 @@ impl<R: RandomRing, F: RandomNTTField> SecretKeyPack<R, F> {
 
 /// Encodes a message
 #[inline]
-fn encode<R: Ring>(message: LWEPlaintext, message_modulus: R::Inner) -> R {
+fn encode<R: Ring>(message: LWEPlaintext) -> R {
     if message {
-        R::from(R::modulus_value().rounded_div(message_modulus))
+        R::from(R::modulus_value().rounded_div(R::FOUR_INNER))
     } else {
         R::ZERO
     }
 }
 
 /// Decodes a cipher text
-fn decode<R: Ring>(encoded_message: R, message_modulus: R::Inner) -> bool {
+fn decode<R: Ring>(encoded_message: R) -> bool {
     let decoded = encoded_message
         .inner()
-        .checked_mul(&message_modulus)
+        .checked_mul(&R::FOUR_INNER)
         .unwrap()
         .rounded_div(R::modulus_value());
 
-    if decoded == message_modulus || decoded.is_zero() {
+    if decoded == R::FOUR_INNER || decoded.is_zero() {
         false
     } else if decoded.is_one() {
         true

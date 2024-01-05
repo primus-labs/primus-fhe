@@ -17,7 +17,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = <Parameters<RR, FF>>::new(4, 512, 1024, SecretKeyType::Ternary, 6, 5, 3.2, 3.2);
+    let params = <Parameters<RR, FF>>::new(512, 1024, SecretKeyType::Ternary, 6, 5, 3.2, 3.2);
 
     // generate keys
     let skp = SecretKeyPack::new(params, &mut rng);

@@ -7,8 +7,6 @@ use crate::SecretKeyType;
 /// The parameters for the fully homomorphic encryption scheme.
 #[derive(Debug, Clone)]
 pub struct Parameters<R: Ring, F: NTTField> {
-    /// LWE message modulus.
-    lwe_message_modulus: R::Inner,
     /// [`LWECiphertext<R>`] vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
@@ -46,7 +44,6 @@ pub struct Parameters<R: Ring, F: NTTField> {
 impl<R: Ring, F: NTTField> Parameters<R, F> {
     /// Creates a new [`Parameters<R, F>`].
     pub fn new(
-        lwe_message_modulus: R::Inner,
         lwe_dimension: usize,
         rlwe_dimension: usize,
         secret_key_type: SecretKeyType,
@@ -79,7 +76,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         });
 
         Self {
-            lwe_message_modulus,
             lwe_dimension,
             lwe_modulus,
             lwe_noise_std_dev,
@@ -100,12 +96,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
             key_switching_basis,
             key_switching_basis_powers,
         }
-    }
-
-    /// Returns the lwe message modulus of this [`Parameters<R, F>`], refers to **`t`** in the paper.
-    #[inline]
-    pub fn lwe_message_modulus(&self) -> <R as Ring>::Inner {
-        self.lwe_message_modulus
     }
 
     /// Returns the lwe dimension of this [`Parameters<R, F>`], refers to **`n`** in the paper.

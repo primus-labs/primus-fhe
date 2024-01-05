@@ -223,7 +223,7 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Perform [`RLWE<F>`] multiply with `Y^r - 1` for functional bootstrapping where `Y = X^(2N/q)`.
-    pub fn mul_with_monic_monomial_sub_one<R: Ring>(
+    pub fn mul_with_monic_monomial_sub1<R: Ring>(
         &self,
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,

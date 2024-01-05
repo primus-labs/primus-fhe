@@ -72,7 +72,6 @@ impl<R: Ring, F: RandomNTTField> EvaluationKey<R, F> {
             parameters.secret_key_type(),
             lwe_secret_key,
             secret_key_pack.ntt_rlwe_secret_key(),
-            parameters.rlwe_dimension(),
             parameters.gadget_basis(),
             parameters.gadget_basis_powers(),
             chi,
@@ -92,7 +91,7 @@ impl<R: Ring, F: RandomNTTField> EvaluationKey<R, F> {
         Self {
             bootstrapping_key,
             key_switching_key,
-            parameters: Clone::clone(&secret_key_pack.parameters()),
+            parameters: secret_key_pack.parameters().clone(),
         }
     }
 }
