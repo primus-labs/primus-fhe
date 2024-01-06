@@ -117,7 +117,7 @@ impl<F: NTTField> LWE<F> {
     }
 
     /// modulus switch from **reduce `p`** to **reduce `q`**
-    pub fn modulus_switch_round<R: Ring>(&self, q: f64, p: f64) -> LWE<R> {
+    pub fn modulus_switch_nearest_round<R: Ring>(&self, q: f64, p: f64) -> LWE<R> {
         debug_assert!(q < p);
         let switch = |v: F| R::from_f64((v.as_f64() * q / p).round());
 

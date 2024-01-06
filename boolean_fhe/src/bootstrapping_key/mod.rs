@@ -21,9 +21,9 @@ use ternary::TernaryBootstrappingKey;
 /// ciphertexts, allowing the computation to continue.
 #[derive(Debug, Clone)]
 pub enum BootstrappingKey<F: NTTField> {
-    /// TFHE binary bootstrapping key
+    /// FHE binary bootstrapping key
     Binary(BinaryBootstrappingKey<F>),
-    /// TFHE ternary bootstrapping key
+    /// FHE ternary bootstrapping key
     Ternary(TernaryBootstrappingKey<F>),
 }
 
