@@ -33,6 +33,20 @@ fn impl_field_with_ops(input: Input) -> TokenStream {
 #[inline]
 fn impl_field(name: &proc_macro2::Ident) -> TokenStream {
     quote! {
-        impl algebra::Field for #name {}
+        impl algebra::Field for #name {
+                #[inline]
+                fn add_mul(self, a: Self, b: Self) -> Self {
+                    use algebra::Widening;
+                    use algebra::reduce::Reduce;
+                    Self(a.0.carry_mul(b.0, self.0).reduce(&<Self as algebra::ModulusConfig>::MODULUS))
+                }
+
+                #[inline]
+                fn mul_add(self, a: Self, b: Self) -> Self {
+                    use algebra::Widening;
+                    use algebra::reduce::Reduce;
+                    Self(self.0.carry_mul(a.0, b.0).reduce(&<Self as algebra::ModulusConfig>::MODULUS))
+                }
+        }
     }
 }

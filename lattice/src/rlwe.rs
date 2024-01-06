@@ -1,6 +1,6 @@
 use algebra::{NTTField, NTTPolynomial, Polynomial, Ring};
 
-use crate::LWE;
+use crate::{GadgetRLWE, NTTGadgetRLWE, LWE, NTTRGSW, RGSW};
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly
@@ -57,6 +57,16 @@ impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
         Self {
             a: <Polynomial<F>>::from(a),
             b: <Polynomial<F>>::from(b),
+        }
+    }
+}
+
+impl<F: NTTField> From<NTTRLWE<F>> for RLWE<F> {
+    #[inline]
+    fn from(ntt_rlwe: NTTRLWE<F>) -> Self {
+        Self {
+            a: <Polynomial<F>>::from(ntt_rlwe.a),
+            b: <Polynomial<F>>::from(ntt_rlwe.b),
         }
     }
 }
@@ -167,12 +177,23 @@ impl<F: NTTField> RLWE<F> {
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `poly` [`Polynomial<F>`],
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_with_polynomial(self, poly: &Polynomial<F>) -> Self {
+    pub fn mul_polynomial(&self, poly: Polynomial<F>) -> Self {
         let ntt_poly = <NTTPolynomial<F>>::from(poly);
         Self {
-            a: self.a * &ntt_poly,
-            b: self.b * ntt_poly,
+            a: &self.a * &ntt_poly,
+            b: &self.b * ntt_poly,
         }
+    }
+
+    /// Performs `self + gadget_rlwe * polynomial`.
+    #[inline]
+    pub fn add_gadget_rlwe_mul_polynomial(
+        self,
+        gadget_rlwe: &GadgetRLWE<F>,
+        polynomial: &Polynomial<F>,
+    ) -> RLWE<F> {
+        let decomposed = polynomial.decompose(gadget_rlwe.basis());
+        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
     }
 
     /// Extract an LWE sample from RLWE.
@@ -187,9 +208,16 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Perform [`RLWE<F>`] multiply with `Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
-    pub fn mul_with_monic_monomial<R: Ring>(&self, nr: usize, nr2dql: usize, r: R) -> Self {
-        let r = r.cast_into_usize() * nr2dql;
-        if r <= nr {
+    pub fn mul_with_monic_monomial<R: Ring>(
+        &self,
+        // N
+        rlwe_dimension: usize,
+        // 2N/q
+        twice_rlwe_dimension_div_lwe_modulus: usize,
+        r: R,
+    ) -> Self {
+        let r = r.cast_into_usize() * twice_rlwe_dimension_div_lwe_modulus;
+        if r <= rlwe_dimension {
             #[inline]
             fn rotate<F: NTTField>(p: &Polynomial<F>, n_sub_r: usize) -> Polynomial<F> {
                 p[n_sub_r..]
@@ -199,7 +227,7 @@ impl<F: NTTField> RLWE<F> {
                     .collect::<Vec<F>>()
                     .into()
             }
-            let n_sub_r = nr - r;
+            let n_sub_r = rlwe_dimension - r;
             Self {
                 a: rotate(self.a(), n_sub_r),
                 b: rotate(self.b(), n_sub_r),
@@ -214,7 +242,7 @@ impl<F: NTTField> RLWE<F> {
                     .collect::<Vec<F>>()
                     .into()
             }
-            let n_mul_2_sub_r = nr - (r - nr);
+            let n_mul_2_sub_r = rlwe_dimension - (r - rlwe_dimension);
             Self {
                 a: rotate(self.a(), n_mul_2_sub_r),
                 b: rotate(self.b(), n_mul_2_sub_r),
@@ -266,6 +294,33 @@ impl<F: NTTField> RLWE<F> {
             }
         }
     }
+
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_rgsw` [`RGSW<F>`],
+    /// return a [`RLWE<F>`].
+    ///
+    /// # Attention
+    /// The message of **`small_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    #[inline]
+    pub fn mul_small_rgsw(&self, small_rgsw: &RGSW<F>) -> RLWE<F> {
+        small_rgsw
+            .c_neg_s_m()
+            .mul_polynomial(self.a())
+            .add_gadget_rlwe_mul_polynomial(small_rgsw.c_m(), self.b())
+    }
+
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
+    /// return a [`RLWE<F>`].
+    ///
+    /// # Attention
+    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    #[inline]
+    pub fn mul_small_ntt_rgsw(&self, small_ntt_rgsw: &NTTRGSW<F>) -> RLWE<F> {
+        small_ntt_rgsw
+            .c_neg_s_m()
+            .mul_polynomial(self.a())
+            .add_gadget_rlwe_mul_polynomial(small_ntt_rgsw.c_m(), self.b())
+            .into()
+    }
 }
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
@@ -290,10 +345,10 @@ pub struct NTTRLWE<F: NTTField> {
 
 impl<F: NTTField> From<RLWE<F>> for NTTRLWE<F> {
     #[inline]
-    fn from(c: RLWE<F>) -> Self {
+    fn from(rlwe: RLWE<F>) -> Self {
         Self {
-            a: <NTTPolynomial<F>>::from(c.a),
-            b: <NTTPolynomial<F>>::from(c.b),
+            a: <NTTPolynomial<F>>::from(rlwe.a),
+            b: <NTTPolynomial<F>>::from(rlwe.b),
         }
     }
 }
@@ -348,14 +403,75 @@ impl<F: NTTField> NTTRLWE<F> {
         &mut self.b
     }
 
+    /// Perform element-wise addition of two [`NTTRLWE<F>`].
+    #[inline]
+    pub fn add_element_wise(self, rhs: &Self) -> Self {
+        Self {
+            a: self.a + rhs.a(),
+            b: self.b + rhs.b(),
+        }
+    }
+
+    /// Perform element-wise subtraction of two [`NTTRLWE<F>`].
+    #[inline]
+    pub fn sub_element_wise(self, rhs: &Self) -> Self {
+        Self {
+            a: self.a - rhs.a(),
+            b: self.b - rhs.b(),
+        }
+    }
+
     /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `poly` [`Polynomial<F>`],
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_with_polynomial(&self, poly: Polynomial<F>) -> RLWE<F> {
-        let ntt_poly = <NTTPolynomial<F>>::from(poly);
-        RLWE {
-            a: <Polynomial<F>>::from(&ntt_poly * &self.a),
-            b: <Polynomial<F>>::from(ntt_poly * &self.b),
+    pub fn mul_polynomial(&self, polynomial: Polynomial<F>) -> NTTRLWE<F> {
+        let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
+        NTTRLWE {
+            a: &self.a * &ntt_polynomial,
+            b: &self.b * ntt_polynomial,
         }
+    }
+
+    /// Performs `self + rlwe * polynomial`.
+    pub fn add_rlwe_mul_polynomial(
+        mut self,
+        rhs: &NTTRLWE<F>,
+        polynomial: Polynomial<F>,
+    ) -> NTTRLWE<F> {
+        let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
+
+        let op = |l: &mut NTTPolynomial<F>, r: &NTTPolynomial<F>| {
+            l.iter_mut()
+                .zip(r.iter())
+                .zip(ntt_polynomial.iter())
+                .for_each(|((x, &y), &z)| *x = x.add_mul(y, z))
+        };
+
+        op(&mut self.a, &rhs.a);
+        op(&mut self.b, &rhs.b);
+
+        self
+    }
+
+    /// Performs `self + gadget_rlwe * polynomial`.
+    #[inline]
+    pub fn add_gadget_rlwe_mul_polynomial(
+        self,
+        gadget_rlwe: &NTTGadgetRLWE<F>,
+        polynomial: &Polynomial<F>,
+    ) -> NTTRLWE<F> {
+        let decomposed = polynomial.decompose(gadget_rlwe.basis());
+        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
+    }
+
+    /// Performs `self - gadget_rlwe * polynomial`.
+    #[inline]
+    pub fn sub_gadget_rlwe_mul_polynomial(
+        self,
+        gadget_rlwe: &NTTGadgetRLWE<F>,
+        polynomial: Polynomial<F>,
+    ) -> NTTRLWE<F> {
+        let decomposed = (-polynomial).decompose(gadget_rlwe.basis());
+        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
     }
 }

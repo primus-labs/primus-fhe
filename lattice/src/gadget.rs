@@ -1,4 +1,4 @@
-use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
+use algebra::{Basis, NTTField, Polynomial};
 
 use crate::{NTTRLWE, RLWE};
 
@@ -23,7 +23,9 @@ pub struct GadgetRLWE<F: NTTField> {
 }
 
 impl<F: NTTField> From<(Vec<RLWE<F>>, Basis<F>)> for GadgetRLWE<F> {
+    #[inline]
     fn from((data, basis): (Vec<RLWE<F>>, Basis<F>)) -> Self {
+        debug_assert_eq!(data.len(), basis.decompose_len());
         Self { data, basis }
     }
 }
@@ -32,12 +34,14 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// Creates a new [`GadgetRLWE<F>`].
     #[inline]
     pub fn new(data: Vec<RLWE<F>>, basis: Basis<F>) -> Self {
+        debug_assert_eq!(data.len(), basis.decompose_len());
         Self { data, basis }
     }
 
     /// Creates a new [`GadgetRLWE<F>`] with reference.
     #[inline]
     pub fn from_ref(data: &[RLWE<F>], basis: Basis<F>) -> Self {
+        debug_assert_eq!(data.len(), basis.decompose_len());
         Self {
             data: data.to_vec(),
             basis,
@@ -72,33 +76,41 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`],
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_with_polynomial(&self, poly: &Polynomial<F>) -> RLWE<F> {
-        let decomposed = poly.decompose(self.basis);
-        self.mul_with_decomposed_polynomial(&decomposed)
+    pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> RLWE<F> {
+        let decomposed = polynomial.decompose(self.basis);
+        self.mul_decomposed_polynomial(decomposed)
     }
 
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`] slice,
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_with_decomposed_polynomial(&self, decomposed: &[Polynomial<F>]) -> RLWE<F> {
-        debug_assert_eq!(self.data().len(), decomposed.len());
+    pub fn mul_decomposed_polynomial(&self, decomposed: Vec<Polynomial<F>>) -> RLWE<F> {
+        let mut gadget_rlwe_iter = self.iter();
+        let mut decomposed_iter = decomposed.into_iter();
 
-        let coeff_count = decomposed[0].coeff_count();
+        let init = gadget_rlwe_iter
+            .next()
+            .unwrap()
+            .mul_polynomial(decomposed_iter.next().unwrap());
 
-        self.data
-            .iter()
-            .zip(decomposed)
-            .fold(RLWE::zero(coeff_count), |acc, (r, p)| {
-                acc.add_element_wise(&r.clone().mul_with_polynomial(p))
+        gadget_rlwe_iter
+            .zip(decomposed_iter)
+            .fold(init, |acc, (r, p)| {
+                acc.add_element_wise(&r.mul_polynomial(p))
             })
     }
 
-    /// Convert this [`GadgetRLWE<F>`] to [`NTTPolynomial<F>`] vector.
+    /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`] slice,
+    /// then add the `rlwe`, return a [`RLWE<F>`].
     #[inline]
-    pub(crate) fn to_ntt_poly(&self) -> Vec<(NTTPolynomial<F>, NTTPolynomial<F>)> {
-        self.iter()
-            .map(|rlwe| (rlwe.a().into(), rlwe.b().into()))
-            .collect()
+    pub fn mul_decomposed_polynomial_add_rlwe(
+        &self,
+        decomposed: Vec<Polynomial<F>>,
+        rlwe: RLWE<F>,
+    ) -> RLWE<F> {
+        self.iter().zip(decomposed).fold(rlwe, |acc, (r, p)| {
+            acc.add_element_wise(&r.mul_polynomial(p))
+        })
     }
 }
 
@@ -143,12 +155,14 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     /// Creates a new [`NTTGadgetRLWE<F>`].
     #[inline]
     pub fn new(data: Vec<NTTRLWE<F>>, basis: Basis<F>) -> Self {
+        debug_assert_eq!(data.len(), basis.decompose_len());
         Self { data, basis }
     }
 
     /// Creates a new [`NTTGadgetRLWE<F>`] with reference.
     #[inline]
     pub fn from_ref(data: &[NTTRLWE<F>], basis: Basis<F>) -> Self {
+        debug_assert_eq!(data.len(), basis.decompose_len());
         Self {
             data: data.to_vec(),
             basis,
@@ -167,27 +181,56 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         self.basis
     }
 
-    /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
-    /// return a [`RLWE<F>`].
+    /// Returns an iterator over the `data` of this [`NTTGadgetRLWE<F>`].
     #[inline]
-    pub fn mul_with_polynomial(&self, poly: &Polynomial<F>) -> RLWE<F> {
+    pub fn iter(&self) -> std::slice::Iter<'_, NTTRLWE<F>> {
+        self.data.iter()
+    }
+
+    /// Returns an iterator over the `data` of this [`NTTGadgetRLWE<F>`]
+    /// that allows modifying each value.
+    #[inline]
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, NTTRLWE<F>> {
+        self.data.iter_mut()
+    }
+
+    /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
+    /// return a [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mul_polynomial(&self, poly: &Polynomial<F>) -> NTTRLWE<F> {
         let decomposed = poly.decompose(self.basis);
-        self.mul_with_decomposed_polynomial(decomposed)
+        self.mul_decomposed_polynomial(decomposed)
     }
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
-    /// return a [`RLWE<F>`].
+    /// return a [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_with_decomposed_polynomial(&self, decomposed: Vec<Polynomial<F>>) -> RLWE<F> {
-        debug_assert_eq!(self.data().len(), decomposed.len());
+    pub fn mul_decomposed_polynomial(&self, decomposed: Vec<Polynomial<F>>) -> NTTRLWE<F> {
+        let mut gadget_rlwe_iter = self.iter();
+        let mut decomposed_iter = decomposed.into_iter();
 
-        let coeff_count = decomposed[0].coeff_count();
+        let init = gadget_rlwe_iter
+            .next()
+            .unwrap()
+            .mul_polynomial(decomposed_iter.next().unwrap());
 
-        self.data()
-            .iter()
+        gadget_rlwe_iter
+            .zip(decomposed_iter)
+            .fold(init, |acc, (g, d)| acc.add_rlwe_mul_polynomial(g, d))
+    }
+
+    /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
+    /// then add the `rlwe`, return a [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mul_decomposed_polynomial_add_rlwe(
+        &self,
+        decomposed: Vec<Polynomial<F>>,
+        rlwe: NTTRLWE<F>,
+    ) -> NTTRLWE<F> {
+        self.iter()
             .zip(decomposed)
-            .fold(RLWE::zero(coeff_count), |acc, (g, d)| {
-                acc.add_element_wise(&g.mul_with_polynomial(d))
+            .fold(rlwe, |acc, (gadget, decomposed_polynomial)| {
+                acc.add_rlwe_mul_polynomial(gadget, decomposed_polynomial)
             })
     }
 }

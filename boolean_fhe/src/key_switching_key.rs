@@ -1,5 +1,5 @@
 use algebra::{NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring};
-use lattice::{NTTGadgetRLWE, LWE, RLWE};
+use lattice::{NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
@@ -36,13 +36,12 @@ impl<F: NTTField> KeySwitchingKey<F> {
         );
         init.b_mut()[0] = ciphertext.b();
 
-        self.key
-            .iter()
-            .zip(a)
-            .fold(init, |acc, (k_i, a_i)| {
-                acc.sub_element_wise(&k_i.mul_with_polynomial(&a_i))
-            })
-            .extract_lwe()
+        let init = <NTTRLWE<F>>::from(init);
+
+        <RLWE<F>>::from(self.key.iter().zip(a).fold(init, |acc, (k_i, a_i)| {
+            acc.sub_gadget_rlwe_mul_polynomial(k_i, a_i)
+        }))
+        .extract_lwe()
     }
 }
 

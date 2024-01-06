@@ -214,7 +214,7 @@ impl<F: NTTField> Polynomial<F> {
         let mut ret: Vec<Self> =
             vec![Self::with_capacity(self.coeff_count()); basis.decompose_len()];
         for coeff in self.iter() {
-            let decompose_res = F::decompose(coeff, basis);
+            let decompose_res = coeff.decompose(basis);
             ret.iter_mut()
                 .zip(decompose_res.into_iter())
                 .for_each(|(d_p, d_c)| d_p.push(d_c));

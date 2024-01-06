@@ -115,7 +115,7 @@ fn test_rlwe() {
             .sub_element_wise(&rlwe1),
         rlwe2
     );
-    assert_eq!(rlwe1.mul_with_polynomial(&r), rlwe3);
+    assert_eq!(rlwe1.mul_polynomial(r), rlwe3);
 }
 
 #[inline]
@@ -223,12 +223,12 @@ fn test_gadget_rlwe() {
         })
         .collect::<Vec<RLWE<FF>>>();
 
-    let bad_rlwe_mul = m_base_power[0].clone().mul_with_polynomial(&poly);
+    let bad_rlwe_mul = m_base_power[0].clone().mul_polynomial(poly.clone());
     let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
 
     let gadget_rlwe = GadgetRLWE::new(m_base_power, basis);
 
-    let good_rlwe_mul = gadget_rlwe.mul_with_polynomial(&poly);
+    let good_rlwe_mul = gadget_rlwe.mul_polynomial(&poly);
     let good_mul = good_rlwe_mul.b() - good_rlwe_mul.a() * s;
 
     let diff: Vec<Inner> = (&poly_mul_m - &good_mul)
@@ -308,7 +308,7 @@ fn test_rgsw_mul_rlwe() {
         (RLWE::new(a, b), e)
     };
 
-    let rlwe_mul = rgsw.mul_with_rlwe(&rlwe);
+    let rlwe_mul = rlwe.mul_small_rgsw(&rgsw);
     let decrypt_mul = rlwe_mul.b() - rlwe_mul.a() * &s;
 
     let decoded_m0m1: Vec<u32> = m0m1.into_iter().map(decode).collect();
@@ -385,7 +385,7 @@ fn test_rgsw_mul_rgsw() {
         )
     };
 
-    let rgsw_m0m1 = rgsw_m0.mul_with_rgsw(&rgsw_m1);
+    let rgsw_m0m1 = rgsw_m0.mul_small_rgsw(&rgsw_m1);
 
     let rlwe_m0m1 = &rgsw_m0m1.c_m().data()[0];
     let decrypted_m0m1 = rlwe_m0m1.b() - rlwe_m0m1.a() * &s;

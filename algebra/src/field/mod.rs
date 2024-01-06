@@ -31,6 +31,12 @@ pub trait Field:
     + for<'a> DivAssign<&'a Self>
     + Inv<Output = Self>
 {
+    /// Performs `self + a * b`.
+    fn add_mul(self, a: Self, b: Self) -> Self;
+
+    /// Performs `self * a + b`.
+    fn mul_add(self, a: Self, b: Self) -> Self;
+
     /// Computes the multiplicative inverse of `self` if `self` is nonzero.
     #[inline]
     fn inverse(&self) -> Option<Self> {

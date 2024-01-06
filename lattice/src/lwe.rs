@@ -88,7 +88,7 @@ impl<R: Ring> LWE<R> {
         self.a_mut()
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, v1)| *v0 += *v1);
+            .for_each(|(v0, &v1)| *v0 += v1);
         *self.b_mut() += rhs.b();
     }
 
@@ -100,14 +100,15 @@ impl<R: Ring> LWE<R> {
         self.a_mut()
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, v1)| *v0 -= *v1);
+            .for_each(|(v0, &v1)| *v0 -= v1);
         *self.b_mut() -= rhs.b();
     }
 }
 
 impl<F: NTTField> LWE<F> {
-    /// modulus switch from **reduce `q`** to **reduce `p`**
+    /// modulus switch from **reduce `p`** to **reduce `q`**
     pub fn modulus_switch_floor<R: Ring>(&self, q: f64, p: f64) -> LWE<R> {
+        debug_assert!(q < p);
         let switch = |v: F| R::from_f64((v.as_f64() * q / p).floor());
 
         let a: Vec<R> = self.a.iter().copied().map(switch).collect();
@@ -115,8 +116,9 @@ impl<F: NTTField> LWE<F> {
         <LWE<R>>::new(a, b)
     }
 
-    /// modulus switch from **reduce `q`** to **reduce `p`**
+    /// modulus switch from **reduce `p`** to **reduce `q`**
     pub fn modulus_switch_round<R: Ring>(&self, q: f64, p: f64) -> LWE<R> {
+        debug_assert!(q < p);
         let switch = |v: F| R::from_f64((v.as_f64() * q / p).round());
 
         let a: Vec<R> = self.a.iter().copied().map(switch).collect();
