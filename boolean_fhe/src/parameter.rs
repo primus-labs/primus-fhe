@@ -4,10 +4,10 @@ use num_traits::cast;
 
 use crate::SecretKeyType;
 
-/// The parameters for the fully homomorphic encryption scheme.
+/// The parameters of the fully homomorphic encryption scheme.
 #[derive(Debug, Clone)]
 pub struct Parameters<R: Ring, F: NTTField> {
-    /// [`LWECiphertext<R>`] vector dimension, refers to **`n`** in the paper.
+    /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
     lwe_modulus: R::Inner,
@@ -16,7 +16,7 @@ pub struct Parameters<R: Ring, F: NTTField> {
     /// LWE Secret Key distribution Type
     secret_key_type: SecretKeyType,
 
-    /// [`RLWECiphertext<F>`] vector dimension, refers to **`N`** in the paper.
+    /// RLWE polynomial dimension, refers to **`N`** in the paper.
     rlwe_dimension: usize,
     /// RLWE cipher modulus, refers to **`Q`** in the paper.
     rlwe_modulus: F::Inner,

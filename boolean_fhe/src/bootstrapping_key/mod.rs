@@ -1,7 +1,9 @@
 use algebra::{Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring};
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
 
-use crate::{ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, SecretKeyType};
+use crate::{
+    ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, SecretKeyPack, SecretKeyType,
+};
 
 mod binary;
 mod ternary;
@@ -9,7 +11,14 @@ mod ternary;
 use binary::BinaryBootstrappingKey;
 use ternary::TernaryBootstrappingKey;
 
-/// Bootstrapping key
+/// Bootstrapping key.
+///
+/// In FHE, bootstrapping is a technique used to refresh the ciphertexts
+/// during the homomorphic computation. As homomorphic operations are
+/// performed on encrypted data, the noise in the ciphertext increases,
+/// and if left unchecked, it can eventually lead to decryption errors.
+/// Bootstrapping is a method to reduce the noise and refresh the
+/// ciphertexts, allowing the computation to continue.
 #[derive(Debug, Clone)]
 pub enum BootstrappingKey<F: NTTField> {
     /// TFHE binary bootstrapping key
@@ -40,13 +49,13 @@ impl<F: NTTField> BootstrappingKey<F> {
         twice_rlwe_dimension_div_lwe_modulus: usize,
     ) -> RLWE<F> {
         match self {
-            BootstrappingKey::Binary(bk) => bk.bootstrapping(
+            BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(
                 init_acc,
                 lwe_a,
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
             ),
-            BootstrappingKey::Ternary(bk) => bk.bootstrapping(
+            BootstrappingKey::Ternary(bootstrapping_key) => bootstrapping_key.bootstrapping(
                 init_acc,
                 lwe_a,
                 rlwe_dimension,
@@ -57,42 +66,40 @@ impl<F: NTTField> BootstrappingKey<F> {
 }
 
 impl<F: RandomNTTField> BootstrappingKey<F> {
-    pub(crate) fn generate<R: Ring, Rng>(
-        secret_key_type: SecretKeyType,
-        lwe_secret_key: &[R],
-        rlwe_secret_key: &NTTRLWESecretKey<F>,
-        basis: Basis<F>,
-        basis_powers: &[F],
+    /// Generates the [`BootstrappingKey<F>`].
+    pub fn generate<R: Ring, Rng>(
+        secret_key_pack: &SecretKeyPack<R, F>,
         chi: <F as Random>::NormalDistribution,
         rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
-        match secret_key_type {
+        let parameters = secret_key_pack.parameters();
+        match parameters.secret_key_type() {
             SecretKeyType::Binary => BootstrappingKey::Binary(BinaryBootstrappingKey::generate(
-                basis,
-                basis_powers,
-                lwe_secret_key,
+                parameters.gadget_basis(),
+                parameters.gadget_basis_powers(),
+                secret_key_pack.lwe_secret_key(),
                 chi,
-                rlwe_secret_key.coeff_count(),
-                rlwe_secret_key,
+                parameters.rlwe_dimension(),
+                secret_key_pack.ntt_rlwe_secret_key(),
                 rng,
             )),
             SecretKeyType::Ternary => BootstrappingKey::Ternary(TernaryBootstrappingKey::generate(
-                basis,
-                basis_powers,
-                lwe_secret_key,
+                parameters.gadget_basis(),
+                parameters.gadget_basis_powers(),
+                secret_key_pack.lwe_secret_key(),
                 chi,
-                rlwe_secret_key.coeff_count(),
-                rlwe_secret_key,
+                parameters.rlwe_dimension(),
+                secret_key_pack.ntt_rlwe_secret_key(),
                 rng,
             )),
         }
     }
 }
 
-/// .
+/// Generates a ntt version `RGSW(0)`.
 pub(crate) fn ntt_rgsw_zero<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
@@ -105,13 +112,6 @@ where
     Rng: rand::Rng + rand::CryptoRng,
 {
     let decompose_len = basis.decompose_len();
-    let m = ntt_rlwe_zeros(
-        rlwe_dimension,
-        rlwe_secret_key,
-        decompose_len,
-        chi,
-        &mut rng,
-    );
     let neg_sm = ntt_rlwe_zeros(
         rlwe_dimension,
         rlwe_secret_key,
@@ -119,13 +119,21 @@ where
         chi,
         &mut rng,
     );
+    let m = ntt_rlwe_zeros(
+        rlwe_dimension,
+        rlwe_secret_key,
+        decompose_len,
+        chi,
+        &mut rng,
+    );
+
     NTTRGSW::new(
         NTTGadgetRLWE::new(neg_sm, basis),
         NTTGadgetRLWE::new(m, basis),
     )
 }
 
-/// .
+/// Generates a ntt version `RGSW(1)`.
 pub(crate) fn ntt_rgsw_one<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
@@ -152,7 +160,7 @@ where
     )
 }
 
-///
+/// Generates a [`Vec`], which has `n` ntt version `RLWE(0)`.
 fn ntt_rlwe_zeros<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
@@ -175,7 +183,7 @@ where
         .collect()
 }
 
-///
+/// Generates a [`Vec`], which is a ntt version `GadgetRLWE(1)`.
 fn ntt_gadget_rlwe_one<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
@@ -200,7 +208,9 @@ where
         .collect()
 }
 
+/// Generates a [`Vec`], which is a ntt version `GadgetRLWE(-s)`.
 ///
+/// `s` is the secret key of the RLWE.
 fn ntt_gadget_rlwe_neg_secret_mul_one<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,

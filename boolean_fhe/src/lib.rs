@@ -4,7 +4,6 @@
 //! This library contains an implementation of a fully homomorphic encryption scheme.
 
 mod parameter;
-mod scheme;
 
 mod ciphertext;
 mod plaintext;
@@ -16,10 +15,10 @@ mod secret_key;
 
 pub use parameter::Parameters;
 
-pub use ciphertext::LWECiphertext;
+pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::LWEPlaintext;
 
 pub use bootstrapping_key::BootstrappingKey;
 pub use evaluation_key::EvaluationKey;
 pub use key_switching_key::KeySwitchingKey;
-pub use secret_key::{SecretKeyPack, SecretKeyType};
+pub use secret_key::{LWESecretKey, NTTRLWESecretKey, RLWESecretKey, SecretKeyPack, SecretKeyType};

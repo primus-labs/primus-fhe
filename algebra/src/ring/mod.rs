@@ -30,6 +30,8 @@ pub trait Ring:
     Sized
     + Copy
     + Clone
+    + Send
+    + Sync
     + Debug
     + Display
     + Default
@@ -56,7 +58,7 @@ pub trait Ring:
     + From<Self::Inner>
 {
     /// The inner type of this ring.
-    type Inner: Debug + PrimInt + RoundedDiv<Output = Self::Inner>;
+    type Inner: Debug + PrimInt + RoundedDiv<Output = Self::Inner> + Send + Sync;
 
     /// The type of the ring's order.
     type Order: Copy;

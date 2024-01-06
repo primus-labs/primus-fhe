@@ -23,12 +23,20 @@ pub type RLWESecretKey<F> = Polynomial<F>;
 /// NTT version RLWE Secret key
 pub type NTTRLWESecretKey<F> = NTTPolynomial<F>;
 
-/// boolean fhe's secret keys pack
+/// Boolean fhe's secret keys pack.
+///
+/// This struct contains the LWE secret key,
+/// RLWE secret key, ntt version RLWE secret key
+/// and boolean fhe's parameters.
 #[derive(Clone)]
 pub struct SecretKeyPack<R: Ring, F: NTTField> {
+    /// LWE secret key
     lwe_secret_key: LWESecretKey<R>,
+    /// RLWE secret key
     rlwe_secret_key: RLWESecretKey<F>,
+    /// ntt version RLWE secret key
     ntt_rlwe_secret_key: NTTRLWESecretKey<F>,
+    /// boolean fhe's parameters
     parameters: Parameters<R, F>,
 }
 
@@ -60,8 +68,7 @@ impl<R: Ring, F: NTTField> SecretKeyPack<R, F> {
     /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     #[inline]
     pub fn decrypt(&self, cipher_text: &LWECiphertext<R>) -> bool {
-        let encoded_message =
-            cipher_text.b() - dot_product(cipher_text.a(), self.lwe_secret_key.as_slice());
+        let encoded_message = cipher_text.b() - dot_product(cipher_text.a(), self.lwe_secret_key());
         decode(encoded_message)
     }
 }
@@ -73,14 +80,17 @@ impl<R: RandomRing, F: NTTField> SecretKeyPack<R, F> {
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
-        let dis = R::standard_distribution();
+        let standard_distribution = R::standard_distribution();
         let lwe_dimension = self.parameters.lwe_dimension();
-        let chi = self.parameters.lwe_noise_distribution();
+        let noise_distribution = self.parameters.lwe_noise_distribution();
 
-        let a: Vec<R> = dis.sample_iter(&mut rng).take(lwe_dimension).collect();
-        let b = dot_product(&a, self.lwe_secret_key.as_slice())
+        let a: Vec<R> = standard_distribution
+            .sample_iter(&mut rng)
+            .take(lwe_dimension)
+            .collect();
+        let b = dot_product(&a, self.lwe_secret_key())
             + encode::<R>(message)
-            + chi.sample(&mut rng);
+            + noise_distribution.sample(&mut rng);
 
         LWECiphertext::new(a, b)
     }

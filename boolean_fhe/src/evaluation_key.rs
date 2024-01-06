@@ -8,8 +8,11 @@ use crate::{
 
 /// The evaluator of the homomorphic encryption scheme.
 pub struct EvaluationKey<R: Ring, F: NTTField> {
+    /// Bootstrapping key
     bootstrapping_key: BootstrappingKey<F>,
+    /// Key Switching Key
     key_switching_key: KeySwitchingKey<F>,
+    /// The parameters of the fully homomorphic encryption scheme.
     parameters: Parameters<R, F>,
 }
 
@@ -20,7 +23,7 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
         &self.parameters
     }
 
-    /// nand
+    /// Performs the homomorphic nand operation.
     pub fn nand(&self, c0: LWECiphertext<R>, c1: &LWECiphertext<R>) -> LWECiphertext<R> {
         let parameters = self.parameters();
 
@@ -35,7 +38,8 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
         self.bootstrap(add, init_acc)
     }
 
-    fn bootstrap(&self, c: LWECiphertext<R>, init_acc: RLWECiphertext<F>) -> LWECiphertext<R> {
+    /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
+    pub fn bootstrap(&self, c: LWECiphertext<R>, init_acc: RLWECiphertext<F>) -> LWECiphertext<R> {
         let parameters = self.parameters();
 
         let acc = self.bootstrapping_key.bootstrapping(
@@ -49,7 +53,7 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
         *extract.b_mut() += F::Q_DIV_8;
 
         self.key_switching_key
-            .key_switch(extract, parameters.lwe_dimension())
+            .key_switch(extract)
             .modulus_switch_floor(
                 self.parameters.lwe_modulus_f64(),
                 self.parameters.rlwe_modulus_f64(),
@@ -58,40 +62,22 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
 }
 
 impl<R: Ring, F: RandomNTTField> EvaluationKey<R, F> {
-    /// .
+    /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new<Rng>(secret_key_pack: &SecretKeyPack<R, F>, mut rng: Rng) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
-        let lwe_secret_key = secret_key_pack.lwe_secret_key();
-
         let parameters = secret_key_pack.parameters();
         let chi = parameters.rlwe_noise_distribution();
 
-        let bootstrapping_key = BootstrappingKey::generate(
-            parameters.secret_key_type(),
-            lwe_secret_key,
-            secret_key_pack.ntt_rlwe_secret_key(),
-            parameters.gadget_basis(),
-            parameters.gadget_basis_powers(),
-            chi,
-            &mut rng,
-        );
+        let bootstrapping_key = BootstrappingKey::generate(secret_key_pack, chi, &mut rng);
 
-        let key_switching_key = KeySwitchingKey::generate(
-            parameters.lwe_dimension(),
-            lwe_secret_key,
-            secret_key_pack.rlwe_secret_key(),
-            parameters.key_switching_basis(),
-            parameters.key_switching_basis_powers(),
-            chi,
-            rng,
-        );
+        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, rng);
 
         Self {
             bootstrapping_key,
             key_switching_key,
-            parameters: secret_key_pack.parameters().clone(),
+            parameters: parameters.clone(),
         }
     }
 }

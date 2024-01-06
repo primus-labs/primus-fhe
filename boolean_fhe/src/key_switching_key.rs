@@ -1,18 +1,26 @@
-use algebra::{Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring};
+use algebra::{NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring};
 use lattice::{NTTGadgetRLWE, LWE, RLWE};
 
-use crate::{ciphertext::NTTRLWECiphertext, secret_key::RLWESecretKey};
+use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
-/// Key Switching Key
+/// The Key Switching Key.
+///
+/// This struct stores the key
+/// to switch a [`LWE`] ciphertext from the RLWE Secret Key
+/// to a [`LWE`] ciphertext of the LWE Secret Key.
 pub struct KeySwitchingKey<F: NTTField> {
+    /// LWE vector dimension, refers to **`n`** in the paper.
+    lwe_dimension: usize,
+    /// Key Switching Key data
     key: Vec<NTTGadgetRLWE<F>>,
 }
 
 impl<F: NTTField> KeySwitchingKey<F> {
-    pub(crate) fn key_switch(&self, ciphertext: LWE<F>, lwe_dimension: usize) -> LWE<F> {
+    /// Performs key switching operation.
+    pub fn key_switch(&self, ciphertext: LWE<F>) -> LWE<F> {
         let a: Vec<Polynomial<F>> = ciphertext
             .a()
-            .chunks_exact(lwe_dimension)
+            .chunks_exact(self.lwe_dimension)
             .map(|a| {
                 <Polynomial<F>>::new(
                     std::iter::once(a[0])
@@ -23,8 +31,8 @@ impl<F: NTTField> KeySwitchingKey<F> {
             .collect();
 
         let mut init = RLWE::new(
-            Polynomial::zero_with_coeff_count(lwe_dimension),
-            Polynomial::zero_with_coeff_count(lwe_dimension),
+            Polynomial::zero_with_coeff_count(self.lwe_dimension),
+            Polynomial::zero_with_coeff_count(self.lwe_dimension),
         );
         init.b_mut()[0] = ciphertext.b();
 
@@ -39,20 +47,23 @@ impl<F: NTTField> KeySwitchingKey<F> {
 }
 
 impl<F: RandomNTTField> KeySwitchingKey<F> {
-    pub(crate) fn generate<R: Ring, Rng>(
-        lwe_dimension: usize,
-        lwe_secret_key: &[R],
-        rlwe_secret_key: &RLWESecretKey<F>,
-        key_switching_basis: Basis<F>,
-        key_switching_basis_powers: &[F],
+    /// Generates a new [`KeySwitchingKey`].
+    pub fn generate<R: Ring, Rng>(
+        secret_key_pack: &SecretKeyPack<R, F>,
         chi: <F as Random>::NormalDistribution,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
     {
+        let parameters = secret_key_pack.parameters();
+        let lwe_dimension = parameters.lwe_dimension();
+        let key_switching_basis = parameters.key_switching_basis();
+        let key_switching_basis_powers = parameters.key_switching_basis_powers();
+
         let s = <Polynomial<F>>::new(
-            lwe_secret_key
+            secret_key_pack
+                .lwe_secret_key()
                 .iter()
                 .map(|&v| {
                     if v.is_one() {
@@ -68,7 +79,8 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
 
         let ntt_lwe_sk = s.to_ntt_polynomial();
 
-        let key = rlwe_secret_key
+        let key = secret_key_pack
+            .rlwe_secret_key()
             .as_slice()
             .chunks(lwe_dimension)
             .map(|z| {
@@ -91,6 +103,6 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
             })
             .collect();
 
-        Self { key }
+        Self { lwe_dimension, key }
     }
 }
