@@ -251,7 +251,7 @@ impl<F: NTTField> NTTRGSW<F> {
     /// return a [`RLWE<F>`].
     ///
     /// # Attention
-    /// The message of **`self`** is restricted to small messages `m`, typically `m = ±X^v`
+    /// The message of **`self`** is restricted to small messages `m`, typically `m = ±Xⁱ`
     #[inline]
     pub fn mul_with_rlwe(&self, rlwe: &RLWE<F>) -> RLWE<F> {
         self.c_neg_s_m()

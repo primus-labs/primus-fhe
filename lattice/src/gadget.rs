@@ -172,13 +172,13 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     #[inline]
     pub fn mul_with_polynomial(&self, poly: &Polynomial<F>) -> RLWE<F> {
         let decomposed = poly.decompose(self.basis);
-        self.mul_with_decomposed_polynomial(&decomposed)
+        self.mul_with_decomposed_polynomial(decomposed)
     }
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_with_decomposed_polynomial(&self, decomposed: &[Polynomial<F>]) -> RLWE<F> {
+    pub fn mul_with_decomposed_polynomial(&self, decomposed: Vec<Polynomial<F>>) -> RLWE<F> {
         debug_assert_eq!(self.data().len(), decomposed.len());
 
         let coeff_count = decomposed[0].coeff_count();

@@ -1,18 +1,23 @@
-//! basis for decompose
+//! basis for decomposition of the [`Ring`].
 
 use crate::Ring;
 
-/// power of two basis
+/// This basis struct is used for decomposition of the [`Ring`].
+///
+/// It is designed for powers of 2 basis. In this case, decomposition will become simple and efficient.
 #[derive(Debug, Clone, Copy)]
 pub struct Basis<R: Ring> {
     basis: R::Inner,
+    /// The length of the vector of the decomposed [`Ring`] based on the basis.
     decompose_len: usize,
+    /// A value of the `bits` 1, used for some bit-operation.
     mask: R::Inner,
+    /// This basis' bits number.
     bits: u32,
 }
 
 impl<R: Ring> Basis<R> {
-    /// Creates a new [`Basis<R>`].
+    /// Creates a new [`Basis<R>`] with the given basis' bits number.
     pub fn new(bits: u32) -> Self {
         let basis = R::pow_of_two(bits);
         let mask = R::mask(bits);
@@ -34,12 +39,14 @@ impl<R: Ring> Basis<R> {
     }
 
     /// Returns the mask of this [`Basis<R>`].
+    ///
+    /// mask is a value of the `bits` 1, used for some bit-operation.
     #[inline]
     pub fn mask(&self) -> <R as Ring>::Inner {
         self.mask
     }
 
-    /// Returns the bits of this [`Basis<R>`].
+    /// Returns the basis' bits number of this [`Basis<R>`].
     #[inline]
     pub fn bits(&self) -> u32 {
         self.bits

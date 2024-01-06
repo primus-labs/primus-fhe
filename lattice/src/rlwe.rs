@@ -168,9 +168,9 @@ impl<F: NTTField> RLWE<F> {
     /// return a [`RLWE<F>`].
     #[inline]
     pub fn mul_with_polynomial(self, poly: &Polynomial<F>) -> Self {
-        let ntt_poly = &<NTTPolynomial<F>>::from(poly);
+        let ntt_poly = <NTTPolynomial<F>>::from(poly);
         Self {
-            a: self.a * ntt_poly,
+            a: self.a * &ntt_poly,
             b: self.b * ntt_poly,
         }
     }
@@ -183,7 +183,7 @@ impl<F: NTTField> RLWE<F> {
             .collect();
         let b = self.b()[0];
 
-        LWE::<F>::from((a, b))
+        LWE::<F>::new(a, b)
     }
 
     /// Perform [`RLWE<F>`] multiply with `Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
@@ -351,7 +351,7 @@ impl<F: NTTField> NTTRLWE<F> {
     /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `poly` [`Polynomial<F>`],
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_with_polynomial(&self, poly: &Polynomial<F>) -> RLWE<F> {
+    pub fn mul_with_polynomial(&self, poly: Polynomial<F>) -> RLWE<F> {
         let ntt_poly = <NTTPolynomial<F>>::from(poly);
         RLWE {
             a: <Polynomial<F>>::from(&ntt_poly * &self.a),
