@@ -31,7 +31,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
             .fold(init_acc, |acc, (s_i, &a_i)| {
                 // u = 1
                 // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
-                let median = acc.mul_small_ntt_rgsw(&s_i.0).mul_with_monic_monomial_sub1(
+                let median = acc.mul_small_ntt_rgsw(&s_i.0).mul_monic_monomial_sub_one(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     -a_i,
@@ -40,7 +40,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
 
                 // u = -1
                 // ACC = ACC + (Y^{a_i} - 1) * ACC * RGSW(s_i_u)
-                let median = acc.mul_small_ntt_rgsw(&s_i.1).mul_with_monic_monomial_sub1(
+                let median = acc.mul_small_ntt_rgsw(&s_i.1).mul_monic_monomial_sub_one(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     a_i,
@@ -51,6 +51,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
 }
 
 impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
+    /// Generates the [`TernaryBootstrappingKey<F>`].
     pub(crate) fn generate<R: Ring, Rng>(
         basis: Basis<F>,
         basis_powers: &[F],

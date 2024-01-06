@@ -56,23 +56,23 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         let rlwe_modulus = F::modulus_value();
 
         let gadget_basis = <Basis<F>>::new(gadget_basis_bits);
-        let bf = F::new(gadget_basis.basis());
+        let bf = gadget_basis.basis();
 
         let mut gadget_basis_powers = vec![F::zero(); gadget_basis.decompose_len()];
-        let mut temp = F::one();
+        let mut temp = F::ONE.inner();
         gadget_basis_powers.iter_mut().for_each(|v| {
-            *v = temp;
-            temp *= bf;
+            *v = F::new(temp);
+            temp = temp * bf;
         });
 
         let key_switching_basis = <Basis<F>>::new(key_switch_basis_bits);
-        let bf = F::new(key_switching_basis.basis());
+        let bf = key_switching_basis.basis();
 
         let mut key_switching_basis_powers = vec![F::zero(); key_switching_basis.decompose_len()];
-        let mut temp = F::one();
+        let mut temp = F::ONE.inner();
         key_switching_basis_powers.iter_mut().for_each(|v| {
-            *v = temp;
-            temp *= bf;
+            *v = F::new(temp);
+            temp = temp * bf;
         });
 
         Self {

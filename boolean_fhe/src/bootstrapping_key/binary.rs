@@ -30,7 +30,7 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
             .zip(lwe_a)
             .fold(init_acc, |acc, (s_i, &a_i)| {
                 // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                let median = acc.mul_small_ntt_rgsw(s_i).mul_with_monic_monomial_sub1(
+                let median = acc.mul_small_ntt_rgsw(s_i).mul_monic_monomial_sub_one(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     -a_i,
@@ -41,6 +41,7 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
 }
 
 impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
+    /// Generates the [`BinaryBootstrappingKey<F>`].
     pub(crate) fn generate<R: Ring, Rng>(
         basis: Basis<F>,
         basis_powers: &[F],
