@@ -71,6 +71,12 @@ impl<F: Field> NTTPolynomial<F> {
         self.data
     }
 
+    /// swap `self.data` with an outside data.
+    #[inline]
+    pub fn swap(&mut self, data: &mut Vec<F>) {
+        std::mem::swap(&mut self.data, data);
+    }
+
     /// Creates a [`NTTPolynomial<F>`] with all coefficients equal to zero.
     #[inline]
     pub fn zero_with_coeff_count(coeff_count: usize) -> Self {
