@@ -170,9 +170,9 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
 
             const Q_DIV_8: Self = #name(#modulus >> 3);
 
-            const Q3_DIV_8: Self = #name((3 * #modulus) >> 3);
+            const Q3_DIV_8: Self = #name(3 * (#modulus >> 3));
 
-            const Q7_DIV_8: Self = #name((7 * #modulus) >> 3);
+            const Q7_DIV_8: Self = #name(7 * (#modulus >> 3));
 
             const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
 
