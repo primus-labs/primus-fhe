@@ -43,14 +43,18 @@ impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
 
 impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
     /// Converts a tuple of `NTTPolynomials` into an instance of Self.
+    /// Converts a tuple of `NTTPolynomials` into an instance of Self.
     ///
     /// # Arguments
     ///
     /// * `a` - The first `NTTPolynomial`.
     /// * `b` - The second `NTTPolynomial`.
+    /// * `a` - The first `NTTPolynomial`.
+    /// * `b` - The second `NTTPolynomial`.
     ///
     /// # Returns
     ///
+    /// An instance of `Self` containing the converted polynomials.
     /// An instance of `Self` containing the converted polynomials.
     #[inline]
     fn from((a, b): (NTTPolynomial<F>, NTTPolynomial<F>)) -> Self {
