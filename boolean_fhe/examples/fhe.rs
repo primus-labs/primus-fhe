@@ -1,14 +1,7 @@
-use algebra::derive::*;
-use boolean_fhe::{EvaluationKey, Parameters, SecretKeyPack, DEFAULT_PARAMERTERS};
+use boolean_fhe::{
+    DefaultField, DefaultRing, EvaluationKey, Parameters, SecretKeyPack, DEFAULT_PARAMERTERS,
+};
 use rand::Rng;
-
-#[derive(Ring, Random)]
-#[modulus = 1024]
-pub struct RR(u32);
-
-#[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
-pub struct FF(u32);
 
 fn main() {
     // set random generator
@@ -17,7 +10,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = <Parameters<RR, FF>>::from(DEFAULT_PARAMERTERS);
+    let params = <Parameters<DefaultRing, DefaultField>>::from(DEFAULT_PARAMERTERS);
 
     // generate keys
     let skp = SecretKeyPack::new(params, &mut rng);

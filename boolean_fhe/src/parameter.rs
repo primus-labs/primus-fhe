@@ -1,4 +1,4 @@
-use algebra::{Basis, NTTField, Random, RandomNTTField, RandomRing, Ring};
+use algebra::{derive::*, Basis, NTTField, Random, RandomNTTField, RandomRing, Ring};
 
 use num_traits::cast;
 
@@ -31,6 +31,16 @@ pub struct ConstParameters<Scalar> {
     /// Decompose basis for `Q` used for key switching
     pub key_switching_basis_bits: u32,
 }
+
+/// Default Ring for Default Parameters
+#[derive(Ring, Random)]
+#[modulus = 1024]
+pub struct DefaultRing(u32);
+
+/// Default Field for Default Parameters
+#[derive(Ring, Field, Random, Prime, NTT)]
+#[modulus = 1073692673]
+pub struct DefaultField(u32);
 
 /// Default Parameters
 pub const DEFAULT_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {

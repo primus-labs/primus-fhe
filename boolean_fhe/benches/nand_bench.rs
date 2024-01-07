@@ -1,16 +1,8 @@
+use boolean_fhe::{
+    DefaultField, DefaultRing, EvaluationKey, Parameters, SecretKeyPack, DEFAULT_PARAMERTERS,
+};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-
-use algebra::derive::{Field, Prime, Random, Ring, NTT};
-use boolean_fhe::{EvaluationKey, Parameters, SecretKeyPack, DEFAULT_PARAMERTERS};
 use rand::Rng;
-
-#[derive(Ring, Random)]
-#[modulus = 1024]
-pub struct RR(u32);
-
-#[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
-pub struct FF(u32);
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     // set random generator
@@ -19,7 +11,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = <Parameters<RR, FF>>::from(DEFAULT_PARAMERTERS);
+    let params = <Parameters<DefaultRing, DefaultField>>::from(DEFAULT_PARAMERTERS);
 
     // generate keys
     let skp = SecretKeyPack::new(params, &mut rng);
