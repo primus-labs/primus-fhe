@@ -14,7 +14,10 @@ mod evaluation_key;
 mod key_switching_key;
 mod secret_key;
 
-pub use parameter::{ConstParameters, DefaultField, DefaultRing, Parameters, DEFAULT_PARAMERTERS};
+pub use parameter::{
+    ConstParameters, DefaultField100, DefaultRing100, Parameters,
+    CONST_DEFAULT_100_BITS_PARAMERTERS, DEFAULT_100_BITS_PARAMERTERS,
+};
 
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::LWEPlaintext;

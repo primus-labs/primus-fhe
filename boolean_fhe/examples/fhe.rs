@@ -1,6 +1,4 @@
-use boolean_fhe::{
-    DefaultField, DefaultRing, EvaluationKey, Parameters, SecretKeyPack, DEFAULT_PARAMERTERS,
-};
+use boolean_fhe::{EvaluationKey, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
 use rand::Rng;
 
 fn main() {
@@ -10,21 +8,21 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = <Parameters<DefaultRing, DefaultField>>::from(DEFAULT_PARAMERTERS);
+    let params = DEFAULT_100_BITS_PARAMERTERS.clone();
 
     // generate keys
-    let skp = SecretKeyPack::new(params, &mut rng);
+    let skp = SecretKeyPack::new(params);
     println!("Secret Key Generation done!\n");
 
-    let evk = EvaluationKey::new(&skp, &mut rng);
+    let evk = EvaluationKey::new(&skp);
     println!("Evaluation Key Generation done!\n");
 
     let mut m = rng.gen();
-    let mut c = skp.encrypt(m, &mut rng);
+    let mut c = skp.encrypt(m);
 
     for i in 0..100 {
         let m1 = rng.gen();
-        let c1 = skp.encrypt(m1, &mut rng);
+        let c1 = skp.encrypt(m1);
 
         c = evk.nand(c1, &c);
 

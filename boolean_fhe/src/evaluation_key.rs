@@ -2,8 +2,7 @@ use algebra::{NTTField, Polynomial, RandomNTTField, Ring};
 use lattice::RLWE;
 
 use crate::{
-    ciphertext::RLWECiphertext, BootstrappingKey, KeySwitchingKey, LWECiphertext, Parameters,
-    SecretKeyPack,
+    BootstrappingKey, KeySwitchingKey, LWECiphertext, Parameters, RLWECiphertext, SecretKeyPack,
 };
 
 /// The evaluator of the homomorphic encryption scheme.
@@ -60,16 +59,15 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
 
 impl<R: Ring, F: RandomNTTField> EvaluationKey<R, F> {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
-    pub fn new<Rng>(secret_key_pack: &SecretKeyPack<R, F>, mut rng: Rng) -> Self
-    where
-        Rng: rand::Rng + rand::CryptoRng,
-    {
+    pub fn new(secret_key_pack: &SecretKeyPack<R, F>) -> Self {
+        let mut csrng = secret_key_pack.csrng_mut();
+
         let parameters = secret_key_pack.parameters();
         let chi = parameters.rlwe_noise_distribution();
 
-        let bootstrapping_key = BootstrappingKey::generate(secret_key_pack, chi, &mut rng);
+        let bootstrapping_key = BootstrappingKey::generate(secret_key_pack, chi, &mut *csrng);
 
-        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, rng);
+        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
 
         Self {
             bootstrapping_key,

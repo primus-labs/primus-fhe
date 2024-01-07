@@ -1,6 +1,7 @@
 use algebra::{derive::*, Basis, NTTField, Random, RandomNTTField, RandomRing, Ring};
 
 use num_traits::cast;
+use once_cell::sync::Lazy;
 
 use crate::SecretKeyType;
 
@@ -31,29 +32,6 @@ pub struct ConstParameters<Scalar> {
     /// Decompose basis for `Q` used for key switching
     pub key_switching_basis_bits: u32,
 }
-
-/// Default Ring for Default Parameters
-#[derive(Ring, Random)]
-#[modulus = 1024]
-pub struct DefaultRing(u32);
-
-/// Default Field for Default Parameters
-#[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
-pub struct DefaultField(u32);
-
-/// Default Parameters
-pub const DEFAULT_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
-    lwe_dimension: 512,
-    lwe_modulus: 1024,
-    lwe_noise_std_dev: 3.20,
-    secret_key_type: SecretKeyType::Ternary,
-    rlwe_dimension: 1024,
-    rlwe_modulus: 1073692673,
-    rlwe_noise_std_dev: 3.20,
-    gadget_basis_bits: 6,
-    key_switching_basis_bits: 3,
-};
 
 /// The parameters of the fully homomorphic encryption scheme.
 #[derive(Debug, Clone)]
@@ -272,3 +250,32 @@ impl<R: Ring, F: RandomNTTField> Parameters<R, F> {
         F::normal_distribution(0.0, self.rlwe_noise_std_dev).unwrap()
     }
 }
+
+/// Default Ring for Default Parameters
+#[derive(Ring, Random)]
+#[modulus = 1024]
+pub struct DefaultRing100(u32);
+
+/// Default Field for Default Parameters
+#[derive(Ring, Field, Random, Prime, NTT)]
+#[modulus = 1073692673]
+pub struct DefaultField100(u32);
+
+/// Default Parameters
+pub const CONST_DEFAULT_100_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
+    lwe_dimension: 512,
+    lwe_modulus: 1024,
+    lwe_noise_std_dev: 3.20,
+    secret_key_type: SecretKeyType::Ternary,
+    rlwe_dimension: 1024,
+    rlwe_modulus: 1073692673,
+    rlwe_noise_std_dev: 3.20,
+    gadget_basis_bits: 6,
+    key_switching_basis_bits: 3,
+};
+
+/// Default 100bits security Parameters
+pub static DEFAULT_100_BITS_PARAMERTERS: Lazy<Parameters<DefaultRing100, DefaultField100>> =
+    Lazy::new(|| {
+        <Parameters<DefaultRing100, DefaultField100>>::from(CONST_DEFAULT_100_BITS_PARAMERTERS)
+    });
