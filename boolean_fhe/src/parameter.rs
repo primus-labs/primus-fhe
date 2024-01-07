@@ -5,6 +5,8 @@ use num_traits::cast;
 use crate::SecretKeyType;
 
 /// The parameters of the fully homomorphic encryption scheme.
+///
+/// This type is used for setting some default Parameters.
 #[derive(Debug, Clone, Copy)]
 pub struct ConstParameters<Scalar> {
     /// LWE vector dimension, refers to **`n`** in the paper.
@@ -29,6 +31,19 @@ pub struct ConstParameters<Scalar> {
     /// Decompose basis for `Q` used for key switching
     pub key_switching_basis_bits: u32,
 }
+
+/// Default Parameters
+pub const DEFAULT_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
+    lwe_dimension: 512,
+    lwe_modulus: 1024,
+    lwe_noise_std_dev: 3.20,
+    secret_key_type: SecretKeyType::Ternary,
+    rlwe_dimension: 1024,
+    rlwe_modulus: 1073692673,
+    rlwe_noise_std_dev: 3.20,
+    gadget_basis_bits: 6,
+    key_switching_basis_bits: 3,
+};
 
 /// The parameters of the fully homomorphic encryption scheme.
 #[derive(Debug, Clone)]
@@ -67,6 +82,27 @@ pub struct Parameters<R: Ring, F: NTTField> {
     key_switching_basis_powers: Vec<F>,
 }
 
+impl<R: Ring, F: NTTField, Scalar> From<ConstParameters<Scalar>> for Parameters<R, F>
+where
+    R::Inner: std::cmp::PartialEq<Scalar>,
+    F::Inner: std::cmp::PartialEq<Scalar>,
+    Scalar: std::fmt::Debug,
+{
+    fn from(parameters: ConstParameters<Scalar>) -> Self {
+        assert_eq!(R::modulus_value(), parameters.lwe_modulus);
+        assert_eq!(F::modulus_value(), parameters.rlwe_modulus);
+        Self::new(
+            parameters.lwe_dimension,
+            parameters.rlwe_dimension,
+            parameters.secret_key_type,
+            parameters.gadget_basis_bits,
+            parameters.key_switching_basis_bits,
+            parameters.lwe_noise_std_dev,
+            parameters.rlwe_noise_std_dev,
+        )
+    }
+}
+
 impl<R: Ring, F: NTTField> Parameters<R, F> {
     /// Creates a new [`Parameters<R, F>`].
     pub fn new(
@@ -74,7 +110,7 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         rlwe_dimension: usize,
         secret_key_type: SecretKeyType,
         gadget_basis_bits: u32,
-        key_switch_basis_bits: u32,
+        key_switching_basis_bits: u32,
         lwe_noise_std_dev: f64,
         rlwe_noise_std_dev: f64,
     ) -> Self {
@@ -91,7 +127,7 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
             temp = temp * bf;
         });
 
-        let key_switching_basis = <Basis<F>>::new(key_switch_basis_bits);
+        let key_switching_basis = <Basis<F>>::new(key_switching_basis_bits);
         let bf = key_switching_basis.basis();
 
         let mut key_switching_basis_powers = vec![F::ZERO; key_switching_basis.decompose_len()];

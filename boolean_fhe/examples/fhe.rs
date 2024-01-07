@@ -1,5 +1,5 @@
 use algebra::derive::*;
-use boolean_fhe::{EvaluationKey, Parameters, SecretKeyPack, SecretKeyType};
+use boolean_fhe::{EvaluationKey, Parameters, SecretKeyPack, DEFAULT_PARAMERTERS};
 use rand::Rng;
 
 #[derive(Ring, Random)]
@@ -17,7 +17,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = <Parameters<RR, FF>>::new(512, 1024, SecretKeyType::Ternary, 6, 5, 3.2, 3.2);
+    let params = <Parameters<RR, FF>>::from(DEFAULT_PARAMERTERS);
 
     // generate keys
     let skp = SecretKeyPack::new(params, &mut rng);
