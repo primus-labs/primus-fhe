@@ -257,7 +257,7 @@ impl<F: NTTField> RLWE<F> {
         r: R,
     ) -> Self {
         self.mul_monic_monomial(rlwe_dimension, twice_rlwe_dimension_div_lwe_modulus, r)
-            .sub_element_wise(&self)
+            .sub_element_wise(self)
     }
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_rgsw` [`RGSW<F>`],
