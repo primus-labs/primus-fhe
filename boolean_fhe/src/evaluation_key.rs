@@ -54,10 +54,7 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
 
         self.key_switching_key
             .key_switch(extract)
-            .modulus_switch_floor(
-                self.parameters.lwe_modulus_f64(),
-                self.parameters.rlwe_modulus_f64(),
-            )
+            .modulus_switch_floor()
     }
 }
 

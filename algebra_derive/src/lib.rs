@@ -17,7 +17,7 @@ use syn::{parse_macro_input, DeriveInput};
 
 /// Derive macro generates an impl of the trait `algebra::Ring`.
 ///
-/// This also generates some compitation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
+/// This also generates some computation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
 ///
 /// By the way, it also generates impl of the trait `Zero`, `One`, `Display`.
 ///
@@ -43,7 +43,7 @@ pub fn derive_ring(input: TokenStream) -> TokenStream {
 
 /// Derive macro generates an impl of the trait `algebra::Field`.
 ///
-/// This also generates some compitation for it, e.g. `Div` and `Inv`.
+/// This also generates some computation for it, e.g. `Div` and `Inv`.
 ///
 /// It can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 ///

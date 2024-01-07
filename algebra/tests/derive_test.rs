@@ -85,13 +85,13 @@ mod tests {
         // neg
         let a = rng.sample(distr);
         let a_neg = -FF::new(a);
-        assert_eq!(FF::new(a) + a_neg, num_traits::Zero::zero());
+        assert_eq!(FF::new(a) + a_neg, FF::ZERO);
 
         // inv
         let a = rng.sample(distr);
         let a_inv = a.pow_reduce(p - 2, &Modulus::<T>::new(p));
         assert_eq!(FF::new(a).inv(), FF::new(a_inv));
-        assert_eq!(FF::new(a) * FF::new(a_inv), num_traits::One::one());
+        assert_eq!(FF::new(a) * FF::new(a_inv), FF::ONE);
 
         // associative
         let a = rng.sample(distr);
@@ -190,7 +190,7 @@ mod tests {
         // neg
         let a = rng.sample(distr);
         let a_neg = -RR::new(a);
-        assert_eq!(RR::new(a) + a_neg, num_traits::Zero::zero());
+        assert_eq!(RR::new(a) + a_neg, RR::ZERO);
 
         // associative
         let a = rng.sample(distr);

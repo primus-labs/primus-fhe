@@ -22,7 +22,7 @@ use rand_distr::Standard;
 
 // Derive macro `Field` generating an impl of the trait `algebra::Field`.
 //
-// This also generating some compitation for it, e.g. `Div` and `Inv`.
+// This also generating some computation for it, e.g. `Div` and `Inv`.
 
 // Derive macro `Prime` generating an impl of the trait `algebra::PrimeField`.
 //
@@ -48,8 +48,10 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let mut b = FF::max();
 
     // you can get two special value `one` and `zero`
-    let one = FF::one();
-    let zero = FF::zero();
+    let _one = FF::one();
+    let _zero = FF::zero();
+    let one = FF::ONE;
+    let zero = FF::ZERO;
 
     // check `one` and `zero` by function
     assert!(one.is_one());

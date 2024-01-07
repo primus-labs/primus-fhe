@@ -75,7 +75,7 @@ impl<F: Field> NTTPolynomial<F> {
     #[inline]
     pub fn zero_with_coeff_count(coeff_count: usize) -> Self {
         Self {
-            data: vec![F::zero(); coeff_count],
+            data: vec![F::ZERO; coeff_count],
         }
     }
 
@@ -218,7 +218,7 @@ impl<F: Field> Zero for NTTPolynomial<F> {
     #[inline]
     fn set_zero(&mut self) {
         let coeff_count = self.coeff_count();
-        self.data = vec![F::zero(); coeff_count];
+        self.data = vec![F::ZERO; coeff_count];
     }
 }
 

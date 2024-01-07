@@ -29,7 +29,6 @@ use crate::{Basis, Random, RoundedDiv};
 pub trait Ring:
     Sized
     + Copy
-    + Clone
     + Send
     + Sync
     + Debug
@@ -86,6 +85,9 @@ pub trait Ring:
 
     /// 4
     const FOUR_INNER: Self::Inner;
+
+    /// q
+    const MODULUS_F64: f64;
 
     /// Creates a new instance.
     fn new(value: Self::Inner) -> Self;

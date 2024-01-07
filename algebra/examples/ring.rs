@@ -8,7 +8,7 @@ use rand_distr::Standard;
 
 // Derive macro `Ring` generates an impl of the trait `algebra::Ring`.
 //
-// This also generates some compitation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
+// This also generates some computation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
 //
 // By the way, it also generates impl of the trait `Zero`, `One`, `Display`.
 //
@@ -36,8 +36,10 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let mut b = RR::max();
 
     // you can get two special value `one` and `zero`
-    let one = RR::one();
-    let zero = RR::zero();
+    let _one = RR::one();
+    let _zero = RR::zero();
+    let one = RR::ONE;
+    let zero = RR::ZERO;
 
     // check `one` and `zero` by function
     assert!(one.is_one());

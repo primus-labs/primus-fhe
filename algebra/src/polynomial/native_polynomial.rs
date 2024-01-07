@@ -86,7 +86,7 @@ impl<F: Field> Polynomial<F> {
     #[inline]
     pub fn zero_with_coeff_count(coeff_count: usize) -> Self {
         Self {
-            data: vec![F::zero(); coeff_count],
+            data: vec![F::ZERO; coeff_count],
         }
     }
 
@@ -152,7 +152,7 @@ impl<F: Field> Polynomial<F> {
     /// Given `x`, outputs `f(x)`
     #[inline]
     pub fn evaluate(&self, x: F) -> F {
-        self.data.iter().rev().fold(F::zero(), |acc, a| acc * x + a)
+        self.data.iter().rev().fold(F::ZERO, |acc, a| acc * x + a)
     }
 }
 
@@ -259,7 +259,7 @@ impl<F: Field> Zero for Polynomial<F> {
     #[inline]
     fn set_zero(&mut self) {
         let coeff_count = self.coeff_count();
-        self.data = vec![F::zero(); coeff_count];
+        self.data = vec![F::ZERO; coeff_count];
     }
 }
 

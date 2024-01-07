@@ -178,6 +178,8 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
 
             const FOUR_INNER: Self::Inner = 4;
 
+            const MODULUS_F64: f64 = #modulus as f64;
+
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
             fn new(value: #field_ty) -> Self {
@@ -292,6 +294,8 @@ fn impl_and_ring(
             const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
 
             const FOUR_INNER: Self::Inner = 4;
+
+            const MODULUS_F64: f64 = #modulus as f64;
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]

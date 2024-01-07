@@ -2,7 +2,6 @@ use algebra::{
     derive::{Field, Prime, Random, Ring, NTT},
     Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial, Ring,
 };
-use num_traits::{One, Zero};
 use rand::thread_rng;
 
 #[derive(Ring, Field, Random, Prime, NTT)]
@@ -69,7 +68,7 @@ fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<
     assert_eq!(lhs.coeff_count(), rhs.coeff_count());
     let coeff_count = lhs.coeff_count();
 
-    let mut result = vec![F::zero(); coeff_count];
+    let mut result = vec![F::ZERO; coeff_count];
     let poly1: &[F] = lhs.as_ref();
     let poly2: &[F] = rhs.as_ref();
 
@@ -160,15 +159,15 @@ fn test_poly_eval() {
         poly.evaluate(FF::max()),
         poly.iter()
             .enumerate()
-            .fold(FF::zero(), |acc, (i, a)| if i & 1 == 0 {
+            .fold(FF::ZERO, |acc, (i, a)| if i & 1 == 0 {
                 acc + a
             } else {
                 acc - a
             })
     );
-    assert_eq!(poly.evaluate(FF::zero()), poly[0]);
+    assert_eq!(poly.evaluate(FF::ZERO), poly[0]);
     assert_eq!(
-        poly.evaluate(FF::one()),
-        poly.iter().fold(FF::zero(), |acc, a| acc + a)
+        poly.evaluate(FF::ONE),
+        poly.iter().fold(FF::ZERO, |acc, a| acc + a)
     );
 }

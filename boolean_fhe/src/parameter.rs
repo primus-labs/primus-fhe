@@ -5,6 +5,32 @@ use num_traits::cast;
 use crate::SecretKeyType;
 
 /// The parameters of the fully homomorphic encryption scheme.
+#[derive(Debug, Clone, Copy)]
+pub struct ConstParameters<Scalar> {
+    /// LWE vector dimension, refers to **`n`** in the paper.
+    pub lwe_dimension: usize,
+    /// LWE cipher modulus, refers to **`q`** in the paper.
+    pub lwe_modulus: Scalar,
+    /// The lwe noise error's standard deviation
+    pub lwe_noise_std_dev: f64,
+    /// LWE Secret Key distribution Type
+    pub secret_key_type: SecretKeyType,
+
+    /// RLWE polynomial dimension, refers to **`N`** in the paper.
+    pub rlwe_dimension: usize,
+    /// RLWE cipher modulus, refers to **`Q`** in the paper.
+    pub rlwe_modulus: Scalar,
+    /// The rlwe noise error's standard deviation
+    pub rlwe_noise_std_dev: f64,
+
+    /// Decompose basis for `Q` used for bootstrapping accumulator
+    pub gadget_basis_bits: u32,
+
+    /// Decompose basis for `Q` used for key switching
+    pub key_switching_basis_bits: u32,
+}
+
+/// The parameters of the fully homomorphic encryption scheme.
 #[derive(Debug, Clone)]
 pub struct Parameters<R: Ring, F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
@@ -58,7 +84,7 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         let gadget_basis = <Basis<F>>::new(gadget_basis_bits);
         let bf = gadget_basis.basis();
 
-        let mut gadget_basis_powers = vec![F::zero(); gadget_basis.decompose_len()];
+        let mut gadget_basis_powers = vec![F::ZERO; gadget_basis.decompose_len()];
         let mut temp = F::ONE.inner();
         gadget_basis_powers.iter_mut().for_each(|v| {
             *v = F::new(temp);
@@ -68,7 +94,7 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         let key_switching_basis = <Basis<F>>::new(key_switch_basis_bits);
         let bf = key_switching_basis.basis();
 
-        let mut key_switching_basis_powers = vec![F::zero(); key_switching_basis.decompose_len()];
+        let mut key_switching_basis_powers = vec![F::ZERO; key_switching_basis.decompose_len()];
         let mut temp = F::ONE.inner();
         key_switching_basis_powers.iter_mut().for_each(|v| {
             *v = F::new(temp);
