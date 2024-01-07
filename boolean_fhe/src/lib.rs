@@ -12,6 +12,7 @@ mod bootstrapping_key;
 mod evaluation_key;
 mod key_switching_key;
 mod secret_key;
+mod allocator;
 
 pub use parameter::Parameters;
 
