@@ -2,7 +2,7 @@
 //! modular arithmetic based on barrett reduction.
 //!
 //! Barrett reduction computes `r ≡ x mod m` given `x` and `m`
-//! and return `r`.
+//! and return `r` where `r < m`.
 //!
 //! Fisrt, we need decide the radix `b`, which is chosen to be close to
 //! the word-size of the processor. Here, `b` = 2^64.
@@ -20,8 +20,8 @@
 //! 3. If `r ≥ m` do: `r ← r − m`.
 //! 4. Return(`r`).
 
-use crate::modulo_traits::{MulModulo, MulModuloAssign};
-use crate::primitive::Widening;
+use crate::reduce::{MulReduce, MulReduceAssign};
+use crate::Widening;
 
 #[macro_use]
 mod internal_macros;
@@ -61,7 +61,7 @@ impl<T: Copy> Modulus<T> {
 impl<T> Modulus<T> {
     /// Returns the bit count of this [`Modulus<T>`].
     #[inline]
-    pub fn bit_count(&self) -> u32 {
+    pub const fn bit_count(&self) -> u32 {
         self.bit_count
     }
 }
@@ -76,7 +76,7 @@ impl_prime_modulus!(impl Modulus<u64>; WideType: u128);
 /// This is efficient if many operations are multiplied by
 /// the same number and then reduced with the same modulus.
 #[derive(Clone, Copy, Default)]
-pub struct MulModuloFactor<T> {
+pub struct MulReduceFactor<T> {
     /// value
     pub value: T,
 
@@ -84,35 +84,35 @@ pub struct MulModuloFactor<T> {
     pub quotient: T,
 }
 
-impl<T: Copy> MulModuloFactor<T> {
-    /// Returns the value of this [`MulModuloFactor<T>`].
+impl<T: Copy> MulReduceFactor<T> {
+    /// Returns the value of this [`MulReduceFactor<T>`].
     #[inline]
-    pub fn value(&self) -> T {
+    pub const fn value(&self) -> T {
         self.value
     }
 
-    /// Returns the quotient of this [`MulModuloFactor<T>`].
+    /// Returns the quotient of this [`MulReduceFactor<T>`].
     #[inline]
-    pub fn quotient(&self) -> T {
+    pub const fn quotient(&self) -> T {
         self.quotient
     }
 }
 
-impl_mul_modulo_factor!(impl MulModuloFactor<u8>; WideType: u16);
-impl_mul_modulo_factor!(impl MulModuloFactor<u16>; WideType: u32);
-impl_mul_modulo_factor!(impl MulModuloFactor<u32>; WideType: u64);
-impl_mul_modulo_factor!(impl MulModuloFactor<u64>; WideType: u128);
+impl_mul_reduce_factor!(impl MulReduceFactor<u8>; WideType: u16);
+impl_mul_reduce_factor!(impl MulReduceFactor<u16>; WideType: u32);
+impl_mul_reduce_factor!(impl MulReduceFactor<u32>; WideType: u64);
+impl_mul_reduce_factor!(impl MulReduceFactor<u64>; WideType: u128);
 
-impl_mul_modulo_factor_ops!(impl MulModuloFactor<u8>);
-impl_mul_modulo_factor_ops!(impl MulModuloFactor<u16>);
-impl_mul_modulo_factor_ops!(impl MulModuloFactor<u32>);
-impl_mul_modulo_factor_ops!(impl MulModuloFactor<u64>);
+impl_mul_reduce_factor_ops!(impl MulReduceFactor<u8>);
+impl_mul_reduce_factor_ops!(impl MulReduceFactor<u16>);
+impl_mul_reduce_factor_ops!(impl MulReduceFactor<u32>);
+impl_mul_reduce_factor_ops!(impl MulReduceFactor<u64>);
 
 #[cfg(test)]
 mod tests {
     use rand::{prelude::*, thread_rng};
 
-    use crate::modulo_traits::Modulo;
+    use crate::reduce::Reduce;
 
     use super::*;
 

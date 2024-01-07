@@ -10,7 +10,7 @@ macro_rules! impl_prime_modulus {
             #[doc = concat!("The `value`'s `bit_count` should be at most ", stringify!($SelfT::BITS - 1), ", others will panic.")]
             pub const fn new(value: $SelfT) -> Self {
                 const HALF_BITS: u32 = <$SelfT>::BITS >> 1;
-                const HALF: $SelfT = (1 << HALF_BITS) - 1;
+                const HALF: $SelfT = <$SelfT>::MAX >> HALF_BITS;
 
                 #[inline]
                 const fn div_rem(numerator: $SelfT, divisor: $SelfT) -> ($SelfT, $SelfT) {
@@ -18,49 +18,35 @@ macro_rules! impl_prime_modulus {
                 }
 
                 #[inline]
-                const fn div_wide(hi: $SelfT, lo: $SelfT, divisor: $SelfT) -> ($SelfT, $SelfT) {
-                    debug_assert!(hi < divisor);
-                    let lhs = lo as $WideT | ((hi as $WideT) << <$SelfT>::BITS);
+                const fn div_wide(hi: $SelfT, divisor: $SelfT) -> ($SelfT, $SelfT) {
+                    let lhs = (hi as $WideT) << <$SelfT>::BITS;
                     let rhs = divisor as $WideT;
                     ((lhs / rhs) as $SelfT, (lhs % rhs) as $SelfT)
                 }
 
                 #[inline]
-                const fn div_half(rem: $SelfT, digit: $SelfT, divisor: $SelfT) -> ($SelfT, $SelfT) {
-                    debug_assert!(rem < divisor && divisor <= HALF);
-                    let (hi, rem) = div_rem((rem << HALF_BITS) | (digit >> HALF_BITS), divisor);
-                    let (lo, rem) = div_rem((rem << HALF_BITS) | (digit & HALF), divisor);
+                const fn div_half(rem: $SelfT, divisor: $SelfT) -> ($SelfT, $SelfT) {
+                    let (hi, rem) = div_rem(rem << HALF_BITS, divisor);
+                    let (lo, rem) = div_rem(rem << HALF_BITS, divisor);
                     ((hi << HALF_BITS) | lo, rem)
                 }
 
-                const fn div_inplace(value: $SelfT) -> ([$SelfT; 3], $SelfT) {
-                    assert!(value != 0);
-
-                    let mut numerator = [0, 0, 0];
-                    let mut rem = 0;
+                const fn div_inplace(value: $SelfT) -> ([$SelfT; 2], $SelfT) {
+                    let mut numerator = [0, 0];
+                    let rem;
 
                     if value <= HALF {
-                        let (q, r) = div_half(rem, 1, value);
-                        numerator[2] = q;
-                        rem = r;
-
-                        let (q, r) = div_half(rem, 0, value);
+                        let (q, r) = div_half(1, value);
                         numerator[1] = q;
-                        rem = r;
 
-                        let (q, r) = div_half(rem, 0, value);
+                        let (q, r) = div_half(r, value);
                         numerator[0] = q;
                         rem = r;
                     } else {
-                        let (q, r) = div_wide(rem, 1, value);
-                        numerator[2] = q;
-                        rem = r;
-
-                        let (q, r) = div_wide(rem, 0, value);
+                        let (q, r) = div_wide(1, value);
                         numerator[1] = q;
-                        rem = r;
 
-                        let (q, r) = div_wide(rem, 0, value);
+                        let (q, r) = div_wide(r, value);
                         numerator[0] = q;
                         rem = r;
                     }
@@ -77,7 +63,7 @@ macro_rules! impl_prime_modulus {
 
                         Self {
                             value,
-                            ratio: [numerator[0], numerator[1]],
+                            ratio: numerator,
                             bit_count,
                         }
                     }
@@ -85,7 +71,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo_traits::Modulo<&Modulus<$SelfT>> for $SelfT {
+        impl crate::reduce::Reduce<&Modulus<$SelfT>> for $SelfT {
             type Output = Self;
 
             /// Caculates `self (mod modulus)`.
@@ -144,7 +130,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo_traits::Modulo<&Modulus<$SelfT>> for [$SelfT; 2] {
+        impl crate::reduce::Reduce<&Modulus<$SelfT>> for [$SelfT; 2] {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)`.
@@ -214,7 +200,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo_traits::Modulo<&Modulus<$SelfT>> for ($SelfT, $SelfT) {
+        impl crate::reduce::Reduce<&Modulus<$SelfT>> for ($SelfT, $SelfT) {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)`.
@@ -284,7 +270,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::modulo_traits::Modulo<&Modulus<$SelfT>> for &[$SelfT] {
+        impl crate::reduce::Reduce<&Modulus<$SelfT>> for &[$SelfT] {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)` when value's length > 0.
@@ -300,12 +286,12 @@ macro_rules! impl_prime_modulus {
                     }
                     [other @ .., last] => other
                         .iter()
-                        .rfold(*last, |acc, x| [*x, acc].reduce(modulus)),
+                        .rfold(*last, |acc, &x| [x, acc].reduce(modulus)),
                 }
             }
         }
 
-        impl crate::modulo_traits::ModuloAssign<&Modulus<$SelfT>> for $SelfT {
+        impl crate::reduce::ReduceAssign<&Modulus<$SelfT>> for $SelfT {
             /// Caculates `self (mod modulus)`.
             ///
             /// ## Procedure
@@ -363,28 +349,30 @@ macro_rules! impl_prime_modulus {
     };
 }
 
-macro_rules! impl_mul_modulo_factor {
-    (impl MulModuloFactor<$SelfT:ty>; WideType: $WideT:ty) => {
-        impl MulModuloFactor<$SelfT> {
-            /// Constructs a [`MulModuloFactor`].
+macro_rules! impl_mul_reduce_factor {
+    (impl MulReduceFactor<$SelfT:ty>; WideType: $WideT:ty) => {
+        impl MulReduceFactor<$SelfT> {
+            /// Constructs a [`MulReduceFactor`].
             ///
             /// * `value` must be less than `modulus`.
             #[inline]
-            pub fn new(value: $SelfT, modulus: $SelfT) -> Self {
+            pub const fn new(value: $SelfT, modulus: $SelfT) -> Self {
+                debug_assert!(value < modulus);
                 Self {
                     value,
                     quotient: (((value as $WideT) << <$SelfT>::BITS) / modulus as $WideT) as $SelfT,
                 }
             }
 
-            /// Resets the `modulus` of [`MulModuloFactor`].
+            /// Resets the `modulus` of [`MulReduceFactor`].
             #[inline]
             pub fn set_modulus(&mut self, modulus: $SelfT) {
+                debug_assert!(self.value < modulus);
                 self.quotient =
                     (((self.value as $WideT) << <$SelfT>::BITS) / modulus as $WideT) as $SelfT;
             }
 
-            /// Resets the content of [`MulModuloFactor`].
+            /// Resets the content of [`MulReduceFactor`].
             ///
             /// * `value` must be less than `modulus`.
             #[inline]
@@ -409,7 +397,7 @@ macro_rules! impl_mul_modulo_factor {
             ///
             /// `0 ≤ wx − qp < xp/β + p < 2p < β`
             #[inline]
-            pub fn mul_modulo_lazy(&self, rhs: $SelfT, modulus: $SelfT) -> $SelfT {
+            pub fn mul_reduce_lazy(&self, rhs: $SelfT, modulus: $SelfT) -> $SelfT {
                 let (_, hw) = self.quotient.widen_mul(rhs);
                 self.value
                     .wrapping_mul(rhs)
@@ -419,9 +407,9 @@ macro_rules! impl_mul_modulo_factor {
     };
 }
 
-macro_rules! impl_mul_modulo_factor_ops {
-    (impl MulModuloFactor<$SelfT:ty>) => {
-        impl MulModulo<$SelfT, MulModuloFactor<$SelfT>> for $SelfT {
+macro_rules! impl_mul_reduce_factor_ops {
+    (impl MulReduceFactor<$SelfT:ty>) => {
+        impl MulReduce<$SelfT, MulReduceFactor<$SelfT>> for $SelfT {
             type Output = Self;
 
             /// Calculates `self * rhs mod modulus`
@@ -432,7 +420,7 @@ macro_rules! impl_mul_modulo_factor_ops {
             ///
             /// `rhs.value` must be less than `modulus`.
             #[inline]
-            fn mul_reduce(self, rhs: MulModuloFactor<$SelfT>, modulus: $SelfT) -> Self::Output {
+            fn mul_reduce(self, rhs: MulReduceFactor<$SelfT>, modulus: $SelfT) -> Self::Output {
                 let (_, hw) = self.widen_mul(rhs.quotient);
                 let tmp = self
                     .wrapping_mul(rhs.value)
@@ -446,7 +434,7 @@ macro_rules! impl_mul_modulo_factor_ops {
             }
         }
 
-        impl MulModulo<&Modulus<$SelfT>, MulModuloFactor<$SelfT>> for $SelfT {
+        impl MulReduce<&Modulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
             type Output = Self;
 
             /// Calculates `self * rhs mod modulus`
@@ -459,14 +447,14 @@ macro_rules! impl_mul_modulo_factor_ops {
             #[inline]
             fn mul_reduce(
                 self,
-                rhs: MulModuloFactor<$SelfT>,
+                rhs: MulReduceFactor<$SelfT>,
                 modulus: &Modulus<$SelfT>,
             ) -> Self::Output {
-                MulModulo::mul_reduce(self, rhs, modulus.value())
+                MulReduce::mul_reduce(self, rhs, modulus.value())
             }
         }
 
-        impl MulModulo<$SelfT, $SelfT> for MulModuloFactor<$SelfT> {
+        impl MulReduce<$SelfT, $SelfT> for MulReduceFactor<$SelfT> {
             type Output = $SelfT;
 
             /// Calculates `self.value * rhs mod modulus`.
@@ -488,7 +476,7 @@ macro_rules! impl_mul_modulo_factor_ops {
             }
         }
 
-        impl MulModulo<&Modulus<$SelfT>, $SelfT> for MulModuloFactor<$SelfT> {
+        impl MulReduce<&Modulus<$SelfT>, $SelfT> for MulReduceFactor<$SelfT> {
             type Output = $SelfT;
 
             /// Calculates `self.value * rhs mod modulus`.
@@ -500,11 +488,11 @@ macro_rules! impl_mul_modulo_factor_ops {
             /// `self.value` must be less than `modulus`.
             #[inline]
             fn mul_reduce(self, rhs: $SelfT, modulus: &Modulus<$SelfT>) -> Self::Output {
-                MulModulo::mul_reduce(self, rhs, modulus.value())
+                MulReduce::mul_reduce(self, rhs, modulus.value())
             }
         }
 
-        impl MulModuloAssign<$SelfT, MulModuloFactor<$SelfT>> for $SelfT {
+        impl MulReduceAssign<$SelfT, MulReduceFactor<$SelfT>> for $SelfT {
             /// Calculates `self *= rhs mod modulus`.
             ///
             /// The result is in `[0, modulus)`.
@@ -513,7 +501,7 @@ macro_rules! impl_mul_modulo_factor_ops {
             ///
             /// `rhs.value` must be less than `modulus`.
             #[inline]
-            fn mul_reduce_assign(&mut self, rhs: MulModuloFactor<$SelfT>, modulus: $SelfT) {
+            fn mul_reduce_assign(&mut self, rhs: MulReduceFactor<$SelfT>, modulus: $SelfT) {
                 let (_, hw) = self.widen_mul(rhs.quotient);
                 let tmp = self
                     .wrapping_mul(rhs.value)
@@ -522,7 +510,7 @@ macro_rules! impl_mul_modulo_factor_ops {
             }
         }
 
-        impl MulModuloAssign<&Modulus<$SelfT>, MulModuloFactor<$SelfT>> for $SelfT {
+        impl MulReduceAssign<&Modulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
             /// Calculates `self *= rhs mod modulus`.
             ///
             /// The result is in `[0, modulus)`.
@@ -533,10 +521,10 @@ macro_rules! impl_mul_modulo_factor_ops {
             #[inline]
             fn mul_reduce_assign(
                 &mut self,
-                rhs: MulModuloFactor<$SelfT>,
+                rhs: MulReduceFactor<$SelfT>,
                 modulus: &Modulus<$SelfT>,
             ) {
-                MulModuloAssign::mul_reduce_assign(self, rhs, modulus.value());
+                MulReduceAssign::mul_reduce_assign(self, rhs, modulus.value());
             }
         }
     };

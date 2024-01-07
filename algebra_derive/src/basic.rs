@@ -3,23 +3,18 @@ use quote::quote;
 use syn::LitInt;
 
 pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> TokenStream {
+    let name_str = name.to_string();
     quote! {
         impl #name {
-            #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
-            #[inline]
-            pub fn new(value: #field_ty) -> Self {
-                Self(value)
-            }
-
-            /// Return inner value
-            #[inline]
-            pub fn inner(self) -> #field_ty {
-                self.0
-            }
-
             /// Return max value
             #[inline]
             pub const fn max() -> Self {
+                Self(#modulus - 1)
+            }
+
+            /// Return -1
+            #[inline]
+            pub const fn neg_one() -> Self {
                 Self(#modulus - 1)
             }
         }
@@ -30,6 +25,52 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
                 Self(value)
             }
         }
+
+        impl Clone for #name {
+            #[inline]
+            fn clone(&self) -> Self {
+                *self
+            }
+        }
+
+        impl Copy for #name {}
+
+        impl std::fmt::Debug for #name {
+            #[inline]
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_tuple(#name_str).field(&self.0).finish()
+            }
+        }
+
+        impl Default for #name {
+            #[inline]
+            fn default() -> Self {
+                Self(0)
+            }
+        }
+
+        impl PartialOrd for #name {
+            #[inline]
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        impl Ord for #name {
+            #[inline]
+            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                self.0.cmp(&other.0)
+            }
+        }
+
+        impl PartialEq for #name {
+            #[inline]
+            fn eq(&self, other: &Self) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl Eq for #name {}
     }
 }
 

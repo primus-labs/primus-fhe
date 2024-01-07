@@ -13,15 +13,13 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
 fn impl_field_with_ops(input: Input) -> TokenStream {
     let name = &input.ident;
 
-    let field_ty = input.field.ty;
-
     let modulus = input.attrs.modulus.unwrap();
 
-    let impl_div = div_reduce_ops(name, field_ty);
+    let impl_div = div_reduce_ops(name);
 
     let impl_inv = inv_reduce_ops(name, &modulus);
 
-    let impl_field = impl_field(name, field_ty, &modulus);
+    let impl_field = impl_field(name);
 
     quote! {
         #impl_div
@@ -32,19 +30,23 @@ fn impl_field_with_ops(input: Input) -> TokenStream {
     }
 }
 
-fn impl_field(
-    name: &proc_macro2::Ident,
-    field_ty: &syn::Type,
-    modulus: &syn::LitInt,
-) -> TokenStream {
+#[inline]
+fn impl_field(name: &proc_macro2::Ident) -> TokenStream {
     quote! {
-        impl algebra::field::Field for #name {
-            type Modulus = #field_ty;
+        impl algebra::Field for #name {
+                #[inline]
+                fn add_mul(self, a: Self, b: Self) -> Self {
+                    use algebra::Widening;
+                    use algebra::reduce::Reduce;
+                    Self(a.0.carry_mul(b.0, self.0).reduce(&<Self as algebra::ModulusConfig>::MODULUS))
+                }
 
-            #[inline]
-            fn modulus() -> Self::Modulus {
-                #modulus
-            }
+                #[inline]
+                fn mul_add(self, a: Self, b: Self) -> Self {
+                    use algebra::Widening;
+                    use algebra::reduce::Reduce;
+                    Self(self.0.carry_mul(a.0, b.0).reduce(&<Self as algebra::ModulusConfig>::MODULUS))
+                }
         }
     }
 }

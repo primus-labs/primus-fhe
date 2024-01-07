@@ -1,14 +1,10 @@
 use algebra::{
     derive::{Field, Prime, Random, Ring, NTT},
-    field::{BarrettConfig, Field, NTTField},
-    polynomial::{NTTPolynomial, Polynomial},
+    Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial, Ring,
 };
-use num_traits::{One, Zero};
 use rand::thread_rng;
 
-#[derive(
-    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
-)]
+#[derive(Ring, Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -19,8 +15,9 @@ type NTTPolyFF = NTTPolynomial<FF>;
 
 const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
-const B: Inner = 1 << 3; // base
-const P: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
+const BITS: u32 = 3;
+const B: usize = 1 << BITS; // base
+const P: Inner = FF::MODULUS.value(); // ciphertext space
 
 #[test]
 fn test_transform() {
@@ -71,7 +68,7 @@ fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<
     assert_eq!(lhs.coeff_count(), rhs.coeff_count());
     let coeff_count = lhs.coeff_count();
 
-    let mut result = vec![F::zero(); coeff_count];
+    let mut result = vec![F::ZERO; coeff_count];
     let poly1: &[F] = lhs.as_ref();
     let poly2: &[F] = rhs.as_ref();
 
@@ -96,12 +93,13 @@ fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<
 fn test_poly_decompose() {
     let rng = &mut thread_rng();
     let poly = PolyFF::random(N, rng);
-    let decompose = poly.decompose(B);
+    let basis = <Basis<Fp32>>::new(BITS);
+    let decompose = poly.decompose(basis);
     let compose = decompose
         .into_iter()
         .enumerate()
         .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + d.mul_scalar(B.pow(i as u32))
+            acc + d.mul_scalar(B.pow(i as u32) as Inner)
         });
     assert_eq!(compose, poly);
 }
@@ -115,12 +113,13 @@ fn test_poly_decompose_mul() {
 
     let mul_result = &poly1 * &poly2;
 
-    let decompose = poly1.decompose(B);
+    let basis = <Basis<Fp32>>::new(BITS);
+    let decompose = poly1.decompose(basis);
     let compose_mul_result = decompose
         .into_iter()
         .enumerate()
         .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + d * poly2.mul_scalar(B.pow(i as u32))
+            acc + d * poly2.mul_scalar(B.pow(i as u32) as Inner)
         });
     assert_eq!(compose_mul_result, mul_result);
 }
@@ -160,15 +159,15 @@ fn test_poly_eval() {
         poly.evaluate(FF::max()),
         poly.iter()
             .enumerate()
-            .fold(FF::zero(), |acc, (i, a)| if i & 1 == 0 {
+            .fold(FF::ZERO, |acc, (i, a)| if i & 1 == 0 {
                 acc + a
             } else {
                 acc - a
             })
     );
-    assert_eq!(poly.evaluate(FF::zero()), poly[0]);
+    assert_eq!(poly.evaluate(FF::ZERO), poly[0]);
     assert_eq!(
-        poly.evaluate(FF::one()),
-        poly.iter().fold(FF::zero(), |acc, a| acc + a)
+        poly.evaluate(FF::ONE),
+        poly.iter().fold(FF::ZERO, |acc, a| acc + a)
     );
 }

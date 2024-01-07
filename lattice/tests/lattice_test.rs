@@ -1,18 +1,14 @@
 use algebra::derive::{Field, Prime, Random, Ring, NTT};
-use algebra::field::{BarrettConfig, FieldDistribution, NTTField};
-use algebra::polynomial::Polynomial;
-use algebra::ring::Ring;
+use algebra::{Basis, ModulusConfig, Polynomial, Random, Ring};
 use lattice::*;
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Random)]
+#[derive(Ring, Random)]
 #[modulus = 512]
 pub struct R512(u32);
 
-#[derive(
-    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
-)]
+#[derive(Ring, Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -23,9 +19,10 @@ type PolyFF = Polynomial<FF>;
 
 const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
-const B: u32 = 1 << 3; // base
+const BITS: u32 = 3;
+const B: usize = 1 << BITS; // base
 
-const FP: Inner = FF::BARRETT_MODULUS.value(); // ciphertext space
+const FP: Inner = FF::MODULUS.value(); // ciphertext space
 const FT: Inner = 4; // message space
 
 #[test]
@@ -69,13 +66,6 @@ fn test_lwe_he() {
     let rng = &mut rand::thread_rng();
 
     let chi = RR::normal_distribution(0., 3.2).unwrap();
-
-    #[inline]
-    fn dot_product<R: Ring>(u: &[R], v: &[R]) -> R {
-        u.iter()
-            .zip(v.iter())
-            .fold(R::zero(), |acc, (x, y)| acc + *x * y)
-    }
 
     let v0: Inner = rng.gen_range(0..RT);
     let v1: Inner = rng.gen_range(0..RT);
@@ -125,7 +115,7 @@ fn test_rlwe() {
             .sub_element_wise(&rlwe1),
         rlwe2
     );
-    assert_eq!(rlwe1.mul_with_polynomial(&r), rlwe3);
+    assert_eq!(rlwe1.mul_polynomial(r), rlwe3);
 }
 
 #[inline]
@@ -221,25 +211,24 @@ fn test_gadget_rlwe() {
     let poly_mul_m = &poly * &m;
 
     let s = PolyFF::random(N, &mut rng);
+    let basis = <Basis<Fp32>>::new(BITS);
 
-    let decompose_len = FF::decompose_len(B);
-
-    let m_base_power = (0..decompose_len)
+    let m_base_power = (0..basis.decompose_len())
         .map(|i| {
             let a = PolyFF::random(N, &mut rng);
             let e = PolyFF::random_with_dis(N, &mut rng, chi);
-            let b = &a * &s + m.mul_scalar(B.pow(i as u32)) + e;
+            let b = &a * &s + m.mul_scalar(B.pow(i as u32) as Inner) + e;
 
             RLWE::new(a, b)
         })
         .collect::<Vec<RLWE<FF>>>();
 
-    let bad_rlwe_mul = m_base_power[0].clone().mul_with_polynomial(&poly);
+    let bad_rlwe_mul = m_base_power[0].clone().mul_polynomial(poly.clone());
     let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
 
-    let gadget_rlwe = GadgetRLWE::new(m_base_power, B);
+    let gadget_rlwe = GadgetRLWE::new(m_base_power, basis);
 
-    let good_rlwe_mul = gadget_rlwe.mul_with_polynomial(&poly);
+    let good_rlwe_mul = gadget_rlwe.mul_polynomial(&poly);
     let good_mul = good_rlwe_mul.b() - good_rlwe_mul.a() * s;
 
     let diff: Vec<Inner> = (&poly_mul_m - &good_mul)
@@ -282,32 +271,32 @@ fn test_rgsw_mul_rlwe() {
 
     let s = PolyFF::random(N, &mut rng);
 
-    let decompose_len = FF::decompose_len(B);
+    let basis = <Basis<Fp32>>::new(BITS);
 
     let rgsw = {
-        let m1_base_power = (0..decompose_len)
+        let m1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
-                let b = &a * &s + m1.mul_scalar(B.pow(i as u32)) + e;
+                let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
-        let neg_sm1_base_power = (0..decompose_len)
+        let neg_sm1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m1.mul_scalar(B.pow(i as u32)), b)
+                RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
         RGSW::new(
-            GadgetRLWE::new(neg_sm1_base_power, B),
-            GadgetRLWE::new(m1_base_power, B),
+            GadgetRLWE::new(neg_sm1_base_power, basis),
+            GadgetRLWE::new(m1_base_power, basis),
         )
     };
 
@@ -319,7 +308,7 @@ fn test_rgsw_mul_rlwe() {
         (RLWE::new(a, b), e)
     };
 
-    let rlwe_mul = rgsw.mul_with_rlwe(&rlwe);
+    let rlwe_mul = rlwe.mul_small_rgsw(&rgsw);
     let decrypt_mul = rlwe_mul.b() - rlwe_mul.a() * &s;
 
     let decoded_m0m1: Vec<u32> = m0m1.into_iter().map(decode).collect();
@@ -340,63 +329,63 @@ fn test_rgsw_mul_rgsw() {
 
     let s = PolyFF::random(N, &mut rng);
 
-    let decompose_len = FF::decompose_len(B);
+    let basis = <Basis<Fp32>>::new(BITS);
 
     let rgsw_m1 = {
-        let m1_base_power = (0..decompose_len)
+        let m1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
-                let b = &a * &s + m1.mul_scalar(B.pow(i as u32)) + e;
+                let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
-        let neg_sm1_base_power = (0..decompose_len)
+        let neg_sm1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m1.mul_scalar(B.pow(i as u32)), b)
+                RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
         RGSW::new(
-            GadgetRLWE::new(neg_sm1_base_power, B),
-            GadgetRLWE::new(m1_base_power, B),
+            GadgetRLWE::new(neg_sm1_base_power, basis),
+            GadgetRLWE::new(m1_base_power, basis),
         )
     };
 
     let rgsw_m0 = {
-        let m0_base_power = (0..decompose_len)
+        let m0_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
-                let b = &a * &s + m0.mul_scalar(B.pow(i as u32)) + e;
+                let b = &a * &s + m0.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
-        let neg_sm0_base_power = (0..decompose_len)
+        let neg_sm0_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_dis(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m0.mul_scalar(B.pow(i as u32)), b)
+                RLWE::new(a + m0.mul_scalar(B.pow(i as u32) as Inner), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
         RGSW::new(
-            GadgetRLWE::new(neg_sm0_base_power, B),
-            GadgetRLWE::new(m0_base_power, B),
+            GadgetRLWE::new(neg_sm0_base_power, basis),
+            GadgetRLWE::new(m0_base_power, basis),
         )
     };
 
-    let rgsw_m0m1 = rgsw_m0.mul_with_rgsw(&rgsw_m1);
+    let rgsw_m0m1 = rgsw_m0.mul_small_rgsw(&rgsw_m1);
 
     let rlwe_m0m1 = &rgsw_m0m1.c_m().data()[0];
     let decrypted_m0m1 = rlwe_m0m1.b() - rlwe_m0m1.a() * &s;

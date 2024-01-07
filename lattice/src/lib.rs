@@ -33,8 +33,10 @@ mod gadget;
 mod lwe;
 mod rgsw;
 mod rlwe;
+mod utils;
 
-pub use gadget::GadgetRLWE;
+pub use gadget::{GadgetRLWE, NTTGadgetRLWE};
 pub use lwe::LWE;
-pub use rgsw::RGSW;
-pub use rlwe::RLWE;
+pub use rgsw::{NTTRGSW, RGSW};
+pub use rlwe::{NTTRLWE, RLWE};
+pub use utils::*;

@@ -23,36 +23,12 @@ fn impl_ntt(input: Input) -> TokenStream {
             = once_cell::sync::OnceCell::new();
         static #ntt_mutex: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-        impl algebra::field::NTTField for #name {
+        impl algebra::NTTField for #name {
             type Table = algebra::transformation::NTTTable<Self>;
 
-            type Root = algebra::field::MulFactor<Self>;
+            type Root = algebra::MulFactor<Self>;
 
             type Degree = #field_ty;
-
-            #[inline]
-            fn decompose_len(basis: Self::Base) -> usize {
-                debug_assert!(basis.is_power_of_two());
-                algebra::div_ceil(<Self as algebra::field::BarrettConfig<#field_ty>>::barrett_modulus().bit_count(), basis.trailing_zeros()) as usize
-            }
-
-            fn decompose(&self, basis: Self::Base) -> Vec<Self> {
-                let mut temp = self.0;
-                let bits = basis.trailing_zeros();
-
-                let len = Self::decompose_len(basis);
-                let mask = #field_ty::MAX >> (#field_ty::BITS - bits);
-                let mut ret: Vec<Self> = Vec::with_capacity(len);
-
-                while temp != 0 {
-                    ret.push(Self(temp & mask));
-                    temp >>= bits;
-                }
-
-                ret.resize(len, #name(0));
-
-                ret
-            }
 
             #[inline]
             fn from_root(root: Self::Root) -> Self {
@@ -66,30 +42,30 @@ fn impl_ntt(input: Input) -> TokenStream {
 
             #[inline]
             fn mul_root(&self, root: Self::Root) -> Self {
-                let r = algebra::modulus::MulModuloFactor::<#field_ty> {
+                let r = algebra::modulus::MulReduceFactor::<#field_ty> {
                     value: root.value().0,
                     quotient: root.quotient().0,
                 };
 
-                use algebra::modulo_traits::MulModulo;
+                use algebra::reduce::MulReduce;
                 Self(self.0.mul_reduce(r, #modulus))
             }
 
             #[inline]
             fn mul_root_assign(&mut self, root: Self::Root) {
-                let r = algebra::modulus::MulModuloFactor::<#field_ty> {
+                let r = algebra::modulus::MulReduceFactor::<#field_ty> {
                     value: root.value().0,
                     quotient: root.quotient().0,
                 };
 
-                use algebra::modulo_traits::MulModuloAssign;
+                use algebra::reduce::MulReduceAssign;
                 self.0.mul_reduce_assign(r, #modulus);
             }
 
             #[inline]
             fn is_primitive_root(root: Self, degree: Self::Degree) -> bool {
                 debug_assert!(root.0 < #modulus);
-                assert!(
+                debug_assert!(
                     degree > 1 && degree.is_power_of_two(),
                     "degree must be a power of two and bigger than 1"
                 );
@@ -137,7 +113,7 @@ fn impl_ntt(input: Input) -> TokenStream {
             fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, algebra::AlgebraError> {
                 let mut root = Self::try_primitive_root(degree)?;
 
-                let generator_sq = algebra::ring::Ring::square(&root);
+                let generator_sq = algebra::Ring::square(&root);
                 let mut current_generator = root;
 
                 for _ in 0..degree {
@@ -160,7 +136,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let root_factor = root.to_root();
                 let mut power = root;
 
-                let mut root_powers = vec![<Self as algebra::field::NTTField>::Root::default(); n];
+                let mut root_powers = vec![<Self as algebra::NTTField>::Root::default(); n];
                 root_powers[0] = Self(1).to_root();
                 for i in 1..n {
                     root_powers[algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = power.to_root();
@@ -168,7 +144,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 }
 
                 let inv_root_factor = inv_root.to_root();
-                let mut inv_root_powers = vec![<Self as algebra::field::NTTField>::Root::default(); n];
+                let mut inv_root_powers = vec![<Self as algebra::NTTField>::Root::default(); n];
                 power = inv_root;
 
                 inv_root_powers[0] = Self(1).to_root();

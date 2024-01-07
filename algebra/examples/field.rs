@@ -1,46 +1,38 @@
-use algebra::{
-    derive::*,
-    field::{Field, FieldDistribution, PrimeField},
-    polynomial::Polynomial,
-    ring::Ring,
-};
+use algebra::{derive::*, Field, Polynomial, PrimeField, Random, Ring};
 use num_traits::{Inv, One, Pow, Zero};
 use rand::{prelude::*, thread_rng};
 use rand_distr::Standard;
 
 // algebra's derive macro can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 
-// Derive macro `Ring` generating an impl of the trait `algebra::ring::Ring`.
+// Derive macro `Ring` generates an impl of the trait `algebra::Ring`.
 //
-// This also generating some compitation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
+// This also generates some computation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
 //
-// By the way, it also generating impl of the trait `Zero`, `One`, `Display`.
+// By the way, it also generates impl of the trait `Zero`, `One`, `Display`.
 //
-// But it will note generating impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
-// You need to make it by yourself.
+// And it will generate impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 
-// Derive macro `Random` generating an impl of the trait `algebra::field::FieldDistribution`.
+// Derive macro `Random` generates an impl of the trait `algebra::Random`.
 //
 // Then you can use `rand` crate to generate it randomly.
 //
 // Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
 // ternary distribution and normal distribution.
 
-// Derive macro `Field` generating an impl of the trait `algebra::field::Field`.
+// Derive macro `Field` generating an impl of the trait `algebra::Field`.
 //
-// This also generating some compitation for it, e.g. `Div` and `Inv`.
+// This also generating some computation for it, e.g. `Div` and `Inv`.
 
-// Derive macro `Prime` generating an impl of the trait `algebra::field::PrimeField`.
+// Derive macro `Prime` generating an impl of the trait `algebra::PrimeField`.
 //
 // It's based the Derive macro `Field`.
 
-// Derive macro `NTT` generating an impl of the trait `algebra::field::NTTField`.
+// Derive macro `NTT` generating an impl of the trait `algebra::NTTField`.
 //
 // It's based the Derive macro `Prime`.
 
-#[derive(
-    Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
-)]
+#[derive(Ring, Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct FF(u64);
 
@@ -56,8 +48,10 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let mut b = FF::max();
 
     // you can get two special value `one` and `zero`
-    let one = FF::one();
-    let zero = FF::zero();
+    let _one = FF::one();
+    let _zero = FF::zero();
+    let one = FF::ONE;
+    let zero = FF::ZERO;
 
     // check `one` and `zero` by function
     assert!(one.is_one());

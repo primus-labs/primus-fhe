@@ -26,14 +26,6 @@ pub trait NTTField: PrimeField {
     /// Degree type
     type Degree;
 
-    /// Get the length of decompose vec.
-    fn decompose_len(basis: Self::Base) -> usize;
-
-    /// Decompose `self` according to `basis`.
-    ///
-    /// Now we focus on power-of-two basis.
-    fn decompose(&self, basis: Self::Base) -> Vec<Self>;
-
     /// Convert `root` into `Self` type.
     fn from_root(root: Self::Root) -> Self;
 

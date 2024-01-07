@@ -1,10 +1,10 @@
-use algebra::{field::NTTField, polynomial::NTTPolynomial};
+use algebra::{Basis, NTTField};
 
-use crate::{GadgetRLWE, RLWE};
+use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
 /// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
 ///
-/// The `RGSW` struct holds two components, `c_m` and `c_neg_s_m`, each of type [`GadgetRLWE`]. These components are
+/// The [`RGSW`] struct holds two components, `c_m` and `c_neg_s_m`, each of type [`GadgetRLWE`]. These components are
 /// integral to the RGSW encryption scheme, which is a variant of GSW encryption that operates over polynomial
 /// rings for efficiency. This scheme is often used in lattice-based cryptography for constructing fully
 /// homomorphic encryption systems.
@@ -14,7 +14,7 @@ use crate::{GadgetRLWE, RLWE};
 /// These gadget representations play a crucial role in performing homomorphic operations by controlling noise
 /// growth and enabling efficient arithmetic on encrypted data.
 ///
-/// The struct is generic over a type `F` that must implement the `NTTField` trait, indicating that field
+/// The struct is generic over a type `F` that must implement the [`NTTField`] trait, indicating that field
 /// operations are compatible with Number Theoretic Transforms. This is essential for the efficient polynomial
 /// arithmetic required by the encryption scheme.
 #[derive(Debug, Clone)]
@@ -27,12 +27,12 @@ pub struct RGSW<F: NTTField> {
 }
 
 impl<F: NTTField> From<(GadgetRLWE<F>, GadgetRLWE<F>)> for RGSW<F> {
-    /// Converts a tuple of GadgetRLWE into an instance of `Self`.
+    /// Converts a tuple of `GadgetRLWE` into an instance of `Self`.
     ///
     /// # Arguments
     ///
-    /// * `c_neg_s_m` - The first GadgetRLWE sample.
-    /// * `c_m` - The second GadgetRLWE sample.
+    /// * `c_neg_s_m` - The first `GadgetRLWE` sample.
+    /// * `c_m` - The second `GadgetRLWE` sample.
     ///
     /// # Returns
     ///
@@ -70,87 +70,138 @@ impl<F: NTTField> RGSW<F> {
         &self.c_m
     }
 
+    /// Returns a mutable reference to the c neg s m of this [`RGSW<F>`].
+    #[inline]
+    pub fn c_neg_s_m_mut(&mut self) -> &mut GadgetRLWE<F> {
+        &mut self.c_neg_s_m
+    }
+
+    /// Returns a mutable reference to the c m of this [`RGSW<F>`].
+    #[inline]
+    pub fn c_m_mut(&mut self) -> &mut GadgetRLWE<F> {
+        &mut self.c_m
+    }
+
     /// Returns a reference to the basis of this [`RGSW<F>`].
     #[inline]
-    pub fn basis(&self) -> F::Base {
+    pub fn basis(&self) -> Basis<F> {
         self.c_neg_s_m.basis()
     }
 
-    /// Performs a multiplication on the `self` [`RGSW<F>`] with another `rlwe` [`RLWE<F>`],
-    /// return a [`RLWE<F>`].
-    ///
-    /// # Attention
-    /// The message of **`self`** is restricted to small messages `m`, typically `m = ±X^v`
-    #[inline]
-    pub fn mul_with_rlwe(&self, rlwe: &RLWE<F>) -> RLWE<F> {
-        self.c_neg_s_m()
-            .mul_with_polynomial(rlwe.a())
-            .add_element_wise(&self.c_m().mul_with_polynomial(rlwe.b()))
-    }
-
-    /// Performs a multiplication on the `self` [`RGSW<F>`] with another `rgsw` [`RGSW<F>`],
+    /// Performs a multiplication on the `self` [`RGSW<F>`] with another `small_rgsw` [`RGSW<F>`],
     /// return a [`RGSW<F>`].
     ///
     /// # Attention
-    /// The message of **`rhs`** is restricted to small messages `m`, typically `m = ±X^v`
+    /// The message of **`small_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
     #[inline]
-    pub fn mul_with_rgsw(&self, rhs: &RGSW<F>) -> RGSW<F> {
-        let basis = self.basis();
+    pub fn mul_small_rgsw(&self, small_rgsw: &Self) -> Self {
+        let small_ntt_rgsw = <NTTRGSW<F>>::from(small_rgsw.clone());
+        self.mul_small_ntt_rgsw(&small_ntt_rgsw)
+    }
 
-        let ntt_c_neg_s_m = rhs.c_neg_s_m().to_ntt_poly();
-        let ntt_c_m = rhs.c_m().to_ntt_poly();
+    /// Performs a multiplication on the `self` [`RGSW<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
+    /// return a [`RGSW<F>`].
+    ///
+    /// # Attention
+    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    pub fn mul_small_ntt_rgsw(&self, small_ntt_rgsw: &NTTRGSW<F>) -> Self {
+        let basis = self.basis();
 
         let c0_data: Vec<RLWE<F>> = self
             .c_neg_s_m()
             .iter()
-            .map(|rlwe| ntt_rgsw_mul_rlwe(&ntt_c_neg_s_m, &ntt_c_m, rlwe, basis))
+            .map(|rlwe| rlwe.mul_small_ntt_rgsw(small_ntt_rgsw))
             .collect();
         let c_neg_s_m = GadgetRLWE::new(c0_data, basis);
 
         let c1_data: Vec<RLWE<F>> = self
             .c_m()
             .iter()
-            .map(|rlwe| ntt_rgsw_mul_rlwe(&ntt_c_neg_s_m, &ntt_c_m, rlwe, basis))
+            .map(|rlwe| rlwe.mul_small_ntt_rgsw(small_ntt_rgsw))
             .collect();
         let c_m = GadgetRLWE::new(c1_data, basis);
 
-        RGSW::new(c_neg_s_m, c_m)
+        Self::new(c_neg_s_m, c_m)
     }
 }
 
-/// An optimized version `rgsw * rlwe`, the rgsw input is its ntt polynomials.
+/// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
 ///
-/// This method can decrease the numbers of conversion of Number Theoretic Transforms.
-fn ntt_rgsw_mul_rlwe<F: NTTField>(
-    ntt_c_neg_s_m: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
-    ntt_c_m: &[(NTTPolynomial<F>, NTTPolynomial<F>)],
-    rlwe: &RLWE<F>,
-    basis: F::Base,
-) -> RLWE<F> {
-    let decomposed = rlwe.a().decompose(basis);
-    let coeff_count = decomposed[0].coeff_count();
-    let init = (
-        NTTPolynomial::zero_with_coeff_count(coeff_count),
-        NTTPolynomial::zero_with_coeff_count(coeff_count),
-    );
+/// The [`NTTRGSW`] struct holds two components, `c_m` and `c_neg_s_m`, each of type [`NTTGadgetRLWE`]. These components are
+/// integral to the RGSW encryption scheme, which is a variant of GSW encryption that operates over polynomial
+/// rings for efficiency. This scheme is often used in lattice-based cryptography for constructing fully
+/// homomorphic encryption systems.
+///
+/// The [`NTTGadgetRLWE`] structures `c_m` and `c_neg_s_m` contain encrypted data that, when used together, allow for the
+/// encrypted computation of linear and non-linear operations on ciphertexts without decrypting them.
+/// These gadget representations play a crucial role in performing homomorphic operations by controlling noise
+/// growth and enabling efficient arithmetic on encrypted data.
+///
+/// The struct is generic over a type `F` that must implement the [`NTTField`] trait, indicating that field
+/// operations are compatible with Number Theoretic Transforms. This is essential for the efficient polynomial
+/// arithmetic required by the encryption scheme.
+#[derive(Debug, Clone)]
+pub struct NTTRGSW<F: NTTField> {
+    /// The first part of the NTT RGSW ciphertext, which is often used for homomorphic operations
+    /// and can represent the encrypted data multiplied by some secret value.
+    c_neg_s_m: NTTGadgetRLWE<F>,
+    /// The second part of the NTT RGSW ciphertext, typically representing the encrypted data.
+    c_m: NTTGadgetRLWE<F>,
+}
 
-    // a * (-s * m)
-    let intermediate = ntt_c_neg_s_m
-        .iter()
-        .zip(decomposed)
-        .fold(init, |acc, (r, p)| {
-            let p = <NTTPolynomial<F>>::from(p);
-            (acc.0 + &r.0 * &p, acc.1 + &r.1 * p)
-        });
+impl<F: NTTField> From<RGSW<F>> for NTTRGSW<F> {
+    #[inline]
+    fn from(r: RGSW<F>) -> Self {
+        Self {
+            c_neg_s_m: <NTTGadgetRLWE<F>>::from(r.c_neg_s_m),
+            c_m: <NTTGadgetRLWE<F>>::from(r.c_m),
+        }
+    }
+}
 
-    // a * (-s * m) + b * m = (b - as) * m
-    let decompose = rlwe.b().decompose(basis);
-    ntt_c_m
-        .iter()
-        .zip(decompose)
-        .fold(intermediate, |acc, (r, p)| {
-            let p = <NTTPolynomial<F>>::from(p);
-            (acc.0 + &r.0 * &p, acc.1 + &r.1 * p)
-        })
-        .into()
+impl<F: NTTField> NTTRGSW<F> {
+    /// Creates a new [`NTTRGSW<F>`].
+    #[inline]
+    pub fn new(c_neg_s_m: NTTGadgetRLWE<F>, c_m: NTTGadgetRLWE<F>) -> Self {
+        Self { c_neg_s_m, c_m }
+    }
+
+    /// Creates a new [`NTTRGSW<F>`] with reference.
+    #[inline]
+    pub fn from_ref(c_neg_s_m: &NTTGadgetRLWE<F>, c_m: &NTTGadgetRLWE<F>) -> Self {
+        Self {
+            c_neg_s_m: c_neg_s_m.clone(),
+            c_m: c_m.clone(),
+        }
+    }
+
+    /// Returns a reference to the c neg s m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_neg_s_m(&self) -> &NTTGadgetRLWE<F> {
+        &self.c_neg_s_m
+    }
+
+    /// Returns a reference to the c m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_m(&self) -> &NTTGadgetRLWE<F> {
+        &self.c_m
+    }
+
+    /// Returns a mutable reference to the c neg s m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_neg_s_m_mut(&mut self) -> &mut NTTGadgetRLWE<F> {
+        &mut self.c_neg_s_m
+    }
+
+    /// Returns a mutable reference to the c m of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn c_m_mut(&mut self) -> &mut NTTGadgetRLWE<F> {
+        &mut self.c_m
+    }
+
+    /// Returns a reference to the basis of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn basis(&self) -> Basis<F> {
+        self.c_neg_s_m.basis()
+    }
 }

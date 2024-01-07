@@ -1,4 +1,4 @@
-use algebra::ring::Ring;
+use algebra::{NTTField, Ring};
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
@@ -84,11 +84,11 @@ impl<R: Ring> LWE<R> {
     /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
     #[inline]
     pub fn add_inplace_component_wise(&mut self, rhs: &Self) {
-        assert_eq!(self.a().len(), rhs.a().len());
+        debug_assert_eq!(self.a().len(), rhs.a().len());
         self.a_mut()
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, v1)| *v0 += *v1);
+            .for_each(|(v0, &v1)| *v0 += v1);
         *self.b_mut() += rhs.b();
     }
 
@@ -96,11 +96,31 @@ impl<R: Ring> LWE<R> {
     /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
     #[inline]
     pub fn sub_inplace_component_wise(&mut self, rhs: &Self) {
-        assert_eq!(self.a().len(), rhs.a().len());
+        debug_assert_eq!(self.a().len(), rhs.a().len());
         self.a_mut()
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, v1)| *v0 -= *v1);
+            .for_each(|(v0, &v1)| *v0 -= v1);
         *self.b_mut() -= rhs.b();
+    }
+}
+
+impl<F: NTTField> LWE<F> {
+    /// modulus switch from reduce `NTTField::MODULUS` to reduce `Ring::MODULUS`
+    pub fn modulus_switch_floor<R: Ring>(&self) -> LWE<R> {
+        let switch = |v: F| R::from_f64((v.as_f64() * R::MODULUS_F64 / F::MODULUS_F64).floor());
+
+        let a: Vec<R> = self.a.iter().copied().map(switch).collect();
+        let b = switch(self.b);
+        <LWE<R>>::new(a, b)
+    }
+
+    /// modulus switch from reduce `NTTField::MODULUS` to reduce `Ring::MODULUS`
+    pub fn modulus_switch_nearest_round<R: Ring>(&self) -> LWE<R> {
+        let switch = |v: F| R::from_f64((v.as_f64() * R::MODULUS_F64 / F::MODULUS_F64).round());
+
+        let a: Vec<R> = self.a.iter().copied().map(switch).collect();
+        let b = switch(self.b);
+        <LWE<R>>::new(a, b)
     }
 }

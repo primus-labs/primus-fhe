@@ -3,7 +3,9 @@
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use num_traits::{One, Pow, Zero};
+use num_traits::{One, Pow, PrimInt, Zero};
+
+use crate::{Basis, Random, RoundedDiv};
 
 /// A trait defining the algebraic structure of a mathematical ring.
 ///
@@ -27,7 +29,8 @@ use num_traits::{One, Pow, Zero};
 pub trait Ring:
     Sized
     + Copy
-    + Clone
+    + Send
+    + Sync
     + Debug
     + Display
     + Default
@@ -51,22 +54,81 @@ pub trait Ring:
     + for<'a> MulAssign<&'a Self>
     + Neg<Output = Self>
     + Pow<Self::Order, Output = Self>
+    + From<Self::Inner>
 {
-    /// The type of the scalar for this ring.
-    type Scalar: Copy;
+    /// The inner type of this ring.
+    type Inner: Debug + PrimInt + RoundedDiv<Output = Self::Inner> + Send + Sync;
 
     /// The type of the ring's order.
     type Order: Copy;
 
-    /// The type of the ring's base,
-    /// which is used to decompose the element of the ring.
-    type Base: Copy + Debug;
+    /// 1
+    const ONE: Self;
+
+    /// 0
+    const ZERO: Self;
+
+    /// -1
+    const NEG_ONE: Self;
+
+    /// q/8
+    const Q_DIV_8: Self;
+
+    /// 3q/8
+    const Q3_DIV_8: Self;
+
+    /// 7q/8
+    const Q7_DIV_8: Self;
+
+    /// -q/8
+    const NRG_Q_DIV_8: Self;
+
+    /// 4
+    const FOUR_INNER: Self::Inner;
+
+    /// q
+    const MODULUS_F64: f64;
+
+    /// Creates a new instance.
+    fn new(value: Self::Inner) -> Self;
+
+    /// power of 2
+    fn pow_of_two(pow: u32) -> Self;
+
+    /// mask
+    fn mask(bits: u32) -> Self::Inner;
+
+    /// Return inner value
+    fn inner(self) -> Self::Inner;
+
+    /// cast self to [`usize`]
+    fn cast_into_usize(self) -> usize;
+
+    /// cast from [`usize`]
+    fn cast_from_usize(value: usize) -> Self;
+
+    /// cast inner to [`f64`]
+    fn as_f64(self) -> f64;
+
+    /// cast from [`f64`]
+    fn from_f64(value: f64) -> Self;
+
+    /// Returns the modulus value.
+    fn modulus_value() -> Self::Inner;
 
     /// Returns the order of the ring.
     fn order() -> Self::Order;
 
+    /// Get the length of decompose vec.
+    fn decompose_len(basis: Self::Inner) -> usize;
+
+    /// Decompose `self` according to `basis`.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose(&self, basis: Basis<Self>) -> Vec<Self>;
+
     /// Return `self * scalar`.
-    fn mul_scalar(&self, scalar: Self::Scalar) -> Self;
+    fn mul_scalar(&self, scalar: Self::Inner) -> Self;
 
     /// Returns `self + self`.
     #[inline]
@@ -101,3 +163,8 @@ pub trait Ring:
         self
     }
 }
+
+/// A trait combine [`Ring`] with random property.
+pub trait RandomRing: Ring + Random {}
+
+impl<R> RandomRing for R where R: Ring + Random {}

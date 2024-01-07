@@ -1,11 +1,13 @@
 [workspace]
 
-members = ["algebra", "lattice", "algebra_derive"]
+members = ["algebra", "lattice", "algebra_derive", "boolean_fhe"]
 
 resolver = "2"
 
 [profile.bench]
 lto = true
+codegen-units = 1
 
 [profile.release]
 lto = true
+codegen-units = 1

@@ -4,7 +4,7 @@ use rand_distr::{uniform::SampleUniform, Distribution};
 
 use crate::AlgebraError;
 
-/// Defines a trait for sampling from various mathematical distributions over a field.
+/// Defines a trait for sampling from various mathematical distributions over a ring or field.
 ///
 /// This trait specifies the ability to create different types of distributions that can be sampled,
 /// which is particularly useful in the context of probabilistic cryptographic schemes and other
@@ -13,7 +13,7 @@ use crate::AlgebraError;
 /// The trait is bound by `Sized`, ensuring that the trait can only be implemented by types with a known
 /// size at compile time, and `SampleUniform`, which allows for uniform sampling over a range.
 ///
-/// Types implementing this trait must define three associated distribution types: binary, ternary, and normal,
+/// Types implementing this trait must define four associated distribution types: standard, binary, ternary and normal,
 /// each of which must implement the `Distribution` trait. This setup allows for sampling from these
 /// distributions in a generic manner.
 ///
@@ -29,18 +29,18 @@ use crate::AlgebraError;
 /// * `ternary_distribution()`: Returns an instance of the ternary distribution type.
 /// * `normal_distribution(mean, std_dev)`: Returns an instance of the normal distribution type, parameterized by the specified mean and standard deviation.
 ///   This method may fail, indicated by returning an `AlgebraError`, if the parameters do not result in a valid distribution.
-pub trait FieldDistribution: Sized + SampleUniform {
+pub trait Random: Sized + SampleUniform {
     /// The thpe of the standard distribution.
-    type StandardDistribution: Distribution<Self>;
+    type StandardDistribution: Distribution<Self> + Copy;
 
     /// The type of the binary distribution.
-    type BinaryDistribution: Distribution<Self>;
+    type BinaryDistribution: Distribution<Self> + Copy;
 
     /// The type of the ternary distribution.
-    type TernaryDistribution: Distribution<Self>;
+    type TernaryDistribution: Distribution<Self> + Copy;
 
     /// The type of the normal distribution.
-    type NormalDistribution: Distribution<Self>;
+    type NormalDistribution: Distribution<Self> + Copy;
 
     /// Get the standard distribution.
     fn standard_distribution() -> Self::StandardDistribution;

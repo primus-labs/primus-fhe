@@ -121,11 +121,11 @@ fn impl_ring_with_ops(input: Input) -> Result<TokenStream> {
 
         let impl_sub = sub_reduce_ops(name, &modulus);
 
-        let impl_mul = mul_reduce_ops(name, field_ty);
+        let impl_mul = mul_reduce_ops(name);
 
         let impl_neg = neg_reduce_ops(name, &modulus);
 
-        let impl_pow = pow_reduce_ops(name, field_ty);
+        let impl_pow = pow_reduce_ops(name);
 
         let impl_ring = impl_ring(name, field_ty, &modulus);
 
@@ -157,12 +157,74 @@ fn impl_ring_with_ops(input: Input) -> Result<TokenStream> {
 
 fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
-        impl algebra::ring::Ring for #name {
-            type Scalar = #field_ty;
+        impl algebra::Ring for #name {
+            type Inner = #field_ty;
 
             type Order = #field_ty;
 
-            type Base = #field_ty;
+            const ONE: Self = #name(1);
+
+            const ZERO: Self = #name(0);
+
+            const NEG_ONE: Self = #name(#modulus - 1);
+
+            const Q_DIV_8: Self = #name(#modulus >> 3);
+
+            const Q3_DIV_8: Self = #name(3 * (#modulus >> 3));
+
+            const Q7_DIV_8: Self = #name(7 * (#modulus >> 3));
+
+            const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
+
+            const FOUR_INNER: Self::Inner = 4;
+
+            const MODULUS_F64: f64 = #modulus as f64;
+
+            #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
+            #[inline]
+            fn new(value: #field_ty) -> Self {
+                Self(value)
+            }
+
+            #[inline]
+            fn pow_of_two(pow: u32) -> Self {
+                Self(1 << pow)
+            }
+
+            #[inline]
+            fn mask(bits: u32) -> Self::Inner {
+                #field_ty::MAX >> (#field_ty::BITS - bits)
+            }
+
+            #[inline]
+            fn inner(self) -> #field_ty {
+                self.0
+            }
+
+            #[inline]
+            fn cast_into_usize(self) -> usize {
+                num_traits::cast::<#field_ty, usize>(self.0).unwrap()
+            }
+
+            #[inline]
+            fn cast_from_usize(value: usize) -> Self {
+                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
+            }
+
+            #[inline]
+            fn as_f64(self) -> f64 {
+                self.0 as f64
+            }
+
+            #[inline]
+            fn from_f64(value: f64) -> Self {
+                Self::new(value as #field_ty)
+            }
+
+            #[inline]
+            fn modulus_value() -> Self::Inner {
+                #modulus
+            }
 
             #[inline]
             fn order() -> Self::Order {
@@ -170,9 +232,36 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
-                use algebra::modulo_traits::MulModulo;
-                Self(self.0.mul_reduce(scalar, &<Self as algebra::field::BarrettConfig<#field_ty>>::BARRETT_MODULUS))
+            fn decompose_len(basis: Self::Inner) -> usize {
+                debug_assert!(basis.is_power_of_two() && basis > 1);
+                algebra::div_ceil(<Self as algebra::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
+            }
+
+            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
+                let mut temp = self.0;
+
+                let len = basis.decompose_len();
+                let mask = basis.mask();
+                let bits = basis.bits();
+
+                let mut ret: Vec<Self> = vec![#name(0); len];
+
+                for v in ret.iter_mut() {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
+                }
+
+                ret
+            }
+
+            #[inline]
+            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
+                use algebra::reduce::MulReduce;
+                Self(self.0.mul_reduce(scalar, &<Self as algebra::ModulusConfig>::MODULUS))
             }
         }
     }
@@ -185,12 +274,74 @@ fn impl_and_ring(
     mask: &TokenStream,
 ) -> TokenStream {
     quote! {
-        impl algebra::ring::Ring for #name {
-            type Scalar = #field_ty;
+        impl algebra::Ring for #name {
+            type Inner = #field_ty;
 
             type Order = #field_ty;
 
-            type Base = #field_ty;
+            const ONE: Self = #name(1);
+
+            const ZERO: Self = #name(0);
+
+            const NEG_ONE: Self = #name(#mask);
+
+            const Q_DIV_8: Self = #name(#modulus >> 3);
+
+            const Q3_DIV_8: Self = #name(3 * (#modulus >> 3));
+
+            const Q7_DIV_8: Self = #name(7 * (#modulus >> 3));
+
+            const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
+
+            const FOUR_INNER: Self::Inner = 4;
+
+            const MODULUS_F64: f64 = #modulus as f64;
+
+            #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
+            #[inline]
+            fn new(value: #field_ty) -> Self {
+                Self(value)
+            }
+
+            #[inline]
+            fn pow_of_two(pow: u32) -> Self {
+                Self(1 << pow)
+            }
+
+            #[inline]
+            fn mask(bits: u32) -> Self::Inner {
+                #field_ty::MAX >> (#field_ty::BITS - bits)
+            }
+
+            #[inline]
+            fn inner(self) -> #field_ty {
+                self.0
+            }
+
+            #[inline]
+            fn cast_into_usize(self) -> usize {
+                num_traits::cast::<#field_ty, usize>(self.0).unwrap()
+            }
+
+            #[inline]
+            fn cast_from_usize(value: usize) -> Self {
+                Self::new(num_traits::cast::<usize, #field_ty>(value).unwrap())
+            }
+
+            #[inline]
+            fn as_f64(self) -> f64 {
+                self.0 as f64
+            }
+
+            #[inline]
+            fn from_f64(value: f64) -> Self {
+                Self::new(value as #field_ty)
+            }
+
+            #[inline]
+            fn modulus_value() -> Self::Inner {
+                #modulus
+            }
 
             #[inline]
             fn order() -> Self::Order {
@@ -198,7 +349,34 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Scalar) -> Self {
+            fn decompose_len(basis: Self::Inner) -> usize {
+                debug_assert!(basis.is_power_of_two() && basis > 1);
+                algebra::div_ceil(Self::modulus_value().trailing_zeros(), basis.trailing_zeros()) as usize
+            }
+
+            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
+                let mut temp = self.0;
+
+                let len = basis.decompose_len();
+                let mask = basis.mask();
+                let bits = basis.bits();
+
+                let mut ret: Vec<Self> = vec![#name(0); len];
+
+                for v in ret.iter_mut() {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
+                }
+
+                ret
+            }
+
+            #[inline]
+            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
                 Self(self.0.wrapping_mul(scalar) & #mask)
             }
         }

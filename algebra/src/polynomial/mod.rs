@@ -3,5 +3,5 @@
 mod native_polynomial;
 mod ntt_polynomial;
 
-pub use native_polynomial::*;
-pub use ntt_polynomial::*;
+pub use native_polynomial::Polynomial;
+pub use ntt_polynomial::NTTPolynomial;

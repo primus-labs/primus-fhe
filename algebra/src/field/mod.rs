@@ -4,28 +4,13 @@ use std::ops::{Div, DivAssign};
 
 use num_traits::Inv;
 
-use crate::modulus::Modulus;
-use crate::ring::Ring;
+use crate::{Random, Ring};
 
-mod distribution;
 mod ntt_fields;
 mod prime_fields;
 
-pub use distribution::FieldDistribution;
 pub use ntt_fields::NTTField;
 pub use prime_fields::{MulFactor, PrimeField};
-
-/// A helper trait to get the modulus of the ring or field.
-pub trait BarrettConfig<T> {
-    /// The modulus of the ring or field.
-    const BARRETT_MODULUS: Modulus<T>;
-
-    /// Get the barrett modulus of the ring or field.
-    #[inline]
-    fn barrett_modulus() -> Modulus<T> {
-        Self::BARRETT_MODULUS
-    }
-}
 
 /// A trait that extends the algebraic structure of a `Ring` to a `Field`.
 ///
@@ -46,11 +31,11 @@ pub trait Field:
     + for<'a> DivAssign<&'a Self>
     + Inv<Output = Self>
 {
-    /// The type of the modulus.
-    type Modulus: Clone;
+    /// Performs `self + a * b`.
+    fn add_mul(self, a: Self, b: Self) -> Self;
 
-    /// Returns the modulus.
-    fn modulus() -> Self::Modulus;
+    /// Performs `self * a + b`.
+    fn mul_add(self, a: Self, b: Self) -> Self;
 
     /// Computes the multiplicative inverse of `self` if `self` is nonzero.
     #[inline]
@@ -74,3 +59,8 @@ pub trait Field:
         }
     }
 }
+
+/// A trait combine [`NTTField`] with random property.
+pub trait RandomNTTField: NTTField + Random {}
+
+impl<F> RandomNTTField for F where F: NTTField + Random {}

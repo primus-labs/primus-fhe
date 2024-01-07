@@ -71,9 +71,10 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
         /// prob\[1] = prob\[-1] = 0.25
         ///
         /// prob\[0] = 0.5
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Copy, Debug)]
         pub struct #ternary_name {
-            inner: rand_distr::WeightedIndex<usize>,
+            inner1: rand_distr::Bernoulli,
+            inner2: rand_distr::Bernoulli,
         }
 
         impl #ternary_name {
@@ -81,7 +82,8 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
             #[inline]
             pub fn new() -> Self {
                 Self {
-                    inner: rand_distr::WeightedIndex::new([1, 2, 1]).unwrap(),
+                    inner1: rand_distr::Bernoulli::new(0.5).unwrap(),
+                    inner2: rand_distr::Bernoulli::new(0.5).unwrap(),
                 }
             }
         }
@@ -96,8 +98,13 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
         impl rand::distributions::Distribution<#name> for #ternary_name {
             #[inline]
             fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
-                const VALUES: [#name; 3] = [#name::max(), #name(0), #name(1)];
-                VALUES[self.inner.sample(rng)]
+                if self.inner1.sample(rng) {
+                    #name(0)
+                } else if self.inner2.sample(rng) {
+                    #name(1)
+                } else {
+                    #name::neg_one()
+                }
             }
         }
     }
@@ -161,6 +168,8 @@ fn normal(
         #[derive(Clone, Copy, Debug)]
         pub struct #sample_name {
             inner: rand_distr::Normal<f64>,
+            std_dev_min: f64,
+            std_dev_max: f64,
         }
 
         impl #sample_name {
@@ -173,7 +182,11 @@ fn normal(
             #[inline]
             pub fn new(mean: f64, std_dev: f64) -> Result<#sample_name, algebra::AlgebraError> {
                 match rand_distr::Normal::new(mean, std_dev) {
-                    Ok(inner) => Ok(#sample_name { inner }),
+                    Ok(inner) => {
+                        let std_dev_max = std_dev * 6.0;
+                        let std_dev_min = -std_dev_max;
+                        Ok(#sample_name { inner, std_dev_max, std_dev_min })
+                    },
                     Err(_) => Err(algebra::AlgebraError::DistributionError),
                 }
             }
@@ -189,19 +202,40 @@ fn normal(
             pub fn std_dev(&self) -> f64 {
                 self.inner.std_dev()
             }
+
+            /// Returns `6σ` of the distribution.
+            #[inline]
+            pub fn std_dev_max(&self) -> f64 {
+                self.std_dev_max
+            }
+
+            /// Returns `-6σ` of the distribution.
+            #[inline]
+            pub fn std_dev_min(&self) -> f64 {
+                self.std_dev_min
+            }
         }
 
         impl rand::distributions::Distribution<#name> for #sample_name {
             fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 const FLOAT_P: f64 = #modulus as f64;
                 let mut value = self.inner.sample(rng);
-                while value < 0. {
-                    value += FLOAT_P;
+                while value < self.std_dev_min {
+                    value += self.std_dev();
                 }
-                while value >= FLOAT_P {
-                    value -= FLOAT_P;
+                while value >= self.std_dev_max {
+                    value -= self.std_dev();
                 }
-                #name(value as #field_ty)
+                if value < 0. {
+                    if value.ceil() == 0. {
+                        #name(0)
+                    } else {
+                        value = FLOAT_P + value.ceil();
+                        #name(value as #field_ty)
+                    }
+                } else {
+                    #name(value as #field_ty)
+                }
             }
         }
     }
@@ -246,7 +280,7 @@ fn impl_random(input: Input) -> TokenStream {
             }
         }
 
-        impl algebra::field::FieldDistribution for #name {
+        impl algebra::Random for #name {
             type StandardDistribution = rand::distributions::Uniform<#name>;
 
             type BinaryDistribution = #binary_name;

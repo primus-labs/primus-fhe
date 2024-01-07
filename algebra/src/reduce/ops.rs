@@ -1,7 +1,7 @@
 use crate::AlgebraError;
 
 /// The modulo operation.
-pub trait Modulo<Modulus>: Sized {
+pub trait Reduce<Modulus>: Sized {
     /// Output type.
     type Output;
 
@@ -10,13 +10,13 @@ pub trait Modulo<Modulus>: Sized {
 }
 
 /// The modulo assignment operation.
-pub trait ModuloAssign<Modulus>: Sized {
+pub trait ReduceAssign<Modulus>: Sized {
     /// Caculates `self (mod modulus)`.
     fn reduce_assign(&mut self, modulus: Modulus);
 }
 
 /// The modular addition.
-pub trait AddModulo<Modulus, Rhs = Self> {
+pub trait AddReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
@@ -30,7 +30,7 @@ pub trait AddModulo<Modulus, Rhs = Self> {
 }
 
 /// The modular addition assignment.
-pub trait AddModuloAssign<Modulus, Rhs = Self> {
+pub trait AddReduceAssign<Modulus, Rhs = Self> {
     /// Calculates `self += rhs mod modulus`
     ///
     /// # Correctness
@@ -41,7 +41,7 @@ pub trait AddModuloAssign<Modulus, Rhs = Self> {
 }
 
 /// The modular subtraction.
-pub trait SubModulo<Modulus, Rhs = Self> {
+pub trait SubReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
@@ -55,7 +55,7 @@ pub trait SubModulo<Modulus, Rhs = Self> {
 }
 
 /// The modular subtraction assignment.
-pub trait SubModuloAssign<Modulus, Rhs = Self> {
+pub trait SubReduceAssign<Modulus, Rhs = Self> {
     /// Calculates `self -= rhs mod modulus`
     ///
     /// # Correctness
@@ -66,7 +66,7 @@ pub trait SubModuloAssign<Modulus, Rhs = Self> {
 }
 
 /// The modular negation.
-pub trait NegModulo<Modulus> {
+pub trait NegReduce<Modulus> {
     /// Output type.
     type Output;
 
@@ -79,7 +79,7 @@ pub trait NegModulo<Modulus> {
 }
 
 /// The modular negation assignment.
-pub trait NegModuloAssign<Modulus> {
+pub trait NegReduceAssign<Modulus> {
     /// Calculates `(-self) mod modulus`
     ///
     /// # Correctness
@@ -89,7 +89,7 @@ pub trait NegModuloAssign<Modulus> {
 }
 
 /// The modular multiplication.
-pub trait MulModulo<Modulus, Rhs = Self> {
+pub trait MulReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
@@ -100,31 +100,31 @@ pub trait MulModulo<Modulus, Rhs = Self> {
 }
 
 /// The modular multiplication assignment.
-pub trait MulModuloAssign<Modulus, Rhs = Self> {
+pub trait MulReduceAssign<Modulus, Rhs = Self> {
     /// Calculates `self *= rhs mod modulus`.
     fn mul_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
 
 /// The modular exponentiation.
-pub trait PowModulo<Modulus, Exponent> {
+pub trait PowReduce<Modulus, Exponent> {
     /// Calcualtes `self^exp (mod modulus)`.
     fn pow_reduce(self, exp: Exponent, modulus: Modulus) -> Self;
 }
 
 /// Calculate the inverse element for a field.
-pub trait InvModulo<Modulus = Self>: Sized {
+pub trait InvReduce<Modulus = Self>: Sized {
     /// Calculate the multiplicative inverse of `self modulo modulus`.
     fn inv_reduce(self, modulus: Modulus) -> Self;
 }
 
 /// The modular inversion assignment for a field.
-pub trait InvModuloAssign<Modulus = Self> {
+pub trait InvReduceAssign<Modulus = Self> {
     /// Calculates `self^(-1) mod modulus`
     fn inv_reduce_assign(&mut self, modulus: Modulus);
 }
 
 /// Try to calculate the inverse element when there is not a field.
-pub trait TryInvModulo<Modulus = Self>: Sized {
+pub trait TryInvReduce<Modulus = Self>: Sized {
     /// Try to calculate the multiplicative inverse of `self modulo modulus`.
     ///
     /// # Errors
@@ -134,7 +134,7 @@ pub trait TryInvModulo<Modulus = Self>: Sized {
 }
 
 /// The modular division.
-pub trait DivModulo<Modulus, Rhs = Self> {
+pub trait DivReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
@@ -145,7 +145,7 @@ pub trait DivModulo<Modulus, Rhs = Self> {
 }
 
 /// The modular division assignment.
-pub trait DivModuloAssign<Modulus, Rhs = Self> {
+pub trait DivReduceAssign<Modulus, Rhs = Self> {
     /// Calculates `self /= rhs mod modulus`.
     fn div_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }

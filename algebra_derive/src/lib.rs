@@ -15,21 +15,20 @@ mod ring;
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
 
-/// Derive macro generating an impl of the trait `algebra::ring::Ring`.
+/// Derive macro generates an impl of the trait `algebra::Ring`.
 ///
-/// This also generating some compitation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
+/// This also generates some computation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
 ///
-/// By the way, it also generating impl of the trait `Zero`, `One`, `Display`.
+/// By the way, it also generates impl of the trait `Zero`, `One`, `Display`.
 ///
-/// But it will note generating impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
-/// You need to make it by yourself.
+/// And it will generate impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
 ///
 /// It can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 ///
 /// # Example
 ///
 /// ```ignore
-/// #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Random)]
+/// #[derive(Ring, Random)]
 /// #[modulus = 512]
 /// pub struct R512(u32);
 /// ```
@@ -42,18 +41,16 @@ pub fn derive_ring(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro generating an impl of the trait `algebra::field::Field`.
+/// Derive macro generates an impl of the trait `algebra::Field`.
 ///
-/// This also generating some compitation for it, e.g. `Div` and `Inv`.
+/// This also generates some computation for it, e.g. `Div` and `Inv`.
 ///
 /// It can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 ///
 /// # Example
 ///
 /// ```ignore
-/// #[derive(
-///     Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Ring, Field, Random, Prime, NTT,
-/// )]
+/// #[derive(Ring, Field, Random, Prime, NTT)]
 /// #[modulus = 132120577]
 /// pub struct Fp32(u32);
 /// ```
@@ -68,12 +65,20 @@ pub fn derive_field(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro generating an impl of the trait `algebra::field::FieldDistribution`.
+/// Derive macro generates an impl of the trait `algebra::Random`.
 ///
 /// Then you can use `rand` crate to generate it randomly.
 ///
 /// Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
 /// ternary distribution and normal distribution.
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Ring, Random)]
+/// #[modulus = 512]
+/// pub struct R512(u32);
+/// ```
 #[proc_macro_derive(Random, attributes(modulus))]
 pub fn derive_random(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -83,9 +88,19 @@ pub fn derive_random(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro generating an impl of the trait `algebra::field::PrimeField`.
+/// Derive macro generating an impl of the trait `algebra::PrimeField`.
 ///
 /// It's based the Derive macro `Field`.
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Ring, Field, Random, Prime, NTT)]
+/// #[modulus = 132120577]
+/// pub struct Fp32(u32);
+/// ```
+///
+/// It's based the Derive macro `Ring`.
 #[proc_macro_derive(Prime, attributes(modulus))]
 pub fn derive_prime(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -95,9 +110,19 @@ pub fn derive_prime(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro generating an impl of the trait `algebra::field::NTTField`.
+/// Derive macro generating an impl of the trait `algebra::NTTField`.
 ///
 /// It's based the Derive macro `Prime`.
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Ring, Field, Random, Prime, NTT)]
+/// #[modulus = 132120577]
+/// pub struct Fp32(u32);
+/// ```
+///
+/// It's based the Derive macro `Ring`.
 #[proc_macro_derive(NTT, attributes(modulus))]
 pub fn derive_ntt(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

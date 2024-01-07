@@ -20,7 +20,7 @@ jobs:
         with:
           toolchain: stable 6 months ago
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      # - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo check --workspace --all-targets --all-features
       - run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
@@ -33,7 +33,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      # - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo check --workspace --all-targets --all-features
       - run: cargo clippy --no-deps --all-targets --all-features -- -D warnings
@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      # - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --doc --all-features
       - run: cargo doc --no-deps --workspace --lib --document-private-items --all-features
 
@@ -59,7 +59,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable 6 months ago
-      - uses: Swatinem/rust-cache@v2
+      # - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --lib --bins --tests --examples --all-features
 
   build:
