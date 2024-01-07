@@ -8,6 +8,7 @@ mod parameter;
 mod ciphertext;
 mod plaintext;
 
+mod allocator;
 mod bootstrapping_key;
 mod evaluation_key;
 mod key_switching_key;
