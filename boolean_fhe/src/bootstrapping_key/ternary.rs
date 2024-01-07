@@ -81,22 +81,8 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
                     )
                 } else if s.is_zero() {
                     (
-                        ntt_rgsw_one(
-                            rlwe_dimension,
-                            rlwe_secret_key,
-                            basis,
-                            basis_powers,
-                            chi,
-                            &mut rng,
-                        ),
-                        ntt_rgsw_one(
-                            rlwe_dimension,
-                            rlwe_secret_key,
-                            basis,
-                            basis_powers,
-                            chi,
-                            &mut rng,
-                        ),
+                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
+                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
                     )
                 } else {
                     (
