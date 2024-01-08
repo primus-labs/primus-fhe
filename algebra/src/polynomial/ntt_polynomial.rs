@@ -71,6 +71,12 @@ impl<F: Field> NTTPolynomial<F> {
         self.data
     }
 
+    /// Return the data reference
+    #[inline]
+    pub fn data_ref(&self) -> &Vec<F> {
+        &self.data
+    }
+
     /// swap `self.data` with an outside data.
     #[inline]
     pub fn swap(&mut self, data: &mut Vec<F>) {
@@ -473,5 +479,15 @@ impl<F: Field> Neg for NTTPolynomial<F> {
             *e = -*e;
         });
         self
+    }
+}
+
+impl<F: Field> Neg for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn neg(self) -> Self::Output {
+        let data = self.data.iter().map(|&e| -e).collect();
+        <NTTPolynomial<F>>::new(data)
     }
 }

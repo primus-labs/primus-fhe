@@ -24,7 +24,7 @@ fn main() {
         let m1 = rng.gen();
         let c1 = skp.encrypt(m1);
 
-        c = evk.nand(c1, &c);
+        c = evk.nand(&c1, &c);
 
         let d = skp.decrypt(&c);
         assert_eq!(d, !(m & m1));

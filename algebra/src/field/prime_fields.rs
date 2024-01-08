@@ -23,7 +23,7 @@ pub trait PrimeField: Field {
 }
 
 /// A factor for multiply many times
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct MulFactor<F> {
     value: F,
     quotient: F,

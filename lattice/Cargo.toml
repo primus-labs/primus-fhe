@@ -16,6 +16,15 @@ num-traits = "0.2"
 
 [dev-dependencies]
 rand = "0.8"
+criterion = "0.5.1"
+
+[[bench]]
+name = "lwe_bench"
+harness = false
+
+[[bench]]
+name = "rlwe_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

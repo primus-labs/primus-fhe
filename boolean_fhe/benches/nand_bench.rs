@@ -25,7 +25,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let c1 = skp.encrypt(m1);
 
     c.bench_function("nand", |b| {
-        b.iter(|| evk.nand(black_box(c0.clone()), black_box(&c1)))
+        b.iter(|| evk.nand(black_box(&c0), black_box(&c1)))
     });
 }
 

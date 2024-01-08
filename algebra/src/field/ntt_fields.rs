@@ -1,6 +1,6 @@
 //! Define `NTTField`` trait
 
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use crate::transformation::AbstractNTT;
 
@@ -21,7 +21,7 @@ pub trait NTTField: PrimeField {
     type Table: AbstractNTT<Self>;
 
     /// The type representing the roots of unity within the field.
-    type Root: Copy;
+    type Root: Copy + Debug;
 
     /// Degree type
     type Degree;

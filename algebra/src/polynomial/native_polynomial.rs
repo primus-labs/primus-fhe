@@ -82,6 +82,12 @@ impl<F: Field> Polynomial<F> {
         self.data
     }
 
+    /// Return the data reference
+    #[inline]
+    pub fn data_ref(&self) -> &Vec<F> {
+        &self.data
+    }
+
     /// swap `self.data` with an outside data.
     #[inline]
     pub fn swap(&mut self, data: &mut Vec<F>) {
@@ -555,5 +561,15 @@ impl<F: Field> Neg for Polynomial<F> {
             *e = -*e;
         });
         self
+    }
+}
+
+impl<F: Field> Neg for &Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn neg(self) -> Self::Output {
+        let data = self.data.iter().map(|&e| -e).collect();
+        <Polynomial<F>>::new(data)
     }
 }

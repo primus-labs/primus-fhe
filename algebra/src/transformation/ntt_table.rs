@@ -25,6 +25,7 @@ use super::AbstractNTT;
 /// scrambled order:     0  1  5  3  7  2  6  4
 ///                         ----------  ----  -
 /// ```
+#[derive(Debug)]
 pub struct NTTTable<F>
 where
     F: NTTField<Table = NTTTable<F>>,
