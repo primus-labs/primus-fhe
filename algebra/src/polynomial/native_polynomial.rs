@@ -557,3 +557,13 @@ impl<F: Field> Neg for Polynomial<F> {
         self
     }
 }
+
+impl<F: Field> Neg for &Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn neg(self) -> Self::Output {
+        let data = self.data.iter().map(|&e| -e).collect();
+        <Polynomial<F>>::new(data)
+    }
+}

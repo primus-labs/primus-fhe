@@ -67,6 +67,25 @@ impl<R: Ring> LWE<R> {
     }
 
     /// Perform component-wise addition of two [`LWE<R>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is a reference.
+    /// If your `self` is not a reference, you can use function `add_component_wise`.
+    #[inline]
+    pub fn add_component_wise_ref(&self, rhs: &Self) -> Self {
+        Self::new(
+            self.a().iter().zip(rhs.a()).map(|(&x, &y)| x + y).collect(),
+            self.b() + rhs.b(),
+        )
+    }
+
+    /// Perform component-wise addition of two [`LWE<R>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is not a reference.
+    /// If your `self` is a reference, you can use function `add_component_wise_ref`.
     #[inline]
     pub fn add_component_wise(mut self, rhs: &Self) -> Self {
         self.add_inplace_component_wise(rhs);
@@ -74,6 +93,25 @@ impl<R: Ring> LWE<R> {
     }
 
     /// Perform component-wise subtraction of two [`LWE<R>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is a reference.
+    /// If your `self` is not a reference, you can use function `sub_component_wise`.
+    #[inline]
+    pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self {
+        Self::new(
+            self.a().iter().zip(rhs.a()).map(|(&x, &y)| x - y).collect(),
+            self.b() - rhs.b(),
+        )
+    }
+
+    /// Perform component-wise subtraction of two [`LWE<R>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is not a reference.
+    /// If your `self` is a reference, you can use function `sub_component_wise_ref`.
     #[inline]
     pub fn sub_component_wise(mut self, rhs: &Self) -> Self {
         self.sub_inplace_component_wise(rhs);

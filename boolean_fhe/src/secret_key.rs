@@ -77,6 +77,19 @@ impl<R: Ring, F: NTTField> SecretKeyPack<R, F> {
         decode(encoded_message)
     }
 
+    /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
+    #[inline]
+    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext<R>) -> (bool, R) {
+        let encoded_message = cipher_text.b() - dot_product(cipher_text.a(), self.lwe_secret_key());
+        let message = decode(encoded_message);
+
+        let fresh = encode::<R>(message);
+        (
+            message,
+            (encoded_message - fresh).min(fresh - encoded_message),
+        )
+    }
+
     /// Returns the csrng of this [`SecretKeyPack<R, F>`].
     #[inline]
     pub fn csrng(&self) -> std::cell::Ref<'_, ChaCha12Rng> {

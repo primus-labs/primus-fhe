@@ -475,3 +475,13 @@ impl<F: Field> Neg for NTTPolynomial<F> {
         self
     }
 }
+
+impl<F: Field> Neg for &NTTPolynomial<F> {
+    type Output = NTTPolynomial<F>;
+
+    #[inline]
+    fn neg(self) -> Self::Output {
+        let data = self.data.iter().map(|&e| -e).collect();
+        <NTTPolynomial<F>>::new(data)
+    }
+}
