@@ -23,7 +23,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let b0 = <Polynomial<FF>>::random_with_dis(M, &mut rng, ff_dis);
     let b1 = <Polynomial<FF>>::random_with_dis(M, &mut rng, ff_dis);
 
-    let c0 = <RLWE<FF>>::new(a0, b0);
+    let mut c0 = <RLWE<FF>>::new(a0, b0);
     let c1 = <RLWE<FF>>::new(a1, b1);
 
     c.bench_function("RLWE add element wise clone", |b| {
@@ -31,7 +31,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("RLWE add element wise collect", |b| {
-        b.iter(|| black_box(&c0).ref_add_element_wise(black_box(&c1)))
+        b.iter(|| black_box(&c0).add_element_wise_ref(black_box(&c1)))
     });
 
     c.bench_function("RLWE sub element wise clone", |b| {
@@ -39,10 +39,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("RLWE sub element wise collect", |b| {
-        b.iter(|| black_box(&c0).ref_sub_element_wise(black_box(&c1)))
+        b.iter(|| black_box(&c0).sub_element_wise_ref(black_box(&c1)))
     });
 
     c.bench_function("RLWE extract", |b| b.iter(|| black_box(&c0).extract_lwe()));
+
+    c.bench_function("RLWE add inplace element wise", |b| {
+        b.iter(|| black_box(&mut c0).add_inplace_element_wise(black_box(&c1)))
+    });
+
+    c.bench_function("RLWE sub inplace element wise", |b| {
+        b.iter(|| black_box(&mut c0).sub_inplace_element_wise(black_box(&c1)))
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);

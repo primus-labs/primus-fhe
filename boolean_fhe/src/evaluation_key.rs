@@ -26,7 +26,7 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
     pub fn nand(&self, c0: &LWECiphertext<R>, c1: &LWECiphertext<R>) -> LWECiphertext<R> {
         let parameters = self.parameters();
 
-        let add = c0.ref_add_component_wise(c1);
+        let add = c0.add_component_wise_ref(c1);
 
         let init_acc: RLWECiphertext<F> = init_nand_acc(
             add.b(),

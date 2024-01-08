@@ -24,7 +24,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let b0 = rr_dis.sample(&mut rng);
     let b1 = rr_dis.sample(&mut rng);
 
-    let c0 = <LWE<RR>>::new(a0, b0);
+    let mut c0 = <LWE<RR>>::new(a0, b0);
     let c1 = <LWE<RR>>::new(a1, b1);
 
     c.bench_function("LWE add component wise clone", |b| {
@@ -32,7 +32,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("LWE add component wise collect", |b| {
-        b.iter(|| black_box(&c0).ref_add_component_wise(black_box(&c1)))
+        b.iter(|| black_box(&c0).add_component_wise_ref(black_box(&c1)))
     });
 
     c.bench_function("LWE sub component wise clone", |b| {
@@ -40,7 +40,15 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("LWE sub component wise collect", |b| {
-        b.iter(|| black_box(&c0).ref_sub_component_wise(black_box(&c1)))
+        b.iter(|| black_box(&c0).sub_component_wise_ref(black_box(&c1)))
+    });
+
+    c.bench_function("LWE add inplace component wise", |b| {
+        b.iter(|| black_box(&mut c0).add_inplace_component_wise(black_box(&c1)))
+    });
+
+    c.bench_function("LWE sub inplace component wise", |b| {
+        b.iter(|| black_box(&mut c0).sub_inplace_component_wise(black_box(&c1)))
     });
 }
 

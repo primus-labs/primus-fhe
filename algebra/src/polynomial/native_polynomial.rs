@@ -82,12 +82,6 @@ impl<F: Field> Polynomial<F> {
         self.data
     }
 
-    /// Return the data reference
-    #[inline]
-    pub fn data_ref(&self) -> &Vec<F> {
-        &self.data
-    }
-
     /// swap `self.data` with an outside data.
     #[inline]
     pub fn swap(&mut self, data: &mut Vec<F>) {

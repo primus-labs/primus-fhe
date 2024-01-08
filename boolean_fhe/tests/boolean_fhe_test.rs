@@ -1,11 +1,9 @@
 use algebra::Ring;
 use boolean_fhe::{DefaultRing100, EvaluationKey, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
-use rand::Rng;
+use rand::prelude::*;
 
-fn main() {
-    // set random generator
-    // use rand::SeedableRng;
-    // let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(11);
+#[test]
+fn test_nand() {
     let mut rng = rand::thread_rng();
 
     // set parameter
@@ -13,15 +11,13 @@ fn main() {
 
     // generate keys
     let skp = SecretKeyPack::new(params);
-    println!("Secret Key Generation done!\n");
 
     let evk = EvaluationKey::new(&skp);
-    println!("Evaluation Key Generation done!\n");
 
     let mut m = rng.gen();
     let mut c = skp.encrypt(m);
 
-    for i in 0..100 {
+    for i in 0..4 {
         let m0 = rng.gen();
         let c0 = skp.encrypt(m0);
 

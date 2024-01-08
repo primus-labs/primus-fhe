@@ -99,7 +99,7 @@ impl<F: NTTField> RLWE<F> {
     /// Creates a new [`RLWE<F>`] that is initialized to zero.
     ///
     /// The `coeff_count` parameter specifies the number of coefficients in the polynomial.
-    /// Both `a` and `b` polynomials of the `RLWE<F>` are initialized with zero coefficients.
+    /// Both `a` and `b` polynomials of the [`RLWE<F>`] are initialized with zero coefficients.
     ///
     /// # Arguments
     ///
@@ -107,7 +107,7 @@ impl<F: NTTField> RLWE<F> {
     ///
     /// # Returns
     ///
-    /// A new `RLWE<F>` where both `a` and `b` polynomials are initialized to zero.
+    /// A new [`RLWE<F>`] where both `a` and `b` polynomials are initialized to zero.
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
         Self {
@@ -147,7 +147,7 @@ impl<F: NTTField> RLWE<F> {
     /// In this function, `self` is a reference.
     /// If your `self` is not a reference, you can use function `add_element_wise`.
     #[inline]
-    pub fn ref_add_element_wise(&self, rhs: &Self) -> Self {
+    pub fn add_element_wise_ref(&self, rhs: &Self) -> Self {
         Self {
             a: &self.a + rhs.a(),
             b: &self.b + rhs.b(),
@@ -159,7 +159,7 @@ impl<F: NTTField> RLWE<F> {
     /// # Attention
     ///
     /// In this function, `self` is not a reference.
-    /// If your `self` is a reference, you can use function `ref_add_element_wise`.
+    /// If your `self` is a reference, you can use function `add_element_wise_ref`.
     #[inline]
     pub fn add_element_wise(self, rhs: &Self) -> Self {
         Self {
@@ -175,7 +175,7 @@ impl<F: NTTField> RLWE<F> {
     /// In this function, `self` is a reference.
     /// If your `self` is not a reference, you can use function `sub_element_wise`.
     #[inline]
-    pub fn ref_sub_element_wise(&self, rhs: &Self) -> Self {
+    pub fn sub_element_wise_ref(&self, rhs: &Self) -> Self {
         Self {
             a: &self.a - rhs.a(),
             b: &self.b - rhs.b(),
@@ -187,7 +187,7 @@ impl<F: NTTField> RLWE<F> {
     /// # Attention
     ///
     /// In this function, `self` is not a reference.
-    /// If your `self` is a reference, you can use function `ref_sub_element_wise`.
+    /// If your `self` is a reference, you can use function `sub_element_wise_ref`.
     #[inline]
     pub fn sub_element_wise(self, rhs: &Self) -> Self {
         Self {
@@ -237,7 +237,7 @@ impl<F: NTTField> RLWE<F> {
     /// Extract an LWE sample from RLWE.
     #[inline]
     pub fn extract_lwe(&self) -> LWE<F> {
-        let mut a: Vec<F> = self.a.data_ref().iter().map(|&x| -x).collect();
+        let mut a: Vec<F> = self.a.as_slice().iter().map(|&x| -x).collect();
         a[1..].reverse();
         a[0] = -a[0];
 
