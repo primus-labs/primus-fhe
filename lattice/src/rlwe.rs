@@ -238,7 +238,6 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn extract_lwe(&self) -> LWE<F> {
         let mut a: Vec<F> = self.a.data_ref().iter().map(|&x| -x).collect();
-        // let mut a: Vec<F> = (-self.a()).data();
         a[1..].reverse();
         a[0] = -a[0];
 

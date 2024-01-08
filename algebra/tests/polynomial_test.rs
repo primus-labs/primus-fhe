@@ -171,17 +171,3 @@ fn test_poly_eval() {
         poly.iter().fold(FF::ZERO, |acc, a| acc + a)
     );
 }
-
-// #[test]
-// fn test_x() {
-//     let log = 2;
-//     println!("{:#?}", Fp32::get_ntt_table(log));
-//     let n = 1 << log;
-
-//     for i in 0..n {
-//         let mut a: Polynomial<Fp32> = PolyFF::zero_with_coeff_count(n);
-//         a[i] = Fp32::ONE;
-//         let a = a.to_ntt_polynomial();
-//         println!("{:?}", a);
-//     }
-// }
