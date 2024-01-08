@@ -214,9 +214,39 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
     }
 }
 
+fn transpose<T: Field>(v: Vec<Vec<T>>) -> Vec<Polynomial<T>> {
+    assert!(!v.is_empty());
+    let len = v[0].len();
+    let mut iters: Vec<_> = v.into_iter().map(|n| n.into_iter()).collect();
+    (0..len)
+        .map(|_| {
+            iters
+                .iter_mut()
+                .map(|n| n.next().unwrap())
+                .collect::<Vec<T>>()
+                .into()
+        })
+        .collect()
+}
+
+fn transpose3<T: Field>(original: Vec<Vec<T>>) -> Vec<Polynomial<T>> {
+    assert!(!original.is_empty());
+    let mut transposed = (0..original[0].len())
+        .map(|_| <Polynomial<T>>::zero())
+        .collect::<Vec<_>>();
+
+    for original_row in original {
+        for (item, transposed_row) in original_row.into_iter().zip(&mut transposed) {
+            transposed_row.push(item);
+        }
+    }
+
+    transposed
+}
+
 impl<F: NTTField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
-    pub fn decompose(&self, basis: Basis<F>) -> Vec<Self> {
+    pub fn decompose2(&self, basis: Basis<F>) -> Vec<Self> {
         let mut ret: Vec<Self> =
             vec![Self::with_capacity(self.coeff_count()); basis.decompose_len()];
         for coeff in self.iter() {
@@ -227,6 +257,36 @@ impl<F: NTTField> Polynomial<F> {
         }
 
         ret
+    }
+
+    /// Decompose `self` according to `basis`.
+    pub fn decompose(&self, basis: Basis<F>) -> Vec<Self> {
+        let mut ret: Vec<Self> = Vec::with_capacity(basis.decompose_len());
+        ret.resize_with(basis.decompose_len(), || {
+            Polynomial::new(vec![F::ZERO; self.coeff_count()])
+        });
+        for (i, coeff) in self.iter().enumerate() {
+            let decompose_res = coeff.decompose(basis);
+            ret.iter_mut()
+                .zip(decompose_res.into_iter())
+                .for_each(|(d_p, d_c)| unsafe {
+                    *d_p.data.get_unchecked_mut(i) = d_c;
+                });
+        }
+
+        ret
+    }
+
+    /// Decompose `self` according to `basis`.
+    #[inline]
+    pub fn decompose3(&self, basis: Basis<F>) -> Vec<Self> {
+        transpose(self.iter().map(|&c| c.decompose(basis)).collect())
+    }
+
+    /// Decompose `self` according to `basis`.
+    #[inline]
+    pub fn decompose4(&self, basis: Basis<F>) -> Vec<Self> {
+        transpose3(self.iter().map(|&c| c.decompose(basis)).collect())
     }
 }
 
