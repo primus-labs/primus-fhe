@@ -208,45 +208,8 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Perform [`RLWE<F>`] multiply with `Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
+    #[inline]
     pub fn mul_monic_monomial<R: Ring>(
-        self,
-        // N
-        rlwe_dimension: usize,
-        // 2N/q
-        twice_rlwe_dimension_div_lwe_modulus: usize,
-        r: R,
-    ) -> Self {
-        let r = r.cast_into_usize() * twice_rlwe_dimension_div_lwe_modulus;
-        if r <= rlwe_dimension {
-            #[inline]
-            fn rotate<F: NTTField>(p: Polynomial<F>, r: usize) -> Polynomial<F> {
-                let mut p = p.data();
-                p.rotate_right(r);
-                p[0..r].iter_mut().for_each(|v| *v = -*v);
-                <Polynomial<F>>::new(p)
-            }
-            Self {
-                a: rotate(self.a, r),
-                b: rotate(self.b, r),
-            }
-        } else {
-            #[inline]
-            fn rotate<F: NTTField>(p: Polynomial<F>, r: usize) -> Polynomial<F> {
-                let mut p = p.data();
-                p.rotate_right(r);
-                p[r..].iter_mut().for_each(|v| *v = -*v);
-                <Polynomial<F>>::new(p)
-            }
-            let r = r - rlwe_dimension;
-            Self {
-                a: rotate(self.a, r),
-                b: rotate(self.b, r),
-            }
-        }
-    }
-
-    /// Perform [`RLWE<F>`] multiply with `Y^r - 1` for functional bootstrapping where `Y = X^(2N/q)`.
-    pub fn mul_monic_monomial_sub_one<R: Ring>(
         &self,
         // N
         rlwe_dimension: usize,
@@ -257,39 +220,44 @@ impl<F: NTTField> RLWE<F> {
         let r = r.cast_into_usize() * twice_rlwe_dimension_div_lwe_modulus;
         if r <= rlwe_dimension {
             #[inline]
-            fn rotate<F: NTTField>(p: &Polynomial<F>, n_sub_r: usize) -> Polynomial<F> {
-                p[n_sub_r..]
-                    .iter()
-                    .map(|&v| -v)
-                    .chain(p[0..n_sub_r].iter().copied())
-                    .zip(p.iter())
-                    .map(|(v0, v1)| v0 - v1)
-                    .collect::<Vec<F>>()
-                    .into()
+            fn rotate<F: NTTField>(p: &Polynomial<F>, r: usize) -> Polynomial<F> {
+                let mut p = p.clone().data();
+                p.rotate_right(r);
+                p[0..r].iter_mut().for_each(|v| *v = -*v);
+                <Polynomial<F>>::new(p)
             }
-            let n_sub_r = rlwe_dimension - r;
             Self {
-                a: rotate(self.a(), n_sub_r),
-                b: rotate(self.b(), n_sub_r),
+                a: rotate(&self.a, r),
+                b: rotate(&self.b, r),
             }
         } else {
             #[inline]
-            fn rotate<F: NTTField>(p: &Polynomial<F>, n_mul_2_sub_r: usize) -> Polynomial<F> {
-                p[n_mul_2_sub_r..]
-                    .iter()
-                    .copied()
-                    .chain(p[0..n_mul_2_sub_r].iter().map(|&v| -v))
-                    .zip(p.iter())
-                    .map(|(v0, v1)| v0 - v1)
-                    .collect::<Vec<F>>()
-                    .into()
+            fn rotate<F: NTTField>(p: &Polynomial<F>, r: usize) -> Polynomial<F> {
+                let mut p = p.clone().data();
+                p.rotate_right(r);
+                p[r..].iter_mut().for_each(|v| *v = -*v);
+                <Polynomial<F>>::new(p)
             }
-            let n_mul_2_sub_r = rlwe_dimension - (r - rlwe_dimension);
+            let r = r - rlwe_dimension;
             Self {
-                a: rotate(self.a(), n_mul_2_sub_r),
-                b: rotate(self.b(), n_mul_2_sub_r),
+                a: rotate(&self.a, r),
+                b: rotate(&self.b, r),
             }
         }
+    }
+
+    /// Perform [`RLWE<F>`] multiply with `Y^r - 1` for functional bootstrapping where `Y = X^(2N/q)`.
+    #[inline]
+    pub fn mul_monic_monomial_sub_one<R: Ring>(
+        &self,
+        // N
+        rlwe_dimension: usize,
+        // 2N/q
+        twice_rlwe_dimension_div_lwe_modulus: usize,
+        r: R,
+    ) -> Self {
+        self.mul_monic_monomial(rlwe_dimension, twice_rlwe_dimension_div_lwe_modulus, r)
+            .sub_element_wise(self)
     }
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_rgsw` [`RGSW<F>`],
