@@ -426,7 +426,7 @@ impl<F: NTTField> NTTRLWE<F> {
     /// In this function, `self` is a reference.
     /// If your `self` is not a reference, you can use function `add_element_wise`.
     #[inline]
-    pub fn ref_add_element_wise(&self, rhs: &Self) -> Self {
+    pub fn add_element_wise_ref(&self, rhs: &Self) -> Self {
         Self {
             a: &self.a + rhs.a(),
             b: &self.b + rhs.b(),
@@ -449,7 +449,7 @@ impl<F: NTTField> NTTRLWE<F> {
     /// In this function, `self` is a reference.
     /// If your `self` is not a reference, you can use function `sub_element_wise`.
     #[inline]
-    pub fn ref_sub_element_wise(&self, rhs: &Self) -> Self {
+    pub fn sub_element_wise_ref(&self, rhs: &Self) -> Self {
         Self {
             a: &self.a - rhs.a(),
             b: &self.b - rhs.b(),

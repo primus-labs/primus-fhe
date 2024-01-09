@@ -127,13 +127,13 @@ impl<F: Field> Polynomial<F> {
         self.data.push(value);
     }
 
-    /// Multipile `self` with the a scalar.
+    /// Multiply `self` with the a scalar.
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
         Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
     }
 
-    /// Multipile `self` with the a scalar inplace.
+    /// Multiply `self` with the a scalar inplace.
     #[inline]
     pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
         self.iter_mut().for_each(|v| *v = v.mul_scalar(scalar))
@@ -157,13 +157,13 @@ impl<F: Field> Polynomial<F> {
         self.data.iter_mut()
     }
 
-    /// Alter the coefficient count of the polynomial.
+    /// Resize the coefficient count of the polynomial.
     #[inline]
     pub fn resize(&mut self, new_degree: usize, value: F) {
         self.data.resize(new_degree, value);
     }
 
-    /// Alter the coefficient count of the polynomial.
+    /// Resize the coefficient count of the polynomial.
     #[inline]
     pub fn resize_with<FN>(&mut self, new_degree: usize, f: FN)
     where
