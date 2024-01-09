@@ -127,6 +127,11 @@ pub trait Ring:
     /// Now we focus on power-of-two basis.
     fn decompose(&self, basis: Basis<Self>) -> Vec<Self>;
 
+    /// Decompose `self` according to `basis`.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose_at(&self, basis: Basis<Self>, dst: &mut [Self]);
+
     /// Return `self * scalar`.
     fn mul_scalar(&self, scalar: Self::Inner) -> Self;
 

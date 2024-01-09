@@ -94,13 +94,18 @@ fn test_poly_decompose() {
     let rng = &mut thread_rng();
     let poly = PolyFF::random(N, rng);
     let basis = <Basis<Fp32>>::new(BITS);
-    let decompose = poly.decompose(basis);
-    let compose = decompose
-        .into_iter()
-        .enumerate()
-        .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + d.mul_scalar(B.pow(i as u32) as Inner)
-        });
+    let mut decompose = poly.decompose(basis);
+
+    let compose = decompose.chunks_exact_mut(N).enumerate().fold(
+        PolyFF::zero_with_coeff_count(N),
+        |mut acc, (i, d)| {
+            let bb = Fp32(B.pow(i as u32) as Inner);
+            acc.iter_mut()
+                .zip(d)
+                .for_each(|(l, r)| *l = l.add_mul(*r, bb));
+            acc
+        },
+    );
     assert_eq!(compose, poly);
 }
 
@@ -114,12 +119,12 @@ fn test_poly_decompose_mul() {
     let mul_result = &poly1 * &poly2;
 
     let basis = <Basis<Fp32>>::new(BITS);
-    let decompose = poly1.decompose(basis);
+    let mut decompose = poly1.decompose(basis);
     let compose_mul_result = decompose
-        .into_iter()
+        .chunks_exact_mut(N)
         .enumerate()
         .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + d * poly2.mul_scalar(B.pow(i as u32) as Inner)
+            acc + PolyFF::from_slice(d) * poly2.mul_scalar(B.pow(i as u32) as Inner)
         });
     assert_eq!(compose_mul_result, mul_result);
 }

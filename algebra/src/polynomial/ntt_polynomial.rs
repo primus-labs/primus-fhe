@@ -1,5 +1,6 @@
 use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut, SliceIndex};
+use std::vec::IntoIter;
 
 use num_traits::Zero;
 use rand_distr::Distribution;
@@ -85,6 +86,22 @@ impl<F: Field> NTTPolynomial<F> {
         }
     }
 
+    /// Extracts a slice containing the entire vector.
+    ///
+    /// Equivalent to `&s[..]`.
+    #[inline]
+    pub fn as_slice(&self) -> &[F] {
+        self.data.as_slice()
+    }
+
+    /// Extracts a mutable slice of the entire vector.
+    ///
+    /// Equivalent to `&mut s[..]`.
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [F] {
+        self.data.as_mut_slice()
+    }
+
     /// Get the coefficient counts of polynomial.
     #[inline]
     pub fn coeff_count(&self) -> usize {
@@ -95,6 +112,12 @@ impl<F: Field> NTTPolynomial<F> {
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
         Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+    }
+
+    /// Multipile `self` with the a scalar inplace.
+    #[inline]
+    pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
+        self.iter_mut().for_each(|v| *v = v.mul_scalar(scalar))
     }
 
     /// Returns an iterator that allows reading each value or coefficient of the polynomial.
@@ -122,6 +145,13 @@ impl<F: Field> NTTPolynomial<F> {
         FN: FnMut() -> F,
     {
         self.data.resize_with(new_degree, f);
+    }
+
+    /// Multiply a ntt polynomial slice.
+    #[inline]
+    pub fn mul_ntt_polynomial_slice(&self, rhs: &[F]) -> NTTPolynomial<F> {
+        debug_assert_eq!(self.coeff_count(), rhs.len());
+        Self::new(self.iter().zip(rhs).map(|(&l, &r)| l * r).collect())
     }
 }
 
@@ -231,11 +261,33 @@ impl<F: Field> Zero for NTTPolynomial<F> {
 impl<F: Field> IntoIterator for NTTPolynomial<F> {
     type Item = F;
 
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = IntoIter<F>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.data.into_iter()
+    }
+}
+
+impl<'a, F: Field> IntoIterator for &'a NTTPolynomial<F> {
+    type Item = &'a F;
+
+    type IntoIter = Iter<'a, F>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
+    }
+}
+
+impl<'a, F: Field> IntoIterator for &'a mut NTTPolynomial<F> {
+    type Item = &'a mut F;
+
+    type IntoIter = IterMut<'a, F>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter_mut()
     }
 }
 
@@ -359,7 +411,7 @@ impl<F: Field> Mul<Self> for NTTPolynomial<F> {
 
     #[inline]
     fn mul(mut self, rhs: Self) -> Self::Output {
-        MulAssign::mul_assign(&mut self, &rhs);
+        MulAssign::mul_assign(&mut self, rhs);
         self
     }
 }
@@ -395,18 +447,19 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     }
 }
 
+impl<F: Field> MulAssign<Self> for NTTPolynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
+    }
+}
+
 impl<F: Field> MulAssign<&Self> for NTTPolynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l *= r);
-    }
-}
-
-impl<F: Field> MulAssign for NTTPolynomial<F> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: Self) {
-        MulAssign::mul_assign(self, &rhs);
+        self.iter_mut().zip(rhs).for_each(|(l, &r)| *l *= r);
     }
 }
 

@@ -1,5 +1,6 @@
 use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut, SliceIndex};
+use std::vec::IntoIter;
 
 use num_traits::Zero;
 use rand_distr::Distribution;
@@ -12,15 +13,15 @@ use super::NTTPolynomial;
 
 /// Represents a polynomial where coefficients are elements of a specified field `F`.
 ///
-/// The `Polynomial` struct is generic over a type `F` that must implement the `Field` trait, ensuring
+/// The [`Polynomial`] struct is generic over a type `F` that must implement the [`Field`] trait, ensuring
 /// that the polynomial coefficients can support field operations such as addition, subtraction,
 /// multiplication, and division, where division is by a non-zero element. These operations are
 /// fundamental in various areas of mathematics and computer science, especially in algorithms that involve
 /// polynomial arithmetic in fields, such as error-correcting codes, cryptography, and numerical analysis.
 ///
 /// The coefficients of the polynomial are stored in a vector `data`, with the `i`-th element
-/// representing the coefficient of the `x^i` term. The vector is ordered from the constant term
-/// at index 0 to the highest non-zero term. This struct can represent both dense and sparse polynomials,
+/// representing the coefficient of the `xⁱ` term. The vector is ordered from the constant term
+/// at index 0 to the highest term. This struct can represent both dense and sparse polynomials,
 /// but it doesn't inherently optimize for sparse representations.
 ///
 /// # Fields
@@ -105,9 +106,19 @@ impl<F: Field> Polynomial<F> {
     }
 
     /// Extracts a slice containing the entire vector.
+    ///
+    /// Equivalent to `&s[..]`.
     #[inline]
     pub fn as_slice(&self) -> &[F] {
         self.data.as_slice()
+    }
+
+    /// Extracts a mutable slice of the entire vector.
+    ///
+    /// Equivalent to `&mut s[..]`.
+    #[inline]
+    pub fn as_mut_slice(&mut self) -> &mut [F] {
+        self.data.as_mut_slice()
     }
 
     /// Appends an element to the back of a [`Polynomial<F>`].
@@ -120,6 +131,12 @@ impl<F: Field> Polynomial<F> {
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
         Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+    }
+
+    /// Multipile `self` with the a scalar inplace.
+    #[inline]
+    pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
+        self.iter_mut().for_each(|v| *v = v.mul_scalar(scalar))
     }
 
     /// Get the coefficient counts of polynomial.
@@ -196,6 +213,19 @@ impl<F: NTTField> Polynomial<F> {
     pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
         <NTTPolynomial<F>>::from(self)
     }
+
+    /// Multiply a ntt polynomial slice.
+    #[inline]
+    pub fn mul_ntt_polynomial_slice(&self, rhs: &[F]) -> Polynomial<F> {
+        debug_assert_eq!(self.coeff_count(), rhs.len());
+        debug_assert!(rhs.len().is_power_of_two());
+        let ntt_table = F::get_ntt_table(rhs.len().trailing_zeros()).unwrap();
+        let mut lhs = ntt_table.transform(self);
+
+        lhs.iter_mut().zip(rhs).for_each(|(l, &r)| *l *= r);
+
+        ntt_table.inverse_transform_inplace(lhs)
+    }
 }
 
 impl<F: Field, I: SliceIndex<[F]>> IndexMut<I> for Polynomial<F> {
@@ -260,7 +290,7 @@ impl<F: NTTField> Polynomial<F> {
     }
 
     /// Decompose `self` according to `basis`.
-    pub fn decompose(&self, basis: Basis<F>) -> Vec<Self> {
+    pub fn decompose1(&self, basis: Basis<F>) -> Vec<Self> {
         let mut ret: Vec<Self> = Vec::with_capacity(basis.decompose_len());
         ret.resize_with(basis.decompose_len(), || {
             Polynomial::new(vec![F::ZERO; self.coeff_count()])
@@ -287,6 +317,21 @@ impl<F: NTTField> Polynomial<F> {
     #[inline]
     pub fn decompose4(&self, basis: Basis<F>) -> Vec<Self> {
         transpose3(self.iter().map(|&c| c.decompose(basis)).collect())
+    }
+
+    /// Decompose `self` according to `basis`.
+    #[inline]
+    pub fn decompose(&self, basis: Basis<F>) -> Vec<F> {
+        let coeff_count = self.coeff_count();
+        let decompose_len = basis.decompose_len();
+        let mut temp: Vec<F> = vec![F::ZERO; decompose_len * coeff_count];
+        let mut ret: Vec<F> = vec![F::ZERO; decompose_len * coeff_count];
+        self.iter()
+            .zip(temp.chunks_exact_mut(decompose_len))
+            .for_each(|(c, d_p)| c.decompose_at(basis, d_p));
+
+        transpose::transpose(&temp, &mut ret, decompose_len, coeff_count);
+        ret
     }
 }
 
@@ -332,11 +377,33 @@ impl<F: Field> Zero for Polynomial<F> {
 impl<F: Field> IntoIterator for Polynomial<F> {
     type Item = F;
 
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = IntoIter<F>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.data.into_iter()
+    }
+}
+
+impl<'a, F: Field> IntoIterator for &'a Polynomial<F> {
+    type Item = &'a F;
+
+    type IntoIter = Iter<'a, F>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
+    }
+}
+
+impl<'a, F: Field> IntoIterator for &'a mut Polynomial<F> {
+    type Item = &'a mut F;
+
+    type IntoIter = IterMut<'a, F>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter_mut()
     }
 }
 

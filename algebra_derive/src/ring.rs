@@ -258,6 +258,22 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 ret
             }
 
+            fn decompose_at(&self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
+                let mut temp = self.0;
+
+                let mask = basis.mask();
+                let bits = basis.bits();
+
+                for v in dst {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
+                }
+            }
+
             #[inline]
             fn mul_scalar(&self, scalar: Self::Inner) -> Self {
                 use algebra::reduce::MulReduce;
@@ -373,6 +389,22 @@ fn impl_and_ring(
                 }
 
                 ret
+            }
+
+            fn decompose_at(&self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
+                let mut temp = self.0;
+
+                let mask = basis.mask();
+                let bits = basis.bits();
+
+                for v in dst {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
+                }
             }
 
             #[inline]

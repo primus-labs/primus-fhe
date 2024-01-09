@@ -1,4 +1,4 @@
-use algebra::{Basis, NTTField, Polynomial};
+use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial};
 
 use crate::{NTTRLWE, RLWE};
 
@@ -77,39 +77,58 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// return a [`RLWE<F>`].
     #[inline]
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> RLWE<F> {
-        let decomposed = polynomial.decompose(self.basis);
-        self.mul_decomposed_polynomial(decomposed)
+        let coeff_count = polynomial.coeff_count();
+        let mut decomposed = polynomial.decompose(self.basis);
+        let slices_vec: Vec<&mut [F]> = decomposed.chunks_exact_mut(coeff_count).collect();
+
+        self.mul_decomposed_polynomial(slices_vec, coeff_count)
     }
 
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`] slice,
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_decomposed_polynomial(&self, decomposed: Vec<Polynomial<F>>) -> RLWE<F> {
+    pub fn mul_decomposed_polynomial(
+        &self,
+        decomposed: Vec<&mut [F]>,
+        coeff_count: usize,
+    ) -> RLWE<F> {
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+
         let mut gadget_rlwe_iter = self.iter();
         let mut decomposed_iter = decomposed.into_iter();
+
+        let d0: &mut [F] = decomposed_iter.next().unwrap();
+        ntt_table.transform_slice(d0);
 
         let init = gadget_rlwe_iter
             .next()
             .unwrap()
-            .mul_polynomial(decomposed_iter.next().unwrap());
+            .mul_ntt_polynomial_slice(d0);
 
         gadget_rlwe_iter
             .zip(decomposed_iter)
             .fold(init, |acc, (r, p)| {
-                acc.add_element_wise(&r.mul_polynomial(p))
+                ntt_table.transform_slice(p);
+                acc.add_element_wise(&r.mul_ntt_polynomial_slice(p))
             })
     }
 
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`] slice,
     /// then add the `rlwe`, return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_decomposed_polynomial_add_rlwe(
+    pub fn mul_decomposed_polynomial_slice_add_rlwe(
         &self,
-        decomposed: Vec<Polynomial<F>>,
+        decomposed: Vec<&mut [F]>,
         rlwe: RLWE<F>,
+        coeff_count: usize,
     ) -> RLWE<F> {
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+
         self.iter().zip(decomposed).fold(rlwe, |acc, (r, p)| {
-            acc.add_element_wise(&r.mul_polynomial(p))
+            ntt_table.transform_slice(p);
+            acc.add_element_wise(&r.mul_ntt_polynomial_slice(p))
         })
     }
 }
@@ -198,25 +217,41 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     /// return a [`NTTRLWE<F>`].
     #[inline]
     pub fn mul_polynomial(&self, poly: &Polynomial<F>) -> NTTRLWE<F> {
-        let decomposed = poly.decompose(self.basis);
-        self.mul_decomposed_polynomial(decomposed)
+        let coeff_count = poly.coeff_count();
+        let mut decomposed = poly.decompose(self.basis);
+        let slices_vec: Vec<&mut [F]> = decomposed.chunks_exact_mut(coeff_count).collect();
+
+        self.mul_decomposed_polynomial(slices_vec, coeff_count)
     }
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
     /// return a [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_decomposed_polynomial(&self, decomposed: Vec<Polynomial<F>>) -> NTTRLWE<F> {
+    pub fn mul_decomposed_polynomial(
+        &self,
+        decomposed: Vec<&mut [F]>,
+        coeff_count: usize,
+    ) -> NTTRLWE<F> {
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+
         let mut gadget_rlwe_iter = self.iter();
         let mut decomposed_iter = decomposed.into_iter();
+
+        let d0: &mut [F] = decomposed_iter.next().unwrap();
+        ntt_table.transform_slice(d0);
 
         let init = gadget_rlwe_iter
             .next()
             .unwrap()
-            .mul_polynomial(decomposed_iter.next().unwrap());
+            .mul_ntt_polynomial_slice(d0);
 
         gadget_rlwe_iter
             .zip(decomposed_iter)
-            .fold(init, |acc, (g, d)| acc.add_rlwe_mul_polynomial(g, d))
+            .fold(init, |acc, (g, d)| {
+                ntt_table.transform_slice(d);
+                acc.add_rlwe_mul_ntt_polynomial_slice(g, d)
+            })
     }
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
@@ -231,6 +266,26 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
             .zip(decomposed)
             .fold(rlwe, |acc, (gadget, decomposed_polynomial)| {
                 acc.add_rlwe_mul_polynomial(gadget, decomposed_polynomial)
+            })
+    }
+
+    /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
+    /// then add the `rlwe`, return a [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mul_decomposed_polynomial_slice_add_rlwe(
+        &self,
+        decomposed: Vec<&mut [F]>,
+        rlwe: NTTRLWE<F>,
+        coeff_count: usize,
+    ) -> NTTRLWE<F> {
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+
+        self.iter()
+            .zip(decomposed)
+            .fold(rlwe, |acc, (gadget, decomposed_polynomial)| {
+                ntt_table.transform_slice(decomposed_polynomial);
+                acc.add_rlwe_mul_ntt_polynomial_slice(gadget, decomposed_polynomial)
             })
     }
 }

@@ -38,9 +38,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("Polynomial decompose");
 
-    group.bench_function("polynomial decompose", |b| {
+    group.bench_function("polynomial decompose1", |b| {
         b.iter(|| {
-            a.decompose(basis);
+            a.decompose1(basis);
         })
     });
 
@@ -59,6 +59,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("polynomial decompose4", |b| {
         b.iter(|| {
             a.decompose4(basis);
+        })
+    });
+
+    group.bench_function("polynomial decompose5", |b| {
+        b.iter(|| {
+            a.decompose(basis);
         })
     });
     group.finish();

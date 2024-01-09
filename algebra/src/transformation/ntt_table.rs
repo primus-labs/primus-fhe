@@ -119,7 +119,7 @@ where
 
     #[inline]
     fn transform_inplace(&self, mut poly: Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_slice(poly.as_mut());
+        self.transform_slice(poly.as_mut_slice());
         NTTPolynomial::<F>::new(poly.data())
     }
 

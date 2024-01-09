@@ -223,6 +223,16 @@ impl<F: NTTField> RLWE<F> {
         }
     }
 
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `poly` `&mut [F]`,
+    /// return a [`RLWE<F>`].
+    #[inline]
+    pub fn mul_ntt_polynomial_slice(&self, poly: &[F]) -> Self {
+        Self {
+            a: self.a.mul_ntt_polynomial_slice(poly),
+            b: self.b.mul_ntt_polynomial_slice(poly),
+        }
+    }
+
     /// Performs `self + gadget_rlwe * polynomial`.
     #[inline]
     pub fn add_gadget_rlwe_mul_polynomial(
@@ -230,8 +240,10 @@ impl<F: NTTField> RLWE<F> {
         gadget_rlwe: &GadgetRLWE<F>,
         polynomial: &Polynomial<F>,
     ) -> RLWE<F> {
-        let decomposed = polynomial.decompose(gadget_rlwe.basis());
-        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
+        let coeff_count = polynomial.coeff_count();
+        let mut decomposed = polynomial.decompose(gadget_rlwe.basis());
+        let slice_vec: Vec<&mut [F]> = decomposed.chunks_exact_mut(coeff_count).collect();
+        gadget_rlwe.mul_decomposed_polynomial_slice_add_rlwe(slice_vec, self, coeff_count)
     }
 
     /// Extract an LWE sample from RLWE.
@@ -454,13 +466,23 @@ impl<F: NTTField> NTTRLWE<F> {
     }
 
     /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `poly` [`Polynomial<F>`],
-    /// return a [`RLWE<F>`].
+    /// return a [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_polynomial(&self, polynomial: Polynomial<F>) -> NTTRLWE<F> {
-        let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
+    pub fn mul_polynomial(&self, poly: Polynomial<F>) -> NTTRLWE<F> {
+        let ntt_polynomial = <NTTPolynomial<F>>::from(poly);
         NTTRLWE {
             a: &self.a * &ntt_polynomial,
             b: &self.b * ntt_polynomial,
+        }
+    }
+
+    /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `poly` [`Polynomial<F>`],
+    /// return a [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mul_ntt_polynomial_slice(&self, poly: &[F]) -> NTTRLWE<F> {
+        NTTRLWE {
+            a: self.a.mul_ntt_polynomial_slice(poly),
+            b: self.b.mul_ntt_polynomial_slice(poly),
         }
     }
 
@@ -485,6 +507,25 @@ impl<F: NTTField> NTTRLWE<F> {
         self
     }
 
+    /// Performs `self + rlwe * polynomial`.
+    pub fn add_rlwe_mul_ntt_polynomial_slice(
+        mut self,
+        rhs: &NTTRLWE<F>,
+        polynomial: &[F],
+    ) -> NTTRLWE<F> {
+        let op = |l: &mut NTTPolynomial<F>, r: &NTTPolynomial<F>| {
+            l.iter_mut()
+                .zip(r.iter())
+                .zip(polynomial)
+                .for_each(|((x, &y), &z)| *x = x.add_mul(y, z))
+        };
+
+        op(&mut self.a, &rhs.a);
+        op(&mut self.b, &rhs.b);
+
+        self
+    }
+
     /// Performs `self + gadget_rlwe * polynomial`.
     #[inline]
     pub fn add_gadget_rlwe_mul_polynomial(
@@ -492,8 +533,11 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
     ) -> NTTRLWE<F> {
-        let decomposed = polynomial.decompose(gadget_rlwe.basis());
-        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
+        let coeff_count = polynomial.coeff_count();
+        let mut decomposed = polynomial.decompose(gadget_rlwe.basis());
+        let slices_vec: Vec<&mut [F]> = decomposed.chunks_exact_mut(coeff_count).collect();
+
+        gadget_rlwe.mul_decomposed_polynomial_slice_add_rlwe(slices_vec, self, coeff_count)
     }
 
     /// Performs `self - gadget_rlwe * polynomial`.
@@ -503,7 +547,10 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: Polynomial<F>,
     ) -> NTTRLWE<F> {
-        let decomposed = (-polynomial).decompose(gadget_rlwe.basis());
-        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
+        let coeff_count = polynomial.coeff_count();
+        let mut decomposed = (-polynomial).decompose(gadget_rlwe.basis());
+        let slices_vec: Vec<&mut [F]> = decomposed.chunks_exact_mut(coeff_count).collect();
+
+        gadget_rlwe.mul_decomposed_polynomial_slice_add_rlwe(slices_vec, self, coeff_count)
     }
 }
