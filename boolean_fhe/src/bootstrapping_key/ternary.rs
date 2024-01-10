@@ -26,32 +26,44 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         twice_rlwe_dimension_div_lwe_modulus: usize,
         pre_allocate: &mut BootstrappingPreAllocator<F>,
     ) -> RLWE<F> {
-        let (decompose, ntt_rlwe, rlwe0, rlwe1) = pre_allocate.get_all_mut();
+        let (decompose_space, ntt_rlwe_space, acc_mul_rgsw, median) = pre_allocate.get_all_mut();
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |acc, (s_i, &a_i)| {
                 // u = 1
-                // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
-                acc.mul_small_ntt_rgsw_inplace(&s_i.0, (decompose, ntt_rlwe, rlwe0));
-                rlwe0.mul_monic_monomial_sub_one_inplace(
+                // acc_mul_rgsw = ACC * RGSW(s_i_u)
+                acc.mul_small_ntt_rgsw_inplace(
+                    &s_i.0,
+                    (decompose_space, ntt_rlwe_space),
+                    acc_mul_rgsw,
+                );
+                // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
+                acc_mul_rgsw.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     -a_i,
-                    rlwe1,
+                    median,
                 );
-                let acc = acc.add_element_wise(rlwe1);
+                // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
+                let acc = acc.add_element_wise(median);
 
                 // u = -1
-                // ACC = ACC + (Y^{a_i} - 1) * ACC * RGSW(s_i_u)
-                acc.mul_small_ntt_rgsw_inplace(&s_i.1, (decompose, ntt_rlwe, rlwe0));
-                rlwe0.mul_monic_monomial_sub_one_inplace(
+                // acc_mul_rgsw = ACC * RGSW(s_i_u)
+                acc.mul_small_ntt_rgsw_inplace(
+                    &s_i.1,
+                    (decompose_space, ntt_rlwe_space),
+                    acc_mul_rgsw,
+                );
+                // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
+                acc_mul_rgsw.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     a_i,
-                    rlwe1,
+                    median,
                 );
-                acc.add_element_wise(rlwe1)
+                // ACC = ACC + (Y^{a_i} - 1) * ACC * RGSW(s_i_u)
+                acc.add_element_wise(median)
             })
     }
 }

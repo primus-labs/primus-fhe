@@ -410,7 +410,7 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
-    /// return a [`RLWE<F>`].
+    /// output the [`RLWE<F>`] result into `dst`.
     ///
     /// # Attention
     /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
@@ -418,20 +418,22 @@ impl<F: NTTField> RLWE<F> {
     pub fn mul_small_ntt_rgsw_inplace(
         &self,
         small_ntt_rgsw: &NTTRGSW<F>,
-        // pre allocate space
-        (decomposed, ntt_rlwe, rlwe): (&mut [Polynomial<F>], &mut NTTRLWE<F>, &mut RLWE<F>),
+        // Pre allocate space
+        (decomposed, ntt_rlwe): (&mut [Polynomial<F>], &mut NTTRLWE<F>),
+        // Output destination
+        dst: &mut RLWE<F>,
     ) {
         small_ntt_rgsw
             .c_neg_s_m()
-            .mul_polynomial_inplace(self.a(), (decomposed, ntt_rlwe, rlwe.a_mut()));
+            .mul_polynomial_inplace(self.a(), (decomposed, ntt_rlwe, dst.a_mut()));
 
         ntt_rlwe.add_gadget_rlwe_mul_polynomial_inplace(
             small_ntt_rgsw.c_m(),
             self.b(),
-            (decomposed, rlwe.a_mut()),
+            (decomposed, dst.a_mut()),
         );
 
-        ntt_rlwe.inverse_transform_inplace(rlwe)
+        ntt_rlwe.inverse_transform_inplace(dst)
     }
 }
 
