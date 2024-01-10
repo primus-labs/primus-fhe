@@ -94,16 +94,12 @@ fn test_poly_decompose() {
     let rng = &mut thread_rng();
     let poly = PolyFF::random(N, rng);
     let basis = <Basis<Fp32>>::new(BITS);
-    let mut decompose = poly.decompose(basis);
-
-    let compose = decompose.iter_mut().enumerate().fold(
+    let decompose = poly.decompose(basis);
+    let compose = decompose.into_iter().enumerate().fold(
         PolyFF::zero_with_coeff_count(N),
-        |mut acc, (i, d)| {
-            let bb = Fp32(B.pow(i as u32) as Inner);
-            acc.iter_mut()
-                .zip(d)
-                .for_each(|(l, r)| l.add_mul_assign(*r, bb));
-            acc
+        |acc, (i, mut d)| {
+            d.mul_scalar_inplace(B.pow(i as u32) as Inner);
+            acc + d
         },
     );
     assert_eq!(compose, poly);
