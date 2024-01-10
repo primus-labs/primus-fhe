@@ -8,7 +8,6 @@ mod parameter;
 mod ciphertext;
 mod plaintext;
 
-mod allocator;
 mod bootstrapping_key;
 mod evaluation_key;
 mod key_switching_key;
@@ -22,7 +21,7 @@ pub use parameter::{
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::LWEPlaintext;
 
-pub use bootstrapping_key::BootstrappingKey;
+pub use bootstrapping_key::{BootstrappingKey, BootstrappingPreAllocate};
 pub use evaluation_key::EvaluationKey;
 pub use key_switching_key::KeySwitchingKey;
 pub use secret_key::{LWESecretKey, NTTRLWESecretKey, RLWESecretKey, SecretKeyPack, SecretKeyType};

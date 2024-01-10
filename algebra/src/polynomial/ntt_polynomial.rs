@@ -253,8 +253,7 @@ impl<F: Field> Zero for NTTPolynomial<F> {
 
     #[inline]
     fn set_zero(&mut self) {
-        let coeff_count = self.coeff_count();
-        self.data = vec![F::ZERO; coeff_count];
+        self.data.fill(F::ZERO);
     }
 }
 

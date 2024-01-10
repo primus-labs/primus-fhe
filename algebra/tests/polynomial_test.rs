@@ -102,7 +102,7 @@ fn test_poly_decompose() {
             let bb = Fp32(B.pow(i as u32) as Inner);
             acc.iter_mut()
                 .zip(d)
-                .for_each(|(l, r)| *l = l.add_mul(*r, bb));
+                .for_each(|(l, r)| l.add_mul_assign(*r, bb));
             acc
         },
     );

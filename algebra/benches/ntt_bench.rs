@@ -1,4 +1,4 @@
-use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random};
+use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random, Ring};
 use algebra_derive::{Field, Prime, Random, Ring, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{prelude::*, thread_rng};
@@ -34,37 +34,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     let basis = <Basis<Fp>>::new(3);
-    let a = <Polynomial<Fp>>::random_with_dis(n, &mut rng, fp_dis);
+    let mut a = <Polynomial<Fp>>::random_with_dis(n, &mut rng, fp_dis);
+
+    let decompose_len = basis.decompose_len();
+    let decompose_allocate_len = decompose_len * n;
+
+    let mut decompose = vec![Fp::ZERO; decompose_allocate_len];
 
     let mut group = c.benchmark_group("Polynomial decompose");
 
-    group.bench_function("polynomial decompose1", |b| {
-        b.iter(|| {
-            a.decompose1(basis);
-        })
-    });
-
-    group.bench_function("polynomial decompose2", |b| {
-        b.iter(|| {
-            a.decompose2(basis);
-        })
-    });
-
-    group.bench_function("polynomial decompose3", |b| {
-        b.iter(|| {
-            a.decompose3(basis);
-        })
-    });
-
-    group.bench_function("polynomial decompose4", |b| {
-        b.iter(|| {
-            a.decompose4(basis);
-        })
-    });
-
-    group.bench_function("polynomial decompose5", |b| {
+    group.bench_function("polynomial decompose", |b| {
         b.iter(|| {
             a.decompose(basis);
+        })
+    });
+
+    group.bench_function("polynomial decompose inplace", |b| {
+        b.iter(|| {
+            a.decompose_inplace(basis, &mut decompose);
         })
     });
     group.finish();

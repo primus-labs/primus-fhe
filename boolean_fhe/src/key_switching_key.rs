@@ -36,12 +36,20 @@ impl<F: NTTField> KeySwitchingKey<F> {
         );
         init.b_mut()[0] = ciphertext.b();
 
-        let init = <NTTRLWE<F>>::from(init);
+        let mut init = <NTTRLWE<F>>::from(init);
 
-        <RLWE<F>>::from(self.key.iter().zip(a).fold(init, |acc, (k_i, a_i)| {
-            acc.sub_gadget_rlwe_mul_polynomial(k_i, a_i)
-        }))
-        .extract_lwe()
+        let rlwe_dimension = init.a().coeff_count();
+        let basis = self.key[0].basis();
+        let decompose_len = basis.decompose_len();
+        let decompose_allocate_len = decompose_len * rlwe_dimension;
+
+        let mut decompose = vec![F::ZERO; decompose_allocate_len];
+
+        self.key.iter().zip(a).for_each(|(k_i, a_i)| {
+            init.sub_gadget_rlwe_mul_polynomial_inplace(k_i, a_i, &mut decompose);
+        });
+
+        <RLWE<F>>::from(init).extract_lwe()
     }
 }
 

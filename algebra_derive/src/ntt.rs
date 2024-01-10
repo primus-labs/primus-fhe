@@ -36,12 +36,12 @@ fn impl_ntt(input: Input) -> TokenStream {
             }
 
             #[inline]
-            fn to_root(&self) -> Self::Root {
-                Self::Root::new(*self, #name((((self.0 as <#field_ty as algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as algebra::Widening>::WideT) as #field_ty))
+            fn to_root(self) -> Self::Root {
+                Self::Root::new(self, #name((((self.0 as <#field_ty as algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as algebra::Widening>::WideT) as #field_ty))
             }
 
             #[inline]
-            fn mul_root(&self, root: Self::Root) -> Self {
+            fn mul_root(self, root: Self::Root) -> Self {
                 let r = algebra::modulus::MulReduceFactor::<#field_ty> {
                     value: root.value().0,
                     quotient: root.quotient().0,

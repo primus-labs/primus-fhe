@@ -97,14 +97,6 @@ impl<F: Field> Polynomial<F> {
         }
     }
 
-    /// Constructs a new, empty [`Polynomial<F>`] with at least the specified capacity.
-    #[inline]
-    fn with_capacity(capacity: usize) -> Self {
-        Self {
-            data: Vec::with_capacity(capacity),
-        }
-    }
-
     /// Extracts a slice containing the entire vector.
     ///
     /// Equivalent to `&s[..]`.
@@ -119,12 +111,6 @@ impl<F: Field> Polynomial<F> {
     #[inline]
     pub fn as_mut_slice(&mut self) -> &mut [F] {
         self.data.as_mut_slice()
-    }
-
-    /// Appends an element to the back of a [`Polynomial<F>`].
-    #[inline]
-    fn push(&mut self, value: F) {
-        self.data.push(value);
     }
 
     /// Multiply `self` with the a scalar.
@@ -244,94 +230,42 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
     }
 }
 
-fn transpose<T: Field>(v: Vec<Vec<T>>) -> Vec<Polynomial<T>> {
-    assert!(!v.is_empty());
-    let len = v[0].len();
-    let mut iters: Vec<_> = v.into_iter().map(|n| n.into_iter()).collect();
-    (0..len)
-        .map(|_| {
-            iters
-                .iter_mut()
-                .map(|n| n.next().unwrap())
-                .collect::<Vec<T>>()
-                .into()
-        })
-        .collect()
-}
-
-fn transpose3<T: Field>(original: Vec<Vec<T>>) -> Vec<Polynomial<T>> {
-    assert!(!original.is_empty());
-    let mut transposed = (0..original[0].len())
-        .map(|_| <Polynomial<T>>::zero())
-        .collect::<Vec<_>>();
-
-    for original_row in original {
-        for (item, transposed_row) in original_row.into_iter().zip(&mut transposed) {
-            transposed_row.push(item);
-        }
-    }
-
-    transposed
-}
-
 impl<F: NTTField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
-    pub fn decompose2(&self, basis: Basis<F>) -> Vec<Self> {
-        let mut ret: Vec<Self> =
-            vec![Self::with_capacity(self.coeff_count()); basis.decompose_len()];
-        for coeff in self.iter() {
-            let decompose_res = coeff.decompose(basis);
-            ret.iter_mut()
-                .zip(decompose_res.into_iter())
-                .for_each(|(d_p, d_c)| d_p.push(d_c));
-        }
-
-        ret
-    }
-
-    /// Decompose `self` according to `basis`.
-    pub fn decompose1(&self, basis: Basis<F>) -> Vec<Self> {
-        let mut ret: Vec<Self> = Vec::with_capacity(basis.decompose_len());
-        ret.resize_with(basis.decompose_len(), || {
-            Polynomial::new(vec![F::ZERO; self.coeff_count()])
-        });
-        for (i, coeff) in self.iter().enumerate() {
-            let decompose_res = coeff.decompose(basis);
-            ret.iter_mut()
-                .zip(decompose_res.into_iter())
-                .for_each(|(d_p, d_c)| unsafe {
-                    *d_p.data.get_unchecked_mut(i) = d_c;
-                });
-        }
-
-        ret
-    }
-
-    /// Decompose `self` according to `basis`.
-    #[inline]
-    pub fn decompose3(&self, basis: Basis<F>) -> Vec<Self> {
-        transpose(self.iter().map(|&c| c.decompose(basis)).collect())
-    }
-
-    /// Decompose `self` according to `basis`.
-    #[inline]
-    pub fn decompose4(&self, basis: Basis<F>) -> Vec<Self> {
-        transpose3(self.iter().map(|&c| c.decompose(basis)).collect())
-    }
-
-    /// Decompose `self` according to `basis`.
-    #[inline]
     pub fn decompose(&self, basis: Basis<F>) -> Vec<F> {
         let coeff_count = self.coeff_count();
-        let decompose_len = basis.decompose_len();
-        let mut temp: Vec<F> = vec![F::ZERO; decompose_len * coeff_count];
-        let mut ret: Vec<F> = vec![F::ZERO; decompose_len * coeff_count];
-        self.iter()
-            .zip(temp.chunks_exact_mut(decompose_len))
-            .for_each(|(c, d_p)| c.decompose_at(basis, d_p));
 
-        transpose::transpose(&temp, &mut ret, decompose_len, coeff_count);
+        let mut p = self.clone();
+        let mut ret: Vec<F> = vec![F::ZERO; basis.decompose_len() * coeff_count];
+        let mask = basis.mask();
+        let bits = basis.bits();
+
+        ret.chunks_exact_mut(coeff_count).for_each(|d| {
+            d.iter_mut().zip(p.iter_mut()).for_each(|(d_i, p_i)| {
+                p_i.decompose_at_mut(d_i, mask, bits);
+            })
+        });
         ret
+    }
+
+    /// Decompose `self` according to `basis`.
+    ///
+    /// # Attention
+    ///
+    /// **`self`** will be a **zero** polynomial.
+    pub fn decompose_inplace(&mut self, basis: Basis<F>, dst: &mut [F]) {
+        let coeff_count = self.coeff_count();
+
+        assert_eq!(dst.len(), basis.decompose_len() * coeff_count);
+
+        let mask = basis.mask();
+        let bits = basis.bits();
+
+        dst.chunks_exact_mut(coeff_count).for_each(|d| {
+            d.iter_mut().zip(self.iter_mut()).for_each(|(d_i, p_i)| {
+                p_i.decompose_at_mut(d_i, mask, bits);
+            })
+        });
     }
 }
 
@@ -369,8 +303,7 @@ impl<F: Field> Zero for Polynomial<F> {
 
     #[inline]
     fn set_zero(&mut self) {
-        let coeff_count = self.coeff_count();
-        self.data = vec![F::ZERO; coeff_count];
+        self.data.fill(F::ZERO);
     }
 }
 

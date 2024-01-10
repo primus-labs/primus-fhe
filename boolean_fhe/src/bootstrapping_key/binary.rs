@@ -3,7 +3,7 @@ use lattice::{NTTRGSW, RLWE};
 
 use crate::secret_key::NTTRLWESecretKey;
 
-use super::{ntt_rgsw_one, ntt_rgsw_zero};
+use super::{ntt_rgsw_one, ntt_rgsw_zero, BootstrappingPreAllocate};
 
 #[derive(Debug, Clone)]
 pub struct BinaryBootstrappingKey<F: NTTField> {
@@ -24,18 +24,22 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
         lwe_a: &[R],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
+        pre_allocate: &mut BootstrappingPreAllocate<F>,
     ) -> RLWE<F> {
+        let (decompose, ntt_rlwe, rlwe0, rlwe1) = pre_allocate.get_all_mut();
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |acc, (s_i, &a_i)| {
                 // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                let median = acc.mul_small_ntt_rgsw(s_i).mul_monic_monomial_sub_one(
+                acc.mul_small_ntt_rgsw_inplace(s_i, (decompose, ntt_rlwe, rlwe0));
+                rlwe0.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     -a_i,
+                    rlwe1,
                 );
-                acc.add_element_wise(&median)
+                acc.add_element_wise(rlwe1)
             })
     }
 }

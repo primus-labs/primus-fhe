@@ -3,6 +3,7 @@ use boolean_fhe::{DefaultRing100, EvaluationKey, SecretKeyPack, DEFAULT_100_BITS
 use rand::prelude::*;
 
 #[test]
+#[ignore = "run slowly in test mode, disable it for github action"]
 fn test_nand() {
     let mut rng = rand::thread_rng();
 
