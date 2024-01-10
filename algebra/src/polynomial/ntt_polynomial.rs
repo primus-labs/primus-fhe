@@ -146,13 +146,6 @@ impl<F: Field> NTTPolynomial<F> {
     {
         self.data.resize_with(new_degree, f);
     }
-
-    /// Multiply a ntt polynomial slice.
-    #[inline]
-    pub fn mul_ntt_polynomial_slice(&self, rhs: &[F]) -> NTTPolynomial<F> {
-        debug_assert_eq!(self.coeff_count(), rhs.len());
-        Self::new(self.iter().zip(rhs).map(|(&l, &r)| l * r).collect())
-    }
 }
 
 impl<F: Field + Random> NTTPolynomial<F> {

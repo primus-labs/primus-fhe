@@ -224,16 +224,6 @@ impl<F: NTTField> RLWE<F> {
         }
     }
 
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `poly` `&mut [F]`,
-    /// return a [`RLWE<F>`].
-    #[inline]
-    pub fn mul_ntt_polynomial_slice(&self, poly: &[F]) -> Self {
-        Self {
-            a: self.a.mul_ntt_polynomial_slice(poly),
-            b: self.b.mul_ntt_polynomial_slice(poly),
-        }
-    }
-
     /// Performs `self + gadget_rlwe * polynomial`.
     #[inline]
     pub fn add_gadget_rlwe_mul_polynomial(
@@ -616,30 +606,6 @@ impl<F: NTTField> NTTRLWE<F> {
             a: &self.a * &ntt_polynomial,
             b: &self.b * ntt_polynomial,
         }
-    }
-
-    /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `ntt_polynomial`,
-    /// return a [`NTTRLWE<F>`].
-    #[inline]
-    pub fn mul_ntt_polynomial_slice(&self, ntt_polynomial: &[F]) -> NTTRLWE<F> {
-        NTTRLWE {
-            a: self.a.mul_ntt_polynomial_slice(ntt_polynomial),
-            b: self.b.mul_ntt_polynomial_slice(ntt_polynomial),
-        }
-    }
-
-    /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `ntt_polynomial`,
-    /// and stores the result into `dst`.
-    #[inline]
-    pub fn mul_ntt_polynomial_slice_inplace(&self, ntt_polynomial: &[F], dst: &mut NTTRLWE<F>) {
-        let op = |l: &mut NTTPolynomial<F>, r: &NTTPolynomial<F>| {
-            l.into_iter()
-                .zip(r)
-                .zip(ntt_polynomial)
-                .for_each(|((x, &y), &z)| *x = y * z);
-        };
-        op(&mut dst.a, &self.a);
-        op(&mut dst.b, &self.b);
     }
 
     /// Performs `self + rlwe * polynomial`.

@@ -199,19 +199,6 @@ impl<F: NTTField> Polynomial<F> {
     pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
         <NTTPolynomial<F>>::from(self)
     }
-
-    /// Multiply a ntt polynomial slice.
-    #[inline]
-    pub fn mul_ntt_polynomial_slice(&self, rhs: &[F]) -> Polynomial<F> {
-        debug_assert_eq!(self.coeff_count(), rhs.len());
-        debug_assert!(rhs.len().is_power_of_two());
-        let ntt_table = F::get_ntt_table(rhs.len().trailing_zeros()).unwrap();
-        let mut lhs = ntt_table.transform(self);
-
-        lhs.iter_mut().zip(rhs).for_each(|(l, &r)| *l *= r);
-
-        ntt_table.inverse_transform_inplace(lhs)
-    }
 }
 
 impl<F: Field, I: SliceIndex<[F]>> IndexMut<I> for Polynomial<F> {
