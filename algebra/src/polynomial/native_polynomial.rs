@@ -228,7 +228,7 @@ impl<F: NTTField> Polynomial<F> {
             .map(|_| {
                 let data: Vec<F> = p
                     .iter_mut()
-                    .map(|v| v.decompose_least_significant_one(mask, bits))
+                    .map(|v| v.decompose_lsb_bits(mask, bits))
                     .collect();
                 <Polynomial<F>>::new(data)
             })
@@ -251,7 +251,7 @@ impl<F: NTTField> Polynomial<F> {
                 .into_iter()
                 .zip(self.iter_mut())
                 .for_each(|(d_i, p_i)| {
-                    p_i.decompose_least_significant_one_at(d_i, mask, bits);
+                    p_i.decompose_lsb_bits_at(d_i, mask, bits);
                 })
         });
     }

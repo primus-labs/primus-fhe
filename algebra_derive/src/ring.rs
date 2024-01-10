@@ -275,14 +275,14 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn decompose_least_significant_one(&mut self, mask: Self::Inner, bits: u32) -> Self {
+            fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self {
                 let temp = Self(self.0 & mask);
                 self.0 >>= bits;
                 temp
             }
 
             #[inline]
-            fn decompose_least_significant_one_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
+            fn decompose_lsb_bits_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
                 *dst = Self(self.0 & mask);
                 self.0 >>= bits;
             }
@@ -421,14 +421,14 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn decompose_least_significant_one(&mut self, mask: Self::Inner, bits: u32) -> Self {
+            fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self {
                 let temp = Self(self.0 & mask);
                 self.0 >>= bits;
                 temp
             }
 
             #[inline]
-            fn decompose_least_significant_one_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
+            fn decompose_lsb_bits_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
                 *dst = Self(self.0 & mask);
                 self.0 >>= bits;
             }

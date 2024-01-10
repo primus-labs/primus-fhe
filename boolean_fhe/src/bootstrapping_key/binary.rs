@@ -26,13 +26,13 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
         twice_rlwe_dimension_div_lwe_modulus: usize,
         pre_allocate: &mut BootstrappingPreAllocator<F>,
     ) -> RLWE<F> {
-        let (decompose, ntt_rlwe, rlwe0, rlwe1) = pre_allocate.get_all_mut();
+        let (decompose_space, ntt_rlwe, rlwe0, rlwe1) = pre_allocate.get_all_mut();
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |acc, (s_i, &a_i)| {
                 // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                acc.mul_small_ntt_rgsw_inplace(s_i, (decompose, ntt_rlwe, rlwe0));
+                acc.mul_small_ntt_rgsw_inplace(s_i, (decompose_space, ntt_rlwe, rlwe0));
                 rlwe0.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,

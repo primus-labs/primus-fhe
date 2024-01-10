@@ -138,13 +138,13 @@ pub trait Ring:
     /// return the least significant decomposed part.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_least_significant_one(&mut self, mask: Self::Inner, bits: u32) -> Self;
+    fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self;
 
     /// Decompose `self` according to `basis`'s `mask` and `bits`,
     /// put the least significant decomposed part into `dst`.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_least_significant_one_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32);
+    fn decompose_lsb_bits_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32);
 
     /// Return `self * scalar`.
     fn mul_scalar(self, scalar: Self::Inner) -> Self;
