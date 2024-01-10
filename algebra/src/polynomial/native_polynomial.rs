@@ -116,13 +116,13 @@ impl<F: Field> Polynomial<F> {
     /// Multiply `self` with the a scalar.
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
-        Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+        Self::new(self.iter().map(|&v| v.mul_scalar(scalar)).collect())
     }
 
     /// Multiply `self` with the a scalar inplace.
     #[inline]
     pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
-        self.iter_mut().for_each(|v| *v = v.mul_scalar(scalar))
+        self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 
     /// Get the coefficient counts of polynomial.
@@ -232,20 +232,20 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
 
 impl<F: NTTField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
-    pub fn decompose(&self, basis: Basis<F>) -> Vec<F> {
-        let coeff_count = self.coeff_count();
-
+    pub fn decompose(&self, basis: Basis<F>) -> Vec<Self> {
         let mut p = self.clone();
-        let mut ret: Vec<F> = vec![F::ZERO; basis.decompose_len() * coeff_count];
         let mask = basis.mask();
         let bits = basis.bits();
 
-        ret.chunks_exact_mut(coeff_count).for_each(|d| {
-            d.iter_mut().zip(p.iter_mut()).for_each(|(d_i, p_i)| {
-                p_i.decompose_at_mut(d_i, mask, bits);
+        (0..basis.decompose_len())
+            .map(|_| {
+                let data: Vec<F> = p
+                    .iter_mut()
+                    .map(|v| v.decompose_least_significant_one(mask, bits))
+                    .collect();
+                <Polynomial<F>>::new(data)
             })
-        });
-        ret
+            .collect()
     }
 
     /// Decompose `self` according to `basis`.
@@ -253,18 +253,19 @@ impl<F: NTTField> Polynomial<F> {
     /// # Attention
     ///
     /// **`self`** will be a **zero** polynomial.
-    pub fn decompose_inplace(&mut self, basis: Basis<F>, dst: &mut [F]) {
-        let coeff_count = self.coeff_count();
-
-        assert_eq!(dst.len(), basis.decompose_len() * coeff_count);
+    pub fn decompose_inplace(&mut self, basis: Basis<F>, dst: &mut [Self]) {
+        assert_eq!(dst.len(), basis.decompose_len());
 
         let mask = basis.mask();
         let bits = basis.bits();
 
-        dst.chunks_exact_mut(coeff_count).for_each(|d| {
-            d.iter_mut().zip(self.iter_mut()).for_each(|(d_i, p_i)| {
-                p_i.decompose_at_mut(d_i, mask, bits);
-            })
+        dst.iter_mut().for_each(|d_poly| {
+            d_poly
+                .into_iter()
+                .zip(self.iter_mut())
+                .for_each(|(d_i, p_i)| {
+                    p_i.decompose_least_significant_one_at(d_i, mask, bits);
+                })
         });
     }
 }

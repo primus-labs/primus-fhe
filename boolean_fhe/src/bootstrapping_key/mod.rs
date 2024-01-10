@@ -108,7 +108,7 @@ impl<F: RandomNTTField> BootstrappingKey<F> {
 /// bootstrapping procedure.
 #[derive(Debug)]
 pub struct BootstrappingPreAllocate<F: NTTField> {
-    decompose: Vec<F>,
+    decompose: Vec<Polynomial<F>>,
     ntt_rlwe: NTTRLWE<F>,
     rlwe_0: RLWE<F>,
     rlwe_1: RLWE<F>,
@@ -118,10 +118,14 @@ impl<F: NTTField> BootstrappingPreAllocate<F> {
     /// Creates a new [`BootstrappingPreAllocate<F>`].
     pub fn new(rlwe_dimension: usize, gadget_basis: Basis<F>) -> Self {
         let decompose_len = gadget_basis.decompose_len();
-        let decompose_allocate_len = decompose_len * rlwe_dimension;
+
+        let mut decompose = Vec::new();
+        decompose.resize_with(decompose_len, || {
+            <Polynomial<F>>::zero_with_coeff_count(rlwe_dimension)
+        });
 
         Self {
-            decompose: vec![F::ZERO; decompose_allocate_len],
+            decompose,
             ntt_rlwe: NTTRLWE::zero(rlwe_dimension),
             rlwe_0: RLWE::zero(rlwe_dimension),
             rlwe_1: RLWE::zero(rlwe_dimension),
@@ -130,7 +134,15 @@ impl<F: NTTField> BootstrappingPreAllocate<F> {
 
     /// Gets all space's mut reference
     #[inline]
-    pub fn get_all_mut(&mut self) -> (&mut [F], &mut NTTRLWE<F>, &mut RLWE<F>, &mut RLWE<F>) {
+    #[allow(clippy::type_complexity)]
+    pub fn get_all_mut(
+        &mut self,
+    ) -> (
+        &mut [Polynomial<F>],
+        &mut NTTRLWE<F>,
+        &mut RLWE<F>,
+        &mut RLWE<F>,
+    ) {
         (
             self.decompose.as_mut_slice(),
             &mut self.ntt_rlwe,
@@ -141,13 +153,13 @@ impl<F: NTTField> BootstrappingPreAllocate<F> {
 
     /// Returns a reference to the decompose of this [`BootstrappingPreAllocate<F>`].
     #[inline]
-    pub fn decompose(&self) -> &[F] {
+    pub fn decompose(&self) -> &[Polynomial<F>] {
         self.decompose.as_ref()
     }
 
     /// Returns a mutable reference to the decompose of this [`BootstrappingPreAllocate<F>`].
     #[inline]
-    pub fn decompose_mut(&mut self) -> &mut [F] {
+    pub fn decompose_mut(&mut self) -> &mut [Polynomial<F>] {
         &mut self.decompose
     }
 

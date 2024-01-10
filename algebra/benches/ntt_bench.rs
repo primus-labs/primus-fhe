@@ -1,4 +1,4 @@
-use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random, Ring};
+use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random};
 use algebra_derive::{Field, Prime, Random, Ring, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{prelude::*, thread_rng};
@@ -37,9 +37,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut a = <Polynomial<Fp>>::random_with_dis(n, &mut rng, fp_dis);
 
     let decompose_len = basis.decompose_len();
-    let decompose_allocate_len = decompose_len * n;
 
-    let mut decompose = vec![Fp::ZERO; decompose_allocate_len];
+    let mut decompose = Vec::new();
+    decompose.resize_with(decompose_len, || <Polynomial<Fp>>::zero_with_coeff_count(n));
 
     let mut group = c.benchmark_group("Polynomial decompose");
 

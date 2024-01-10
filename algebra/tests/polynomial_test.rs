@@ -96,7 +96,7 @@ fn test_poly_decompose() {
     let basis = <Basis<Fp32>>::new(BITS);
     let mut decompose = poly.decompose(basis);
 
-    let compose = decompose.chunks_exact_mut(N).enumerate().fold(
+    let compose = decompose.iter_mut().enumerate().fold(
         PolyFF::zero_with_coeff_count(N),
         |mut acc, (i, d)| {
             let bb = Fp32(B.pow(i as u32) as Inner);
@@ -119,12 +119,12 @@ fn test_poly_decompose_mul() {
     let mul_result = &poly1 * &poly2;
 
     let basis = <Basis<Fp32>>::new(BITS);
-    let mut decompose = poly1.decompose(basis);
+    let decompose = poly1.decompose(basis);
     let compose_mul_result = decompose
-        .chunks_exact_mut(N)
+        .into_iter()
         .enumerate()
         .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + PolyFF::from_slice(d) * poly2.mul_scalar(B.pow(i as u32) as Inner)
+            acc + d * poly2.mul_scalar(B.pow(i as u32) as Inner)
         });
     assert_eq!(compose_mul_result, mul_result);
 }

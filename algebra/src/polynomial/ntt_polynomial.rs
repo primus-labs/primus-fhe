@@ -111,13 +111,13 @@ impl<F: Field> NTTPolynomial<F> {
     /// Multipile `self` with the a scalar.
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
-        Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+        Self::new(self.iter().map(|&v| v.mul_scalar(scalar)).collect())
     }
 
     /// Multipile `self` with the a scalar inplace.
     #[inline]
     pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
-        self.iter_mut().for_each(|v| *v = v.mul_scalar(scalar))
+        self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 
     /// Returns an iterator that allows reading each value or coefficient of the polynomial.

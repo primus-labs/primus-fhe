@@ -237,7 +237,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 algebra::div_ceil(<Self as algebra::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
+            fn decompose(self, basis: algebra::Basis<Self>) -> Vec<Self> {
                 let mut temp = self.0;
 
                 let len = basis.decompose_len();
@@ -258,7 +258,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 ret
             }
 
-            fn decompose_at(&self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
+            fn decompose_at(self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
                 let mut temp = self.0;
 
                 let mask = basis.mask();
@@ -274,13 +274,21 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 }
             }
 
-            fn decompose_at_mut(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
+            #[inline]
+            fn decompose_least_significant_one(&mut self, mask: Self::Inner, bits: u32) -> Self {
+                let temp = Self(self.0 & mask);
+                self.0 >>= bits;
+                temp
+            }
+
+            #[inline]
+            fn decompose_least_significant_one_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
                 *dst = Self(self.0 & mask);
                 self.0 >>= bits;
             }
 
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
+            fn mul_scalar(self, scalar: Self::Inner) -> Self {
                 use algebra::reduce::MulReduce;
                 Self(self.0.mul_reduce(scalar, &<Self as algebra::ModulusConfig>::MODULUS))
             }
@@ -375,7 +383,7 @@ fn impl_and_ring(
                 algebra::div_ceil(Self::modulus_value().trailing_zeros(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
+            fn decompose(self, basis: algebra::Basis<Self>) -> Vec<Self> {
                 let mut temp = self.0;
 
                 let len = basis.decompose_len();
@@ -396,7 +404,7 @@ fn impl_and_ring(
                 ret
             }
 
-            fn decompose_at(&self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
+            fn decompose_at(self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
                 let mut temp = self.0;
 
                 let mask = basis.mask();
@@ -412,13 +420,21 @@ fn impl_and_ring(
                 }
             }
 
-            fn decompose_at_mut(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
+            #[inline]
+            fn decompose_least_significant_one(&mut self, mask: Self::Inner, bits: u32) -> Self {
+                let temp = Self(self.0 & mask);
+                self.0 >>= bits;
+                temp
+            }
+
+            #[inline]
+            fn decompose_least_significant_one_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
                 *dst = Self(self.0 & mask);
                 self.0 >>= bits;
             }
 
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
+            fn mul_scalar(self, scalar: Self::Inner) -> Self {
                 Self(self.0.wrapping_mul(scalar) & #mask)
             }
         }
