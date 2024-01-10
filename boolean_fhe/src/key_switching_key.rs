@@ -42,13 +42,13 @@ impl<F: NTTField> KeySwitchingKey<F> {
         let basis = self.key[0].basis();
         let decompose_len = basis.decompose_len();
 
-        let mut decompose = Vec::new();
-        decompose.resize_with(decompose_len, || {
+        let mut decompose_space = Vec::new();
+        decompose_space.resize_with(decompose_len, || {
             <Polynomial<F>>::zero_with_coeff_count(rlwe_dimension)
         });
 
         self.key.iter().zip(a).for_each(|(k_i, a_i)| {
-            init.sub_gadget_rlwe_mul_polynomial_inplace(k_i, a_i, &mut decompose);
+            init.sub_gadget_rlwe_mul_polynomial_inplace(k_i, a_i, &mut decompose_space);
         });
 
         <RLWE<F>>::from(init).extract_lwe()

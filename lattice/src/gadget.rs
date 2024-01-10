@@ -242,7 +242,10 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
         gadget_rlwe_iter
             .zip(decomposed_iter)
-            .fold(init, |acc, (g, d)| acc.add_rlwe_mul_polynomial(g, d))
+            .fold(init, |mut acc, (g, d)| {
+                acc.add_rlwe_mul_polynomial_inplace(g, d);
+                acc
+            })
     }
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
@@ -255,8 +258,9 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     ) -> NTTRLWE<F> {
         self.iter()
             .zip(decomposed)
-            .fold(rlwe, |acc, (gadget, decomposed_polynomial)| {
-                acc.add_rlwe_mul_polynomial(gadget, decomposed_polynomial)
+            .fold(rlwe, |mut acc, (gadget, decomposed_polynomial)| {
+                acc.add_rlwe_mul_polynomial_inplace(gadget, decomposed_polynomial);
+                acc
             })
     }
 }
