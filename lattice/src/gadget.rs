@@ -81,12 +81,11 @@ impl<F: NTTField> GadgetRLWE<F> {
         self.mul_decomposed_polynomial(decomposed)
     }
 
-    /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`] slice,
+    /// Perform multiplication between [`GadgetRLWE<F>`] and decomposed [`Polynomial<F>`] slice,
     /// return a [`RLWE<F>`].
     #[inline]
     pub fn mul_decomposed_polynomial(&self, decomposed: Vec<Polynomial<F>>) -> RLWE<F> {
         let mut gadget_rlwe_iter = self.iter();
-
         let mut decomposed_iter = decomposed.into_iter();
 
         let init = gadget_rlwe_iter

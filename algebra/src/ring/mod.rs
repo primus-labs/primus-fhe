@@ -122,24 +122,26 @@ pub trait Ring:
     /// Get the length of decompose vec.
     fn decompose_len(basis: Self::Inner) -> usize;
 
-    /// Decompose `self` according to `basis`.
+    /// Decompose `self` according to `basis`,
+    /// return the decomposed vector.
     ///
     /// Now we focus on power-of-two basis.
     fn decompose(self, basis: Basis<Self>) -> Vec<Self>;
 
-    /// Decompose `self` according to `basis`.
+    /// Decompose `self` according to `basis`,
+    /// put the decomposed result into `dst`.
     ///
     /// Now we focus on power-of-two basis.
     fn decompose_at(self, basis: Basis<Self>, dst: &mut [Self]);
 
-    /// Decompose `self` according to `basis`,
-    /// return the least significant one.
+    /// Decompose `self` according to `basis`'s `mask` and `bits`,
+    /// return the least significant decomposed part.
     ///
     /// Now we focus on power-of-two basis.
     fn decompose_least_significant_one(&mut self, mask: Self::Inner, bits: u32) -> Self;
 
-    /// Decompose `self` according to `basis`,
-    /// put the least significant one into `dst`.
+    /// Decompose `self` according to `basis`'s `mask` and `bits`,
+    /// put the least significant decomposed part into `dst`.
     ///
     /// Now we focus on power-of-two basis.
     fn decompose_least_significant_one_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32);

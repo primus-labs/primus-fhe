@@ -3,7 +3,7 @@ use lattice::{NTTRGSW, RLWE};
 
 use crate::secret_key::NTTRLWESecretKey;
 
-use super::{ntt_rgsw_one, ntt_rgsw_zero, BootstrappingPreAllocate};
+use super::{ntt_rgsw_one, ntt_rgsw_zero, BootstrappingPreAllocator};
 
 #[derive(Debug, Clone)]
 pub struct TernaryBootstrappingKey<F: NTTField> {
@@ -24,7 +24,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         lwe_a: &[R],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        pre_allocate: &mut BootstrappingPreAllocate<F>,
+        pre_allocate: &mut BootstrappingPreAllocator<F>,
     ) -> RLWE<F> {
         let (decompose, ntt_rlwe, rlwe0, rlwe1) = pre_allocate.get_all_mut();
         self.key

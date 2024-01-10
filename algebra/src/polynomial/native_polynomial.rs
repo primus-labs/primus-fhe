@@ -252,7 +252,7 @@ impl<F: NTTField> Polynomial<F> {
     ///
     /// # Attention
     ///
-    /// **`self`** will be a **zero** polynomial.
+    /// **`self`** will be a **zero** polynomial *after* performing this function.
     pub fn decompose_inplace(&mut self, basis: Basis<F>, dst: &mut [Self]) {
         assert_eq!(dst.len(), basis.decompose_len());
 
