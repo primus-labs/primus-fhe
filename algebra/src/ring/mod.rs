@@ -108,7 +108,7 @@ pub trait Ring:
     fn cast_from_usize(value: usize) -> Self;
 
     /// cast inner to [`f64`]
-    fn as_f64(self) -> f64;
+    fn to_f64(self) -> f64;
 
     /// cast from [`f64`]
     fn from_f64(value: f64) -> Self;

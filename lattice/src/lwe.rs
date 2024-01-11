@@ -148,7 +148,7 @@ impl<R: Ring> LWE<R> {
 impl<F: NTTField> LWE<F> {
     /// modulus switch from reduce `NTTField::MODULUS` to reduce `Ring::MODULUS`
     pub fn modulus_switch_floor<R: Ring>(&self) -> LWE<R> {
-        let switch = |v: F| R::from_f64((v.as_f64() * R::MODULUS_F64 / F::MODULUS_F64).floor());
+        let switch = |v: F| R::from_f64((v.to_f64() * R::MODULUS_F64 / F::MODULUS_F64).floor());
 
         let a: Vec<R> = self.a.iter().copied().map(switch).collect();
         let b = switch(self.b);
@@ -157,7 +157,7 @@ impl<F: NTTField> LWE<F> {
 
     /// modulus switch from reduce `NTTField::MODULUS` to reduce `Ring::MODULUS`
     pub fn modulus_switch_nearest_round<R: Ring>(&self) -> LWE<R> {
-        let switch = |v: F| R::from_f64((v.as_f64() * R::MODULUS_F64 / F::MODULUS_F64).round());
+        let switch = |v: F| R::from_f64((v.to_f64() * R::MODULUS_F64 / F::MODULUS_F64).round());
 
         let a: Vec<R> = self.a.iter().copied().map(switch).collect();
         let b = switch(self.b);

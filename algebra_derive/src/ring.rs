@@ -212,7 +212,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn as_f64(self) -> f64 {
+            fn to_f64(self) -> f64 {
                 self.0 as f64
             }
 
@@ -358,7 +358,7 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn as_f64(self) -> f64 {
+            fn to_f64(self) -> f64 {
                 self.0 as f64
             }
 

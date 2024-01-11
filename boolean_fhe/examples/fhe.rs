@@ -34,9 +34,9 @@ fn main() {
         assert_eq!(m2, !(m0 & m1));
         println!(
             "Noise: {}",
-            DefaultRing100::MODULUS_F64 / 16.0 - noise.as_f64()
+            DefaultRing100::MODULUS_F64 / 16.0 - noise.to_f64()
         );
-        assert!(noise.as_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
+        assert!(noise.to_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
 
         c = evk.nand(&c, &c2);
 
@@ -44,9 +44,9 @@ fn main() {
         assert_eq!(d, !(m & m2));
         println!(
             "Noise: {}",
-            DefaultRing100::MODULUS_F64 / 16.0 - noise.as_f64()
+            DefaultRing100::MODULUS_F64 / 16.0 - noise.to_f64()
         );
-        assert!(noise.as_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
+        assert!(noise.to_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
 
         m = d;
         println!("The {i} nand test done!\n");
