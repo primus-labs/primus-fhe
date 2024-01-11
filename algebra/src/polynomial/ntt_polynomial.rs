@@ -179,7 +179,7 @@ impl<F: Field + Random> NTTPolynomial<F> {
 impl<F: NTTField> NTTPolynomial<F> {
     /// Convert `self` from [`NTTPolynomial<F>`] to [`Polynomial<F>`]
     #[inline]
-    pub fn to_native_polynomial(self) -> Polynomial<F> {
+    pub fn into_native_polynomial(self) -> Polynomial<F> {
         <Polynomial<F>>::from(self)
     }
 
@@ -192,7 +192,7 @@ impl<F: NTTField> NTTPolynomial<F> {
     /// And then, you use that [`Polynomial<F>`] to evaluate with different `x`.
     #[inline]
     pub fn evaluate(&self, x: F) -> F {
-        self.clone().to_native_polynomial().evaluate(x)
+        self.clone().into_native_polynomial().evaluate(x)
     }
 }
 

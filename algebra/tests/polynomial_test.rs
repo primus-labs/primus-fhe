@@ -24,9 +24,9 @@ fn test_transform() {
     FF::init_ntt_table(&[LOG_N as u32]).unwrap();
 
     let a = PolyFF::random(N, thread_rng());
-    let b = a.clone().to_ntt_polynomial();
-    let c = b.clone().to_native_polynomial();
-    let d = c.clone().to_ntt_polynomial();
+    let b = a.clone().into_ntt_polynomial();
+    let c = b.clone().into_native_polynomial();
+    let d = c.clone().into_ntt_polynomial();
     assert_eq!(a, c);
     assert_eq!(b, d);
 }

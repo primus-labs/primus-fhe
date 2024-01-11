@@ -130,7 +130,7 @@ where
 
     #[inline]
     fn inverse_transform_inplace(&self, mut poly: NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_slice(poly.as_mut());
+        self.inverse_transform_slice(poly.as_mut_slice());
         Polynomial::<F>::new(poly.data())
     }
 

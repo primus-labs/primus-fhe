@@ -278,7 +278,7 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let b = &a * rlwe_secret_key
                 + <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
-                    .to_ntt_polynomial();
+                    .into_ntt_polynomial();
             <NTTRLWECiphertext<F>>::new(a, b)
         })
         .collect()
@@ -302,7 +302,7 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = &a * rlwe_secret_key
                 + <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
-                    .to_ntt_polynomial();
+                    .into_ntt_polynomial();
             b.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
@@ -329,7 +329,7 @@ where
             let mut a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let b = &a * rlwe_secret_key
                 + <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
-                    .to_ntt_polynomial();
+                    .into_ntt_polynomial();
             a.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })

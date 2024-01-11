@@ -86,20 +86,20 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 .collect(),
         );
 
-        let ntt_lwe_sk = s.to_ntt_polynomial();
+        let ntt_lwe_sk = s.into_ntt_polynomial();
 
         let key = secret_key_pack
             .rlwe_secret_key()
             .as_slice()
             .chunks_exact(lwe_dimension)
             .map(|z| {
-                let ntt_z = Polynomial::from_slice(z).to_ntt_polynomial();
+                let ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
                 let k_i = key_switching_basis_powers
                     .iter()
                     .map(|&key_switching_basis_power| {
                         let a = <NTTPolynomial<F>>::random(lwe_dimension, &mut rng);
                         let e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
-                            .to_ntt_polynomial();
+                            .into_ntt_polynomial();
 
                         let b = &a * &ntt_lwe_sk
                             + ntt_z.mul_scalar(key_switching_basis_power.inner())

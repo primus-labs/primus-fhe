@@ -196,7 +196,7 @@ impl<F: Field + Random> Polynomial<F> {
 impl<F: NTTField> Polynomial<F> {
     /// Convert `self` from [`Polynomial<F>`] to [`NTTPolynomial<F>`]
     #[inline]
-    pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
+    pub fn into_ntt_polynomial(self) -> NTTPolynomial<F> {
         <NTTPolynomial<F>>::from(self)
     }
 }
