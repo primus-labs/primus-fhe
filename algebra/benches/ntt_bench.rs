@@ -45,7 +45,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function("polynomial decompose", |b| {
         b.iter(|| {
-            a.decompose(basis);
+            a.clone().decompose(basis);
         })
     });
 

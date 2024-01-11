@@ -231,7 +231,7 @@ impl<F: NTTField> RLWE<F> {
         gadget_rlwe: &GadgetRLWE<F>,
         polynomial: &Polynomial<F>,
     ) -> RLWE<F> {
-        let decomposed = polynomial.decompose(gadget_rlwe.basis());
+        let decomposed = polynomial.clone().decompose(gadget_rlwe.basis());
         gadget_rlwe.mul_decomposed_polynomial_slice_add_rlwe(decomposed, self)
     }
 
@@ -645,7 +645,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
     ) -> NTTRLWE<F> {
-        let decomposed = polynomial.decompose(gadget_rlwe.basis());
+        let decomposed = polynomial.clone().decompose(gadget_rlwe.basis());
         gadget_rlwe.mul_decomposed_polynomial_slice_add_rlwe(decomposed, self)
     }
 

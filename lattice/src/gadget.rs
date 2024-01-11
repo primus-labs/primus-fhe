@@ -77,7 +77,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// return a [`RLWE<F>`].
     #[inline]
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> RLWE<F> {
-        let decomposed = polynomial.decompose(self.basis);
+        let decomposed = polynomial.clone().decompose(self.basis);
         self.mul_decomposed_polynomial(decomposed)
     }
 
@@ -197,8 +197,8 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
     /// return a [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_polynomial(&self, poly: &Polynomial<F>) -> NTTRLWE<F> {
-        let decomposed = poly.decompose(self.basis);
+    pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> NTTRLWE<F> {
+        let decomposed = polynomial.clone().decompose(self.basis);
         self.mul_decomposed_polynomial(decomposed)
     }
 
