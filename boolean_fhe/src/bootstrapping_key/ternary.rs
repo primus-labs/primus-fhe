@@ -35,7 +35,8 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                 // acc_mul_rgsw = ACC * RGSW(s_i_u)
                 acc.mul_small_ntt_rgsw_inplace(
                     &s_i.0,
-                    (decompose_space, ntt_rlwe_space),
+                    decompose_space,
+                    ntt_rlwe_space,
                     acc_mul_rgsw,
                 );
                 // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
@@ -52,7 +53,8 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                 // acc_mul_rgsw = ACC * RGSW(s_i_u)
                 acc.mul_small_ntt_rgsw_inplace(
                     &s_i.1,
-                    (decompose_space, ntt_rlwe_space),
+                    decompose_space,
+                    ntt_rlwe_space,
                     acc_mul_rgsw,
                 );
                 // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)

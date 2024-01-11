@@ -32,11 +32,7 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
             .zip(lwe_a)
             .fold(init_acc, |acc, (s_i, &a_i)| {
                 // acc_mul_rgsw = ACC * RGSW(s_i)
-                acc.mul_small_ntt_rgsw_inplace(
-                    s_i,
-                    (decompose_space, ntt_rlwe_space),
-                    acc_mul_rgsw,
-                );
+                acc.mul_small_ntt_rgsw_inplace(s_i, decompose_space, ntt_rlwe_space, acc_mul_rgsw);
                 // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i)
                 acc_mul_rgsw.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,

@@ -208,23 +208,30 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     pub fn mul_polynomial_inplace(
         &self,
         polynomial: &Polynomial<F>,
-        // pre allocate space
-        (decomposed, ntt_rlwe, p): (&mut [Polynomial<F>], &mut NTTRLWE<F>, &mut Polynomial<F>),
+        // Pre allocate space for decomposition
+        decompose_space: &mut [Polynomial<F>],
+        // Pre allocate space for ntt rlwe
+        ntt_rlwe_space: &mut NTTRLWE<F>,
+        // Pre allocate space for decomposition
+        polynomial_space: &mut Polynomial<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
-        p.iter_mut().zip(polynomial).for_each(|(x, &y)| *x = y);
+        polynomial_space
+            .iter_mut()
+            .zip(polynomial)
+            .for_each(|(x, &y)| *x = y);
 
-        p.decompose_inplace(self.basis, decomposed);
+        polynomial_space.decompose_inplace(self.basis, decompose_space);
 
-        ntt_rlwe.set_zero();
+        ntt_rlwe_space.set_zero();
 
-        self.iter().zip(decomposed).for_each(|(g, d_p)| {
+        self.iter().zip(decompose_space).for_each(|(g, d_p)| {
             let d_s = d_p.as_mut_slice();
             ntt_table.transform_slice(d_s);
-            ntt_rlwe.add_rlwe_mul_ntt_polynomial_inplace(g, d_s);
+            ntt_rlwe_space.add_rlwe_mul_ntt_polynomial_inplace(g, d_s);
         });
     }
 

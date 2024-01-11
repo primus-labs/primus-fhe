@@ -261,10 +261,11 @@ impl<F: NTTField> RLWE<F> {
         if r <= rlwe_dimension {
             #[inline]
             fn rotate<F: NTTField>(p: &Polynomial<F>, r: usize) -> Polynomial<F> {
-                let mut p = p.clone().data();
-                p.rotate_right(r);
-                p[0..r].iter_mut().for_each(|v| *v = -*v);
-                <Polynomial<F>>::new(p)
+                let mut p = p.clone();
+                let s = p.as_mut_slice();
+                s.rotate_right(r);
+                s[0..r].iter_mut().for_each(|v| *v = -*v);
+                p
             }
             Self {
                 a: rotate(&self.a, r),
@@ -273,10 +274,11 @@ impl<F: NTTField> RLWE<F> {
         } else {
             #[inline]
             fn rotate<F: NTTField>(p: &Polynomial<F>, r: usize) -> Polynomial<F> {
-                let mut p = p.clone().data();
-                p.rotate_right(r);
-                p[r..].iter_mut().for_each(|v| *v = -*v);
-                <Polynomial<F>>::new(p)
+                let mut p = p.clone();
+                let s = p.as_mut_slice();
+                s.rotate_right(r);
+                s[r..].iter_mut().for_each(|v| *v = -*v);
+                p
             }
             let r = r - rlwe_dimension;
             Self {
@@ -418,22 +420,28 @@ impl<F: NTTField> RLWE<F> {
     pub fn mul_small_ntt_rgsw_inplace(
         &self,
         small_ntt_rgsw: &NTTRGSW<F>,
-        // Pre allocate space
-        (decomposed, ntt_rlwe): (&mut [Polynomial<F>], &mut NTTRLWE<F>),
+        // Pre allocate space for decomposition
+        decompose_space: &mut [Polynomial<F>],
+        // Pre allocate space for ntt rlwe
+        ntt_rlwe_space: &mut NTTRLWE<F>,
         // Output destination
         dst: &mut RLWE<F>,
     ) {
-        small_ntt_rgsw
-            .c_neg_s_m()
-            .mul_polynomial_inplace(self.a(), (decomposed, ntt_rlwe, dst.a_mut()));
-
-        ntt_rlwe.add_gadget_rlwe_mul_polynomial_inplace(
-            small_ntt_rgsw.c_m(),
-            self.b(),
-            (decomposed, dst.a_mut()),
+        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace(
+            self.a(),
+            decompose_space,
+            ntt_rlwe_space,
+            dst.a_mut(),
         );
 
-        ntt_rlwe.inverse_transform_inplace(dst)
+        ntt_rlwe_space.add_gadget_rlwe_mul_polynomial_inplace(
+            small_ntt_rgsw.c_m(),
+            self.b(),
+            decompose_space,
+            dst.a_mut(),
+        );
+
+        ntt_rlwe_space.inverse_transform_inplace(dst)
     }
 }
 
@@ -655,7 +663,8 @@ impl<F: NTTField> NTTRLWE<F> {
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
-        (decompose_space, polynomial_space): (&mut [Polynomial<F>], &mut Polynomial<F>),
+        decompose_space: &mut [Polynomial<F>],
+        polynomial_space: &mut Polynomial<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());
