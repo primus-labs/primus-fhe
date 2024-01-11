@@ -46,13 +46,6 @@ impl<F: NTTField> From<Polynomial<F>> for NTTPolynomial<F> {
     }
 }
 
-impl<F: NTTField> From<&Polynomial<F>> for NTTPolynomial<F> {
-    #[inline]
-    fn from(poly: &Polynomial<F>) -> Self {
-        Self::from(poly.clone())
-    }
-}
-
 impl<F: Field> NTTPolynomial<F> {
     /// Creates a new [`NTTPolynomial<F>`].
     #[inline]

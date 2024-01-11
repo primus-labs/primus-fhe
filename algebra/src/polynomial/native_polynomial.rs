@@ -39,28 +39,14 @@ pub struct Polynomial<F: Field> {
     data: Vec<F>,
 }
 
-impl<F: Field> From<Vec<F>> for Polynomial<F> {
-    #[inline]
-    fn from(data: Vec<F>) -> Self {
-        Self { data }
-    }
-}
-
 impl<F: NTTField> From<NTTPolynomial<F>> for Polynomial<F> {
     #[inline]
-    fn from(vec: NTTPolynomial<F>) -> Self {
-        debug_assert!(vec.coeff_count().is_power_of_two());
+    fn from(ntt_polynomial: NTTPolynomial<F>) -> Self {
+        debug_assert!(ntt_polynomial.coeff_count().is_power_of_two());
 
-        let ntt_table = F::get_ntt_table(vec.coeff_count().trailing_zeros()).unwrap();
+        let ntt_table = F::get_ntt_table(ntt_polynomial.coeff_count().trailing_zeros()).unwrap();
 
-        ntt_table.inverse_transform_inplace(vec)
-    }
-}
-
-impl<F: NTTField> From<&NTTPolynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn from(vec: &NTTPolynomial<F>) -> Self {
-        Self::from(vec.clone())
+        ntt_table.inverse_transform_inplace(ntt_polynomial)
     }
 }
 

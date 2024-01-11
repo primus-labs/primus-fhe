@@ -111,7 +111,7 @@ impl<R: RandomRing, F: NTTField> SecretKeyPack<R, F> {
         let lwe_dimension = self.parameters.lwe_dimension();
         let noise_distribution = self.parameters.lwe_noise_distribution();
 
-        let mut csrng = self.csrng.borrow_mut();
+        let mut csrng = self.csrng_mut();
 
         let a: Vec<R> = standard_distribution
             .sample_iter(&mut *csrng)

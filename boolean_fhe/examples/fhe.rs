@@ -4,8 +4,6 @@ use rand::Rng;
 
 fn main() {
     // set random generator
-    // use rand::SeedableRng;
-    // let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(11);
     let mut rng = rand::thread_rng();
 
     // set parameter

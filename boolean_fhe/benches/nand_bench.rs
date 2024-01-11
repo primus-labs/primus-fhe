@@ -4,8 +4,6 @@ use rand::Rng;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     // set random generator
-    // use rand::SeedableRng;
-    // let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(11);
     let mut rng = rand::thread_rng();
 
     // set parameter
