@@ -253,22 +253,22 @@ impl<R: Ring, F: RandomNTTField> Parameters<R, F> {
 
 /// Default Ring for Default Parameters
 #[derive(Ring, Random)]
-#[modulus = 1024]
+#[modulus = 512]
 pub struct DefaultRing100(u32);
 
 /// Default Field for Default Parameters
 #[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
+#[modulus = 132120577]
 pub struct DefaultField100(u32);
 
 /// Default Parameters
 pub const CONST_DEFAULT_100_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
     lwe_dimension: 512,
-    lwe_modulus: 1024,
+    lwe_modulus: 512,
     lwe_noise_std_dev: 3.20,
     secret_key_type: SecretKeyType::Ternary,
     rlwe_dimension: 1024,
-    rlwe_modulus: 1073692673,
+    rlwe_modulus: 132120577,
     rlwe_noise_std_dev: 3.20,
     gadget_basis_bits: 6,
     key_switching_basis_bits: 3,

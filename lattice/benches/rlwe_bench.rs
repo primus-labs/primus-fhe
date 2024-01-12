@@ -7,7 +7,7 @@ use lattice::RLWE;
 pub struct RR(u32);
 
 #[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
+#[modulus = 132120577]
 pub struct FF(u32);
 
 const M: usize = 1024;
