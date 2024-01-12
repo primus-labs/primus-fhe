@@ -321,7 +321,7 @@ impl<F: Field> AddAssign<&Self> for Polynomial<F> {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs).for_each(|(l, &r)| *l += r);
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l += r);
     }
 }
 
@@ -361,7 +361,7 @@ impl<F: Field> Add<&Polynomial<F>> for &Polynomial<F> {
     #[inline]
     fn add(self, rhs: &Polynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let polynomial: Vec<F> = self.iter().zip(rhs).map(|(&l, &r)| l + r).collect();
+        let polynomial: Vec<F> = self.iter().zip(rhs).map(|(&l, r)| l + r).collect();
         <Polynomial<F>>::new(polynomial)
     }
 }
@@ -377,7 +377,7 @@ impl<F: Field> SubAssign<&Self> for Polynomial<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs).for_each(|(l, &r)| *l -= r);
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l -= r);
     }
 }
 
@@ -418,7 +418,7 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     #[inline]
     fn sub(self, rhs: &Polynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let polynomial: Vec<F> = self.iter().zip(rhs).map(|(&l, &r)| l - r).collect();
+        let polynomial: Vec<F> = self.iter().zip(rhs).map(|(&l, r)| l - r).collect();
         <Polynomial<F>>::new(polynomial)
     }
 }

@@ -113,25 +113,25 @@ where
     F: NTTField<Table = Self>,
 {
     #[inline]
-    fn transform(&self, poly: &Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_inplace(poly.clone())
+    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
+        self.transform_inplace(polynomial.clone())
     }
 
     #[inline]
-    fn transform_inplace(&self, mut poly: Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_slice(poly.as_mut_slice());
-        NTTPolynomial::<F>::new(poly.data())
+    fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
+        self.transform_slice(polynomial.as_mut_slice());
+        NTTPolynomial::<F>::new(polynomial.data())
     }
 
     #[inline]
-    fn inverse_transform(&self, poly: &NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_inplace(poly.clone())
+    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_inplace(ntt_polynomial.clone())
     }
 
     #[inline]
-    fn inverse_transform_inplace(&self, mut poly: NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_slice(poly.as_mut_slice());
-        Polynomial::<F>::new(poly.data())
+    fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
+        Polynomial::<F>::new(ntt_polynomial.data())
     }
 
     fn transform_slice(&self, values: &mut [F]) {

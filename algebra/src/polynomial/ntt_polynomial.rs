@@ -270,7 +270,7 @@ impl<F: Field> AddAssign<&Self> for NTTPolynomial<F> {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs).for_each(|(l, &r)| *l += r);
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l += r);
     }
 }
 
@@ -310,7 +310,7 @@ impl<F: Field> Add<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     #[inline]
     fn add(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let data: Vec<F> = self.iter().zip(rhs).map(|(&l, &r)| l + r).collect();
+        let data: Vec<F> = self.iter().zip(rhs).map(|(&l, r)| l + r).collect();
         <NTTPolynomial<F>>::new(data)
     }
 }
@@ -326,7 +326,7 @@ impl<F: Field> SubAssign<&Self> for NTTPolynomial<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs).for_each(|(l, &r)| *l -= r);
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l -= r);
     }
 }
 
@@ -367,7 +367,7 @@ impl<F: Field> Sub<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     #[inline]
     fn sub(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let data: Vec<F> = self.iter().zip(rhs).map(|(&l, &r)| l - r).collect();
+        let data: Vec<F> = self.iter().zip(rhs).map(|(&l, r)| l - r).collect();
         <NTTPolynomial<F>>::new(data)
     }
 }
@@ -384,7 +384,7 @@ impl<F: Field> MulAssign<&Self> for NTTPolynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs).for_each(|(l, &r)| *l *= r);
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
     }
 }
 
@@ -424,7 +424,7 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
     #[inline]
     fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let data = self.iter().zip(rhs).map(|(&l, &r)| l * r).collect();
+        let data = self.iter().zip(rhs).map(|(&l, r)| l * r).collect();
         <NTTPolynomial<F>>::new(data)
     }
 }
@@ -516,22 +516,55 @@ impl<F: Field> Neg for &NTTPolynomial<F> {
     }
 }
 
+/// Performs enrty-wise mul operation.
 #[inline]
-pub(in crate::polynomial) fn ntt_mul_assign<F: NTTField, I: IntoIterator<Item = F>>(
+pub fn ntt_mul_assign<F: NTTField, I: IntoIterator<Item = F>>(lhs: &mut [F], rhs: I) {
+    lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
+}
+
+/// Performs enrty-wise mul operation.
+#[inline]
+pub fn ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
     lhs: &mut [F],
     rhs: I,
 ) {
     lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
 }
 
+/// Performs enrty-wise add_mul operation.
 #[inline]
-pub(in crate::polynomial) fn ntt_mul_assign_ref<
+pub fn ntt_add_mul_assign<
     'a,
     F: NTTField + 'a,
-    I: IntoIterator<Item = &'a F>,
+    I: IntoIterator<Item = &'a mut F>,
+    J: IntoIterator<Item = &'a F>,
+    K: IntoIterator<Item = F>,
 >(
-    lhs: &mut [F],
-    rhs: I,
+    x: I,
+    y: J,
+    z: K,
 ) {
-    lhs.iter_mut().zip(rhs).for_each(|(l, &r)| *l *= r);
+    x.into_iter()
+        .zip(y)
+        .zip(z)
+        .for_each(|((a, &b), c)| a.add_mul_assign(b, c));
+}
+
+/// Performs enrty-wise add_mul operation.
+#[inline]
+pub fn ntt_add_mul_assign_ref<
+    'a,
+    F: NTTField + 'a,
+    I: IntoIterator<Item = &'a mut F>,
+    J: IntoIterator<Item = &'a F>,
+    K: IntoIterator<Item = &'a F>,
+>(
+    x: I,
+    y: J,
+    z: K,
+) {
+    x.into_iter()
+        .zip(y)
+        .zip(z)
+        .for_each(|((a, &b), &c)| a.add_mul_assign(b, c));
 }

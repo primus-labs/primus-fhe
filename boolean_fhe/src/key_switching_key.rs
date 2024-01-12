@@ -1,4 +1,6 @@
-use algebra::{NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring};
+use algebra::{
+    ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring,
+};
 use lattice::{NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
@@ -68,7 +70,6 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();
         let key_switching_basis = parameters.key_switching_basis();
-        let key_switching_basis_powers = parameters.key_switching_basis_powers();
 
         let s = <Polynomial<F>>::new(
             secret_key_pack
@@ -93,17 +94,16 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
             .as_slice()
             .chunks_exact(lwe_dimension)
             .map(|z| {
-                let ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
-                let k_i = key_switching_basis_powers
-                    .iter()
-                    .map(|&key_switching_basis_power| {
+                let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
+                let k_i = (0..key_switching_basis.decompose_len())
+                    .map(|_| {
                         let a = <NTTPolynomial<F>>::random(lwe_dimension, &mut rng);
-                        let e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
+                        let mut e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
                             .into_ntt_polynomial();
 
-                        let b = &a * &ntt_lwe_sk
-                            + ntt_z.mul_scalar(key_switching_basis_power.inner())
-                            + e;
+                        ntt_add_mul_assign_ref(e.as_mut_slice(), &a, &ntt_lwe_sk);
+                        ntt_z.mul_scalar_inplace(key_switching_basis.basis());
+                        let b = e + &ntt_z;
 
                         NTTRLWECiphertext::new(a, b)
                     })

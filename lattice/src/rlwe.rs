@@ -1,9 +1,10 @@
-use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial, Ring};
+use algebra::{
+    ntt_add_mul_assign, ntt_add_mul_assign_ref, transformation::AbstractNTT, NTTField,
+    NTTPolynomial, Polynomial, Ring,
+};
 use num_traits::Zero;
 
 use crate::{GadgetRLWE, NTTGadgetRLWE, LWE, NTTRGSW, RGSW};
-
-use super::utils::{ntt_add_mul_assign, ntt_add_mul_assign_ref};
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly

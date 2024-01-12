@@ -66,8 +66,6 @@ pub struct Parameters<R: Ring, F: NTTField> {
 
     /// Decompose basis for `Q` used for key switching
     key_switching_basis: Basis<F>,
-    /// The powers of key_switch_basis
-    key_switching_basis_powers: Vec<F>,
 }
 
 impl<R: Ring, F: NTTField, Scalar> From<ConstParameters<Scalar>> for Parameters<R, F>
@@ -116,14 +114,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         });
 
         let key_switching_basis = <Basis<F>>::new(key_switching_basis_bits);
-        let bf = key_switching_basis.basis();
-
-        let mut key_switching_basis_powers = vec![F::ZERO; key_switching_basis.decompose_len()];
-        let mut temp = F::ONE.inner();
-        key_switching_basis_powers.iter_mut().for_each(|v| {
-            *v = F::new(temp);
-            temp = temp * bf;
-        });
 
         Self {
             lwe_dimension,
@@ -144,7 +134,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
             gadget_basis_powers,
 
             key_switching_basis,
-            key_switching_basis_powers,
         }
     }
 
@@ -226,12 +215,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
     #[inline]
     pub fn key_switching_basis(&self) -> Basis<F> {
         self.key_switching_basis
-    }
-
-    /// Returns the powers of key switch basis of this [`Parameters<R, F>`].
-    #[inline]
-    pub fn key_switching_basis_powers(&self) -> &[F] {
-        &self.key_switching_basis_powers
     }
 }
 
