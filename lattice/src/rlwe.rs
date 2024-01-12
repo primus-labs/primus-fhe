@@ -3,6 +3,8 @@ use num_traits::Zero;
 
 use crate::{GadgetRLWE, NTTGadgetRLWE, LWE, NTTRGSW, RGSW};
 
+use super::utils::{ntt_add_mul_assign, ntt_add_mul_assign_ref};
+
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly
 /// those that require efficient homomorphic encryption properties. It consists of two [`Polynomial<F>`]
@@ -619,31 +621,18 @@ impl<F: NTTField> NTTRLWE<F> {
     }
 
     /// Performs `self = self + ntt_rlwe * polynomial`.
+    #[inline]
     pub fn add_rlwe_mul_polynomial_inplace(&mut self, rhs: &NTTRLWE<F>, polynomial: Polynomial<F>) {
         let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
-
-        let op = |l: &mut NTTPolynomial<F>, r: &NTTPolynomial<F>| {
-            l.iter_mut()
-                .zip(r)
-                .zip(ntt_polynomial.iter())
-                .for_each(|((x, &y), &z)| x.add_mul_assign(y, z))
-        };
-
-        op(&mut self.a, &rhs.a);
-        op(&mut self.b, &rhs.b);
+        ntt_add_mul_assign_ref(&mut self.a, &rhs.a, &ntt_polynomial);
+        ntt_add_mul_assign(&mut self.b, &rhs.b, ntt_polynomial);
     }
 
     /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
+    #[inline]
     pub fn add_rlwe_mul_ntt_polynomial_inplace(&mut self, rhs: &NTTRLWE<F>, ntt_polynomial: &[F]) {
-        let op = |l: &mut NTTPolynomial<F>, r: &NTTPolynomial<F>| {
-            l.into_iter()
-                .zip(r)
-                .zip(ntt_polynomial)
-                .for_each(|((x, &y), &z)| x.add_mul_assign(y, z))
-        };
-
-        op(&mut self.a, &rhs.a);
-        op(&mut self.b, &rhs.b);
+        ntt_add_mul_assign_ref(&mut self.a, &rhs.a, ntt_polynomial);
+        ntt_add_mul_assign_ref(&mut self.b, &rhs.b, ntt_polynomial);
     }
 
     /// Performs `self + gadget_rlwe * polynomial`.

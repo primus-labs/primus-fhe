@@ -516,6 +516,7 @@ impl<F: Field> Neg for &NTTPolynomial<F> {
     }
 }
 
+#[inline]
 pub(in crate::polynomial) fn ntt_mul_assign<F: NTTField, I: IntoIterator<Item = F>>(
     lhs: &mut [F],
     rhs: I,
@@ -523,6 +524,7 @@ pub(in crate::polynomial) fn ntt_mul_assign<F: NTTField, I: IntoIterator<Item = 
     lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
 }
 
+#[inline]
 pub(in crate::polynomial) fn ntt_mul_assign_ref<
     'a,
     F: NTTField + 'a,
