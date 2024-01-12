@@ -103,7 +103,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`] slice,
     /// then add the `rlwe`, return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_decomposed_polynomial_slice_add_rlwe(
+    pub fn mul_decomposed_polynomial_add_rlwe(
         &self,
         decomposed: Vec<Polynomial<F>>,
         rlwe: RLWE<F>,
@@ -258,7 +258,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`] slice,
     /// then add the `rlwe`, return a [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_decomposed_polynomial_slice_add_rlwe(
+    pub fn mul_decomposed_polynomial_add_rlwe(
         &self,
         decomposed: Vec<Polynomial<F>>,
         rlwe: NTTRLWE<F>,
