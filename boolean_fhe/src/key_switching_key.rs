@@ -32,21 +32,17 @@ impl<F: NTTField> KeySwitchingKey<F> {
             })
             .collect();
 
-        let mut init = RLWE::new(
-            Polynomial::zero_with_coeff_count(self.lwe_dimension),
-            Polynomial::zero_with_coeff_count(self.lwe_dimension),
+        let mut init = <NTTRLWE<F>>::new(
+            NTTPolynomial::zero_with_coeff_count(self.lwe_dimension),
+            NTTPolynomial::new(vec![ciphertext.b(); self.lwe_dimension]),
         );
-        init.b_mut()[0] = ciphertext.b();
 
-        let mut init = <NTTRLWE<F>>::from(init);
-
-        let rlwe_dimension = init.a().coeff_count();
         let basis = self.key[0].basis();
         let decompose_len = basis.decompose_len();
 
         let mut decompose_space = Vec::new();
         decompose_space.resize_with(decompose_len, || {
-            <Polynomial<F>>::zero_with_coeff_count(rlwe_dimension)
+            <Polynomial<F>>::zero_with_coeff_count(self.lwe_dimension)
         });
 
         self.key.iter().zip(a).for_each(|(k_i, a_i)| {
@@ -89,21 +85,26 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
 
         let ntt_lwe_sk = s.into_ntt_polynomial();
 
+        let len = key_switching_basis.decompose_len();
+
         let key = secret_key_pack
             .rlwe_secret_key()
             .as_slice()
             .chunks_exact(lwe_dimension)
             .map(|z| {
                 let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
-                let k_i = (0..key_switching_basis.decompose_len())
-                    .map(|_| {
+                let k_i = (0..len)
+                    .map(|i| {
                         let a = <NTTPolynomial<F>>::random(lwe_dimension, &mut rng);
                         let mut e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
                             .into_ntt_polynomial();
 
                         ntt_add_mul_assign_ref(e.as_mut_slice(), &a, &ntt_lwe_sk);
-                        ntt_z.mul_scalar_inplace(key_switching_basis.basis());
                         let b = e + &ntt_z;
+
+                        if i < len - 1 {
+                            ntt_z.mul_scalar_inplace(key_switching_basis.basis());
+                        }
 
                         NTTRLWECiphertext::new(a, b)
                     })

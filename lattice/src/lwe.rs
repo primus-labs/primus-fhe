@@ -76,7 +76,7 @@ impl<R: Ring> LWE<R> {
     pub fn add_component_wise_ref(&self, rhs: &Self) -> Self {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
-            self.a.iter().zip(rhs.a()).map(|(&x, &y)| x + y).collect(),
+            self.a.iter().zip(rhs.a()).map(|(&x, y)| x + y).collect(),
             self.b + rhs.b,
         )
     }
@@ -103,7 +103,7 @@ impl<R: Ring> LWE<R> {
     pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
-            self.a.iter().zip(rhs.a()).map(|(&x, &y)| x - y).collect(),
+            self.a.iter().zip(rhs.a()).map(|(&x, y)| x - y).collect(),
             self.b - rhs.b,
         )
     }
@@ -128,7 +128,7 @@ impl<R: Ring> LWE<R> {
         self.a
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, &v1)| *v0 += v1);
+            .for_each(|(v0, v1)| *v0 += v1);
         self.b += rhs.b;
     }
 
@@ -140,7 +140,7 @@ impl<R: Ring> LWE<R> {
         self.a
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, &v1)| *v0 -= v1);
+            .for_each(|(v0, v1)| *v0 -= v1);
         self.b -= rhs.b;
     }
 }

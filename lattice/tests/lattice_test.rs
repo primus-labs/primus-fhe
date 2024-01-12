@@ -195,7 +195,7 @@ fn extract_lwe_test() {
         .a()
         .iter()
         .zip(s_vec.iter())
-        .fold(FF::new(0), |acc, (&x, &y)| acc + x * y);
+        .fold(FF::new(0), |acc, (&x, y)| acc + x * y);
 
     assert_eq!(inner_a, lwe_sample.b());
 }

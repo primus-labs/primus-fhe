@@ -4,5 +4,5 @@ use algebra::Ring;
 #[inline]
 pub fn dot_product<R: Ring>(u: &[R], v: &[R]) -> R {
     debug_assert_eq!(u.len(), v.len());
-    u.iter().zip(v).fold(R::ZERO, |acc, (&x, &y)| acc + x * y)
+    u.iter().zip(v).fold(R::ZERO, |acc, (&x, y)| acc + x * y)
 }
