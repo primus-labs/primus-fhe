@@ -30,21 +30,23 @@ fn main() {
         let (m2, noise) = skp.decrypt_with_noise(&c2);
 
         assert_eq!(m2, !(m0 & m1));
-        println!(
-            "Noise: {}",
-            DefaultRing100::MODULUS_F64 / 16.0 - noise.to_f64()
-        );
         assert!(noise.to_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
+        println!(
+            "Noise: {} < {}",
+            noise.to_f64(),
+            DefaultRing100::MODULUS_F64 / 16.0,
+        );
 
         c = evk.nand(&c, &c2);
 
         let (d, noise) = skp.decrypt_with_noise(&c);
         assert_eq!(d, !(m & m2));
-        println!(
-            "Noise: {}",
-            DefaultRing100::MODULUS_F64 / 16.0 - noise.to_f64()
-        );
         assert!(noise.to_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
+        println!(
+            "Noise: {} < {}",
+            noise.to_f64(),
+            DefaultRing100::MODULUS_F64 / 16.0,
+        );
 
         m = d;
         println!("The {i} nand test done!\n");
