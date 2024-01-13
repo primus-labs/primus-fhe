@@ -28,6 +28,9 @@ pub use random::Random;
 pub use reduce::ModulusConfig;
 pub use ring::{RandomRing, Ring};
 
-pub use polynomial::{NTTPolynomial, Polynomial};
+pub use polynomial::{
+    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_mul_assign, ntt_mul_assign_ref, NTTPolynomial,
+    Polynomial,
+};
 
 pub use primitive::{div_ceil, Bits, RoundedDiv, Widening};

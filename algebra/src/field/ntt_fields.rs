@@ -30,10 +30,10 @@ pub trait NTTField: PrimeField {
     fn from_root(root: Self::Root) -> Self;
 
     /// Convert `self` into `Self::Root` type.
-    fn to_root(&self) -> Self::Root;
+    fn to_root(self) -> Self::Root;
 
     /// Calculate `self * root`.
-    fn mul_root(&self, root: Self::Root) -> Self;
+    fn mul_root(self, root: Self::Root) -> Self;
 
     /// Calculate `self *= root`.
     fn mul_root_assign(&mut self, root: Self::Root);
@@ -69,5 +69,5 @@ pub trait NTTField: PrimeField {
     fn get_ntt_table(log_n: u32) -> Result<Arc<Self::Table>, crate::AlgebraError>;
 
     /// Init ntt table with `log_n` slice.
-    fn init_ntt_table(log_ns: &[u32]) -> Result<(), crate::AlgebraError>;
+    fn init_ntt_table(log_n_slice: &[u32]) -> Result<(), crate::AlgebraError>;
 }

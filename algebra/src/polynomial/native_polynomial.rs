@@ -1,10 +1,12 @@
 use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut, SliceIndex};
+use std::vec::IntoIter;
 
 use num_traits::Zero;
 use rand_distr::Distribution;
 
 use crate::field::{Field, NTTField};
+use crate::polynomial::ntt_polynomial::{ntt_mul_assign, ntt_mul_assign_ref};
 use crate::transformation::AbstractNTT;
 use crate::{Basis, Random};
 
@@ -12,15 +14,15 @@ use super::NTTPolynomial;
 
 /// Represents a polynomial where coefficients are elements of a specified field `F`.
 ///
-/// The `Polynomial` struct is generic over a type `F` that must implement the `Field` trait, ensuring
+/// The [`Polynomial`] struct is generic over a type `F` that must implement the [`Field`] trait, ensuring
 /// that the polynomial coefficients can support field operations such as addition, subtraction,
 /// multiplication, and division, where division is by a non-zero element. These operations are
 /// fundamental in various areas of mathematics and computer science, especially in algorithms that involve
 /// polynomial arithmetic in fields, such as error-correcting codes, cryptography, and numerical analysis.
 ///
 /// The coefficients of the polynomial are stored in a vector `data`, with the `i`-th element
-/// representing the coefficient of the `x^i` term. The vector is ordered from the constant term
-/// at index 0 to the highest non-zero term. This struct can represent both dense and sparse polynomials,
+/// representing the coefficient of the `xⁱ` term. The vector is ordered from the constant term
+/// at index 0 to the highest term. This struct can represent both dense and sparse polynomials,
 /// but it doesn't inherently optimize for sparse representations.
 ///
 /// # Fields
@@ -38,54 +40,34 @@ pub struct Polynomial<F: Field> {
     data: Vec<F>,
 }
 
-impl<F: Field> From<Vec<F>> for Polynomial<F> {
-    #[inline]
-    fn from(data: Vec<F>) -> Self {
-        Self { data }
-    }
-}
-
 impl<F: NTTField> From<NTTPolynomial<F>> for Polynomial<F> {
     #[inline]
-    fn from(vec: NTTPolynomial<F>) -> Self {
-        debug_assert!(vec.coeff_count().is_power_of_two());
+    fn from(ntt_polynomial: NTTPolynomial<F>) -> Self {
+        debug_assert!(ntt_polynomial.coeff_count().is_power_of_two());
 
-        let ntt_table = F::get_ntt_table(vec.coeff_count().trailing_zeros()).unwrap();
+        let ntt_table = F::get_ntt_table(ntt_polynomial.coeff_count().trailing_zeros()).unwrap();
 
-        ntt_table.inverse_transform_inplace(vec)
-    }
-}
-
-impl<F: NTTField> From<&NTTPolynomial<F>> for Polynomial<F> {
-    #[inline]
-    fn from(vec: &NTTPolynomial<F>) -> Self {
-        Self::from(vec.clone())
+        ntt_table.inverse_transform_inplace(ntt_polynomial)
     }
 }
 
 impl<F: Field> Polynomial<F> {
     /// Creates a new [`Polynomial<F>`].
     #[inline]
-    pub fn new(poly: Vec<F>) -> Self {
-        Self { data: poly }
+    pub fn new(polynomial: Vec<F>) -> Self {
+        Self { data: polynomial }
     }
 
     /// Constructs a new polynomial from a slice.
     #[inline]
-    pub fn from_slice(poly: &[F]) -> Self {
-        Self::new(poly.to_vec())
+    pub fn from_slice(polynomial: &[F]) -> Self {
+        Self::new(polynomial.to_vec())
     }
 
     /// Drop self, and return the data
     #[inline]
     pub fn data(self) -> Vec<F> {
         self.data
-    }
-
-    /// swap `self.data` with an outside data.
-    #[inline]
-    pub fn swap(&mut self, data: &mut Vec<F>) {
-        std::mem::swap(&mut self.data, data);
     }
 
     /// Creates a [`Polynomial<F>`] with all coefficients equal to zero.
@@ -96,30 +78,32 @@ impl<F: Field> Polynomial<F> {
         }
     }
 
-    /// Constructs a new, empty [`Polynomial<F>`] with at least the specified capacity.
-    #[inline]
-    fn with_capacity(capacity: usize) -> Self {
-        Self {
-            data: Vec::with_capacity(capacity),
-        }
-    }
-
     /// Extracts a slice containing the entire vector.
+    ///
+    /// Equivalent to `&s[..]`.
     #[inline]
     pub fn as_slice(&self) -> &[F] {
         self.data.as_slice()
     }
 
-    /// Appends an element to the back of a [`Polynomial<F>`].
+    /// Extracts a mutable slice of the entire vector.
+    ///
+    /// Equivalent to `&mut s[..]`.
     #[inline]
-    fn push(&mut self, value: F) {
-        self.data.push(value);
+    pub fn as_mut_slice(&mut self) -> &mut [F] {
+        self.data.as_mut_slice()
     }
 
-    /// Multipile `self` with the a scalar.
+    /// Multiply `self` with the a scalar.
     #[inline]
     pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
-        Self::new(self.iter().map(|v| v.mul_scalar(scalar)).collect())
+        Self::new(self.iter().map(|&v| v.mul_scalar(scalar)).collect())
+    }
+
+    /// Multiply `self` with the a scalar inplace.
+    #[inline]
+    pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
+        self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 
     /// Get the coefficient counts of polynomial.
@@ -140,13 +124,13 @@ impl<F: Field> Polynomial<F> {
         self.data.iter_mut()
     }
 
-    /// Alter the coefficient count of the polynomial.
+    /// Resize the coefficient count of the polynomial.
     #[inline]
     pub fn resize(&mut self, new_degree: usize, value: F) {
         self.data.resize(new_degree, value);
     }
 
-    /// Alter the coefficient count of the polynomial.
+    /// Resize the coefficient count of the polynomial.
     #[inline]
     pub fn resize_with<FN>(&mut self, new_degree: usize, f: FN)
     where
@@ -158,7 +142,7 @@ impl<F: Field> Polynomial<F> {
     /// Given `x`, outputs `f(x)`
     #[inline]
     pub fn evaluate(&self, x: F) -> F {
-        self.data.iter().rev().fold(F::ZERO, |acc, a| acc * x + a)
+        self.data.iter().rev().fold(F::ZERO, |acc, &a| acc * x + a)
     }
 }
 
@@ -193,7 +177,7 @@ impl<F: Field + Random> Polynomial<F> {
 impl<F: NTTField> Polynomial<F> {
     /// Convert `self` from [`Polynomial<F>`] to [`NTTPolynomial<F>`]
     #[inline]
-    pub fn to_ntt_polynomial(self) -> NTTPolynomial<F> {
+    pub fn into_ntt_polynomial(self) -> NTTPolynomial<F> {
         <NTTPolynomial<F>>::from(self)
     }
 }
@@ -216,17 +200,56 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
 
 impl<F: NTTField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
-    pub fn decompose(&self, basis: Basis<F>) -> Vec<Self> {
-        let mut ret: Vec<Self> =
-            vec![Self::with_capacity(self.coeff_count()); basis.decompose_len()];
-        for coeff in self.iter() {
-            let decompose_res = coeff.decompose(basis);
-            ret.iter_mut()
-                .zip(decompose_res.into_iter())
-                .for_each(|(d_p, d_c)| d_p.push(d_c));
-        }
+    pub fn decompose(mut self, basis: Basis<F>) -> Vec<Self> {
+        let mask = basis.mask();
+        let bits = basis.bits();
 
-        ret
+        (0..basis.decompose_len())
+            .map(|_| {
+                let data: Vec<F> = self
+                    .iter_mut()
+                    .map(|v| v.decompose_lsb_bits(mask, bits))
+                    .collect();
+                <Polynomial<F>>::new(data)
+            })
+            .collect()
+    }
+
+    /// Decompose `self` according to `basis`.
+    ///
+    /// # Attention
+    ///
+    /// **`self`** will be a **zero** polynomial *after* performing this decomposition.
+    pub fn decompose_inplace(&mut self, basis: Basis<F>, destination: &mut [Self]) {
+        assert_eq!(destination.len(), basis.decompose_len());
+
+        let mask = basis.mask();
+        let bits = basis.bits();
+
+        destination.iter_mut().for_each(|d_poly| {
+            debug_assert_eq!(d_poly.coeff_count(), self.coeff_count());
+            d_poly
+                .into_iter()
+                .zip(self.iter_mut())
+                .for_each(|(d_i, p_i)| {
+                    p_i.decompose_lsb_bits_at(d_i, mask, bits);
+                })
+        });
+    }
+
+    /// Decompose `self` according to `basis`.
+    ///
+    /// # Attention
+    ///
+    /// **`self`** will be modified *after* performing this decomposition.
+    pub fn decompose_lsb_bits_inplace(&mut self, basis: Basis<F>, destination: &mut Self) {
+        debug_assert_eq!(destination.coeff_count(), self.coeff_count());
+        let mask = basis.mask();
+        let bits = basis.bits();
+
+        destination.into_iter().zip(self).for_each(|(d_i, p_i)| {
+            p_i.decompose_lsb_bits_at(d_i, mask, bits);
+        });
     }
 }
 
@@ -264,15 +287,14 @@ impl<F: Field> Zero for Polynomial<F> {
 
     #[inline]
     fn set_zero(&mut self) {
-        let coeff_count = self.coeff_count();
-        self.data = vec![F::ZERO; coeff_count];
+        self.data.fill(F::ZERO);
     }
 }
 
 impl<F: Field> IntoIterator for Polynomial<F> {
     type Item = F;
 
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+    type IntoIter = IntoIter<F>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -280,27 +302,50 @@ impl<F: Field> IntoIterator for Polynomial<F> {
     }
 }
 
+impl<'a, F: Field> IntoIterator for &'a Polynomial<F> {
+    type Item = &'a F;
+
+    type IntoIter = Iter<'a, F>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
+    }
+}
+
+impl<'a, F: Field> IntoIterator for &'a mut Polynomial<F> {
+    type Item = &'a mut F;
+
+    type IntoIter = IterMut<'a, F>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter_mut()
+    }
+}
+
+impl<F: Field> AddAssign<Self> for Polynomial<F> {
+    #[inline]
+    fn add_assign(&mut self, rhs: Self) {
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l += r);
+    }
+}
+
 impl<F: Field> AddAssign<&Self> for Polynomial<F> {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l += r);
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l += r);
     }
 }
 
-impl<F: Field> AddAssign for Polynomial<F> {
-    #[inline]
-    fn add_assign(&mut self, rhs: Self) {
-        AddAssign::add_assign(self, &rhs);
-    }
-}
-
-impl<F: Field> Add for Polynomial<F> {
+impl<F: Field> Add<Self> for Polynomial<F> {
     type Output = Self;
 
     #[inline]
     fn add(mut self, rhs: Self) -> Self::Output {
-        AddAssign::add_assign(&mut self, &rhs);
+        AddAssign::add_assign(&mut self, rhs);
         self
     }
 }
@@ -331,31 +376,32 @@ impl<F: Field> Add<&Polynomial<F>> for &Polynomial<F> {
     #[inline]
     fn add(self, rhs: &Polynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l + r).collect();
-        <Polynomial<F>>::new(poly)
+        let polynomial: Vec<F> = self.iter().zip(rhs).map(|(&l, r)| l + r).collect();
+        <Polynomial<F>>::new(polynomial)
     }
 }
 
-impl<F: Field> SubAssign for Polynomial<F> {
+impl<F: Field> SubAssign<Self> for Polynomial<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        SubAssign::sub_assign(self, &rhs);
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l -= r);
     }
 }
 impl<F: Field> SubAssign<&Self> for Polynomial<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        self.iter_mut().zip(rhs.iter()).for_each(|(l, &r)| *l -= r);
+        self.iter_mut().zip(rhs).for_each(|(l, r)| *l -= r);
     }
 }
 
-impl<F: Field> Sub for Polynomial<F> {
+impl<F: Field> Sub<Self> for Polynomial<F> {
     type Output = Self;
 
     #[inline]
     fn sub(mut self, rhs: Self) -> Self::Output {
-        SubAssign::sub_assign(&mut self, &rhs);
+        SubAssign::sub_assign(&mut self, rhs);
         self
     }
 }
@@ -373,12 +419,10 @@ impl<F: Field> Sub<&Self> for Polynomial<F> {
 impl<F: Field> Sub<Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
+    #[inline]
     fn sub(self, mut rhs: Polynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        rhs.iter_mut()
-            .zip(self.iter())
-            .for_each(|(r, &l)| *r = l - *r);
-
+        rhs.iter_mut().zip(self).for_each(|(r, &l)| *r = l - *r);
         rhs
     }
 }
@@ -389,8 +433,32 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
     #[inline]
     fn sub(self, rhs: &Polynomial<F>) -> Self::Output {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        let poly: Vec<F> = self.iter().zip(rhs.iter()).map(|(&l, &r)| l - r).collect();
-        <Polynomial<F>>::new(poly)
+        let polynomial: Vec<F> = self.iter().zip(rhs).map(|(&l, r)| l - r).collect();
+        <Polynomial<F>>::new(polynomial)
+    }
+}
+
+impl<F: NTTField> MulAssign<Self> for Polynomial<F> {
+    fn mul_assign(&mut self, mut rhs: Self) {
+        let coeff_count = self.coeff_count();
+        debug_assert_eq!(coeff_count, rhs.coeff_count());
+        debug_assert!(coeff_count.is_power_of_two());
+
+        let log_n = coeff_count.trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+
+        let lhs = self.as_mut_slice();
+        ntt_table.transform_slice(rhs.as_mut_slice());
+        ntt_table.transform_slice(lhs);
+        ntt_mul_assign(lhs, rhs);
+        ntt_table.inverse_transform_slice(lhs);
+    }
+}
+
+impl<F: NTTField> MulAssign<&Self> for Polynomial<F> {
+    #[inline]
+    fn mul_assign(&mut self, rhs: &Self) {
+        MulAssign::mul_assign(self, rhs.clone());
     }
 }
 
@@ -398,15 +466,9 @@ impl<F: NTTField> Mul<Self> for Polynomial<F> {
     type Output = Self;
 
     #[inline]
-    fn mul(self, rhs: Self) -> Self::Output {
-        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        debug_assert!(self.coeff_count().is_power_of_two());
-
-        let log_n = self.coeff_count().trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-        ntt_table.inverse_transform_inplace(
-            ntt_table.transform_inplace(self) * ntt_table.transform_inplace(rhs),
-        )
+    fn mul(mut self, rhs: Self) -> Self::Output {
+        MulAssign::mul_assign(&mut self, rhs);
+        self
     }
 }
 
@@ -414,8 +476,9 @@ impl<F: NTTField> Mul<&Self> for Polynomial<F> {
     type Output = Self;
 
     #[inline]
-    fn mul(self, rhs: &Self) -> Self::Output {
-        Mul::mul(self, rhs.clone())
+    fn mul(mut self, rhs: &Self) -> Self::Output {
+        MulAssign::mul_assign(&mut self, rhs);
+        self
     }
 }
 
@@ -423,8 +486,9 @@ impl<F: NTTField> Mul<Polynomial<F>> for &Polynomial<F> {
     type Output = Polynomial<F>;
 
     #[inline]
-    fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-        Mul::mul(self.clone(), rhs)
+    fn mul(self, mut rhs: Polynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut rhs, self.clone());
+        rhs
     }
 }
 
@@ -437,44 +501,13 @@ impl<F: NTTField> Mul<&Polynomial<F>> for &Polynomial<F> {
     }
 }
 
-impl<F: NTTField> MulAssign<&Self> for Polynomial<F> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: &Self) {
-        MulAssign::mul_assign(self, rhs.clone());
-    }
-}
-
-impl<F: NTTField> MulAssign<Self> for Polynomial<F> {
-    #[inline]
-    fn mul_assign(&mut self, rhs: Self) {
-        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        debug_assert!(self.coeff_count().is_power_of_two());
-
-        let log_n = self.coeff_count().trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-
-        let mut data = Vec::new();
-        self.swap(&mut data);
-        ntt_table.transform_slice(&mut data);
-
-        let ret = ntt_table.inverse_transform_inplace(
-            <NTTPolynomial<F>>::new(data) * ntt_table.transform_inplace(rhs),
-        );
-        self.data = ret.data;
-    }
-}
-
 impl<F: NTTField> Mul<NTTPolynomial<F>> for Polynomial<F> {
     type Output = Self;
 
     #[inline]
-    fn mul(self, rhs: NTTPolynomial<F>) -> Self::Output {
-        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        debug_assert!(self.coeff_count().is_power_of_two());
-
-        let log_n = self.coeff_count().trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-        ntt_table.inverse_transform_inplace(ntt_table.transform_inplace(self) * rhs)
+    fn mul(mut self, rhs: NTTPolynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut self, rhs);
+        self
     }
 }
 
@@ -482,13 +515,9 @@ impl<F: NTTField> Mul<&NTTPolynomial<F>> for Polynomial<F> {
     type Output = Self;
 
     #[inline]
-    fn mul(self, rhs: &NTTPolynomial<F>) -> Self::Output {
-        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        debug_assert!(self.coeff_count().is_power_of_two());
-
-        let log_n = self.coeff_count().trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-        ntt_table.inverse_transform_inplace(ntt_table.transform_inplace(self) * rhs)
+    fn mul(mut self, rhs: &NTTPolynomial<F>) -> Self::Output {
+        MulAssign::mul_assign(&mut self, rhs);
+        self
     }
 }
 
@@ -513,36 +542,34 @@ impl<F: NTTField> Mul<&NTTPolynomial<F>> for &Polynomial<F> {
 impl<F: NTTField> MulAssign<NTTPolynomial<F>> for Polynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: NTTPolynomial<F>) {
-        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        debug_assert!(self.coeff_count().is_power_of_two());
+        let coeff_count = self.coeff_count();
+        debug_assert_eq!(coeff_count, rhs.coeff_count());
+        debug_assert!(coeff_count.is_power_of_two());
 
-        let log_n = self.coeff_count().trailing_zeros();
+        let log_n = coeff_count.trailing_zeros();
         let ntt_table = F::get_ntt_table(log_n).unwrap();
 
-        let mut data = Vec::new();
-        self.swap(&mut data);
-        ntt_table.transform_slice(&mut data);
-
-        let ret = ntt_table.inverse_transform_inplace(<NTTPolynomial<F>>::new(data) * rhs);
-        self.data = ret.data;
+        let lhs = self.as_mut_slice();
+        ntt_table.transform_slice(lhs);
+        ntt_mul_assign(lhs, rhs);
+        ntt_table.inverse_transform_slice(lhs);
     }
 }
 
 impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for Polynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: &NTTPolynomial<F>) {
-        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
-        debug_assert!(self.coeff_count().is_power_of_two());
+        let coeff_count = self.coeff_count();
+        debug_assert_eq!(coeff_count, rhs.coeff_count());
+        debug_assert!(coeff_count.is_power_of_two());
 
-        let log_n = self.coeff_count().trailing_zeros();
+        let log_n = coeff_count.trailing_zeros();
         let ntt_table = F::get_ntt_table(log_n).unwrap();
 
-        let mut data = Vec::new();
-        self.swap(&mut data);
-        ntt_table.transform_slice(&mut data);
-
-        let ret = ntt_table.inverse_transform_inplace(<NTTPolynomial<F>>::new(data) * rhs);
-        self.data = ret.data;
+        let lhs = self.as_mut_slice();
+        ntt_table.transform_slice(lhs);
+        ntt_mul_assign_ref(lhs, rhs);
+        ntt_table.inverse_transform_slice(lhs);
     }
 }
 
@@ -551,7 +578,7 @@ impl<F: Field> Neg for Polynomial<F> {
 
     #[inline]
     fn neg(mut self) -> Self::Output {
-        self.data.iter_mut().for_each(|e| {
+        self.iter_mut().for_each(|e| {
             *e = -*e;
         });
         self
@@ -563,7 +590,7 @@ impl<F: Field> Neg for &Polynomial<F> {
 
     #[inline]
     fn neg(self) -> Self::Output {
-        let data = self.data.iter().map(|&e| -e).collect();
+        let data = self.iter().map(|&e| -e).collect();
         <Polynomial<F>>::new(data)
     }
 }

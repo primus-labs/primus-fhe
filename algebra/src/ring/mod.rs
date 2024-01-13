@@ -108,7 +108,7 @@ pub trait Ring:
     fn cast_from_usize(value: usize) -> Self;
 
     /// cast inner to [`f64`]
-    fn as_f64(self) -> f64;
+    fn to_f64(self) -> f64;
 
     /// cast from [`f64`]
     fn from_f64(value: f64) -> Self;
@@ -122,13 +122,32 @@ pub trait Ring:
     /// Get the length of decompose vec.
     fn decompose_len(basis: Self::Inner) -> usize;
 
-    /// Decompose `self` according to `basis`.
+    /// Decompose `self` according to `basis`,
+    /// return the decomposed vector.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose(&self, basis: Basis<Self>) -> Vec<Self>;
+    fn decompose(self, basis: Basis<Self>) -> Vec<Self>;
+
+    /// Decompose `self` according to `basis`,
+    /// put the decomposed result into `destination`.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose_at(self, basis: Basis<Self>, destination: &mut [Self]);
+
+    /// Decompose `self` according to `basis`'s `mask` and `bits`,
+    /// return the least significant decomposed part.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self;
+
+    /// Decompose `self` according to `basis`'s `mask` and `bits`,
+    /// put the least significant decomposed part into `destination`.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32);
 
     /// Return `self * scalar`.
-    fn mul_scalar(&self, scalar: Self::Inner) -> Self;
+    fn mul_scalar(self, scalar: Self::Inner) -> Self;
 
     /// Returns `self + self`.
     #[inline]

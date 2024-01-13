@@ -12,7 +12,7 @@ mod prime_fields;
 pub use ntt_fields::NTTField;
 pub use prime_fields::{MulFactor, PrimeField};
 
-/// A trait that extends the algebraic structure of a `Ring` to a `Field`.
+/// A trait that extends the algebraic structure of a [`Ring`] to a [`Field`].
 ///
 /// Fields are algebraic structures with two operations: addition and multiplication,
 /// where every nonzero element has a multiplicative inverse. This trait builds upon
@@ -20,7 +20,7 @@ pub use prime_fields::{MulFactor, PrimeField};
 /// extending the ring into a field. In a field, division by any non-zero element is
 /// possible and every element except zero has an inverse.
 ///
-/// The `Field` trait includes division and division assignment operations, including
+/// The [`Field`] trait includes division and division assignment operations, including
 /// their reference-based variants. This allows for division of field elements in an
 /// ergonomic manner consistent with Rust's ownership and borrowing principles.
 pub trait Field:
@@ -36,6 +36,12 @@ pub trait Field:
 
     /// Performs `self * a + b`.
     fn mul_add(self, a: Self, b: Self) -> Self;
+
+    /// Performs `self = self + a * b`.
+    fn add_mul_assign(&mut self, a: Self, b: Self);
+
+    /// Performs `self = self * a + b`.
+    fn mul_add_assign(&mut self, a: Self, b: Self);
 
     /// Computes the multiplicative inverse of `self` if `self` is nonzero.
     #[inline]

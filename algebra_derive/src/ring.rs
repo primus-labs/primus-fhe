@@ -212,7 +212,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn as_f64(self) -> f64 {
+            fn to_f64(self) -> f64 {
                 self.0 as f64
             }
 
@@ -237,7 +237,7 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 algebra::div_ceil(<Self as algebra::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
+            fn decompose(self, basis: algebra::Basis<Self>) -> Vec<Self> {
                 let mut temp = self.0;
 
                 let len = basis.decompose_len();
@@ -258,8 +258,37 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 ret
             }
 
+            fn decompose_at(self, basis: algebra::Basis<Self>, destination: &mut [Self]) {
+                let mut temp = self.0;
+
+                let mask = basis.mask();
+                let bits = basis.bits();
+
+                for v in destination {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
+                }
+            }
+
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
+            fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self {
+                let temp = Self(self.0 & mask);
+                self.0 >>= bits;
+                temp
+            }
+
+            #[inline]
+            fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32) {
+                *destination = Self(self.0 & mask);
+                self.0 >>= bits;
+            }
+
+            #[inline]
+            fn mul_scalar(self, scalar: Self::Inner) -> Self {
                 use algebra::reduce::MulReduce;
                 Self(self.0.mul_reduce(scalar, &<Self as algebra::ModulusConfig>::MODULUS))
             }
@@ -329,7 +358,7 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn as_f64(self) -> f64 {
+            fn to_f64(self) -> f64 {
                 self.0 as f64
             }
 
@@ -354,7 +383,7 @@ fn impl_and_ring(
                 algebra::div_ceil(Self::modulus_value().trailing_zeros(), basis.trailing_zeros()) as usize
             }
 
-            fn decompose(&self, basis: algebra::Basis<Self>) -> Vec<Self> {
+            fn decompose(self, basis: algebra::Basis<Self>) -> Vec<Self> {
                 let mut temp = self.0;
 
                 let len = basis.decompose_len();
@@ -375,8 +404,37 @@ fn impl_and_ring(
                 ret
             }
 
+            fn decompose_at(self, basis: algebra::Basis<Self>, destination: &mut [Self]) {
+                let mut temp = self.0;
+
+                let mask = basis.mask();
+                let bits = basis.bits();
+
+                for v in destination {
+                    if temp == 0 {
+                        break;
+                    } else {
+                        *v = Self(temp & mask);
+                        temp >>= bits;
+                    }
+                }
+            }
+
             #[inline]
-            fn mul_scalar(&self, scalar: Self::Inner) -> Self {
+            fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self {
+                let temp = Self(self.0 & mask);
+                self.0 >>= bits;
+                temp
+            }
+
+            #[inline]
+            fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32) {
+                *destination = Self(self.0 & mask);
+                self.0 >>= bits;
+            }
+
+            #[inline]
+            fn mul_scalar(self, scalar: Self::Inner) -> Self {
                 Self(self.0.wrapping_mul(scalar) & #mask)
             }
         }

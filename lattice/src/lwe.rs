@@ -74,9 +74,10 @@ impl<R: Ring> LWE<R> {
     /// If your `self` is not a reference, you can use function `add_component_wise`.
     #[inline]
     pub fn add_component_wise_ref(&self, rhs: &Self) -> Self {
+        debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
-            self.a().iter().zip(rhs.a()).map(|(&x, &y)| x + y).collect(),
-            self.b() + rhs.b(),
+            self.a.iter().zip(rhs.a()).map(|(&x, y)| x + y).collect(),
+            self.b + rhs.b,
         )
     }
 
@@ -100,9 +101,10 @@ impl<R: Ring> LWE<R> {
     /// If your `self` is not a reference, you can use function `sub_component_wise`.
     #[inline]
     pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self {
+        debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
-            self.a().iter().zip(rhs.a()).map(|(&x, &y)| x - y).collect(),
-            self.b() - rhs.b(),
+            self.a.iter().zip(rhs.a()).map(|(&x, y)| x - y).collect(),
+            self.b - rhs.b,
         )
     }
 
@@ -122,31 +124,31 @@ impl<R: Ring> LWE<R> {
     /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
     #[inline]
     pub fn add_inplace_component_wise(&mut self, rhs: &Self) {
-        debug_assert_eq!(self.a().len(), rhs.a().len());
-        self.a_mut()
+        debug_assert_eq!(self.a.len(), rhs.a.len());
+        self.a
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, &v1)| *v0 += v1);
-        *self.b_mut() += rhs.b();
+            .for_each(|(v0, v1)| *v0 += v1);
+        self.b += rhs.b;
     }
 
     /// Performs an in-place component-wise subtraction
     /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
     #[inline]
     pub fn sub_inplace_component_wise(&mut self, rhs: &Self) {
-        debug_assert_eq!(self.a().len(), rhs.a().len());
-        self.a_mut()
+        debug_assert_eq!(self.a.len(), rhs.a.len());
+        self.a
             .iter_mut()
             .zip(rhs.a())
-            .for_each(|(v0, &v1)| *v0 -= v1);
-        *self.b_mut() -= rhs.b();
+            .for_each(|(v0, v1)| *v0 -= v1);
+        self.b -= rhs.b;
     }
 }
 
 impl<F: NTTField> LWE<F> {
     /// modulus switch from reduce `NTTField::MODULUS` to reduce `Ring::MODULUS`
     pub fn modulus_switch_floor<R: Ring>(&self) -> LWE<R> {
-        let switch = |v: F| R::from_f64((v.as_f64() * R::MODULUS_F64 / F::MODULUS_F64).floor());
+        let switch = |v: F| R::from_f64((v.to_f64() * R::MODULUS_F64 / F::MODULUS_F64).floor());
 
         let a: Vec<R> = self.a.iter().copied().map(switch).collect();
         let b = switch(self.b);
@@ -155,7 +157,7 @@ impl<F: NTTField> LWE<F> {
 
     /// modulus switch from reduce `NTTField::MODULUS` to reduce `Ring::MODULUS`
     pub fn modulus_switch_nearest_round<R: Ring>(&self) -> LWE<R> {
-        let switch = |v: F| R::from_f64((v.as_f64() * R::MODULUS_F64 / F::MODULUS_F64).round());
+        let switch = |v: F| R::from_f64((v.to_f64() * R::MODULUS_F64 / F::MODULUS_F64).round());
 
         let a: Vec<R> = self.a.iter().copied().map(switch).collect();
         let b = switch(self.b);

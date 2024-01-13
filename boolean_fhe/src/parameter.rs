@@ -66,8 +66,6 @@ pub struct Parameters<R: Ring, F: NTTField> {
 
     /// Decompose basis for `Q` used for key switching
     key_switching_basis: Basis<F>,
-    /// The powers of key_switch_basis
-    key_switching_basis_powers: Vec<F>,
 }
 
 impl<R: Ring, F: NTTField, Scalar> From<ConstParameters<Scalar>> for Parameters<R, F>
@@ -116,14 +114,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         });
 
         let key_switching_basis = <Basis<F>>::new(key_switching_basis_bits);
-        let bf = key_switching_basis.basis();
-
-        let mut key_switching_basis_powers = vec![F::ZERO; key_switching_basis.decompose_len()];
-        let mut temp = F::ONE.inner();
-        key_switching_basis_powers.iter_mut().for_each(|v| {
-            *v = F::new(temp);
-            temp = temp * bf;
-        });
 
         Self {
             lwe_dimension,
@@ -144,7 +134,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
             gadget_basis_powers,
 
             key_switching_basis,
-            key_switching_basis_powers,
         }
     }
 
@@ -227,12 +216,6 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
     pub fn key_switching_basis(&self) -> Basis<F> {
         self.key_switching_basis
     }
-
-    /// Returns the powers of key switch basis of this [`Parameters<R, F>`].
-    #[inline]
-    pub fn key_switching_basis_powers(&self) -> &[F] {
-        &self.key_switching_basis_powers
-    }
 }
 
 impl<R: RandomRing, F: NTTField> Parameters<R, F> {
@@ -253,22 +236,22 @@ impl<R: Ring, F: RandomNTTField> Parameters<R, F> {
 
 /// Default Ring for Default Parameters
 #[derive(Ring, Random)]
-#[modulus = 1024]
+#[modulus = 512]
 pub struct DefaultRing100(u32);
 
 /// Default Field for Default Parameters
 #[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
+#[modulus = 132120577]
 pub struct DefaultField100(u32);
 
 /// Default Parameters
 pub const CONST_DEFAULT_100_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
     lwe_dimension: 512,
-    lwe_modulus: 1024,
+    lwe_modulus: 512,
     lwe_noise_std_dev: 3.20,
     secret_key_type: SecretKeyType::Ternary,
     rlwe_dimension: 1024,
-    rlwe_modulus: 1073692673,
+    rlwe_modulus: 132120577,
     rlwe_noise_std_dev: 3.20,
     gadget_basis_bits: 6,
     key_switching_basis_bits: 3,

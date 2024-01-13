@@ -4,8 +4,6 @@ use rand::Rng;
 
 fn main() {
     // set random generator
-    // use rand::SeedableRng;
-    // let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(11);
     let mut rng = rand::thread_rng();
 
     // set parameter
@@ -21,7 +19,8 @@ fn main() {
     let mut m = rng.gen();
     let mut c = skp.encrypt(m);
 
-    for i in 0..100 {
+    let noise_max = DefaultRing100::MODULUS_F64 / 16.0;
+    for i in 1..=50 {
         let m0 = rng.gen();
         let c0 = skp.encrypt(m0);
 
@@ -29,24 +28,22 @@ fn main() {
         let c1 = skp.encrypt(m1);
 
         let c2 = evk.nand(&c0, &c1);
-        let (m2, noise) = skp.decrypt_with_noise(&c2);
 
-        assert_eq!(m2, !(m0 & m1));
-        println!(
-            "Noise: {}",
-            DefaultRing100::MODULUS_F64 / 16.0 - noise.as_f64()
-        );
-        assert!(noise.as_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
+        let (m2, noise) = skp.decrypt_with_noise(&c2);
+        let noise = noise.to_f64();
+
+        assert_eq!(m2, !(m0 & m1), "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
 
         c = evk.nand(&c, &c2);
 
         let (d, noise) = skp.decrypt_with_noise(&c);
-        assert_eq!(d, !(m & m2));
-        println!(
-            "Noise: {}",
-            DefaultRing100::MODULUS_F64 / 16.0 - noise.as_f64()
-        );
-        assert!(noise.as_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
+        let noise = noise.to_f64();
+
+        assert_eq!(d, !(m & m2), "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
 
         m = d;
         println!("The {i} nand test done!\n");

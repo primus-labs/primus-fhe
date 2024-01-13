@@ -1,7 +1,7 @@
-use algebra::{transformation::AbstractNTT, NTTField};
+use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random};
 use algebra_derive::{Field, Prime, Random, Ring, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::{distributions::Standard, prelude::*, thread_rng};
+use rand::{prelude::*, thread_rng};
 
 #[derive(Ring, Field, Random, Prime, NTT)]
 #[modulus = 132120577]
@@ -13,8 +13,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     Fp::init_ntt_table(&[log_n]).unwrap();
 
-    let mut r = thread_rng();
-    let mut data: Vec<Fp> = Standard.sample_iter(&mut r).take(n).collect();
+    let mut rng = thread_rng();
+
+    let fp_dis = Fp::standard_distribution();
+
+    let mut data: Vec<Fp> = fp_dis.sample_iter(&mut rng).take(n).collect();
 
     let ntt_table = Fp::get_ntt_table(log_n).unwrap();
 
@@ -29,6 +32,29 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             ntt_table.inverse_transform_slice(data.as_mut_slice());
         })
     });
+
+    let basis = <Basis<Fp>>::new(3);
+    let mut a = <Polynomial<Fp>>::random_with_dis(n, &mut rng, fp_dis);
+
+    let decompose_len = basis.decompose_len();
+
+    let mut decompose = Vec::new();
+    decompose.resize_with(decompose_len, || <Polynomial<Fp>>::zero_with_coeff_count(n));
+
+    let mut group = c.benchmark_group("Polynomial decompose");
+
+    group.bench_function("polynomial decompose", |b| {
+        b.iter(|| {
+            a.clone().decompose(basis);
+        })
+    });
+
+    group.bench_function("polynomial decompose inplace", |b| {
+        b.iter(|| {
+            a.decompose_inplace(basis, &mut decompose);
+        })
+    });
+    group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark);

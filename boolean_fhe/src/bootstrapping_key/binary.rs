@@ -1,5 +1,5 @@
 use algebra::{Basis, NTTField, Random, RandomNTTField, Ring};
-use lattice::{NTTRGSW, RLWE};
+use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
 use crate::secret_key::NTTRLWESecretKey;
 
@@ -25,17 +25,33 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
     ) -> RLWE<F> {
+        let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
+        let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
+        let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
+        let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);
+        let median = &mut RLWESpace::new(rlwe_dimension);
+
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |acc, (s_i, &a_i)| {
-                // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                let median = acc.mul_small_ntt_rgsw(s_i).mul_monic_monomial_sub_one(
+                // acc_mul_rgsw = ACC * RGSW(s_i)
+                acc.mul_small_ntt_rgsw_inplace(
+                    s_i,
+                    decompose_space,
+                    polynomial_space,
+                    ntt_rlwe_space,
+                    acc_mul_rgsw,
+                );
+                // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i)
+                acc_mul_rgsw.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     -a_i,
+                    median,
                 );
-                acc.add_element_wise(&median)
+                // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
+                acc.add_element_wise(median)
             })
     }
 }

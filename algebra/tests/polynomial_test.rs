@@ -24,9 +24,9 @@ fn test_transform() {
     FF::init_ntt_table(&[LOG_N as u32]).unwrap();
 
     let a = PolyFF::random(N, thread_rng());
-    let b = a.clone().to_ntt_polynomial();
-    let c = b.clone().to_native_polynomial();
-    let d = c.clone().to_ntt_polynomial();
+    let b = a.clone().into_ntt_polynomial();
+    let c = b.clone().into_native_polynomial();
+    let d = c.clone().into_ntt_polynomial();
     assert_eq!(a, c);
     assert_eq!(b, d);
 }
@@ -61,7 +61,15 @@ fn test_native_poly_mul() {
     let b = PolyFF::random(N, &mut rng);
 
     let mul_result = simple_mul(&a, &b);
-    assert_eq!(a * b, mul_result);
+    assert_eq!(&a * &b, mul_result);
+
+    let b = b.into_ntt_polynomial();
+    assert_eq!(&a * &b, mul_result);
+    assert_eq!(&a * b.clone(), mul_result);
+
+    let mul_result = mul_result.into_ntt_polynomial();
+    assert_eq!(&b * &a, mul_result);
+    assert_eq!(b * a, mul_result);
 }
 
 fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<F> {
@@ -94,13 +102,14 @@ fn test_poly_decompose() {
     let rng = &mut thread_rng();
     let poly = PolyFF::random(N, rng);
     let basis = <Basis<Fp32>>::new(BITS);
-    let decompose = poly.decompose(basis);
-    let compose = decompose
-        .into_iter()
-        .enumerate()
-        .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
-            acc + d.mul_scalar(B.pow(i as u32) as Inner)
-        });
+    let decompose = poly.clone().decompose(basis);
+    let compose = decompose.into_iter().enumerate().fold(
+        PolyFF::zero_with_coeff_count(N),
+        |acc, (i, mut d)| {
+            d.mul_scalar_inplace(B.pow(i as u32) as Inner);
+            acc + d
+        },
+    );
     assert_eq!(compose, poly);
 }
 

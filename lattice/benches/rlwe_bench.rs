@@ -7,7 +7,7 @@ use lattice::RLWE;
 pub struct RR(u32);
 
 #[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
+#[modulus = 132120577]
 pub struct FF(u32);
 
 const M: usize = 1024;
@@ -26,31 +26,35 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut c0 = <RLWE<FF>>::new(a0, b0);
     let c1 = <RLWE<FF>>::new(a1, b1);
 
-    c.bench_function("RLWE add element wise clone", |b| {
+    c.bench_function("RLWE extract", |b| b.iter(|| black_box(&c0).extract_lwe()));
+
+    let mut group = c.benchmark_group("Ring Learning with error");
+
+    group.bench_function("RLWE add element wise clone", |b| {
         b.iter(|| black_box(&c0).clone().add_element_wise(black_box(&c1)))
     });
 
-    c.bench_function("RLWE add element wise collect", |b| {
+    group.bench_function("RLWE add element wise collect", |b| {
         b.iter(|| black_box(&c0).add_element_wise_ref(black_box(&c1)))
     });
 
-    c.bench_function("RLWE sub element wise clone", |b| {
+    group.bench_function("RLWE sub element wise clone", |b| {
         b.iter(|| black_box(&c0).clone().sub_element_wise(black_box(&c1)))
     });
 
-    c.bench_function("RLWE sub element wise collect", |b| {
+    group.bench_function("RLWE sub element wise collect", |b| {
         b.iter(|| black_box(&c0).sub_element_wise_ref(black_box(&c1)))
     });
 
-    c.bench_function("RLWE extract", |b| b.iter(|| black_box(&c0).extract_lwe()));
-
-    c.bench_function("RLWE add inplace element wise", |b| {
+    group.bench_function("RLWE add inplace element wise", |b| {
         b.iter(|| black_box(&mut c0).add_inplace_element_wise(black_box(&c1)))
     });
 
-    c.bench_function("RLWE sub inplace element wise", |b| {
+    group.bench_function("RLWE sub inplace element wise", |b| {
         b.iter(|| black_box(&mut c0).sub_inplace_element_wise(black_box(&c1)))
     });
+
+    group.finish()
 }
 
 criterion_group!(benches, criterion_benchmark);

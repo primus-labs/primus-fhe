@@ -8,7 +8,7 @@ use rand::prelude::*;
 pub struct RR(u32);
 
 #[derive(Ring, Field, Random, Prime, NTT)]
-#[modulus = 1073692673]
+#[modulus = 132120577]
 pub struct FF(u32);
 
 const N: usize = 512;
@@ -27,29 +27,32 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut c0 = <LWE<RR>>::new(a0, b0);
     let c1 = <LWE<RR>>::new(a1, b1);
 
-    c.bench_function("LWE add component wise clone", |b| {
+    let mut group = c.benchmark_group("LWE");
+
+    group.bench_function("LWE add component wise clone", |b| {
         b.iter(|| black_box(&c0).clone().add_component_wise(black_box(&c1)))
     });
 
-    c.bench_function("LWE add component wise collect", |b| {
+    group.bench_function("LWE add component wise collect", |b| {
         b.iter(|| black_box(&c0).add_component_wise_ref(black_box(&c1)))
     });
 
-    c.bench_function("LWE sub component wise clone", |b| {
+    group.bench_function("LWE sub component wise clone", |b| {
         b.iter(|| black_box(&c0).clone().sub_component_wise(black_box(&c1)))
     });
 
-    c.bench_function("LWE sub component wise collect", |b| {
+    group.bench_function("LWE sub component wise collect", |b| {
         b.iter(|| black_box(&c0).sub_component_wise_ref(black_box(&c1)))
     });
 
-    c.bench_function("LWE add inplace component wise", |b| {
+    group.bench_function("LWE add inplace component wise", |b| {
         b.iter(|| black_box(&mut c0).add_inplace_component_wise(black_box(&c1)))
     });
 
-    c.bench_function("LWE sub inplace component wise", |b| {
+    group.bench_function("LWE sub inplace component wise", |b| {
         b.iter(|| black_box(&mut c0).sub_inplace_component_wise(black_box(&c1)))
     });
+    group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark);

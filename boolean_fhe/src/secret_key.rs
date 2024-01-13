@@ -111,7 +111,7 @@ impl<R: RandomRing, F: NTTField> SecretKeyPack<R, F> {
         let lwe_dimension = self.parameters.lwe_dimension();
         let noise_distribution = self.parameters.lwe_noise_distribution();
 
-        let mut csrng = self.csrng.borrow_mut();
+        let mut csrng = self.csrng_mut();
 
         let a: Vec<R> = standard_distribution
             .sample_iter(&mut *csrng)
@@ -144,7 +144,7 @@ impl<R: RandomRing, F: RandomNTTField> SecretKeyPack<R, F> {
 
         let rlwe_dimension = parameters.rlwe_dimension();
         let rlwe_secret_key = Polynomial::random(rlwe_dimension, &mut csrng);
-        let ntt_rlwe_secret_key = rlwe_secret_key.clone().to_ntt_polynomial();
+        let ntt_rlwe_secret_key = rlwe_secret_key.clone().into_ntt_polynomial();
 
         Self {
             lwe_secret_key,

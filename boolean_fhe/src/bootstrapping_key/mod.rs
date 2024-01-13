@@ -1,4 +1,7 @@
-use algebra::{Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring};
+use algebra::{
+    ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
+    Ring,
+};
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
 
 use crate::{
@@ -175,9 +178,9 @@ where
     (0..n)
         .map(|_| {
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let b = &a * rlwe_secret_key
-                + <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
-                    .to_ntt_polynomial();
+            let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
+                .into_ntt_polynomial();
+            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
         .collect()
@@ -199,9 +202,9 @@ where
         .iter()
         .map(|&basis_power| {
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let mut b = &a * rlwe_secret_key
-                + <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
-                    .to_ntt_polynomial();
+            let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
+                .into_ntt_polynomial();
+            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
             b.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
@@ -226,9 +229,9 @@ where
         .iter()
         .map(|&basis_power| {
             let mut a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let b = &a * rlwe_secret_key
-                + <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
-                    .to_ntt_polynomial();
+            let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
+                .into_ntt_polynomial();
+            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
             a.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
