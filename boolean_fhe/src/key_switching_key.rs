@@ -42,7 +42,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
         let mut decompose_space = DecomposeSpace::new(self.lwe_dimension);
 
         self.key.iter().zip(a).for_each(|(k_i, a_i)| {
-            init.sub_gadget_rlwe_mul_polynomial_inplace(k_i, a_i, &mut decompose_space);
+            init.sub_assign_gadget_rlwe_mul_polynomial_inplace(k_i, a_i, &mut decompose_space);
         });
 
         <RLWE<F>>::from(init).extract_lwe()

@@ -97,7 +97,6 @@ impl<F: NTTField> GadgetRLWE<F> {
 
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`],
     /// then add the `rlwe`, return a [`RLWE<F>`].
-    #[inline]
     pub fn mul_polynomial_add_rlwe(&self, polynomial: &Polynomial<F>, rlwe: RLWE<F>) -> RLWE<F> {
         let coeff_count = polynomial.coeff_count();
 
@@ -199,7 +198,6 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
     /// return a [`NTTRLWE<F>`].
-    #[inline]
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> NTTRLWE<F> {
         let coeff_count = polynomial.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());
@@ -222,7 +220,6 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
     /// stores the result into `destination`.
-    #[inline]
     pub fn mul_polynomial_inplace(
         &self,
         polynomial: &Polynomial<F>,

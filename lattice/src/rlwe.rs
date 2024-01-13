@@ -257,7 +257,6 @@ impl<F: NTTField> RLWE<F> {
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
     /// store the result into `destination` [`NTTRLWE<F>`].
-    #[inline]
     pub fn mul_polynomial_inplace_lazy(
         &self,
         polynomial: &mut Polynomial<F>,
@@ -489,7 +488,7 @@ impl<F: NTTField> RLWE<F> {
             median,
         );
 
-        median.add_gadget_rlwe_mul_polynomial_inplace(
+        median.add_assign_gadget_rlwe_mul_polynomial_inplace(
             small_ntt_rgsw.c_m(),
             self.b(),
             decompose_space,
@@ -709,7 +708,7 @@ impl<F: NTTField> NTTRLWE<F> {
     }
 
     /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `polynomial` [`NTTPolynomial<F>`],
-    /// return a [`NTTRLWE<F>`].
+    /// stores the result into `destination`.
     #[inline]
     pub fn mul_ntt_polynomial_inplace(
         &self,
@@ -734,11 +733,11 @@ impl<F: NTTField> NTTRLWE<F> {
     #[inline]
     pub fn add_ntt_rlwe_mul_ntt_polynomial_inplace(
         &mut self,
-        rhs: &NTTRLWE<F>,
+        ntt_rlwe: &NTTRLWE<F>,
         ntt_polynomial: &[F],
     ) {
-        ntt_add_mul_assign_ref(&mut self.a, &rhs.a, ntt_polynomial);
-        ntt_add_mul_assign_ref(&mut self.b, &rhs.b, ntt_polynomial);
+        ntt_add_mul_assign_ref(&mut self.a, &ntt_rlwe.a, ntt_polynomial);
+        ntt_add_mul_assign_ref(&mut self.b, &ntt_rlwe.b, ntt_polynomial);
     }
 
     /// Performs `self + gadget_rlwe * polynomial`.
@@ -752,7 +751,7 @@ impl<F: NTTField> NTTRLWE<F> {
         let mut decompose_space = DecomposeSpace::new(coeff_count);
         let mut polynomial_space = PolynomialSpace::new(coeff_count);
 
-        self.add_gadget_rlwe_mul_polynomial_inplace(
+        self.add_assign_gadget_rlwe_mul_polynomial_inplace(
             gadget_rlwe,
             polynomial,
             &mut decompose_space,
@@ -763,7 +762,7 @@ impl<F: NTTField> NTTRLWE<F> {
 
     /// Performs `self = self + gadget_rlwe * polynomial`.
     #[inline]
-    pub fn add_gadget_rlwe_mul_polynomial_inplace(
+    pub fn add_assign_gadget_rlwe_mul_polynomial_inplace(
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
@@ -785,21 +784,9 @@ impl<F: NTTField> NTTRLWE<F> {
         })
     }
 
-    /// Performs `self - gadget_rlwe * polynomial`.
-    #[inline]
-    pub fn sub_gadget_rlwe_mul_polynomial(
-        mut self,
-        gadget_rlwe: &NTTGadgetRLWE<F>,
-        polynomial: Polynomial<F>,
-    ) -> NTTRLWE<F> {
-        let mut decompose_space = DecomposeSpace::new(polynomial.coeff_count());
-        self.sub_gadget_rlwe_mul_polynomial_inplace(gadget_rlwe, polynomial, &mut decompose_space);
-        self
-    }
-
     /// Performs `self = self - gadget_rlwe * polynomial`.
     #[inline]
-    pub fn sub_gadget_rlwe_mul_polynomial_inplace(
+    pub fn sub_assign_gadget_rlwe_mul_polynomial_inplace(
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: Polynomial<F>,
