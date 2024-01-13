@@ -13,11 +13,11 @@ pub fn dot_product<R: Ring>(u: &[R], v: &[R]) -> R {
 
 /// Pre allocated space for inplace decomposition.
 #[derive(Debug)]
-pub struct DecomposeSpace<F: NTTField> {
+pub struct DecompositionSpace<F: NTTField> {
     space: Polynomial<F>,
 }
 
-impl<F: NTTField> Deref for DecomposeSpace<F> {
+impl<F: NTTField> Deref for DecompositionSpace<F> {
     type Target = Polynomial<F>;
 
     #[inline]
@@ -26,15 +26,15 @@ impl<F: NTTField> Deref for DecomposeSpace<F> {
     }
 }
 
-impl<F: NTTField> DerefMut for DecomposeSpace<F> {
+impl<F: NTTField> DerefMut for DecompositionSpace<F> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.space
     }
 }
 
-impl<F: NTTField> DecomposeSpace<F> {
-    /// Creates a new [`DecomposeSpace<F>`].
+impl<F: NTTField> DecompositionSpace<F> {
+    /// Creates a new [`DecompositionSpace<F>`].
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {

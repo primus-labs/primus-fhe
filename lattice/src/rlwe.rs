@@ -7,7 +7,8 @@ use algebra::{
 use num_traits::Zero;
 
 use crate::{
-    DecomposeSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW, RGSW,
+    DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW,
+    RGSW,
 };
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
@@ -475,7 +476,7 @@ impl<F: NTTField> RLWE<F> {
         &self,
         small_ntt_rgsw: &NTTRGSW<F>,
         // Pre allocate space
-        decompose_space: &mut DecomposeSpace<F>,
+        decompose_space: &mut DecompositionSpace<F>,
         polynomial_space: &mut PolynomialSpace<F>,
         median: &mut NTTRLWESpace<F>,
         // Output destination
@@ -748,7 +749,7 @@ impl<F: NTTField> NTTRLWE<F> {
         polynomial: &Polynomial<F>,
     ) -> NTTRLWE<F> {
         let coeff_count = polynomial.coeff_count();
-        let mut decompose_space = DecomposeSpace::new(coeff_count);
+        let mut decompose_space = DecompositionSpace::new(coeff_count);
         let mut polynomial_space = PolynomialSpace::new(coeff_count);
 
         self.add_assign_gadget_rlwe_mul_polynomial_inplace(
@@ -766,7 +767,7 @@ impl<F: NTTField> NTTRLWE<F> {
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
-        decompose_space: &mut DecomposeSpace<F>,
+        decompose_space: &mut DecompositionSpace<F>,
         polynomial_space: &mut PolynomialSpace<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
@@ -790,7 +791,7 @@ impl<F: NTTField> NTTRLWE<F> {
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: Polynomial<F>,
-        decompose_space: &mut DecomposeSpace<F>,
+        decompose_space: &mut DecompositionSpace<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());

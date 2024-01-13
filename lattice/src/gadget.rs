@@ -2,7 +2,7 @@ use std::slice::{Iter, IterMut};
 
 use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial};
 
-use crate::{DecomposeSpace, PolynomialSpace, NTTRLWE, RLWE};
+use crate::{DecompositionSpace, PolynomialSpace, NTTRLWE, RLWE};
 
 /// A representation of Ring Learning with Errors (RLWE) ciphertexts with respect to different powers
 /// of a base, used to control noise growth in polynomial multiplications.
@@ -80,7 +80,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> RLWE<F> {
         let coeff_count = polynomial.coeff_count();
 
-        let mut decompose_space = DecomposeSpace::new(coeff_count);
+        let mut decompose_space = DecompositionSpace::new(coeff_count);
         let mut polynomial = polynomial.clone();
 
         let mut ntt_rlwe = <NTTRLWE<F>>::zero(coeff_count);
@@ -100,7 +100,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     pub fn mul_polynomial_add_rlwe(&self, polynomial: &Polynomial<F>, rlwe: RLWE<F>) -> RLWE<F> {
         let coeff_count = polynomial.coeff_count();
 
-        let mut decompose_space = DecomposeSpace::new(coeff_count);
+        let mut decompose_space = DecompositionSpace::new(coeff_count);
         let mut polynomial = polynomial.clone();
 
         let mut ntt_rlwe = <NTTRLWE<F>>::from(rlwe);
@@ -203,7 +203,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
-        let mut decompose_space = DecomposeSpace::new(coeff_count);
+        let mut decompose_space = DecompositionSpace::new(coeff_count);
         let mut polynomial = polynomial.clone();
 
         let mut ntt_rlwe = <NTTRLWE<F>>::zero(coeff_count);
@@ -224,7 +224,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         &self,
         polynomial: &Polynomial<F>,
         // Pre allocate space for decomposition
-        decompose_space: &mut DecomposeSpace<F>,
+        decompose_space: &mut DecompositionSpace<F>,
         polynomial_space: &mut PolynomialSpace<F>,
         // Output destination
         destination: &mut NTTRLWE<F>,

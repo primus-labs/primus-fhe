@@ -1,5 +1,5 @@
 use algebra::{Basis, NTTField, Random, RandomNTTField, Ring};
-use lattice::{DecomposeSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
+use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
 use crate::secret_key::NTTRLWESecretKey;
 
@@ -25,7 +25,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
     ) -> RLWE<F> {
-        let decompose_space = &mut DecomposeSpace::new(rlwe_dimension);
+        let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
         let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
         let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);

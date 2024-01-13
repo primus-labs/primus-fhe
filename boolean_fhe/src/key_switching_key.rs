@@ -1,7 +1,7 @@
 use algebra::{
     ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring,
 };
-use lattice::{DecomposeSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
+use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
@@ -37,7 +37,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
             NTTPolynomial::new(vec![ciphertext.b(); self.lwe_dimension]),
         );
 
-        let mut decompose_space = DecomposeSpace::new(self.lwe_dimension);
+        let mut decompose_space = DecompositionSpace::new(self.lwe_dimension);
 
         self.key.iter().zip(a).for_each(|(k_i, a_i)| {
             init.sub_assign_gadget_rlwe_mul_polynomial_inplace(k_i, a_i, &mut decompose_space);
