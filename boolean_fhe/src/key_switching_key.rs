@@ -1,6 +1,5 @@
 use algebra::{
-    ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
-    Ring,
+    ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring,
 };
 use lattice::{DecomposeSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
@@ -14,7 +13,6 @@ use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 pub struct KeySwitchingKey<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
-    key_switching_basis: Basis<F>,
     /// Key Switching Key data
     key: Vec<NTTGadgetRLWE<F>>,
 }
@@ -46,13 +44,6 @@ impl<F: NTTField> KeySwitchingKey<F> {
         });
 
         <RLWE<F>>::from(init).extract_lwe()
-    }
-
-    /// Returns the key switching basis of this [`KeySwitchingKey<F>`],
-    /// which acts as the decompose basis for `Q` used for key switching.
-    #[inline]
-    pub fn key_switching_basis(&self) -> Basis<F> {
-        self.key_switching_basis
     }
 }
 
@@ -116,10 +107,6 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
             })
             .collect();
 
-        Self {
-            lwe_dimension,
-            key,
-            key_switching_basis,
-        }
+        Self { lwe_dimension, key }
     }
 }
