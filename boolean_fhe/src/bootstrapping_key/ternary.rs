@@ -1,9 +1,9 @@
 use algebra::{Basis, NTTField, Random, RandomNTTField, Ring};
-use lattice::{NTTRGSW, RLWE};
+use lattice::{DecomposeSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
 use crate::secret_key::NTTRLWESecretKey;
 
-use super::{ntt_rgsw_one, ntt_rgsw_zero, BootstrappingPreAllocator};
+use super::{ntt_rgsw_one, ntt_rgsw_zero};
 
 #[derive(Debug, Clone)]
 pub struct TernaryBootstrappingKey<F: NTTField> {
@@ -24,9 +24,13 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         lwe_a: &[R],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        pre_allocate: &mut BootstrappingPreAllocator<F>,
     ) -> RLWE<F> {
-        let (decompose_space, ntt_rlwe_space, acc_mul_rgsw, median) = pre_allocate.get_all_mut();
+        let decompose_space = &mut DecomposeSpace::new(rlwe_dimension);
+        let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
+        let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
+        let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);
+        let median = &mut RLWESpace::new(rlwe_dimension);
+
         self.key
             .iter()
             .zip(lwe_a)
@@ -36,6 +40,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                 acc.mul_small_ntt_rgsw_inplace(
                     &s_i.0,
                     decompose_space,
+                    polynomial_space,
                     ntt_rlwe_space,
                     acc_mul_rgsw,
                 );
@@ -54,6 +59,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                 acc.mul_small_ntt_rgsw_inplace(
                     &s_i.1,
                     decompose_space,
+                    polynomial_space,
                     ntt_rlwe_space,
                     acc_mul_rgsw,
                 );

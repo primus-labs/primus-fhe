@@ -21,7 +21,7 @@ pub use parameter::{
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::LWEPlaintext;
 
-pub use bootstrapping_key::{BootstrappingKey, BootstrappingPreAllocator};
+pub use bootstrapping_key::BootstrappingKey;
 pub use evaluation_key::EvaluationKey;
 pub use key_switching_key::KeySwitchingKey;
 pub use secret_key::{LWESecretKey, NTTRLWESecretKey, RLWESecretKey, SecretKeyPack, SecretKeyType};

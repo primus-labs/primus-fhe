@@ -258,13 +258,13 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
                 ret
             }
 
-            fn decompose_at(self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
+            fn decompose_at(self, basis: algebra::Basis<Self>, destination: &mut [Self]) {
                 let mut temp = self.0;
 
                 let mask = basis.mask();
                 let bits = basis.bits();
 
-                for v in dst {
+                for v in destination {
                     if temp == 0 {
                         break;
                     } else {
@@ -282,8 +282,8 @@ fn impl_ring(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
             }
 
             #[inline]
-            fn decompose_lsb_bits_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
-                *dst = Self(self.0 & mask);
+            fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32) {
+                *destination = Self(self.0 & mask);
                 self.0 >>= bits;
             }
 
@@ -404,13 +404,13 @@ fn impl_and_ring(
                 ret
             }
 
-            fn decompose_at(self, basis: algebra::Basis<Self>, dst: &mut [Self]) {
+            fn decompose_at(self, basis: algebra::Basis<Self>, destination: &mut [Self]) {
                 let mut temp = self.0;
 
                 let mask = basis.mask();
                 let bits = basis.bits();
 
-                for v in dst {
+                for v in destination {
                     if temp == 0 {
                         break;
                     } else {
@@ -428,8 +428,8 @@ fn impl_and_ring(
             }
 
             #[inline]
-            fn decompose_lsb_bits_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32) {
-                *dst = Self(self.0 & mask);
+            fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32) {
+                *destination = Self(self.0 & mask);
                 self.0 >>= bits;
             }
 

@@ -2,7 +2,7 @@ use algebra::{
     ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
     Ring,
 };
-use lattice::{NTTGadgetRLWE, NTTRGSW, NTTRLWE, RLWE};
+use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
 
 use crate::{
     ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, SecretKeyPack, SecretKeyType,
@@ -50,23 +50,19 @@ impl<F: NTTField> BootstrappingKey<F> {
         lwe_a: &[R],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        gadget_basis: Basis<F>,
     ) -> RLWE<F> {
-        let mut pre_allocate = BootstrappingPreAllocator::<F>::new(rlwe_dimension, gadget_basis);
         match self {
             BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(
                 init_acc,
                 lwe_a,
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
-                &mut pre_allocate,
             ),
             BootstrappingKey::Ternary(bootstrapping_key) => bootstrapping_key.bootstrapping(
                 init_acc,
                 lwe_a,
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
-                &mut pre_allocate,
             ),
         }
     }
@@ -103,103 +99,6 @@ impl<F: RandomNTTField> BootstrappingKey<F> {
                 rng,
             )),
         }
-    }
-}
-
-/// Pre allocated space for the bootstrapping
-/// to reduce the `allocate` or `free` in the
-/// bootstrapping procedure.
-#[derive(Debug)]
-pub struct BootstrappingPreAllocator<F: NTTField> {
-    decomposed_space: Vec<Polynomial<F>>,
-    ntt_rlwe: NTTRLWE<F>,
-    rlwe_0: RLWE<F>,
-    rlwe_1: RLWE<F>,
-}
-
-impl<F: NTTField> BootstrappingPreAllocator<F> {
-    /// Creates a new [`BootstrappingPreAllocator<F>`].
-    pub fn new(rlwe_dimension: usize, gadget_basis: Basis<F>) -> Self {
-        let decompose_len = gadget_basis.decompose_len();
-
-        let mut decomposed_space = Vec::new();
-        decomposed_space.resize_with(decompose_len, || {
-            <Polynomial<F>>::zero_with_coeff_count(rlwe_dimension)
-        });
-
-        Self {
-            decomposed_space,
-            ntt_rlwe: NTTRLWE::zero(rlwe_dimension),
-            rlwe_0: RLWE::zero(rlwe_dimension),
-            rlwe_1: RLWE::zero(rlwe_dimension),
-        }
-    }
-
-    /// Gets all space's mut reference
-    #[inline]
-    #[allow(clippy::type_complexity)]
-    pub fn get_all_mut(
-        &mut self,
-    ) -> (
-        &mut [Polynomial<F>],
-        &mut NTTRLWE<F>,
-        &mut RLWE<F>,
-        &mut RLWE<F>,
-    ) {
-        (
-            self.decomposed_space.as_mut_slice(),
-            &mut self.ntt_rlwe,
-            &mut self.rlwe_0,
-            &mut self.rlwe_1,
-        )
-    }
-
-    /// Returns a reference to the decompose space of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn decomposed_space(&self) -> &[Polynomial<F>] {
-        self.decomposed_space.as_ref()
-    }
-
-    /// Returns a mutable reference to the decompose space of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn decomposed_space_mut(&mut self) -> &mut [Polynomial<F>] {
-        &mut self.decomposed_space
-    }
-
-    /// Returns a reference to the ntt rlwe of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn ntt_rlwe(&self) -> &NTTRLWE<F> {
-        &self.ntt_rlwe
-    }
-
-    /// Returns a mutable reference to the ntt rlwe of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn ntt_rlwe_mut(&mut self) -> &mut NTTRLWE<F> {
-        &mut self.ntt_rlwe
-    }
-
-    /// Returns a reference to the rlwe 0 of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn rlwe_0(&self) -> &RLWE<F> {
-        &self.rlwe_0
-    }
-
-    /// Returns a mutable reference to the rlwe 0 of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn rlwe_0_mut(&mut self) -> &mut RLWE<F> {
-        &mut self.rlwe_0
-    }
-
-    /// Returns a reference to the rlwe 1 of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn rlwe_1(&self) -> &RLWE<F> {
-        &self.rlwe_1
-    }
-
-    /// Returns a mutable reference to the rlwe 1 of this [`BootstrappingPreAllocator<F>`].
-    #[inline]
-    pub fn rlwe_1_mut(&mut self) -> &mut RLWE<F> {
-        &mut self.rlwe_1
     }
 }
 

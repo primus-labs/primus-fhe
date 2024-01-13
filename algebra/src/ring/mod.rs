@@ -129,10 +129,10 @@ pub trait Ring:
     fn decompose(self, basis: Basis<Self>) -> Vec<Self>;
 
     /// Decompose `self` according to `basis`,
-    /// put the decomposed result into `dst`.
+    /// put the decomposed result into `destination`.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_at(self, basis: Basis<Self>, dst: &mut [Self]);
+    fn decompose_at(self, basis: Basis<Self>, destination: &mut [Self]);
 
     /// Decompose `self` according to `basis`'s `mask` and `bits`,
     /// return the least significant decomposed part.
@@ -141,10 +141,10 @@ pub trait Ring:
     fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self;
 
     /// Decompose `self` according to `basis`'s `mask` and `bits`,
-    /// put the least significant decomposed part into `dst`.
+    /// put the least significant decomposed part into `destination`.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_lsb_bits_at(&mut self, dst: &mut Self, mask: Self::Inner, bits: u32);
+    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32);
 
     /// Return `self * scalar`.
     fn mul_scalar(self, scalar: Self::Inner) -> Self;

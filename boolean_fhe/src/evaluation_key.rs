@@ -46,7 +46,6 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
             c.a(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
-            parameters.gadget_basis(),
         );
 
         let mut extract = acc.extract_lwe();

@@ -1,10 +1,14 @@
+use std::ops::MulAssign;
+
 use algebra::{
-    ntt_add_mul_assign, ntt_add_mul_assign_ref, transformation::AbstractNTT, NTTField,
+    ntt_add_mul_assign_ref, ntt_mul_assign_ref, transformation::AbstractNTT, NTTField,
     NTTPolynomial, Polynomial, Ring,
 };
 use num_traits::Zero;
 
-use crate::{GadgetRLWE, NTTGadgetRLWE, LWE, NTTRGSW, RGSW};
+use crate::{
+    DecomposeSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW, RGSW,
+};
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly
@@ -144,6 +148,30 @@ impl<F: NTTField> RLWE<F> {
         &mut self.b
     }
 
+    /// Extracts a slice of `a` of this [`RLWE<F>`].
+    #[inline]
+    pub fn a_slice(&self) -> &[F] {
+        self.a.as_slice()
+    }
+
+    /// Extracts a mutable slice of `a` of this [`RLWE<F>`].
+    #[inline]
+    pub fn a_mut_slice(&mut self) -> &mut [F] {
+        self.a.as_mut_slice()
+    }
+
+    /// Extracts a slice of `b` of this [`RLWE<F>`].
+    #[inline]
+    pub fn b_slice(&self) -> &[F] {
+        self.b.as_slice()
+    }
+
+    /// Extracts a mutable slice of `b` of this [`RLWE<F>`].
+    #[inline]
+    pub fn b_mut_slice(&mut self) -> &mut [F] {
+        self.b.as_mut_slice()
+    }
+
     /// Perform element-wise addition of two [`RLWE<F>`].
     ///
     /// # Attention
@@ -216,15 +244,40 @@ impl<F: NTTField> RLWE<F> {
         self.b -= rhs.b();
     }
 
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `poly` [`Polynomial<F>`],
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
     /// return a [`RLWE<F>`].
     #[inline]
-    pub fn mul_polynomial(&self, poly: Polynomial<F>) -> Self {
-        let ntt_poly = <NTTPolynomial<F>>::from(poly);
+    pub fn mul_polynomial(&self, polynomial: Polynomial<F>) -> Self {
+        let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
         Self {
-            a: self.a() * &ntt_poly,
-            b: self.b() * ntt_poly,
+            a: self.a() * &ntt_polynomial,
+            b: self.b() * ntt_polynomial,
         }
+    }
+
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
+    /// store the result into `destination` [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mul_polynomial_inplace_lazy(
+        &self,
+        polynomial: &mut Polynomial<F>,
+        destination: &mut NTTRLWE<F>,
+    ) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+
+        let log_n = coeff_count.trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+
+        destination.a_mut_slice().copy_from_slice(self.a_slice());
+        destination.b_mut_slice().copy_from_slice(self.b_slice());
+
+        ntt_table.transform_slice(polynomial.as_mut_slice());
+        ntt_table.transform_slice(destination.a_mut_slice());
+        ntt_table.transform_slice(destination.b_mut_slice());
+
+        ntt_mul_assign_ref(destination.a_mut_slice(), &*polynomial);
+        ntt_mul_assign_ref(destination.b_mut_slice(), &*polynomial);
     }
 
     /// Performs `self + gadget_rlwe * polynomial`.
@@ -234,8 +287,7 @@ impl<F: NTTField> RLWE<F> {
         gadget_rlwe: &GadgetRLWE<F>,
         polynomial: &Polynomial<F>,
     ) -> RLWE<F> {
-        let decomposed = polynomial.clone().decompose(gadget_rlwe.basis());
-        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
+        gadget_rlwe.mul_polynomial_add_rlwe(polynomial, self)
     }
 
     /// Extract an LWE sample from RLWE.
@@ -300,7 +352,7 @@ impl<F: NTTField> RLWE<F> {
         // 2N/q
         twice_rlwe_dimension_div_lwe_modulus: usize,
         r: R,
-        dst: &mut RLWE<F>,
+        destination: &mut RLWE<F>,
     ) {
         let r = r.cast_into_usize() * twice_rlwe_dimension_div_lwe_modulus;
         if r <= rlwe_dimension {
@@ -309,10 +361,10 @@ impl<F: NTTField> RLWE<F> {
                 src: &Polynomial<F>,
                 r: usize,
                 n_sub_r: usize,
-                dst: &mut Polynomial<F>,
+                destination: &mut Polynomial<F>,
             ) {
                 let src = src.as_slice();
-                let dst = dst.as_mut_slice();
+                let dst = destination.as_mut_slice();
                 dst[0..r]
                     .iter_mut()
                     .zip(&src[n_sub_r..])
@@ -324,18 +376,18 @@ impl<F: NTTField> RLWE<F> {
             }
 
             let n_sub_r = rlwe_dimension - r;
-            rotate(&self.a, r, n_sub_r, &mut dst.a);
-            rotate(&self.b, r, n_sub_r, &mut dst.b);
+            rotate(&self.a, r, n_sub_r, &mut destination.a);
+            rotate(&self.b, r, n_sub_r, &mut destination.b);
         } else {
             #[inline]
             fn rotate<F: NTTField>(
                 src: &Polynomial<F>,
                 r: usize,
                 n_sub_r: usize,
-                dst: &mut Polynomial<F>,
+                destination: &mut Polynomial<F>,
             ) {
                 let src = src.as_slice();
-                let dst = dst.as_mut_slice();
+                let dst = destination.as_mut_slice();
                 dst[0..r]
                     .iter_mut()
                     .zip(&src[n_sub_r..])
@@ -348,8 +400,8 @@ impl<F: NTTField> RLWE<F> {
 
             let r = r - rlwe_dimension;
             let n_sub_r = rlwe_dimension - r;
-            rotate(&self.a, r, n_sub_r, &mut dst.a);
-            rotate(&self.b, r, n_sub_r, &mut dst.b);
+            rotate(&self.a, r, n_sub_r, &mut destination.a);
+            rotate(&self.b, r, n_sub_r, &mut destination.b);
         }
     }
 
@@ -376,15 +428,15 @@ impl<F: NTTField> RLWE<F> {
         // 2N/q
         twice_rlwe_dimension_div_lwe_modulus: usize,
         r: R,
-        dst: &mut RLWE<F>,
+        destination: &mut RLWE<F>,
     ) {
         self.mul_monic_monomial_inplace(
             rlwe_dimension,
             twice_rlwe_dimension_div_lwe_modulus,
             r,
-            dst,
+            destination,
         );
-        dst.sub_inplace_element_wise(self);
+        destination.sub_inplace_element_wise(self);
     }
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_rgsw` [`RGSW<F>`],
@@ -415,7 +467,7 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
-    /// output the [`RLWE<F>`] result into `dst`.
+    /// output the [`RLWE<F>`] result into `destination`.
     ///
     /// # Attention
     /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
@@ -423,28 +475,28 @@ impl<F: NTTField> RLWE<F> {
     pub fn mul_small_ntt_rgsw_inplace(
         &self,
         small_ntt_rgsw: &NTTRGSW<F>,
-        // Pre allocate space for decomposition
-        decompose_space: &mut [Polynomial<F>],
-        // Pre allocate space for ntt rlwe
-        ntt_rlwe_space: &mut NTTRLWE<F>,
+        // Pre allocate space
+        decompose_space: &mut DecomposeSpace<F>,
+        polynomial_space: &mut PolynomialSpace<F>,
+        median: &mut NTTRLWESpace<F>,
         // Output destination
-        dst: &mut RLWE<F>,
+        destination: &mut RLWE<F>,
     ) {
         small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace(
             self.a(),
             decompose_space,
-            ntt_rlwe_space,
-            dst.a_mut(),
+            polynomial_space,
+            median,
         );
 
-        ntt_rlwe_space.add_gadget_rlwe_mul_polynomial_inplace(
+        median.add_gadget_rlwe_mul_polynomial_inplace(
             small_ntt_rgsw.c_m(),
             self.b(),
             decompose_space,
-            dst.a_mut(),
+            polynomial_space,
         );
 
-        ntt_rlwe_space.inverse_transform_inplace(dst)
+        median.inverse_transform_inplace(destination)
     }
 }
 
@@ -521,23 +573,22 @@ impl<F: NTTField> NTTRLWE<F> {
     }
 
     /// ntt inverse transform
-    pub fn inverse_transform_inplace(&self, dst: &mut RLWE<F>) {
-        let coeff_count = dst.a.coeff_count();
+    pub fn inverse_transform_inplace(&self, destination: &mut RLWE<F>) {
+        let coeff_count = destination.a.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
-        dst.a_mut()
-            .iter_mut()
-            .zip(self.a())
-            .for_each(|(x, &y)| *x = y);
+        destination
+            .a_mut()
+            .as_mut_slice()
+            .copy_from_slice(self.a.as_slice());
+        destination
+            .b_mut()
+            .as_mut_slice()
+            .copy_from_slice(self.b.as_slice());
 
-        dst.b_mut()
-            .iter_mut()
-            .zip(self.b())
-            .for_each(|(x, &y)| *x = y);
-
-        ntt_table.inverse_transform_slice(dst.a_mut().as_mut_slice());
-        ntt_table.inverse_transform_slice(dst.b_mut().as_mut_slice());
+        ntt_table.inverse_transform_slice(destination.a_mut().as_mut_slice());
+        ntt_table.inverse_transform_slice(destination.b_mut().as_mut_slice());
     }
 
     /// Returns a reference to the a of this [`NTTRLWE<F>`].
@@ -562,6 +613,30 @@ impl<F: NTTField> NTTRLWE<F> {
     #[inline]
     pub fn b_mut(&mut self) -> &mut NTTPolynomial<F> {
         &mut self.b
+    }
+
+    /// Extracts a slice of `a` of this [`RLWE<F>`].
+    #[inline]
+    pub fn a_slice(&self) -> &[F] {
+        self.a.as_slice()
+    }
+
+    /// Extracts a mutable slice of `a` of this [`RLWE<F>`].
+    #[inline]
+    pub fn a_mut_slice(&mut self) -> &mut [F] {
+        self.a.as_mut_slice()
+    }
+
+    /// Extracts a slice of `b` of this [`RLWE<F>`].
+    #[inline]
+    pub fn b_slice(&self) -> &[F] {
+        self.b.as_slice()
+    }
+
+    /// Extracts a mutable slice of `b` of this [`RLWE<F>`].
+    #[inline]
+    pub fn b_mut_slice(&mut self) -> &mut [F] {
+        self.b.as_mut_slice()
     }
 
     /// Perform element-wise addition of two [`NTTRLWE<F>`].
@@ -610,28 +685,58 @@ impl<F: NTTField> NTTRLWE<F> {
         }
     }
 
-    /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `polynomial` [`Polynomial<F>`],
-    /// return a [`NTTRLWE<F>`].
+    /// Performs an in-place element-wise addition
+    /// on the `self` [`NTTRLWE<F>`] with another `rhs` [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_polynomial(&self, polynomial: Polynomial<F>) -> NTTRLWE<F> {
-        let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
-        NTTRLWE {
-            a: &self.a * &ntt_polynomial,
-            b: &self.b * ntt_polynomial,
-        }
+    pub fn add_element_wise_assign(&mut self, rhs: &Self) {
+        self.a += rhs.a();
+        self.b += rhs.b();
     }
 
-    /// Performs `self = self + ntt_rlwe * polynomial`.
+    /// Performs an in-place element-wise subtraction
+    /// on the `self` [`NTTRLWE<F>`] with another `rhs` [`NTTRLWE<F>`].
     #[inline]
-    pub fn add_rlwe_mul_polynomial_inplace(&mut self, rhs: &NTTRLWE<F>, polynomial: Polynomial<F>) {
-        let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
-        ntt_add_mul_assign_ref(&mut self.a, &rhs.a, &ntt_polynomial);
-        ntt_add_mul_assign(&mut self.b, &rhs.b, ntt_polynomial);
+    pub fn sub_element_wise_assign(&mut self, rhs: &Self) {
+        self.a -= rhs.a();
+        self.b -= rhs.b();
+    }
+
+    /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn mul_ntt_polynomial_assign(&mut self, ntt_polynomial: &NTTPolynomial<F>) {
+        self.a.mul_assign(ntt_polynomial);
+        self.b.mul_assign(ntt_polynomial);
+    }
+
+    /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `polynomial` [`NTTPolynomial<F>`],
+    /// return a [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mul_ntt_polynomial_inplace(
+        &self,
+        ntt_polynomial: &NTTPolynomial<F>,
+        destination: &mut NTTRLWE<F>,
+    ) {
+        destination
+            .a_mut_slice()
+            .iter_mut()
+            .zip(self.a())
+            .zip(ntt_polynomial)
+            .for_each(|((x, &y), z)| *x = y * z);
+        destination
+            .b_mut_slice()
+            .iter_mut()
+            .zip(self.b())
+            .zip(ntt_polynomial)
+            .for_each(|((x, &y), z)| *x = y * z);
     }
 
     /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
     #[inline]
-    pub fn add_rlwe_mul_ntt_polynomial_inplace(&mut self, rhs: &NTTRLWE<F>, ntt_polynomial: &[F]) {
+    pub fn add_ntt_rlwe_mul_ntt_polynomial_inplace(
+        &mut self,
+        rhs: &NTTRLWE<F>,
+        ntt_polynomial: &[F],
+    ) {
         ntt_add_mul_assign_ref(&mut self.a, &rhs.a, ntt_polynomial);
         ntt_add_mul_assign_ref(&mut self.b, &rhs.b, ntt_polynomial);
     }
@@ -639,12 +744,21 @@ impl<F: NTTField> NTTRLWE<F> {
     /// Performs `self + gadget_rlwe * polynomial`.
     #[inline]
     pub fn add_gadget_rlwe_mul_polynomial(
-        self,
+        mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
     ) -> NTTRLWE<F> {
-        let decomposed = polynomial.clone().decompose(gadget_rlwe.basis());
-        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
+        let coeff_count = polynomial.coeff_count();
+        let mut decompose_space = DecomposeSpace::new(coeff_count);
+        let mut polynomial_space = PolynomialSpace::new(coeff_count);
+
+        self.add_gadget_rlwe_mul_polynomial_inplace(
+            gadget_rlwe,
+            polynomial,
+            &mut decompose_space,
+            &mut polynomial_space,
+        );
+        self
     }
 
     /// Performs `self = self + gadget_rlwe * polynomial`.
@@ -653,39 +767,34 @@ impl<F: NTTField> NTTRLWE<F> {
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
-        decompose_space: &mut [Polynomial<F>],
-        polynomial_space: &mut Polynomial<F>,
+        decompose_space: &mut DecomposeSpace<F>,
+        polynomial_space: &mut PolynomialSpace<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
+        debug_assert_eq!(coeff_count, polynomial_space.coeff_count());
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+        let basis = gadget_rlwe.basis();
 
-        polynomial_space
-            .iter_mut()
-            .zip(polynomial)
-            .for_each(|(x, &y)| *x = y);
+        polynomial_space.copy_from_polynomial(polynomial);
 
-        polynomial_space.decompose_inplace(gadget_rlwe.basis(), decompose_space);
-
-        gadget_rlwe
-            .iter()
-            .zip(decompose_space)
-            .for_each(|(g, d_p)| {
-                let d_s = d_p.as_mut_slice();
-                ntt_table.transform_slice(d_s);
-                self.add_rlwe_mul_ntt_polynomial_inplace(g, d_s);
-            });
+        gadget_rlwe.iter().for_each(|g| {
+            polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_inplace(g, decompose_space.as_mut_slice());
+        })
     }
 
     /// Performs `self - gadget_rlwe * polynomial`.
     #[inline]
     pub fn sub_gadget_rlwe_mul_polynomial(
-        self,
+        mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: Polynomial<F>,
     ) -> NTTRLWE<F> {
-        let decomposed = (-polynomial).decompose(gadget_rlwe.basis());
-        gadget_rlwe.mul_decomposed_polynomial_add_rlwe(decomposed, self)
+        let mut decompose_space = DecomposeSpace::new(polynomial.coeff_count());
+        self.sub_gadget_rlwe_mul_polynomial_inplace(gadget_rlwe, polynomial, &mut decompose_space);
+        self
     }
 
     /// Performs `self = self - gadget_rlwe * polynomial`.
@@ -694,21 +803,20 @@ impl<F: NTTField> NTTRLWE<F> {
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: Polynomial<F>,
-        decompose_space: &mut [Polynomial<F>],
+        decompose_space: &mut DecomposeSpace<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+        let decompose_space = decompose_space.get_mut();
+        let basis = gadget_rlwe.basis();
 
-        (-polynomial).decompose_inplace(gadget_rlwe.basis(), decompose_space);
+        let mut polynomial = -polynomial;
 
-        gadget_rlwe
-            .iter()
-            .zip(decompose_space)
-            .for_each(|(g, d_p)| {
-                let d_s = d_p.as_mut_slice();
-                ntt_table.transform_slice(d_s);
-                self.add_rlwe_mul_ntt_polynomial_inplace(g, d_s);
-            });
+        gadget_rlwe.iter().for_each(|g| {
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_inplace(g, decompose_space.as_mut_slice());
+        })
     }
 }

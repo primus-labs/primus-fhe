@@ -1,9 +1,9 @@
 use algebra::{Basis, NTTField, Random, RandomNTTField, Ring};
-use lattice::{NTTRGSW, RLWE};
+use lattice::{DecomposeSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
 use crate::secret_key::NTTRLWESecretKey;
 
-use super::{ntt_rgsw_one, ntt_rgsw_zero, BootstrappingPreAllocator};
+use super::{ntt_rgsw_one, ntt_rgsw_zero};
 
 #[derive(Debug, Clone)]
 pub struct BinaryBootstrappingKey<F: NTTField> {
@@ -24,15 +24,25 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
         lwe_a: &[R],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        pre_allocate: &mut BootstrappingPreAllocator<F>,
     ) -> RLWE<F> {
-        let (decompose_space, ntt_rlwe_space, acc_mul_rgsw, median) = pre_allocate.get_all_mut();
+        let decompose_space = &mut DecomposeSpace::new(rlwe_dimension);
+        let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
+        let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
+        let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);
+        let median = &mut RLWESpace::new(rlwe_dimension);
+
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |acc, (s_i, &a_i)| {
                 // acc_mul_rgsw = ACC * RGSW(s_i)
-                acc.mul_small_ntt_rgsw_inplace(s_i, decompose_space, ntt_rlwe_space, acc_mul_rgsw);
+                acc.mul_small_ntt_rgsw_inplace(
+                    s_i,
+                    decompose_space,
+                    polynomial_space,
+                    ntt_rlwe_space,
+                    acc_mul_rgsw,
+                );
                 // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i)
                 acc_mul_rgsw.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,

@@ -220,13 +220,13 @@ impl<F: NTTField> Polynomial<F> {
     /// # Attention
     ///
     /// **`self`** will be a **zero** polynomial *after* performing this decomposition.
-    pub fn decompose_inplace(&mut self, basis: Basis<F>, dst: &mut [Self]) {
-        assert_eq!(dst.len(), basis.decompose_len());
+    pub fn decompose_inplace(&mut self, basis: Basis<F>, destination: &mut [Self]) {
+        assert_eq!(destination.len(), basis.decompose_len());
 
         let mask = basis.mask();
         let bits = basis.bits();
 
-        dst.iter_mut().for_each(|d_poly| {
+        destination.iter_mut().for_each(|d_poly| {
             debug_assert_eq!(d_poly.coeff_count(), self.coeff_count());
             d_poly
                 .into_iter()
@@ -234,6 +234,21 @@ impl<F: NTTField> Polynomial<F> {
                 .for_each(|(d_i, p_i)| {
                     p_i.decompose_lsb_bits_at(d_i, mask, bits);
                 })
+        });
+    }
+
+    /// Decompose `self` according to `basis`.
+    ///
+    /// # Attention
+    ///
+    /// **`self`** will be modified *after* performing this decomposition.
+    pub fn decompose_lsb_bits_inplace(&mut self, basis: Basis<F>, destination: &mut Self) {
+        debug_assert_eq!(destination.coeff_count(), self.coeff_count());
+        let mask = basis.mask();
+        let bits = basis.bits();
+
+        destination.into_iter().zip(self).for_each(|(d_i, p_i)| {
+            p_i.decompose_lsb_bits_at(d_i, mask, bits);
         });
     }
 }

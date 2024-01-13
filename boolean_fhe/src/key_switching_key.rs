@@ -1,7 +1,8 @@
 use algebra::{
-    ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring,
+    ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
+    Ring,
 };
-use lattice::{NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
+use lattice::{DecomposeSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
@@ -13,6 +14,7 @@ use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 pub struct KeySwitchingKey<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
+    key_switching_basis: Basis<F>,
     /// Key Switching Key data
     key: Vec<NTTGadgetRLWE<F>>,
 }
@@ -37,19 +39,20 @@ impl<F: NTTField> KeySwitchingKey<F> {
             NTTPolynomial::new(vec![ciphertext.b(); self.lwe_dimension]),
         );
 
-        let basis = self.key[0].basis();
-        let decompose_len = basis.decompose_len();
-
-        let mut decompose_space = Vec::new();
-        decompose_space.resize_with(decompose_len, || {
-            <Polynomial<F>>::zero_with_coeff_count(self.lwe_dimension)
-        });
+        let mut decompose_space = DecomposeSpace::new(self.lwe_dimension);
 
         self.key.iter().zip(a).for_each(|(k_i, a_i)| {
             init.sub_gadget_rlwe_mul_polynomial_inplace(k_i, a_i, &mut decompose_space);
         });
 
         <RLWE<F>>::from(init).extract_lwe()
+    }
+
+    /// Returns the key switching basis of this [`KeySwitchingKey<F>`],
+    /// which acts as the decompose basis for `Q` used for key switching.
+    #[inline]
+    pub fn key_switching_basis(&self) -> Basis<F> {
+        self.key_switching_basis
     }
 }
 
@@ -113,6 +116,10 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
             })
             .collect();
 
-        Self { lwe_dimension, key }
+        Self {
+            lwe_dimension,
+            key,
+            key_switching_basis,
+        }
     }
 }
