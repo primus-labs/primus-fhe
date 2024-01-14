@@ -47,11 +47,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("RLWE add inplace element wise", |b| {
-        b.iter(|| black_box(&mut c0).add_inplace_element_wise(black_box(&c1)))
+        b.iter(|| black_box(&mut c0).add_assign_element_wise(black_box(&c1)))
     });
 
     group.bench_function("RLWE sub inplace element wise", |b| {
-        b.iter(|| black_box(&mut c0).sub_inplace_element_wise(black_box(&c1)))
+        b.iter(|| black_box(&mut c0).sub_assign_element_wise(black_box(&c1)))
     });
 
     group.finish()

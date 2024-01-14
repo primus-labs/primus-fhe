@@ -532,7 +532,7 @@ pub fn ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
 }
 
 /// Performs enrty-wise add_mul operation.
-/// 
+///
 /// Treats three iterators as [`NTTPolynomial<F>`]'s iterators,
 /// then multiply enrty-wise over last two iterators, and add back to the first
 /// iterator.
@@ -555,7 +555,7 @@ pub fn ntt_add_mul_assign<
 }
 
 /// Performs enrty-wise add_mul operation.
-/// 
+///
 /// Treats three iterators as [`NTTPolynomial<F>`]'s iterators,
 /// then multiply enrty-wise over last two iterators, and add back to the first
 /// iterator.

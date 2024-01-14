@@ -29,12 +29,11 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
         let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
         let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);
-        let median = &mut RLWESpace::new(rlwe_dimension);
 
         self.key
             .iter()
             .zip(lwe_a)
-            .fold(init_acc, |acc, (s_i, &a_i)| {
+            .fold(init_acc, |mut acc, (s_i, &a_i)| {
                 // acc_mul_rgsw = ACC * RGSW(s_i)
                 acc.mul_small_ntt_rgsw_inplace(
                     s_i,
@@ -43,15 +42,17 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
                     ntt_rlwe_space,
                     acc_mul_rgsw,
                 );
-                // median = (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                acc_mul_rgsw.mul_monic_monomial_sub_one_inplace(
+                // ACC = ACC - ACC * RGSW(s_i)
+                acc.sub_assign_element_wise(acc_mul_rgsw);
+                // ACC = ACC - ACC * RGSW(s_i) + Y^{-a_i} * ACC * RGSW(s_i)
+                //     = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
+                acc.add_assign_rhs_mul_monic_monomial(
+                    acc_mul_rgsw,
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     -a_i,
-                    median,
                 );
-                // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                acc.add_element_wise(median)
+                acc
             })
     }
 }
