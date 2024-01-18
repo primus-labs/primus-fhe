@@ -3,6 +3,8 @@
 
 //! This library contains an implementation of a fully homomorphic encryption scheme.
 
+mod error;
+
 mod parameter;
 
 mod ciphertext;
@@ -12,6 +14,8 @@ mod bootstrapping_key;
 mod evaluation_key;
 mod key_switching_key;
 mod secret_key;
+
+pub use error::FHEError;
 
 pub use parameter::{
     ConstParameters, DefaultField100, DefaultRing100, Parameters,

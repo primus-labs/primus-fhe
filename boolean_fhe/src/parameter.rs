@@ -3,7 +3,7 @@ use algebra::{derive::*, Basis, NTTField, Random, RandomNTTField, RandomRing, Ri
 use num_traits::cast;
 use once_cell::sync::Lazy;
 
-use crate::SecretKeyType;
+use crate::{FHEError, SecretKeyType};
 
 /// The parameters of the fully homomorphic encryption scheme.
 ///
@@ -68,15 +68,18 @@ pub struct Parameters<R: Ring, F: NTTField> {
     key_switching_basis: Basis<F>,
 }
 
-impl<R: Ring, F: NTTField, Scalar> From<ConstParameters<Scalar>> for Parameters<R, F>
+impl<R: Ring, F: NTTField, Scalar> TryFrom<ConstParameters<Scalar>> for Parameters<R, F>
 where
     R::Inner: std::cmp::PartialEq<Scalar>,
     F::Inner: std::cmp::PartialEq<Scalar>,
     Scalar: std::fmt::Debug,
 {
-    fn from(parameters: ConstParameters<Scalar>) -> Self {
+    type Error = FHEError;
+
+    fn try_from(parameters: ConstParameters<Scalar>) -> Result<Self, FHEError> {
         assert_eq!(R::modulus_value(), parameters.lwe_modulus);
         assert_eq!(F::modulus_value(), parameters.rlwe_modulus);
+
         Self::new(
             parameters.lwe_dimension,
             parameters.rlwe_dimension,
@@ -99,9 +102,37 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         key_switching_basis_bits: u32,
         lwe_noise_std_dev: f64,
         rlwe_noise_std_dev: f64,
-    ) -> Self {
+    ) -> Result<Self, FHEError> {
+        if !lwe_dimension.is_power_of_two() {
+            return Err(FHEError::LweDimensionUnValid(lwe_dimension));
+        }
+        // N = 2^i
+        if !rlwe_dimension.is_power_of_two() {
+            return Err(FHEError::RlweDimensionUnValid(rlwe_dimension));
+        }
+
         let lwe_modulus = R::modulus_value();
         let rlwe_modulus = F::modulus_value();
+
+        // q|2N
+        let lwe_modulus_u = cast::<<R as Ring>::Inner, usize>(lwe_modulus).unwrap();
+        let twice_rlwe_dimension_div_lwe_modulus = (rlwe_dimension << 1) / lwe_modulus_u;
+        if twice_rlwe_dimension_div_lwe_modulus * lwe_modulus_u != (rlwe_dimension << 1) {
+            return Err(FHEError::LweModulusRlweDimensionNotCompatible {
+                lwe_modulus: lwe_modulus_u,
+                rlwe_dimension,
+            });
+        }
+
+        // 2N|(Q-1)
+        let rlwe_modulus_u = cast::<<F as Ring>::Inner, usize>(rlwe_modulus).unwrap();
+        let temp = (rlwe_modulus_u - 1) / (rlwe_dimension << 1);
+        if temp * (rlwe_dimension << 1) != (rlwe_modulus_u - 1) {
+            return Err(FHEError::RLweModulusRlweDimensionNotCompatible {
+                rlwe_modulus: rlwe_modulus_u,
+                rlwe_dimension,
+            });
+        }
 
         let gadget_basis = <Basis<F>>::new(gadget_basis_bits);
         let bf = gadget_basis.basis();
@@ -115,7 +146,7 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
 
         let key_switching_basis = <Basis<F>>::new(key_switching_basis_bits);
 
-        Self {
+        Ok(Self {
             lwe_dimension,
             lwe_modulus,
             lwe_noise_std_dev,
@@ -127,14 +158,13 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
 
             lwe_modulus_f64: cast::<<R as Ring>::Inner, f64>(lwe_modulus).unwrap(),
             rlwe_modulus_f64: cast::<<F as Ring>::Inner, f64>(rlwe_modulus).unwrap(),
-            twice_rlwe_dimension_div_lwe_modulus: (rlwe_dimension << 1)
-                / cast::<<R as Ring>::Inner, usize>(lwe_modulus).unwrap(),
+            twice_rlwe_dimension_div_lwe_modulus,
 
             gadget_basis,
             gadget_basis_powers,
 
             key_switching_basis,
-        }
+        })
     }
 
     /// Returns the lwe dimension of this [`Parameters<R, F>`], refers to **`n`** in the paper.
@@ -260,5 +290,6 @@ pub const CONST_DEFAULT_100_BITS_PARAMERTERS: ConstParameters<u32> = ConstParame
 /// Default 100bits security Parameters
 pub static DEFAULT_100_BITS_PARAMERTERS: Lazy<Parameters<DefaultRing100, DefaultField100>> =
     Lazy::new(|| {
-        <Parameters<DefaultRing100, DefaultField100>>::from(CONST_DEFAULT_100_BITS_PARAMERTERS)
+        <Parameters<DefaultRing100, DefaultField100>>::try_from(CONST_DEFAULT_100_BITS_PARAMERTERS)
+            .unwrap()
     });
