@@ -61,12 +61,12 @@ impl<R: Ring, F: RandomNTTField> EvaluationKey<R, F> {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<R, F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();
-
         let parameters = secret_key_pack.parameters();
-        let chi = parameters.rlwe_noise_distribution();
 
+        let chi = parameters.rlwe_noise_distribution();
         let bootstrapping_key = BootstrappingKey::generate(secret_key_pack, chi, &mut *csrng);
 
+        let chi = parameters.key_switching_noise_distribution();
         let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
 
         Self {
