@@ -12,7 +12,7 @@ pub struct Fp32(u32);
 mod tests {
     use super::*;
 
-    use algebra::modulus::Modulus;
+    use algebra::modulus::BarrettModulus;
     use algebra::reduce::*;
     use algebra::Basis;
     use algebra::ModulusConfig;
@@ -73,7 +73,7 @@ mod tests {
         // div
         let a = rng.sample(distr);
         let b = rng.sample(distr);
-        let b_inv = b.pow_reduce(p - 2, &Modulus::<T>::new(p));
+        let b_inv = b.pow_reduce(p - 2, &BarrettModulus::<T>::new(p));
         let c = ((a as W * b_inv as W) % p as W) as T;
         assert_eq!(FF::new(a) / FF::new(b), FF::new(c));
 
@@ -89,7 +89,7 @@ mod tests {
 
         // inv
         let a = rng.sample(distr);
-        let a_inv = a.pow_reduce(p - 2, &Modulus::<T>::new(p));
+        let a_inv = a.pow_reduce(p - 2, &BarrettModulus::<T>::new(p));
         assert_eq!(FF::new(a).inv(), FF::new(a_inv));
         assert_eq!(FF::new(a) * FF::new(a_inv), FF::ONE);
 

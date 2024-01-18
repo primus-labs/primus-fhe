@@ -184,8 +184,8 @@ pub(crate) fn pow_and_ops(
 pub(crate) fn barrett(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
         impl algebra::ModulusConfig for #name {
-            type Modulus = algebra::modulus::Modulus<#field_ty>;
-            const MODULUS: algebra::modulus::Modulus<#field_ty> = algebra::modulus::Modulus::<#field_ty>::new(#modulus);
+            type Modulus = algebra::modulus::BarrettModulus<#field_ty>;
+            const MODULUS: Self::Modulus = Self::Modulus::new(#modulus);
         }
     }
 }

@@ -1,6 +1,6 @@
 use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, thread_rng, SeedableRng};
 
-use crate::modulus::Modulus;
+use crate::modulus::BarrettModulus;
 use crate::reduce::{PowReduce, Reduce};
 use crate::Widening;
 
@@ -15,8 +15,8 @@ pub trait Prime {
 }
 
 macro_rules! impl_prime_check {
-    (impl Prime for Modulus<$SelfT:ty>; PRIME_BIT_MASK = $Mask:expr) => {
-        impl Prime for Modulus<$SelfT> {
+    (impl Prime for BarrettModulus<$SelfT:ty>; PRIME_BIT_MASK = $Mask:expr) => {
+        impl Prime for BarrettModulus<$SelfT> {
             fn probably_prime(&self, rounds: usize) -> bool {
                 /// Records the primes < 64.
                 const PRIME_BIT_MASK: u64 = $Mask;
@@ -90,7 +90,7 @@ macro_rules! impl_prime_check {
     };
 }
 
-impl_prime_check!(impl Prime for Modulus<u64>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for BarrettModulus<u64>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
@@ -110,7 +110,7 @@ impl_prime_check!(impl Prime for Modulus<u64>; PRIME_BIT_MASK = 1 << 2
 | 1 << 61
 );
 
-impl_prime_check!(impl Prime for Modulus<u32>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for BarrettModulus<u32>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
@@ -123,7 +123,7 @@ impl_prime_check!(impl Prime for Modulus<u32>; PRIME_BIT_MASK = 1 << 2
 | 1 << 31
 );
 
-impl_prime_check!(impl Prime for Modulus<u16>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for BarrettModulus<u16>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
@@ -131,7 +131,7 @@ impl_prime_check!(impl Prime for Modulus<u16>; PRIME_BIT_MASK = 1 << 2
 | 1 << 13
 );
 
-impl_prime_check!(impl Prime for Modulus<u8>; PRIME_BIT_MASK = 1 << 2
+impl_prime_check!(impl Prime for BarrettModulus<u8>; PRIME_BIT_MASK = 1 << 2
 | 1 << 3
 | 1 << 5
 | 1 << 7
@@ -163,7 +163,7 @@ mod tests {
 
         for _ in 0..5 {
             let m = r.gen_range(2..=(u64::MAX >> 2));
-            let modulus = Modulus::<u64>::new(m);
+            let modulus = BarrettModulus::<u64>::new(m);
             let is_prime = modulus.probably_prime(20);
             assert_eq!(is_prime, simple_prime_test(m));
         }

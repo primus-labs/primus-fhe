@@ -1,7 +1,7 @@
 macro_rules! impl_prime_modulus {
-    (impl Modulus<$SelfT:ty>; WideType: $WideT:ty) => {
-        impl Modulus<$SelfT> {
-            /// Creates a [`Modulus<T>`] instance.
+    (impl BarrettModulus<$SelfT:ty>; WideType: $WideT:ty) => {
+        impl BarrettModulus<$SelfT> {
+            /// Creates a [`BarrettModulus<T>`] instance.
             ///
             /// - `value`: The value of the modulus.
             ///
@@ -71,7 +71,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::reduce::Reduce<&Modulus<$SelfT>> for $SelfT {
+        impl crate::reduce::Reduce<&BarrettModulus<$SelfT>> for $SelfT {
             type Output = Self;
 
             /// Caculates `self (mod modulus)`.
@@ -98,7 +98,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce(self, modulus: &Modulus<$SelfT>) -> Self::Output {
+            fn reduce(self, modulus: &BarrettModulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -130,7 +130,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::reduce::Reduce<&Modulus<$SelfT>> for [$SelfT; 2] {
+        impl crate::reduce::Reduce<&BarrettModulus<$SelfT>> for [$SelfT; 2] {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)`.
@@ -157,7 +157,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce(self, modulus: &Modulus<$SelfT>) -> Self::Output {
+            fn reduce(self, modulus: &BarrettModulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -200,7 +200,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::reduce::Reduce<&Modulus<$SelfT>> for ($SelfT, $SelfT) {
+        impl crate::reduce::Reduce<&BarrettModulus<$SelfT>> for ($SelfT, $SelfT) {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)`.
@@ -227,7 +227,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce(self, modulus: &Modulus<$SelfT>) -> Self::Output {
+            fn reduce(self, modulus: &BarrettModulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -270,11 +270,11 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::reduce::Reduce<&Modulus<$SelfT>> for &[$SelfT] {
+        impl crate::reduce::Reduce<&BarrettModulus<$SelfT>> for &[$SelfT] {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)` when value's length > 0.
-            fn reduce(self, modulus: &Modulus<$SelfT>) -> Self::Output {
+            fn reduce(self, modulus: &BarrettModulus<$SelfT>) -> Self::Output {
                 match self {
                     &[] => unreachable!(),
                     &[v] => {
@@ -291,7 +291,7 @@ macro_rules! impl_prime_modulus {
             }
         }
 
-        impl crate::reduce::ReduceAssign<&Modulus<$SelfT>> for $SelfT {
+        impl crate::reduce::ReduceAssign<&BarrettModulus<$SelfT>> for $SelfT {
             /// Caculates `self (mod modulus)`.
             ///
             /// ## Procedure
@@ -316,7 +316,7 @@ macro_rules! impl_prime_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce_assign(&mut self, modulus: &Modulus<$SelfT>) {
+            fn reduce_assign(&mut self, modulus: &BarrettModulus<$SelfT>) {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -434,7 +434,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             }
         }
 
-        impl MulReduce<&Modulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
+        impl MulReduce<&BarrettModulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
             type Output = Self;
 
             /// Calculates `self * rhs mod modulus`
@@ -448,7 +448,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             fn mul_reduce(
                 self,
                 rhs: MulReduceFactor<$SelfT>,
-                modulus: &Modulus<$SelfT>,
+                modulus: &BarrettModulus<$SelfT>,
             ) -> Self::Output {
                 MulReduce::mul_reduce(self, rhs, modulus.value())
             }
@@ -476,7 +476,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             }
         }
 
-        impl MulReduce<&Modulus<$SelfT>, $SelfT> for MulReduceFactor<$SelfT> {
+        impl MulReduce<&BarrettModulus<$SelfT>, $SelfT> for MulReduceFactor<$SelfT> {
             type Output = $SelfT;
 
             /// Calculates `self.value * rhs mod modulus`.
@@ -487,7 +487,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             ///
             /// `self.value` must be less than `modulus`.
             #[inline]
-            fn mul_reduce(self, rhs: $SelfT, modulus: &Modulus<$SelfT>) -> Self::Output {
+            fn mul_reduce(self, rhs: $SelfT, modulus: &BarrettModulus<$SelfT>) -> Self::Output {
                 MulReduce::mul_reduce(self, rhs, modulus.value())
             }
         }
@@ -510,7 +510,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             }
         }
 
-        impl MulReduceAssign<&Modulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
+        impl MulReduceAssign<&BarrettModulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
             /// Calculates `self *= rhs mod modulus`.
             ///
             /// The result is in `[0, modulus)`.
@@ -522,7 +522,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             fn mul_reduce_assign(
                 &mut self,
                 rhs: MulReduceFactor<$SelfT>,
-                modulus: &Modulus<$SelfT>,
+                modulus: &BarrettModulus<$SelfT>,
             ) {
                 MulReduceAssign::mul_reduce_assign(self, rhs, modulus.value());
             }

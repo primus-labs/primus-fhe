@@ -35,7 +35,7 @@ mod ops;
 ///
 /// It's efficient if many reductions are performed with a single modulus.
 #[derive(Clone)]
-pub struct Modulus<T> {
+pub struct BarrettModulus<T> {
     /// the value to indicate the modulus
     value: T,
     /// ratio `µ` = ⌊b^2/value⌋
@@ -44,32 +44,32 @@ pub struct Modulus<T> {
     bit_count: u32,
 }
 
-impl<T: Copy> Modulus<T> {
-    /// Returns the value of this [`Modulus<T>`].
+impl<T: Copy> BarrettModulus<T> {
+    /// Returns the value of this [`BarrettModulus<T>`].
     #[inline]
     pub const fn value(&self) -> T {
         self.value
     }
 
-    /// Returns the ratio of this [`Modulus<T>`].
+    /// Returns the ratio of this [`BarrettModulus<T>`].
     #[inline]
     pub const fn ratio(&self) -> [T; 2] {
         self.ratio
     }
 }
 
-impl<T> Modulus<T> {
-    /// Returns the bit count of this [`Modulus<T>`].
+impl<T> BarrettModulus<T> {
+    /// Returns the bit count of this [`BarrettModulus<T>`].
     #[inline]
     pub const fn bit_count(&self) -> u32 {
         self.bit_count
     }
 }
 
-impl_prime_modulus!(impl Modulus<u8>; WideType: u16);
-impl_prime_modulus!(impl Modulus<u16>; WideType: u32);
-impl_prime_modulus!(impl Modulus<u32>; WideType: u64);
-impl_prime_modulus!(impl Modulus<u64>; WideType: u128);
+impl_prime_modulus!(impl BarrettModulus<u8>; WideType: u16);
+impl_prime_modulus!(impl BarrettModulus<u16>; WideType: u32);
+impl_prime_modulus!(impl BarrettModulus<u32>; WideType: u64);
+impl_prime_modulus!(impl BarrettModulus<u64>; WideType: u128);
 
 /// A number used for fast modular multiplication.
 ///
@@ -120,10 +120,10 @@ mod tests {
     fn test_modulus_create() {
         let mut rng = thread_rng();
 
-        let _m = Modulus::<u8>::new(rng.gen_range(2..=(u8::MAX >> 2)));
-        let _m = Modulus::<u16>::new(rng.gen_range(2..=(u16::MAX >> 2)));
-        let _m = Modulus::<u32>::new(rng.gen_range(2..=(u32::MAX >> 2)));
-        let _m = Modulus::<u64>::new(rng.gen_range(2..=(u64::MAX >> 2)));
+        let _m = BarrettModulus::<u8>::new(rng.gen_range(2..=(u8::MAX >> 2)));
+        let _m = BarrettModulus::<u16>::new(rng.gen_range(2..=(u16::MAX >> 2)));
+        let _m = BarrettModulus::<u32>::new(rng.gen_range(2..=(u32::MAX >> 2)));
+        let _m = BarrettModulus::<u64>::new(rng.gen_range(2..=(u64::MAX >> 2)));
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod tests {
         let mut rng = thread_rng();
 
         let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
-        let modulus = Modulus::<u64>::new(m);
+        let modulus = BarrettModulus::<u64>::new(m);
 
         let v: u64 = rng.gen();
         assert_eq!(v.reduce(&modulus), v % m);
@@ -142,7 +142,7 @@ mod tests {
         let mut rng = thread_rng();
 
         let m: u64 = rng.gen_range(2..=(u64::MAX >> 2));
-        let modulus = Modulus::<u64>::new(m);
+        let modulus = BarrettModulus::<u64>::new(m);
 
         let lw64: u64 = rng.gen();
         let hw64: u64 = rng.gen();
