@@ -29,8 +29,10 @@ pub struct ConstParameters<Scalar> {
     /// Decompose basis for `Q` used for bootstrapping accumulator
     pub gadget_basis_bits: u32,
 
-    /// Decompose basis for `Q` used for key switching
+    /// Decompose basis for `Q` used for key switching.
     pub key_switching_basis_bits: u32,
+    /// The rlwe noise error's standard deviation for key switching.
+    pub key_switching_std_dev: f64,
 }
 
 /// The parameters of the fully homomorphic encryption scheme.
@@ -64,8 +66,10 @@ pub struct Parameters<R: Ring, F: NTTField> {
     /// The powers of gadget_basis
     gadget_basis_powers: Vec<F>,
 
-    /// Decompose basis for `Q` used for key switching
+    /// Decompose basis for `Q` used for key switching.
     key_switching_basis: Basis<F>,
+    /// The rlwe noise error's standard deviation for key switching.
+    key_switching_std_dev: f64,
 }
 
 impl<R: Ring, F: NTTField, Scalar> TryFrom<ConstParameters<Scalar>> for Parameters<R, F>
@@ -88,12 +92,14 @@ where
             parameters.key_switching_basis_bits,
             parameters.lwe_noise_std_dev,
             parameters.rlwe_noise_std_dev,
+            parameters.key_switching_std_dev,
         )
     }
 }
 
 impl<R: Ring, F: NTTField> Parameters<R, F> {
     /// Creates a new [`Parameters<R, F>`].
+    #[allow(clippy::too_many_arguments)] // This will be modified when remove `Ring`.
     pub fn new(
         lwe_dimension: usize,
         rlwe_dimension: usize,
@@ -102,6 +108,7 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
         key_switching_basis_bits: u32,
         lwe_noise_std_dev: f64,
         rlwe_noise_std_dev: f64,
+        key_switching_std_dev: f64,
     ) -> Result<Self, FHEError> {
         if !lwe_dimension.is_power_of_two() {
             return Err(FHEError::LweDimensionUnValid(lwe_dimension));
@@ -164,6 +171,7 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
             gadget_basis_powers,
 
             key_switching_basis,
+            key_switching_std_dev,
         })
     }
 
@@ -246,6 +254,12 @@ impl<R: Ring, F: NTTField> Parameters<R, F> {
     pub fn key_switching_basis(&self) -> Basis<F> {
         self.key_switching_basis
     }
+
+    /// Returns the key switching std dev of this [`Parameters<R, F>`].
+    #[inline]
+    pub fn key_switching_std_dev(&self) -> f64 {
+        self.key_switching_std_dev
+    }
 }
 
 impl<R: RandomRing, F: NTTField> Parameters<R, F> {
@@ -261,6 +275,12 @@ impl<R: Ring, F: RandomNTTField> Parameters<R, F> {
     #[inline]
     pub fn rlwe_noise_distribution(&self) -> <F as Random>::NormalDistribution {
         F::normal_distribution(0.0, self.rlwe_noise_std_dev).unwrap()
+    }
+
+    /// Gets the key_switching noise distribution.
+    #[inline]
+    pub fn key_switching_noise_distribution(&self) -> <F as Random>::NormalDistribution {
+        F::normal_distribution(0.0, self.key_switching_std_dev).unwrap()
     }
 }
 
@@ -285,6 +305,7 @@ pub const CONST_DEFAULT_100_BITS_PARAMERTERS: ConstParameters<u32> = ConstParame
     rlwe_noise_std_dev: 3.20,
     gadget_basis_bits: 6,
     key_switching_basis_bits: 3,
+    key_switching_std_dev: (1u32 << 12) as f64,
 };
 
 /// Default 100bits security Parameters
