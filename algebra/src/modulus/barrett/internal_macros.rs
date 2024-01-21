@@ -71,7 +71,7 @@ macro_rules! impl_barrett_modulus {
             }
         }
 
-        impl crate::reduce::Reduce<&BarrettModulus<$SelfT>> for $SelfT {
+        impl crate::reduce::Reduce<&BarrettModulus<Self>> for $SelfT {
             type Output = Self;
 
             /// Caculates `self (mod modulus)`.
@@ -98,7 +98,7 @@ macro_rules! impl_barrett_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce(self, modulus: &BarrettModulus<$SelfT>) -> Self::Output {
+            fn reduce(self, modulus: &BarrettModulus<Self>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -115,8 +115,8 @@ macro_rules! impl_barrett_modulus {
                 //   +--------+
                 //   |   q3   |
                 //   +--------+
-                let tmp = (self as $WideT * ratio[0] as $WideT) >> <$SelfT>::BITS; // tmp1
-                let tmp = ((self as $WideT * ratio[1] as $WideT + tmp) >> <$SelfT>::BITS) as $SelfT; // q3
+                let tmp = (self as $WideT * ratio[0] as $WideT) >> Self::BITS; // tmp1
+                let tmp = ((self as $WideT * ratio[1] as $WideT + tmp) >> Self::BITS) as $SelfT; // q3
 
                 // Step 2.
                 let tmp = self.wrapping_sub(tmp.wrapping_mul(modulus.value())); // r = r1 -r2
@@ -291,7 +291,7 @@ macro_rules! impl_barrett_modulus {
             }
         }
 
-        impl crate::reduce::ReduceAssign<&BarrettModulus<$SelfT>> for $SelfT {
+        impl crate::reduce::ReduceAssign<&BarrettModulus<Self>> for $SelfT {
             /// Caculates `self (mod modulus)`.
             ///
             /// ## Procedure
@@ -316,7 +316,7 @@ macro_rules! impl_barrett_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce_assign(&mut self, modulus: &BarrettModulus<$SelfT>) {
+            fn reduce_assign(&mut self, modulus: &BarrettModulus<Self>) {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -333,9 +333,9 @@ macro_rules! impl_barrett_modulus {
                 //   +--------+
                 //   |   q3   |
                 //   +--------+
-                let tmp = (*self as $WideT * ratio[0] as $WideT) >> <$SelfT>::BITS; // tmp1
+                let tmp = (*self as $WideT * ratio[0] as $WideT) >> Self::BITS; // tmp1
                 let tmp =
-                    ((*self as $WideT * ratio[1] as $WideT + tmp) >> <$SelfT>::BITS) as $SelfT; // q3
+                    ((*self as $WideT * ratio[1] as $WideT + tmp) >> Self::BITS) as $SelfT; // q3
 
                 // Step 2.
                 *self = self.wrapping_sub(tmp.wrapping_mul(modulus.value())); // r = r1 -r2
@@ -409,7 +409,7 @@ macro_rules! impl_mul_reduce_factor {
 
 macro_rules! impl_mul_reduce_factor_ops {
     (impl MulReduceFactor<$SelfT:ty>) => {
-        impl MulReduce<$SelfT, MulReduceFactor<$SelfT>> for $SelfT {
+        impl MulReduce<$SelfT, MulReduceFactor<Self>> for $SelfT {
             type Output = Self;
 
             /// Calculates `self * rhs mod modulus`
@@ -420,7 +420,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             ///
             /// `rhs.value` must be less than `modulus`.
             #[inline]
-            fn mul_reduce(self, rhs: MulReduceFactor<$SelfT>, modulus: $SelfT) -> Self::Output {
+            fn mul_reduce(self, rhs: MulReduceFactor<Self>, modulus: Self) -> Self::Output {
                 let (_, hw) = self.widen_mul(rhs.quotient);
                 let tmp = self
                     .wrapping_mul(rhs.value)
@@ -434,7 +434,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             }
         }
 
-        impl MulReduce<&BarrettModulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
+        impl MulReduce<&BarrettModulus<Self>, MulReduceFactor<Self>> for $SelfT {
             type Output = Self;
 
             /// Calculates `self * rhs mod modulus`
@@ -447,8 +447,8 @@ macro_rules! impl_mul_reduce_factor_ops {
             #[inline]
             fn mul_reduce(
                 self,
-                rhs: MulReduceFactor<$SelfT>,
-                modulus: &BarrettModulus<$SelfT>,
+                rhs: MulReduceFactor<Self>,
+                modulus: &BarrettModulus<Self>,
             ) -> Self::Output {
                 MulReduce::mul_reduce(self, rhs, modulus.value())
             }
@@ -492,7 +492,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             }
         }
 
-        impl MulReduceAssign<$SelfT, MulReduceFactor<$SelfT>> for $SelfT {
+        impl MulReduceAssign<Self, MulReduceFactor<Self>> for $SelfT {
             /// Calculates `self *= rhs mod modulus`.
             ///
             /// The result is in `[0, modulus)`.
@@ -501,7 +501,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             ///
             /// `rhs.value` must be less than `modulus`.
             #[inline]
-            fn mul_reduce_assign(&mut self, rhs: MulReduceFactor<$SelfT>, modulus: $SelfT) {
+            fn mul_reduce_assign(&mut self, rhs: MulReduceFactor<Self>, modulus: Self) {
                 let (_, hw) = self.widen_mul(rhs.quotient);
                 let tmp = self
                     .wrapping_mul(rhs.value)
@@ -510,7 +510,7 @@ macro_rules! impl_mul_reduce_factor_ops {
             }
         }
 
-        impl MulReduceAssign<&BarrettModulus<$SelfT>, MulReduceFactor<$SelfT>> for $SelfT {
+        impl MulReduceAssign<&BarrettModulus<Self>, MulReduceFactor<Self>> for $SelfT {
             /// Calculates `self *= rhs mod modulus`.
             ///
             /// The result is in `[0, modulus)`.
@@ -521,8 +521,8 @@ macro_rules! impl_mul_reduce_factor_ops {
             #[inline]
             fn mul_reduce_assign(
                 &mut self,
-                rhs: MulReduceFactor<$SelfT>,
-                modulus: &BarrettModulus<$SelfT>,
+                rhs: MulReduceFactor<Self>,
+                modulus: &BarrettModulus<Self>,
             ) {
                 MulReduceAssign::mul_reduce_assign(self, rhs, modulus.value());
             }
