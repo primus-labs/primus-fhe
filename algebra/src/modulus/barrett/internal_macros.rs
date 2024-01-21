@@ -1,4 +1,4 @@
-macro_rules! impl_prime_modulus {
+macro_rules! impl_barrett_modulus {
     (impl BarrettModulus<$SelfT:ty>; WideType: $WideT:ty) => {
         impl BarrettModulus<$SelfT> {
             /// Creates a [`BarrettModulus<T>`] instance.
