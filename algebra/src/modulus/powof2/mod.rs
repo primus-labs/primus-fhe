@@ -1,6 +1,6 @@
 #[macro_use]
 mod internal_macros;
-mod ops;
+// mod ops;
 
 /// A struct for pow of 2 modulus.
 #[derive(Clone, Copy)]
@@ -26,8 +26,9 @@ impl_powof2_modulus!(impl PowOf2Modulus<u128>);
 #[cfg(test)]
 mod tests {
     use rand::{prelude::*, thread_rng};
+    use rand_distr::Uniform;
 
-    use crate::reduce::Reduce;
+    use crate::reduce::*;
 
     use super::*;
 
@@ -58,13 +59,32 @@ mod tests {
     }
 
     #[test]
-    fn test_barret_reduce() {
+    fn test_reduce() {
         let mut rng = thread_rng();
 
         let m: u64 = rng.gen_range(2..=(u64::MAX >> 2)).next_power_of_two();
         let modulus = PowOf2Modulus::<u64>::new(m);
+        let dis = Uniform::new_inclusive(0, modulus.mask());
 
-        let v: u64 = rng.gen();
+        let v: u64 = rng.sample(dis);
         assert_eq!(v.reduce(modulus), v % m);
+
+        let a: u64 = rng.sample(dis);
+        let b: u64 = rng.sample(dis);
+        assert_eq!(a.add_reduce(b, modulus), (a + b) % m);
+
+        let a: u64 = rng.sample(dis);
+        let b: u64 = rng.sample(dis);
+        assert_eq!(a.sub_reduce(b, modulus), (m + a - b) % m);
+
+        let a: u64 = rng.sample(dis);
+        let b: u64 = rng.sample(dis);
+        assert_eq!(
+            a.mul_reduce(b, modulus),
+            ((a as u128 * b as u128) % m as u128) as u64
+        );
+
+        let a: u64 = rng.sample(dis);
+        assert_eq!(a.neg_reduce(modulus), m - a);
     }
 }
