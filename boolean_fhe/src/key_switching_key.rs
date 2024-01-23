@@ -1,5 +1,5 @@
 use algebra::{
-    ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField, Ring,
+    ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
 };
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
@@ -49,8 +49,8 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
 impl<F: RandomNTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R: Ring, Rng>(
-        secret_key_pack: &SecretKeyPack<R, F>,
+    pub fn generate<Rng>(
+        secret_key_pack: &SecretKeyPack<F>,
         chi: <F as Random>::NormalDistribution,
         mut rng: Rng,
     ) -> Self
@@ -66,12 +66,12 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 .lwe_secret_key()
                 .iter()
                 .map(|&v| {
-                    if v.is_one() {
+                    if v == 1 {
                         F::ONE
-                    } else if v == R::NEG_ONE {
-                        F::NEG_ONE
-                    } else {
+                    } else if v == 0 {
                         F::ZERO
+                    } else {
+                        F::NEG_ONE
                     }
                 })
                 .collect(),

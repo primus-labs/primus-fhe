@@ -4,9 +4,16 @@ macro_rules! impl_powof2_modulus {
             /// Creates a [`PowOf2Modulus<T>`] instance.
             ///
             /// - `value`: The value of the modulus.
+            #[inline]
             pub const fn new(value: $SelfT) -> Self {
                 assert!(value > 1 && value.is_power_of_two());
                 Self { mask: value - 1 }
+            }
+
+            /// Returns the value of this [`PowOf2Modulus<T>`].
+            #[inline]
+            pub const fn value(self) -> $SelfT {
+                self.mask + 1
             }
         }
 

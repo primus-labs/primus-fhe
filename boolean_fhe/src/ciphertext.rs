@@ -1,5 +1,7 @@
+use crate::LWEValue;
+
 /// LWE Cipher text
-pub type LWECiphertext<R> = lattice::LWE<R>;
+pub type LWECiphertext = lattice::NewLWE<LWEValue>;
 
 /// RLWE Cipher text
 pub type RLWECiphertext<F> = lattice::RLWE<F>;

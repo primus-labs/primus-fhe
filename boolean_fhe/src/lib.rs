@@ -18,12 +18,14 @@ mod secret_key;
 pub use error::FHEError;
 
 pub use parameter::{
-    ConstParameters, DefaultField100, DefaultRing100, Parameters,
-    CONST_DEFAULT_100_BITS_PARAMERTERS, DEFAULT_100_BITS_PARAMERTERS,
+    ConstParameters, DefaultField100, Parameters, CONST_DEFAULT_100_BITS_PARAMERTERS,
+    DEFAULT_100_BITS_PARAMERTERS,
 };
 
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
-pub use plaintext::LWEPlaintext;
+pub use plaintext::{
+    dot_product, LWEPlaintext, LWEValue, LWEValueBinary, LWEValueNormal, LWEValueTernary,
+};
 
 pub use bootstrapping_key::BootstrappingKey;
 pub use evaluation_key::EvaluationKey;

@@ -1,44 +1,49 @@
-use algebra::{NTTField, Polynomial, RandomNTTField, Ring};
-use lattice::RLWE;
+use algebra::{
+    modulus::PowOf2Modulus, reduce::SubReduceAssign, NTTField, Polynomial, RandomNTTField,
+};
+use lattice::{LWE, RLWE};
 
 use crate::{
-    BootstrappingKey, KeySwitchingKey, LWECiphertext, Parameters, RLWECiphertext, SecretKeyPack,
+    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEValue, Parameters, RLWECiphertext,
+    SecretKeyPack,
 };
 
 /// The evaluator of the homomorphic encryption scheme.
-pub struct EvaluationKey<R: Ring, F: NTTField> {
+pub struct EvaluationKey<F: NTTField> {
     /// Bootstrapping key
     bootstrapping_key: BootstrappingKey<F>,
     /// Key Switching Key
     key_switching_key: KeySwitchingKey<F>,
     /// The parameters of the fully homomorphic encryption scheme.
-    parameters: Parameters<R, F>,
+    parameters: Parameters<F>,
 }
 
-impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
-    /// Returns the parameters of this [`EvaluationKey<R, F>`].
+impl<F: NTTField> EvaluationKey<F> {
+    /// Returns the parameters of this [`EvaluationKey<F>`].
     #[inline]
-    pub fn parameters(&self) -> &Parameters<R, F> {
+    pub fn parameters(&self) -> &Parameters<F> {
         &self.parameters
     }
 
     /// Performs the homomorphic nand operation.
-    pub fn nand(&self, c0: &LWECiphertext<R>, c1: &LWECiphertext<R>) -> LWECiphertext<R> {
+    pub fn nand(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
+        let lwe_modulus = parameters.lwe_modulus();
 
-        let add = c0.add_component_wise_ref(c1);
+        let add = c0.add_component_wise_ref(c1, lwe_modulus);
 
         let init_acc: RLWECiphertext<F> = init_nand_acc(
             add.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
+            lwe_modulus,
         );
 
         self.bootstrap(add, init_acc)
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
-    pub fn bootstrap(&self, c: LWECiphertext<R>, init_acc: RLWECiphertext<F>) -> LWECiphertext<R> {
+    pub fn bootstrap(&self, c: LWECiphertext, init_acc: RLWECiphertext<F>) -> LWECiphertext {
         let parameters = self.parameters();
 
         let acc = self.bootstrapping_key.bootstrapping(
@@ -46,20 +51,35 @@ impl<R: Ring, F: NTTField> EvaluationKey<R, F> {
             c.a(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
+            parameters.lwe_modulus(),
         );
 
         let mut extract = acc.extract_lwe();
         *extract.b_mut() += F::Q_DIV_8;
 
-        self.key_switching_key
-            .key_switch(extract)
-            .modulus_switch_floor()
+        let key_switched = self.key_switching_key.key_switch(extract);
+        self.modulus_switch(key_switched)
+    }
+
+    /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
+    pub fn modulus_switch(&self, c: LWE<F>) -> LWECiphertext {
+        let parameters = self.parameters();
+        let lwe_modulus_f64 = parameters.lwe_modulus_f64();
+
+        let switch = |v: F| (v.to_f64() * lwe_modulus_f64 / F::MODULUS_F64).floor() as LWEValue;
+
+        let a: Vec<LWEValue> = c.a().iter().copied().map(switch).collect();
+        let b = switch(c.b());
+
+        // assert!(a.iter().all(|&v| v <= parameters.lwe_modulus().value()));
+        // assert!(b <= parameters.lwe_modulus().value());
+        LWECiphertext::new(a, b)
     }
 }
 
-impl<R: Ring, F: RandomNTTField> EvaluationKey<R, F> {
+impl<F: RandomNTTField> EvaluationKey<F> {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
-    pub fn new(secret_key_pack: &SecretKeyPack<R, F>) -> Self {
+    pub fn new(secret_key_pack: &SecretKeyPack<F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();
         let parameters = secret_key_pack.parameters();
 
@@ -77,29 +97,31 @@ impl<R: Ring, F: RandomNTTField> EvaluationKey<R, F> {
     }
 }
 
-fn init_nand_acc<R, F>(
-    mut b: R,
+fn init_nand_acc<F>(
+    mut b: LWEValue,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
+    lwe_modulus: PowOf2Modulus<LWEValue>,
 ) -> RLWE<F>
 where
-    R: Ring,
     F: NTTField,
 {
     let mut v = Polynomial::zero_with_coeff_count(rlwe_dimension);
 
-    let l = R::Q3_DIV_8.inner();
-    let r = R::Q7_DIV_8.inner();
+    let lwe_modulus_value = lwe_modulus.value();
+
+    let l = (lwe_modulus_value >> 3) * 3;
+    let r = (lwe_modulus_value >> 3) * 7;
 
     v.iter_mut()
         .step_by(twice_rlwe_dimension_div_lwe_modulus)
         .for_each(|a| {
-            if (l..r).contains(&b.inner()) {
+            if (l..r).contains(&b) {
                 *a = F::NRG_Q_DIV_8;
             } else {
                 *a = F::Q_DIV_8;
             }
-            b -= R::ONE;
+            b.sub_reduce_assign(1, lwe_modulus);
         });
     RLWE::new(Polynomial::zero_with_coeff_count(rlwe_dimension), v)
 }
