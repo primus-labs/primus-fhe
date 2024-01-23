@@ -61,7 +61,7 @@ impl<F: NTTField> EvaluationKey<F> {
         self.modulus_switch(key_switched)
     }
 
-    /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
+    /// Performs modulus switch.
     pub fn modulus_switch(&self, c: LWE<F>) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
@@ -71,8 +71,6 @@ impl<F: NTTField> EvaluationKey<F> {
         let a: Vec<LWEValue> = c.a().iter().copied().map(switch).collect();
         let b = switch(c.b());
 
-        // assert!(a.iter().all(|&v| v <= parameters.lwe_modulus().value()));
-        // assert!(b <= parameters.lwe_modulus().value());
         LWECiphertext::new(a, b)
     }
 }
