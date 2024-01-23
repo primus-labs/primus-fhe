@@ -13,7 +13,7 @@ pub struct ConstParameters<Scalar> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
-    pub lwe_modulus: u32,
+    pub lwe_modulus: LWEValue,
     /// The lwe noise error's standard deviation
     pub lwe_noise_std_dev: f64,
     /// LWE Secret Key distribution Type
