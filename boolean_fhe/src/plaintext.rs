@@ -4,7 +4,7 @@ use algebra::{modulus::PowOf2Modulus, reduce::Reduce};
 pub type LWEPlaintext = bool;
 
 /// LWE ciphertext inner value type
-pub type LWEValue = u32;
+pub type LWEValue = u16;
 
 /// Performs dot product for two slices
 #[inline]
@@ -12,7 +12,9 @@ pub fn dot_product(u: &[LWEValue], v: &[LWEValue], modulus: PowOf2Modulus<LWEVal
     debug_assert_eq!(u.len(), v.len());
     u.iter()
         .zip(v)
-        .fold(0u32, |acc, (&x, &y)| acc.wrapping_add(x.wrapping_mul(y)))
+        .fold(LWEValue::default(), |acc, (&x, &y)| {
+            acc.wrapping_add(x.wrapping_mul(y))
+        })
         .reduce(modulus)
 }
 

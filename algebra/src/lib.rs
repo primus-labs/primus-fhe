@@ -33,4 +33,4 @@ pub use polynomial::{
     Polynomial,
 };
 
-pub use primitive::{div_ceil, Bits, RoundedDiv, Widening};
+pub use primitive::{div_ceil, Bits, Widening};

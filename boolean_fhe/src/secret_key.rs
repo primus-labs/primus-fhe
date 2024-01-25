@@ -2,9 +2,8 @@ use std::cell::RefCell;
 
 use algebra::{
     reduce::{AddReduce, SubReduce},
-    NTTField, NTTPolynomial, Polynomial, RandomNTTField, RoundedDiv,
+    NTTField, NTTPolynomial, Polynomial, RandomNTTField,
 };
-use num_traits::{One, Zero};
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
 use rand_distr::Uniform;
@@ -185,16 +184,14 @@ fn encode(message: LWEPlaintext, lwe_modulus: LWEValue) -> LWEValue {
 
 /// Decodes a cipher text
 fn decode(encoded_message: LWEValue, lwe_modulus: LWEValue) -> bool {
-    let decoded = encoded_message
-        .checked_mul(4)
-        .unwrap()
-        .rounded_div(lwe_modulus);
+    assert!(lwe_modulus.is_power_of_two() && lwe_modulus >= 8);
 
-    if decoded == 4 || decoded.is_zero() {
-        false
-    } else if decoded.is_one() {
-        true
-    } else {
-        panic!("Wrong decoding output: {:?}", decoded);
+    let temp = encoded_message >> (lwe_modulus.trailing_zeros() - 3);
+    let decoded = ((temp >> 1) + (temp & 1)) & 3;
+
+    match decoded {
+        0 => false,
+        1 => true,
+        _ => panic!("Wrong decoding output: {:?}", decoded),
     }
 }

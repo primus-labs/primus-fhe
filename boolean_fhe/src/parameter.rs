@@ -163,7 +163,7 @@ impl<F: NTTField> Parameters<F> {
             rlwe_noise_std_dev,
 
             lwe_modulus_f64: lwe_modulus as f64,
-            rlwe_modulus_f64: cast::<<F as Ring>::Inner, f64>(rlwe_modulus).unwrap(),
+            rlwe_modulus_f64: F::MODULUS_F64,
             twice_rlwe_dimension_div_lwe_modulus,
 
             gadget_basis,

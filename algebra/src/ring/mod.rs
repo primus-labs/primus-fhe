@@ -5,7 +5,7 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{One, Pow, PrimInt, Zero};
 
-use crate::{Basis, Random, RoundedDiv};
+use crate::{Basis, Random};
 
 /// A trait defining the algebraic structure of a mathematical ring.
 ///
@@ -57,7 +57,7 @@ pub trait Ring:
     + From<Self::Inner>
 {
     /// The inner type of this ring.
-    type Inner: Debug + PrimInt + RoundedDiv<Output = Self::Inner> + Send + Sync;
+    type Inner: Debug + PrimInt + Send + Sync;
 
     /// The type of the ring's order.
     type Order: Copy;
@@ -74,17 +74,8 @@ pub trait Ring:
     /// q/8
     const Q_DIV_8: Self;
 
-    /// 3q/8
-    const Q3_DIV_8: Self;
-
-    /// 7q/8
-    const Q7_DIV_8: Self;
-
     /// -q/8
     const NRG_Q_DIV_8: Self;
-
-    /// 4
-    const FOUR_INNER: Self::Inner;
 
     /// q
     const MODULUS_F64: f64;
