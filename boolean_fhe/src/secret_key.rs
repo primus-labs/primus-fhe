@@ -13,11 +13,12 @@ use crate::{
 };
 
 /// The distribution type of the LWE Secret Key
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum SecretKeyType {
     /// Binary SecretKey Distribution
     Binary,
     /// Ternary SecretKey Distribution
+    #[default]
     Ternary,
 }
 

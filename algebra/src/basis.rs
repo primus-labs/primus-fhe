@@ -16,6 +16,12 @@ pub struct Basis<R: Ring> {
     bits: u32,
 }
 
+impl<R: Ring> Default for Basis<R> {
+    fn default() -> Self {
+        Self::new(1)
+    }
+}
+
 impl<R: Ring> Basis<R> {
     /// Creates a new [`Basis<R>`] with the given basis' bits number.
     pub fn new(bits: u32) -> Self {

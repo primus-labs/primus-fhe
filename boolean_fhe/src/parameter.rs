@@ -82,96 +82,26 @@ where
     fn try_from(parameters: ConstParameters<Scalar>) -> Result<Self, FHEError> {
         assert_eq!(F::modulus_value(), parameters.rlwe_modulus);
 
-        Self::new(
-            parameters.lwe_dimension,
-            parameters.rlwe_dimension,
-            parameters.lwe_modulus,
-            parameters.secret_key_type,
-            parameters.gadget_basis_bits,
-            parameters.key_switching_basis_bits,
-            parameters.lwe_noise_std_dev,
-            parameters.rlwe_noise_std_dev,
-            parameters.key_switching_std_dev,
-        )
+        Self::builder()
+            .lwe_dimension(parameters.lwe_dimension)
+            .lwe_modulus(parameters.lwe_modulus)
+            .lwe_noise_std_dev(parameters.lwe_noise_std_dev)
+            .secret_key_type(parameters.secret_key_type)
+            .rlwe_dimension(parameters.rlwe_dimension)
+            .rlwe_modulus(F::modulus_value())
+            .rlwe_noise_std_dev(parameters.rlwe_noise_std_dev)
+            .gadget_basis_bits(parameters.gadget_basis_bits)
+            .key_switching_basis_bits(parameters.key_switching_basis_bits)
+            .key_switching_std_dev(parameters.key_switching_std_dev)
+            .build()
     }
 }
 
 impl<F: NTTField> Parameters<F> {
-    /// Creates a new [`Parameters<F>`].
-    #[allow(clippy::too_many_arguments)] // This will be modified when remove `Ring`.
-    pub fn new(
-        lwe_dimension: usize,
-        rlwe_dimension: usize,
-        lwe_modulus: LWEValue,
-        secret_key_type: SecretKeyType,
-        gadget_basis_bits: u32,
-        key_switching_basis_bits: u32,
-        lwe_noise_std_dev: f64,
-        rlwe_noise_std_dev: f64,
-        key_switching_std_dev: f64,
-    ) -> Result<Self, FHEError> {
-        if !lwe_dimension.is_power_of_two() {
-            return Err(FHEError::LweDimensionUnValid(lwe_dimension));
-        }
-        // N = 2^i
-        if !rlwe_dimension.is_power_of_two() {
-            return Err(FHEError::RlweDimensionUnValid(rlwe_dimension));
-        }
-
-        let rlwe_modulus = F::modulus_value();
-
-        // q|2N
-        let lwe_modulus_u = lwe_modulus as usize;
-        let twice_rlwe_dimension_div_lwe_modulus = (rlwe_dimension << 1) / lwe_modulus_u;
-        if twice_rlwe_dimension_div_lwe_modulus * lwe_modulus_u != (rlwe_dimension << 1) {
-            return Err(FHEError::LweModulusRlweDimensionNotCompatible {
-                lwe_modulus: lwe_modulus_u,
-                rlwe_dimension,
-            });
-        }
-
-        // 2N|(Q-1)
-        let rlwe_modulus_u = cast::<<F as Ring>::Inner, usize>(rlwe_modulus).unwrap();
-        let temp = (rlwe_modulus_u - 1) / (rlwe_dimension << 1);
-        if temp * (rlwe_dimension << 1) != (rlwe_modulus_u - 1) {
-            return Err(FHEError::RLweModulusRlweDimensionNotCompatible {
-                rlwe_modulus: rlwe_modulus_u,
-                rlwe_dimension,
-            });
-        }
-
-        let gadget_basis = <Basis<F>>::new(gadget_basis_bits);
-        let bf = gadget_basis.basis();
-
-        let mut gadget_basis_powers = vec![F::ZERO; gadget_basis.decompose_len()];
-        let mut temp = F::ONE.inner();
-        gadget_basis_powers.iter_mut().for_each(|v| {
-            *v = F::new(temp);
-            temp = temp * bf;
-        });
-
-        let key_switching_basis = <Basis<F>>::new(key_switching_basis_bits);
-
-        Ok(Self {
-            lwe_dimension,
-            lwe_modulus: <PowOf2Modulus<LWEValue>>::new(lwe_modulus),
-            lwe_noise_std_dev,
-            secret_key_type,
-
-            rlwe_dimension,
-            rlwe_modulus,
-            rlwe_noise_std_dev,
-
-            lwe_modulus_f64: lwe_modulus as f64,
-            rlwe_modulus_f64: F::MODULUS_F64,
-            twice_rlwe_dimension_div_lwe_modulus,
-
-            gadget_basis,
-            gadget_basis_powers,
-
-            key_switching_basis,
-            key_switching_std_dev,
-        })
+    /// Creates a builder for [`Parameters<F>`].
+    #[inline]
+    pub fn builder() -> ParametersBuilder<F> {
+        <ParametersBuilder<F>>::new()
     }
 
     /// Returns the lwe dimension of this [`Parameters<F>`], refers to **`n`** in the paper.
@@ -259,9 +189,7 @@ impl<F: NTTField> Parameters<F> {
     pub fn key_switching_std_dev(&self) -> f64 {
         self.key_switching_std_dev
     }
-}
 
-impl<F: NTTField> Parameters<F> {
     /// Gets the lwe noise distribution.
     #[inline]
     pub fn lwe_noise_distribution(&self) -> LWEValueNormal {
@@ -280,6 +208,210 @@ impl<F: RandomNTTField> Parameters<F> {
     #[inline]
     pub fn key_switching_noise_distribution(&self) -> <F as Random>::NormalDistribution {
         F::normal_distribution(0.0, self.key_switching_std_dev).unwrap()
+    }
+}
+
+/// The parameters builder of the fully homomorphic encryption scheme.
+#[derive(Debug, Clone)]
+pub struct ParametersBuilder<F: NTTField> {
+    /// LWE vector dimension, refers to **`n`** in the paper.
+    lwe_dimension: Option<usize>,
+    /// LWE cipher modulus, refers to **`q`** in the paper.
+    lwe_modulus: Option<LWEValue>,
+    /// The lwe noise error's standard deviation
+    lwe_noise_std_dev: Option<f64>,
+    /// LWE Secret Key distribution Type
+    secret_key_type: SecretKeyType,
+
+    /// RLWE polynomial dimension, refers to **`N`** in the paper.
+    rlwe_dimension: Option<usize>,
+    /// RLWE cipher modulus, refers to **`Q`** in the paper.
+    rlwe_modulus: Option<F::Inner>,
+    /// The rlwe noise error's standard deviation
+    rlwe_noise_std_dev: Option<f64>,
+
+    /// Decompose basis for `Q` used for bootstrapping accumulator
+    gadget_basis_bits: u32,
+
+    /// Decompose basis for `Q` used for key switching.
+    key_switching_basis_bits: u32,
+    /// The rlwe noise error's standard deviation for key switching.
+    key_switching_std_dev: Option<f64>,
+}
+
+impl<F: NTTField> Default for ParametersBuilder<F> {
+    fn default() -> Self {
+        Self {
+            lwe_dimension: None,
+            lwe_modulus: None,
+            lwe_noise_std_dev: None,
+            secret_key_type: SecretKeyType::default(),
+            rlwe_dimension: None,
+            rlwe_modulus: None,
+            rlwe_noise_std_dev: None,
+            gadget_basis_bits: 1,
+            key_switching_basis_bits: 1,
+            key_switching_std_dev: None,
+        }
+    }
+}
+
+impl<F: NTTField> ParametersBuilder<F> {
+    /// Creates a new [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the lwe dimension of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn lwe_dimension(mut self, lwe_dimension: usize) -> Self {
+        self.lwe_dimension = Some(lwe_dimension);
+        self
+    }
+
+    /// Sets the lwe modulus of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn lwe_modulus(mut self, lwe_modulus: LWEValue) -> Self {
+        self.lwe_modulus = Some(lwe_modulus);
+        self
+    }
+
+    /// Sets the lwe noise error's standard deviation of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn lwe_noise_std_dev(mut self, lwe_noise_std_dev: f64) -> Self {
+        self.lwe_noise_std_dev = Some(lwe_noise_std_dev);
+        self
+    }
+
+    /// Sets the LWE Secret Key distribution Type of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn secret_key_type(mut self, secret_key_type: SecretKeyType) -> Self {
+        self.secret_key_type = secret_key_type;
+        self
+    }
+
+    /// Sets the RLWE polynomial dimension of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn rlwe_dimension(mut self, rlwe_dimension: usize) -> Self {
+        self.rlwe_dimension = Some(rlwe_dimension);
+        self
+    }
+
+    /// Sets the RLWE cipher modulus of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn rlwe_modulus(mut self, rlwe_modulus: F::Inner) -> Self {
+        self.rlwe_modulus = Some(rlwe_modulus);
+        self
+    }
+
+    /// Sets the rlwe noise error's standard deviation of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn rlwe_noise_std_dev(mut self, rlwe_noise_std_dev: f64) -> Self {
+        self.rlwe_noise_std_dev = Some(rlwe_noise_std_dev);
+        self
+    }
+
+    /// Sets the gadget basis bits of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn gadget_basis_bits(mut self, gadget_basis_bits: u32) -> Self {
+        self.gadget_basis_bits = gadget_basis_bits;
+        self
+    }
+
+    /// Sets the key switching basis bits of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn key_switching_basis_bits(mut self, key_switching_basis_bits: u32) -> Self {
+        self.key_switching_basis_bits = key_switching_basis_bits;
+        self
+    }
+
+    /// Sets the rlwe noise error's standard deviation for key switching of this [`ParametersBuilder<F>`].
+    #[inline]
+    pub fn key_switching_std_dev(mut self, key_switching_std_dev: f64) -> Self {
+        self.key_switching_std_dev = Some(key_switching_std_dev);
+        self
+    }
+
+    /// Tries to build the [`Parameters<F>`].
+    #[inline]
+    pub fn build(self) -> Result<Parameters<F>, FHEError> {
+        assert!(
+            self.lwe_dimension.is_some()
+                & self.lwe_modulus.is_some()
+                & self.lwe_noise_std_dev.is_some()
+                & self.rlwe_dimension.is_some()
+                & self.rlwe_modulus.is_some()
+                & self.rlwe_noise_std_dev.is_some()
+                & self.key_switching_std_dev.is_some()
+        );
+        assert_eq!(F::modulus_value(), self.rlwe_modulus.unwrap());
+
+        let lwe_dimension = self.lwe_dimension.unwrap();
+        let lwe_modulus = self.lwe_modulus.unwrap();
+        let rlwe_dimension = self.rlwe_dimension.unwrap();
+        let rlwe_modulus = self.rlwe_modulus.unwrap();
+
+        if !lwe_dimension.is_power_of_two() {
+            return Err(FHEError::LweDimensionUnValid(lwe_dimension));
+        }
+        // N = 2^i
+        if !rlwe_dimension.is_power_of_two() {
+            return Err(FHEError::RlweDimensionUnValid(rlwe_dimension));
+        }
+
+        // q|2N
+        let lwe_modulus_u = lwe_modulus as usize;
+        let twice_rlwe_dimension_div_lwe_modulus = (rlwe_dimension << 1) / lwe_modulus_u;
+        if twice_rlwe_dimension_div_lwe_modulus * lwe_modulus_u != (rlwe_dimension << 1) {
+            return Err(FHEError::LweModulusRlweDimensionNotCompatible {
+                lwe_modulus: lwe_modulus_u,
+                rlwe_dimension,
+            });
+        }
+
+        // 2N|(Q-1)
+        let rlwe_modulus_u = cast::<<F as Ring>::Inner, usize>(rlwe_modulus).unwrap();
+        let temp = (rlwe_modulus_u - 1) / (rlwe_dimension << 1);
+        if temp * (rlwe_dimension << 1) != (rlwe_modulus_u - 1) {
+            return Err(FHEError::RLweModulusRlweDimensionNotCompatible {
+                rlwe_modulus: rlwe_modulus_u,
+                rlwe_dimension,
+            });
+        }
+
+        let gadget_basis = <Basis<F>>::new(self.gadget_basis_bits);
+        let bf = gadget_basis.basis();
+
+        let mut gadget_basis_powers = vec![F::ZERO; gadget_basis.decompose_len()];
+        let mut temp = F::ONE.inner();
+        gadget_basis_powers.iter_mut().for_each(|v| {
+            *v = F::new(temp);
+            temp = temp * bf;
+        });
+
+        let key_switching_basis = <Basis<F>>::new(self.key_switching_basis_bits);
+
+        Ok(Parameters::<F> {
+            lwe_dimension,
+            lwe_modulus: <PowOf2Modulus<LWEValue>>::new(lwe_modulus),
+            lwe_noise_std_dev: self.lwe_noise_std_dev.unwrap(),
+            secret_key_type: self.secret_key_type,
+
+            rlwe_dimension,
+            rlwe_modulus,
+            rlwe_noise_std_dev: self.rlwe_noise_std_dev.unwrap(),
+
+            lwe_modulus_f64: lwe_modulus as f64,
+            rlwe_modulus_f64: F::MODULUS_F64,
+            twice_rlwe_dimension_div_lwe_modulus,
+
+            gadget_basis,
+            gadget_basis_powers,
+
+            key_switching_basis,
+            key_switching_std_dev: self.key_switching_std_dev.unwrap(),
+        })
     }
 }
 
