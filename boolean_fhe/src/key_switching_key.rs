@@ -1,7 +1,7 @@
 use algebra::{
     ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
 };
-use lattice::{DecompositionSpace, NTTGadgetRLWE, NewLWE, NTTRLWE, RLWE};
+use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
@@ -19,7 +19,7 @@ pub struct KeySwitchingKey<F: NTTField> {
 
 impl<F: NTTField> KeySwitchingKey<F> {
     /// Performs key switching operation.
-    pub fn key_switch(&self, ciphertext: NewLWE<F>) -> NewLWE<F> {
+    pub fn key_switch(&self, ciphertext: LWE<F>) -> LWE<F> {
         let a: Vec<Polynomial<F>> = ciphertext
             .a()
             .chunks_exact(self.lwe_dimension)
