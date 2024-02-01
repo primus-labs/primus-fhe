@@ -1,7 +1,7 @@
 use algebra::{
     modulus::PowOf2Modulus, reduce::SubReduceAssign, NTTField, Polynomial, RandomNTTField,
 };
-use lattice::{LWE, RLWE};
+use lattice::{NewLWE, RLWE};
 
 use crate::{
     BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEValue, Parameters, RLWECiphertext,
@@ -62,7 +62,7 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs modulus switch.
-    pub fn modulus_switch(&self, c: LWE<F>) -> LWECiphertext {
+    pub fn modulus_switch(&self, c: NewLWE<F>) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
 

@@ -7,7 +7,7 @@ use algebra::{
 use num_traits::{NumCast, Zero};
 
 use crate::{
-    DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW,
+    DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, NewLWE, PolynomialSpace, NTTRGSW,
     RGSW,
 };
 
@@ -292,14 +292,14 @@ impl<F: NTTField> RLWE<F> {
 
     /// Extract an LWE sample from RLWE.
     #[inline]
-    pub fn extract_lwe(&self) -> LWE<F> {
+    pub fn extract_lwe(&self) -> NewLWE<F> {
         let mut a: Vec<F> = self.a.as_slice().iter().map(|&x| -x).collect();
         a[1..].reverse();
         a[0] = -a[0];
 
         let b = self.b()[0];
 
-        LWE::<F>::new(a, b)
+        NewLWE::<F>::new(a, b)
     }
 
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
