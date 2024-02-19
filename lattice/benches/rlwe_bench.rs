@@ -2,11 +2,7 @@ use algebra::{derive::*, Polynomial, Random};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use lattice::RLWE;
 
-#[derive(Ring, Random)]
-#[modulus = 1024]
-pub struct RR(u32);
-
-#[derive(Ring, Field, Random, Prime, NTT)]
+#[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct FF(u32);
 

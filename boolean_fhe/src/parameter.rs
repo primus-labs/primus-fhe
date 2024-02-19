@@ -1,4 +1,4 @@
-use algebra::{derive::*, modulus::PowOf2Modulus, Basis, NTTField, Random, RandomNTTField, Ring};
+use algebra::{derive::*, modulus::PowOf2Modulus, Basis, Field, NTTField, Random, RandomNTTField};
 
 use num_traits::cast;
 use once_cell::sync::Lazy;
@@ -136,7 +136,7 @@ impl<F: NTTField> Parameters<F> {
 
     /// Returns the rlwe modulus of this [`Parameters<F>`], refers to **`Q`** in the paper.
     #[inline]
-    pub fn rlwe_modulus(&self) -> <F as Ring>::Inner {
+    pub fn rlwe_modulus(&self) -> <F as Field>::Inner {
         self.rlwe_modulus
     }
 
@@ -371,7 +371,7 @@ impl<F: NTTField> ParametersBuilder<F> {
         }
 
         // 2N|(Q-1)
-        let rlwe_modulus_u = cast::<<F as Ring>::Inner, usize>(rlwe_modulus).unwrap();
+        let rlwe_modulus_u = cast::<<F as Field>::Inner, usize>(rlwe_modulus).unwrap();
         let temp = (rlwe_modulus_u - 1) / (rlwe_dimension << 1);
         if temp * (rlwe_dimension << 1) != (rlwe_modulus_u - 1) {
             return Err(FHEError::RLweModulusRlweDimensionNotCompatible {
@@ -416,7 +416,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 }
 
 /// Default Field for Default Parameters
-#[derive(Ring, Field, Random, Prime, NTT)]
+#[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct DefaultField100(u32);
 

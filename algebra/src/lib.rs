@@ -12,7 +12,6 @@ mod field;
 pub mod modulus;
 mod random;
 pub mod reduce;
-mod ring;
 pub mod utils;
 
 mod polynomial;
@@ -26,7 +25,6 @@ pub use basis::Basis;
 pub use field::{Field, MulFactor, NTTField, PrimeField, RandomNTTField};
 pub use random::Random;
 pub use reduce::ModulusConfig;
-pub use ring::{RandomRing, Ring};
 
 pub use polynomial::{
     ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_mul_assign, ntt_mul_assign_ref, NTTPolynomial,

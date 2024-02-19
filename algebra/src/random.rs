@@ -4,7 +4,7 @@ use rand_distr::{uniform::SampleUniform, Distribution};
 
 use crate::AlgebraError;
 
-/// Defines a trait for sampling from various mathematical distributions over a ring or field.
+/// Defines a trait for sampling from various mathematical distributions over a field.
 ///
 /// This trait specifies the ability to create different types of distributions that can be sampled,
 /// which is particularly useful in the context of probabilistic cryptographic schemes and other

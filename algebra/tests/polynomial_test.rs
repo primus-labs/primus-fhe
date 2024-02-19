@@ -1,10 +1,10 @@
 use algebra::{
-    derive::{Field, Prime, Random, Ring, NTT},
-    Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial, Ring,
+    derive::{Field, Prime, Random, NTT},
+    Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
 };
 use rand::thread_rng;
 
-#[derive(Ring, Field, Random, Prime, NTT)]
+#[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 

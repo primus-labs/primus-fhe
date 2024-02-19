@@ -1,14 +1,14 @@
 use std::ops::{Deref, DerefMut};
 
-use algebra::{NTTField, Polynomial, Ring};
+use algebra::{Field, NTTField, Polynomial};
 
 use crate::{NTTRLWE, RLWE};
 
 /// Performs dot product for two slices
 #[inline]
-pub fn dot_product<R: Ring>(u: &[R], v: &[R]) -> R {
+pub fn dot_product<F: Field>(u: &[F], v: &[F]) -> F {
     debug_assert_eq!(u.len(), v.len());
-    u.iter().zip(v).fold(R::ZERO, |acc, (&x, y)| acc + x * y)
+    u.iter().zip(v).fold(F::ZERO, |acc, (&x, y)| acc + x * y)
 }
 
 /// Pre allocated space for inplace decomposition.
