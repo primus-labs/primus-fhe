@@ -162,10 +162,9 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
                 for v in ret.iter_mut() {
                     if temp == 0 {
                         break;
-                    } else {
-                        *v = Self(temp & mask);
-                        temp >>= bits;
                     }
+                    *v = Self(temp & mask);
+                    temp >>= bits;
                 }
 
                 ret
@@ -180,10 +179,9 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
                 for v in destination {
                     if temp == 0 {
                         break;
-                    } else {
-                        *v = Self(temp & mask);
-                        temp >>= bits;
                     }
+                    *v = Self(temp & mask);
+                    temp >>= bits;
                 }
             }
 
