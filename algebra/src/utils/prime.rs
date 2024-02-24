@@ -15,11 +15,28 @@ pub trait Prime {
 }
 
 macro_rules! impl_prime_check {
-    (impl Prime for BarrettModulus<$SelfT:ty>; PRIME_BIT_MASK = $Mask:expr) => {
+    (impl Prime for BarrettModulus<$SelfT:ty>) => {
         impl Prime for BarrettModulus<$SelfT> {
             fn probably_prime(&self, rounds: usize) -> bool {
                 /// Records the primes < 64.
-                const PRIME_BIT_MASK: u64 = $Mask;
+                const PRIME_BIT_MASK: u64 = 1 << 2
+                    | 1 << 3
+                    | 1 << 5
+                    | 1 << 7
+                    | 1 << 11
+                    | 1 << 13
+                    | 1 << 17
+                    | 1 << 19
+                    | 1 << 23
+                    | 1 << 29
+                    | 1 << 31
+                    | 1 << 37
+                    | 1 << 41
+                    | 1 << 43
+                    | 1 << 47
+                    | 1 << 53
+                    | 1 << 59
+                    | 1 << 61;
 
                 let value: $SelfT = self.value();
 
@@ -90,52 +107,13 @@ macro_rules! impl_prime_check {
     };
 }
 
-impl_prime_check!(impl Prime for BarrettModulus<u64>; PRIME_BIT_MASK = 1 << 2
-| 1 << 3
-| 1 << 5
-| 1 << 7
-| 1 << 11
-| 1 << 13
-| 1 << 17
-| 1 << 19
-| 1 << 23
-| 1 << 29
-| 1 << 31
-| 1 << 37
-| 1 << 41
-| 1 << 43
-| 1 << 47
-| 1 << 53
-| 1 << 59
-| 1 << 61
-);
+impl_prime_check!(impl Prime for BarrettModulus<u64>);
 
-impl_prime_check!(impl Prime for BarrettModulus<u32>; PRIME_BIT_MASK = 1 << 2
-| 1 << 3
-| 1 << 5
-| 1 << 7
-| 1 << 11
-| 1 << 13
-| 1 << 17
-| 1 << 19
-| 1 << 23
-| 1 << 29
-| 1 << 31
-);
+impl_prime_check!(impl Prime for BarrettModulus<u32>);
 
-impl_prime_check!(impl Prime for BarrettModulus<u16>; PRIME_BIT_MASK = 1 << 2
-| 1 << 3
-| 1 << 5
-| 1 << 7
-| 1 << 11
-| 1 << 13
-);
+impl_prime_check!(impl Prime for BarrettModulus<u16>);
 
-impl_prime_check!(impl Prime for BarrettModulus<u8>; PRIME_BIT_MASK = 1 << 2
-| 1 << 3
-| 1 << 5
-| 1 << 7
-);
+impl_prime_check!(impl Prime for BarrettModulus<u8>);
 
 #[cfg(test)]
 mod tests {

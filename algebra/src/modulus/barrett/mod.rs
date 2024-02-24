@@ -15,13 +15,10 @@
 //!
 //! Then, the algorithm will output `r ≡ x mod m` with the below procedures:
 //!
-//! 1. `q1 ← ⌊x/b^(k−1)⌋`, `q2 ← q1 · µ`, `q3 ← ⌊q2/b^(k+1)⌋`.
-//! 2. `r1 ← x mod b^(k+1)`, `r2 ← (q3 · m) mod b^(k+1)`, `r ← r1 − r2`.
-//! 3. If `r ≥ m` do: `r ← r − m`.
+//! 1. `q1 ← ⌊x/b^(k-1)⌋`, `q2 ← q1 · µ`, `q3 ← ⌊q2/b^(k+1)⌋`.
+//! 2. `r1 ← x mod b^(k+1)`, `r2 ← (q3 · m) mod b^(k+1)`, `r ← r1 - r2`.
+//! 3. If `r ≥ m` do: `r ← r - m`.
 //! 4. Return(`r`).
-
-use crate::reduce::{MulReduce, MulReduceAssign};
-use crate::Widening;
 
 #[macro_use]
 mod internal_macros;

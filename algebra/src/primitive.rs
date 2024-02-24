@@ -19,7 +19,7 @@ pub trait Widening: Sized {
     /// If the input carry is false, this method is equivalent to `overflowing_add`.
     fn carry_add(self, rhs: Self, carry: bool) -> (Self, bool);
 
-    /// Calculates `self` − `rhs` − `borrow` and returns a tuple containing
+    /// Calculates `self` - `rhs` - `borrow` and returns a tuple containing
     /// the difference and the output borrow.
     ///
     /// Performs "ternary subtraction" by subtracting both an integer operand and a borrow-in bit from self,

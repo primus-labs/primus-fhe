@@ -69,15 +69,16 @@ macro_rules! impl_modulo_ops_for_primitive {
         impl $crate::reduce::InvReduce for $t {
             fn inv_reduce(self, modulus: Self) -> Self {
                 debug_assert!(self < modulus);
+                use $crate::utils::ExtendedGCD;
 
-                let (_, inv, gcd) = $crate::utils::ExtendedGCD::extended_gcd(modulus, self);
+                let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
 
                 debug_assert_eq!(gcd, 1);
 
                 if inv > 0 {
                     inv as Self
                 } else {
-                    (inv + modulus as <Self as $crate::utils::ExtendedGCD>::SignedT) as Self
+                    (inv + modulus as <Self as ExtendedGCD>::SignedT) as Self
                 }
             }
         }
@@ -85,14 +86,15 @@ macro_rules! impl_modulo_ops_for_primitive {
         impl $crate::reduce::TryInvReduce for $t {
             fn try_inv_reduce(self, modulus: Self) -> Result<Self, crate::AlgebraError> {
                 debug_assert!(self < modulus);
+                use $crate::utils::ExtendedGCD;
 
-                let (_, inv, gcd) = $crate::utils::ExtendedGCD::extended_gcd(modulus, self);
+                let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
 
                 if gcd == 1 {
                     if inv > 0 {
                         Ok(inv as Self)
                     } else {
-                        Ok((inv + modulus as <Self as $crate::utils::ExtendedGCD>::SignedT) as Self)
+                        Ok((inv + modulus as <Self as ExtendedGCD>::SignedT) as Self)
                     }
                 } else {
                     Err($crate::AlgebraError::NoReduceInverse {
