@@ -14,11 +14,11 @@ fn impl_prime(input: Input) -> TokenStream {
     let name = &input.ident;
 
     quote! {
-        impl algebra::PrimeField for #name {
+        impl ::algebra::PrimeField for #name {
             #[doc = concat!("Check [`", stringify!(#name), "`] is a prime field.")]
             #[inline]
             fn is_prime_field() -> bool {
-                algebra::utils::Prime::probably_prime(&<Self as algebra::ModulusConfig>::MODULUS, 20)
+                ::algebra::utils::Prime::probably_prime(&<Self as ::algebra::ModulusConfig>::MODULUS, 20)
             }
         }
     }

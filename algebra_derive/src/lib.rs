@@ -1,6 +1,6 @@
 //! Define some derive macro for `algebra` crate.
 //!
-//! You use these to define some field, prime field, ntt field and the random function for them.
+//! You use these to define some field, prime field, ntt field and the random functions for them.
 
 mod ast;
 mod attr;
@@ -44,7 +44,7 @@ pub fn derive_field(input: TokenStream) -> TokenStream {
 
 /// Derive macro generates an impl of the trait `algebra::Random`.
 ///
-/// Then you can use `rand` crate to generate it randomly.
+/// Then you can use `rand` crate to generate numbers randomly.
 ///
 /// Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
 /// ternary distribution and normal distribution.

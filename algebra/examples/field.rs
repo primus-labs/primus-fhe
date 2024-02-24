@@ -17,7 +17,7 @@ use rand_distr::Standard;
 
 // Derive macro `Random` generates an impl of the trait `algebra::Random`.
 //
-// Then you can use `rand` crate to generate it randomly.
+// Then you can use `rand` crate to generate numbers randomly.
 //
 // Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
 // ternary distribution and normal distribution.
