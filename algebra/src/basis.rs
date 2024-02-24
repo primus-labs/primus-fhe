@@ -27,9 +27,8 @@ impl<F: Field> Default for Basis<F> {
 impl<F: Field> Basis<F> {
     /// Creates a new [`Basis<F>`] with the given basis' bits number.
     pub fn new(bits: u32) -> Self {
-        let basis = F::pow_of_two(bits);
         let mask = F::mask(bits);
-        let basis = basis.inner();
+        let basis = mask + F::ONE_INNER;
         let decompose_len = F::decompose_len(basis);
 
         Self {
@@ -40,7 +39,7 @@ impl<F: Field> Basis<F> {
         }
     }
 
-    /// Returns the decompose len of this [`Basis<R>`].
+    /// Returns the decompose len of this [`Basis<F>`].
     #[inline]
     pub fn decompose_len(&self) -> usize {
         self.decompose_len

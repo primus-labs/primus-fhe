@@ -88,6 +88,10 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
 
             const NEG_ONE: Self = #name(#modulus - 1);
 
+            const ONE_INNER: Self::Inner = 1;
+
+            const ZERO_INNER: Self::Inner = 0;
+
             const Q_DIV_8: Self = #name(#modulus >> 3);
 
             const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
@@ -98,11 +102,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             #[inline]
             fn new(value: #field_ty) -> Self {
                 Self(value)
-            }
-
-            #[inline]
-            fn pow_of_two(pow: u32) -> Self {
-                Self(1 << pow)
             }
 
             #[inline]

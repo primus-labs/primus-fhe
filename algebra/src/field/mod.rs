@@ -81,6 +81,12 @@ pub trait Field:
     /// -1
     const NEG_ONE: Self;
 
+    /// 1
+    const ONE_INNER: Self::Inner;
+
+    /// 0
+    const ZERO_INNER: Self::Inner;
+
     /// q/8
     const Q_DIV_8: Self;
 
@@ -92,9 +98,6 @@ pub trait Field:
 
     /// Creates a new instance.
     fn new(value: Self::Inner) -> Self;
-
-    /// power of 2, return `2^exp`.
-    fn pow_of_two(exp: u32) -> Self;
 
     /// mask, return a number with `bits` 1s.
     fn mask(bits: u32) -> Self::Inner;
