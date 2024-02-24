@@ -22,15 +22,11 @@ pub use prime_fields::{MulFactor, PrimeField};
 /// The [`Field`] trait extends various Rust standard library traits to ensure field elements
 /// can be copied, cloned, debugged, displayed, compared, and have a sense of 'zero' and 'one'.
 /// Additionally, it supports standard arithmetic operations like addition, subtraction,
-/// multiplication, and exponentiation, as well as assignment versions of these operations.
+/// multiplication, division, and exponentiation, as well as assignment versions of these operations.
 ///
-/// Types implementing [`Field`] must provide implementations for scalar multiplication,
+/// Types implementing [`Field`] also provide implementations for scalar multiplication,
 /// negation, doubling, and squaring operations, both as returning new instances and
 /// mutating the current instance in place.
-///
-/// The [`Field`] trait includes division and division assignment operations, including
-/// their reference-based variants. This allows for division of field elements in an
-/// ergonomic manner consistent with Rust's ownership and borrowing principles.
 ///
 /// Implementing this trait enables types to be used within mathematical constructs and
 /// algorithms that require field properties, such as many cryptographic systems, coding theory,
@@ -97,25 +93,25 @@ pub trait Field:
     /// Creates a new instance.
     fn new(value: Self::Inner) -> Self;
 
-    /// power of 2, return `2^pow`.
-    fn pow_of_two(pow: u32) -> Self;
+    /// power of 2, return `2^exp`.
+    fn pow_of_two(exp: u32) -> Self;
 
     /// mask, return a number with `bits` 1s.
     fn mask(bits: u32) -> Self::Inner;
 
-    /// Return inner value
+    /// Return inner value.
     fn inner(self) -> Self::Inner;
 
-    /// cast self to [`usize`]
+    /// cast self to [`usize`].
     fn cast_into_usize(self) -> usize;
 
-    /// cast from [`usize`]
+    /// cast from [`usize`].
     fn cast_from_usize(value: usize) -> Self;
 
-    /// cast inner to [`f64`]
+    /// cast inner to [`f64`].
     fn to_f64(self) -> f64;
 
-    /// cast from [`f64`]
+    /// cast from [`f64`].
     fn from_f64(value: f64) -> Self;
 
     /// Returns the modulus value.
@@ -124,7 +120,7 @@ pub trait Field:
     /// Returns the order of the field.
     fn order() -> Self::Order;
 
-    /// Get the length of decompose vec.
+    /// Get the length of decompose vector.
     fn decompose_len(basis: Self::Inner) -> usize;
 
     /// Decompose `self` according to `basis`,
@@ -156,8 +152,8 @@ pub trait Field:
 
     /// Returns `self + self`.
     #[inline]
-    fn double(&self) -> Self {
-        *self + self
+    fn double(self) -> Self {
+        self + self
     }
 
     /// Doubles `self` in place.
@@ -176,8 +172,8 @@ pub trait Field:
 
     /// Returns `self * self`.
     #[inline]
-    fn square(&self) -> Self {
-        *self * self
+    fn square(self) -> Self {
+        self * self
     }
 
     /// Squares `self` in place.
@@ -201,7 +197,7 @@ pub trait Field:
 
     /// Computes the multiplicative inverse of `self` if `self` is nonzero.
     #[inline]
-    fn inverse(&self) -> Option<Self> {
+    fn inverse(self) -> Option<Self> {
         if self.is_zero() {
             None
         } else {
