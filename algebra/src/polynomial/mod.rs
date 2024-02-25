@@ -2,6 +2,7 @@
 
 mod native_polynomial;
 mod ntt_polynomial;
+pub mod multivariate;
 
 pub use native_polynomial::Polynomial;
 pub use ntt_polynomial::{
