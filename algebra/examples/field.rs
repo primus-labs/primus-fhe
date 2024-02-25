@@ -1,28 +1,26 @@
-use algebra::{derive::*, Field, Polynomial, PrimeField, Random, Ring};
+use algebra::{derive::*, Field, Polynomial, PrimeField, Random};
 use num_traits::{Inv, One, Pow, Zero};
 use rand::{prelude::*, thread_rng};
 use rand_distr::Standard;
 
-// algebra's derive macro can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
-
-// Derive macro `Ring` generates an impl of the trait `algebra::Ring`.
+// Derive macro `Field` generates an impl of the trait `algebra::Field`.
 //
-// This also generates some computation for it, e.g. `Add`, `Sub`, `Mul`, `Neg` and `Pow`.
+// This also generates some computation for it, e.g.
+// `Add`, `Sub`, `Mul`, `Neg`, `Pow`, `Div` and `Inv`.
 //
 // By the way, it also generates impl of the trait `Zero`, `One`, `Display`.
 //
-// And it will generate impl of the trait `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
+// And it will generate impl of the trait
+// `Clone`, `Copy`, `Debug`, `Default`, `Eq`, `PartialEq`, `PartialOrd`, `Ord`.
+//
+// It can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 
 // Derive macro `Random` generates an impl of the trait `algebra::Random`.
 //
-// Then you can use `rand` crate to generate it randomly.
+// Then you can use `rand` crate to generate numbers randomly.
 //
 // Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
 // ternary distribution and normal distribution.
-
-// Derive macro `Field` generating an impl of the trait `algebra::Field`.
-//
-// This also generating some computation for it, e.g. `Div` and `Inv`.
 
 // Derive macro `Prime` generating an impl of the trait `algebra::PrimeField`.
 //
@@ -32,7 +30,7 @@ use rand_distr::Standard;
 //
 // It's based the Derive macro `Prime`.
 
-#[derive(Ring, Field, Random, Prime, NTT)]
+#[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct FF(u64);
 

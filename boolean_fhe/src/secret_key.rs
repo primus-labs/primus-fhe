@@ -1,24 +1,29 @@
 use std::cell::RefCell;
 
-use algebra::{NTTField, NTTPolynomial, Polynomial, RandomNTTField, RandomRing, Ring, RoundedDiv};
-use lattice::dot_product;
-use num_traits::{CheckedMul, One, Zero};
+use algebra::{
+    reduce::{AddReduce, SubReduce},
+    NTTField, NTTPolynomial, Polynomial, RandomNTTField,
+};
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
+use rand_distr::Uniform;
 
-use crate::{LWECiphertext, LWEPlaintext, Parameters};
+use crate::{
+    dot_product, LWECiphertext, LWEPlaintext, LWEType, LWEValueBinary, LWEValueTernary, Parameters,
+};
 
 /// The distribution type of the LWE Secret Key
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum SecretKeyType {
     /// Binary SecretKey Distribution
     Binary,
     /// Ternary SecretKey Distribution
+    #[default]
     Ternary,
 }
 
 /// LWE Secret key
-pub type LWESecretKey<R> = Vec<R>;
+pub type LWESecretKey = Vec<LWEType>;
 
 /// RLWE Secret key
 pub type RLWESecretKey<F> = Polynomial<F>;
@@ -32,111 +37,123 @@ pub type NTTRLWESecretKey<F> = NTTPolynomial<F>;
 /// RLWE secret key, ntt version RLWE secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
-pub struct SecretKeyPack<R: Ring, F: NTTField> {
+pub struct SecretKeyPack<F: NTTField> {
     /// LWE secret key
-    lwe_secret_key: LWESecretKey<R>,
+    lwe_secret_key: LWESecretKey,
     /// RLWE secret key
     rlwe_secret_key: RLWESecretKey<F>,
     /// ntt version RLWE secret key
     ntt_rlwe_secret_key: NTTRLWESecretKey<F>,
     /// boolean fhe's parameters
-    parameters: Parameters<R, F>,
+    parameters: Parameters<F>,
     /// cryptographically secure random number generator
     csrng: RefCell<ChaCha12Rng>,
 }
 
-impl<R: Ring, F: NTTField> SecretKeyPack<R, F> {
-    /// Returns the lwe secret key of this [`SecretKeyPack<R, F>`].
+impl<F: NTTField> SecretKeyPack<F> {
+    /// Returns the lwe secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn lwe_secret_key(&self) -> &[R] {
+    pub fn lwe_secret_key(&self) -> &[LWEType] {
         &self.lwe_secret_key
     }
 
-    /// Returns the rlwe secret key of this [`SecretKeyPack<R, F>`].
+    /// Returns the rlwe secret key of this [`SecretKeyPack<F>`].
     #[inline]
     pub fn rlwe_secret_key(&self) -> &RLWESecretKey<F> {
         &self.rlwe_secret_key
     }
 
-    /// Returns the ntt rlwe secret key of this [`SecretKeyPack<R, F>`].
+    /// Returns the ntt rlwe secret key of this [`SecretKeyPack<F>`].
     #[inline]
     pub fn ntt_rlwe_secret_key(&self) -> &NTTRLWESecretKey<F> {
         &self.ntt_rlwe_secret_key
     }
 
-    /// Returns the parameters of this [`SecretKeyPack<R, F>`].
+    /// Returns the parameters of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn parameters(&self) -> &Parameters<R, F> {
+    pub fn parameters(&self) -> &Parameters<F> {
         &self.parameters
     }
 
     /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     #[inline]
-    pub fn decrypt(&self, cipher_text: &LWECiphertext<R>) -> bool {
-        let encoded_message = cipher_text.b() - dot_product(cipher_text.a(), self.lwe_secret_key());
-        decode(encoded_message)
+    pub fn decrypt(&self, cipher_text: &LWECiphertext) -> bool {
+        let lwe_modulus = self.parameters().lwe_modulus();
+        let encoded_message = cipher_text.b().sub_reduce(
+            dot_product(cipher_text.a(), self.lwe_secret_key(), lwe_modulus),
+            lwe_modulus,
+        );
+        decode(encoded_message, lwe_modulus.value())
     }
 
     /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     #[inline]
-    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext<R>) -> (bool, R) {
-        let encoded_message = cipher_text.b() - dot_product(cipher_text.a(), self.lwe_secret_key());
-        let message = decode(encoded_message);
+    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEType) {
+        let lwe_modulus = self.parameters().lwe_modulus();
+        let encoded_message = cipher_text.b().sub_reduce(
+            dot_product(cipher_text.a(), self.lwe_secret_key(), lwe_modulus),
+            lwe_modulus,
+        );
+        let message = decode(encoded_message, lwe_modulus.value());
 
-        let fresh = encode::<R>(message);
+        let fresh = encode(message, lwe_modulus.value());
+
         (
             message,
-            (encoded_message - fresh).min(fresh - encoded_message),
+            encoded_message
+                .sub_reduce(fresh, lwe_modulus)
+                .min(fresh.sub_reduce(encoded_message, lwe_modulus)),
         )
     }
 
-    /// Returns the csrng of this [`SecretKeyPack<R, F>`].
+    /// Returns the csrng of this [`SecretKeyPack<F>`].
     #[inline]
     pub fn csrng(&self) -> std::cell::Ref<'_, ChaCha12Rng> {
         self.csrng.borrow()
     }
 
-    /// Returns the csrng of this [`SecretKeyPack<R, F>`].
+    /// Returns the csrng of this [`SecretKeyPack<F>`].
     #[inline]
     pub fn csrng_mut(&self) -> std::cell::RefMut<'_, ChaCha12Rng> {
         self.csrng.borrow_mut()
     }
 }
 
-impl<R: RandomRing, F: NTTField> SecretKeyPack<R, F> {
+impl<F: NTTField> SecretKeyPack<F> {
     /// Encrypts [`LWEPlaintext`] into [`LWECiphertext<R>`].
     #[inline]
-    pub fn encrypt(&self, message: LWEPlaintext) -> LWECiphertext<R> {
-        let standard_distribution = R::standard_distribution();
+    pub fn encrypt(&self, message: LWEPlaintext) -> LWECiphertext {
         let lwe_dimension = self.parameters.lwe_dimension();
+        let lwe_modulus = self.parameters().lwe_modulus();
+        let standard_distribution = Uniform::new_inclusive(0, lwe_modulus.mask());
         let noise_distribution = self.parameters.lwe_noise_distribution();
 
         let mut csrng = self.csrng_mut();
 
-        let a: Vec<R> = standard_distribution
+        let a: Vec<LWEType> = standard_distribution
             .sample_iter(&mut *csrng)
             .take(lwe_dimension)
             .collect();
-        let b = dot_product(&a, self.lwe_secret_key())
-            + encode::<R>(message)
-            + noise_distribution.sample(&mut *csrng);
+        let b = dot_product(&a, self.lwe_secret_key(), lwe_modulus)
+            .add_reduce(encode(message, lwe_modulus.value()), lwe_modulus)
+            .add_reduce(noise_distribution.sample(&mut *csrng), lwe_modulus);
 
         LWECiphertext::new(a, b)
     }
 }
 
-impl<R: RandomRing, F: RandomNTTField> SecretKeyPack<R, F> {
-    /// Creates a new [`SecretKeyPack<R, F>`].
-    pub fn new(parameters: Parameters<R, F>) -> Self {
+impl<F: RandomNTTField> SecretKeyPack<F> {
+    /// Creates a new [`SecretKeyPack<F>`].
+    pub fn new(parameters: Parameters<F>) -> Self {
         let mut csrng = ChaCha12Rng::from_entropy();
 
         let lwe_dimension = parameters.lwe_dimension();
         let lwe_secret_key = match parameters.secret_key_type() {
-            SecretKeyType::Binary => R::binary_distribution()
+            SecretKeyType::Binary => LWEValueBinary::new()
                 .sample_iter(&mut csrng)
                 .take(lwe_dimension)
                 .collect(),
-            SecretKeyType::Ternary => R::ternary_distribution()
+            SecretKeyType::Ternary => LWEValueTernary::new(parameters.lwe_modulus().value())
                 .sample_iter(&mut csrng)
                 .take(lwe_dimension)
                 .collect(),
@@ -158,27 +175,24 @@ impl<R: RandomRing, F: RandomNTTField> SecretKeyPack<R, F> {
 
 /// Encodes a message
 #[inline]
-fn encode<R: Ring>(message: LWEPlaintext) -> R {
+fn encode(message: LWEPlaintext, lwe_modulus: LWEType) -> LWEType {
     if message {
-        R::from(R::modulus_value().rounded_div(R::FOUR_INNER))
+        lwe_modulus >> 2
     } else {
-        R::ZERO
+        0
     }
 }
 
 /// Decodes a cipher text
-fn decode<R: Ring>(encoded_message: R) -> bool {
-    let decoded = encoded_message
-        .inner()
-        .checked_mul(&R::FOUR_INNER)
-        .unwrap()
-        .rounded_div(R::modulus_value());
+fn decode(encoded_message: LWEType, lwe_modulus: LWEType) -> bool {
+    assert!(lwe_modulus.is_power_of_two() && lwe_modulus >= 8);
 
-    if decoded == R::FOUR_INNER || decoded.is_zero() {
-        false
-    } else if decoded.is_one() {
-        true
-    } else {
-        panic!("Wrong decoding output: {:?}", decoded);
+    let temp = encoded_message >> (lwe_modulus.trailing_zeros() - 3);
+    let decoded = ((temp >> 1) + (temp & 1)) & 3;
+
+    match decoded {
+        0 => false,
+        1 => true,
+        _ => panic!("Wrong decoding output: {:?}", decoded),
     }
 }

@@ -19,14 +19,14 @@ fn impl_ntt(input: Input) -> TokenStream {
     let ntt_mutex = format_ident!("NTT_MUTEX{}", name.to_string().to_uppercase());
 
     quote! {
-        static mut #ntt_table: once_cell::sync::OnceCell<std::collections::HashMap<u32, std::sync::Arc<algebra::transformation::NTTTable<#name>>>>
-            = once_cell::sync::OnceCell::new();
-        static #ntt_mutex: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        static mut #ntt_table: ::once_cell::sync::OnceCell<::std::collections::HashMap<u32, ::std::sync::Arc<::algebra::transformation::NTTTable<#name>>>>
+            = ::once_cell::sync::OnceCell::new();
+        static #ntt_mutex: ::std::sync::Mutex<()> = ::std::sync::Mutex::new(());
 
-        impl algebra::NTTField for #name {
-            type Table = algebra::transformation::NTTTable<Self>;
+        impl ::algebra::NTTField for #name {
+            type Table = ::algebra::transformation::NTTTable<Self>;
 
-            type Root = algebra::MulFactor<Self>;
+            type Root = ::algebra::MulFactor<Self>;
 
             type Degree = #field_ty;
 
@@ -37,28 +37,28 @@ fn impl_ntt(input: Input) -> TokenStream {
 
             #[inline]
             fn to_root(self) -> Self::Root {
-                Self::Root::new(self, #name((((self.0 as <#field_ty as algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as algebra::Widening>::WideT) as #field_ty))
+                Self::Root::new(self, #name((((self.0 as <#field_ty as ::algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as ::algebra::Widening>::WideT) as #field_ty))
             }
 
             #[inline]
             fn mul_root(self, root: Self::Root) -> Self {
-                let r = algebra::modulus::MulReduceFactor::<#field_ty> {
+                let r = ::algebra::modulus::MulReduceFactor::<#field_ty> {
                     value: root.value().0,
                     quotient: root.quotient().0,
                 };
 
-                use algebra::reduce::MulReduce;
+                use ::algebra::reduce::MulReduce;
                 Self(self.0.mul_reduce(r, #modulus))
             }
 
             #[inline]
             fn mul_root_assign(&mut self, root: Self::Root) {
-                let r = algebra::modulus::MulReduceFactor::<#field_ty> {
+                let r = ::algebra::modulus::MulReduceFactor::<#field_ty> {
                     value: root.value().0,
                     quotient: root.quotient().0,
                 };
 
-                use algebra::reduce::MulReduceAssign;
+                use ::algebra::reduce::MulReduceAssign;
                 self.0.mul_reduce_assign(r, #modulus);
             }
 
@@ -70,14 +70,14 @@ fn impl_ntt(input: Input) -> TokenStream {
                     "degree must be a power of two and bigger than 1"
                 );
 
-                if num_traits::Zero::is_zero(&root) {
+                if ::num_traits::Zero::is_zero(&root) {
                     return false;
                 }
 
-                num_traits::Pow::pow(root, degree >> 1).0 == #modulus - 1
+                ::num_traits::Pow::pow(root, degree >> 1).0 == #modulus - 1
             }
 
-            fn try_primitive_root(degree: Self::Degree) -> Result<Self, algebra::AlgebraError> {
+            fn try_primitive_root(degree: Self::Degree) -> Result<Self, ::algebra::AlgebraError> {
                 // p-1
                 let modulus_sub_one = #modulus - 1;
 
@@ -86,34 +86,34 @@ fn impl_ntt(input: Input) -> TokenStream {
 
                 // (p-1) must be divisible by n
                 if modulus_sub_one != quotient * degree {
-                    return Err(algebra::AlgebraError::NoPrimitiveRoot {
+                    return Err(::algebra::AlgebraError::NoPrimitiveRoot {
                         degree: degree.to_string(),
                         modulus: #modulus.to_string(),
                     });
                 }
 
-                let mut rng = rand::thread_rng();
-                let distr = rand::distributions::Uniform::new_inclusive(Self(2), Self(#modulus - 1));
+                let mut rng = ::rand::thread_rng();
+                let distr = ::rand::distributions::Uniform::new_inclusive(Self(2), Self(#modulus - 1));
 
                 let mut w = Self(0);
 
                 if (0..100).any(|_| {
-                    w = num_traits::Pow::pow(rand::Rng::sample(&mut rng, distr), quotient);
+                    w = ::num_traits::Pow::pow(::rand::Rng::sample(&mut rng, distr), quotient);
                     Self::is_primitive_root(w, degree)
                 }) {
                     Ok(w)
                 } else {
-                    Err(algebra::AlgebraError::NoPrimitiveRoot {
+                    Err(::algebra::AlgebraError::NoPrimitiveRoot {
                         degree: degree.to_string(),
                         modulus: #modulus.to_string(),
                     })
                 }
             }
 
-            fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, algebra::AlgebraError> {
+            fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, ::algebra::AlgebraError> {
                 let mut root = Self::try_primitive_root(degree)?;
 
-                let generator_sq = algebra::Ring::square(&root);
+                let generator_sq = ::algebra::Field::square(root);
                 let mut current_generator = root;
 
                 for _ in 0..degree {
@@ -127,34 +127,34 @@ fn impl_ntt(input: Input) -> TokenStream {
                 Ok(root)
             }
 
-            fn generate_ntt_table(log_n: u32) -> Result<algebra::transformation::NTTTable<Self>, algebra::AlgebraError> {
+            fn generate_ntt_table(log_n: u32) -> Result<::algebra::transformation::NTTTable<Self>, ::algebra::AlgebraError> {
                 let n = 1usize << log_n;
 
                 let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
-                let inv_root = num_traits::Inv::inv(root);
+                let inv_root = ::num_traits::Inv::inv(root);
 
                 let root_factor = root.to_root();
                 let mut power = root;
 
-                let mut root_powers = vec![<Self as algebra::NTTField>::Root::default(); n];
+                let mut root_powers = vec![<Self as ::algebra::NTTField>::Root::default(); n];
                 root_powers[0] = Self(1).to_root();
                 for i in 1..n {
-                    root_powers[algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = power.to_root();
+                    root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = power.to_root();
                     power.mul_root_assign(root_factor);
                 }
 
                 let inv_root_factor = inv_root.to_root();
-                let mut inv_root_powers = vec![<Self as algebra::NTTField>::Root::default(); n];
+                let mut inv_root_powers = vec![<Self as ::algebra::NTTField>::Root::default(); n];
                 power = inv_root;
 
                 inv_root_powers[0] = Self(1).to_root();
                 for i in 1..n {
-                    inv_root_powers[algebra::utils::ReverseLsbs::reverse_lsbs(i - 1, log_n) + 1] = power.to_root();
+                    inv_root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i - 1, log_n) + 1] = power.to_root();
                     power.mul_root_assign(inv_root_factor);
                 }
-                let inv_degree = num_traits::Inv::inv(Self(n as #field_ty)).to_root();
+                let inv_degree = ::num_traits::Inv::inv(Self(n as #field_ty)).to_root();
 
-                Ok(algebra::transformation::NTTTable::new(
+                Ok(::algebra::transformation::NTTTable::new(
                     root,
                     inv_root,
                     log_n,
@@ -165,45 +165,45 @@ fn impl_ntt(input: Input) -> TokenStream {
                 ))
             }
 
-            fn get_ntt_table(log_n: u32) -> Result<std::sync::Arc<Self::Table>, algebra::AlgebraError> {
+            fn get_ntt_table(log_n: u32) -> Result<::std::sync::Arc<Self::Table>, ::algebra::AlgebraError> {
                 if let Some(tables) = unsafe { #ntt_table.get() } {
                     if let Some(t) = tables.get(&log_n) {
-                        return Ok(std::sync::Arc::clone(t));
+                        return Ok(::std::sync::Arc::clone(t));
                     }
                 }
 
                 Self::init_ntt_table(&[log_n])?;
-                Ok(std::sync::Arc::clone(unsafe {
+                Ok(::std::sync::Arc::clone(unsafe {
                     #ntt_table.get().unwrap().get(&log_n).unwrap()
                 }))
             }
 
-            fn init_ntt_table(log_ns: &[u32]) -> Result<(), algebra::AlgebraError> {
+            fn init_ntt_table(log_ns: &[u32]) -> Result<(), ::algebra::AlgebraError> {
                 let _g = #ntt_mutex.lock().unwrap();
                 match unsafe { #ntt_table.get_mut() } {
                     Some(tables) => {
-                        let new_log_ns: std::collections::HashSet<u32> = log_ns.iter().copied().collect();
-                        let old_log_ns: std::collections::HashSet<u32> = tables.keys().copied().collect();
+                        let new_log_ns: ::std::collections::HashSet<u32> = log_ns.iter().copied().collect();
+                        let old_log_ns: ::std::collections::HashSet<u32> = tables.keys().copied().collect();
                         let difference = new_log_ns.difference(&old_log_ns);
 
                         for &log_n in difference {
                             let temp_table = Self::generate_ntt_table(log_n)?;
-                            tables.insert(log_n, std::sync::Arc::new(temp_table));
+                            tables.insert(log_n, ::std::sync::Arc::new(temp_table));
                         }
 
                         Ok(())
                     }
                     None => {
-                        let log_ns: std::collections::HashSet<u32> = log_ns.iter().copied().collect();
-                        let mut map = std::collections::HashMap::with_capacity(log_ns.len());
+                        let log_ns: ::std::collections::HashSet<u32> = log_ns.iter().copied().collect();
+                        let mut map = ::std::collections::HashMap::with_capacity(log_ns.len());
 
                         for log_n in log_ns {
                             let temp_table = Self::generate_ntt_table(log_n)?;
-                            map.insert(log_n, std::sync::Arc::new(temp_table));
+                            map.insert(log_n, ::std::sync::Arc::new(temp_table));
                         }
 
                         if unsafe { #ntt_table.set(map).is_err() } {
-                            Err(algebra::AlgebraError::NTTTableError)
+                            Err(::algebra::AlgebraError::NTTTableError)
                         } else {
                             Ok(())
                         }

@@ -1,11 +1,12 @@
 use algebra::{
-    ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
-    Ring,
+    modulus::PowOf2Modulus, ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial,
+    Random, RandomNTTField,
 };
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
 
 use crate::{
-    ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, SecretKeyPack, SecretKeyType,
+    ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, LWEType, SecretKeyPack,
+    SecretKeyType,
 };
 
 mod binary;
@@ -44,12 +45,13 @@ impl<F: NTTField> BootstrappingKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn bootstrapping<R: Ring>(
+    pub fn bootstrapping(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[R],
+        lwe_a: &[LWEType],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
+        lwe_modulus: PowOf2Modulus<LWEType>,
     ) -> RLWE<F> {
         match self {
             BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(
@@ -57,12 +59,14 @@ impl<F: NTTField> BootstrappingKey<F> {
                 lwe_a,
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
+                lwe_modulus,
             ),
             BootstrappingKey::Ternary(bootstrapping_key) => bootstrapping_key.bootstrapping(
                 init_acc,
                 lwe_a,
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
+                lwe_modulus,
             ),
         }
     }
@@ -70,8 +74,8 @@ impl<F: NTTField> BootstrappingKey<F> {
 
 impl<F: RandomNTTField> BootstrappingKey<F> {
     /// Generates the [`BootstrappingKey<F>`].
-    pub fn generate<R: Ring, Rng>(
-        secret_key_pack: &SecretKeyPack<R, F>,
+    pub fn generate<Rng>(
+        secret_key_pack: &SecretKeyPack<F>,
         chi: <F as Random>::NormalDistribution,
         rng: Rng,
     ) -> Self

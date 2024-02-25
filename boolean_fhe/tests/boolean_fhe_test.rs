@@ -1,5 +1,4 @@
-use algebra::Ring;
-use boolean_fhe::{DefaultRing100, EvaluationKey, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
+use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
 use rand::prelude::*;
 
 #[test]
@@ -30,5 +29,5 @@ fn test_nand() {
 
     // check
     assert_eq!(m2, !(m0 & m1));
-    assert!(noise.to_f64() <= DefaultRing100::MODULUS_F64 / 16.0);
+    assert!(noise <= (DEFAULT_100_BITS_PARAMERTERS.lwe_modulus_f64() / 16.0) as LWEType);
 }

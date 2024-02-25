@@ -12,12 +12,12 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
 
 fn standard(name: &Ident, standard_name: &Ident) -> TokenStream {
     quote! {
-        static #standard_name: once_cell::sync::Lazy<rand::distributions::Uniform<#name>> =
-            once_cell::sync::Lazy::new(|| rand::distributions::Uniform::new_inclusive(#name(0), #name::max()));
+        static #standard_name: ::once_cell::sync::Lazy<::rand::distributions::Uniform<#name>> =
+            ::once_cell::sync::Lazy::new(|| ::rand::distributions::Uniform::new_inclusive(#name(0), #name::max()));
 
-        impl rand::distributions::Distribution<#name> for rand::distributions::Standard {
+        impl ::rand::distributions::Distribution<#name> for ::rand::distributions::Standard {
             #[inline]
-            fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
+            fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 #standard_name.sample(rng)
             }
         }
@@ -31,7 +31,7 @@ fn binary(name: &Ident, binary_name: &Ident) -> TokenStream {
         /// prob\[1] = prob\[0] = 0.5
         #[derive(Clone, Copy, Debug)]
         pub struct #binary_name {
-            inner: rand_distr::Bernoulli,
+            inner: ::rand_distr::Bernoulli,
         }
 
         impl #binary_name {
@@ -39,21 +39,21 @@ fn binary(name: &Ident, binary_name: &Ident) -> TokenStream {
             #[inline]
             pub fn new() -> Self {
                 Self {
-                    inner: rand_distr::Bernoulli::new(0.5).unwrap(),
+                    inner: ::rand_distr::Bernoulli::new(0.5).unwrap(),
                 }
             }
         }
 
-        impl Default for #binary_name {
+        impl ::std::default::Default for #binary_name {
             #[inline]
             fn default() -> Self {
                 Self::new()
             }
         }
 
-        impl rand::distributions::Distribution<#name> for #binary_name {
+        impl ::rand::distributions::Distribution<#name> for #binary_name {
             #[inline]
-            fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
+            fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 if self.inner.sample(rng) {
                     #name(1)
                 } else {
@@ -73,8 +73,8 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
         /// prob\[0] = 0.5
         #[derive(Clone, Copy, Debug)]
         pub struct #ternary_name {
-            inner1: rand_distr::Bernoulli,
-            inner2: rand_distr::Bernoulli,
+            inner1: ::rand_distr::Bernoulli,
+            inner2: ::rand_distr::Bernoulli,
         }
 
         impl #ternary_name {
@@ -82,22 +82,22 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
             #[inline]
             pub fn new() -> Self {
                 Self {
-                    inner1: rand_distr::Bernoulli::new(0.5).unwrap(),
-                    inner2: rand_distr::Bernoulli::new(0.5).unwrap(),
+                    inner1: ::rand_distr::Bernoulli::new(0.5).unwrap(),
+                    inner2: ::rand_distr::Bernoulli::new(0.5).unwrap(),
                 }
             }
         }
 
-        impl Default for #ternary_name {
+        impl ::std::default::Default for #ternary_name {
             #[inline]
             fn default() -> Self {
                 Self::new()
             }
         }
 
-        impl rand::distributions::Distribution<#name> for #ternary_name {
+        impl ::rand::distributions::Distribution<#name> for #ternary_name {
             #[inline]
-            fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
+            fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 if self.inner1.sample(rng) {
                     #name(0)
                 } else if self.inner2.sample(rng) {
@@ -114,18 +114,18 @@ fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenSt
     let sample_name = format_ident!("Uniform{}", name);
     quote! {
         #[derive(Clone, Copy, Debug)]
-        pub struct #sample_name(rand::distributions::uniform::UniformInt<#field_ty>);
+        pub struct #sample_name(::rand::distributions::uniform::UniformInt<#field_ty>);
 
-        impl rand::distributions::uniform::UniformSampler for #sample_name {
+        impl ::rand::distributions::uniform::UniformSampler for #sample_name {
             type X = #name;
 
             #[inline]
             fn new<B1, B2>(low: B1, high: B2) -> Self
             where
-                B1: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
-                B2: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+                B1: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+                B2: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
             {
-                #sample_name(rand::distributions::uniform::UniformInt::<#field_ty>::new_inclusive(
+                #sample_name(::rand::distributions::uniform::UniformInt::<#field_ty>::new_inclusive(
                     low.borrow().0,
                     high.borrow().0 - 1,
                 ))
@@ -134,24 +134,24 @@ fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenSt
             #[inline]
             fn new_inclusive<B1, B2>(low: B1, high: B2) -> Self
             where
-                B1: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
-                B2: rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+                B1: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
+                B2: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
             {
                 let high = if high.borrow().0 >= #modulus - 1 {
                     #modulus - 1
                 } else {
                     high.borrow().0
                 };
-                #sample_name(rand::distributions::uniform::UniformInt::<#field_ty>::new_inclusive(low.borrow().0, high))
+                #sample_name(::rand::distributions::uniform::UniformInt::<#field_ty>::new_inclusive(low.borrow().0, high))
             }
 
             #[inline]
-            fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Self::X {
+            fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> Self::X {
                 #name(self.0.sample(rng))
             }
         }
 
-        impl rand::distributions::uniform::SampleUniform for #name {
+        impl ::rand::distributions::uniform::SampleUniform for #name {
             type Sampler = #sample_name;
         }
     }
@@ -167,7 +167,7 @@ fn normal(
         #[doc = concat!("The normal distribution `N(mean, std_dev**2)` for [`", stringify!(#name), "`].")]
         #[derive(Clone, Copy, Debug)]
         pub struct #sample_name {
-            inner: rand_distr::Normal<f64>,
+            inner: ::rand_distr::Normal<f64>,
             std_dev_min: f64,
             std_dev_max: f64,
         }
@@ -180,14 +180,14 @@ fn normal(
             /// -   mean (`μ`, unrestricted)
             /// -   standard deviation (`σ`, must be finite)
             #[inline]
-            pub fn new(mean: f64, std_dev: f64) -> Result<#sample_name, algebra::AlgebraError> {
-                match rand_distr::Normal::new(mean, std_dev) {
+            pub fn new(mean: f64, std_dev: f64) -> Result<#sample_name, ::algebra::AlgebraError> {
+                match ::rand_distr::Normal::new(mean, std_dev) {
                     Ok(inner) => {
                         let std_dev_max = std_dev * 6.0;
                         let std_dev_min = -std_dev_max;
                         Ok(#sample_name { inner, std_dev_max, std_dev_min })
                     },
-                    Err(_) => Err(algebra::AlgebraError::DistributionError),
+                    Err(_) => Err(::algebra::AlgebraError::DistributionError),
                 }
             }
 
@@ -216,8 +216,8 @@ fn normal(
             }
         }
 
-        impl rand::distributions::Distribution<#name> for #sample_name {
-            fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
+        impl ::rand::distributions::Distribution<#name> for #sample_name {
+            fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 const FLOAT_P: f64 = #modulus as f64;
                 let mut value = self.inner.sample(rng);
                 while value < self.std_dev_min {
@@ -273,15 +273,15 @@ fn impl_random(input: Input) -> TokenStream {
             #[inline]
             pub fn random<R>(rng: &mut R) -> Self
             where
-                R: rand::Rng + rand::CryptoRng,
+                R: ::rand::Rng + ::rand::CryptoRng,
             {
-                use rand::distributions::Distribution;
+                use ::rand::distributions::Distribution;
                 #standard_name.sample(rng)
             }
         }
 
-        impl algebra::Random for #name {
-            type StandardDistribution = rand::distributions::Uniform<#name>;
+        impl ::algebra::Random for #name {
+            type StandardDistribution = ::rand::distributions::Uniform<#name>;
 
             type BinaryDistribution = #binary_name;
 
@@ -308,7 +308,7 @@ fn impl_random(input: Input) -> TokenStream {
             fn normal_distribution(
                 mean: f64,
                 std_dev: f64,
-            ) -> Result<Self::NormalDistribution, algebra::AlgebraError> {
+            ) -> Result<Self::NormalDistribution, ::algebra::AlgebraError> {
                 #normal_name::new(mean, std_dev)
             }
         }

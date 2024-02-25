@@ -1,7 +1,7 @@
-use algebra::{Basis, NTTField, Random, RandomNTTField, Ring};
+use algebra::{modulus::PowOf2Modulus, reduce::NegReduce, Basis, NTTField, Random, RandomNTTField};
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
-use crate::secret_key::NTTRLWESecretKey;
+use crate::{secret_key::NTTRLWESecretKey, LWEType};
 
 use super::{ntt_rgsw_one, ntt_rgsw_zero};
 
@@ -18,12 +18,13 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn bootstrapping<R: Ring>(
+    pub fn bootstrapping(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[R],
+        lwe_a: &[LWEType],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
+        lwe_modulus: PowOf2Modulus<LWEType>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
@@ -50,7 +51,7 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
                     acc_mul_rgsw,
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
-                    -a_i,
+                    a_i.neg_reduce(lwe_modulus),
                 );
                 acc
             })
@@ -59,10 +60,10 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
 
 impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
     /// Generates the [`BinaryBootstrappingKey<F>`].
-    pub(crate) fn generate<R: Ring, Rng>(
+    pub(crate) fn generate<Rng>(
         basis: Basis<F>,
         basis_powers: &[F],
-        lwe_secret_key: &[R],
+        lwe_secret_key: &[LWEType],
         chi: <F as Random>::NormalDistribution,
         rlwe_dimension: usize,
         rlwe_secret_key: &NTTRLWESecretKey<F>,
@@ -74,7 +75,7 @@ impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s.is_zero() {
+                if s == 0 {
                     ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng)
                 } else {
                     ntt_rgsw_one(

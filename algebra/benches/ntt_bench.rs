@@ -1,9 +1,9 @@
 use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random};
-use algebra_derive::{Field, Prime, Random, Ring, NTT};
+use algebra_derive::{Field, Prime, Random, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{prelude::*, thread_rng};
 
-#[derive(Ring, Field, Random, Prime, NTT)]
+#[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp(u32);
 

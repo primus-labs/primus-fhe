@@ -2,9 +2,9 @@ use std::ops::MulAssign;
 
 use algebra::{
     ntt_add_mul_assign_ref, ntt_mul_assign_ref, transformation::AbstractNTT, NTTField,
-    NTTPolynomial, Polynomial, Ring,
+    NTTPolynomial, Polynomial,
 };
-use num_traits::Zero;
+use num_traits::{NumCast, Zero};
 
 use crate::{
     DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW,
@@ -303,16 +303,16 @@ impl<F: NTTField> RLWE<F> {
     }
 
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
-    pub fn add_assign_rhs_mul_monic_monomial<R: Ring>(
+    pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
         &mut self,
         rhs: &Self,
         // N
         rlwe_dimension: usize,
         // 2N/q
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        r: R,
+        r: T,
     ) {
-        let r = r.cast_into_usize() * twice_rlwe_dimension_div_lwe_modulus;
+        let r = num_traits::cast::<T, usize>(r).unwrap() * twice_rlwe_dimension_div_lwe_modulus;
         if r <= rlwe_dimension {
             #[inline]
             fn rotate_add<F: NTTField>(

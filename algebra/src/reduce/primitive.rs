@@ -1,17 +1,10 @@
-use crate::reduce::{
-    AddReduce, AddReduceAssign, InvReduce, NegReduce, NegReduceAssign, SubReduce, SubReduceAssign,
-};
-use crate::utils::ExtendedGCD;
-
-use super::TryInvReduce;
-
 macro_rules! impl_modulo_ops_for_primitive {
     ($($t:ty),*) => {$(
-        impl AddReduce<$t> for $t {
-            type Output = $t;
+        impl $crate::reduce::AddReduce<Self> for $t {
+            type Output = Self;
 
             #[inline]
-            fn add_reduce(self, rhs: Self, modulus: $t) -> Self::Output {
+            fn add_reduce(self, rhs: Self, modulus: Self) -> Self::Output {
                 let r = self + rhs;
                 if r >= modulus {
                     r - modulus
@@ -21,9 +14,9 @@ macro_rules! impl_modulo_ops_for_primitive {
             }
         }
 
-        impl AddReduceAssign<$t> for $t {
+        impl $crate::reduce::AddReduceAssign<Self> for $t {
             #[inline]
-            fn add_reduce_assign(&mut self, rhs: Self, modulus: $t) {
+            fn add_reduce_assign(&mut self, rhs: Self, modulus: Self) {
                 let r = *self + rhs;
                 *self = if r >= modulus {
                     r - modulus
@@ -33,11 +26,11 @@ macro_rules! impl_modulo_ops_for_primitive {
             }
         }
 
-        impl SubReduce<$t> for $t {
-            type Output = $t;
+        impl $crate::reduce::SubReduce<Self> for $t {
+            type Output = Self;
 
             #[inline]
-            fn sub_reduce(self, rhs: Self, modulus: $t) -> Self::Output {
+            fn sub_reduce(self, rhs: Self, modulus: Self) -> Self::Output {
                 if self >= rhs {
                     self - rhs
                 } else {
@@ -46,9 +39,9 @@ macro_rules! impl_modulo_ops_for_primitive {
             }
         }
 
-        impl SubReduceAssign<$t> for $t {
+        impl $crate::reduce::SubReduceAssign<Self> for $t {
             #[inline]
-            fn sub_reduce_assign(&mut self, rhs: Self, modulus: $t) {
+            fn sub_reduce_assign(&mut self, rhs: Self, modulus: Self) {
                 if *self >= rhs {
                     *self -= rhs;
                 } else {
@@ -57,43 +50,45 @@ macro_rules! impl_modulo_ops_for_primitive {
             }
         }
 
-        impl NegReduce<$t> for $t {
-            type Output = $t;
+        impl $crate::reduce::NegReduce<Self> for $t {
+            type Output = Self;
 
             #[inline]
-            fn neg_reduce(self, modulus: $t) -> Self::Output {
+            fn neg_reduce(self, modulus: Self) -> Self::Output {
                 modulus - self
             }
         }
 
-        impl NegReduceAssign<$t> for $t {
+        impl $crate::reduce::NegReduceAssign<Self> for $t {
             #[inline]
-            fn neg_reduce_assign(&mut self, modulus: $t) {
+            fn neg_reduce_assign(&mut self, modulus: Self) {
                 *self = modulus - *self;
             }
         }
 
-        impl InvReduce for $t {
+        impl $crate::reduce::InvReduce for $t {
             fn inv_reduce(self, modulus: Self) -> Self {
                 debug_assert!(self < modulus);
+                use $crate::utils::ExtendedGCD;
 
-                let (_, inv, gcd) = Self::extended_gcd(modulus, self);
+                let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
 
                 debug_assert_eq!(gcd, 1);
 
                 if inv > 0 {
-                    inv as $t
+                    inv as Self
                 } else {
-                    (inv + modulus as <$t as ExtendedGCD>::SignedT) as $t
+                    (inv + modulus as <Self as ExtendedGCD>::SignedT) as Self
                 }
             }
         }
 
-        impl TryInvReduce for $t {
+        impl $crate::reduce::TryInvReduce for $t {
             fn try_inv_reduce(self, modulus: Self) -> Result<Self, crate::AlgebraError> {
                 debug_assert!(self < modulus);
+                use $crate::utils::ExtendedGCD;
 
-                let (_, inv, gcd) = Self::extended_gcd(modulus, self);
+                let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
 
                 if gcd == 1 {
                     if inv > 0 {
@@ -102,7 +97,7 @@ macro_rules! impl_modulo_ops_for_primitive {
                         Ok((inv + modulus as <Self as ExtendedGCD>::SignedT) as Self)
                     }
                 } else {
-                    Err(crate::AlgebraError::NoReduceInverse {
+                    Err($crate::AlgebraError::NoReduceInverse {
                         value: self.to_string(),
                         modulus: modulus.to_string(),
                     })

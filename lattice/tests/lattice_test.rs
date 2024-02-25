@@ -1,21 +1,20 @@
-use algebra::derive::{Field, Prime, Random, Ring, NTT};
-use algebra::{Basis, ModulusConfig, Polynomial, Random, Ring};
+use algebra::derive::{Field, Prime, Random, NTT};
+use algebra::modulus::PowOf2Modulus;
+use algebra::reduce::{AddReduce, MulReduce, SubReduce};
+use algebra::{Basis, Field, ModulusConfig, Polynomial, Random};
 use lattice::*;
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
-#[derive(Ring, Random)]
-#[modulus = 512]
-pub struct R512(u32);
-
-#[derive(Ring, Field, Random, Prime, NTT)]
+#[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
 type Inner = u32; // inner type
 type FF = Fp32; // field type
-type RR = R512; // ring type
 type PolyFF = Polynomial<FF>;
+
+const RR: Inner = 1024;
 
 const LOG_N: usize = 3;
 const N: usize = 1 << LOG_N; // length
@@ -29,65 +28,90 @@ const FT: Inner = 4; // message space
 fn test_lwe() {
     let rng = &mut rand::thread_rng();
 
-    let a1 = rng.sample_iter(Standard).take(N).collect::<Vec<RR>>();
-    let a2 = rng.sample_iter(Standard).take(N).collect::<Vec<RR>>();
+    let dis = Uniform::new(0u32, RR);
+    let modulus = <PowOf2Modulus<u32>>::new(RR);
+
+    let a1 = rng.sample_iter(dis).take(N).collect::<Vec<Inner>>();
+    let a2 = rng.sample_iter(dis).take(N).collect::<Vec<Inner>>();
     let a3 = a1
         .iter()
         .zip(a2.iter())
-        .map(|(u, v)| *u + v)
-        .collect::<Vec<RR>>();
+        .map(|(u, v)| u.add_reduce(*v, modulus))
+        .collect::<Vec<Inner>>();
 
-    let b1: RR = rng.gen();
-    let b2: RR = rng.gen();
-    let b3: RR = b1 + b2;
+    let b1: Inner = rng.sample(dis);
+    let b2: Inner = rng.sample(dis);
+    let b3: Inner = b1.add_reduce(b2, modulus);
 
     let lwe1 = LWE::new(a1, b1);
     let lwe2 = LWE::new(a2, b2);
     let lwe3 = LWE::new(a3, b3);
-    assert_eq!(lwe1.clone().add_component_wise(&lwe2), lwe3);
-    assert_eq!(lwe3.sub_component_wise(&lwe2), lwe1);
+    assert_eq!(lwe1.clone().add_reduce_component_wise(&lwe2, modulus), lwe3);
+    assert_eq!(lwe3.sub_reduce_component_wise(&lwe2, modulus), lwe1);
 }
 
 #[test]
 fn test_lwe_he() {
-    const RP: Inner = RR::max().0 + 1;
+    const RP: Inner = RR;
     const RT: Inner = 4;
+    const EMAX: Inner = RR / 16;
 
     #[inline]
-    fn encode(m: Inner) -> RR {
-        RR::new((m as f64 * RP as f64 / RT as f64).round() as Inner)
+    fn encode(m: Inner) -> Inner {
+        (m as f64 * RP as f64 / RT as f64).round() as Inner
     }
 
     #[inline]
-    fn decode(c: RR) -> Inner {
-        (c.inner() as f64 * RT as f64 / RP as f64).round() as Inner % RT
+    fn decode(c: Inner) -> Inner {
+        (c as f64 * RT as f64 / RP as f64).round() as Inner % RT
     }
 
     let rng = &mut rand::thread_rng();
 
-    let chi = RR::normal_distribution(0., 3.2).unwrap();
+    let dis = Uniform::new(0u32, RR);
+    let modulus = <PowOf2Modulus<u32>>::new(RR);
 
     let v0: Inner = rng.gen_range(0..RT);
     let v1: Inner = rng.gen_range(0..RT);
 
-    let s = rng.sample_iter(Standard).take(N).collect::<Vec<RR>>();
+    let s = rng.sample_iter(dis).take(N).collect::<Vec<Inner>>();
 
     let lwe1 = {
-        let a = rng.sample_iter(Standard).take(N).collect::<Vec<RR>>();
-        let b: RR = dot_product(&a, &s) + encode(v0) + chi.sample(rng);
+        let a = rng.sample_iter(dis).take(N).collect::<Vec<Inner>>();
+        let b = a
+            .iter()
+            .zip(&s)
+            .fold(0, |acc, (&x, &y)| {
+                x.mul_reduce(y, modulus).add_reduce(acc, modulus)
+            })
+            .add_reduce(encode(v0), modulus)
+            .add_reduce(rng.gen_range(0..EMAX), modulus);
 
         LWE::new(a, b)
     };
 
     let lwe2 = {
-        let a = rng.sample_iter(Standard).take(N).collect::<Vec<RR>>();
-        let b: RR = dot_product(&a, &s) + encode(v1) + chi.sample(rng);
+        let a = rng.sample_iter(Standard).take(N).collect::<Vec<Inner>>();
+
+        let b = a
+            .iter()
+            .zip(&s)
+            .fold(0, |acc, (&x, &y)| {
+                x.mul_reduce(y, modulus).add_reduce(acc, modulus)
+            })
+            .add_reduce(encode(v1), modulus)
+            .add_reduce(rng.gen_range(0..EMAX), modulus);
 
         LWE::new(a, b)
     };
 
     let ret = lwe1.add_component_wise(&lwe2);
-    let decrypted = decode(ret.b() - dot_product(ret.a(), &s));
+    let decrypted = decode(ret.b().sub_reduce(
+        ret.a().iter().zip(&s).fold(0, |acc, (&x, &y)| {
+            x.mul_reduce(y, modulus).add_reduce(acc, modulus)
+        }),
+        modulus,
+    ));
     assert_eq!(decrypted, (v0 + v1) % RT);
 }
 

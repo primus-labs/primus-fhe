@@ -18,7 +18,7 @@ use super::Field;
 /// found in elliptic curve cryptography and various other cryptographic schemes where the security
 /// assumptions are based on the difficulty of solving problems within a prime field.
 pub trait PrimeField: Field {
-    /// Check [`Self`] is a prime field.
+    /// Check if this [`PrimeField`] is a prime field.
     fn is_prime_field() -> bool;
 }
 
