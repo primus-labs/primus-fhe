@@ -31,4 +31,10 @@ pub use polynomial::{
     Polynomial,
 };
 
+pub use polynomial::multivariate::{
+    data_structures::ListOfProductsOfPolynomials,
+    multilinear::{DenseMultilinearExtension, MultilinearExtension},
+    PolynomialTrait,
+};
+
 pub use primitive::{div_ceil, Bits, Widening};
