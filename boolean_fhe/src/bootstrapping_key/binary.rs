@@ -1,7 +1,7 @@
 use algebra::{modulus::PowOf2Modulus, reduce::NegReduce, Basis, NTTField, Random, RandomNTTField};
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
-use crate::{secret_key::NTTRLWESecretKey, LWEValue};
+use crate::{secret_key::NTTRLWESecretKey, LWEType};
 
 use super::{ntt_rgsw_one, ntt_rgsw_zero};
 
@@ -21,10 +21,10 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
     pub fn bootstrapping(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[LWEValue],
+        lwe_a: &[LWEType],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEValue>,
+        lwe_modulus: PowOf2Modulus<LWEType>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
@@ -63,7 +63,7 @@ impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
     pub(crate) fn generate<Rng>(
         basis: Basis<F>,
         basis_powers: &[F],
-        lwe_secret_key: &[LWEValue],
+        lwe_secret_key: &[LWEType],
         chi: <F as Random>::NormalDistribution,
         rlwe_dimension: usize,
         rlwe_secret_key: &NTTRLWESecretKey<F>,

@@ -9,7 +9,7 @@ use rand_chacha::ChaCha12Rng;
 use rand_distr::Uniform;
 
 use crate::{
-    dot_product, LWECiphertext, LWEPlaintext, LWEValue, LWEValueBinary, LWEValueTernary, Parameters,
+    dot_product, LWECiphertext, LWEPlaintext, LWEType, LWEValueBinary, LWEValueTernary, Parameters,
 };
 
 /// The distribution type of the LWE Secret Key
@@ -23,7 +23,7 @@ pub enum SecretKeyType {
 }
 
 /// LWE Secret key
-pub type LWESecretKey = Vec<LWEValue>;
+pub type LWESecretKey = Vec<LWEType>;
 
 /// RLWE Secret key
 pub type RLWESecretKey<F> = Polynomial<F>;
@@ -53,7 +53,7 @@ pub struct SecretKeyPack<F: NTTField> {
 impl<F: NTTField> SecretKeyPack<F> {
     /// Returns the lwe secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn lwe_secret_key(&self) -> &[LWEValue] {
+    pub fn lwe_secret_key(&self) -> &[LWEType] {
         &self.lwe_secret_key
     }
 
@@ -88,7 +88,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     #[inline]
-    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEValue) {
+    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEType) {
         let lwe_modulus = self.parameters().lwe_modulus();
         let encoded_message = cipher_text.b().sub_reduce(
             dot_product(cipher_text.a(), self.lwe_secret_key(), lwe_modulus),
@@ -130,7 +130,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
         let mut csrng = self.csrng_mut();
 
-        let a: Vec<LWEValue> = standard_distribution
+        let a: Vec<LWEType> = standard_distribution
             .sample_iter(&mut *csrng)
             .take(lwe_dimension)
             .collect();
@@ -175,7 +175,7 @@ impl<F: RandomNTTField> SecretKeyPack<F> {
 
 /// Encodes a message
 #[inline]
-fn encode(message: LWEPlaintext, lwe_modulus: LWEValue) -> LWEValue {
+fn encode(message: LWEPlaintext, lwe_modulus: LWEType) -> LWEType {
     if message {
         lwe_modulus >> 2
     } else {
@@ -184,7 +184,7 @@ fn encode(message: LWEPlaintext, lwe_modulus: LWEValue) -> LWEValue {
 }
 
 /// Decodes a cipher text
-fn decode(encoded_message: LWEValue, lwe_modulus: LWEValue) -> bool {
+fn decode(encoded_message: LWEType, lwe_modulus: LWEType) -> bool {
     assert!(lwe_modulus.is_power_of_two() && lwe_modulus >= 8);
 
     let temp = encoded_message >> (lwe_modulus.trailing_zeros() - 3);

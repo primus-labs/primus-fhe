@@ -1,4 +1,4 @@
-use boolean_fhe::{EvaluationKey, LWEValue, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
+use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
 use rand::Rng;
 
 fn main() {
@@ -8,7 +8,7 @@ fn main() {
     // set parameter
     let params = DEFAULT_100_BITS_PARAMERTERS.clone();
 
-    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEValue;
+    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEType;
 
     // generate keys
     let skp = SecretKeyPack::new(params);

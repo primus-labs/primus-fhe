@@ -7,7 +7,7 @@ mod error;
 
 pub mod derive;
 
-mod basis;
+mod decompose_basis;
 mod field;
 pub mod modulus;
 mod random;
@@ -21,7 +21,7 @@ mod primitive;
 
 pub use error::AlgebraError;
 
-pub use basis::Basis;
+pub use decompose_basis::Basis;
 pub use field::{Field, MulFactor, NTTField, PrimeField, RandomNTTField};
 pub use random::Random;
 pub use reduce::ModulusConfig;

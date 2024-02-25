@@ -4,7 +4,7 @@ use algebra::{
 use lattice::{LWE, RLWE};
 
 use crate::{
-    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEValue, Parameters, RLWECiphertext,
+    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEType, Parameters, RLWECiphertext,
     SecretKeyPack,
 };
 
@@ -66,9 +66,9 @@ impl<F: NTTField> EvaluationKey<F> {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
 
-        let switch = |v: F| (v.to_f64() * lwe_modulus_f64 / F::MODULUS_F64).floor() as LWEValue;
+        let switch = |v: F| (v.to_f64() * lwe_modulus_f64 / F::MODULUS_F64).floor() as LWEType;
 
-        let a: Vec<LWEValue> = c.a().iter().copied().map(switch).collect();
+        let a: Vec<LWEType> = c.a().iter().copied().map(switch).collect();
         let b = switch(c.b());
 
         LWECiphertext::new(a, b)
@@ -96,10 +96,10 @@ impl<F: RandomNTTField> EvaluationKey<F> {
 }
 
 fn init_nand_acc<F>(
-    mut b: LWEValue,
+    mut b: LWEType,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
-    lwe_modulus: PowOf2Modulus<LWEValue>,
+    lwe_modulus: PowOf2Modulus<LWEType>,
 ) -> RLWE<F>
 where
     F: NTTField,

@@ -1,4 +1,4 @@
-//! basis for decomposition of the [`Field`].
+//! The basis for decomposition of the [`Field`].
 
 use crate::Field;
 

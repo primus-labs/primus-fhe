@@ -1,16 +1,18 @@
 #[macro_use]
 mod internal_macros;
-// mod ops;
 
-/// A struct for pow of 2 modulus.
+/// A struct for power of 2 modulus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PowOf2Modulus<T: Copy> {
-    /// the special value for performing `reduce`.
+    /// The special value for performing `reduce`.
+    ///
+    /// It's equal to modulus value sub one.
     mask: T,
 }
 
 impl<T: Copy> PowOf2Modulus<T> {
-    /// Returns the mask of this [`PowOf2Modulus<T>`].
+    /// Returns the mask of this [`PowOf2Modulus<T>`],
+    /// which is equal to modulus value sub one.
     #[inline]
     pub const fn mask(&self) -> T {
         self.mask

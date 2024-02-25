@@ -3,7 +3,7 @@ use algebra::{derive::*, modulus::PowOf2Modulus, Basis, Field, NTTField, Random,
 use num_traits::cast;
 use once_cell::sync::Lazy;
 
-use crate::{FHEError, LWEValue, LWEValueNormal, SecretKeyType};
+use crate::{FHEError, LWEType, LWEValueNormal, SecretKeyType};
 
 /// The parameters of the fully homomorphic encryption scheme.
 ///
@@ -13,7 +13,7 @@ pub struct ConstParameters<Scalar> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
-    pub lwe_modulus: LWEValue,
+    pub lwe_modulus: LWEType,
     /// The lwe noise error's standard deviation
     pub lwe_noise_std_dev: f64,
     /// LWE Secret Key distribution Type
@@ -41,7 +41,7 @@ pub struct Parameters<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
-    lwe_modulus: PowOf2Modulus<LWEValue>,
+    lwe_modulus: PowOf2Modulus<LWEType>,
     /// The lwe noise error's standard deviation
     lwe_noise_std_dev: f64,
     /// LWE Secret Key distribution Type
@@ -112,7 +112,7 @@ impl<F: NTTField> Parameters<F> {
 
     /// Returns the lwe modulus of this [`Parameters<F>`], refers to **`q`** in the paper.
     #[inline]
-    pub fn lwe_modulus(&self) -> PowOf2Modulus<LWEValue> {
+    pub fn lwe_modulus(&self) -> PowOf2Modulus<LWEType> {
         self.lwe_modulus
     }
 
@@ -217,7 +217,7 @@ pub struct ParametersBuilder<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: Option<usize>,
     /// LWE cipher modulus, refers to **`q`** in the paper.
-    lwe_modulus: Option<LWEValue>,
+    lwe_modulus: Option<LWEType>,
     /// The lwe noise error's standard deviation
     lwe_noise_std_dev: Option<f64>,
     /// LWE Secret Key distribution Type
@@ -272,7 +272,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
     /// Sets the lwe modulus of this [`ParametersBuilder<F>`].
     #[inline]
-    pub fn lwe_modulus(mut self, lwe_modulus: LWEValue) -> Self {
+    pub fn lwe_modulus(mut self, lwe_modulus: LWEType) -> Self {
         self.lwe_modulus = Some(lwe_modulus);
         self
     }
@@ -394,7 +394,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
         Ok(Parameters::<F> {
             lwe_dimension,
-            lwe_modulus: <PowOf2Modulus<LWEValue>>::new(lwe_modulus),
+            lwe_modulus: <PowOf2Modulus<LWEType>>::new(lwe_modulus),
             lwe_noise_std_dev: self.lwe_noise_std_dev.unwrap(),
             secret_key_type: self.secret_key_type,
 

@@ -1,4 +1,4 @@
-use boolean_fhe::{EvaluationKey, LWEValue, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
+use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
 use rand::prelude::*;
 
 #[test]
@@ -29,5 +29,5 @@ fn test_nand() {
 
     // check
     assert_eq!(m2, !(m0 & m1));
-    assert!(noise <= (DEFAULT_100_BITS_PARAMERTERS.lwe_modulus_f64() / 16.0) as LWEValue);
+    assert!(noise <= (DEFAULT_100_BITS_PARAMERTERS.lwe_modulus_f64() / 16.0) as LWEType);
 }

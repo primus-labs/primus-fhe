@@ -5,7 +5,7 @@ use algebra::{
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
 
 use crate::{
-    ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, LWEValue, SecretKeyPack,
+    ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, LWEType, SecretKeyPack,
     SecretKeyType,
 };
 
@@ -48,10 +48,10 @@ impl<F: NTTField> BootstrappingKey<F> {
     pub fn bootstrapping(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[LWEValue],
+        lwe_a: &[LWEType],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEValue>,
+        lwe_modulus: PowOf2Modulus<LWEType>,
     ) -> RLWE<F> {
         match self {
             BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(

@@ -24,7 +24,7 @@ pub use parameter::{
 
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::{
-    dot_product, LWEPlaintext, LWEValue, LWEValueBinary, LWEValueNormal, LWEValueTernary,
+    dot_product, LWEPlaintext, LWEType, LWEValueBinary, LWEValueNormal, LWEValueTernary,
 };
 
 pub use bootstrapping_key::BootstrappingKey;

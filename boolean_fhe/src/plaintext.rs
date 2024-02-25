@@ -4,15 +4,15 @@ use algebra::{modulus::PowOf2Modulus, reduce::Reduce};
 pub type LWEPlaintext = bool;
 
 /// LWE ciphertext inner value type
-pub type LWEValue = u16;
+pub type LWEType = u16;
 
 /// Performs dot product for two slices
 #[inline]
-pub fn dot_product(u: &[LWEValue], v: &[LWEValue], modulus: PowOf2Modulus<LWEValue>) -> LWEValue {
+pub fn dot_product(u: &[LWEType], v: &[LWEType], modulus: PowOf2Modulus<LWEType>) -> LWEType {
     debug_assert_eq!(u.len(), v.len());
     u.iter()
         .zip(v)
-        .fold(LWEValue::default(), |acc, (&x, &y)| {
+        .fold(LWEType::default(), |acc, (&x, &y)| {
             acc.wrapping_add(x.wrapping_mul(y))
         })
         .reduce(modulus)
@@ -24,7 +24,7 @@ pub struct LWEValueNormal {
     inner: rand_distr::Normal<f64>,
     std_dev_min: f64,
     std_dev_max: f64,
-    modulus: LWEValue,
+    modulus: LWEType,
 }
 
 impl LWEValueNormal {
@@ -36,7 +36,7 @@ impl LWEValueNormal {
     /// -   standard deviation (`σ`, must be finite)
     #[inline]
     pub fn new(
-        modulus: LWEValue,
+        modulus: LWEType,
         mean: f64,
         std_dev: f64,
     ) -> Result<LWEValueNormal, algebra::AlgebraError> {
@@ -80,8 +80,8 @@ impl LWEValueNormal {
     }
 }
 
-impl rand::distributions::Distribution<LWEValue> for LWEValueNormal {
-    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEValue {
+impl rand::distributions::Distribution<LWEType> for LWEValueNormal {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
         let float_p: f64 = self.modulus as f64;
         let mut value = self.inner.sample(rng);
         while value < self.std_dev_min {
@@ -95,10 +95,10 @@ impl rand::distributions::Distribution<LWEValue> for LWEValueNormal {
                 0
             } else {
                 value = float_p + value.ceil();
-                value as LWEValue
+                value as LWEType
             }
         } else {
-            value as LWEValue
+            value as LWEType
         }
     }
 }
@@ -128,9 +128,9 @@ impl Default for LWEValueBinary {
     }
 }
 
-impl rand::distributions::Distribution<LWEValue> for LWEValueBinary {
+impl rand::distributions::Distribution<LWEType> for LWEValueBinary {
     #[inline]
-    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEValue {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
         if self.inner.sample(rng) {
             1
         } else {
@@ -146,7 +146,7 @@ impl rand::distributions::Distribution<LWEValue> for LWEValueBinary {
 /// prob\[0] = 0.5
 #[derive(Clone, Copy, Debug)]
 pub struct LWEValueTernary {
-    lwe_modulus_mask: LWEValue,
+    lwe_modulus_mask: LWEType,
     inner1: rand_distr::Bernoulli,
     inner2: rand_distr::Bernoulli,
 }
@@ -154,7 +154,7 @@ pub struct LWEValueTernary {
 impl LWEValueTernary {
     /// Creates a new [`LWEValueTernary`].
     #[inline]
-    pub fn new(lwe_modulus: LWEValue) -> Self {
+    pub fn new(lwe_modulus: LWEType) -> Self {
         Self {
             lwe_modulus_mask: lwe_modulus - 1,
             inner1: rand_distr::Bernoulli::new(0.5).unwrap(),
@@ -163,9 +163,9 @@ impl LWEValueTernary {
     }
 }
 
-impl rand::distributions::Distribution<LWEValue> for LWEValueTernary {
+impl rand::distributions::Distribution<LWEType> for LWEValueTernary {
     #[inline]
-    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEValue {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
         if self.inner1.sample(rng) {
             0
         } else if self.inner2.sample(rng) {
