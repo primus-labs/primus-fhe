@@ -24,6 +24,8 @@ fn impl_ntt(input: Input) -> TokenStream {
         static #ntt_mutex: ::std::sync::Mutex<()> = ::std::sync::Mutex::new(());
 
         impl ::algebra::NTTField for #name {
+            const TWICE_MODULUS: Self::Inner = #modulus << 1;
+
             type Table = ::algebra::transformation::NTTTable<Self>;
 
             type Root = ::algebra::modulus::MulReduceFactor<<Self as ::algebra::Field>::Inner>;
@@ -32,12 +34,12 @@ fn impl_ntt(input: Input) -> TokenStream {
 
             #[inline]
             fn from_root(root: Self::Root) -> Self {
-                #name(root.value())
+                Self(root.value())
             }
 
             #[inline]
             fn to_root(self) -> Self::Root {
-                Self::Root::new(self.0, (((self.0 as <#field_ty as ::algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as ::algebra::Widening>::WideT) as #field_ty)
+                Self::Root::new(self.0, #modulus)
             }
 
             #[inline]
@@ -50,6 +52,50 @@ fn impl_ntt(input: Input) -> TokenStream {
             fn mul_root_assign(&mut self, root: Self::Root) {
                 use ::algebra::reduce::MulReduceAssign;
                 self.0.mul_reduce_assign(root, #modulus);
+            }
+
+            #[inline]
+            fn normalize(&mut self) {
+                if self.0 >= Self::TWICE_MODULUS {
+                    self.0 -= Self::TWICE_MODULUS;
+                }
+                if self.0 >= #modulus {
+                    self.0 -= #modulus;
+                }
+            }
+
+            #[inline]
+            fn reduce_lazy(self) -> Self {
+                if self.0 >= Self::TWICE_MODULUS {
+                    Self(self.0 - Self::TWICE_MODULUS)
+                } else {
+                    self
+                }
+            }
+
+            #[inline]
+            fn add_no_reduce(self, rhs: Self) -> Self {
+                Self(self.0 + rhs.0)
+            }
+
+            #[inline]
+            fn add_lazy(self, rhs: Self) -> Self {
+                let res = self.0 + rhs.0;
+                if res >= Self::TWICE_MODULUS {
+                    Self(res - Self::TWICE_MODULUS)
+                } else {
+                    Self(res)
+                }
+            }
+
+            #[inline]
+            fn sub_lazy(self, rhs: Self) -> Self {
+                Self(self.0 + Self::TWICE_MODULUS - rhs.0)
+            }
+
+            #[inline]
+            fn mul_root_lazy(self, root: Self::Root) -> Self {
+                Self(root.mul_reduce_lazy(self.0, #modulus))
             }
 
             #[inline]

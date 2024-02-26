@@ -151,13 +151,14 @@ where
                 root = *root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
-                    u = *i;
-                    v = (*j).mul_root(root);
-                    *i = u + v;
-                    *j = u - v;
+                    u = i.reduce_lazy();
+                    v = (*j).mul_root_lazy(root);
+                    *i = u.add_no_reduce(v);
+                    *j = u.sub_lazy(v);
                 }
             }
         }
+        values.iter_mut().for_each(NTTField::normalize);
     }
 
     fn inverse_transform_slice(&self, values: &mut [F]) {
@@ -179,8 +180,8 @@ where
                 for (i, j) in std::iter::zip(v0, v1) {
                     u = *i;
                     v = *j;
-                    *i = u + v;
-                    *j = (u - v).mul_root(root);
+                    *i = u.add_lazy(v);
+                    *j = u.sub_lazy(v).mul_root_lazy(root);
                 }
             }
         }
@@ -196,8 +197,10 @@ where
         for (i, j) in std::iter::zip(v0, v1) {
             u = *i;
             v = *j;
-            *i = (u + v).mul_root(scalar);
-            *j = (u - v).mul_root(scaled_r);
+            *i = u.add_no_reduce(v).mul_root_lazy(scalar);
+            *j = u.sub_lazy(v).mul_root_lazy(scaled_r);
         }
+
+        values.iter_mut().for_each(NTTField::normalize);
     }
 }

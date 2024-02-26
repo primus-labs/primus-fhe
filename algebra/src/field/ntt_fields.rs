@@ -17,6 +17,9 @@ use super::PrimeField;
 /// Implementing types must provide functionality to work with roots of unity, decompose elements
 /// with respect to a basis, and generate and manage tables for NTT operations.
 pub trait NTTField: PrimeField {
+    /// `2 * modulus`
+    const TWICE_MODULUS: Self::Inner;
+
     /// An abstraction over the data structure used to store precomputed values for NTT.
     type Table: AbstractNTT<Self>;
 
@@ -37,6 +40,28 @@ pub trait NTTField: PrimeField {
 
     /// Calculate `self *= root`.
     fn mul_root_assign(&mut self, root: Self::Root);
+
+    /// Normalize `self`
+    fn normalize(&mut self);
+
+    /// Reduce `self`.
+    /// The result is in [0, 2 * modulus).
+    fn reduce_lazy(self) -> Self;
+
+    /// Calculate `self + rhs` without reduce operation.
+    fn add_no_reduce(self, rhs: Self) -> Self;
+
+    /// Calculate `self + rhs`.
+    /// The result is in [0, 2 * modulus).
+    fn add_lazy(self, rhs: Self) -> Self;
+
+    /// Calculate `self - rhs`.
+    /// The result is in [0, 2 * modulus).
+    fn sub_lazy(self, rhs: Self) -> Self;
+
+    /// Calculate `self * root`.
+    /// The result is in [0, 2 * modulus).
+    fn mul_root_lazy(self, root: Self::Root) -> Self;
 
     /// Check if `root` is a primitive `degree`-th root of unity in integers reduce `p`.
     fn is_primitive_root(root: Self, degree: Self::Degree) -> bool;
