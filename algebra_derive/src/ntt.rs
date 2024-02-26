@@ -26,40 +26,30 @@ fn impl_ntt(input: Input) -> TokenStream {
         impl ::algebra::NTTField for #name {
             type Table = ::algebra::transformation::NTTTable<Self>;
 
-            type Root = ::algebra::MulFactor<Self>;
+            type Root = ::algebra::modulus::MulReduceFactor<<Self as ::algebra::Field>::Inner>;
 
             type Degree = #field_ty;
 
             #[inline]
             fn from_root(root: Self::Root) -> Self {
-                root.value()
+                #name(root.value())
             }
 
             #[inline]
             fn to_root(self) -> Self::Root {
-                Self::Root::new(self, #name((((self.0 as <#field_ty as ::algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as ::algebra::Widening>::WideT) as #field_ty))
+                Self::Root::new(self.0, (((self.0 as <#field_ty as ::algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as ::algebra::Widening>::WideT) as #field_ty)
             }
 
             #[inline]
             fn mul_root(self, root: Self::Root) -> Self {
-                let r = ::algebra::modulus::MulReduceFactor::<#field_ty> {
-                    value: root.value().0,
-                    quotient: root.quotient().0,
-                };
-
                 use ::algebra::reduce::MulReduce;
-                Self(self.0.mul_reduce(r, #modulus))
+                Self(self.0.mul_reduce(root, #modulus))
             }
 
             #[inline]
             fn mul_root_assign(&mut self, root: Self::Root) {
-                let r = ::algebra::modulus::MulReduceFactor::<#field_ty> {
-                    value: root.value().0,
-                    quotient: root.quotient().0,
-                };
-
                 use ::algebra::reduce::MulReduceAssign;
-                self.0.mul_reduce_assign(r, #modulus);
+                self.0.mul_reduce_assign(root, #modulus);
             }
 
             #[inline]

@@ -11,7 +11,7 @@ mod ntt_fields;
 mod prime_fields;
 
 pub use ntt_fields::NTTField;
-pub use prime_fields::{MulFactor, PrimeField};
+pub use prime_fields::PrimeField;
 
 /// A trait defining the algebraic structure of a mathematical field.
 ///

@@ -22,7 +22,7 @@ mod primitive;
 pub use error::AlgebraError;
 
 pub use decompose_basis::Basis;
-pub use field::{Field, MulFactor, NTTField, PrimeField, RandomNTTField};
+pub use field::{Field, NTTField, PrimeField, RandomNTTField};
 pub use random::Random;
 pub use reduce::ModulusConfig;
 

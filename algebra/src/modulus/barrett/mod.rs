@@ -71,7 +71,7 @@ impl_barrett_modulus!(impl BarrettModulus<u64>; WideType: u128);
 ///
 /// This is efficient if many operations are multiplied by
 /// the same number and then reduced with the same modulus.
-#[derive(Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct MulReduceFactor<T> {
     /// value
     pub value: T,
