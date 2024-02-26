@@ -134,7 +134,7 @@ where
         Polynomial::<F>::new(ntt_polynomial.data())
     }
 
-    fn transform_slice(&self, values: &mut [F]) {
+    fn transform_slice_lazy(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
@@ -158,10 +158,9 @@ where
                 }
             }
         }
-        values.iter_mut().for_each(NTTField::normalize);
     }
 
-    fn inverse_transform_slice(&self, values: &mut [F]) {
+    fn inverse_transform_slice_lazy(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
@@ -200,7 +199,17 @@ where
             *i = u.add_no_reduce(v).mul_root_lazy(scalar);
             *j = u.sub_lazy(v).mul_root_lazy(scaled_r);
         }
+    }
 
+    #[inline]
+    fn transform_slice(&self, values: &mut [F]) {
+        self.transform_slice_lazy(values);
+        values.iter_mut().for_each(NTTField::normalize);
+    }
+
+    #[inline]
+    fn inverse_transform_slice(&self, values: &mut [F]) {
+        self.inverse_transform_slice_lazy(values);
         values.iter_mut().for_each(NTTField::normalize);
     }
 }
