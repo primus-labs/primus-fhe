@@ -357,7 +357,7 @@ macro_rules! impl_mul_reduce_factor {
             /// * `value` must be less than `modulus`.
             #[inline]
             pub const fn new(value: $SelfT, modulus: $SelfT) -> Self {
-                // debug_assert!(value < modulus, "value is not smaller than modulus");
+                debug_assert!(value < modulus);
                 Self {
                     value,
                     quotient: (((value as $WideT) << <$SelfT>::BITS) / modulus as $WideT) as $SelfT,
