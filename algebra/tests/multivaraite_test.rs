@@ -1,15 +1,13 @@
-use std::{ops::Neg, vec};
+use std::vec;
 
 use algebra::{
     derive::{Field, Prime, Random},
-    Field, ListOfProductsOfPolynomials, PolynomialTrait, Random,
+    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension, Random,
 };
-use rand_distr::Distribution;
-use std::rc::Rc;
-
-use algebra::{DenseMultilinearExtension, MultilinearExtension};
 use num_traits::Zero;
 use rand::thread_rng;
+use rand_distr::Distribution;
+use std::rc::Rc;
 
 macro_rules! field_vec {
     ($t:ident; $elem:expr; $n:expr)=>{
@@ -24,7 +22,8 @@ macro_rules! field_vec {
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
-type FF = Fp32; // field type
+// field type
+type FF = Fp32;
 type PolyFf = DenseMultilinearExtension<FF>;
 
 fn evaluate_mle_data_arry<F: Field>(data: &[F], point: &[F]) -> F {
@@ -46,11 +45,7 @@ fn evaluate_mle_data_arry<F: Field>(data: &[F], point: &[F]) -> F {
 
 #[test]
 fn evaluate_mle_at_a_point() {
-    let poly = PolyFf::from_evaluations_vec(
-        2,
-        // vec![FF::new(1), FF::new(2), FF::new(3), FF::new(4)]
-        field_vec! {FF; 1, 2, 3, 4},
-    );
+    let poly = PolyFf::from_evaluations_vec(2, field_vec! {FF; 1, 2, 3, 4});
 
     let point = vec![FF::new(0), FF::new(1)];
     assert_eq!(poly.evaluate(&point), FF::new(3));
@@ -59,8 +54,7 @@ fn evaluate_mle_at_a_point() {
 #[test]
 fn evaluate_mle_at_a_random_point() {
     let mut rng = thread_rng();
-    let poly = PolyFf::rand(2, &mut rng);
-    // let point = vec![FF::random(&mut rng), FF::random(&mut rng)];
+    let poly = PolyFf::random(2, &mut rng);
     let point: Vec<_> = (0..2).map(|_| FF::random(&mut rng)).collect();
     assert_eq!(
         poly.evaluate(&point),
@@ -74,8 +68,8 @@ fn mle_arithmetic() {
     let mut rng = thread_rng();
     for _ in 0..20 {
         let point: Vec<_> = (0..NV).map(|_| FF::random(&mut rng)).collect();
-        let poly1 = PolyFf::rand(NV, &mut rng);
-        let poly2 = PolyFf::rand(NV, &mut rng);
+        let poly1 = PolyFf::random(NV, &mut rng);
+        let poly2 = PolyFf::random(NV, &mut rng);
         let v1 = poly1.evaluate(&point);
         let v2 = poly2.evaluate(&point);
         // test add
@@ -83,7 +77,7 @@ fn mle_arithmetic() {
         // test sub
         assert_eq!((&poly1 - &poly2).evaluate(&point), v1 - v2);
         // test negate
-        assert_eq!(poly1.clone().neg().evaluate(&point), -v1);
+        assert_eq!(-poly1.evaluate(&point), -v1);
         // test add assign
         {
             let mut poly1 = poly1.clone();
@@ -112,7 +106,7 @@ fn mle_arithmetic() {
 }
 
 #[test]
-fn evaluate_mv_at_a_point() {
+fn evaluate_lists_of_products_at_a_point() {
     let nv = 2;
     let mut poly = ListOfProductsOfPolynomials::new(nv);
     let products = vec![field_vec!(FF; 1, 2, 3, 4), field_vec!(FF; 5, 4, 2, 9)];
@@ -167,8 +161,6 @@ fn random_list_of_products<F: Field + Random, R: rand::Rng + rand::CryptoRng>(
     let mut sum = F::zero();
     let mut poly = ListOfProductsOfPolynomials::new(nv);
     for _ in 0..num_products {
-        // let num_multiplicands = rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
-        // TODO
         let num_multiplicands = num_multiplicands_range.0;
         let (product, product_sum) = random_product(nv, num_multiplicands, rng);
         let coefficient = F::standard_distribution().sample(rng);

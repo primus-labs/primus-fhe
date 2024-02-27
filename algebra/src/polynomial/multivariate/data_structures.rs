@@ -1,7 +1,7 @@
 use std::cmp::max;
 use std::{collections::HashMap, rc::Rc};
 
-use super::{multilinear::DenseMultilinearExtension, PolynomialTrait};
+use super::multilinear::{DenseMultilinearExtension, MultilinearExtension};
 use crate::field::Field;
 use crate::Random;
 
@@ -12,13 +12,13 @@ use crate::Random;
 /// This data structure of the polynomial is a list of list of `(coefficient, DenseMultilinearExtension)`.
 /// * Number of products n = `self.products.len()`,
 /// * Number of multiplicands of ith product m_i = `self.products[i].1.len()`,
-/// * Coefficient of ith product c_i = `self.products[i].0`
+/// * Coefficient of i-th product c_i = `self.products[i].0`
 ///
 /// The resulting polynomial is
 ///
-/// $$\sum_{i=0}^{n}C_i\cdot\prod_{j=0}^{m_i}P_{ij}$$
+/// $$\sum_{i=0}^{n}c_i\cdot\prod_{j=0}^{m_i}P_{ij}$$
 ///
-/// The result polynomial is used as the prover key.
+/// The resulting polynomial is used as the prover key.
 #[derive(Clone)]
 pub struct ListOfProductsOfPolynomials<F: Field> {
     /// max number of multiplicands in each product
@@ -96,18 +96,7 @@ impl<F: Field + Random> ListOfProductsOfPolynomials<F> {
 
     /// Evaluate the polynomial at point `point`
     pub fn evaluate(&self, point: &[F]) -> F {
-        //TODO Field type misses the Product Trait
-        // self.products
-        //     .iter()
-        //     .map(|(c, p)| {
-        //         *c * p
-        //             .iter()
-        //             .map(|&i| self.flattened_ml_extensions[i].evaluate(&point.to_vec()))
-        //             .product::<F>()
-        //     })
-        //     .sum()
-
-        self.products.iter().fold(F::zero(), |result, (c, p)| {
+        self.products.iter().fold(F::ZERO, |result, (c, p)| {
             result
                 + p.iter().fold(*c, |acc, &i| {
                     acc * self.flattened_ml_extensions[i].evaluate(&point.to_vec())

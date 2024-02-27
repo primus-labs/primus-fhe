@@ -7,7 +7,6 @@ use std::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
 
 use num_traits::Zero;
 
-use super::PolynomialTrait;
 use crate::Field;
 
 /// This trait describes an interface for the multilinear extension
@@ -31,14 +30,19 @@ pub trait MultilinearExtension<F: Field>:
     + for<'a> AddAssign<&'a Self>
     + for<'a> AddAssign<(F, &'a Self)>
     + for<'a> SubAssign<&'a Self>
-    + PolynomialTrait<F, Point = Vec<F>>
 {
+    /// The type of evaluation points for this polynomial.
+    type Point: Sized + Clone + Debug;
+
     /// Return the number of variables in `self`
     fn num_vars(&self) -> usize;
 
+    /// Evaluates `self` at the given `point` in `Self::Point`.
+    fn evaluate(&self, point: &Self::Point) -> F;
+
     /// Outputs an `l`-variate multilinear extension where value of evaluations
     /// are sampled at random.
-    fn rand<R: rand::Rng + rand::CryptoRng>(num_vars: usize, rng: &mut R) -> Self;
+    fn random<R: rand::Rng + rand::CryptoRng>(num_vars: usize, rng: &mut R) -> Self;
 
     /// Reduce the number of variables of `self` by fixing the
     /// `partial_point.len()` variables at `partial_point`.
