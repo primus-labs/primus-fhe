@@ -410,7 +410,7 @@ macro_rules! impl_mul_reduce_factor {
 
 macro_rules! impl_mul_reduce_factor_ops {
     (impl MulReduceFactor<$SelfT:ty>) => {
-        impl $crate::reduce::MulReduce<$SelfT, MulReduceFactor<Self>> for $SelfT {
+        impl $crate::reduce::MulReduce<Self, MulReduceFactor<Self>> for $SelfT {
             type Output = Self;
 
             /// Calculates `self * rhs mod modulus`
@@ -422,37 +422,13 @@ macro_rules! impl_mul_reduce_factor_ops {
             /// `rhs.value` must be less than `modulus`.
             #[inline]
             fn mul_reduce(self, rhs: MulReduceFactor<Self>, modulus: Self) -> Self::Output {
-                use $crate::Widening;
-                let (_, hw) = self.widen_mul(rhs.quotient);
-                let tmp = self
-                    .wrapping_mul(rhs.value)
-                    .wrapping_sub(hw.wrapping_mul(modulus));
+                let tmp = rhs.mul_reduce_lazy(self, modulus);
 
                 if tmp >= modulus {
                     tmp - modulus
                 } else {
                     tmp
                 }
-            }
-        }
-
-        impl $crate::reduce::MulReduce<BarrettModulus<Self>, MulReduceFactor<Self>> for $SelfT {
-            type Output = Self;
-
-            /// Calculates `self * rhs mod modulus`
-            ///
-            /// The result is in `[0, modulus)`
-            ///
-            /// # Correctness
-            ///
-            /// `rhs.value` must be less than `modulus`.
-            #[inline]
-            fn mul_reduce(
-                self,
-                rhs: MulReduceFactor<Self>,
-                modulus: BarrettModulus<Self>,
-            ) -> Self::Output {
-                $crate::reduce::MulReduce::mul_reduce(self, rhs, modulus.value())
             }
         }
 
@@ -464,34 +440,13 @@ macro_rules! impl_mul_reduce_factor_ops {
             /// The result is in `[0, modulus)`.
             #[inline]
             fn mul_reduce(self, rhs: $SelfT, modulus: $SelfT) -> Self::Output {
-                use $crate::Widening;
-                let (_, hw) = self.quotient.widen_mul(rhs);
-                let tmp = self
-                    .value
-                    .wrapping_mul(rhs)
-                    .wrapping_sub(hw.wrapping_mul(modulus));
+                let tmp = self.mul_reduce_lazy(rhs, modulus);
 
                 if tmp >= modulus {
                     tmp - modulus
                 } else {
                     tmp
                 }
-            }
-        }
-
-        impl $crate::reduce::MulReduce<BarrettModulus<$SelfT>, $SelfT> for MulReduceFactor<$SelfT> {
-            type Output = $SelfT;
-
-            /// Calculates `self.value * rhs mod modulus`.
-            ///
-            /// The result is in `[0, modulus)`.
-            ///
-            /// # Correctness
-            ///
-            /// `self.value` must be less than `modulus`.
-            #[inline]
-            fn mul_reduce(self, rhs: $SelfT, modulus: BarrettModulus<$SelfT>) -> Self::Output {
-                $crate::reduce::MulReduce::mul_reduce(self, rhs, modulus.value())
             }
         }
 
@@ -505,32 +460,8 @@ macro_rules! impl_mul_reduce_factor_ops {
             /// `rhs.value` must be less than `modulus`.
             #[inline]
             fn mul_reduce_assign(&mut self, rhs: MulReduceFactor<Self>, modulus: Self) {
-                use $crate::Widening;
-                let (_, hw) = self.widen_mul(rhs.quotient);
-                let tmp = self
-                    .wrapping_mul(rhs.value)
-                    .wrapping_sub(hw.wrapping_mul(modulus));
+                let tmp = rhs.mul_reduce_lazy(*self, modulus);
                 *self = if tmp >= modulus { tmp - modulus } else { tmp };
-            }
-        }
-
-        impl $crate::reduce::MulReduceAssign<BarrettModulus<Self>, MulReduceFactor<Self>>
-            for $SelfT
-        {
-            /// Calculates `self *= rhs mod modulus`.
-            ///
-            /// The result is in `[0, modulus)`.
-            ///
-            /// # Correctness
-            ///
-            /// `rhs.value` must be less than `modulus`.
-            #[inline]
-            fn mul_reduce_assign(
-                &mut self,
-                rhs: MulReduceFactor<Self>,
-                modulus: BarrettModulus<Self>,
-            ) {
-                $crate::reduce::MulReduceAssign::mul_reduce_assign(self, rhs, modulus.value());
             }
         }
     };

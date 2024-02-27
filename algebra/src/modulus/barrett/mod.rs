@@ -52,9 +52,7 @@ impl<T: Copy> BarrettModulus<T> {
     pub const fn ratio(&self) -> [T; 2] {
         self.ratio
     }
-}
 
-impl<T: Copy> BarrettModulus<T> {
     /// Returns the bit count of this [`BarrettModulus<T>`].
     #[inline]
     pub const fn bit_count(&self) -> u32 {
@@ -72,12 +70,12 @@ impl_barrett_modulus!(impl BarrettModulus<u64>; WideType: u128);
 /// This is efficient if many operations are multiplied by
 /// the same number and then reduced with the same modulus.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct MulReduceFactor<T> {
+pub struct MulReduceFactor<T: Copy> {
     /// value
-    pub value: T,
+    value: T,
 
     /// quotient
-    pub quotient: T,
+    quotient: T,
 }
 
 impl<T: Copy> MulReduceFactor<T> {
