@@ -64,12 +64,18 @@ macro_rules! impl_barrett_modulus {
                         Self {
                             value,
                             ratio: numerator,
-                            bit_count,
                         }
                     }
                 }
             }
+
+            /// Returns the bit count of this [`BarrettModulus<T>`].
+            #[inline]
+            pub const fn bit_count(&self) -> u32 {
+                <$SelfT>::BITS - self.value.leading_zeros()
+            }
         }
+
 
         impl $crate::reduce::Reduce<BarrettModulus<Self>> for $SelfT {
             type Output = Self;

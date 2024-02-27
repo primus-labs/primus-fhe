@@ -36,8 +36,6 @@ pub struct BarrettModulus<T: Copy> {
     value: T,
     /// ratio `µ` = ⌊b^2/value⌋
     ratio: [T; 2],
-    /// the bit count of the value
-    bit_count: u32,
 }
 
 impl<T: Copy> BarrettModulus<T> {
@@ -51,12 +49,6 @@ impl<T: Copy> BarrettModulus<T> {
     #[inline]
     pub const fn ratio(&self) -> [T; 2] {
         self.ratio
-    }
-
-    /// Returns the bit count of this [`BarrettModulus<T>`].
-    #[inline]
-    pub const fn bit_count(&self) -> u32 {
-        self.bit_count
     }
 }
 
@@ -106,5 +98,24 @@ mod tests {
         let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
         assert_eq!([lw64, hw64].reduce(modulus), (v % (m as u128)) as u64);
         assert_eq!((lw64, hw64).reduce(modulus), (v % (m as u128)) as u64);
+    }
+
+    #[test]
+    fn test_barrett_const() {
+        const MODULUS1: BarrettModulus<u32> = BarrettModulus::<u32>::new(17);
+        const MODULUS2: BarrettModulus<u32> = BarrettModulus::<u32>::new(101);
+        const MODULUS3: BarrettModulus<u64> = BarrettModulus::<u64>::new(521);
+
+        const A: u32 = MODULUS1.bit_count();
+        const B: u32 = MODULUS2.bit_count();
+        const C: u32 = MODULUS3.bit_count();
+
+        assert_eq!(MODULUS1.bit_count(), 5);
+        assert_eq!(MODULUS2.bit_count(), 7);
+        assert_eq!(MODULUS3.bit_count(), 10);
+
+        assert_eq!(A, 5);
+        assert_eq!(B, 7);
+        assert_eq!(C, 10);
     }
 }
