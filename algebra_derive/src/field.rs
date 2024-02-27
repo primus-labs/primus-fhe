@@ -82,19 +82,19 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
 
             type Order = #field_ty;
 
-            const ONE: Self = #name(1);
+            const ONE: Self = Self(1);
 
-            const ZERO: Self = #name(0);
+            const ZERO: Self = Self(0);
 
-            const NEG_ONE: Self = #name(#modulus - 1);
+            const NEG_ONE: Self = Self(#modulus - 1);
 
             const ONE_INNER: Self::Inner = 1;
 
             const ZERO_INNER: Self::Inner = 0;
 
-            const Q_DIV_8: Self = #name(#modulus >> 3);
+            const Q_DIV_8: Self = Self(#modulus >> 3);
 
-            const NRG_Q_DIV_8: Self = #name(#modulus - (#modulus >> 3));
+            const NRG_Q_DIV_8: Self = Self(#modulus - (#modulus >> 3));
 
             const MODULUS_F64: f64 = #modulus as f64;
 
@@ -201,35 +201,35 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             #[inline]
             fn mul_scalar(self, scalar: Self::Inner) -> Self {
                 use ::algebra::reduce::MulReduce;
-                Self(self.0.mul_reduce(scalar, &<Self as ::algebra::ModulusConfig>::MODULUS))
+                Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
             }
 
             #[inline]
             fn add_mul(self, a: Self, b: Self) -> Self {
                 use ::algebra::Widening;
                 use ::algebra::reduce::Reduce;
-                Self(a.0.carry_mul(b.0, self.0).reduce(&<Self as ::algebra::ModulusConfig>::MODULUS))
+                Self(a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
             }
 
             #[inline]
             fn mul_add(self, a: Self, b: Self) -> Self {
                 use ::algebra::Widening;
                 use ::algebra::reduce::Reduce;
-                Self(self.0.carry_mul(a.0, b.0).reduce(&<Self as ::algebra::ModulusConfig>::MODULUS))
+                Self(self.0.carry_mul(a.0, b.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
             }
 
             #[inline]
             fn add_mul_assign(&mut self, a: Self, b: Self) {
                 use ::algebra::Widening;
                 use ::algebra::reduce::Reduce;
-                self.0 = a.0.carry_mul(b.0, self.0).reduce(&<Self as ::algebra::ModulusConfig>::MODULUS);
+                self.0 = a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
             }
 
             #[inline]
             fn mul_add_assign(&mut self, a: Self, b: Self) {
                 use ::algebra::Widening;
                 use ::algebra::reduce::Reduce;
-                self.0 = self.0.carry_mul(a.0, b.0).reduce(&<Self as ::algebra::ModulusConfig>::MODULUS);
+                self.0 = self.0.carry_mul(a.0, b.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
             }
         }
     }

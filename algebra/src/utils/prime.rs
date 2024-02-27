@@ -11,13 +11,13 @@ pub trait Prime {
     /// This is a probabilistic algorithm. Its error-probability bound is `(1/4)^rounds`.
     ///
     /// See Handbook of Applied Cryptography, p. 139, Algorithm 4.24.
-    fn probably_prime(&self, rounds: usize) -> bool;
+    fn probably_prime(self, rounds: usize) -> bool;
 }
 
 macro_rules! impl_prime_check {
     (impl Prime for BarrettModulus<$SelfT:ty>) => {
         impl Prime for BarrettModulus<$SelfT> {
-            fn probably_prime(&self, rounds: usize) -> bool {
+            fn probably_prime(self, rounds: usize) -> bool {
                 /// Records the primes < 64.
                 const PRIME_BIT_MASK: u64 = 1 << 2
                     | 1 << 3

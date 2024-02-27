@@ -9,14 +9,14 @@ use crate::reduce::{
 };
 use crate::{Bits, Widening};
 
-impl<T> AddReduce<&BarrettModulus<T>> for T
+impl<T> AddReduce<BarrettModulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
     type Output = T;
 
     #[inline]
-    fn add_reduce(self, rhs: Self, modulus: &BarrettModulus<T>) -> Self::Output {
+    fn add_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
         let r = self + rhs;
         if r >= modulus.value() {
             r - modulus.value()
@@ -26,12 +26,12 @@ where
     }
 }
 
-impl<T> AddReduceAssign<&BarrettModulus<T>> for T
+impl<T> AddReduceAssign<BarrettModulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
     #[inline]
-    fn add_reduce_assign(&mut self, rhs: Self, modulus: &BarrettModulus<T>) {
+    fn add_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
         let r = *self + rhs;
         *self = if r >= modulus.value() {
             r - modulus.value()
@@ -41,14 +41,14 @@ where
     }
 }
 
-impl<T> SubReduce<&BarrettModulus<T>> for T
+impl<T> SubReduce<BarrettModulus<T>> for T
 where
     T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
 {
     type Output = T;
 
     #[inline]
-    fn sub_reduce(self, rhs: Self, modulus: &BarrettModulus<T>) -> Self::Output {
+    fn sub_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
         if self >= rhs {
             self - rhs
         } else {
@@ -57,12 +57,12 @@ where
     }
 }
 
-impl<T> SubReduceAssign<&BarrettModulus<T>> for T
+impl<T> SubReduceAssign<BarrettModulus<T>> for T
 where
     T: Copy + AddAssign + SubAssign + Sub<Output = Self> + PartialOrd,
 {
     #[inline]
-    fn sub_reduce_assign(&mut self, rhs: Self, modulus: &BarrettModulus<T>) {
+    fn sub_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
         if *self >= rhs {
             *self -= rhs;
         } else {
@@ -71,58 +71,58 @@ where
     }
 }
 
-impl<T> NegReduce<&BarrettModulus<T>> for T
+impl<T> NegReduce<BarrettModulus<T>> for T
 where
     T: Copy + Sub<Output = Self>,
 {
     type Output = T;
 
     #[inline]
-    fn neg_reduce(self, modulus: &BarrettModulus<T>) -> Self::Output {
+    fn neg_reduce(self, modulus: BarrettModulus<T>) -> Self::Output {
         modulus.value() - self
     }
 }
 
-impl<T> NegReduceAssign<&BarrettModulus<T>> for T
+impl<T> NegReduceAssign<BarrettModulus<T>> for T
 where
     T: Copy + Sub<Output = Self>,
 {
     #[inline]
-    fn neg_reduce_assign(&mut self, modulus: &BarrettModulus<T>) {
+    fn neg_reduce_assign(&mut self, modulus: BarrettModulus<T>) {
         *self = modulus.value() - *self;
     }
 }
 
-impl<T> MulReduce<&BarrettModulus<T>> for T
+impl<T> MulReduce<BarrettModulus<T>> for T
 where
-    T: Widening,
-    (T, T): for<'m> Reduce<&'m BarrettModulus<T>, Output = T>,
+    T: Copy + Widening,
+    (T, T): Reduce<BarrettModulus<T>, Output = T>,
 {
     type Output = Self;
 
     #[inline]
-    fn mul_reduce(self, rhs: Self, modulus: &BarrettModulus<T>) -> Self::Output {
+    fn mul_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
         self.widen_mul(rhs).reduce(modulus)
     }
 }
 
-impl<T> MulReduceAssign<&BarrettModulus<T>> for T
+impl<T> MulReduceAssign<BarrettModulus<T>> for T
 where
     T: Copy + Widening,
-    (T, T): for<'m> Reduce<&'m BarrettModulus<T>, Output = T>,
+    (T, T): Reduce<BarrettModulus<T>, Output = T>,
 {
     #[inline]
-    fn mul_reduce_assign(&mut self, rhs: Self, modulus: &BarrettModulus<T>) {
+    fn mul_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
         *self = self.widen_mul(rhs).reduce(modulus);
     }
 }
 
-impl<T, E> PowReduce<&BarrettModulus<T>, E> for T
+impl<T, E> PowReduce<BarrettModulus<T>, E> for T
 where
-    T: Copy + One + PartialOrd + for<'m> MulReduce<&'m BarrettModulus<T>, Output = T>,
+    T: Copy + One + PartialOrd + MulReduce<BarrettModulus<T>, Output = T>,
     E: PrimInt + ShrAssign<u32> + Bits,
 {
-    fn pow_reduce(self, mut exp: E, modulus: &BarrettModulus<T>) -> Self {
+    fn pow_reduce(self, mut exp: E, modulus: BarrettModulus<T>) -> Self {
         if exp.is_zero() {
             return Self::one();
         }
@@ -155,45 +155,44 @@ where
     }
 }
 
-impl<T> InvReduce<&BarrettModulus<T>> for T
+impl<T> InvReduce<BarrettModulus<T>> for T
 where
     T: Copy + InvReduce<T>,
 {
     #[inline]
-    fn inv_reduce(self, modulus: &BarrettModulus<T>) -> Self {
+    fn inv_reduce(self, modulus: BarrettModulus<T>) -> Self {
         self.inv_reduce(modulus.value())
     }
 }
 
-impl<T> InvReduceAssign<&BarrettModulus<T>> for T
+impl<T> InvReduceAssign<BarrettModulus<T>> for T
 where
     T: Copy + InvReduce<T>,
 {
     #[inline]
-    fn inv_reduce_assign(&mut self, modulus: &BarrettModulus<T>) {
+    fn inv_reduce_assign(&mut self, modulus: BarrettModulus<T>) {
         *self = self.inv_reduce(modulus.value());
     }
 }
 
-impl<T> DivReduce<&BarrettModulus<T>> for T
+impl<T> DivReduce<BarrettModulus<T>> for T
 where
-    T: for<'m> MulReduce<&'m BarrettModulus<T>, Output = T>
-        + for<'m> InvReduce<&'m BarrettModulus<T>>,
+    T: Copy + MulReduce<BarrettModulus<T>, Output = T> + InvReduce<BarrettModulus<T>>,
 {
     type Output = T;
 
     #[inline]
-    fn div_reduce(self, rhs: Self, modulus: &BarrettModulus<T>) -> Self::Output {
+    fn div_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
         self.mul_reduce(rhs.inv_reduce(modulus), modulus)
     }
 }
 
-impl<T> DivReduceAssign<&BarrettModulus<T>> for T
+impl<T> DivReduceAssign<BarrettModulus<T>> for T
 where
-    T: for<'m> MulReduceAssign<&'m BarrettModulus<T>> + for<'m> InvReduce<&'m BarrettModulus<T>>,
+    T: Copy + MulReduceAssign<BarrettModulus<T>> + InvReduce<BarrettModulus<T>>,
 {
     #[inline]
-    fn div_reduce_assign(&mut self, rhs: Self, modulus: &BarrettModulus<T>) {
+    fn div_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
         self.mul_reduce_assign(rhs.inv_reduce(modulus), modulus);
     }
 }
@@ -222,7 +221,7 @@ mod tests {
             let base = rng.sample(distr);
             let exp = random();
 
-            assert_eq!(simple_pow(base, exp, P), base.pow_reduce(exp, &modulus));
+            assert_eq!(simple_pow(base, exp, P), base.pow_reduce(exp, modulus));
         }
     }
 
@@ -267,9 +266,9 @@ mod tests {
 
         if modulus.probably_prime(20) {
             let value: Num = rng.gen_range(2..modulus.value());
-            let inv: Num = value.inv_reduce(&modulus);
+            let inv: Num = value.inv_reduce(modulus);
             assert_eq!(
-                value.mul_reduce(inv, &modulus),
+                value.mul_reduce(inv, modulus),
                 1,
                 "\nval:{value}\ninv:{inv}\nmod:{}",
                 modulus.value()

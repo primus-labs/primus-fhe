@@ -30,8 +30,8 @@ mod ops;
 /// data. Here, `b` = 2^T::BITS
 ///
 /// It's efficient if many reductions are performed with a single modulus.
-#[derive(Clone)]
-pub struct BarrettModulus<T> {
+#[derive(Clone, Copy)]
+pub struct BarrettModulus<T: Copy> {
     /// the value to indicate the modulus
     value: T,
     /// ratio `µ` = ⌊b^2/value⌋
@@ -54,7 +54,7 @@ impl<T: Copy> BarrettModulus<T> {
     }
 }
 
-impl<T> BarrettModulus<T> {
+impl<T: Copy> BarrettModulus<T> {
     /// Returns the bit count of this [`BarrettModulus<T>`].
     #[inline]
     pub const fn bit_count(&self) -> u32 {
@@ -130,7 +130,7 @@ mod tests {
         let modulus = BarrettModulus::<u64>::new(m);
 
         let v: u64 = rng.gen();
-        assert_eq!(v.reduce(&modulus), v % m);
+        assert_eq!(v.reduce(modulus), v % m);
     }
 
     #[test]
@@ -143,7 +143,7 @@ mod tests {
         let lw64: u64 = rng.gen();
         let hw64: u64 = rng.gen();
         let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
-        assert_eq!([lw64, hw64].reduce(&modulus), (v % (m as u128)) as u64);
-        assert_eq!((lw64, hw64).reduce(&modulus), (v % (m as u128)) as u64);
+        assert_eq!([lw64, hw64].reduce(modulus), (v % (m as u128)) as u64);
+        assert_eq!((lw64, hw64).reduce(modulus), (v % (m as u128)) as u64);
     }
 }
