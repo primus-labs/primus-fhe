@@ -65,43 +65,6 @@ impl_barrett_modulus!(impl BarrettModulus<u16>; WideType: u32);
 impl_barrett_modulus!(impl BarrettModulus<u32>; WideType: u64);
 impl_barrett_modulus!(impl BarrettModulus<u64>; WideType: u128);
 
-/// A number used for fast modular multiplication.
-///
-/// This is efficient if many operations are multiplied by
-/// the same number and then reduced with the same modulus.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct MulReduceFactor<T: Copy> {
-    /// value
-    value: T,
-
-    /// quotient
-    quotient: T,
-}
-
-impl<T: Copy> MulReduceFactor<T> {
-    /// Returns the value of this [`MulReduceFactor<T>`].
-    #[inline]
-    pub const fn value(&self) -> T {
-        self.value
-    }
-
-    /// Returns the quotient of this [`MulReduceFactor<T>`].
-    #[inline]
-    pub const fn quotient(&self) -> T {
-        self.quotient
-    }
-}
-
-impl_mul_reduce_factor!(impl MulReduceFactor<u8>; WideType: u16);
-impl_mul_reduce_factor!(impl MulReduceFactor<u16>; WideType: u32);
-impl_mul_reduce_factor!(impl MulReduceFactor<u32>; WideType: u64);
-impl_mul_reduce_factor!(impl MulReduceFactor<u64>; WideType: u128);
-
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u8>);
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u16>);
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u32>);
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u64>);
-
 #[cfg(test)]
 mod tests {
     use rand::{prelude::*, thread_rng};

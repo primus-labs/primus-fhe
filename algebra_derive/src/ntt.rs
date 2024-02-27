@@ -28,7 +28,7 @@ fn impl_ntt(input: Input) -> TokenStream {
 
             type Table = ::algebra::transformation::NTTTable<Self>;
 
-            type Root = ::algebra::modulus::MulReduceFactor<<Self as ::algebra::Field>::Inner>;
+            type Root = ::algebra::modulus::ShoupFactor<<Self as ::algebra::Field>::Inner>;
 
             type Degree = #field_ty;
 
