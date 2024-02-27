@@ -204,12 +204,12 @@ where
     #[inline]
     fn transform_slice(&self, values: &mut [F]) {
         self.transform_slice_lazy(values);
-        values.iter_mut().for_each(NTTField::normalize);
+        values.iter_mut().for_each(NTTField::normalize_4p);
     }
 
     #[inline]
     fn inverse_transform_slice(&self, values: &mut [F]) {
         self.inverse_transform_slice_lazy(values);
-        values.iter_mut().for_each(NTTField::normalize);
+        values.iter_mut().for_each(NTTField::normalize_2p);
     }
 }

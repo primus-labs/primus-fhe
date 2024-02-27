@@ -55,7 +55,14 @@ fn impl_ntt(input: Input) -> TokenStream {
             }
 
             #[inline]
-            fn normalize(&mut self) {
+            fn normalize_2p(&mut self) {
+                if self.0 >= #modulus {
+                    self.0 -= #modulus;
+                }
+            }
+
+            #[inline]
+            fn normalize_4p(&mut self) {
                 if self.0 >= Self::TWICE_MODULUS {
                     self.0 -= Self::TWICE_MODULUS;
                 }

@@ -42,7 +42,10 @@ pub trait NTTField: PrimeField {
     fn mul_root_assign(&mut self, root: Self::Root);
 
     /// Normalize `self`
-    fn normalize(&mut self);
+    fn normalize_2p(&mut self);
+
+    /// Normalize `self`
+    fn normalize_4p(&mut self);
 
     /// Reduce `self`.
     /// The result is in [0, 2 * modulus).
