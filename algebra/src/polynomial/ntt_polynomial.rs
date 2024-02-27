@@ -522,6 +522,14 @@ pub fn ntt_mul_assign<F: NTTField, I: IntoIterator<Item = F>>(lhs: &mut [F], rhs
     lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
 }
 
+/// Performs enrty-wise lazy mul operation.
+#[inline]
+pub fn lazy_ntt_mul_assign<F: NTTField, I: IntoIterator<Item = F>>(lhs: &mut [F], rhs: I) {
+    lhs.iter_mut()
+        .zip(rhs)
+        .for_each(|(l, r)| l.mul_assign_lazy(r));
+}
+
 /// Performs enrty-wise mul operation.
 #[inline]
 pub fn ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
@@ -529,6 +537,17 @@ pub fn ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
     rhs: I,
 ) {
     lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
+}
+
+/// Performs enrty-wise lazy mul operation.
+#[inline]
+pub fn lazy_ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
+    lhs: &mut [F],
+    rhs: I,
+) {
+    lhs.iter_mut()
+        .zip(rhs)
+        .for_each(|(l, &r)| l.mul_assign_lazy(r));
 }
 
 /// Performs enrty-wise add_mul operation.

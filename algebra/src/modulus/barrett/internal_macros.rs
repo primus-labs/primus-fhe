@@ -76,11 +76,10 @@ macro_rules! impl_barrett_modulus {
             }
         }
 
-
-        impl $crate::reduce::Reduce<BarrettModulus<Self>> for $SelfT {
+        impl $crate::reduce::LazyReduce<BarrettModulus<Self>> for $SelfT {
             type Output = Self;
 
-            /// Caculates `self (mod modulus)`.
+            /// Caculates `self (mod 2*modulus)`.
             ///
             /// ## Procedure
             ///
@@ -104,7 +103,8 @@ macro_rules! impl_barrett_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce(self, modulus: BarrettModulus<Self>) -> Self::Output {
+            #[inline]
+            fn lazy_reduce(self, modulus: BarrettModulus<Self>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -125,21 +125,15 @@ macro_rules! impl_barrett_modulus {
                 let tmp = ((self as $WideT * ratio[1] as $WideT + tmp) >> Self::BITS) as $SelfT; // q3
 
                 // Step 2.
-                let tmp = self.wrapping_sub(tmp.wrapping_mul(modulus.value())); // r = r1 -r2
-
-                // Step 3. and 4.
-                if tmp >= modulus.value() {
-                    tmp - modulus.value()
-                } else {
-                    tmp
-                }
+                self.wrapping_sub(tmp.wrapping_mul(modulus.value())) // r = r1 -r2
             }
         }
 
-        impl $crate::reduce::Reduce<BarrettModulus<$SelfT>> for [$SelfT; 2] {
-            type Output = $SelfT;
 
-            /// Caculates `self (mod modulus)`.
+        impl $crate::reduce::Reduce<BarrettModulus<Self>> for $SelfT {
+            type Output = Self;
+
+            /// Caculates `self (mod 2*modulus)`.
             ///
             /// ## Procedure
             ///
@@ -163,7 +157,48 @@ macro_rules! impl_barrett_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
-            fn reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
+            #[inline]
+            fn reduce(self, modulus: BarrettModulus<Self>) -> Self::Output {
+                use $crate::reduce::LazyReduce;
+                let tmp = self.lazy_reduce(modulus);
+
+                if tmp >= modulus.value() {
+                    tmp - modulus.value()
+                } else {
+                    tmp
+                }
+            }
+        }
+
+        impl $crate::reduce::LazyReduce<BarrettModulus<$SelfT>> for [$SelfT; 2] {
+            type Output = $SelfT;
+
+            /// Caculates `self (mod 2*modulus)`.
+            ///
+            /// ## Procedure
+            ///
+            /// We denote `x` = `self`  and `m` = `modulus` here.
+            ///
+            /// The algorithm will output `r` = `x` mod `m` with the below procedures:
+            ///
+            /// 1. `q1` ← `x`, `q2` ← `q1` * `ratio`, `q3` ← ⌊`q2`/b^2⌋.
+            /// 2. `r1` ← `x` mod b^2, `r2` ← `q3` * `m` mod b^2, `r` ← `r1` - `r2`.
+            /// 3. If `r` ≥ `m` do: `r` ← `r` - `m`.
+            /// 4. Return(`r`).
+            ///
+            /// ## Proof:
+            ///
+            /// ∵ `q1` = `x` , ⌊b^2 / m⌋ - 1 < `ratio` ≤ ⌊b^2 / m⌋
+            ///
+            /// ∴ ⌊x * b^2 / m⌋ - x < `q2` = `q1` * `ratio` ≤ ⌊x * b^2 / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 2 < `q3` = ⌊`q2` / b^2⌋ ≤ ⌊x / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
+            ///
+            /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
+            #[inline]
+            fn lazy_reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -195,18 +230,11 @@ macro_rules! impl_barrett_modulus {
                 let tmp = d.wrapping_add((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT;
 
                 // Step 2.
-                let r = self[0].wrapping_sub(tmp.wrapping_mul(modulus.value()));
-
-                // Step 3. and 4.
-                if r >= modulus.value() {
-                    r - modulus.value()
-                } else {
-                    r
-                }
+                self[0].wrapping_sub(tmp.wrapping_mul(modulus.value()))
             }
         }
 
-        impl $crate::reduce::Reduce<BarrettModulus<$SelfT>> for ($SelfT, $SelfT) {
+        impl $crate::reduce::Reduce<BarrettModulus<$SelfT>> for [$SelfT; 2] {
             type Output = $SelfT;
 
             /// Caculates `self (mod modulus)`.
@@ -233,7 +261,48 @@ macro_rules! impl_barrett_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
+            #[inline]
             fn reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
+                use $crate::reduce::LazyReduce;
+                let r = self.lazy_reduce(modulus);
+
+                if r >= modulus.value() {
+                    r - modulus.value()
+                } else {
+                    r
+                }
+            }
+        }
+
+        impl $crate::reduce::LazyReduce<BarrettModulus<$SelfT>> for ($SelfT, $SelfT) {
+            type Output = $SelfT;
+
+            /// Caculates `self (mod 2*modulus)`.
+            ///
+            /// ## Procedure
+            ///
+            /// We denote `x` = `self`  and `m` = `modulus` here.
+            ///
+            /// The algorithm will output `r` = `x` mod `m` with the below procedures:
+            ///
+            /// 1. `q1` ← `x`, `q2` ← `q1` * `ratio`, `q3` ← ⌊`q2`/b^2⌋.
+            /// 2. `r1` ← `x` mod b^2, `r2` ← `q3` * `m` mod b^2, `r` ← `r1` - `r2`.
+            /// 3. If `r` ≥ `m` do: `r` ← `r` - `m`.
+            /// 4. Return(`r`).
+            ///
+            /// ## Proof:
+            ///
+            /// ∵ `q1` = `x` , ⌊b^2 / m⌋ - 1 < `ratio` ≤ ⌊b^2 / m⌋
+            ///
+            /// ∴ ⌊x * b^2 / m⌋ - x < `q2` = `q1` * `ratio` ≤ ⌊x * b^2 / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 2 < `q3` = ⌊`q2` / b^2⌋ ≤ ⌊x / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
+            ///
+            /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
+            #[inline]
+            fn lazy_reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
                 let ratio = modulus.ratio();
 
                 // Step 1.
@@ -265,13 +334,67 @@ macro_rules! impl_barrett_modulus {
                 let tmp = d.wrapping_add((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT;
 
                 // Step 2.
-                let r = self.0.wrapping_sub(tmp.wrapping_mul(modulus.value()));
+                self.0.wrapping_sub(tmp.wrapping_mul(modulus.value()))
+            }
+        }
 
-                // Step 3. and 4.
+        impl $crate::reduce::Reduce<BarrettModulus<$SelfT>> for ($SelfT, $SelfT) {
+            type Output = $SelfT;
+
+            /// Caculates `self (mod modulus)`.
+            ///
+            /// ## Procedure
+            ///
+            /// We denote `x` = `self`  and `m` = `modulus` here.
+            ///
+            /// The algorithm will output `r` = `x` mod `m` with the below procedures:
+            ///
+            /// 1. `q1` ← `x`, `q2` ← `q1` * `ratio`, `q3` ← ⌊`q2`/b^2⌋.
+            /// 2. `r1` ← `x` mod b^2, `r2` ← `q3` * `m` mod b^2, `r` ← `r1` - `r2`.
+            /// 3. If `r` ≥ `m` do: `r` ← `r` - `m`.
+            /// 4. Return(`r`).
+            ///
+            /// ## Proof:
+            ///
+            /// ∵ `q1` = `x` , ⌊b^2 / m⌋ - 1 < `ratio` ≤ ⌊b^2 / m⌋
+            ///
+            /// ∴ ⌊x * b^2 / m⌋ - x < `q2` = `q1` * `ratio` ≤ ⌊x * b^2 / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 2 < `q3` = ⌊`q2` / b^2⌋ ≤ ⌊x / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
+            ///
+            /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
+            #[inline]
+            fn reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
+                use $crate::reduce::LazyReduce;
+                let r = self.lazy_reduce(modulus);
+
                 if r >= modulus.value() {
                     r - modulus.value()
                 } else {
                     r
+                }
+            }
+        }
+
+        impl $crate::reduce::LazyReduce<BarrettModulus<$SelfT>> for &[$SelfT] {
+            type Output = $SelfT;
+
+            /// Caculates `self (mod 2*modulus)` when value's length > 0.
+            fn lazy_reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
+                match self {
+                    &[] => unreachable!(),
+                    &[v] => {
+                        if v < modulus.value() {
+                            v
+                        } else {
+                            v.lazy_reduce(modulus)
+                        }
+                    }
+                    [other @ .., last] => other
+                        .iter()
+                        .rfold(*last, |acc, &x| [x, acc].lazy_reduce(modulus)),
                 }
             }
         }
@@ -294,6 +417,58 @@ macro_rules! impl_barrett_modulus {
                         .iter()
                         .rfold(*last, |acc, &x| [x, acc].reduce(modulus)),
                 }
+            }
+        }
+
+        impl $crate::reduce::LazyReduceAssign<BarrettModulus<Self>> for $SelfT {
+            /// Caculates `self (mod 2*modulus)`.
+            ///
+            /// ## Procedure
+            ///
+            /// We denote `x` = `self`  and `m` = `modulus` here.
+            ///
+            /// The algorithm will output `r` = `x` mod `m` with the below procedures:
+            ///
+            /// 1. `q1` ← `x`, `q2` ← `q1` * `ratio`, `q3` ← ⌊`q2`/b^2⌋.
+            /// 2. `r1` ← `x` mod b^2, `r2` ← `q3` * `m` mod b^2, `r` ← `r1` - `r2`.
+            /// 3. If `r` ≥ `m` do: `r` ← `r` - `m`.
+            /// 4. Return(`r`).
+            ///
+            /// ## Proof:
+            ///
+            /// ∵ `q1` = `x` , ⌊b^2 / m⌋ - 1 < `ratio` ≤ ⌊b^2 / m⌋
+            ///
+            /// ∴ ⌊x * b^2 / m⌋ - x < `q2` = `q1` * `ratio` ≤ ⌊x * b^2 / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 2 < `q3` = ⌊`q2` / b^2⌋ ≤ ⌊x / m⌋
+            ///
+            /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
+            ///
+            /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
+            #[inline]
+            fn lazy_reduce_assign(&mut self, modulus: BarrettModulus<Self>) {
+                let ratio = modulus.ratio();
+
+                // Step 1.
+                //              ratio[1]  ratio[0]
+                //         *                self
+                //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                //            +-------------------+
+                //            |  tmp1   |         |    <-- self * ratio[0]
+                //            +-------------------+
+                //   +------------------+
+                //   |      tmp2        |              <-- self * ratio[1]
+                //   +------------------+
+                //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                //   +--------+
+                //   |   q3   |
+                //   +--------+
+                let tmp = (*self as $WideT * ratio[0] as $WideT) >> Self::BITS; // tmp1
+                let tmp =
+                    ((*self as $WideT * ratio[1] as $WideT + tmp) >> Self::BITS) as $SelfT; // q3
+
+                // Step 2.
+                *self = self.wrapping_sub(tmp.wrapping_mul(modulus.value())); // r = r1 -r2
             }
         }
 
@@ -322,31 +497,11 @@ macro_rules! impl_barrett_modulus {
             /// ∴ ⌊x / m⌋ - 1 ≤ `q3` ≤ ⌊x / m⌋
             ///
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
+            #[inline]
             fn reduce_assign(&mut self, modulus: BarrettModulus<Self>) {
-                let ratio = modulus.ratio();
+                use $crate::reduce::LazyReduceAssign;
+                self.lazy_reduce_assign(modulus);
 
-                // Step 1.
-                //              ratio[1]  ratio[0]
-                //         *                self
-                //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                //            +-------------------+
-                //            |  tmp1   |         |    <-- self * ratio[0]
-                //            +-------------------+
-                //   +------------------+
-                //   |      tmp2        |              <-- self * ratio[1]
-                //   +------------------+
-                //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                //   +--------+
-                //   |   q3   |
-                //   +--------+
-                let tmp = (*self as $WideT * ratio[0] as $WideT) >> Self::BITS; // tmp1
-                let tmp =
-                    ((*self as $WideT * ratio[1] as $WideT + tmp) >> Self::BITS) as $SelfT; // q3
-
-                // Step 2.
-                *self = self.wrapping_sub(tmp.wrapping_mul(modulus.value())); // r = r1 -r2
-
-                // Step 3. and 4.
                 if *self >= modulus.value() {
                     *self -= modulus.value();
                 }

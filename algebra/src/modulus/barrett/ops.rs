@@ -1,11 +1,14 @@
-use std::ops::{Add, AddAssign, ShrAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Shl, ShrAssign, Sub, SubAssign};
 
 use num_traits::{One, PrimInt};
 
 use crate::modulus::BarrettModulus;
 use crate::reduce::{
-    AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, InvReduceAssign, MulReduce,
-    MulReduceAssign, NegReduce, NegReduceAssign, PowReduce, Reduce, SubReduce, SubReduceAssign,
+    AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, InvReduceAssign,
+    LazyAddReduce, LazyAddReduceAssign, LazyDivReduce, LazyDivReduceAssign, LazyMulReduce,
+    LazyMulReduceAssign, LazyNegReduce, LazyNegReduceAssign, LazyReduce, LazySubReduce,
+    LazySubReduceAssign, MulReduce, MulReduceAssign, NegReduce, NegReduceAssign, PowReduce, Reduce,
+    SubReduce, SubReduceAssign,
 };
 use crate::{Bits, Widening};
 
@@ -194,6 +197,138 @@ where
     #[inline]
     fn div_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
         self.mul_reduce_assign(rhs.inv_reduce(modulus), modulus);
+    }
+}
+
+impl<T> LazyAddReduce<BarrettModulus<T>> for T
+where
+    T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd + Shl<u32, Output = Self>,
+{
+    type Output = T;
+
+    #[inline]
+    fn lazy_add_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
+        let twice_modulus = modulus.value() << 1;
+        let r = self + rhs;
+        if r >= twice_modulus {
+            r - twice_modulus
+        } else {
+            r
+        }
+    }
+}
+
+impl<T> LazyAddReduceAssign<BarrettModulus<T>> for T
+where
+    T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd + Shl<u32, Output = Self>,
+{
+    #[inline]
+    fn lazy_add_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
+        let twice_modulus = modulus.value() << 1;
+        let r = *self + rhs;
+        *self = if r >= twice_modulus {
+            r - twice_modulus
+        } else {
+            r
+        };
+    }
+}
+
+impl<T> LazySubReduce<BarrettModulus<T>> for T
+where
+    T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd + Shl<u32, Output = Self>,
+{
+    type Output = T;
+
+    #[inline]
+    fn lazy_sub_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
+        if self >= rhs {
+            self - rhs
+        } else {
+            (modulus.value() << 1) - rhs + self
+        }
+    }
+}
+
+impl<T> LazySubReduceAssign<BarrettModulus<T>> for T
+where
+    T: Copy + AddAssign + SubAssign + Sub<Output = Self> + PartialOrd + Shl<u32, Output = Self>,
+{
+    #[inline]
+    fn lazy_sub_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
+        if *self >= rhs {
+            *self -= rhs;
+        } else {
+            *self += (modulus.value() << 1) - rhs;
+        }
+    }
+}
+
+impl<T> LazyNegReduce<BarrettModulus<T>> for T
+where
+    T: Copy + Sub<Output = Self> + Shl<u32, Output = Self>,
+{
+    type Output = T;
+
+    #[inline]
+    fn lazy_neg_reduce(self, modulus: BarrettModulus<T>) -> Self::Output {
+        (modulus.value() << 1) - self
+    }
+}
+
+impl<T> LazyNegReduceAssign<BarrettModulus<T>> for T
+where
+    T: Copy + Sub<Output = Self> + Shl<u32, Output = Self>,
+{
+    #[inline]
+    fn lazy_neg_reduce_assign(&mut self, modulus: BarrettModulus<T>) {
+        *self = (modulus.value() << 1) - *self;
+    }
+}
+
+impl<T> LazyMulReduce<BarrettModulus<T>> for T
+where
+    T: Copy + Widening,
+    (T, T): LazyReduce<BarrettModulus<T>, Output = T>,
+{
+    type Output = Self;
+
+    #[inline]
+    fn lazy_mul_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
+        self.widen_mul(rhs).lazy_reduce(modulus)
+    }
+}
+
+impl<T> LazyMulReduceAssign<BarrettModulus<T>> for T
+where
+    T: Copy + Widening,
+    (T, T): LazyReduce<BarrettModulus<T>, Output = T>,
+{
+    #[inline]
+    fn lazy_mul_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
+        *self = self.widen_mul(rhs).lazy_reduce(modulus);
+    }
+}
+
+impl<T> LazyDivReduce<BarrettModulus<T>> for T
+where
+    T: Copy + LazyMulReduce<BarrettModulus<T>, Output = T> + InvReduce<BarrettModulus<T>>,
+{
+    type Output = T;
+
+    #[inline]
+    fn lazy_div_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
+        self.lazy_mul_reduce(rhs.inv_reduce(modulus), modulus)
+    }
+}
+
+impl<T> LazyDivReduceAssign<BarrettModulus<T>> for T
+where
+    T: Copy + LazyMulReduceAssign<BarrettModulus<T>> + InvReduce<BarrettModulus<T>>,
+{
+    #[inline]
+    fn lazy_div_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
+        self.lazy_mul_reduce_assign(rhs.inv_reduce(modulus), modulus);
     }
 }
 

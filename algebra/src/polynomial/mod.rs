@@ -5,5 +5,6 @@ mod ntt_polynomial;
 
 pub use native_polynomial::Polynomial;
 pub use ntt_polynomial::{
-    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_mul_assign, ntt_mul_assign_ref, NTTPolynomial,
+    lazy_ntt_mul_assign, lazy_ntt_mul_assign_ref, ntt_add_mul_assign, ntt_add_mul_assign_ref,
+    ntt_mul_assign, ntt_mul_assign_ref, NTTPolynomial,
 };

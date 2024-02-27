@@ -101,6 +101,18 @@ fn impl_ntt(input: Input) -> TokenStream {
             }
 
             #[inline]
+            fn mul_lazy(self, rhs: Self) -> Self {
+                use algebra::reduce::LazyMulReduce;
+                Self(self.0.lazy_mul_reduce(rhs.0, <Self as ::algebra::ModulusConfig>::MODULUS))
+            }
+
+            #[inline]
+            fn mul_assign_lazy(&mut self, rhs: Self){
+                use algebra::reduce::LazyMulReduceAssign;
+                self.0.lazy_mul_reduce_assign(rhs.0, <Self as ::algebra::ModulusConfig>::MODULUS);
+            }
+
+            #[inline]
             fn mul_root_lazy(self, root: Self::Root) -> Self {
                 Self(root.mul_reduce_lazy(self.0, #modulus))
             }

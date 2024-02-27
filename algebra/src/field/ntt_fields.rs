@@ -62,6 +62,14 @@ pub trait NTTField: PrimeField {
     /// The result is in [0, 2 * modulus).
     fn sub_lazy(self, rhs: Self) -> Self;
 
+    /// Calculate `self * rhs`.
+    /// The result is in [0, 2 * modulus).
+    fn mul_lazy(self, rhs: Self) -> Self;
+
+    /// Calculate `self *= rhs`.
+    /// The result is in [0, 2 * modulus).
+    fn mul_assign_lazy(&mut self, rhs: Self);
+
     /// Calculate `self * root`.
     /// The result is in [0, 2 * modulus).
     fn mul_root_lazy(self, root: Self::Root) -> Self;
