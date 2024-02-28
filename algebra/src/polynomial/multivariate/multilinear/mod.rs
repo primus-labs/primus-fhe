@@ -32,7 +32,7 @@ pub trait MultilinearExtension<F: Field>:
     + for<'a> SubAssign<&'a Self>
 {
     /// The type of evaluation points for this polynomial.
-    type Point: Sized + Clone + Debug;
+    type Point: ?Sized + Debug;
 
     /// Return the number of variables in `self`
     fn num_vars(&self) -> usize;

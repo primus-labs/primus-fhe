@@ -2,11 +2,10 @@ use std::vec;
 
 use algebra::{
     derive::{Field, Prime, Random},
-    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension, Random,
+    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use num_traits::Zero;
 use rand::thread_rng;
-use rand_distr::Distribution;
 use std::rc::Rc;
 
 macro_rules! field_vec {
@@ -119,53 +118,4 @@ fn evaluate_lists_of_products_at_a_point() {
 
     let point = field_vec!(FF; 0, 1);
     assert_eq!(poly.evaluate(&point), FF::new(24));
-}
-
-#[allow(dead_code)]
-fn random_product<F: Field + Random, R: rand::Rng + rand::CryptoRng>(
-    nv: usize,
-    num_multiplicands: usize,
-    rng: &mut R,
-) -> (Vec<Rc<DenseMultilinearExtension<F>>>, F) {
-    let mut multiplicands = Vec::with_capacity(num_multiplicands);
-    for _ in 0..num_multiplicands {
-        multiplicands.push(Vec::with_capacity(1 << nv));
-    }
-    let mut sum = F::zero();
-
-    for _ in 0..(1 << nv) {
-        let mut product = F::one();
-        for multiplicand in &mut multiplicands {
-            let val = F::standard_distribution().sample(rng);
-            multiplicand.push(val);
-            product *= val;
-        }
-        sum += product;
-    }
-    (
-        multiplicands
-            .into_iter()
-            .map(|x| Rc::new(DenseMultilinearExtension::from_evaluations_vec(nv, x)))
-            .collect(),
-        sum,
-    )
-}
-
-#[allow(dead_code)]
-fn random_list_of_products<F: Field + Random, R: rand::Rng + rand::CryptoRng>(
-    nv: usize,
-    num_multiplicands_range: (usize, usize),
-    num_products: usize,
-    rng: &mut R,
-) -> (ListOfProductsOfPolynomials<F>, F) {
-    let mut sum = F::zero();
-    let mut poly = ListOfProductsOfPolynomials::new(nv);
-    for _ in 0..num_products {
-        let num_multiplicands = num_multiplicands_range.0;
-        let (product, product_sum) = random_product(nv, num_multiplicands, rng);
-        let coefficient = F::standard_distribution().sample(rng);
-        poly.add_product(product.into_iter(), coefficient);
-        sum += product_sum * coefficient;
-    }
-    (poly, sum)
 }

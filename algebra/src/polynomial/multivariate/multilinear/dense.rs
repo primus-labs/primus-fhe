@@ -1,4 +1,3 @@
-use core::fmt;
 use std::cmp::min;
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
@@ -62,7 +61,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
 }
 
 impl<F: Field + Random> MultilinearExtension<F> for DenseMultilinearExtension<F> {
-    type Point = Vec<F>;
+    type Point = [F];
 
     fn num_vars(&self) -> usize {
         self.num_vars
@@ -130,7 +129,7 @@ impl<F: Field> Index<usize> for DenseMultilinearExtension<F> {
 }
 
 impl<F: Field> Debug for DenseMultilinearExtension<F> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "DenseML(nv = {}, evaluations = [", self.num_vars)?;
         for i in 0..min(4, self.evaluations.len()) {
             write!(f, "{:?}", self.evaluations[i])?;

@@ -43,7 +43,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 /// Stores the number of variables and max number of multiplicands of the added polynomial used by the prover.
 /// This data structures will is used as the verifier key.
 pub struct PolynomialInfo {
@@ -99,7 +99,7 @@ impl<F: Field + Random> ListOfProductsOfPolynomials<F> {
         self.products.iter().fold(F::ZERO, |result, (c, p)| {
             result
                 + p.iter().fold(*c, |acc, &i| {
-                    acc * self.flattened_ml_extensions[i].evaluate(&point.to_vec())
+                    acc * self.flattened_ml_extensions[i].evaluate(point)
                 })
         })
     }
