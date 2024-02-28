@@ -28,7 +28,7 @@ use super::AbstractNTT;
 #[derive(Debug)]
 pub struct NTTTable<F>
 where
-    F: NTTField<Table = NTTTable<F>>,
+    F: NTTField<Table = Self>,
 {
     root: F,
     inv_root: F,
@@ -65,16 +65,16 @@ where
         }
     }
 
-    /// Returns a reference to the root of this [`NTTTable<F>`].
+    /// Returns the root of this [`NTTTable<F>`].
     #[inline]
-    pub fn root(&self) -> &F {
-        &self.root
+    pub fn root(&self) -> F {
+        self.root
     }
 
-    /// Returns a reference to the inv root of this [`NTTTable<F>`].
+    /// Returns the inverse element of the root of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_root(&self) -> &F {
-        &self.inv_root
+    pub fn inv_root(&self) -> F {
+        self.inv_root
     }
 
     /// Returns the coeff count power of this [`NTTTable<F>`].
@@ -89,10 +89,10 @@ where
         self.coeff_count
     }
 
-    /// Returns a reference to the inv degree of this [`NTTTable<F>`].
+    /// Returns the inverse element of the degree of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_degree(&self) -> &<F as NTTField>::Root {
-        &self.inv_degree
+    pub fn inv_degree(&self) -> <F as NTTField>::Root {
+        self.inv_degree
     }
 
     /// Returns a reference to the root powers of this [`NTTTable<F>`].
@@ -101,7 +101,7 @@ where
         self.root_powers.as_ref()
     }
 
-    /// Returns a reference to the inv root powers of this [`NTTTable<F>`].
+    /// Returns a reference to the inverse elements of the root powers of this [`NTTTable<F>`].
     #[inline]
     pub fn inv_root_powers(&self) -> &[<F as NTTField>::Root] {
         self.inv_root_powers.as_ref()
@@ -144,11 +144,11 @@ where
         let mut v: F;
 
         let roots = self.root_powers();
-        let mut root_iter = roots[1..].iter();
+        let mut root_iter = roots[1..].iter().copied();
 
         for gap in (0..log_n).rev().map(|x| 1usize << x) {
             for vc in values.chunks_exact_mut(gap << 1) {
-                root = *root_iter.next().unwrap();
+                root = root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
                     u = i.reduce_lazy();
@@ -170,11 +170,11 @@ where
         let mut v: F;
 
         let roots = self.inv_root_powers();
-        let mut root_iter = roots[1..].iter();
+        let mut root_iter = roots[1..].iter().copied();
 
         for gap in (0..log_n - 1).map(|x| 1usize << x) {
             for vc in values.chunks_exact_mut(gap << 1) {
-                root = *root_iter.next().unwrap();
+                root = root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
                     u = *i;
@@ -187,9 +187,9 @@ where
 
         let gap = 1 << (log_n - 1);
 
-        let scalar = *self.inv_degree();
+        let scalar = self.inv_degree();
 
-        root = *root_iter.next().unwrap();
+        root = root_iter.next().unwrap();
 
         let scaled_r = F::from_root(root).mul_root(scalar).to_root();
         let (v0, v1) = values.split_at_mut(gap);
