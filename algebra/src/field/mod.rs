@@ -10,7 +10,7 @@ use crate::{Basis, Random};
 mod ntt_fields;
 mod prime_fields;
 
-pub use ntt_fields::NTTField;
+pub use ntt_fields::{HarveyNTT, NTTField};
 pub use prime_fields::PrimeField;
 
 /// A trait defining the algebraic structure of a mathematical field.
@@ -64,10 +64,10 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
-    + From<Self::Inner>
+    + From<Self::Value>
 {
     /// The inner type of this field.
-    type Inner: Debug + PrimInt + Send + Sync;
+    type Value: Debug + PrimInt + Send + Sync;
 
     /// The type of the field's order.
     type Order: Copy;
@@ -82,10 +82,16 @@ pub trait Field:
     const NEG_ONE: Self;
 
     /// 1
-    const ONE_INNER: Self::Inner;
+    const ONE_INNER: Self::Value;
 
     /// 0
-    const ZERO_INNER: Self::Inner;
+    const ZERO_INNER: Self::Value;
+
+    /// q
+    const MODULUS_INNER: Self::Value;
+
+    /// 2q
+    const TWICE_MODULUS_INNER: Self::Value;
 
     /// q/8
     const Q_DIV_8: Self;
@@ -97,13 +103,38 @@ pub trait Field:
     const MODULUS_F64: f64;
 
     /// Creates a new instance.
-    fn new(value: Self::Inner) -> Self;
+    fn new(value: Self::Value) -> Self;
+
+    /// Get inner value.
+    fn get(self) -> Self::Value;
+
+    /// Reset inner value.
+    fn set(&mut self, value: Self::Value);
+
+    /// Normalize `self`.
+    ///
+    /// If `self` > `modulus`, return `self - modulus`.
+    ///
+    /// The result is in [0, modulus).
+    ///
+    /// # Correctness
+    ///
+    /// - `self < modulus`
+    fn normalize(self) -> Self;
+
+    /// Normalize assign `self`.
+    ///
+    /// If `self` > `modulus`, return `self - modulus`.
+    ///
+    /// The result is in [0, modulus).
+    ///
+    /// # Correctness
+    ///
+    /// - `self < modulus`
+    fn normalize_assign(&mut self);
 
     /// mask, return a number with `bits` 1s.
-    fn mask(bits: u32) -> Self::Inner;
-
-    /// Return inner value.
-    fn inner(self) -> Self::Inner;
+    fn mask(bits: u32) -> Self::Value;
 
     /// cast self to [`usize`].
     fn cast_into_usize(self) -> usize;
@@ -118,13 +149,13 @@ pub trait Field:
     fn from_f64(value: f64) -> Self;
 
     /// Returns the modulus value.
-    fn modulus_value() -> Self::Inner;
+    fn modulus_value() -> Self::Value;
 
     /// Returns the order of the field.
     fn order() -> Self::Order;
 
     /// Get the length of decompose vector.
-    fn decompose_len(basis: Self::Inner) -> usize;
+    fn decompose_len(basis: Self::Value) -> usize;
 
     /// Decompose `self` according to `basis`,
     /// return the decomposed vector.
@@ -142,16 +173,16 @@ pub trait Field:
     /// return the least significant decomposed part.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self;
+    fn decompose_lsb_bits(&mut self, mask: Self::Value, bits: u32) -> Self;
 
     /// Decompose `self` according to `basis`'s `mask` and `bits`,
     /// put the least significant decomposed part into `destination`.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32);
+    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32);
 
     /// Return `self * scalar`.
-    fn mul_scalar(self, scalar: Self::Inner) -> Self;
+    fn mul_scalar(self, scalar: Self::Value) -> Self;
 
     /// Returns `self + self`.
     #[inline]

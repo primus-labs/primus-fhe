@@ -6,9 +6,8 @@ use num_traits::Zero;
 use rand_distr::Distribution;
 
 use crate::field::{Field, NTTField};
-use crate::polynomial::{lazy_ntt_mul_assign, lazy_ntt_mul_assign_ref};
 use crate::transformation::AbstractNTT;
-use crate::{Basis, Random};
+use crate::{ntt_mul_assign, ntt_mul_assign_ref, Basis, Random};
 
 use super::NTTPolynomial;
 
@@ -96,13 +95,13 @@ impl<F: Field> Polynomial<F> {
 
     /// Multiply `self` with the a scalar.
     #[inline]
-    pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
+    pub fn mul_scalar(&self, scalar: F::Value) -> Self {
         Self::new(self.iter().map(|&v| v.mul_scalar(scalar)).collect())
     }
 
     /// Multiply `self` with the a scalar inplace.
     #[inline]
-    pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
+    pub fn mul_scalar_inplace(&mut self, scalar: F::Value) {
         self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 
@@ -450,7 +449,7 @@ impl<F: NTTField> MulAssign<Self> for Polynomial<F> {
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(rhs.as_mut_slice());
         ntt_table.transform_slice(lhs);
-        lazy_ntt_mul_assign(lhs, rhs);
+        ntt_mul_assign(lhs, rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }
@@ -551,7 +550,7 @@ impl<F: NTTField> MulAssign<NTTPolynomial<F>> for Polynomial<F> {
 
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(lhs);
-        lazy_ntt_mul_assign(lhs, rhs);
+        ntt_mul_assign(lhs, rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }
@@ -568,7 +567,7 @@ impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for Polynomial<F> {
 
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(lhs);
-        lazy_ntt_mul_assign_ref(lhs, rhs);
+        ntt_mul_assign_ref(lhs, rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }

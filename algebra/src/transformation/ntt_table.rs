@@ -1,5 +1,9 @@
+use num_traits::{WrappingMul, WrappingSub};
+
 use crate::field::NTTField;
+use crate::modulus::ShoupFactor;
 use crate::polynomial::{NTTPolynomial, Polynomial};
+use crate::{Field, HarveyNTT, Widening};
 
 use super::AbstractNTT;
 
@@ -26,22 +30,22 @@ use super::AbstractNTT;
 ///                         ----------  ----  -
 /// ```
 #[derive(Debug)]
-pub struct NTTTable<F>
+pub struct NTTTable<F, R: Copy>
 where
-    F: NTTField<Table = Self>,
+    F: NTTField<Table = Self, Root = R>,
 {
     root: F,
     inv_root: F,
     coeff_count_power: u32,
     coeff_count: usize,
-    inv_degree: <F as NTTField>::Root,
-    root_powers: Vec<<F as NTTField>::Root>,
-    inv_root_powers: Vec<<F as NTTField>::Root>,
+    inv_degree: R,
+    root_powers: Vec<R>,
+    inv_root_powers: Vec<R>,
 }
 
-impl<F> NTTTable<F>
+impl<F, R: Copy> NTTTable<F, R>
 where
-    F: NTTField<Table = Self>,
+    F: NTTField<Table = Self, Root = R>,
 {
     /// Creates a new [`NTTTable<F>`].
     #[inline]
@@ -91,26 +95,27 @@ where
 
     /// Returns the inverse element of the degree of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_degree(&self) -> <F as NTTField>::Root {
+    pub fn inv_degree(&self) -> R {
         self.inv_degree
     }
 
     /// Returns a reference to the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn root_powers(&self) -> &[<F as NTTField>::Root] {
+    pub fn root_powers(&self) -> &[R] {
         self.root_powers.as_ref()
     }
 
     /// Returns a reference to the inverse elements of the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_root_powers(&self) -> &[<F as NTTField>::Root] {
+    pub fn inv_root_powers(&self) -> &[R] {
         self.inv_root_powers.as_ref()
     }
 }
 
-impl<F> AbstractNTT<F> for NTTTable<F>
+impl<F> AbstractNTT<F> for NTTTable<F, ShoupFactor<<F as Field>::Value>>
 where
-    F: NTTField<Table = Self>,
+    F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
+    <F as Field>::Value: Widening + WrappingMul + WrappingSub,
 {
     #[inline]
     fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
@@ -134,7 +139,7 @@ where
         Polynomial::<F>::new(ntt_polynomial.data())
     }
 
-    fn transform_slice_lazy(&self, values: &mut [F]) {
+    fn transform_slice(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
@@ -151,16 +156,21 @@ where
                 root = root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
-                    u = i.reduce_lazy();
+                    u = i.normalize();
                     v = (*j).mul_root_lazy(root);
                     *i = u.add_no_reduce(v);
                     *j = u.sub_lazy(v);
                 }
             }
         }
+
+        values.iter_mut().for_each(|v| {
+            HarveyNTT::normalize_assign(v);
+            Field::normalize_assign(v);
+        });
     }
 
-    fn inverse_transform_slice_lazy(&self, values: &mut [F]) {
+    fn inverse_transform_slice(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
@@ -199,17 +209,7 @@ where
             *i = u.add_no_reduce(v).mul_root_lazy(scalar);
             *j = u.sub_lazy(v).mul_root_lazy(scaled_r);
         }
-    }
 
-    #[inline]
-    fn transform_slice(&self, values: &mut [F]) {
-        self.transform_slice_lazy(values);
-        values.iter_mut().for_each(NTTField::normalize_4p);
-    }
-
-    #[inline]
-    fn inverse_transform_slice(&self, values: &mut [F]) {
-        self.inverse_transform_slice_lazy(values);
-        values.iter_mut().for_each(NTTField::normalize_2p);
+        values.iter_mut().for_each(Field::normalize_assign);
     }
 }

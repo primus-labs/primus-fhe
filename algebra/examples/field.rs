@@ -39,8 +39,8 @@ fn main() -> Result<(), algebra::AlgebraError> {
 
     // You can generate a value by yourself
     let mut a = FF::new(9);
-    // You can get the inner value by `inner` function
-    let a_in = a.inner();
+    // You can get the inner value by `get` function
+    let a_in = a.get();
     assert_eq!(a_in, 9);
     // You can get the max value
     let mut b = FF::max();

@@ -8,11 +8,11 @@ use crate::Field;
 /// In this case, decomposition will become simple and efficient.
 #[derive(Debug, Clone, Copy)]
 pub struct Basis<F: Field> {
-    basis: F::Inner,
+    basis: F::Value,
     /// The length of the vector of the decomposed [`Field`] based on the basis.
     decompose_len: usize,
     /// A value of the `bits` 1, used for some bit-operation.
-    mask: F::Inner,
+    mask: F::Value,
     /// This basis' bits number.
     bits: u32,
 }
@@ -49,7 +49,7 @@ impl<F: Field> Basis<F> {
     ///
     /// mask is a value of the `bits` 1, used for some bit-operation.
     #[inline]
-    pub fn mask(&self) -> <F as Field>::Inner {
+    pub fn mask(&self) -> <F as Field>::Value {
         self.mask
     }
 
@@ -61,7 +61,7 @@ impl<F: Field> Basis<F> {
 
     /// Returns the basis of this [`Basis<F>`].
     #[inline]
-    pub fn basis(&self) -> <F as Field>::Inner {
+    pub fn basis(&self) -> <F as Field>::Value {
         self.basis
     }
 }

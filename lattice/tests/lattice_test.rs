@@ -149,12 +149,12 @@ fn encode(m: Inner) -> FF {
 
 #[inline]
 fn decode(c: FF) -> Inner {
-    (c.inner() as f64 * FT as f64 / FP as f64).round() as Inner % FT
+    (c.get() as f64 * FT as f64 / FP as f64).round() as Inner % FT
 }
 
 #[inline]
 fn min_to_zero(value: FF) -> Inner {
-    value.inner().min(FP - value.inner())
+    value.get().min(FP - value.get())
 }
 
 #[test]

@@ -78,7 +78,7 @@ fn impl_field_with_ops(input: Input) -> TokenStream {
 fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
     quote! {
         impl ::algebra::Field for #name {
-            type Inner = #field_ty;
+            type Value = #field_ty;
 
             type Order = #field_ty;
 
@@ -88,9 +88,13 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
 
             const NEG_ONE: Self = Self(#modulus - 1);
 
-            const ONE_INNER: Self::Inner = 1;
+            const ONE_INNER: Self::Value = 1;
 
-            const ZERO_INNER: Self::Inner = 0;
+            const ZERO_INNER: Self::Value = 0;
+
+            const MODULUS_INNER: Self::Value = #modulus;
+
+            const TWICE_MODULUS_INNER: Self::Value = #modulus << 1;
 
             const Q_DIV_8: Self = Self(#modulus >> 3);
 
@@ -105,13 +109,34 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn mask(bits: u32) -> Self::Inner {
-                #field_ty::MAX >> (#field_ty::BITS - bits)
+            fn get(self) -> #field_ty {
+                self.0
             }
 
             #[inline]
-            fn inner(self) -> #field_ty {
-                self.0
+            fn set(&mut self, value: Self::Value) {
+                self.0 = value;
+            }
+
+            #[inline]
+            fn normalize(self) -> Self {
+                if self.0 >= #modulus {
+                    Self(self.0 - #modulus)
+                } else {
+                    self
+                }
+            }
+
+            #[inline]
+            fn normalize_assign(&mut self) {
+                if self.0 >= #modulus {
+                    self.0 -= #modulus;
+                }
+            }
+
+            #[inline]
+            fn mask(bits: u32) -> Self::Value {
+                #field_ty::MAX >> (#field_ty::BITS - bits)
             }
 
             #[inline]
@@ -135,7 +160,7 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn modulus_value() -> Self::Inner {
+            fn modulus_value() -> Self::Value {
                 #modulus
             }
 
@@ -145,7 +170,7 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn decompose_len(basis: Self::Inner) -> usize {
+            fn decompose_len(basis: Self::Value) -> usize {
                 debug_assert!(basis.is_power_of_two() && basis > 1);
                 ::algebra::div_ceil(<Self as ::algebra::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
             }
@@ -186,22 +211,49 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self {
+            fn decompose_lsb_bits(&mut self, mask: Self::Value, bits: u32) -> Self {
                 let temp = Self(self.0 & mask);
                 self.0 >>= bits;
                 temp
             }
 
             #[inline]
-            fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32) {
+            fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32) {
                 *destination = Self(self.0 & mask);
                 self.0 >>= bits;
             }
 
             #[inline]
-            fn mul_scalar(self, scalar: Self::Inner) -> Self {
+            fn mul_scalar(self, scalar: Self::Value) -> Self {
                 use ::algebra::reduce::MulReduce;
                 Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
+            }
+
+            #[inline]
+            fn double(self) -> Self {
+                let r = self.0 << 1;
+                if r >= #modulus {
+                    Self(r - #modulus)
+                } else {
+                    Self(r)
+                }
+            }
+
+            #[inline]
+            fn double_in_place(&mut self) -> &mut Self {
+                let r = self.0 << 1;
+                self.0 += if r >= #modulus {
+                    r - #modulus
+                } else {
+                    r
+                };
+                self
+            }
+
+            #[inline]
+            fn neg_in_place(&mut self) -> &mut Self {
+                self.0 = #modulus - self.0;
+                self
             }
 
             #[inline]
