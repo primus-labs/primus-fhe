@@ -150,9 +150,9 @@ where
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
                     let u = HarveyNTT::normalize(*i);
-                    let v = (*j).mul_root_lazy(root);
+                    let v = (*j).mul_root_fast(root);
                     *i = u.add_no_reduce(v);
-                    *j = u.sub_lazy(v);
+                    *j = u.sub_fast(v);
                 }
             }
         }
@@ -178,8 +178,8 @@ where
                 for (i, j) in std::iter::zip(v0, v1) {
                     let u = *i;
                     let v = *j;
-                    *i = u.add_lazy(v);
-                    *j = u.sub_lazy(v).mul_root_lazy(root);
+                    *i = u.add_fast(v);
+                    *j = u.sub_fast(v).mul_root_fast(root);
                 }
             }
         }
@@ -195,8 +195,8 @@ where
         for (i, j) in std::iter::zip(v0, v1) {
             let u = *i;
             let v = *j;
-            *i = u.add_no_reduce(v).mul_root_lazy(scalar);
-            *j = u.sub_lazy(v).mul_root_lazy(scaled_r);
+            *i = u.add_no_reduce(v).mul_root_fast(scalar);
+            *j = u.sub_fast(v).mul_root_fast(scaled_r);
         }
 
         values.iter_mut().for_each(Field::normalize_assign);

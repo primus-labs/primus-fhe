@@ -114,7 +114,7 @@ pub trait HarveyNTT<F: NTTField> {
     ///
     /// - `self < 2*modulus`
     /// - `rhs < 2*modulus`
-    fn add_lazy(self, rhs: Self) -> Self;
+    fn add_fast(self, rhs: Self) -> Self;
 
     /// Calculate `self - rhs`.
     ///
@@ -124,7 +124,7 @@ pub trait HarveyNTT<F: NTTField> {
     ///
     /// - `self < 2*modulus`
     /// - `rhs < 2*modulus`
-    fn sub_lazy(self, rhs: Self) -> Self;
+    fn sub_fast(self, rhs: Self) -> Self;
 
     /// Calculate `self * root`.
     ///
@@ -133,7 +133,7 @@ pub trait HarveyNTT<F: NTTField> {
     /// # Correctness
     ///
     /// - `root.value < modulus`
-    fn mul_root_lazy(self, root: <F as NTTField>::Root) -> Self;
+    fn mul_root_fast(self, root: <F as NTTField>::Root) -> Self;
 }
 
 impl<F> HarveyNTT<F> for F
@@ -162,7 +162,7 @@ where
     }
 
     #[inline]
-    fn add_lazy(self, rhs: Self) -> Self {
+    fn add_fast(self, rhs: Self) -> Self {
         let r = self.get() + rhs.get();
         if r >= F::TWICE_MODULUS_INNER {
             Self::new(r - F::TWICE_MODULUS_INNER)
@@ -172,12 +172,12 @@ where
     }
 
     #[inline]
-    fn sub_lazy(self, rhs: Self) -> Self {
+    fn sub_fast(self, rhs: Self) -> Self {
         Self::new(self.get() + F::TWICE_MODULUS_INNER - rhs.get())
     }
 
     #[inline]
-    fn mul_root_lazy(self, root: <F as NTTField>::Root) -> Self {
+    fn mul_root_fast(self, root: <F as NTTField>::Root) -> Self {
         let (_, hw) = self.get().widen_mul(root.quotient());
         Self::new(
             root.value()
