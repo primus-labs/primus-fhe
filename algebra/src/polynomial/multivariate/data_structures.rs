@@ -1,3 +1,4 @@
+// It is derived from https://github.com/arkworks-rs/sumcheck/blob/master/src/ml_sumcheck/data_structures.rs .
 use std::cmp::max;
 use std::{collections::HashMap, rc::Rc};
 
