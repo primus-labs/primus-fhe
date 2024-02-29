@@ -103,7 +103,7 @@ fn impl_ntt(input: Input) -> TokenStream {
             fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, ::algebra::AlgebraError> {
                 let mut root = Self::try_primitive_root(degree)?;
 
-                let generator_sq = ::algebra::Field::square(root);
+                let generator_sq = root * root;
                 let mut current_generator = root;
 
                 for _ in 0..degree {

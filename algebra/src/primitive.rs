@@ -140,3 +140,52 @@ pub const fn div_ceil(lhs: u32, rhs: u32) -> u32 {
         d
     }
 }
+
+/// A trait for big number calculation
+pub trait WrappingOps: Sized + Copy {
+    /// Wrapping addition. Computes `self + rhs`, wrapping around at the boundary of the type.
+    fn wrapping_add(self, rhs: Self) -> Self;
+
+    /// Wrapping subtraction. Computes `self - rhs`, wrapping around at the boundary of the type.
+    fn wrapping_sub(self, rhs: Self) -> Self;
+
+    /// Wrapping negation. Computes `-self`, wrapping around at the boundary of the type.
+    ///
+    /// Since unsigned types do not have negative equivalents
+    /// all applications of this function will wrap (except for `-0`).
+    /// For values smaller than the corresponding signed type's maximum the result
+    /// is the same as casting the corresponding signed value.
+    /// Any larger values are equivalent to `MAX + 1 - (val - MAX - 1)` where `MAX` is the corresponding signed type's maximum.
+    fn wrapping_neg(self) -> Self;
+
+    /// Wrapping multiplication. Computes `self * rhs`, wrapping around at the boundary of the type.
+    fn wrapping_mul(self, rhs: Self) -> Self;
+}
+
+macro_rules! wrapping_impl {
+    ($($SelfT:ty),*) => {$(
+        impl WrappingOps for $SelfT {
+            #[inline]
+            fn wrapping_add(self, rhs: Self) -> Self {
+                self.wrapping_add(rhs)
+            }
+
+            #[inline]
+            fn wrapping_sub(self, rhs: Self) -> Self {
+                self.wrapping_sub(rhs)
+            }
+
+            #[inline]
+            fn wrapping_neg(self) -> Self {
+                self.wrapping_neg()
+            }
+
+            #[inline]
+            fn wrapping_mul(self, rhs: Self) -> Self {
+                self.wrapping_mul(rhs)
+            }
+        })*
+    };
+}
+
+wrapping_impl!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128);

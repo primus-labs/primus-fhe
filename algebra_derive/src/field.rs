@@ -119,6 +119,11 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
+            fn modulus_value() -> Self::Value {
+                #modulus
+            }
+
+            #[inline]
             fn normalize(self) -> Self {
                 if self.0 >= #modulus {
                     Self(self.0 - #modulus)
@@ -135,8 +140,63 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn mask(bits: u32) -> Self::Value {
-                #field_ty::MAX >> (#field_ty::BITS - bits)
+            fn mul_scalar(self, scalar: Self::Value) -> Self {
+                use ::algebra::reduce::MulReduce;
+                Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
+            }
+
+            #[inline]
+            fn add_mul(self, a: Self, b: Self) -> Self {
+                use ::algebra::Widening;
+                use ::algebra::reduce::Reduce;
+                Self(a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
+            }
+
+            #[inline]
+            fn mul_add(self, a: Self, b: Self) -> Self {
+                use ::algebra::Widening;
+                use ::algebra::reduce::Reduce;
+                Self(self.0.carry_mul(a.0, b.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
+            }
+
+            #[inline]
+            fn add_mul_assign(&mut self, a: Self, b: Self) {
+                use ::algebra::Widening;
+                use ::algebra::reduce::Reduce;
+                self.0 = a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
+            }
+
+            #[inline]
+            fn mul_add_assign(&mut self, a: Self, b: Self) {
+                use ::algebra::Widening;
+                use ::algebra::reduce::Reduce;
+                self.0 = self.0.carry_mul(a.0, b.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
+            }
+
+            #[inline]
+            fn mul_fast(self, rhs: Self) -> Self {
+                use ::algebra::reduce::LazyMulReduce;
+                Self(self.0.lazy_mul_reduce(rhs.0, <Self as ::algebra::ModulusConfig>::MODULUS))
+            }
+
+            #[inline]
+            fn mul_assign_fast(&mut self, rhs: Self) {
+                use ::algebra::reduce::LazyMulReduceAssign;
+                self.0.lazy_mul_reduce_assign(rhs.0, <Self as ::algebra::ModulusConfig>::MODULUS)
+            }
+
+            #[inline]
+            fn add_mul_fast(self, a: Self, b: Self) -> Self {
+                use ::algebra::Widening;
+                use ::algebra::reduce::LazyReduce;
+                Self(a.0.carry_mul(b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
+            }
+
+            #[inline]
+            fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
+                use ::algebra::Widening;
+                use ::algebra::reduce::LazyReduce;
+                self.0 = a.0.carry_mul(b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
             }
 
             #[inline]
@@ -160,13 +220,13 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn modulus_value() -> Self::Value {
+            fn order() -> Self::Order {
                 #modulus
             }
 
             #[inline]
-            fn order() -> Self::Order {
-                #modulus
+            fn mask(bits: u32) -> Self::Value {
+                #field_ty::MAX >> (#field_ty::BITS - bits)
             }
 
             #[inline]
@@ -221,67 +281,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32) {
                 *destination = Self(self.0 & mask);
                 self.0 >>= bits;
-            }
-
-            #[inline]
-            fn mul_scalar(self, scalar: Self::Value) -> Self {
-                use ::algebra::reduce::MulReduce;
-                Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
-            }
-
-            #[inline]
-            fn double(self) -> Self {
-                let r = self.0 << 1;
-                if r >= #modulus {
-                    Self(r - #modulus)
-                } else {
-                    Self(r)
-                }
-            }
-
-            #[inline]
-            fn double_in_place(&mut self) -> &mut Self {
-                let r = self.0 << 1;
-                self.0 += if r >= #modulus {
-                    r - #modulus
-                } else {
-                    r
-                };
-                self
-            }
-
-            #[inline]
-            fn neg_in_place(&mut self) -> &mut Self {
-                self.0 = #modulus - self.0;
-                self
-            }
-
-            #[inline]
-            fn add_mul(self, a: Self, b: Self) -> Self {
-                use ::algebra::Widening;
-                use ::algebra::reduce::Reduce;
-                Self(a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
-            }
-
-            #[inline]
-            fn mul_add(self, a: Self, b: Self) -> Self {
-                use ::algebra::Widening;
-                use ::algebra::reduce::Reduce;
-                Self(self.0.carry_mul(a.0, b.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
-            }
-
-            #[inline]
-            fn add_mul_assign(&mut self, a: Self, b: Self) {
-                use ::algebra::Widening;
-                use ::algebra::reduce::Reduce;
-                self.0 = a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
-            }
-
-            #[inline]
-            fn mul_add_assign(&mut self, a: Self, b: Self) {
-                use ::algebra::Widening;
-                use ::algebra::reduce::Reduce;
-                self.0 = self.0.carry_mul(a.0, b.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
             }
         }
     }

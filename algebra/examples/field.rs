@@ -81,27 +81,20 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let _c = a - b;
     let _c = a * b;
     let _c = a / b;
-    let _c = a.double(); // a + a
 
     // Some assign operation
     a += b;
     a -= b;
     a *= b;
     a /= b;
-    a.double_in_place(); // a += a;
 
     // neg operation
     a = -a;
-    a.neg_in_place(); // a = -a;
 
     // inv operation
     a = a.inv(); // a = 1 / a;
-    a = a.inverse().unwrap();
-    a.inverse_in_place();
 
     // pow operation
-    a = a.square(); // a = a * a
-    a.square_in_place(); // a *= a
     a = a.pow(5);
 
     // you can print FF value by `Display` trait

@@ -7,7 +7,7 @@ use rand_distr::Distribution;
 
 use crate::field::{Field, NTTField};
 use crate::transformation::AbstractNTT;
-use crate::{ntt_mul_assign, ntt_mul_assign_ref, Basis, Random};
+use crate::{ntt_mul_assign_fast, ntt_mul_assign_ref_fast, Basis, Random};
 
 use super::NTTPolynomial;
 
@@ -449,7 +449,7 @@ impl<F: NTTField> MulAssign<Self> for Polynomial<F> {
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(rhs.as_mut_slice());
         ntt_table.transform_slice(lhs);
-        ntt_mul_assign(lhs, rhs);
+        ntt_mul_assign_fast(lhs, rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }
@@ -550,7 +550,7 @@ impl<F: NTTField> MulAssign<NTTPolynomial<F>> for Polynomial<F> {
 
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(lhs);
-        ntt_mul_assign(lhs, rhs);
+        ntt_mul_assign_fast(lhs, rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }
@@ -567,7 +567,7 @@ impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for Polynomial<F> {
 
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(lhs);
-        ntt_mul_assign_ref(lhs, rhs);
+        ntt_mul_assign_ref_fast(lhs, rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }

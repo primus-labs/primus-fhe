@@ -1,9 +1,7 @@
-use num_traits::{WrappingMul, WrappingSub};
-
 use crate::field::NTTField;
 use crate::modulus::ShoupFactor;
 use crate::polynomial::{NTTPolynomial, Polynomial};
-use crate::{Field, HarveyNTT, Widening};
+use crate::{Field, HarveyNTT};
 
 use super::AbstractNTT;
 
@@ -115,7 +113,6 @@ where
 impl<F> AbstractNTT<F> for NTTTable<F, ShoupFactor<<F as Field>::Value>>
 where
     F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
-    <F as Field>::Value: Widening + WrappingMul + WrappingSub,
 {
     #[inline]
     fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
@@ -144,20 +141,16 @@ where
 
         debug_assert_eq!(values.len(), 1 << log_n);
 
-        let mut root: <F as NTTField>::Root;
-        let mut u: F;
-        let mut v: F;
-
         let roots = self.root_powers();
         let mut root_iter = roots[1..].iter().copied();
 
         for gap in (0..log_n).rev().map(|x| 1usize << x) {
             for vc in values.chunks_exact_mut(gap << 1) {
-                root = root_iter.next().unwrap();
+                let root = root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
-                    u = i.normalize();
-                    v = (*j).mul_root_lazy(root);
+                    let u = i.normalize();
+                    let v = (*j).mul_root_lazy(root);
                     *i = u.add_no_reduce(v);
                     *j = u.sub_lazy(v);
                 }
@@ -175,20 +168,16 @@ where
 
         debug_assert_eq!(values.len(), 1 << log_n);
 
-        let mut root: <F as NTTField>::Root;
-        let mut u: F;
-        let mut v: F;
-
         let roots = self.inv_root_powers();
         let mut root_iter = roots[1..].iter().copied();
 
         for gap in (0..log_n - 1).map(|x| 1usize << x) {
             for vc in values.chunks_exact_mut(gap << 1) {
-                root = root_iter.next().unwrap();
+                let root = root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
-                    u = *i;
-                    v = *j;
+                    let u = *i;
+                    let v = *j;
                     *i = u.add_lazy(v);
                     *j = u.sub_lazy(v).mul_root_lazy(root);
                 }
@@ -199,13 +188,13 @@ where
 
         let scalar = self.inv_degree();
 
-        root = root_iter.next().unwrap();
-
-        let scaled_r = F::from_root(root).mul_root(scalar).to_root();
+        let scaled_r = F::from_root(root_iter.next().unwrap())
+            .mul_root(scalar)
+            .to_root();
         let (v0, v1) = values.split_at_mut(gap);
         for (i, j) in std::iter::zip(v0, v1) {
-            u = *i;
-            v = *j;
+            let u = *i;
+            let v = *j;
             *i = u.add_no_reduce(v).mul_root_lazy(scalar);
             *j = u.sub_lazy(v).mul_root_lazy(scaled_r);
         }

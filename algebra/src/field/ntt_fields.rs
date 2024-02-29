@@ -2,9 +2,7 @@
 
 use std::{fmt::Debug, sync::Arc};
 
-use num_traits::{WrappingMul, WrappingSub};
-
-use crate::{modulus::ShoupFactor, transformation::AbstractNTT, Field, Widening};
+use crate::{modulus::ShoupFactor, transformation::AbstractNTT, Field, Widening, WrappingOps};
 
 use super::PrimeField;
 
@@ -84,7 +82,7 @@ pub trait HarveyNTT<F: NTTField> {
     ///
     /// # Correctness
     ///
-    /// - `self < 2*modulus`
+    /// - `self < 4*modulus`
     fn normalize(self) -> Self;
 
     /// Normalize assign `self`.
@@ -95,7 +93,7 @@ pub trait HarveyNTT<F: NTTField> {
     ///
     /// # Correctness
     ///
-    /// - `self < 2*modulus`
+    /// - `self < 4*modulus`
     fn normalize_assign(&mut self);
 
     /// Calculate `self + rhs` without reduce operation.
@@ -141,7 +139,6 @@ pub trait HarveyNTT<F: NTTField> {
 impl<F> HarveyNTT<F> for F
 where
     F: NTTField<Root = ShoupFactor<<F as Field>::Value>>,
-    <F as Field>::Value: Widening + WrappingMul + WrappingSub,
 {
     #[inline]
     fn normalize(self) -> Self {
@@ -184,8 +181,8 @@ where
         let (_, hw) = self.get().widen_mul(root.quotient());
         Self::new(
             root.value()
-                .wrapping_mul(&self.get())
-                .wrapping_sub(&hw.wrapping_mul(&Self::MODULUS_INNER)),
+                .wrapping_mul(self.get())
+                .wrapping_sub(hw.wrapping_mul(Self::MODULUS_INNER)),
         )
     }
 }

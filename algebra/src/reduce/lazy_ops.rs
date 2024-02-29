@@ -4,12 +4,18 @@ pub trait LazyReduce<Modulus>: Sized {
     type Output;
 
     /// Caculates `self (mod 2*modulus)`.
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `Reduce` trait.
     fn lazy_reduce(self, modulus: Modulus) -> Self::Output;
 }
 
 /// The lazy modulo assignment operation.
 pub trait LazyReduceAssign<Modulus>: Sized {
     /// Caculates `self (mod 2*modulus)`.
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `ReduceAssign` trait.
     fn lazy_reduce_assign(&mut self, modulus: Modulus);
 }
 
@@ -24,6 +30,9 @@ pub trait LazyAddReduce<Modulus, Rhs = Self> {
     ///
     /// - `self < 2*modulus`
     /// - `rhs < 2*modulus`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `AddReduce` trait.
     fn lazy_add_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
 }
 
@@ -35,6 +44,9 @@ pub trait LazyAddReduceAssign<Modulus, Rhs = Self> {
     ///
     /// - `self < 2*modulus`
     /// - `rhs < 2*modulus`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `AddReduceAssign` trait.
     fn lazy_add_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
 
@@ -49,6 +61,9 @@ pub trait LazySubReduce<Modulus, Rhs = Self> {
     ///
     /// - `self < 2*modulus`
     /// - `rhs < 2*modulus`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `SubReduce` trait.
     fn lazy_sub_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
 }
 
@@ -60,6 +75,9 @@ pub trait LazySubReduceAssign<Modulus, Rhs = Self> {
     ///
     /// - `self < 2*modulus`
     /// - `rhs < 2*modulus`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `SubReduceAssign` trait.
     fn lazy_sub_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
 
@@ -73,6 +91,9 @@ pub trait LazyNegReduce<Modulus> {
     /// # Correctness
     ///
     /// - `self < 2*modulus`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `NegReduce` trait.
     fn lazy_neg_reduce(self, modulus: Modulus) -> Self::Output;
 }
 
@@ -83,6 +104,9 @@ pub trait LazyNegReduceAssign<Modulus> {
     /// # Correctness
     ///
     /// - `self < 2*modulus`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `NegReduceAssign` trait.
     fn lazy_neg_reduce_assign(&mut self, modulus: Modulus);
 }
 
@@ -96,6 +120,9 @@ pub trait LazyMulReduce<Modulus, Rhs = Self> {
     /// # Correctness
     ///
     /// - `self*rhs < modulus^2`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `MulReduce` trait.
     fn lazy_mul_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
 }
 
@@ -106,6 +133,9 @@ pub trait LazyMulReduceAssign<Modulus, Rhs = Self> {
     /// # Correctness
     ///
     /// - `self*rhs < modulus^2`
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `MulReduceAssign` trait.
     fn lazy_mul_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
 
@@ -115,11 +145,17 @@ pub trait LazyDivReduce<Modulus, Rhs = Self> {
     type Output;
 
     /// Calculates `self / rhs (mod 2*modulus)`.
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `DivReduce` trait.
     fn lazy_div_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
 }
 
 /// The lazy modular division assignment.
 pub trait LazyDivReduceAssign<Modulus, Rhs = Self> {
     /// Calculates `self /= rhs (mod 2*modulus)`.
+    ///
+    /// If `Modulus` doesn't support this special case,
+    /// just fall back to `DivReduceAssign` trait.
     fn lazy_div_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
