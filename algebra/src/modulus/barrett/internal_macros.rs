@@ -447,28 +447,8 @@ macro_rules! impl_barrett_modulus {
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
             #[inline]
             fn lazy_reduce_assign(&mut self, modulus: BarrettModulus<Self>) {
-                let ratio = modulus.ratio();
-
-                // Step 1.
-                //              ratio[1]  ratio[0]
-                //         *                self
-                //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                //            +-------------------+
-                //            |  tmp1   |         |    <-- self * ratio[0]
-                //            +-------------------+
-                //   +------------------+
-                //   |      tmp2        |              <-- self * ratio[1]
-                //   +------------------+
-                //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                //   +--------+
-                //   |   q3   |
-                //   +--------+
-                let tmp = (*self as $WideT * ratio[0] as $WideT) >> Self::BITS; // tmp1
-                let tmp =
-                    ((*self as $WideT * ratio[1] as $WideT + tmp) >> Self::BITS) as $SelfT; // q3
-
-                // Step 2.
-                *self = self.wrapping_sub(tmp.wrapping_mul(modulus.value())); // r = r1 -r2
+                use $crate::reduce::LazyReduce;
+                *self = (*self).lazy_reduce(modulus);
             }
         }
 
@@ -499,12 +479,8 @@ macro_rules! impl_barrett_modulus {
             /// ∴ `x` - `q3` * `m` mod b^2 < 2 * m
             #[inline]
             fn reduce_assign(&mut self, modulus: BarrettModulus<Self>) {
-                use $crate::reduce::LazyReduceAssign;
-                self.lazy_reduce_assign(modulus);
-
-                if *self >= modulus.value() {
-                    *self -= modulus.value();
-                }
+                use $crate::reduce::Reduce;
+                *self = (*self).reduce(modulus);
             }
         }
     };

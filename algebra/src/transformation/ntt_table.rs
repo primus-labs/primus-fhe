@@ -149,7 +149,7 @@ where
                 let root = root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
-                    let u = i.normalize();
+                    let u = HarveyNTT::normalize(*i);
                     let v = (*j).mul_root_lazy(root);
                     *i = u.add_no_reduce(v);
                     *j = u.sub_lazy(v);
