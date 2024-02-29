@@ -32,7 +32,6 @@ pub struct NTTTable<F>
 where
     F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
-    twice_modulus: <F as Field>::Value,
     root: F,
     inv_root: F,
     coeff_count_power: u32,
@@ -58,7 +57,6 @@ where
         inv_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
         Self {
-            twice_modulus: F::modulus_value() << 1,
             root,
             inv_root,
             coeff_count_power,
@@ -67,12 +65,6 @@ where
             root_powers,
             inv_root_powers,
         }
-    }
-
-    /// Returns the twice modulus of this [`NTTTable<F>`].
-    #[inline]
-    pub fn twice_modulus(&self) -> <F as Field>::Value {
-        self.twice_modulus
     }
 
     /// Returns the root of this [`NTTTable<F>`].

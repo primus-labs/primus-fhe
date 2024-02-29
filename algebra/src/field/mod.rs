@@ -3,9 +3,8 @@
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use num_traits::{AsPrimitive, Inv, One, Pow, PrimInt, Zero};
+use num_traits::{Inv, One, Pow, PrimInt, Zero};
 
-use crate::reduce::{LazyMulReduce, MulReduce};
 use crate::{Basis, ModulusConfig, Random, Widening, WrappingOps};
 
 mod ntt_fields;
@@ -69,15 +68,7 @@ pub trait Field:
     + ModulusConfig
 {
     /// The inner type of this field.
-    type Value: Debug
-        + Send
-        + Sync
-        + PrimInt
-        + AsPrimitive<f64>
-        + Widening
-        + WrappingOps
-        + MulReduce<<Self as ModulusConfig>::Modulus, Output = Self::Value>
-        + LazyMulReduce<<Self as ModulusConfig>::Modulus, Output = Self::Value>;
+    type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps;
 
     /// The type of the field's order.
     type Order: Copy;
@@ -162,13 +153,7 @@ pub trait Field:
     }
 
     /// Return `self * scalar`.
-    #[inline]
-    fn mul_scalar(self, scalar: Self::Value) -> Self {
-        Self::new(
-            self.get()
-                .mul_reduce(scalar, <Self as ModulusConfig>::MODULUS),
-        )
-    }
+    fn mul_scalar(self, scalar: Self::Value) -> Self;
 
     /// Performs `self + a * b`.
     fn add_mul(self, a: Self, b: Self) -> Self;
@@ -186,25 +171,13 @@ pub trait Field:
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
-    #[inline]
-    fn mul_fast(self, rhs: Self) -> Self {
-        Self::new(
-            self.get()
-                .lazy_mul_reduce(rhs.get(), <Self as ModulusConfig>::MODULUS),
-        )
-    }
+    fn mul_fast(self, rhs: Self) -> Self;
 
     /// Performs `self *= rhs`.
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
-    #[inline]
-    fn mul_assign_fast(&mut self, rhs: Self) {
-        self.set(
-            self.get()
-                .lazy_mul_reduce(rhs.get(), <Self as ModulusConfig>::MODULUS),
-        );
-    }
+    fn mul_assign_fast(&mut self, rhs: Self);
 
     /// Performs `self + a * b`.
     ///
@@ -231,10 +204,7 @@ pub trait Field:
     }
 
     /// cast inner to [`f64`].
-    #[inline]
-    fn to_f64(self) -> f64 {
-        self.get().as_()
-    }
+    fn to_f64(self) -> f64;
 
     /// cast from [`f64`].
     fn from_f64(value: f64) -> Self;
