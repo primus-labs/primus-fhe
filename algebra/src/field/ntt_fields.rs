@@ -2,7 +2,7 @@
 
 use std::{fmt::Debug, sync::Arc};
 
-use crate::{modulus::ShoupFactor, transformation::AbstractNTT, Field, Widening, WrappingOps};
+use crate::transformation::AbstractNTT;
 
 use super::PrimeField;
 
@@ -70,119 +70,4 @@ pub trait NTTField: PrimeField {
 
     /// Init ntt table with `log_n` slice.
     fn init_ntt_table(log_n_slice: &[u32]) -> Result<(), crate::AlgebraError>;
-}
-
-/// Helper trait to implement Harvey's butterfly.
-pub trait HarveyNTT<F: NTTField> {
-    /// Normalize `self`.
-    ///
-    /// If `self` > `2*modulus`, return `self - TWICE_MODULUS`.
-    ///
-    /// The result is in [0, 2*modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 4*modulus`
-    fn normalize(self) -> Self;
-
-    /// Normalize assign `self`.
-    ///
-    /// If `self` > `2*modulus`, return `self - TWICE_MODULUS`.
-    ///
-    /// The result is in [0, 2*modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 4*modulus`
-    fn normalize_assign(&mut self);
-
-    /// Calculate `self + rhs` without reduce operation.
-    ///
-    /// The result is in [0, 4*modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 2*modulus`
-    /// - `rhs < 2*modulus`
-    fn add_no_reduce(self, rhs: Self) -> Self;
-
-    /// Calculate `self + rhs`.
-    ///
-    /// The result is in [0, 2*modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 2*modulus`
-    /// - `rhs < 2*modulus`
-    fn add_fast(self, rhs: Self) -> Self;
-
-    /// Calculate `self - rhs`.
-    ///
-    /// The result is in [0, 2*modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 2*modulus`
-    /// - `rhs < 2*modulus`
-    fn sub_fast(self, rhs: Self) -> Self;
-
-    /// Calculate `self * root`.
-    ///
-    /// The result is in [0, 2*modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `root.value < modulus`
-    fn mul_root_fast(self, root: <F as NTTField>::Root) -> Self;
-}
-
-impl<F> HarveyNTT<F> for F
-where
-    F: NTTField<Root = ShoupFactor<<F as Field>::Value>>,
-{
-    #[inline]
-    fn normalize(self) -> Self {
-        if self.get() >= F::TWICE_MODULUS_INNER {
-            Self::new(self.get() - F::TWICE_MODULUS_INNER)
-        } else {
-            self
-        }
-    }
-
-    #[inline]
-    fn normalize_assign(&mut self) {
-        if self.get() >= F::TWICE_MODULUS_INNER {
-            self.set(self.get() - F::TWICE_MODULUS_INNER)
-        }
-    }
-
-    #[inline]
-    fn add_no_reduce(self, rhs: Self) -> Self {
-        Self::new(self.get() + rhs.get())
-    }
-
-    #[inline]
-    fn add_fast(self, rhs: Self) -> Self {
-        let r = self.get() + rhs.get();
-        if r >= F::TWICE_MODULUS_INNER {
-            Self::new(r - F::TWICE_MODULUS_INNER)
-        } else {
-            Self::new(r)
-        }
-    }
-
-    #[inline]
-    fn sub_fast(self, rhs: Self) -> Self {
-        Self::new(self.get() + F::TWICE_MODULUS_INNER - rhs.get())
-    }
-
-    #[inline]
-    fn mul_root_fast(self, root: <F as NTTField>::Root) -> Self {
-        let (_, hw) = self.get().widen_mul(root.quotient());
-        Self::new(
-            root.value()
-                .wrapping_mul(self.get())
-                .wrapping_sub(hw.wrapping_mul(Self::MODULUS_INNER)),
-        )
-    }
 }

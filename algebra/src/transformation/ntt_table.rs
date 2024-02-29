@@ -1,7 +1,7 @@
 use crate::field::NTTField;
 use crate::modulus::ShoupFactor;
 use crate::polynomial::{NTTPolynomial, Polynomial};
-use crate::{Field, HarveyNTT};
+use crate::{Field, Widening, WrappingOps};
 
 use super::AbstractNTT;
 
@@ -28,22 +28,23 @@ use super::AbstractNTT;
 ///                         ----------  ----  -
 /// ```
 #[derive(Debug)]
-pub struct NTTTable<F, R: Copy>
+pub struct NTTTable<F>
 where
-    F: NTTField<Table = Self, Root = R>,
+    F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
+    twice_modulus: <F as Field>::Value,
     root: F,
     inv_root: F,
     coeff_count_power: u32,
     coeff_count: usize,
-    inv_degree: R,
-    root_powers: Vec<R>,
-    inv_root_powers: Vec<R>,
+    inv_degree: ShoupFactor<<F as Field>::Value>,
+    root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
+    inv_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
 }
 
-impl<F, R: Copy> NTTTable<F, R>
+impl<F> NTTTable<F>
 where
-    F: NTTField<Table = Self, Root = R>,
+    F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
     /// Creates a new [`NTTTable<F>`].
     #[inline]
@@ -57,6 +58,7 @@ where
         inv_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
         Self {
+            twice_modulus: F::modulus_value() << 1,
             root,
             inv_root,
             coeff_count_power,
@@ -65,6 +67,12 @@ where
             root_powers,
             inv_root_powers,
         }
+    }
+
+    /// Returns the twice modulus of this [`NTTTable<F>`].
+    #[inline]
+    pub fn twice_modulus(&self) -> <F as Field>::Value {
+        self.twice_modulus
     }
 
     /// Returns the root of this [`NTTTable<F>`].
@@ -93,24 +101,24 @@ where
 
     /// Returns the inverse element of the degree of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_degree(&self) -> R {
+    pub fn inv_degree(&self) -> ShoupFactor<<F as Field>::Value> {
         self.inv_degree
     }
 
     /// Returns a reference to the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn root_powers(&self) -> &[R] {
+    pub fn root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
         self.root_powers.as_ref()
     }
 
     /// Returns a reference to the inverse elements of the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_root_powers(&self) -> &[R] {
+    pub fn inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
         self.inv_root_powers.as_ref()
     }
 }
 
-impl<F> AbstractNTT<F> for NTTTable<F, ShoupFactor<<F as Field>::Value>>
+impl<F> AbstractNTT<F> for NTTTable<F>
 where
     F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
@@ -149,18 +157,15 @@ where
                 let root = root_iter.next().unwrap();
                 let (v0, v1) = vc.split_at_mut(gap);
                 for (i, j) in std::iter::zip(v0, v1) {
-                    let u = HarveyNTT::normalize(*i);
-                    let v = (*j).mul_root_fast(root);
-                    *i = u.add_no_reduce(v);
-                    *j = u.sub_fast(v);
+                    let u = guard(*i);
+                    let v = mul_root_fast(*j, root);
+                    *i = add_no_reduce(u, v);
+                    *j = sub_fast(u, v);
                 }
             }
         }
 
-        values.iter_mut().for_each(|v| {
-            HarveyNTT::normalize_assign(v);
-            Field::normalize_assign(v);
-        });
+        values.iter_mut().for_each(ntt_normalize_assign);
     }
 
     fn inverse_transform_slice(&self, values: &mut [F]) {
@@ -178,8 +183,8 @@ where
                 for (i, j) in std::iter::zip(v0, v1) {
                     let u = *i;
                     let v = *j;
-                    *i = u.add_fast(v);
-                    *j = u.sub_fast(v).mul_root_fast(root);
+                    *i = add_fast(u, v);
+                    *j = mul_root_fast(sub_fast(u, v), root);
                 }
             }
         }
@@ -195,10 +200,68 @@ where
         for (i, j) in std::iter::zip(v0, v1) {
             let u = *i;
             let v = *j;
-            *i = u.add_no_reduce(v).mul_root_fast(scalar);
-            *j = u.sub_fast(v).mul_root_fast(scaled_r);
+            *i = mul_root_fast(add_no_reduce(u, v), scalar);
+            *j = mul_root_fast(sub_fast(u, v), scaled_r);
         }
 
-        values.iter_mut().for_each(Field::normalize_assign);
+        values.iter_mut().for_each(intt_normalize_assign);
     }
+}
+
+#[inline]
+fn guard<F: Field>(a: F) -> F {
+    if a.get() >= F::TWICE_MODULUS_INNER {
+        F::new(a.get() - F::TWICE_MODULUS_INNER)
+    } else {
+        a
+    }
+}
+
+#[inline]
+fn ntt_normalize_assign<F: Field>(a: &mut F) {
+    let mut r = a.get();
+    if r >= F::TWICE_MODULUS_INNER {
+        r = r - F::TWICE_MODULUS_INNER;
+    }
+    if r >= F::MODULUS_INNER {
+        r = r - F::MODULUS_INNER;
+    }
+    a.set(r);
+}
+
+#[inline]
+fn intt_normalize_assign<F: Field>(a: &mut F) {
+    if a.get() >= F::MODULUS_INNER {
+        a.set(a.get() - F::MODULUS_INNER)
+    }
+}
+
+#[inline]
+fn add_no_reduce<F: Field>(a: F, b: F) -> F {
+    F::new(a.get() + b.get())
+}
+
+#[inline]
+fn add_fast<F: Field>(a: F, b: F) -> F {
+    let r = a.get() + b.get();
+    if r >= F::TWICE_MODULUS_INNER {
+        F::new(r - F::TWICE_MODULUS_INNER)
+    } else {
+        F::new(r)
+    }
+}
+
+#[inline]
+fn sub_fast<F: Field>(a: F, b: F) -> F {
+    F::new(a.get() + F::TWICE_MODULUS_INNER - b.get())
+}
+
+#[inline]
+fn mul_root_fast<F: NTTField>(a: F, root: ShoupFactor<F::Value>) -> F {
+    let (_, hw) = a.get().widen_mul(root.quotient());
+    F::new(
+        root.value()
+            .wrapping_mul(a.get())
+            .wrapping_sub(hw.wrapping_mul(F::MODULUS_INNER)),
+    )
 }

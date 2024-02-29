@@ -24,7 +24,7 @@ fn impl_ntt(input: Input) -> TokenStream {
         static #ntt_mutex: ::std::sync::Mutex<()> = ::std::sync::Mutex::new(());
 
         impl ::algebra::NTTField for #name {
-            type Table = ::algebra::transformation::NTTTable<Self, Self::Root>;
+            type Table = ::algebra::transformation::NTTTable<Self>;
 
             type Root = ::algebra::modulus::ShoupFactor<<Self as ::algebra::Field>::Value>;
 
