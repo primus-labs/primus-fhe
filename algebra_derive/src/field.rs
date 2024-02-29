@@ -232,7 +232,7 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             #[inline]
             fn decompose_len(basis: Self::Value) -> usize {
                 debug_assert!(basis.is_power_of_two() && basis > 1);
-                ::algebra::div_ceil(<Self as ::algebra::ModulusConfig>::modulus().bit_count(), basis.trailing_zeros()) as usize
+                ::algebra::div_ceil(<Self as ::algebra::ModulusConfig>::MODULUS.bit_count(), basis.trailing_zeros()) as usize
             }
 
             fn decompose(self, basis: ::algebra::Basis<Self>) -> Vec<Self> {

@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, ShrAssign, Sub, SubAssign};
+use std::ops::ShrAssign;
 
 use num_traits::{One, PrimInt};
 
@@ -12,85 +12,67 @@ use crate::{Bits, Widening};
 
 impl<T> AddReduce<BarrettModulus<T>> for T
 where
-    T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
+    T: Copy + AddReduce<T, Output = T>,
 {
     type Output = T;
 
     #[inline]
     fn add_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
-        let r = self + rhs;
-        if r >= modulus.value() {
-            r - modulus.value()
-        } else {
-            r
-        }
+        self.add_reduce(rhs, modulus.value())
     }
 }
 
 impl<T> AddReduceAssign<BarrettModulus<T>> for T
 where
-    T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
+    T: Copy + AddReduceAssign<T>,
 {
     #[inline]
     fn add_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
-        let r = *self + rhs;
-        *self = if r >= modulus.value() {
-            r - modulus.value()
-        } else {
-            r
-        };
+        self.add_reduce_assign(rhs, modulus.value());
     }
 }
 
 impl<T> SubReduce<BarrettModulus<T>> for T
 where
-    T: Copy + Add<Output = Self> + Sub<Output = Self> + PartialOrd,
+    T: Copy + SubReduce<T, Output = T>,
 {
     type Output = T;
 
     #[inline]
     fn sub_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
-        if self >= rhs {
-            self - rhs
-        } else {
-            modulus.value() - rhs + self
-        }
+        self.sub_reduce(rhs, modulus.value())
     }
 }
 
 impl<T> SubReduceAssign<BarrettModulus<T>> for T
 where
-    T: Copy + AddAssign + SubAssign + Sub<Output = Self> + PartialOrd,
+    T: Copy + SubReduceAssign<T>,
 {
     #[inline]
     fn sub_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
-        if *self >= rhs {
-            *self -= rhs;
-        } else {
-            *self += modulus.value() - rhs;
-        }
+        self.sub_reduce_assign(rhs, modulus.value());
     }
 }
 
 impl<T> NegReduce<BarrettModulus<T>> for T
 where
-    T: Copy + Sub<Output = Self>,
+    T: Copy + NegReduce<T, Output = T>,
 {
     type Output = T;
 
     #[inline]
     fn neg_reduce(self, modulus: BarrettModulus<T>) -> Self::Output {
-        modulus.value() - self
+        self.neg_reduce(modulus.value())
     }
 }
 
 impl<T> NegReduceAssign<BarrettModulus<T>> for T
 where
-    T: Copy + Sub<Output = Self>,
+    T: Copy + NegReduceAssign<T>,
 {
     #[inline]
     fn neg_reduce_assign(&mut self, modulus: BarrettModulus<T>) {
-        *self = modulus.value() - *self;
+        self.neg_reduce_assign(modulus.value());
     }
 }
 
