@@ -24,6 +24,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
     /// Construct a new polynomial from a list of evaluations where the index
     /// represents a point in {0,1}^`num_vars` in little endian form. For
     /// example, `0b1011` represents `P(1,1,0,1)`
+    #[inline]
     pub fn from_evaluations_slice(num_vars: usize, evaluations: &[F]) -> Self {
         assert_eq!(
             evaluations.len(),
@@ -36,6 +37,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
     /// Construct a new polynomial from a list of evaluations where the index
     /// represents a point in {0,1}^`num_vars` in little endian form. For
     /// example, `0b1011` represents `P(1,1,0,1)`
+    #[inline]
     pub fn from_evaluations_vec(num_vars: usize, evaluations: Vec<F>) -> Self {
         assert_eq!(
             evaluations.len(),
@@ -50,11 +52,13 @@ impl<F: Field> DenseMultilinearExtension<F> {
     }
 
     /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
     pub fn iter(&self) -> Iter<'_, F> {
         self.evaluations.iter()
     }
 
     /// Returns a mutable iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'_, F> {
         self.evaluations.iter_mut()
     }
@@ -63,6 +67,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
 impl<F: Field + Random> MultilinearExtension<F> for DenseMultilinearExtension<F> {
     type Point = [F];
 
+    #[inline]
     fn num_vars(&self) -> usize {
         self.num_vars
     }
@@ -109,6 +114,7 @@ impl<F: Field + Random> MultilinearExtension<F> for DenseMultilinearExtension<F>
         Self::from_evaluations_vec(nv - dim, poly)
     }
 
+    #[inline]
     fn to_evaluations(&self) -> Vec<F> {
         self.evaluations.to_vec()
     }
@@ -129,6 +135,7 @@ impl<F: Field> Index<usize> for DenseMultilinearExtension<F> {
 }
 
 impl<F: Field> Debug for DenseMultilinearExtension<F> {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "DenseML(nv = {}, evaluations = [", self.num_vars)?;
         for i in 0..min(4, self.evaluations.len()) {
@@ -144,6 +151,7 @@ impl<F: Field> Debug for DenseMultilinearExtension<F> {
 }
 
 impl<F: Field> Zero for DenseMultilinearExtension<F> {
+    #[inline]
     fn zero() -> Self {
         Self {
             num_vars: 0,
@@ -151,6 +159,7 @@ impl<F: Field> Zero for DenseMultilinearExtension<F> {
         }
     }
 
+    #[inline]
     fn is_zero(&self) -> bool {
         self.num_vars == 0 && self.evaluations[0].is_zero()
     }

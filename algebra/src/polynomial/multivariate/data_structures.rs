@@ -35,6 +35,7 @@ pub struct ListOfProductsOfPolynomials<F: Field> {
 /// Extract the max number of multiplicands and number of variables of the list of products.
 impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// Extract the max number of multiplicands and number of variables of the list of products.
+    #[inline]
     pub fn info(&self) -> PolynomialInfo {
         PolynomialInfo {
             max_multiplicands: self.max_multiplicands,
@@ -55,6 +56,7 @@ pub struct PolynomialInfo {
 
 impl<F: Field + Random> ListOfProductsOfPolynomials<F> {
     /// Returns an empty polynomial
+    #[inline]
     pub fn new(num_variables: usize) -> Self {
         ListOfProductsOfPolynomials {
             max_multiplicands: 0,
