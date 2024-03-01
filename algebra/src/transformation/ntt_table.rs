@@ -39,6 +39,8 @@ where
     inv_degree: ShoupFactor<<F as Field>::Value>,
     root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
     inv_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
+    ordinal_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
+    ordinal_inv_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
 }
 
 impl<F> NTTTable<F>
@@ -47,6 +49,7 @@ where
 {
     /// Creates a new [`NTTTable<F>`].
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         root: F,
         inv_root: F,
@@ -55,6 +58,8 @@ where
         inv_degree: <F as NTTField>::Root,
         root_powers: Vec<<F as NTTField>::Root>,
         inv_root_powers: Vec<<F as NTTField>::Root>,
+        ordinal_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
+        ordinal_inv_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
     ) -> Self {
         Self {
             root,
@@ -64,6 +69,8 @@ where
             inv_degree,
             root_powers,
             inv_root_powers,
+            ordinal_root_powers,
+            ordinal_inv_root_powers,
         }
     }
 
@@ -107,6 +114,18 @@ where
     #[inline]
     pub fn inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
         self.inv_root_powers.as_ref()
+    }
+    
+    /// Returns a reference to the ordinal root powers of this [`NTTTable<F>`].
+    #[inline]
+    pub fn ordinal_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
+        &self.ordinal_root_powers
+    }
+    
+    /// Returns a reference to the ordinal inverse elements of the root powers of this [`NTTTable<F>`].
+    #[inline]
+    pub fn ordinal_inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
+        &self.ordinal_inv_root_powers
     }
 }
 
