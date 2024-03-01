@@ -113,10 +113,7 @@ pub trait Field:
     fn set(&mut self, value: Self::Value);
 
     /// Returns the modulus value.
-    #[inline]
-    fn modulus_value() -> Self::Value {
-        Self::MODULUS_INNER
-    }
+    fn modulus_value() -> Self::Value;
 
     /// Normalize `self`.
     ///
@@ -127,14 +124,7 @@ pub trait Field:
     /// # Correctness
     ///
     /// - `self < 2*modulus`
-    #[inline]
-    fn normalize(self) -> Self {
-        if self.get() >= Self::MODULUS_INNER {
-            Self::new(self.get() - Self::MODULUS_INNER)
-        } else {
-            self
-        }
-    }
+    fn normalize(self) -> Self;
 
     /// Normalize assign `self`.
     ///
@@ -145,12 +135,7 @@ pub trait Field:
     /// # Correctness
     ///
     /// - `self < 2*modulus`
-    #[inline]
-    fn normalize_assign(&mut self) {
-        if self.get() >= Self::MODULUS_INNER {
-            self.set(self.get() - Self::MODULUS_INNER)
-        }
-    }
+    fn normalize_assign(&mut self);
 
     /// Return `self * scalar`.
     fn mul_scalar(self, scalar: Self::Value) -> Self;
@@ -192,16 +177,10 @@ pub trait Field:
     fn add_mul_assign_fast(&mut self, a: Self, b: Self);
 
     /// cast self to [`usize`].
-    #[inline]
-    fn cast_into_usize(self) -> usize {
-        ::num_traits::cast::<Self::Value, usize>(self.get()).unwrap()
-    }
+    fn cast_into_usize(self) -> usize;
 
     /// cast from [`usize`].
-    #[inline]
-    fn cast_from_usize(value: usize) -> Self {
-        Self::new(::num_traits::cast::<usize, Self::Value>(value).unwrap())
-    }
+    fn cast_from_usize(value: usize) -> Self;
 
     /// cast inner to [`f64`].
     fn to_f64(self) -> f64;
