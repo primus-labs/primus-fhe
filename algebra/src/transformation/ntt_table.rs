@@ -115,13 +115,13 @@ where
     pub fn inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
         self.inv_root_powers.as_ref()
     }
-    
+
     /// Returns a reference to the ordinal root powers of this [`NTTTable<F>`].
     #[inline]
     pub fn ordinal_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
         &self.ordinal_root_powers
     }
-    
+
     /// Returns a reference to the ordinal inverse elements of the root powers of this [`NTTTable<F>`].
     #[inline]
     pub fn ordinal_inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
