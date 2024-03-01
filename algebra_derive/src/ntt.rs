@@ -60,7 +60,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                     "degree must be a power of two and bigger than 1"
                 );
 
-                if ::num_traits::Zero::is_zero(&root) {
+                if root.0 == 0 {
                     return false;
                 }
 
@@ -103,7 +103,7 @@ fn impl_ntt(input: Input) -> TokenStream {
             fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, ::algebra::AlgebraError> {
                 let mut root = Self::try_primitive_root(degree)?;
 
-                let generator_sq = root * root;
+                let generator_sq = (root * root).to_root();
                 let mut current_generator = root;
 
                 for _ in 0..degree {
@@ -111,7 +111,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                         root = current_generator;
                     }
 
-                    current_generator *= generator_sq;
+                    current_generator.mul_root_assign(generator_sq);
                 }
 
                 Ok(root)
@@ -159,7 +159,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                     inv_root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i - 1, log_n) + 1] = inv_root_power;
                 }
 
-                let inv_degree = ::num_traits::Inv::inv(Self(n as #field_ty)).to_root();
+                let inv_degree = ::num_traits::Inv::inv(<Self as ::algebra::Field>::cast_from_usize(n)).to_root();
 
                 Ok(Self::Table::new(
                     root,
