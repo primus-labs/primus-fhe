@@ -50,7 +50,8 @@ pub trait AbstractNTT<F: NTTField> {
 
     /// Perform a fast number theory transform in place.
     ///
-    /// This function transforms a [`Polynomial<F>`] slice to a [`NTTPolynomial<F>`] slice.
+    /// This function transforms a [`Polynomial<F>`] slice with coefficient in `[0, 4*modulus)`
+    /// to a [`NTTPolynomial<F>`] slice with coefficient in `[0, modulus)`.
     ///
     /// # Arguments
     ///
@@ -59,7 +60,8 @@ pub trait AbstractNTT<F: NTTField> {
 
     /// Perform a fast inverse number theory transform in place.
     ///
-    /// This function transforms a [`NTTPolynomial<F>`] slice to a [`Polynomial<F>`] slice.
+    /// This function transforms a [`NTTPolynomial<F>`] slice with coefficient in `[0, 2*modulus)`
+    /// to a [`Polynomial<F>`] slice with coefficient in `[0, modulus)`.
     ///
     /// # Arguments
     ///

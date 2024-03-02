@@ -1,8 +1,8 @@
 use std::ops::MulAssign;
 
 use algebra::{
-    ntt_add_mul_assign_ref, ntt_mul_assign_ref, transformation::AbstractNTT, NTTField,
-    NTTPolynomial, Polynomial,
+    ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_assign_ref,
+    transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
 };
 use num_traits::{NumCast, Zero};
 
@@ -400,14 +400,14 @@ impl<F: NTTField> RLWE<F> {
         // Output destination
         destination: &mut RLWE<F>,
     ) {
-        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace(
+        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
             self.a(),
             decompose_space,
             polynomial_space,
             median,
         );
 
-        median.add_assign_gadget_rlwe_mul_polynomial_inplace(
+        median.add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
             small_ntt_rgsw.c_m(),
             self.b(),
             decompose_space,
@@ -659,6 +659,20 @@ impl<F: NTTField> NTTRLWE<F> {
         ntt_add_mul_assign_ref(&mut self.b, &ntt_rlwe.b, ntt_polynomial);
     }
 
+    /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
+    ///
+    /// The result coefficients may be in [0, 2*modulus) for some case,
+    /// and fall back to [0, modulus) for normal case,
+    #[inline]
+    pub fn add_ntt_rlwe_mul_ntt_polynomial_inplace_fast(
+        &mut self,
+        ntt_rlwe: &NTTRLWE<F>,
+        ntt_polynomial: &[F],
+    ) {
+        ntt_add_mul_assign_ref_fast(&mut self.a, &ntt_rlwe.a, ntt_polynomial);
+        ntt_add_mul_assign_ref_fast(&mut self.b, &ntt_rlwe.b, ntt_polynomial);
+    }
+
     /// Performs `self + gadget_rlwe * polynomial`.
     #[inline]
     pub fn add_gadget_rlwe_mul_polynomial(
@@ -703,6 +717,33 @@ impl<F: NTTField> NTTRLWE<F> {
         })
     }
 
+    /// Performs `self = self + gadget_rlwe * polynomial`.
+    ///
+    /// The result coefficients may be in [0, 2*modulus) for some case,
+    /// and fall back to [0, modulus) for normal case,
+    #[inline]
+    pub fn add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
+        &mut self,
+        gadget_rlwe: &NTTGadgetRLWE<F>,
+        polynomial: &Polynomial<F>,
+        decompose_space: &mut DecompositionSpace<F>,
+        polynomial_space: &mut PolynomialSpace<F>,
+    ) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert_eq!(coeff_count, polynomial_space.coeff_count());
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+        let basis = gadget_rlwe.basis();
+
+        polynomial_space.copy_from_polynomial(polynomial);
+
+        gadget_rlwe.iter().for_each(|g| {
+            polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_inplace_fast(g, decompose_space.as_mut_slice());
+        })
+    }
+
     /// Performs `self = self - gadget_rlwe * polynomial`.
     #[inline]
     pub fn sub_assign_gadget_rlwe_mul_polynomial_inplace(
@@ -723,6 +764,32 @@ impl<F: NTTField> NTTRLWE<F> {
             polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
             self.add_ntt_rlwe_mul_ntt_polynomial_inplace(g, decompose_space.as_mut_slice());
+        })
+    }
+
+    /// Performs `self = self - gadget_rlwe * polynomial`.
+    ///
+    /// The result coefficients may be in [0, 2*modulus) for some case,
+    /// and fall back to [0, modulus) for normal case,
+    #[inline]
+    pub fn sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(
+        &mut self,
+        gadget_rlwe: &NTTGadgetRLWE<F>,
+        polynomial: Polynomial<F>,
+        decompose_space: &mut DecompositionSpace<F>,
+    ) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+        let decompose_space = decompose_space.get_mut();
+        let basis = gadget_rlwe.basis();
+
+        let mut polynomial = -polynomial;
+
+        gadget_rlwe.iter().for_each(|g| {
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_inplace_fast(g, decompose_space.as_mut_slice());
         })
     }
 }

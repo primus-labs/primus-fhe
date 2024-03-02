@@ -50,7 +50,7 @@ pub struct Parameters<F: NTTField> {
     /// RLWE polynomial dimension, refers to **`N`** in the paper.
     rlwe_dimension: usize,
     /// RLWE cipher modulus, refers to **`Q`** in the paper.
-    rlwe_modulus: F::Inner,
+    rlwe_modulus: F::Value,
     /// The rlwe noise error's standard deviation
     rlwe_noise_std_dev: f64,
 
@@ -74,7 +74,7 @@ pub struct Parameters<F: NTTField> {
 
 impl<F: NTTField, Scalar> TryFrom<ConstParameters<Scalar>> for Parameters<F>
 where
-    F::Inner: std::cmp::PartialEq<Scalar>,
+    F::Value: std::cmp::PartialEq<Scalar>,
     Scalar: std::fmt::Debug,
 {
     type Error = FHEError;
@@ -136,7 +136,7 @@ impl<F: NTTField> Parameters<F> {
 
     /// Returns the rlwe modulus of this [`Parameters<F>`], refers to **`Q`** in the paper.
     #[inline]
-    pub fn rlwe_modulus(&self) -> <F as Field>::Inner {
+    pub fn rlwe_modulus(&self) -> <F as Field>::Value {
         self.rlwe_modulus
     }
 
@@ -226,7 +226,7 @@ pub struct ParametersBuilder<F: NTTField> {
     /// RLWE polynomial dimension, refers to **`N`** in the paper.
     rlwe_dimension: Option<usize>,
     /// RLWE cipher modulus, refers to **`Q`** in the paper.
-    rlwe_modulus: Option<F::Inner>,
+    rlwe_modulus: Option<F::Value>,
     /// The rlwe noise error's standard deviation
     rlwe_noise_std_dev: Option<f64>,
 
@@ -300,7 +300,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
     /// Sets the RLWE cipher modulus of this [`ParametersBuilder<F>`].
     #[inline]
-    pub fn rlwe_modulus(mut self, rlwe_modulus: F::Inner) -> Self {
+    pub fn rlwe_modulus(mut self, rlwe_modulus: F::Value) -> Self {
         self.rlwe_modulus = Some(rlwe_modulus);
         self
     }
@@ -371,7 +371,7 @@ impl<F: NTTField> ParametersBuilder<F> {
         }
 
         // 2N|(Q-1)
-        let rlwe_modulus_u = cast::<<F as Field>::Inner, usize>(rlwe_modulus).unwrap();
+        let rlwe_modulus_u = cast::<<F as Field>::Value, usize>(rlwe_modulus).unwrap();
         let temp = (rlwe_modulus_u - 1) / (rlwe_dimension << 1);
         if temp * (rlwe_dimension << 1) != (rlwe_modulus_u - 1) {
             return Err(FHEError::RLweModulusRlweDimensionNotCompatible {
@@ -384,7 +384,7 @@ impl<F: NTTField> ParametersBuilder<F> {
         let bf = gadget_basis.basis();
 
         let mut gadget_basis_powers = vec![F::ZERO; gadget_basis.decompose_len()];
-        let mut temp = F::ONE.inner();
+        let mut temp = F::ONE.get();
         gadget_basis_powers.iter_mut().for_each(|v| {
             *v = F::new(temp);
             temp = temp * bf;
@@ -392,6 +392,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
         let key_switching_basis = <Basis<F>>::new(self.key_switching_basis_bits);
 
+        let rlwe_modulus_f64 = F::new(rlwe_modulus).to_f64();
         Ok(Parameters::<F> {
             lwe_dimension,
             lwe_modulus: <PowOf2Modulus<LWEType>>::new(lwe_modulus),
@@ -403,7 +404,7 @@ impl<F: NTTField> ParametersBuilder<F> {
             rlwe_noise_std_dev: self.rlwe_noise_std_dev.unwrap(),
 
             lwe_modulus_f64: lwe_modulus as f64,
-            rlwe_modulus_f64: F::MODULUS_F64,
+            rlwe_modulus_f64,
             twice_rlwe_dimension_div_lwe_modulus,
 
             gadget_basis,

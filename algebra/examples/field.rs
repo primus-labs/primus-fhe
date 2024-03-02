@@ -1,6 +1,6 @@
 use algebra::{derive::*, Field, Polynomial, PrimeField, Random};
 use num_traits::{Inv, One, Pow, Zero};
-use rand::{prelude::*, thread_rng};
+use rand::prelude::*;
 use rand_distr::Standard;
 
 // Derive macro `Field` generates an impl of the trait `algebra::Field`.
@@ -39,8 +39,8 @@ fn main() -> Result<(), algebra::AlgebraError> {
 
     // You can generate a value by yourself
     let mut a = FF::new(9);
-    // You can get the inner value by `inner` function
-    let a_in = a.inner();
+    // You can get the inner value by `get` function
+    let a_in = a.get();
     assert_eq!(a_in, 9);
     // You can get the max value
     let mut b = FF::max();
@@ -81,27 +81,20 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let _c = a - b;
     let _c = a * b;
     let _c = a / b;
-    let _c = a.double(); // a + a
 
     // Some assign operation
     a += b;
     a -= b;
     a *= b;
     a /= b;
-    a.double_in_place(); // a += a;
 
     // neg operation
     a = -a;
-    a.neg_in_place(); // a = -a;
 
     // inv operation
     a = a.inv(); // a = 1 / a;
-    a = a.inverse().unwrap();
-    a.inverse_in_place();
 
     // pow operation
-    a = a.square(); // a = a * a
-    a.square_in_place(); // a *= a
     a = a.pow(5);
 
     // you can print FF value by `Display` trait

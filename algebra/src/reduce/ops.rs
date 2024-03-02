@@ -20,7 +20,7 @@ pub trait AddReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
-    /// Calculates `self + rhs mod modulus`
+    /// Calculates `self + rhs (mod modulus)`
     ///
     /// # Correctness
     ///
@@ -31,7 +31,7 @@ pub trait AddReduce<Modulus, Rhs = Self> {
 
 /// The modular addition assignment.
 pub trait AddReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self += rhs mod modulus`
+    /// Calculates `self += rhs (mod modulus)`
     ///
     /// # Correctness
     ///
@@ -45,7 +45,7 @@ pub trait SubReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
-    /// Calculates `self - rhs mod modulus`
+    /// Calculates `self - rhs (mod modulus)`
     ///
     /// # Correctness
     ///
@@ -56,7 +56,7 @@ pub trait SubReduce<Modulus, Rhs = Self> {
 
 /// The modular subtraction assignment.
 pub trait SubReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self -= rhs mod modulus`
+    /// Calculates `self -= rhs (mod modulus)`
     ///
     /// # Correctness
     ///
@@ -70,7 +70,7 @@ pub trait NegReduce<Modulus> {
     /// Output type.
     type Output;
 
-    /// Calculates `(-self) mod modulus`
+    /// Calculates `-self (mod modulus)`
     ///
     /// # Correctness
     ///
@@ -80,7 +80,7 @@ pub trait NegReduce<Modulus> {
 
 /// The modular negation assignment.
 pub trait NegReduceAssign<Modulus> {
-    /// Calculates `(-self) mod modulus`
+    /// Calculates `-self (mod modulus)`
     ///
     /// # Correctness
     ///
@@ -93,15 +93,21 @@ pub trait MulReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
-    /// Calculates `self * rhs mod modulus`.
+    /// Calculates `self * rhs (mod modulus)`.
     ///
-    /// The result is in `[0, modulus)`.
+    /// # Correctness
+    ///
+    /// - `self*rhs < modulus^2`
     fn mul_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
 }
 
 /// The modular multiplication assignment.
 pub trait MulReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self *= rhs mod modulus`.
+    /// Calculates `self *= rhs (mod modulus)`.
+    ///
+    /// # Correctness
+    ///
+    /// - `self*rhs < modulus^2`
     fn mul_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
 
@@ -113,13 +119,13 @@ pub trait PowReduce<Modulus, Exponent> {
 
 /// Calculate the inverse element for a field.
 pub trait InvReduce<Modulus = Self>: Sized {
-    /// Calculate the multiplicative inverse of `self modulo modulus`.
+    /// Calculate the multiplicative inverse of `self (mod modulus)`.
     fn inv_reduce(self, modulus: Modulus) -> Self;
 }
 
 /// The modular inversion assignment for a field.
 pub trait InvReduceAssign<Modulus = Self> {
-    /// Calculates `self^(-1) mod modulus`
+    /// Calculates `self^(-1) (mod modulus)`
     fn inv_reduce_assign(&mut self, modulus: Modulus);
 }
 
@@ -138,14 +144,12 @@ pub trait DivReduce<Modulus, Rhs = Self> {
     /// Output type.
     type Output;
 
-    /// Calculates `self / rhs mod modulus`.
-    ///
-    /// The result is in `[0, modulus)`.
+    /// Calculates `self / rhs (mod modulus)`.
     fn div_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
 }
 
 /// The modular division assignment.
 pub trait DivReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self /= rhs mod modulus`.
+    /// Calculates `self /= rhs (mod modulus)`.
     fn div_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }

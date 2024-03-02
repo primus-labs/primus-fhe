@@ -97,13 +97,13 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Multiply `self` with the a scalar.
     #[inline]
-    pub fn mul_scalar(&self, scalar: F::Inner) -> Self {
+    pub fn mul_scalar(&self, scalar: F::Value) -> Self {
         Self::new(self.iter().map(|&v| v.mul_scalar(scalar)).collect())
     }
 
     /// Multiply `self` with the a scalar inplace.
     #[inline]
-    pub fn mul_scalar_inplace(&mut self, scalar: F::Inner) {
+    pub fn mul_scalar_inplace(&mut self, scalar: F::Value) {
         self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 
@@ -522,6 +522,17 @@ pub fn ntt_mul_assign<F: NTTField, I: IntoIterator<Item = F>>(lhs: &mut [F], rhs
     lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
 }
 
+/// Performs enrty-wise fast mul operation.
+///
+/// The result coefficients may be in [0, 2*modulus) for some case,
+/// and fall back to [0, modulus) for normal case.
+#[inline]
+pub fn ntt_mul_assign_fast<F: NTTField, I: IntoIterator<Item = F>>(lhs: &mut [F], rhs: I) {
+    lhs.iter_mut()
+        .zip(rhs)
+        .for_each(|(l, r)| l.mul_assign_fast(r));
+}
+
 /// Performs enrty-wise mul operation.
 #[inline]
 pub fn ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
@@ -529,6 +540,20 @@ pub fn ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
     rhs: I,
 ) {
     lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
+}
+
+/// Performs enrty-wise fast mul operation.
+///
+/// The result coefficients may be in [0, 2*modulus) for some case,
+/// and fall back to [0, modulus) for normal case.
+#[inline]
+pub fn ntt_mul_assign_ref_fast<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
+    lhs: &mut [F],
+    rhs: I,
+) {
+    lhs.iter_mut()
+        .zip(rhs)
+        .for_each(|(l, &r)| l.mul_assign_fast(r));
 }
 
 /// Performs enrty-wise add_mul operation.
@@ -575,4 +600,30 @@ pub fn ntt_add_mul_assign_ref<
         .zip(y)
         .zip(z)
         .for_each(|((a, &b), &c)| a.add_mul_assign(b, c));
+}
+
+/// Performs enrty-wise add_mul fast operation.
+///
+/// Treats three iterators as [`NTTPolynomial<F>`]'s iterators,
+/// then multiply enrty-wise over last two iterators, and add back to the first
+/// iterator.
+///
+/// The result coefficients may be in [0, 2*modulus) for some case,
+/// and fall back to [0, modulus) for normal case.
+#[inline]
+pub fn ntt_add_mul_assign_ref_fast<
+    'a,
+    F: NTTField + 'a,
+    I: IntoIterator<Item = &'a mut F>,
+    J: IntoIterator<Item = &'a F>,
+    K: IntoIterator<Item = &'a F>,
+>(
+    x: I,
+    y: J,
+    z: K,
+) {
+    x.into_iter()
+        .zip(y)
+        .zip(z)
+        .for_each(|((a, &b), &c)| a.add_mul_assign_fast(b, c));
 }

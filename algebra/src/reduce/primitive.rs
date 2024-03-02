@@ -1,4 +1,4 @@
-macro_rules! impl_modulo_ops_for_primitive {
+macro_rules! impl_reduce_ops_for_primitive {
     ($($t:ty),*) => {$(
         impl $crate::reduce::AddReduce<Self> for $t {
             type Output = Self;
@@ -107,4 +107,4 @@ macro_rules! impl_modulo_ops_for_primitive {
     )*};
 }
 
-impl_modulo_ops_for_primitive!(u8, u16, u32, u64);
+impl_reduce_ops_for_primitive!(u8, u16, u32, u64);

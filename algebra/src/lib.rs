@@ -22,13 +22,13 @@ mod primitive;
 pub use error::AlgebraError;
 
 pub use decompose_basis::Basis;
-pub use field::{Field, MulFactor, NTTField, PrimeField, RandomNTTField};
+pub use field::{Field, NTTField, PrimeField, RandomNTTField};
 pub use random::Random;
 pub use reduce::ModulusConfig;
 
 pub use polynomial::{
-    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_mul_assign, ntt_mul_assign_ref, NTTPolynomial,
-    Polynomial,
+    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_assign,
+    ntt_mul_assign_fast, ntt_mul_assign_ref, ntt_mul_assign_ref_fast, NTTPolynomial, Polynomial,
 };
 
-pub use primitive::{div_ceil, Bits, Widening};
+pub use primitive::{div_ceil, Bits, Widening, WrappingOps};

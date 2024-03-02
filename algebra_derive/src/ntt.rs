@@ -19,47 +19,37 @@ fn impl_ntt(input: Input) -> TokenStream {
     let ntt_mutex = format_ident!("NTT_MUTEX{}", name.to_string().to_uppercase());
 
     quote! {
-        static mut #ntt_table: ::once_cell::sync::OnceCell<::std::collections::HashMap<u32, ::std::sync::Arc<::algebra::transformation::NTTTable<#name>>>>
+        static mut #ntt_table: ::once_cell::sync::OnceCell<::std::collections::HashMap<u32, ::std::sync::Arc<<#name as ::algebra::NTTField>::Table>>>
             = ::once_cell::sync::OnceCell::new();
         static #ntt_mutex: ::std::sync::Mutex<()> = ::std::sync::Mutex::new(());
 
         impl ::algebra::NTTField for #name {
             type Table = ::algebra::transformation::NTTTable<Self>;
 
-            type Root = ::algebra::MulFactor<Self>;
+            type Root = ::algebra::modulus::ShoupFactor<<Self as ::algebra::Field>::Value>;
 
             type Degree = #field_ty;
 
             #[inline]
             fn from_root(root: Self::Root) -> Self {
-                root.value()
+                Self(root.value())
             }
 
             #[inline]
             fn to_root(self) -> Self::Root {
-                Self::Root::new(self, #name((((self.0 as <#field_ty as ::algebra::Widening>::WideT) << #field_ty::BITS) / #modulus as <#field_ty as ::algebra::Widening>::WideT) as #field_ty))
+                Self::Root::new(self.0, #modulus)
             }
 
             #[inline]
             fn mul_root(self, root: Self::Root) -> Self {
-                let r = ::algebra::modulus::MulReduceFactor::<#field_ty> {
-                    value: root.value().0,
-                    quotient: root.quotient().0,
-                };
-
                 use ::algebra::reduce::MulReduce;
-                Self(self.0.mul_reduce(r, #modulus))
+                Self(self.0.mul_reduce(root, #modulus))
             }
 
             #[inline]
             fn mul_root_assign(&mut self, root: Self::Root) {
-                let r = ::algebra::modulus::MulReduceFactor::<#field_ty> {
-                    value: root.value().0,
-                    quotient: root.quotient().0,
-                };
-
                 use ::algebra::reduce::MulReduceAssign;
-                self.0.mul_reduce_assign(r, #modulus);
+                self.0.mul_reduce_assign(root, #modulus);
             }
 
             #[inline]
@@ -70,7 +60,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                     "degree must be a power of two and bigger than 1"
                 );
 
-                if ::num_traits::Zero::is_zero(&root) {
+                if root.0 == 0 {
                     return false;
                 }
 
@@ -113,7 +103,7 @@ fn impl_ntt(input: Input) -> TokenStream {
             fn try_minimal_primitive_root(degree: Self::Degree) -> Result<Self, ::algebra::AlgebraError> {
                 let mut root = Self::try_primitive_root(degree)?;
 
-                let generator_sq = ::algebra::Field::square(root);
+                let generator_sq = (root * root).to_root();
                 let mut current_generator = root;
 
                 for _ in 0..degree {
@@ -121,14 +111,16 @@ fn impl_ntt(input: Input) -> TokenStream {
                         root = current_generator;
                     }
 
-                    current_generator *= generator_sq;
+                    current_generator.mul_root_assign(generator_sq);
                 }
 
                 Ok(root)
             }
 
-            fn generate_ntt_table(log_n: u32) -> Result<::algebra::transformation::NTTTable<Self>, ::algebra::AlgebraError> {
+            fn generate_ntt_table(log_n: u32) -> Result<Self::Table, ::algebra::AlgebraError> {
                 let n = 1usize << log_n;
+
+                let root_one = Self(1).to_root();
 
                 let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
                 let inv_root = ::num_traits::Inv::inv(root);
@@ -136,25 +128,40 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let root_factor = root.to_root();
                 let mut power = root;
 
-                let mut root_powers = vec![<Self as ::algebra::NTTField>::Root::default(); n];
-                root_powers[0] = Self(1).to_root();
-                for i in 1..n {
-                    root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = power.to_root();
+                let mut ordinal_root_powers = vec![Self::Root::default(); n];
+                ordinal_root_powers[0] = root_one;
+                ordinal_root_powers[1] = root_factor;
+                for root_power in ordinal_root_powers.iter_mut().skip(2) {
                     power.mul_root_assign(root_factor);
+                    *root_power = power.to_root();
+                }
+
+                let mut root_powers = vec![Self::Root::default(); n];
+                root_powers[0] = root_one;
+                for (i, &root_power) in ordinal_root_powers.iter().enumerate().skip(1) {
+                    root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = root_power;
                 }
 
                 let inv_root_factor = inv_root.to_root();
-                let mut inv_root_powers = vec![<Self as ::algebra::NTTField>::Root::default(); n];
                 power = inv_root;
 
-                inv_root_powers[0] = Self(1).to_root();
-                for i in 1..n {
-                    inv_root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i - 1, log_n) + 1] = power.to_root();
+                let mut ordinal_inv_root_powers = vec![Self::Root::default(); n];
+                ordinal_inv_root_powers[0] = root_one;
+                ordinal_inv_root_powers[1] = inv_root_factor;
+                for inv_root_power in ordinal_inv_root_powers.iter_mut().skip(2) {
                     power.mul_root_assign(inv_root_factor);
+                    *inv_root_power = power.to_root();
                 }
-                let inv_degree = ::num_traits::Inv::inv(Self(n as #field_ty)).to_root();
 
-                Ok(::algebra::transformation::NTTTable::new(
+                let mut inv_root_powers = vec![Self::Root::default(); n];
+                inv_root_powers[0] = root_one;
+                for (i, &inv_root_power) in ordinal_inv_root_powers.iter().enumerate().skip(1) {
+                    inv_root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i - 1, log_n) + 1] = inv_root_power;
+                }
+
+                let inv_degree = ::num_traits::Inv::inv(<Self as ::algebra::Field>::cast_from_usize(n)).to_root();
+
+                Ok(Self::Table::new(
                     root,
                     inv_root,
                     log_n,
@@ -162,6 +169,8 @@ fn impl_ntt(input: Input) -> TokenStream {
                     inv_degree,
                     root_powers,
                     inv_root_powers,
+                    ordinal_root_powers,
+                    ordinal_inv_root_powers,
                 ))
             }
 
