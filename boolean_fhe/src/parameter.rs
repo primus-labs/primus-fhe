@@ -392,6 +392,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
         let key_switching_basis = <Basis<F>>::new(self.key_switching_basis_bits);
 
+        let rlwe_modulus_f64 = F::new(rlwe_modulus).to_f64();
         Ok(Parameters::<F> {
             lwe_dimension,
             lwe_modulus: <PowOf2Modulus<LWEType>>::new(lwe_modulus),
@@ -403,7 +404,7 @@ impl<F: NTTField> ParametersBuilder<F> {
             rlwe_noise_std_dev: self.rlwe_noise_std_dev.unwrap(),
 
             lwe_modulus_f64: lwe_modulus as f64,
-            rlwe_modulus_f64: F::MODULUS_F64,
+            rlwe_modulus_f64,
             twice_rlwe_dimension_div_lwe_modulus,
 
             gadget_basis,

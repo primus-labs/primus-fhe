@@ -1,7 +1,5 @@
-use crate::field::NTTField;
 use crate::modulus::ShoupFactor;
-use crate::polynomial::{NTTPolynomial, Polynomial};
-use crate::{Field, Widening, WrappingOps};
+use crate::{Field, NTTField, NTTPolynomial, Polynomial, Widening, WrappingOps};
 
 use super::AbstractNTT;
 
@@ -30,22 +28,22 @@ use super::AbstractNTT;
 #[derive(Debug)]
 pub struct NTTTable<F>
 where
-    F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
+    F: NTTField<Table = Self>,
 {
     root: F,
     inv_root: F,
     coeff_count_power: u32,
     coeff_count: usize,
-    inv_degree: ShoupFactor<<F as Field>::Value>,
-    root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
-    inv_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
-    ordinal_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
-    ordinal_inv_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
+    inv_degree: <F as NTTField>::Root,
+    root_powers: Vec<<F as NTTField>::Root>,
+    inv_root_powers: Vec<<F as NTTField>::Root>,
+    ordinal_root_powers: Vec<<F as NTTField>::Root>,
+    ordinal_inv_root_powers: Vec<<F as NTTField>::Root>,
 }
 
 impl<F> NTTTable<F>
 where
-    F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
+    F: NTTField<Table = Self>,
 {
     /// Creates a new [`NTTTable<F>`].
     #[inline]
@@ -58,8 +56,8 @@ where
         inv_degree: <F as NTTField>::Root,
         root_powers: Vec<<F as NTTField>::Root>,
         inv_root_powers: Vec<<F as NTTField>::Root>,
-        ordinal_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
-        ordinal_inv_root_powers: Vec<ShoupFactor<<F as Field>::Value>>,
+        ordinal_root_powers: Vec<<F as NTTField>::Root>,
+        ordinal_inv_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
         Self {
             root,
@@ -100,31 +98,31 @@ where
 
     /// Returns the inverse element of the degree of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_degree(&self) -> ShoupFactor<<F as Field>::Value> {
+    pub fn inv_degree(&self) -> <F as NTTField>::Root {
         self.inv_degree
     }
 
     /// Returns a reference to the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
+    pub fn root_powers(&self) -> &[<F as NTTField>::Root] {
         self.root_powers.as_ref()
     }
 
     /// Returns a reference to the inverse elements of the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
+    pub fn inv_root_powers(&self) -> &[<F as NTTField>::Root] {
         self.inv_root_powers.as_ref()
     }
 
     /// Returns a reference to the ordinal root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn ordinal_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
+    pub fn ordinal_root_powers(&self) -> &[<F as NTTField>::Root] {
         &self.ordinal_root_powers
     }
 
     /// Returns a reference to the ordinal inverse elements of the root powers of this [`NTTTable<F>`].
     #[inline]
-    pub fn ordinal_inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::Value>] {
+    pub fn ordinal_inv_root_powers(&self) -> &[<F as NTTField>::Root] {
         &self.ordinal_inv_root_powers
     }
 }

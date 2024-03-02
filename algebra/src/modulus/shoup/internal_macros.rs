@@ -46,7 +46,7 @@ macro_rules! impl_shoup_factor {
             ///
             /// `0 ≤ wx - qp < xp/β + p < 2p < β`
             #[inline]
-            pub fn mul_reduce_lazy(&self, rhs: $SelfT, modulus: $SelfT) -> $SelfT {
+            pub fn mul_reduce_lazy(self, rhs: $SelfT, modulus: $SelfT) -> $SelfT {
                 use $crate::Widening;
                 let (_, hw) = self.quotient.widen_mul(rhs);
                 self.value

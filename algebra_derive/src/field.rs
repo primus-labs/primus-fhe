@@ -159,8 +159,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
 
             const ONE_INNER: Self::Value = 1;
 
-            const ZERO_INNER: Self::Value = 0;
-
             const MODULUS_INNER: Self::Value = #modulus;
 
             const TWICE_MODULUS_INNER: Self::Value = #modulus << 1;
@@ -168,8 +166,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             const Q_DIV_8: Self = Self(#modulus >> 3);
 
             const NRG_Q_DIV_8: Self = Self(#modulus - (#modulus >> 3));
-
-            const MODULUS_F64: f64 = #modulus as f64;
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]

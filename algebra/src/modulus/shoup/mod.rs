@@ -17,13 +17,13 @@ pub struct ShoupFactor<T: Copy> {
 impl<T: Copy> ShoupFactor<T> {
     /// Returns the value of this [`ShoupFactor<T>`].
     #[inline]
-    pub const fn value(&self) -> T {
+    pub const fn value(self) -> T {
         self.value
     }
 
     /// Returns the quotient of this [`ShoupFactor<T>`].
     #[inline]
-    pub const fn quotient(&self) -> T {
+    pub const fn quotient(self) -> T {
         self.quotient
     }
 }

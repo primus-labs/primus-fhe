@@ -85,9 +85,6 @@ pub trait Field:
     /// 1
     const ONE_INNER: Self::Value;
 
-    /// 0
-    const ZERO_INNER: Self::Value;
-
     /// q
     const MODULUS_INNER: Self::Value;
 
@@ -99,9 +96,6 @@ pub trait Field:
 
     /// -q/8
     const NRG_Q_DIV_8: Self;
-
-    /// q
-    const MODULUS_F64: f64;
 
     /// Creates a new instance.
     fn new(value: Self::Value) -> Self;
