@@ -1,6 +1,6 @@
 use algebra::{derive::*, Field, Polynomial, PrimeField, Random};
 use num_traits::{Inv, One, Pow, Zero};
-use rand::{prelude::*, thread_rng};
+use rand::prelude::*;
 use rand_distr::Standard;
 
 // Derive macro `Field` generates an impl of the trait `algebra::Field`.

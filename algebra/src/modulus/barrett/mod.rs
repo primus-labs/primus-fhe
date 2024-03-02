@@ -59,7 +59,7 @@ impl_barrett_modulus!(impl BarrettModulus<u64>; WideType: u128);
 
 #[cfg(test)]
 mod tests {
-    use rand::{prelude::*, thread_rng};
+    use rand::prelude::*;
 
     use crate::reduce::Reduce;
 

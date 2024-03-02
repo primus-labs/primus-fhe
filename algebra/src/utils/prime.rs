@@ -117,7 +117,7 @@ impl_prime_check!(impl Prime for BarrettModulus<u8>);
 
 #[cfg(test)]
 mod tests {
-    use rand::{prelude::*, thread_rng};
+    use rand::prelude::*;
 
     use super::*;
 

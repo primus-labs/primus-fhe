@@ -207,7 +207,7 @@ where
 #[cfg(test)]
 mod tests {
     use num_traits::Zero;
-    use rand::{prelude::*, thread_rng};
+    use rand::prelude::*;
 
     use crate::utils::Prime;
 

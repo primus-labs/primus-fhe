@@ -46,7 +46,7 @@ mod tests {
     };
 
     use super::*;
-    use rand::{prelude::*, thread_rng};
+    use rand::prelude::*;
 
     #[test]
     fn test_shoup_factor() {

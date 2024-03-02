@@ -27,7 +27,7 @@ impl_powof2_modulus!(impl PowOf2Modulus<u128>);
 
 #[cfg(test)]
 mod tests {
-    use rand::{prelude::*, thread_rng};
+    use rand::prelude::*;
     use rand_distr::Uniform;
 
     use crate::reduce::*;
