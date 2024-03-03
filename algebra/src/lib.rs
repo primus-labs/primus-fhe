@@ -36,4 +36,4 @@ pub use polynomial::multivariate::{
     multilinear::{DenseMultilinearExtension, MultilinearExtension},
 };
 
-pub use primitive::{div_ceil, Bits, Widening};
+pub use primitive::{div_ceil, Bits, Widening, WrappingOps};
