@@ -1,9 +1,11 @@
 //! This module defines some traits for modular arithmetic.
 
+mod lazy_ops;
 mod ops;
 
 mod primitive;
 
+pub use lazy_ops::*;
 pub use ops::*;
 
 /// A helper trait to get the modulus of the field.

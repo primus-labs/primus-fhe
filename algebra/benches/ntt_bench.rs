@@ -1,7 +1,7 @@
 use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random};
 use algebra_derive::{Field, Prime, Random, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::{prelude::*, thread_rng};
+use rand::prelude::*;
 
 #[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]

@@ -246,4 +246,38 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
                 .add_ntt_rlwe_mul_ntt_polynomial_inplace(g_rlwe, decompose_space.as_mut_slice());
         })
     }
+
+    /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
+    /// stores the result into `destination`.
+    ///
+    /// The coefficients in the `destination` may be in [0, 2*modulus) for some case,
+    /// and fall back to [0, modulus) for normal case,
+    pub fn mul_polynomial_inplace_fast(
+        &self,
+        polynomial: &Polynomial<F>,
+        // Pre allocate space for decomposition
+        decompose_space: &mut DecompositionSpace<F>,
+        polynomial_space: &mut PolynomialSpace<F>,
+        // Output destination
+        destination: &mut NTTRLWE<F>,
+    ) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+
+        polynomial_space
+            .as_mut_slice()
+            .copy_from_slice(polynomial.as_slice());
+
+        destination.set_zero();
+
+        self.iter().for_each(|g_rlwe| {
+            polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+            destination.add_ntt_rlwe_mul_ntt_polynomial_inplace_fast(
+                g_rlwe,
+                decompose_space.as_mut_slice(),
+            );
+        })
+    }
 }

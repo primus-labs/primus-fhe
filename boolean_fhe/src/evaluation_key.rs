@@ -65,8 +65,9 @@ impl<F: NTTField> EvaluationKey<F> {
     pub fn modulus_switch(&self, c: LWE<F>) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
+        let rlwe_modulus_f64 = parameters.rlwe_modulus_f64();
 
-        let switch = |v: F| (v.to_f64() * lwe_modulus_f64 / F::MODULUS_F64).floor() as LWEType;
+        let switch = |v: F| (v.to_f64() * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
 
         let a: Vec<LWEType> = c.a().iter().copied().map(switch).collect();
         let b = switch(c.b());

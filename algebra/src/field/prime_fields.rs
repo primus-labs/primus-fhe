@@ -21,30 +21,3 @@ pub trait PrimeField: Field {
     /// Check if this [`PrimeField`] is a prime field.
     fn is_prime_field() -> bool;
 }
-
-/// A factor for multiply many times
-#[derive(Clone, Copy, Default, Debug)]
-pub struct MulFactor<F> {
-    value: F,
-    quotient: F,
-}
-
-impl<F: Copy> MulFactor<F> {
-    /// Creates a new instance.
-    #[inline]
-    pub const fn new(value: F, quotient: F) -> Self {
-        Self { value, quotient }
-    }
-
-    /// Returns the value of this [`MulFactor<F>`].
-    #[inline]
-    pub const fn value(&self) -> F {
-        self.value
-    }
-
-    /// Returns the quotient of this [`MulFactor<F>`].
-    #[inline]
-    pub const fn quotient(&self) -> F {
-        self.quotient
-    }
-}

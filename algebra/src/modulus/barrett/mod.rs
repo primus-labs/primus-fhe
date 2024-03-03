@@ -30,14 +30,12 @@ mod ops;
 /// data. Here, `b` = 2^T::BITS
 ///
 /// It's efficient if many reductions are performed with a single modulus.
-#[derive(Clone)]
-pub struct BarrettModulus<T> {
+#[derive(Clone, Copy)]
+pub struct BarrettModulus<T: Copy> {
     /// the value to indicate the modulus
     value: T,
     /// ratio `µ` = ⌊b^2/value⌋
     ratio: [T; 2],
-    /// the bit count of the value
-    bit_count: u32,
 }
 
 impl<T: Copy> BarrettModulus<T> {
@@ -54,59 +52,14 @@ impl<T: Copy> BarrettModulus<T> {
     }
 }
 
-impl<T> BarrettModulus<T> {
-    /// Returns the bit count of this [`BarrettModulus<T>`].
-    #[inline]
-    pub const fn bit_count(&self) -> u32 {
-        self.bit_count
-    }
-}
-
 impl_barrett_modulus!(impl BarrettModulus<u8>; WideType: u16);
 impl_barrett_modulus!(impl BarrettModulus<u16>; WideType: u32);
 impl_barrett_modulus!(impl BarrettModulus<u32>; WideType: u64);
 impl_barrett_modulus!(impl BarrettModulus<u64>; WideType: u128);
 
-/// A number used for fast modular multiplication.
-///
-/// This is efficient if many operations are multiplied by
-/// the same number and then reduced with the same modulus.
-#[derive(Clone, Copy, Default)]
-pub struct MulReduceFactor<T> {
-    /// value
-    pub value: T,
-
-    /// quotient
-    pub quotient: T,
-}
-
-impl<T: Copy> MulReduceFactor<T> {
-    /// Returns the value of this [`MulReduceFactor<T>`].
-    #[inline]
-    pub const fn value(&self) -> T {
-        self.value
-    }
-
-    /// Returns the quotient of this [`MulReduceFactor<T>`].
-    #[inline]
-    pub const fn quotient(&self) -> T {
-        self.quotient
-    }
-}
-
-impl_mul_reduce_factor!(impl MulReduceFactor<u8>; WideType: u16);
-impl_mul_reduce_factor!(impl MulReduceFactor<u16>; WideType: u32);
-impl_mul_reduce_factor!(impl MulReduceFactor<u32>; WideType: u64);
-impl_mul_reduce_factor!(impl MulReduceFactor<u64>; WideType: u128);
-
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u8>);
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u16>);
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u32>);
-impl_mul_reduce_factor_ops!(impl MulReduceFactor<u64>);
-
 #[cfg(test)]
 mod tests {
-    use rand::{prelude::*, thread_rng};
+    use rand::prelude::*;
 
     use crate::reduce::Reduce;
 
@@ -130,7 +83,7 @@ mod tests {
         let modulus = BarrettModulus::<u64>::new(m);
 
         let v: u64 = rng.gen();
-        assert_eq!(v.reduce(&modulus), v % m);
+        assert_eq!(v.reduce(modulus), v % m);
     }
 
     #[test]
@@ -143,7 +96,26 @@ mod tests {
         let lw64: u64 = rng.gen();
         let hw64: u64 = rng.gen();
         let v: u128 = ((hw64 as u128) << 64) + (lw64 as u128);
-        assert_eq!([lw64, hw64].reduce(&modulus), (v % (m as u128)) as u64);
-        assert_eq!((lw64, hw64).reduce(&modulus), (v % (m as u128)) as u64);
+        assert_eq!([lw64, hw64].reduce(modulus), (v % (m as u128)) as u64);
+        assert_eq!((lw64, hw64).reduce(modulus), (v % (m as u128)) as u64);
+    }
+
+    #[test]
+    fn test_barrett_const() {
+        const MODULUS1: BarrettModulus<u32> = BarrettModulus::<u32>::new(17);
+        const MODULUS2: BarrettModulus<u32> = BarrettModulus::<u32>::new(101);
+        const MODULUS3: BarrettModulus<u64> = BarrettModulus::<u64>::new(521);
+
+        const A: u32 = MODULUS1.bit_count();
+        const B: u32 = MODULUS2.bit_count();
+        const C: u32 = MODULUS3.bit_count();
+
+        assert_eq!(MODULUS1.bit_count(), 5);
+        assert_eq!(MODULUS2.bit_count(), 7);
+        assert_eq!(MODULUS3.bit_count(), 10);
+
+        assert_eq!(A, 5);
+        assert_eq!(B, 7);
+        assert_eq!(C, 10);
     }
 }

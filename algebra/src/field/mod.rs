@@ -5,13 +5,13 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
 
-use crate::{Basis, Random};
+use crate::{Basis, ModulusConfig, Random, Widening, WrappingOps};
 
 mod ntt_fields;
 mod prime_fields;
 
 pub use ntt_fields::NTTField;
-pub use prime_fields::{MulFactor, PrimeField};
+pub use prime_fields::PrimeField;
 
 /// A trait defining the algebraic structure of a mathematical field.
 ///
@@ -64,10 +64,11 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
-    + From<Self::Inner>
+    + From<Self::Value>
+    + ModulusConfig
 {
     /// The inner type of this field.
-    type Inner: Debug + PrimInt + Send + Sync;
+    type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps;
 
     /// The type of the field's order.
     type Order: Copy;
@@ -82,10 +83,13 @@ pub trait Field:
     const NEG_ONE: Self;
 
     /// 1
-    const ONE_INNER: Self::Inner;
+    const ONE_INNER: Self::Value;
 
-    /// 0
-    const ZERO_INNER: Self::Inner;
+    /// q
+    const MODULUS_INNER: Self::Value;
+
+    /// 2q
+    const TWICE_MODULUS_INNER: Self::Value;
 
     /// q/8
     const Q_DIV_8: Self;
@@ -93,17 +97,78 @@ pub trait Field:
     /// -q/8
     const NRG_Q_DIV_8: Self;
 
-    /// q
-    const MODULUS_F64: f64;
-
     /// Creates a new instance.
-    fn new(value: Self::Inner) -> Self;
+    fn new(value: Self::Value) -> Self;
 
-    /// mask, return a number with `bits` 1s.
-    fn mask(bits: u32) -> Self::Inner;
+    /// Get inner value.
+    fn get(self) -> Self::Value;
 
-    /// Return inner value.
-    fn inner(self) -> Self::Inner;
+    /// Reset inner value.
+    fn set(&mut self, value: Self::Value);
+
+    /// Returns the modulus value.
+    fn modulus_value() -> Self::Value;
+
+    /// Normalize `self`.
+    ///
+    /// If `self` > `modulus`, return `self - modulus`.
+    ///
+    /// The result is in [0, modulus).
+    ///
+    /// # Correctness
+    ///
+    /// - `self < 2*modulus`
+    fn normalize(self) -> Self;
+
+    /// Normalize assign `self`.
+    ///
+    /// If `self` > `modulus`, return `self - modulus`.
+    ///
+    /// The result is in [0, modulus).
+    ///
+    /// # Correctness
+    ///
+    /// - `self < 2*modulus`
+    fn normalize_assign(&mut self);
+
+    /// Return `self * scalar`.
+    fn mul_scalar(self, scalar: Self::Value) -> Self;
+
+    /// Performs `self + a * b`.
+    fn add_mul(self, a: Self, b: Self) -> Self;
+
+    /// Performs `self * a + b`.
+    fn mul_add(self, a: Self, b: Self) -> Self;
+
+    /// Performs `self = self + a * b`.
+    fn add_mul_assign(&mut self, a: Self, b: Self);
+
+    /// Performs `self = self * a + b`.
+    fn mul_add_assign(&mut self, a: Self, b: Self);
+
+    /// Performs `self * rhs`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    fn mul_fast(self, rhs: Self) -> Self;
+
+    /// Performs `self *= rhs`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    fn mul_assign_fast(&mut self, rhs: Self);
+
+    /// Performs `self + a * b`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    fn add_mul_fast(self, a: Self, b: Self) -> Self;
+
+    /// Performs `self = self + a * b`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    fn add_mul_assign_fast(&mut self, a: Self, b: Self);
 
     /// cast self to [`usize`].
     fn cast_into_usize(self) -> usize;
@@ -117,14 +182,14 @@ pub trait Field:
     /// cast from [`f64`].
     fn from_f64(value: f64) -> Self;
 
-    /// Returns the modulus value.
-    fn modulus_value() -> Self::Inner;
-
     /// Returns the order of the field.
     fn order() -> Self::Order;
 
+    /// mask, return a number with `bits` 1s.
+    fn mask(bits: u32) -> Self::Value;
+
     /// Get the length of decompose vector.
-    fn decompose_len(basis: Self::Inner) -> usize;
+    fn decompose_len(basis: Self::Value) -> usize;
 
     /// Decompose `self` according to `basis`,
     /// return the decomposed vector.
@@ -142,83 +207,13 @@ pub trait Field:
     /// return the least significant decomposed part.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_lsb_bits(&mut self, mask: Self::Inner, bits: u32) -> Self;
+    fn decompose_lsb_bits(&mut self, mask: Self::Value, bits: u32) -> Self;
 
     /// Decompose `self` according to `basis`'s `mask` and `bits`,
     /// put the least significant decomposed part into `destination`.
     ///
     /// Now we focus on power-of-two basis.
-    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Inner, bits: u32);
-
-    /// Return `self * scalar`.
-    fn mul_scalar(self, scalar: Self::Inner) -> Self;
-
-    /// Returns `self + self`.
-    #[inline]
-    fn double(self) -> Self {
-        self + self
-    }
-
-    /// Doubles `self` in place.
-    #[inline]
-    fn double_in_place(&mut self) -> &mut Self {
-        *self += *self;
-        self
-    }
-
-    /// Negates `self` in place.
-    #[inline]
-    fn neg_in_place(&mut self) -> &mut Self {
-        *self = -*self;
-        self
-    }
-
-    /// Returns `self * self`.
-    #[inline]
-    fn square(self) -> Self {
-        self * self
-    }
-
-    /// Squares `self` in place.
-    #[inline]
-    fn square_in_place(&mut self) -> &mut Self {
-        *self *= *self;
-        self
-    }
-
-    /// Performs `self + a * b`.
-    fn add_mul(self, a: Self, b: Self) -> Self;
-
-    /// Performs `self * a + b`.
-    fn mul_add(self, a: Self, b: Self) -> Self;
-
-    /// Performs `self = self + a * b`.
-    fn add_mul_assign(&mut self, a: Self, b: Self);
-
-    /// Performs `self = self * a + b`.
-    fn mul_add_assign(&mut self, a: Self, b: Self);
-
-    /// Computes the multiplicative inverse of `self` if `self` is nonzero.
-    #[inline]
-    fn inverse(self) -> Option<Self> {
-        if self.is_zero() {
-            None
-        } else {
-            Some(self.inv())
-        }
-    }
-
-    /// If `self.inverse().is_none()`, this just returns `None`. Otherwise, it sets
-    /// `self` to `self.inverse().unwrap()`.
-    #[inline]
-    fn inverse_in_place(&mut self) -> Option<&mut Self> {
-        if self.is_zero() {
-            None
-        } else {
-            *self = self.inv();
-            Some(self)
-        }
-    }
+    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32);
 }
 
 /// A trait combine [`NTTField`] with random property.
