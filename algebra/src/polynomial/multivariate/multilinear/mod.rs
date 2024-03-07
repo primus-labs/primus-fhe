@@ -1,3 +1,4 @@
+// It is derived from https://github.com/arkworks-rs/sumcheck.
 mod dense;
 
 pub use dense::DenseMultilinearExtension;
