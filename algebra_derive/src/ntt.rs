@@ -128,7 +128,7 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let root_factor = root.to_root();
                 let mut power = root;
 
-                let mut ordinal_root_powers = vec![Self::Root::default(); n];
+                let mut ordinal_root_powers = vec![Self::Root::default(); n * 2];
                 ordinal_root_powers[0] = root_one;
                 ordinal_root_powers[1] = root_factor;
                 for root_power in ordinal_root_powers.iter_mut().skip(2) {
@@ -138,25 +138,14 @@ fn impl_ntt(input: Input) -> TokenStream {
 
                 let mut root_powers = vec![Self::Root::default(); n];
                 root_powers[0] = root_one;
-                for (i, &root_power) in ordinal_root_powers.iter().enumerate().skip(1) {
+                for (i, &root_power) in ordinal_root_powers[0..n].iter().enumerate().skip(1) {
                     root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = root_power;
-                }
-
-                let inv_root_factor = inv_root.to_root();
-                power = inv_root;
-
-                let mut ordinal_inv_root_powers = vec![Self::Root::default(); n];
-                ordinal_inv_root_powers[0] = root_one;
-                ordinal_inv_root_powers[1] = inv_root_factor;
-                for inv_root_power in ordinal_inv_root_powers.iter_mut().skip(2) {
-                    power.mul_root_assign(inv_root_factor);
-                    *inv_root_power = power.to_root();
                 }
 
                 let mut inv_root_powers = vec![Self::Root::default(); n];
                 inv_root_powers[0] = root_one;
-                for (i, &inv_root_power) in ordinal_inv_root_powers.iter().enumerate().skip(1) {
-                    inv_root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i - 1, log_n) + 1] = inv_root_power;
+                for (i, &inv_root_power) in ordinal_root_powers[n + 1..].iter().rev().enumerate() {
+                    inv_root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n) + 1] = inv_root_power;
                 }
 
                 let inv_degree = ::num_traits::Inv::inv(<Self as ::algebra::Field>::cast_from_usize(n)).to_root();
@@ -170,7 +159,6 @@ fn impl_ntt(input: Input) -> TokenStream {
                     root_powers,
                     inv_root_powers,
                     ordinal_root_powers,
-                    ordinal_inv_root_powers,
                 ))
             }
 

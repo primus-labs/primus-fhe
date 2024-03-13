@@ -21,6 +21,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let ntt_table = Fp::get_ntt_table(log_n).unwrap();
 
+    let coeff = rng.gen();
+    let degree = rng.gen_range(1..n);
+
     c.bench_function(&format!("ntt {}", n), |b| {
         b.iter(|| {
             ntt_table.transform_slice(data.as_mut_slice());
@@ -30,6 +33,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function(&format!("intt {}", n), |b| {
         b.iter(|| {
             ntt_table.inverse_transform_slice(data.as_mut_slice());
+        })
+    });
+
+    c.bench_function(&format!("monomial ntt {}", n), |b| {
+        b.iter(|| {
+            ntt_table.transform_monomial_inplace(coeff, degree, data.as_mut_slice());
         })
     });
 

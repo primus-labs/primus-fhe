@@ -1,4 +1,5 @@
 use crate::modulus::ShoupFactor;
+use crate::utils::ReverseLsbs;
 use crate::{Field, NTTField, NTTPolynomial, Polynomial, Widening, WrappingOps};
 
 use super::AbstractNTT;
@@ -38,7 +39,6 @@ where
     root_powers: Vec<<F as NTTField>::Root>,
     inv_root_powers: Vec<<F as NTTField>::Root>,
     ordinal_root_powers: Vec<<F as NTTField>::Root>,
-    ordinal_inv_root_powers: Vec<<F as NTTField>::Root>,
 }
 
 impl<F> NTTTable<F>
@@ -57,7 +57,6 @@ where
         root_powers: Vec<<F as NTTField>::Root>,
         inv_root_powers: Vec<<F as NTTField>::Root>,
         ordinal_root_powers: Vec<<F as NTTField>::Root>,
-        ordinal_inv_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
         Self {
             root,
@@ -68,7 +67,6 @@ where
             root_powers,
             inv_root_powers,
             ordinal_root_powers,
-            ordinal_inv_root_powers,
         }
     }
 
@@ -120,10 +118,22 @@ where
         &self.ordinal_root_powers
     }
 
-    /// Returns a reference to the ordinal inverse elements of the root powers of this [`NTTTable<F>`].
-    #[inline]
-    pub fn ordinal_inv_root_powers(&self) -> &[<F as NTTField>::Root] {
-        &self.ordinal_inv_root_powers
+    /// Perform a fast number theory transform for **monomial** `coeff*X^degree` in place.
+    pub fn transform_monomial_inplace(&self, coeff: F, degree: usize, values: &mut [F]) {
+        if degree == 0 {
+            values.fill(coeff);
+            return;
+        }
+
+        let log_n = self.coeff_count_power();
+        debug_assert_eq!(values.len(), 1 << log_n);
+
+        let mask = usize::MAX >> (usize::BITS - log_n - 1);
+
+        values.iter_mut().enumerate().for_each(|(i, v)| {
+            let index = ((2 * i.reverse_lsbs(log_n) + 1) * degree) & mask;
+            *v = coeff.mul_root(self.ordinal_root_powers[index]);
+        })
     }
 }
 

@@ -1,8 +1,9 @@
 use algebra::{
     derive::{Field, Prime, Random, NTT},
+    transformation::AbstractNTT,
     Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
 };
-use rand::thread_rng;
+use rand::{thread_rng, Rng};
 
 #[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
@@ -29,6 +30,23 @@ fn test_transform() {
     let d = c.clone().into_ntt_polynomial();
     assert_eq!(a, c);
     assert_eq!(b, d);
+}
+
+#[test]
+fn test_transform_monomial() {
+    let mut rng = thread_rng();
+
+    let degree = rng.gen_range(0..N);
+    let coeff = rng.gen();
+    let mut a = PolyFF::zero_with_coeff_count(N);
+    let mut b = NTTPolyFF::zero_with_coeff_count(N);
+    a[degree] = coeff;
+
+    let table = Fp32::get_ntt_table(LOG_N as u32).unwrap();
+    let a = table.transform_inplace(a);
+
+    table.transform_monomial_inplace(coeff, degree, b.as_mut_slice());
+    assert_eq!(a, b);
 }
 
 #[test]
