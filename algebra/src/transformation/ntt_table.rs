@@ -132,7 +132,7 @@ where
 
         values.iter_mut().enumerate().for_each(|(i, v)| {
             let index = ((2 * i.reverse_lsbs(log_n) + 1) * degree) & mask;
-            *v = coeff.mul_root(self.ordinal_root_powers[index]);
+            *v = coeff.mul_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
         })
     }
 }
