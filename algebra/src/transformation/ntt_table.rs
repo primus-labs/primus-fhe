@@ -39,6 +39,7 @@ where
     root_powers: Vec<<F as NTTField>::Root>,
     inv_root_powers: Vec<<F as NTTField>::Root>,
     ordinal_root_powers: Vec<<F as NTTField>::Root>,
+    reverse_lsbs: Vec<usize>,
 }
 
 impl<F> NTTTable<F>
@@ -58,6 +59,9 @@ where
         inv_root_powers: Vec<<F as NTTField>::Root>,
         ordinal_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
+        let reverse_lsbs = (0..coeff_count)
+            .map(|i| i.reverse_lsbs(coeff_count_power))
+            .collect();
         Self {
             root,
             inv_root,
@@ -67,6 +71,7 @@ where
             root_powers,
             inv_root_powers,
             ordinal_root_powers,
+            reverse_lsbs,
         }
     }
 
@@ -120,6 +125,11 @@ where
 
     /// Perform a fast number theory transform for **monomial** `coeff*X^degree` in place.
     pub fn transform_monomial_inplace(&self, coeff: F, degree: usize, values: &mut [F]) {
+        if coeff == F::ZERO {
+            values.fill(F::ZERO);
+            return;
+        }
+
         if degree == 0 {
             values.fill(coeff);
             return;
@@ -130,10 +140,32 @@ where
 
         let mask = usize::MAX >> (usize::BITS - log_n - 1);
 
-        values.iter_mut().enumerate().for_each(|(i, v)| {
-            let index = ((2 * i.reverse_lsbs(log_n) + 1) * degree) & mask;
-            *v = coeff.mul_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
-        })
+        if coeff == F::ONE {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+                })
+        } else if coeff == F::NEG_ONE {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) })
+                        .neg();
+                })
+        } else {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = coeff.mul_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+                })
+        }
     }
 }
 
