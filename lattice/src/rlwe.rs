@@ -1,8 +1,8 @@
 use std::ops::MulAssign;
 
 use algebra::{
-    ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_add_mul_inplace_ref,
-    ntt_mul_assign_ref, transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
+    ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_add_mul_inplace, ntt_mul_assign_ref,
+    transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
 };
 use num_traits::{NumCast, Zero};
 
@@ -681,17 +681,17 @@ impl<F: NTTField> NTTRLWE<F> {
         ntt_polynomial: &[F],
         destination: &mut Self,
     ) {
-        ntt_add_mul_inplace_ref(
+        ntt_add_mul_inplace(
+            self.a.iter().copied(),
+            ntt_rlwe.a.iter().copied(),
+            ntt_polynomial.into_iter().copied(),
             destination.a.iter_mut(),
-            self.a.iter(),
-            ntt_rlwe.a.iter(),
-            ntt_polynomial,
         );
-        ntt_add_mul_inplace_ref(
+        ntt_add_mul_inplace(
+            self.b.iter().copied(),
+            ntt_rlwe.b.iter().copied(),
+            ntt_polynomial.into_iter().copied(),
             destination.b.iter_mut(),
-            self.b.iter(),
-            ntt_rlwe.b.iter(),
-            ntt_polynomial,
         );
     }
 
