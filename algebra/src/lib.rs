@@ -31,4 +31,9 @@ pub use polynomial::{
     ntt_mul_assign_fast, ntt_mul_assign_ref, ntt_mul_assign_ref_fast, NTTPolynomial, Polynomial,
 };
 
+pub use polynomial::multivariate::{
+    data_structures::ListOfProductsOfPolynomials,
+    multilinear::{DenseMultilinearExtension, MultilinearExtension},
+};
+
 pub use primitive::{div_ceil, Bits, Widening, WrappingOps};
