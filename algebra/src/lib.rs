@@ -3,37 +3,30 @@
 
 //! Define arithmetic operations.
 
+mod decompose_basis;
 mod error;
+mod field;
+mod polynomial;
+mod primitive;
+mod random;
 
 pub mod derive;
-
-mod decompose_basis;
-mod field;
 pub mod modulus;
-mod random;
 pub mod reduce;
+pub mod transformation;
 pub mod utils;
 
-mod polynomial;
-pub mod transformation;
-
-mod primitive;
-
-pub use error::AlgebraError;
-
 pub use decompose_basis::Basis;
+pub use error::AlgebraError;
 pub use field::{Field, NTTField, PrimeField, RandomNTTField};
-pub use random::Random;
-pub use reduce::ModulusConfig;
-
-pub use polynomial::{
-    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_assign,
-    ntt_mul_assign_fast, ntt_mul_assign_ref, ntt_mul_assign_ref_fast, NTTPolynomial, Polynomial,
-};
-
 pub use polynomial::multivariate::{
     data_structures::ListOfProductsOfPolynomials,
     multilinear::{DenseMultilinearExtension, MultilinearExtension},
 };
-
+pub use polynomial::univariate::{
+    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_assign,
+    ntt_mul_assign_fast, ntt_mul_assign_ref, ntt_mul_assign_ref_fast, NTTPolynomial, Polynomial,
+};
 pub use primitive::{div_ceil, Bits, Widening, WrappingOps};
+pub use random::Random;
+pub use reduce::ModulusConfig;
