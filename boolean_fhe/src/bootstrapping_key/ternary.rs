@@ -38,7 +38,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
         let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
         let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);
-        let ntt_rgsw_space = &mut NTTRGSWSpace::new(rlwe_dimension, gadget_basis);
+        let evk_space = &mut NTTRGSWSpace::new(rlwe_dimension, gadget_basis);
 
         let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
 
@@ -48,29 +48,27 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
                 let degree =
                     (a_i.neg_reduce(lwe_modulus) as usize) * twice_rlwe_dimension_div_lwe_modulus;
-                if degree < rlwe_dimension {
-                    ntt_table.transform_monomial_inplace(
-                        F::ONE,
-                        rlwe_dimension - degree,
-                        ntt_polynomial_space.as_mut_slice(),
-                    );
+                let degree = if degree < rlwe_dimension {
+                    rlwe_dimension - degree
                 } else {
-                    ntt_table.transform_monomial_inplace(
-                        F::NEG_ONE,
-                        rlwe_dimension * 2 - degree,
-                        ntt_polynomial_space.as_mut_slice(),
-                    );
-                }
+                    rlwe_dimension * 2 - (degree - rlwe_dimension)
+                };
+
+                ntt_table.transform_monomial_inplace(
+                    F::ONE,
+                    degree,
+                    ntt_polynomial_space.as_mut_slice(),
+                );
 
                 s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
                     &s_i.1,
                     ntt_polynomial_space,
-                    ntt_rgsw_space,
+                    evk_space,
                 );
 
                 // acc_mul_rgsw = ACC * RGSW(s_i)
                 acc.mul_small_ntt_rgsw_inplace(
-                    ntt_rgsw_space,
+                    evk_space,
                     decompose_space,
                     polynomial_space,
                     ntt_rlwe_space,

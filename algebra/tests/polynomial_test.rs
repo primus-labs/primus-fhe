@@ -50,6 +50,32 @@ fn test_transform_monomial() {
 }
 
 #[test]
+fn test_monomial_property() {
+    let mut rng = thread_rng();
+
+    let table = Fp32::get_ntt_table(LOG_N as u32).unwrap();
+
+    let degree = rng.gen_range(0..N);
+
+    let mut a = NTTPolyFF::zero_with_coeff_count(N);
+    let mut b = NTTPolyFF::zero_with_coeff_count(N);
+
+    table.transform_monomial_inplace(Fp32::ONE, degree, a.as_mut_slice());
+    table.transform_monomial_inplace(Fp32::NEG_ONE, degree + N, b.as_mut_slice());
+    assert_eq!(a, b);
+
+    table.transform_monomial_inplace(Fp32::NEG_ONE, degree, a.as_mut_slice());
+    table.transform_monomial_inplace(Fp32::ONE, degree + N, b.as_mut_slice());
+    assert_eq!(a, b);
+
+    let degree = rng.gen_range(N..N * 2);
+
+    table.transform_monomial_inplace(Fp32::NEG_ONE, N * 2 - degree, a.as_mut_slice());
+    table.transform_monomial_inplace(Fp32::ONE, N * 2 - (degree - N), b.as_mut_slice());
+    assert_eq!(a, b);
+}
+
+#[test]
 fn test_native_poly() {
     let a = PolyFF::new(vec![FF::new(1), FF::new(P - 1)]);
     let b = PolyFF::new(vec![FF::new(P - 1), FF::new(1)]);
