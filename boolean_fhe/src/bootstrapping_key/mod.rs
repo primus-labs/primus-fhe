@@ -52,6 +52,7 @@ impl<F: NTTField> BootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEType>,
+        gadget_basis: Basis<F>,
     ) -> RLWE<F> {
         match self {
             BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(
@@ -67,6 +68,7 @@ impl<F: NTTField> BootstrappingKey<F> {
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
                 lwe_modulus,
+                gadget_basis,
             ),
         }
     }

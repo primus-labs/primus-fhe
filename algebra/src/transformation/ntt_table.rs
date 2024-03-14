@@ -122,51 +122,6 @@ where
     pub fn ordinal_root_powers(&self) -> &[<F as NTTField>::Root] {
         &self.ordinal_root_powers
     }
-
-    /// Perform a fast number theory transform for **monomial** `coeff*X^degree` in place.
-    pub fn transform_monomial_inplace(&self, coeff: F, degree: usize, values: &mut [F]) {
-        if coeff == F::ZERO {
-            values.fill(F::ZERO);
-            return;
-        }
-
-        if degree == 0 {
-            values.fill(coeff);
-            return;
-        }
-
-        let log_n = self.coeff_count_power();
-        debug_assert_eq!(values.len(), 1 << log_n);
-
-        let mask = usize::MAX >> (usize::BITS - log_n - 1);
-
-        if coeff == F::ONE {
-            values
-                .iter_mut()
-                .zip(&self.reverse_lsbs)
-                .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
-                })
-        } else if coeff == F::NEG_ONE {
-            values
-                .iter_mut()
-                .zip(&self.reverse_lsbs)
-                .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) })
-                        .neg();
-                })
-        } else {
-            values
-                .iter_mut()
-                .zip(&self.reverse_lsbs)
-                .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    *v = coeff.mul_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
-                })
-        }
-    }
 }
 
 impl<F> AbstractNTT<F> for NTTTable<F>
@@ -256,6 +211,50 @@ where
         }
 
         values.iter_mut().for_each(intt_normalize_assign);
+    }
+
+    fn transform_monomial_inplace(&self, coeff: F, degree: usize, values: &mut [F]) {
+        if coeff == F::ZERO {
+            values.fill(F::ZERO);
+            return;
+        }
+
+        if degree == 0 {
+            values.fill(coeff);
+            return;
+        }
+
+        let log_n = self.coeff_count_power();
+        debug_assert_eq!(values.len(), 1 << log_n);
+
+        let mask = usize::MAX >> (usize::BITS - log_n - 1);
+
+        if coeff == F::ONE {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+                })
+        } else if coeff == F::NEG_ONE {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) })
+                        .neg();
+                })
+        } else {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = coeff.mul_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+                })
+        }
     }
 }
 

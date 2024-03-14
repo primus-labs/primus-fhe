@@ -1,6 +1,6 @@
-use algebra::{Basis, NTTField};
+use algebra::{Basis, NTTField, NTTPolynomial};
 
-use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
+use crate::{GadgetRLWE, NTTGadgetRLWE, NTTRGSWSpace, RLWE};
 
 /// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
 ///
@@ -175,6 +175,15 @@ impl<F: NTTField> NTTRGSW<F> {
         }
     }
 
+    /// Creates a [`NTTRGSW<F>`] with all entries equal to zero.
+    #[inline]
+    pub fn zero(coeff_count: usize, basis: Basis<F>) -> Self {
+        Self {
+            c_neg_s_m: NTTGadgetRLWE::zero(coeff_count, basis),
+            c_m: NTTGadgetRLWE::zero(coeff_count, basis),
+        }
+    }
+
     /// Returns a reference to the c neg s m of this [`NTTRGSW<F>`].
     #[inline]
     pub fn c_neg_s_m(&self) -> &NTTGadgetRLWE<F> {
@@ -203,5 +212,25 @@ impl<F: NTTField> NTTRGSW<F> {
     #[inline]
     pub fn basis(&self) -> Basis<F> {
         self.c_neg_s_m.basis()
+    }
+
+    /// Perform `self + rhs * ntt_polynomial`, and store the result into destination.
+    pub fn add_ntt_rgsw_mul_ntt_polynomial_inplace(
+        &self,
+        rhs: &Self,
+        ntt_polynomial: &NTTPolynomial<F>,
+        destination: &mut NTTRGSWSpace<F>,
+    ) {
+        self.c_neg_s_m()
+            .add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
+                rhs.c_neg_s_m(),
+                ntt_polynomial,
+                destination.c_neg_s_m_mut(),
+            );
+        self.c_m().add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
+            rhs.c_m(),
+            ntt_polynomial,
+            destination.c_m_mut(),
+        );
     }
 }

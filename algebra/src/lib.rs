@@ -24,8 +24,9 @@ pub use polynomial::multivariate::{
     multilinear::{DenseMultilinearExtension, MultilinearExtension},
 };
 pub use polynomial::univariate::{
-    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_assign,
-    ntt_mul_assign_fast, ntt_mul_assign_ref, ntt_mul_assign_ref_fast, NTTPolynomial, Polynomial,
+    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast,
+    ntt_add_mul_inplace_ref, ntt_mul_assign, ntt_mul_assign_fast, ntt_mul_assign_ref,
+    ntt_mul_assign_ref_fast, NTTPolynomial, Polynomial,
 };
 pub use primitive::{div_ceil, Bits, Widening, WrappingOps};
 pub use random::Random;

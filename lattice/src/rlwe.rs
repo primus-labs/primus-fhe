@@ -1,8 +1,8 @@
 use std::ops::MulAssign;
 
 use algebra::{
-    ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_assign_ref,
-    transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
+    ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_add_mul_inplace_ref,
+    ntt_mul_assign_ref, transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
 };
 use num_traits::{NumCast, Zero};
 
@@ -650,7 +650,7 @@ impl<F: NTTField> NTTRLWE<F> {
 
     /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
     #[inline]
-    pub fn add_ntt_rlwe_mul_ntt_polynomial_inplace(
+    pub fn add_ntt_rlwe_mul_ntt_polynomial_assign(
         &mut self,
         ntt_rlwe: &NTTRLWE<F>,
         ntt_polynomial: &[F],
@@ -664,13 +664,35 @@ impl<F: NTTField> NTTRLWE<F> {
     /// The result coefficients may be in [0, 2*modulus) for some case,
     /// and fall back to [0, modulus) for normal case,
     #[inline]
-    pub fn add_ntt_rlwe_mul_ntt_polynomial_inplace_fast(
+    pub fn add_ntt_rlwe_mul_ntt_polynomial_assign_fast(
         &mut self,
         ntt_rlwe: &NTTRLWE<F>,
         ntt_polynomial: &[F],
     ) {
         ntt_add_mul_assign_ref_fast(&mut self.a, &ntt_rlwe.a, ntt_polynomial);
         ntt_add_mul_assign_ref_fast(&mut self.b, &ntt_rlwe.b, ntt_polynomial);
+    }
+
+    /// Performs `destination = self + ntt_rlwe * ntt_polynomial`.
+    #[inline]
+    pub fn add_ntt_rlwe_mul_ntt_polynomial_inplace(
+        &self,
+        ntt_rlwe: &Self,
+        ntt_polynomial: &[F],
+        destination: &mut Self,
+    ) {
+        ntt_add_mul_inplace_ref(
+            destination.a.iter_mut(),
+            self.a.iter(),
+            ntt_rlwe.a.iter(),
+            ntt_polynomial,
+        );
+        ntt_add_mul_inplace_ref(
+            destination.b.iter_mut(),
+            self.b.iter(),
+            ntt_rlwe.b.iter(),
+            ntt_polynomial,
+        );
     }
 
     /// Performs `self + gadget_rlwe * polynomial`.
@@ -713,7 +735,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-            self.add_ntt_rlwe_mul_ntt_polynomial_inplace(g, decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, decompose_space.as_mut_slice());
         })
     }
 
@@ -740,7 +762,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-            self.add_ntt_rlwe_mul_ntt_polynomial_inplace_fast(g, decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, decompose_space.as_mut_slice());
         })
     }
 
@@ -763,7 +785,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-            self.add_ntt_rlwe_mul_ntt_polynomial_inplace(g, decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, decompose_space.as_mut_slice());
         })
     }
 
@@ -789,7 +811,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-            self.add_ntt_rlwe_mul_ntt_polynomial_inplace_fast(g, decompose_space.as_mut_slice());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, decompose_space.as_mut_slice());
         })
     }
 }
