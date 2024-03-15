@@ -24,7 +24,7 @@ pub use polynomial::multivariate::{
     multilinear::{DenseMultilinearExtension, MultilinearExtension},
 };
 pub use polynomial::univariate::{
-    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_add_mul_inplace,
+    ntt_add_mul_assign, ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_add_inplace,
     ntt_mul_assign, ntt_mul_assign_fast, ntt_mul_assign_ref, ntt_mul_assign_ref_fast,
     NTTPolynomial, Polynomial,
 };

@@ -608,24 +608,23 @@ pub fn ntt_add_mul_assign_ref<
 /// then multiply enrty-wise over last two iterators, and add the second
 /// iterator, store the result to first iterator.
 #[inline]
-pub fn ntt_add_mul_inplace<
-    'a,
-    F: NTTField + 'a,
+pub fn ntt_mul_add_inplace<
+    F: NTTField,
     J: IntoIterator<Item = F>,
     K: IntoIterator<Item = F>,
     L: IntoIterator<Item = F>,
-    I: IntoIterator<Item = &'a mut F>,
+    O: AsMut<[F]>,
 >(
     x: J,
     y: K,
     z: L,
-    des: I,
+    mut des: O,
 ) {
     x.into_iter()
         .zip(y)
         .zip(z)
-        .zip(des)
-        .for_each(|(((a, b), c), des)| *des = a.add_mul(b, c));
+        .zip(des.as_mut())
+        .for_each(|(((a, b), c), d)| *d = a.mul_add(b, c));
 }
 
 /// Performs enrty-wise add_mul fast operation.

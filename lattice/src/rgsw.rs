@@ -1,6 +1,6 @@
 use algebra::{Basis, NTTField, NTTPolynomial};
 
-use crate::{GadgetRLWE, NTTGadgetRLWE, NTTRGSWSpace, RLWE};
+use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
 /// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
 ///
@@ -219,7 +219,7 @@ impl<F: NTTField> NTTRGSW<F> {
         &self,
         rhs: &Self,
         ntt_polynomial: &NTTPolynomial<F>,
-        destination: &mut NTTRGSWSpace<F>,
+        destination: &mut Self,
     ) {
         self.c_neg_s_m()
             .add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
