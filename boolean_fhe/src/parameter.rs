@@ -430,7 +430,7 @@ pub const CONST_DEFAULT_100_BITS_PARAMERTERS: ConstParameters<u32> = ConstParame
     rlwe_dimension: 1024,
     rlwe_modulus: 132120577,
     rlwe_noise_std_dev: 3.20,
-    gadget_basis_bits: 1,
+    gadget_basis_bits: 6,
     key_switching_basis_bits: 3,
     key_switching_std_dev: (1u32 << 12) as f64,
 };
