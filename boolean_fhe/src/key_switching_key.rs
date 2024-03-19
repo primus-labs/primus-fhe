@@ -1,6 +1,4 @@
-use algebra::{
-    ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
-};
+use algebra::{ntt_add_mul_assign, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
@@ -93,7 +91,11 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                         let mut e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
                             .into_ntt_polynomial();
 
-                        ntt_add_mul_assign_ref(e.as_mut_slice(), &a, &ntt_lwe_sk);
+                        ntt_add_mul_assign(
+                            e.as_mut_slice(),
+                            a.copied_iter(),
+                            ntt_lwe_sk.copied_iter(),
+                        );
                         let b = e + &ntt_z;
 
                         if i < len - 1 {

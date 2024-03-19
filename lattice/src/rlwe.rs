@@ -1,7 +1,7 @@
 use std::ops::MulAssign;
 
 use algebra::{
-    ntt_add_mul_assign_ref, ntt_add_mul_assign_ref_fast, ntt_mul_add_inplace, ntt_mul_assign_ref,
+    ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
     transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
 };
 use num_traits::{NumCast, Zero};
@@ -276,8 +276,8 @@ impl<F: NTTField> RLWE<F> {
         ntt_table.transform_slice(destination.a_mut_slice());
         ntt_table.transform_slice(destination.b_mut_slice());
 
-        ntt_mul_assign_ref(destination.a_mut_slice(), &*polynomial);
-        ntt_mul_assign_ref(destination.b_mut_slice(), &*polynomial);
+        ntt_mul_assign(destination.a_mut_slice(), polynomial.copied_iter());
+        ntt_mul_assign(destination.b_mut_slice(), polynomial.copied_iter());
     }
 
     /// Performs `self + gadget_rlwe * polynomial`.
@@ -655,8 +655,16 @@ impl<F: NTTField> NTTRLWE<F> {
         ntt_rlwe: &NTTRLWE<F>,
         ntt_polynomial: &[F],
     ) {
-        ntt_add_mul_assign_ref(&mut self.a, &ntt_rlwe.a, ntt_polynomial);
-        ntt_add_mul_assign_ref(&mut self.b, &ntt_rlwe.b, ntt_polynomial);
+        ntt_add_mul_assign(
+            &mut self.a,
+            ntt_rlwe.a.copied_iter(),
+            ntt_polynomial.iter().copied(),
+        );
+        ntt_add_mul_assign(
+            &mut self.b,
+            ntt_rlwe.b.copied_iter(),
+            ntt_polynomial.iter().copied(),
+        );
     }
 
     /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
@@ -669,8 +677,16 @@ impl<F: NTTField> NTTRLWE<F> {
         ntt_rlwe: &NTTRLWE<F>,
         ntt_polynomial: &[F],
     ) {
-        ntt_add_mul_assign_ref_fast(&mut self.a, &ntt_rlwe.a, ntt_polynomial);
-        ntt_add_mul_assign_ref_fast(&mut self.b, &ntt_rlwe.b, ntt_polynomial);
+        ntt_add_mul_assign_fast(
+            &mut self.a,
+            ntt_rlwe.a.copied_iter(),
+            ntt_polynomial.iter().copied(),
+        );
+        ntt_add_mul_assign_fast(
+            &mut self.b,
+            ntt_rlwe.b.copied_iter(),
+            ntt_polynomial.iter().copied(),
+        );
     }
 
     /// Performs `destination = self + ntt_rlwe * ntt_polynomial`.
@@ -681,16 +697,16 @@ impl<F: NTTField> NTTRLWE<F> {
         ntt_polynomial: &[F],
         destination: &mut Self,
     ) {
-        ntt_mul_add_inplace(
+        ntt_add_mul_inplace(
+            self.a.copied_iter(),
             ntt_polynomial.iter().copied(),
-            ntt_rlwe.a.iter().copied(),
-            self.a.iter().copied(),
+            ntt_rlwe.a.copied_iter(),
             destination.a_mut(),
         );
-        ntt_mul_add_inplace(
+        ntt_add_mul_inplace(
+            self.b.copied_iter(),
             ntt_polynomial.iter().copied(),
-            ntt_rlwe.b.iter().copied(),
-            self.b.iter().copied(),
+            ntt_rlwe.b.copied_iter(),
             destination.b_mut(),
         );
     }

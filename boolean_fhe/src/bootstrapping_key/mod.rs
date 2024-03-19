@@ -1,6 +1,6 @@
 use algebra::{
-    modulus::PowOf2Modulus, ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial,
-    Random, RandomNTTField,
+    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, NTTField, NTTPolynomial, Polynomial, Random,
+    RandomNTTField,
 };
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
 
@@ -186,7 +186,11 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
+            ntt_add_mul_assign(
+                b.as_mut_slice(),
+                a.copied_iter(),
+                rlwe_secret_key.copied_iter(),
+            );
             <NTTRLWECiphertext<F>>::new(a, b)
         })
         .collect()
@@ -210,7 +214,11 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
+            ntt_add_mul_assign(
+                b.as_mut_slice(),
+                a.copied_iter(),
+                rlwe_secret_key.copied_iter(),
+            );
             b.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
@@ -237,7 +245,11 @@ where
             let mut a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
+            ntt_add_mul_assign(
+                b.as_mut_slice(),
+                a.copied_iter(),
+                rlwe_secret_key.copied_iter(),
+            );
             a.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })

@@ -414,7 +414,7 @@ fn test_rgsw_mul_rgsw() {
     let rlwe_m0m1 = &rgsw_m0m1.c_m().data()[0];
     let decrypted_m0m1 = rlwe_m0m1.b() - rlwe_m0m1.a() * &s;
 
-    let decoded_m0m1: Vec<u32> = m0m1.iter().copied().map(decode).collect();
+    let decoded_m0m1: Vec<u32> = m0m1.copied_iter().map(decode).collect();
     let decoded_decrypt: Vec<u32> = decrypted_m0m1.into_iter().map(decode).collect();
     assert_eq!(decoded_m0m1, decoded_decrypt);
 
@@ -422,7 +422,7 @@ fn test_rgsw_mul_rgsw() {
     let decrypted_neg_sm0m1 = rlwe_neg_sm0m1.b() - rlwe_neg_sm0m1.a() * &s;
     let neg_sm0m1 = m0m1 * &s.mul_scalar(FP - 1);
 
-    let decoded_neg_sm0m1: Vec<u32> = neg_sm0m1.iter().copied().map(decode).collect();
+    let decoded_neg_sm0m1: Vec<u32> = neg_sm0m1.copied_iter().map(decode).collect();
     let decoded_decrypt_neg_sm0m1: Vec<u32> = decrypted_neg_sm0m1.into_iter().map(decode).collect();
     assert_eq!(decoded_neg_sm0m1, decoded_decrypt_neg_sm0m1);
 }

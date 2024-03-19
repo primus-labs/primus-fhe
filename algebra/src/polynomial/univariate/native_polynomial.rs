@@ -7,7 +7,7 @@ use rand_distr::Distribution;
 
 use crate::field::{Field, NTTField};
 use crate::transformation::AbstractNTT;
-use crate::{ntt_mul_assign_fast, ntt_mul_assign_ref_fast, Basis, Random};
+use crate::{ntt_mul_assign_fast, Basis, Random};
 
 use super::NTTPolynomial;
 
@@ -115,6 +115,12 @@ impl<F: Field> Polynomial<F> {
     #[inline]
     pub fn iter(&self) -> Iter<F> {
         self.data.iter()
+    }
+
+    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
+    #[inline]
+    pub fn copied_iter(&self) -> std::iter::Copied<Iter<'_, F>> {
+        self.data.iter().copied()
     }
 
     /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
@@ -567,7 +573,7 @@ impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for Polynomial<F> {
 
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(lhs);
-        ntt_mul_assign_ref_fast(lhs, rhs);
+        ntt_mul_assign_fast(lhs, rhs.copied_iter());
         ntt_table.inverse_transform_slice(lhs);
     }
 }
