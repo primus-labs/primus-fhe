@@ -7,7 +7,7 @@ use lattice::{
     NTTRGSW, RLWE,
 };
 
-use crate::{secret_key::NTTRLWESecretKey, LWEType};
+use crate::{LWEType, NTTRLWESecretKey};
 
 use super::{ntt_rgsw_one, ntt_rgsw_zero};
 

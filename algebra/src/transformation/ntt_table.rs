@@ -48,20 +48,44 @@ where
 {
     /// Creates a new [`NTTTable<F>`].
     #[inline]
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         root: F,
-        inv_root: F,
         coeff_count_power: u32,
-        coeff_count: usize,
-        inv_degree: <F as NTTField>::Root,
-        root_powers: Vec<<F as NTTField>::Root>,
-        inv_root_powers: Vec<<F as NTTField>::Root>,
         ordinal_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
-        let reverse_lsbs = (0..coeff_count)
+        let coeff_count = 1usize << coeff_count_power;
+
+        let inv_root = F::from_root(*ordinal_root_powers.last().unwrap());
+
+        debug_assert_eq!(root * inv_root, F::ONE);
+
+        let root_one = ordinal_root_powers[0];
+
+        let reverse_lsbs: Vec<usize> = (0..coeff_count)
             .map(|i| i.reverse_lsbs(coeff_count_power))
             .collect();
+
+        let mut root_powers = vec![<F as NTTField>::Root::default(); coeff_count];
+        root_powers[0] = root_one;
+        for (&root_power, &i) in ordinal_root_powers[0..coeff_count]
+            .iter()
+            .zip(reverse_lsbs.iter())
+        {
+            root_powers[i] = root_power;
+        }
+
+        let mut inv_root_powers = vec![<F as NTTField>::Root::default(); coeff_count];
+        inv_root_powers[0] = root_one;
+        for (&inv_root_power, &i) in ordinal_root_powers[coeff_count + 1..]
+            .iter()
+            .rev()
+            .zip(reverse_lsbs.iter())
+        {
+            inv_root_powers[i + 1] = inv_root_power;
+        }
+
+        let inv_degree = <F as Field>::cast_from_usize(coeff_count).inv().to_root();
+
         Self {
             root,
             inv_root,

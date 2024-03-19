@@ -20,8 +20,7 @@ pub use decompose_basis::Basis;
 pub use error::AlgebraError;
 pub use field::{Field, NTTField, PrimeField, RandomNTTField};
 pub use polynomial::multivariate::{
-    data_structures::ListOfProductsOfPolynomials,
-    multilinear::{DenseMultilinearExtension, MultilinearExtension},
+    DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
 pub use polynomial::univariate::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,

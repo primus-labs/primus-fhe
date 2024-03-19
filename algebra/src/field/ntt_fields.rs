@@ -21,7 +21,7 @@ pub trait NTTField: PrimeField {
     type Table: AbstractNTT<Self>;
 
     /// The type representing the roots of unity within the field.
-    type Root: Copy + Debug;
+    type Root: Copy + Debug + Default;
 
     /// Degree type
     type Degree;

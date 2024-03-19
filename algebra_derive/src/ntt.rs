@@ -123,7 +123,6 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let root_one = Self(1).to_root();
 
                 let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
-                let inv_root = ::num_traits::Inv::inv(root);
 
                 let root_factor = root.to_root();
                 let mut power = root;
@@ -136,28 +135,9 @@ fn impl_ntt(input: Input) -> TokenStream {
                     *root_power = power.to_root();
                 }
 
-                let mut root_powers = vec![Self::Root::default(); n];
-                root_powers[0] = root_one;
-                for (i, &root_power) in ordinal_root_powers[0..n].iter().enumerate().skip(1) {
-                    root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n)] = root_power;
-                }
-
-                let mut inv_root_powers = vec![Self::Root::default(); n];
-                inv_root_powers[0] = root_one;
-                for (i, &inv_root_power) in ordinal_root_powers[n + 1..].iter().rev().enumerate() {
-                    inv_root_powers[::algebra::utils::ReverseLsbs::reverse_lsbs(i, log_n) + 1] = inv_root_power;
-                }
-
-                let inv_degree = ::num_traits::Inv::inv(<Self as ::algebra::Field>::cast_from_usize(n)).to_root();
-
                 Ok(Self::Table::new(
                     root,
-                    inv_root,
                     log_n,
-                    n,
-                    inv_degree,
-                    root_powers,
-                    inv_root_powers,
                     ordinal_root_powers,
                 ))
             }
