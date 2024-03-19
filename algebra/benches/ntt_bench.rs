@@ -48,7 +48,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let decompose_len = basis.decompose_len();
 
     let mut decompose = Vec::new();
-    decompose.resize_with(decompose_len, || <Polynomial<Fp>>::zero_with_coeff_count(n));
+    decompose.resize_with(decompose_len, || <Polynomial<Fp>>::zero(n));
 
     let mut group = c.benchmark_group("Polynomial decompose");
 

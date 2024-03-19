@@ -4,7 +4,7 @@ use algebra::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
     transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
 };
-use num_traits::{NumCast, Zero};
+use num_traits::NumCast;
 
 use crate::{
     DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW,
@@ -120,8 +120,8 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
         Self {
-            a: Polynomial::zero_with_coeff_count(coeff_count),
-            b: Polynomial::zero_with_coeff_count(coeff_count),
+            a: Polynomial::zero(coeff_count),
+            b: Polynomial::zero(coeff_count),
         }
     }
 
@@ -478,8 +478,8 @@ impl<F: NTTField> NTTRLWE<F> {
     #[inline]
     pub fn zero(coeff_count: usize) -> NTTRLWE<F> {
         Self {
-            a: <NTTPolynomial<F>>::zero_with_coeff_count(coeff_count),
-            b: <NTTPolynomial<F>>::zero_with_coeff_count(coeff_count),
+            a: <NTTPolynomial<F>>::zero(coeff_count),
+            b: <NTTPolynomial<F>>::zero(coeff_count),
         }
     }
 

@@ -38,8 +38,8 @@ fn test_transform_monomial() {
 
     let degree = rng.gen_range(0..N);
     let coeff = rng.gen();
-    let mut a = PolyFF::zero_with_coeff_count(N);
-    let mut b = NTTPolyFF::zero_with_coeff_count(N);
+    let mut a = PolyFF::zero(N);
+    let mut b = NTTPolyFF::zero(N);
     a[degree] = coeff;
 
     let table = Fp32::get_ntt_table(LOG_N as u32).unwrap();
@@ -57,8 +57,8 @@ fn test_monomial_property() {
 
     let degree = rng.gen_range(0..N);
 
-    let mut a = NTTPolyFF::zero_with_coeff_count(N);
-    let mut b = NTTPolyFF::zero_with_coeff_count(N);
+    let mut a = NTTPolyFF::zero(N);
+    let mut b = NTTPolyFF::zero(N);
 
     table.transform_monomial_inplace(Fp32::ONE, degree, a.as_mut_slice());
     table.transform_monomial_inplace(Fp32::NEG_ONE, degree + N, b.as_mut_slice());
@@ -147,13 +147,13 @@ fn test_poly_decompose() {
     let poly = PolyFF::random(N, rng);
     let basis = <Basis<Fp32>>::new(BITS);
     let decompose = poly.clone().decompose(basis);
-    let compose = decompose.into_iter().enumerate().fold(
-        PolyFF::zero_with_coeff_count(N),
-        |acc, (i, mut d)| {
+    let compose = decompose
+        .into_iter()
+        .enumerate()
+        .fold(PolyFF::zero(N), |acc, (i, mut d)| {
             d.mul_scalar_inplace(B.pow(i as u32) as Inner);
             acc + d
-        },
-    );
+        });
     assert_eq!(compose, poly);
 }
 
@@ -171,7 +171,7 @@ fn test_poly_decompose_mul() {
     let compose_mul_result = decompose
         .into_iter()
         .enumerate()
-        .fold(PolyFF::zero_with_coeff_count(N), |acc, (i, d)| {
+        .fold(PolyFF::zero(N), |acc, (i, d)| {
             acc + d * poly2.mul_scalar(B.pow(i as u32) as Inner)
         });
     assert_eq!(compose_mul_result, mul_result);

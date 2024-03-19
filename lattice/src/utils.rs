@@ -40,7 +40,7 @@ impl<F: NTTField> DecompositionSpace<F> {
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {
-            space: <Polynomial<F>>::zero_with_coeff_count(coeff_count),
+            space: <Polynomial<F>>::zero(coeff_count),
         }
     }
 
@@ -84,7 +84,7 @@ impl<F: NTTField> PolynomialSpace<F> {
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {
-            space: <Polynomial<F>>::zero_with_coeff_count(coeff_count),
+            space: <Polynomial<F>>::zero(coeff_count),
         }
     }
 
@@ -140,7 +140,7 @@ impl<F: NTTField> NTTPolynomialSpace<F> {
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {
-            space: <NTTPolynomial<F>>::zero_with_coeff_count(coeff_count),
+            space: <NTTPolynomial<F>>::zero(coeff_count),
         }
     }
 

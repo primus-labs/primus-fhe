@@ -2,7 +2,6 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 use std::vec::IntoIter;
 
-use num_traits::Zero;
 use rand_distr::Distribution;
 
 use crate::field::{Field, NTTField};
@@ -67,10 +66,22 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Creates a [`NTTPolynomial<F>`] with all coefficients equal to zero.
     #[inline]
-    pub fn zero_with_coeff_count(coeff_count: usize) -> Self {
+    pub fn zero(coeff_count: usize) -> Self {
         Self {
             data: vec![F::ZERO; coeff_count],
         }
+    }
+
+    /// Returns `true` if `self` is equal to `0`.
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        self.data.is_empty() || self.data.iter().all(F::is_zero)
+    }
+
+    /// Sets `self` to `0`.
+    #[inline]
+    pub fn set_zero(&mut self) {
+        self.data.fill(F::ZERO);
     }
 
     /// Extracts a slice containing the entire vector.
@@ -211,23 +222,6 @@ impl<F: Field> AsMut<[F]> for NTTPolynomial<F> {
     #[inline]
     fn as_mut(&mut self) -> &mut [F] {
         self.data.as_mut()
-    }
-}
-
-impl<F: Field> Zero for NTTPolynomial<F> {
-    #[inline]
-    fn zero() -> Self {
-        Self { data: Vec::new() }
-    }
-
-    #[inline]
-    fn is_zero(&self) -> bool {
-        self.data.is_empty() || self.data.iter().all(F::is_zero)
-    }
-
-    #[inline]
-    fn set_zero(&mut self) {
-        self.data.fill(F::ZERO);
     }
 }
 

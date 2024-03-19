@@ -31,7 +31,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
             .collect();
 
         let mut init = <NTTRLWE<F>>::new(
-            NTTPolynomial::zero_with_coeff_count(self.lwe_dimension),
+            NTTPolynomial::zero(self.lwe_dimension),
             NTTPolynomial::new(vec![ciphertext.b(); self.lwe_dimension]),
         );
 

@@ -106,7 +106,7 @@ fn init_nand_acc<F>(
 where
     F: NTTField,
 {
-    let mut v = Polynomial::zero_with_coeff_count(rlwe_dimension);
+    let mut v = Polynomial::zero(rlwe_dimension);
 
     let lwe_modulus_value = lwe_modulus.value();
 
@@ -123,5 +123,5 @@ where
             }
             b.sub_reduce_assign(1, lwe_modulus);
         });
-    RLWE::new(Polynomial::zero_with_coeff_count(rlwe_dimension), v)
+    RLWE::new(Polynomial::zero(rlwe_dimension), v)
 }
