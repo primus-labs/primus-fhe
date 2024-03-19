@@ -95,7 +95,7 @@ pub trait Field:
     const Q_DIV_8: Self;
 
     /// -q/8
-    const NRG_Q_DIV_8: Self;
+    const NEG_Q_DIV_8: Self;
 
     /// Creates a new instance.
     fn new(value: Self::Value) -> Self;

@@ -39,6 +39,27 @@ impl<F: NTTField> EvaluationKey<F> {
             lwe_modulus,
         );
 
+        let init_acc_t: RLWECiphertext<F> = init_nand_acc_re_work(
+            add.b(),
+            parameters.rlwe_dimension(),
+            parameters.twice_rlwe_dimension_div_lwe_modulus(),
+        );
+
+        dbg!(add.b());
+        dbg!(parameters.rlwe_dimension());
+        dbg!(parameters.twice_rlwe_dimension_div_lwe_modulus());
+        for (i, (l, r)) in init_acc
+            .b()
+            .iter()
+            .copied()
+            .zip(init_acc_t.b().iter().copied())
+            .enumerate()
+        {
+            if l != r {
+                println!("{}", i);
+            }
+        }
+
         self.bootstrap(add, init_acc)
     }
 
@@ -117,11 +138,51 @@ where
         .step_by(twice_rlwe_dimension_div_lwe_modulus)
         .for_each(|a| {
             if (l..r).contains(&b) {
-                *a = F::NRG_Q_DIV_8;
+                *a = F::NEG_Q_DIV_8;
             } else {
                 *a = F::Q_DIV_8;
             }
             b.sub_reduce_assign(1, lwe_modulus);
         });
+    RLWE::new(Polynomial::zero(rlwe_dimension), v)
+}
+
+fn init_nand_acc_re_work<F>(
+    b: LWEType,
+    rlwe_dimension: usize,
+    twice_rlwe_dimension_div_lwe_modulus: usize,
+) -> RLWE<F>
+where
+    F: NTTField,
+{
+    let mut v = Polynomial::zero(rlwe_dimension);
+
+    let d = b as usize * twice_rlwe_dimension_div_lwe_modulus;
+
+    let x = rlwe_dimension >> 2; // N/4
+    let y = (rlwe_dimension >> 1) + x; // 3N/4
+    let z = rlwe_dimension + y; // 7N/4
+    if d < y || d > z {
+        let mid = if d < y { d + x } else { d - z };
+        v[0..mid]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus)
+            .for_each(|a| *a = F::Q_DIV_8);
+        v[mid..]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus)
+            .for_each(|a| *a = F::NEG_Q_DIV_8);
+    } else {
+        let mid = d - y;
+        v[0..mid]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus)
+            .for_each(|a| *a = F::NEG_Q_DIV_8);
+        v[mid..]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus)
+            .for_each(|a| *a = F::Q_DIV_8);
+    }
+
     RLWE::new(Polynomial::zero(rlwe_dimension), v)
 }

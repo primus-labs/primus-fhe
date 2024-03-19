@@ -165,7 +165,7 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
 
             const Q_DIV_8: Self = Self(#modulus >> 3);
 
-            const NRG_Q_DIV_8: Self = Self(#modulus - (#modulus >> 3));
+            const NEG_Q_DIV_8: Self = Self(#modulus - (#modulus >> 3));
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
