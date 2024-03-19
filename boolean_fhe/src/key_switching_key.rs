@@ -22,11 +22,10 @@ impl<F: NTTField> KeySwitchingKey<F> {
             .a()
             .chunks_exact(self.lwe_dimension)
             .map(|a| {
-                <Polynomial<F>>::new(
-                    std::iter::once(a[0])
-                        .chain(a.iter().skip(1).rev().map(|&x| -x))
-                        .collect(),
-                )
+                let mut p: Vec<F> = a.iter().map(|&x| -x).collect();
+                p[0] = -p[0];
+                p[1..].reverse();
+                <Polynomial<F>>::new(p)
             })
             .collect();
 

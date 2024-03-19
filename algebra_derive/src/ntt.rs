@@ -128,9 +128,10 @@ fn impl_ntt(input: Input) -> TokenStream {
                 let mut power = root;
 
                 let mut ordinal_root_powers = vec![Self::Root::default(); n * 2];
-                ordinal_root_powers[0] = root_one;
-                ordinal_root_powers[1] = root_factor;
-                for root_power in ordinal_root_powers.iter_mut().skip(2) {
+                let mut iter = ordinal_root_powers.iter_mut();
+                *iter.next().unwrap() = root_one;
+                *iter.next().unwrap() = root_factor;
+                for root_power in iter {
                     power.mul_root_assign(root_factor);
                     *root_power = power.to_root();
                 }
