@@ -4,7 +4,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{Field, Random};
 
-use super::multilinear::{DenseMultilinearExtension, MultilinearExtension};
+use super::{DenseMultilinearExtension, MultilinearExtension};
 
 /// Stores a list of products of `DenseMultilinearExtension` that is meant to be added together.
 ///

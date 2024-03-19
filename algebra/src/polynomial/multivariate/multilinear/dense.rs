@@ -1,6 +1,5 @@
 // It is derived from https://github.com/arkworks-rs/sumcheck.
 
-use std::cmp::min;
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
@@ -8,10 +7,9 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::polynomial::multivariate::multilinear::MultilinearExtension;
-use crate::Random;
+use crate::{Field, Random};
 
-use crate::field::Field;
+use super::MultilinearExtension;
 
 /// Stores a multilinear polynomial in dense evaluation form.
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -93,6 +91,7 @@ impl<F: Field + Random> MultilinearExtension<F> for DenseMultilinearExtension<F>
                 .collect(),
         }
     }
+
     fn fix_variables(&self, partial_point: &[F]) -> Self {
         assert!(
             partial_point.len() <= self.num_vars,
@@ -143,7 +142,7 @@ impl<F: Field> Debug for DenseMultilinearExtension<F> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
         write!(f, "DenseML(nv = {}, evaluations = [", self.num_vars)?;
-        for i in 0..min(4, self.evaluations.len()) {
+        for i in 0..4.min(self.evaluations.len()) {
             write!(f, "{:?}", self.evaluations[i])?;
         }
         if self.evaluations.len() < 4 {
@@ -160,7 +159,7 @@ impl<F: Field> Zero for DenseMultilinearExtension<F> {
     fn zero() -> Self {
         Self {
             num_vars: 0,
-            evaluations: vec![F::zero()],
+            evaluations: vec![F::ZERO],
         }
     }
 
@@ -174,7 +173,7 @@ impl<F: Field> Add for DenseMultilinearExtension<F> {
     type Output = DenseMultilinearExtension<F>;
     #[inline]
     fn add(mut self, rhs: DenseMultilinearExtension<F>) -> Self {
-        self.add_assign(&rhs);
+        self.add_assign(rhs);
         self
     }
 }
@@ -201,7 +200,7 @@ impl<'a, 'b, F: Field> Add<&'a DenseMultilinearExtension<F>> for &'b DenseMultil
             return rhs.clone();
         }
         assert_eq!(self.num_vars, rhs.num_vars);
-        let result: Vec<F> = self.iter().zip(rhs.iter()).map(|(a, b)| *a + *b).collect();
+        let result: Vec<F> = self.iter().zip(rhs.iter()).map(|(&a, b)| a + b).collect();
         Self::Output::from_evaluations_vec(self.num_vars, result)
     }
 }
@@ -209,14 +208,14 @@ impl<'a, 'b, F: Field> Add<&'a DenseMultilinearExtension<F>> for &'b DenseMultil
 impl<F: Field> AddAssign for DenseMultilinearExtension<F> {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
-        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x += *y);
+        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x += y);
     }
 }
 
 impl<'a, F: Field> AddAssign<&'a DenseMultilinearExtension<F>> for DenseMultilinearExtension<F> {
     #[inline]
     fn add_assign(&mut self, rhs: &'a DenseMultilinearExtension<F>) {
-        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x += *y);
+        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x += y);
     }
 }
 
@@ -246,7 +245,7 @@ impl<F: Field> Sub for DenseMultilinearExtension<F> {
 
     #[inline]
     fn sub(mut self, rhs: Self) -> Self {
-        self.sub_assign(&rhs);
+        self.sub_assign(rhs);
         self
     }
 }
@@ -274,7 +273,7 @@ impl<'a, 'b, F: Field> Sub<&'a DenseMultilinearExtension<F>> for &'b DenseMultil
             return rhs.clone();
         }
         assert_eq!(self.num_vars, rhs.num_vars);
-        let result: Vec<F> = self.iter().zip(rhs.iter()).map(|(a, b)| *a - *b).collect();
+        let result: Vec<F> = self.iter().zip(rhs.iter()).map(|(&a, b)| a - b).collect();
         Self::Output::from_evaluations_vec(self.num_vars, result)
     }
 }
@@ -282,13 +281,13 @@ impl<'a, 'b, F: Field> Sub<&'a DenseMultilinearExtension<F>> for &'b DenseMultil
 impl<F: Field> SubAssign for DenseMultilinearExtension<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x -= *y);
+        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x -= y);
     }
 }
 
 impl<'a, F: Field> SubAssign<&'a DenseMultilinearExtension<F>> for DenseMultilinearExtension<F> {
     #[inline]
     fn sub_assign(&mut self, rhs: &'a DenseMultilinearExtension<F>) {
-        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x -= *y);
+        self.iter_mut().zip(rhs.iter()).for_each(|(x, y)| *x -= y);
     }
 }
