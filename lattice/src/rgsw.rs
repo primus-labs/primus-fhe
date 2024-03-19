@@ -238,7 +238,6 @@ impl<F: NTTField> NTTRGSW<F> {
         ntt_polynomial: &NTTPolynomial<F>,
         destination: &mut Self,
     ) {
-        destination.set_zero();
         self.c_neg_s_m()
             .add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
                 rhs.c_neg_s_m(),

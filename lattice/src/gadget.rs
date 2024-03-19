@@ -294,7 +294,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         })
     }
 
-    /// Perform `self + rhs * ntt_polynomial`, and store the result into destination.
+    /// Perform `destination = self + rhs * ntt_polynomial`, and store the result into destination.
     pub fn add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
         &self,
         rhs: &Self,
