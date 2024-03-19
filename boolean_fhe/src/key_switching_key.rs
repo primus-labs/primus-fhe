@@ -99,7 +99,7 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                         let b = e + &ntt_z;
 
                         if i < len - 1 {
-                            ntt_z.mul_scalar_inplace(key_switching_basis.basis());
+                            ntt_z.mul_scalar_assign(key_switching_basis.basis());
                         }
 
                         NTTRLWECiphertext::new(a, b)

@@ -4,9 +4,8 @@ use std::vec::IntoIter;
 
 use rand_distr::Distribution;
 
-use crate::field::{Field, NTTField};
 use crate::transformation::AbstractNTT;
-use crate::Random;
+use crate::{Field, NTTField, Random};
 
 use super::Polynomial;
 
@@ -120,7 +119,7 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Multiply `self` with the a scalar inplace.
     #[inline]
-    pub fn mul_scalar_inplace(&mut self, scalar: F::Value) {
+    pub fn mul_scalar_assign(&mut self, scalar: F::Value) {
         self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 

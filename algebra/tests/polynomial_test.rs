@@ -151,7 +151,7 @@ fn test_poly_decompose() {
         .into_iter()
         .enumerate()
         .fold(PolyFF::zero(N), |acc, (i, mut d)| {
-            d.mul_scalar_inplace(B.pow(i as u32) as Inner);
+            d.mul_scalar_assign(B.pow(i as u32) as Inner);
             acc + d
         });
     assert_eq!(compose, poly);

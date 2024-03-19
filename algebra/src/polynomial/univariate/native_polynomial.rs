@@ -4,9 +4,8 @@ use std::vec::IntoIter;
 
 use rand_distr::Distribution;
 
-use crate::field::{Field, NTTField};
 use crate::transformation::AbstractNTT;
-use crate::{ntt_mul_assign_fast, Basis, Random};
+use crate::{ntt_mul_assign_fast, Basis, Field, NTTField, Random};
 
 use super::NTTPolynomial;
 
@@ -118,7 +117,7 @@ impl<F: Field> Polynomial<F> {
 
     /// Multiply `self` with the a scalar inplace.
     #[inline]
-    pub fn mul_scalar_inplace(&mut self, scalar: F::Value) {
+    pub fn mul_scalar_assign(&mut self, scalar: F::Value) {
         self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 
@@ -161,10 +160,13 @@ impl<F: Field> Polynomial<F> {
         self.data.resize_with(new_degree, f);
     }
 
-    /// Given `x`, outputs `f(x)`
+    /// Given `x`, outputs `f(x)
     #[inline]
     pub fn evaluate(&self, x: F) -> F {
-        self.data.iter().rev().fold(F::ZERO, |acc, &a| acc * x + a)
+        self.data
+            .iter()
+            .rev()
+            .fold(F::ZERO, |acc, &a| a.add_mul(acc, x))
     }
 }
 
