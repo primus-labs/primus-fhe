@@ -433,36 +433,6 @@ impl<F: NTTField> RLWE<F> {
 
         median.inverse_transform_inplace(destination)
     }
-
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
-    /// output the [`RLWE<F>`] result into `destination`.
-    ///
-    /// # Attention
-    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
-    #[inline]
-    pub fn mul_small_ntt_rgsw_inplace_2(
-        &self,
-        small_ntt_rgsw: &NTTRGSW<F>,
-        // Pre allocate space
-        decompose_space: &mut DecompositionSpace<F>,
-        polynomial_space: &mut PolynomialSpace<F>,
-        // Output destination
-        destination: &mut NTTRLWESpace<F>,
-    ) {
-        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
-            self.a(),
-            decompose_space,
-            polynomial_space,
-            destination,
-        );
-
-        destination.add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
-            small_ntt_rgsw.c_m(),
-            self.b(),
-            decompose_space,
-            polynomial_space,
-        );
-    }
 }
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
