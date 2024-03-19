@@ -221,7 +221,7 @@ impl<F: NTTField> NTTRGSW<F> {
         self.c_neg_s_m.basis()
     }
 
-    /// .
+    /// Perform `self = self * ntt_polynomial`.
     pub fn mul_ntt_polynomial_assign(&mut self, ntt_polynomial: &NTTPolynomial<F>) {
         self.c_m_mut()
             .iter_mut()

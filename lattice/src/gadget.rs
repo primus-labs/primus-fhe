@@ -89,7 +89,7 @@ impl<F: NTTField> GadgetRLWE<F> {
         let space = decompose_space.get_mut();
         self.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(self.basis, space);
-            g.mul_polynomial_inplace_lazy(space, &mut temp);
+            g.mul_polynomial_inplace(space, &mut temp);
             ntt_rlwe.add_element_wise_assign(&temp);
         });
         <RLWE<F>>::from(ntt_rlwe)
@@ -109,7 +109,7 @@ impl<F: NTTField> GadgetRLWE<F> {
         let space = decompose_space.get_mut();
         self.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(self.basis, space);
-            g.mul_polynomial_inplace_lazy(space, &mut temp);
+            g.mul_polynomial_inplace(space, &mut temp);
             ntt_rlwe.add_element_wise_assign(&temp);
         });
         <RLWE<F>>::from(ntt_rlwe)

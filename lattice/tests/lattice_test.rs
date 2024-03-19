@@ -141,7 +141,7 @@ fn test_rlwe() {
     );
     let r = r.into_ntt_polynomial();
     let mut d = NTTRLWE::zero(N);
-    rlwe1.mul_polynomial(&r, &mut d);
+    rlwe1.mul_ntt_polynomial_inplace(&r, &mut d);
     d.inverse_transform_inplace(&mut rlwe2);
     assert_eq!(rlwe2, rlwe3);
 }
@@ -254,7 +254,7 @@ fn test_gadget_rlwe() {
     let np = poly.clone().into_ntt_polynomial();
     let mut d = NTTRLWE::zero(N);
 
-    m_base_power[0].clone().mul_polynomial(&np, &mut d);
+    m_base_power[0].clone().mul_ntt_polynomial_inplace(&np, &mut d);
 
     let bad_rlwe_mul = RLWE::from(d);
     let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;

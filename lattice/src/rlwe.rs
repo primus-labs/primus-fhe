@@ -254,7 +254,11 @@ impl<F: NTTField> RLWE<F> {
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`],
     /// store the result into `destination` [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_polynomial(&self, polynomial: &NTTPolynomial<F>, destination: &mut NTTRLWE<F>) {
+    pub fn mul_ntt_polynomial_inplace(
+        &self,
+        polynomial: &NTTPolynomial<F>,
+        destination: &mut NTTRLWE<F>,
+    ) {
         let coeff_count = polynomial.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());
 
@@ -275,7 +279,11 @@ impl<F: NTTField> RLWE<F> {
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
     /// store the result into `destination` [`NTTRLWE<F>`].
-    pub fn mul_polynomial_inplace_lazy(
+    /// 
+    /// # Attention
+    /// 
+    /// `polynomial` will be transformed into **ntt** form.
+    pub fn mul_polynomial_inplace(
         &self,
         polynomial: &mut Polynomial<F>,
         destination: &mut NTTRLWE<F>,
