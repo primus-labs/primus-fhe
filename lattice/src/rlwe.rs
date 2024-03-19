@@ -173,6 +173,12 @@ impl<F: NTTField> RLWE<F> {
         self.b.as_mut_slice()
     }
 
+    /// Extracts mutable slice of `a` and `b` of this [`RLWE<F>`].
+    #[inline]
+    pub fn mut_slices(&mut self) -> (&mut [F], &mut [F]) {
+        (self.a.as_mut_slice(), self.b.as_mut_slice())
+    }
+
     /// Perform element-wise addition of two [`RLWE<F>`].
     ///
     /// # Attention
@@ -245,15 +251,26 @@ impl<F: NTTField> RLWE<F> {
         self.b -= rhs.b();
     }
 
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
-    /// return a [`RLWE<F>`].
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`],
+    /// store the result into `destination` [`NTTRLWE<F>`].
     #[inline]
-    pub fn mul_polynomial(&self, polynomial: Polynomial<F>) -> Self {
-        let ntt_polynomial = <NTTPolynomial<F>>::from(polynomial);
-        Self {
-            a: self.a() * &ntt_polynomial,
-            b: self.b() * ntt_polynomial,
-        }
+    pub fn mul_polynomial(&self, polynomial: &NTTPolynomial<F>, destination: &mut NTTRLWE<F>) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+
+        let log_n = coeff_count.trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+
+        let (a, b) = destination.mut_slices();
+
+        a.copy_from_slice(self.a_slice());
+        b.copy_from_slice(self.b_slice());
+
+        ntt_table.transform_slice(a);
+        ntt_table.transform_slice(b);
+
+        ntt_mul_assign(a, polynomial.copied_iter());
+        ntt_mul_assign(b, polynomial.copied_iter());
     }
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
@@ -533,25 +550,31 @@ impl<F: NTTField> NTTRLWE<F> {
         &mut self.b
     }
 
-    /// Extracts a slice of `a` of this [`RLWE<F>`].
+    /// Extracts a slice of `a` of this [`NTTRLWE<F>`].
     #[inline]
     pub fn a_slice(&self) -> &[F] {
         self.a.as_slice()
     }
 
-    /// Extracts a mutable slice of `a` of this [`RLWE<F>`].
+    /// Extracts a mutable slice of `a` of this [`NTTRLWE<F>`].
     #[inline]
     pub fn a_mut_slice(&mut self) -> &mut [F] {
         self.a.as_mut_slice()
     }
 
-    /// Extracts a slice of `b` of this [`RLWE<F>`].
+    /// Extracts mutable slice of `a` and `b` of this [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mut_slices(&mut self) -> (&mut [F], &mut [F]) {
+        (self.a.as_mut_slice(), self.b.as_mut_slice())
+    }
+
+    /// Extracts a slice of `b` of this [`NTTRLWE<F>`].
     #[inline]
     pub fn b_slice(&self) -> &[F] {
         self.b.as_slice()
     }
 
-    /// Extracts a mutable slice of `b` of this [`RLWE<F>`].
+    /// Extracts a mutable slice of `b` of this [`NTTRLWE<F>`].
     #[inline]
     pub fn b_mut_slice(&mut self) -> &mut [F] {
         self.b.as_mut_slice()
