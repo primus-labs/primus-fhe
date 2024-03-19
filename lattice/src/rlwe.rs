@@ -433,6 +433,36 @@ impl<F: NTTField> RLWE<F> {
 
         median.inverse_transform_inplace(destination)
     }
+
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
+    /// output the [`RLWE<F>`] result into `destination`.
+    ///
+    /// # Attention
+    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    #[inline]
+    pub fn mul_small_ntt_rgsw_inplace_2(
+        &self,
+        small_ntt_rgsw: &NTTRGSW<F>,
+        // Pre allocate space
+        decompose_space: &mut DecompositionSpace<F>,
+        polynomial_space: &mut PolynomialSpace<F>,
+        // Output destination
+        destination: &mut NTTRLWESpace<F>,
+    ) {
+        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
+            self.a(),
+            decompose_space,
+            polynomial_space,
+            destination,
+        );
+
+        destination.add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
+            small_ntt_rgsw.c_m(),
+            self.b(),
+            decompose_space,
+            polynomial_space,
+        );
+    }
 }
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
@@ -500,7 +530,7 @@ impl<F: NTTField> NTTRLWE<F> {
         }
     }
 
-    /// Creates a [`NTTRLWE<F>`] with all entries equal to zero.
+    /// Set all entries equal to zero.
     #[inline]
     pub fn set_zero(&mut self) {
         self.a.set_zero();
@@ -513,17 +543,13 @@ impl<F: NTTField> NTTRLWE<F> {
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
-        destination
-            .a_mut()
-            .as_mut_slice()
-            .copy_from_slice(self.a.as_slice());
-        destination
-            .b_mut()
-            .as_mut_slice()
-            .copy_from_slice(self.b.as_slice());
+        let (a, b) = destination.mut_slices();
 
-        ntt_table.inverse_transform_slice(destination.a_mut().as_mut_slice());
-        ntt_table.inverse_transform_slice(destination.b_mut().as_mut_slice());
+        a.copy_from_slice(self.a_slice());
+        b.copy_from_slice(self.b_slice());
+
+        ntt_table.inverse_transform_slice(a);
+        ntt_table.inverse_transform_slice(b);
     }
 
     /// Returns a reference to the a of this [`NTTRLWE<F>`].
@@ -769,7 +795,7 @@ impl<F: NTTField> NTTRLWE<F> {
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
         let basis = gadget_rlwe.basis();
 
-        polynomial_space.copy_from_polynomial(polynomial);
+        polynomial_space.copy_from(polynomial);
 
         gadget_rlwe.iter().for_each(|g| {
             polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
@@ -796,7 +822,7 @@ impl<F: NTTField> NTTRLWE<F> {
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
         let basis = gadget_rlwe.basis();
 
-        polynomial_space.copy_from_polynomial(polynomial);
+        polynomial_space.copy_from(polynomial);
 
         gadget_rlwe.iter().for_each(|g| {
             polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);

@@ -99,18 +99,6 @@ impl<F: NTTField> PolynomialSpace<F> {
     pub fn get_mut(&mut self) -> &mut Polynomial<F> {
         &mut self.space
     }
-
-    /// Returns the coeff count of this [`PolynomialSpace<F>`].
-    #[inline]
-    pub fn coeff_count(&self) -> usize {
-        self.space.coeff_count()
-    }
-
-    /// Copies all coefficients from `src` into `self`, using a memcpy.
-    #[inline]
-    pub fn copy_from_polynomial(&mut self, src: &Polynomial<F>) {
-        self.as_mut_slice().copy_from_slice(src.as_slice());
-    }
 }
 
 /// Pre allocated space for inplace polynomial operation.
@@ -154,18 +142,6 @@ impl<F: NTTField> NTTPolynomialSpace<F> {
     #[inline]
     pub fn get_mut(&mut self) -> &mut NTTPolynomial<F> {
         &mut self.space
-    }
-
-    /// Returns the coeff count of this [`PolynomialSpace<F>`].
-    #[inline]
-    pub fn coeff_count(&self) -> usize {
-        self.space.coeff_count()
-    }
-
-    /// Copies all coefficients from `src` into `self`, using a memcpy.
-    #[inline]
-    pub fn copy_from_polynomial(&mut self, src: &NTTPolynomial<F>) {
-        self.as_mut_slice().copy_from_slice(src.as_slice());
     }
 }
 

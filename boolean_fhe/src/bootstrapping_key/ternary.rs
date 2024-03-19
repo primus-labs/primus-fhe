@@ -1,6 +1,5 @@
 use algebra::{
-    modulus::PowOf2Modulus, reduce::NegReduce, transformation::AbstractNTT, Basis, NTTField,
-    Random, RandomNTTField,
+    modulus::PowOf2Modulus, transformation::AbstractNTT, Basis, NTTField, Random, RandomNTTField,
 };
 use lattice::{
     DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
@@ -30,60 +29,65 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         lwe_a: &[LWEType],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEType>,
+        _lwe_modulus: PowOf2Modulus<LWEType>,
         gadget_basis: Basis<F>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
-        let ntt_polynomial_space = &mut NTTPolynomialSpace::new(rlwe_dimension);
+        let ntt_polynomial = &mut NTTPolynomialSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
-        let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
-        let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);
-        let evk_space = &mut NTTRGSWSpace::new(rlwe_dimension, gadget_basis);
+        let external_product = &mut NTTRLWESpace::new(rlwe_dimension);
+        let median = &mut RLWESpace::new(rlwe_dimension);
+        let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, gadget_basis);
 
         let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
+        let twice_rlwe_dimension = rlwe_dimension << 1;
 
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                let degree =
-                    (a_i.neg_reduce(lwe_modulus) as usize) * twice_rlwe_dimension_div_lwe_modulus;
-                let degree = if degree < rlwe_dimension {
-                    rlwe_dimension - degree
-                } else {
-                    rlwe_dimension * 2 - (degree - rlwe_dimension)
-                };
+                let degree = (a_i as usize) * twice_rlwe_dimension_div_lwe_modulus;
 
+                // ntt_polynomial = Y^{a_i}
                 ntt_table.transform_monomial_inplace(
-                    F::ONE,
+                    F::NEG_ONE,
                     degree,
-                    ntt_polynomial_space.as_mut_slice(),
+                    ntt_polynomial.as_mut_slice(),
                 );
 
+                // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}
                 s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
                     &s_i.1,
-                    ntt_polynomial_space,
-                    evk_space,
+                    ntt_polynomial,
+                    evaluation_key,
                 );
 
-                // acc_mul_rgsw = ACC * RGSW(s_i)
-                acc.mul_small_ntt_rgsw_inplace(
-                    evk_space,
+                // external_product = ACC * evaluation_key
+                //                  = ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                acc.mul_small_ntt_rgsw_inplace_2(
+                    evaluation_key,
                     decompose_space,
                     polynomial_space,
-                    ntt_rlwe_space,
-                    acc_mul_rgsw,
+                    external_product,
                 );
-                // ACC = ACC - ACC * RGSW(s_i)
-                acc.sub_assign_element_wise(acc_mul_rgsw);
-                // ACC = ACC - ACC * RGSW(s_i) + Y^{a_i} * ACC * RGSW(s_i)
-                //     = ACC + (Y^{a_i} - 1) * ACC * RGSW(s_i)
-                acc.add_assign_rhs_mul_monic_monomial(
-                    acc_mul_rgsw,
-                    rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_modulus,
-                    a_i,
+
+                // ntt_polynomial = Y^{-a_i} - 1
+                ntt_table.transform_monomial_inplace(
+                    F::ONE,
+                    twice_rlwe_dimension - degree,
+                    ntt_polynomial.as_mut_slice(),
                 );
+
+                ntt_polynomial.iter_mut().for_each(|v| *v -= F::ONE);
+
+                // median = ntt_polynomial * external_product
+                //        = (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                external_product.mul_ntt_polynomial_assign(ntt_polynomial);
+                external_product.inverse_transform_inplace(median);
+                // ACC = ACC + median
+                //     = ACC + (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                acc.add_assign_element_wise(median);
+
                 acc
             })
     }

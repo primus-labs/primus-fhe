@@ -184,6 +184,13 @@ impl<F: NTTField> NTTRGSW<F> {
         }
     }
 
+    /// Set all entries equal to zero.
+    #[inline]
+    pub fn set_zero(&mut self) {
+        self.c_m.set_zero();
+        self.c_neg_s_m.set_zero();
+    }
+
     /// Returns a reference to the c neg s m of this [`NTTRGSW<F>`].
     #[inline]
     pub fn c_neg_s_m(&self) -> &NTTGadgetRLWE<F> {
@@ -214,6 +221,16 @@ impl<F: NTTField> NTTRGSW<F> {
         self.c_neg_s_m.basis()
     }
 
+    /// .
+    pub fn mul_ntt_polynomial_assign(&mut self, ntt_polynomial: &NTTPolynomial<F>) {
+        self.c_m_mut()
+            .iter_mut()
+            .for_each(|p| p.mul_ntt_polynomial_assign(ntt_polynomial));
+        self.c_neg_s_m_mut()
+            .iter_mut()
+            .for_each(|p| p.mul_ntt_polynomial_assign(ntt_polynomial));
+    }
+
     /// Perform `self + rhs * ntt_polynomial`, and store the result into destination.
     pub fn add_ntt_rgsw_mul_ntt_polynomial_inplace(
         &self,
@@ -221,6 +238,7 @@ impl<F: NTTField> NTTRGSW<F> {
         ntt_polynomial: &NTTPolynomial<F>,
         destination: &mut Self,
     ) {
+        destination.set_zero();
         self.c_neg_s_m()
             .add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
                 rhs.c_neg_s_m(),

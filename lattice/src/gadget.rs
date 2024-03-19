@@ -182,6 +182,12 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         }
     }
 
+    /// Set all entries equal to zero.
+    #[inline]
+    pub fn set_zero(&mut self) {
+        self.data.iter_mut().for_each(|rlwe| rlwe.set_zero());
+    }
+
     /// Returns a reference to the data of this [`NTTGadgetRLWE<F>`].
     #[inline]
     pub fn data(&self) -> &[NTTRLWE<F>] {
@@ -244,9 +250,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
-        polynomial_space
-            .as_mut_slice()
-            .copy_from_slice(polynomial.as_slice());
+        polynomial_space.copy_from(polynomial);
 
         destination.set_zero();
 
@@ -276,9 +280,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         debug_assert!(coeff_count.is_power_of_two());
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
-        polynomial_space
-            .as_mut_slice()
-            .copy_from_slice(polynomial.as_slice());
+        polynomial_space.copy_from(polynomial);
 
         destination.set_zero();
 

@@ -88,6 +88,12 @@ impl<F: Field> Polynomial<F> {
         self.data.fill(F::ZERO);
     }
 
+    /// Copy the coefficients from another slice.
+    #[inline]
+    pub fn copy_from(&mut self, src: impl AsRef<[F]>) {
+        self.data.copy_from_slice(src.as_ref())
+    }
+
     /// Extracts a slice containing the entire vector.
     ///
     /// Equivalent to `&s[..]`.
