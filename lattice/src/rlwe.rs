@@ -279,9 +279,9 @@ impl<F: NTTField> RLWE<F> {
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
     /// store the result into `destination` [`NTTRLWE<F>`].
-    /// 
+    ///
     /// # Attention
-    /// 
+    ///
     /// `polynomial` will be transformed into **ntt** form.
     pub fn mul_polynomial_inplace(
         &self,

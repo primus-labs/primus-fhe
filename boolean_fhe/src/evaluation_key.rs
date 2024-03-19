@@ -1,6 +1,4 @@
-use algebra::{
-    modulus::PowOf2Modulus, reduce::SubReduceAssign, NTTField, Polynomial, RandomNTTField,
-};
+use algebra::{NTTField, Polynomial, RandomNTTField};
 use lattice::{LWE, RLWE};
 
 use crate::{
@@ -36,29 +34,7 @@ impl<F: NTTField> EvaluationKey<F> {
             add.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
-            lwe_modulus,
         );
-
-        let init_acc_t: RLWECiphertext<F> = init_nand_acc_re_work(
-            add.b(),
-            parameters.rlwe_dimension(),
-            parameters.twice_rlwe_dimension_div_lwe_modulus(),
-        );
-
-        dbg!(add.b());
-        dbg!(parameters.rlwe_dimension());
-        dbg!(parameters.twice_rlwe_dimension_div_lwe_modulus());
-        for (i, (l, r)) in init_acc
-            .b()
-            .iter()
-            .copied()
-            .zip(init_acc_t.b().iter().copied())
-            .enumerate()
-        {
-            if l != r {
-                println!("{}", i);
-            }
-        }
 
         self.bootstrap(add, init_acc)
     }
@@ -119,35 +95,6 @@ impl<F: RandomNTTField> EvaluationKey<F> {
 }
 
 fn init_nand_acc<F>(
-    mut b: LWEType,
-    rlwe_dimension: usize,
-    twice_rlwe_dimension_div_lwe_modulus: usize,
-    lwe_modulus: PowOf2Modulus<LWEType>,
-) -> RLWE<F>
-where
-    F: NTTField,
-{
-    let mut v = Polynomial::zero(rlwe_dimension);
-
-    let lwe_modulus_value = lwe_modulus.value();
-
-    let l = (lwe_modulus_value >> 3) * 3;
-    let r = (lwe_modulus_value >> 3) * 7;
-
-    v.iter_mut()
-        .step_by(twice_rlwe_dimension_div_lwe_modulus)
-        .for_each(|a| {
-            if (l..r).contains(&b) {
-                *a = F::NEG_Q_DIV_8;
-            } else {
-                *a = F::Q_DIV_8;
-            }
-            b.sub_reduce_assign(1, lwe_modulus);
-        });
-    RLWE::new(Polynomial::zero(rlwe_dimension), v)
-}
-
-fn init_nand_acc_re_work<F>(
     b: LWEType,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
@@ -157,32 +104,75 @@ where
 {
     let mut v = Polynomial::zero(rlwe_dimension);
 
-    let d = b as usize * twice_rlwe_dimension_div_lwe_modulus;
+    let b = b as usize * twice_rlwe_dimension_div_lwe_modulus;
 
     let x = rlwe_dimension >> 2; // N/4
     let y = (rlwe_dimension >> 1) + x; // 3N/4
     let z = rlwe_dimension + y; // 7N/4
-    if d < y || d > z {
-        let mid = if d < y { d + x } else { d - z };
-        v[0..mid]
+    if b < y || b >= z {
+        let mid = if b < y { b + x } else { b - z };
+        v[0..=mid]
             .iter_mut()
             .step_by(twice_rlwe_dimension_div_lwe_modulus)
             .for_each(|a| *a = F::Q_DIV_8);
-        v[mid..]
+
+        let mut iter = v[mid..]
             .iter_mut()
-            .step_by(twice_rlwe_dimension_div_lwe_modulus)
-            .for_each(|a| *a = F::NEG_Q_DIV_8);
+            .step_by(twice_rlwe_dimension_div_lwe_modulus);
+        iter.next();
+        iter.for_each(|a| *a = F::NEG_Q_DIV_8);
     } else {
-        let mid = d - y;
-        v[0..mid]
+        let mid = b - y;
+        v[0..=mid]
             .iter_mut()
             .step_by(twice_rlwe_dimension_div_lwe_modulus)
             .for_each(|a| *a = F::NEG_Q_DIV_8);
-        v[mid..]
+
+        let mut iter = v[mid..]
             .iter_mut()
-            .step_by(twice_rlwe_dimension_div_lwe_modulus)
-            .for_each(|a| *a = F::Q_DIV_8);
+            .step_by(twice_rlwe_dimension_div_lwe_modulus);
+        iter.next();
+        iter.for_each(|a| *a = F::Q_DIV_8);
     }
 
     RLWE::new(Polynomial::zero(rlwe_dimension), v)
+}
+
+#[test]
+fn test_init_nand_acc() {
+    use std::ops::Neg;
+
+    use algebra::modulus::PowOf2Modulus;
+    use algebra::reduce::{NegReduce, SubReduce};
+    use algebra::Field;
+
+    use crate::DefaultField100;
+
+    const N: usize = 64;
+    let q = 16u16;
+    let modulus = <PowOf2Modulus<u16>>::new(q);
+    let ratio = N * 2 / (q as usize);
+    let l = (q >> 3) * 3;
+    let r = (q >> 3) * 7;
+    for b in 0..q {
+        let acc = init_nand_acc::<DefaultField100>(b, N, ratio);
+        for a in 0..q {
+            let ra = a.neg_reduce(modulus) as usize * ratio;
+            let m = if ra == 0 {
+                acc.b()[0]
+            } else if ra < N {
+                acc.b()[N - ra].neg()
+            } else if ra == N {
+                acc.b()[0].neg()
+            } else {
+                acc.b()[2 * N - ra]
+            };
+
+            if (l..r).contains(&(b.sub_reduce(a, modulus))) {
+                assert_eq!(m, DefaultField100::NEG_Q_DIV_8, "b:{b} a:{a}");
+            } else {
+                assert_eq!(m, DefaultField100::Q_DIV_8, "b:{b} a:{a}");
+            }
+        }
+    }
 }

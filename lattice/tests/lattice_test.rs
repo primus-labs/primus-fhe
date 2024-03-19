@@ -254,7 +254,9 @@ fn test_gadget_rlwe() {
     let np = poly.clone().into_ntt_polynomial();
     let mut d = NTTRLWE::zero(N);
 
-    m_base_power[0].clone().mul_ntt_polynomial_inplace(&np, &mut d);
+    m_base_power[0]
+        .clone()
+        .mul_ntt_polynomial_inplace(&np, &mut d);
 
     let bad_rlwe_mul = RLWE::from(d);
     let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
