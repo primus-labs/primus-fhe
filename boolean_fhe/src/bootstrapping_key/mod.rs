@@ -186,11 +186,7 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign(
-                b.as_mut_slice(),
-                a.copied_iter(),
-                rlwe_secret_key.copied_iter(),
-            );
+            ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
         .collect()
@@ -214,11 +210,7 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign(
-                b.as_mut_slice(),
-                a.copied_iter(),
-                rlwe_secret_key.copied_iter(),
-            );
+            ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             b.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
@@ -245,11 +237,7 @@ where
             let mut a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign(
-                b.as_mut_slice(),
-                a.copied_iter(),
-                rlwe_secret_key.copied_iter(),
-            );
+            ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             a.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })

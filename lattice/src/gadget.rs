@@ -292,13 +292,14 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
         destination.set_zero();
 
+        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
+
         self.iter().for_each(|g_rlwe| {
             polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-            destination.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(
-                g_rlwe,
-                decompose_space.as_mut_slice(),
-            );
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            destination.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g_rlwe, &ntt_polynomial);
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
         })
     }
 

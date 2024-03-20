@@ -74,7 +74,7 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 .collect(),
         );
 
-        let ntt_lwe_sk = s.into_ntt_polynomial();
+        let s = s.into_ntt_polynomial();
 
         let len = key_switching_basis.decompose_len();
 
@@ -90,11 +90,7 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                         let mut e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
                             .into_ntt_polynomial();
 
-                        ntt_add_mul_assign(
-                            e.as_mut_slice(),
-                            a.copied_iter(),
-                            ntt_lwe_sk.copied_iter(),
-                        );
+                        ntt_add_mul_assign(&mut e, &a, &s);
                         let b = e + &ntt_z;
 
                         if i < len - 1 {
