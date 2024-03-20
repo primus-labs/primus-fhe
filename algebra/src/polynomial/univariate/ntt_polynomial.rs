@@ -57,7 +57,7 @@ impl<F: Field> NTTPolynomial<F> {
         Self::new(vec.to_vec())
     }
 
-    /// Drop self, and return the data
+    /// Drop self, and return the data.
     #[inline]
     pub fn data(self) -> Vec<F> {
         self.data

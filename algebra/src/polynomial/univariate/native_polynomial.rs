@@ -61,7 +61,7 @@ impl<F: Field> Polynomial<F> {
         Self::new(polynomial.to_vec())
     }
 
-    /// Drop self, and return the data
+    /// Drop self, and return the data.
     #[inline]
     pub fn data(self) -> Vec<F> {
         self.data
@@ -160,7 +160,7 @@ impl<F: Field> Polynomial<F> {
         self.data.resize_with(new_degree, f);
     }
 
-    /// Given `x`, outputs `f(x)
+    /// Treats `self` as a function `f`. Given `x`, outputs `f(x)`.
     #[inline]
     pub fn evaluate(&self, x: F) -> F {
         self.data
@@ -199,7 +199,7 @@ impl<F: Field + Random> Polynomial<F> {
 }
 
 impl<F: NTTField> Polynomial<F> {
-    /// Convert `self` from [`Polynomial<F>`] to [`NTTPolynomial<F>`]
+    /// Convert `self` from [`Polynomial<F>`] to [`NTTPolynomial<F>`].
     #[inline]
     pub fn into_ntt_polynomial(self) -> NTTPolynomial<F> {
         <NTTPolynomial<F>>::from(self)
