@@ -48,7 +48,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
                 let degree = (a_i as usize) * twice_rlwe_dimension_div_lwe_modulus;
 
-                // ntt_polynomial = Y^{a_i}
+                // ntt_polynomial = -Y^{a_i}
                 ntt_table.transform_monomial_inplace(
                     F::NEG_ONE,
                     degree,
