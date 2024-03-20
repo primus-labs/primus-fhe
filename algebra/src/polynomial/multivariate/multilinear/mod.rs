@@ -1,12 +1,14 @@
 // It is derived from https://github.com/arkworks-rs/sumcheck.
+use std::fmt::Debug;
+use std::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
+
+use num_traits::Zero;
+
+use crate::Field;
+
 mod dense;
 
 pub use dense::DenseMultilinearExtension;
-
-use crate::Field;
-use num_traits::Zero;
-use std::fmt::Debug;
-use std::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
 
 /// This trait describes an interface for the multilinear extension
 /// of an array.

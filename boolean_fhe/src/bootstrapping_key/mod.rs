@@ -1,6 +1,6 @@
 use algebra::{
-    modulus::PowOf2Modulus, ntt_add_mul_assign_ref, Basis, NTTField, NTTPolynomial, Polynomial,
-    Random, RandomNTTField,
+    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, NTTField, NTTPolynomial, Polynomial, Random,
+    RandomNTTField,
 };
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
 
@@ -52,6 +52,7 @@ impl<F: NTTField> BootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEType>,
+        gadget_basis: Basis<F>,
     ) -> RLWE<F> {
         match self {
             BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(
@@ -67,6 +68,7 @@ impl<F: NTTField> BootstrappingKey<F> {
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
                 lwe_modulus,
+                gadget_basis,
             ),
         }
     }
@@ -184,7 +186,7 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
+            ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
         .collect()
@@ -208,7 +210,7 @@ where
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
+            ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             b.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })
@@ -235,7 +237,7 @@ where
             let mut a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
             let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
-            ntt_add_mul_assign_ref(b.as_mut_slice(), &a, rlwe_secret_key);
+            ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             a.iter_mut().for_each(|v| *v += basis_power);
             <NTTRLWECiphertext<F>>::new(a, b)
         })

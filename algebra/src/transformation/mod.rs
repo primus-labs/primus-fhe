@@ -68,3 +68,12 @@ pub trait AbstractNTT<F: NTTField> {
     /// * `ntt_polynomial_slice` - inputs in bit-reversed order, outputs in normal order
     fn inverse_transform_slice(&self, ntt_polynomial_slice: &mut [F]);
 }
+
+/// Number theory transform for monomial.
+pub trait MonomialNTT<F: NTTField> {
+    /// Perform a fast number theory transform for **monomial** `coeff*X^degree` in place.
+    fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]);
+
+    /// Perform a fast number theory transform for **monomial** `X^degree` in place.
+    fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]);
+}

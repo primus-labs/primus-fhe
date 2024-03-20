@@ -2,12 +2,10 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 use std::vec::IntoIter;
 
-use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::field::{Field, NTTField};
 use crate::transformation::AbstractNTT;
-use crate::Random;
+use crate::{Field, NTTField, Random};
 
 use super::Polynomial;
 
@@ -59,18 +57,42 @@ impl<F: Field> NTTPolynomial<F> {
         Self::new(vec.to_vec())
     }
 
-    /// Drop self, and return the data
+    /// Drop self, and return the data.
     #[inline]
     pub fn data(self) -> Vec<F> {
         self.data
     }
 
+    /// Returns a mutable reference to the data of this [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn data_mut(&mut self) -> &mut Vec<F> {
+        &mut self.data
+    }
+
     /// Creates a [`NTTPolynomial<F>`] with all coefficients equal to zero.
     #[inline]
-    pub fn zero_with_coeff_count(coeff_count: usize) -> Self {
+    pub fn zero(coeff_count: usize) -> Self {
         Self {
             data: vec![F::ZERO; coeff_count],
         }
+    }
+
+    /// Returns `true` if `self` is equal to `0`.
+    #[inline]
+    pub fn is_zero(&self) -> bool {
+        self.data.is_empty() || self.data.iter().all(F::is_zero)
+    }
+
+    /// Sets `self` to `0`.
+    #[inline]
+    pub fn set_zero(&mut self) {
+        self.data.fill(F::ZERO);
+    }
+
+    /// Copy the coefficients from another slice.
+    #[inline]
+    pub fn copy_from(&mut self, src: impl AsRef<[F]>) {
+        self.data.copy_from_slice(src.as_ref())
     }
 
     /// Extracts a slice containing the entire vector.
@@ -103,7 +125,7 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Multiply `self` with the a scalar inplace.
     #[inline]
-    pub fn mul_scalar_inplace(&mut self, scalar: F::Value) {
+    pub fn mul_scalar_assign(&mut self, scalar: F::Value) {
         self.iter_mut().for_each(|v| *v = (*v).mul_scalar(scalar))
     }
 
@@ -111,6 +133,12 @@ impl<F: Field> NTTPolynomial<F> {
     #[inline]
     pub fn iter(&self) -> Iter<F> {
         self.data.iter()
+    }
+
+    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
+    #[inline]
+    pub fn copied_iter(&self) -> std::iter::Copied<Iter<'_, F>> {
+        self.data.iter().copied()
     }
 
     /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
@@ -132,6 +160,12 @@ impl<F: Field> NTTPolynomial<F> {
         FN: FnMut() -> F,
     {
         self.data.resize_with(new_degree, f);
+    }
+
+    /// Performs the unary `-` operation.
+    #[inline]
+    pub fn neg_assign(&mut self) {
+        self.data.iter_mut().for_each(|v| *v = -*v);
     }
 }
 
@@ -205,23 +239,6 @@ impl<F: Field> AsMut<[F]> for NTTPolynomial<F> {
     #[inline]
     fn as_mut(&mut self) -> &mut [F] {
         self.data.as_mut()
-    }
-}
-
-impl<F: Field> Zero for NTTPolynomial<F> {
-    #[inline]
-    fn zero() -> Self {
-        Self { data: Vec::new() }
-    }
-
-    #[inline]
-    fn is_zero(&self) -> bool {
-        self.data.is_empty() || self.data.iter().all(F::is_zero)
-    }
-
-    #[inline]
-    fn set_zero(&mut self) {
-        self.data.fill(F::ZERO);
     }
 }
 
@@ -431,16 +448,12 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 
 impl<F: NTTField> MulAssign<Polynomial<F>> for NTTPolynomial<F> {
     #[inline]
-    fn mul_assign(&mut self, mut rhs: Polynomial<F>) {
+    fn mul_assign(&mut self, rhs: Polynomial<F>) {
         let coeff_count = self.coeff_count();
         debug_assert_eq!(coeff_count, rhs.coeff_count());
-        debug_assert!(coeff_count.is_power_of_two());
 
-        let log_n = coeff_count.trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-
-        ntt_table.transform_slice(rhs.as_mut_slice());
-        ntt_mul_assign(self.as_mut_slice(), rhs);
+        let rhs = rhs.into_ntt_polynomial();
+        ntt_mul_assign(self, &rhs);
     }
 }
 
@@ -518,65 +531,21 @@ impl<F: Field> Neg for &NTTPolynomial<F> {
 
 /// Performs enrty-wise mul operation.
 #[inline]
-pub fn ntt_mul_assign<F: NTTField, I: IntoIterator<Item = F>>(lhs: &mut [F], rhs: I) {
-    lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
-}
-
-/// Performs enrty-wise fast mul operation.
-///
-/// The result coefficients may be in [0, 2*modulus) for some case,
-/// and fall back to [0, modulus) for normal case.
-#[inline]
-pub fn ntt_mul_assign_fast<F: NTTField, I: IntoIterator<Item = F>>(lhs: &mut [F], rhs: I) {
-    lhs.iter_mut()
-        .zip(rhs)
-        .for_each(|(l, r)| l.mul_assign_fast(r));
+pub fn ntt_mul_assign<F: NTTField>(x: &mut NTTPolynomial<F>, y: &NTTPolynomial<F>) {
+    x.iter_mut().zip(y).for_each(|(a, b)| *a *= b);
 }
 
 /// Performs enrty-wise mul operation.
 #[inline]
-pub fn ntt_mul_assign_ref<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
-    lhs: &mut [F],
-    rhs: I,
+pub fn ntt_mul_inplace<F: NTTField>(
+    x: &NTTPolynomial<F>,
+    y: &NTTPolynomial<F>,
+    des: &mut NTTPolynomial<F>,
 ) {
-    lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
-}
-
-/// Performs enrty-wise fast mul operation.
-///
-/// The result coefficients may be in [0, 2*modulus) for some case,
-/// and fall back to [0, modulus) for normal case.
-#[inline]
-pub fn ntt_mul_assign_ref_fast<'a, F: NTTField + 'a, I: IntoIterator<Item = &'a F>>(
-    lhs: &mut [F],
-    rhs: I,
-) {
-    lhs.iter_mut()
-        .zip(rhs)
-        .for_each(|(l, &r)| l.mul_assign_fast(r));
-}
-
-/// Performs enrty-wise add_mul operation.
-///
-/// Treats three iterators as [`NTTPolynomial<F>`]'s iterators,
-/// then multiply enrty-wise over last two iterators, and add back to the first
-/// iterator.
-#[inline]
-pub fn ntt_add_mul_assign<
-    'a,
-    F: NTTField + 'a,
-    I: IntoIterator<Item = &'a mut F>,
-    J: IntoIterator<Item = &'a F>,
-    K: IntoIterator<Item = F>,
->(
-    x: I,
-    y: J,
-    z: K,
-) {
-    x.into_iter()
+    des.iter_mut()
+        .zip(x)
         .zip(y)
-        .zip(z)
-        .for_each(|((a, &b), c)| a.add_mul_assign(b, c));
+        .for_each(|((d, &a), &b)| *d = a * b);
 }
 
 /// Performs enrty-wise add_mul operation.
@@ -585,21 +554,34 @@ pub fn ntt_add_mul_assign<
 /// then multiply enrty-wise over last two iterators, and add back to the first
 /// iterator.
 #[inline]
-pub fn ntt_add_mul_assign_ref<
-    'a,
-    F: NTTField + 'a,
-    I: IntoIterator<Item = &'a mut F>,
-    J: IntoIterator<Item = &'a F>,
-    K: IntoIterator<Item = &'a F>,
->(
-    x: I,
-    y: J,
-    z: K,
+pub fn ntt_add_mul_assign<F: NTTField>(
+    x: &mut NTTPolynomial<F>,
+    y: &NTTPolynomial<F>,
+    z: &NTTPolynomial<F>,
 ) {
     x.into_iter()
         .zip(y)
         .zip(z)
         .for_each(|((a, &b), &c)| a.add_mul_assign(b, c));
+}
+
+/// Performs enrty-wise add_mul operation.
+///
+/// Treats four iterators as [`NTTPolynomial<F>`]'s iterators,
+/// then multiply enrty-wise over last two iterators, and add the second
+/// iterator, store the result to first iterator.
+#[inline]
+pub fn ntt_add_mul_inplace<F: NTTField>(
+    x: &NTTPolynomial<F>,
+    y: &NTTPolynomial<F>,
+    z: &NTTPolynomial<F>,
+    des: &mut NTTPolynomial<F>,
+) {
+    des.into_iter()
+        .zip(x)
+        .zip(y)
+        .zip(z)
+        .for_each(|(((d, &a), &b), &c)| *d = a.add_mul(b, c));
 }
 
 /// Performs enrty-wise add_mul fast operation.
@@ -611,16 +593,10 @@ pub fn ntt_add_mul_assign_ref<
 /// The result coefficients may be in [0, 2*modulus) for some case,
 /// and fall back to [0, modulus) for normal case.
 #[inline]
-pub fn ntt_add_mul_assign_ref_fast<
-    'a,
-    F: NTTField + 'a,
-    I: IntoIterator<Item = &'a mut F>,
-    J: IntoIterator<Item = &'a F>,
-    K: IntoIterator<Item = &'a F>,
->(
-    x: I,
-    y: J,
-    z: K,
+pub fn ntt_add_mul_assign_fast<F: NTTField>(
+    x: &mut NTTPolynomial<F>,
+    y: &NTTPolynomial<F>,
+    z: &NTTPolynomial<F>,
 ) {
     x.into_iter()
         .zip(y)

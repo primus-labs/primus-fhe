@@ -1,7 +1,8 @@
 use crate::modulus::ShoupFactor;
+use crate::utils::ReverseLsbs;
 use crate::{Field, NTTField, NTTPolynomial, Polynomial, Widening, WrappingOps};
 
-use super::AbstractNTT;
+use super::{AbstractNTT, MonomialNTT};
 
 /// This struct store the pre-computed data for number theory transform and
 /// inverse number theory transform.
@@ -38,7 +39,7 @@ where
     root_powers: Vec<<F as NTTField>::Root>,
     inv_root_powers: Vec<<F as NTTField>::Root>,
     ordinal_root_powers: Vec<<F as NTTField>::Root>,
-    ordinal_inv_root_powers: Vec<<F as NTTField>::Root>,
+    reverse_lsbs: Vec<usize>,
 }
 
 impl<F> NTTTable<F>
@@ -47,18 +48,44 @@ where
 {
     /// Creates a new [`NTTTable<F>`].
     #[inline]
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         root: F,
-        inv_root: F,
         coeff_count_power: u32,
-        coeff_count: usize,
-        inv_degree: <F as NTTField>::Root,
-        root_powers: Vec<<F as NTTField>::Root>,
-        inv_root_powers: Vec<<F as NTTField>::Root>,
         ordinal_root_powers: Vec<<F as NTTField>::Root>,
-        ordinal_inv_root_powers: Vec<<F as NTTField>::Root>,
     ) -> Self {
+        let coeff_count = 1usize << coeff_count_power;
+
+        let inv_root = F::from_root(*ordinal_root_powers.last().unwrap());
+
+        debug_assert_eq!(root * inv_root, F::ONE);
+
+        let root_one = ordinal_root_powers[0];
+
+        let reverse_lsbs: Vec<usize> = (0..coeff_count)
+            .map(|i| i.reverse_lsbs(coeff_count_power))
+            .collect();
+
+        let mut root_powers = vec![<F as NTTField>::Root::default(); coeff_count];
+        root_powers[0] = root_one;
+        for (&root_power, &i) in ordinal_root_powers[0..coeff_count]
+            .iter()
+            .zip(reverse_lsbs.iter())
+        {
+            root_powers[i] = root_power;
+        }
+
+        let mut inv_root_powers = vec![<F as NTTField>::Root::default(); coeff_count];
+        inv_root_powers[0] = root_one;
+        for (&inv_root_power, &i) in ordinal_root_powers[coeff_count + 1..]
+            .iter()
+            .rev()
+            .zip(reverse_lsbs.iter())
+        {
+            inv_root_powers[i + 1] = inv_root_power;
+        }
+
+        let inv_degree = <F as Field>::cast_from_usize(coeff_count).inv().to_root();
+
         Self {
             root,
             inv_root,
@@ -68,7 +95,7 @@ where
             root_powers,
             inv_root_powers,
             ordinal_root_powers,
-            ordinal_inv_root_powers,
+            reverse_lsbs,
         }
     }
 
@@ -119,11 +146,74 @@ where
     pub fn ordinal_root_powers(&self) -> &[<F as NTTField>::Root] {
         &self.ordinal_root_powers
     }
+}
 
-    /// Returns a reference to the ordinal inverse elements of the root powers of this [`NTTTable<F>`].
-    #[inline]
-    pub fn ordinal_inv_root_powers(&self) -> &[<F as NTTField>::Root] {
-        &self.ordinal_inv_root_powers
+impl<F> MonomialNTT<F> for NTTTable<F>
+where
+    F: NTTField<Table = Self>,
+{
+    fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
+        if coeff == F::ZERO {
+            values.fill(F::ZERO);
+            return;
+        }
+
+        if degree == 0 {
+            values.fill(coeff);
+            return;
+        }
+
+        let log_n = self.coeff_count_power();
+        debug_assert_eq!(values.len(), 1 << log_n);
+
+        let mask = usize::MAX >> (usize::BITS - log_n - 1);
+
+        if coeff == F::ONE {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+                })
+        } else if coeff == F::NEG_ONE {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) })
+                        .neg();
+                })
+        } else {
+            values
+                .iter_mut()
+                .zip(&self.reverse_lsbs)
+                .for_each(|(v, &i)| {
+                    let index = ((2 * i + 1) * degree) & mask;
+                    *v = coeff.mul_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+                })
+        }
+    }
+
+    fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]) {
+        if degree == 0 {
+            values.fill(F::ONE);
+            return;
+        }
+
+        let log_n = self.coeff_count_power();
+        debug_assert_eq!(values.len(), 1 << log_n);
+
+        let mask = usize::MAX >> (usize::BITS - log_n - 1);
+
+        values
+            .iter_mut()
+            .zip(&self.reverse_lsbs)
+            .for_each(|(v, &i)| {
+                let index = ((2 * i + 1) * degree) & mask;
+                *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+            })
     }
 }
 

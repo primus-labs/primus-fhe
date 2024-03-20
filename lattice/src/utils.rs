@@ -1,14 +1,16 @@
 use std::ops::{Deref, DerefMut};
 
-use algebra::{Field, NTTField, Polynomial};
+use algebra::{Basis, Field, NTTField, NTTPolynomial, Polynomial};
 
-use crate::{NTTRLWE, RLWE};
+use crate::{NTTRGSW, NTTRLWE, RLWE};
 
 /// Performs dot product for two slices
 #[inline]
 pub fn dot_product<F: Field>(u: &[F], v: &[F]) -> F {
     debug_assert_eq!(u.len(), v.len());
-    u.iter().zip(v).fold(F::ZERO, |acc, (&x, y)| acc + x * y)
+    u.iter()
+        .zip(v)
+        .fold(F::ZERO, |acc, (&x, &y)| acc.add_mul(x, y))
 }
 
 /// Pre allocated space for inplace decomposition.
@@ -38,7 +40,7 @@ impl<F: NTTField> DecompositionSpace<F> {
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {
-            space: <Polynomial<F>>::zero_with_coeff_count(coeff_count),
+            space: <Polynomial<F>>::zero(coeff_count),
         }
     }
 
@@ -82,7 +84,7 @@ impl<F: NTTField> PolynomialSpace<F> {
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {
-            space: <Polynomial<F>>::zero_with_coeff_count(coeff_count),
+            space: <Polynomial<F>>::zero(coeff_count),
         }
     }
 
@@ -97,17 +99,49 @@ impl<F: NTTField> PolynomialSpace<F> {
     pub fn get_mut(&mut self) -> &mut Polynomial<F> {
         &mut self.space
     }
+}
 
-    /// Returns the coeff count of this [`PolynomialSpace<F>`].
+/// Pre allocated space for inplace polynomial operation.
+#[derive(Debug)]
+pub struct NTTPolynomialSpace<F: NTTField> {
+    space: NTTPolynomial<F>,
+}
+
+impl<F: NTTField> Deref for NTTPolynomialSpace<F> {
+    type Target = NTTPolynomial<F>;
+
     #[inline]
-    pub fn coeff_count(&self) -> usize {
-        self.space.coeff_count()
+    fn deref(&self) -> &Self::Target {
+        &self.space
+    }
+}
+
+impl<F: NTTField> DerefMut for NTTPolynomialSpace<F> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.space
+    }
+}
+
+impl<F: NTTField> NTTPolynomialSpace<F> {
+    /// Creates a new [`NTTPolynomialSpace<F>`].
+    #[inline]
+    pub fn new(coeff_count: usize) -> Self {
+        Self {
+            space: <NTTPolynomial<F>>::zero(coeff_count),
+        }
     }
 
-    /// Copies all coefficients from `src` into `self`, using a memcpy.
+    /// Gets the pre allocated space.
     #[inline]
-    pub fn copy_from_polynomial(&mut self, src: &Polynomial<F>) {
-        self.as_mut_slice().copy_from_slice(src.as_slice());
+    pub fn get(&self) -> &NTTPolynomial<F> {
+        &self.space
+    }
+
+    /// Gets the mutable pre allocated space.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut NTTPolynomial<F> {
+        &mut self.space
     }
 }
 
@@ -195,6 +229,50 @@ impl<F: NTTField> RLWESpace<F> {
     /// Gets the mutable pre allocated space.
     #[inline]
     pub fn get_mut(&mut self) -> &mut RLWE<F> {
+        &mut self.space
+    }
+}
+
+/// Pre allocated space.
+#[derive(Debug)]
+pub struct NTTRGSWSpace<F: NTTField> {
+    space: NTTRGSW<F>,
+}
+
+impl<F: NTTField> Deref for NTTRGSWSpace<F> {
+    type Target = NTTRGSW<F>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.space
+    }
+}
+
+impl<F: NTTField> DerefMut for NTTRGSWSpace<F> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.space
+    }
+}
+
+impl<F: NTTField> NTTRGSWSpace<F> {
+    /// Creates a new [`NTTRGSWSpace<F>`].
+    #[inline]
+    pub fn new(coeff_count: usize, basis: Basis<F>) -> Self {
+        Self {
+            space: NTTRGSW::zero(coeff_count, basis),
+        }
+    }
+
+    /// Gets the pre allocated space.
+    #[inline]
+    pub fn get(&self) -> &NTTRGSW<F> {
+        &self.space
+    }
+
+    /// Gets the mutable pre allocated space.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut NTTRGSW<F> {
         &mut self.space
     }
 }

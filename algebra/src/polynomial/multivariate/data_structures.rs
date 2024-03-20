@@ -1,10 +1,10 @@
 // It is derived from https://github.com/arkworks-rs/sumcheck/blob/master/src/ml_sumcheck/data_structures.rs .
-use std::cmp::max;
+
 use std::{collections::HashMap, rc::Rc};
 
-use super::multilinear::{DenseMultilinearExtension, MultilinearExtension};
-use crate::field::Field;
-use crate::Random;
+use crate::{Field, Random};
+
+use super::{DenseMultilinearExtension, MultilinearExtension};
 
 /// Stores a list of products of `DenseMultilinearExtension` that is meant to be added together.
 ///
@@ -77,7 +77,7 @@ impl<F: Field + Random> ListOfProductsOfPolynomials<F> {
     ) {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
         let mut indexed_product: Vec<usize> = Vec::with_capacity(product.len());
-        self.max_multiplicands = max(self.max_multiplicands, product.len());
+        self.max_multiplicands = self.max_multiplicands.max(product.len());
         assert!(!product.is_empty());
         for m in product {
             assert_eq!(

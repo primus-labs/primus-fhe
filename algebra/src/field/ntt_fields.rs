@@ -2,7 +2,7 @@
 
 use std::{fmt::Debug, sync::Arc};
 
-use crate::transformation::AbstractNTT;
+use crate::transformation::{AbstractNTT, MonomialNTT};
 
 use super::PrimeField;
 
@@ -18,10 +18,10 @@ use super::PrimeField;
 /// with respect to a basis, and generate and manage tables for NTT operations.
 pub trait NTTField: PrimeField {
     /// An abstraction over the data structure used to store precomputed values for NTT.
-    type Table: AbstractNTT<Self>;
+    type Table: AbstractNTT<Self> + MonomialNTT<Self>;
 
     /// The type representing the roots of unity within the field.
-    type Root: Copy + Debug;
+    type Root: Copy + Debug + Default;
 
     /// Degree type
     type Degree;

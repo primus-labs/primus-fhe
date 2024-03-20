@@ -1,4 +1,4 @@
-use algebra::{Basis, NTTField};
+use algebra::{Basis, NTTField, NTTPolynomial};
 
 use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
@@ -175,6 +175,22 @@ impl<F: NTTField> NTTRGSW<F> {
         }
     }
 
+    /// Creates a [`NTTRGSW<F>`] with all entries equal to zero.
+    #[inline]
+    pub fn zero(coeff_count: usize, basis: Basis<F>) -> Self {
+        Self {
+            c_neg_s_m: NTTGadgetRLWE::zero(coeff_count, basis),
+            c_m: NTTGadgetRLWE::zero(coeff_count, basis),
+        }
+    }
+
+    /// Set all entries equal to zero.
+    #[inline]
+    pub fn set_zero(&mut self) {
+        self.c_m.set_zero();
+        self.c_neg_s_m.set_zero();
+    }
+
     /// Returns a reference to the c neg s m of this [`NTTRGSW<F>`].
     #[inline]
     pub fn c_neg_s_m(&self) -> &NTTGadgetRLWE<F> {
@@ -203,5 +219,35 @@ impl<F: NTTField> NTTRGSW<F> {
     #[inline]
     pub fn basis(&self) -> Basis<F> {
         self.c_neg_s_m.basis()
+    }
+
+    /// Perform `self = self * ntt_polynomial`.
+    pub fn mul_ntt_polynomial_assign(&mut self, ntt_polynomial: &NTTPolynomial<F>) {
+        self.c_m_mut()
+            .iter_mut()
+            .for_each(|p| p.mul_ntt_polynomial_assign(ntt_polynomial));
+        self.c_neg_s_m_mut()
+            .iter_mut()
+            .for_each(|p| p.mul_ntt_polynomial_assign(ntt_polynomial));
+    }
+
+    /// Perform `self + rhs * ntt_polynomial`, and store the result into destination.
+    pub fn add_ntt_rgsw_mul_ntt_polynomial_inplace(
+        &self,
+        rhs: &Self,
+        ntt_polynomial: &NTTPolynomial<F>,
+        destination: &mut Self,
+    ) {
+        self.c_neg_s_m()
+            .add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
+                rhs.c_neg_s_m(),
+                ntt_polynomial,
+                destination.c_neg_s_m_mut(),
+            );
+        self.c_m().add_ntt_gadget_rlwe_mul_ntt_polynomial_inplace(
+            rhs.c_m(),
+            ntt_polynomial,
+            destination.c_m_mut(),
+        );
     }
 }

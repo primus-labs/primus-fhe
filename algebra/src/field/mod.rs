@@ -95,7 +95,7 @@ pub trait Field:
     const Q_DIV_8: Self;
 
     /// -q/8
-    const NRG_Q_DIV_8: Self;
+    const NEG_Q_DIV_8: Self;
 
     /// Creates a new instance.
     fn new(value: Self::Value) -> Self;
@@ -137,14 +137,8 @@ pub trait Field:
     /// Performs `self + a * b`.
     fn add_mul(self, a: Self, b: Self) -> Self;
 
-    /// Performs `self * a + b`.
-    fn mul_add(self, a: Self, b: Self) -> Self;
-
     /// Performs `self = self + a * b`.
     fn add_mul_assign(&mut self, a: Self, b: Self);
-
-    /// Performs `self = self * a + b`.
-    fn mul_add_assign(&mut self, a: Self, b: Self);
 
     /// Performs `self * rhs`.
     ///

@@ -130,7 +130,7 @@ fn test_rlwe() {
     let b3: PolyFF = &b1 * &r;
 
     let rlwe1 = RLWE::new(a1, b1);
-    let rlwe2 = RLWE::new(a2, b2);
+    let mut rlwe2 = RLWE::new(a2, b2);
     let rlwe3 = RLWE::new(a3, b3);
     assert_eq!(
         rlwe1
@@ -139,7 +139,11 @@ fn test_rlwe() {
             .sub_element_wise(&rlwe1),
         rlwe2
     );
-    assert_eq!(rlwe1.mul_polynomial(r), rlwe3);
+    let r = r.into_ntt_polynomial();
+    let mut d = NTTRLWE::zero(N);
+    rlwe1.mul_ntt_polynomial_inplace(&r, &mut d);
+    d.inverse_transform_inplace(&mut rlwe2);
+    assert_eq!(rlwe2, rlwe3);
 }
 
 #[inline]
@@ -247,7 +251,14 @@ fn test_gadget_rlwe() {
         })
         .collect::<Vec<RLWE<FF>>>();
 
-    let bad_rlwe_mul = m_base_power[0].clone().mul_polynomial(poly.clone());
+    let np = poly.clone().into_ntt_polynomial();
+    let mut d = NTTRLWE::zero(N);
+
+    m_base_power[0]
+        .clone()
+        .mul_ntt_polynomial_inplace(&np, &mut d);
+
+    let bad_rlwe_mul = RLWE::from(d);
     let bad_mul = bad_rlwe_mul.b() - bad_rlwe_mul.a() * &s;
 
     let gadget_rlwe = GadgetRLWE::new(m_base_power, basis);
@@ -414,7 +425,7 @@ fn test_rgsw_mul_rgsw() {
     let rlwe_m0m1 = &rgsw_m0m1.c_m().data()[0];
     let decrypted_m0m1 = rlwe_m0m1.b() - rlwe_m0m1.a() * &s;
 
-    let decoded_m0m1: Vec<u32> = m0m1.iter().copied().map(decode).collect();
+    let decoded_m0m1: Vec<u32> = m0m1.copied_iter().map(decode).collect();
     let decoded_decrypt: Vec<u32> = decrypted_m0m1.into_iter().map(decode).collect();
     assert_eq!(decoded_m0m1, decoded_decrypt);
 
@@ -422,7 +433,7 @@ fn test_rgsw_mul_rgsw() {
     let decrypted_neg_sm0m1 = rlwe_neg_sm0m1.b() - rlwe_neg_sm0m1.a() * &s;
     let neg_sm0m1 = m0m1 * &s.mul_scalar(FP - 1);
 
-    let decoded_neg_sm0m1: Vec<u32> = neg_sm0m1.iter().copied().map(decode).collect();
+    let decoded_neg_sm0m1: Vec<u32> = neg_sm0m1.copied_iter().map(decode).collect();
     let decoded_decrypt_neg_sm0m1: Vec<u32> = decrypted_neg_sm0m1.into_iter().map(decode).collect();
     assert_eq!(decoded_neg_sm0m1, decoded_decrypt_neg_sm0m1);
 }

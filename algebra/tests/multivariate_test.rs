@@ -9,11 +9,11 @@ use rand::thread_rng;
 use std::rc::Rc;
 
 macro_rules! field_vec {
-    ($t:ident; $elem:expr; $n:expr)=>{
-        vec![$t::new($elem);$n]
+    ($t:ty; $elem:expr; $n:expr)=>{
+        vec![<$t>::new($elem);$n]
     };
-    ($t:ident; $($x:expr),+ $(,)?) => {
-        vec![$($t::new($x)),+]
+    ($t:ty; $($x:expr),+ $(,)?) => {
+        vec![$(<$t>::new($x)),+]
     }
 }
 

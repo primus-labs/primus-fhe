@@ -1,6 +1,4 @@
-use algebra::{
-    ntt_add_mul_assign_ref, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField,
-};
+use algebra::{ntt_add_mul_assign, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
@@ -24,16 +22,15 @@ impl<F: NTTField> KeySwitchingKey<F> {
             .a()
             .chunks_exact(self.lwe_dimension)
             .map(|a| {
-                <Polynomial<F>>::new(
-                    std::iter::once(a[0])
-                        .chain(a.iter().skip(1).rev().map(|&x| -x))
-                        .collect(),
-                )
+                let mut p: Vec<F> = a.iter().map(|&x| -x).collect();
+                p[0] = -p[0];
+                p[1..].reverse();
+                <Polynomial<F>>::new(p)
             })
             .collect();
 
         let mut init = <NTTRLWE<F>>::new(
-            NTTPolynomial::zero_with_coeff_count(self.lwe_dimension),
+            NTTPolynomial::zero(self.lwe_dimension),
             NTTPolynomial::new(vec![ciphertext.b(); self.lwe_dimension]),
         );
 
@@ -77,7 +74,7 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 .collect(),
         );
 
-        let ntt_lwe_sk = s.into_ntt_polynomial();
+        let s = s.into_ntt_polynomial();
 
         let len = key_switching_basis.decompose_len();
 
@@ -93,11 +90,11 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                         let mut e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
                             .into_ntt_polynomial();
 
-                        ntt_add_mul_assign_ref(e.as_mut_slice(), &a, &ntt_lwe_sk);
+                        ntt_add_mul_assign(&mut e, &a, &s);
                         let b = e + &ntt_z;
 
                         if i < len - 1 {
-                            ntt_z.mul_scalar_inplace(key_switching_basis.basis());
+                            ntt_z.mul_scalar_assign(key_switching_basis.basis());
                         }
 
                         NTTRLWECiphertext::new(a, b)

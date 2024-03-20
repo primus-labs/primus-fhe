@@ -1,7 +1,13 @@
-use algebra::{modulus::PowOf2Modulus, reduce::NegReduce, Basis, NTTField, Random, RandomNTTField};
-use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
+use algebra::{
+    modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis, NTTField,
+    Random, RandomNTTField,
+};
+use lattice::{
+    DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
+    NTTRGSW, RLWE,
+};
 
-use crate::{secret_key::NTTRLWESecretKey, LWEType};
+use crate::{LWEType, NTTRLWESecretKey};
 
 use super::{ntt_rgsw_one, ntt_rgsw_zero};
 
@@ -25,55 +31,56 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEType>,
+        gadget_basis: Basis<F>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
+        let ntt_polynomial = &mut NTTPolynomialSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
-        let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
-        let acc_mul_rgsw = &mut RLWESpace::new(rlwe_dimension);
+        let median = &mut NTTRLWESpace::new(rlwe_dimension);
+        let external_product = &mut RLWESpace::new(rlwe_dimension);
+        let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, gadget_basis);
+
+        let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
 
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                // u = 1
-                // acc_mul_rgsw = ACC * RGSW(s_i_u)
+                let degree = (a_i as usize) * twice_rlwe_dimension_div_lwe_modulus;
+
+                // ntt_polynomial = -Y^{a_i}
+                ntt_table.transform_coeff_one_monomial(degree, ntt_polynomial.as_mut_slice());
+                ntt_polynomial.neg_assign();
+
+                // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}
+                s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
+                    &s_i.1,
+                    ntt_polynomial,
+                    evaluation_key,
+                );
+
+                // external_product = ACC * evaluation_key
+                //                  = ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
                 acc.mul_small_ntt_rgsw_inplace(
-                    &s_i.0,
+                    evaluation_key,
                     decompose_space,
                     polynomial_space,
-                    ntt_rlwe_space,
-                    acc_mul_rgsw,
+                    median,
+                    external_product,
                 );
-                // ACC = ACC - ACC * RGSW(s_i_u)
-                acc.sub_assign_element_wise(acc_mul_rgsw);
-                // ACC = ACC - ACC * RGSW(s_i_u) + Y^{-a_i} * ACC * RGSW(s_i_u)
-                //     = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
+
+                // ACC = ACC - external_product
+                //     = ACC - ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                acc.sub_assign_element_wise(external_product);
+                // ACC = ACC - ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}) + Y^{-a_i} * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                //     = ACC + (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
                 acc.add_assign_rhs_mul_monic_monomial(
-                    acc_mul_rgsw,
+                    external_product,
                     rlwe_dimension,
                     twice_rlwe_dimension_div_lwe_modulus,
                     a_i.neg_reduce(lwe_modulus),
                 );
 
-                // u = -1
-                // acc_mul_rgsw = ACC * RGSW(s_i_u)
-                acc.mul_small_ntt_rgsw_inplace(
-                    &s_i.1,
-                    decompose_space,
-                    polynomial_space,
-                    ntt_rlwe_space,
-                    acc_mul_rgsw,
-                );
-                // ACC = ACC - ACC * RGSW(s_i_u)
-                acc.sub_assign_element_wise(acc_mul_rgsw);
-                // ACC = ACC - ACC * RGSW(s_i_u) + Y^{-a_i} * ACC * RGSW(s_i_u)
-                //     = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i_u)
-                acc.add_assign_rhs_mul_monic_monomial(
-                    acc_mul_rgsw,
-                    rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_modulus,
-                    a_i,
-                );
                 acc
             })
     }
