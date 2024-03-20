@@ -452,7 +452,7 @@ impl<F: Field> Sub<&Polynomial<F>> for &Polynomial<F> {
 }
 
 impl<F: NTTField> MulAssign<Self> for Polynomial<F> {
-    fn mul_assign(&mut self, mut rhs: Self) {
+    fn mul_assign(&mut self, rhs: Self) {
         let coeff_count = self.coeff_count();
         debug_assert_eq!(coeff_count, rhs.coeff_count());
         debug_assert!(coeff_count.is_power_of_two());
@@ -461,9 +461,9 @@ impl<F: NTTField> MulAssign<Self> for Polynomial<F> {
         let ntt_table = F::get_ntt_table(log_n).unwrap();
 
         let lhs = self.as_mut_slice();
-        ntt_table.transform_slice(rhs.as_mut_slice());
+        let rhs = ntt_table.transform_inplace(rhs);
         ntt_table.transform_slice(lhs);
-        ntt_mul_assign_fast(lhs, rhs);
+        ntt_mul_assign_fast(lhs, &rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }
@@ -564,7 +564,7 @@ impl<F: NTTField> MulAssign<NTTPolynomial<F>> for Polynomial<F> {
 
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(lhs);
-        ntt_mul_assign_fast(lhs, rhs);
+        ntt_mul_assign_fast(lhs, &rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }
@@ -581,7 +581,7 @@ impl<F: NTTField> MulAssign<&NTTPolynomial<F>> for Polynomial<F> {
 
         let lhs = self.as_mut_slice();
         ntt_table.transform_slice(lhs);
-        ntt_mul_assign_fast(lhs, rhs.copied_iter());
+        ntt_mul_assign_fast(lhs, rhs);
         ntt_table.inverse_transform_slice(lhs);
     }
 }

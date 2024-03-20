@@ -262,10 +262,10 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn mul_ntt_polynomial_inplace(
         &self,
-        polynomial: &NTTPolynomial<F>,
+        ntt_polynomial: &NTTPolynomial<F>,
         destination: &mut NTTRLWE<F>,
     ) {
-        let coeff_count = polynomial.coeff_count();
+        let coeff_count = ntt_polynomial.coeff_count();
         debug_assert!(coeff_count.is_power_of_two());
 
         let log_n = coeff_count.trailing_zeros();
@@ -279,38 +279,8 @@ impl<F: NTTField> RLWE<F> {
         ntt_table.transform_slice(a.as_mut_slice());
         ntt_table.transform_slice(b.as_mut_slice());
 
-        ntt_mul_assign(a, polynomial.copied_iter());
-        ntt_mul_assign(b, polynomial.copied_iter());
-    }
-
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `polynomial` [`Polynomial<F>`],
-    /// store the result into `destination` [`NTTRLWE<F>`].
-    ///
-    /// # Attention
-    ///
-    /// `polynomial` will be transformed into **ntt** form.
-    pub fn mul_polynomial_inplace(
-        &self,
-        polynomial: &mut Polynomial<F>,
-        destination: &mut NTTRLWE<F>,
-    ) {
-        let coeff_count = polynomial.coeff_count();
-        debug_assert!(coeff_count.is_power_of_two());
-
-        let log_n = coeff_count.trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-
-        let (a, b) = destination.a_b_mut();
-
-        a.copy_from(self.a());
-        b.copy_from(self.b());
-
-        ntt_table.transform_slice(polynomial.as_mut_slice());
-        ntt_table.transform_slice(a.as_mut_slice());
-        ntt_table.transform_slice(b.as_mut_slice());
-
-        ntt_mul_assign(a, polynomial.copied_iter());
-        ntt_mul_assign(b, polynomial.copied_iter());
+        ntt_mul_assign(a, ntt_polynomial);
+        ntt_mul_assign(b, ntt_polynomial);
     }
 
     /// Performs `self + gadget_rlwe * polynomial`.

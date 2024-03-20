@@ -442,16 +442,12 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 
 impl<F: NTTField> MulAssign<Polynomial<F>> for NTTPolynomial<F> {
     #[inline]
-    fn mul_assign(&mut self, mut rhs: Polynomial<F>) {
+    fn mul_assign(&mut self, rhs: Polynomial<F>) {
         let coeff_count = self.coeff_count();
         debug_assert_eq!(coeff_count, rhs.coeff_count());
-        debug_assert!(coeff_count.is_power_of_two());
 
-        let log_n = coeff_count.trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-
-        ntt_table.transform_slice(rhs.as_mut_slice());
-        ntt_mul_assign(self, rhs);
+        let rhs = rhs.into_ntt_polynomial();
+        ntt_mul_assign(self, &rhs);
     }
 }
 
@@ -529,7 +525,7 @@ impl<F: Field> Neg for &NTTPolynomial<F> {
 
 /// Performs enrty-wise mul operation.
 #[inline]
-pub fn ntt_mul_assign<F: NTTField>(lhs: &mut NTTPolynomial<F>, rhs: impl IntoIterator<Item = F>) {
+pub fn ntt_mul_assign<F: NTTField>(lhs: &mut NTTPolynomial<F>, rhs: &NTTPolynomial<F>) {
     lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
 }
 
@@ -538,10 +534,10 @@ pub fn ntt_mul_assign<F: NTTField>(lhs: &mut NTTPolynomial<F>, rhs: impl IntoIte
 /// The result coefficients may be in [0, 2*modulus) for some case,
 /// and fall back to [0, modulus) for normal case.
 #[inline]
-pub fn ntt_mul_assign_fast<F: NTTField>(lhs: &mut [F], rhs: impl IntoIterator<Item = F>) {
+pub fn ntt_mul_assign_fast<F: NTTField>(lhs: &mut [F], rhs: &NTTPolynomial<F>) {
     lhs.iter_mut()
         .zip(rhs)
-        .for_each(|(l, r)| l.mul_assign_fast(r));
+        .for_each(|(l, &r)| l.mul_assign_fast(r));
 }
 
 /// Performs enrty-wise add_mul operation.
@@ -589,7 +585,7 @@ pub fn ntt_add_mul_inplace<F: NTTField>(
 /// The result coefficients may be in [0, 2*modulus) for some case,
 /// and fall back to [0, modulus) for normal case.
 #[inline]
-pub fn ntt_add_mul_assign_fast<'a, F: NTTField + 'a>(
+pub fn ntt_add_mul_assign_fast<F: NTTField>(
     x: &mut NTTPolynomial<F>,
     y: &NTTPolynomial<F>,
     z: &NTTPolynomial<F>,
