@@ -63,6 +63,12 @@ impl<F: Field> NTTPolynomial<F> {
         self.data
     }
 
+    /// Returns a mutable reference to the data of this [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn data_mut(&mut self) -> &mut Vec<F> {
+        &mut self.data
+    }
+
     /// Creates a [`NTTPolynomial<F>`] with all coefficients equal to zero.
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {

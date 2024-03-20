@@ -67,6 +67,12 @@ impl<F: Field> Polynomial<F> {
         self.data
     }
 
+    /// Returns a mutable reference to the data of this [`Polynomial<F>`].
+    #[inline]
+    pub fn data_mut(&mut self) -> &mut Vec<F> {
+        &mut self.data
+    }
+
     /// Creates a [`Polynomial<F>`] with all coefficients equal to zero.
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
