@@ -306,7 +306,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
             .zip(self.iter())
             .zip(rhs.iter())
             .for_each(|((des, l), r)| {
-                l.add_ntt_rlwe_mul_ntt_polynomial_inplace(r, ntt_polynomial.as_slice(), des);
+                l.add_ntt_rlwe_mul_ntt_polynomial_inplace(r, ntt_polynomial, des);
             })
     }
 }

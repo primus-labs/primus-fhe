@@ -721,18 +721,18 @@ impl<F: NTTField> NTTRLWE<F> {
     pub fn add_ntt_rlwe_mul_ntt_polynomial_inplace(
         &self,
         ntt_rlwe: &Self,
-        ntt_polynomial: &[F],
+        ntt_polynomial: &NTTPolynomial<F>,
         destination: &mut Self,
     ) {
         ntt_add_mul_inplace(
             self.a.copied_iter(),
-            ntt_polynomial.iter().copied(),
+            ntt_polynomial.copied_iter(),
             ntt_rlwe.a.copied_iter(),
             destination.a_mut(),
         );
         ntt_add_mul_inplace(
             self.b.copied_iter(),
-            ntt_polynomial.iter().copied(),
+            ntt_polynomial.copied_iter(),
             ntt_rlwe.b.copied_iter(),
             destination.b_mut(),
         );
