@@ -166,6 +166,12 @@ impl<F: Field> Polynomial<F> {
         self.data.resize_with(new_degree, f);
     }
 
+    /// Performs the unary `-` operation.
+    #[inline]
+    pub fn neg_assign(&mut self) {
+        self.data.iter_mut().for_each(|v| *v = -*v);
+    }
+
     /// Treats `self` as a function `f`. Given `x`, outputs `f(x)`.
     #[inline]
     pub fn evaluate(&self, x: F) -> F {

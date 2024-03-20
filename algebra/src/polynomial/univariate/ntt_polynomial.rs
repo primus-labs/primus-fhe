@@ -161,6 +161,12 @@ impl<F: Field> NTTPolynomial<F> {
     {
         self.data.resize_with(new_degree, f);
     }
+
+    /// Performs the unary `-` operation.
+    #[inline]
+    pub fn neg_assign(&mut self) {
+        self.data.iter_mut().for_each(|v| *v = -*v);
+    }
 }
 
 impl<F: Field + Random> NTTPolynomial<F> {

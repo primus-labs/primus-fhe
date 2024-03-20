@@ -1,5 +1,5 @@
 use algebra::{
-    modulus::PowOf2Modulus, reduce::NegReduce, transformation::AbstractNTT, Basis, NTTField,
+    modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis, NTTField,
     Random, RandomNTTField,
 };
 use lattice::{
@@ -49,11 +49,8 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                 let degree = (a_i as usize) * twice_rlwe_dimension_div_lwe_modulus;
 
                 // ntt_polynomial = -Y^{a_i}
-                ntt_table.transform_monomial_inplace(
-                    F::NEG_ONE,
-                    degree,
-                    ntt_polynomial.as_mut_slice(),
-                );
+                ntt_table.transform_coeff_one_monomial(degree, ntt_polynomial.as_mut_slice());
+                ntt_polynomial.neg_assign();
 
                 // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}
                 s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(

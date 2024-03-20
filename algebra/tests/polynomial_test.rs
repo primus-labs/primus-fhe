@@ -1,6 +1,6 @@
 use algebra::{
     derive::{Field, Prime, Random, NTT},
-    transformation::AbstractNTT,
+    transformation::{AbstractNTT, MonomialNTT},
     Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
 };
 use rand::{thread_rng, Rng};
@@ -45,7 +45,7 @@ fn test_transform_monomial() {
     let table = Fp32::get_ntt_table(LOG_N as u32).unwrap();
     let a = table.transform_inplace(a);
 
-    table.transform_monomial_inplace(coeff, degree, b.as_mut_slice());
+    table.transform_monomial(coeff, degree, b.as_mut_slice());
     assert_eq!(a, b);
 }
 
@@ -60,18 +60,18 @@ fn test_monomial_property() {
     let mut a = NTTPolyFF::zero(N);
     let mut b = NTTPolyFF::zero(N);
 
-    table.transform_monomial_inplace(Fp32::ONE, degree, a.as_mut_slice());
-    table.transform_monomial_inplace(Fp32::NEG_ONE, degree + N, b.as_mut_slice());
+    table.transform_monomial(Fp32::ONE, degree, a.as_mut_slice());
+    table.transform_monomial(Fp32::NEG_ONE, degree + N, b.as_mut_slice());
     assert_eq!(a, b);
 
-    table.transform_monomial_inplace(Fp32::NEG_ONE, degree, a.as_mut_slice());
-    table.transform_monomial_inplace(Fp32::ONE, degree + N, b.as_mut_slice());
+    table.transform_monomial(Fp32::NEG_ONE, degree, a.as_mut_slice());
+    table.transform_monomial(Fp32::ONE, degree + N, b.as_mut_slice());
     assert_eq!(a, b);
 
     let degree = rng.gen_range(N..N * 2);
 
-    table.transform_monomial_inplace(Fp32::NEG_ONE, N * 2 - degree, a.as_mut_slice());
-    table.transform_monomial_inplace(Fp32::ONE, N * 2 - (degree - N), b.as_mut_slice());
+    table.transform_monomial(Fp32::NEG_ONE, N * 2 - degree, a.as_mut_slice());
+    table.transform_monomial(Fp32::ONE, N * 2 - (degree - N), b.as_mut_slice());
     assert_eq!(a, b);
 }
 

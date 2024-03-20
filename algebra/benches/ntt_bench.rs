@@ -1,4 +1,7 @@
-use algebra::{transformation::AbstractNTT, Basis, NTTField, Polynomial, Random};
+use algebra::{
+    transformation::{AbstractNTT, MonomialNTT},
+    Basis, NTTField, Polynomial, Random,
+};
 use algebra_derive::{Field, Prime, Random, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
@@ -38,7 +41,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function(&format!("monomial ntt {}", n), |b| {
         b.iter(|| {
-            ntt_table.transform_monomial_inplace(coeff, degree, data.as_mut_slice());
+            ntt_table.transform_monomial(coeff, degree, data.as_mut_slice());
         })
     });
 
