@@ -2,7 +2,7 @@ use std::ops::MulAssign;
 
 use algebra::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
-    transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
+    ntt_mul_inplace, transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
 };
 use num_traits::NumCast;
 
@@ -645,18 +645,8 @@ impl<F: NTTField> NTTRLWE<F> {
         ntt_polynomial: &NTTPolynomial<F>,
         destination: &mut NTTRLWE<F>,
     ) {
-        destination
-            .a_mut_slice()
-            .iter_mut()
-            .zip(self.a())
-            .zip(ntt_polynomial)
-            .for_each(|((x, &y), z)| *x = y * z);
-        destination
-            .b_mut_slice()
-            .iter_mut()
-            .zip(self.b())
-            .zip(ntt_polynomial)
-            .for_each(|((x, &y), z)| *x = y * z);
+        ntt_mul_inplace(self.a(), ntt_polynomial, destination.a_mut());
+        ntt_mul_inplace(self.b(), ntt_polynomial, destination.b_mut());
     }
 
     /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
@@ -738,6 +728,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
+
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
             self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
@@ -769,6 +760,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
+
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
             self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
@@ -796,6 +788,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
+
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
             self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
@@ -826,6 +819,7 @@ impl<F: NTTField> NTTRLWE<F> {
         gadget_rlwe.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
+
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
             self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());

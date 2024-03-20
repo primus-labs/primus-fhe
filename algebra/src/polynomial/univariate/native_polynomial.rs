@@ -5,7 +5,7 @@ use std::vec::IntoIter;
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
-use crate::{ntt_mul_assign_fast, Basis, Field, NTTField, Random};
+use crate::{Basis, Field, NTTField, Random};
 
 use super::NTTPolynomial;
 
@@ -606,4 +606,15 @@ impl<F: Field> Neg for &Polynomial<F> {
         let data = self.iter().map(|&e| -e).collect();
         <Polynomial<F>>::new(data)
     }
+}
+
+/// Performs enrty-wise fast mul operation.
+///
+/// The result coefficients may be in [0, 2*modulus) for some case,
+/// and fall back to [0, modulus) for normal case.
+#[inline]
+fn ntt_mul_assign_fast<F: NTTField>(lhs: &mut [F], rhs: &NTTPolynomial<F>) {
+    lhs.iter_mut()
+        .zip(rhs)
+        .for_each(|(l, &r)| l.mul_assign_fast(r));
 }

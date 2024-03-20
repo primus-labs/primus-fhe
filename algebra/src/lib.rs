@@ -24,7 +24,7 @@ pub use polynomial::multivariate::{
 };
 pub use polynomial::univariate::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
-    ntt_mul_assign_fast, NTTPolynomial, Polynomial,
+    ntt_mul_inplace, NTTPolynomial, Polynomial,
 };
 pub use primitive::{div_ceil, Bits, Widening, WrappingOps};
 pub use random::Random;

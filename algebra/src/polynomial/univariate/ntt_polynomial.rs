@@ -525,19 +525,21 @@ impl<F: Field> Neg for &NTTPolynomial<F> {
 
 /// Performs enrty-wise mul operation.
 #[inline]
-pub fn ntt_mul_assign<F: NTTField>(lhs: &mut NTTPolynomial<F>, rhs: &NTTPolynomial<F>) {
-    lhs.iter_mut().zip(rhs).for_each(|(l, r)| *l *= r);
+pub fn ntt_mul_assign<F: NTTField>(x: &mut NTTPolynomial<F>, y: &NTTPolynomial<F>) {
+    x.iter_mut().zip(y).for_each(|(a, b)| *a *= b);
 }
 
-/// Performs enrty-wise fast mul operation.
-///
-/// The result coefficients may be in [0, 2*modulus) for some case,
-/// and fall back to [0, modulus) for normal case.
+/// Performs enrty-wise mul operation.
 #[inline]
-pub fn ntt_mul_assign_fast<F: NTTField>(lhs: &mut [F], rhs: &NTTPolynomial<F>) {
-    lhs.iter_mut()
-        .zip(rhs)
-        .for_each(|(l, &r)| l.mul_assign_fast(r));
+pub fn ntt_mul_inplace<F: NTTField>(
+    x: &NTTPolynomial<F>,
+    y: &NTTPolynomial<F>,
+    des: &mut NTTPolynomial<F>,
+) {
+    des.iter_mut()
+        .zip(x)
+        .zip(y)
+        .for_each(|((d, &a), &b)| *d = a * b);
 }
 
 /// Performs enrty-wise add_mul operation.
