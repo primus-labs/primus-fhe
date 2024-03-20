@@ -79,6 +79,8 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// return a [`RLWE<F>`].
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> RLWE<F> {
         let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
         let mut decompose_space = DecompositionSpace::new(coeff_count);
         let mut polynomial = polynomial.clone();
@@ -92,6 +94,7 @@ impl<F: NTTField> GadgetRLWE<F> {
 
         self.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(self.basis, space);
+            ntt_table.transform_slice(space.as_mut_slice());
 
             std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
             g.mul_ntt_polynomial_inplace(&ntt_polynomial, &mut temp);
@@ -106,6 +109,8 @@ impl<F: NTTField> GadgetRLWE<F> {
     /// then add the `rlwe`, return a [`RLWE<F>`].
     pub fn mul_polynomial_add_rlwe(&self, polynomial: &Polynomial<F>, rlwe: RLWE<F>) -> RLWE<F> {
         let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
 
         let mut decompose_space = DecompositionSpace::new(coeff_count);
         let mut polynomial = polynomial.clone();
@@ -118,6 +123,7 @@ impl<F: NTTField> GadgetRLWE<F> {
 
         self.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(self.basis, space);
+            ntt_table.transform_slice(space.as_mut_slice());
 
             std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
             g.mul_ntt_polynomial_inplace(&ntt_polynomial, &mut temp);
@@ -245,6 +251,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         self.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(self.basis, space);
             ntt_table.transform_slice(space.as_mut_slice());
+
             std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
             ntt_rlwe.add_ntt_rlwe_mul_ntt_polynomial_assign(g, &ntt_polynomial);
             std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
@@ -277,6 +284,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         self.iter().for_each(|g_rlwe| {
             polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
+
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
             destination.add_ntt_rlwe_mul_ntt_polynomial_assign(g_rlwe, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
@@ -310,6 +318,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         self.iter().for_each(|g_rlwe| {
             polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
+
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
             destination.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g_rlwe, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
