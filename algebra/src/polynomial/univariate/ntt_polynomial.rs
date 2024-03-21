@@ -167,6 +167,24 @@ impl<F: Field> NTTPolynomial<F> {
     pub fn neg_assign(&mut self) {
         self.data.iter_mut().for_each(|v| *v = -*v);
     }
+
+    /// Generate a random binary [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn binary_random<R>(n: usize, mut rng: R) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self::new(crate::utils::sample_binary_field_vec(n, &mut rng))
+    }
+
+    /// Generate a random ternary [`NTTPolynomial<F>`].
+    #[inline]
+    pub fn ternary_random<R>(n: usize, mut rng: R) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self::new(crate::utils::sample_ternary_field_vec(n, &mut rng))
+    }
 }
 
 impl<F: Field + Random> NTTPolynomial<F> {

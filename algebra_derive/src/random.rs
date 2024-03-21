@@ -24,47 +24,24 @@ fn standard(name: &Ident, standard_name: &Ident) -> TokenStream {
     }
 }
 
-fn binary(name: &Ident, binary_name: &Ident) -> TokenStream {
+fn binary(name: &Ident, binary_name: &Ident, field_ty: &syn::Type) -> TokenStream {
     quote! {
         #[doc = concat!("The binary distribution for [`", stringify!(#name), "`].")]
         ///
         /// prob\[1] = prob\[0] = 0.5
         #[derive(Clone, Copy, Debug)]
-        pub struct #binary_name {
-            inner: ::rand_distr::Bernoulli,
-        }
-
-        impl #binary_name {
-            #[doc = concat!("Creates a new [`", stringify!(#binary_name), "`].")]
-            #[inline]
-            pub fn new() -> Self {
-                Self {
-                    inner: ::rand_distr::Bernoulli::new(0.5).unwrap(),
-                }
-            }
-        }
-
-        impl ::std::default::Default for #binary_name {
-            #[inline]
-            fn default() -> Self {
-                Self::new()
-            }
-        }
+        pub struct #binary_name;
 
         impl ::rand::distributions::Distribution<#name> for #binary_name {
             #[inline]
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
-                if self.inner.sample(rng) {
-                    #name(1)
-                } else {
-                    #name(0)
-                }
+                #name((rng.next_u32() & 0b1) as #field_ty)
             }
         }
     }
 }
 
-fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
+fn ternary(name: &Ident, ternary_name: &Ident, modulus: &syn::LitInt) -> TokenStream {
     quote! {
         #[doc = concat!("The ternary distribution for [`", stringify!(#name), "`].")]
         ///
@@ -72,39 +49,12 @@ fn ternary(name: &Ident, ternary_name: &Ident) -> TokenStream {
         ///
         /// prob\[0] = 0.5
         #[derive(Clone, Copy, Debug)]
-        pub struct #ternary_name {
-            inner1: ::rand_distr::Bernoulli,
-            inner2: ::rand_distr::Bernoulli,
-        }
-
-        impl #ternary_name {
-            #[doc = concat!("Creates a new [`", stringify!(#ternary_name), "`].")]
-            #[inline]
-            pub fn new() -> Self {
-                Self {
-                    inner1: ::rand_distr::Bernoulli::new(0.5).unwrap(),
-                    inner2: ::rand_distr::Bernoulli::new(0.5).unwrap(),
-                }
-            }
-        }
-
-        impl ::std::default::Default for #ternary_name {
-            #[inline]
-            fn default() -> Self {
-                Self::new()
-            }
-        }
+        pub struct #ternary_name;
 
         impl ::rand::distributions::Distribution<#name> for #ternary_name {
             #[inline]
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
-                if self.inner1.sample(rng) {
-                    #name(0)
-                } else if self.inner2.sample(rng) {
-                    #name(1)
-                } else {
-                    #name::neg_one()
-                }
+                unsafe {*[#name(0), #name(0), #name(1), #name(#modulus - 1)].get_unchecked((rng.next_u32() & 0b11) as usize)}
             }
         }
     }
@@ -168,7 +118,6 @@ fn normal(
         #[derive(Clone, Copy, Debug)]
         pub struct #sample_name {
             inner: ::rand_distr::Normal<f64>,
-            std_dev_min: f64,
             std_dev_max: f64,
         }
 
@@ -184,8 +133,7 @@ fn normal(
                 match ::rand_distr::Normal::new(mean, std_dev) {
                     Ok(inner) => {
                         let std_dev_max = std_dev * 6.0;
-                        let std_dev_min = -std_dev_max;
-                        Ok(#sample_name { inner, std_dev_max, std_dev_min })
+                        Ok(#sample_name { inner, std_dev_max })
                     },
                     Err(_) => Err(::algebra::AlgebraError::DistributionError),
                 }
@@ -208,33 +156,21 @@ fn normal(
             pub fn std_dev_max(&self) -> f64 {
                 self.std_dev_max
             }
-
-            /// Returns `-6σ` of the distribution.
-            #[inline]
-            pub fn std_dev_min(&self) -> f64 {
-                self.std_dev_min
-            }
         }
 
         impl ::rand::distributions::Distribution<#name> for #sample_name {
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
-                const FLOAT_P: f64 = #modulus as f64;
-                let mut value = self.inner.sample(rng);
-                while value < self.std_dev_min {
-                    value += self.std_dev();
-                }
-                while value >= self.std_dev_max {
-                    value -= self.std_dev();
-                }
-                if value < 0. {
-                    if value.ceil() == 0. {
-                        #name(0)
-                    } else {
-                        value = FLOAT_P + value.ceil();
-                        #name(value as #field_ty)
+                let mean = self.inner.mean();
+                loop {
+                    let value = self.inner.sample(rng);
+                    if (value - mean).abs() < self.std_dev_max {
+                        let round = value.round();
+                        if round < 0. {
+                            return #name((#modulus as f64 + value) as #field_ty);
+                        } else {
+                            return #name(value as #field_ty);
+                        }
                     }
-                } else {
-                    #name(value as #field_ty)
                 }
             }
         }
@@ -252,8 +188,8 @@ fn impl_random(input: Input) -> TokenStream {
     let normal_name = format_ident!("Normal{}", name);
 
     let impl_standard = standard(name, &standard_name);
-    let impl_binary = binary(name, &binary_name);
-    let impl_ternary = ternary(name, &ternary_name);
+    let impl_binary = binary(name, &binary_name, field_ty);
+    let impl_ternary = ternary(name, &ternary_name, &modulus);
     let impl_uniform = uniform(name, field_ty, &modulus);
     let impl_normal = normal(name, &normal_name, field_ty, &modulus);
 
@@ -296,12 +232,12 @@ fn impl_random(input: Input) -> TokenStream {
 
             #[inline]
             fn binary_distribution() -> Self::BinaryDistribution {
-                #binary_name::new()
+                #binary_name
             }
 
             #[inline]
             fn ternary_distribution() -> Self::TernaryDistribution {
-                #ternary_name::new()
+                #ternary_name
             }
 
             #[inline]
