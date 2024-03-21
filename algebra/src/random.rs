@@ -40,7 +40,7 @@ pub trait Random: Sized + SampleUniform {
     type TernaryDistribution: Distribution<Self> + Copy;
 
     /// The type of the normal distribution.
-    type NormalDistribution: Distribution<Self> + Copy;
+    type NormalDistribution: Distribution<Self> + NormalInfo + Copy;
 
     /// Get the standard distribution.
     fn standard_distribution() -> Self::StandardDistribution;
@@ -56,4 +56,13 @@ pub trait Random: Sized + SampleUniform {
         mean: f64,
         std_dev: f64,
     ) -> Result<Self::NormalDistribution, AlgebraError>;
+}
+
+/// Get info of normal distribution.
+pub trait NormalInfo {
+    /// Returns the mean (`μ`) of the distribution.
+    fn mean(&self) -> f64;
+
+    /// Returns the standard deviation (`σ`) of the distribution.
+    fn std_dev(&self) -> f64;
 }

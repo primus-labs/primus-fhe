@@ -198,6 +198,15 @@ impl<F: Field> Polynomial<F> {
     {
         Self::new(crate::utils::sample_ternary_field_vec(n, &mut rng))
     }
+
+    /// Generate a random cbd [`Polynomial<F>`].
+    #[inline]
+    pub fn cbd_random<R>(n: usize, mut rng: R) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self::new(crate::utils::sample_cbd_field_vec(n, &mut rng))
+    }
 }
 
 impl<F: Field + Random> Polynomial<F> {

@@ -139,22 +139,24 @@ fn normal(
                 }
             }
 
+            /// Returns `6σ` of the distribution.
+            #[inline]
+            pub fn std_dev_max(&self) -> f64 {
+                self.std_dev_max
+            }
+        }
+
+        impl ::algebra::NormalInfo for #sample_name {
             /// Returns the mean (`μ`) of the distribution.
             #[inline]
-            pub fn mean(&self) -> f64 {
+            fn mean(&self) -> f64 {
                 self.inner.mean()
             }
 
             /// Returns the standard deviation (`σ`) of the distribution.
             #[inline]
-            pub fn std_dev(&self) -> f64 {
+            fn std_dev(&self) -> f64 {
                 self.inner.std_dev()
-            }
-
-            /// Returns `6σ` of the distribution.
-            #[inline]
-            pub fn std_dev_max(&self) -> f64 {
-                self.std_dev_max
             }
         }
 
