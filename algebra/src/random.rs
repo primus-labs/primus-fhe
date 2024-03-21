@@ -1,6 +1,6 @@
 //! This module defines a trait to get some distributions easily.
 
-use rand_distr::{uniform::SampleUniform, Distribution};
+use rand_distr::{uniform::SampleUniform, Distribution, Normal};
 
 use crate::AlgebraError;
 
@@ -19,9 +19,6 @@ use crate::AlgebraError;
 ///
 /// # Associated Types
 /// * `StandardDistribution`: A distribution that produces all values uniformly.
-/// * `BinaryDistribution`: A distribution that produces binary (0 or 1) samples.
-/// * `TernaryDistribution`: A distribution that produces ternary (-1, 0, or 1) samples.
-/// * `NormalDistribution`: A distribution that produces samples according to a normal (Gaussian) distribution.
 ///
 /// # Methods
 /// * `standard_distribution()`: Returns an instance of the standard distribution type.
@@ -33,36 +30,85 @@ pub trait Random: Sized + SampleUniform {
     /// The thpe of the standard distribution.
     type StandardDistribution: Distribution<Self> + Copy;
 
-    /// The type of the binary distribution.
-    type BinaryDistribution: Distribution<Self> + Copy;
-
-    /// The type of the ternary distribution.
-    type TernaryDistribution: Distribution<Self> + Copy;
-
-    /// The type of the normal distribution.
-    type NormalDistribution: Distribution<Self> + NormalInfo + Copy;
-
     /// Get the standard distribution.
     fn standard_distribution() -> Self::StandardDistribution;
 
     /// Get the binary distribution.
-    fn binary_distribution() -> Self::BinaryDistribution;
+    fn binary_distribution() -> FieldBinarySampler;
 
     /// Get the ternary distribution.
-    fn ternary_distribution() -> Self::TernaryDistribution;
+    fn ternary_distribution() -> FieldTernarySampler;
 
     /// Get the normal distribution.
     fn normal_distribution(
         mean: f64,
         std_dev: f64,
-    ) -> Result<Self::NormalDistribution, AlgebraError>;
+    ) -> Result<FieldDiscreteGaussainSampler, AlgebraError>;
 }
 
-/// Get info of normal distribution.
-pub trait NormalInfo {
+/// The binary distribution for Field.
+///
+/// prob\[1] = prob\[0] = 0.5
+#[derive(Clone, Copy, Debug)]
+pub struct FieldBinarySampler;
+
+/// The ternary distribution for Field.
+///
+/// prob\[1] = prob\[-1] = 0.25
+///
+/// prob\[0] = 0.5
+#[derive(Clone, Copy, Debug)]
+pub struct FieldTernarySampler;
+
+/// The normal distribution `N(mean, std_dev**2)` for Field.
+#[derive(Clone, Copy, Debug)]
+pub struct FieldDiscreteGaussainSampler {
+    normal: rand_distr::Normal<f64>,
+    max_std_dev: f64,
+}
+
+impl FieldDiscreteGaussainSampler {
+    /// Construct, from mean and standard deviation
+    ///
+    /// Parameters:
+    ///
+    /// -   mean (`μ`, unrestricted)
+    /// -   standard deviation (`σ`, must be finite)
+    #[inline]
+    pub fn new(mean: f64, std_dev: f64) -> Result<FieldDiscreteGaussainSampler, AlgebraError> {
+        match rand_distr::Normal::new(mean, std_dev) {
+            Ok(normal) => {
+                let std_dev_max = std_dev * 6.0;
+                Ok(FieldDiscreteGaussainSampler {
+                    normal,
+                    max_std_dev: std_dev_max,
+                })
+            }
+            Err(_) => Err(AlgebraError::DistributionError),
+        }
+    }
+
     /// Returns the mean (`μ`) of the distribution.
-    fn mean(&self) -> f64;
+    #[inline]
+    pub fn mean(&self) -> f64 {
+        self.normal.mean()
+    }
 
     /// Returns the standard deviation (`σ`) of the distribution.
-    fn std_dev(&self) -> f64;
+    #[inline]
+    pub fn std_dev(&self) -> f64 {
+        self.normal.std_dev()
+    }
+
+    /// Returns `6σ` of the distribution.
+    #[inline]
+    pub fn max_std_dev(&self) -> f64 {
+        self.max_std_dev
+    }
+
+    /// Returns the normal of this [`FieldDiscreteGaussainSampler`].
+    #[inline]
+    pub fn normal(&self) -> Normal<f64> {
+        self.normal
+    }
 }

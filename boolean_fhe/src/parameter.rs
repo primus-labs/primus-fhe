@@ -1,4 +1,7 @@
-use algebra::{derive::*, modulus::PowOf2Modulus, Basis, Field, NTTField, Random, RandomNTTField};
+use algebra::{
+    derive::*, modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussainSampler, NTTField,
+    RandomNTTField,
+};
 
 use num_traits::cast;
 use once_cell::sync::Lazy;
@@ -200,13 +203,13 @@ impl<F: NTTField> Parameters<F> {
 impl<F: RandomNTTField> Parameters<F> {
     /// Gets the rlwe noise distribution.
     #[inline]
-    pub fn rlwe_noise_distribution(&self) -> <F as Random>::NormalDistribution {
+    pub fn rlwe_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
         F::normal_distribution(0.0, self.rlwe_noise_std_dev).unwrap()
     }
 
     /// Gets the key_switching noise distribution.
     #[inline]
-    pub fn key_switching_noise_distribution(&self) -> <F as Random>::NormalDistribution {
+    pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
         F::normal_distribution(0.0, self.key_switching_std_dev).unwrap()
     }
 }

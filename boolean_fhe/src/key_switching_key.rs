@@ -1,7 +1,9 @@
 use algebra::{
-    ntt_add_mul_assign, NTTField, NTTPolynomial, NormalInfo, Polynomial, Random, RandomNTTField,
+    ntt_add_mul_assign, FieldDiscreteGaussainSampler, NTTField, NTTPolynomial, Polynomial,
+    RandomNTTField,
 };
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
+use rand_distr::Distribution;
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
@@ -50,11 +52,12 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
     pub fn generate<Rng>(
         secret_key_pack: &SecretKeyPack<F>,
-        chi: <F as Random>::NormalDistribution,
+        chi: FieldDiscreteGaussainSampler,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
+        FieldDiscreteGaussainSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();
@@ -80,6 +83,9 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
 
         let len = key_switching_basis.decompose_len();
 
+        let cbd =
+            chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
+
         let key = secret_key_pack
             .rlwe_secret_key()
             .as_slice()
@@ -89,9 +95,7 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 let k_i = (0..len)
                     .map(|i| {
                         let a = <NTTPolynomial<F>>::random(lwe_dimension, &mut rng);
-                        let mut e = if chi.mean().to_bits() == 0.0f64.to_bits()
-                            && chi.std_dev().to_bits() == 3.2f64.to_bits()
-                        {
+                        let mut e = if cbd {
                             <Polynomial<F>>::cbd_random(lwe_dimension, &mut rng)
                                 .into_ntt_polynomial()
                         } else {

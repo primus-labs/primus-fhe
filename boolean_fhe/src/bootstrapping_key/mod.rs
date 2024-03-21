@@ -1,8 +1,9 @@
 use algebra::{
-    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, NTTField, NTTPolynomial, NormalInfo,
-    Polynomial, Random, RandomNTTField,
+    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, FieldDiscreteGaussainSampler, NTTField,
+    NTTPolynomial, Polynomial, RandomNTTField,
 };
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
+use rand_distr::Distribution;
 
 use crate::{
     ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, LWEType, SecretKeyPack,
@@ -78,11 +79,12 @@ impl<F: RandomNTTField> BootstrappingKey<F> {
     /// Generates the [`BootstrappingKey<F>`].
     pub fn generate<Rng>(
         secret_key_pack: &SecretKeyPack<F>,
-        chi: <F as Random>::NormalDistribution,
+        chi: FieldDiscreteGaussainSampler,
         rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
+        FieldDiscreteGaussainSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {
@@ -113,12 +115,13 @@ pub(crate) fn ntt_rgsw_zero<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis: Basis<F>,
-    chi: <F as Random>::NormalDistribution,
+    chi: FieldDiscreteGaussainSampler,
     mut rng: Rng,
 ) -> NTTRGSW<F>
 where
     F: RandomNTTField,
     Rng: rand::Rng + rand::CryptoRng,
+    FieldDiscreteGaussainSampler: Distribution<F>,
 {
     let decompose_len = basis.decompose_len();
     let neg_sm = ntt_rlwe_zeros(
@@ -148,12 +151,13 @@ pub(crate) fn ntt_rgsw_one<F, Rng>(
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis: Basis<F>,
     basis_powers: &[F],
-    chi: <F as Random>::NormalDistribution,
+    chi: FieldDiscreteGaussainSampler,
     mut rng: Rng,
 ) -> NTTRGSW<F>
 where
     F: RandomNTTField,
     Rng: rand::Rng + rand::CryptoRng,
+    FieldDiscreteGaussainSampler: Distribution<F>,
 {
     let one = ntt_gadget_rlwe_one(rlwe_dimension, rlwe_secret_key, basis_powers, chi, &mut rng);
     let neg_secret = ntt_gadget_rlwe_neg_secret_mul_one(
@@ -174,19 +178,20 @@ fn ntt_rlwe_zeros<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     n: usize,
-    chi: <F as Random>::NormalDistribution,
+    chi: FieldDiscreteGaussainSampler,
     mut rng: Rng,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
     Rng: rand::Rng + rand::CryptoRng,
+    FieldDiscreteGaussainSampler: Distribution<F>,
 {
+    let cbd =
+        chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
     (0..n)
         .map(|_| {
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let mut b = if chi.mean().to_bits() == 0.0f64.to_bits()
-                && chi.std_dev().to_bits() == 3.2f64.to_bits()
-            {
+            let mut b = if cbd {
                 <Polynomial<F>>::cbd_random(rlwe_dimension, &mut rng).into_ntt_polynomial()
             } else {
                 <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
@@ -203,20 +208,21 @@ fn ntt_gadget_rlwe_one<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis_powers: &[F],
-    chi: <F as Random>::NormalDistribution,
+    chi: FieldDiscreteGaussainSampler,
     mut rng: Rng,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
     Rng: rand::Rng + rand::CryptoRng,
+    FieldDiscreteGaussainSampler: Distribution<F>,
 {
+    let cbd =
+        chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
     basis_powers
         .iter()
         .map(|&basis_power| {
             let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let mut b = if chi.mean().to_bits() == 0.0f64.to_bits()
-                && chi.std_dev().to_bits() == 3.2f64.to_bits()
-            {
+            let mut b = if cbd {
                 <Polynomial<F>>::cbd_random(rlwe_dimension, &mut rng).into_ntt_polynomial()
             } else {
                 <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
@@ -236,20 +242,21 @@ fn ntt_gadget_rlwe_neg_secret_mul_one<F, Rng>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis_powers: &[F],
-    chi: <F as Random>::NormalDistribution,
+    chi: FieldDiscreteGaussainSampler,
     mut rng: Rng,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
     Rng: rand::Rng + rand::CryptoRng,
+    FieldDiscreteGaussainSampler: Distribution<F>,
 {
+    let cbd =
+        chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
     basis_powers
         .iter()
         .map(|&basis_power| {
             let mut a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let mut b = if chi.mean().to_bits() == 0.0f64.to_bits()
-                && chi.std_dev().to_bits() == 3.2f64.to_bits()
-            {
+            let mut b = if cbd {
                 <Polynomial<F>>::cbd_random(rlwe_dimension, &mut rng).into_ntt_polynomial()
             } else {
                 <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
