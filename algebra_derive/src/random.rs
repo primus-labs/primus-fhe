@@ -40,7 +40,7 @@ fn ternary(name: &Ident, modulus: &syn::LitInt) -> TokenStream {
         impl ::rand::distributions::Distribution<#name> for ::algebra::FieldTernarySampler {
             #[inline]
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
-                unsafe {*[#name(0), #name(0), #name(1), #name(#modulus - 1)].get_unchecked((rng.next_u32() & 0b11) as usize)}
+                [#name(0), #name(0), #name(1), #name(#modulus - 1)][(rng.next_u32() & 0b11) as usize]
             }
         }
     }
@@ -173,8 +173,9 @@ fn impl_random(input: Input) -> TokenStream {
             fn normal_distribution(
                 mean: f64,
                 std_dev: f64,
+                max_std_dev: f64,
             ) -> Result<::algebra::FieldDiscreteGaussainSampler, ::algebra::AlgebraError> {
-                ::algebra::FieldDiscreteGaussainSampler::new(mean, std_dev)
+                ::algebra::FieldDiscreteGaussainSampler::new(mean, std_dev, max_std_dev)
             }
         }
     }

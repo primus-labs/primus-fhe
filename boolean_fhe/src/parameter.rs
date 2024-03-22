@@ -196,7 +196,13 @@ impl<F: NTTField> Parameters<F> {
     /// Gets the lwe noise distribution.
     #[inline]
     pub fn lwe_noise_distribution(&self) -> LWEValueNormal {
-        LWEValueNormal::new(self.lwe_modulus.value(), 0.0, self.lwe_noise_std_dev).unwrap()
+        LWEValueNormal::new(
+            self.lwe_modulus.value(),
+            0.0,
+            self.lwe_noise_std_dev,
+            self.lwe_noise_std_dev * 12.0,
+        )
+        .unwrap()
     }
 }
 
@@ -204,13 +210,19 @@ impl<F: RandomNTTField> Parameters<F> {
     /// Gets the rlwe noise distribution.
     #[inline]
     pub fn rlwe_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
-        F::normal_distribution(0.0, self.rlwe_noise_std_dev).unwrap()
+        F::normal_distribution(0.0, self.rlwe_noise_std_dev, self.rlwe_noise_std_dev * 12.0)
+            .unwrap()
     }
 
     /// Gets the key_switching noise distribution.
     #[inline]
     pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
-        F::normal_distribution(0.0, self.key_switching_std_dev).unwrap()
+        F::normal_distribution(
+            0.0,
+            self.key_switching_std_dev,
+            self.key_switching_std_dev * 6.0,
+        )
+        .unwrap()
     }
 }
 

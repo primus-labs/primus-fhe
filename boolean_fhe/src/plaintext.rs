@@ -22,7 +22,7 @@ pub fn dot_product(u: &[LWEType], v: &[LWEType], modulus: PowOf2Modulus<LWEType>
 #[derive(Clone, Copy, Debug)]
 pub struct LWEValueNormal {
     inner: rand_distr::Normal<f64>,
-    std_dev_max: f64,
+    max_std_dev: f64,
     modulus: LWEType,
 }
 
@@ -38,16 +38,17 @@ impl LWEValueNormal {
         modulus: LWEType,
         mean: f64,
         std_dev: f64,
+        max_std_dev: f64,
     ) -> Result<LWEValueNormal, algebra::AlgebraError> {
+        if max_std_dev <= std_dev || std_dev < 0. {
+            return Err(algebra::AlgebraError::DistributionError);
+        }
         match rand_distr::Normal::new(mean, std_dev) {
-            Ok(inner) => {
-                let std_dev_max = std_dev * 6.0;
-                Ok(LWEValueNormal {
-                    inner,
-                    std_dev_max,
-                    modulus,
-                })
-            }
+            Ok(inner) => Ok(LWEValueNormal {
+                inner,
+                max_std_dev,
+                modulus,
+            }),
             Err(_) => Err(algebra::AlgebraError::DistributionError),
         }
     }
@@ -66,8 +67,8 @@ impl LWEValueNormal {
 
     /// Returns `6σ` of the distribution.
     #[inline]
-    pub fn std_dev_max(&self) -> f64 {
-        self.std_dev_max
+    pub fn max_std_dev(&self) -> f64 {
+        self.max_std_dev
     }
 }
 
@@ -76,10 +77,10 @@ impl rand::distributions::Distribution<LWEType> for LWEValueNormal {
         let mean = self.inner.mean();
         loop {
             let value = self.inner.sample(rng);
-            if (value - mean).abs() < self.std_dev_max {
+            if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
                 if round < 0. {
-                    return (self.modulus as f64 + value) as LWEType;
+                    return self.modulus - ((-value) as LWEType);
                 } else {
                     return value as LWEType;
                 }
@@ -124,7 +125,7 @@ impl LWEValueTernary {
 impl rand::distributions::Distribution<LWEType> for LWEValueTernary {
     #[inline]
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
-        unsafe { *[0, 0, 1, self.neg_one].get_unchecked((rng.next_u32() & 0b11) as usize) }
+        [0, 0, 1, self.neg_one][(rng.next_u32() & 0b11) as usize]
     }
 }
 
@@ -162,13 +163,13 @@ where
     for chunk in &mut iter {
         let mut r = rng.next_u32();
         for elem in chunk.iter_mut() {
-            *elem = unsafe { *s.get_unchecked((r & 0b11) as usize) };
+            *elem = s[(r & 0b11) as usize];
             r >>= 2;
         }
     }
     let mut r = rng.next_u32();
     for elem in iter.into_remainder() {
-        *elem = unsafe { *s.get_unchecked((r & 0b11) as usize) };
+        *elem = s[(r & 0b11) as usize];
         r >>= 2;
     }
     v

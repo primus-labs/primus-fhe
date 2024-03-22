@@ -43,6 +43,7 @@ pub trait Random: Sized + SampleUniform {
     fn normal_distribution(
         mean: f64,
         std_dev: f64,
+        max_std_dev: f64,
     ) -> Result<FieldDiscreteGaussainSampler, AlgebraError>;
 }
 
@@ -75,15 +76,19 @@ impl FieldDiscreteGaussainSampler {
     /// -   mean (`μ`, unrestricted)
     /// -   standard deviation (`σ`, must be finite)
     #[inline]
-    pub fn new(mean: f64, std_dev: f64) -> Result<FieldDiscreteGaussainSampler, AlgebraError> {
+    pub fn new(
+        mean: f64,
+        std_dev: f64,
+        max_std_dev: f64,
+    ) -> Result<FieldDiscreteGaussainSampler, AlgebraError> {
+        if max_std_dev <= std_dev || std_dev < 0. {
+            return Err(AlgebraError::DistributionError);
+        }
         match rand_distr::Normal::new(mean, std_dev) {
-            Ok(normal) => {
-                let std_dev_max = std_dev * 6.0;
-                Ok(FieldDiscreteGaussainSampler {
-                    normal,
-                    max_std_dev: std_dev_max,
-                })
-            }
+            Ok(normal) => Ok(FieldDiscreteGaussainSampler {
+                normal,
+                max_std_dev,
+            }),
             Err(_) => Err(AlgebraError::DistributionError),
         }
     }
