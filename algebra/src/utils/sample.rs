@@ -1,4 +1,5 @@
 use num_traits::NumCast;
+use rand::{CryptoRng, Rng};
 
 use crate::Field;
 
@@ -6,7 +7,7 @@ use crate::Field;
 pub fn sample_binary_field_vec<F, R>(length: usize, rng: &mut R) -> Vec<F>
 where
     F: Field,
-    R: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
 {
     let mut v = vec![F::ZERO; length];
     let mut iter = v.chunks_exact_mut(32);
@@ -33,7 +34,7 @@ where
 pub fn sample_ternary_field_vec<F, R>(length: usize, rng: &mut R) -> Vec<F>
 where
     F: Field,
-    R: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
 {
     let s = [F::ZERO, F::ZERO, F::ONE, F::NEG_ONE];
     let mut v = vec![F::ZERO; length];
@@ -57,7 +58,7 @@ where
 pub fn sample_cbd_field_vec<F, R>(length: usize, rng: &mut R) -> Vec<F>
 where
     F: Field,
-    R: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
 {
     let modulus = F::modulus_value();
     let mut cbd = || {

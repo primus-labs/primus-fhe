@@ -3,6 +3,7 @@ use algebra::{
     RandomNTTField,
 };
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
+use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
@@ -50,13 +51,13 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
 impl<F: RandomNTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<Rng>(
+    pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,
         chi: FieldDiscreteGaussainSampler,
-        mut rng: Rng,
+        mut rng: R,
     ) -> Self
     where
-        Rng: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
         FieldDiscreteGaussainSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
@@ -96,7 +97,7 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                     .map(|i| {
                         let a = <NTTPolynomial<F>>::random(lwe_dimension, &mut rng);
                         let mut e = if cbd {
-                            <Polynomial<F>>::cbd_random(lwe_dimension, &mut rng)
+                            <Polynomial<F>>::random_with_cbd(lwe_dimension, &mut rng)
                                 .into_ntt_polynomial()
                         } else {
                             <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)

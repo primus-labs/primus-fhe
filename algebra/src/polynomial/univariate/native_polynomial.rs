@@ -2,6 +2,7 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 use std::vec::IntoIter;
 
+use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
@@ -183,27 +184,27 @@ impl<F: Field> Polynomial<F> {
 
     /// Generate a random binary [`Polynomial<F>`].
     #[inline]
-    pub fn binary_random<R>(n: usize, mut rng: R) -> Self
+    pub fn random_with_binary<R>(n: usize, mut rng: R) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
     {
         Self::new(crate::utils::sample_binary_field_vec(n, &mut rng))
     }
 
     /// Generate a random ternary [`Polynomial<F>`].
     #[inline]
-    pub fn ternary_random<R>(n: usize, mut rng: R) -> Self
+    pub fn random_with_ternary<R>(n: usize, mut rng: R) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
     {
         Self::new(crate::utils::sample_ternary_field_vec(n, &mut rng))
     }
 
-    /// Generate a random cbd [`Polynomial<F>`].
+    /// Generate a random [`Polynomial<F>`] with centered binomial distribution.
     #[inline]
-    pub fn cbd_random<R>(n: usize, mut rng: R) -> Self
+    pub fn random_with_cbd<R>(n: usize, mut rng: R) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
     {
         Self::new(crate::utils::sample_cbd_field_vec(n, &mut rng))
     }
@@ -214,7 +215,7 @@ impl<F: Field + Random> Polynomial<F> {
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
     {
         Self {
             data: F::standard_distribution()
@@ -228,7 +229,7 @@ impl<F: Field + Random> Polynomial<F> {
     #[inline]
     pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
         D: Distribution<F>,
     {
         Self {

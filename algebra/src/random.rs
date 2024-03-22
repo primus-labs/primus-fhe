@@ -64,7 +64,7 @@ pub struct FieldTernarySampler;
 /// The normal distribution `N(mean, std_dev**2)` for Field.
 #[derive(Clone, Copy, Debug)]
 pub struct FieldDiscreteGaussainSampler {
-    normal: rand_distr::Normal<f64>,
+    normal: Normal<f64>,
     max_std_dev: f64,
 }
 
@@ -84,7 +84,7 @@ impl FieldDiscreteGaussainSampler {
         if max_std_dev <= std_dev || std_dev < 0. {
             return Err(AlgebraError::DistributionError);
         }
-        match rand_distr::Normal::new(mean, std_dev) {
+        match Normal::new(mean, std_dev) {
             Ok(normal) => Ok(FieldDiscreteGaussainSampler {
                 normal,
                 max_std_dev,
@@ -105,13 +105,13 @@ impl FieldDiscreteGaussainSampler {
         self.normal.std_dev()
     }
 
-    /// Returns `6σ` of the distribution.
+    /// Returns max deviation of the distribution.
     #[inline]
     pub fn max_std_dev(&self) -> f64 {
         self.max_std_dev
     }
 
-    /// Returns the normal of this [`FieldDiscreteGaussainSampler`].
+    /// Returns the inner normal of this [`FieldDiscreteGaussainSampler`].
     #[inline]
     pub fn normal(&self) -> Normal<f64> {
         self.normal
