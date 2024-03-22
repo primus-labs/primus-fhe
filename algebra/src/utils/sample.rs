@@ -41,13 +41,13 @@ where
     for chunk in &mut iter {
         let mut r = rng.next_u32();
         for elem in chunk.iter_mut() {
-            *elem = unsafe { *s.get_unchecked((r & 0b11) as usize) };
+            *elem = s[(r & 0b11) as usize];
             r >>= 2;
         }
     }
     let mut r = rng.next_u32();
     for elem in iter.into_remainder() {
-        *elem = unsafe { *s.get_unchecked((r & 0b11) as usize) };
+        *elem = s[(r & 0b11) as usize];
         r >>= 2;
     }
     v
