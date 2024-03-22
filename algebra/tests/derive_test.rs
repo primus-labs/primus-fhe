@@ -82,6 +82,9 @@ mod tests {
         let a_neg = -FF::new(a);
         assert_eq!(FF::new(a) + a_neg, FF::ZERO);
 
+        let a = FF::ZERO;
+        assert_eq!(a, -a);
+
         // inv
         let a = rng.sample(distr);
         let a_inv = a.pow_reduce(p - 2, BarrettModulus::<T>::new(p));

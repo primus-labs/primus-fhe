@@ -55,14 +55,20 @@ macro_rules! impl_reduce_ops_for_primitive {
 
             #[inline]
             fn neg_reduce(self, modulus: Self) -> Self::Output {
-                modulus - self
+                if self == 0 {
+                    0
+                }else{
+                    modulus - self
+                }
             }
         }
 
         impl $crate::reduce::NegReduceAssign<Self> for $t {
             #[inline]
             fn neg_reduce_assign(&mut self, modulus: Self) {
-                *self = modulus - *self;
+                if *self != 0{
+                    *self = modulus - *self;
+                }
             }
         }
 
