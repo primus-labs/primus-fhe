@@ -84,9 +84,6 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
 
         let len = key_switching_basis.decompose_len();
 
-        let cbd =
-            chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
-
         let key = secret_key_pack
             .rlwe_secret_key()
             .as_slice()
@@ -96,13 +93,8 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 let k_i = (0..len)
                     .map(|i| {
                         let a = NTTPolynomial::random(lwe_dimension, &mut rng);
-                        let mut e = if cbd {
-                            Polynomial::random_with_cbd(lwe_dimension, &mut rng)
-                                .into_ntt_polynomial()
-                        } else {
-                            Polynomial::random_with_distribution(lwe_dimension, &mut rng, chi)
-                                .into_ntt_polynomial()
-                        };
+                        let mut e = Polynomial::random_with_gaussain(lwe_dimension, &mut rng, chi)
+                            .into_ntt_polynomial();
 
                         ntt_add_mul_assign(&mut e, &a, &s);
                         let b = e + &ntt_z;

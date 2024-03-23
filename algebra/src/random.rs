@@ -66,6 +66,7 @@ pub struct FieldTernarySampler;
 pub struct FieldDiscreteGaussainSampler {
     normal: Normal<f64>,
     max_std_dev: f64,
+    cbd_enable: bool,
 }
 
 impl FieldDiscreteGaussainSampler {
@@ -88,6 +89,8 @@ impl FieldDiscreteGaussainSampler {
             Ok(normal) => Ok(FieldDiscreteGaussainSampler {
                 normal,
                 max_std_dev,
+                cbd_enable: mean.to_bits() == 0.0f64.to_bits()
+                    && std_dev.to_bits() == 3.2f64.to_bits(),
             }),
             Err(_) => Err(AlgebraError::DistributionError),
         }
@@ -115,5 +118,11 @@ impl FieldDiscreteGaussainSampler {
     #[inline]
     pub fn normal(&self) -> Normal<f64> {
         self.normal
+    }
+
+    /// Returns the cbd enable of this [`FieldDiscreteGaussainSampler`].
+    #[inline]
+    pub fn cbd_enable(&self) -> bool {
+        self.cbd_enable
     }
 }

@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
-use crate::{Basis, Field, NTTField, Random};
+use crate::{Basis, Field, FieldDiscreteGaussainSampler, NTTField, Random};
 
 use super::NTTPolynomial;
 
@@ -200,13 +200,22 @@ impl<F: Field> Polynomial<F> {
         Self::new(crate::utils::sample_ternary_field_vec(n, &mut rng))
     }
 
-    /// Generate a random [`Polynomial<F>`] with centered binomial distribution.
+    /// Generate a random [`Polynomial<F>`] with discrete gaussain distribution.
     #[inline]
-    pub fn random_with_cbd<R>(n: usize, mut rng: R) -> Self
+    pub fn random_with_gaussain<R>(
+        n: usize,
+        mut rng: R,
+        gaussain: FieldDiscreteGaussainSampler,
+    ) -> Self
     where
         R: Rng + CryptoRng,
+        FieldDiscreteGaussainSampler: Distribution<F>,
     {
-        Self::new(crate::utils::sample_cbd_field_vec(n, &mut rng))
+        if gaussain.cbd_enable() {
+            Self::new(crate::utils::sample_cbd_field_vec(n, &mut rng))
+        } else {
+            Self::new(gaussain.sample_iter(rng).take(n).collect())
+        }
     }
 }
 
@@ -227,14 +236,12 @@ impl<F: Field + Random> Polynomial<F> {
 
     /// Generate a random [`Polynomial<F>`] with a specified distribution `dis`.
     #[inline]
-    pub fn random_with_distribution<R, D>(n: usize, rng: R, dis: D) -> Self
+    pub fn random_with_distribution<R, D>(n: usize, rng: R, distribution: D) -> Self
     where
         R: Rng + CryptoRng,
         D: Distribution<F>,
     {
-        Self {
-            data: dis.sample_iter(rng).take(n).collect(),
-        }
+        Self::new(distribution.sample_iter(rng).take(n).collect())
     }
 }
 

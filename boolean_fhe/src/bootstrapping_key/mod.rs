@@ -187,17 +187,12 @@ where
     R: Rng + CryptoRng,
     FieldDiscreteGaussainSampler: Distribution<F>,
 {
-    let cbd =
-        chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
     (0..n)
         .map(|_| {
             let a = NTTPolynomial::random(rlwe_dimension, &mut rng);
-            let mut b = if cbd {
-                Polynomial::random_with_cbd(rlwe_dimension, &mut rng).into_ntt_polynomial()
-            } else {
-                Polynomial::random_with_distribution(rlwe_dimension, &mut rng, chi)
-                    .into_ntt_polynomial()
-            };
+            let mut b = Polynomial::random_with_gaussain(rlwe_dimension, &mut rng, chi)
+                .into_ntt_polynomial();
+
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             NTTRLWECiphertext::new(a, b)
         })
@@ -217,18 +212,13 @@ where
     R: Rng + CryptoRng,
     FieldDiscreteGaussainSampler: Distribution<F>,
 {
-    let cbd =
-        chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
     basis_powers
         .iter()
         .map(|&basis_power| {
             let a = NTTPolynomial::random(rlwe_dimension, &mut rng);
-            let mut b = if cbd {
-                Polynomial::random_with_cbd(rlwe_dimension, &mut rng).into_ntt_polynomial()
-            } else {
-                Polynomial::random_with_distribution(rlwe_dimension, &mut rng, chi)
-                    .into_ntt_polynomial()
-            };
+            let mut b = Polynomial::random_with_gaussain(rlwe_dimension, &mut rng, chi)
+                .into_ntt_polynomial();
+
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             b.iter_mut().for_each(|v| *v += basis_power);
             NTTRLWECiphertext::new(a, b)
@@ -251,18 +241,13 @@ where
     R: Rng + CryptoRng,
     FieldDiscreteGaussainSampler: Distribution<F>,
 {
-    let cbd =
-        chi.mean().to_bits() == 0.0f64.to_bits() && chi.std_dev().to_bits() == 3.2f64.to_bits();
     basis_powers
         .iter()
         .map(|&basis_power| {
             let mut a = NTTPolynomial::random(rlwe_dimension, &mut rng);
-            let mut b = if cbd {
-                Polynomial::random_with_cbd(rlwe_dimension, &mut rng).into_ntt_polynomial()
-            } else {
-                Polynomial::random_with_distribution(rlwe_dimension, &mut rng, chi)
-                    .into_ntt_polynomial()
-            };
+            let mut b = Polynomial::random_with_gaussain(rlwe_dimension, &mut rng, chi)
+                .into_ntt_polynomial();
+
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             a.iter_mut().for_each(|v| *v += basis_power);
             NTTRLWECiphertext::new(a, b)
