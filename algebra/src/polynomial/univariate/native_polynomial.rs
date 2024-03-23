@@ -227,7 +227,7 @@ impl<F: Field + Random> Polynomial<F> {
 
     /// Generate a random [`Polynomial<F>`] with a specified distribution `dis`.
     #[inline]
-    pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
+    pub fn random_with_distribution<R, D>(n: usize, rng: R, dis: D) -> Self
     where
         R: Rng + CryptoRng,
         D: Distribution<F>,

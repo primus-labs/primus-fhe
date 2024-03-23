@@ -95,12 +95,12 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
                 let k_i = (0..len)
                     .map(|i| {
-                        let a = <NTTPolynomial<F>>::random(lwe_dimension, &mut rng);
+                        let a = NTTPolynomial::random(lwe_dimension, &mut rng);
                         let mut e = if cbd {
-                            <Polynomial<F>>::random_with_cbd(lwe_dimension, &mut rng)
+                            Polynomial::random_with_cbd(lwe_dimension, &mut rng)
                                 .into_ntt_polynomial()
                         } else {
-                            <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
+                            Polynomial::random_with_distribution(lwe_dimension, &mut rng, chi)
                                 .into_ntt_polynomial()
                         };
 
