@@ -88,7 +88,7 @@ mod tests {
 
         let a: u64 = rng.sample(dis);
         let a_neg = a.neg_reduce(modulus);
-        assert_eq!(a_neg + a, 0);
+        assert_eq!(a_neg.add_reduce(a, modulus), 0);
 
         assert_eq!(0.neg_reduce(modulus), 0);
     }
