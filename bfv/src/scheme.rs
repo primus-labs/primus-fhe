@@ -30,9 +30,17 @@ impl BFVScheme {
         let mut csrng = ctx.csrng_mut();
         let u = Polynomial::<CipherField>::random_with_ternary(ctx.rlwe_dimension(), &mut *csrng);
 
-        let e1 = Polynomial::<CipherField>::random_with_gaussian(ctx.rlwe_dimension(), &mut *csrng, ctx.sampler());
+        let e1 = Polynomial::<CipherField>::random_with_gaussian(
+            ctx.rlwe_dimension(),
+            &mut *csrng,
+            ctx.sampler(),
+        );
 
-        let e2 = Polynomial::<CipherField>::random_with_gaussian(ctx.rlwe_dimension(), &mut *csrng, ctx.sampler());
+        let e2 = Polynomial::<CipherField>::random_with_gaussian(
+            ctx.rlwe_dimension(),
+            &mut *csrng,
+            ctx.sampler(),
+        );
 
         let t = PlainField::modulus_value() as u64;
         let q = CipherField::modulus_value() as u64;
@@ -97,11 +105,11 @@ impl BFVScheme {
 
     /// Scale multiplication .
     pub fn evaluate_scale(
-        _ctx: BFVContext,
+        _ctx: &BFVContext,
         scalar: &PlainField,
         c: &BFVCiphertext,
     ) -> BFVCiphertext {
-        let scalar = scalar.to_f64() as u32;
+        let scalar = scalar.cast_into_usize() as u32;
         let BFVCiphertext([c1, c2]) = c;
         let c1 = c1.mul_scalar(scalar);
         let c2 = c2.mul_scalar(scalar);
@@ -110,7 +118,7 @@ impl BFVScheme {
 
     /// Addition
     pub fn evalute_add(
-        _ctx: BFVContext,
+        _ctx: &BFVContext,
         c_lhs: &BFVCiphertext,
         c_rhs: &BFVCiphertext,
     ) -> BFVCiphertext {
@@ -118,12 +126,4 @@ impl BFVScheme {
         let c2 = &c_lhs.0[1] + &c_rhs.0[1];
         BFVCiphertext([c1, c2])
     }
-}
-
-#[test]
-fn value_test() {
-    let a = 0_u16;
-    let b = 1_u16;
-
-    println!("{}", (a as i16) - (b as i16));
 }
