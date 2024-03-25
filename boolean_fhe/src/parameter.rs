@@ -6,7 +6,7 @@ use algebra::{
 use num_traits::cast;
 use once_cell::sync::Lazy;
 
-use crate::{FHEError, LWEType, LWEValueNormal, SecretKeyType};
+use crate::{FHEError, LWEType, LWEValueGaussain, SecretKeyType};
 
 /// The parameters of the fully homomorphic encryption scheme.
 ///
@@ -195,8 +195,8 @@ impl<F: NTTField> Parameters<F> {
 
     /// Gets the lwe noise distribution.
     #[inline]
-    pub fn lwe_noise_distribution(&self) -> LWEValueNormal {
-        LWEValueNormal::new(
+    pub fn lwe_noise_distribution(&self) -> LWEValueGaussain {
+        LWEValueGaussain::new(
             self.lwe_modulus.value(),
             0.0,
             self.lwe_noise_std_dev,
@@ -210,14 +210,14 @@ impl<F: RandomNTTField> Parameters<F> {
     /// Gets the rlwe noise distribution.
     #[inline]
     pub fn rlwe_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
-        F::normal_distribution(0.0, self.rlwe_noise_std_dev, self.rlwe_noise_std_dev * 12.0)
+        F::gaussain_distribution(0.0, self.rlwe_noise_std_dev, self.rlwe_noise_std_dev * 12.0)
             .unwrap()
     }
 
     /// Gets the key_switching noise distribution.
     #[inline]
     pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
-        F::normal_distribution(
+        F::gaussain_distribution(
             0.0,
             self.key_switching_std_dev,
             self.key_switching_std_dev * 6.0,

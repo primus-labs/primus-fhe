@@ -93,14 +93,14 @@ fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenSt
     }
 }
 
-fn normal(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenStream {
+fn gaussain(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenStream {
     quote! {
         impl ::rand::distributions::Distribution<#name> for ::algebra::FieldDiscreteGaussainSampler {
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 let mean = self.mean();
-                let normal = self.normal();
+                let gaussain = self.gaussain();
                 loop {
-                    let value = normal.sample(rng);
+                    let value = gaussain.sample(rng);
                     if (value - mean).abs() < self.max_std_dev() {
                         let round = value.round();
                         if round < 0. {
@@ -126,7 +126,7 @@ fn impl_random(input: Input) -> TokenStream {
     let impl_binary = binary(name, field_ty);
     let impl_ternary = ternary(name, &modulus);
     let impl_uniform = uniform(name, field_ty, &modulus);
-    let impl_normal = normal(name, field_ty, &modulus);
+    let impl_gaussain = gaussain(name, field_ty, &modulus);
 
     quote! {
         #impl_standard
@@ -137,7 +137,7 @@ fn impl_random(input: Input) -> TokenStream {
 
         #impl_uniform
 
-        #impl_normal
+        #impl_gaussain
 
         impl #name {
             #[doc = concat!("Get a random value of [`", stringify!(#name), "`].")]
@@ -170,7 +170,7 @@ fn impl_random(input: Input) -> TokenStream {
             }
 
             #[inline]
-            fn normal_distribution(
+            fn gaussain_distribution(
                 mean: f64,
                 std_dev: f64,
                 max_std_dev: f64,

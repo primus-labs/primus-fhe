@@ -47,7 +47,7 @@ pub fn derive_field(input: TokenStream) -> TokenStream {
 /// Then you can use `rand` crate to generate numbers randomly.
 ///
 /// Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
-/// ternary distribution and normal distribution.
+/// ternary distribution and gaussain distribution.
 ///
 /// # Example
 ///

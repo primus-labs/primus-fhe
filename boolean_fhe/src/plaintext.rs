@@ -1,4 +1,5 @@
 use algebra::{modulus::PowOf2Modulus, reduce::Reduce};
+use rand_distr::Normal;
 
 /// LWE Plain text
 pub type LWEPlaintext = bool;
@@ -18,15 +19,15 @@ pub fn dot_product(u: &[LWEType], v: &[LWEType], modulus: PowOf2Modulus<LWEType>
         .reduce(modulus)
 }
 
-/// The normal distribution `N(mean, std_dev**2)` for [`LWEValue`].
+/// The gaussain distribution `N(mean, std_dev**2)` for [`LWEValue`].
 #[derive(Clone, Copy, Debug)]
-pub struct LWEValueNormal {
-    inner: rand_distr::Normal<f64>,
+pub struct LWEValueGaussain {
+    inner: Normal<f64>,
     max_std_dev: f64,
     modulus: LWEType,
 }
 
-impl LWEValueNormal {
+impl LWEValueGaussain {
     /// Construct, from mean and standard deviation
     ///
     /// Parameters:
@@ -39,12 +40,12 @@ impl LWEValueNormal {
         mean: f64,
         std_dev: f64,
         max_std_dev: f64,
-    ) -> Result<LWEValueNormal, algebra::AlgebraError> {
+    ) -> Result<LWEValueGaussain, algebra::AlgebraError> {
         if max_std_dev <= std_dev || std_dev < 0. {
             return Err(algebra::AlgebraError::DistributionError);
         }
-        match rand_distr::Normal::new(mean, std_dev) {
-            Ok(inner) => Ok(LWEValueNormal {
+        match Normal::new(mean, std_dev) {
+            Ok(inner) => Ok(LWEValueGaussain {
                 inner,
                 max_std_dev,
                 modulus,
@@ -72,7 +73,7 @@ impl LWEValueNormal {
     }
 }
 
-impl rand::distributions::Distribution<LWEType> for LWEValueNormal {
+impl rand::distributions::Distribution<LWEType> for LWEValueGaussain {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
         let mean = self.inner.mean();
         loop {
