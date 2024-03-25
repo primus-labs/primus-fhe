@@ -22,7 +22,12 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
         impl ::std::convert::From<#field_ty> for #name {
             #[inline]
             fn from(value: #field_ty) -> Self {
-                Self(value)
+                if value < #modulus {
+                    Self(value)
+                } else {
+                    use ::algebra::reduce::Reduce;
+                    Self(value.reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
+                }
             }
         }
 
