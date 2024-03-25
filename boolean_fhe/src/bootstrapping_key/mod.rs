@@ -1,8 +1,10 @@
 use algebra::{
-    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, NTTField, NTTPolynomial, Polynomial, Random,
-    RandomNTTField,
+    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, FieldDiscreteGaussianSampler, NTTField,
+    NTTPolynomial, Polynomial, RandomNTTField,
 };
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
+use rand::{CryptoRng, Rng};
+use rand_distr::Distribution;
 
 use crate::{
     ciphertext::NTTRLWECiphertext, secret_key::NTTRLWESecretKey, LWEType, SecretKeyPack,
@@ -76,13 +78,14 @@ impl<F: NTTField> BootstrappingKey<F> {
 
 impl<F: RandomNTTField> BootstrappingKey<F> {
     /// Generates the [`BootstrappingKey<F>`].
-    pub fn generate<Rng>(
+    pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,
-        chi: <F as Random>::NormalDistribution,
-        rng: Rng,
+        chi: FieldDiscreteGaussianSampler,
+        rng: R,
     ) -> Self
     where
-        Rng: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {
@@ -109,16 +112,17 @@ impl<F: RandomNTTField> BootstrappingKey<F> {
 }
 
 /// Generates a ntt version `RGSW(0)`.
-pub(crate) fn ntt_rgsw_zero<F, Rng>(
+pub(crate) fn ntt_rgsw_zero<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis: Basis<F>,
-    chi: <F as Random>::NormalDistribution,
-    mut rng: Rng,
+    chi: FieldDiscreteGaussianSampler,
+    mut rng: R,
 ) -> NTTRGSW<F>
 where
     F: RandomNTTField,
-    Rng: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     let decompose_len = basis.decompose_len();
     let neg_sm = ntt_rlwe_zeros(
@@ -143,17 +147,18 @@ where
 }
 
 /// Generates a ntt version `RGSW(1)`.
-pub(crate) fn ntt_rgsw_one<F, Rng>(
+pub(crate) fn ntt_rgsw_one<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis: Basis<F>,
     basis_powers: &[F],
-    chi: <F as Random>::NormalDistribution,
-    mut rng: Rng,
+    chi: FieldDiscreteGaussianSampler,
+    mut rng: R,
 ) -> NTTRGSW<F>
 where
     F: RandomNTTField,
-    Rng: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     let one = ntt_gadget_rlwe_one(rlwe_dimension, rlwe_secret_key, basis_powers, chi, &mut rng);
     let neg_secret = ntt_gadget_rlwe_neg_secret_mul_one(
@@ -170,49 +175,53 @@ where
 }
 
 /// Generates a [`Vec`], which has `n` ntt version `RLWE(0)`.
-fn ntt_rlwe_zeros<F, Rng>(
+fn ntt_rlwe_zeros<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     n: usize,
-    chi: <F as Random>::NormalDistribution,
-    mut rng: Rng,
+    chi: FieldDiscreteGaussianSampler,
+    mut rng: R,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
-    Rng: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     (0..n)
         .map(|_| {
-            let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
+            let a = NTTPolynomial::random(rlwe_dimension, &mut rng);
+            let mut b = Polynomial::random_with_gaussian(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
+
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
-            <NTTRLWECiphertext<F>>::new(a, b)
+            NTTRLWECiphertext::new(a, b)
         })
         .collect()
 }
 
 /// Generates a [`Vec`], which is a ntt version `GadgetRLWE(1)`.
-fn ntt_gadget_rlwe_one<F, Rng>(
+fn ntt_gadget_rlwe_one<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis_powers: &[F],
-    chi: <F as Random>::NormalDistribution,
-    mut rng: Rng,
+    chi: FieldDiscreteGaussianSampler,
+    mut rng: R,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
-    Rng: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     basis_powers
         .iter()
         .map(|&basis_power| {
-            let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
+            let a = NTTPolynomial::random(rlwe_dimension, &mut rng);
+            let mut b = Polynomial::random_with_gaussian(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
+
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             b.iter_mut().for_each(|v| *v += basis_power);
-            <NTTRLWECiphertext<F>>::new(a, b)
+            NTTRLWECiphertext::new(a, b)
         })
         .collect()
 }
@@ -220,26 +229,28 @@ where
 /// Generates a [`Vec`], which is a ntt version `GadgetRLWE(-s)`.
 ///
 /// `s` is the secret key of the RLWE.
-fn ntt_gadget_rlwe_neg_secret_mul_one<F, Rng>(
+fn ntt_gadget_rlwe_neg_secret_mul_one<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis_powers: &[F],
-    chi: <F as Random>::NormalDistribution,
-    mut rng: Rng,
+    chi: FieldDiscreteGaussianSampler,
+    mut rng: R,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
-    Rng: rand::Rng + rand::CryptoRng,
+    R: Rng + CryptoRng,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     basis_powers
         .iter()
         .map(|&basis_power| {
-            let mut a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-            let mut b = <Polynomial<F>>::random_with_dis(rlwe_dimension, &mut rng, chi)
+            let mut a = NTTPolynomial::random(rlwe_dimension, &mut rng);
+            let mut b = Polynomial::random_with_gaussian(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
+
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
             a.iter_mut().for_each(|v| *v += basis_power);
-            <NTTRLWECiphertext<F>>::new(a, b)
+            NTTRLWECiphertext::new(a, b)
         })
         .collect()
 }

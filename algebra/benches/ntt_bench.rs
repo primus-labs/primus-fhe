@@ -46,7 +46,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     let basis = <Basis<Fp>>::new(3);
-    let mut a = <Polynomial<Fp>>::random_with_dis(n, &mut rng, fp_dis);
+    let mut a = <Polynomial<Fp>>::random_with_distribution(n, &mut rng, fp_dis);
 
     let decompose_len = basis.decompose_len();
 

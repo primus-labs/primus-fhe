@@ -1,9 +1,12 @@
-use algebra::{derive::*, modulus::PowOf2Modulus, Basis, Field, NTTField, Random, RandomNTTField};
+use algebra::{
+    derive::*, modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
+    RandomNTTField,
+};
 
 use num_traits::cast;
 use once_cell::sync::Lazy;
 
-use crate::{FHEError, LWEType, LWEValueNormal, SecretKeyType};
+use crate::{FHEError, LWEType, LWEValueGaussian, SecretKeyType};
 
 /// The parameters of the fully homomorphic encryption scheme.
 ///
@@ -192,22 +195,22 @@ impl<F: NTTField> Parameters<F> {
 
     /// Gets the lwe noise distribution.
     #[inline]
-    pub fn lwe_noise_distribution(&self) -> LWEValueNormal {
-        LWEValueNormal::new(self.lwe_modulus.value(), 0.0, self.lwe_noise_std_dev).unwrap()
+    pub fn lwe_noise_distribution(&self) -> LWEValueGaussian {
+        LWEValueGaussian::new(self.lwe_modulus.value(), 0.0, self.lwe_noise_std_dev).unwrap()
     }
 }
 
 impl<F: RandomNTTField> Parameters<F> {
     /// Gets the rlwe noise distribution.
     #[inline]
-    pub fn rlwe_noise_distribution(&self) -> <F as Random>::NormalDistribution {
-        F::normal_distribution(0.0, self.rlwe_noise_std_dev).unwrap()
+    pub fn rlwe_noise_distribution(&self) -> FieldDiscreteGaussianSampler {
+        F::gaussian_sampler(0.0, self.rlwe_noise_std_dev).unwrap()
     }
 
     /// Gets the key_switching noise distribution.
     #[inline]
-    pub fn key_switching_noise_distribution(&self) -> <F as Random>::NormalDistribution {
-        F::normal_distribution(0.0, self.key_switching_std_dev).unwrap()
+    pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussianSampler {
+        F::gaussian_sampler(0.0, self.key_switching_std_dev).unwrap()
     }
 }
 

@@ -164,7 +164,7 @@ fn min_to_zero(value: FF) -> Inner {
 #[test]
 fn test_rlwe_he() {
     let mut rng = rand::thread_rng();
-    let chi = FF::normal_distribution(0., 3.2).unwrap();
+    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
     let dis = Uniform::new(0, FT);
 
     let v0: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
@@ -183,14 +183,14 @@ fn test_rlwe_he() {
 
     let rlwe0 = {
         let a = PolyFF::random(N, &mut rng);
-        let e = PolyFF::random_with_dis(N, &mut rng, chi);
+        let e = PolyFF::random_with_distribution(N, &mut rng, chi);
         let b = &a * &s + v0 + e;
         RLWE::new(a, b)
     };
 
     let rlwe1 = {
         let a = PolyFF::random(N, &mut rng);
-        let e = PolyFF::random_with_dis(N, &mut rng, chi);
+        let e = PolyFF::random_with_distribution(N, &mut rng, chi);
         let b = &a * &s + v1 + e;
         RLWE::new(a, b)
     };
@@ -231,7 +231,7 @@ fn extract_lwe_test() {
 #[test]
 fn test_gadget_rlwe() {
     let mut rng = rand::thread_rng();
-    let chi = FF::normal_distribution(0., 3.2).unwrap();
+    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
 
     let m = PolyFF::random(N, &mut rng);
     let poly = PolyFF::random(N, &mut rng);
@@ -244,7 +244,7 @@ fn test_gadget_rlwe() {
     let m_base_power = (0..basis.decompose_len())
         .map(|i| {
             let a = PolyFF::random(N, &mut rng);
-            let e = PolyFF::random_with_dis(N, &mut rng, chi);
+            let e = PolyFF::random_with_distribution(N, &mut rng, chi);
             let b = &a * &s + m.mul_scalar(B.pow(i as u32) as Inner) + e;
 
             RLWE::new(a, b)
@@ -296,11 +296,11 @@ fn test_gadget_rlwe() {
 #[test]
 fn test_rgsw_mul_rlwe() {
     let mut rng = rand::thread_rng();
-    let ternary = FF::ternary_distribution();
-    let chi = FF::normal_distribution(0., 3.2).unwrap();
+    let ternary = FF::ternary_sampler();
+    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
 
     let m0 = PolyFF::random(N, &mut rng);
-    let m1 = PolyFF::random_with_dis(N, &mut rng, ternary);
+    let m1 = PolyFF::random_with_distribution(N, &mut rng, ternary);
 
     let m0m1 = &m0 * &m1;
 
@@ -312,7 +312,7 @@ fn test_rgsw_mul_rlwe() {
         let m1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
-                let e = PolyFF::random_with_dis(N, &mut rng, chi);
+                let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
@@ -322,7 +322,7 @@ fn test_rgsw_mul_rlwe() {
         let neg_sm1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
-                let e = PolyFF::random_with_dis(N, &mut rng, chi);
+                let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + e;
 
                 RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
@@ -337,7 +337,7 @@ fn test_rgsw_mul_rlwe() {
 
     let (rlwe, _e) = {
         let a = PolyFF::random(N, &mut rng);
-        let e = PolyFF::random_with_dis(N, &mut rng, chi);
+        let e = PolyFF::random_with_distribution(N, &mut rng, chi);
         let b = &a * &s + m0 + &e;
 
         (RLWE::new(a, b), e)
@@ -354,11 +354,11 @@ fn test_rgsw_mul_rlwe() {
 #[test]
 fn test_rgsw_mul_rgsw() {
     let mut rng = rand::thread_rng();
-    let ternary = FF::ternary_distribution();
-    let chi = FF::normal_distribution(0., 3.2).unwrap();
+    let ternary = FF::ternary_sampler();
+    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
 
     let m0 = PolyFF::random(N, &mut rng);
-    let m1 = PolyFF::random_with_dis(N, &mut rng, ternary);
+    let m1 = PolyFF::random_with_distribution(N, &mut rng, ternary);
 
     let m0m1 = &m0 * &m1;
 
@@ -370,7 +370,7 @@ fn test_rgsw_mul_rgsw() {
         let m1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
-                let e = PolyFF::random_with_dis(N, &mut rng, chi);
+                let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
@@ -380,7 +380,7 @@ fn test_rgsw_mul_rgsw() {
         let neg_sm1_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
-                let e = PolyFF::random_with_dis(N, &mut rng, chi);
+                let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + e;
 
                 RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
@@ -397,7 +397,7 @@ fn test_rgsw_mul_rgsw() {
         let m0_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
-                let e = PolyFF::random_with_dis(N, &mut rng, chi);
+                let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + m0.mul_scalar(B.pow(i as u32) as Inner) + e;
 
                 RLWE::new(a, b)
@@ -407,7 +407,7 @@ fn test_rgsw_mul_rgsw() {
         let neg_sm0_base_power = (0..basis.decompose_len())
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
-                let e = PolyFF::random_with_dis(N, &mut rng, chi);
+                let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + e;
 
                 RLWE::new(a + m0.mul_scalar(B.pow(i as u32) as Inner), b)

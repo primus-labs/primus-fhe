@@ -1,5 +1,10 @@
-use algebra::{ntt_add_mul_assign, NTTField, NTTPolynomial, Polynomial, Random, RandomNTTField};
+use algebra::{
+    ntt_add_mul_assign, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
+    RandomNTTField,
+};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
+use rand::{CryptoRng, Rng};
+use rand_distr::Distribution;
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
@@ -46,13 +51,14 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
 impl<F: RandomNTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<Rng>(
+    pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,
-        chi: <F as Random>::NormalDistribution,
-        mut rng: Rng,
+        chi: FieldDiscreteGaussianSampler,
+        mut rng: R,
     ) -> Self
     where
-        Rng: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();
@@ -86,8 +92,8 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
                 let k_i = (0..len)
                     .map(|i| {
-                        let a = <NTTPolynomial<F>>::random(lwe_dimension, &mut rng);
-                        let mut e = <Polynomial<F>>::random_with_dis(lwe_dimension, &mut rng, chi)
+                        let a = NTTPolynomial::random(lwe_dimension, &mut rng);
+                        let mut e = Polynomial::random_with_gaussian(lwe_dimension, &mut rng, chi)
                             .into_ntt_polynomial();
 
                         ntt_add_mul_assign(&mut e, &a, &s);

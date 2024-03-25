@@ -27,5 +27,5 @@ pub use polynomial::univariate::{
     ntt_mul_inplace, NTTPolynomial, Polynomial,
 };
 pub use primitive::{div_ceil, Bits, Widening, WrappingOps};
-pub use random::Random;
+pub use random::{FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler, Random};
 pub use reduce::ModulusConfig;

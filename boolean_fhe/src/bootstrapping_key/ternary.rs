@@ -1,11 +1,12 @@
 use algebra::{
-    modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis, NTTField,
-    Random, RandomNTTField,
+    modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis,
+    FieldDiscreteGaussianSampler, NTTField, RandomNTTField,
 };
 use lattice::{
     DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
     NTTRGSW, RLWE,
 };
+use rand_distr::Distribution;
 
 use crate::{LWEType, NTTRLWESecretKey};
 
@@ -92,13 +93,14 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
         basis: Basis<F>,
         basis_powers: &[F],
         lwe_secret_key: &[LWEType],
-        chi: <F as Random>::NormalDistribution,
+        chi: FieldDiscreteGaussianSampler,
         rlwe_dimension: usize,
         rlwe_secret_key: &NTTRLWESecretKey<F>,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let key = lwe_secret_key
             .iter()

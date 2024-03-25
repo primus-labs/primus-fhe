@@ -2,10 +2,11 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 use std::vec::IntoIter;
 
+use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
-use crate::{Basis, Field, NTTField, Random};
+use crate::{Basis, Field, FieldDiscreteGaussianSampler, NTTField, Random};
 
 use super::NTTPolynomial;
 
@@ -180,6 +181,42 @@ impl<F: Field> Polynomial<F> {
             .rev()
             .fold(F::ZERO, |acc, &a| a.add_mul(acc, x))
     }
+
+    /// Generate a random binary [`Polynomial<F>`].
+    #[inline]
+    pub fn random_with_binary<R>(n: usize, mut rng: R) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        Self::new(crate::utils::sample_binary_field_vec(n, &mut rng))
+    }
+
+    /// Generate a random ternary [`Polynomial<F>`].
+    #[inline]
+    pub fn random_with_ternary<R>(n: usize, mut rng: R) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        Self::new(crate::utils::sample_ternary_field_vec(n, &mut rng))
+    }
+
+    /// Generate a random [`Polynomial<F>`] with discrete gaussian distribution.
+    #[inline]
+    pub fn random_with_gaussian<R>(
+        n: usize,
+        mut rng: R,
+        gaussian: FieldDiscreteGaussianSampler,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        if gaussian.cbd_enable() {
+            Self::new(crate::utils::sample_cbd_field_vec(n, &mut rng))
+        } else {
+            Self::new(gaussian.sample_iter(rng).take(n).collect())
+        }
+    }
 }
 
 impl<F: Field + Random> Polynomial<F> {
@@ -187,7 +224,7 @@ impl<F: Field + Random> Polynomial<F> {
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
     {
         Self {
             data: F::standard_distribution()
@@ -199,14 +236,12 @@ impl<F: Field + Random> Polynomial<F> {
 
     /// Generate a random [`Polynomial<F>`] with a specified distribution `dis`.
     #[inline]
-    pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
+    pub fn random_with_distribution<R, D>(n: usize, rng: R, distribution: D) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
         D: Distribution<F>,
     {
-        Self {
-            data: dis.sample_iter(rng).take(n).collect(),
-        }
+        Self::new(distribution.sample_iter(rng).take(n).collect())
     }
 }
 
