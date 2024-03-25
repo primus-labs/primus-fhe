@@ -40,13 +40,21 @@ fn bfv_add_test() {
 }
 
 #[test]
-fn bfv_scale_test() {
+fn bfv_mul_scalar_test() {
     let ctx = BFVScheme::gen_context();
     let (sk, pk) = BFVScheme::gen_keypair(&ctx);
     for _ in 0..1000 {
         let m_poly = Polynomial::<PlainField>::random(ctx.rlwe_dimension(), &mut *ctx.csrng_mut());
         let m = BFVPlaintext(m_poly.clone());
 
-        let scale = PlainField::random(&mut *ctx.csrng_mut());
+        let c = BFVScheme::encrypt(&ctx, &pk, &m);
+
+        let scalar = PlainField::random(&mut *ctx.csrng_mut());
+        let m_scalar = BFVPlaintext(m_poly.mul_scalar(scalar));
+
+        let c_scalar = BFVScheme::evaluate_mul_scalar(&ctx, &scalar, &c);
+
+        let m_res = BFVScheme::decrypt(&ctx, &sk, &c_scalar);
+        assert_eq!(m_scalar, m_res);
     }
 }

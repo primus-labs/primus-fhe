@@ -58,13 +58,7 @@ impl BFVScheme {
             }
         };
 
-        let m: Vec<CipherField> =
-            m.0.iter()
-                .map(
-                    #[inline(always)]
-                    |x| round(x),
-                )
-                .collect();
+        let m: Vec<CipherField> = m.0.iter().map(round).collect();
         let m = Polynomial::from_slice(&m);
 
         let c1 = b * &u + e1 + m;
@@ -93,23 +87,17 @@ impl BFVScheme {
             }
         };
         let msg = c1 + c2 * sk;
-        let msg: Vec<PlainField> = msg
-            .iter()
-            .map(
-                #[inline]
-                |m| round(m),
-            )
-            .collect();
+        let msg: Vec<PlainField> = msg.iter().map(round).collect();
         BFVPlaintext(Polynomial::<PlainField>::from_slice(&msg))
     }
 
     /// Scale multiplication .
-    pub fn evaluate_scale(
+    pub fn evaluate_mul_scalar(
         _ctx: &BFVContext,
         scalar: &PlainField,
         c: &BFVCiphertext,
     ) -> BFVCiphertext {
-        let scalar = scalar.cast_into_usize() as u32;
+        let scalar = CipherField::new(scalar.cast_into_usize() as u32);
         let BFVCiphertext([c1, c2]) = c;
         let c1 = c1.mul_scalar(scalar);
         let c2 = c2.mul_scalar(scalar);

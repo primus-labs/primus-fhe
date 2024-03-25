@@ -43,3 +43,10 @@ impl BFVContext {
         self.csrng.borrow_mut()
     }
 }
+
+impl Default for BFVContext {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -27,7 +27,11 @@ impl BFVSecretKey {
         let mut csrng = ctx.csrng_mut();
         let a = Polynomial::<CipherField>::random(ctx.rlwe_dimension(), &mut *csrng);
 
-        let e = Polynomial::<CipherField>::random_with_gaussian(ctx.rlwe_dimension(), &mut *csrng, ctx.sampler());
+        let e = Polynomial::<CipherField>::random_with_gaussian(
+            ctx.rlwe_dimension(),
+            &mut *csrng,
+            ctx.sampler(),
+        );
         let b = &a * self.secret_key() + e;
         BFVPublicKey::new([b, -a])
     }
