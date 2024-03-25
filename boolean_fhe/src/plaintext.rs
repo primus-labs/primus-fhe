@@ -39,6 +39,32 @@ impl LWEValueGaussain {
         modulus: LWEType,
         mean: f64,
         std_dev: f64,
+    ) -> Result<LWEValueGaussain, algebra::AlgebraError> {
+        let max_std_dev = std_dev * 6.0;
+        if std_dev < 0. {
+            return Err(algebra::AlgebraError::DistributionError);
+        }
+        match Normal::new(mean, std_dev) {
+            Ok(inner) => Ok(LWEValueGaussain {
+                inner,
+                max_std_dev,
+                modulus,
+            }),
+            Err(_) => Err(algebra::AlgebraError::DistributionError),
+        }
+    }
+
+    /// Construct, from mean and standard deviation
+    ///
+    /// Parameters:
+    ///
+    /// -   mean (`μ`, unrestricted)
+    /// -   standard deviation (`σ`, must be finite)
+    #[inline]
+    pub fn new_with_max_limit(
+        modulus: LWEType,
+        mean: f64,
+        std_dev: f64,
         max_std_dev: f64,
     ) -> Result<LWEValueGaussain, algebra::AlgebraError> {
         if max_std_dev <= std_dev || std_dev < 0. {

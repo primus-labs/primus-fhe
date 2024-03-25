@@ -196,13 +196,7 @@ impl<F: NTTField> Parameters<F> {
     /// Gets the lwe noise distribution.
     #[inline]
     pub fn lwe_noise_distribution(&self) -> LWEValueGaussain {
-        LWEValueGaussain::new(
-            self.lwe_modulus.value(),
-            0.0,
-            self.lwe_noise_std_dev,
-            self.lwe_noise_std_dev * 12.0,
-        )
-        .unwrap()
+        LWEValueGaussain::new(self.lwe_modulus.value(), 0.0, self.lwe_noise_std_dev).unwrap()
     }
 }
 
