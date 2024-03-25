@@ -19,15 +19,15 @@ pub fn dot_product(u: &[LWEType], v: &[LWEType], modulus: PowOf2Modulus<LWEType>
         .reduce(modulus)
 }
 
-/// The gaussain distribution `N(mean, std_dev**2)` for [`LWEValue`].
+/// The gaussian distribution `N(mean, std_dev**2)` for [`LWEValue`].
 #[derive(Clone, Copy, Debug)]
-pub struct LWEValueGaussain {
+pub struct LWEValueGaussian {
     inner: Normal<f64>,
     max_std_dev: f64,
     modulus: LWEType,
 }
 
-impl LWEValueGaussain {
+impl LWEValueGaussian {
     /// Construct, from mean and standard deviation
     ///
     /// Parameters:
@@ -39,13 +39,13 @@ impl LWEValueGaussain {
         modulus: LWEType,
         mean: f64,
         std_dev: f64,
-    ) -> Result<LWEValueGaussain, algebra::AlgebraError> {
+    ) -> Result<LWEValueGaussian, algebra::AlgebraError> {
         let max_std_dev = std_dev * 6.0;
         if std_dev < 0. {
             return Err(algebra::AlgebraError::DistributionError);
         }
         match Normal::new(mean, std_dev) {
-            Ok(inner) => Ok(LWEValueGaussain {
+            Ok(inner) => Ok(LWEValueGaussian {
                 inner,
                 max_std_dev,
                 modulus,
@@ -66,12 +66,12 @@ impl LWEValueGaussain {
         mean: f64,
         std_dev: f64,
         max_std_dev: f64,
-    ) -> Result<LWEValueGaussain, algebra::AlgebraError> {
+    ) -> Result<LWEValueGaussian, algebra::AlgebraError> {
         if max_std_dev <= std_dev || std_dev < 0. {
             return Err(algebra::AlgebraError::DistributionError);
         }
         match Normal::new(mean, std_dev) {
-            Ok(inner) => Ok(LWEValueGaussain {
+            Ok(inner) => Ok(LWEValueGaussian {
                 inner,
                 max_std_dev,
                 modulus,
@@ -99,7 +99,7 @@ impl LWEValueGaussain {
     }
 }
 
-impl rand::distributions::Distribution<LWEType> for LWEValueGaussain {
+impl rand::distributions::Distribution<LWEType> for LWEValueGaussian {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
         let mean = self.inner.mean();
         loop {

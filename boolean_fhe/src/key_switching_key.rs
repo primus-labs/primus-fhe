@@ -1,5 +1,5 @@
 use algebra::{
-    ntt_add_mul_assign, FieldDiscreteGaussainSampler, NTTField, NTTPolynomial, Polynomial,
+    ntt_add_mul_assign, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
     RandomNTTField,
 };
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
@@ -53,12 +53,12 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
     pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,
-        chi: FieldDiscreteGaussainSampler,
+        chi: FieldDiscreteGaussianSampler,
         mut rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussainSampler: Distribution<F>,
+        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();
@@ -93,7 +93,7 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 let k_i = (0..len)
                     .map(|i| {
                         let a = NTTPolynomial::random(lwe_dimension, &mut rng);
-                        let mut e = Polynomial::random_with_gaussain(lwe_dimension, &mut rng, chi)
+                        let mut e = Polynomial::random_with_gaussian(lwe_dimension, &mut rng, chi)
                             .into_ntt_polynomial();
 
                         ntt_add_mul_assign(&mut e, &a, &s);

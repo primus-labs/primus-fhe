@@ -93,14 +93,14 @@ fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenSt
     }
 }
 
-fn gaussain(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenStream {
+fn gaussian(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenStream {
     quote! {
-        impl ::rand::distributions::Distribution<#name> for ::algebra::FieldDiscreteGaussainSampler {
+        impl ::rand::distributions::Distribution<#name> for ::algebra::FieldDiscreteGaussianSampler {
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 let mean = self.mean();
-                let gaussain = self.gaussain();
+                let gaussian = self.gaussian();
                 loop {
-                    let value = gaussain.sample(rng);
+                    let value = gaussian.sample(rng);
                     if (value - mean).abs() < self.max_std_dev() {
                         let round = value.round();
                         if round < 0. {
@@ -126,7 +126,7 @@ fn impl_random(input: Input) -> TokenStream {
     let impl_binary = binary(name, field_ty);
     let impl_ternary = ternary(name, &modulus);
     let impl_uniform = uniform(name, field_ty, &modulus);
-    let impl_gaussain = gaussain(name, field_ty, &modulus);
+    let impl_gaussian = gaussian(name, field_ty, &modulus);
 
     quote! {
         #impl_standard
@@ -137,7 +137,7 @@ fn impl_random(input: Input) -> TokenStream {
 
         #impl_uniform
 
-        #impl_gaussain
+        #impl_gaussian
 
         impl #name {
             #[doc = concat!("Get a random value of [`", stringify!(#name), "`].")]
@@ -160,30 +160,30 @@ fn impl_random(input: Input) -> TokenStream {
             }
 
             #[inline]
-            fn binary_distribution() -> ::algebra::FieldBinarySampler {
+            fn binary_sampler() -> ::algebra::FieldBinarySampler {
                 ::algebra::FieldBinarySampler
             }
 
             #[inline]
-            fn ternary_distribution() -> ::algebra::FieldTernarySampler {
+            fn ternary_sampler() -> ::algebra::FieldTernarySampler {
                 ::algebra::FieldTernarySampler
             }
 
             #[inline]
-            fn gaussain_distribution(
+            fn gaussian_sampler(
                 mean: f64,
                 std_dev: f64,
-            ) -> Result<::algebra::FieldDiscreteGaussainSampler, ::algebra::AlgebraError> {
-                ::algebra::FieldDiscreteGaussainSampler::new(mean, std_dev)
+            ) -> Result<::algebra::FieldDiscreteGaussianSampler, ::algebra::AlgebraError> {
+                ::algebra::FieldDiscreteGaussianSampler::new(mean, std_dev)
             }
 
             #[inline]
-            fn gaussain_distribution_with_max_limit(
+            fn gaussian_sampler_with_max_limit(
                 mean: f64,
                 std_dev: f64,
                 max_std_dev: f64,
-            ) -> Result<::algebra::FieldDiscreteGaussainSampler, ::algebra::AlgebraError> {
-                ::algebra::FieldDiscreteGaussainSampler::new_with_max(mean, std_dev, max_std_dev)
+            ) -> Result<::algebra::FieldDiscreteGaussianSampler, ::algebra::AlgebraError> {
+                ::algebra::FieldDiscreteGaussianSampler::new_with_max(mean, std_dev, max_std_dev)
             }
         }
     }

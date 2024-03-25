@@ -1,6 +1,6 @@
 use algebra::{
     modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis,
-    FieldDiscreteGaussainSampler, NTTField, RandomNTTField,
+    FieldDiscreteGaussianSampler, NTTField, RandomNTTField,
 };
 use lattice::{
     DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
@@ -93,14 +93,14 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
         basis: Basis<F>,
         basis_powers: &[F],
         lwe_secret_key: &[LWEType],
-        chi: FieldDiscreteGaussainSampler,
+        chi: FieldDiscreteGaussianSampler,
         rlwe_dimension: usize,
         rlwe_secret_key: &NTTRLWESecretKey<F>,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
-        FieldDiscreteGaussainSampler: Distribution<F>,
+        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let key = lwe_secret_key
             .iter()

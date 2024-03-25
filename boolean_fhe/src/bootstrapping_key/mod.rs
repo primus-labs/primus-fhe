@@ -1,5 +1,5 @@
 use algebra::{
-    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, FieldDiscreteGaussainSampler, NTTField,
+    modulus::PowOf2Modulus, ntt_add_mul_assign, Basis, FieldDiscreteGaussianSampler, NTTField,
     NTTPolynomial, Polynomial, RandomNTTField,
 };
 use lattice::{NTTGadgetRLWE, NTTRGSW, RLWE};
@@ -80,12 +80,12 @@ impl<F: RandomNTTField> BootstrappingKey<F> {
     /// Generates the [`BootstrappingKey<F>`].
     pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,
-        chi: FieldDiscreteGaussainSampler,
+        chi: FieldDiscreteGaussianSampler,
         rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussainSampler: Distribution<F>,
+        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {
@@ -116,13 +116,13 @@ pub(crate) fn ntt_rgsw_zero<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis: Basis<F>,
-    chi: FieldDiscreteGaussainSampler,
+    chi: FieldDiscreteGaussianSampler,
     mut rng: R,
 ) -> NTTRGSW<F>
 where
     F: RandomNTTField,
     R: Rng + CryptoRng,
-    FieldDiscreteGaussainSampler: Distribution<F>,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     let decompose_len = basis.decompose_len();
     let neg_sm = ntt_rlwe_zeros(
@@ -152,13 +152,13 @@ pub(crate) fn ntt_rgsw_one<F, R>(
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis: Basis<F>,
     basis_powers: &[F],
-    chi: FieldDiscreteGaussainSampler,
+    chi: FieldDiscreteGaussianSampler,
     mut rng: R,
 ) -> NTTRGSW<F>
 where
     F: RandomNTTField,
     R: Rng + CryptoRng,
-    FieldDiscreteGaussainSampler: Distribution<F>,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     let one = ntt_gadget_rlwe_one(rlwe_dimension, rlwe_secret_key, basis_powers, chi, &mut rng);
     let neg_secret = ntt_gadget_rlwe_neg_secret_mul_one(
@@ -179,18 +179,18 @@ fn ntt_rlwe_zeros<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     n: usize,
-    chi: FieldDiscreteGaussainSampler,
+    chi: FieldDiscreteGaussianSampler,
     mut rng: R,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
     R: Rng + CryptoRng,
-    FieldDiscreteGaussainSampler: Distribution<F>,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     (0..n)
         .map(|_| {
             let a = NTTPolynomial::random(rlwe_dimension, &mut rng);
-            let mut b = Polynomial::random_with_gaussain(rlwe_dimension, &mut rng, chi)
+            let mut b = Polynomial::random_with_gaussian(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
 
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
@@ -204,19 +204,19 @@ fn ntt_gadget_rlwe_one<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis_powers: &[F],
-    chi: FieldDiscreteGaussainSampler,
+    chi: FieldDiscreteGaussianSampler,
     mut rng: R,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
     R: Rng + CryptoRng,
-    FieldDiscreteGaussainSampler: Distribution<F>,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     basis_powers
         .iter()
         .map(|&basis_power| {
             let a = NTTPolynomial::random(rlwe_dimension, &mut rng);
-            let mut b = Polynomial::random_with_gaussain(rlwe_dimension, &mut rng, chi)
+            let mut b = Polynomial::random_with_gaussian(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
 
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);
@@ -233,19 +233,19 @@ fn ntt_gadget_rlwe_neg_secret_mul_one<F, R>(
     rlwe_dimension: usize,
     rlwe_secret_key: &NTTRLWESecretKey<F>,
     basis_powers: &[F],
-    chi: FieldDiscreteGaussainSampler,
+    chi: FieldDiscreteGaussianSampler,
     mut rng: R,
 ) -> Vec<NTTRLWECiphertext<F>>
 where
     F: RandomNTTField,
     R: Rng + CryptoRng,
-    FieldDiscreteGaussainSampler: Distribution<F>,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     basis_powers
         .iter()
         .map(|&basis_power| {
             let mut a = NTTPolynomial::random(rlwe_dimension, &mut rng);
-            let mut b = Polynomial::random_with_gaussain(rlwe_dimension, &mut rng, chi)
+            let mut b = Polynomial::random_with_gaussian(rlwe_dimension, &mut rng, chi)
                 .into_ntt_polynomial();
 
             ntt_add_mul_assign(&mut b, &a, rlwe_secret_key);

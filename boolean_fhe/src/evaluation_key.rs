@@ -1,4 +1,4 @@
-use algebra::{FieldDiscreteGaussainSampler, NTTField, Polynomial, RandomNTTField};
+use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial, RandomNTTField};
 use lattice::{LWE, RLWE};
 use rand_distr::Distribution;
 
@@ -77,7 +77,7 @@ impl<F: NTTField> EvaluationKey<F> {
 
 impl<F: RandomNTTField> EvaluationKey<F>
 where
-    FieldDiscreteGaussainSampler: Distribution<F>,
+    FieldDiscreteGaussianSampler: Distribution<F>,
 {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<F>) -> Self {
