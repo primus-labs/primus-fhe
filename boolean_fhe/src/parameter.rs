@@ -210,19 +210,13 @@ impl<F: RandomNTTField> Parameters<F> {
     /// Gets the rlwe noise distribution.
     #[inline]
     pub fn rlwe_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
-        F::gaussain_distribution(0.0, self.rlwe_noise_std_dev, self.rlwe_noise_std_dev * 12.0)
-            .unwrap()
+        F::gaussain_distribution(0.0, self.rlwe_noise_std_dev).unwrap()
     }
 
     /// Gets the key_switching noise distribution.
     #[inline]
     pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussainSampler {
-        F::gaussain_distribution(
-            0.0,
-            self.key_switching_std_dev,
-            self.key_switching_std_dev * 6.0,
-        )
-        .unwrap()
+        F::gaussain_distribution(0.0, self.key_switching_std_dev).unwrap()
     }
 }
 

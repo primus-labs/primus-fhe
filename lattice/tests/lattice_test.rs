@@ -164,7 +164,7 @@ fn min_to_zero(value: FF) -> Inner {
 #[test]
 fn test_rlwe_he() {
     let mut rng = rand::thread_rng();
-    let chi = FF::gaussain_distribution(0., 3.2, 3.2 * 6.).unwrap();
+    let chi = FF::gaussain_distribution(0., 3.2).unwrap();
     let dis = Uniform::new(0, FT);
 
     let v0: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
@@ -231,7 +231,7 @@ fn extract_lwe_test() {
 #[test]
 fn test_gadget_rlwe() {
     let mut rng = rand::thread_rng();
-    let chi = FF::gaussain_distribution(0., 3.2, 3.2 * 6.).unwrap();
+    let chi = FF::gaussain_distribution(0., 3.2).unwrap();
 
     let m = PolyFF::random(N, &mut rng);
     let poly = PolyFF::random(N, &mut rng);
@@ -297,7 +297,7 @@ fn test_gadget_rlwe() {
 fn test_rgsw_mul_rlwe() {
     let mut rng = rand::thread_rng();
     let ternary = FF::ternary_distribution();
-    let chi = FF::gaussain_distribution(0., 3.2, 3.2 * 6.).unwrap();
+    let chi = FF::gaussain_distribution(0., 3.2).unwrap();
 
     let m0 = PolyFF::random(N, &mut rng);
     let m1 = PolyFF::random_with_distribution(N, &mut rng, ternary);
@@ -355,7 +355,7 @@ fn test_rgsw_mul_rlwe() {
 fn test_rgsw_mul_rgsw() {
     let mut rng = rand::thread_rng();
     let ternary = FF::ternary_distribution();
-    let chi = FF::gaussain_distribution(0., 3.2, 3.2 * 6.).unwrap();
+    let chi = FF::gaussain_distribution(0., 3.2).unwrap();
 
     let m0 = PolyFF::random(N, &mut rng);
     let m1 = PolyFF::random_with_distribution(N, &mut rng, ternary);

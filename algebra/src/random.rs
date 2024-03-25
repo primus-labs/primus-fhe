@@ -43,6 +43,12 @@ pub trait Random: Sized + SampleUniform {
     fn gaussain_distribution(
         mean: f64,
         std_dev: f64,
+    ) -> Result<FieldDiscreteGaussainSampler, AlgebraError>;
+
+    /// Get the gaussain distribution.
+    fn gaussain_distribution_with_max_limit(
+        mean: f64,
+        std_dev: f64,
         max_std_dev: f64,
     ) -> Result<FieldDiscreteGaussainSampler, AlgebraError>;
 }

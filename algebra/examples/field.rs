@@ -74,7 +74,7 @@ fn main() -> Result<(), algebra::AlgebraError> {
     // other distributions
     let _binary_distribution = FF::binary_distribution();
     let _ternary_distribution = FF::ternary_distribution();
-    let _gaussain_distribution = FF::gaussain_distribution(0.0, 3.2, 3.2 * 6.0)?;
+    let _gaussain_distribution = FF::gaussain_distribution(0.0, 3.2)?;
 
     // Some operation
     let _c = a + b;
