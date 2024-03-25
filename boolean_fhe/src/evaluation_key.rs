@@ -146,7 +146,7 @@ fn test_init_nand_acc() {
     use algebra::reduce::{NegReduce, SubReduce};
     use algebra::Field;
 
-    use crate::DefaultField100;
+    use crate::DefaultFieldTernary128;
 
     const N: usize = 64;
     let q = 16u16;
@@ -155,7 +155,7 @@ fn test_init_nand_acc() {
     let l = (q >> 3) * 3;
     let r = (q >> 3) * 7;
     for b in 0..q {
-        let acc = init_nand_acc::<DefaultField100>(b, N, ratio);
+        let acc = init_nand_acc::<DefaultFieldTernary128>(b, N, ratio);
         for a in 0..q {
             let ra = a.neg_reduce(modulus) as usize * ratio;
             let m = if ra == 0 {
@@ -169,9 +169,9 @@ fn test_init_nand_acc() {
             };
 
             if (l..r).contains(&(b.sub_reduce(a, modulus))) {
-                assert_eq!(m, DefaultField100::NEG_Q_DIV_8, "b:{b} a:{a}");
+                assert_eq!(m, DefaultFieldTernary128::NEG_Q_DIV_8, "b:{b} a:{a}");
             } else {
-                assert_eq!(m, DefaultField100::Q_DIV_8, "b:{b} a:{a}");
+                assert_eq!(m, DefaultFieldTernary128::Q_DIV_8, "b:{b} a:{a}");
             }
         }
     }

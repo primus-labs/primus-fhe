@@ -419,23 +419,25 @@ impl<F: NTTField> ParametersBuilder<F> {
 /// Default Field for Default Parameters
 #[derive(Field, Random, Prime, NTT)]
 #[modulus = 132120577]
-pub struct DefaultField100(u32);
+pub struct DefaultFieldTernary128(u32);
 
 /// Default Parameters
-pub const CONST_DEFAULT_100_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
+pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
     lwe_dimension: 512,
-    lwe_modulus: 512,
+    lwe_modulus: 1024,
     lwe_noise_std_dev: 3.20,
     secret_key_type: SecretKeyType::Ternary,
     rlwe_dimension: 1024,
     rlwe_modulus: 132120577,
     rlwe_noise_std_dev: 3.20,
-    gadget_basis_bits: 6,
-    key_switching_basis_bits: 3,
-    key_switching_std_dev: (1u32 << 12) as f64,
+    gadget_basis_bits: 8,
+    key_switching_basis_bits: 4,
+    key_switching_std_dev: 3.2 * ((1 << 7) as f64),
 };
 
-/// Default 100bits security Parameters
-pub static DEFAULT_100_BITS_PARAMERTERS: Lazy<Parameters<DefaultField100>> = Lazy::new(|| {
-    <Parameters<DefaultField100>>::try_from(CONST_DEFAULT_100_BITS_PARAMERTERS).unwrap()
-});
+/// Default 128-bits security Parameters
+pub static DEFAULT_TERNARY_128_BITS_PARAMERTERS: Lazy<Parameters<DefaultFieldTernary128>> =
+    Lazy::new(|| {
+        <Parameters<DefaultFieldTernary128>>::try_from(CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS)
+            .unwrap()
+    });
