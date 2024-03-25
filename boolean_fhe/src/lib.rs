@@ -18,8 +18,8 @@ mod secret_key;
 pub use error::FHEError;
 
 pub use parameter::{
-    ConstParameters, DefaultField100, Parameters, ParametersBuilder,
-    CONST_DEFAULT_100_BITS_PARAMERTERS, DEFAULT_100_BITS_PARAMERTERS,
+    ConstParameters, DefaultFieldTernary128, Parameters, ParametersBuilder,
+    CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
 };
 
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};

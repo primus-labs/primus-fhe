@@ -1,4 +1,4 @@
-use boolean_fhe::{EvaluationKey, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
+use boolean_fhe::{EvaluationKey, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::Rng;
 
@@ -7,7 +7,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let default_parameters = DEFAULT_100_BITS_PARAMERTERS.clone();
+    let default_parameters = DEFAULT_TERNARY_128_BITS_PARAMERTERS.clone();
 
     // generate keys
     let skp = SecretKeyPack::new(default_parameters);

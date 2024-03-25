@@ -1,4 +1,4 @@
-use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_100_BITS_PARAMERTERS};
+use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS};
 use rand::prelude::*;
 
 #[test]
@@ -7,7 +7,7 @@ fn test_nand() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = DEFAULT_100_BITS_PARAMERTERS.clone();
+    let params = DEFAULT_TERNARY_128_BITS_PARAMERTERS.clone();
 
     let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEType;
 
