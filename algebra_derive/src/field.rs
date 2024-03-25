@@ -90,7 +90,7 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 
     let impl_basic = basic(name, &modulus);
 
-    let impl_display = display(name, &modulus);
+    let impl_display = display(name);
 
     let impl_zero = impl_zero(name);
 
@@ -157,11 +157,11 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
 
             const NEG_ONE: Self = Self(#modulus - 1);
 
-            const ONE_INNER: Self::Value = 1;
+            const ONE_VALUE: Self::Value = 1;
 
-            const MODULUS_INNER: Self::Value = #modulus;
+            const MODULUS_VALUE: Self::Value = #modulus;
 
-            const TWICE_MODULUS_INNER: Self::Value = #modulus << 1;
+            const TWICE_MODULUS_VALUE: Self::Value = #modulus << 1;
 
             const Q_DIV_8: Self = Self(#modulus >> 3);
 
@@ -201,11 +201,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
                     use ::algebra::reduce::ReduceAssign;
                     self.0.reduce_assign(<Self as ::algebra::ModulusConfig>::MODULUS);
                 }
-            }
-
-            #[inline]
-            fn modulus_value() -> Self::Value {
-                #modulus
             }
 
             #[inline]
@@ -255,23 +250,13 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn cast_into_usize(self) -> usize {
-                ::num_traits::cast::<#field_ty, usize>(self.0).unwrap()
-            }
-
-            #[inline]
-            fn cast_from_usize(value: usize) -> Self {
+            fn from_usize(value: usize) -> Self {
                 Self::new(::num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
             #[inline]
             fn to_f64(self) -> f64 {
                 self.0 as f64
-            }
-
-            #[inline]
-            fn order() -> Self::Order {
-                #modulus
             }
 
             #[inline]

@@ -82,13 +82,13 @@ pub trait Field:
     const NEG_ONE: Self;
 
     /// 1
-    const ONE_INNER: Self::Value;
+    const ONE_VALUE: Self::Value;
 
     /// q
-    const MODULUS_INNER: Self::Value;
+    const MODULUS_VALUE: Self::Value;
 
     /// 2q
-    const TWICE_MODULUS_INNER: Self::Value;
+    const TWICE_MODULUS_VALUE: Self::Value;
 
     /// q/8
     const Q_DIV_8: Self;
@@ -99,20 +99,17 @@ pub trait Field:
     /// Creates a new instance.
     fn new(value: Self::Value) -> Self;
 
-    /// Creates a new instance.
+    /// Creates and checks a new instance.
     fn checked_new(value: Self::Value) -> Self;
 
-    /// Get inner value.
+    /// Gets inner value.
     fn get(self) -> Self::Value;
 
-    /// Reset inner value.
+    /// Resets inner value.
     fn set(&mut self, value: Self::Value);
 
-    /// Reset inner value.
+    /// Resets and checks inner value.
     fn checked_set(&mut self, value: Self::Value);
-
-    /// Returns the modulus value.
-    fn modulus_value() -> Self::Value;
 
     /// Return `self * scalar`.
     fn mul_scalar(self, scalar: Self::Value) -> Self;
@@ -147,17 +144,11 @@ pub trait Field:
     /// and falling back to [0, modulus) for normal case.
     fn add_mul_assign_fast(&mut self, a: Self, b: Self);
 
-    /// cast self to [`usize`].
-    fn cast_into_usize(self) -> usize;
-
     /// cast from [`usize`].
-    fn cast_from_usize(value: usize) -> Self;
+    fn from_usize(value: usize) -> Self;
 
     /// cast inner to [`f64`].
     fn to_f64(self) -> f64;
-
-    /// Returns the order of the field.
-    fn order() -> Self::Order;
 
     /// mask, return a number with `bits` 1s.
     fn mask(bits: u32) -> Self::Value;

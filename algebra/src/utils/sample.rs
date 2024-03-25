@@ -60,7 +60,7 @@ where
     F: Field,
     R: Rng + CryptoRng,
 {
-    let modulus = F::modulus_value();
+    let modulus = F::MODULUS_VALUE;
     let mut cbd = || {
         let mut x: [u8; 6] = [0; 6];
         rng.fill_bytes(&mut x);

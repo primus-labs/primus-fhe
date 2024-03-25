@@ -83,7 +83,7 @@ where
     type Error = FHEError;
 
     fn try_from(parameters: ConstParameters<Scalar>) -> Result<Self, FHEError> {
-        assert_eq!(F::modulus_value(), parameters.rlwe_modulus);
+        assert_eq!(F::MODULUS_VALUE, parameters.rlwe_modulus);
 
         Self::builder()
             .lwe_dimension(parameters.lwe_dimension)
@@ -91,7 +91,7 @@ where
             .lwe_noise_std_dev(parameters.lwe_noise_std_dev)
             .secret_key_type(parameters.secret_key_type)
             .rlwe_dimension(parameters.rlwe_dimension)
-            .rlwe_modulus(F::modulus_value())
+            .rlwe_modulus(F::MODULUS_VALUE)
             .rlwe_noise_std_dev(parameters.rlwe_noise_std_dev)
             .gadget_basis_bits(parameters.gadget_basis_bits)
             .key_switching_basis_bits(parameters.key_switching_basis_bits)
@@ -348,7 +348,7 @@ impl<F: NTTField> ParametersBuilder<F> {
                 & self.rlwe_noise_std_dev.is_some()
                 & self.key_switching_std_dev.is_some()
         );
-        assert_eq!(F::modulus_value(), self.rlwe_modulus.unwrap());
+        assert_eq!(F::MODULUS_VALUE, self.rlwe_modulus.unwrap());
 
         let lwe_dimension = self.lwe_dimension.unwrap();
         let lwe_modulus = self.lwe_modulus.unwrap();

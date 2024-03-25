@@ -84,7 +84,7 @@ where
             inv_root_powers[i + 1] = inv_root_power;
         }
 
-        let inv_degree = <F as Field>::cast_from_usize(coeff_count).inv().to_root();
+        let inv_degree = <F as Field>::from_usize(coeff_count).inv().to_root();
 
         Self {
             root,
@@ -309,8 +309,8 @@ where
 
 #[inline]
 fn guard<F: Field>(a: F) -> F {
-    if a.get() >= F::TWICE_MODULUS_INNER {
-        F::new(a.get() - F::TWICE_MODULUS_INNER)
+    if a.get() >= F::TWICE_MODULUS_VALUE {
+        F::new(a.get() - F::TWICE_MODULUS_VALUE)
     } else {
         a
     }
@@ -319,19 +319,19 @@ fn guard<F: Field>(a: F) -> F {
 #[inline]
 fn ntt_normalize_assign<F: Field>(a: &mut F) {
     let mut r = a.get();
-    if r >= F::TWICE_MODULUS_INNER {
-        r = r - F::TWICE_MODULUS_INNER;
+    if r >= F::TWICE_MODULUS_VALUE {
+        r = r - F::TWICE_MODULUS_VALUE;
     }
-    if r >= F::MODULUS_INNER {
-        r = r - F::MODULUS_INNER;
+    if r >= F::MODULUS_VALUE {
+        r = r - F::MODULUS_VALUE;
     }
     a.set(r);
 }
 
 #[inline]
 fn intt_normalize_assign<F: Field>(a: &mut F) {
-    if a.get() >= F::MODULUS_INNER {
-        a.set(a.get() - F::MODULUS_INNER)
+    if a.get() >= F::MODULUS_VALUE {
+        a.set(a.get() - F::MODULUS_VALUE)
     }
 }
 
@@ -343,8 +343,8 @@ fn add_no_reduce<F: Field>(a: F, b: F) -> F {
 #[inline]
 fn add_fast<F: Field>(a: F, b: F) -> F {
     let r = a.get() + b.get();
-    if r >= F::TWICE_MODULUS_INNER {
-        F::new(r - F::TWICE_MODULUS_INNER)
+    if r >= F::TWICE_MODULUS_VALUE {
+        F::new(r - F::TWICE_MODULUS_VALUE)
     } else {
         F::new(r)
     }
@@ -352,7 +352,7 @@ fn add_fast<F: Field>(a: F, b: F) -> F {
 
 #[inline]
 fn sub_fast<F: Field>(a: F, b: F) -> F {
-    F::new(a.get() + F::TWICE_MODULUS_INNER - b.get())
+    F::new(a.get() + F::TWICE_MODULUS_VALUE - b.get())
 }
 
 #[inline]
@@ -361,6 +361,6 @@ fn mul_root_fast<F: NTTField>(a: F, root: ShoupFactor<F::Value>) -> F {
     F::new(
         root.value()
             .wrapping_mul(a.get())
-            .wrapping_sub(hw.wrapping_mul(F::MODULUS_INNER)),
+            .wrapping_sub(hw.wrapping_mul(F::MODULUS_VALUE)),
     )
 }

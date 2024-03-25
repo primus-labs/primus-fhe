@@ -67,12 +67,12 @@ pub(crate) fn basic(name: &Ident, modulus: &LitInt) -> TokenStream {
     }
 }
 
-pub(crate) fn display(name: &Ident, modulus: &LitInt) -> TokenStream {
+pub(crate) fn display(name: &Ident) -> TokenStream {
     quote! {
         impl ::std::fmt::Display for #name {
             #[inline]
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                write!(f, "[({})_{}]", self.0, #modulus)
+                write!(f, "{}", self.0)
             }
         }
     }
