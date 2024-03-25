@@ -174,7 +174,7 @@ fn impl_random(input: Input) -> TokenStream {
                 mean: f64,
                 std_dev: f64,
             ) -> Result<::algebra::FieldDiscreteGaussainSampler, ::algebra::AlgebraError> {
-                ::algebra::FieldDiscreteGaussainSampler::new(mean, std_dev, std_dev * 6.0)
+                ::algebra::FieldDiscreteGaussainSampler::new(mean, std_dev)
             }
 
             #[inline]
@@ -183,7 +183,7 @@ fn impl_random(input: Input) -> TokenStream {
                 std_dev: f64,
                 max_std_dev: f64,
             ) -> Result<::algebra::FieldDiscreteGaussainSampler, ::algebra::AlgebraError> {
-                ::algebra::FieldDiscreteGaussainSampler::new(mean, std_dev, max_std_dev)
+                ::algebra::FieldDiscreteGaussainSampler::new_with_max(mean, std_dev, max_std_dev)
             }
         }
     }

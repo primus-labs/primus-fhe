@@ -83,7 +83,30 @@ impl FieldDiscreteGaussainSampler {
     /// -   mean (`μ`, unrestricted)
     /// -   standard deviation (`σ`, must be finite)
     #[inline]
-    pub fn new(
+    pub fn new(mean: f64, std_dev: f64) -> Result<FieldDiscreteGaussainSampler, AlgebraError> {
+        let max_std_dev = std_dev * 6.0;
+        if std_dev < 0. {
+            return Err(AlgebraError::DistributionError);
+        }
+        match Normal::new(mean, std_dev) {
+            Ok(gaussain) => Ok(FieldDiscreteGaussainSampler {
+                gaussain,
+                max_std_dev,
+                cbd_enable: mean.to_bits() == 0.0f64.to_bits()
+                    && std_dev.to_bits() == 3.2f64.to_bits(),
+            }),
+            Err(_) => Err(AlgebraError::DistributionError),
+        }
+    }
+
+    /// Construct, from mean and standard deviation
+    ///
+    /// Parameters:
+    ///
+    /// -   mean (`μ`, unrestricted)
+    /// -   standard deviation (`σ`, must be finite)
+    #[inline]
+    pub fn new_with_max(
         mean: f64,
         std_dev: f64,
         max_std_dev: f64,
