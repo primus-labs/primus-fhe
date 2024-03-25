@@ -172,7 +172,7 @@ fn test_poly_decompose_mul() {
         .into_iter()
         .enumerate()
         .fold(PolyFF::zero(N), |acc, (i, d)| {
-            acc + d * poly2.mul_scalar(B.pow(i as u32) as Inner)
+            acc + d * poly2.mul_scalar(Fp32::new(B.pow(i as u32) as u32))
         });
     assert_eq!(compose_mul_result, mul_result);
 }
