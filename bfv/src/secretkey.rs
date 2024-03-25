@@ -1,6 +1,6 @@
 //! The secret key of BFV.
 use crate::{context::BFVContext, BFVPublicKey, CipherField};
-use algebra::{Polynomial, Random};
+use algebra::Polynomial;
 
 /// Define the secret key of BFV.
 #[derive(Clone, Debug, PartialEq)]
@@ -12,11 +12,8 @@ impl BFVSecretKey {
     /// Generate a new BFV secret key with ternary distribution.
     pub fn new(ctx: &BFVContext) -> Self {
         let mut csrng = ctx.csrng_mut();
-        let poly = Polynomial::<CipherField>::random_with_dis(
-            ctx.rlwe_dimension(),
-            &mut *csrng,
-            CipherField::ternary_distribution(),
-        );
+        let poly =
+            Polynomial::<CipherField>::random_with_ternary(ctx.rlwe_dimension(), &mut *csrng);
         Self { ternary_key: poly }
     }
     /// Returns the reference of secret key.
@@ -29,11 +26,8 @@ impl BFVSecretKey {
     pub fn gen_pubkey(&self, ctx: &BFVContext) -> BFVPublicKey {
         let mut csrng = ctx.csrng_mut();
         let a = Polynomial::<CipherField>::random(ctx.rlwe_dimension(), &mut *csrng);
-        let e: Polynomial<CipherField> = Polynomial::<CipherField>::random_with_dis(
-            ctx.rlwe_dimension(),
-            &mut *csrng,
-            CipherField::normal_distribution(0.0, 3.2).unwrap(),
-        );
+
+        let e = Polynomial::<CipherField>::random_with_gaussian(ctx.rlwe_dimension(), &mut *csrng, ctx.sampler());
         let b = &a * self.secret_key() + e;
         BFVPublicKey::new([b, -a])
     }

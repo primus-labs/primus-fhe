@@ -2,6 +2,7 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 use std::vec::IntoIter;
 
+use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
@@ -174,7 +175,7 @@ impl<F: Field + Random> NTTPolynomial<F> {
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
     {
         Self {
             data: F::standard_distribution()
@@ -186,14 +187,12 @@ impl<F: Field + Random> NTTPolynomial<F> {
 
     /// Generate a random [`NTTPolynomial<F>`]  with a specified distribution `dis`.
     #[inline]
-    pub fn random_with_dis<R, D>(n: usize, rng: R, dis: D) -> Self
+    pub fn random_with_distribution<R, D>(n: usize, rng: R, distribution: D) -> Self
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: Rng + CryptoRng,
         D: Distribution<F>,
     {
-        Self {
-            data: dis.sample_iter(rng).take(n).collect(),
-        }
+        Self::new(distribution.sample_iter(rng).take(n).collect())
     }
 }
 

@@ -1,4 +1,5 @@
 use algebra::{modulus::PowOf2Modulus, reduce::Reduce};
+use rand_distr::Normal;
 
 /// LWE Plain text
 pub type LWEPlaintext = bool;
@@ -18,16 +19,15 @@ pub fn dot_product(u: &[LWEType], v: &[LWEType], modulus: PowOf2Modulus<LWEType>
         .reduce(modulus)
 }
 
-/// The normal distribution `N(mean, std_dev**2)` for [`LWEValue`].
+/// The gaussian distribution `N(mean, std_dev**2)` for [`LWEValue`].
 #[derive(Clone, Copy, Debug)]
-pub struct LWEValueNormal {
-    inner: rand_distr::Normal<f64>,
-    std_dev_min: f64,
-    std_dev_max: f64,
+pub struct LWEValueGaussian {
+    inner: Normal<f64>,
+    max_std_dev: f64,
     modulus: LWEType,
 }
 
-impl LWEValueNormal {
+impl LWEValueGaussian {
     /// Construct, from mean and standard deviation
     ///
     /// Parameters:
@@ -39,18 +39,43 @@ impl LWEValueNormal {
         modulus: LWEType,
         mean: f64,
         std_dev: f64,
-    ) -> Result<LWEValueNormal, algebra::AlgebraError> {
-        match rand_distr::Normal::new(mean, std_dev) {
-            Ok(inner) => {
-                let std_dev_max = std_dev * 6.0;
-                let std_dev_min = -std_dev_max;
-                Ok(LWEValueNormal {
-                    inner,
-                    std_dev_max,
-                    std_dev_min,
-                    modulus,
-                })
-            }
+    ) -> Result<LWEValueGaussian, algebra::AlgebraError> {
+        let max_std_dev = std_dev * 6.0;
+        if std_dev < 0. {
+            return Err(algebra::AlgebraError::DistributionError);
+        }
+        match Normal::new(mean, std_dev) {
+            Ok(inner) => Ok(LWEValueGaussian {
+                inner,
+                max_std_dev,
+                modulus,
+            }),
+            Err(_) => Err(algebra::AlgebraError::DistributionError),
+        }
+    }
+
+    /// Construct, from mean and standard deviation
+    ///
+    /// Parameters:
+    ///
+    /// -   mean (`μ`, unrestricted)
+    /// -   standard deviation (`σ`, must be finite)
+    #[inline]
+    pub fn new_with_max_limit(
+        modulus: LWEType,
+        mean: f64,
+        std_dev: f64,
+        max_std_dev: f64,
+    ) -> Result<LWEValueGaussian, algebra::AlgebraError> {
+        if max_std_dev <= std_dev || std_dev < 0. {
+            return Err(algebra::AlgebraError::DistributionError);
+        }
+        match Normal::new(mean, std_dev) {
+            Ok(inner) => Ok(LWEValueGaussian {
+                inner,
+                max_std_dev,
+                modulus,
+            }),
             Err(_) => Err(algebra::AlgebraError::DistributionError),
         }
     }
@@ -69,36 +94,24 @@ impl LWEValueNormal {
 
     /// Returns `6σ` of the distribution.
     #[inline]
-    pub fn std_dev_max(&self) -> f64 {
-        self.std_dev_max
-    }
-
-    /// Returns `-6σ` of the distribution.
-    #[inline]
-    pub fn std_dev_min(&self) -> f64 {
-        self.std_dev_min
+    pub fn max_std_dev(&self) -> f64 {
+        self.max_std_dev
     }
 }
 
-impl rand::distributions::Distribution<LWEType> for LWEValueNormal {
+impl rand::distributions::Distribution<LWEType> for LWEValueGaussian {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
-        let float_p: f64 = self.modulus as f64;
-        let mut value = self.inner.sample(rng);
-        while value < self.std_dev_min {
-            value += self.std_dev();
-        }
-        while value >= self.std_dev_max {
-            value -= self.std_dev();
-        }
-        if value < 0. {
-            if value.ceil() == 0. {
-                0
-            } else {
-                value = float_p + value.ceil();
-                value as LWEType
+        let mean = self.inner.mean();
+        loop {
+            let value = self.inner.sample(rng);
+            if (value - mean).abs() < self.max_std_dev {
+                let round = value.round();
+                if round < 0. {
+                    return self.modulus - ((-value) as LWEType);
+                } else {
+                    return value as LWEType;
+                }
             }
-        } else {
-            value as LWEType
         }
     }
 }
@@ -107,35 +120,12 @@ impl rand::distributions::Distribution<LWEType> for LWEValueNormal {
 ///
 /// prob\[1] = prob\[0] = 0.5
 #[derive(Clone, Copy, Debug)]
-pub struct LWEValueBinary {
-    inner: rand_distr::Bernoulli,
-}
-
-impl LWEValueBinary {
-    /// Creates a new [`LWEValueBinary`].
-    #[inline]
-    pub fn new() -> Self {
-        Self {
-            inner: rand_distr::Bernoulli::new(0.5).unwrap(),
-        }
-    }
-}
-
-impl Default for LWEValueBinary {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub struct LWEValueBinary;
 
 impl rand::distributions::Distribution<LWEType> for LWEValueBinary {
     #[inline]
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
-        if self.inner.sample(rng) {
-            1
-        } else {
-            0
-        }
+        (rng.next_u32() & 0b1) as LWEType
     }
 }
 
@@ -146,9 +136,7 @@ impl rand::distributions::Distribution<LWEType> for LWEValueBinary {
 /// prob\[0] = 0.5
 #[derive(Clone, Copy, Debug)]
 pub struct LWEValueTernary {
-    lwe_modulus_mask: LWEType,
-    inner1: rand_distr::Bernoulli,
-    inner2: rand_distr::Bernoulli,
+    neg_one: LWEType,
 }
 
 impl LWEValueTernary {
@@ -156,9 +144,7 @@ impl LWEValueTernary {
     #[inline]
     pub fn new(lwe_modulus: LWEType) -> Self {
         Self {
-            lwe_modulus_mask: lwe_modulus - 1,
-            inner1: rand_distr::Bernoulli::new(0.5).unwrap(),
-            inner2: rand_distr::Bernoulli::new(0.5).unwrap(),
+            neg_one: lwe_modulus - 1,
         }
     }
 }
@@ -166,12 +152,52 @@ impl LWEValueTernary {
 impl rand::distributions::Distribution<LWEType> for LWEValueTernary {
     #[inline]
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> LWEType {
-        if self.inner1.sample(rng) {
-            0
-        } else if self.inner2.sample(rng) {
-            1
-        } else {
-            self.lwe_modulus_mask
+        [0, 0, 1, self.neg_one][(rng.next_u32() & 0b11) as usize]
+    }
+}
+
+/// Sample a binary vector whose values are `LWEType`.
+pub fn sample_binary_lwe_vec<R>(length: usize, rng: &mut R) -> Vec<LWEType>
+where
+    R: rand::Rng + rand::CryptoRng,
+{
+    let mut v = vec![0; length];
+    let mut iter = v.chunks_exact_mut(32);
+    for chunk in &mut iter {
+        let mut r = rng.next_u32();
+        for elem in chunk.iter_mut() {
+            *elem = (r & 0b1) as LWEType;
+            r >>= 1;
         }
     }
+    let mut r = rng.next_u32();
+    for elem in iter.into_remainder() {
+        *elem = (r & 0b1) as LWEType;
+        r >>= 1;
+    }
+    v
+}
+
+/// Sample a ternary vector whose values are `LWEType`.
+pub fn sample_ternary_lwe_vec<R>(lwe_modulus: LWEType, length: usize, rng: &mut R) -> Vec<LWEType>
+where
+    R: rand::Rng + rand::CryptoRng,
+{
+    let neg_one = lwe_modulus - 1;
+    let s = [0, 0, 1, neg_one];
+    let mut v = vec![0; length];
+    let mut iter = v.chunks_exact_mut(16);
+    for chunk in &mut iter {
+        let mut r = rng.next_u32();
+        for elem in chunk.iter_mut() {
+            *elem = s[(r & 0b11) as usize];
+            r >>= 2;
+        }
+    }
+    let mut r = rng.next_u32();
+    for elem in iter.into_remainder() {
+        *elem = s[(r & 0b11) as usize];
+        r >>= 2;
+    }
+    v
 }

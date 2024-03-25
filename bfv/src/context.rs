@@ -1,5 +1,6 @@
 //! Context of BFV
 
+use algebra::FieldDiscreteGaussianSampler;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::cell::RefCell;
@@ -10,6 +11,7 @@ use crate::DIMENSION_N;
 pub struct BFVContext {
     rlwe_dimension: usize,
     csrng: RefCell<ChaCha12Rng>,
+    sampler: FieldDiscreteGaussianSampler,
 }
 
 impl BFVContext {
@@ -20,12 +22,19 @@ impl BFVContext {
         Self {
             rlwe_dimension: DIMENSION_N,
             csrng: RefCell::new(csrng),
+            sampler: FieldDiscreteGaussianSampler::new(0.0, 3.2).unwrap(),
         }
     }
     /// Returns the rlwe_dimension.
     #[inline]
     pub fn rlwe_dimension(&self) -> usize {
         self.rlwe_dimension
+    }
+
+    /// Returns the sampler.
+    #[inline]
+    pub fn sampler(&self) -> FieldDiscreteGaussianSampler {
+        self.sampler
     }
 
     /// Returns the csrng of [`BFVContext`].

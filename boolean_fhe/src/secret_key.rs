@@ -9,7 +9,8 @@ use rand_chacha::ChaCha12Rng;
 use rand_distr::Uniform;
 
 use crate::{
-    dot_product, LWECiphertext, LWEPlaintext, LWEType, LWEValueBinary, LWEValueTernary, Parameters,
+    dot_product, sample_binary_lwe_vec, sample_ternary_lwe_vec, LWECiphertext, LWEPlaintext,
+    LWEType, Parameters,
 };
 
 /// The distribution type of the LWE Secret Key
@@ -148,15 +149,12 @@ impl<F: RandomNTTField> SecretKeyPack<F> {
         let mut csrng = ChaCha12Rng::from_entropy();
 
         let lwe_dimension = parameters.lwe_dimension();
+
         let lwe_secret_key = match parameters.secret_key_type() {
-            SecretKeyType::Binary => LWEValueBinary::new()
-                .sample_iter(&mut csrng)
-                .take(lwe_dimension)
-                .collect(),
-            SecretKeyType::Ternary => LWEValueTernary::new(parameters.lwe_modulus().value())
-                .sample_iter(&mut csrng)
-                .take(lwe_dimension)
-                .collect(),
+            SecretKeyType::Binary => sample_binary_lwe_vec(lwe_dimension, &mut csrng),
+            SecretKeyType::Ternary => {
+                sample_ternary_lwe_vec(parameters.lwe_modulus().value(), lwe_dimension, &mut csrng)
+            }
         };
 
         let rlwe_dimension = parameters.rlwe_dimension();

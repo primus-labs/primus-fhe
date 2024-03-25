@@ -1,6 +1,6 @@
 //! The BFV scheme.
 
-use algebra::{Field, Polynomial, Random};
+use algebra::{Field, Polynomial};
 
 use crate::{
     plaintext::BFVPlaintext, BFVCiphertext, BFVContext, BFVPublicKey, BFVSecretKey, CipherField,
@@ -28,23 +28,11 @@ impl BFVScheme {
     pub fn encrypt(ctx: &BFVContext, pk: &BFVPublicKey, m: &BFVPlaintext) -> BFVCiphertext {
         let BFVPublicKey([b, a]) = pk;
         let mut csrng = ctx.csrng_mut();
-        let u = Polynomial::<CipherField>::random_with_dis(
-            ctx.rlwe_dimension(),
-            &mut *csrng,
-            CipherField::ternary_distribution(),
-        );
+        let u = Polynomial::<CipherField>::random_with_ternary(ctx.rlwe_dimension(), &mut *csrng);
 
-        let e1 = Polynomial::<CipherField>::random_with_dis(
-            ctx.rlwe_dimension(),
-            &mut *csrng,
-            CipherField::normal_distribution(0.0, 3.2).unwrap(),
-        );
+        let e1 = Polynomial::<CipherField>::random_with_gaussian(ctx.rlwe_dimension(), &mut *csrng, ctx.sampler());
 
-        let e2 = Polynomial::<CipherField>::random_with_dis(
-            ctx.rlwe_dimension(),
-            &mut *csrng,
-            CipherField::normal_distribution(0.0, 3.2).unwrap(),
-        );
+        let e2 = Polynomial::<CipherField>::random_with_gaussian(ctx.rlwe_dimension(), &mut *csrng, ctx.sampler());
 
         let t = PlainField::modulus_value() as u64;
         let q = CipherField::modulus_value() as u64;

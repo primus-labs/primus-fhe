@@ -20,7 +20,7 @@ use rand_distr::Standard;
 // Then you can use `rand` crate to generate numbers randomly.
 //
 // Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
-// ternary distribution and normal distribution.
+// ternary distribution and gaussian distribution.
 
 // Derive macro `Prime` generating an impl of the trait `algebra::PrimeField`.
 //
@@ -72,9 +72,9 @@ fn main() -> Result<(), algebra::AlgebraError> {
     // standard_distribution
     let _standard_distribution = FF::standard_distribution();
     // other distributions
-    let _binary_distribution = FF::binary_distribution();
-    let _ternary_distribution = FF::ternary_distribution();
-    let _normal_distribution = FF::normal_distribution(0.0, 3.2)?;
+    let _binary_distribution = FF::binary_sampler();
+    let _ternary_distribution = FF::ternary_sampler();
+    let _gaussian_distribution = FF::gaussian_sampler(0.0, 3.2)?;
 
     // Some operation
     let _c = a + b;

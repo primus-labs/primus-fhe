@@ -13,11 +13,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let ff_dis = FF::standard_distribution();
 
-    let a0 = <Polynomial<FF>>::random_with_dis(M, &mut rng, ff_dis);
-    let a1 = <Polynomial<FF>>::random_with_dis(M, &mut rng, ff_dis);
+    let a0 = <Polynomial<FF>>::random_with_distribution(M, &mut rng, ff_dis);
+    let a1 = <Polynomial<FF>>::random_with_distribution(M, &mut rng, ff_dis);
 
-    let b0 = <Polynomial<FF>>::random_with_dis(M, &mut rng, ff_dis);
-    let b1 = <Polynomial<FF>>::random_with_dis(M, &mut rng, ff_dis);
+    let b0 = <Polynomial<FF>>::random_with_distribution(M, &mut rng, ff_dis);
+    let b1 = <Polynomial<FF>>::random_with_distribution(M, &mut rng, ff_dis);
 
     let mut c0 = <RLWE<FF>>::new(a0, b0);
     let c1 = <RLWE<FF>>::new(a1, b1);

@@ -174,6 +174,16 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
+            fn checked_new(value: Self::Value) -> Self {
+                if value < #modulus {
+                    Self(value)
+                } else {
+                    use ::algebra::reduce::Reduce;
+                    Self(value.reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
+                }
+            }
+
+            #[inline]
             fn get(self) -> #field_ty {
                 self.0
             }
@@ -181,6 +191,16 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             #[inline]
             fn set(&mut self, value: Self::Value) {
                 self.0 = value;
+            }
+
+            #[inline]
+            fn checked_set(&mut self, value: Self::Value) {
+                if value < #modulus {
+                    self.0 = value;
+                } else {
+                    use ::algebra::reduce::ReduceAssign;
+                    self.0.reduce_assign(<Self as ::algebra::ModulusConfig>::MODULUS);
+                }
             }
 
             #[inline]
