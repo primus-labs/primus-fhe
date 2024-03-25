@@ -100,11 +100,17 @@ pub trait Field:
     /// Creates a new instance.
     fn new(value: Self::Value) -> Self;
 
+    /// Creates a new instance.
+    fn checked_new(value: Self::Value) -> Self;
+
     /// Get inner value.
     fn get(self) -> Self::Value;
 
     /// Reset inner value.
     fn set(&mut self, value: Self::Value);
+
+    /// Reset inner value.
+    fn checked_set(&mut self, value: Self::Value);
 
     /// Returns the modulus value.
     fn modulus_value() -> Self::Value;
