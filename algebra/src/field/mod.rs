@@ -64,7 +64,6 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
-    + From<Self::Value>
     + ModulusConfig
 {
     /// The inner type of this field.
@@ -115,28 +114,6 @@ pub trait Field:
     /// Returns the modulus value.
     fn modulus_value() -> Self::Value;
 
-    /// Normalize `self`.
-    ///
-    /// If `self` > `modulus`, return `self - modulus`.
-    ///
-    /// The result is in [0, modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 2*modulus`
-    fn normalize(self) -> Self;
-
-    /// Normalize assign `self`.
-    ///
-    /// If `self` > `modulus`, return `self - modulus`.
-    ///
-    /// The result is in [0, modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 2*modulus`
-    fn normalize_assign(&mut self);
-
     /// Return `self * scalar`.
     fn mul_scalar(self, scalar: Self::Value) -> Self;
 
@@ -178,9 +155,6 @@ pub trait Field:
 
     /// cast inner to [`f64`].
     fn to_f64(self) -> f64;
-
-    /// cast from [`f64`].
-    fn from_f64(value: f64) -> Self;
 
     /// Returns the order of the field.
     fn order() -> Self::Order;

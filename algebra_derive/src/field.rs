@@ -88,7 +88,7 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
         }
     }
 
-    let impl_basic = basic(name, field_ty, &modulus);
+    let impl_basic = basic(name, &modulus);
 
     let impl_display = display(name, &modulus);
 
@@ -209,22 +209,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             }
 
             #[inline]
-            fn normalize(self) -> Self {
-                if self.0 >= #modulus {
-                    Self(self.0 - #modulus)
-                } else {
-                    self
-                }
-            }
-
-            #[inline]
-            fn normalize_assign(&mut self) {
-                if self.0 >= #modulus {
-                    self.0 -= #modulus;
-                }
-            }
-
-            #[inline]
             fn mul_scalar(self, scalar: Self::Value) -> Self {
                 use ::algebra::reduce::MulReduce;
                 Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
@@ -283,11 +267,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
             #[inline]
             fn to_f64(self) -> f64 {
                 self.0 as f64
-            }
-
-            #[inline]
-            fn from_f64(value: f64) -> Self {
-                Self::new(value as #field_ty)
             }
 
             #[inline]

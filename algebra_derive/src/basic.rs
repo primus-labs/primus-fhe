@@ -2,7 +2,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::LitInt;
 
-pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> TokenStream {
+pub(crate) fn basic(name: &Ident, modulus: &LitInt) -> TokenStream {
     let name_str = name.to_string();
     quote! {
         impl #name {
@@ -16,18 +16,6 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
             #[inline]
             pub const fn neg_one() -> Self {
                 Self(#modulus - 1)
-            }
-        }
-
-        impl ::std::convert::From<#field_ty> for #name {
-            #[inline]
-            fn from(value: #field_ty) -> Self {
-                if value < #modulus {
-                    Self(value)
-                } else {
-                    use ::algebra::reduce::Reduce;
-                    Self(value.reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
-                }
             }
         }
 
