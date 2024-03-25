@@ -245,7 +245,7 @@ fn test_gadget_rlwe() {
         .map(|i| {
             let a = PolyFF::random(N, &mut rng);
             let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-            let b = &a * &s + m.mul_scalar(B.pow(i as u32) as Inner) + e;
+            let b = &a * &s + m.mul_scalar(Fp32::new(B.pow(i as u32) as Inner)) + e;
 
             RLWE::new(a, b)
         })
@@ -313,7 +313,7 @@ fn test_rgsw_mul_rlwe() {
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-                let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
+                let b = &a * &s + m1.mul_scalar(Fp32::new(B.pow(i as u32) as Inner)) + e;
 
                 RLWE::new(a, b)
             })
@@ -325,7 +325,7 @@ fn test_rgsw_mul_rlwe() {
                 let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
+                RLWE::new(a + m1.mul_scalar(Fp32::new(B.pow(i as u32) as Inner)), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
@@ -371,7 +371,7 @@ fn test_rgsw_mul_rgsw() {
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-                let b = &a * &s + m1.mul_scalar(B.pow(i as u32) as Inner) + e;
+                let b = &a * &s + m1.mul_scalar(Fp32::new(B.pow(i as u32) as Inner)) + e;
 
                 RLWE::new(a, b)
             })
@@ -383,7 +383,7 @@ fn test_rgsw_mul_rgsw() {
                 let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m1.mul_scalar(B.pow(i as u32) as Inner), b)
+                RLWE::new(a + m1.mul_scalar(Fp32::new(B.pow(i as u32) as Inner)), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
@@ -398,7 +398,7 @@ fn test_rgsw_mul_rgsw() {
             .map(|i| {
                 let a = PolyFF::random(N, &mut rng);
                 let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-                let b = &a * &s + m0.mul_scalar(B.pow(i as u32) as Inner) + e;
+                let b = &a * &s + m0.mul_scalar(Fp32::new(B.pow(i as u32) as Inner)) + e;
 
                 RLWE::new(a, b)
             })
@@ -410,7 +410,7 @@ fn test_rgsw_mul_rgsw() {
                 let e = PolyFF::random_with_distribution(N, &mut rng, chi);
                 let b = &a * &s + e;
 
-                RLWE::new(a + m0.mul_scalar(B.pow(i as u32) as Inner), b)
+                RLWE::new(a + m0.mul_scalar(Fp32::new(B.pow(i as u32) as Inner)), b)
             })
             .collect::<Vec<RLWE<FF>>>();
 
@@ -431,7 +431,7 @@ fn test_rgsw_mul_rgsw() {
 
     let rlwe_neg_sm0m1 = &rgsw_m0m1.c_neg_s_m().data()[0];
     let decrypted_neg_sm0m1 = rlwe_neg_sm0m1.b() - rlwe_neg_sm0m1.a() * &s;
-    let neg_sm0m1 = m0m1 * &s.mul_scalar(FP - 1);
+    let neg_sm0m1 = m0m1 * &s.mul_scalar(Fp32::new(FP - 1));
 
     let decoded_neg_sm0m1: Vec<u32> = neg_sm0m1.copied_iter().map(decode).collect();
     let decoded_decrypt_neg_sm0m1: Vec<u32> = decrypted_neg_sm0m1.into_iter().map(decode).collect();

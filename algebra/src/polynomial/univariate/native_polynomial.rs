@@ -118,8 +118,8 @@ impl<F: Field> Polynomial<F> {
 
     /// Multiply `self` with the a scalar.
     #[inline]
-    pub fn mul_scalar(&self, scalar: F::Value) -> Self {
-        Self::new(self.iter().map(|&v| v.mul_scalar(scalar)).collect())
+    pub fn mul_scalar(&self, scalar: F) -> Self {
+        Self::new(self.iter().map(|&v| v * scalar).collect())
     }
 
     /// Multiply `self` with the a scalar inplace.
