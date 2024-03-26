@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
-use syn::{DeriveInput, Error, LitInt, Result, Type};
+use quote::quote;
+use syn::{DeriveInput, Result, Type};
 
 use crate::{
     ast::Input,
@@ -16,77 +16,12 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
 
 fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
     let name = &input.ident;
-    let field_ty = input.field.ty;
-    let modulus = input.attrs.modulus.unwrap();
 
-    match field_ty {
-        Type::Path(type_path) => {
-            if type_path.clone().into_token_stream().to_string() == "u8" {
-                let modulus_number: u8 = modulus.base10_digits().parse().map_err(|_| {
-                    Error::new_spanned(
-                        input.field.original,
-                        "It's not possible to parse modulus into u8 type.",
-                    )
-                })?;
-                if modulus_number.leading_zeros() < 2 {
-                    return Err(Error::new_spanned(
-                        input.field.original,
-                        "Modulus is too big! It should be smaller than `u8::MAX >> 2`. You can also use `u16` for inner value.",
-                    ));
-                }
-            } else if type_path.clone().into_token_stream().to_string() == "u16" {
-                let modulus_number: u16 = modulus.base10_digits().parse().map_err(|_| {
-                    Error::new_spanned(
-                        input.field.original,
-                        "It's not possible to parse modulus into u16 type.",
-                    )
-                })?;
-                if modulus_number.leading_zeros() < 2 {
-                    return Err(Error::new_spanned(
-                        input.field.original,
-                        "Modulus is too big! It should be smaller than `u16::MAX >> 2`. You can also use `u32` for inner value.",
-                    ));
-                }
-            } else if type_path.clone().into_token_stream().to_string() == "u32" {
-                let modulus_number: u32 = modulus.base10_digits().parse().map_err(|_| {
-                    Error::new_spanned(
-                        input.field.original,
-                        "It's not possible to parse modulus into u32 type.",
-                    )
-                })?;
-                if modulus_number.leading_zeros() < 2 {
-                    return Err(Error::new_spanned(
-                        input.field.original,
-                        "Modulus is too big! It should be smaller than `u32::MAX >> 2`. You can also use `u64` for inner value.",
-                    ));
-                }
-            } else if type_path.clone().into_token_stream().to_string() == "u64" {
-                let modulus_number: u64 = modulus.base10_digits().parse().map_err(|_| {
-                    Error::new_spanned(
-                        input.field.original,
-                        "It's not possible to parse modulus into u64 type.",
-                    )
-                })?;
-                if modulus_number.leading_zeros() < 2 {
-                    return Err(Error::new_spanned(
-                        input.field.original,
-                        "Modulus is too big! It should be smaller than `u64::MAX >> 2`.",
-                    ));
-                }
-            } else {
-                return Err(Error::new_spanned(
-                    input.field.original,
-                    "The type supplied is unsupported.",
-                ));
-            }
-        }
-        _ => {
-            return Err(Error::new_spanned(
-                input.original,
-                "Unable to check the inner type.",
-            ))
-        }
-    }
+    let modulus_value = input.attrs.modulus_value;
+    modulus_value.check_leading_zeros(input.field.original)?;
+    let modulus = modulus_value.into_token_stream();
+
+    let field_ty = input.field.ty;
 
     let impl_basic = basic(name, &modulus);
 
@@ -144,7 +79,7 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 }
 
 #[inline]
-fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
+fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::algebra::Field for #name {
             type Value = #field_ty;
@@ -247,11 +182,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &LitInt) -> T
                 use ::algebra::Widening;
                 use ::algebra::reduce::LazyReduce;
                 self.0 = a.0.carry_mul(b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
-            }
-
-            #[inline]
-            fn from_usize(value: usize) -> Self {
-                Self::new(::num_traits::cast::<usize, #field_ty>(value).unwrap())
             }
 
             #[inline]

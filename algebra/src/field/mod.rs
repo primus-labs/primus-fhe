@@ -5,7 +5,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
 
-use crate::{Basis, ModulusConfig, Random, Widening, WrappingOps};
+use crate::{Basis, Random, Widening, WrappingOps};
 
 mod ntt_fields;
 mod prime_fields;
@@ -64,10 +64,9 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
-    + ModulusConfig
 {
     /// The inner type of this field.
-    type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps;
+    type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps + Into<u64>;
 
     /// The type of the field's order.
     type Order: Copy;
@@ -143,9 +142,6 @@ pub trait Field:
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
     fn add_mul_assign_fast(&mut self, a: Self, b: Self);
-
-    /// cast from [`usize`].
-    fn from_usize(value: usize) -> Self;
 
     /// cast inner to [`f64`].
     fn to_f64(self) -> f64;

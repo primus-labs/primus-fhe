@@ -84,7 +84,7 @@ where
             inv_root_powers[i + 1] = inv_root_power;
         }
 
-        let inv_degree = <F as Field>::from_usize(coeff_count).inv().to_root();
+        let inv_degree = <F as From<usize>>::from(coeff_count).inv().to_root();
 
         Self {
             root,

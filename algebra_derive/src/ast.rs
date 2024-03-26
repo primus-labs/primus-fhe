@@ -11,6 +11,7 @@ pub(crate) struct Input<'a> {
     pub(crate) field: Field<'a>,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct Field<'a> {
     pub(crate) original: &'a syn::Field,
     pub(crate) ty: &'a Type,
@@ -18,12 +19,6 @@ pub(crate) struct Field<'a> {
 
 impl<'a> Input<'a> {
     pub(crate) fn from_syn(node: &'a DeriveInput) -> Result<Self> {
-        let attrs = attr::get(&node.attrs)?;
-
-        if attrs.modulus.is_none() {
-            return Err(Error::new_spanned(node, "modulus should supplied"));
-        }
-
         match node.data {
             syn::Data::Struct(ref data) => {
                 let mut field_iter = data.fields.iter();
@@ -38,6 +33,8 @@ impl<'a> Input<'a> {
                     ));
                 }
                 let field = Field::from_syn(field)?;
+
+                let attrs = attr::get(node, field)?;
 
                 Ok(Input {
                     original: node,

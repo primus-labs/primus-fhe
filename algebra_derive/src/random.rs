@@ -35,7 +35,7 @@ fn binary(name: &Ident, field_ty: &syn::Type) -> TokenStream {
     }
 }
 
-fn ternary(name: &Ident, modulus: &syn::LitInt) -> TokenStream {
+fn ternary(name: &Ident, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::rand::distributions::Distribution<#name> for ::algebra::FieldTernarySampler {
             #[inline]
@@ -46,7 +46,7 @@ fn ternary(name: &Ident, modulus: &syn::LitInt) -> TokenStream {
     }
 }
 
-fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenStream {
+fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &TokenStream) -> TokenStream {
     let sample_name = format_ident!("Uniform{}", name);
     quote! {
         #[derive(Clone, Copy, Debug)]
@@ -93,7 +93,7 @@ fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenSt
     }
 }
 
-fn gaussian(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenStream {
+fn gaussian(name: &Ident, field_ty: &syn::Type, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::rand::distributions::Distribution<#name> for ::algebra::FieldDiscreteGaussianSampler {
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
@@ -117,7 +117,8 @@ fn gaussian(name: &Ident, field_ty: &syn::Type, modulus: &syn::LitInt) -> TokenS
 
 fn impl_random(input: Input) -> TokenStream {
     let name = &input.ident;
-    let modulus = input.attrs.modulus.unwrap();
+    let modulus_value = input.attrs.modulus_value;
+    let modulus = modulus_value.into_token_stream();
     let field_ty = input.field.ty;
 
     let standard_name = format_ident!("STANDARD_{}", name.to_string().to_uppercase());

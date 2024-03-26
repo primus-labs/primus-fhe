@@ -1,8 +1,7 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::LitInt;
 
-pub(crate) fn basic(name: &Ident, modulus: &LitInt) -> TokenStream {
+pub(crate) fn basic(name: &Ident, modulus: &TokenStream) -> TokenStream {
     let name_str = name.to_string();
     quote! {
         impl #name {
