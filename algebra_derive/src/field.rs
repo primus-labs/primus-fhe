@@ -31,7 +31,8 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 
     let impl_one = impl_one(name);
 
-    let impl_modulus_config = impl_modulus_config(name, field_ty, &modulus);
+    let impl_modulus_config =
+        impl_modulus_config(name, field_ty, input.attrs.modulus_type, &modulus);
 
     let impl_add = add_reduce_ops(name, &modulus);
 

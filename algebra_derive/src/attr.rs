@@ -2,7 +2,7 @@ use quote::ToTokens;
 use syn::{DeriveInput, Error, Expr, Lit, LitInt, Meta, Type};
 
 pub(crate) struct Attrs {
-    pub(crate) _modulus_type: ModulusType,
+    pub(crate) modulus_type: ModulusType,
     pub(crate) modulus_value: ModulusValue,
 }
 
@@ -99,7 +99,7 @@ fn parse_modulus_value(
                 })?;
                 return Ok(Attrs {
                     modulus_value: ModulusValue::U8(modulus_value),
-                    _modulus_type: modulus_type,
+                    modulus_type,
                 });
             }
             "u16" => {
@@ -111,7 +111,7 @@ fn parse_modulus_value(
                 })?;
                 return Ok(Attrs {
                     modulus_value: ModulusValue::U16(modulus_value),
-                    _modulus_type: modulus_type,
+                    modulus_type,
                 });
             }
             "u32" => {
@@ -123,7 +123,7 @@ fn parse_modulus_value(
                 })?;
                 return Ok(Attrs {
                     modulus_value: ModulusValue::U32(modulus_value),
-                    _modulus_type: modulus_type,
+                    modulus_type,
                 });
             }
             "u64" => {
@@ -135,7 +135,7 @@ fn parse_modulus_value(
                 })?;
                 return Ok(Attrs {
                     modulus_value: ModulusValue::U64(modulus_value),
-                    _modulus_type: modulus_type,
+                    modulus_type,
                 });
             }
             _ => {
