@@ -1,5 +1,5 @@
 use algebra::Polynomial;
-use bfv::{BFVPlaintext, BFVScheme, PlainField};
+use bfv::{BFVCiphertext, BFVPlaintext, BFVScheme, PlainField};
 
 #[test]
 fn bfv_enc_dec_test() {
@@ -56,5 +56,43 @@ fn bfv_mul_scalar_test() {
 
         let m_res = BFVScheme::decrypt(&ctx, &sk, &c_scalar);
         assert_eq!(m_scalar, m_res);
+    }
+}
+
+#[test]
+fn bfv_inner_product_test() {
+    let ctx = BFVScheme::gen_context();
+    let (sk, pk) = BFVScheme::gen_keypair(&ctx);
+    const N: usize = 20;
+
+    for _ in 0..200 {
+        let mut scalars = Vec::new();
+        let mut msgs = Vec::new();
+        let mut msgs_poly = Vec::new();
+        for i in 0..N {
+            msgs_poly.push(Polynomial::<PlainField>::random(
+                ctx.rlwe_dimension(),
+                &mut *ctx.csrng_mut(),
+            ));
+            msgs.push(BFVPlaintext(msgs_poly[i].clone()));
+
+            scalars.push(PlainField::random(&mut *ctx.csrng_mut()));
+        }
+        let m_ip = msgs_poly.iter().zip(scalars.iter()).fold(
+            Polynomial::<PlainField>::zero(ctx.rlwe_dimension()),
+            |acc, (m, s)| acc + m.mul_scalar(*s),
+        );
+
+        let m_ip = BFVPlaintext(m_ip);
+
+        let ctxts: Vec<BFVCiphertext> = msgs
+            .iter()
+            .map(|m| BFVScheme::encrypt(&ctx, &pk, m))
+            .collect();
+
+        let c_ip = BFVScheme::evaluate_inner_product(&ctx, &ctxts, &scalars);
+        let m_res = BFVScheme::decrypt(&ctx, &sk, &c_ip);
+
+        assert_eq!(m_res, m_ip);
     }
 }

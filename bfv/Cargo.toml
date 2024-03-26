@@ -15,6 +15,12 @@ rand = { workspace = true }
 rand_distr = { workspace = true }
 rand_chacha = "0.3.1"
 
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "bfv"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

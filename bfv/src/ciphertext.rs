@@ -5,7 +5,7 @@ use algebra::{
 };
 
 /// The default rlwe dimension.
-pub const DIMENSION_N: usize = 8;
+pub const DIMENSION_N: usize = 1024;
 
 /// The field for the ciphertext space.
 #[derive(Field, Random, Prime, NTT)]

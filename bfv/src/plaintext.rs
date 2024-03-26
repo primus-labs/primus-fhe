@@ -7,7 +7,7 @@ use algebra::{
 
 /// The field for the plaintext space.
 #[derive(Field, Random, Prime)]
-#[modulus = 1307]
+#[modulus = 61]
 pub struct PlainField(u16);
 
 /// Define the type of platintext.

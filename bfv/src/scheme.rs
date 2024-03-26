@@ -115,12 +115,17 @@ impl BFVScheme {
         BFVCiphertext([c1, c2])
     }
 
-    /// Mulply scalar and add
-    pub fn evaluate_mul_scalar_and_add(
-        _ctx: &BFVContext,
+    /// Inner Product
+    pub fn evaluate_inner_product(
+        ctx: &BFVContext,
         c: &[BFVCiphertext],
         scalar: &[PlainField],
     ) -> BFVCiphertext {
-        todo!()
+        assert_eq!(c.len(), scalar.len());
+        let zero = Polynomial::<CipherField>::zero(ctx.rlwe_dimension());
+        let c_zero = BFVCiphertext([zero.clone(), zero]);
+        c.iter().zip(scalar.iter()).fold(c_zero, |acc, (c, s)| {
+            BFVScheme::evalute_add(&ctx, &acc, &BFVScheme::evaluate_mul_scalar(&ctx, s, c))
+        })
     }
 }
