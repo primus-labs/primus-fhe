@@ -125,7 +125,7 @@ impl BFVScheme {
         let zero = Polynomial::<CipherField>::zero(ctx.rlwe_dimension());
         let c_zero = BFVCiphertext([zero.clone(), zero]);
         c.iter().zip(scalar.iter()).fold(c_zero, |acc, (c, s)| {
-            BFVScheme::evalute_add(&ctx, &acc, &BFVScheme::evaluate_mul_scalar(&ctx, s, c))
+            BFVScheme::evalute_add(ctx, &acc, &BFVScheme::evaluate_mul_scalar(ctx, s, c))
         })
     }
 }
