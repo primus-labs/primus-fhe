@@ -1,6 +1,6 @@
 //! Define threshold pke with BFV.
 
-use algebra::{Field, Polynomial, Random};
+use algebra::{Field, Polynomial};
 use rand::{CryptoRng, Rng};
 
 use crate::{
@@ -8,23 +8,26 @@ use crate::{
     MAX_USER_NUMBER,
 };
 
+type F = PlainField;
+
 /// Define the threshold policy.
 #[derive(Debug, Clone)]
-pub struct ThresholdPolicy<F: Field + Random> {
+pub struct ThresholdPolicy {
     total_number: usize,
     threshold_number: usize,
     lagrange_coeff: Vec<F>,
     indices: Vec<F>,
 }
 
-impl<F: Field + Random> ThresholdPolicy<F> {
+impl ThresholdPolicy {
     /// Create a new instance.
     /// Make sure that no repeated index in `indices`
+    /// `indices` should not contain `0`.
     pub fn new(total_number: usize, threshold_number: usize, indices: Vec<F>) -> Self {
         assert_eq!(
             indices.len(),
             total_number,
-            "indices length is inconsistent with total_number"
+            "indices length should be consistent with total_number"
         );
         assert!(!indices.contains(&F::ZERO), "indices should not contain 0");
         assert!(
@@ -39,11 +42,11 @@ impl<F: Field + Random> ThresholdPolicy<F> {
         let mut lagrange_coeff = vec![F::ZERO; total_number];
 
         for (i, point) in indices.iter().enumerate() {
-            let mut points_with_out_i = indices.clone();
-            points_with_out_i.retain(|x| *x == *point);
+            let mut points_without_i = indices.clone();
+            points_without_i.retain(|x| *x != *point);
 
-            let numerator = points_with_out_i.iter().fold(F::ONE, |acc, &x| acc * (-x));
-            let denominator = points_with_out_i
+            let numerator = points_without_i.iter().fold(F::ONE, |acc, &x| acc * (-x));
+            let denominator = points_without_i
                 .iter()
                 .fold(F::ONE, |acc, &x| acc * (*point - x));
             lagrange_coeff[i] = numerator / denominator;
@@ -103,12 +106,12 @@ impl<F: Field + Random> ThresholdPolicy<F> {
 
 /// Define Threshold PKE context.
 #[derive(Debug, Clone)]
-pub struct ThresholdPKEContext<F: Field + Random> {
+pub struct ThresholdPKEContext {
     bfv_ctx: BFVContext,
-    policy: ThresholdPolicy<F>,
+    policy: ThresholdPolicy,
 }
 
-impl<F: Field + Random> ThresholdPKEContext<F> {
+impl ThresholdPKEContext {
     /// Create a new instance
     #[inline]
     pub fn new(total_number: usize, threshold_number: usize, indices: Vec<F>) -> Self {
@@ -125,7 +128,7 @@ impl<F: Field + Random> ThresholdPKEContext<F> {
 
     /// Return the referance of policy.
     #[inline]
-    pub fn policy(&self) -> &ThresholdPolicy<F> {
+    pub fn policy(&self) -> &ThresholdPolicy {
         &self.policy
     }
 }
@@ -138,14 +141,14 @@ impl ThresholdPKE {
     pub fn gen_context(
         total_number: usize,
         threshold_number: usize,
-        indices: Vec<PlainField>,
-    ) -> ThresholdPKEContext<PlainField> {
+        indices: Vec<F>,
+    ) -> ThresholdPKEContext {
         ThresholdPKEContext::new(total_number, threshold_number, indices)
     }
 
     /// Generate key pair.
     #[inline]
-    pub fn gen_keypair(ctx: &ThresholdPKEContext<PlainField>) -> (BFVSecretKey, BFVPublicKey) {
+    pub fn gen_keypair(ctx: &ThresholdPKEContext) -> (BFVSecretKey, BFVPublicKey) {
         BFVScheme::gen_keypair(ctx.bfv_ctx())
     }
 
@@ -154,7 +157,7 @@ impl ThresholdPKE {
     /// Encrypt each share using different pk's of the parties in `indices`
     #[inline]
     pub fn encrypt(
-        ctx: &ThresholdPKEContext<PlainField>,
+        ctx: &ThresholdPKEContext,
         pks: &Vec<BFVPublicKey>,
         m: &BFVPlaintext,
     ) -> Vec<BFVCiphertext> {
@@ -174,7 +177,7 @@ impl ThresholdPKE {
     /// Decrypt the ciphertext.
     #[inline]
     pub fn decrypt(
-        ctx: &ThresholdPKEContext<PlainField>,
+        ctx: &ThresholdPKEContext,
         sk: &BFVSecretKey,
         c: &BFVCiphertext,
     ) -> BFVPlaintext {
@@ -186,7 +189,7 @@ impl ThresholdPKE {
     /// Encrypt the above message with `pk_new`.
     #[inline]
     pub fn re_encrypt(
-        ctx: &ThresholdPKEContext<PlainField>,
+        ctx: &ThresholdPKEContext,
         c: &BFVCiphertext,
         sk: &BFVSecretKey,
         pk_new: &BFVPublicKey,
@@ -197,10 +200,7 @@ impl ThresholdPKE {
 
     /// Combine the ciphertext
     #[inline]
-    pub fn combine(
-        ctx: &ThresholdPKEContext<PlainField>,
-        ctxts: &[BFVCiphertext],
-    ) -> BFVCiphertext {
+    pub fn combine(ctx: &ThresholdPKEContext, ctxts: &[BFVCiphertext]) -> BFVCiphertext {
         BFVScheme::evaluate_inner_product(ctx.bfv_ctx(), ctxts, ctx.policy.lagrange_coeff())
     }
 }
