@@ -65,16 +65,12 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let _a: FF = rng.gen();
     let _a: FF = Standard.sample(&mut rng);
 
-    // custom uniform distribution
-    let dis = rand::distributions::Uniform::new(FF(0), FF(64));
-    let _a = dis.sample(&mut rng);
-
-    // standard_distribution
-    let _standard_distribution = FF::standard_distribution();
+    // uniform
+    let _uniform_sampler = FF::uniform_sampler();
     // other distributions
-    let _binary_distribution = FF::binary_sampler();
-    let _ternary_distribution = FF::ternary_sampler();
-    let _gaussian_distribution = FF::gaussian_sampler(0.0, 3.2)?;
+    let _binary_sampler = FF::binary_sampler();
+    let _binary_sampler = FF::binary_sampler();
+    let _gaussian_sampler = FF::gaussian_sampler(0.0, 3.2)?;
 
     // Some operation
     let _c = a + b;

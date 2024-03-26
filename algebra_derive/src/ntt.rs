@@ -97,12 +97,12 @@ fn impl_ntt(input: Input) -> TokenStream {
                 }
 
                 let mut rng = ::rand::thread_rng();
-                let distr = ::rand::distributions::Uniform::new_inclusive(Self(2), Self(#modulus - 1));
+                let distr = ::rand::distributions::Uniform::new_inclusive(2, #modulus - 1);
 
                 let mut w = Self(0);
 
                 if (0..100).any(|_| {
-                    w = ::num_traits::Pow::pow(::rand::Rng::sample(&mut rng, distr), quotient);
+                    w = ::num_traits::Pow::pow(Self(::rand::Rng::sample(&mut rng, distr)), quotient);
                     Self::is_primitive_root(w, degree)
                 }) {
                     Ok(w)

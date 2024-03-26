@@ -2,7 +2,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::{DeriveInput, Result};
 
-use crate::ast::Input;
+use crate::{ast::Input, attr::ModulusValue};
 
 #[inline]
 pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
@@ -10,15 +10,36 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     Ok(impl_random(input))
 }
 
-fn standard(name: &Ident, standard_name: &Ident) -> TokenStream {
+fn uniform(
+    name: &Ident,
+    uniform_name: &Ident,
+    field_ty: &syn::Type,
+    sample_type: &TokenStream,
+) -> TokenStream {
     quote! {
-        static #standard_name: ::once_cell::sync::Lazy<::rand::distributions::Uniform<#name>> =
-            ::once_cell::sync::Lazy::new(|| ::rand::distributions::Uniform::new_inclusive(#name(0), #name::max()));
+        static #uniform_name: ::once_cell::sync::Lazy<::algebra::FieldUniformSampler<#name>> =
+            ::once_cell::sync::Lazy::new(|| <#name as ::algebra::Random>::uniform_sampler());
 
         impl ::rand::distributions::Distribution<#name> for ::rand::distributions::Standard {
             #[inline]
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
-                #standard_name.sample(rng)
+                #uniform_name.sample(rng)
+            }
+        }
+
+        impl ::rand::distributions::Distribution<#name> for ::algebra::FieldUniformSampler<#name> {
+            #[inline]
+            fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
+                use ::algebra::Widening;
+                let range = self.range as #sample_type;
+                let thresh = self.thresh as #sample_type;
+                let hi = loop {
+                    let (lo, hi) = rng.gen::<#sample_type>().widen_mul(range);
+                    if lo >= thresh {
+                        break hi;
+                    }
+                };
+                #name(self.low.wrapping_add(hi as #field_ty))
             }
         }
     }
@@ -42,53 +63,6 @@ fn ternary(name: &Ident, modulus: &TokenStream) -> TokenStream {
             fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> #name {
                 [#name(0), #name(0), #name(1), #name(#modulus - 1)][(rng.next_u32() & 0b11) as usize]
             }
-        }
-    }
-}
-
-fn uniform(name: &Ident, field_ty: &syn::Type, modulus: &TokenStream) -> TokenStream {
-    let sample_name = format_ident!("Uniform{}", name);
-    quote! {
-        #[derive(Clone, Copy, Debug)]
-        pub struct #sample_name(::rand::distributions::uniform::UniformInt<#field_ty>);
-
-        impl ::rand::distributions::uniform::UniformSampler for #sample_name {
-            type X = #name;
-
-            #[inline]
-            fn new<B1, B2>(low: B1, high: B2) -> Self
-            where
-                B1: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
-                B2: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
-            {
-                #sample_name(::rand::distributions::uniform::UniformInt::<#field_ty>::new_inclusive(
-                    low.borrow().0,
-                    high.borrow().0 - 1,
-                ))
-            }
-
-            #[inline]
-            fn new_inclusive<B1, B2>(low: B1, high: B2) -> Self
-            where
-                B1: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
-                B2: ::rand::distributions::uniform::SampleBorrow<Self::X> + Sized,
-            {
-                let high = if high.borrow().0 >= #modulus - 1 {
-                    #modulus - 1
-                } else {
-                    high.borrow().0
-                };
-                #sample_name(::rand::distributions::uniform::UniformInt::<#field_ty>::new_inclusive(low.borrow().0, high))
-            }
-
-            #[inline]
-            fn sample<R: ::rand::Rng + ?Sized>(&self, rng: &mut R) -> Self::X {
-                #name(self.0.sample(rng))
-            }
-        }
-
-        impl ::rand::distributions::uniform::SampleUniform for #name {
-            type Sampler = #sample_name;
         }
     }
 }
@@ -121,22 +95,24 @@ fn impl_random(input: Input) -> TokenStream {
     let modulus = modulus_value.into_token_stream();
     let field_ty = input.field.ty;
 
-    let standard_name = format_ident!("STANDARD_{}", name.to_string().to_uppercase());
+    let uniform_name = format_ident!("UNIFORM_{}", name.to_string().to_uppercase());
 
-    let impl_standard = standard(name, &standard_name);
+    let sample_type = match modulus_value {
+        ModulusValue::U8(_) | ModulusValue::U16(_) | ModulusValue::U32(_) => quote!(u32),
+        ModulusValue::U64(_) => quote!(u64),
+    };
+
+    let impl_uniform = uniform(name, &uniform_name, field_ty, &sample_type);
     let impl_binary = binary(name, field_ty);
     let impl_ternary = ternary(name, &modulus);
-    let impl_uniform = uniform(name, field_ty, &modulus);
     let impl_gaussian = gaussian(name, field_ty, &modulus);
 
     quote! {
-        #impl_standard
+        #impl_uniform
 
         #impl_binary
 
         #impl_ternary
-
-        #impl_uniform
 
         #impl_gaussian
 
@@ -148,24 +124,31 @@ fn impl_random(input: Input) -> TokenStream {
                 R: ::rand::Rng + ::rand::CryptoRng,
             {
                 use ::rand::distributions::Distribution;
-                #standard_name.sample(rng)
+                #uniform_name.sample(rng)
             }
         }
 
         impl ::algebra::Random for #name {
-            type StandardDistribution = ::rand::distributions::Uniform<#name>;
+            type UniformSampler = ::algebra::FieldUniformSampler<#name>;
 
             #[inline]
-            fn standard_distribution() -> Self::StandardDistribution {
-                #standard_name.clone()
+            fn uniform_sampler() -> ::algebra::FieldUniformSampler<#name> {
+                ::algebra::FieldUniformSampler {
+                    low: 0,
+                    range: #modulus,
+                    thresh: {
+                        let range = #modulus as #sample_type;
+                        (range.wrapping_neg() % range) as #field_ty
+                    },
+                }
             }
 
-            #[inline]
+            #[inline(always)]
             fn binary_sampler() -> ::algebra::FieldBinarySampler {
                 ::algebra::FieldBinarySampler
             }
 
-            #[inline]
+            #[inline(always)]
             fn ternary_sampler() -> ::algebra::FieldTernarySampler {
                 ::algebra::FieldTernarySampler
             }

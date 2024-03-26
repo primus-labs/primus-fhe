@@ -85,7 +85,7 @@ impl<F: Field + Random> MultilinearExtension<F> for DenseMultilinearExtension<F>
     {
         Self {
             num_vars,
-            evaluations: F::standard_distribution()
+            evaluations: F::uniform_sampler()
                 .sample_iter(rng)
                 .take(1 << num_vars)
                 .collect(),

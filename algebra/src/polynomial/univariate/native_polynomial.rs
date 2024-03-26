@@ -227,10 +227,7 @@ impl<F: Field + Random> Polynomial<F> {
         R: Rng + CryptoRng,
     {
         Self {
-            data: F::standard_distribution()
-                .sample_iter(rng)
-                .take(n)
-                .collect(),
+            data: F::uniform_sampler().sample_iter(rng).take(n).collect(),
         }
     }
 

@@ -1,8 +1,8 @@
 //! This module defines a trait to get some distributions easily.
 
-use rand_distr::{uniform::SampleUniform, Distribution, Normal};
+use rand_distr::{Distribution, Normal};
 
-use crate::AlgebraError;
+use crate::{AlgebraError, Field};
 
 /// Defines a trait for sampling from various mathematical distributions over a field.
 ///
@@ -13,25 +13,25 @@ use crate::AlgebraError;
 /// The trait is bound by `Sized`, ensuring that the trait can only be implemented by types with a known
 /// size at compile time, and `SampleUniform`, which allows for uniform sampling over a range.
 ///
-/// Types implementing this trait must define four associated distribution types: standard, binary, ternary and gaussian,
+/// Types implementing this trait must define four associated sampler types: uniform, binary, ternary and gaussian,
 /// each of which must implement the `Distribution` trait. This setup allows for sampling from these
 /// distributions in a generic manner.
 ///
 /// # Associated Types
-/// * `StandardDistribution`: A distribution that produces all values uniformly.
+/// * `UniformSampler`: A sampler that produces all values uniformly.
 ///
 /// # Methods
-/// * `standard_distribution()`: Returns an instance of the standard distribution type.
+/// * `uniform_sampler()`: Returns an instance of the uniform sampler type.
 /// * `binary_sampler()`: Returns an instance of the binary sampler type.
 /// * `ternary_sampler()`: Returns an instance of the ternary sampler type.
 /// * `gaussian_sampler(mean, std_dev)`: Returns an instance of the gaussian sampler type, parameterized by the specified mean and standard deviation.
 ///   This method may fail, indicated by returning an `AlgebraError`, if the parameters do not result in a valid sampler.
-pub trait Random: Sized + SampleUniform {
-    /// The thpe of the standard distribution.
-    type StandardDistribution: Distribution<Self> + Copy;
+pub trait Random: Field {
+    /// A sampler that produces all values uniformly.
+    type UniformSampler: Distribution<Self> + Copy;
 
-    /// Get the standard distribution.
-    fn standard_distribution() -> Self::StandardDistribution;
+    /// Get the uniform sampler.
+    fn uniform_sampler() -> Self::UniformSampler;
 
     /// Get the binary sampler.
     fn binary_sampler() -> FieldBinarySampler;
@@ -53,13 +53,24 @@ pub trait Random: Sized + SampleUniform {
     ) -> Result<FieldDiscreteGaussianSampler, AlgebraError>;
 }
 
-/// The binary distribution for Field.
+/// The uniform sampler for Field.
+#[derive(Clone, Copy)]
+pub struct FieldUniformSampler<F: Field> {
+    /// low
+    pub low: F::Value,
+    /// range
+    pub range: F::Value,
+    /// thresh
+    pub thresh: F::Value,
+}
+
+/// The binary sampler for Field.
 ///
 /// prob\[1] = prob\[0] = 0.5
 #[derive(Clone, Copy, Debug)]
 pub struct FieldBinarySampler;
 
-/// The ternary distribution for Field.
+/// The ternary sampler for Field.
 ///
 /// prob\[1] = prob\[-1] = 0.25
 ///
@@ -67,7 +78,7 @@ pub struct FieldBinarySampler;
 #[derive(Clone, Copy, Debug)]
 pub struct FieldTernarySampler;
 
-/// The gaussian distribution `N(mean, std_dev**2)` for Field.
+/// The gaussian sampler `N(mean, std_dev**2)` for Field.
 #[derive(Clone, Copy, Debug)]
 pub struct FieldDiscreteGaussianSampler {
     gaussian: Normal<f64>,
@@ -125,19 +136,19 @@ impl FieldDiscreteGaussianSampler {
         }
     }
 
-    /// Returns the mean (`μ`) of the distribution.
+    /// Returns the mean (`μ`) of the sampler.
     #[inline]
     pub fn mean(&self) -> f64 {
         self.gaussian.mean()
     }
 
-    /// Returns the standard deviation (`σ`) of the distribution.
+    /// Returns the standard deviation (`σ`) of the sampler.
     #[inline]
     pub fn std_dev(&self) -> f64 {
         self.gaussian.std_dev()
     }
 
-    /// Returns max deviation of the distribution.
+    /// Returns max deviation of the sampler.
     #[inline]
     pub fn max_std_dev(&self) -> f64 {
         self.max_std_dev
