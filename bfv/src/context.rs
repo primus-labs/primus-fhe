@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use crate::DIMENSION_N;
 
 /// Define the context of BFV scheme.
+#[derive(Debug, Clone)]
 pub struct BFVContext {
     rlwe_dimension: usize,
     csrng: RefCell<ChaCha12Rng>,

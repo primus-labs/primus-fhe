@@ -18,6 +18,7 @@ impl BFVScheme {
     }
 
     /// Generate key pair.
+    #[inline]
     pub fn gen_keypair(ctx: &BFVContext) -> (BFVSecretKey, BFVPublicKey) {
         let sk = BFVSecretKey::new(ctx);
         let pk = sk.gen_pubkey(ctx);
@@ -92,6 +93,7 @@ impl BFVScheme {
     }
 
     /// Scale multiplication .
+    #[inline]
     pub fn evaluate_mul_scalar(
         _ctx: &BFVContext,
         scalar: &PlainField,
@@ -105,6 +107,7 @@ impl BFVScheme {
     }
 
     /// Addition
+    #[inline]
     pub fn evalute_add(
         _ctx: &BFVContext,
         c_lhs: &BFVCiphertext,
@@ -116,6 +119,7 @@ impl BFVScheme {
     }
 
     /// Inner Product
+    #[inline]
     pub fn evaluate_inner_product(
         ctx: &BFVContext,
         c: &[BFVCiphertext],

@@ -16,6 +16,7 @@ pub struct BFVPlaintext(pub Polynomial<PlainField>);
 
 impl BFVPlaintext {
     /// Create a new instance
+    #[inline]
     pub fn new(poly: Polynomial<PlainField>) -> Self {
         Self(poly)
     }
