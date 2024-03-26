@@ -31,7 +31,7 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 
     let impl_one = impl_one(name);
 
-    let impl_barrett = barrett(name, field_ty, &modulus);
+    let impl_modulus_config = impl_modulus_config(name, field_ty, &modulus);
 
     let impl_add = add_reduce_ops(name, &modulus);
 
@@ -58,7 +58,7 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 
         #impl_display
 
-        #impl_barrett
+        #impl_modulus_config
 
         #impl_add
 
@@ -97,10 +97,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
             const MODULUS_VALUE: Self::Value = #modulus;
 
             const TWICE_MODULUS_VALUE: Self::Value = #modulus << 1;
-
-            const Q_DIV_8: Self = Self(#modulus >> 3);
-
-            const NEG_Q_DIV_8: Self = Self(#modulus - (#modulus >> 3));
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
@@ -182,11 +178,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
                 use ::algebra::Widening;
                 use ::algebra::reduce::LazyReduce;
                 self.0 = a.0.carry_mul(b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
-            }
-
-            #[inline]
-            fn to_f64(self) -> f64 {
-                self.0 as f64
             }
 
             #[inline]

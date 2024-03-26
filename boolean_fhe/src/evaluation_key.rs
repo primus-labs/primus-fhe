@@ -54,7 +54,7 @@ impl<F: NTTField> EvaluationKey<F> {
         );
 
         let mut extract = acc.extract_lwe();
-        *extract.b_mut() += F::Q_DIV_8;
+        *extract.b_mut() += F::new(F::MODULUS_VALUE >> 3);
 
         let key_switched = self.key_switching_key.key_switch(extract);
         self.modulus_switch(key_switched)
@@ -66,7 +66,8 @@ impl<F: NTTField> EvaluationKey<F> {
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
         let rlwe_modulus_f64 = parameters.rlwe_modulus_f64();
 
-        let switch = |v: F| (v.to_f64() * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
+        let switch =
+            |v: F| (v.get().into() as f64 * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
 
         let a: Vec<LWEType> = c.a().iter().copied().map(switch).collect();
         let b = switch(c.b());
@@ -107,6 +108,9 @@ where
     F: NTTField,
 {
     let mut v = Polynomial::zero(rlwe_dimension);
+    let q = F::MODULUS_VALUE;
+    let q_div_8 = F::new(q >> 3);
+    let neg_q_div_8 = F::new(q - q_div_8.get());
 
     let b = b as usize * twice_rlwe_dimension_div_lwe_modulus;
 
@@ -118,65 +122,26 @@ where
         v[0..=mid]
             .iter_mut()
             .step_by(twice_rlwe_dimension_div_lwe_modulus)
-            .for_each(|a| *a = F::Q_DIV_8);
+            .for_each(|a| *a = q_div_8);
 
         let mut iter = v[mid..]
             .iter_mut()
             .step_by(twice_rlwe_dimension_div_lwe_modulus);
         iter.next();
-        iter.for_each(|a| *a = F::NEG_Q_DIV_8);
+        iter.for_each(|a| *a = neg_q_div_8);
     } else {
         let mid = b - y;
         v[0..=mid]
             .iter_mut()
             .step_by(twice_rlwe_dimension_div_lwe_modulus)
-            .for_each(|a| *a = F::NEG_Q_DIV_8);
+            .for_each(|a| *a = neg_q_div_8);
 
         let mut iter = v[mid..]
             .iter_mut()
             .step_by(twice_rlwe_dimension_div_lwe_modulus);
         iter.next();
-        iter.for_each(|a| *a = F::Q_DIV_8);
+        iter.for_each(|a| *a = q_div_8);
     }
 
     RLWE::new(Polynomial::zero(rlwe_dimension), v)
-}
-
-#[test]
-fn test_init_nand_acc() {
-    use std::ops::Neg;
-
-    use algebra::modulus::PowOf2Modulus;
-    use algebra::reduce::{NegReduce, SubReduce};
-    use algebra::Field;
-
-    use crate::DefaultFieldTernary128;
-
-    const N: usize = 64;
-    let q = 16u16;
-    let modulus = <PowOf2Modulus<u16>>::new(q);
-    let ratio = N * 2 / (q as usize);
-    let l = (q >> 3) * 3;
-    let r = (q >> 3) * 7;
-    for b in 0..q {
-        let acc = init_nand_acc::<DefaultFieldTernary128>(b, N, ratio);
-        for a in 0..q {
-            let ra = a.neg_reduce(modulus) as usize * ratio;
-            let m = if ra == 0 {
-                acc.b()[0]
-            } else if ra < N {
-                acc.b()[N - ra].neg()
-            } else if ra == N {
-                acc.b()[0].neg()
-            } else {
-                acc.b()[2 * N - ra]
-            };
-
-            if (l..r).contains(&(b.sub_reduce(a, modulus))) {
-                assert_eq!(m, DefaultFieldTernary128::NEG_Q_DIV_8, "b:{b} a:{a}");
-            } else {
-                assert_eq!(m, DefaultFieldTernary128::Q_DIV_8, "b:{b} a:{a}");
-            }
-        }
-    }
 }

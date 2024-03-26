@@ -89,12 +89,6 @@ pub trait Field:
     /// 2q
     const TWICE_MODULUS_VALUE: Self::Value;
 
-    /// q/8
-    const Q_DIV_8: Self;
-
-    /// -q/8
-    const NEG_Q_DIV_8: Self;
-
     /// Creates a new instance.
     fn new(value: Self::Value) -> Self;
 
@@ -142,9 +136,6 @@ pub trait Field:
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
     fn add_mul_assign_fast(&mut self, a: Self, b: Self);
-
-    /// cast inner to [`f64`].
-    fn to_f64(self) -> f64;
 
     /// mask, return a number with `bits` 1s.
     fn mask(bits: u32) -> Self::Value;

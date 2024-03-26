@@ -2,7 +2,11 @@ use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::Type;
 
-pub(crate) fn barrett(name: &Ident, field_ty: &Type, modulus: &TokenStream) -> TokenStream {
+pub(crate) fn impl_modulus_config(
+    name: &Ident,
+    field_ty: &Type,
+    modulus: &TokenStream,
+) -> TokenStream {
     quote! {
         impl ::algebra::ModulusConfig for #name {
             type Modulus = ::algebra::modulus::BarrettModulus<#field_ty>;
