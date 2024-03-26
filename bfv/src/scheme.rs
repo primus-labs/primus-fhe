@@ -114,4 +114,13 @@ impl BFVScheme {
         let c2 = &c_lhs.0[1] + &c_rhs.0[1];
         BFVCiphertext([c1, c2])
     }
+
+    /// Mulply scalar and add
+    pub fn evaluate_mul_scalar_and_add(
+        _ctx: &BFVContext,
+        c: &[BFVCiphertext],
+        scalar: &[PlainField],
+    ) -> BFVCiphertext {
+        todo!()
+    }
 }
