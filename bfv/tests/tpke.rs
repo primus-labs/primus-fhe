@@ -29,15 +29,16 @@ mod tests {
         let ctxt = ThresholdPKE::encrypt(&ctx, &pks, &msg);
 
         let c0 = ThresholdPKE::re_encrypt(&ctx, &ctxt[0], &sk0, &pk);
-
         let c1 = ThresholdPKE::re_encrypt(&ctx, &ctxt[1], &sk1, &pk);
-
         let c2 = ThresholdPKE::re_encrypt(&ctx, &ctxt[2], &sk2, &pk);
 
         let ctxts = [c0, c1, c2].to_vec();
+        // let ctxts = [c0, c1].to_vec();
 
-        let c = ThresholdPKE::combine(&ctx, &ctxts);
+        let chosen_indices = [F::new(1), F::new(2), F::new(3)].to_vec();
+        // let chosen_indices = [F::new(1), F::new(2)].to_vec();
 
+        let c = ThresholdPKE::combine(&ctx, &ctxts, &chosen_indices);
         let m_res = ThresholdPKE::decrypt(&ctx, &sk, &c);
 
         assert_eq!(msg, m_res);

@@ -166,8 +166,10 @@ impl ThresholdPKE {
             ctx.policy.total_number(),
             "the length of pks should be total_number"
         );
-        ctx.policy
-            .secret_sharing(&m.0, &mut *ctx.bfv_ctx().csrng_mut())
+        let polys = ctx
+            .policy
+            .secret_sharing(&m.0, &mut *ctx.bfv_ctx().csrng_mut());
+        polys
             .into_iter()
             .zip(pks)
             .map(|(x, pk)| BFVScheme::encrypt(ctx.bfv_ctx(), pk, &BFVPlaintext(x)))
@@ -200,7 +202,27 @@ impl ThresholdPKE {
 
     /// Combine the ciphertext
     #[inline]
-    pub fn combine(ctx: &ThresholdPKEContext, ctxts: &[BFVCiphertext]) -> BFVCiphertext {
-        BFVScheme::evaluate_inner_product(ctx.bfv_ctx(), ctxts, ctx.policy.lagrange_coeff())
+    pub fn combine(
+        ctx: &ThresholdPKEContext,
+        ctxts: &[BFVCiphertext],
+        chosen_indices: &[F],
+    ) -> BFVCiphertext {
+        assert_eq!(
+            ctxts.len(),
+            chosen_indices.len(),
+            "the length of ctxts and chosen_indices should be equal"
+        );
+        let mut scalars = vec![F::ZERO; ctxts.len()];
+        for (i, f) in chosen_indices.iter().enumerate() {
+            let pos = ctx
+                .policy
+                .indices()
+                .iter()
+                .position(|&x| x == *f)
+                .expect("invalid chosen indices");
+            scalars[i] = ctx.policy.lagrange_coeff()[pos];
+        }
+
+        BFVScheme::evaluate_inner_product(ctx.bfv_ctx(), ctxts, &scalars)
     }
 }
