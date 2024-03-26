@@ -69,7 +69,7 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let _uniform_sampler = FF::uniform_sampler();
     // other distributions
     let _binary_sampler = FF::binary_sampler();
-    let _binary_sampler = FF::binary_sampler();
+    let _ternary_sampler = FF::ternary_sampler();
     let _gaussian_sampler = FF::gaussian_sampler(0.0, 3.2)?;
 
     // Some operation
