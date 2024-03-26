@@ -80,9 +80,6 @@ pub trait Field:
     /// -1
     const NEG_ONE: Self;
 
-    /// 1
-    const ONE_VALUE: Self::Value;
-
     /// q
     const MODULUS_VALUE: Self::Value;
 

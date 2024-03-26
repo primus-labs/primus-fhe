@@ -92,8 +92,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
 
             const NEG_ONE: Self = Self(#modulus - 1);
 
-            const ONE_VALUE: Self::Value = 1;
-
             const MODULUS_VALUE: Self::Value = #modulus;
 
             const TWICE_MODULUS_VALUE: Self::Value = #modulus << 1;
