@@ -1,8 +1,7 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::LitInt;
 
-pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> TokenStream {
+pub(crate) fn basic(name: &Ident, modulus: &TokenStream) -> TokenStream {
     let name_str = name.to_string();
     quote! {
         impl #name {
@@ -16,18 +15,6 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
             #[inline]
             pub const fn neg_one() -> Self {
                 Self(#modulus - 1)
-            }
-        }
-
-        impl ::std::convert::From<#field_ty> for #name {
-            #[inline]
-            fn from(value: #field_ty) -> Self {
-                if value < #modulus {
-                    Self(value)
-                } else {
-                    use ::algebra::reduce::Reduce;
-                    Self(value.reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
-                }
             }
         }
 
@@ -76,15 +63,22 @@ pub(crate) fn basic(name: &Ident, field_ty: &syn::Type, modulus: &LitInt) -> Tok
         }
 
         impl ::std::cmp::Eq for #name {}
+
+        impl ::std::hash::Hash for #name {
+            #[inline]
+            fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+                self.0.hash(state);
+            }
+        }
     }
 }
 
-pub(crate) fn display(name: &Ident, modulus: &LitInt) -> TokenStream {
+pub(crate) fn display(name: &Ident) -> TokenStream {
     quote! {
         impl ::std::fmt::Display for #name {
             #[inline]
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                write!(f, "[({})_{}]", self.0, #modulus)
+                write!(f, "{}", self.0)
             }
         }
     }

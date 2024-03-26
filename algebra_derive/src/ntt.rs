@@ -13,7 +13,9 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
 fn impl_ntt(input: Input) -> TokenStream {
     let name = &input.ident;
     let field_ty = input.field.ty;
-    let modulus = input.attrs.modulus.unwrap();
+
+    let modulus_value = input.attrs.modulus_value;
+    let modulus = modulus_value.into_token_stream();
 
     let ntt_table = format_ident!("NTT_TABLE{}", name.to_string().to_uppercase());
     let ntt_mutex = format_ident!("NTT_MUTEX{}", name.to_string().to_uppercase());
@@ -22,6 +24,18 @@ fn impl_ntt(input: Input) -> TokenStream {
         static mut #ntt_table: ::once_cell::sync::OnceCell<::std::collections::HashMap<u32, ::std::sync::Arc<<#name as ::algebra::NTTField>::Table>>>
             = ::once_cell::sync::OnceCell::new();
         static #ntt_mutex: ::std::sync::Mutex<()> = ::std::sync::Mutex::new(());
+
+        impl ::std::convert::From<usize> for #name {
+            #[inline]
+            fn from(value: usize) -> Self {
+                let modulus = #modulus.try_into().unwrap();
+                if value < modulus {
+                    Self(value as #field_ty)
+                } else {
+                    Self((value % modulus) as #field_ty)
+                }
+            }
+        }
 
         impl ::algebra::NTTField for #name {
             type Table = ::algebra::transformation::NTTTable<Self>;
@@ -83,12 +97,12 @@ fn impl_ntt(input: Input) -> TokenStream {
                 }
 
                 let mut rng = ::rand::thread_rng();
-                let distr = ::rand::distributions::Uniform::new_inclusive(Self(2), Self(#modulus - 1));
+                let distr = ::rand::distributions::Uniform::new_inclusive(2, #modulus - 1);
 
                 let mut w = Self(0);
 
                 if (0..100).any(|_| {
-                    w = ::num_traits::Pow::pow(::rand::Rng::sample(&mut rng, distr), quotient);
+                    w = ::num_traits::Pow::pow(Self(::rand::Rng::sample(&mut rng, distr)), quotient);
                     Self::is_primitive_root(w, degree)
                 }) {
                     Ok(w)

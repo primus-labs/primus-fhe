@@ -18,7 +18,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut rng = thread_rng();
 
-    let fp_dis = Fp::standard_distribution();
+    let fp_dis = Fp::uniform_sampler();
 
     let mut data: Vec<Fp> = fp_dis.sample_iter(&mut rng).take(n).collect();
 

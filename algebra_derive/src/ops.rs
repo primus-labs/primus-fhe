@@ -1,17 +1,28 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{LitInt, Type};
+use syn::Type;
 
-pub(crate) fn barrett(name: &Ident, field_ty: &Type, modulus: &LitInt) -> TokenStream {
-    quote! {
-        impl ::algebra::ModulusConfig for #name {
-            type Modulus = ::algebra::modulus::BarrettModulus<#field_ty>;
-            const MODULUS: Self::Modulus = Self::Modulus::new(#modulus);
+use crate::attr::ModulusType;
+
+pub(crate) fn impl_modulus_config(
+    name: &Ident,
+    field_ty: &Type,
+    modulus_type: ModulusType,
+    modulus: &TokenStream,
+) -> TokenStream {
+    match modulus_type {
+        ModulusType::Barrett => {
+            quote! {
+                impl ::algebra::ModulusConfig for #name {
+                    type Modulus = ::algebra::modulus::BarrettModulus<#field_ty>;
+                    const MODULUS: Self::Modulus = Self::Modulus::new(#modulus);
+                }
+            }
         }
     }
 }
 
-pub(crate) fn add_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
+pub(crate) fn add_reduce_ops(name: &Ident, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::std::ops::Add<Self> for #name {
             type Output = Self;
@@ -51,7 +62,7 @@ pub(crate) fn add_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
     }
 }
 
-pub(crate) fn sub_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
+pub(crate) fn sub_reduce_ops(name: &Ident, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::std::ops::Sub<Self> for #name {
             type Output = Self;
@@ -131,7 +142,7 @@ pub(crate) fn mul_reduce_ops(name: &Ident) -> TokenStream {
     }
 }
 
-pub(crate) fn neg_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
+pub(crate) fn neg_reduce_ops(name: &Ident, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::std::ops::Neg for #name {
             type Output = Self;
@@ -199,7 +210,7 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
     }
 }
 
-pub(crate) fn inv_reduce_ops(name: &Ident, modulus: &LitInt) -> TokenStream {
+pub(crate) fn inv_reduce_ops(name: &Ident, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::num_traits::Inv for #name {
             type Output = Self;

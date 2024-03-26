@@ -29,7 +29,7 @@ use super::Polynomial;
 ///
 /// # Fields
 /// * `data: Vec<F>` - A vector that contains the coefficients of the polynomial in NTT form.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct NTTPolynomial<F: Field> {
     data: Vec<F>,
 }
@@ -178,10 +178,7 @@ impl<F: Field + Random> NTTPolynomial<F> {
         R: Rng + CryptoRng,
     {
         Self {
-            data: F::standard_distribution()
-                .sample_iter(rng)
-                .take(n)
-                .collect(),
+            data: F::uniform_sampler().sample_iter(rng).take(n).collect(),
         }
     }
 

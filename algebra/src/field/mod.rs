@@ -1,11 +1,12 @@
 //! This place defines some concrete implement of field of the algebra.
 
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
 
-use crate::{Basis, ModulusConfig, Random, Widening, WrappingOps};
+use crate::{Basis, Random, Widening, WrappingOps};
 
 mod ntt_fields;
 mod prime_fields;
@@ -64,11 +65,10 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
-    + From<Self::Value>
-    + ModulusConfig
+    + Hash
 {
     /// The inner type of this field.
-    type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps;
+    type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps + Into<u64>;
 
     /// The type of the field's order.
     type Order: Copy;
@@ -82,60 +82,26 @@ pub trait Field:
     /// -1
     const NEG_ONE: Self;
 
-    /// 1
-    const ONE_INNER: Self::Value;
-
     /// q
-    const MODULUS_INNER: Self::Value;
+    const MODULUS_VALUE: Self::Value;
 
     /// 2q
-    const TWICE_MODULUS_INNER: Self::Value;
-
-    /// q/8
-    const Q_DIV_8: Self;
-
-    /// -q/8
-    const NEG_Q_DIV_8: Self;
+    const TWICE_MODULUS_VALUE: Self::Value;
 
     /// Creates a new instance.
     fn new(value: Self::Value) -> Self;
 
-    /// Creates a new instance.
+    /// Creates and checks a new instance.
     fn checked_new(value: Self::Value) -> Self;
 
-    /// Get inner value.
+    /// Gets inner value.
     fn get(self) -> Self::Value;
 
-    /// Reset inner value.
+    /// Resets inner value.
     fn set(&mut self, value: Self::Value);
 
-    /// Reset inner value.
+    /// Resets and checks inner value.
     fn checked_set(&mut self, value: Self::Value);
-
-    /// Returns the modulus value.
-    fn modulus_value() -> Self::Value;
-
-    /// Normalize `self`.
-    ///
-    /// If `self` > `modulus`, return `self - modulus`.
-    ///
-    /// The result is in [0, modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 2*modulus`
-    fn normalize(self) -> Self;
-
-    /// Normalize assign `self`.
-    ///
-    /// If `self` > `modulus`, return `self - modulus`.
-    ///
-    /// The result is in [0, modulus).
-    ///
-    /// # Correctness
-    ///
-    /// - `self < 2*modulus`
-    fn normalize_assign(&mut self);
 
     /// Return `self * scalar`.
     fn mul_scalar(self, scalar: Self::Value) -> Self;
@@ -169,21 +135,6 @@ pub trait Field:
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
     fn add_mul_assign_fast(&mut self, a: Self, b: Self);
-
-    /// cast self to [`usize`].
-    fn cast_into_usize(self) -> usize;
-
-    /// cast from [`usize`].
-    fn cast_from_usize(value: usize) -> Self;
-
-    /// cast inner to [`f64`].
-    fn to_f64(self) -> f64;
-
-    /// cast from [`f64`].
-    fn from_f64(value: f64) -> Self;
-
-    /// Returns the order of the field.
-    fn order() -> Self::Order;
 
     /// mask, return a number with `bits` 1s.
     fn mask(bits: u32) -> Self::Value;

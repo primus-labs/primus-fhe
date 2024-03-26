@@ -16,7 +16,7 @@ use super::PrimeField;
 ///
 /// Implementing types must provide functionality to work with roots of unity, decompose elements
 /// with respect to a basis, and generate and manage tables for NTT operations.
-pub trait NTTField: PrimeField {
+pub trait NTTField: PrimeField + From<usize> {
     /// An abstraction over the data structure used to store precomputed values for NTT.
     type Table: AbstractNTT<Self> + MonomialNTT<Self>;
 
