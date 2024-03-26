@@ -33,7 +33,7 @@ use super::NTTPolynomial;
 /// let poly = Polynomial::new(coeffs);
 /// // `poly` now represents the polynomial 1 + 2x + 3x^2.
 /// ```
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct Polynomial<F: Field> {
     data: Vec<F>,
 }
