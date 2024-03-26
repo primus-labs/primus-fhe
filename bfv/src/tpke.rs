@@ -104,7 +104,7 @@ impl<F: Field + Random> ThresholdPolicy<F> {
 /// Define Threshold PKE context.
 #[derive(Debug, Clone)]
 pub struct ThresholdPKEContext<F: Field + Random> {
-    ctx: BFVContext,
+    bfv_ctx: BFVContext,
     policy: ThresholdPolicy<F>,
 }
 
@@ -112,15 +112,15 @@ impl<F: Field + Random> ThresholdPKEContext<F> {
     /// Create a new instance
     #[inline]
     pub fn new(total_number: usize, threshold_number: usize, indices: Vec<F>) -> Self {
-        let ctx = BFVContext::new();
+        let bfv_ctx = BFVContext::new();
         let policy = ThresholdPolicy::new(total_number, threshold_number, indices);
-        Self { ctx, policy }
+        Self { bfv_ctx, policy }
     }
 
     /// Return the reference of BFV context
     #[inline]
     pub fn bfv_ctx(&self) -> &BFVContext {
-        &self.ctx
+        &self.bfv_ctx
     }
 
     /// Return the referance of policy.
