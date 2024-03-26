@@ -1,6 +1,7 @@
 //! This place defines some concrete implement of field of the algebra.
 
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
@@ -64,6 +65,7 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
+    + Hash
 {
     /// The inner type of this field.
     type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps + Into<u64>;
