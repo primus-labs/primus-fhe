@@ -63,7 +63,7 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
 impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
     /// Generates the [`BinaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
-        basis: Basis<F>,
+        bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[LWEType],
         chi: FieldDiscreteGaussianSampler,
         rlwe_dimension: usize,
@@ -81,7 +81,7 @@ impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
                     <NTTRGSW<F>>::generate_zero_sample(
                         rlwe_dimension,
                         rlwe_secret_key,
-                        basis,
+                        bootstrapping_basis,
                         chi,
                         &mut rng,
                     )
@@ -89,7 +89,7 @@ impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
                     <NTTRGSW<F>>::generate_one_sample(
                         rlwe_dimension,
                         rlwe_secret_key,
-                        basis,
+                        bootstrapping_basis,
                         chi,
                         &mut rng,
                     )

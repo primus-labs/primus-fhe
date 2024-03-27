@@ -50,7 +50,7 @@ impl<F: NTTField> EvaluationKey<F> {
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
             parameters.lwe_modulus(),
-            parameters.gadget_basis(),
+            parameters.bootstrapping_basis(),
         );
 
         let mut extract = acc.extract_lwe();

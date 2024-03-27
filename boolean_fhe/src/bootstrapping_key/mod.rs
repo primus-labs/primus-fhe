@@ -50,7 +50,7 @@ impl<F: NTTField> BootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEType>,
-        gadget_basis: Basis<F>,
+        bootstrapping_basis: Basis<F>,
     ) -> RLWE<F> {
         match self {
             BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(
@@ -66,7 +66,7 @@ impl<F: NTTField> BootstrappingKey<F> {
                 rlwe_dimension,
                 twice_rlwe_dimension_div_lwe_modulus,
                 lwe_modulus,
-                gadget_basis,
+                bootstrapping_basis,
             ),
         }
     }
@@ -86,7 +86,7 @@ impl<F: RandomNTTField> BootstrappingKey<F> {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {
             SecretKeyType::Binary => BootstrappingKey::Binary(BinaryBootstrappingKey::generate(
-                parameters.gadget_basis(),
+                parameters.bootstrapping_basis(),
                 secret_key_pack.lwe_secret_key(),
                 chi,
                 parameters.rlwe_dimension(),
@@ -94,7 +94,7 @@ impl<F: RandomNTTField> BootstrappingKey<F> {
                 rng,
             )),
             SecretKeyType::Ternary => BootstrappingKey::Ternary(TernaryBootstrappingKey::generate(
-                parameters.gadget_basis(),
+                parameters.bootstrapping_basis(),
                 secret_key_pack.lwe_secret_key(),
                 chi,
                 parameters.rlwe_dimension(),

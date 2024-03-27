@@ -31,7 +31,7 @@ pub struct ConstParameters<Scalar> {
     pub rlwe_noise_std_dev: f64,
 
     /// Decompose basis for `Q` used for bootstrapping accumulator
-    pub gadget_basis_bits: u32,
+    pub bootstrapping_basis_bits: u32,
 
     /// Decompose basis for `Q` used for key switching.
     pub key_switching_basis_bits: u32,
@@ -66,9 +66,7 @@ pub struct Parameters<F: NTTField> {
     twice_rlwe_dimension_div_lwe_modulus: usize,
 
     /// Decompose basis for `Q` used for bootstrapping accumulator
-    gadget_basis: Basis<F>,
-    /// The powers of gadget_basis
-    gadget_basis_powers: Vec<F>,
+    bootstrapping_basis: Basis<F>,
 
     /// Decompose basis for `Q` used for key switching.
     key_switching_basis: Basis<F>,
@@ -94,7 +92,7 @@ where
             .rlwe_dimension(parameters.rlwe_dimension)
             .rlwe_modulus(F::MODULUS_VALUE)
             .rlwe_noise_std_dev(parameters.rlwe_noise_std_dev)
-            .gadget_basis_bits(parameters.gadget_basis_bits)
+            .bootstrapping_basis_bits(parameters.bootstrapping_basis_bits)
             .key_switching_basis_bits(parameters.key_switching_basis_bits)
             .key_switching_std_dev(parameters.key_switching_std_dev)
             .build()
@@ -171,14 +169,8 @@ impl<F: NTTField> Parameters<F> {
     /// Returns the gadget basis of this [`Parameters<F>`],
     /// which acts as the decompose basis for `Q` used for bootstrapping accumulator.
     #[inline]
-    pub fn gadget_basis(&self) -> Basis<F> {
-        self.gadget_basis
-    }
-
-    /// Returns the powers of gadget basis of this [`Parameters<F>`].
-    #[inline]
-    pub fn gadget_basis_powers(&self) -> &[F] {
-        &self.gadget_basis_powers
+    pub fn bootstrapping_basis(&self) -> Basis<F> {
+        self.bootstrapping_basis
     }
 
     /// Returns the key switching basis of this [`Parameters<F>`],
@@ -235,7 +227,7 @@ pub struct ParametersBuilder<F: NTTField> {
     rlwe_noise_std_dev: Option<f64>,
 
     /// Decompose basis for `Q` used for bootstrapping accumulator
-    gadget_basis_bits: u32,
+    bootstrapping_basis_bits: u32,
 
     /// Decompose basis for `Q` used for key switching.
     key_switching_basis_bits: u32,
@@ -253,7 +245,7 @@ impl<F: NTTField> Default for ParametersBuilder<F> {
             rlwe_dimension: None,
             rlwe_modulus: None,
             rlwe_noise_std_dev: None,
-            gadget_basis_bits: 1,
+            bootstrapping_basis_bits: 1,
             key_switching_basis_bits: 1,
             key_switching_std_dev: None,
         }
@@ -318,8 +310,8 @@ impl<F: NTTField> ParametersBuilder<F> {
 
     /// Sets the gadget basis bits of this [`ParametersBuilder<F>`].
     #[inline]
-    pub fn gadget_basis_bits(mut self, gadget_basis_bits: u32) -> Self {
-        self.gadget_basis_bits = gadget_basis_bits;
+    pub fn bootstrapping_basis_bits(mut self, bootstrapping_basis_bits: u32) -> Self {
+        self.bootstrapping_basis_bits = bootstrapping_basis_bits;
         self
     }
 
@@ -384,15 +376,7 @@ impl<F: NTTField> ParametersBuilder<F> {
             });
         }
 
-        let gadget_basis = <Basis<F>>::new(self.gadget_basis_bits);
-        let bf = gadget_basis.basis();
-
-        let mut gadget_basis_powers = vec![F::ZERO; gadget_basis.decompose_len()];
-        let mut temp = F::ONE.get();
-        gadget_basis_powers.iter_mut().for_each(|v| {
-            *v = F::new(temp);
-            temp = temp * bf;
-        });
+        let bootstrapping_basis = <Basis<F>>::new(self.bootstrapping_basis_bits);
 
         let key_switching_basis = <Basis<F>>::new(self.key_switching_basis_bits);
 
@@ -411,8 +395,7 @@ impl<F: NTTField> ParametersBuilder<F> {
             rlwe_modulus_f64,
             twice_rlwe_dimension_div_lwe_modulus,
 
-            gadget_basis,
-            gadget_basis_powers,
+            bootstrapping_basis,
 
             key_switching_basis,
             key_switching_std_dev: self.key_switching_std_dev.unwrap(),
@@ -434,7 +417,7 @@ pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = Con
     rlwe_dimension: 1024,
     rlwe_modulus: 132120577,
     rlwe_noise_std_dev: 3.20,
-    gadget_basis_bits: 8,
+    bootstrapping_basis_bits: 8,
     key_switching_basis_bits: 4,
     key_switching_std_dev: 3.2 * ((1 << 7) as f64),
 };

@@ -30,14 +30,14 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEType>,
-        gadget_basis: Basis<F>,
+        bootstrapping_basis: Basis<F>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let ntt_polynomial = &mut NTTPolynomialSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
         let median = &mut NTTRLWESpace::new(rlwe_dimension);
         let external_product = &mut RLWESpace::new(rlwe_dimension);
-        let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, gadget_basis);
+        let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, bootstrapping_basis);
 
         let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
 
@@ -88,7 +88,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
 impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
     /// Generates the [`TernaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
-        basis: Basis<F>,
+        bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[LWEType],
         chi: FieldDiscreteGaussianSampler,
         rlwe_dimension: usize,
@@ -107,14 +107,14 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
                         <NTTRGSW<F>>::generate_one_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
-                            basis,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
                         <NTTRGSW<F>>::generate_zero_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
-                            basis,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
@@ -124,14 +124,14 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
                         <NTTRGSW<F>>::generate_zero_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
-                            basis,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
                         <NTTRGSW<F>>::generate_zero_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
-                            basis,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
@@ -141,14 +141,14 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
                         <NTTRGSW<F>>::generate_zero_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
-                            basis,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
                         <NTTRGSW<F>>::generate_one_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
-                            basis,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
