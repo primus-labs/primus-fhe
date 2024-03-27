@@ -1,7 +1,4 @@
-use algebra::{
-    ntt_add_mul_assign, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
-    RandomNTTField,
-};
+use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial, RandomNTTField};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
@@ -92,18 +89,16 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
                 let k_i = (0..len)
                     .map(|i| {
-                        let a = NTTPolynomial::random(lwe_dimension, &mut rng);
-                        let mut e = Polynomial::random_with_gaussian(lwe_dimension, &mut rng, chi)
-                            .into_ntt_polynomial();
+                        let mut sample =
+                            <NTTRLWE<F>>::generate_zero_sample(lwe_dimension, &s, chi, &mut rng);
 
-                        ntt_add_mul_assign(&mut e, &a, &s);
-                        let b = e + &ntt_z;
+                        *sample.b_mut() += &ntt_z;
 
                         if i < len - 1 {
                             ntt_z.mul_scalar_assign(F::new(key_switching_basis.basis()));
                         }
 
-                        NTTRLWECiphertext::new(a, b)
+                        sample
                     })
                     .collect::<Vec<NTTRLWECiphertext<F>>>();
                 NTTGadgetRLWE::new(k_i, key_switching_basis)
