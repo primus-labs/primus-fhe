@@ -10,8 +10,6 @@ use rand_distr::Distribution;
 
 use crate::{LWEType, NTTRLWESecretKey};
 
-use super::{ntt_rgsw_one, ntt_rgsw_zero};
-
 #[derive(Debug, Clone)]
 pub struct TernaryBootstrappingKey<F: NTTField> {
     key: Vec<(NTTRGSW<F>, NTTRGSW<F>)>,
@@ -91,7 +89,6 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
     /// Generates the [`TernaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
         basis: Basis<F>,
-        basis_powers: &[F],
         lwe_secret_key: &[LWEType],
         chi: FieldDiscreteGaussianSampler,
         rlwe_dimension: usize,
@@ -107,29 +104,51 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
             .map(|&s| {
                 if s == 1 {
                     (
-                        ntt_rgsw_one(
+                        <NTTRGSW<F>>::generate_one_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
                             basis,
-                            basis_powers,
                             chi,
                             &mut rng,
                         ),
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
-                    )
-                } else if s == 0 {
-                    (
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
-                    )
-                } else {
-                    (
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
-                        ntt_rgsw_one(
+                        <NTTRGSW<F>>::generate_zero_sample(
                             rlwe_dimension,
                             rlwe_secret_key,
                             basis,
-                            basis_powers,
+                            chi,
+                            &mut rng,
+                        ),
+                    )
+                } else if s == 0 {
+                    (
+                        <NTTRGSW<F>>::generate_zero_sample(
+                            rlwe_dimension,
+                            rlwe_secret_key,
+                            basis,
+                            chi,
+                            &mut rng,
+                        ),
+                        <NTTRGSW<F>>::generate_zero_sample(
+                            rlwe_dimension,
+                            rlwe_secret_key,
+                            basis,
+                            chi,
+                            &mut rng,
+                        ),
+                    )
+                } else {
+                    (
+                        <NTTRGSW<F>>::generate_zero_sample(
+                            rlwe_dimension,
+                            rlwe_secret_key,
+                            basis,
+                            chi,
+                            &mut rng,
+                        ),
+                        <NTTRGSW<F>>::generate_one_sample(
+                            rlwe_dimension,
+                            rlwe_secret_key,
+                            basis,
                             chi,
                             &mut rng,
                         ),
