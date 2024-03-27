@@ -155,7 +155,7 @@ impl<F: RandomNTTField> GadgetRLWE<F> {
     {
         let data = (0..basis.decompose_len())
             .map(|_| {
-                <RLWE<F>>::generate_zero_sample(rlwe_dimension, &mut rng, error_sampler, secret_key)
+                <RLWE<F>>::generate_zero_sample(rlwe_dimension, secret_key, error_sampler, &mut rng)
             })
             .collect();
         Self { data, basis }
@@ -174,19 +174,19 @@ impl<F: RandomNTTField> GadgetRLWE<F> {
         FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
-        let b = basis.basis();
-        let mut basis_power = F::new(b);
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let mut r = <RLWE<F>>::generate_zero_sample(
                 rlwe_dimension,
-                &mut rng,
-                error_sampler,
                 secret_key,
+                error_sampler,
+                &mut rng,
             );
             r.b_mut_slice()[0] += basis_power;
             data.push(r);
-            basis_power = F::new(basis_power.get() * b);
+            basis_power = F::new(basis_power.get() * basis_value);
         }
 
         Self { data, basis }
@@ -205,19 +205,19 @@ impl<F: RandomNTTField> GadgetRLWE<F> {
         FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
-        let b = basis.basis();
-        let mut basis_power = F::new(b);
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let mut r = <RLWE<F>>::generate_zero_sample(
                 rlwe_dimension,
-                &mut rng,
-                error_sampler,
                 secret_key,
+                error_sampler,
+                &mut rng,
             );
             r.a_mut_slice()[0] += basis_power;
             data.push(r);
-            basis_power = F::new(basis_power.get() * b);
+            basis_power = F::new(basis_power.get() * basis_value);
         }
 
         Self { data, basis }
@@ -448,9 +448,9 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
             .map(|_| {
                 <NTTRLWE<F>>::generate_zero_sample(
                     rlwe_dimension,
-                    &mut rng,
-                    error_sampler,
                     secret_key,
+                    error_sampler,
+                    &mut rng,
                 )
             })
             .collect();
@@ -470,19 +470,19 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
         FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
-        let b = basis.basis();
-        let mut basis_power = F::new(b);
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let r = <NTTRLWE<F>>::generate_value_sample(
                 rlwe_dimension,
-                &mut rng,
-                error_sampler,
                 secret_key,
                 basis_power,
+                error_sampler,
+                &mut rng,
             );
             data.push(r);
-            basis_power = F::new(basis_power.get() * b);
+            basis_power = F::new(basis_power.get() * basis_value);
         }
 
         Self { data, basis }
@@ -501,19 +501,19 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
         FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
-        let b = basis.basis();
-        let mut basis_power = F::new(b);
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let mut r = <NTTRLWE<F>>::generate_zero_sample(
                 rlwe_dimension,
-                &mut rng,
-                error_sampler,
                 secret_key,
+                error_sampler,
+                &mut rng,
             );
             r.a_mut_slice().iter_mut().for_each(|v| *v += basis_power);
             data.push(r);
-            basis_power = F::new(basis_power.get() * b);
+            basis_power = F::new(basis_power.get() * basis_value);
         }
 
         Self { data, basis }

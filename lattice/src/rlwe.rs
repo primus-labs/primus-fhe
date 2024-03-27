@@ -428,9 +428,9 @@ impl<F: RandomNTTField> RLWE<F> {
     /// Generate a `RLWE<F>` sample which encrypts `0`.
     pub fn generate_zero_sample<R>(
         rlwe_dimension: usize,
-        mut rng: R,
-        error_sampler: FieldDiscreteGaussianSampler,
         secret_key: &NTTPolynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -858,9 +858,9 @@ impl<F: RandomNTTField> NTTRLWE<F> {
     /// Generate a `NTTRLWE<F>` sample which encrypts `0`.
     pub fn generate_zero_sample<R>(
         rlwe_dimension: usize,
-        mut rng: R,
-        error_sampler: FieldDiscreteGaussianSampler,
         secret_key: &NTTPolynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -877,10 +877,10 @@ impl<F: RandomNTTField> NTTRLWE<F> {
     /// Generate a `NTTRLWE<F>` sample which encrypts `value`.
     pub fn generate_value_sample<R>(
         rlwe_dimension: usize,
-        mut rng: R,
-        error_sampler: FieldDiscreteGaussianSampler,
         secret_key: &NTTPolynomial<F>,
         value: F,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
