@@ -3,10 +3,11 @@ use algebra::{
     RandomNTTField,
 };
 
+use lattice::DiscreteGaussian;
 use num_traits::cast;
 use once_cell::sync::Lazy;
 
-use crate::{FHEError, LWEType, LWEValueGaussian, SecretKeyType};
+use crate::{FHEError, LWEType, SecretKeyType};
 
 /// The parameters of the fully homomorphic encryption scheme.
 ///
@@ -195,8 +196,8 @@ impl<F: NTTField> Parameters<F> {
 
     /// Gets the lwe noise distribution.
     #[inline]
-    pub fn lwe_noise_distribution(&self) -> LWEValueGaussian {
-        LWEValueGaussian::new(self.lwe_modulus.value(), 0.0, self.lwe_noise_std_dev).unwrap()
+    pub fn lwe_noise_distribution(&self) -> DiscreteGaussian<LWEType> {
+        DiscreteGaussian::new(self.lwe_modulus.value(), 0.0, self.lwe_noise_std_dev).unwrap()
     }
 }
 

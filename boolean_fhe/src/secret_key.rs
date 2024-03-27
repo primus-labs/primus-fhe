@@ -4,14 +4,12 @@ use algebra::{
     reduce::{AddReduce, SubReduce},
     NTTField, NTTPolynomial, Polynomial, RandomNTTField,
 };
+use lattice::{sample_binary_values, sample_ternary_values};
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
 use rand_distr::Uniform;
 
-use crate::{
-    dot_product, sample_binary_lwe_vec, sample_ternary_lwe_vec, LWECiphertext, LWEPlaintext,
-    LWEType, Parameters,
-};
+use crate::{dot_product, LWECiphertext, LWEPlaintext, LWEType, Parameters};
 
 /// The distribution type of the LWE Secret Key
 #[derive(Debug, Default, Clone, Copy)]
@@ -151,9 +149,9 @@ impl<F: RandomNTTField> SecretKeyPack<F> {
         let lwe_dimension = parameters.lwe_dimension();
 
         let lwe_secret_key = match parameters.secret_key_type() {
-            SecretKeyType::Binary => sample_binary_lwe_vec(lwe_dimension, &mut csrng),
+            SecretKeyType::Binary => sample_binary_values(lwe_dimension, &mut csrng),
             SecretKeyType::Ternary => {
-                sample_ternary_lwe_vec(parameters.lwe_modulus().value(), lwe_dimension, &mut csrng)
+                sample_ternary_values(parameters.lwe_modulus().value(), lwe_dimension, &mut csrng)
             }
         };
 
