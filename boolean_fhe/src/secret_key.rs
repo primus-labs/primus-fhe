@@ -126,12 +126,12 @@ impl<F: NTTField> SecretKeyPack<F> {
     pub fn encrypt(&self, message: LWEPlaintext) -> LWECiphertext {
         let lwe_dimension = self.parameters.lwe_dimension();
         let lwe_modulus = self.parameters().lwe_modulus();
-        let standard_distribution = Uniform::new_inclusive(0, lwe_modulus.mask());
+        let uniform_distribution = Uniform::new_inclusive(0, lwe_modulus.mask());
         let noise_distribution = self.parameters.lwe_noise_distribution();
 
         let mut csrng = self.csrng_mut();
 
-        let a: Vec<LWEType> = standard_distribution
+        let a: Vec<LWEType> = uniform_distribution
             .sample_iter(&mut *csrng)
             .take(lwe_dimension)
             .collect();

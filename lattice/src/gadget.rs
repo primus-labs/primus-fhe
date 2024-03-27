@@ -1,6 +1,11 @@
 use std::slice::{Iter, IterMut};
 
-use algebra::{transformation::AbstractNTT, Basis, NTTField, NTTPolynomial, Polynomial};
+use algebra::{
+    transformation::AbstractNTT, Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
+    Polynomial, RandomNTTField,
+};
+use rand::{CryptoRng, Rng};
+use rand_distr::Distribution;
 
 use crate::{DecompositionSpace, PolynomialSpace, NTTRLWE, RLWE};
 
@@ -132,6 +137,90 @@ impl<F: NTTField> GadgetRLWE<F> {
             ntt_rlwe.add_element_wise_assign(&temp);
         });
         <RLWE<F>>::from(ntt_rlwe)
+    }
+}
+
+impl<F: RandomNTTField> GadgetRLWE<F> {
+    /// Generate a `GadgetRLWE<F>` sample which encrypts `0`.
+    pub fn generate_zero_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        let data = (0..basis.decompose_len())
+            .map(|_| {
+                <RLWE<F>>::generate_zero_sample(rlwe_dimension, &mut rng, error_sampler, secret_key)
+            })
+            .collect();
+        Self { data, basis }
+    }
+
+    /// Generate a `GadgetRLWE<F>` sample which encrypts `1`.
+    pub fn generate_one_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        let len = basis.decompose_len();
+        let b = basis.basis();
+        let mut basis_power = F::new(b);
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let mut r = <RLWE<F>>::generate_zero_sample(
+                rlwe_dimension,
+                &mut rng,
+                error_sampler,
+                secret_key,
+            );
+            r.b_mut_slice()[0] += basis_power;
+            data.push(r);
+            basis_power = F::new(basis_power.get() * b);
+        }
+
+        Self { data, basis }
+    }
+
+    /// Generate a `GadgetRLWE<F>` sample which encrypts `-s`.
+    pub fn generate_neg_secret_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        let len = basis.decompose_len();
+        let b = basis.basis();
+        let mut basis_power = F::new(b);
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let mut r = <RLWE<F>>::generate_zero_sample(
+                rlwe_dimension,
+                &mut rng,
+                error_sampler,
+                secret_key,
+            );
+            r.a_mut_slice()[0] += basis_power;
+            data.push(r);
+            basis_power = F::new(basis_power.get() * b);
+        }
+
+        Self { data, basis }
     }
 }
 
@@ -339,5 +428,94 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
             .for_each(|((des, l), r)| {
                 l.add_ntt_rlwe_mul_ntt_polynomial_inplace(r, ntt_polynomial, des);
             })
+    }
+}
+
+impl<F: RandomNTTField> NTTGadgetRLWE<F> {
+    /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `0`.
+    pub fn generate_zero_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        let data = (0..basis.decompose_len())
+            .map(|_| {
+                <NTTRLWE<F>>::generate_zero_sample(
+                    rlwe_dimension,
+                    &mut rng,
+                    error_sampler,
+                    secret_key,
+                )
+            })
+            .collect();
+        Self { data, basis }
+    }
+
+    /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `1`.
+    pub fn generate_one_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        let len = basis.decompose_len();
+        let b = basis.basis();
+        let mut basis_power = F::new(b);
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let r = <NTTRLWE<F>>::generate_value_sample(
+                rlwe_dimension,
+                &mut rng,
+                error_sampler,
+                secret_key,
+                basis_power,
+            );
+            data.push(r);
+            basis_power = F::new(basis_power.get() * b);
+        }
+
+        Self { data, basis }
+    }
+
+    /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `-s`.
+    pub fn generate_neg_secret_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        let len = basis.decompose_len();
+        let b = basis.basis();
+        let mut basis_power = F::new(b);
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let mut r = <NTTRLWE<F>>::generate_zero_sample(
+                rlwe_dimension,
+                &mut rng,
+                error_sampler,
+                secret_key,
+            );
+            r.a_mut_slice().iter_mut().for_each(|v| *v += basis_power);
+            data.push(r);
+            basis_power = F::new(basis_power.get() * b);
+        }
+
+        Self { data, basis }
     }
 }
