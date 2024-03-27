@@ -65,7 +65,6 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
-    + Hash
 {
     /// The inner type of this field.
     type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps + Into<u64>;

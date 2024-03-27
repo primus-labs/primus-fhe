@@ -63,13 +63,6 @@ pub(crate) fn basic(name: &Ident, modulus: &TokenStream) -> TokenStream {
         }
 
         impl ::std::cmp::Eq for #name {}
-
-        impl ::std::hash::Hash for #name {
-            #[inline]
-            fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
-                self.0.hash(state);
-            }
-        }
     }
 }
 
