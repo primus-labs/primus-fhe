@@ -1,4 +1,6 @@
-use algebra::{Basis, NTTField, NTTPolynomial};
+use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, RandomNTTField};
+use rand::{CryptoRng, Rng};
+use rand_distr::Distribution;
 
 use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
@@ -122,6 +124,68 @@ impl<F: NTTField> RGSW<F> {
         let c_m = GadgetRLWE::new(c1_data, basis);
 
         Self::new(c_neg_s_m, c_m)
+    }
+}
+
+impl<F: RandomNTTField> RGSW<F> {
+    /// Generate a `RGSW<F>` sample which encrypts `0`.
+    pub fn generate_zero_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        Self {
+            c_neg_s_m: <GadgetRLWE<F>>::generate_zero_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+            c_m: <GadgetRLWE<F>>::generate_zero_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+        }
+    }
+
+    /// Generate a `RGSW<F>` sample which encrypts `1`.
+    pub fn generate_one_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        Self {
+            c_neg_s_m: <GadgetRLWE<F>>::generate_neg_secret_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+            c_m: <GadgetRLWE<F>>::generate_one_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+        }
     }
 }
 
@@ -249,5 +313,67 @@ impl<F: NTTField> NTTRGSW<F> {
             ntt_polynomial,
             destination.c_m_mut(),
         );
+    }
+}
+
+impl<F: RandomNTTField> NTTRGSW<F> {
+    /// Generate a `NTTRGSW<F>` sample which encrypts `0`.
+    pub fn generate_zero_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        Self {
+            c_neg_s_m: <NTTGadgetRLWE<F>>::generate_zero_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+            c_m: <NTTGadgetRLWE<F>>::generate_zero_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+        }
+    }
+
+    /// Generate a `NTTRGSW<F>` sample which encrypts `1`.
+    pub fn generate_one_sample<R>(
+        rlwe_dimension: usize,
+        mut rng: R,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &NTTPolynomial<F>,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        Self {
+            c_neg_s_m: <NTTGadgetRLWE<F>>::generate_neg_secret_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+            c_m: <NTTGadgetRLWE<F>>::generate_one_sample(
+                rlwe_dimension,
+                &mut rng,
+                basis,
+                error_sampler,
+                secret_key,
+            ),
+        }
     }
 }
