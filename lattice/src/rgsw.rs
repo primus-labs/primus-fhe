@@ -143,17 +143,17 @@ impl<F: RandomNTTField> RGSW<F> {
         Self {
             c_neg_s_m: <GadgetRLWE<F>>::generate_zero_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
             c_m: <GadgetRLWE<F>>::generate_zero_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
         }
     }
@@ -173,17 +173,17 @@ impl<F: RandomNTTField> RGSW<F> {
         Self {
             c_neg_s_m: <GadgetRLWE<F>>::generate_neg_secret_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
             c_m: <GadgetRLWE<F>>::generate_one_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
         }
     }
@@ -332,17 +332,17 @@ impl<F: RandomNTTField> NTTRGSW<F> {
         Self {
             c_neg_s_m: <NTTGadgetRLWE<F>>::generate_zero_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
             c_m: <NTTGadgetRLWE<F>>::generate_zero_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
         }
     }
@@ -362,17 +362,17 @@ impl<F: RandomNTTField> NTTRGSW<F> {
         Self {
             c_neg_s_m: <NTTGadgetRLWE<F>>::generate_neg_secret_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
             c_m: <NTTGadgetRLWE<F>>::generate_one_sample(
                 rlwe_dimension,
-                &mut rng,
+                secret_key,
                 basis,
                 error_sampler,
-                secret_key,
+                &mut rng,
             ),
         }
     }
