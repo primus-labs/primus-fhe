@@ -4,6 +4,12 @@ use algebra::{Basis, Field, NTTField, NTTPolynomial, Polynomial};
 
 use crate::{NTTRGSW, NTTRLWE, RLWE};
 
+mod sample;
+
+pub use sample::{
+    sample_binary_values, sample_ternary_values, BinarySampler, DiscreteGaussian, TernarySampler,
+};
+
 /// Performs dot product for two slices
 #[inline]
 pub fn dot_product<F: Field>(u: &[F], v: &[F]) -> F {
