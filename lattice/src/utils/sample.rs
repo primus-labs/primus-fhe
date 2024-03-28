@@ -52,7 +52,7 @@ where
     v
 }
 
-/// The gaussian distribution `N(mean, std_dev**2)` for [`LWEValue`].
+/// The gaussian distribution `N(mean, std_dev**2)`.
 #[derive(Clone, Copy, Debug)]
 pub struct DiscreteGaussian<T: Copy> {
     normal: Normal<f64>,
