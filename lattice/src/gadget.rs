@@ -142,7 +142,7 @@ impl<F: NTTField> GadgetRLWE<F> {
 
 impl<F: RandomNTTField> GadgetRLWE<F> {
     /// Generate a `GadgetRLWE<F>` sample which encrypts `0`.
-    pub fn generate_zero_sample<R>(
+    pub fn generate_random_zero_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
@@ -155,14 +155,19 @@ impl<F: RandomNTTField> GadgetRLWE<F> {
     {
         let data = (0..basis.decompose_len())
             .map(|_| {
-                <RLWE<F>>::generate_zero_sample(rlwe_dimension, secret_key, error_sampler, &mut rng)
+                <RLWE<F>>::generate_random_zero_sample(
+                    rlwe_dimension,
+                    secret_key,
+                    error_sampler,
+                    &mut rng,
+                )
             })
             .collect();
         Self { data, basis }
     }
 
     /// Generate a `GadgetRLWE<F>` sample which encrypts `1`.
-    pub fn generate_one_sample<R>(
+    pub fn generate_random_one_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
@@ -178,7 +183,7 @@ impl<F: RandomNTTField> GadgetRLWE<F> {
         let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
-            let mut r = <RLWE<F>>::generate_zero_sample(
+            let mut r = <RLWE<F>>::generate_random_zero_sample(
                 rlwe_dimension,
                 secret_key,
                 error_sampler,
@@ -193,7 +198,7 @@ impl<F: RandomNTTField> GadgetRLWE<F> {
     }
 
     /// Generate a `GadgetRLWE<F>` sample which encrypts `-s`.
-    pub fn generate_neg_secret_sample<R>(
+    pub fn generate_random_neg_secret_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
@@ -209,7 +214,7 @@ impl<F: RandomNTTField> GadgetRLWE<F> {
         let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
-            let mut r = <RLWE<F>>::generate_zero_sample(
+            let mut r = <RLWE<F>>::generate_random_zero_sample(
                 rlwe_dimension,
                 secret_key,
                 error_sampler,
@@ -433,7 +438,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
 impl<F: RandomNTTField> NTTGadgetRLWE<F> {
     /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `0`.
-    pub fn generate_zero_sample<R>(
+    pub fn generate_random_zero_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
@@ -446,7 +451,7 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
     {
         let data = (0..basis.decompose_len())
             .map(|_| {
-                <NTTRLWE<F>>::generate_zero_sample(
+                <NTTRLWE<F>>::generate_random_zero_sample(
                     rlwe_dimension,
                     secret_key,
                     error_sampler,
@@ -458,7 +463,7 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
     }
 
     /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `1`.
-    pub fn generate_one_sample<R>(
+    pub fn generate_random_one_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
@@ -474,7 +479,7 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
         let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
-            let r = <NTTRLWE<F>>::generate_value_sample(
+            let r = <NTTRLWE<F>>::generate_random_value_sample(
                 rlwe_dimension,
                 secret_key,
                 basis_power,
@@ -489,7 +494,7 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
     }
 
     /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `-s`.
-    pub fn generate_neg_secret_sample<R>(
+    pub fn generate_random_neg_secret_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
@@ -505,7 +510,7 @@ impl<F: RandomNTTField> NTTGadgetRLWE<F> {
         let mut basis_power = F::ONE;
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
-            let mut r = <NTTRLWE<F>>::generate_zero_sample(
+            let mut r = <NTTRLWE<F>>::generate_random_zero_sample(
                 rlwe_dimension,
                 secret_key,
                 error_sampler,

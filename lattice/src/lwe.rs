@@ -268,7 +268,7 @@ impl<T: Copy> LWE<T> {
 
 impl<T: Copy> LWE<T> {
     /// Generate a `LWE<T>` sample which encrypts `0`.
-    pub fn generate_zero_sample<M, R>(
+    pub fn generate_random_zero_sample<M, R>(
         secret_key: &[T],
         modulus_value: T,
         modulus: M,

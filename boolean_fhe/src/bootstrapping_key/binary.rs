@@ -78,7 +78,7 @@ impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
             .iter()
             .map(|&s| {
                 if s == 0 {
-                    <NTTRGSW<F>>::generate_zero_sample(
+                    <NTTRGSW<F>>::generate_random_zero_sample(
                         rlwe_dimension,
                         rlwe_secret_key,
                         bootstrapping_basis,
@@ -86,7 +86,7 @@ impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
                         &mut rng,
                     )
                 } else {
-                    <NTTRGSW<F>>::generate_one_sample(
+                    <NTTRGSW<F>>::generate_random_one_sample(
                         rlwe_dimension,
                         rlwe_secret_key,
                         bootstrapping_basis,

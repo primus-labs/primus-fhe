@@ -426,9 +426,31 @@ impl<F: NTTField> RLWE<F> {
 
 impl<F: RandomNTTField> RLWE<F> {
     /// Generate a `RLWE<F>` sample which encrypts `0`.
-    pub fn generate_zero_sample<R>(
+    pub fn generate_random_zero_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+        FieldDiscreteGaussianSampler: Distribution<F>,
+    {
+        let a = <Polynomial<F>>::random(rlwe_dimension, &mut rng);
+
+        let mut a_ntt = a.clone().into_ntt_polynomial();
+        a_ntt *= secret_key;
+
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler);
+        e += a_ntt.into_native_polynomial();
+
+        Self { a, b: e }
+    }
+
+    /// Generate a `RLWE<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample_slower<R>(
+        rlwe_dimension: usize,
+        secret_key: &Polynomial<F>,
         error_sampler: FieldDiscreteGaussianSampler,
         mut rng: R,
     ) -> Self
@@ -856,7 +878,7 @@ impl<F: NTTField> NTTRLWE<F> {
 
 impl<F: RandomNTTField> NTTRLWE<F> {
     /// Generate a `NTTRLWE<F>` sample which encrypts `0`.
-    pub fn generate_zero_sample<R>(
+    pub fn generate_random_zero_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         error_sampler: FieldDiscreteGaussianSampler,
@@ -875,7 +897,7 @@ impl<F: RandomNTTField> NTTRLWE<F> {
     }
 
     /// Generate a `NTTRLWE<F>` sample which encrypts `value`.
-    pub fn generate_value_sample<R>(
+    pub fn generate_random_value_sample<R>(
         rlwe_dimension: usize,
         secret_key: &NTTPolynomial<F>,
         value: F,

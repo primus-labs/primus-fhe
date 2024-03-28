@@ -127,7 +127,7 @@ impl<F: NTTField> SecretKeyPack<F> {
         let noise_distribution = self.parameters.lwe_noise_distribution();
         let mut csrng = self.csrng_mut();
 
-        let mut cipher = LWECiphertext::generate_zero_sample(
+        let mut cipher = LWECiphertext::generate_random_zero_sample(
             self.lwe_secret_key(),
             lwe_modulus.value(),
             lwe_modulus,
