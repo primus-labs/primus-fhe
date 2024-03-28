@@ -153,3 +153,22 @@ pub trait DivReduceAssign<Modulus, Rhs = Self> {
     /// Calculates `self /= rhs (mod modulus)`.
     fn div_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
+
+/// The modular dot product.
+///
+/// This is always used for slice. For example, `u64` slice `[u64]`.
+///
+/// For two same length slice `a = (a0, a1, ..., an)` and `b = (b0, b1, ..., bn)`.
+///
+/// This trait will calculate `a0×b0 + a1×b1 + ... + an×bn mod modulus`.
+pub trait DotProductReduce<Modulus, Rhs = Self> {
+    /// Output type.
+    type Output;
+
+    /// Calcualte `self • rhs mod modulus`
+    ///
+    /// For two same length slice `self = (a0, a1, ..., an)` and `rhs = (b0, b1, ..., bn)`.
+    ///
+    /// This trait will calculate `a0×b0 + a1×b1 + ... + an×bn mod modulus`.
+    fn dot_product_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
+}

@@ -114,3 +114,110 @@ macro_rules! impl_reduce_ops_for_primitive {
 }
 
 impl_reduce_ops_for_primitive!(u8, u16, u32, u64);
+
+macro_rules! impl_non_reduce_ops_for_primitive {
+    ($($t:ty),*) => {$(
+        impl $crate::reduce::Reduce<()> for $t {
+            type Output = Self;
+
+            #[inline]
+            fn reduce(self, _modulus: ()) -> Self::Output {
+                self
+            }
+        }
+
+        impl $crate::reduce::ReduceAssign<()> for $t {
+            #[inline]
+            fn reduce_assign(&mut self, _modulus: ()) {}
+        }
+
+        impl $crate::reduce::AddReduce<()> for $t {
+            type Output = Self;
+
+            #[inline]
+            fn add_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
+                self.wrapping_add(rhs)
+            }
+        }
+
+        impl $crate::reduce::AddReduceAssign<()> for $t {
+            #[inline]
+            fn add_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
+                *self = self.wrapping_add(rhs)
+            }
+        }
+
+        impl $crate::reduce::SubReduce<()> for $t {
+            type Output = Self;
+
+            #[inline]
+            fn sub_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
+                self.wrapping_sub(rhs)
+            }
+        }
+
+        impl $crate::reduce::SubReduceAssign<()> for $t {
+            #[inline]
+            fn sub_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
+                *self = self.wrapping_sub(rhs);
+            }
+        }
+
+        impl $crate::reduce::NegReduce<()> for $t {
+            type Output = Self;
+
+            #[inline]
+            fn neg_reduce(self, _modulus: ()) -> Self::Output {
+                self.wrapping_neg()
+            }
+        }
+
+        impl $crate::reduce::NegReduceAssign<()> for $t {
+            #[inline]
+            fn neg_reduce_assign(&mut self, _modulus: ()) {
+                *self = self.wrapping_neg();
+            }
+        }
+
+        impl $crate::reduce::MulReduce<()> for $t {
+            type Output = Self;
+
+            #[inline]
+            fn mul_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
+                self.wrapping_mul(rhs)
+            }
+        }
+
+        impl $crate::reduce::MulReduceAssign<()> for $t {
+            #[inline]
+            fn mul_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
+                *self = self.wrapping_mul(rhs)
+            }
+        }
+
+        impl $crate::reduce::DivReduce<()> for $t {
+            type Output = Self;
+
+            #[inline]
+            fn div_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
+                self.wrapping_div(rhs)
+            }
+        }
+
+        impl $crate::reduce::DivReduceAssign<()> for $t {
+            #[inline]
+            fn div_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
+                *self = self.wrapping_div(rhs)
+            }
+        }
+
+        impl $crate::reduce::PowReduce<(), u32> for $t {
+            #[inline]
+            fn pow_reduce(self, exp: u32, _modulus: ()) -> Self {
+                self.wrapping_pow(exp)
+            }
+        }
+    )*};
+}
+
+impl_non_reduce_ops_for_primitive! {u8, u16, u32, u64}

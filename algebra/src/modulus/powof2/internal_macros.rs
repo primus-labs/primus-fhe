@@ -134,5 +134,21 @@ macro_rules! impl_powof2_modulus {
                 intermediate
             }
         }
+
+        impl $crate::reduce::DotProductReduce<PowOf2Modulus<$SelfT>> for &'_ [$SelfT] {
+            type Output = $SelfT;
+
+            #[inline]
+            fn dot_product_reduce(self, rhs: Self, modulus: PowOf2Modulus<$SelfT>) -> Self::Output {
+                use $crate::reduce::Reduce;
+                debug_assert_eq!(self.len(), rhs.len());
+                self.iter()
+                    .zip(rhs)
+                    .fold(0, |acc: $SelfT, (&x, &y)| {
+                        x.wrapping_mul(y).wrapping_add(acc)
+                    })
+                    .reduce(modulus)
+            }
+        }
     };
 }
