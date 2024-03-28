@@ -89,12 +89,8 @@ impl<F: RandomNTTField> KeySwitchingKey<F> {
                 let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
                 let k_i = (0..len)
                     .map(|i| {
-                        let mut sample = <NTTRLWE<F>>::generate_random_zero_sample(
-                            lwe_dimension,
-                            &s,
-                            chi,
-                            &mut rng,
-                        );
+                        let mut sample =
+                            <NTTRLWE<F>>::generate_random_zero_sample(&s, chi, &mut rng);
 
                         *sample.b_mut() += &ntt_z;
 

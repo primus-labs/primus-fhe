@@ -91,7 +91,7 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
         bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[LWEType],
         chi: FieldDiscreteGaussianSampler,
-        rlwe_dimension: usize,
+
         rlwe_secret_key: &NTTRLWESecretKey<F>,
         mut rng: Rng,
     ) -> Self
@@ -105,14 +105,12 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
                 if s == 1 {
                     (
                         <NTTRGSW<F>>::generate_random_one_sample(
-                            rlwe_dimension,
                             rlwe_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
                         <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_dimension,
                             rlwe_secret_key,
                             bootstrapping_basis,
                             chi,
@@ -122,14 +120,12 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
                 } else if s == 0 {
                     (
                         <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_dimension,
                             rlwe_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
                         <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_dimension,
                             rlwe_secret_key,
                             bootstrapping_basis,
                             chi,
@@ -139,14 +135,12 @@ impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
                 } else {
                     (
                         <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_dimension,
                             rlwe_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
                         <NTTRGSW<F>>::generate_random_one_sample(
-                            rlwe_dimension,
                             rlwe_secret_key,
                             bootstrapping_basis,
                             chi,
