@@ -135,15 +135,21 @@ macro_rules! impl_powof2_modulus {
             }
         }
 
-        impl $crate::reduce::DotProductReduce<PowOf2Modulus<$SelfT>> for &'_ [$SelfT] {
-            type Output = $SelfT;
+        impl $crate::reduce::DotProductReduce<PowOf2Modulus<Self>> for $SelfT {
+            type Output = Self;
 
             #[inline]
-            fn dot_product_reduce(self, rhs: Self, modulus: PowOf2Modulus<$SelfT>) -> Self::Output {
+            fn dot_product_reduce(
+                a: impl AsRef<[Self]>,
+                b: impl AsRef<[Self]>,
+                modulus: PowOf2Modulus<Self>,
+            ) -> Self::Output {
                 use $crate::reduce::Reduce;
-                debug_assert_eq!(self.len(), rhs.len());
-                self.iter()
-                    .zip(rhs)
+                let a = a.as_ref();
+                let b = b.as_ref();
+                debug_assert_eq!(a.len(), b.len());
+                a.iter()
+                    .zip(b)
                     .fold(0, |acc: $SelfT, (&x, &y)| {
                         x.wrapping_mul(y).wrapping_add(acc)
                     })

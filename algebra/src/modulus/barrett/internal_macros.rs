@@ -484,16 +484,22 @@ macro_rules! impl_barrett_modulus {
             }
         }
 
-        impl $crate::reduce::DotProductReduce<BarrettModulus<$SelfT>> for &'_ [$SelfT] {
-            type Output = $SelfT;
+        impl $crate::reduce::DotProductReduce<BarrettModulus<Self>> for $SelfT {
+            type Output = Self;
 
             #[inline]
-            fn dot_product_reduce(self, rhs: Self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
+            fn dot_product_reduce(
+                a: impl AsRef<[Self]>,
+                b: impl AsRef<[Self]>,
+                modulus: BarrettModulus<Self>
+            ) -> Self::Output {
                 use $crate::Widening;
                 use $crate::reduce::Reduce;
-                debug_assert_eq!(self.len(), rhs.len());
-                self.iter()
-                    .zip(rhs)
+                let a = a.as_ref();
+                let b = b.as_ref();
+                debug_assert_eq!(a.len(), b.len());
+                a.iter()
+                    .zip(b)
                     .fold(0, |acc: $SelfT, (&x, &y)| {
                         x.carry_mul(y, acc).reduce(modulus)
                     })

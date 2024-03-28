@@ -1,7 +1,7 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use algebra::{
-    reduce::{AddReduce, AddReduceAssign, MulReduce, SubReduce, SubReduceAssign},
+    reduce::{AddReduce, AddReduceAssign, DotProductReduce, MulReduce, SubReduce, SubReduceAssign},
     AsFrom,
 };
 use num_traits::ConstZero;
@@ -281,7 +281,8 @@ impl<T: Copy> LWE<T> {
             + MulReduce<M, Output = T>
             + AddReduce<M, Output = T>
             + AsFrom<f64>
-            + Sub<Output = T>,
+            + Sub<Output = T>
+            + DotProductReduce<M, Output = T>,
         M: Copy,
         R: Rng + CryptoRng,
     {
@@ -289,12 +290,7 @@ impl<T: Copy> LWE<T> {
         let uniform = Uniform::new(T::ZERO, modulus_value);
 
         let a: Vec<T> = uniform.sample_iter(&mut rng).take(len).collect();
-        let b = a
-            .iter()
-            .zip(secret_key)
-            .fold(T::ZERO, |acc, (&x, &y)| {
-                x.mul_reduce(y, modulus).add_reduce(acc, modulus)
-            })
+        let b = T::dot_product_reduce(&a, secret_key, modulus)
             .add_reduce(error_sampler.sample(&mut rng), modulus);
         LWE { a, b }
     }
