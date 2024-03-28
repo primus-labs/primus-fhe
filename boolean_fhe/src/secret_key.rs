@@ -1,14 +1,14 @@
 use std::cell::RefCell;
 
 use algebra::{
-    reduce::{AddReduceAssign, SubReduce},
+    reduce::{AddReduceAssign, DotProductReduce, SubReduce},
     NTTField, NTTPolynomial, Polynomial, RandomNTTField,
 };
 use lattice::{sample_binary_values, sample_ternary_values};
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
 
-use crate::{dot_product, LWECiphertext, LWEPlaintext, LWEType, Parameters};
+use crate::{LWECiphertext, LWEPlaintext, LWEType, Parameters};
 
 /// The distribution type of the LWE Secret Key
 #[derive(Debug, Default, Clone, Copy)]
@@ -77,10 +77,11 @@ impl<F: NTTField> SecretKeyPack<F> {
     #[inline]
     pub fn decrypt(&self, cipher_text: &LWECiphertext) -> bool {
         let lwe_modulus = self.parameters().lwe_modulus();
-        let encoded_message = cipher_text.b().sub_reduce(
-            dot_product(cipher_text.a(), self.lwe_secret_key(), lwe_modulus),
-            lwe_modulus,
-        );
+
+        let a_mul_s =
+            LWEType::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+        let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
+
         decode(encoded_message, lwe_modulus.value())
     }
 
@@ -88,10 +89,11 @@ impl<F: NTTField> SecretKeyPack<F> {
     #[inline]
     pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEType) {
         let lwe_modulus = self.parameters().lwe_modulus();
-        let encoded_message = cipher_text.b().sub_reduce(
-            dot_product(cipher_text.a(), self.lwe_secret_key(), lwe_modulus),
-            lwe_modulus,
-        );
+
+        let a_mul_s =
+            LWEType::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+
+        let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
         let message = decode(encoded_message, lwe_modulus.value());
 
         let fresh = encode(message, lwe_modulus.value());

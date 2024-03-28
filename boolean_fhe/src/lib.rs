@@ -23,7 +23,7 @@ pub use parameter::{
 };
 
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
-pub use plaintext::{dot_product, LWEPlaintext, LWEType};
+pub use plaintext::{LWEPlaintext, LWEType};
 
 pub use bootstrapping_key::BootstrappingKey;
 pub use evaluation_key::EvaluationKey;
