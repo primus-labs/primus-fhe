@@ -1,6 +1,4 @@
-use algebra::{
-    modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField, RandomNTTField,
-};
+use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField};
 use lattice::RLWE;
 use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
@@ -72,7 +70,7 @@ impl<F: NTTField> BootstrappingKey<F> {
     }
 }
 
-impl<F: RandomNTTField> BootstrappingKey<F> {
+impl<F: NTTField> BootstrappingKey<F> {
     /// Generates the [`BootstrappingKey<F>`].
     pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,

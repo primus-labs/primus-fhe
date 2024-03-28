@@ -1,7 +1,9 @@
-use algebra::{derive::*, Field, Polynomial, PrimeField, Random};
+use algebra::{
+    derive::*, Field, FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler,
+    FieldUniformSampler, Polynomial, PrimeField,
+};
 use num_traits::{Inv, One, Pow, Zero};
 use rand::prelude::*;
-use rand_distr::Standard;
 
 // Derive macro `Field` generates an impl of the trait `algebra::Field`.
 //
@@ -30,7 +32,7 @@ use rand_distr::Standard;
 //
 // It's based the Derive macro `Prime`.
 
-#[derive(Field, Random, Prime, NTT)]
+#[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
 pub struct FF(u64);
 
@@ -60,17 +62,13 @@ fn main() -> Result<(), algebra::AlgebraError> {
     b.set_zero();
 
     // uniform random on all values of [`FF`]
-    let mut a = FF::random(&mut rng);
-    let b: FF = rand::random();
-    let _a: FF = rng.gen();
-    let _a: FF = Standard.sample(&mut rng);
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let mut a = uniform.sample(&mut rng);
 
-    // uniform
-    let _uniform_sampler = FF::uniform_sampler();
     // other distributions
-    let _binary_sampler = FF::binary_sampler();
-    let _ternary_sampler = FF::ternary_sampler();
-    let _gaussian_sampler = FF::gaussian_sampler(0.0, 3.2)?;
+    let _binary_sampler = FieldBinarySampler;
+    let _ternary_sampler = FieldTernarySampler;
+    let _gaussian_sampler = FieldDiscreteGaussianSampler::new(0.0, 3.2).unwrap();
 
     // Some operation
     let _c = a + b;

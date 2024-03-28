@@ -1,6 +1,5 @@
 use algebra::{
     modulus::PowOf2Modulus, reduce::NegReduce, Basis, FieldDiscreteGaussianSampler, NTTField,
-    RandomNTTField,
 };
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 use rand_distr::Distribution;
@@ -60,7 +59,7 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
     }
 }
 
-impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
+impl<F: NTTField> BinaryBootstrappingKey<F> {
     /// Generates the [`BinaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
         bootstrapping_basis: Basis<F>,

@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use algebra::{
     reduce::{AddReduceAssign, DotProductReduce, SubReduce},
-    NTTField, NTTPolynomial, Polynomial, RandomNTTField,
+    NTTField, NTTPolynomial, Polynomial,
 };
 use lattice::{sample_binary_values, sample_ternary_values};
 use rand::prelude::*;
@@ -143,7 +143,7 @@ impl<F: NTTField> SecretKeyPack<F> {
     }
 }
 
-impl<F: RandomNTTField> SecretKeyPack<F> {
+impl<F: NTTField> SecretKeyPack<F> {
     /// Creates a new [`SecretKeyPack<F>`].
     pub fn new(parameters: Parameters<F>) -> Self {
         let mut csrng = ChaCha12Rng::from_entropy();

@@ -1,11 +1,12 @@
 use algebra::{
-    derive::{Field, Prime, Random, NTT},
+    derive::{Field, Prime, NTT},
     transformation::{AbstractNTT, MonomialNTT},
-    Basis, Field, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
+    Basis, Field, FieldUniformSampler, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
 };
 use rand::{thread_rng, Rng};
+use rand_distr::Distribution;
 
-#[derive(Field, Random, Prime, NTT)]
+#[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -36,8 +37,9 @@ fn test_transform() {
 fn test_transform_monomial() {
     let mut rng = thread_rng();
 
+    let uniform = <FieldUniformSampler<FF>>::new();
     let degree = rng.gen_range(0..N);
-    let coeff = rng.gen();
+    let coeff = uniform.sample(&mut rng);
     let mut a = PolyFF::zero(N);
     let mut b = NTTPolyFF::zero(N);
     a[degree] = coeff;

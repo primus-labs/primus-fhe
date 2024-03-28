@@ -1,4 +1,4 @@
-use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial, RandomNTTField};
+use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
@@ -46,7 +46,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
     }
 }
 
-impl<F: RandomNTTField> KeySwitchingKey<F> {
+impl<F: NTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
     pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,

@@ -3,7 +3,7 @@ use std::ops::MulAssign;
 use algebra::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
     ntt_mul_inplace, transformation::AbstractNTT, FieldDiscreteGaussianSampler, NTTField,
-    NTTPolynomial, Polynomial, RandomNTTField,
+    NTTPolynomial, Polynomial,
 };
 use num_traits::NumCast;
 use rand::{CryptoRng, Rng};
@@ -424,7 +424,7 @@ impl<F: NTTField> RLWE<F> {
     }
 }
 
-impl<F: RandomNTTField> RLWE<F> {
+impl<F: NTTField> RLWE<F> {
     /// Generate a `RLWE<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,
@@ -876,7 +876,7 @@ impl<F: NTTField> NTTRLWE<F> {
     }
 }
 
-impl<F: RandomNTTField> NTTRLWE<F> {
+impl<F: NTTField> NTTRLWE<F> {
     /// Generate a `NTTRLWE<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,

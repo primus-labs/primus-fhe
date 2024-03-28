@@ -1,11 +1,11 @@
 //! This place defines some concrete implement of field of the algebra.
 
 use std::fmt::{Debug, Display};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
 
-use crate::{Basis, Random, Widening, WrappingOps};
+use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
 
 mod ntt_fields;
 mod prime_fields;
@@ -66,10 +66,28 @@ pub trait Field:
     + Pow<Self::Order, Output = Self>
 {
     /// The inner type of this field.
-    type Value: Debug + Send + Sync + PrimInt + Widening + WrappingOps + Into<u64>;
+    type Value: Debug
+        + Send
+        + Sync
+        + PrimInt
+        + Widening
+        + WrappingOps
+        + Into<u64>
+        + AsFrom<u32>
+        + AsFrom<Self::SampleType>
+        + AsInto<f64>
+        + AsFrom<f64>;
 
     /// The type of the field's order.
     type Order: Copy;
+
+    /// The type for uniform sample.
+    type SampleType: Copy
+        + AsFrom<Self::Value>
+        + Widening
+        + WrappingOps
+        + PartialOrd
+        + Rem<Output = Self::SampleType>;
 
     /// 1
     const ONE: Self;
@@ -163,9 +181,7 @@ pub trait Field:
     ///
     /// Now we focus on power-of-two basis.
     fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32);
+
+    /// Generate a sample for uniform sampler.
+    fn gen_sample<R: rand::Rng + ?Sized>(rng: &mut R) -> Self::SampleType;
 }
-
-/// A trait combine [`NTTField`] with random property.
-pub trait RandomNTTField: NTTField + Random {}
-
-impl<F> RandomNTTField for F where F: NTTField + Random {}

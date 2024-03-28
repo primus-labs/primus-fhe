@@ -2,7 +2,7 @@ use std::slice::{Iter, IterMut};
 
 use algebra::{
     transformation::AbstractNTT, Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
-    Polynomial, RandomNTTField,
+    Polynomial,
 };
 use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
@@ -140,7 +140,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     }
 }
 
-impl<F: RandomNTTField> GadgetRLWE<F> {
+impl<F: NTTField> GadgetRLWE<F> {
     /// Generate a `GadgetRLWE<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,
@@ -416,7 +416,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     }
 }
 
-impl<F: RandomNTTField> NTTGadgetRLWE<F> {
+impl<F: NTTField> NTTGadgetRLWE<F> {
     /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,

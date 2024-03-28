@@ -1,4 +1,4 @@
-use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, RandomNTTField};
+use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial};
 use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
@@ -127,7 +127,7 @@ impl<F: NTTField> RGSW<F> {
     }
 }
 
-impl<F: RandomNTTField> RGSW<F> {
+impl<F: NTTField> RGSW<F> {
     /// Generate a `RGSW<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         mut rng: R,
@@ -310,7 +310,7 @@ impl<F: NTTField> NTTRGSW<F> {
     }
 }
 
-impl<F: RandomNTTField> NTTRGSW<F> {
+impl<F: NTTField> NTTRGSW<F> {
     /// Generate a `NTTRGSW<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,

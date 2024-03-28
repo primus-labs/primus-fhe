@@ -1,6 +1,6 @@
 use algebra::{
     modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis,
-    FieldDiscreteGaussianSampler, NTTField, RandomNTTField,
+    FieldDiscreteGaussianSampler, NTTField,
 };
 use lattice::{
     DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
@@ -85,13 +85,12 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
     }
 }
 
-impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
+impl<F: NTTField> TernaryBootstrappingKey<F> {
     /// Generates the [`TernaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
         bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[LWEType],
         chi: FieldDiscreteGaussianSampler,
-
         rlwe_secret_key: &NTTRLWESecretKey<F>,
         mut rng: Rng,
     ) -> Self

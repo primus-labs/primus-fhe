@@ -1,4 +1,4 @@
-use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial, RandomNTTField};
+use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use lattice::{LWE, RLWE};
 use rand_distr::Distribution;
 
@@ -76,7 +76,7 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 }
 
-impl<F: RandomNTTField> EvaluationKey<F>
+impl<F: NTTField> EvaluationKey<F>
 where
     FieldDiscreteGaussianSampler: Distribution<F>,
 {

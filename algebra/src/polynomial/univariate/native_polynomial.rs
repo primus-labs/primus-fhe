@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
-use crate::{Basis, Field, FieldDiscreteGaussianSampler, NTTField, Random};
+use crate::{Basis, Field, FieldDiscreteGaussianSampler, FieldUniformSampler, NTTField};
 
 use super::NTTPolynomial;
 
@@ -219,7 +219,7 @@ impl<F: Field> Polynomial<F> {
     }
 }
 
-impl<F: Field + Random> Polynomial<F> {
+impl<F: Field> Polynomial<F> {
     /// Generate a random [`Polynomial<F>`].
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self
@@ -227,7 +227,10 @@ impl<F: Field + Random> Polynomial<F> {
         R: Rng + CryptoRng,
     {
         Self {
-            data: F::uniform_sampler().sample_iter(rng).take(n).collect(),
+            data: FieldUniformSampler::new()
+                .sample_iter(rng)
+                .take(n)
+                .collect(),
         }
     }
 

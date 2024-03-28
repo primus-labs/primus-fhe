@@ -4,6 +4,7 @@ use syn::{DeriveInput, Result, Type};
 
 use crate::{
     ast::Input,
+    attr::ModulusValue,
     basic::{basic, display, impl_one, impl_zero},
     ops::*,
 };
@@ -20,6 +21,11 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
     let modulus_value = input.attrs.modulus_value;
     modulus_value.check_leading_zeros(input.field.original)?;
     let modulus = modulus_value.into_token_stream();
+
+    let sample_type = match modulus_value {
+        ModulusValue::U8(_) | ModulusValue::U16(_) | ModulusValue::U32(_) => quote!(u32),
+        ModulusValue::U64(_) => quote!(u64),
+    };
 
     let field_ty = input.field.ty;
 
@@ -48,7 +54,7 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 
     let impl_inv = inv_reduce_ops(name, &modulus);
 
-    let impl_field = impl_field(name, field_ty, &modulus);
+    let impl_field = impl_field(name, field_ty, &modulus, sample_type);
 
     Ok(quote! {
         #impl_basic
@@ -80,12 +86,19 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 }
 
 #[inline]
-fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream) -> TokenStream {
+fn impl_field(
+    name: &proc_macro2::Ident,
+    field_ty: &Type,
+    modulus: &TokenStream,
+    sample_type: TokenStream,
+) -> TokenStream {
     quote! {
         impl ::algebra::Field for #name {
             type Value = #field_ty;
 
             type Order = #field_ty;
+
+            type SampleType = #sample_type;
 
             const ONE: Self = Self(1);
 
@@ -236,6 +249,11 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
             fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32) {
                 *destination = Self(self.0 & mask);
                 self.0 >>= bits;
+            }
+
+            #[inline]
+            fn gen_sample<R: ::rand::Rng + ?Sized>(rng: &mut R) -> Self::SampleType {
+                rng.gen()
             }
         }
     }

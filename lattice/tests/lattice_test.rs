@@ -1,12 +1,15 @@
-use algebra::derive::{Field, Prime, Random, NTT};
+use algebra::derive::{Field, Prime, NTT};
 use algebra::modulus::PowOf2Modulus;
 use algebra::reduce::{AddReduce, MulReduce, SubReduce};
-use algebra::{Basis, Field, ModulusConfig, Polynomial, Random};
+use algebra::{
+    Basis, Field, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
+    ModulusConfig, Polynomial,
+};
 use lattice::*;
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
-#[derive(Field, Random, Prime, NTT)]
+#[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -164,7 +167,7 @@ fn min_to_zero(value: FF) -> Inner {
 #[test]
 fn test_rlwe_he() {
     let mut rng = rand::thread_rng();
-    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
+    let chi = FieldDiscreteGaussianSampler::new(0., 3.2).unwrap();
     let dis = Uniform::new(0, FT);
 
     let v0: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
@@ -207,9 +210,11 @@ fn test_rlwe_he() {
 
 #[test]
 fn extract_lwe_test() {
-    let rng = &mut thread_rng();
-    let s_vec: Vec<FF> = rng.sample_iter(Standard).take(N).collect();
-    let a_vec: Vec<FF> = rng.sample_iter(Standard).take(N).collect();
+    let mut rng = thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+
+    let s_vec: Vec<FF> = uniform.sample_iter(&mut rng).take(N).collect();
+    let a_vec: Vec<FF> = uniform.sample_iter(&mut rng).take(N).collect();
 
     let s = PolyFF::from_slice(&s_vec);
     let a = PolyFF::new(a_vec);
@@ -231,7 +236,7 @@ fn extract_lwe_test() {
 #[test]
 fn test_gadget_rlwe() {
     let mut rng = rand::thread_rng();
-    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
+    let chi = FieldDiscreteGaussianSampler::new(0., 3.2).unwrap();
 
     let m = PolyFF::random(N, &mut rng);
     let poly = PolyFF::random(N, &mut rng);
@@ -296,11 +301,10 @@ fn test_gadget_rlwe() {
 #[test]
 fn test_rgsw_mul_rlwe() {
     let mut rng = rand::thread_rng();
-    let ternary = FF::ternary_sampler();
-    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
+    let chi = FieldDiscreteGaussianSampler::new(0., 3.2).unwrap();
 
     let m0 = PolyFF::random(N, &mut rng);
-    let m1 = PolyFF::random_with_distribution(N, &mut rng, ternary);
+    let m1 = PolyFF::random_with_distribution(N, &mut rng, FieldTernarySampler);
 
     let m0m1 = &m0 * &m1;
 
@@ -354,11 +358,10 @@ fn test_rgsw_mul_rlwe() {
 #[test]
 fn test_rgsw_mul_rgsw() {
     let mut rng = rand::thread_rng();
-    let ternary = FF::ternary_sampler();
-    let chi = FF::gaussian_sampler(0., 3.2).unwrap();
+    let chi = FieldDiscreteGaussianSampler::new(0., 3.2).unwrap();
 
     let m0 = PolyFF::random(N, &mut rng);
-    let m1 = PolyFF::random_with_distribution(N, &mut rng, ternary);
+    let m1 = PolyFF::random_with_distribution(N, &mut rng, FieldTernarySampler);
 
     let m0m1 = &m0 * &m1;
 

@@ -1,6 +1,5 @@
 use algebra::{
     derive::*, modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
-    RandomNTTField,
 };
 
 use lattice::DiscreteGaussian;
@@ -193,17 +192,17 @@ impl<F: NTTField> Parameters<F> {
     }
 }
 
-impl<F: RandomNTTField> Parameters<F> {
+impl<F: NTTField> Parameters<F> {
     /// Gets the rlwe noise distribution.
     #[inline]
     pub fn rlwe_noise_distribution(&self) -> FieldDiscreteGaussianSampler {
-        F::gaussian_sampler(0.0, self.rlwe_noise_std_dev).unwrap()
+        FieldDiscreteGaussianSampler::new(0.0, self.rlwe_noise_std_dev).unwrap()
     }
 
     /// Gets the key_switching noise distribution.
     #[inline]
     pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussianSampler {
-        F::gaussian_sampler(0.0, self.key_switching_std_dev).unwrap()
+        FieldDiscreteGaussianSampler::new(0.0, self.key_switching_std_dev).unwrap()
     }
 }
 
@@ -404,7 +403,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 }
 
 /// Default Field for Default Parameters
-#[derive(Field, Random, Prime, NTT)]
+#[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
 pub struct DefaultFieldTernary128(u32);
 
