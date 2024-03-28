@@ -1,23 +1,8 @@
 use std::ops::{Deref, DerefMut};
 
-use algebra::{Basis, Field, NTTField, NTTPolynomial, Polynomial};
+use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
 
 use crate::{NTTRGSW, NTTRLWE, RLWE};
-
-mod sample;
-
-pub use sample::{
-    sample_binary_values, sample_ternary_values, BinarySampler, DiscreteGaussian, TernarySampler,
-};
-
-/// Performs dot product for two slices
-#[inline]
-pub fn dot_product<F: Field>(u: &[F], v: &[F]) -> F {
-    debug_assert_eq!(u.len(), v.len());
-    u.iter()
-        .zip(v)
-        .fold(F::ZERO, |acc, (&x, &y)| acc.add_mul(x, y))
-}
 
 /// Pre allocated space for inplace decomposition.
 #[derive(Debug)]
@@ -107,7 +92,7 @@ impl<F: NTTField> PolynomialSpace<F> {
     }
 }
 
-/// Pre allocated space for inplace polynomial operation.
+/// Pre allocated space for inplace ntt polynomial operation.
 #[derive(Debug)]
 pub struct NTTPolynomialSpace<F: NTTField> {
     space: NTTPolynomial<F>,
