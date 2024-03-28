@@ -31,6 +31,13 @@ impl<F: Field> FieldUniformSampler<F> {
     }
 }
 
+impl<F: Field> Default for FieldUniformSampler<F> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<F: Field> Distribution<F> for FieldUniformSampler<F> {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
