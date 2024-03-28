@@ -1,13 +1,12 @@
 use std::cell::RefCell;
 
 use algebra::{
-    reduce::{AddReduce, SubReduce},
+    reduce::{AddReduceAssign, SubReduce},
     NTTField, NTTPolynomial, Polynomial, RandomNTTField,
 };
 use lattice::{sample_binary_values, sample_ternary_values};
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
-use rand_distr::Uniform;
 
 use crate::{dot_product, LWECiphertext, LWEPlaintext, LWEType, Parameters};
 
@@ -122,22 +121,23 @@ impl<F: NTTField> SecretKeyPack<F> {
     /// Encrypts [`LWEPlaintext`] into [`LWECiphertext<R>`].
     #[inline]
     pub fn encrypt(&self, message: LWEPlaintext) -> LWECiphertext {
-        let lwe_dimension = self.parameters.lwe_dimension();
         let lwe_modulus = self.parameters().lwe_modulus();
-        let uniform_distribution = Uniform::new_inclusive(0, lwe_modulus.mask());
         let noise_distribution = self.parameters.lwe_noise_distribution();
-
         let mut csrng = self.csrng_mut();
 
-        let a: Vec<LWEType> = uniform_distribution
-            .sample_iter(&mut *csrng)
-            .take(lwe_dimension)
-            .collect();
-        let b = dot_product(&a, self.lwe_secret_key(), lwe_modulus)
-            .add_reduce(encode(message, lwe_modulus.value()), lwe_modulus)
-            .add_reduce(noise_distribution.sample(&mut *csrng), lwe_modulus);
+        let mut cipher = LWECiphertext::generate_zero_sample(
+            self.lwe_secret_key(),
+            lwe_modulus.value(),
+            lwe_modulus,
+            noise_distribution,
+            &mut *csrng,
+        );
 
-        LWECiphertext::new(a, b)
+        cipher
+            .b_mut()
+            .add_reduce_assign(encode(message, lwe_modulus.value()), lwe_modulus);
+
+        cipher
     }
 }
 
