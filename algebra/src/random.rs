@@ -9,11 +9,11 @@ use crate::{AlgebraError, AsFrom, AsInto, Field, Widening, WrappingOps};
 #[derive(Clone, Copy)]
 pub struct FieldUniformSampler<F: Field> {
     /// low
-    pub low: F::Value,
+    low: F::Value,
     /// range
-    pub range: F::Value,
+    range: F::Value,
     /// thresh
-    pub thresh: F::Value,
+    thresh: F::Value,
 }
 
 impl<F: Field> FieldUniformSampler<F> {
@@ -174,13 +174,12 @@ impl<F: Field> Distribution<F> for FieldDiscreteGaussianSampler {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
         let mean = self.mean();
         let gaussian = self.gaussian();
-        let modulus: f64 = F::MODULUS_VALUE.as_into();
         loop {
             let value = gaussian.sample(rng);
-            if (value - mean).abs() < self.max_std_dev() {
+            if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
                 if round < 0. {
-                    return F::new((modulus + value).as_into());
+                    return F::new(F::MODULUS_VALUE + (-value).as_into());
                 } else {
                     return F::new(value.as_into());
                 }
