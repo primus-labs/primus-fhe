@@ -209,7 +209,6 @@ impl<F: Field> Polynomial<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         if gaussian.cbd_enable() {
             Self::new(crate::utils::sample_cbd_field_vec(n, &mut rng))

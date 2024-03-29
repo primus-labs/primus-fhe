@@ -7,7 +7,6 @@ use algebra::{
 };
 use num_traits::NumCast;
 use rand::{CryptoRng, Rng};
-use rand_distr::Distribution;
 
 use crate::{
     DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW,
@@ -433,7 +432,6 @@ impl<F: NTTField> RLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let rlwe_dimension = secret_key.coeff_count();
         let a = <Polynomial<F>>::random(rlwe_dimension, &mut rng);
@@ -455,7 +453,6 @@ impl<F: NTTField> RLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let rlwe_dimension = secret_key.coeff_count();
         let a = <Polynomial<F>>::random(rlwe_dimension, &mut rng);
@@ -885,7 +882,6 @@ impl<F: NTTField> NTTRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let rlwe_dimension = secret_key.coeff_count();
         let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
@@ -905,7 +901,6 @@ impl<F: NTTField> NTTRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let rlwe_dimension = secret_key.coeff_count();
         let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);

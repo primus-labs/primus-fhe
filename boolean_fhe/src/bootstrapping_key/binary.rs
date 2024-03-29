@@ -2,7 +2,6 @@ use algebra::{
     modulus::PowOf2Modulus, reduce::NegReduce, Basis, FieldDiscreteGaussianSampler, NTTField,
 };
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
-use rand_distr::Distribution;
 
 use crate::{LWEType, NTTRLWESecretKey};
 
@@ -70,7 +69,6 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let key = lwe_secret_key
             .iter()

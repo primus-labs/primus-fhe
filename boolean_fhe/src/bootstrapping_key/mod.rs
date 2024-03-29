@@ -1,7 +1,6 @@
 use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField};
 use lattice::RLWE;
 use rand::{CryptoRng, Rng};
-use rand_distr::Distribution;
 
 use crate::{LWEType, SecretKeyPack, SecretKeyType};
 
@@ -79,7 +78,6 @@ impl<F: NTTField> BootstrappingKey<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {

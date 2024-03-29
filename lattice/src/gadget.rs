@@ -5,7 +5,6 @@ use algebra::{
     Polynomial,
 };
 use rand::{CryptoRng, Rng};
-use rand_distr::Distribution;
 
 use crate::{DecompositionSpace, PolynomialSpace, NTTRLWE, RLWE};
 
@@ -150,7 +149,6 @@ impl<F: NTTField> GadgetRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let data = (0..basis.decompose_len())
             .map(|_| <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng))
@@ -167,7 +165,6 @@ impl<F: NTTField> GadgetRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
@@ -192,7 +189,6 @@ impl<F: NTTField> GadgetRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
@@ -426,7 +422,6 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let data = (0..basis.decompose_len())
             .map(|_| <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng))
@@ -443,7 +438,6 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
@@ -472,7 +466,6 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();

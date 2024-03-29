@@ -1,6 +1,5 @@
-use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
+use algebra::{NTTField, Polynomial};
 use lattice::{LWE, RLWE};
-use rand_distr::Distribution;
 
 use crate::{
     BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEType, Parameters, RLWECiphertext,
@@ -76,10 +75,7 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 }
 
-impl<F: NTTField> EvaluationKey<F>
-where
-    FieldDiscreteGaussianSampler: Distribution<F>,
-{
+impl<F: NTTField> EvaluationKey<F> {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();

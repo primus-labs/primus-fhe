@@ -6,7 +6,6 @@ use lattice::{
     DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
     NTTRGSW, RLWE,
 };
-use rand_distr::Distribution;
 
 use crate::{LWEType, NTTRLWESecretKey};
 
@@ -96,7 +95,6 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let key = lwe_secret_key
             .iter()

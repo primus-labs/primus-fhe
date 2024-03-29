@@ -1,7 +1,6 @@
 use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
-use rand_distr::Distribution;
 
 use crate::{ciphertext::NTTRLWECiphertext, SecretKeyPack};
 
@@ -55,7 +54,6 @@ impl<F: NTTField> KeySwitchingKey<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();

@@ -1,6 +1,5 @@
 use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial};
 use rand::{CryptoRng, Rng};
-use rand_distr::Distribution;
 
 use crate::{GadgetRLWE, NTTGadgetRLWE, RLWE};
 
@@ -137,7 +136,6 @@ impl<F: NTTField> RGSW<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         Self {
             c_neg_s_m: <GadgetRLWE<F>>::generate_random_zero_sample(
@@ -164,7 +162,6 @@ impl<F: NTTField> RGSW<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         Self {
             c_neg_s_m: <GadgetRLWE<F>>::generate_random_neg_secret_sample(
@@ -320,7 +317,6 @@ impl<F: NTTField> NTTRGSW<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         Self {
             c_neg_s_m: <NTTGadgetRLWE<F>>::generate_random_zero_sample(
@@ -347,7 +343,6 @@ impl<F: NTTField> NTTRGSW<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         Self {
             c_neg_s_m: <NTTGadgetRLWE<F>>::generate_random_neg_secret_sample(
