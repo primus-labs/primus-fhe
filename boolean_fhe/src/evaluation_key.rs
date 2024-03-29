@@ -1,4 +1,4 @@
-use algebra::{NTTField, Polynomial};
+use algebra::{AsInto, NTTField, Polynomial};
 use lattice::{LWE, RLWE};
 
 use crate::{
@@ -66,7 +66,7 @@ impl<F: NTTField> EvaluationKey<F> {
         let rlwe_modulus_f64 = parameters.rlwe_modulus_f64();
 
         let switch =
-            |v: F| (v.get().into() as f64 * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
+            |v: F| (v.get().as_into() * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
 
         let a: Vec<LWEType> = c.a().iter().copied().map(switch).collect();
         let b = switch(c.b());
