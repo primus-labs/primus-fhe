@@ -143,9 +143,9 @@ where
             if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
                 if round < 0. {
-                    return self.modulus - T::as_from(-value);
+                    return self.modulus - T::as_from(-round);
                 } else {
-                    return T::as_from(value);
+                    return T::as_from(round);
                 }
             }
         }

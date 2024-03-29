@@ -179,9 +179,9 @@ impl<F: Field> Distribution<F> for FieldDiscreteGaussianSampler {
             if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
                 if round < 0. {
-                    return F::new(F::MODULUS_VALUE + (-value).as_into());
+                    return F::new(F::MODULUS_VALUE + (-round).as_into());
                 } else {
-                    return F::new(value.as_into());
+                    return F::new(round.as_into());
                 }
             }
         }
