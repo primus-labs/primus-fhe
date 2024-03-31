@@ -18,7 +18,7 @@ pub mod utils;
 
 pub use decompose_basis::Basis;
 pub use error::AlgebraError;
-pub use field::{Field, NTTField, PrimeField, RandomNTTField};
+pub use field::{Field, NTTField, PrimeField};
 pub use polynomial::multivariate::{
     DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
@@ -26,9 +26,8 @@ pub use polynomial::univariate::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
     ntt_mul_inplace, NTTPolynomial, Polynomial,
 };
-pub use primitive::{div_ceil, Bits, Widening, WrappingOps};
+pub use primitive::{div_ceil, AsFrom, AsInto, Bits, Widening, WrappingOps};
 pub use random::{
     FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
-    Random,
 };
 pub use reduce::ModulusConfig;

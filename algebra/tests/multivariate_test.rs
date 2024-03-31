@@ -1,11 +1,13 @@
 use std::vec;
 
 use algebra::{
-    derive::{Field, Prime, Random},
-    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
+    derive::{Field, Prime},
+    DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
+    MultilinearExtension,
 };
 use num_traits::Zero;
 use rand::thread_rng;
+use rand_distr::Distribution;
 use std::rc::Rc;
 
 macro_rules! field_vec {
@@ -17,7 +19,7 @@ macro_rules! field_vec {
     }
 }
 
-#[derive(Field, Random, Prime)]
+#[derive(Field, Prime)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -54,7 +56,8 @@ fn evaluate_mle_at_a_point() {
 fn evaluate_mle_at_a_random_point() {
     let mut rng = thread_rng();
     let poly = PolyFf::random(2, &mut rng);
-    let point: Vec<_> = (0..2).map(|_| FF::random(&mut rng)).collect();
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let point: Vec<_> = (0..2).map(|_| uniform.sample(&mut rng)).collect();
     assert_eq!(
         poly.evaluate(&point),
         evaluate_mle_data_arry(&poly.evaluations, &point),
@@ -65,8 +68,9 @@ fn evaluate_mle_at_a_random_point() {
 fn mle_arithmetic() {
     const NV: usize = 10;
     let mut rng = thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
     for _ in 0..20 {
-        let point: Vec<_> = (0..NV).map(|_| FF::random(&mut rng)).collect();
+        let point: Vec<_> = (0..NV).map(|_| uniform.sample(&mut rng)).collect();
         let poly1 = PolyFf::random(NV, &mut rng);
         let poly2 = PolyFf::random(NV, &mut rng);
         let v1 = poly1.evaluate(&point);
@@ -92,7 +96,7 @@ fn mle_arithmetic() {
         // test add assign with scalar
         {
             let mut poly1 = poly1.clone();
-            let scalar = FF::random(&mut rng);
+            let scalar = uniform.sample(&mut rng);
             poly1 += (scalar, &poly2);
             assert_eq!(poly1.evaluate(&point), v1 + scalar * v2);
         }

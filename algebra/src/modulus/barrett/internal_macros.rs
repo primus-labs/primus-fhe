@@ -483,5 +483,41 @@ macro_rules! impl_barrett_modulus {
                 *self = (*self).reduce(modulus);
             }
         }
+
+        impl $crate::reduce::DotProductReduce<BarrettModulus<Self>> for $SelfT {
+            type Output = Self;
+
+            #[inline]
+            fn dot_product_reduce(
+                a: impl AsRef<[Self]>,
+                b: impl AsRef<[Self]>,
+                modulus: BarrettModulus<Self>
+            ) -> Self::Output {
+                /// `c += a * b`
+                fn multiply_add(c: &mut [$SelfT; 2], a: $SelfT, b: $SelfT) {
+                    let (lw64, hw64) = a.widen_mul(b);
+                    let carry;
+                    (c[0], carry) = c[0].overflowing_add(lw64);
+                    (c[1], _) = c[1].carry_add(hw64, carry);
+                }
+                use $crate::Widening;
+                use $crate::reduce::{AddReduce, Reduce};
+                let a = a.as_ref();
+                let b = b.as_ref();
+                debug_assert_eq!(a.len(), b.len());
+                a.chunks_exact(16)
+                    .zip(b.chunks_exact(16))
+                    .map(|(a_s, b_s)| {
+                        let mut c: [$SelfT; 2] = [0, 0];
+                        for (&a, &b) in a_s.iter().zip(b_s) {
+                            multiply_add(&mut c, a, b);
+                        }
+                        c.reduce(modulus)
+                    })
+                    .fold(0, |acc: $SelfT, b| {
+                        acc.add_reduce(b, modulus)
+                    })
+            }
+        }
     };
 }

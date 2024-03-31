@@ -1,12 +1,12 @@
 use algebra::{
     transformation::{AbstractNTT, MonomialNTT},
-    Basis, NTTField, Polynomial, Random,
+    Basis, FieldUniformSampler, NTTField, Polynomial,
 };
-use algebra_derive::{Field, Prime, Random, NTT};
+use algebra_derive::{Field, Prime, NTT};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 
-#[derive(Field, Random, Prime, NTT)]
+#[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp(u32);
 
@@ -18,13 +18,14 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut rng = thread_rng();
 
-    let fp_dis = Fp::uniform_sampler();
+    let fp_dis = FieldUniformSampler::new();
 
     let mut data: Vec<Fp> = fp_dis.sample_iter(&mut rng).take(n).collect();
 
     let ntt_table = Fp::get_ntt_table(log_n).unwrap();
 
-    let coeff = rng.gen();
+    let uniform = FieldUniformSampler::new();
+    let coeff = uniform.sample(&mut rng);
     let degree = rng.gen_range(1..n);
 
     c.bench_function(&format!("ntt {}", n), |b| {

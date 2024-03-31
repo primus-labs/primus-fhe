@@ -11,9 +11,9 @@ algebra = { path = "../algebra" }
 num-traits = { workspace = true }
 once_cell = { workspace = true }
 rand_distr = { workspace = true }
+rand = { workspace = true }
 
 [dev-dependencies]
-rand = { workspace = true }
 criterion = { workspace = true }
 
 [[bench]]

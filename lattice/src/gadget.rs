@@ -1,6 +1,10 @@
 use std::slice::{Iter, IterMut};
 
-use algebra::{transformation::AbstractNTT, Basis, NTTField, NTTPolynomial, Polynomial};
+use algebra::{
+    transformation::AbstractNTT, Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
+    Polynomial,
+};
+use rand::{CryptoRng, Rng};
 
 use crate::{DecompositionSpace, PolynomialSpace, NTTRLWE, RLWE};
 
@@ -132,6 +136,72 @@ impl<F: NTTField> GadgetRLWE<F> {
             ntt_rlwe.add_element_wise_assign(&temp);
         });
         <RLWE<F>>::from(ntt_rlwe)
+    }
+}
+
+impl<F: NTTField> GadgetRLWE<F> {
+    /// Generate a `GadgetRLWE<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let data = (0..basis.decompose_len())
+            .map(|_| <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng))
+            .collect();
+        Self { data, basis }
+    }
+
+    /// Generate a `GadgetRLWE<F>` sample which encrypts `1`.
+    pub fn generate_random_one_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let len = basis.decompose_len();
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
+            r.b_mut_slice()[0] += basis_power;
+            data.push(r);
+            basis_power = F::new(basis_power.get() * basis_value);
+        }
+
+        Self { data, basis }
+    }
+
+    /// Generate a `GadgetRLWE<F>` sample which encrypts `-s`.
+    pub fn generate_random_neg_secret_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let len = basis.decompose_len();
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
+            r.a_mut_slice()[0] += basis_power;
+            data.push(r);
+            basis_power = F::new(basis_power.get() * basis_value);
+        }
+
+        Self { data, basis }
     }
 }
 
@@ -339,5 +409,76 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
             .for_each(|((des, l), r)| {
                 l.add_ntt_rlwe_mul_ntt_polynomial_inplace(r, ntt_polynomial, des);
             })
+    }
+}
+
+impl<F: NTTField> NTTGadgetRLWE<F> {
+    /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let data = (0..basis.decompose_len())
+            .map(|_| <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng))
+            .collect();
+        Self { data, basis }
+    }
+
+    /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `1`.
+    pub fn generate_random_one_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let len = basis.decompose_len();
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let r = <NTTRLWE<F>>::generate_random_value_sample(
+                secret_key,
+                basis_power,
+                error_sampler,
+                &mut rng,
+            );
+            data.push(r);
+            basis_power = F::new(basis_power.get() * basis_value);
+        }
+
+        Self { data, basis }
+    }
+
+    /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `-s`.
+    pub fn generate_random_neg_secret_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let len = basis.decompose_len();
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let mut r =
+                <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
+            r.a_mut_slice().iter_mut().for_each(|v| *v += basis_power);
+            data.push(r);
+            basis_power = F::new(basis_power.get() * basis_value);
+        }
+
+        Self { data, basis }
     }
 }

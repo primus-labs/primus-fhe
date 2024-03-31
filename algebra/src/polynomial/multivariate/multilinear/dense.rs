@@ -7,7 +7,7 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::{Field, Random};
+use crate::{Field, FieldUniformSampler};
 
 use super::MultilinearExtension;
 
@@ -64,7 +64,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
     }
 }
 
-impl<F: Field + Random> MultilinearExtension<F> for DenseMultilinearExtension<F> {
+impl<F: Field> MultilinearExtension<F> for DenseMultilinearExtension<F> {
     type Point = [F];
 
     #[inline]
@@ -85,7 +85,7 @@ impl<F: Field + Random> MultilinearExtension<F> for DenseMultilinearExtension<F>
     {
         Self {
             num_vars,
-            evaluations: F::uniform_sampler()
+            evaluations: FieldUniformSampler::new()
                 .sample_iter(rng)
                 .take(1 << num_vars)
                 .collect(),

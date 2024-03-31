@@ -1,6 +1,5 @@
-use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial, RandomNTTField};
+use algebra::{AsInto, NTTField, Polynomial};
 use lattice::{LWE, RLWE};
-use rand_distr::Distribution;
 
 use crate::{
     BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEType, Parameters, RLWECiphertext,
@@ -50,7 +49,7 @@ impl<F: NTTField> EvaluationKey<F> {
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
             parameters.lwe_modulus(),
-            parameters.gadget_basis(),
+            parameters.bootstrapping_basis(),
         );
 
         let mut extract = acc.extract_lwe();
@@ -67,7 +66,7 @@ impl<F: NTTField> EvaluationKey<F> {
         let rlwe_modulus_f64 = parameters.rlwe_modulus_f64();
 
         let switch =
-            |v: F| (v.get().into() as f64 * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
+            |v: F| (v.get().as_into() * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
 
         let a: Vec<LWEType> = c.a().iter().copied().map(switch).collect();
         let b = switch(c.b());
@@ -76,10 +75,7 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 }
 
-impl<F: RandomNTTField> EvaluationKey<F>
-where
-    FieldDiscreteGaussianSampler: Distribution<F>,
-{
+impl<F: NTTField> EvaluationKey<F> {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();

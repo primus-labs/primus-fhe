@@ -1,6 +1,6 @@
-use algebra::derive::{Field, Prime, Random, NTT};
+use algebra::derive::{Field, Prime, NTT};
 
-#[derive(Field, Random, Prime, NTT)]
+#[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -12,12 +12,14 @@ mod tests {
     use algebra::reduce::*;
     use algebra::Basis;
     use algebra::Field;
+    use algebra::FieldUniformSampler;
     use algebra::ModulusConfig;
     use algebra::PrimeField;
     use num_traits::Inv;
     use rand::distributions::Uniform;
     use rand::thread_rng;
     use rand::Rng;
+    use rand_distr::Distribution;
 
     type FF = Fp32;
     type T = u32;
@@ -132,7 +134,8 @@ mod tests {
         let basis = <Basis<Fp32>>::new(BITS);
         let rng = &mut thread_rng();
 
-        let a: FF = rng.gen();
+        let uniform = <FieldUniformSampler<FF>>::new();
+        let a: FF = uniform.sample(rng);
         let decompose = a.decompose(basis);
         let compose = decompose
             .into_iter()

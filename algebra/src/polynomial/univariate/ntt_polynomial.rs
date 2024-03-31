@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
-use crate::{Field, NTTField, Random};
+use crate::{Field, FieldUniformSampler, NTTField};
 
 use super::Polynomial;
 
@@ -29,7 +29,7 @@ use super::Polynomial;
 ///
 /// # Fields
 /// * `data: Vec<F>` - A vector that contains the coefficients of the polynomial in NTT form.
-#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct NTTPolynomial<F: Field> {
     data: Vec<F>,
 }
@@ -170,7 +170,7 @@ impl<F: Field> NTTPolynomial<F> {
     }
 }
 
-impl<F: Field + Random> NTTPolynomial<F> {
+impl<F: Field> NTTPolynomial<F> {
     /// Generate a random [`NTTPolynomial<F>`].
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self
@@ -178,7 +178,10 @@ impl<F: Field + Random> NTTPolynomial<F> {
         R: Rng + CryptoRng,
     {
         Self {
-            data: F::uniform_sampler().sample_iter(rng).take(n).collect(),
+            data: FieldUniformSampler::new()
+                .sample_iter(rng)
+                .take(n)
+                .collect(),
         }
     }
 
