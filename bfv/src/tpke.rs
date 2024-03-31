@@ -15,7 +15,6 @@ type F = PlainField;
 pub struct ThresholdPolicy {
     total_number: usize,
     threshold_number: usize,
-    lagrange_coeff: Vec<F>,
     indices: Vec<F>,
 }
 
@@ -39,23 +38,9 @@ impl ThresholdPolicy {
             "total number exceeds MAX_USER_NUMBER"
         );
 
-        let mut lagrange_coeff = vec![F::ZERO; total_number];
-
-        for (i, point) in indices.iter().enumerate() {
-            let mut points_without_i = indices.clone();
-            points_without_i.retain(|x| *x != *point);
-
-            let numerator = points_without_i.iter().fold(F::ONE, |acc, &x| acc * (-x));
-            let denominator = points_without_i
-                .iter()
-                .fold(F::ONE, |acc, &x| acc * (*point - x));
-            lagrange_coeff[i] = numerator / denominator;
-        }
-
         Self {
             total_number,
             threshold_number,
-            lagrange_coeff,
             indices,
         }
     }
@@ -70,12 +55,6 @@ impl ThresholdPolicy {
     #[inline]
     pub fn threshold_number(&self) -> usize {
         self.threshold_number
-    }
-
-    /// Return the reference of lagrange ceofficient
-    #[inline]
-    pub fn lagrange_coeff(&self) -> &[F] {
-        &self.lagrange_coeff
     }
 
     /// Return the reference of indices
@@ -100,7 +79,7 @@ impl ThresholdPolicy {
             }
         }
 
-        res.into_iter().map(|x| Polynomial::new(x)).collect()
+        res.into_iter().map(Polynomial::new).collect()
     }
 }
 
@@ -144,6 +123,28 @@ impl ThresholdPKE {
         indices: Vec<F>,
     ) -> ThresholdPKEContext {
         ThresholdPKEContext::new(total_number, threshold_number, indices)
+    }
+
+    /// Compute lagrange coefficients.
+    pub fn gen_lagrange_coeffs(chosen_indices: &[F]) -> Vec<F> {
+        assert!(
+            !chosen_indices.contains(&F::ZERO),
+            "indices should not contain 0"
+        );
+        let mut lagrange_coeff = vec![F::ZERO; chosen_indices.len()];
+
+        for (i, point) in chosen_indices.iter().enumerate() {
+            let mut points_without_i = chosen_indices.to_vec();
+            points_without_i.retain(|x| *x != *point);
+
+            let numerator = points_without_i.iter().fold(F::ONE, |acc, &x| acc * (-x));
+            let denominator = points_without_i
+                .iter()
+                .fold(F::ONE, |acc, &x| acc * (*point - x));
+            lagrange_coeff[i] = numerator / denominator;
+        }
+
+        lagrange_coeff
     }
 
     /// Generate key pair.
@@ -212,17 +213,7 @@ impl ThresholdPKE {
             chosen_indices.len(),
             "the length of ctxts and chosen_indices should be equal"
         );
-        let mut scalars = vec![F::ZERO; ctxts.len()];
-        for (i, f) in chosen_indices.iter().enumerate() {
-            let pos = ctx
-                .policy
-                .indices()
-                .iter()
-                .position(|&x| x == *f)
-                .expect("invalid chosen indices");
-            scalars[i] = ctx.policy.lagrange_coeff()[pos];
-        }
-
-        BFVScheme::evaluate_inner_product(ctx.bfv_ctx(), ctxts, &scalars)
+        let lagrange_coeff = Self::gen_lagrange_coeffs(chosen_indices);
+        BFVScheme::evaluate_inner_product(ctx.bfv_ctx(), ctxts, &lagrange_coeff)
     }
 }

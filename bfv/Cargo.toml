@@ -22,6 +22,10 @@ criterion = { workspace = true }
 name = "bfv"
 harness = false
 
+[[bench]]
+name = "tpke"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 # enable unstable features in the documentation
