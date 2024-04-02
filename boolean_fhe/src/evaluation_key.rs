@@ -26,10 +26,10 @@ impl<F: NTTField> EvaluationKey<F> {
     /// Performs the homomorphic not operation.
     ///
     /// # Arguments
-    /// 
+    ///
     /// * Input: ciphertext `c`, with message `m`.
     /// * Output: ciphertext `c'`, with message `1 - m`.
-    /// 
+    ///
     /// Link:https://eprint.iacr.org/2020/086
     pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
@@ -217,6 +217,7 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 }
 
+/// init acc for bootstrapping which performs homomorphic `nand`.
 fn init_nand_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
@@ -229,7 +230,7 @@ where
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.get());
 
-    init_nand_and_acc(
+    init_nand_and_majority_acc(
         b,
         rlwe_dimension,
         twice_rlwe_dimension_div_lwe_modulus,
@@ -238,6 +239,7 @@ where
     )
 }
 
+/// init acc for bootstrapping which performs homomorphic `and` or `majority`.
 fn init_and_majority_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
@@ -250,7 +252,7 @@ where
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.get());
 
-    init_nand_and_acc(
+    init_nand_and_majority_acc(
         b,
         rlwe_dimension,
         twice_rlwe_dimension_div_lwe_modulus,
@@ -259,7 +261,8 @@ where
     )
 }
 
-fn init_nand_and_acc<F>(
+/// init acc for bootstrapping which performs homomorphic `nand`, `and` or `majority`.
+fn init_nand_and_majority_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
@@ -305,6 +308,7 @@ where
     RLWE::new(Polynomial::zero(rlwe_dimension), v)
 }
 
+/// init acc for bootstrapping which performs homomorphic `or` or `xor`.
 fn init_or_xor_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
@@ -326,6 +330,7 @@ where
     )
 }
 
+/// init acc for bootstrapping which performs homomorphic `nor` or `xnor`.
 fn init_nor_xnor_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
@@ -347,6 +352,7 @@ where
     )
 }
 
+/// init acc for bootstrapping which performs homomorphic `or`, `nor`, `xor` or `xnor`.
 fn init_or_nor_xor_xnor_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
