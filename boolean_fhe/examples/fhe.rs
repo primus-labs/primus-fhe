@@ -21,25 +21,79 @@ fn main() {
     let mut c = skp.encrypt(m);
 
     for i in 1..=50 {
+        // and
         let m0 = rng.gen();
         let c0 = skp.encrypt(m0);
 
         let m1 = rng.gen();
         let c1 = skp.encrypt(m1);
 
-        let c2 = evk.nand(&c0, &c1);
+        let c2 = evk.and(&c0, &c1);
 
         let (m2, noise) = skp.decrypt_with_noise(&c2);
 
-        assert_eq!(m2, !(m0 & m1), "Noise: {noise}");
+        assert_eq!(m2, m0 & m1, "Noise: {noise}");
         assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
         println!("Noise: {noise} < {noise_max}");
 
-        c = evk.nand(&c, &c2);
+        // or
+        let m3 = rng.gen();
+        let c3 = skp.encrypt(m3);
+
+        let c4 = evk.or(&c2, &c3);
+
+        let (m4, noise) = skp.decrypt_with_noise(&c4);
+
+        assert_eq!(m4, m2 | m3, "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+
+        assert_eq!(m2, m0 & m1, "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+
+        // nor
+        let m5 = rng.gen();
+        let c5 = skp.encrypt(m5);
+
+        let c6 = evk.nor(&c4, &c5);
+
+        let (m6, noise) = skp.decrypt_with_noise(&c6);
+
+        assert_eq!(m6, !(m4 | m5), "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+
+        // xor
+        let m7 = rng.gen();
+        let c7 = skp.encrypt(m7);
+
+        let c8 = evk.xor(&c6, &c7);
+
+        let (m8, noise) = skp.decrypt_with_noise(&c8);
+
+        assert_eq!(m8, m6 ^ m7, "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+
+        // xnor
+        let m9 = rng.gen();
+        let c9 = skp.encrypt(m9);
+
+        let c10 = evk.xnor(&c8, &c9);
+
+        let (m10, noise) = skp.decrypt_with_noise(&c10);
+
+        assert_eq!(m10, !(m8 ^ m9), "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+
+        // nand
+        c = evk.nand(&c, &c10);
 
         let (d, noise) = skp.decrypt_with_noise(&c);
 
-        assert_eq!(d, !(m & m2), "Noise: {noise}");
+        assert_eq!(d, !(m & m10), "Noise: {noise}");
         assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
         println!("Noise: {noise} < {noise_max}");
 

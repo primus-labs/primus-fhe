@@ -1,7 +1,10 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use algebra::{
-    reduce::{AddReduce, AddReduceAssign, DotProductReduce, MulReduce, SubReduce, SubReduceAssign},
+    reduce::{
+        AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, SubReduce,
+        SubReduceAssign,
+    },
     AsFrom,
 };
 use num_traits::ConstZero;
@@ -263,6 +266,20 @@ impl<T: Copy> LWE<T> {
             .zip(rhs.a())
             .for_each(|(v0, &v1)| v0.sub_reduce_assign(v1, modulus));
         self.b.sub_reduce_assign(rhs.b, modulus);
+    }
+
+    /// Performs an in-place scalar multiplication
+    /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
+    #[inline]
+    pub fn scalar_mul_reduce_inplac<M>(&mut self, scalar: T, modulus: M)
+    where
+        T: MulReduceAssign<M>,
+        M: Copy,
+    {
+        self.a
+            .iter_mut()
+            .for_each(|v| v.mul_reduce_assign(scalar, modulus));
+        self.b.mul_reduce_assign(scalar, modulus);
     }
 }
 
