@@ -1,18 +1,11 @@
+//! polynomial commitment scheme
+
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![deny(missing_docs)]
+
+/// mulilinear polynomial commitment
 pub mod multilinear;
+/// transcript to enable Fiat-Shamir Transformation
 pub mod transcript;
+/// utils, mainly used to implement linear time encodable code now
 pub mod utils;
-
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
