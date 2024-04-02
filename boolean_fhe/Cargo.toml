@@ -20,7 +20,7 @@ rand_chacha = "0.3.1"
 criterion = { workspace = true }
 
 [[bench]]
-name = "he_bench"
+name = "bfhe"
 harness = false
 
 [package.metadata.docs.rs]

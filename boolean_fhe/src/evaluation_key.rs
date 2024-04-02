@@ -23,7 +23,14 @@ impl<F: NTTField> EvaluationKey<F> {
         &self.parameters
     }
 
-    /// Performs the homomorphic nand operation.
+    /// Performs the homomorphic not operation.
+    ///
+    /// # Arguments
+    /// 
+    /// * Input: ciphertext `c`, with message `m`.
+    /// * Output: ciphertext `c'`, with message `1 - m`.
+    /// 
+    /// Link:https://eprint.iacr.org/2020/086
     pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
