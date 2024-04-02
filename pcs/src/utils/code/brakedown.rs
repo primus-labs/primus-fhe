@@ -350,8 +350,12 @@ mod test {
         );
         println!("codeword_len: {}", brakedown_code.codeword_len);
         let (a_dimension, b_dimension) = brakedown_code.spec.dimensions(brakedown_code.message_len);
-        a_dimension.iter().for_each(|a_d| println!("a dimension: {:?}", a_d));
-        b_dimension.iter().for_each(|b_d| println!("b dimension: {:?}", b_d));
+        a_dimension
+            .iter()
+            .for_each(|a_d| println!("a dimension: {:?}", a_d));
+        b_dimension
+            .iter()
+            .for_each(|b_d| println!("b dimension: {:?}", b_d));
         let (a, b) = (&brakedown_code.a, &brakedown_code.b);
         a.iter().for_each(|a| println!("a matrix: {:?}/n", a));
         b.iter().for_each(|b| println!("b matrix: {:?}/n", b));
