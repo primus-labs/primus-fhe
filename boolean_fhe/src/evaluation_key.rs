@@ -170,12 +170,11 @@ impl<F: NTTField> EvaluationKey<F> {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
 
-        // c & c0
-        let mut t0 = self.and(c, c0);
+        let not_c = self.not(c);
 
+        // c & c0
         // !c & c1
-        let mut t1 = self.not(c);
-        t1 = self.and(&t1, c1);
+        let (mut t0, t1) = rayon::join(|| self.and(c, c0), || self.and(&not_c, c1));
 
         // (c & c0) | (!c & c1)
         t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
@@ -187,47 +186,6 @@ impl<F: NTTField> EvaluationKey<F> {
         );
 
         self.bootstrap(t0, init_acc)
-    }
-
-    /// Performs the homomorphic mux operation.
-    ///
-    /// ```ignore
-    /// if c {c0} else {c1}
-    /// ```
-    pub fn mux_of_xie(
-        &self,
-        c: &LWECiphertext,
-        c0: &LWECiphertext,
-        c1: &LWECiphertext,
-    ) -> LWECiphertext {
-        let parameters = self.parameters();
-        let lwe_modulus = parameters.lwe_modulus();
-
-        // c0 - c1
-        let sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
-        // c(c0 - c1)
-        let temp = self.and(c, &sub);
-        // c(c0 - c1) + c1
-        self.or(&temp, c1)
-    }
-
-    /// Performs the homomorphic mux operation.
-    ///
-    /// ```ignore
-    /// if c {c0} else {c1}
-    /// ```
-    pub fn mux_of_zama(
-        &self,
-        c: &LWECiphertext,
-        c0: &LWECiphertext,
-        c1: &LWECiphertext,
-    ) -> LWECiphertext {
-        let parameters = self.parameters();
-        let lwe_modulus = parameters.lwe_modulus();
-
-        let t0 = self.and(c, c0);
-        let t1 = self.and(&self.not(c), c1);
-        t0.add_reduce_component_wise(&t1, lwe_modulus)
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
