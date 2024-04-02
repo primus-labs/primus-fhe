@@ -52,6 +52,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("majority", |b| {
         b.iter(|| evk.majority(black_box(&c0), black_box(&c1), black_box(&c2)))
     });
+
+    c.bench_function("mux", |b| {
+        b.iter(|| evk.mux(black_box(&c0), black_box(&c1), black_box(&c2)))
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);

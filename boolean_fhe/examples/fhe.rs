@@ -105,15 +105,27 @@ fn main() {
         assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
         println!("Noise: {noise} < {noise_max}");
 
-        //majority
+        // majority
         let m14 = rng.gen();
         let c14 = skp.encrypt(m14);
 
-        c = evk.majority(&c13, &c14, &c);
+        let c15 = evk.majority(&c13, &c14, &c);
+
+        let (m15, noise) = skp.decrypt_with_noise(&c15);
+
+        assert_eq!(m15, majority(m13, m14, m), "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+
+        // mux
+        let m16 = rng.gen();
+        let c16 = skp.encrypt(m16);
+
+        c = evk.mux(&c16, &c15, &c14);
 
         let (d, noise) = skp.decrypt_with_noise(&c);
 
-        assert_eq!(d, majority(m13, m14, m), "Noise: {noise}");
+        assert_eq!(d, if m16 { m15 } else { m14 }, "Noise: {noise}");
         assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
         println!("Noise: {noise} < {noise_max}");
 
