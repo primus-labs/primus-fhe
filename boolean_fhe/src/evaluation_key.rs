@@ -57,7 +57,7 @@ impl<F: NTTField> EvaluationKey<F> {
 
         let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let init_acc: RLWECiphertext<F> = init_and_acc(
+        let init_acc: RLWECiphertext<F> = init_and_majority_acc(
             add.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
@@ -130,6 +130,28 @@ impl<F: NTTField> EvaluationKey<F> {
         );
 
         self.bootstrap(sub, init_acc)
+    }
+
+    /// Performs the homomorphic majority operation.
+    pub fn majority(
+        &self,
+        c0: &LWECiphertext,
+        c1: &LWECiphertext,
+        c2: &LWECiphertext,
+    ) -> LWECiphertext {
+        let parameters = self.parameters();
+        let lwe_modulus = parameters.lwe_modulus();
+
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        add.add_reduce_inplace_component_wise(c2, lwe_modulus);
+
+        let init_acc: RLWECiphertext<F> = init_and_majority_acc(
+            add.b(),
+            parameters.rlwe_dimension(),
+            parameters.twice_rlwe_dimension_div_lwe_modulus(),
+        );
+
+        self.bootstrap(add, init_acc)
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
@@ -209,7 +231,7 @@ where
     )
 }
 
-fn init_and_acc<F>(
+fn init_and_majority_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
