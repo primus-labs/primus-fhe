@@ -96,8 +96,16 @@ fn main() {
         assert_eq!(d, !(m & m10), "Noise: {noise}");
         assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
         println!("Noise: {noise} < {noise_max}");
-
         m = d;
+
+        // not
+        let c11 = evk.not(&c);
+        let (d, noise) = skp.decrypt_with_noise(&c11);
+
+        assert_eq!(d, !m, "Noise: {noise}");
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+
         println!("The {i} nand test done!\n");
     }
 }

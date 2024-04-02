@@ -2,8 +2,8 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 use algebra::{
     reduce::{
-        AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, SubReduce,
-        SubReduceAssign,
+        AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, NegReduce,
+        SubReduce, SubReduceAssign,
     },
     AsFrom,
 };
@@ -269,7 +269,7 @@ impl<T: Copy> LWE<T> {
     }
 
     /// Performs an in-place scalar multiplication
-    /// on the `self` [`LWE<R>`] with another `rhs` [`LWE<R>`].
+    /// on the `self` [`LWE<T>`] with `scalar` `T`.
     #[inline]
     pub fn scalar_mul_reduce_inplac<M>(&mut self, scalar: T, modulus: M)
     where
@@ -280,6 +280,17 @@ impl<T: Copy> LWE<T> {
             .iter_mut()
             .for_each(|v| v.mul_reduce_assign(scalar, modulus));
         self.b.mul_reduce_assign(scalar, modulus);
+    }
+
+    /// Performs an negation on the `self` [`LWE<T>`].
+    #[inline]
+    pub fn neg_reduce<M>(&self, modulus: M) -> Self
+    where
+        T: NegReduce<M, Output = T>,
+        M: Copy,
+    {
+        let a = self.a.iter().map(|&v| v.neg_reduce(modulus)).collect();
+        Self::new(a, self.b.neg_reduce(modulus))
     }
 }
 

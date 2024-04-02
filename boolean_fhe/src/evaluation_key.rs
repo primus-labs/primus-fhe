@@ -1,4 +1,4 @@
-use algebra::{AsInto, NTTField, Polynomial};
+use algebra::{reduce::AddReduceAssign, AsInto, NTTField, Polynomial};
 use lattice::{LWE, RLWE};
 
 use crate::{
@@ -21,6 +21,17 @@ impl<F: NTTField> EvaluationKey<F> {
     #[inline]
     pub fn parameters(&self) -> &Parameters<F> {
         &self.parameters
+    }
+
+    /// Performs the homomorphic nand operation.
+    pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
+        let parameters = self.parameters();
+        let lwe_modulus = parameters.lwe_modulus();
+
+        let mut neg = c.neg_reduce(lwe_modulus);
+        neg.b_mut()
+            .add_reduce_assign(lwe_modulus.value() >> 2, lwe_modulus);
+        neg
     }
 
     /// Performs the homomorphic nand operation.
