@@ -1,4 +1,7 @@
-use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS};
+use algebra::NTTField;
+use boolean_fhe::{
+    EvaluationKey, LWECiphertext, LWEType, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
+};
 use rand::Rng;
 
 fn main() {
@@ -10,6 +13,11 @@ fn main() {
 
     let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEType;
 
+    let check_noise = |noise: LWEType| {
+        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+        println!("Noise: {noise} < {noise_max}");
+    };
+
     // generate keys
     let skp = SecretKeyPack::new(params);
     println!("Secret Key Generation done!\n");
@@ -17,121 +25,119 @@ fn main() {
     let evk = EvaluationKey::new(&skp);
     println!("Evaluation Key Generation done!\n");
 
-    let mut m = rng.gen();
-    let mut c = skp.encrypt(m);
+    let mut a = rng.gen();
+    let mut x = skp.encrypt(a);
 
-    for i in 1..=10 {
-        // and
-        let m0 = rng.gen();
-        let c0 = skp.encrypt(m0);
+    for i in 1..=50 {
+        let b = rng.gen();
+        let c = rng.gen();
 
-        let m1 = rng.gen();
-        let c1 = skp.encrypt(m1);
-
-        let c2 = evk.and(&c0, &c1);
-
-        let (m2, noise) = skp.decrypt_with_noise(&c2);
-
-        assert_eq!(m2, and(m0, m1), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
-
-        // or
-        let m3 = rng.gen();
-        let c3 = skp.encrypt(m3);
-
-        let c4 = evk.or(&c2, &c3);
-
-        let (m4, noise) = skp.decrypt_with_noise(&c4);
-
-        assert_eq!(m4, or(m2, m3), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
-
-        // nor
-        let m5 = rng.gen();
-        let c5 = skp.encrypt(m5);
-
-        let c6 = evk.nor(&c4, &c5);
-
-        let (m6, noise) = skp.decrypt_with_noise(&c6);
-
-        assert_eq!(m6, nor(m4, m5), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
-
-        // xor
-        let m7 = rng.gen();
-        let c7 = skp.encrypt(m7);
-
-        let c8 = evk.xor(&c6, &c7);
-
-        let (m8, noise) = skp.decrypt_with_noise(&c8);
-
-        assert_eq!(m8, xor(m6, m7), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
-
-        // xnor
-        let m9 = rng.gen();
-        let c9 = skp.encrypt(m9);
-
-        let c10 = evk.xnor(&c8, &c9);
-
-        let (m10, noise) = skp.decrypt_with_noise(&c10);
-
-        assert_eq!(m10, xnor(m8, m9), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
-
-        // nand
-        let m11 = rng.gen();
-        let c11 = skp.encrypt(m11);
-
-        let c12 = evk.nand(&c10, &c11);
-
-        let (m12, noise) = skp.decrypt_with_noise(&c12);
-
-        assert_eq!(m12, nand(m10, m11), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
+        let y = skp.encrypt(b);
+        let z = skp.encrypt(c);
 
         // not
-        let c13 = evk.not(&c12);
+        let ct_not = evk.not(&x);
+        let (m, noise) = skp.decrypt_with_noise(&ct_not);
+        assert_eq!(m, not(a), "Noise: {noise}");
+        check_noise(noise);
 
-        let (m13, noise) = skp.decrypt_with_noise(&c13);
+        // perform all other homomorphic bit operations
+        let start = std::time::Instant::now();
+        let (ct_and, ct_nand, ct_or, ct_nor, ct_xor, ct_xnor, ct_majority, ct_mux) =
+            join_bit_opearions(&evk, &x, &y, &z);
+        let duration = start.elapsed();
+        println!("Time elapsed in join_bit_opearions() is: {:?}", duration);
 
-        assert_eq!(m13, not(m12), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
+        // and
+        let (m, noise) = skp.decrypt_with_noise(&ct_and);
+        assert_eq!(m, and(a, b), "Noise: {noise}");
+        check_noise(noise);
+
+        // nand
+        let (m, noise) = skp.decrypt_with_noise(&ct_nand);
+        assert_eq!(m, nand(a, b), "Noise: {noise}");
+        check_noise(noise);
+
+        // or
+        let (m, noise) = skp.decrypt_with_noise(&ct_or);
+        assert_eq!(m, or(a, b), "Noise: {noise}");
+        check_noise(noise);
+
+        // nor
+        let (m, noise) = skp.decrypt_with_noise(&ct_nor);
+        assert_eq!(m, nor(a, b), "Noise: {noise}");
+        check_noise(noise);
+
+        // xor
+        let (m, noise) = skp.decrypt_with_noise(&ct_xor);
+        assert_eq!(m, xor(a, b), "Noise: {noise}");
+        check_noise(noise);
+
+        // xnor
+        let (m, noise) = skp.decrypt_with_noise(&ct_xnor);
+        assert_eq!(m, xnor(a, b), "Noise: {noise}");
+        check_noise(noise);
 
         // majority
-        let m14 = rng.gen();
-        let c14 = skp.encrypt(m14);
-
-        let c15 = evk.majority(&c13, &c14, &c);
-
-        let (m15, noise) = skp.decrypt_with_noise(&c15);
-
-        assert_eq!(m15, majority(m13, m14, m), "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
+        let (m, noise) = skp.decrypt_with_noise(&ct_majority);
+        assert_eq!(m, majority(a, b, c), "Noise: {noise}");
+        check_noise(noise);
 
         // mux
-        let m16 = rng.gen();
-        let c16 = skp.encrypt(m16);
+        let (m, noise) = skp.decrypt_with_noise(&ct_mux);
+        assert_eq!(m, if a { b } else { c }, "Noise: {noise}");
+        check_noise(noise);
 
-        c = evk.mux(&c16, &c15, &c14);
-
-        let (d, noise) = skp.decrypt_with_noise(&c);
-
-        assert_eq!(d, if m16 { m15 } else { m14 }, "Noise: {noise}");
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
-        println!("Noise: {noise} < {noise_max}");
-
-        m = d;
+        a = m;
+        x = ct_mux;
         println!("The {i} group test done!\n");
     }
+}
+
+fn join_bit_opearions<F: NTTField>(
+    evk: &EvaluationKey<F>,
+    x: &LWECiphertext,
+    y: &LWECiphertext,
+    z: &LWECiphertext,
+) -> (
+    LWECiphertext,
+    LWECiphertext,
+    LWECiphertext,
+    LWECiphertext,
+    LWECiphertext,
+    LWECiphertext,
+    LWECiphertext,
+    LWECiphertext,
+) {
+    let mut ct_and: Option<LWECiphertext> = None;
+    let mut ct_nand: Option<LWECiphertext> = None;
+    let mut ct_or: Option<LWECiphertext> = None;
+    let mut ct_nor: Option<LWECiphertext> = None;
+    let mut ct_xor: Option<LWECiphertext> = None;
+    let mut ct_xnor: Option<LWECiphertext> = None;
+    let mut ct_majority: Option<LWECiphertext> = None;
+    let mut ct_mux: Option<LWECiphertext> = None;
+
+    rayon::scope(|s| {
+        s.spawn(|_| ct_and = Some(evk.and(x, y)));
+        s.spawn(|_| ct_nand = Some(evk.nand(x, y)));
+        s.spawn(|_| ct_or = Some(evk.or(x, y)));
+        s.spawn(|_| ct_nor = Some(evk.nor(x, y)));
+        s.spawn(|_| ct_xor = Some(evk.xor(x, y)));
+        s.spawn(|_| ct_xnor = Some(evk.xnor(x, y)));
+        s.spawn(|_| ct_majority = Some(evk.majority(x, y, z)));
+        s.spawn(|_| ct_mux = Some(evk.mux(x, y, z)));
+    });
+    (
+        ct_and.unwrap(),
+        ct_nand.unwrap(),
+        ct_or.unwrap(),
+        ct_nor.unwrap(),
+        ct_xor.unwrap(),
+        ct_xnor.unwrap(),
+        ct_majority.unwrap(),
+        ct_mux.unwrap(),
+    )
 }
 
 #[inline]
