@@ -18,7 +18,7 @@ fn main() {
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"
         );
-        println!("Noise: {noise} < {noise_max}");
+        println!("{op:4.4} Noise: {noise:3} < {noise_max:3}");
     };
 
     // generate keys
@@ -50,6 +50,11 @@ fn main() {
         let duration = start.elapsed();
         println!("Time elapsed in join_bit_opearions() is: {:?}", duration);
 
+        // majority
+        let (ma, noise) = skp.decrypt_with_noise(&ct_majority);
+        assert_eq!(ma, majority(a, b, c), "Noise: {noise}");
+        check_noise(noise, "majority");
+
         // and
         let (m, noise) = skp.decrypt_with_noise(&ct_and);
         assert_eq!(m, and(a, b), "Noise: {noise}");
@@ -59,16 +64,6 @@ fn main() {
         let (m, noise) = skp.decrypt_with_noise(&ct_nand);
         assert_eq!(m, nand(a, b), "Noise: {noise}");
         check_noise(noise, "nand");
-
-        // or
-        let (m, noise) = skp.decrypt_with_noise(&ct_or);
-        assert_eq!(m, or(a, b), "Noise: {noise}");
-        check_noise(noise, "or");
-
-        // nor
-        let (m, noise) = skp.decrypt_with_noise(&ct_nor);
-        assert_eq!(m, nor(a, b), "Noise: {noise}");
-        check_noise(noise, "nor");
 
         // xor
         let (mx, noise) = skp.decrypt_with_noise(&ct_xor);
@@ -80,10 +75,15 @@ fn main() {
         assert_eq!(m, xnor(a, b), "Noise: {noise}");
         check_noise(noise, "xnor");
 
-        // majority
-        let (ma, noise) = skp.decrypt_with_noise(&ct_majority);
-        assert_eq!(ma, majority(a, b, c), "Noise: {noise}");
-        check_noise(noise, "majority");
+        // or
+        let (m, noise) = skp.decrypt_with_noise(&ct_or);
+        assert_eq!(m, or(a, b), "Noise: {noise}");
+        check_noise(noise, "or");
+
+        // nor
+        let (m, noise) = skp.decrypt_with_noise(&ct_nor);
+        assert_eq!(m, nor(a, b), "Noise: {noise}");
+        check_noise(noise, "nor");
 
         // mux
         let (m, noise) = skp.decrypt_with_noise(&ct_mux);
