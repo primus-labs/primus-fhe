@@ -13,8 +13,11 @@ fn main() {
 
     let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEType;
 
-    let check_noise = |noise: LWEType| {
-        assert!(noise < noise_max, "Noise: {noise} >= {noise_max}");
+    let check_noise = |noise: LWEType, op: &str| {
+        assert!(
+            noise < noise_max,
+            "Type: {op}\nNoise: {noise} >= {noise_max}"
+        );
         println!("Noise: {noise} < {noise_max}");
     };
 
@@ -33,12 +36,12 @@ fn main() {
     let mut y = skp.encrypt(b);
     let mut z = skp.encrypt(c);
 
-    for i in 1..=10 {
+    for i in 1..=100000 {
         // not
         let ct_not = evk.not(&x);
         let (m, noise) = skp.decrypt_with_noise(&ct_not);
         assert_eq!(m, not(a), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "not");
 
         // perform all other homomorphic bit operations
         let start = std::time::Instant::now();
@@ -50,42 +53,42 @@ fn main() {
         // and
         let (m, noise) = skp.decrypt_with_noise(&ct_and);
         assert_eq!(m, and(a, b), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "and");
 
         // nand
         let (m, noise) = skp.decrypt_with_noise(&ct_nand);
         assert_eq!(m, nand(a, b), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "nand");
 
         // or
         let (m, noise) = skp.decrypt_with_noise(&ct_or);
         assert_eq!(m, or(a, b), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "or");
 
         // nor
         let (m, noise) = skp.decrypt_with_noise(&ct_nor);
         assert_eq!(m, nor(a, b), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "nor");
 
         // xor
         let (mx, noise) = skp.decrypt_with_noise(&ct_xor);
         assert_eq!(mx, xor(a, b), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "xor");
 
         // xnor
         let (m, noise) = skp.decrypt_with_noise(&ct_xnor);
         assert_eq!(m, xnor(a, b), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "xnor");
 
         // majority
         let (ma, noise) = skp.decrypt_with_noise(&ct_majority);
         assert_eq!(ma, majority(a, b, c), "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "majority");
 
         // mux
         let (m, noise) = skp.decrypt_with_noise(&ct_mux);
         assert_eq!(m, if a { b } else { c }, "Noise: {noise}");
-        check_noise(noise);
+        check_noise(noise, "mux");
 
         a = m;
         x = ct_mux;

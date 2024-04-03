@@ -80,7 +80,7 @@ impl<F: NTTField> EvaluationKey<F> {
 
         let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let init_acc: RLWECiphertext<F> = init_or_xor_acc(
+        let init_acc: RLWECiphertext<F> = init_or_acc(
             add.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
@@ -96,7 +96,7 @@ impl<F: NTTField> EvaluationKey<F> {
 
         let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let init_acc: RLWECiphertext<F> = init_nor_xnor_acc(
+        let init_acc: RLWECiphertext<F> = init_nor_acc(
             add.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
@@ -113,7 +113,7 @@ impl<F: NTTField> EvaluationKey<F> {
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplac(2, lwe_modulus);
 
-        let init_acc: RLWECiphertext<F> = init_or_xor_acc(
+        let init_acc: RLWECiphertext<F> = init_xor_acc(
             sub.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
@@ -130,7 +130,7 @@ impl<F: NTTField> EvaluationKey<F> {
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplac(2, lwe_modulus);
 
-        let init_acc: RLWECiphertext<F> = init_nor_xnor_acc(
+        let init_acc: RLWECiphertext<F> = init_xnor_acc(
             sub.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
@@ -179,7 +179,7 @@ impl<F: NTTField> EvaluationKey<F> {
         // (c & c0) | (!c & c1)
         t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
 
-        let init_acc: RLWECiphertext<F> = init_or_xor_acc(
+        let init_acc: RLWECiphertext<F> = init_or_acc(
             t0.b(),
             parameters.rlwe_dimension(),
             parameters.twice_rlwe_dimension_div_lwe_modulus(),
@@ -336,7 +336,7 @@ where
 }
 
 /// init acc for bootstrapping which performs homomorphic `or` or `xor`.
-fn init_or_xor_acc<F>(
+fn init_or_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
@@ -348,7 +348,7 @@ where
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.get());
 
-    init_or_nor_xor_xnor_acc(
+    init_or_nor_acc(
         b,
         rlwe_dimension,
         twice_rlwe_dimension_div_lwe_modulus,
@@ -358,7 +358,7 @@ where
 }
 
 /// init acc for bootstrapping which performs homomorphic `nor` or `xnor`.
-fn init_nor_xnor_acc<F>(
+fn init_nor_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
@@ -370,7 +370,51 @@ where
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.get());
 
-    init_or_nor_xor_xnor_acc(
+    init_or_nor_acc(
+        b,
+        rlwe_dimension,
+        twice_rlwe_dimension_div_lwe_modulus,
+        neg_q_div_8,
+        q_div_8,
+    )
+}
+
+/// init acc for bootstrapping which performs homomorphic `xor`.
+fn init_xor_acc<F>(
+    b: LWEType,
+    rlwe_dimension: usize,
+    twice_rlwe_dimension_div_lwe_modulus: usize,
+) -> RLWE<F>
+where
+    F: NTTField,
+{
+    let q = F::MODULUS_VALUE;
+    let q_div_8 = F::new(q >> 3);
+    let neg_q_div_8 = F::new(q - q_div_8.get());
+
+    init_xor_xnor_acc(
+        b,
+        rlwe_dimension,
+        twice_rlwe_dimension_div_lwe_modulus,
+        q_div_8,
+        neg_q_div_8,
+    )
+}
+
+/// init acc for bootstrapping which performs homomorphic `xnor`.
+fn init_xnor_acc<F>(
+    b: LWEType,
+    rlwe_dimension: usize,
+    twice_rlwe_dimension_div_lwe_modulus: usize,
+) -> RLWE<F>
+where
+    F: NTTField,
+{
+    let q = F::MODULUS_VALUE;
+    let q_div_8 = F::new(q >> 3);
+    let neg_q_div_8 = F::new(q - q_div_8.get());
+
+    init_xor_xnor_acc(
         b,
         rlwe_dimension,
         twice_rlwe_dimension_div_lwe_modulus,
@@ -380,7 +424,7 @@ where
 }
 
 /// init acc for bootstrapping which performs homomorphic `or`, `nor`, `xor` or `xnor`.
-fn init_or_nor_xor_xnor_acc<F>(
+fn init_or_nor_acc<F>(
     b: LWEType,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
@@ -421,6 +465,52 @@ where
             .step_by(twice_rlwe_dimension_div_lwe_modulus);
         iter.next();
         iter.for_each(|a| *a = value_3_0);
+    }
+
+    RLWE::new(Polynomial::zero(rlwe_dimension), v)
+}
+
+/// init acc for bootstrapping which performs homomorphic `xor` or `xnor`.
+fn init_xor_xnor_acc<F>(
+    b: LWEType,
+    rlwe_dimension: usize,
+    twice_rlwe_dimension_div_lwe_modulus: usize,
+    value_2: F, // [q/4, 3q/4)
+    value_0: F, // [−q/4, q/4)
+) -> RLWE<F>
+where
+    F: NTTField,
+{
+    let mut v = Polynomial::zero(rlwe_dimension);
+
+    let b = b as usize * twice_rlwe_dimension_div_lwe_modulus;
+
+    let x = rlwe_dimension >> 1; // N/2
+    let y = rlwe_dimension + x; // 3N/2
+    if b < x || b >= y {
+        let mid = if b < x { b + x } else { b - y };
+        v[0..=mid]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus)
+            .for_each(|a| *a = value_0);
+
+        let mut iter = v[mid..]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus);
+        iter.next();
+        iter.for_each(|a| *a = value_2);
+    } else {
+        let mid = b - x;
+        v[0..=mid]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus)
+            .for_each(|a| *a = value_2);
+
+        let mut iter = v[mid..]
+            .iter_mut()
+            .step_by(twice_rlwe_dimension_div_lwe_modulus);
+        iter.next();
+        iter.for_each(|a| *a = value_0);
     }
 
     RLWE::new(Polynomial::zero(rlwe_dimension), v)
