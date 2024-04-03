@@ -17,6 +17,7 @@ pub struct SparseMatrixDimension {
 
 impl SparseMatrixDimension {
     /// create an instance of SparseMatrixDimension
+    #[inline]
     pub fn new(n: usize, m: usize, d: usize) -> Self {
         Self { n, m, d }
     }
@@ -61,6 +62,7 @@ impl<F: Field> SparseMatrix<F> {
 
     /// store the (m x 1) dot product of a (1 x n) vector and this (n x m) matrix into target
     /// target should keep clean (all zeros) before calling dot_into()
+    #[inline]
     pub fn dot_into(&self, vector: &[F], mut target: impl AsMut<[F]>) {
         let target = target.as_mut();
         assert_eq!(self.dimension.n, vector.len());
@@ -102,5 +104,11 @@ pub fn ceil(v: f64) -> usize {
 /// compute the division and take the ceil
 #[inline]
 pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
-    dividend.div_ceil(divisor)
+    let d = dividend / divisor;
+    let r = dividend % divisor;
+    if r > 0 {
+        d + 1
+    } else {
+        d
+    }
 }

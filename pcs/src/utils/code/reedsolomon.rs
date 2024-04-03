@@ -12,6 +12,7 @@ pub struct ReedSolomonCode {
 
 impl ReedSolomonCode {
     /// create an instance of ReedSolomonCode
+    #[inline]
     pub fn new(message_len: usize, codeword_len: usize) -> Self {
         Self {
             message_len,
@@ -19,6 +20,8 @@ impl ReedSolomonCode {
         }
     }
 
+    /// evaluate the polynomial of coeffs at point x
+    #[inline]
     fn evaluate<F: Field>(coeffs: &[F], x: &F) -> F {
         coeffs
             .iter()
@@ -28,14 +31,17 @@ impl ReedSolomonCode {
 }
 
 impl<F: Field> LinearCode<F> for ReedSolomonCode {
+    #[inline]
     fn message_len(&self) -> usize {
         self.message_len
     }
 
+    #[inline]
     fn codeword_len(&self) -> usize {
         self.codeword_len
     }
 
+    #[inline]
     fn encode(&self, mut target: impl AsMut<[F]>) {
         let input = target.as_mut()[..min(self.message_len, self.codeword_len)].to_vec();
         let points = iter::successors(Some(F::ONE), move |state| Some(F::ONE + state));

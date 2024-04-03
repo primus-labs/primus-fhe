@@ -32,6 +32,7 @@ pub struct BrakedownCodeSpec {
 
 impl BrakedownCodeSpec {
     /// create an instance of BrakedownCodeSpec
+    #[inline]
     pub fn new(
         lambda: f64,
         alpha: f64,
@@ -61,20 +62,21 @@ impl BrakedownCodeSpec {
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
     /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
+    #[inline]
     pub fn num_opening(&self) -> usize {
-        println!("lambda: {}", self.lambda);
-        println!("lambda: {}", self.distance);
         ceil(-self.lambda / (1.0 - self.distance / 3.0).log2())
     }
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
     /// return the needed size of the extension field, which accounts for the (codeword_len/|F|) part
+    #[inline]
     pub fn extension_field_size(&self, message_len: usize) -> usize {
         let n = message_len;
         self.codeword_len(n) * ceil(f64::powf(2f64, self.lambda))
     }
 
     /// return the codeword length of the given message length under this set of code parameters
+    #[inline]
     pub fn codeword_len(&self, message_len: usize) -> usize {
         let (a, b) = self.dimensions(message_len);
         message_len + // the systematic part
@@ -84,6 +86,7 @@ impl BrakedownCodeSpec {
     }
 
     /// returh the number of nonzere elements in each row of A_n
+    #[inline]
     fn c_n(&self, message_len: usize) -> usize {
         let n = message_len as f64;
         let alpha = self.alpha;
@@ -98,6 +101,7 @@ impl BrakedownCodeSpec {
     }
 
     /// num of nonzere elements in each row of B_n
+    #[inline]
     fn d_n(&self, message_len: usize) -> usize {
         let log2_q = self.field_size_bits as f64;
         let n = message_len as f64;
@@ -130,6 +134,7 @@ impl BrakedownCodeSpec {
     // iteratively produces matrices A, B until n <= n_0
 
     // generating dimensions iteratively
+    #[inline]
     fn dimensions(
         &self,
         message_len: usize,
@@ -157,6 +162,7 @@ impl BrakedownCodeSpec {
     }
 
     // generating random matrices iteratively
+    #[inline]
     fn matrices<F: Field>(
         &self,
         message_len: usize,
@@ -189,6 +195,7 @@ pub struct BrakedownCode<F> {
 
 impl<F: Field> BrakedownCode<F> {
     /// create an instance of BrakedownCode
+    #[inline]
     pub fn new(
         spec: BrakedownCodeSpec,
         num_vars: usize,
@@ -213,26 +220,31 @@ impl<F: Field> BrakedownCode<F> {
     /// return the size of proof given column_num c and row_num r, which consists of
     /// product of random vector and commited matrix: 1*c
     /// random selected columns of commited matrix: self.spec.num_opening() * r
+    #[inline]
     pub fn proof_size(&self, c: usize, r: usize) -> usize {
         c + self.num_opening * r
     }
 
     /// return the number of column needed to open
+    #[inline]
     pub fn num_opening(&self) -> usize {
         self.spec.num_opening()
     }
 
     /// return the needed size of the extension field
+    #[inline]
     pub fn extension_field_size(&self) -> usize {
         self.spec.extension_field_size(self.message_len)
     }
 }
 
 impl<F: Field> LinearCode<F> for BrakedownCode<F> {
+    #[inline]
     fn message_len(&self) -> usize {
         self.message_len
     }
 
+    #[inline]
     fn codeword_len(&self) -> usize {
         self.codeword_len
     }
@@ -295,6 +307,7 @@ mod test {
     use crate::utils::code::{BrakedownCode, BrakedownCodeSpec, LinearCode};
     use algebra::{derive::*, Field};
 
+    /// test whether a set of parameters is correct
     fn assert_spec_correct(
         spec: BrakedownCodeSpec,
         distance: f64,
@@ -309,7 +322,7 @@ mod test {
         assert_eq!(spec.num_opening(), num_opening);
     }
 
-    // Figure 2 in [GLSTW21](https://eprint.iacr.org/2021/1043.pdf).
+    ///  test correctness of sets of parameters taken from Figure 2 in [GLSTW21](https://eprint.iacr.org/2021/1043.pdf).
     #[test]
     fn spec_127_bit_field() {
         let spec1 = BrakedownCodeSpec::new(128.0, 0.1195, 0.0284, 1.420, 127, 30);
