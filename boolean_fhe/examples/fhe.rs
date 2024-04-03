@@ -28,7 +28,7 @@ fn main() {
     let mut a = rng.gen();
     let mut x = skp.encrypt(a);
 
-    for i in 1..=50 {
+    for i in 1..=10 {
         let b = rng.gen();
         let c = rng.gen();
 
