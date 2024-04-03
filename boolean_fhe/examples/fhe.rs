@@ -26,15 +26,14 @@ fn main() {
     println!("Evaluation Key Generation done!\n");
 
     let mut a = rng.gen();
+    let mut b = rng.gen();
+    let mut c = rng.gen();
+
     let mut x = skp.encrypt(a);
+    let mut y = skp.encrypt(b);
+    let mut z = skp.encrypt(c);
 
     for i in 1..=10 {
-        let b = rng.gen();
-        let c = rng.gen();
-
-        let y = skp.encrypt(b);
-        let z = skp.encrypt(c);
-
         // not
         let ct_not = evk.not(&x);
         let (m, noise) = skp.decrypt_with_noise(&ct_not);
@@ -69,8 +68,8 @@ fn main() {
         check_noise(noise);
 
         // xor
-        let (m, noise) = skp.decrypt_with_noise(&ct_xor);
-        assert_eq!(m, xor(a, b), "Noise: {noise}");
+        let (mx, noise) = skp.decrypt_with_noise(&ct_xor);
+        assert_eq!(mx, xor(a, b), "Noise: {noise}");
         check_noise(noise);
 
         // xnor
@@ -79,8 +78,8 @@ fn main() {
         check_noise(noise);
 
         // majority
-        let (m, noise) = skp.decrypt_with_noise(&ct_majority);
-        assert_eq!(m, majority(a, b, c), "Noise: {noise}");
+        let (ma, noise) = skp.decrypt_with_noise(&ct_majority);
+        assert_eq!(ma, majority(a, b, c), "Noise: {noise}");
         check_noise(noise);
 
         // mux
@@ -90,6 +89,13 @@ fn main() {
 
         a = m;
         x = ct_mux;
+
+        b = ma;
+        y = ct_majority;
+
+        c = mx;
+        z = ct_xor;
+
         println!("The {i} group test done!\n");
     }
 }
