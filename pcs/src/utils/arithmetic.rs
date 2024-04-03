@@ -1,4 +1,4 @@
-use algebra::{Field, Random};
+use algebra::{Field, FieldUniformSampler};
 
 use std::{collections::BTreeSet, fmt::Debug, iter};
 
@@ -31,7 +31,7 @@ pub struct SparseMatrix<F> {
     pub cells: Vec<(usize, F)>,
 }
 
-impl<F: Field + Random> SparseMatrix<F> {
+impl<F: Field> SparseMatrix<F> {
     /// create a random sparse matrix in a row major manner, given the dimension and randomness
     pub fn random(dimension: SparseMatrixDimension, mut rng: impl RngCore) -> Self {
         let cells = iter::repeat_with(|| {
@@ -44,7 +44,7 @@ impl<F: Field + Random> SparseMatrix<F> {
                 .count();
             // sample the random field elements at these indexes
             row.into_iter()
-                .map(|index| (index, rng.sample(F::uniform_sampler())))
+                .map(|index| (index, rng.sample(FieldUniformSampler::new())))
                 .collect::<Vec<(usize, F)>>()
         })
         .take(dimension.n)

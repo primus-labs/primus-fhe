@@ -3,7 +3,7 @@ use crate::utils::{
     code::{LinearCode, ReedSolomonCode},
 };
 
-use algebra::{Field, Random};
+use algebra::Field;
 use itertools::Itertools;
 use rand::RngCore;
 use std::{
@@ -157,7 +157,7 @@ impl BrakedownCodeSpec {
     }
 
     // generating random matrices iteratively
-    fn matrices<F: Field + Random>(
+    fn matrices<F: Field>(
         &self,
         message_len: usize,
         mut rng: impl RngCore,
@@ -187,7 +187,7 @@ pub struct BrakedownCode<F> {
     b: Vec<SparseMatrix<F>>,
 }
 
-impl<F: Field + Random> BrakedownCode<F> {
+impl<F: Field> BrakedownCode<F> {
     /// create an instance of BrakedownCode
     pub fn new(
         spec: BrakedownCodeSpec,
@@ -228,7 +228,7 @@ impl<F: Field + Random> BrakedownCode<F> {
     }
 }
 
-impl<F: Field + Random> LinearCode<F> for BrakedownCode<F> {
+impl<F: Field> LinearCode<F> for BrakedownCode<F> {
     fn message_len(&self) -> usize {
         self.message_len
     }
@@ -331,7 +331,7 @@ mod test {
         assert_spec_correct(spec6, 0.07, 10, 20, 3755);
     }
 
-    #[derive(Field, Random)]
+    #[derive(Field)]
     #[modulus = 32] // pow(2,32)
     pub struct FF32(u64);
 
