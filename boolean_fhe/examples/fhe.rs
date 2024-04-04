@@ -36,7 +36,7 @@ fn main() {
     let mut y = skp.encrypt(b);
     let mut z = skp.encrypt(c);
 
-    for i in 1..=100000 {
+    for i in 1..10 {
         // not
         let ct_not = evk.not(&x);
         let (m, noise) = skp.decrypt_with_noise(&ct_not);
