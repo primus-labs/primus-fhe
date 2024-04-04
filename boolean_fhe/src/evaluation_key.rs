@@ -27,8 +27,8 @@ impl<F: NTTField> EvaluationKey<F> {
     ///
     /// # Arguments
     ///
-    /// * Input: ciphertext `c`, with message `m`.
-    /// * Output: ciphertext `c'`, with message `1 - m`.
+    /// * Input: ciphertext `c`, with message `true`(resp. `false`).
+    /// * Output: ciphertext with message `false`(resp. `true`).
     ///
     /// Link: https://eprint.iacr.org/2020/086
     pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
@@ -43,9 +43,11 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic nand operation.
     ///
-    /// ```ignore
-    /// !(c0 & c1)
-    /// ```
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Output: ciphertext with message `not(a and b)`.
     pub fn nand(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -63,9 +65,11 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic and operation.
     ///
-    /// ```ignore
-    /// c0 & c1
-    /// ```
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Output: ciphertext with message `a and b`.
     pub fn and(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -83,9 +87,11 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic or operation.
     ///
-    /// ```ignore
-    /// c0 | c1
-    /// ```
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Output: ciphertext with message `a or b`.
     pub fn or(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -103,9 +109,11 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic nor operation.
     ///
-    /// ```ignore
-    /// !(c0 | c1)
-    /// ```
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Output: ciphertext with message `not(a or b)`.
     pub fn nor(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -123,9 +131,11 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic xor operation.
     ///
-    /// ```ignore
-    /// c0 ^ c1
-    /// ```
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Output: ciphertext with message `a xor b`.
     pub fn xor(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -144,9 +154,11 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic xnor operation.
     ///
-    /// ```ignore
-    /// !(c0 ^ c1)
-    /// ```
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Output: ciphertext with message `not(a xor b)`.
     pub fn xnor(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -165,9 +177,13 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic majority operation.
     ///
-    /// ```ignore
-    /// (c0 & c1) | (c1 & c2) | (c0 & c2)
-    /// ```
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Input: ciphertext `c2`, with message `c`.
+    /// * Output: ciphertext with message `(a & b) | (b & c) | (a & c)`.
+    ///     If there are two or three `true`(resp. `false`) in `a`, `b` and `c`, it will return `true`(resp. `false`).
     pub fn majority(
         &self,
         c0: &LWECiphertext,
@@ -191,20 +207,22 @@ impl<F: NTTField> EvaluationKey<F> {
 
     /// Performs the homomorphic mux operation.
     ///
-    /// ```ignore
-    /// if c {c0} else {c1}
-    /// ```
-    pub fn mux(&self, c: &LWECiphertext, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
+    /// # Arguments
+    ///
+    /// * Input: ciphertext `c0`, with message `a`.
+    /// * Input: ciphertext `c1`, with message `b`.
+    /// * Input: ciphertext `c2`, with message `c`.
+    /// * Output: ciphertext with message `if a {b} else {c}`.
+    ///     If `a` is `true`, it will return `b`. If `a` is `false`, it will return `c`.
+    pub fn mux(&self, c0: &LWECiphertext, c1: &LWECiphertext, c2: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
 
-        let not_c = self.not(c);
+        let not_c0 = self.not(c0);
 
-        // c & c0
-        // !c & c1
-        let (mut t0, t1) = rayon::join(|| self.and(c, c0), || self.and(&not_c, c1));
+        let (mut t0, t1) = rayon::join(|| self.and(c0, c1), || self.and(&not_c0, c2));
 
-        // (c & c0) | (!c & c1)
+        // (a & b) | (!a & c)
         t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
 
         let init_acc: RLWECiphertext<F> = init_or_acc(
