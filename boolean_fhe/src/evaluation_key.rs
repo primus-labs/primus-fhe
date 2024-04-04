@@ -515,3 +515,84 @@ where
 
     RLWE::new(Polynomial::zero(rlwe_dimension), v)
 }
+
+fn init_test_acc<F>(
+    b: LWEType,
+    rlwe_dimension: usize,
+    twice_rlwe_dimension_div_lwe_modulus: usize,
+    lwe_modulus: algebra::modulus::PowOf2Modulus<LWEType>,
+) -> RLWE<F>
+where
+    F: NTTField,
+{
+    use algebra::transformation::MonomialNTT;
+    let mut v = Polynomial::zero(rlwe_dimension);
+
+    let q = F::MODULUS_VALUE;
+    let q_div_8 = F::new(q >> 3);
+    let neg_q_div_8 = F::new(q - q_div_8.get());
+
+    let lwe_modulus_value = lwe_modulus.value();
+
+    let l = (lwe_modulus_value >> 3) * 2;
+    let r = (lwe_modulus_value >> 3) * 6;
+
+    let mut iters = v.iter_mut().step_by(twice_rlwe_dimension_div_lwe_modulus);
+
+    *iters.next().unwrap() = q_div_8;
+
+    iters.rev().enumerate().for_each(|(i, v)| {
+        if (l..r).contains(&(i as LWEType + 1)) {
+            *v = q_div_8;
+        } else {
+            *v = neg_q_div_8;
+        }
+    });
+
+    let mut p = algebra::NTTPolynomial::zero(rlwe_dimension);
+    let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
+    ntt_table.transform_coeff_one_monomial(
+        b as usize * twice_rlwe_dimension_div_lwe_modulus,
+        p.as_mut_slice(),
+    );
+
+    let r = v * p;
+
+    RLWE::new(Polynomial::zero(rlwe_dimension), r)
+}
+
+#[test]
+fn test_acc() {
+    use crate::DefaultFieldTernary128;
+    use algebra::Field;
+    use rand::distributions::Distribution;
+    let rng = &mut rand::thread_rng();
+    let lwe_modulus_value = 1024;
+    let lwe_modulus = <algebra::modulus::PowOf2Modulus<LWEType>>::new(lwe_modulus_value);
+    let rlwe_dimension = 1024usize;
+    let twice_rlwe_dimension_div_lwe_modulus = rlwe_dimension * 2 / (lwe_modulus_value as usize);
+
+    let q = DefaultFieldTernary128::MODULUS_VALUE;
+    let q_div_8 = DefaultFieldTernary128::new(q >> 3);
+    let neg_q_div_8 = DefaultFieldTernary128::new(q - q_div_8.get());
+    println!(" q/8 = {q_div_8}");
+    println!("-q/8 = {neg_q_div_8}");
+
+    let u = rand_distr::Uniform::new(0, lwe_modulus.value());
+    let b = u.sample(rng);
+    // let b = 0;
+    let x: RLWE<DefaultFieldTernary128> = init_test_acc(
+        b,
+        rlwe_dimension,
+        twice_rlwe_dimension_div_lwe_modulus,
+        lwe_modulus,
+    );
+    let y: RLWE<DefaultFieldTernary128> =
+        init_xnor_acc(b, rlwe_dimension, twice_rlwe_dimension_div_lwe_modulus);
+    x.b()
+        .iter()
+        .zip(y.b().iter())
+        .enumerate()
+        .filter(|(_i, (a, b))| a != b)
+        .for_each(|(i, (a, b))| println!("i={i}\nold={a}\nnew={b}"));
+}
