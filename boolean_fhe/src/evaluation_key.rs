@@ -30,7 +30,7 @@ impl<F: NTTField> EvaluationKey<F> {
     /// * Input: ciphertext `c`, with message `m`.
     /// * Output: ciphertext `c'`, with message `1 - m`.
     ///
-    /// Link:https://eprint.iacr.org/2020/086
+    /// Link: https://eprint.iacr.org/2020/086
     pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -42,6 +42,10 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs the homomorphic nand operation.
+    ///
+    /// ```ignore
+    /// !(c0 & c1)
+    /// ```
     pub fn nand(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -58,6 +62,10 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs the homomorphic and operation.
+    ///
+    /// ```ignore
+    /// c0 & c1
+    /// ```
     pub fn and(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -74,6 +82,10 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs the homomorphic or operation.
+    ///
+    /// ```ignore
+    /// c0 | c1
+    /// ```
     pub fn or(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -90,6 +102,10 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs the homomorphic nor operation.
+    ///
+    /// ```ignore
+    /// !(c0 | c1)
+    /// ```
     pub fn nor(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -106,6 +122,10 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs the homomorphic xor operation.
+    ///
+    /// ```ignore
+    /// c0 ^ c1
+    /// ```
     pub fn xor(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -123,6 +143,10 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs the homomorphic xnor operation.
+    ///
+    /// ```ignore
+    /// !(c0 ^ c1)
+    /// ```
     pub fn xnor(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
@@ -140,6 +164,10 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Performs the homomorphic majority operation.
+    ///
+    /// ```ignore
+    /// (c0 & c1) | (c1 & c2) | (c0 & c2)
+    /// ```
     pub fn majority(
         &self,
         c0: &LWECiphertext,
@@ -516,83 +544,107 @@ where
     RLWE::new(Polynomial::zero(rlwe_dimension), v)
 }
 
-fn init_test_acc<F>(
-    b: LWEType,
-    rlwe_dimension: usize,
-    twice_rlwe_dimension_div_lwe_modulus: usize,
-    lwe_modulus: algebra::modulus::PowOf2Modulus<LWEType>,
-) -> RLWE<F>
-where
-    F: NTTField,
-{
-    use algebra::transformation::MonomialNTT;
-    let mut v = Polynomial::zero(rlwe_dimension);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let q = F::MODULUS_VALUE;
-    let q_div_8 = F::new(q >> 3);
-    let neg_q_div_8 = F::new(q - q_div_8.get());
+    fn init_test_acc<F>(
+        b: LWEType,
+        rlwe_dimension: usize,
+        twice_rlwe_dimension_div_lwe_modulus: usize,
+        range: std::ops::Range<LWEType>,
+        value: F,
+    ) -> RLWE<F>
+    where
+        F: NTTField,
+    {
+        use algebra::transformation::MonomialNTT;
+        let mut v = Polynomial::zero(rlwe_dimension);
 
-    let lwe_modulus_value = lwe_modulus.value();
+        let neg_value = -value;
 
-    let l = (lwe_modulus_value >> 3) * 2;
-    let r = (lwe_modulus_value >> 3) * 6;
+        let mut iters = v.iter_mut().step_by(twice_rlwe_dimension_div_lwe_modulus);
 
-    let mut iters = v.iter_mut().step_by(twice_rlwe_dimension_div_lwe_modulus);
-
-    *iters.next().unwrap() = q_div_8;
-
-    iters.rev().enumerate().for_each(|(i, v)| {
-        if (l..r).contains(&(i as LWEType + 1)) {
-            *v = q_div_8;
+        if range.contains(&0) {
+            *iters.next().unwrap() = value;
         } else {
-            *v = neg_q_div_8;
+            *iters.next().unwrap() = neg_value;
         }
-    });
 
-    let mut p = algebra::NTTPolynomial::zero(rlwe_dimension);
-    let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
-    ntt_table.transform_coeff_one_monomial(
-        b as usize * twice_rlwe_dimension_div_lwe_modulus,
-        p.as_mut_slice(),
-    );
+        iters.rev().enumerate().for_each(|(i, v)| {
+            if range.contains(&(i as LWEType + 1)) {
+                *v = neg_value;
+            } else {
+                *v = value;
+            }
+        });
 
-    let r = v * p;
+        let mut p = algebra::NTTPolynomial::zero(rlwe_dimension);
+        let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
+        ntt_table.transform_coeff_one_monomial(
+            b as usize * twice_rlwe_dimension_div_lwe_modulus,
+            p.as_mut_slice(),
+        );
 
-    RLWE::new(Polynomial::zero(rlwe_dimension), r)
-}
+        let r = v * &p;
 
-#[test]
-fn test_acc() {
-    use crate::DefaultFieldTernary128;
-    use algebra::Field;
-    use rand::distributions::Distribution;
-    let rng = &mut rand::thread_rng();
-    let lwe_modulus_value = 1024;
-    let lwe_modulus = <algebra::modulus::PowOf2Modulus<LWEType>>::new(lwe_modulus_value);
-    let rlwe_dimension = 1024usize;
-    let twice_rlwe_dimension_div_lwe_modulus = rlwe_dimension * 2 / (lwe_modulus_value as usize);
+        p.set_zero();
+        RLWE::new(Polynomial::new(p.data()), r)
+    }
 
-    let q = DefaultFieldTernary128::MODULUS_VALUE;
-    let q_div_8 = DefaultFieldTernary128::new(q >> 3);
-    let neg_q_div_8 = DefaultFieldTernary128::new(q - q_div_8.get());
-    println!(" q/8 = {q_div_8}");
-    println!("-q/8 = {neg_q_div_8}");
+    #[allow(non_snake_case)]
+    #[test]
+    #[ignore = "only for manual check"]
+    fn test_acc() {
+        use algebra::Field;
 
-    let u = rand_distr::Uniform::new(0, lwe_modulus.value());
-    let b = u.sample(rng);
-    // let b = 0;
-    let x: RLWE<DefaultFieldTernary128> = init_test_acc(
-        b,
-        rlwe_dimension,
-        twice_rlwe_dimension_div_lwe_modulus,
-        lwe_modulus,
-    );
-    let y: RLWE<DefaultFieldTernary128> =
-        init_xnor_acc(b, rlwe_dimension, twice_rlwe_dimension_div_lwe_modulus);
-    x.b()
-        .iter()
-        .zip(y.b().iter())
-        .enumerate()
-        .filter(|(_i, (a, b))| a != b)
-        .for_each(|(i, (a, b))| println!("i={i}\nold={a}\nnew={b}"));
+        use crate::DefaultFieldTernary128;
+
+        let lwe_modulus_value = 512;
+        let rlwe_dimension = 1024usize;
+        let twice_rlwe_dimension_div_lwe_modulus =
+            rlwe_dimension * 2 / (lwe_modulus_value as usize);
+
+        let Q = DefaultFieldTernary128::MODULUS_VALUE;
+        let Q_div_8 = DefaultFieldTernary128::new(Q >> 3);
+        let neg_Q_div_8 = DefaultFieldTernary128::new(Q - Q_div_8.get());
+
+        for _ in 0..10 {
+            use rand::distributions::Distribution;
+            let rng = &mut rand::thread_rng();
+            let u = rand_distr::Uniform::new(0, lwe_modulus_value);
+            let b = u.sample(rng);
+
+            // nand, and, majority
+            // let l = (lwe_modulus_value >> 3) * 3;
+            // let r = (lwe_modulus_value >> 3) * 7;
+
+            // or, nor
+            let l = lwe_modulus_value >> 3;
+            let r = (lwe_modulus_value >> 3) * 5;
+
+            // xor, xnor
+            // let l = (lwe_modulus_value >> 3) * 2;
+            // let r = (lwe_modulus_value >> 3) * 6;
+
+            let x: RLWE<DefaultFieldTernary128> = init_test_acc(
+                b,
+                rlwe_dimension,
+                twice_rlwe_dimension_div_lwe_modulus,
+                l..r,
+                // q_div_8, // and, or, xor, majority
+                neg_Q_div_8, // nand, nor, xnor
+            );
+
+            let y: RLWE<DefaultFieldTernary128> =
+                init_nor_acc(b, rlwe_dimension, twice_rlwe_dimension_div_lwe_modulus);
+
+            x.b()
+                .iter()
+                .zip(y.b().iter())
+                .enumerate()
+                .filter(|(_i, (a, b))| a != b)
+                .for_each(|(i, (a, b))| println!("i={i}\nold={a}\nnew={b}"));
+        }
+    }
 }
