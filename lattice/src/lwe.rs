@@ -1,6 +1,14 @@
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
-use algebra::reduce::{AddReduce, AddReduceAssign, SubReduce, SubReduceAssign};
+use algebra::{
+    reduce::{AddReduce, AddReduceAssign, DotProductReduce, MulReduce, SubReduce, SubReduceAssign},
+    AsFrom,
+};
+use num_traits::ConstZero;
+use rand::{CryptoRng, Rng};
+use rand_distr::{uniform::SampleUniform, Distribution, Uniform};
+
+use crate::DiscreteGaussian;
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
@@ -255,5 +263,35 @@ impl<T: Copy> LWE<T> {
             .zip(rhs.a())
             .for_each(|(v0, &v1)| v0.sub_reduce_assign(v1, modulus));
         self.b.sub_reduce_assign(rhs.b, modulus);
+    }
+}
+
+impl<T: Copy> LWE<T> {
+    /// Generate a `LWE<T>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample<M, R>(
+        secret_key: &[T],
+        modulus_value: T,
+        modulus: M,
+        error_sampler: DiscreteGaussian<T>,
+        mut rng: R,
+    ) -> Self
+    where
+        T: SampleUniform
+            + ConstZero
+            + MulReduce<M, Output = T>
+            + AddReduce<M, Output = T>
+            + AsFrom<f64>
+            + Sub<Output = T>
+            + DotProductReduce<M, Output = T>,
+        M: Copy,
+        R: Rng + CryptoRng,
+    {
+        let len = secret_key.len();
+        let uniform = Uniform::new(T::ZERO, modulus_value);
+
+        let a: Vec<T> = uniform.sample_iter(&mut rng).take(len).collect();
+        let b = T::dot_product_reduce(&a, secret_key, modulus)
+            .add_reduce(error_sampler.sample(&mut rng), modulus);
+        LWE { a, b }
     }
 }

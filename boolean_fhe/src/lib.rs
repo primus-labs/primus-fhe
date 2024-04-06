@@ -23,10 +23,7 @@ pub use parameter::{
 };
 
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
-pub use plaintext::{
-    dot_product, sample_binary_lwe_vec, sample_ternary_lwe_vec, LWEPlaintext, LWEType,
-    LWEValueBinary, LWEValueGaussian, LWEValueTernary,
-};
+pub use plaintext::{LWEPlaintext, LWEType};
 
 pub use bootstrapping_key::BootstrappingKey;
 pub use evaluation_key::EvaluationKey;

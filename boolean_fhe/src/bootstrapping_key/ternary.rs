@@ -1,16 +1,13 @@
 use algebra::{
     modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis,
-    FieldDiscreteGaussianSampler, NTTField, RandomNTTField,
+    FieldDiscreteGaussianSampler, NTTField,
 };
 use lattice::{
     DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
     NTTRGSW, RLWE,
 };
-use rand_distr::Distribution;
 
 use crate::{LWEType, NTTRLWESecretKey};
-
-use super::{ntt_rgsw_one, ntt_rgsw_zero};
 
 #[derive(Debug, Clone)]
 pub struct TernaryBootstrappingKey<F: NTTField> {
@@ -32,14 +29,14 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEType>,
-        gadget_basis: Basis<F>,
+        bootstrapping_basis: Basis<F>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let ntt_polynomial = &mut NTTPolynomialSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
         let median = &mut NTTRLWESpace::new(rlwe_dimension);
         let external_product = &mut RLWESpace::new(rlwe_dimension);
-        let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, gadget_basis);
+        let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, bootstrapping_basis);
 
         let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
 
@@ -87,49 +84,62 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
     }
 }
 
-impl<F: RandomNTTField> TernaryBootstrappingKey<F> {
+impl<F: NTTField> TernaryBootstrappingKey<F> {
     /// Generates the [`TernaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
-        basis: Basis<F>,
-        basis_powers: &[F],
+        bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[LWEType],
         chi: FieldDiscreteGaussianSampler,
-        rlwe_dimension: usize,
         rlwe_secret_key: &NTTRLWESecretKey<F>,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
                 if s == 1 {
                     (
-                        ntt_rgsw_one(
-                            rlwe_dimension,
+                        <NTTRGSW<F>>::generate_random_one_sample(
                             rlwe_secret_key,
-                            basis,
-                            basis_powers,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
+                        <NTTRGSW<F>>::generate_random_zero_sample(
+                            rlwe_secret_key,
+                            bootstrapping_basis,
+                            chi,
+                            &mut rng,
+                        ),
                     )
                 } else if s == 0 {
                     (
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
+                        <NTTRGSW<F>>::generate_random_zero_sample(
+                            rlwe_secret_key,
+                            bootstrapping_basis,
+                            chi,
+                            &mut rng,
+                        ),
+                        <NTTRGSW<F>>::generate_random_zero_sample(
+                            rlwe_secret_key,
+                            bootstrapping_basis,
+                            chi,
+                            &mut rng,
+                        ),
                     )
                 } else {
                     (
-                        ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng),
-                        ntt_rgsw_one(
-                            rlwe_dimension,
+                        <NTTRGSW<F>>::generate_random_zero_sample(
                             rlwe_secret_key,
-                            basis,
-                            basis_powers,
+                            bootstrapping_basis,
+                            chi,
+                            &mut rng,
+                        ),
+                        <NTTRGSW<F>>::generate_random_one_sample(
+                            rlwe_secret_key,
+                            bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),

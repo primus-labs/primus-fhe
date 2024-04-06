@@ -9,7 +9,6 @@ mod field;
 mod ntt;
 mod ops;
 mod prime;
-mod random;
 
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, DeriveInput};
@@ -38,29 +37,6 @@ pub fn derive_field(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     field::derive(&input)
-        .unwrap_or_else(|err| err.to_compile_error())
-        .into()
-}
-
-/// Derive macro generates an impl of the trait `algebra::Random`.
-///
-/// Then you can use `rand` crate to generate numbers randomly.
-///
-/// Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
-/// ternary distribution and gaussian distribution.
-///
-/// # Example
-///
-/// ```ignore
-/// #[derive(Field, Random)]
-/// #[modulus = 132120577]
-/// pub struct FF(u32);
-/// ```
-#[proc_macro_derive(Random, attributes(modulus))]
-pub fn derive_random(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    random::derive(&input)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }

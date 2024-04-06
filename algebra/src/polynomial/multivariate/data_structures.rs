@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{Field, Random};
+use crate::Field;
 
 use super::{DenseMultilinearExtension, MultilinearExtension};
 
@@ -55,7 +55,7 @@ pub struct PolynomialInfo {
     pub num_variables: usize,
 }
 
-impl<F: Field + Random> ListOfProductsOfPolynomials<F> {
+impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// Returns an empty polynomial
     #[inline]
     pub fn new(num_variables: usize) -> Self {

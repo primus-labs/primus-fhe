@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
-use crate::{Basis, Field, FieldDiscreteGaussianSampler, NTTField, Random};
+use crate::{Basis, Field, FieldDiscreteGaussianSampler, FieldUniformSampler, NTTField};
 
 use super::NTTPolynomial;
 
@@ -33,7 +33,7 @@ use super::NTTPolynomial;
 /// let poly = Polynomial::new(coeffs);
 /// // `poly` now represents the polynomial 1 + 2x + 3x^2.
 /// ```
-#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Polynomial<F: Field> {
     data: Vec<F>,
 }
@@ -209,7 +209,6 @@ impl<F: Field> Polynomial<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         if gaussian.cbd_enable() {
             Self::new(crate::utils::sample_cbd_field_vec(n, &mut rng))
@@ -219,7 +218,7 @@ impl<F: Field> Polynomial<F> {
     }
 }
 
-impl<F: Field + Random> Polynomial<F> {
+impl<F: Field> Polynomial<F> {
     /// Generate a random [`Polynomial<F>`].
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self
@@ -227,7 +226,10 @@ impl<F: Field + Random> Polynomial<F> {
         R: Rng + CryptoRng,
     {
         Self {
-            data: F::uniform_sampler().sample_iter(rng).take(n).collect(),
+            data: FieldUniformSampler::new()
+                .sample_iter(rng)
+                .take(n)
+                .collect(),
         }
     }
 

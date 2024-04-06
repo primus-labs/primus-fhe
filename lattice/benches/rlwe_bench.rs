@@ -1,8 +1,8 @@
-use algebra::{derive::*, Polynomial, Random};
+use algebra::{derive::*, FieldUniformSampler, Polynomial};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use lattice::RLWE;
 
-#[derive(Field, Random, Prime, NTT)]
+#[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
 pub struct FF(u32);
 
@@ -11,7 +11,7 @@ const M: usize = 1024;
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
-    let ff_dis = FF::uniform_sampler();
+    let ff_dis = FieldUniformSampler::new();
 
     let a0 = <Polynomial<FF>>::random_with_distribution(M, &mut rng, ff_dis);
     let a1 = <Polynomial<FF>>::random_with_distribution(M, &mut rng, ff_dis);

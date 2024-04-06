@@ -2,9 +2,11 @@ use std::ops::MulAssign;
 
 use algebra::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
-    ntt_mul_inplace, transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial,
+    ntt_mul_inplace, transformation::AbstractNTT, FieldDiscreteGaussianSampler, NTTField,
+    NTTPolynomial, Polynomial,
 };
 use num_traits::NumCast;
+use rand::{CryptoRng, Rng};
 
 use crate::{
     DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW,
@@ -421,6 +423,50 @@ impl<F: NTTField> RLWE<F> {
     }
 }
 
+impl<F: NTTField> RLWE<F> {
+    /// Generate a `RLWE<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let rlwe_dimension = secret_key.coeff_count();
+        let a = <Polynomial<F>>::random(rlwe_dimension, &mut rng);
+
+        let mut a_ntt = a.clone().into_ntt_polynomial();
+        a_ntt *= secret_key;
+
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler);
+        e += a_ntt.into_native_polynomial();
+
+        Self { a, b: e }
+    }
+
+    /// Generate a `RLWE<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample_slower<R>(
+        secret_key: &Polynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let rlwe_dimension = secret_key.coeff_count();
+        let a = <Polynomial<F>>::random(rlwe_dimension, &mut rng);
+
+        let mut a_ntt = a.clone().into_ntt_polynomial();
+        a_ntt *= secret_key;
+
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler);
+        e += a_ntt.into_native_polynomial();
+
+        Self { a, b: e }
+    }
+}
+
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly
 /// those that require efficient homomorphic encryption properties. It consists of two [`NTTPolynomial<F>`]
@@ -824,5 +870,47 @@ impl<F: NTTField> NTTRLWE<F> {
             self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
         })
+    }
+}
+
+impl<F: NTTField> NTTRLWE<F> {
+    /// Generate a `NTTRLWE<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let rlwe_dimension = secret_key.coeff_count();
+        let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler)
+            .into_ntt_polynomial();
+        ntt_add_mul_assign(&mut e, &a, secret_key);
+
+        Self { a, b: e }
+    }
+
+    /// Generate a `NTTRLWE<F>` sample which encrypts `value`.
+    pub fn generate_random_value_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        value: F,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let rlwe_dimension = secret_key.coeff_count();
+        let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
+
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler);
+        e[0] += value;
+
+        let mut b = e.into_ntt_polynomial();
+        ntt_add_mul_assign(&mut b, &a, secret_key);
+
+        Self { a, b }
     }
 }

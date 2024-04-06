@@ -1,13 +1,9 @@
 use algebra::{
     modulus::PowOf2Modulus, reduce::NegReduce, Basis, FieldDiscreteGaussianSampler, NTTField,
-    RandomNTTField,
 };
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
-use rand_distr::Distribution;
 
 use crate::{LWEType, NTTRLWESecretKey};
-
-use super::{ntt_rgsw_one, ntt_rgsw_zero};
 
 #[derive(Debug, Clone)]
 pub struct BinaryBootstrappingKey<F: NTTField> {
@@ -62,32 +58,32 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
     }
 }
 
-impl<F: RandomNTTField> BinaryBootstrappingKey<F> {
+impl<F: NTTField> BinaryBootstrappingKey<F> {
     /// Generates the [`BinaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
-        basis: Basis<F>,
-        basis_powers: &[F],
+        bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[LWEType],
         chi: FieldDiscreteGaussianSampler,
-        rlwe_dimension: usize,
         rlwe_secret_key: &NTTRLWESecretKey<F>,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
-        FieldDiscreteGaussianSampler: Distribution<F>,
     {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
                 if s == 0 {
-                    ntt_rgsw_zero(rlwe_dimension, rlwe_secret_key, basis, chi, &mut rng)
-                } else {
-                    ntt_rgsw_one(
-                        rlwe_dimension,
+                    <NTTRGSW<F>>::generate_random_zero_sample(
                         rlwe_secret_key,
-                        basis,
-                        basis_powers,
+                        bootstrapping_basis,
+                        chi,
+                        &mut rng,
+                    )
+                } else {
+                    <NTTRGSW<F>>::generate_random_one_sample(
+                        rlwe_secret_key,
+                        bootstrapping_basis,
                         chi,
                         &mut rng,
                     )

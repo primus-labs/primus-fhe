@@ -1,17 +1,14 @@
 use std::cell::RefCell;
 
 use algebra::{
-    reduce::{AddReduce, SubReduce},
-    NTTField, NTTPolynomial, Polynomial, RandomNTTField,
+    reduce::{AddReduceAssign, DotProductReduce, SubReduce},
+    NTTField, NTTPolynomial, Polynomial,
 };
+use lattice::{sample_binary_values, sample_ternary_values};
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
-use rand_distr::Uniform;
 
-use crate::{
-    dot_product, sample_binary_lwe_vec, sample_ternary_lwe_vec, LWECiphertext, LWEPlaintext,
-    LWEType, Parameters,
-};
+use crate::{LWECiphertext, LWEPlaintext, LWEType, Parameters};
 
 /// The distribution type of the LWE Secret Key
 #[derive(Debug, Default, Clone, Copy)]
@@ -80,10 +77,11 @@ impl<F: NTTField> SecretKeyPack<F> {
     #[inline]
     pub fn decrypt(&self, cipher_text: &LWECiphertext) -> bool {
         let lwe_modulus = self.parameters().lwe_modulus();
-        let encoded_message = cipher_text.b().sub_reduce(
-            dot_product(cipher_text.a(), self.lwe_secret_key(), lwe_modulus),
-            lwe_modulus,
-        );
+
+        let a_mul_s =
+            LWEType::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+        let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
+
         decode(encoded_message, lwe_modulus.value())
     }
 
@@ -91,10 +89,11 @@ impl<F: NTTField> SecretKeyPack<F> {
     #[inline]
     pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEType) {
         let lwe_modulus = self.parameters().lwe_modulus();
-        let encoded_message = cipher_text.b().sub_reduce(
-            dot_product(cipher_text.a(), self.lwe_secret_key(), lwe_modulus),
-            lwe_modulus,
-        );
+
+        let a_mul_s =
+            LWEType::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+
+        let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
         let message = decode(encoded_message, lwe_modulus.value());
 
         let fresh = encode(message, lwe_modulus.value());
@@ -124,26 +123,27 @@ impl<F: NTTField> SecretKeyPack<F> {
     /// Encrypts [`LWEPlaintext`] into [`LWECiphertext<R>`].
     #[inline]
     pub fn encrypt(&self, message: LWEPlaintext) -> LWECiphertext {
-        let lwe_dimension = self.parameters.lwe_dimension();
         let lwe_modulus = self.parameters().lwe_modulus();
-        let standard_distribution = Uniform::new_inclusive(0, lwe_modulus.mask());
         let noise_distribution = self.parameters.lwe_noise_distribution();
-
         let mut csrng = self.csrng_mut();
 
-        let a: Vec<LWEType> = standard_distribution
-            .sample_iter(&mut *csrng)
-            .take(lwe_dimension)
-            .collect();
-        let b = dot_product(&a, self.lwe_secret_key(), lwe_modulus)
-            .add_reduce(encode(message, lwe_modulus.value()), lwe_modulus)
-            .add_reduce(noise_distribution.sample(&mut *csrng), lwe_modulus);
+        let mut cipher = LWECiphertext::generate_random_zero_sample(
+            self.lwe_secret_key(),
+            lwe_modulus.value(),
+            lwe_modulus,
+            noise_distribution,
+            &mut *csrng,
+        );
 
-        LWECiphertext::new(a, b)
+        cipher
+            .b_mut()
+            .add_reduce_assign(encode(message, lwe_modulus.value()), lwe_modulus);
+
+        cipher
     }
 }
 
-impl<F: RandomNTTField> SecretKeyPack<F> {
+impl<F: NTTField> SecretKeyPack<F> {
     /// Creates a new [`SecretKeyPack<F>`].
     pub fn new(parameters: Parameters<F>) -> Self {
         let mut csrng = ChaCha12Rng::from_entropy();
@@ -151,9 +151,9 @@ impl<F: RandomNTTField> SecretKeyPack<F> {
         let lwe_dimension = parameters.lwe_dimension();
 
         let lwe_secret_key = match parameters.secret_key_type() {
-            SecretKeyType::Binary => sample_binary_lwe_vec(lwe_dimension, &mut csrng),
+            SecretKeyType::Binary => sample_binary_values(lwe_dimension, &mut csrng),
             SecretKeyType::Ternary => {
-                sample_ternary_lwe_vec(parameters.lwe_modulus().value(), lwe_dimension, &mut csrng)
+                sample_ternary_values(parameters.lwe_modulus().value(), lwe_dimension, &mut csrng)
             }
         };
 
