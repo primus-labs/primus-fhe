@@ -4,8 +4,8 @@
 use core::panic;
 use std::vec;
 
+use algebra::Field;
 use algebra::{DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension};
-use algebra::{Field, Random};
 
 use super::verifier::VerifierMsg;
 use super::IPForMLSumcheck;
@@ -34,7 +34,7 @@ pub struct ProverState<F: Field> {
     pub round: usize,
 }
 
-impl<F: Field + Random> IPForMLSumcheck<F> {
+impl<F: Field> IPForMLSumcheck<F> {
     /// Initilaize the prover to argue for the sum of polynomial over {0, 1}^`num_vars`
     ///
     /// The polynomial is represented by a list of products of polynomials along with its coefficient that is meant to be added together.

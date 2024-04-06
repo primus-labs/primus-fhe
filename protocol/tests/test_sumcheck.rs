@@ -1,7 +1,7 @@
-use algebra::Random;
 use algebra::{
-    derive::{Field, Prime, Random},
-    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
+    derive::{Field, Prime},
+    DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
+    MultilinearExtension,
 };
 use protocol::sumcheck::IPForMLSumcheck;
 use protocol::sumcheck::MLSumcheck;
@@ -10,14 +10,14 @@ use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
 use std::rc::Rc;
 
-#[derive(Field, Random, Prime)]
+#[derive(Field, Prime)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
 // field type
 type FF = Fp32;
 
-fn random_product<F: Field + Random, R: RngCore>(
+fn random_product<F: Field, R: RngCore>(
     nv: usize,
     num_multiplicands: usize,
     rng: &mut R,
@@ -31,7 +31,7 @@ fn random_product<F: Field + Random, R: RngCore>(
     for _ in 0..(1 << nv) {
         let mut product = F::one();
         for multiplicand in &mut multiplicands {
-            let val = F::uniform_sampler().sample(rng);
+            let val = FieldUniformSampler::new().sample(rng);
             multiplicand.push(val);
             product *= val;
         }
@@ -47,7 +47,7 @@ fn random_product<F: Field + Random, R: RngCore>(
     )
 }
 
-fn random_list_of_products<F: Field + Random, R: RngCore>(
+fn random_list_of_products<F: Field, R: RngCore>(
     nv: usize,
     num_multiplicands_range: (usize, usize),
     num_products: usize,
@@ -59,7 +59,7 @@ fn random_list_of_products<F: Field + Random, R: RngCore>(
         let num_multiplicands: usize =
             rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
         let (product, product_sum) = random_product(nv, num_multiplicands, rng);
-        let coefficient = F::uniform_sampler().sample(rng);
+        let coefficient = FieldUniformSampler::new().sample(rng);
         poly.add_product(product.into_iter(), coefficient);
         sum += product_sum * coefficient;
     }
@@ -232,7 +232,7 @@ fn test_shared_reference() {
             ml_extensions[1].clone(),
             ml_extensions[2].clone(),
         ],
-        FF::uniform_sampler().sample(&mut rng),
+        <FieldUniformSampler<FF>>::new().sample(&mut rng),
     );
     poly.add_product(
         vec![
@@ -240,7 +240,7 @@ fn test_shared_reference() {
             ml_extensions[1].clone(),
             ml_extensions[3].clone(),
         ],
-        FF::uniform_sampler().sample(&mut rng),
+        <FieldUniformSampler<FF>>::new().sample(&mut rng),
     );
     poly.add_product(
         vec![
@@ -248,15 +248,15 @@ fn test_shared_reference() {
             ml_extensions[3].clone(),
             ml_extensions[2].clone(),
         ],
-        FF::uniform_sampler().sample(&mut rng),
+        <FieldUniformSampler<FF>>::new().sample(&mut rng),
     );
     poly.add_product(
         vec![ml_extensions[4].clone(), ml_extensions[4].clone()],
-        FF::uniform_sampler().sample(&mut rng),
+        <FieldUniformSampler<FF>>::new().sample(&mut rng),
     );
     poly.add_product(
         vec![ml_extensions[0].clone()],
-        FF::uniform_sampler().sample(&mut rng),
+        <FieldUniformSampler<FF>>::new().sample(&mut rng),
     );
 
     assert_eq!(poly.flattened_ml_extensions.len(), 5);
