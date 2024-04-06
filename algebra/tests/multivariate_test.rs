@@ -27,7 +27,7 @@ pub struct Fp32(u32);
 type FF = Fp32;
 type PolyFf = DenseMultilinearExtension<FF>;
 
-fn evaluate_mle_data_arry<F: Field>(data: &[F], point: &[F]) -> F {
+fn evaluate_mle_data_array<F: Field>(data: &[F], point: &[F]) -> F {
     if data.len() != (1 << point.len()) {
         panic!("Data size mismatch with number of variables.")
     }
@@ -60,7 +60,7 @@ fn evaluate_mle_at_a_random_point() {
     let point: Vec<_> = (0..2).map(|_| uniform.sample(&mut rng)).collect();
     assert_eq!(
         poly.evaluate(&point),
-        evaluate_mle_data_arry(&poly.evaluations, &point),
+        evaluate_mle_data_array(&poly.evaluations, &point),
     );
 }
 
