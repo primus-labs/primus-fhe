@@ -28,10 +28,11 @@ fn random_product<F: Field, R: RngCore>(
     }
     let mut sum = F::zero();
 
+    let uniform_sampler = FieldUniformSampler::new();
     for _ in 0..(1 << nv) {
         let mut product = F::one();
         for multiplicand in &mut multiplicands {
-            let val = FieldUniformSampler::new().sample(rng);
+            let val = uniform_sampler.sample(rng);
             multiplicand.push(val);
             product *= val;
         }
@@ -55,11 +56,12 @@ fn random_list_of_products<F: Field, R: RngCore>(
 ) -> (ListOfProductsOfPolynomials<F>, F) {
     let mut sum = F::zero();
     let mut poly = ListOfProductsOfPolynomials::new(nv);
+    let uniform_sampler = FieldUniformSampler::new();
     for _ in 0..num_products {
         let num_multiplicands: usize =
             rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
         let (product, product_sum) = random_product(nv, num_multiplicands, rng);
-        let coefficient = FieldUniformSampler::new().sample(rng);
+        let coefficient = uniform_sampler.sample(rng);
         poly.add_product(product.into_iter(), coefficient);
         sum += product_sum * coefficient;
     }
@@ -226,13 +228,15 @@ fn test_shared_reference() {
         .map(|_| Rc::new(DenseMultilinearExtension::<FF>::random(8, &mut rng)))
         .collect();
     let mut poly = ListOfProductsOfPolynomials::new(8);
+
+    let uniform_sampler = <FieldUniformSampler<FF>>::new();
     poly.add_product(
         vec![
             ml_extensions[0].clone(),
             ml_extensions[1].clone(),
             ml_extensions[2].clone(),
         ],
-        <FieldUniformSampler<FF>>::new().sample(&mut rng),
+        uniform_sampler.sample(&mut rng),
     );
     poly.add_product(
         vec![
@@ -240,7 +244,7 @@ fn test_shared_reference() {
             ml_extensions[1].clone(),
             ml_extensions[3].clone(),
         ],
-        <FieldUniformSampler<FF>>::new().sample(&mut rng),
+        uniform_sampler.sample(&mut rng),
     );
     poly.add_product(
         vec![
@@ -248,15 +252,15 @@ fn test_shared_reference() {
             ml_extensions[3].clone(),
             ml_extensions[2].clone(),
         ],
-        <FieldUniformSampler<FF>>::new().sample(&mut rng),
+        uniform_sampler.sample(&mut rng),
     );
     poly.add_product(
         vec![ml_extensions[4].clone(), ml_extensions[4].clone()],
-        <FieldUniformSampler<FF>>::new().sample(&mut rng),
+        uniform_sampler.sample(&mut rng),
     );
     poly.add_product(
         vec![ml_extensions[0].clone()],
-        <FieldUniformSampler<FF>>::new().sample(&mut rng),
+        uniform_sampler.sample(&mut rng),
     );
 
     assert_eq!(poly.flattened_ml_extensions.len(), 5);
