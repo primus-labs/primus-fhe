@@ -3,7 +3,7 @@
 
 use std::vec;
 
-use algebra::{Field, PolynomialInfo, Random};
+use algebra::{Field, FieldUniformSampler, PolynomialInfo};
 use rand::distributions::Distribution;
 
 use crate::error::Error;
@@ -36,7 +36,7 @@ pub struct SubClaim<F: Field> {
     pub expected_evaluations: F,
 }
 
-impl<F: Field + Random> IPForMLSumcheck<F> {
+impl<F: Field> IPForMLSumcheck<F> {
     /// initialize the verifier
     pub fn verifier_init(index_info: &PolynomialInfo) -> VerifierState<F> {
         VerifierState {
@@ -122,7 +122,7 @@ impl<F: Field + Random> IPForMLSumcheck<F> {
     #[inline]
     pub fn sample_round<R: rand::RngCore>(rng: &mut R) -> VerifierMsg<F> {
         VerifierMsg {
-            randomness: F::uniform_sampler().sample(rng),
+            randomness: FieldUniformSampler::new().sample(rng),
         }
     }
 }
@@ -131,7 +131,7 @@ impl<F: Field + Random> IPForMLSumcheck<F> {
 /// p_i.len() - 1 passing through y-values in p_i at x = 0, ..., p_i.len() - 1,
 /// and evalute this polynomial at `eval_at`.
 /// In other words, efficiently compute
-/// \sum_{i=0}^{len p_i - 1} p_i[i] * (\prod_{j!=i}(eval_at - j)/(i - j))
+/// \sum_{i=0}^{len p_i - 1} p_i\[i\] * (\prod_{j!=i}(eval_at - j)/(i - j))
 pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     let len = p_i.len();
 
@@ -227,13 +227,14 @@ fn field_factorial<F: Field>(a: usize) -> F {
 mod test {
     use crate::sumcheck::verifier::interpolate_uni_poly;
     use algebra::{
-        derive::{Field, Prime, Random},
-        Field, Polynomial,
+        derive::{Field, Prime},
+        Field, FieldUniformSampler, Polynomial,
     };
     use rand::SeedableRng;
     use rand_chacha::ChaCha12Rng;
+    use rand_distr::Distribution;
 
-    #[derive(Field, Random, Prime)]
+    #[derive(Field, Prime)]
     #[modulus = 132120577]
     pub struct Fp32(u32);
 
@@ -264,7 +265,7 @@ mod test {
             point += FF::ONE;
             evals.push(poly.evaluate(point));
         }
-        let query = FF::random(&mut prng);
+        let query = <FieldUniformSampler<FF>>::new().sample(&mut prng);
 
         assert_eq!(poly.evaluate(query), interpolate_uni_poly(&evals, query));
 
