@@ -416,7 +416,7 @@ pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = Con
     rlwe_dimension: 1024,
     rlwe_modulus: 132120577,
     rlwe_noise_std_dev: 3.20,
-    bootstrapping_basis_bits: 8,
+    bootstrapping_basis_bits: 7,
     key_switching_basis_bits: 4,
     key_switching_std_dev: 3.2 * ((1 << 7) as f64),
 };
