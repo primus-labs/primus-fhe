@@ -148,6 +148,60 @@ where
     }
 }
 
+#[cfg(feature = "count_ntt")]
+/// Module for `ntt` and `intt` counting.
+pub mod count {
+    use std::sync::atomic::{AtomicBool, AtomicU32};
+
+    pub(super) static mut NTT_COUNT: AtomicU32 = AtomicU32::new(0);
+    pub(super) static mut INTT_COUNT: AtomicU32 = AtomicU32::new(0);
+    pub(super) static mut COUNT_ENABLE: AtomicBool = AtomicBool::new(false);
+
+    /// Enable counting `ntt` and `intt`.
+    #[inline]
+    pub fn enable_count_ntt_and_intt() {
+        unsafe {
+            *COUNT_ENABLE.get_mut() = true;
+        }
+    }
+
+    /// Disable counting `ntt` and `intt`.
+    #[inline]
+    pub fn disable_count_ntt_and_intt() {
+        unsafe {
+            *COUNT_ENABLE.get_mut() = false;
+        }
+    }
+
+    /// Get the `ntt` count.
+    #[inline]
+    pub fn get_ntt_count() -> u32 {
+        unsafe { *NTT_COUNT.get_mut() }
+    }
+
+    /// Get the `intt` count.
+    #[inline]
+    pub fn get_intt_count() -> u32 {
+        unsafe { *INTT_COUNT.get_mut() }
+    }
+
+    /// Clear the `ntt` count, set `ntt` count to 0.
+    #[inline]
+    pub fn clear_ntt_count() {
+        unsafe {
+            *NTT_COUNT.get_mut() = 0;
+        }
+    }
+
+    /// Clear the `intt` count, set `intt` count to 0.
+    #[inline]
+    pub fn clear_intt_count() {
+        unsafe {
+            *INTT_COUNT.get_mut() = 0;
+        }
+    }
+}
+
 impl<F> MonomialNTT<F> for NTTTable<F>
 where
     F: NTTField<Table = Self>,
@@ -248,6 +302,13 @@ where
 
         debug_assert_eq!(values.len(), 1 << log_n);
 
+        #[cfg(feature = "count_ntt")]
+        if unsafe { *count::COUNT_ENABLE.get_mut() } {
+            unsafe {
+                *count::NTT_COUNT.get_mut() += 1;
+            }
+        }
+
         let roots = self.root_powers();
         let mut root_iter = roots[1..].iter().copied();
 
@@ -271,6 +332,13 @@ where
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
+
+        #[cfg(feature = "count_ntt")]
+        if unsafe { *count::COUNT_ENABLE.get_mut() } {
+            unsafe {
+                *count::INTT_COUNT.get_mut() += 1;
+            }
+        }
 
         let roots = self.inv_root_powers();
         let mut root_iter = roots[1..].iter().copied();
