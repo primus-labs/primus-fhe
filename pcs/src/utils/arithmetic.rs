@@ -35,17 +35,20 @@ pub struct SparseMatrix<F> {
 impl<F: Field> SparseMatrix<F> {
     /// create a random sparse matrix in a row major manner, given the dimension and randomness
     pub fn random(dimension: SparseMatrixDimension, mut rng: impl RngCore) -> Self {
+        let index_distr: Uniform<usize> = Uniform::new(0, dimension.m);
+        let field_distr: FieldUniformSampler<F> = FieldUniformSampler::new();
+        let mut row = BTreeSet::<usize>::new();
         let cells = iter::repeat_with(|| {
-            let mut row = BTreeSet::<usize>::new();
             // sample which indexes of this row are nonempty
+            row.clear();
             (&mut rng)
-                .sample_iter(Uniform::new(0, dimension.m))
+                .sample_iter(index_distr)
                 .filter(|index| row.insert(*index))
                 .take(dimension.d)
                 .count();
             // sample the random field elements at these indexes
-            row.into_iter()
-                .map(|index| (index, rng.sample(FieldUniformSampler::new())))
+            row.iter()
+                .map(|index| (index.clone(), rng.sample(field_distr)))
                 .collect::<Vec<(usize, F)>>()
         })
         .take(dimension.n)
@@ -60,7 +63,7 @@ impl<F: Field> SparseMatrix<F> {
         self.cells.chunks_exact(self.dimension.d)
     }
 
-    /// store the (m x 1) dot product of a (1 x n) vector and this (n x m) matrix into target
+    /// store the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix into target
     /// target should keep clean (all zeros) before calling dot_into()
     #[inline]
     pub fn dot_into(&self, vector: &[F], mut target: impl AsMut<[F]>) {
@@ -78,7 +81,7 @@ impl<F: Field> SparseMatrix<F> {
         });
     }
 
-    /// return the (m x 1) dot product of a (1 x n) vector and this (n x m) matrix
+    /// return the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix
     #[inline]
     pub fn dot(&self, array: &[F]) -> Vec<F> {
         let mut target = vec![F::ZERO; self.dimension.m];

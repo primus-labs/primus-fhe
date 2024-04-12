@@ -119,21 +119,21 @@ impl BrakedownCodeSpec {
         )
     }
 
-    // at each recursion layer, it needs two matrices A, B
+    /// at each recursion layer, it needs two matrices A, B
 
-    // we iteratively produce all A, B we need
-    // at iteration 1 i.e. the beginning
-    // A(n) = M_{n, alpha * n, c_n}
-    // B(n) = M_{alpha, (r - 1 - r * alpha) * n, d_n}
-    // with M_{n, m, d} denotes row_num, column_num, nonzero_num, respectively
+    /// we iteratively produce all A, B we need
+    /// at iteration 1 i.e. the beginning
+    /// A(n) = M_{n, alpha * n, c_n}
+    /// B(n) = M_{alpha, (r - 1 - r * alpha) * n, d_n}
+    /// with M_{n, m, d} denotes row_num, column_num, nonzero_num, respectively
 
-    // at iteration 2
-    // n = alpha * n
-    // A(n) = ..., B(n) = ..., proceeding like the above
+    /// at iteration 2
+    /// n = alpha * n
+    /// A(n) = ..., B(n) = ..., proceeding like the above
 
-    // iteratively produces matrices A, B until n <= n_0
+    /// iteratively produces matrices A, B until n <= n_0
 
-    // generating dimensions iteratively
+    /// generating dimensions iteratively
     #[inline]
     fn dimensions(
         &self,
@@ -145,8 +145,8 @@ impl BrakedownCodeSpec {
 
         let a = iter::successors(Some(n), |n| Some(ceil(*n as f64 * self.alpha)))
             .tuple_windows()
+            .take_while(|(n, _)| n > &n0)
             .map(|(n, m)| SparseMatrixDimension::new(n, m, min(self.c_n(n), m)))
-            .take_while(|a| a.n > n0)
             .collect_vec();
 
         let b = a
@@ -161,7 +161,7 @@ impl BrakedownCodeSpec {
         (a, b)
     }
 
-    // generating random matrices iteratively
+    /// generating random matrices iteratively
     #[inline]
     fn matrices<F: Field>(
         &self,
@@ -196,13 +196,8 @@ pub struct BrakedownCode<F> {
 impl<F: Field> BrakedownCode<F> {
     /// create an instance of BrakedownCode
     #[inline]
-    pub fn new(
-        spec: BrakedownCodeSpec,
-        num_vars: usize,
-        message_len: usize,
-        rng: impl RngCore,
-    ) -> Self {
-        assert!(1 << num_vars > spec.recursion_threshold);
+    pub fn new(spec: BrakedownCodeSpec, message_len: usize, rng: impl RngCore) -> Self {
+        //assert!(1 << num_vars > spec.recursion_threshold);
 
         let (a, b) = spec.matrices(message_len, rng);
         let codeword_len = spec.codeword_len(message_len);
@@ -217,9 +212,9 @@ impl<F: Field> BrakedownCode<F> {
         }
     }
 
-    /// return the size of proof given column_num c and row_num r, which consists of
-    /// product of random vector and commited matrix: 1*c
-    /// random selected columns of commited matrix: self.spec.num_opening() * r
+    /// return the size of proof given column_num c and row_num r, which consists of the following two parts:
+    /// size of the product of random vector and commited matrix: 1*c
+    /// size of the random selected columns of commited matrix: self.spec.num_opening() * r
     #[inline]
     pub fn proof_size(&self, c: usize, r: usize) -> usize {
         c + self.num_opening * r
@@ -240,6 +235,7 @@ impl<F: Field> BrakedownCode<F> {
 
 impl<F: Field> LinearCode<F> for BrakedownCode<F> {
     #[inline]
+
     fn message_len(&self) -> usize {
         self.message_len
     }
@@ -249,12 +245,12 @@ impl<F: Field> LinearCode<F> for BrakedownCode<F> {
         self.codeword_len
     }
 
-    // iteratively encode
-    // Enc: x0 -> x0 = x0 | x1 = x0 * A0 | x2 = x1 * A1 | x3 = x3 * A3 | ... | x{k-1} = x{k-2} * A{k-1} |
-    //            xk = ReedSoloman(x * Ak) |
-    //            x{k+1} = xk * B | x_{k+2} = (x_{k-1}|x_k|x_{k+1})*B | x_{k+3} =  (x_{k-2}|x_{k-1}|x_k|x_{k+1}|x_{k+2})*B | ...
-    // all A, B above are different!
-    // A, B are stored in self.a, self.b
+    /// iteratively encode
+    /// Enc: x0 -> x0 = x0 | x1 = x0 * A0 | x2 = x1 * A1 | x3 = x3 * A3 | ... | x{k-1} = x{k-2} * A{k-1} |
+    ///            xk = ReedSoloman(x * Ak) |
+    ///            x{k+1} = xk * B | x_{k+2} = (x_{k-1}|x_k|x_{k+1})*B | x_{k+3} =  (x_{k-2}|x_{k-1}|x_k|x_{k+1}|x_{k+2})*B | ...
+    /// all A, B above are different!
+    /// A, B are stored in self.a, self.b
     fn encode(&self, mut target: impl AsMut<[F]>) {
         // target[0..message_len] is the message
         // target has the length of codeword_len
@@ -304,8 +300,10 @@ impl<F: Field> LinearCode<F> for BrakedownCode<F> {
 
 #[cfg(test)]
 mod test {
+
     use crate::utils::code::{BrakedownCode, BrakedownCodeSpec, LinearCode};
-    use algebra::{derive::*, Field};
+    use algebra::{derive::*, Field, FieldUniformSampler};
+    use rand::Rng;
 
     /// test whether a set of parameters is correct
     fn assert_spec_correct(
@@ -345,14 +343,14 @@ mod test {
     }
 
     #[derive(Field)]
-    #[modulus = 32] // pow(2,32)
+    #[modulus = 32]
     pub struct FF32(u64);
 
     #[test]
     fn print() {
         let rng = rand::thread_rng();
         let spec = BrakedownCodeSpec::new(127.0, 0.1195, 0.0284, 1.420, 31, 5);
-        let brakedown_code = BrakedownCode::new(spec, 10, 300, rng);
+        let brakedown_code = BrakedownCode::new(spec, 300, rng);
 
         // input your message here
         let mut target = vec![FF32::ONE; brakedown_code.codeword_len()];
@@ -374,5 +372,107 @@ mod test {
         b.iter().for_each(|b| println!("b matrix: {:?}/n", b));
         brakedown_code.encode(&mut target);
         target.iter().for_each(|item| println!("{}", item.get()));
+    }
+
+    /// test the real code distance is larger or equal to the ideal minimum code distance
+    /// two random codewords have large distance to each other with high probability, making it inefficient to find two closed codewords
+    /// the test iteratively adds 1 to the first element of the message and compare its codeword to the original codeword
+    #[test]
+    fn code_distance_test() {
+        let mut rng = rand::thread_rng();
+        let field_distr = FieldUniformSampler::new();
+
+        let spec = BrakedownCodeSpec::new(128.0, 0.1195, 0.0284, 1.420, 31, 30);
+        let brakedown_code: BrakedownCode<FF32> = BrakedownCode::new(spec, 5000, &mut rng);
+
+        let message_len = brakedown_code.message_len;
+        let codeword_len = brakedown_code.codeword_len;
+
+        println!(
+            "{:?}\nmessage_len: {}\ncodeword: {}",
+            brakedown_code.spec, message_len, codeword_len
+        );
+
+        let mut target_0 = vec![FF32::ZERO; codeword_len];
+        target_0[..message_len]
+            .iter_mut()
+            .for_each(|x| *x = (&mut rng).sample(field_distr));
+        let mut target_1 = target_0.clone();
+
+        let check_times = 32;
+        for _ in 0..check_times {
+            target_1[0] += FF32::ONE;
+
+            brakedown_code.encode(&mut target_0);
+            brakedown_code.encode(&mut target_1);
+
+            let num_real: usize = target_0
+                .iter()
+                .zip(target_1.iter())
+                .map(|(x_0, x_1)| (x_0 != x_1) as usize)
+                .sum();
+            let num_expected = (brakedown_code.spec.distance * codeword_len as f64) as usize;
+            println!(
+                "different entries: real num {}, expected num {}",
+                num_real, num_expected
+            );
+            assert!(num_real >= num_expected);
+        }
+    }
+
+    /// test whether the code is linear
+    /// the test compares Enc(k1 * m1 + k2 * m2) and k1 * Enc(m1) + k2 * Enc(m2)
+    #[test]
+    fn linearity_check() {
+        let mut rng = rand::thread_rng();
+        let field_distr = FieldUniformSampler::new();
+
+        let spec = BrakedownCodeSpec::new(128.0, 0.1195, 0.0284, 1.420, 31, 30);
+        let brakedown_code: BrakedownCode<FF32> = BrakedownCode::new(spec, 5000, &mut rng);
+
+        let message_len = brakedown_code.message_len;
+        let codeword_len = brakedown_code.codeword_len;
+
+        // println!("{:?}\nmessage_len: {}\ncodeword: {}", brakedown_code.spec, message_len, codeword_len);
+
+        let check_times = 100;
+        for _ in 0..check_times {
+            let k_0 = (&mut rng).sample(field_distr);
+            let k_1 = (&mut rng).sample(field_distr);
+
+            let mut codeword = vec![FF32::ZERO; codeword_len];
+            codeword[..message_len]
+                .iter_mut()
+                .for_each(|x| *x = (&mut rng).sample(field_distr));
+
+            let mut codeword_add = vec![FF32::ZERO; codeword_len];
+            codeword_add[..message_len]
+                .iter_mut()
+                .for_each(|x| *x = (&mut rng).sample(field_distr));
+
+            let mut codeword_sum: Vec<FF32> = codeword
+                .clone()
+                .into_iter()
+                .zip(codeword_add.clone())
+                .map(|(x_0, x_1)| k_0 * x_0 + k_1 * x_1)
+                .collect();
+            brakedown_code.encode(&mut codeword_sum);
+
+            brakedown_code.encode(&mut codeword);
+            brakedown_code.encode(&mut codeword_add);
+            let codeword_sum_expected: Vec<FF32> = codeword
+                .clone()
+                .into_iter()
+                .zip(codeword_add.clone())
+                .map(|(x_0, x_1)| k_0 * x_0 + k_1 * x_1)
+                .collect();
+
+            let num_notequal: usize = codeword_sum_expected
+                .iter()
+                .zip(codeword_sum.iter())
+                .map(|(x_0, x_1)| (x_0 != x_1) as usize)
+                .sum();
+            assert!(num_notequal == 0);
+        }
     }
 }
