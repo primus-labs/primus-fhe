@@ -48,7 +48,7 @@ impl<F: Field> SparseMatrix<F> {
                 .count();
             // sample the random field elements at these indexes
             row.iter()
-                .map(|index| (index.clone(), rng.sample(field_distr)))
+                .map(|index| (*index, rng.sample(field_distr)))
                 .collect::<Vec<(usize, F)>>()
         })
         .take(dimension.n)

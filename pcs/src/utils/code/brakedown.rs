@@ -396,7 +396,7 @@ mod test {
         let mut target_0 = vec![FF32::ZERO; codeword_len];
         target_0[..message_len]
             .iter_mut()
-            .for_each(|x| *x = (&mut rng).sample(field_distr));
+            .for_each(|x| *x = rng.sample(field_distr));
         let mut target_1 = target_0.clone();
 
         let check_times = 32;
@@ -437,18 +437,18 @@ mod test {
 
         let check_times = 100;
         for _ in 0..check_times {
-            let k_0 = (&mut rng).sample(field_distr);
-            let k_1 = (&mut rng).sample(field_distr);
+            let k_0 = rng.sample(field_distr);
+            let k_1 = rng.sample(field_distr);
 
             let mut codeword = vec![FF32::ZERO; codeword_len];
             codeword[..message_len]
                 .iter_mut()
-                .for_each(|x| *x = (&mut rng).sample(field_distr));
+                .for_each(|x| *x = rng.sample(field_distr));
 
             let mut codeword_add = vec![FF32::ZERO; codeword_len];
             codeword_add[..message_len]
                 .iter_mut()
-                .for_each(|x| *x = (&mut rng).sample(field_distr));
+                .for_each(|x| *x = rng.sample(field_distr));
 
             let mut codeword_sum: Vec<FF32> = codeword
                 .clone()
