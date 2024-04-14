@@ -2,10 +2,12 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+/// error occurred during the protocol
 pub enum Error {
-    /// protocol rejects this proof
     #[error("Verifier reject the proof ({0:?})")]
+    /// protocol rejects this proof
     Reject(Option<String>),
     #[error("RNG Error")]
+    /// RGN Error
     RNGError,
 }

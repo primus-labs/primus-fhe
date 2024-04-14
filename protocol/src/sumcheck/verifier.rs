@@ -11,6 +11,7 @@ use crate::error::Error;
 use super::{prover::ProverMsg, IPForMLSumcheck};
 
 #[derive(Clone)]
+/// verifier message
 pub struct VerifierMsg<F: Field> {
     /// randomness sampled by verifier
     pub randomness: F,
@@ -85,6 +86,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         Some(msg)
     }
 
+    /// check the proof and generate the reduced subclaim
     pub fn check_and_generate_subclaim(
         verifier_state: VerifierState<F>,
         asserted_sum: F,
