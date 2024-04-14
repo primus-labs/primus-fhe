@@ -123,3 +123,23 @@ fn evaluate_lists_of_products_at_a_point() {
     let point = field_vec!(FF; 0, 1);
     assert_eq!(poly.evaluate(&point), FF::new(24));
 }
+
+#[test]
+fn evaluate_lists_of_products_with_op_at_a_point() {
+    let nv = 2;
+    let mut poly = ListOfProductsOfPolynomials::new(nv);
+    let products = vec![field_vec!(FF; 1, 2, 3, 4), field_vec!(FF; 1, 2, 3, 4)];
+    let products: Vec<Rc<DenseMultilinearExtension<FF>>> = products
+        .into_iter()
+        .map(|x| Rc::new(DenseMultilinearExtension::from_evaluations_vec(nv, x)))
+        .collect();
+    let coeff = FF::new(4);
+    let mut op_coefficient: Vec<(FF, FF)> = Vec::with_capacity(2);
+    op_coefficient.push((FF::new(2), FF::new(0)));
+    op_coefficient.push((FF::new(1), FF::new(3)));
+    // coeff \cdot [2f \cdot (g + 3)]
+    poly.add_product_with_op(products, &op_coefficient, coeff);
+    // 4 * [2*2 * (2+3)] = 80
+    let point = field_vec!(FF; 1, 0);
+    assert_eq!(poly.evaluate(&point), FF::new(80));
+}
