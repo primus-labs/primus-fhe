@@ -11,6 +11,7 @@ use verifier::SubClaim;
 pub mod prover;
 pub mod verifier;
 
+/// IP for MLSumcheck   
 pub struct IPForMLSumcheck<F: Field> {
     #[doc(hidden)]
     _marker: PhantomData<F>,
@@ -73,6 +74,7 @@ impl<F: Field> MLSumcheck<F> {
         Ok((prover_msgs, prover_state))
     }
 
+    /// verify the proof using `polynomial_info` as the verifier key
     pub fn verify(
         polynomial_info: &PolynomialInfo,
         claimed_sum: F,

@@ -23,7 +23,9 @@ pub struct ProverState<F: Field> {
     pub randomness: Vec<F>,
     /// Stores the list of products that is meant to be added together.
     /// Each multiplicand is represented by the index in flattened_ml_extensions
+    /// (index, (a, b)) where `index` indicates the location of MLE and
     /// (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
+    #[allow(clippy::type_complexity)]
     pub list_of_products: Vec<(F, Vec<(usize, (F, F))>)>,
     /// Stores a list of multilinear extensions in which `self.list_of_products` point to
     pub flattened_ml_extensions: Vec<DenseMultilinearExtension<F>>,
@@ -121,8 +123,8 @@ impl<F: Field> IPForMLSumcheck<F> {
                     // This loop is evaluating each MLE to update the product via performing the accumulated multiplication.
                     let table = &prover_state.flattened_ml_extensions[jth_product.0];
                     // (a, b) is a wrapped linear operation over original MLE
-                    let op_a = jth_product.1.0;
-                    let op_b = jth_product.1.1;
+                    let op_a = jth_product.1 .0;
+                    let op_b = jth_product.1 .1;
                     let mut start = (table[b << 1] * op_a) + op_b;
                     let step = (table[(b << 1) + 1] * op_a) + op_b - start;
                     // Evaluate each point P(t) for t = 0..degree + 1 via the accumulated addition instead of the multiplication by t.
