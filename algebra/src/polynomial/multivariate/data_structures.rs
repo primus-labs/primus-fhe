@@ -80,11 +80,12 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         coefficient: F,
     ) {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
+        self.max_multiplicands = self.max_multiplicands.max(product.len());
         assert_eq!(product.len(), op_coefficient.len());
         assert!(!product.is_empty());
-        let mut indexed_product_with_op: Vec<(usize, (F, F))> = Vec::with_capacity(op_coefficient.len());
-        self.max_multiplicands = self.max_multiplicands.max(indexed_product_with_op.len());
-        
+        let mut indexed_product_with_op: Vec<(usize, (F, F))> =
+            Vec::with_capacity(op_coefficient.len());
+
         // (a, b) is the linear operation perfomed on the original MLE pointed by m
         for (m, (a, b)) in product.iter().zip(op_coefficient) {
             assert_eq!(
@@ -140,7 +141,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
             result
                 + p.iter().fold(*c, |acc, &i| {
                     // acc * (f(point) * a + b)
-                    acc * (self.flattened_ml_extensions[i.0].evaluate(point) * i.1.0 + i.1.1)
+                    acc * (self.flattened_ml_extensions[i.0].evaluate(point) * i.1 .0 + i.1 .1)
                 })
         })
     }
