@@ -27,7 +27,9 @@ pub struct ListOfProductsOfPolynomials<F: Field> {
     /// number of variables of the polynomial
     pub num_variables: usize,
     /// list of reference to products (as usize) of multilinear extension
+    /// (index, (a, b)) where `index` indicates the location of MLE and
     /// (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
+    #[allow(clippy::type_complexity)]
     pub products: Vec<(F, Vec<(usize, (F, F))>)>,
     /// Stores multilinear extensions in which product multiplicand can refer to.
     pub flattened_ml_extensions: Vec<Rc<DenseMultilinearExtension<F>>>,
@@ -92,7 +94,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
                 m.num_vars, self.num_variables,
                 "product has a multiplicand with wrong number of variables"
             );
-            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(&m);
+            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
             if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
                 indexed_product_with_op.push((*index, (*a, *b)));
             } else {
