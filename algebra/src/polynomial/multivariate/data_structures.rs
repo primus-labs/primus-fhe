@@ -75,7 +75,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// Here we wrap a linear operation on the same MLE so that we can add the
     /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
     /// The resulting polynomial will be multiplied by the scalar `coefficient`.
-    pub fn add_product_with_op(
+    pub fn add_product_with_linear_op(
         &mut self,
         product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
         op_coefficient: &[(F, F)],

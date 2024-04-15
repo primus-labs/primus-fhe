@@ -136,7 +136,7 @@ fn evaluate_lists_of_products_with_op_at_a_point() {
     let coeff = FF::new(4);
     let op_coefficient = vec![(FF::new(2), FF::new(0)), (FF::new(1), FF::new(3))];
     // coeff \cdot [2f \cdot (g + 3)]
-    poly.add_product_with_op(products, &op_coefficient, coeff);
+    poly.add_product_with_linear_op(products, &op_coefficient, coeff);
     // 4 * [2*2 * (2+3)] = 80
     let point = field_vec!(FF; 1, 0);
     assert_eq!(poly.evaluate(&point), FF::new(80));
