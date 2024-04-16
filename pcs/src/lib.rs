@@ -5,7 +5,5 @@
 
 /// mulilinear polynomial commitment
 pub mod multilinear;
-/// transcript to enable Fiat-Shamir Transformation
-pub mod transcript;
 /// utils, mainly used to implement linear time encodable code now
 pub mod utils;

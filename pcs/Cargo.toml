@@ -16,3 +16,4 @@ rand_distr = { workspace = true }
 
 itertools = "0.12.1"
 sha3 = "0.10.6"
+generic-array = "1.0.0"

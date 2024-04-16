@@ -15,7 +15,7 @@ use std::{
 
 /// BrakedownCode Specification
 /// names of the parameters are consistent with the paper
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BrakedownCodeSpec {
     // security parameter
     lambda: f64,
@@ -183,9 +183,10 @@ impl BrakedownCodeSpec {
 
 /// BrakedownCode is linear-time encodable code, using a recursive encoding method in spirit
 /// This implementation uses an equavailent iterative encoding method for efficiency
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BrakedownCode<F> {
-    spec: BrakedownCodeSpec,
+    /// specification
+    pub spec: BrakedownCodeSpec,
     message_len: usize,
     codeword_len: usize,
     num_opening: usize,
@@ -235,7 +236,6 @@ impl<F: Field> BrakedownCode<F> {
 
 impl<F: Field> LinearCode<F> for BrakedownCode<F> {
     #[inline]
-
     fn message_len(&self) -> usize {
         self.message_len
     }
