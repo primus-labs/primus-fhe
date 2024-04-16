@@ -1,7 +1,4 @@
-use crate::{
-    //multilinear::PolynomialCommitmentScheme,
-    utils::code::{BrakedownCode, BrakedownCodeSpec, LinearCode},
-};
+use crate::utils::code::{BrakedownCode, BrakedownCodeSpec, LinearCode};
 
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
 
