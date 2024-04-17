@@ -63,7 +63,7 @@ impl BrakedownCodeSpec {
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
     /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
     #[inline]
-    pub fn num_opening(&self) -> usize {
+    pub fn num_queries(&self) -> usize {
         ceil(-self.lambda / (1.0 - self.distance / 3.0).log2())
     }
 
@@ -182,6 +182,7 @@ impl BrakedownCodeSpec {
 }
 
 /// BrakedownCode is linear-time encodable code, using a recursive encoding method in spirit
+///
 /// This implementation uses an equavailent iterative encoding method for efficiency
 #[derive(Clone, Debug, Default)]
 pub struct BrakedownCode<F> {
@@ -202,7 +203,7 @@ impl<F: Field> BrakedownCode<F> {
 
         let (a, b) = spec.matrices(message_len, rng);
         let codeword_len = spec.codeword_len(message_len);
-        let num_opening = spec.num_opening();
+        let num_opening = spec.num_queries();
         Self {
             spec,
             message_len,
@@ -223,8 +224,8 @@ impl<F: Field> BrakedownCode<F> {
 
     /// return the number of column needed to open
     #[inline]
-    pub fn num_opening(&self) -> usize {
-        self.spec.num_opening()
+    pub fn num_queries(&self) -> usize {
+        self.spec.num_queries()
     }
 
     /// return the needed size of the extension field
@@ -311,13 +312,13 @@ mod test {
         distance: f64,
         c_n: usize,
         d_n: usize,
-        num_opening: usize,
+        num_queries: usize,
     ) {
         let n = 1 << 30;
         assert!(spec.distance - distance < 1e-3);
         assert_eq!(spec.c_n(n), c_n);
         assert_eq!(spec.d_n(n), d_n);
-        assert_eq!(spec.num_opening(), num_opening);
+        assert_eq!(spec.num_queries(), num_queries);
     }
 
     ///  test correctness of sets of parameters taken from Figure 2 in [GLSTW21](https://eprint.iacr.org/2021/1043.pdf).

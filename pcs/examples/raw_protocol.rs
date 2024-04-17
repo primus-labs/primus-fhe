@@ -42,7 +42,7 @@ fn main() {
 
     // prover commits the polynomial and sends the commitment to the verifier
     let root = prover.commit_poly(&poly);
-    println!("matrix: {:?}", &prover.rows);
+    //println!("matrix: {:?}", &prover.rows);
     // verifier receives the commitment
     verifier.receive_root(root);
 
@@ -55,11 +55,11 @@ fn main() {
     println!("answer: {:?}", &answer);
     // the verifier receives the answer
     verifier.receive_answer(answer);
-    println!("encoded answer: {:?}", verifier.answer);
+    //println!("encoded answer: {:?}", verifier.answer);
     // verifier generates a set of random opening queries
-    let openings = verifier.random_openings();
+    let openings = verifier.random_queries();
     // prover answers the opening queries
-    let (merkle_paths, columns) = prover.answer_openings(openings);
+    let (merkle_paths, columns) = prover.answer_queries(openings);
     // verifier checks whether the answer is consistent with the openings
     verifier.check_answer(merkle_paths, columns);
 
@@ -80,12 +80,12 @@ fn main() {
     println!("product: {:?}", &product);
     // the verifier receives the product
     verifier.receive_answer(product);
-    println!("encoded product: {:?}", verifier.answer);
+    //println!("encoded product: {:?}", verifier.answer);
     // verifier generates a set of random opening queries
-    let openings = verifier.random_openings();
+    let openings = verifier.random_queries();
     println!("openings: {:?}", &openings);
     // prover answers the opening queries
-    let (merkle_paths, columns) = prover.answer_openings(openings);
+    let (merkle_paths, columns) = prover.answer_queries(openings);
     //println!("merkle_paths: {:?}\ncolunms: {:?}", &merkle_paths, &columns);
     // verifier checks whether the answer is consistent with the openings
     verifier.check_answer(merkle_paths, columns);
