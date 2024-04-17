@@ -1,3 +1,5 @@
+// cargo run --package boolean_fhe --example count_ntt --features count_ntt
+#[cfg(feature = "count_ntt")]
 use algebra::transformation::count;
 use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS};
 use rand::Rng;
@@ -34,28 +36,39 @@ fn main() {
     let y = skp.encrypt(b);
     let z = skp.encrypt(c);
 
+    #[cfg(feature = "count_ntt")]
     count::enable_count_ntt_and_intt();
     let ct = evk.nand(&x, &y);
-    count::disable_count_ntt_and_intt();
+    #[cfg(feature = "count_ntt")]
+    {
+        count::disable_count_ntt_and_intt();
+        println!("ntt count: {}", count::get_ntt_count());
+        println!("intt count: {}", count::get_intt_count());
+    }
 
     let (m, noise) = skp.decrypt_with_noise(&ct);
     assert_eq!(m, nand(a, b), "Noise: {noise}");
     check_noise(noise, "nand");
-    println!("ntt count: {}", count::get_ntt_count());
-    println!("intt count: {}", count::get_intt_count());
 
-    count::clear_ntt_count();
-    count::clear_intt_count();
+    #[cfg(feature = "count_ntt")]
+    {
+        count::clear_ntt_count();
+        count::clear_intt_count();
+        count::enable_count_ntt_and_intt();
+    }
 
-    count::enable_count_ntt_and_intt();
     let ct = evk.mux(&x, &y, &z);
-    count::disable_count_ntt_and_intt();
+
+    #[cfg(feature = "count_ntt")]
+    {
+        count::disable_count_ntt_and_intt();
+        println!("ntt count: {}", count::get_ntt_count());
+        println!("intt count: {}", count::get_intt_count());
+    }
 
     let (m, noise) = skp.decrypt_with_noise(&ct);
     assert_eq!(m, if a { b } else { c }, "Noise: {noise}");
     check_noise(noise, "mux");
-    println!("ntt count: {}", count::get_ntt_count());
-    println!("intt count: {}", count::get_intt_count());
 }
 
 #[inline]

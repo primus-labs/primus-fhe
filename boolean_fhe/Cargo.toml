@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-algebra = { path = "../algebra", features = ["count_ntt"] }
+algebra = { path = "../algebra" }
 lattice = { path = "../lattice" }
 
 thiserror = { workspace = true }
@@ -16,6 +16,10 @@ rand = { workspace = true }
 rand_distr = { workspace = true }
 rand_chacha = "0.3.1"
 rayon = { workspace = true }
+
+[features]
+default = []
+count_ntt = ["algebra/count_ntt"]
 
 [dev-dependencies]
 criterion = { workspace = true }
