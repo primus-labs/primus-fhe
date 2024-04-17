@@ -2,24 +2,23 @@
 pub mod brakedown;
 
 use algebra::{Field, MultilinearExtension};
-
 use rand::RngCore;
 use std::fmt::Debug;
-///
-//pub type Point<F, P> = <P as MultilinearExtension<F>>::Point;
-//pub type Point<F> = <DenseMultilinearExtension<F> as MultilinearExtension<F>>::Point;
-///
+
+type Point<F, P> = <P as MultilinearExtension<F>>::Point;
+
+/// Polymomial Commitment Scheme
 pub trait PolynomialCommitmentScheme<F: Field, S>: Clone + Debug {
     /// prover's parameters
-    type ProverParam: Clone + Debug;
+    type ProverParam: Clone + Debug + Default;
     /// verifier's parameters
-    type VerifierParam: Clone + Debug;
+    type VerifierParam: Clone + Debug + Default;
     /// polynomial to commit
     type Polynomial: MultilinearExtension<F>;
     /// commitment
-    type Commitment: Clone + Debug + Default; // + AsRef<[Self::CommitmentChunk]>;
-    ///
-    type CommitmentChunk: Clone + Debug + Default;
+    type Commitment: Clone + Debug + Default;
+    /// Proof
+    type Proof: Clone + Debug + Default;
 
     /// setup
     fn setup(
@@ -35,16 +34,16 @@ pub trait PolynomialCommitmentScheme<F: Field, S>: Clone + Debug {
     fn open(
         pp: &Self::ProverParam,
         poly: &Self::Polynomial,
-        comm: &Self::Commitment,
-        //point: &Point<F, Self::Polynomial>,
-        eval: &F,
-    );
+        commit: &Self::Commitment,
+        point: &Point<F, Self::Polynomial>,
+    ) -> Self::Proof;
 
     /// verify
     fn verify(
         vp: &Self::VerifierParam,
-        comm: &Self::Commitment,
-        //point: &Point<F, Self::Polynomial>,
+        commit: &Self::Commitment,
+        point: &Point<F, Self::Polynomial>,
         eval: &F,
+        proof: &Self::Proof,
     );
 }

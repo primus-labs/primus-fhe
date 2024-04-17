@@ -1,0 +1,21 @@
+- theory
+
+any possible optimization?
+
+- optimization
+
+merkle tree optimization
+
+multiple point evaluation optimization
+
+matrix access optimization: row-major or column major?
+
+- implementation
+
+fiat-shamir transformation
+
+how to use pcs?
+
+more tests
+
+benchs

@@ -42,7 +42,7 @@ fn main() {
 
     // prover commits the polynomial and sends the commitment to the verifier
     let root = prover.commit_poly(&poly);
-    //println!("matrix: {:?}", &prover.rows);
+    println!("root: {:?}", &root);
     // verifier receives the commitment
     verifier.receive_root(root);
 
@@ -50,6 +50,7 @@ fn main() {
 
     // verifier generates a random challenge
     let challenge = verifier.random_challenge();
+    println!("challenge: {:?}", &challenge);
     // prover answers the challenge
     let answer = prover.answer_challenge(challenge);
     println!("answer: {:?}", &answer);
@@ -57,10 +58,11 @@ fn main() {
     verifier.receive_answer(answer);
     //println!("encoded answer: {:?}", verifier.answer);
     // verifier generates a set of random opening queries
-    let openings = verifier.random_queries();
+    let queries = verifier.random_queries();
     // prover answers the opening queries
-    let (merkle_paths, columns) = prover.answer_queries(openings);
-    // verifier checks whether the answer is consistent with the openings
+    let (merkle_paths, columns) = prover.answer_queries(queries);
+    println!("merkle_paths: {:?}\ncolunms: {:?}", &merkle_paths, &columns);
+    // verifier checks whether the answer is consistent with the queries
     verifier.check_answer(merkle_paths, columns);
 
     // Consistency Check
@@ -82,12 +84,12 @@ fn main() {
     verifier.receive_answer(product);
     //println!("encoded product: {:?}", verifier.answer);
     // verifier generates a set of random opening queries
-    let openings = verifier.random_queries();
-    println!("openings: {:?}", &openings);
+    let queries = verifier.random_queries();
+    println!("queries: {:?}", &queries);
     // prover answers the opening queries
-    let (merkle_paths, columns) = prover.answer_queries(openings);
-    //println!("merkle_paths: {:?}\ncolunms: {:?}", &merkle_paths, &columns);
-    // verifier checks whether the answer is consistent with the openings
+    let (merkle_paths, columns) = prover.answer_queries(queries);
+    println!("merkle_paths: {:?}\ncolunms: {:?}", &merkle_paths, &columns);
+    // verifier checks whether the answer is consistent with the queries
     verifier.check_answer(merkle_paths, columns);
 
     // Final Evaluation
@@ -95,6 +97,7 @@ fn main() {
     // verifier computes the residual product operation
     let pcs_evaluation = verifier.residual_product();
     println!("pcs evalution: {:?}", &pcs_evaluation);
+    // true evalutaions
     let true_evaluation = poly.evaluate(&point);
     println!("true evalution: {:?}", &true_evaluation);
     assert!(true_evaluation == pcs_evaluation);
