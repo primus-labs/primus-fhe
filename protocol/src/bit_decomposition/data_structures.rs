@@ -73,7 +73,7 @@ impl<F: Field> BitDecompositionSubClaim<F> {
     pub fn verify_subclaim(
         &self,
         d: &DenseMultilinearExtension<F>,
-        d_i: &Vec<DenseMultilinearExtension<F>>,
+        d_i: &Vec<Rc<DenseMultilinearExtension<F>>>,
         u: &[F],
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> bool {
