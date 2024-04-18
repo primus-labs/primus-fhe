@@ -6,6 +6,8 @@
 
 mod ntt_table;
 
+#[cfg(feature = "count_ntt")]
+pub use ntt_table::count;
 pub use ntt_table::NTTTable;
 
 use crate::{NTTField, NTTPolynomial, Polynomial};
