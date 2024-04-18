@@ -85,33 +85,3 @@ fn and(a: bool, b: bool) -> bool {
 fn nand(a: bool, b: bool) -> bool {
     not(and(a, b))
 }
-
-#[allow(dead_code)]
-#[inline]
-fn or(a: bool, b: bool) -> bool {
-    a | b
-}
-
-#[allow(dead_code)]
-#[inline]
-fn nor(a: bool, b: bool) -> bool {
-    not(or(a, b))
-}
-
-#[allow(dead_code)]
-#[inline]
-fn xor(a: bool, b: bool) -> bool {
-    a ^ b
-}
-
-#[allow(dead_code)]
-#[inline]
-fn xnor(a: bool, b: bool) -> bool {
-    not(xor(a, b))
-}
-
-#[allow(dead_code)]
-#[inline]
-fn majority(a: bool, b: bool, c: bool) -> bool {
-    (a & b) | (b & c) | (a & c)
-}
