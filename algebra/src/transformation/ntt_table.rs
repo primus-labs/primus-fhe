@@ -151,54 +151,46 @@ where
 #[cfg(feature = "count_ntt")]
 /// Module for `ntt` and `intt` counting.
 pub mod count {
-    use std::sync::atomic::{AtomicBool, AtomicU32};
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-    pub(super) static mut NTT_COUNT: AtomicU32 = AtomicU32::new(0);
-    pub(super) static mut INTT_COUNT: AtomicU32 = AtomicU32::new(0);
-    pub(super) static mut COUNT_ENABLE: AtomicBool = AtomicBool::new(false);
+    pub(super) static NTT_COUNT: AtomicU32 = AtomicU32::new(0);
+    pub(super) static INTT_COUNT: AtomicU32 = AtomicU32::new(0);
+    pub(super) static COUNT_ENABLE: AtomicBool = AtomicBool::new(false);
 
     /// Enable counting `ntt` and `intt`.
     #[inline]
     pub fn enable_count_ntt_and_intt() {
-        unsafe {
-            *COUNT_ENABLE.get_mut() = true;
-        }
+        COUNT_ENABLE.store(true, Ordering::Relaxed);
     }
 
     /// Disable counting `ntt` and `intt`.
     #[inline]
     pub fn disable_count_ntt_and_intt() {
-        unsafe {
-            *COUNT_ENABLE.get_mut() = false;
-        }
+        COUNT_ENABLE.store(false, Ordering::Relaxed);
     }
 
     /// Get the `ntt` count.
     #[inline]
     pub fn get_ntt_count() -> u32 {
-        unsafe { *NTT_COUNT.get_mut() }
+        NTT_COUNT.load(Ordering::Relaxed)
     }
 
     /// Get the `intt` count.
     #[inline]
     pub fn get_intt_count() -> u32 {
-        unsafe { *INTT_COUNT.get_mut() }
+        INTT_COUNT.load(Ordering::Relaxed)
     }
 
     /// Clear the `ntt` count, set `ntt` count to 0.
     #[inline]
     pub fn clear_ntt_count() {
-        unsafe {
-            *NTT_COUNT.get_mut() = 0;
-        }
+        NTT_COUNT.store(0, Ordering::Relaxed);
     }
 
     /// Clear the `intt` count, set `intt` count to 0.
     #[inline]
     pub fn clear_intt_count() {
-        unsafe {
-            *INTT_COUNT.get_mut() = 0;
-        }
+        INTT_COUNT.store(0, Ordering::Relaxed);
     }
 }
 
@@ -303,9 +295,10 @@ where
         debug_assert_eq!(values.len(), 1 << log_n);
 
         #[cfg(feature = "count_ntt")]
-        if unsafe { *count::COUNT_ENABLE.get_mut() } {
-            unsafe {
-                *count::NTT_COUNT.get_mut() += 1;
+        {
+            use std::sync::atomic::Ordering;
+            if count::COUNT_ENABLE.load(Ordering::Relaxed) {
+                count::NTT_COUNT.fetch_add(1, Ordering::Relaxed);
             }
         }
 
@@ -334,9 +327,10 @@ where
         debug_assert_eq!(values.len(), 1 << log_n);
 
         #[cfg(feature = "count_ntt")]
-        if unsafe { *count::COUNT_ENABLE.get_mut() } {
-            unsafe {
-                *count::INTT_COUNT.get_mut() += 1;
+        {
+            use std::sync::atomic::Ordering;
+            if count::COUNT_ENABLE.load(Ordering::Relaxed) {
+                count::INTT_COUNT.fetch_add(1, Ordering::Relaxed);
             }
         }
 
