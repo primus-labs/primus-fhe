@@ -7,7 +7,6 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
 use verifier::SubClaim;
-
 pub mod prover;
 pub mod verifier;
 

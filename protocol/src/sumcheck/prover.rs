@@ -9,12 +9,13 @@ use algebra::{DenseMultilinearExtension, ListOfProductsOfPolynomials, Multilinea
 
 use super::verifier::VerifierMsg;
 use super::IPForMLSumcheck;
+use std::rc::Rc;
 
 /// Prover Message
 #[derive(Clone)]
 pub struct ProverMsg<F: Field> {
     /// evaluations on P(0), P(1), P(2), ...
-    pub(crate) evaluations: Vec<F>,
+    pub(crate) evaluations: Rc<Vec<F>>,
 }
 
 /// Prover State
@@ -49,7 +50,7 @@ impl<F: Field> IPForMLSumcheck<F> {
     ///
     /// The resulting polynomial is
     ///
-    /// $$\sum_{i=0}^{n} C_i \cdot \prod_{j=0}^{m_i}P_{ij}$$
+    /// $$\sum_{i=0}^{n} c_i \cdot \prod_{j=0}^{m_i}P_{ij}$$
     pub fn prover_init(polynomial: &ListOfProductsOfPolynomials<F>) -> ProverState<F> {
         if polynomial.num_variables == 0 {
             panic!("Attempt to prove a constant.")
@@ -106,23 +107,22 @@ impl<F: Field> IPForMLSumcheck<F> {
 
         let i = prover_state.round;
         let nv = prover_state.num_vars;
-        let degree = prover_state.max_multiplicands; // the degree of univariate polynomial sent by prover at this round
+        // the degree of univariate polynomial sent by prover at this round
+        let degree = prover_state.max_multiplicands;
 
-        let zeros = (vec![F::zero(); degree + 1], vec![F::zero(); degree + 1]);
-
+        let zeros = (vec![F::ZERO; degree + 1], vec![F::ZERO; degree + 1]);
+        // In effect, this fold is essentially doing simply:
+        // for b in 0..1 << (nv - i)
+        // The goal is to evaluate degree + 1 points for each b, all of which has been fixed with the same (i-1) variables.
+        // Note that the function proved in the sumcheck is a sum of products.
         let fold_result = (0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
-            // In effect, this fold is essentially doing simply:
-            // for b in 0..1 << (nv - i)
-            // The goal is to evaluate degree + 1 points for each b, all of which has been fixed with the same (i-1) variables.
-            // Note that the function proved in the sumcheck is a sum of products.
-
+            // This loop is evaluating each product over the specific degree + 1 points.
             for (coefficient, products) in &prover_state.list_of_products {
-                // This loop is evaluating each product over the specific degree + 1 points.
                 product.fill(*coefficient);
+                // This loop is evaluating each MLE to update the product via performing the accumulated multiplication.
                 for &jth_product in products {
-                    // This loop is evaluating each MLE to update the product via performing the accumulated multiplication.
-                    let table = &prover_state.flattened_ml_extensions[jth_product.0];
                     // (a, b) is a wrapped linear operation over original MLE
+                    let table = &prover_state.flattened_ml_extensions[jth_product.0];
                     let op_a = jth_product.1 .0;
                     let op_b = jth_product.1 .1;
                     let mut start = (table[b << 1] * op_a) + op_b;
@@ -143,7 +143,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         let products_sum = fold_result.0;
 
         ProverMsg {
-            evaluations: products_sum,
+            evaluations: Rc::new(products_sum),
         }
     }
 }

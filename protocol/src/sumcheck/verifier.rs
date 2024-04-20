@@ -7,6 +7,7 @@ use algebra::{Field, FieldUniformSampler, PolynomialInfo};
 use rand::distributions::Distribution;
 
 use crate::error::Error;
+use std::rc::Rc;
 
 use super::{prover::ProverMsg, IPForMLSumcheck};
 
@@ -23,8 +24,8 @@ pub struct VerifierState<F: Field> {
     nv: usize,
     max_multiplicands: usize,
     finished: bool,
-    /// a list storing the univariate polynomial in evaluations from sent by the prover at each round
-    polynomials_received: Vec<Vec<F>>,
+    /// a list storing the univariate polynomial in evaluations sent by the prover at each round
+    polynomials_received: Vec<Rc<Vec<F>>>,
     /// a list storing the randomness sampled by the verifier at each round
     randomness: Vec<F>,
 }
@@ -66,7 +67,6 @@ impl<F: Field> IPForMLSumcheck<F> {
 
         // Now, verifier should check if the received P(0) + P(1) = expected. The check is moved to
         // `check_and_generate_subclaim`, and will be done after the last round.
-
         let msg = Self::sample_round(rng);
         verifier_state.randomness.push(msg.randomness);
         verifier_state
@@ -76,7 +76,6 @@ impl<F: Field> IPForMLSumcheck<F> {
         // Now, verifier should set `expected` to P(r).
         // This operation is also moved to `check_and_generate_subclaim`,
         // and will be done after the last round.
-
         if verifier_state.round == verifier_state.nv {
             // accept and close
             verifier_state.finished = true;
@@ -143,13 +142,13 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     let mut prod = eval_at;
     evals.push(eval_at);
 
-    let mut check = F::zero();
+    let mut check = F::ZERO;
     // We return early if 0 <= eval_at <  len, i.e. if the desired value has been passed
     for i in 1..len {
         if eval_at == check {
             return p_i[i - 1];
         }
-        check += F::one();
+        check += F::ONE;
 
         let tmp = eval_at - check;
         evals.push(tmp);
@@ -160,7 +159,7 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     }
     // Now check = len - 1
 
-    let mut res = F::zero();
+    let mut res = F::ZERO;
     // We want to compute the denominator \prod (j!=i) (i-j) for a given i in 0..len
     //
     // we start from the last step for i = len - 1, which is
@@ -194,10 +193,10 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     // = \sum_{i=0}^{len p_i - 1} * prod / (evals[i] * denom[i]) where denom[i-1] = - denom[i] * (len-i) / i.
     // So we use denom_up / denom_down to update denom[i] in reverse.
     let mut denom_up = field_factorial::<F>(len - 1);
-    let mut denom_down = F::one();
+    let mut denom_down = F::ONE;
 
     let mut i_as_field = check; // len-1
-    let mut len_minust_i_as_field = F::one();
+    let mut len_minust_i_as_field = F::ONE;
     for i in (0..len).rev() {
         res += p_i[i] * prod * denom_down / (denom_up * evals[i]);
 
@@ -206,8 +205,8 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
         if i != 0 {
             denom_up *= -len_minust_i_as_field;
             denom_down *= i_as_field;
-            i_as_field -= F::one();
-            len_minust_i_as_field += F::one();
+            i_as_field -= F::ONE;
+            len_minust_i_as_field += F::ONE;
         }
     }
     res
@@ -216,11 +215,11 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
 /// Compute the factorial(a) = 1 * 2 * ... * a
 #[inline]
 fn field_factorial<F: Field>(a: usize) -> F {
-    let mut res = F::one();
-    let mut acc = F::one();
+    let mut res = F::ONE;
+    let mut acc = F::ONE;
     for _i in 1..=a {
         res *= acc;
-        acc += F::one();
+        acc += F::ONE;
     }
     res
 }
