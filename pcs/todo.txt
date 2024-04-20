@@ -1,21 +1,17 @@
-- theory
+-theory
 
 any possible optimization?
 
-- optimization
-
-merkle tree optimization
-
-multiple point evaluation optimization
-
-matrix access optimization: row-major or column major?
-
-- implementation
+-implementation
 
 fiat-shamir transformation
+implement pcs trait for brakdown
+adopt extension field
+add tests
+add benchmark
 
-how to use pcs?
+-implementation optimization
 
-more tests
-
-benchs
+merkle tree optimization
+multiple point evaluation optimization
+matrix access optimization: row-major or column major?

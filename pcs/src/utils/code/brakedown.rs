@@ -60,6 +60,18 @@ impl BrakedownCodeSpec {
         }
     }
 
+    /// return field_size_bits
+    #[inline]
+    pub fn field_size_bits(&self) -> usize {
+        self.field_size_bits
+    }
+
+    /// return recursion_threshold
+    #[inline]
+    pub fn recursion_threshold(&self) -> usize {
+        self.recursion_threshold
+    }
+
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
     /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
     #[inline]
@@ -73,6 +85,14 @@ impl BrakedownCodeSpec {
     pub fn extension_field_size(&self, message_len: usize) -> usize {
         let n = message_len;
         self.codeword_len(n) * ceil(f64::powf(2f64, self.lambda))
+    }
+
+    /// return the size of proof given column_num c and row_num r, which consists of the following two parts:
+    /// size of the product of random vector and commited matrix: 1*c
+    /// size of the random selected columns of commited matrix: self.spec.num_opening() * r
+    #[inline]
+    pub fn proof_size(&self, c: usize, r: usize) -> usize {
+        c + self.num_queries() * r
     }
 
     /// return the codeword length of the given message length under this set of code parameters
@@ -225,7 +245,7 @@ impl<F: Field> BrakedownCode<F> {
     /// return the number of column needed to open
     #[inline]
     pub fn num_queries(&self) -> usize {
-        self.spec.num_queries()
+        min(self.spec.num_queries(), self.message_len)
     }
 
     /// return the needed size of the extension field
