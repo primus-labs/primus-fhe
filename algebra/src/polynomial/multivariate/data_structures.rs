@@ -116,25 +116,11 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         coefficient: F,
     ) {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
-        let mut indexed_product: Vec<(usize, (F, F))> = Vec::with_capacity(product.len());
-        self.max_multiplicands = self.max_multiplicands.max(product.len());
-        assert!(!product.is_empty());
-        for m in product {
-            assert_eq!(
-                m.num_vars, self.num_variables,
-                "product has a multiplicand with wrong number of variables"
-            );
-            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(&m);
-            if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
-                indexed_product.push((*index, (F::ONE, F::ZERO)));
-            } else {
-                let curr_index = self.flattened_ml_extensions.len();
-                self.flattened_ml_extensions.push(m.clone());
-                self.raw_pointers_lookup_table.insert(m_ptr, curr_index);
-                indexed_product.push((curr_index, (F::ONE, F::ZERO)));
-            }
+        let mut op_coefficient: Vec<(F, F)> = Vec::with_capacity(product.len());
+        for _ in 0..product.len() {
+            op_coefficient.push((F::ONE, F::ZERO));
         }
-        self.products.push((coefficient, indexed_product));
+        self.add_product_with_linear_op(product, &op_coefficient, coefficient);
     }
 
     /// Evaluate the polynomial at point `point`
