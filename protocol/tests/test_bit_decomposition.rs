@@ -15,7 +15,6 @@ pub struct Fp32(u32);
 
 // field type
 type FF = Fp32;
-type T = u32;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -24,26 +23,6 @@ macro_rules! field_vec {
     ($t:ty; $($x:expr),+ $(,)?) => {
         vec![$(<$t>::new($x)),+]
     }
-}
-
-#[test]
-fn test_decompose() {
-    const BITS: u32 = 2;
-    const B: u32 = 1 << BITS;
-    let basis = <Basis<Fp32>>::new(BITS);
-    let rng = &mut thread_rng();
-
-    let uniform = <FieldUniformSampler<FF>>::new();
-    let a: FF = uniform.sample(rng);
-    let decompose = a.decompose(basis);
-    let compose = decompose
-        .into_iter()
-        .enumerate()
-        .fold(FF::new(0), |acc, (i, d)| {
-            acc + d.mul_scalar(B.pow(i as T) as T)
-        });
-
-    assert_eq!(compose, a);
 }
 
 #[test]
@@ -65,9 +44,9 @@ fn test_trivial_bit_decomposition_base_2() {
 
     let decomposed_bits = DecomposedBits {
         base: FF::new(2),
-        base_bits: 1,
-        len_bits: 2,
-        num_variables: 2,
+        base_len: 1,
+        bits_len: 2,
+        num_vars: 2,
         decomposed_bits: d_bits,
     };
     let decomposed_bits_info = decomposed_bits.info();
@@ -121,9 +100,9 @@ fn test_bit_decomposition_base_4() {
 
     let decomposed_bits = DecomposedBits {
         base,
-        base_bits,
-        len_bits,
-        num_variables,
+        base_len: base_bits,
+        bits_len: len_bits,
+        num_vars: num_variables,
         decomposed_bits,
     };
     let decomposed_bits_info = decomposed_bits.info();

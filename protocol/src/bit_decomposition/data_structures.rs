@@ -1,4 +1,23 @@
 //! Define the structures required in SNARKs for Bit Decomposition
+//! The prover wants to convince that the decomposition of an element into some bits on a power-of-two base.
+//! * base (denoted by B): the power-of-two base used in bit decomposition
+//! * base_len: the length of base, i.e. log_2(base) 
+//! * bits_len (denoted by l): the length of decomposed bits
+//! 
+//! Given M instances of bit decomposition to be proved, d and each bit of d, i.e. (d_0, ..., d_l),
+//! the main idea of this IOP is to prove: 
+//! For x \in \{0, 1\}^l
+//! 1. d(x) = \sum_{i=0}^{log M - 1} B^i d_i(x) => can be reduced to the evaluation of a random point
+//! 2. For every i \in [l]: \prod_{k = 0}^B (d_i(x) - k) = 0 =>
+//!     a) each of which can be reduced to prove the following sum
+//!        $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
+//!        where u is the common random challenge from the verifier,
+//!     b) and then, it can be proved with the sumcheck protocol where the maximum variable-degree is B + 1.
+//! 
+//! The second part consists of l sumcheck protocols which can be combined into one giant sumcheck via random linear combination,
+//! then the resulting purported sum is: 
+//! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
+//! where r_i (for i = 0..l) are sampled from the verifier.
 use algebra::{DenseMultilinearExtension, Field, MultilinearExtension};
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -18,8 +37,8 @@ pub struct BitDecompositionProof<F: Field> {
 pub struct BitDecompositionSubClaim<F: Field> {
     /// r
     pub randomness: Vec<F>,
-    /// v
-    pub v: Vec<F>,
+    /// reduced point from the sumcheck protocol
+    pub point: Vec<F>,
     /// expected value returned in sumcheck
     pub expected_evaluation: F,
 }
@@ -31,13 +50,13 @@ pub struct BitDecompositionSubClaim<F: Field> {
 pub struct DecomposedBits<F: Field> {
     /// base
     pub base: F,
-    /// base = 2^base_bits
-    pub base_bits: u32,
-    /// length of the decomposed bits
-    pub len_bits: u32,
+    /// the length of base, i.e. log_2(base)
+    pub base_len: u32,
+    /// the length of decomposed bits
+    pub bits_len: u32,
     /// number of variables of every polynomial
-    pub num_variables: usize,
-    /// Plain deomposed bits
+    pub num_vars: usize,
+    /// plain deomposed bits
     pub decomposed_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
 }
 
@@ -46,16 +65,16 @@ impl<F: Field> DecomposedBits<F> {
     pub fn info(&self) -> DecomposedBitsInfo<F> {
         DecomposedBitsInfo {
             base: self.base,
-            base_bits: self.base_bits,
-            len_bits: self.len_bits,
-            num_variables: self.num_variables,
+            base_bits: self.base_len,
+            len_bits: self.bits_len,
+            num_variables: self.num_vars,
         }
     }
 }
 
 /// Stores the parameters used for bit decomposation.
 ///
-/// It is required to decompose over a power-of-2 base.
+/// * It is required to decompose over a power-of-2 base.
 /// These parameters are used as the verifier key.
 pub struct DecomposedBitsInfo<F: Field> {
     /// base
@@ -81,15 +100,15 @@ impl<F: Field> BitDecompositionSubClaim<F> {
         assert_eq!(len, d_i.len());
         assert_eq!(len, self.randomness.len());
         let dim = u.len();
-        assert_eq!(dim, self.v.len());
+        assert_eq!(dim, self.point.len());
         assert_eq!(dim, d.num_vars);
         for poly in d_i {
             assert_eq!(dim, poly.num_vars);
         }
 
         // check 1: d[v] = \sum_{i=0}^len B^i \cdot d_i[v]
-        let eval_d = d.evaluate(&self.v);
-        let eval_d_i: Vec<F> = d_i.iter().map(|x| x.evaluate(&self.v)).collect();
+        let eval_d = d.evaluate(&self.point);
+        let eval_d_i: Vec<F> = d_i.iter().map(|x| x.evaluate(&self.point)).collect();
 
         let mut sum = F::ZERO;
         let mut pow_base = F::ONE;
@@ -113,6 +132,6 @@ impl<F: Field> BitDecompositionSubClaim<F> {
             eval += prod;
         }
 
-        self.expected_evaluation == eval * eval_identity_function(u, &self.v)
+        self.expected_evaluation == eval * eval_identity_function(u, &self.point)
     }
 }

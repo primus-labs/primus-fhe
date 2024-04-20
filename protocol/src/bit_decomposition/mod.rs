@@ -1,4 +1,5 @@
-//! SNARKs for Bit Decomposition
+//! SNARKs for Bit Decomposition (which could also be used for Range Check)
+//! 
 pub mod data_structures;
 use crate::sumcheck::MLSumcheck;
 use algebra::{
@@ -49,8 +50,8 @@ pub fn randomize_sumcheck<F: Field>(
     u: &[F],
 ) -> ListOfProductsOfPolynomials<F> {
     let dim = u.len();
-    let len: usize = decomposed_bits.len_bits as usize;
-    let base: usize = 1 << decomposed_bits.base_bits;
+    let len: usize = decomposed_bits.bits_len as usize;
+    let base: usize = 1 << decomposed_bits.base_len;
     let d_i = &decomposed_bits.decomposed_bits;
     for bit in d_i {
         assert_eq!(dim, bit.num_vars);
@@ -92,7 +93,7 @@ impl<F: Field> BitDecomposition<F> {
         decomposed_bits: &DecomposedBits<F>,
         u: &[F],
     ) -> BitDecompositionProof<F> {
-        let len_bits = decomposed_bits.len_bits as usize;
+        let len_bits = decomposed_bits.bits_len as usize;
         // TODO sample randomness via Fiat-Shamir RNG
         // batch `len_bits` sumcheck protocols into one with random linear combination
         let sampler = <FieldUniformSampler<F>>::new();
@@ -138,7 +139,7 @@ impl<F: Field> BitDecomposition<F> {
                 .expect("bit decomposition verification failed");
         BitDecompositionSubClaim {
             randomness,
-            v: subclaim.point,
+            point: subclaim.point,
             expected_evaluation: subclaim.expected_evaluations,
         }
     }
