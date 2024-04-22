@@ -17,13 +17,6 @@ use rand::prelude::*;
 //
 // It can used for unnamed struct with only one element of `u8`, `u16`, `u32`, `u64`.
 
-// Derive macro `Random` generates an impl of the trait `algebra::Random`.
-//
-// Then you can use `rand` crate to generate numbers randomly.
-//
-// Besides the `Standard` and `Uniform` Distribution, you can also use the binary distribution,
-// ternary distribution and gaussian distribution.
-
 // Derive macro `Prime` generating an impl of the trait `algebra::PrimeField`.
 //
 // It's based the Derive macro `Field`.
@@ -69,6 +62,13 @@ fn main() -> Result<(), algebra::AlgebraError> {
     let _binary_sampler = FieldBinarySampler;
     let _ternary_sampler = FieldTernarySampler;
     let _gaussian_sampler = FieldDiscreteGaussianSampler::new(0.0, 3.2).unwrap();
+
+    let b = loop {
+        let t = uniform.sample(&mut rng);
+        if !t.is_zero() {
+            break t;
+        }
+    };
 
     // Some operation
     let _c = a + b;

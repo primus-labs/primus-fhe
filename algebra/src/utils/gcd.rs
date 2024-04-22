@@ -64,6 +64,9 @@ macro_rules! impl_extended_gcd {
             }
 
             fn extended_gcd(mut x: Self, mut y: Self) -> (Self::SignedT, Self::SignedT, Self) {
+                if x == 0 || y == 0 {
+                    return (0, 0, 0);
+                }
                 let mut g = 1;
 
                 let shift = (x | y).trailing_zeros();
