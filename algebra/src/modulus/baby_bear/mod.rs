@@ -39,27 +39,25 @@ fn try_inverse(value: u32) -> Option<u32> {
     // Uses 30 Squares + 7 Multiplications => 37 Operations total.
 
     let p1 = value;
-    let p100000000 = p1.pow_reduce(1 << 8, BabyBearModulus);
-    let p100000001 = p100000000.mul_reduce(p1, BabyBearModulus);
-    let p10000000000000000 = p100000000.pow_reduce(1 << 8, BabyBearModulus);
-    let p10000000100000001 = p10000000000000000.mul_reduce(p100000001, BabyBearModulus);
-    let p10000000100000001000 = p10000000100000001.pow_reduce(1 << 3, BabyBearModulus);
-    let p1000000010000000100000000 = p10000000100000001000.pow_reduce(1 << 5, BabyBearModulus);
-    let p1000000010000000100000001 = p1000000010000000100000000.mul_reduce(p1, BabyBearModulus);
-    let p1000010010000100100001001 =
-        p1000000010000000100000001.mul_reduce(p10000000100000001000, BabyBearModulus);
-    let p10000000100000001000000010 =
-        p1000000010000000100000001.mul_reduce(p1000000010000000100000001, BabyBearModulus);
-    let p11000010110000101100001011 =
-        p10000000100000001000000010.mul_reduce(p1000010010000100100001001, BabyBearModulus);
-    let p100000001000000010000000100 =
-        p10000000100000001000000010.mul_reduce(p10000000100000001000000010, BabyBearModulus);
+
+    let p100000000 = exp::<8>(p1);
+    let p100000001 = mul(p100000000, p1);
+    let p10000000000000000 = exp::<8>(p100000000);
+    let p10000000100000001 = mul(p10000000000000000, p100000001);
+    let p10000000100000001000 = exp::<3>(p10000000100000001);
+    let p1000000010000000100000000 = exp::<5>(p10000000100000001000);
+    let p1000000010000000100000001 = mul(p1000000010000000100000000, p1);
+    let p1000010010000100100001001 = mul(p1000000010000000100000001, p10000000100000001000);
+    let p10000000100000001000000010 = square(p1000000010000000100000001);
+    let p11000010110000101100001011 = mul(p10000000100000001000000010, p1000010010000100100001001);
+    let p100000001000000010000000100 = square(p10000000100000001000000010);
     let p111000011110000111100001111 =
-        p100000001000000010000000100.mul_reduce(p11000010110000101100001011, BabyBearModulus);
-    let p1110000111100001111000011110000 =
-        p111000011110000111100001111.pow_reduce(1 << 4, BabyBearModulus);
-    let p1110111111111111111111111111111 =
-        p1110000111100001111000011110000.mul_reduce(p111000011110000111100001111, BabyBearModulus);
+        mul(p100000001000000010000000100, p11000010110000101100001011);
+    let p1110000111100001111000011110000 = exp::<4>(p111000011110000111100001111);
+    let p1110111111111111111111111111111 = mul(
+        p1110000111100001111000011110000,
+        p111000011110000111100001111,
+    );
 
     Some(p1110111111111111111111111111111)
 }
@@ -116,6 +114,22 @@ const fn monty_reduce(x: u64) -> u32 {
     x_sub_u_hi.wrapping_add(corr)
 }
 
+/// Squares the base N number of times and multiplies the result by the tail value.
+#[inline(always)]
+fn exp<const N: usize>(base: u32) -> u32 {
+    base.pow_reduce(1u16 << N, BabyBearModulus)
+}
+
+#[inline(always)]
+fn mul(a: u32, b: u32) -> u32 {
+    a.mul_reduce(b, BabyBearModulus)
+}
+
+#[inline(always)]
+fn square(value: u32) -> u32 {
+    value.mul_reduce(value, BabyBearModulus)
+}
+
 #[cfg(test)]
 mod tests {
     use rand::thread_rng;
@@ -125,7 +139,9 @@ mod tests {
 
     use super::*;
 
-    const P64: u64 = P as u64;
+    type S = u32;
+    type W = u64;
+    const PW: W = P as W;
     #[test]
     fn test_baby_bear() {
         let dis = Uniform::new(0, P);
@@ -146,17 +162,17 @@ mod tests {
 
         assert_eq!(
             from_monty(a_m.add_reduce(b_m, BabyBearModulus)),
-            ((a_n as u64 + b_n as u64) % P64) as u32
+            ((a_n as W + b_n as W) % PW) as S
         );
 
         assert_eq!(
             from_monty(a_m.sub_reduce(b_m, BabyBearModulus)),
-            ((P64 + a_n as u64 - b_n as u64) % P64) as u32
+            ((PW + a_n as W - b_n as W) % PW) as S
         );
 
         assert_eq!(
             from_monty(a_m.mul_reduce(b_m, BabyBearModulus)),
-            ((a_n as u64 * b_n as u64) % P64) as u32
+            ((a_n as W * b_n as W) % PW) as S
         );
 
         let b_inv = b_m.inv_reduce(BabyBearModulus);
