@@ -142,13 +142,14 @@ mod tests {
     type S = u32;
     type W = u64;
     const PW: W = P as W;
+
     #[test]
     fn test_baby_bear() {
         let dis = Uniform::new(0, P);
         let mut rng = thread_rng();
 
-        let a_n = dis.sample(&mut rng);
-        let b_n = loop {
+        let mut a_n = dis.sample(&mut rng);
+        let mut b_n = loop {
             let t = dis.sample(&mut rng);
             if t != 0 {
                 break t;
@@ -157,6 +158,14 @@ mod tests {
 
         let a_m = to_monty(a_n);
         let b_m = to_monty(b_n);
+
+        while a_n > P {
+            a_n -= P;
+        }
+
+        while b_n > P {
+            b_n -= P;
+        }
 
         assert_eq!(a_n, from_monty(a_m));
 
