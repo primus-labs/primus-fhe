@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
 
-use crate::{NTTRGSW, NTTRLWE, RLWE};
+use crate::{NTRU, NTTNTRU, NTTRGSW, NTTRLWE, RLWE};
 
 /// Pre allocated space for inplace decomposition.
 #[derive(Debug)]
@@ -264,6 +264,94 @@ impl<F: NTTField> NTTRGSWSpace<F> {
     /// Gets the mutable pre allocated space.
     #[inline]
     pub fn get_mut(&mut self) -> &mut NTTRGSW<F> {
+        &mut self.space
+    }
+}
+
+/// Pre allocated space.
+#[derive(Debug)]
+pub struct NTTNTRUSpace<F: NTTField> {
+    space: NTTNTRU<F>,
+}
+
+impl<F: NTTField> Deref for NTTNTRUSpace<F> {
+    type Target = NTTNTRU<F>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.space
+    }
+}
+
+impl<F: NTTField> DerefMut for NTTNTRUSpace<F> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.space
+    }
+}
+
+impl<F: NTTField> NTTNTRUSpace<F> {
+    /// Creates a new [`NTTNTRUSpace<F>`].
+    #[inline]
+    pub fn new(coeff_count: usize) -> Self {
+        Self {
+            space: NTTNTRU::zero(coeff_count),
+        }
+    }
+
+    /// Gets the pre allocated space.
+    #[inline]
+    pub fn get(&self) -> &NTTNTRU<F> {
+        &self.space
+    }
+
+    /// Gets the mutable pre allocated space.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut NTTNTRU<F> {
+        &mut self.space
+    }
+}
+
+/// Pre allocated space.
+#[derive(Debug)]
+pub struct NTRUSpace<F: NTTField> {
+    space: NTRU<F>,
+}
+
+impl<F: NTTField> Deref for NTRUSpace<F> {
+    type Target = NTRU<F>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.space
+    }
+}
+
+impl<F: NTTField> DerefMut for NTRUSpace<F> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.space
+    }
+}
+
+impl<F: NTTField> NTRUSpace<F> {
+    /// Creates a new [`NTRUSpace<F>`].
+    #[inline]
+    pub fn new(coeff_count: usize) -> Self {
+        Self {
+            space: NTRU::zero(coeff_count),
+        }
+    }
+
+    /// Gets the pre allocated space.
+    #[inline]
+    pub fn get(&self) -> &NTRU<F> {
+        &self.space
+    }
+
+    /// Gets the mutable pre allocated space.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut NTRU<F> {
         &mut self.space
     }
 }
