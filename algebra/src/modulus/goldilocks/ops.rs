@@ -6,6 +6,28 @@ use crate::{reduce::*, Bits};
 
 use super::{reduce128, try_inverse, GoldilocksModulus, EPSILON, P};
 
+impl Reduce<GoldilocksModulus> for u64 {
+    type Output = Self;
+
+    #[inline]
+    fn reduce(self, _: GoldilocksModulus) -> Self::Output {
+        if self > P {
+            self - P
+        } else {
+            self
+        }
+    }
+}
+
+impl ReduceAssign<GoldilocksModulus> for u64 {
+    #[inline]
+    fn reduce_assign(&mut self, _: GoldilocksModulus) {
+        if *self > P {
+            *self -= P;
+        }
+    }
+}
+
 impl AddReduce<GoldilocksModulus> for u64 {
     type Output = Self;
 
@@ -158,5 +180,23 @@ impl DivReduceAssign<GoldilocksModulus> for u64 {
     #[inline]
     fn div_reduce_assign(&mut self, rhs: Self, _: GoldilocksModulus) {
         *self = self.mul_reduce(rhs.inv_reduce(GoldilocksModulus), GoldilocksModulus);
+    }
+}
+
+impl DotProductReduce<GoldilocksModulus> for u64 {
+    type Output = Self;
+
+    fn dot_product_reduce(
+        a: impl AsRef<[Self]>,
+        b: impl AsRef<[Self]>,
+        _: GoldilocksModulus,
+    ) -> Self::Output {
+        let a = a.as_ref();
+        let b = b.as_ref();
+        debug_assert_eq!(a.len(), b.len());
+        a.iter().zip(b).fold(0, |acc: Self, (&x, &y)| {
+            x.mul_reduce(y, GoldilocksModulus)
+                .add_reduce(acc, GoldilocksModulus)
+        })
     }
 }

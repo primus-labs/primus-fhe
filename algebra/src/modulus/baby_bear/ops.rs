@@ -155,3 +155,21 @@ impl DivReduceAssign<BabyBearModulus> for u32 {
         *self = self.mul_reduce(rhs.inv_reduce(BabyBearModulus), BabyBearModulus);
     }
 }
+
+impl DotProductReduce<BabyBearModulus> for u32 {
+    type Output = Self;
+
+    fn dot_product_reduce(
+        a: impl AsRef<[Self]>,
+        b: impl AsRef<[Self]>,
+        _: BabyBearModulus,
+    ) -> Self::Output {
+        let a = a.as_ref();
+        let b = b.as_ref();
+        debug_assert_eq!(a.len(), b.len());
+        a.iter().zip(b).fold(0, |acc: Self, (&x, &y)| {
+            x.mul_reduce(y, BabyBearModulus)
+                .add_reduce(acc, BabyBearModulus)
+        })
+    }
+}
