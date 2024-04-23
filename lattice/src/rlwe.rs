@@ -127,6 +127,13 @@ impl<F: NTTField> RLWE<F> {
         }
     }
 
+    /// Set all entries equal to zero.
+    #[inline]
+    pub fn set_zero(&mut self) {
+        self.a.set_zero();
+        self.b.set_zero();
+    }
+
     /// Returns a reference to the `a` of this [`RLWE<F>`].
     #[inline]
     pub fn a(&self) -> &Polynomial<F> {
