@@ -1,7 +1,9 @@
 // cargo run --package boolean_fhe --example count_ntt --features count_ntt
 #[cfg(feature = "count_ntt")]
 use algebra::transformation::count;
-use boolean_fhe::{EvaluationKey, LWEType, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS};
+use boolean_fhe::{
+    EvaluationKey, LWEContainer, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
+};
 use rand::Rng;
 
 fn main() {
@@ -11,9 +13,9 @@ fn main() {
     // set parameter
     let params = DEFAULT_TERNARY_128_BITS_PARAMERTERS.clone();
 
-    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEType;
+    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEContainer;
 
-    let check_noise = |noise: LWEType, op: &str| {
+    let check_noise = |noise: LWEContainer, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"

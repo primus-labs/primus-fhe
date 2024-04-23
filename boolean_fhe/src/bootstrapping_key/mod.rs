@@ -2,7 +2,7 @@ use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTFi
 use lattice::RLWE;
 use rand::{CryptoRng, Rng};
 
-use crate::{LWEType, SecretKeyPack, SecretKeyType};
+use crate::{LWEContainer, SecretKeyPack, SecretKeyType};
 
 mod binary;
 mod ternary;
@@ -43,10 +43,10 @@ impl<F: NTTField> BootstrappingKey<F> {
     pub fn bootstrapping(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[LWEType],
+        lwe_a: &[LWEContainer],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEType>,
+        lwe_modulus: PowOf2Modulus<LWEContainer>,
         bootstrapping_basis: Basis<F>,
     ) -> RLWE<F> {
         match self {

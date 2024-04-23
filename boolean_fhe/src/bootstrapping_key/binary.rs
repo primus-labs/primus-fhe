@@ -3,7 +3,7 @@ use algebra::{
 };
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
-use crate::{LWEType, NTTRLWESecretKey};
+use crate::{LWEContainer, NTTRLWESecretKey};
 
 #[derive(Debug, Clone)]
 pub struct BinaryBootstrappingKey<F: NTTField> {
@@ -21,10 +21,10 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
     pub fn bootstrapping(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[LWEType],
+        lwe_a: &[LWEContainer],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEType>,
+        lwe_modulus: PowOf2Modulus<LWEContainer>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
@@ -62,7 +62,7 @@ impl<F: NTTField> BinaryBootstrappingKey<F> {
     /// Generates the [`BinaryBootstrappingKey<F>`].
     pub(crate) fn generate<Rng>(
         bootstrapping_basis: Basis<F>,
-        lwe_secret_key: &[LWEType],
+        lwe_secret_key: &[LWEContainer],
         chi: FieldDiscreteGaussianSampler,
         rlwe_secret_key: &NTTRLWESecretKey<F>,
         mut rng: Rng,

@@ -1,6 +1,6 @@
 use algebra::NTTField;
 use boolean_fhe::{
-    EvaluationKey, LWECiphertext, LWEType, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
+    EvaluationKey, LWECiphertext, LWEContainer, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
 };
 use rand::prelude::*;
 
@@ -13,9 +13,9 @@ fn bfhe_test() {
     // set parameter
     let params = DEFAULT_TERNARY_128_BITS_PARAMERTERS.clone();
 
-    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEType;
+    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEContainer;
 
-    let check_noise = |noise: LWEType, op: &str| {
+    let check_noise = |noise: LWEContainer, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"
