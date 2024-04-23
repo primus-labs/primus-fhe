@@ -1,9 +1,10 @@
-use crate::reduce::{
-    AddReduce, AddReduceAssign, MulReduce, MulReduceAssign, NegReduce, NegReduceAssign, SubReduce,
-    SubReduceAssign,
-};
+use std::ops::ShrAssign;
 
-use super::{monty_reduce, BabyBearModulus, P};
+use num_traits::PrimInt;
+
+use crate::{reduce::*, Bits};
+
+use super::{from_monty, monty_reduce, try_inverse, BabyBearModulus, P};
 
 impl AddReduce<BabyBearModulus> for u32 {
     type Output = Self;
@@ -75,5 +76,82 @@ impl MulReduceAssign<BabyBearModulus> for u32 {
     #[inline]
     fn mul_reduce_assign(&mut self, rhs: Self, _: BabyBearModulus) {
         *self = self.mul_reduce(rhs, BabyBearModulus)
+    }
+}
+
+impl<E> PowReduce<BabyBearModulus, E> for u32
+where
+    E: PrimInt + ShrAssign<u32> + Bits,
+{
+    fn pow_reduce(self, mut exp: E, _: BabyBearModulus) -> Self {
+        if exp.is_zero() {
+            return 1;
+        }
+
+        debug_assert!(self < P);
+
+        let mut power: Self = self;
+
+        let exp_trailing_zeros = exp.trailing_zeros();
+        if exp_trailing_zeros > 0 {
+            for _ in 0..exp_trailing_zeros {
+                power = power.mul_reduce(power, BabyBearModulus);
+            }
+            exp >>= exp_trailing_zeros;
+        }
+
+        if exp.is_one() {
+            return power;
+        }
+
+        let mut intermediate: Self = power;
+        for _ in 1..(E::N_BITS - exp.leading_zeros()) {
+            exp >>= 1;
+            power = power.mul_reduce(power, BabyBearModulus);
+            if !(exp & E::one()).is_zero() {
+                intermediate = intermediate.mul_reduce(power, BabyBearModulus);
+            }
+        }
+        intermediate
+    }
+}
+
+impl InvReduce<BabyBearModulus> for u32 {
+    #[inline]
+    fn inv_reduce(self, _: BabyBearModulus) -> Self {
+        try_inverse(self).unwrap()
+    }
+}
+
+impl InvReduceAssign<BabyBearModulus> for u32 {
+    #[inline]
+    fn inv_reduce_assign(&mut self, _: BabyBearModulus) {
+        *self = try_inverse(*self).unwrap();
+    }
+}
+
+impl TryInvReduce<BabyBearModulus> for u32 {
+    #[inline]
+    fn try_inv_reduce(self, _: BabyBearModulus) -> Result<Self, crate::AlgebraError> {
+        try_inverse(self).ok_or(crate::AlgebraError::NoReduceInverse {
+            value: from_monty(self).to_string(),
+            modulus: P.to_string(),
+        })
+    }
+}
+
+impl DivReduce<BabyBearModulus> for u32 {
+    type Output = Self;
+
+    #[inline]
+    fn div_reduce(self, rhs: Self, _: BabyBearModulus) -> Self::Output {
+        self.mul_reduce(rhs.inv_reduce(BabyBearModulus), BabyBearModulus)
+    }
+}
+
+impl DivReduceAssign<BabyBearModulus> for u32 {
+    #[inline]
+    fn div_reduce_assign(&mut self, rhs: Self, _: BabyBearModulus) {
+        *self = self.mul_reduce(rhs.inv_reduce(BabyBearModulus), BabyBearModulus);
     }
 }

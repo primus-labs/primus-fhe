@@ -1,7 +1,7 @@
 //! This module implements some functions and methods for
 //! modular arithmetic.
 
-mod baby_bear;
+pub mod baby_bear;
 mod barrett;
 mod powof2;
 mod shoup;
