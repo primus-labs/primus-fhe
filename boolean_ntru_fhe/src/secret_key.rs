@@ -5,8 +5,7 @@ use algebra::{
     NTTField, NTTPolynomial, Polynomial,
 };
 use lattice::{sample_binary_values, sample_ternary_values};
-use rand::SeedableRng;
-use rand_chacha::ChaCha12Rng;
+use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
 
 use crate::{decode, encode, LWECiphertext, LWEContainer, LWEPlaintext, Parameters};
 
@@ -23,25 +22,25 @@ pub enum SecretKeyType {
 /// LWE Secret key
 pub type LWESecretKey = Vec<LWEContainer>;
 
-/// RLWE Secret key
-pub type RLWESecretKey<F> = Polynomial<F>;
+/// NTRU Secret key
+pub type NTRUSecretKey<F> = Polynomial<F>;
 
-/// NTT version RLWE Secret key
-pub type NTTRLWESecretKey<F> = NTTPolynomial<F>;
+/// NTT version NTRU Secret key
+pub type NTTNTRUSecretKey<F> = NTTPolynomial<F>;
 
 /// Boolean fhe's secret keys pack.
 ///
 /// This struct contains the LWE secret key,
-/// RLWE secret key, ntt version RLWE secret key
+/// NTRU secret key, ntt version NTRU secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
 pub struct SecretKeyPack<F: NTTField> {
     /// LWE secret key
     lwe_secret_key: LWESecretKey,
     /// RLWE secret key
-    rlwe_secret_key: RLWESecretKey<F>,
+    ntru_secret_key: NTRUSecretKey<F>,
     /// ntt version RLWE secret key
-    ntt_rlwe_secret_key: NTTRLWESecretKey<F>,
+    ntt_ntru_secret_key: NTTNTRUSecretKey<F>,
     /// boolean fhe's parameters
     parameters: Parameters<F>,
     /// cryptographically secure random number generator
@@ -62,14 +61,14 @@ impl<F: NTTField> SecretKeyPack<F> {
             }
         };
 
-        let rlwe_dimension = parameters.rlwe_dimension();
-        let rlwe_secret_key = Polynomial::random(rlwe_dimension, &mut csrng);
-        let ntt_rlwe_secret_key = rlwe_secret_key.clone().into_ntt_polynomial();
+        let ntru_dimension = parameters.ntru_dimension();
+        let ntru_secret_key = Polynomial::random(ntru_dimension, &mut csrng);
+        let ntt_ntru_secret_key = ntru_secret_key.clone().into_ntt_polynomial();
 
         Self {
             lwe_secret_key,
-            rlwe_secret_key,
-            ntt_rlwe_secret_key,
+            ntru_secret_key,
+            ntt_ntru_secret_key,
             parameters,
             csrng: RefCell::new(csrng),
         }
@@ -81,16 +80,16 @@ impl<F: NTTField> SecretKeyPack<F> {
         &self.lwe_secret_key
     }
 
-    /// Returns the rlwe secret key of this [`SecretKeyPack<F>`].
+    /// Returns the ntru secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn rlwe_secret_key(&self) -> &RLWESecretKey<F> {
-        &self.rlwe_secret_key
+    pub fn ntru_secret_key(&self) -> &NTRUSecretKey<F> {
+        &self.ntru_secret_key
     }
 
-    /// Returns the ntt rlwe secret key of this [`SecretKeyPack<F>`].
+    /// Returns the ntt ntru secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn ntt_rlwe_secret_key(&self) -> &NTTRLWESecretKey<F> {
-        &self.ntt_rlwe_secret_key
+    pub fn ntt_ntru_secret_key(&self) -> &NTTNTRUSecretKey<F> {
+        &self.ntt_ntru_secret_key
     }
 
     /// Returns the parameters of this [`SecretKeyPack<F>`].

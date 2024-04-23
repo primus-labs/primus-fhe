@@ -1,6 +1,12 @@
 [workspace]
 
-members = ["algebra", "lattice", "algebra_derive", "boolean_fhe"]
+members = [
+    "algebra",
+    "lattice",
+    "algebra_derive",
+    "boolean_fhe",
+    "boolean_ntru_fhe",
+]
 
 resolver = "2"
 
@@ -12,7 +18,7 @@ rand = "0.8"
 rand_distr = "0.4"
 rayon = "1"
 
-criterion = "0.4"
+criterion = "0.5"
 
 [profile.bench]
 lto = true

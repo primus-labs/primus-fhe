@@ -2,7 +2,7 @@ use algebra::{reduce::AddReduceAssign, AsInto, NTTField, Polynomial};
 use lattice::{LWE, RLWE};
 
 use crate::{
-    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEType, Parameters, RLWECiphertext,
+    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEContainer, Parameters, RLWECiphertext,
     SecretKeyPack,
 };
 
@@ -261,9 +261,9 @@ impl<F: NTTField> EvaluationKey<F> {
         let rlwe_modulus_f64 = parameters.rlwe_modulus_f64();
 
         let switch =
-            |v: F| (v.get().as_into() * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEType;
+            |v: F| (v.get().as_into() * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEContainer;
 
-        let a: Vec<LWEType> = c.a().iter().copied().map(switch).collect();
+        let a: Vec<LWEContainer> = c.a().iter().copied().map(switch).collect();
         let b = switch(c.b());
 
         LWECiphertext::new(a, b)
@@ -292,7 +292,7 @@ impl<F: NTTField> EvaluationKey<F> {
 
 /// init acc for bootstrapping which performs homomorphic `nand`.
 fn init_nand_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
 ) -> RLWE<F>
@@ -314,7 +314,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `and` or `majority`.
 fn init_and_majority_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
 ) -> RLWE<F>
@@ -336,7 +336,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `nand`, `and` or `majority`.
 fn init_nand_and_majority_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
     value_0_1: F, // [−q/8, 3q/8)
@@ -383,7 +383,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `or` or `xor`.
 fn init_or_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
 ) -> RLWE<F>
@@ -405,7 +405,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `nor` or `xnor`.
 fn init_nor_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
 ) -> RLWE<F>
@@ -427,7 +427,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `xor`.
 fn init_xor_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
 ) -> RLWE<F>
@@ -449,7 +449,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `xnor`.
 fn init_xnor_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
 ) -> RLWE<F>
@@ -471,7 +471,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `or`, `nor`, `xor` or `xnor`.
 fn init_or_nor_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
     value_1_2: F, // [q/8, 5q/8)
@@ -518,7 +518,7 @@ where
 
 /// init acc for bootstrapping which performs homomorphic `xor` or `xnor`.
 fn init_xor_xnor_acc<F>(
-    b: LWEType,
+    b: LWEContainer,
     rlwe_dimension: usize,
     twice_rlwe_dimension_div_lwe_modulus: usize,
     value_2: F, // [q/4, 3q/4)

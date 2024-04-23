@@ -1,4 +1,4 @@
-/// LWE Plain text
+/// Plain text type of the first layer LWE scheme
 pub type LWEPlaintext = bool;
 
 /// LWE ciphertext inner value type

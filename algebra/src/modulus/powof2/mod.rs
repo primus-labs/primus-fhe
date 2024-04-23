@@ -3,6 +3,7 @@ mod internal_macros;
 
 /// A struct for power of 2 modulus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct PowOf2Modulus<T: Copy> {
     /// The special value for performing `reduce`.
     ///
