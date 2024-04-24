@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["algebra", "lattice", "algebra_derive", "boolean_fhe", "protocol"]
+members = ["algebra", "lattice", "algebra_derive", "boolean_fhe", "zkp"]
 
 resolver = "2"
 
