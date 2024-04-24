@@ -2,6 +2,7 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 use std::vec::IntoIter;
 
+use num_traits::Inv;
 use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
@@ -645,6 +646,27 @@ impl<F: Field> Neg for &Polynomial<F> {
     fn neg(self) -> Self::Output {
         let data = self.iter().map(|&e| -e).collect();
         <Polynomial<F>>::new(data)
+    }
+}
+
+impl<F: NTTField> Inv for Polynomial<F> {
+    type Output = Self;
+
+    #[inline]
+    fn inv(self) -> Self::Output {
+        self.into_ntt_polynomial().inv().into_native_polynomial()
+    }
+}
+
+impl<F: NTTField> Inv for &Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn inv(self) -> Self::Output {
+        self.clone()
+            .into_ntt_polynomial()
+            .inv()
+            .into_native_polynomial()
     }
 }
 

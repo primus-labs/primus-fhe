@@ -85,14 +85,14 @@ impl<F: NTTField> BootstrappingKey<F> {
                 parameters.bootstrapping_basis(),
                 secret_key_pack.lwe_secret_key(),
                 chi,
-                secret_key_pack.ntt_ring_secret_key(),
+                secret_key_pack.ntt_inv_ring_secret_key(),
                 rng,
             )),
             SecretKeyType::Ternary => BootstrappingKey::Ternary(TernaryBootstrappingKey::generate(
                 parameters.bootstrapping_basis(),
                 secret_key_pack.lwe_secret_key(),
                 chi,
-                secret_key_pack.ntt_ring_secret_key(),
+                secret_key_pack.ntt_inv_ring_secret_key(),
                 rng,
             )),
         }
