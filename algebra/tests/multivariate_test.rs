@@ -2,10 +2,10 @@ use std::vec;
 
 use algebra::{
     derive::{Field, Prime},
-    DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
+    Basis, DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension,
 };
-use num_traits::Zero;
+use num_traits::{Pow, Zero};
 use rand::thread_rng;
 use rand_distr::Distribution;
 use std::rc::Rc;
@@ -105,7 +105,49 @@ fn mle_arithmetic() {
             assert_eq!(&poly1 + &PolyFf::zero(), poly1);
             assert_eq!((&PolyFf::zero() + &poly1), poly1);
         }
+
+        // test decomposition of mle
+        {
+            let base_len = 3;
+            let base = FF::new(1 << base_len);
+            let basis = <Basis<FF>>::new(base_len);
+            let bits_len = basis.decompose_len();
+            let decomposed_polys = poly1.get_decomposed_mles(base_len, bits_len as u32);
+            let point: Vec<_> = (0..NV).map(|_| uniform.sample(&mut rng)).collect();
+            let evaluation = decomposed_polys
+                .iter()
+                .enumerate()
+                .fold(FF::ZERO, |acc, (i, bit)| {
+                    acc + bit.evaluate(&point) * base.pow(i as u32)
+                });
+            assert_eq!(poly1.evaluate(&point), evaluation);
+        }
     }
+}
+
+#[test]
+fn trivial_decomposed_mles() {
+    let base_len = 2; // i.e. base = 4
+    let base = FF::new(1 << base_len);
+    let bits_len = 3;
+    let num_vars = 2;
+
+    let val = field_vec!(FF; 0b001101, 0b100011, 0b101100, 0b111110);
+    let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, val);
+    let decomposed_polys = poly.get_decomposed_mles(base_len, bits_len);
+
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let point: Vec<_> = (0..num_vars)
+        .map(|_| uniform.sample(&mut thread_rng()))
+        .collect();
+    let evaluation = decomposed_polys
+        .iter()
+        .enumerate()
+        .fold(FF::ZERO, |acc, (i, bit)| {
+            acc + bit.evaluate(&point) * base.pow(i as u32)
+        });
+
+    assert_eq!(poly.evaluate(&point), evaluation);
 }
 
 #[test]

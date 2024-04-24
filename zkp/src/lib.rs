@@ -2,8 +2,9 @@
 #![deny(missing_docs)]
 
 //! Define arithmetic operations.
-pub mod bit_decomposition;
+pub mod piop;
 pub mod sumcheck;
+pub mod utils;
 
 pub use error::Error;
 mod error;

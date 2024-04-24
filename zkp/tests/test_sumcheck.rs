@@ -3,12 +3,12 @@ use algebra::{
     DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension,
 };
-use protocol::sumcheck::IPForMLSumcheck;
-use protocol::sumcheck::MLSumcheck;
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
 use std::rc::Rc;
+use zkp::sumcheck::IPForMLSumcheck;
+use zkp::sumcheck::MLSumcheck;
 
 #[derive(Field, Prime)]
 #[modulus = 132120577]
