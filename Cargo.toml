@@ -4,6 +4,7 @@ members = [
     "algebra",
     "lattice",
     "algebra_derive",
+    "he_traits",
     "boolean_fhe",
     "boolean_ntru_fhe",
 ]

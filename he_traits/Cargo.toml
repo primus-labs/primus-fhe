@@ -1,5 +1,5 @@
 [package]
-name = "boolean_ntru_fhe"
+name = "he_traits"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,4 +10,3 @@ algebra = { path = "../algebra" }
 lattice = { path = "../lattice" }
 
 thiserror = { workspace = true }
-rand_chacha = "0.3.1"
