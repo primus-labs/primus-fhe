@@ -66,8 +66,6 @@ pub struct DecomposedBits<F: Field> {
     pub num_vars: usize,
     /// batched plain deomposed bits, each of which corresponds to one bit decomposisiton instance
     pub instances: Vec<Vec<Rc<DenseMultilinearExtension<F>>>>,
-    /// the final batched sumcheck protocol
-    pub poly: ListOfProductsOfPolynomials<F>,
 }
 
 /// Stores the parameters used for bit decomposation.
@@ -109,7 +107,6 @@ impl<F: Field> DecomposedBits<F> {
             bits_len,
             num_vars,
             instances: Vec::new(),
-            poly: ListOfProductsOfPolynomials::new(num_vars),
         }
     }
 
