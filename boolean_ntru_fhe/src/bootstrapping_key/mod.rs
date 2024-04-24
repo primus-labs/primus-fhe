@@ -1,5 +1,5 @@
 use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField};
-use lattice::RLWE;
+use lattice::NTRU;
 use rand::{CryptoRng, Rng};
 
 use crate::{LWEPlaintext, SecretKeyPack, SecretKeyType};
@@ -42,26 +42,26 @@ impl<F: NTTField> BootstrappingKey<F> {
     /// Performs the bootstrapping operation
     pub fn bootstrapping(
         &self,
-        init_acc: RLWE<F>,
+        init_acc: NTRU<F>,
         lwe_a: &[LWEPlaintext],
-        rlwe_dimension: usize,
-        twice_rlwe_dimension_div_lwe_modulus: usize,
+        ntru_dimension: usize,
+        twice_ntru_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEPlaintext>,
         bootstrapping_basis: Basis<F>,
-    ) -> RLWE<F> {
+    ) -> NTRU<F> {
         match self {
             BootstrappingKey::Binary(bootstrapping_key) => bootstrapping_key.bootstrapping(
                 init_acc,
                 lwe_a,
-                rlwe_dimension,
-                twice_rlwe_dimension_div_lwe_modulus,
+                ntru_dimension,
+                twice_ntru_dimension_div_lwe_modulus,
                 lwe_modulus,
             ),
             BootstrappingKey::Ternary(bootstrapping_key) => bootstrapping_key.bootstrapping(
                 init_acc,
                 lwe_a,
-                rlwe_dimension,
-                twice_rlwe_dimension_div_lwe_modulus,
+                ntru_dimension,
+                twice_ntru_dimension_div_lwe_modulus,
                 lwe_modulus,
                 bootstrapping_basis,
             ),
@@ -85,14 +85,14 @@ impl<F: NTTField> BootstrappingKey<F> {
                 parameters.bootstrapping_basis(),
                 secret_key_pack.lwe_secret_key(),
                 chi,
-                secret_key_pack.ntt_rlwe_secret_key(),
+                secret_key_pack.ntt_ring_secret_key(),
                 rng,
             )),
             SecretKeyType::Ternary => BootstrappingKey::Ternary(TernaryBootstrappingKey::generate(
                 parameters.bootstrapping_basis(),
                 secret_key_pack.lwe_secret_key(),
                 chi,
-                secret_key_pack.ntt_rlwe_secret_key(),
+                secret_key_pack.ntt_ring_secret_key(),
                 rng,
             )),
         }

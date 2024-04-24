@@ -5,9 +5,10 @@ use algebra::{
     NTTField, NTTPolynomial, Polynomial,
 };
 use lattice::{sample_binary_values, sample_ternary_values};
-use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 
-use crate::{decode, encode, LWECiphertext, LWEContainer, LWEPlaintext, Parameters};
+use crate::{decode, encode, LWECiphertext, LWEMessage, LWEPlaintext, Parameters};
 
 /// The distribution type of the LWE Secret Key
 #[derive(Debug, Default, Clone, Copy)]
@@ -20,27 +21,27 @@ pub enum SecretKeyType {
 }
 
 /// LWE Secret key
-pub type LWESecretKey = Vec<LWEContainer>;
+pub type LWESecretKey = Vec<LWEPlaintext>;
 
-/// NTRU Secret key
-pub type NTRUSecretKey<F> = Polynomial<F>;
+/// Ring Secret key
+pub type RingSecretKey<F> = Polynomial<F>;
 
-/// NTT version NTRU Secret key
-pub type NTTNTRUSecretKey<F> = NTTPolynomial<F>;
+/// NTT version Ring Secret key
+pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 
 /// Boolean fhe's secret keys pack.
 ///
 /// This struct contains the LWE secret key,
-/// NTRU secret key, ntt version NTRU secret key
+/// ring secret key, ntt version ring secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
 pub struct SecretKeyPack<F: NTTField> {
     /// LWE secret key
     lwe_secret_key: LWESecretKey,
-    /// RLWE secret key
-    ntru_secret_key: NTRUSecretKey<F>,
-    /// ntt version RLWE secret key
-    ntt_ntru_secret_key: NTTNTRUSecretKey<F>,
+    /// ring secret key
+    ring_secret_key: RingSecretKey<F>,
+    /// ntt version ring secret key
+    ntt_ring_secret_key: NTTRingSecretKey<F>,
     /// boolean fhe's parameters
     parameters: Parameters<F>,
     /// cryptographically secure random number generator
@@ -62,13 +63,13 @@ impl<F: NTTField> SecretKeyPack<F> {
         };
 
         let ntru_dimension = parameters.ntru_dimension();
-        let ntru_secret_key = Polynomial::random(ntru_dimension, &mut csrng);
-        let ntt_ntru_secret_key = ntru_secret_key.clone().into_ntt_polynomial();
+        let ring_secret_key = Polynomial::random(ntru_dimension, &mut csrng);
+        let ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
 
         Self {
             lwe_secret_key,
-            ntru_secret_key,
-            ntt_ntru_secret_key,
+            ring_secret_key,
+            ntt_ring_secret_key,
             parameters,
             csrng: RefCell::new(csrng),
         }
@@ -76,20 +77,20 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Returns the lwe secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn lwe_secret_key(&self) -> &[LWEContainer] {
+    pub fn lwe_secret_key(&self) -> &[LWEPlaintext] {
         &self.lwe_secret_key
     }
 
-    /// Returns the ntru secret key of this [`SecretKeyPack<F>`].
+    /// Returns the ring secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn ntru_secret_key(&self) -> &NTRUSecretKey<F> {
-        &self.ntru_secret_key
+    pub fn ring_secret_key(&self) -> &RingSecretKey<F> {
+        &self.ring_secret_key
     }
 
-    /// Returns the ntt ntru secret key of this [`SecretKeyPack<F>`].
+    /// Returns the ntt ring secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn ntt_ntru_secret_key(&self) -> &NTTNTRUSecretKey<F> {
-        &self.ntt_ntru_secret_key
+    pub fn ntt_ring_secret_key(&self) -> &NTTRingSecretKey<F> {
+        &self.ntt_ring_secret_key
     }
 
     /// Returns the parameters of this [`SecretKeyPack<F>`].
@@ -112,7 +113,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Encrypts [`LWEPlaintext`] into [`LWECiphertext<R>`].
     #[inline]
-    pub fn encrypt(&self, message: LWEPlaintext) -> LWECiphertext {
+    pub fn encrypt(&self, message: LWEMessage) -> LWECiphertext {
         let lwe_modulus = self.parameters().lwe_modulus();
         let noise_distribution = self.parameters.lwe_noise_distribution();
         let mut csrng = self.csrng_mut();
@@ -138,30 +139,30 @@ impl<F: NTTField> SecretKeyPack<F> {
         let lwe_modulus = self.parameters().lwe_modulus();
 
         let a_mul_s =
-            LWEContainer::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
-        let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
+            LWEPlaintext::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+        let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
-        decode(encoded_message, lwe_modulus.value())
+        decode(plaintext, lwe_modulus.value())
     }
 
     /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     #[inline]
-    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEContainer) {
+    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEPlaintext) {
         let lwe_modulus = self.parameters().lwe_modulus();
 
         let a_mul_s =
-            LWEContainer::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+            LWEPlaintext::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
 
-        let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
-        let message = decode(encoded_message, lwe_modulus.value());
+        let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
+        let message = decode(plaintext, lwe_modulus.value());
 
         let fresh = encode(message, lwe_modulus.value());
 
         (
             message,
-            encoded_message
+            plaintext
                 .sub_reduce(fresh, lwe_modulus)
-                .min(fresh.sub_reduce(encoded_message, lwe_modulus)),
+                .min(fresh.sub_reduce(plaintext, lwe_modulus)),
         )
     }
 }

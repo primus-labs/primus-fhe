@@ -1,7 +1,8 @@
 use std::slice::{Iter, IterMut};
 
 use algebra::transformation::AbstractNTT;
-use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
+use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
+use rand::{CryptoRng, Rng};
 
 use crate::{ntru::NTRU, DecompositionSpace, PolynomialSpace, NTTNTRU};
 
@@ -194,5 +195,75 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
             destination.add_ntt_ntru_mul_ntt_polynomial_assign(g_ntru, &ntt_polynomial);
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
         })
+    }
+
+    /// Perform `self + rhs * ntt_polynomial`, and store the result into destination.
+    pub fn add_ntt_gadget_ntru_mul_ntt_polynomial_inplace(
+        &self,
+        rhs: &Self,
+        ntt_polynomial: &NTTPolynomial<F>,
+        destination: &mut Self,
+    ) {
+        destination
+            .iter_mut()
+            .zip(self.iter())
+            .zip(rhs.iter())
+            .for_each(|((des, l), r)| {
+                l.add_ntt_ntru_mul_ntt_polynomial_inplace(r, ntt_polynomial, des);
+            })
+    }
+
+    /// Generate a `NTTGadgetNTRU<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample<R>(
+        inv_secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let data = (0..basis.decompose_len())
+            .map(|_| {
+                <NTTNTRU<F>>::generate_random_zero_sample(inv_secret_key, error_sampler, &mut rng)
+            })
+            .collect();
+        Self { data, basis }
+    }
+
+    /// Generate a `NTTGadgetNTRU<F>` sample which encrypts `1`.
+    pub fn generate_random_one_sample<R>(
+        inv_secret_key: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let len = basis.decompose_len();
+        let basis_value = basis.basis();
+        let mut basis_power = F::ONE;
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..(len - 1) {
+            let r = <NTTNTRU<F>>::generate_random_value_sample(
+                inv_secret_key,
+                basis_power,
+                error_sampler,
+                &mut rng,
+            );
+            data.push(r);
+            basis_power = F::new(basis_power.get() * basis_value);
+        }
+
+        let r = <NTTNTRU<F>>::generate_random_value_sample(
+            inv_secret_key,
+            basis_power,
+            error_sampler,
+            &mut rng,
+        );
+        data.push(r);
+
+        Self { data, basis }
     }
 }

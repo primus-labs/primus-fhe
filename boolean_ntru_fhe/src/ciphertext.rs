@@ -1,10 +1,10 @@
-use crate::LWEContainer;
+use crate::LWEPlaintext;
 
-/// Cipher text type of the first layer scheme
-pub type LWECiphertext = lattice::LWE<LWEContainer>;
+/// LWE Cipher text
+pub type LWECiphertext = lattice::LWE<LWEPlaintext>;
 
-/// Cipher text of the second layer ntru scheme
+/// NTRU Cipher text
 pub type NTRUCiphertext<F> = lattice::NTRU<F>;
 
-/// NTT version Cipher text of the second layer scheme
+/// NTT version NTRU Cipher text
 pub type NTTNTRUCiphertext<F> = lattice::NTTNTRU<F>;

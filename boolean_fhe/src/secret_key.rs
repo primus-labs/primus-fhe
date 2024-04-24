@@ -8,7 +8,7 @@ use lattice::{sample_binary_values, sample_ternary_values};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
-use crate::{decode, encode, LWECiphertext, LWEContainer, LWEPlaintext, Parameters};
+use crate::{decode, encode, LWECiphertext, LWEPlaintext, LWEMessage, Parameters};
 
 /// The distribution type of the LWE Secret Key
 #[derive(Debug, Default, Clone, Copy)]
@@ -21,7 +21,7 @@ pub enum SecretKeyType {
 }
 
 /// LWE Secret key
-pub type LWESecretKey = Vec<LWEContainer>;
+pub type LWESecretKey = Vec<LWEPlaintext>;
 
 /// RLWE Secret key
 pub type RLWESecretKey<F> = Polynomial<F>;
@@ -77,7 +77,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Returns the lwe secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn lwe_secret_key(&self) -> &[LWEContainer] {
+    pub fn lwe_secret_key(&self) -> &[LWEPlaintext] {
         &self.lwe_secret_key
     }
 
@@ -113,7 +113,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Encrypts [`LWEPlaintext`] into [`LWECiphertext<R>`].
     #[inline]
-    pub fn encrypt(&self, message: LWEPlaintext) -> LWECiphertext {
+    pub fn encrypt(&self, message: LWEMessage) -> LWECiphertext {
         let lwe_modulus = self.parameters().lwe_modulus();
         let noise_distribution = self.parameters.lwe_noise_distribution();
         let mut csrng = self.csrng_mut();
@@ -139,7 +139,7 @@ impl<F: NTTField> SecretKeyPack<F> {
         let lwe_modulus = self.parameters().lwe_modulus();
 
         let a_mul_s =
-            LWEContainer::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+            LWEPlaintext::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
         let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
         decode(encoded_message, lwe_modulus.value())
@@ -147,11 +147,11 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
     #[inline]
-    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEContainer) {
+    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEPlaintext) {
         let lwe_modulus = self.parameters().lwe_modulus();
 
         let a_mul_s =
-            LWEContainer::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+            LWEPlaintext::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
 
         let encoded_message = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
         let message = decode(encoded_message, lwe_modulus.value());
