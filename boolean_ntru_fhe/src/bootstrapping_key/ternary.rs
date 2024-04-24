@@ -3,63 +3,63 @@ use algebra::{
     FieldDiscreteGaussianSampler, NTTField,
 };
 use lattice::{
-    DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
-    NTTRGSW, RLWE,
+    DecompositionSpace, NTRUSpace, NTTGadgetNTRU, NTTGadgetNTRUSpace, NTTNTRUSpace,
+    NTTPolynomialSpace, PolynomialSpace, NTRU,
 };
 
-use crate::{LWEPlaintext, NTTRLWESecretKey};
+use crate::{LWEPlaintext, NTTRingSecretKey};
 
 #[derive(Debug, Clone)]
 pub struct TernaryBootstrappingKey<F: NTTField> {
-    key: Vec<(NTTRGSW<F>, NTTRGSW<F>)>,
+    key: Vec<(NTTGadgetNTRU<F>, NTTGadgetNTRU<F>)>,
 }
 
 impl<F: NTTField> TernaryBootstrappingKey<F> {
     /// Creates a new [`TernaryBootstrappingKey<F>`].
     #[inline]
-    pub fn new(key: Vec<(NTTRGSW<F>, NTTRGSW<F>)>) -> Self {
+    pub fn new(key: Vec<(NTTGadgetNTRU<F>, NTTGadgetNTRU<F>)>) -> Self {
         Self { key }
     }
 
     /// Performs the bootstrapping operation
     pub fn bootstrapping(
         &self,
-        init_acc: RLWE<F>,
+        init_acc: NTRU<F>,
         lwe_a: &[LWEPlaintext],
-        rlwe_dimension: usize,
-        twice_rlwe_dimension_div_lwe_modulus: usize,
+        ntru_dimension: usize,
+        twice_ntru_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEPlaintext>,
         bootstrapping_basis: Basis<F>,
-    ) -> RLWE<F> {
-        let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
-        let ntt_polynomial = &mut NTTPolynomialSpace::new(rlwe_dimension);
-        let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
-        let median = &mut NTTRLWESpace::new(rlwe_dimension);
-        let external_product = &mut RLWESpace::new(rlwe_dimension);
-        let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, bootstrapping_basis);
+    ) -> NTRU<F> {
+        let decompose_space = &mut DecompositionSpace::new(ntru_dimension);
+        let ntt_polynomial = &mut NTTPolynomialSpace::new(ntru_dimension);
+        let polynomial_space = &mut PolynomialSpace::new(ntru_dimension);
+        let median = &mut NTTNTRUSpace::new(ntru_dimension);
+        let external_product = &mut NTRUSpace::new(ntru_dimension);
+        let evaluation_key = &mut NTTGadgetNTRUSpace::new(ntru_dimension, bootstrapping_basis);
 
-        let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
+        let ntt_table = F::get_ntt_table(ntru_dimension.trailing_zeros()).unwrap();
 
         self.key
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                let degree = (a_i as usize) * twice_rlwe_dimension_div_lwe_modulus;
+                let degree = (a_i as usize) * twice_ntru_dimension_div_lwe_modulus;
 
                 // ntt_polynomial = -Y^{a_i}
                 ntt_table.transform_coeff_one_monomial(degree, ntt_polynomial.as_mut_slice());
                 ntt_polynomial.neg_assign();
 
-                // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}
-                s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
+                // evaluation_key = NTRU'(s_i_0) - NTRU'(s_i_1)*Y^{a_i}
+                s_i.0.add_ntt_gadget_ntru_mul_ntt_polynomial_inplace(
                     &s_i.1,
                     ntt_polynomial,
                     evaluation_key,
                 );
 
                 // external_product = ACC * evaluation_key
-                //                  = ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                acc.mul_small_ntt_rgsw_inplace(
+                //                  = ACC * (NTRU'(s_i_0) - NTRU'(s_i_1)*Y^{a_i})
+                acc.mul_small_ntt_gadget_ntru_inplace(
                     evaluation_key,
                     decompose_space,
                     polynomial_space,
@@ -68,14 +68,14 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                 );
 
                 // ACC = ACC - external_product
-                //     = ACC - ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                //     = ACC - ACC * (NTRU'(s_i_0) - NTRU'(s_i_1)*Y^{a_i})
                 acc.sub_assign_element_wise(external_product);
-                // ACC = ACC - ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}) + Y^{-a_i} * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                //     = ACC + (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                // ACC = ACC - ACC * (NTRU'(s_i_0) - NTRU'(s_i_1)*Y^{a_i}) + Y^{-a_i} * ACC * (NTRU'(s_i_0) - NTRU'(s_i_1)*Y^{a_i})
+                //     = ACC + (Y^{-a_i} - 1) * ACC * (NTRU'(s_i_0) - NTRU'(s_i_1)*Y^{a_i})
                 acc.add_assign_rhs_mul_monic_monomial(
                     external_product,
-                    rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_modulus,
+                    ntru_dimension,
+                    twice_ntru_dimension_div_lwe_modulus,
                     a_i.neg_reduce(lwe_modulus),
                 );
 
@@ -90,7 +90,7 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[LWEPlaintext],
         chi: FieldDiscreteGaussianSampler,
-        rlwe_secret_key: &NTTRLWESecretKey<F>,
+        inv_secret_key: &NTTRingSecretKey<F>,
         mut rng: Rng,
     ) -> Self
     where
@@ -101,14 +101,14 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
             .map(|&s| {
                 if s == 1 {
                     (
-                        <NTTRGSW<F>>::generate_random_one_sample(
-                            rlwe_secret_key,
+                        <NTTGadgetNTRU<F>>::generate_random_one_sample(
+                            inv_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
-                        <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_secret_key,
+                        <NTTGadgetNTRU<F>>::generate_random_zero_sample(
+                            inv_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
@@ -116,14 +116,14 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                     )
                 } else if s == 0 {
                     (
-                        <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_secret_key,
+                        <NTTGadgetNTRU<F>>::generate_random_zero_sample(
+                            inv_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
-                        <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_secret_key,
+                        <NTTGadgetNTRU<F>>::generate_random_zero_sample(
+                            inv_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
@@ -131,14 +131,14 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                     )
                 } else {
                     (
-                        <NTTRGSW<F>>::generate_random_zero_sample(
-                            rlwe_secret_key,
+                        <NTTGadgetNTRU<F>>::generate_random_zero_sample(
+                            inv_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,
                         ),
-                        <NTTRGSW<F>>::generate_random_one_sample(
-                            rlwe_secret_key,
+                        <NTTGadgetNTRU<F>>::generate_random_one_sample(
+                            inv_secret_key,
                             bootstrapping_basis,
                             chi,
                             &mut rng,

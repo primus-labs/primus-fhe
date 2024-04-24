@@ -1,12 +1,12 @@
 /// LWE Plain text
-pub type LWEPlaintext = bool;
+pub type LWEMessage = bool;
 
-/// LWE ciphertext inner value type
-pub type LWEContainer = u16;
+/// LWE plain text value type
+pub type LWEPlaintext = u16;
 
 /// Encodes a message
 #[inline]
-pub fn encode(message: LWEPlaintext, lwe_modulus: LWEContainer) -> LWEContainer {
+pub fn encode(message: LWEMessage, lwe_modulus: LWEPlaintext) -> LWEPlaintext {
     if message {
         lwe_modulus >> 2
     } else {
@@ -14,11 +14,11 @@ pub fn encode(message: LWEPlaintext, lwe_modulus: LWEContainer) -> LWEContainer 
     }
 }
 
-/// Decodes a encoded message
-pub fn decode(encoded_message: LWEContainer, lwe_modulus: LWEContainer) -> bool {
+/// Decodes a plain text
+pub fn decode(plaintext: LWEPlaintext, lwe_modulus: LWEPlaintext) -> bool {
     assert!(lwe_modulus.is_power_of_two() && lwe_modulus >= 8);
 
-    let temp = encoded_message >> (lwe_modulus.trailing_zeros() - 3);
+    let temp = plaintext >> (lwe_modulus.trailing_zeros() - 3);
     let decoded = ((temp >> 1) + (temp & 1)) & 3;
 
     match decoded {

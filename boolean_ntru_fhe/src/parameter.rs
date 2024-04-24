@@ -1,7 +1,11 @@
-use algebra::{modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussianSampler, NTTField};
-use lattice::DiscreteGaussian;
+use algebra::{
+    derive::*, modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
+};
 
-use crate::{FHEError, LWEContainer, SecretKeyType};
+use lattice::DiscreteGaussian;
+use once_cell::sync::Lazy;
+
+use crate::{FHEError, LWEPlaintext, SecretKeyType};
 
 /// The parameters of the fully homomorphic encryption scheme.
 ///
@@ -11,7 +15,7 @@ pub struct ConstParameters<Scalar> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
-    pub lwe_modulus: LWEContainer,
+    pub lwe_modulus: LWEPlaintext,
     /// The lwe noise error's standard deviation
     pub lwe_noise_std_dev: f64,
     /// LWE Secret Key distribution Type
@@ -21,7 +25,7 @@ pub struct ConstParameters<Scalar> {
     pub ntru_dimension: usize,
     /// NTRU cipher modulus, refers to **`Q`** in the paper.
     pub ntru_modulus: Scalar,
-    /// The NTRU noise error's standard deviation
+    /// The ntru noise error's standard deviation
     pub ntru_noise_std_dev: f64,
 
     /// Decompose basis for `Q` used for bootstrapping accumulator
@@ -29,7 +33,7 @@ pub struct ConstParameters<Scalar> {
 
     /// Decompose basis for `Q` used for key switching.
     pub key_switching_basis_bits: u32,
-    /// The NTRU noise error's standard deviation for key switching.
+    /// The noise error's standard deviation for key switching.
     pub key_switching_std_dev: f64,
 }
 
@@ -39,7 +43,7 @@ pub struct Parameters<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
-    lwe_modulus: PowOf2Modulus<LWEContainer>,
+    lwe_modulus: PowOf2Modulus<LWEPlaintext>,
     /// The lwe noise error's standard deviation
     lwe_noise_std_dev: f64,
     /// LWE Secret Key distribution Type
@@ -64,8 +68,33 @@ pub struct Parameters<F: NTTField> {
 
     /// Decompose basis for `Q` used for key switching.
     key_switching_basis: Basis<F>,
-    /// The ntru noise error's standard deviation for key switching.
+    /// The noise error's standard deviation for key switching.
     key_switching_std_dev: f64,
+}
+
+impl<F: NTTField, Scalar> TryFrom<ConstParameters<Scalar>> for Parameters<F>
+where
+    F::Value: std::cmp::PartialEq<Scalar>,
+    Scalar: std::fmt::Debug,
+{
+    type Error = FHEError;
+
+    fn try_from(parameters: ConstParameters<Scalar>) -> Result<Self, FHEError> {
+        assert_eq!(F::MODULUS_VALUE, parameters.ntru_modulus);
+
+        Self::builder()
+            .lwe_dimension(parameters.lwe_dimension)
+            .lwe_modulus(parameters.lwe_modulus)
+            .lwe_noise_std_dev(parameters.lwe_noise_std_dev)
+            .secret_key_type(parameters.secret_key_type)
+            .ntru_dimension(parameters.ntru_dimension)
+            .ntru_modulus(F::MODULUS_VALUE)
+            .ntru_noise_std_dev(parameters.ntru_noise_std_dev)
+            .bootstrapping_basis_bits(parameters.bootstrapping_basis_bits)
+            .key_switching_basis_bits(parameters.key_switching_basis_bits)
+            .key_switching_std_dev(parameters.key_switching_std_dev)
+            .build()
+    }
 }
 
 impl<F: NTTField> Parameters<F> {
@@ -83,7 +112,7 @@ impl<F: NTTField> Parameters<F> {
 
     /// Returns the lwe modulus of this [`Parameters<F>`], refers to **`q`** in the paper.
     #[inline]
-    pub fn lwe_modulus(&self) -> PowOf2Modulus<LWEContainer> {
+    pub fn lwe_modulus(&self) -> PowOf2Modulus<LWEPlaintext> {
         self.lwe_modulus
     }
 
@@ -157,7 +186,7 @@ impl<F: NTTField> Parameters<F> {
 
     /// Gets the lwe noise distribution.
     #[inline]
-    pub fn lwe_noise_distribution(&self) -> DiscreteGaussian<LWEContainer> {
+    pub fn lwe_noise_distribution(&self) -> DiscreteGaussian<LWEPlaintext> {
         DiscreteGaussian::new(self.lwe_modulus.value(), 0.0, self.lwe_noise_std_dev).unwrap()
     }
 
@@ -180,7 +209,7 @@ pub struct ParametersBuilder<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: Option<usize>,
     /// LWE cipher modulus, refers to **`q`** in the paper.
-    lwe_modulus: Option<LWEContainer>,
+    lwe_modulus: Option<LWEPlaintext>,
     /// The lwe noise error's standard deviation
     lwe_noise_std_dev: Option<f64>,
     /// LWE Secret Key distribution Type
@@ -235,7 +264,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
     /// Sets the lwe modulus of this [`ParametersBuilder<F>`].
     #[inline]
-    pub fn lwe_modulus(&mut self, lwe_modulus: LWEContainer) -> &mut Self {
+    pub fn lwe_modulus(&mut self, lwe_modulus: LWEPlaintext) -> &mut Self {
         self.lwe_modulus = Some(lwe_modulus);
         self
     }
@@ -289,7 +318,7 @@ impl<F: NTTField> ParametersBuilder<F> {
         self
     }
 
-    /// Sets the ntru noise error's standard deviation for key switching of this [`ParametersBuilder<F>`].
+    /// Sets the noise error's standard deviation for key switching of this [`ParametersBuilder<F>`].
     #[inline]
     pub fn key_switching_std_dev(&mut self, key_switching_std_dev: f64) -> &mut Self {
         self.key_switching_std_dev = Some(key_switching_std_dev);
@@ -298,7 +327,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
     /// Tries to build the [`Parameters<F>`].
     #[inline]
-    pub fn build(self) -> Result<Parameters<F>, FHEError> {
+    pub fn build(&self) -> Result<Parameters<F>, FHEError> {
         assert!(
             self.lwe_dimension.is_some()
                 & self.lwe_modulus.is_some()
@@ -351,7 +380,7 @@ impl<F: NTTField> ParametersBuilder<F> {
         let ntru_modulus_f64 = ntru_modulus.into() as f64;
         Ok(Parameters::<F> {
             lwe_dimension,
-            lwe_modulus: <PowOf2Modulus<LWEContainer>>::new(lwe_modulus),
+            lwe_modulus: <PowOf2Modulus<LWEPlaintext>>::new(lwe_modulus),
             lwe_noise_std_dev: self.lwe_noise_std_dev.unwrap(),
             secret_key_type: self.secret_key_type,
 
@@ -370,3 +399,29 @@ impl<F: NTTField> ParametersBuilder<F> {
         })
     }
 }
+
+/// Default Field for Default Parameters
+#[derive(Field, Prime, NTT)]
+#[modulus = 132120577]
+pub struct DefaultFieldTernary128(u32);
+
+/// Default Parameters
+pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
+    lwe_dimension: 512,
+    lwe_modulus: 1024,
+    lwe_noise_std_dev: 3.20,
+    secret_key_type: SecretKeyType::Ternary,
+    ntru_dimension: 1024,
+    ntru_modulus: 132120577,
+    ntru_noise_std_dev: 3.20,
+    bootstrapping_basis_bits: 7,
+    key_switching_basis_bits: 4,
+    key_switching_std_dev: 3.2 * ((1 << 7) as f64),
+};
+
+/// Default 128-bits security Parameters
+pub static DEFAULT_TERNARY_128_BITS_PARAMERTERS: Lazy<Parameters<DefaultFieldTernary128>> =
+    Lazy::new(|| {
+        <Parameters<DefaultFieldTernary128>>::try_from(CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS)
+            .unwrap()
+    });

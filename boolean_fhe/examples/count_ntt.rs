@@ -2,7 +2,7 @@
 #[cfg(feature = "count_ntt")]
 use algebra::transformation::count;
 use boolean_fhe::{
-    EvaluationKey, LWEContainer, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
+    EvaluationKey, LWEPlaintext, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
 };
 use rand::Rng;
 
@@ -13,9 +13,9 @@ fn main() {
     // set parameter
     let params = DEFAULT_TERNARY_128_BITS_PARAMERTERS.clone();
 
-    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEContainer;
+    let noise_max = (params.lwe_modulus_f64() / 16.0) as LWEPlaintext;
 
-    let check_noise = |noise: LWEContainer, op: &str| {
+    let check_noise = |noise: LWEPlaintext, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"

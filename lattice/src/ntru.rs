@@ -1,7 +1,12 @@
 use algebra::transformation::AbstractNTT;
-use algebra::{ntt_add_mul_assign, NTTField, NTTPolynomial, Polynomial};
+use algebra::{
+    ntt_add_mul_assign, ntt_add_mul_inplace, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
+    Polynomial,
+};
+use num_traits::NumCast;
+use rand::{CryptoRng, Rng};
 
-use crate::{DecompositionSpace, NTTGadgetNTRU, NTTNTRUSpace, PolynomialSpace};
+use crate::{DecompositionSpace, NTTGadgetNTRU, NTTNTRUSpace, PolynomialSpace, LWE};
 
 /// A cryptographic structure for NTRU.
 /// This structure is used in advanced cryptographic systems and protocols, particularly
@@ -143,6 +148,69 @@ impl<F: NTTField> NTRU<F> {
     #[inline]
     pub fn sub_assign_element_wise(&mut self, rhs: &Self) {
         self.data -= rhs.data();
+    }
+
+    /// Extract an LWE sample from RLWE.
+    #[inline]
+    pub fn extract_lwe(&self) -> LWE<F> {
+        let mut a: Vec<F> = self.data.as_slice().iter().map(|&x| x).collect();
+        a[1..].reverse();
+        a[0] = -a[0];
+
+        LWE::<F>::new(a, F::ZERO)
+    }
+
+    /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
+    pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
+        &mut self,
+        rhs: &Self,
+        // N
+        ntru_dimension: usize,
+        // 2N/q
+        twice_ntru_dimension_div_lwe_modulus: usize,
+        r: T,
+    ) {
+        let r = num_traits::cast::<T, usize>(r).unwrap() * twice_ntru_dimension_div_lwe_modulus;
+        if r <= ntru_dimension {
+            #[inline]
+            fn rotate_add<F: NTTField>(
+                x: &mut Polynomial<F>,
+                y: &Polynomial<F>,
+                r: usize,
+                n_sub_r: usize,
+            ) {
+                x[0..r]
+                    .iter_mut()
+                    .zip(y[n_sub_r..].iter())
+                    .for_each(|(u, v)| *u -= v);
+                x[r..]
+                    .iter_mut()
+                    .zip(y[0..n_sub_r].iter())
+                    .for_each(|(u, v)| *u += v);
+            }
+            let n_sub_r = ntru_dimension - r;
+            rotate_add(self.data_mut(), rhs.data(), r, n_sub_r);
+        } else {
+            #[inline]
+            fn rotate_add<F: NTTField>(
+                x: &mut Polynomial<F>,
+                y: &Polynomial<F>,
+                r: usize,
+                n_sub_r: usize,
+            ) {
+                x[0..r]
+                    .iter_mut()
+                    .zip(y[n_sub_r..].iter())
+                    .for_each(|(u, v)| *u += v);
+                x[r..]
+                    .iter_mut()
+                    .zip(y[0..n_sub_r].iter())
+                    .for_each(|(u, v)| *u -= v);
+            }
+            let r = r - ntru_dimension;
+            let n_sub_r = ntru_dimension - r;
+            rotate_add(self.data_mut(), rhs.data(), r, n_sub_r);
+        }
     }
 
     /// Performs a multiplication on the `self` [`NTRU<F>`] with another `small_ntt_gadget_ntru` [`NTTGadgetNTRU<F>`],
@@ -324,5 +392,62 @@ impl<F: NTTField> NTTNTRU<F> {
         ntt_polynomial: &NTTPolynomial<F>,
     ) {
         ntt_add_mul_assign(self.data_mut(), ntt_ntru.data(), ntt_polynomial);
+    }
+
+    /// Performs `destination = self + ntt_rlwe * ntt_polynomial`.
+    #[inline]
+    pub fn add_ntt_ntru_mul_ntt_polynomial_inplace(
+        &self,
+        ntt_ntru: &Self,
+        ntt_polynomial: &NTTPolynomial<F>,
+        destination: &mut Self,
+    ) {
+        ntt_add_mul_inplace(
+            self.data(),
+            ntt_ntru.data(),
+            ntt_polynomial,
+            destination.data_mut(),
+        );
+    }
+
+    /// Generate a `NTTNTRU<F>` sample which encrypts `0`.
+    pub fn generate_random_zero_sample<R>(
+        inv_secret_key: &NTTPolynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let ntru_dimension = inv_secret_key.coeff_count();
+
+        let mut data =
+            <Polynomial<F>>::random_with_gaussian(ntru_dimension, &mut rng, error_sampler)
+                .into_ntt_polynomial();
+        data *= inv_secret_key;
+
+        Self { data }
+    }
+
+    /// Generate a `NTTNTRU<F>` sample which encrypts `value`.
+    pub fn generate_random_value_sample<R>(
+        inv_secret_key: &NTTPolynomial<F>,
+        value: F,
+        error_sampler: FieldDiscreteGaussianSampler,
+        mut rng: R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let ntru_dimension = inv_secret_key.coeff_count();
+
+        let mut data =
+            <Polynomial<F>>::random_with_gaussian(ntru_dimension, &mut rng, error_sampler)
+                .into_ntt_polynomial();
+        data *= inv_secret_key;
+        // FIXME!
+        data[0] += value;
+
+        Self { data }
     }
 }
