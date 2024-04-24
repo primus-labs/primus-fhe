@@ -5,6 +5,7 @@ use algebra::{
     NTTField, NTTPolynomial, Polynomial,
 };
 use lattice::{sample_binary_values, sample_ternary_values};
+use num_traits::Inv;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
@@ -29,6 +30,9 @@ pub type RingSecretKey<F> = Polynomial<F>;
 /// NTT version Ring Secret key
 pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 
+/// NTT version Ring Secret key
+pub type NTTInvRingSecretKey<F> = NTTPolynomial<F>;
+
 /// Boolean fhe's secret keys pack.
 ///
 /// This struct contains the LWE secret key,
@@ -42,6 +46,8 @@ pub struct SecretKeyPack<F: NTTField> {
     ring_secret_key: RingSecretKey<F>,
     /// ntt version ring secret key
     ntt_ring_secret_key: NTTRingSecretKey<F>,
+    /// ntt version inverse ring secret key
+    ntt_inv_ring_secret_key: NTTInvRingSecretKey<F>,
     /// boolean fhe's parameters
     parameters: Parameters<F>,
     /// cryptographically secure random number generator
@@ -65,11 +71,13 @@ impl<F: NTTField> SecretKeyPack<F> {
         let ntru_dimension = parameters.ntru_dimension();
         let ring_secret_key = Polynomial::random(ntru_dimension, &mut csrng);
         let ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
+        let ntt_inv_ring_secret_key = (&ntt_ring_secret_key).inv();
 
         Self {
             lwe_secret_key,
             ring_secret_key,
             ntt_ring_secret_key,
+            ntt_inv_ring_secret_key,
             parameters,
             csrng: RefCell::new(csrng),
         }
@@ -91,6 +99,12 @@ impl<F: NTTField> SecretKeyPack<F> {
     #[inline]
     pub fn ntt_ring_secret_key(&self) -> &NTTRingSecretKey<F> {
         &self.ntt_ring_secret_key
+    }
+
+    /// Returns a reference to the ntt inv ring secret key of this [`SecretKeyPack<F>`].
+    #[inline]
+    pub fn ntt_inv_ring_secret_key(&self) -> &NTTPolynomial<F> {
+        self.ntt_inv_ring_secret_key.as_ref()
     }
 
     /// Returns the parameters of this [`SecretKeyPack<F>`].
