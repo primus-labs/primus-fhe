@@ -1,4 +1,6 @@
 //! impl baby bear prime modulus
+//!
+//! This is derived from the [Plonky3](https://github.com/Plonky3/Plonky3/tree/main/baby-bear).
 
 use crate::reduce::{MulReduce, PowReduce};
 

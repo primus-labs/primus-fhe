@@ -1,4 +1,6 @@
 //! impl Goldilocks Prime Modulus
+//!
+//! This is derived from the [plonky2](https://github.com/0xPolygonZero/plonky2/blob/main/field/src/goldilocks_field.rs).
 
 use crate::reduce::{MulReduce, PowReduce};
 
