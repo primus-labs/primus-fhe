@@ -10,6 +10,7 @@ use rand_distr::Distribution;
 use crate::{Field, FieldUniformSampler};
 
 use super::MultilinearExtension;
+use std::rc::Rc;
 
 /// Stores a multilinear polynomial in dense evaluation form.
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -49,6 +50,36 @@ impl<F: Field> DenseMultilinearExtension<F> {
             num_vars,
             evaluations,
         }
+    }
+
+    #[inline]
+    /// Decompose bits of each evaluation of the origianl MLE.
+    /// The bit deomposition is only applied for power-of-two base.
+    /// * base_len: the length of base, i.e. log_2(base)
+    /// * bits_len: the lenth of decomposed bits
+    /// The resulting decomposition bits are respectively wrapped into `Rc` struct, which can be more easilier added into the ListsOfProducts.
+    pub fn get_decomposed_mles(
+        &self,
+        base_len: u32,
+        bits_len: u32,
+    ) -> Vec<Rc<DenseMultilinearExtension<F>>> {
+        let mut val = self.evaluations.clone();
+        let mask = F::mask(base_len);
+
+        let mut bits = Vec::with_capacity(bits_len as usize);
+
+        // extract `base_len` bits as one "bit" at a time
+        for _ in 0..bits_len {
+            let mut bit = vec![F::ZERO; self.evaluations.len()];
+            bit.iter_mut().zip(val.iter_mut()).for_each(|(b_i, v_i)| {
+                v_i.decompose_lsb_bits_at(b_i, mask, base_len);
+            });
+            bits.push(Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                self.num_vars,
+                bit,
+            )));
+        }
+        bits
     }
 
     /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
