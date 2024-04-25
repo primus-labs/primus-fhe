@@ -110,6 +110,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// Standard add_product in the sumcheck
     /// Add a list of multilinear extensions that is meant to be multiplied together.
     /// The resulting polynomial will be multiplied by the scalar `coefficient`.
+    #[inline]
     pub fn add_product(
         &mut self,
         product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
