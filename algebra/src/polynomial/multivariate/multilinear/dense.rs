@@ -52,12 +52,12 @@ impl<F: Field> DenseMultilinearExtension<F> {
         }
     }
 
-    #[inline]
     /// Decompose bits of each evaluation of the origianl MLE.
     /// The bit deomposition is only applied for power-of-two base.
     /// * base_len: the length of base, i.e. log_2(base)
     /// * bits_len: the lenth of decomposed bits
     /// The resulting decomposition bits are respectively wrapped into `Rc` struct, which can be more easilier added into the ListsOfProducts.
+    #[inline]
     pub fn get_decomposed_mles(
         &self,
         base_len: u32,
