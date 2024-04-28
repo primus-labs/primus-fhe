@@ -176,15 +176,36 @@ mod tests {
             ((a_n as W + b_n as W) % PW) as S
         );
 
+        let mut temp = a_m;
+        temp.add_reduce_assign(b_m, BabyBearModulus);
+        assert_eq!(from_monty(temp), ((a_n as W + b_n as W) % PW) as S);
+
         assert_eq!(
             from_monty(a_m.sub_reduce(b_m, BabyBearModulus)),
             ((PW + a_n as W - b_n as W) % PW) as S
         );
 
+        let mut temp = a_m;
+        temp.sub_reduce_assign(b_m, BabyBearModulus);
+        assert_eq!(from_monty(temp), ((PW + a_n as W - b_n as W) % PW) as S);
+
+        assert_eq!(
+            from_monty(a_m.neg_reduce(BabyBearModulus)),
+            ((PW - a_n as W) % PW) as S
+        );
+
+        let mut temp = a_m;
+        temp.neg_reduce_assign(BabyBearModulus);
+        assert_eq!(from_monty(temp), ((PW - a_n as W) % PW) as S);
+
         assert_eq!(
             from_monty(a_m.mul_reduce(b_m, BabyBearModulus)),
             ((a_n as W * b_n as W) % PW) as S
         );
+
+        let mut temp = a_m;
+        temp.mul_reduce_assign(b_m, BabyBearModulus);
+        assert_eq!(from_monty(temp), ((a_n as W * b_n as W) % PW) as S);
 
         let b_inv = b_m.inv_reduce(BabyBearModulus);
         assert_eq!(from_monty(b_m.mul_reduce(b_inv, BabyBearModulus)), 1);
@@ -193,5 +214,41 @@ mod tests {
             a_m.div_reduce(b_m, BabyBearModulus),
             a_m.mul_reduce(b_inv, BabyBearModulus)
         );
+
+        let mut temp = a_m;
+        temp.div_reduce_assign(b_m, BabyBearModulus);
+        assert_eq!(
+            from_monty(temp),
+            ((a_n as W * from_monty(b_inv) as W) % PW) as S
+        );
+
+        assert_eq!(a_m.pow_reduce(0, BabyBearModulus), 1);
+        assert_eq!(a_m.pow_reduce(1, BabyBearModulus), a_m);
+        assert_eq!(a_m.pow_reduce(b_m, BabyBearModulus), pow(a_m, b_m));
+
+        let mut a_n: Vec<u32> = dis.sample_iter(&mut rng).take(5).collect();
+        let mut b_n: Vec<u32> = dis.sample_iter(&mut rng).take(5).collect();
+        let result = a_n.iter().zip(b_n.iter()).fold(0, |acc, (&a, &b)| {
+            let mul = ((a as W * b as W) % PW) as S;
+            ((acc as W + mul as W) % PW) as S
+        });
+        a_n.iter_mut().for_each(|x| *x = to_monty(*x));
+        b_n.iter_mut().for_each(|x| *x = to_monty(*x));
+        let ans = u32::dot_product_reduce(a_n, b_n, BabyBearModulus);
+        assert_eq!(from_monty(ans), result);
+    }
+
+    fn pow(value: u32, exp: u32) -> u32 {
+        let mut res = MONTY_ONE;
+        let mut base = value;
+        let mut e = exp;
+        while e > 0 {
+            if e & 1 == 1 {
+                res = res.mul_reduce(base, BabyBearModulus);
+            }
+            base = base.mul_reduce(base, BabyBearModulus);
+            e >>= 1;
+        }
+        res
     }
 }

@@ -199,15 +199,36 @@ mod tests {
             ((a as W + b as W) % PW) as S
         );
 
+        let mut temp = a;
+        temp.add_reduce_assign(b, GoldilocksModulus);
+        assert_eq!(to_canonical_u64(temp), ((a as W + b as W) % PW) as S);
+
         assert_eq!(
             to_canonical_u64(a.sub_reduce(b, GoldilocksModulus)),
             ((PW + a as W - b as W) % PW) as S
         );
 
+        let mut temp = a;
+        temp.sub_reduce_assign(b, GoldilocksModulus);
+        assert_eq!(to_canonical_u64(temp), ((PW + a as W - b as W) % PW) as S);
+
+        assert_eq!(
+            to_canonical_u64(a.neg_reduce(GoldilocksModulus)),
+            ((PW - a as W) % PW) as S
+        );
+
+        let mut temp = a;
+        temp.neg_reduce_assign(GoldilocksModulus);
+        assert_eq!(to_canonical_u64(temp), ((PW - a as W) % PW) as S);
+
         assert_eq!(
             to_canonical_u64(a.mul_reduce(b, GoldilocksModulus)),
             ((a as W * b as W) % PW) as S
         );
+
+        let mut temp = a;
+        temp.mul_reduce_assign(b, GoldilocksModulus);
+        assert_eq!(to_canonical_u64(temp), ((a as W * b as W) % PW) as S);
 
         let b_inv = b.inv_reduce(GoldilocksModulus);
         assert_eq!(to_canonical_u64(b.mul_reduce(b_inv, GoldilocksModulus)), 1);
@@ -216,5 +237,40 @@ mod tests {
             to_canonical_u64(a.div_reduce(b, GoldilocksModulus)),
             to_canonical_u64(a.mul_reduce(b_inv, GoldilocksModulus))
         );
+
+        let mut temp = a;
+        temp.div_reduce_assign(b, GoldilocksModulus);
+        assert_eq!(
+            to_canonical_u64(temp),
+            to_canonical_u64(a.mul_reduce(b_inv, GoldilocksModulus))
+        );
+
+        assert_eq!(to_canonical_u64(a.pow_reduce(0, GoldilocksModulus)), 1);
+        assert_eq!(to_canonical_u64(a.pow_reduce(1, GoldilocksModulus)), a);
+        assert_eq!(
+            to_canonical_u64(a.pow_reduce(b, GoldilocksModulus)),
+            pow(a, b)
+        );
+        let a: Vec<u64> = dis.sample_iter(&mut rng).take(5).collect();
+        let b: Vec<u64> = dis.sample_iter(&mut rng).take(5).collect();
+        let result = a.iter().zip(b.iter()).fold(0, |acc, (&a, &b)| {
+            a.mul_reduce(b, GoldilocksModulus)
+                .add_reduce(acc, GoldilocksModulus)
+        });
+        let ans = u64::dot_product_reduce(a, b, GoldilocksModulus);
+        assert_eq!(to_canonical_u64(ans), result);
+    }
+
+    fn pow(value: u64, mut exp: u64) -> u64 {
+        let mut res = 1;
+        let mut base = value;
+        while exp > 0 {
+            if exp & 1 == 1 {
+                res = res.mul_reduce(base, GoldilocksModulus);
+            }
+            base = base.mul_reduce(base, GoldilocksModulus);
+            exp >>= 1;
+        }
+        res
     }
 }
