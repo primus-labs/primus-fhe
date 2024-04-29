@@ -1,5 +1,5 @@
 use algebra::{
-    reduce::{AddReduceAssign, DotProductReduce, MulReduceAssign},
+    reduce::{AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign},
     AsInto, NTTField, Polynomial,
 };
 use rand::{
@@ -70,7 +70,6 @@ impl KeySwitchingKey {
         parameters
             .lwe_noise_distribution()
             .sample_iter(&mut rng)
-            .take(ntru_dimension * decompose_len)
             .zip(b.iter_mut())
             .for_each(|(e_i, b_i)| {
                 b_i.add_reduce_assign(e_i, lwe_modulus);
@@ -79,9 +78,9 @@ impl KeySwitchingKey {
         let f = modulus_switch(secret_key_pack.ring_secret_key(), parameters);
         let mut base: LWEPlaintext = 1;
         b.chunks_exact_mut(decompose_len).for_each(|b_i| {
-            b_i.iter_mut()
-                .zip(f.iter())
-                .for_each(|(b_i_j, f_j)| b_i_j.add_reduce_assign(*f_j, lwe_modulus));
+            b_i.iter_mut().zip(f.iter()).for_each(|(b_i_j, f_j)| {
+                b_i_j.add_reduce_assign(f_j.mul_reduce(base, lwe_modulus), lwe_modulus)
+            });
             base.mul_reduce_assign(basis, lwe_modulus)
         });
 
