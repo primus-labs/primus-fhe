@@ -260,10 +260,10 @@ impl<F: NTTField> EvaluationKey<F> {
     pub fn modulus_switch(&self, c: NTRU<F>) -> NTRUModulusSwitch {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
-        let rlwe_modulus_f64 = parameters.ntru_modulus_f64();
+        let ntru_modulus_f64 = parameters.ntru_modulus_f64();
 
         let switch =
-            |v: F| (v.get().as_into() * lwe_modulus_f64 / rlwe_modulus_f64).round() as LWEPlaintext;
+            |v: F| (v.get().as_into() * lwe_modulus_f64 / ntru_modulus_f64).round() as LWEPlaintext;
 
         let data: Vec<LWEPlaintext> = c.data().iter().copied().map(switch).collect();
 
