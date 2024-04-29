@@ -1,108 +1,83 @@
-use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
-use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
-use rand::{CryptoRng, Rng};
+use algebra::reduce::DotProductReduce;
+use algebra::NTTField;
+use rand::{
+    distributions::{Distribution, Uniform},
+    CryptoRng, Rng,
+};
 
-use crate::SecretKeyPack;
+use crate::{LWECiphertext, LWEPlaintext, NTRUModulusSwitch, SecretKeyPack};
 
 /// The Key Switching Key.
 ///
 /// This struct stores the key
 /// to switch a [`LWE`] ciphertext from the RLWE Secret Key
 /// to a [`LWE`] ciphertext of the LWE Secret Key.
-pub struct KeySwitchingKey<F: NTTField> {
+pub struct KeySwitchingKey {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
     /// Key Switching Key data
-    key: Vec<NTTGadgetRLWE<F>>,
+    a: Vec<Vec<LWEPlaintext>>,
 }
 
-impl<F: NTTField> KeySwitchingKey<F> {
+impl KeySwitchingKey {
     /// Performs key switching operation.
-    pub fn key_switch(&self, ciphertext: LWE<F>) -> LWE<F> {
-        let a: Vec<Polynomial<F>> = ciphertext
-            .a()
-            .chunks_exact(self.lwe_dimension)
-            .map(|a| {
-                let mut p: Vec<F> = a.iter().map(|&x| -x).collect();
-                p[0] = -p[0];
-                p[1..].reverse();
-                <Polynomial<F>>::new(p)
-            })
-            .collect();
-
-        let mut init = <NTTRLWE<F>>::new(
-            NTTPolynomial::zero(self.lwe_dimension),
-            NTTPolynomial::new(vec![ciphertext.b(); self.lwe_dimension]),
-        );
-
-        let mut decompose_space = DecompositionSpace::new(self.lwe_dimension);
-
-        self.key.iter().zip(a).for_each(|(k_i, a_i)| {
-            init.sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(k_i, a_i, &mut decompose_space);
-        });
-
-        <RLWE<F>>::from(init).extract_lwe()
+    pub fn key_switch(&self, ciphertext: NTRUModulusSwitch) -> LWECiphertext {
+        todo!("Key Switching Operation")
     }
 }
 
-impl<F: NTTField> KeySwitchingKey<F> {
+impl KeySwitchingKey {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R>(
-        secret_key_pack: &SecretKeyPack<F>,
-        chi: FieldDiscreteGaussianSampler,
-        mut rng: R,
-    ) -> Self
+    pub fn generate<R, F: NTTField>(secret_key_pack: &SecretKeyPack<F>, mut rng: R) -> Self
     where
         R: Rng + CryptoRng,
     {
         let parameters = secret_key_pack.parameters();
+        let lwe_modulus = parameters.lwe_modulus();
+
+        let dis = Uniform::new(0, lwe_modulus.value());
+
         let lwe_dimension = parameters.lwe_dimension();
+        let ntru_dimension = parameters.ntru_dimension();
         let key_switching_basis = parameters.key_switching_basis();
+        let decompose_len = key_switching_basis.decompose_len();
 
-        let s = <Polynomial<F>>::new(
-            secret_key_pack
-                .lwe_secret_key()
-                .iter()
-                .map(|&v| {
-                    if v == 1 {
-                        F::ONE
-                    } else if v == 0 {
-                        F::ZERO
-                    } else {
-                        F::NEG_ONE
-                    }
-                })
-                .collect(),
-        );
-
-        let s = s.into_ntt_polynomial();
-
-        let len = key_switching_basis.decompose_len();
-
-        let key = secret_key_pack
-            .ring_secret_key()
-            .as_slice()
-            .chunks_exact(lwe_dimension)
-            .map(|z| {
-                let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
-                let k_i = (0..len)
-                    .map(|i| {
-                        let mut sample =
-                            <NTTRLWE<F>>::generate_random_zero_sample(&s, chi, &mut rng);
-
-                        *sample.b_mut() += &ntt_z;
-
-                        if i < len - 1 {
-                            ntt_z.mul_scalar_assign(F::new(key_switching_basis.basis()));
-                        }
-
-                        sample
-                    })
-                    .collect::<Vec<NTTRLWE<F>>>();
-                NTTGadgetRLWE::new(k_i, key_switching_basis)
+        let a = (0..ntru_dimension * decompose_len)
+            .map(|_| {
+                dis.sample_iter(&mut rng)
+                    .take(lwe_dimension)
+                    .collect::<Vec<LWEPlaintext>>()
             })
-            .collect();
+            .collect::<Vec<_>>();
 
-        Self { lwe_dimension, key }
+        let mut b = a
+            .iter()
+            .map(|a_row_i| {
+                LWEPlaintext::dot_product_reduce(
+                    a_row_i,
+                    secret_key_pack.lwe_secret_key(),
+                    lwe_modulus,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        parameters
+            .lwe_noise_distribution()
+            .sample_iter(&mut rng)
+            .take(ntru_dimension * decompose_len)
+            .zip(b.iter_mut())
+            .for_each(|(e_i, b_i)| {
+                *b_i += e_i;
+            });
+
+        // let mut it = b.chunks_exact_mut(decompose_len);
+        // let first_part = it.next().unwrap();
+        // let temp = 1;
+        // let base =
+        // for b_i in first_part {
+
+        // }
+
+        todo!("Generate Key Switching Key")
     }
 }

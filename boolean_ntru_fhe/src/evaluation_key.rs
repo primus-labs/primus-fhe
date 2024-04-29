@@ -2,8 +2,8 @@ use algebra::{reduce::AddReduceAssign, AsInto, NTTField, Polynomial};
 use lattice::{LWE, NTRU};
 
 use crate::{
-    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEPlaintext, NTRUCiphertext, Parameters,
-    SecretKeyPack,
+    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEPlaintext, NTRUCiphertext,
+    NTRUModulusSwitch, Parameters, SecretKeyPack,
 };
 
 /// The evaluator of the homomorphic encryption scheme.
@@ -11,7 +11,7 @@ pub struct EvaluationKey<F: NTTField> {
     /// Bootstrapping key
     bootstrapping_key: BootstrappingKey<F>,
     /// Key Switching Key
-    key_switching_key: KeySwitchingKey<F>,
+    key_switching_key: KeySwitchingKey,
     /// The parameters of the fully homomorphic encryption scheme.
     parameters: Parameters<F>,
 }
@@ -247,26 +247,27 @@ impl<F: NTTField> EvaluationKey<F> {
             parameters.bootstrapping_basis(),
         );
 
-        let mut extract = acc.extract_lwe();
-        *extract.b_mut() += F::new(F::MODULUS_VALUE >> 3);
+        // let mut extract = acc.extract_lwe();
+        // *extract.b_mut() += F::new(F::MODULUS_VALUE >> 3);
 
-        let key_switched = self.key_switching_key.key_switch(extract);
-        self.modulus_switch(key_switched)
+        // let key_switched = self.key_switching_key.key_switch(extract);
+        // self.modulus_switch(key_switched)
+        let switch = self.modulus_switch(acc);
+        todo!()
     }
 
     /// Performs modulus switch.
-    pub fn modulus_switch(&self, c: LWE<F>) -> LWECiphertext {
+    pub fn modulus_switch(&self, c: NTRU<F>) -> NTRUModulusSwitch {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
         let rlwe_modulus_f64 = parameters.ntru_modulus_f64();
 
         let switch =
-            |v: F| (v.get().as_into() * lwe_modulus_f64 / rlwe_modulus_f64).floor() as LWEPlaintext;
+            |v: F| (v.get().as_into() * lwe_modulus_f64 / rlwe_modulus_f64).round() as LWEPlaintext;
 
-        let a: Vec<LWEPlaintext> = c.a().iter().copied().map(switch).collect();
-        let b = switch(c.b());
+        let data: Vec<LWEPlaintext> = c.data().iter().copied().map(switch).collect();
 
-        LWECiphertext::new(a, b)
+        NTRUModulusSwitch::new(data)
     }
 }
 
@@ -280,7 +281,7 @@ impl<F: NTTField> EvaluationKey<F> {
         let bootstrapping_key = BootstrappingKey::generate(secret_key_pack, chi, &mut *csrng);
 
         let chi = parameters.key_switching_noise_distribution();
-        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
+        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, &mut *csrng);
 
         Self {
             bootstrapping_key,
