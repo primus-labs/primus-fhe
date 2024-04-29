@@ -8,7 +8,7 @@ use lattice::{sample_binary_values, sample_ternary_values};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
-use crate::{decode, encode, LWECiphertext, LWEPlaintext, LWEMessage, Parameters};
+use crate::{decode, encode, LWECiphertext, LWEMessage, LWEPlaintext, Parameters};
 
 /// The distribution type of the LWE Secret Key
 #[derive(Debug, Default, Clone, Copy)]

@@ -21,9 +21,9 @@ impl NTRUModulusSwitch {
         Self { data }
     }
 
-    /// Returns a reference to the data of this [`NTRUModulusSwitch`].
+    /// .
     #[inline]
-    pub fn data(&self) -> &[u16] {
-        &self.data
+    pub fn data(self) -> Vec<LWEPlaintext> {
+        self.data
     }
 }

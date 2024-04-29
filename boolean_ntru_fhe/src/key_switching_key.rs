@@ -1,27 +1,32 @@
-use algebra::reduce::DotProductReduce;
-use algebra::NTTField;
+use algebra::{
+    reduce::{AddReduceAssign, DotProductReduce, MulReduceAssign},
+    AsInto, NTTField, Polynomial,
+};
 use rand::{
     distributions::{Distribution, Uniform},
     CryptoRng, Rng,
 };
 
-use crate::{LWECiphertext, LWEPlaintext, NTRUModulusSwitch, SecretKeyPack};
+use crate::{LWECiphertext, LWEPlaintext, NTRUModulusSwitch, Parameters, SecretKeyPack};
 
 /// The Key Switching Key.
-///
-/// This struct stores the key
-/// to switch a [`LWE`] ciphertext from the RLWE Secret Key
-/// to a [`LWE`] ciphertext of the LWE Secret Key.
 pub struct KeySwitchingKey {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
-    /// Key Switching Key data
     a: Vec<Vec<LWEPlaintext>>,
+    b: Vec<LWEPlaintext>,
 }
 
 impl KeySwitchingKey {
     /// Performs key switching operation.
     pub fn key_switch(&self, ciphertext: NTRUModulusSwitch) -> LWECiphertext {
+        let mut a: Vec<LWEPlaintext> = vec![0; self.lwe_dimension];
+        let mut b: LWEPlaintext = 0;
+
+        let mut data = ciphertext.data();
+        let mut decompose_data: Vec<LWEPlaintext> = vec![0; data.len()];
+        // data.de
+
         todo!("Key Switching Operation")
     }
 }
@@ -40,6 +45,7 @@ impl KeySwitchingKey {
         let lwe_dimension = parameters.lwe_dimension();
         let ntru_dimension = parameters.ntru_dimension();
         let key_switching_basis = parameters.key_switching_basis();
+        let basis: LWEPlaintext = 1 << key_switching_basis.bits();
         let decompose_len = key_switching_basis.decompose_len();
 
         let a = (0..ntru_dimension * decompose_len)
@@ -67,17 +73,39 @@ impl KeySwitchingKey {
             .take(ntru_dimension * decompose_len)
             .zip(b.iter_mut())
             .for_each(|(e_i, b_i)| {
-                *b_i += e_i;
+                b_i.add_reduce_assign(e_i, lwe_modulus);
             });
 
-        // let mut it = b.chunks_exact_mut(decompose_len);
-        // let first_part = it.next().unwrap();
-        // let temp = 1;
-        // let base =
-        // for b_i in first_part {
+        let f = modulus_switch(secret_key_pack.ring_secret_key(), parameters);
+        let mut base: LWEPlaintext = 1;
+        b.chunks_exact_mut(decompose_len).for_each(|b_i| {
+            b_i.iter_mut()
+                .zip(f.iter())
+                .for_each(|(b_i_j, f_j)| b_i_j.add_reduce_assign(*f_j, lwe_modulus));
+            base.mul_reduce_assign(basis, lwe_modulus)
+        });
 
-        // }
-
-        todo!("Generate Key Switching Key")
+        Self {
+            lwe_dimension,
+            a,
+            b,
+        }
     }
+}
+
+fn modulus_switch<F: NTTField>(
+    ntru_key: &Polynomial<F>,
+    params: &Parameters<F>,
+) -> Vec<LWEPlaintext> {
+    let lwe_modulus_f64 = params.lwe_modulus_f64();
+    let ntru_modulus_f64 = params.ntru_modulus_f64();
+
+    let switch =
+        |v: F| (v.get().as_into() * lwe_modulus_f64 / ntru_modulus_f64).round() as LWEPlaintext;
+    let first = ntru_key[0];
+
+    std::iter::once(first)
+        .chain(ntru_key[1..].iter().rev().map(|v| -*v))
+        .map(switch)
+        .collect()
 }
