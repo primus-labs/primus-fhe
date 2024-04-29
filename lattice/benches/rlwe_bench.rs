@@ -1,5 +1,5 @@
 use algebra::{derive::*, FieldUniformSampler, Polynomial};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use lattice::RLWE;
 
 #[derive(Field, Prime, NTT)]
@@ -27,7 +27,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Ring Learning with error");
 
     group.bench_function("RLWE add element wise clone", |b| {
-        b.iter(|| black_box(&c0).clone().add_element_wise(black_box(&c1)))
+        b.iter_batched(
+            || c0.clone(),
+            |c0| c0.add_element_wise(black_box(&c1)),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("RLWE add element wise collect", |b| {
@@ -35,7 +39,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("RLWE sub element wise clone", |b| {
-        b.iter(|| black_box(&c0).clone().sub_element_wise(black_box(&c1)))
+        b.iter_batched(
+            || c0.clone(),
+            |c0| c0.sub_element_wise(black_box(&c1)),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("RLWE sub element wise collect", |b| {

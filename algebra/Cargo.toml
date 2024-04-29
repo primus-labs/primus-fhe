@@ -25,6 +25,10 @@ criterion = { workspace = true }
 name = "ntt_bench"
 harness = false
 
+[[bench]]
+name = "modulus_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 # enable unstable features in the documentation
