@@ -48,6 +48,7 @@ pub struct SecretKeyPack<F: NTTField> {
     ntt_ring_secret_key: NTTRingSecretKey<F>,
     /// ntt version inverse ring secret key
     ntt_inv_ring_secret_key: NTTInvRingSecretKey<F>,
+    // ring_secret_key_vec: Vec<LWEPlaintext>,
     /// boolean fhe's parameters
     parameters: Parameters<F>,
     /// cryptographically secure random number generator
@@ -68,8 +69,11 @@ impl<F: NTTField> SecretKeyPack<F> {
             }
         };
 
+        let four = F::ONE + F::ONE + F::ONE + F::ONE;
         let ntru_dimension = parameters.ntru_dimension();
-        let ring_secret_key = Polynomial::random(ntru_dimension, &mut csrng);
+        let mut ring_secret_key = Polynomial::random(ntru_dimension, &mut csrng);
+        ring_secret_key.mul_scalar_assign(four);
+        ring_secret_key[0] += F::ONE;
         let ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
         let ntt_inv_ring_secret_key = (&ntt_ring_secret_key).inv();
 
@@ -125,7 +129,7 @@ impl<F: NTTField> SecretKeyPack<F> {
         self.csrng.borrow_mut()
     }
 
-    /// Encrypts [`LWEPlaintext`] into [`LWECiphertext<R>`].
+    /// Encrypts [`LWEMessage`] into [`LWECiphertext<R>`].
     #[inline]
     pub fn encrypt(&self, message: LWEMessage) -> LWECiphertext {
         let lwe_modulus = self.parameters().lwe_modulus();
@@ -147,7 +151,7 @@ impl<F: NTTField> SecretKeyPack<F> {
         cipher
     }
 
-    /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
+    /// Decrypts the [`LWECiphertext`] back to [`LWEMessage`]
     #[inline]
     pub fn decrypt(&self, cipher_text: &LWECiphertext) -> bool {
         let lwe_modulus = self.parameters().lwe_modulus();
@@ -159,7 +163,7 @@ impl<F: NTTField> SecretKeyPack<F> {
         decode(plaintext, lwe_modulus.value())
     }
 
-    /// Decrypts the [`LWECiphertext`] back to [`LWEPlaintext`]
+    /// Decrypts the [`LWECiphertext`] back to [`LWEMessage`]
     #[inline]
     pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEPlaintext) {
         let lwe_modulus = self.parameters().lwe_modulus();
