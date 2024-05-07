@@ -254,6 +254,16 @@ pub struct NTTNTRU<F: NTTField> {
     pub(crate) data: NTTPolynomial<F>,
 }
 
+impl<F: NTTField> From<NTRU<F>> for NTTNTRU<F> {
+    #[inline]
+    fn from(value: NTRU<F>) -> Self {
+        let NTRU { data } = value;
+        Self {
+            data: data.into_ntt_polynomial(),
+        }
+    }
+}
+
 impl<F: NTTField> NTTNTRU<F> {
     /// Creates a new [`NTTNTRU<F>`].
     #[inline]
