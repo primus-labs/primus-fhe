@@ -107,6 +107,14 @@ pub struct NTTGadgetNTRU<F: NTTField> {
     basis: Basis<F>,
 }
 
+impl<F: NTTField> From<GadgetNTRU<F>> for NTTGadgetNTRU<F> {
+    fn from(value: GadgetNTRU<F>) -> Self {
+        let GadgetNTRU { data, basis } = value;
+        let data = data.into_iter().map(From::from).collect();
+        Self { data, basis }
+    }
+}
+
 impl<F: NTTField> NTTGadgetNTRU<F> {
     /// Creates a new [`NTTGadgetNTRU<F>`].
     #[inline]
