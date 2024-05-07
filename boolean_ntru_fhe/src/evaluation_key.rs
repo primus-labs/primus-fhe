@@ -1,5 +1,5 @@
 use algebra::{reduce::AddReduceAssign, AsInto, NTTField, Polynomial};
-use lattice::{LWE, NTRU};
+use lattice::NTRU;
 
 use crate::{
     BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEPlaintext, NTRUCiphertext,
@@ -48,7 +48,7 @@ impl<F: NTTField> EvaluationKey<F> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `not(a and b)`.
-    pub fn nand(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
+    pub fn nand(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> NTRUCiphertext<F> {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
 
@@ -60,7 +60,7 @@ impl<F: NTTField> EvaluationKey<F> {
             parameters.twice_ntru_dimension_div_lwe_modulus(),
         );
 
-        self.bootstrap(add, init_acc)
+        self.bootstrap_test(add, init_acc)
     }
 
     /// Performs the homomorphic and operation.
@@ -256,6 +256,28 @@ impl<F: NTTField> EvaluationKey<F> {
         todo!()
     }
 
+    /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
+    pub fn bootstrap_test(
+        &self,
+        c: LWECiphertext,
+        init_acc: NTRUCiphertext<F>,
+    ) -> NTRUCiphertext<F> {
+        let parameters = self.parameters();
+
+        let mut acc = self.bootstrapping_key.bootstrapping(
+            init_acc,
+            c.a(),
+            parameters.ntru_dimension(),
+            parameters.twice_ntru_dimension_div_lwe_modulus(),
+            parameters.lwe_modulus(),
+            parameters.bootstrapping_basis(),
+        );
+
+        acc.data_mut()[0] += F::new(F::MODULUS_VALUE >> 3);
+
+        acc
+    }
+
     /// Performs modulus switch.
     pub fn modulus_switch(&self, c: NTRU<F>) -> NTRUModulusSwitch {
         let parameters = self.parameters();
@@ -280,7 +302,7 @@ impl<F: NTTField> EvaluationKey<F> {
         let chi = parameters.ntru_noise_distribution();
         let bootstrapping_key = BootstrappingKey::generate(secret_key_pack, chi, &mut *csrng);
 
-        let chi = parameters.key_switching_noise_distribution();
+        let _chi = parameters.key_switching_noise_distribution();
         let key_switching_key = KeySwitchingKey::generate(secret_key_pack, &mut *csrng);
 
         Self {
