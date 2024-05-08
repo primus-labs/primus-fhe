@@ -25,6 +25,16 @@ pub struct NTRU<F: NTTField> {
     data: Polynomial<F>,
 }
 
+impl<F: NTTField> From<NTTNTRU<F>> for NTRU<F> {
+    #[inline]
+    fn from(value: NTTNTRU<F>) -> Self {
+        let NTTNTRU { data } = value;
+        Self {
+            data: data.into_native_polynomial(),
+        }
+    }
+}
+
 impl<F: NTTField> NTRU<F> {
     /// Creates a new [`NTRU<F>`].
     #[inline]
@@ -60,13 +70,13 @@ impl<F: NTTField> NTRU<F> {
         self.data.set_zero();
     }
 
-    /// Returns a reference to the data of this [`NTRU<F>`].
+    /// Returns a reference to the `data` of this [`NTRU<F>`].
     #[inline]
     pub fn data(&self) -> &Polynomial<F> {
         &self.data
     }
 
-    /// Returns a mutable reference to the data of this [`NTRU<F>`].
+    /// Returns a mutable reference to the `data` of this [`NTRU<F>`].
     #[inline]
     pub fn data_mut(&mut self) -> &mut Polynomial<F> {
         &mut self.data
@@ -150,10 +160,10 @@ impl<F: NTTField> NTRU<F> {
         self.data -= rhs.data();
     }
 
-    /// Extract an LWE sample from RLWE.
+    /// Extract an LWE sample from [`NTRU<F>`].
     #[inline]
     pub fn extract_lwe(&self) -> LWE<F> {
-        let mut a: Vec<F> = self.data.as_slice().iter().map(|&x| x).collect();
+        let mut a: Vec<F> = self.data.as_slice().to_vec();
         a[1..].reverse();
         a[0] = -a[0];
 
@@ -291,13 +301,13 @@ impl<F: NTTField> NTTNTRU<F> {
         self.data.set_zero();
     }
 
-    /// Returns a reference to the data of this [`NTTNTRU<F>`].
+    /// Returns a reference to the `data` of this [`NTTNTRU<F>`].
     #[inline]
     pub fn data(&self) -> &NTTPolynomial<F> {
         self.data.as_ref()
     }
 
-    /// Returns a mutable reference to the data of this [`NTTNTRU<F>`].
+    /// Returns a mutable reference to the `data` of this [`NTTNTRU<F>`].
     #[inline]
     pub fn data_mut(&mut self) -> &mut NTTPolynomial<F> {
         &mut self.data
@@ -404,7 +414,7 @@ impl<F: NTTField> NTTNTRU<F> {
         ntt_add_mul_assign(self.data_mut(), ntt_ntru.data(), ntt_polynomial);
     }
 
-    /// Performs `destination = self + ntt_rlwe * ntt_polynomial`.
+    /// Performs `destination = self + ntt_ntru * ntt_polynomial`.
     #[inline]
     pub fn add_ntt_ntru_mul_ntt_polynomial_inplace(
         &self,
@@ -455,8 +465,7 @@ impl<F: NTTField> NTTNTRU<F> {
             <Polynomial<F>>::random_with_gaussian(ntru_dimension, &mut rng, error_sampler)
                 .into_ntt_polynomial();
         data *= inv_secret_key;
-        // FIXME!
-        data[0] += value;
+        data.iter_mut().for_each(|v| *v += value);
 
         Self { data }
     }
