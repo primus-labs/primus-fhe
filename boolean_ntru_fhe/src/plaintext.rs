@@ -2,7 +2,7 @@
 pub type LWEMessage = bool;
 
 /// LWE plain text value type
-pub type LWEPlaintext = u16;
+pub type LWEPlaintext = u32;
 
 /// Encodes a message
 #[inline]

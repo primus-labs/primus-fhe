@@ -79,7 +79,7 @@ pub fn decompose_lsb_bits_inplace<T: PrimInt + Bits>(
     let bits = basis.bits();
 
     destination
-        .into_iter()
+        .iter_mut()
         .zip(&mut data)
         .for_each(|(d_i, p_i)| {
             let temp = *p_i & mask;

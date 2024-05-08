@@ -66,8 +66,8 @@ pub struct Parameters<F: NTTField> {
     /// Decompose basis for `Q` used for bootstrapping accumulator
     bootstrapping_basis: Basis<F>,
 
-    /// Decompose basis for `Q` used for key switching.
-    key_switching_basis: Basis<F>,
+    /// Decompose basis bits used for key switching.
+    key_switching_basis_bits: u32,
     /// The noise error's standard deviation for key switching.
     key_switching_std_dev: f64,
 }
@@ -171,11 +171,11 @@ impl<F: NTTField> Parameters<F> {
         self.bootstrapping_basis
     }
 
-    /// Returns the key switching basis of this [`Parameters<F>`],
-    /// which acts as the decompose basis for `Q` used for key switching.
+    /// Returns the key switching basis bits of this [`Parameters<F>`],
+    /// which acts as the decompose basis used for key switching.
     #[inline]
-    pub fn key_switching_basis(&self) -> Basis<F> {
-        self.key_switching_basis
+    pub fn key_switching_basis_bits(&self) -> u32 {
+        self.key_switching_basis_bits
     }
 
     /// Returns the key switching std dev of this [`Parameters<F>`].
@@ -375,7 +375,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
         let bootstrapping_basis = <Basis<F>>::new(self.bootstrapping_basis_bits);
 
-        let key_switching_basis = <Basis<F>>::new(self.key_switching_basis_bits);
+        let key_switching_basis_bits = self.key_switching_basis_bits;
 
         let ntru_modulus_f64 = ntru_modulus.into() as f64;
         Ok(Parameters::<F> {
@@ -394,7 +394,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
             bootstrapping_basis,
 
-            key_switching_basis,
+            key_switching_basis_bits,
             key_switching_std_dev: self.key_switching_std_dev.unwrap(),
         })
     }

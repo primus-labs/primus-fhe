@@ -1,7 +1,5 @@
-use algebra::{reduce::SubReduce, Field};
 use boolean_ntru_fhe::{
-    decode, encode, DefaultFieldTernary128, EvaluationKey, LWEPlaintext, SecretKeyPack,
-    DEFAULT_TERNARY_128_BITS_PARAMERTERS,
+    EvaluationKey, LWEPlaintext, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
 };
 use rand::Rng;
 
@@ -39,29 +37,9 @@ fn main() {
 
         let ct_nand = evk.nand(&x, &y);
 
-        let r = ct_nand.data() * skp.ntt_ring_secret_key();
+        let (m, noise) = skp.decrypt_with_noise(&ct_nand);
 
-        let r = r[0];
-
-        let parameters = skp.parameters();
-        let lwe_modulus_f64 = parameters.lwe_modulus_f64();
-        let ntru_modulus_f64 = parameters.ntru_modulus_f64();
-
-        let switch = |v: DefaultFieldTernary128| {
-            (v.get() as f64 * lwe_modulus_f64 / ntru_modulus_f64).round() as LWEPlaintext
-        };
-
-        let lwe_modulus = parameters.lwe_modulus();
-        let plaintext = switch(r);
-        let message = decode(plaintext, lwe_modulus.value());
-
-        let fresh = encode(message, lwe_modulus.value());
-
-        let noise = plaintext
-            .sub_reduce(fresh, lwe_modulus)
-            .min(fresh.sub_reduce(plaintext, lwe_modulus));
-
-        assert_eq!(message, c, "Noise: {noise}");
+        assert_eq!(m, c, "Noise: {noise}");
         check_noise(noise, "nand");
     }
 }
