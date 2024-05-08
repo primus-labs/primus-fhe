@@ -132,13 +132,14 @@ impl<F: NTTField> SecretKeyPack<F> {
     /// Encrypts [`LWEMessage`] into [`LWECiphertext<R>`].
     #[inline]
     pub fn encrypt(&self, message: LWEMessage) -> LWECiphertext {
-        let lwe_modulus = self.parameters().lwe_modulus();
+        let lwe_modulus = self.parameters.lwe_modulus();
         let noise_distribution = self.parameters.lwe_noise_distribution();
+        let lwe_modulus_value = lwe_modulus.value();
         let mut csrng = self.csrng_mut();
 
         let mut cipher = LWECiphertext::generate_random_zero_sample(
             self.lwe_secret_key(),
-            lwe_modulus.value(),
+            lwe_modulus_value,
             lwe_modulus,
             noise_distribution,
             &mut *csrng,
@@ -146,7 +147,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
         cipher
             .b_mut()
-            .add_reduce_assign(encode(message, lwe_modulus.value()), lwe_modulus);
+            .add_reduce_assign(encode(message, lwe_modulus_value), lwe_modulus);
 
         cipher
     }

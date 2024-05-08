@@ -252,7 +252,7 @@ impl<F: NTTField> EvaluationKey<F> {
 
         // let key_switched = self.key_switching_key.key_switch(extract);
         // self.modulus_switch(key_switched)
-        let switch = self.modulus_switch(acc);
+        let _switch = self.modulus_switch(acc);
         todo!()
     }
 
@@ -264,17 +264,24 @@ impl<F: NTTField> EvaluationKey<F> {
     ) -> NTRUCiphertext<F> {
         let parameters = self.parameters();
 
+        let twice_ntru_dimension_div_lwe_modulus =
+            parameters.twice_ntru_dimension_div_lwe_modulus();
+
         let mut acc = self.bootstrapping_key.bootstrapping(
             init_acc,
             c.a(),
             parameters.ntru_dimension(),
-            parameters.twice_ntru_dimension_div_lwe_modulus(),
+            twice_ntru_dimension_div_lwe_modulus,
             parameters.lwe_modulus(),
             parameters.bootstrapping_basis(),
         );
 
-        acc.data_mut()[0] += F::new(F::MODULUS_VALUE >> 3);
+        let half_delta = F::new(F::MODULUS_VALUE >> 3);
 
+        acc.data_mut()
+            .iter_mut()
+            .step_by(twice_ntru_dimension_div_lwe_modulus)
+            .for_each(|v| *v += half_delta);
         acc
     }
 
