@@ -89,10 +89,20 @@ impl KeySwitchingKey {
                 b_i.add_reduce_assign(e_i, lwe_modulus);
             });
 
+        let ntru_modulus = parameters.ntru_modulus();
+        let half_ntru_modulus = ntru_modulus >> 1;
+
         let mut f: Vec<LWEPlaintext> = secret_key_pack
             .ring_secret_key()
             .iter()
-            .map(|v| v.get().neg_reduce(lwe_modulus))
+            .map(|v| {
+                let v = v.get();
+                if v <= half_ntru_modulus {
+                    v.neg_reduce(lwe_modulus)
+                } else {
+                    (ntru_modulus - v).reduce(lwe_modulus)
+                }
+            })
             .collect();
         f[1..].reverse();
         f[0].neg_reduce_assign(lwe_modulus);
