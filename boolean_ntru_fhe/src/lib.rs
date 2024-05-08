@@ -22,7 +22,7 @@ pub use parameter::{
     CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS, DEFAULT_TERNARY_128_BITS_PARAMERTERS,
 };
 
-pub use ciphertext::{LWECiphertext, NTRUCiphertext, NTRUModulusSwitch, NTTNTRUCiphertext};
+pub use ciphertext::{LWECiphertext, NTRUCiphertext, NTTNTRUCiphertext};
 pub use plaintext::{decode, encode, LWEMessage, LWEPlaintext};
 
 pub use bootstrapping_key::BootstrappingKey;

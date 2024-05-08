@@ -7,7 +7,7 @@ use rand_distr::{Distribution, Normal};
 
 use crate::{AlgebraError, AsFrom, AsInto, Field, Widening, WrappingOps};
 
-///
+/// A trait to impl uniform for `Field`.
 pub trait UniformBase: Copy {
     /// The type for uniform sample.
     type Sample: Copy

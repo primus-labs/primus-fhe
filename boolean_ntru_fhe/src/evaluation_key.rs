@@ -1,9 +1,9 @@
-use algebra::{reduce::AddReduceAssign, AsInto, NTTField, Polynomial};
+use algebra::{reduce::AddReduceAssign, AsInto, Field, NTTField, Polynomial};
 use lattice::NTRU;
 
 use crate::{
-    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEPlaintext, NTRUCiphertext,
-    NTRUModulusSwitch, Parameters, SecretKeyPack,
+    BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEPlaintext, NTRUCiphertext, Parameters,
+    SecretKeyPack,
 };
 
 /// The evaluator of the homomorphic encryption scheme.
@@ -48,7 +48,7 @@ impl<F: NTTField> EvaluationKey<F> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `not(a and b)`.
-    pub fn nand(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> NTRUCiphertext<F> {
+    pub fn nand(&self, c0: &LWECiphertext, c1: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();
 
@@ -60,7 +60,7 @@ impl<F: NTTField> EvaluationKey<F> {
             parameters.twice_ntru_dimension_div_lwe_modulus(),
         );
 
-        self.bootstrap_test(add, init_acc)
+        self.bootstrap(add, init_acc)
     }
 
     /// Performs the homomorphic and operation.
@@ -238,32 +238,6 @@ impl<F: NTTField> EvaluationKey<F> {
     pub fn bootstrap(&self, c: LWECiphertext, init_acc: NTRUCiphertext<F>) -> LWECiphertext {
         let parameters = self.parameters();
 
-        let acc = self.bootstrapping_key.bootstrapping(
-            init_acc,
-            c.a(),
-            parameters.ntru_dimension(),
-            parameters.twice_ntru_dimension_div_lwe_modulus(),
-            parameters.lwe_modulus(),
-            parameters.bootstrapping_basis(),
-        );
-
-        // let mut extract = acc.extract_lwe();
-        // *extract.b_mut() += F::new(F::MODULUS_VALUE >> 3);
-
-        // let key_switched = self.key_switching_key.key_switch(extract);
-        // self.modulus_switch(key_switched)
-        let _switch = self.modulus_switch(acc);
-        todo!()
-    }
-
-    /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
-    pub fn bootstrap_test(
-        &self,
-        c: LWECiphertext,
-        init_acc: NTRUCiphertext<F>,
-    ) -> NTRUCiphertext<F> {
-        let parameters = self.parameters();
-
         let twice_ntru_dimension_div_lwe_modulus =
             parameters.twice_ntru_dimension_div_lwe_modulus();
 
@@ -282,11 +256,14 @@ impl<F: NTTField> EvaluationKey<F> {
             .iter_mut()
             .step_by(twice_ntru_dimension_div_lwe_modulus)
             .for_each(|v| *v += half_delta);
-        acc
+
+        let switch = self.modulus_switch(acc);
+        let decomposed_ciphertext = self.decompose_ntru(switch);
+        self.key_switching_key.key_switch(decomposed_ciphertext)
     }
 
     /// Performs modulus switch.
-    pub fn modulus_switch(&self, c: NTRU<F>) -> NTRUModulusSwitch {
+    pub fn modulus_switch(&self, c: NTRU<F>) -> Vec<LWEPlaintext> {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
         let ntru_modulus_f64 = parameters.ntru_modulus_f64();
@@ -296,11 +273,30 @@ impl<F: NTTField> EvaluationKey<F> {
 
         let data: Vec<LWEPlaintext> = c.data().iter().copied().map(switch).collect();
 
-        NTRUModulusSwitch::new(data)
+        data
+    }
+
+    /// Perform decompose
+    pub fn decompose_ntru(&self, c: Vec<LWEPlaintext>) -> Vec<LWEPlaintext> {
+        let parameters = self.parameters();
+        let lwe_modulus_value = parameters.lwe_modulus().value();
+        let bits = parameters.key_switching_basis_bits();
+        let l_ksk = (LWEPlaintext::BITS - (lwe_modulus_value - 1).leading_zeros()).div_ceil(bits);
+        let mask = LWEPlaintext::MAX >> (LWEPlaintext::BITS - bits);
+
+        let mut result = Vec::with_capacity(c.len() * l_ksk as usize);
+        for mut v in c {
+            for _ in 0..l_ksk {
+                result.push(v & mask);
+                v >>= bits;
+            }
+        }
+
+        result
     }
 }
 
-impl<F: NTTField> EvaluationKey<F> {
+impl<F: NTTField + Field<Value = LWEPlaintext>> EvaluationKey<F> {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();
