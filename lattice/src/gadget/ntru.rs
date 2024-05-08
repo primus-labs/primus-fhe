@@ -26,6 +26,15 @@ pub struct GadgetNTRU<F: NTTField> {
     basis: Basis<F>,
 }
 
+impl<F: NTTField> From<NTTGadgetNTRU<F>> for GadgetNTRU<F> {
+    #[inline]
+    fn from(value: NTTGadgetNTRU<F>) -> Self {
+        let NTTGadgetNTRU { data, basis } = value;
+        let data = data.into_iter().map(From::from).collect();
+        Self { data, basis }
+    }
+}
+
 impl<F: NTTField> GadgetNTRU<F> {
     /// Creates a new [`GadgetNTRU<F>`].
     #[inline]
@@ -61,7 +70,7 @@ impl<F: NTTField> GadgetNTRU<F> {
         self.data.iter_mut().for_each(|ntru| ntru.set_zero());
     }
 
-    /// Returns a reference to the data of this [`GadgetNTRU<F>`].
+    /// Returns a reference to the `data` of this [`GadgetNTRU<F>`].
     #[inline]
     pub fn data(&self) -> &[NTRU<F>] {
         &self.data
@@ -108,6 +117,7 @@ pub struct NTTGadgetNTRU<F: NTTField> {
 }
 
 impl<F: NTTField> From<GadgetNTRU<F>> for NTTGadgetNTRU<F> {
+    #[inline]
     fn from(value: GadgetNTRU<F>) -> Self {
         let GadgetNTRU { data, basis } = value;
         let data = data.into_iter().map(From::from).collect();
@@ -149,7 +159,7 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
         self.data.iter_mut().for_each(|ntru| ntru.set_zero());
     }
 
-    /// Returns a reference to the data of this [`NTTGadgetNTRU<F>`].
+    /// Returns a reference to the `data` of this [`NTTGadgetNTRU<F>`].
     #[inline]
     pub fn data(&self) -> &[NTTNTRU<F>] {
         &self.data
