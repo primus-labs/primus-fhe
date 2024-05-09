@@ -66,8 +66,8 @@ pub struct Parameters<F: NTTField> {
     /// Decompose basis for `Q` used for bootstrapping accumulator
     bootstrapping_basis: Basis<F>,
 
-    /// Decompose basis bits used for key switching.
-    key_switching_basis_bits: u32,
+    /// Decompose basis for `Q` used for key switching.
+    key_switching_basis: Basis<F>,
     /// The noise error's standard deviation for key switching.
     key_switching_std_dev: f64,
 }
@@ -174,8 +174,8 @@ impl<F: NTTField> Parameters<F> {
     /// Returns the key switching basis bits of this [`Parameters<F>`],
     /// which acts as the decompose basis used for key switching.
     #[inline]
-    pub fn key_switching_basis_bits(&self) -> u32 {
-        self.key_switching_basis_bits
+    pub fn key_switching_basis(&self) -> Basis<F> {
+        self.key_switching_basis
     }
 
     /// Returns the key switching std dev of this [`Parameters<F>`].
@@ -375,7 +375,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
         let bootstrapping_basis = <Basis<F>>::new(self.bootstrapping_basis_bits);
 
-        let key_switching_basis_bits = self.key_switching_basis_bits;
+        let key_switching_basis = <Basis<F>>::new(self.key_switching_basis_bits);
 
         let ntru_modulus_f64 = ntru_modulus.into() as f64;
         Ok(Parameters::<F> {
@@ -394,7 +394,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
             bootstrapping_basis,
 
-            key_switching_basis_bits,
+            key_switching_basis,
             key_switching_std_dev: self.key_switching_std_dev.unwrap(),
         })
     }
@@ -410,13 +410,13 @@ pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = Con
     lwe_dimension: 512,
     lwe_modulus: 1024,
     lwe_noise_std_dev: 3.20,
-    secret_key_type: SecretKeyType::Binary,
+    secret_key_type: SecretKeyType::Ternary,
     ntru_dimension: 1024,
     ntru_modulus: 132120577,
     ntru_noise_std_dev: 3.20,
-    bootstrapping_basis_bits: 1,
-    key_switching_basis_bits: 1,
-    key_switching_std_dev: 3.2f64,
+    bootstrapping_basis_bits: 8,
+    key_switching_basis_bits: 5,
+    key_switching_std_dev: 3.2 * ((1 << 7) as f64),
 };
 
 /// Default 128-bits security Parameters

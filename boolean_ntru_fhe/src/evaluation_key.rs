@@ -1,5 +1,5 @@
-use algebra::{reduce::AddReduceAssign, AsInto, Field, NTTField, Polynomial};
-use lattice::NTRU;
+use algebra::{reduce::AddReduceAssign, AsInto, NTTField, Polynomial};
+use lattice::{LWE, NTRU};
 
 use crate::{
     BootstrappingKey, KeySwitchingKey, LWECiphertext, LWEPlaintext, NTRUCiphertext, Parameters,
@@ -11,7 +11,7 @@ pub struct EvaluationKey<F: NTTField> {
     /// Bootstrapping key
     bootstrapping_key: BootstrappingKey<F>,
     /// Key Switching Key
-    key_switching_key: KeySwitchingKey,
+    key_switching_key: KeySwitchingKey<F>,
     /// The parameters of the fully homomorphic encryption scheme.
     parameters: Parameters<F>,
 }
@@ -257,46 +257,29 @@ impl<F: NTTField> EvaluationKey<F> {
             .step_by(twice_ntru_dimension_div_lwe_modulus)
             .for_each(|v| *v += half_delta);
 
-        let switch = self.modulus_switch(acc);
-        let decomposed_ciphertext = self.decompose_ntru(switch);
-        self.key_switching_key.key_switch(decomposed_ciphertext)
+        let extract = acc.extract_lwe();
+
+        let key_switched = self.key_switching_key.key_switch(extract);
+        self.modulus_switch(key_switched)
     }
 
     /// Performs modulus switch.
-    pub fn modulus_switch(&self, c: NTRU<F>) -> Vec<LWEPlaintext> {
+    pub fn modulus_switch(&self, c: LWE<F>) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
         let ntru_modulus_f64 = parameters.ntru_modulus_f64();
 
         let switch =
-            |v: F| (v.get().as_into() * lwe_modulus_f64 / ntru_modulus_f64).round() as LWEPlaintext;
+            |v: F| (v.get().as_into() * lwe_modulus_f64 / ntru_modulus_f64).floor() as LWEPlaintext;
 
-        let data: Vec<LWEPlaintext> = c.data().iter().copied().map(switch).collect();
+        let a: Vec<LWEPlaintext> = c.a().iter().copied().map(switch).collect();
+        let b = switch(c.b());
 
-        data
-    }
-
-    /// Perform decompose
-    pub fn decompose_ntru(&self, c: Vec<LWEPlaintext>) -> Vec<LWEPlaintext> {
-        let parameters = self.parameters();
-        let lwe_modulus_value = parameters.lwe_modulus().value();
-        let bits = parameters.key_switching_basis_bits();
-        let l_ksk = (LWEPlaintext::BITS - (lwe_modulus_value - 1).leading_zeros()).div_ceil(bits);
-        let mask = LWEPlaintext::MAX >> (LWEPlaintext::BITS - bits);
-
-        let mut result = Vec::with_capacity(c.len() * l_ksk as usize);
-        for mut v in c {
-            for _ in 0..l_ksk {
-                result.push(v & mask);
-                v >>= bits;
-            }
-        }
-
-        result
+        LWECiphertext::new(a, b)
     }
 }
 
-impl<F: NTTField + Field<Value = LWEPlaintext>> EvaluationKey<F> {
+impl<F: NTTField> EvaluationKey<F> {
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();
@@ -305,8 +288,8 @@ impl<F: NTTField + Field<Value = LWEPlaintext>> EvaluationKey<F> {
         let chi = parameters.ntru_noise_distribution();
         let bootstrapping_key = BootstrappingKey::generate(secret_key_pack, chi, &mut *csrng);
 
-        let _chi = parameters.key_switching_noise_distribution();
-        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, &mut *csrng);
+        let chi = parameters.key_switching_noise_distribution();
+        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
 
         Self {
             bootstrapping_key,

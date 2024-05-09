@@ -428,9 +428,7 @@ impl<F: NTTField> RLWE<F> {
 
         median.inverse_transform_inplace(destination)
     }
-}
 
-impl<F: NTTField> RLWE<F> {
     /// Generate a `RLWE<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,
@@ -878,9 +876,7 @@ impl<F: NTTField> NTTRLWE<F> {
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
         })
     }
-}
 
-impl<F: NTTField> NTTRLWE<F> {
     /// Generate a `NTTRLWE<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,
