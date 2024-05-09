@@ -402,7 +402,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
 /// Default Field for Default Parameters
 #[derive(Field, Prime, NTT)]
-#[modulus = 132120577]
+#[modulus = 67086337]
 pub struct DefaultFieldTernary128(u32);
 
 /// Default Parameters
@@ -412,11 +412,11 @@ pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = Con
     lwe_noise_std_dev: 3.20,
     secret_key_type: SecretKeyType::Ternary,
     ntru_dimension: 1024,
-    ntru_modulus: 132120577,
+    ntru_modulus: 67086337,
     ntru_noise_std_dev: 3.20,
     bootstrapping_basis_bits: 8,
     key_switching_basis_bits: 5,
-    key_switching_std_dev: 3.2 * ((1 << 7) as f64),
+    key_switching_std_dev: 3.2 * ((1 << 6) as f64 + (1 << 4) as f64),
 };
 
 /// Default 128-bits security Parameters
