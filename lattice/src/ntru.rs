@@ -430,6 +430,60 @@ impl<F: NTTField> NTTNTRU<F> {
         );
     }
 
+    /// Performs `self = self + gadget_ntru * polynomial`.
+    #[inline]
+    pub fn add_assign_gadget_ntru_mul_polynomial_inplace(
+        &mut self,
+        gadget_ntru: &NTTGadgetNTRU<F>,
+        mut polynomial: Polynomial<F>,
+        decompose_space: &mut DecompositionSpace<F>,
+    ) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+        let decompose_space = decompose_space.get_mut();
+        let basis = gadget_ntru.basis();
+
+        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
+
+        gadget_ntru.iter().for_each(|g| {
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_ntru_mul_ntt_polynomial_assign(g, &ntt_polynomial);
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+        })
+    }
+
+    /// Performs `self = self - gadget_ntru * polynomial`.
+    #[inline]
+    pub fn sub_assign_gadget_ntru_mul_polynomial_inplace(
+        &mut self,
+        gadget_ntru: &NTTGadgetNTRU<F>,
+        polynomial: Polynomial<F>,
+        decompose_space: &mut DecompositionSpace<F>,
+    ) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+        let decompose_space = decompose_space.get_mut();
+        let basis = gadget_ntru.basis();
+
+        let mut polynomial = -polynomial;
+
+        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
+
+        gadget_ntru.iter().for_each(|g| {
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_ntru_mul_ntt_polynomial_assign(g, &ntt_polynomial);
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+        })
+    }
+
     /// Generate a `NTTNTRU<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         inv_secret_key: &NTTPolynomial<F>,
