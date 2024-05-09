@@ -1,4 +1,4 @@
-use boolean_fhe::{EvaluationKey, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS};
+use boolean_ntru_fhe::{EvaluationKey, SecretKeyPack, DEFAULT_TERNARY_128_BITS_PARAMERTERS};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::Rng;
 
@@ -25,37 +25,37 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let m2 = rng.gen();
     let c2 = skp.encrypt(m2);
 
-    c.bench_function("rlwe not", |b| b.iter(|| evk.not(black_box(&c0))));
+    c.bench_function("ntru not", |b| b.iter(|| evk.not(black_box(&c0))));
 
-    c.bench_function("rlwe and", |b| {
+    c.bench_function("ntru and", |b| {
         b.iter(|| evk.and(black_box(&c0), black_box(&c1)))
     });
 
-    c.bench_function("rlwe nand", |b| {
+    c.bench_function("ntru nand", |b| {
         b.iter(|| evk.nand(black_box(&c0), black_box(&c1)))
     });
 
-    c.bench_function("rlwe or", |b| {
+    c.bench_function("ntru or", |b| {
         b.iter(|| evk.or(black_box(&c0), black_box(&c1)))
     });
 
-    c.bench_function("rlwe nor", |b| {
+    c.bench_function("ntru nor", |b| {
         b.iter(|| evk.nor(black_box(&c0), black_box(&c1)))
     });
 
-    c.bench_function("rlwe xor", |b| {
+    c.bench_function("ntru xor", |b| {
         b.iter(|| evk.xor(black_box(&c0), black_box(&c1)))
     });
 
-    c.bench_function("rlwe xnor", |b| {
+    c.bench_function("ntru xnor", |b| {
         b.iter(|| evk.xnor(black_box(&c0), black_box(&c1)))
     });
 
-    c.bench_function("rlwe majority", |b| {
+    c.bench_function("ntru majority", |b| {
         b.iter(|| evk.majority(black_box(&c0), black_box(&c1), black_box(&c2)))
     });
 
-    c.bench_function("rlwe mux", |b| {
+    c.bench_function("ntru mux", |b| {
         b.iter(|| evk.mux(black_box(&c0), black_box(&c1), black_box(&c2)))
     });
 }
