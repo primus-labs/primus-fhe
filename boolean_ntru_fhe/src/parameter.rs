@@ -413,7 +413,7 @@ pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = Con
     secret_key_type: SecretKeyType::Ternary,
     ntru_dimension: 1024,
     ntru_modulus: 132120577,
-    ntru_noise_std_dev: 3.20 * 2.15,
+    ntru_noise_std_dev: 3.20 * 2.175,
     bootstrapping_basis_bits: 7,
     key_switching_basis_bits: 5,
     key_switching_std_dev: 3.2 * ((1 << 7) as f64),
