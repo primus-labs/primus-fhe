@@ -71,7 +71,8 @@ impl<F: NTTField> SecretKeyPack<F> {
 
         let four = F::ONE + F::ONE + F::ONE + F::ONE;
         let ntru_dimension = parameters.ntru_dimension();
-        let mut ring_secret_key = Polynomial::random_with_ternary(ntru_dimension, &mut csrng);
+        let chi = parameters.ntru_noise_distribution();
+        let mut ring_secret_key = Polynomial::random_with_gaussian(ntru_dimension, &mut csrng, chi);
         ring_secret_key.mul_scalar_assign(four);
         ring_secret_key[0] += F::ONE;
         let ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
