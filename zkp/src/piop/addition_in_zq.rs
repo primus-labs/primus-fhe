@@ -1,19 +1,34 @@
 //! PIOP for Addition in Zq
 //! The prover wants to convince that the addition in Zq in a larger modulus Q.
+//! * q: the modulus used in the addition
+//!
+//! Given M instances of addition in Zq, the main idea of this IOP is to prove:
+//! For x \in \{0, 1\}^l
+//! 1. a(x), b(c), c(x) \in [q] => these range check can be batchly proved by the Bit Decomposition IOP
+//! 2. k(x) \cdot (1 - k(x)) = 0  => can be reduced to prove the sum
+//!     $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [k(x) \cdot (1 - k(x))] = 0$
+//!     where u is the common random challenge from the verifier, used to instantiate the sum,
+//!     and then, it can be proved with the sumcheck protocol where the maximum variable-degree is 3.
+//! 3. a(x) + b(x) = c(x) + k(x)\cdot q => can be reduced to the evaluation of a random point since the LHS and RHS are both MLE
+
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::sumcheck::prover::ProverMsg;
-use super::bit_decomposition::{BitDecompositionProof, BitDecompositionSubClaim, DecomposedBits, DecomposedBitsInfo};
-use crate::utils::eval_identity_function;
+use super::bit_decomposition::{
+    BitDecompositionProof, BitDecompositionSubClaim, DecomposedBits, DecomposedBitsInfo,
+};
 use crate::piop::BitDecomposition;
+use crate::sumcheck::prover::ProverMsg;
+use crate::utils::eval_identity_function;
 
-use algebra::{DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo};
-use crate::utils::gen_identity_evaluations;
 use crate::sumcheck::MLSumcheck;
+use crate::utils::gen_identity_evaluations;
+use algebra::{
+    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
+    PolynomialInfo,
+};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
-
 
 /// SNARKs for addition in Zq, i.e. a + b = c (mod Zq)
 pub struct AdditionInZq<F: Field>(#[doc(hidden)] PhantomData<F>);
@@ -59,20 +74,24 @@ pub struct AdditionInZqInstanceInfo<F: Field> {
 }
 
 impl<F: Field> AdditionInZqInstance<F> {
-    #[inline]
     /// Extract the information of addition in Zq for verification
+    #[inline]
     pub fn info(&self) -> AdditionInZqInstanceInfo<F> {
         AdditionInZqInstanceInfo {
             q: self.q,
-            decomposed_bits_info: self.abc_bits.info()
+            decomposed_bits_info: self.abc_bits.info(),
         }
     }
 
     /// Construct a new instance from vector
+    #[inline]
     pub fn from_vec(
-        abc: Vec<Rc<DenseMultilinearExtension<F>>>, 
+        abc: Vec<Rc<DenseMultilinearExtension<F>>>,
         k: &Rc<DenseMultilinearExtension<F>>,
-        q: F, base: F, base_len: u32, bits_len: u32,
+        q: F,
+        base: F,
+        base_len: u32,
+        bits_len: u32,
     ) -> Self {
         let num_vars = k.num_vars;
         assert_eq!(abc.len(), 3);
@@ -80,7 +99,10 @@ impl<F: Field> AdditionInZqInstance<F> {
             assert_eq!(x.num_vars, num_vars);
         }
 
-        let abc_bits = abc.iter().map(|x| x.get_decomposed_mles(base_len, bits_len)).collect();
+        let abc_bits = abc
+            .iter()
+            .map(|x| x.get_decomposed_mles(base_len, bits_len))
+            .collect();
         Self {
             q,
             num_vars,
@@ -92,15 +114,19 @@ impl<F: Field> AdditionInZqInstance<F> {
                 bits_len,
                 num_vars,
                 instances: abc_bits,
-            }
+            },
         }
-    } 
+    }
 
     /// Construct a new instance from slice
+    #[inline]
     pub fn from_slice(
-        abc: &Vec<Rc<DenseMultilinearExtension<F>>>, 
+        abc: &Vec<Rc<DenseMultilinearExtension<F>>>,
         k: &Rc<DenseMultilinearExtension<F>>,
-        q: F, base: F, base_len: u32, bits_len: u32,
+        q: F,
+        base: F,
+        base_len: u32,
+        bits_len: u32,
     ) -> Self {
         let num_vars = k.num_vars;
         assert_eq!(abc.len(), 3);
@@ -108,7 +134,10 @@ impl<F: Field> AdditionInZqInstance<F> {
             assert_eq!(x.num_vars, num_vars);
         }
 
-        let abc_bits = abc.iter().map(|x| x.get_decomposed_mles(base_len, bits_len)).collect();
+        let abc_bits = abc
+            .iter()
+            .map(|x| x.get_decomposed_mles(base_len, bits_len))
+            .collect();
         Self {
             q,
             num_vars,
@@ -120,13 +149,18 @@ impl<F: Field> AdditionInZqInstance<F> {
                 bits_len,
                 num_vars,
                 instances: abc_bits,
-            }
+            },
         }
     }
 }
 
 impl<F: Field> AdditionInZqSubclaim<F> {
     /// verify the sumcliam
+    /// * abc stores the inputs and the output to be added in Zq
+    /// * k stores the introduced witness s.t. a + b = c + k\cdot q
+    /// * abc_bits stores the decomposed bits for a, b, and c
+    /// * u is the common random challenge from the verifier, used to instantiate the sumcheck.
+    #[inline]
     pub fn verify_subclaim(
         &self,
         q: F,
@@ -140,13 +174,18 @@ impl<F: Field> AdditionInZqSubclaim<F> {
         assert_eq!(abc_bits.len(), 3);
 
         // check 1: subclaim for rangecheck, i.e. a, b, c \in [Zq]
-        if !self.rangecheck_subclaim.verify_subclaim(abc, abc_bits, u, &info.decomposed_bits_info) {
+        if !self
+            .rangecheck_subclaim
+            .verify_subclaim(abc, abc_bits, u, &info.decomposed_bits_info)
+        {
             return false;
         }
-        
+
         // check 2: subclaim for sumcheck, i.e. eq(u, point) * k(point) * (1 - k(point)) = 0
         let eval_k = k.evaluate(&self.sumcheck_point);
-        if eval_identity_function(u, &self.sumcheck_point) * eval_k * (F::ONE - eval_k) != self.sumcheck_expected_evaluations {
+        if eval_identity_function(u, &self.sumcheck_point) * eval_k * (F::ONE - eval_k)
+            != self.sumcheck_expected_evaluations
+        {
             return false;
         }
 
@@ -157,10 +196,7 @@ impl<F: Field> AdditionInZqSubclaim<F> {
 
 impl<F: Field> AdditionInZq<F> {
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
-    pub fn prove(
-        addition_instance: &AdditionInZqInstance<F>,
-        u: &[F],
-    ) -> AdditionInZqProof<F> {
+    pub fn prove(addition_instance: &AdditionInZqInstance<F>, u: &[F]) -> AdditionInZqProof<F> {
         let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
         let mut fs_rng = ChaCha12Rng::from_seed(seed);
         Self::prove_as_subprotocol(&mut fs_rng, addition_instance, u)
@@ -168,23 +204,23 @@ impl<F: Field> AdditionInZq<F> {
 
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-    /// verifier challenges. Additionally, it returns the prover's state in addition to the proof.
-    /// Both of these allow this sumcheck to be better used as a part of a larger protocol.
+    /// verifier challenges.
     pub fn prove_as_subprotocol(
         fs_rng: &mut impl RngCore,
         addition_instance: &AdditionInZqInstance<F>,
         u: &[F],
     ) -> AdditionInZqProof<F> {
         // 1. rangecheck
-        let rangecheck_msg = BitDecomposition::prove_as_subprotocol(fs_rng, &addition_instance.abc_bits, u);
+        let rangecheck_msg =
+            BitDecomposition::prove_as_subprotocol(fs_rng, &addition_instance.abc_bits, u);
 
         let dim = u.len();
         assert_eq!(dim, addition_instance.num_vars);
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(dim);
-        
+
         // 2. execute sumcheck for \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l
         let mut product = Vec::with_capacity(3);
-        let mut op_coefficient= Vec::with_capacity(3);
+        let mut op_coefficient = Vec::with_capacity(3);
         product.push(Rc::new(gen_identity_evaluations(u)));
         op_coefficient.push((F::ONE, F::ZERO));
 
@@ -192,11 +228,11 @@ impl<F: Field> AdditionInZq<F> {
         op_coefficient.push((F::ONE, F::ZERO));
         product.push(Rc::clone(&addition_instance.k));
         op_coefficient.push((-F::ONE, F::ONE));
-        
+
         poly.add_product_with_linear_op(product, &op_coefficient, F::ONE);
         let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for addition in Zq failed");
-        
+
         AdditionInZqProof {
             rangecheck_msg,
             sumcheck_msg: sumcheck_proof.0,
@@ -204,7 +240,7 @@ impl<F: Field> AdditionInZq<F> {
     }
 
     /// Verify addition in Zq given the proof and the verification key for bit decomposistion
-    pub fn verify (
+    pub fn verify(
         proof: &AdditionInZqProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> AdditionInZqSubclaim<F> {
@@ -214,14 +250,20 @@ impl<F: Field> AdditionInZq<F> {
     }
 
     /// Verify addition in Zq given the proof and the verification key for bit decomposistion
+    /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
+    /// verifier challenges.
     pub fn verifier_as_subprotocol(
         fs_rng: &mut impl RngCore,
         proof: &AdditionInZqProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> AdditionInZqSubclaim<F> {
         // TODO sample randomness via Fiat-Shamir RNG
-        let rangecheck_subclaim = BitDecomposition::verifier_as_subprotocol(fs_rng, &proof.rangecheck_msg, decomposed_bits_info);
-        
+        let rangecheck_subclaim = BitDecomposition::verifier_as_subprotocol(
+            fs_rng,
+            &proof.rangecheck_msg,
+            decomposed_bits_info,
+        );
+
         // execute sumcheck for \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l
         let poly_info = PolynomialInfo {
             max_multiplicands: 3,
