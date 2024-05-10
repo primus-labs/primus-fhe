@@ -1,4 +1,5 @@
-//! Define the structures required in SNARKs for Addition in Zq
+//! PIOP for Addition in Zq
+//! The prover wants to convince that the addition in Zq in a larger modulus Q.
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -35,31 +36,31 @@ pub struct AdditionInZqSubclaim<F: Field> {
     pub sumcheck_expected_evaluations: F,
 }
 
-/// 
+/// Stores the parameters used for addition in Zq and the inputs and witness for prover.
 pub struct AdditionInZqInstance<F: Field> {
-    /// modular in addition
+    /// modulus in addition
     pub q: F,
-    ///
+    /// number of variables
     pub num_vars: usize,
-    /// 
+    /// inputs a, b, and c
     pub abc: Vec<Rc<DenseMultilinearExtension<F>>>,
-    /// 
+    /// introduced witness k
     pub k: Rc<DenseMultilinearExtension<F>>,
-    /// 
+    /// introduced witness to check the range of a, b, c
     pub abc_bits: DecomposedBits<F>,
 }
 
-/// 
+/// Stores the parameters used for addition in Zq and the public info for verifier.
 pub struct AdditionInZqInstanceInfo<F: Field> {
-    /// modular in addition
+    /// modulus in addition
     pub q: F,
-    /// 
+    /// Decomposition info for range check (i.e. bit decomposition)
     pub decomposed_bits_info: DecomposedBitsInfo<F>,
 }
 
 impl<F: Field> AdditionInZqInstance<F> {
     #[inline]
-    /// Extract the information of addition in zq for verification
+    /// Extract the information of addition in Zq for verification
     pub fn info(&self) -> AdditionInZqInstanceInfo<F> {
         AdditionInZqInstanceInfo {
             q: self.q,
@@ -67,7 +68,7 @@ impl<F: Field> AdditionInZqInstance<F> {
         }
     }
 
-    /// 
+    /// Construct a new instance from vector
     pub fn from_vec(
         abc: Vec<Rc<DenseMultilinearExtension<F>>>, 
         k: &Rc<DenseMultilinearExtension<F>>,
@@ -95,7 +96,7 @@ impl<F: Field> AdditionInZqInstance<F> {
         }
     } 
 
-    ///
+    /// Construct a new instance from slice
     pub fn from_slice(
         abc: &Vec<Rc<DenseMultilinearExtension<F>>>, 
         k: &Rc<DenseMultilinearExtension<F>>,
