@@ -1,9 +1,6 @@
 use std::cell::RefCell;
 
-use algebra::{
-    reduce::{AddReduceAssign, DotProductReduce, SubReduce},
-    NTTField, NTTPolynomial, Polynomial,
-};
+use algebra::{reduce::*, NTTField, NTTPolynomial, Polynomial};
 use lattice::{sample_binary_values, sample_ternary_values};
 use num_traits::Inv;
 use rand::SeedableRng;
@@ -48,7 +45,6 @@ pub struct SecretKeyPack<F: NTTField> {
     ntt_ring_secret_key: NTTRingSecretKey<F>,
     /// ntt version inverse ring secret key
     ntt_inv_ring_secret_key: NTTInvRingSecretKey<F>,
-    // ring_secret_key_vec: Vec<LWEPlaintext>,
     /// boolean fhe's parameters
     parameters: Parameters<F>,
     /// cryptographically secure random number generator

@@ -99,9 +99,9 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s == 1 {
+                if s == 0 {
                     (
-                        <NTTGadgetNTRU<F>>::generate_random_one_sample(
+                        <NTTGadgetNTRU<F>>::generate_random_zero_sample(
                             inv_secret_key,
                             bootstrapping_basis,
                             chi,
@@ -114,9 +114,9 @@ impl<F: NTTField> TernaryBootstrappingKey<F> {
                             &mut rng,
                         ),
                     )
-                } else if s == 0 {
+                } else if s == 1 {
                     (
-                        <NTTGadgetNTRU<F>>::generate_random_zero_sample(
+                        <NTTGadgetNTRU<F>>::generate_random_one_sample(
                             inv_secret_key,
                             bootstrapping_basis,
                             chi,

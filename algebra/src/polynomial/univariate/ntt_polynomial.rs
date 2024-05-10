@@ -169,9 +169,7 @@ impl<F: Field> NTTPolynomial<F> {
     pub fn neg_assign(&mut self) {
         self.data.iter_mut().for_each(|v| *v = -*v);
     }
-}
 
-impl<F: Field> NTTPolynomial<F> {
     /// Generate a random [`NTTPolynomial<F>`].
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self

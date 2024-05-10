@@ -1,5 +1,5 @@
 use algebra::{
-    derive::*, modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
+    derive::*, modulus::PowOf2Modulus, AsInto, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
 };
 
 use lattice::DiscreteGaussian;
@@ -172,13 +172,13 @@ impl<F: NTTField> Parameters<F> {
     }
 
     /// Returns the key switching basis bits of this [`Parameters<F>`],
-    /// which acts as the decompose basis used for key switching.
+    /// which acts as the decompose basis for `Q` used for key switching.
     #[inline]
     pub fn key_switching_basis(&self) -> Basis<F> {
         self.key_switching_basis
     }
 
-    /// Returns the key switching std dev of this [`Parameters<F>`].
+    /// Returns the key switching error's standard deviation of this [`Parameters<F>`].
     #[inline]
     pub fn key_switching_std_dev(&self) -> f64 {
         self.key_switching_std_dev
@@ -377,7 +377,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 
         let key_switching_basis = <Basis<F>>::new(self.key_switching_basis_bits);
 
-        let ntru_modulus_f64 = ntru_modulus.into() as f64;
+        let ntru_modulus_f64 = ntru_modulus.as_into();
         Ok(Parameters::<F> {
             lwe_dimension,
             lwe_modulus: <PowOf2Modulus<LWEPlaintext>>::new(lwe_modulus),
@@ -403,6 +403,7 @@ impl<F: NTTField> ParametersBuilder<F> {
 /// Default Field for Default Parameters
 #[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
+#[repr(transparent)]
 pub struct DefaultFieldTernary128(u32);
 
 /// Default Parameters
