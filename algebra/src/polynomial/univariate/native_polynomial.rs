@@ -217,9 +217,7 @@ impl<F: Field> Polynomial<F> {
             Self::new(gaussian.sample_iter(rng).take(n).collect())
         }
     }
-}
 
-impl<F: Field> Polynomial<F> {
     /// Generate a random [`Polynomial<F>`].
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self

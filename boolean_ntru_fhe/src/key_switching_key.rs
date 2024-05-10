@@ -2,7 +2,7 @@ use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial}
 use lattice::{DecompositionSpace, NTTGadgetRLWE, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
 
-use crate::SecretKeyPack;
+use crate::{LWEPlaintext, SecretKeyPack};
 
 /// The Key Switching Key.
 ///
@@ -19,9 +19,10 @@ pub struct KeySwitchingKey<F: NTTField> {
 impl<F: NTTField> KeySwitchingKey<F> {
     /// Performs key switching operation.
     pub fn key_switch(&self, ciphertext: LWE<F>) -> LWE<F> {
+        let n = self.lwe_dimension;
         let a: Vec<Polynomial<F>> = ciphertext
             .a()
-            .chunks_exact(self.lwe_dimension)
+            .chunks_exact(n)
             .map(|a| {
                 let mut p: Vec<F> = a.iter().map(|&x| -x).collect();
                 p[0] = -p[0];
@@ -31,17 +32,17 @@ impl<F: NTTField> KeySwitchingKey<F> {
             .collect();
 
         let mut init = <NTTRLWE<F>>::new(
-            NTTPolynomial::zero(self.lwe_dimension),
-            NTTPolynomial::new(vec![ciphertext.b(); self.lwe_dimension]),
+            NTTPolynomial::zero(n),
+            NTTPolynomial::new(vec![ciphertext.b(); n]),
         );
 
-        let mut decompose_space = DecompositionSpace::new(self.lwe_dimension);
+        let mut decompose_space = DecompositionSpace::new(n);
 
         self.key.iter().zip(a).for_each(|(k_i, a_i)| {
             init.sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(k_i, a_i, &mut decompose_space);
         });
 
-        <RLWE<F>>::from(init).extract_lwe()
+        <RLWE<F>>::from(init).extract_lwe_locally()
     }
 }
 
@@ -59,19 +60,17 @@ impl<F: NTTField> KeySwitchingKey<F> {
         let lwe_dimension = parameters.lwe_dimension();
         let key_switching_basis = parameters.key_switching_basis();
 
+        let convert = |v: &LWEPlaintext| match *v {
+            0 => F::ZERO,
+            1 => F::ONE,
+            _ => F::NEG_ONE,
+        };
+
         let s = <Polynomial<F>>::new(
             secret_key_pack
                 .lwe_secret_key()
                 .iter()
-                .map(|&v| {
-                    if v == 1 {
-                        F::ONE
-                    } else if v == 0 {
-                        F::ZERO
-                    } else {
-                        F::NEG_ONE
-                    }
-                })
+                .map(convert)
                 .collect(),
         );
 
@@ -85,7 +84,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
             .chunks_exact(lwe_dimension)
             .map(|z| {
                 let mut ntt_z = Polynomial::from_slice(z).into_ntt_polynomial();
-                let k_i = (0..len)
+                let k_i: Vec<NTTRLWE<F>> = (0..len)
                     .map(|i| {
                         let mut sample =
                             <NTTRLWE<F>>::generate_random_zero_sample(&s, chi, &mut rng);
@@ -98,7 +97,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
                         sample
                     })
-                    .collect::<Vec<NTTRLWE<F>>>();
+                    .collect();
                 NTTGadgetRLWE::new(k_i, key_switching_basis)
             })
             .collect();

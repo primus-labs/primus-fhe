@@ -170,6 +170,16 @@ impl<F: NTTField> NTRU<F> {
         LWE::<F>::new(a, F::ZERO)
     }
 
+    /// Extract an LWE sample from [`NTRU<F>`].
+    #[inline]
+    pub fn extract_lwe_locally(self) -> LWE<F> {
+        let mut a: Vec<F> = self.data.data();
+        a[1..].reverse();
+        a[0] = -a[0];
+
+        LWE::<F>::new(a, F::ZERO)
+    }
+
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
     pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
         &mut self,

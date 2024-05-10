@@ -235,7 +235,7 @@ impl<F: NTTField> EvaluationKey<F> {
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
-    pub fn bootstrap(&self, c: LWECiphertext, init_acc: NTRUCiphertext<F>) -> LWECiphertext {
+    pub fn bootstrap(&self, mut c: LWECiphertext, init_acc: NTRUCiphertext<F>) -> LWECiphertext {
         let parameters = self.parameters();
 
         let twice_ntru_dimension_div_lwe_modulus =
@@ -257,14 +257,15 @@ impl<F: NTTField> EvaluationKey<F> {
             .step_by(twice_ntru_dimension_div_lwe_modulus)
             .for_each(|v| *v += half_delta);
 
-        let extract = acc.extract_lwe();
+        let extract = acc.extract_lwe_locally();
 
         let key_switched = self.key_switching_key.key_switch(extract);
-        self.modulus_switch(key_switched)
+        self.modulus_switch(key_switched, &mut c);
+        c
     }
 
     /// Performs modulus switch.
-    pub fn modulus_switch(&self, c: LWE<F>) -> LWECiphertext {
+    pub fn modulus_switch(&self, c: LWE<F>, destination: &mut LWECiphertext) {
         let parameters = self.parameters();
         let lwe_modulus_f64 = parameters.lwe_modulus_f64();
         let ntru_modulus_f64 = parameters.ntru_modulus_f64();
@@ -272,10 +273,13 @@ impl<F: NTTField> EvaluationKey<F> {
         let switch =
             |v: F| (v.get().as_into() * lwe_modulus_f64 / ntru_modulus_f64).floor() as LWEPlaintext;
 
-        let a: Vec<LWEPlaintext> = c.a().iter().copied().map(switch).collect();
-        let b = switch(c.b());
+        destination
+            .a_mut()
+            .iter_mut()
+            .zip(c.a())
+            .for_each(|(des, &inp)| *des = switch(inp));
 
-        LWECiphertext::new(a, b)
+        *destination.b_mut() = switch(c.b());
     }
 }
 
