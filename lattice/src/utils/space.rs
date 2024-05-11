@@ -7,11 +7,11 @@ use crate::{NTTGadgetNTRU, NTRU, NTTNTRU, NTTRGSW, NTTRLWE, RLWE};
 /// Pre allocated space for inplace decomposition.
 #[derive(Debug)]
 pub struct DecompositionSpace<F: NTTField> {
-    space: Polynomial<F>,
+    space: NTTPolynomial<F>,
 }
 
 impl<F: NTTField> Deref for DecompositionSpace<F> {
-    type Target = Polynomial<F>;
+    type Target = NTTPolynomial<F>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -31,19 +31,19 @@ impl<F: NTTField> DecompositionSpace<F> {
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {
-            space: <Polynomial<F>>::zero(coeff_count),
+            space: <NTTPolynomial<F>>::zero(coeff_count),
         }
     }
 
     /// Gets the pre allocated space of decomposition.
     #[inline]
-    pub fn get(&self) -> &Polynomial<F> {
+    pub fn get(&self) -> &NTTPolynomial<F> {
         &self.space
     }
 
     /// Gets the mutable pre allocated space of decomposition.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut Polynomial<F> {
+    pub fn get_mut(&mut self) -> &mut NTTPolynomial<F> {
         &mut self.space
     }
 }

@@ -454,15 +454,10 @@ impl<F: NTTField> NTTNTRU<F> {
         let decompose_space = decompose_space.get_mut();
         let basis = gadget_ntru.basis();
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         gadget_ntru.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            self.add_ntt_ntru_mul_ntt_polynomial_assign(g, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_ntru_mul_ntt_polynomial_assign(g, decompose_space);
         })
     }
 
@@ -482,15 +477,10 @@ impl<F: NTTField> NTTNTRU<F> {
 
         let mut polynomial = -polynomial;
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         gadget_ntru.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            self.add_ntt_ntru_mul_ntt_polynomial_assign(g, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_ntru_mul_ntt_polynomial_assign(g, decompose_space);
         })
     }
 

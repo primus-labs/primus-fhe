@@ -94,16 +94,10 @@ impl<F: NTTField> GadgetRLWE<F> {
 
         let space = decompose_space.get_mut();
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         self.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(self.basis, space);
+            polynomial.decompose_lsb_bits_inplace(self.basis, space.as_mut_slice());
             ntt_table.transform_slice(space.as_mut_slice());
-
-            std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
-            g.mul_ntt_polynomial_inplace(&ntt_polynomial, &mut temp);
-            std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
-
+            g.mul_ntt_polynomial_inplace(space, &mut temp);
             ntt_rlwe.add_element_wise_assign(&temp);
         });
         <RLWE<F>>::from(ntt_rlwe)
@@ -123,15 +117,11 @@ impl<F: NTTField> GadgetRLWE<F> {
         let mut temp = <NTTRLWE<F>>::zero(coeff_count);
 
         let space = decompose_space.get_mut();
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
 
         self.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(self.basis, space);
+            polynomial.decompose_lsb_bits_inplace(self.basis, space.as_mut_slice());
             ntt_table.transform_slice(space.as_mut_slice());
-
-            std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
-            g.mul_ntt_polynomial_inplace(&ntt_polynomial, &mut temp);
-            std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
+            g.mul_ntt_polynomial_inplace(space, &mut temp);
 
             ntt_rlwe.add_element_wise_assign(&temp);
         });
@@ -316,15 +306,10 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
         let space = decompose_space.get_mut();
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         self.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(self.basis, space);
+            polynomial.decompose_lsb_bits_inplace(self.basis, space.as_mut_slice());
             ntt_table.transform_slice(space.as_mut_slice());
-
-            std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
-            ntt_rlwe.add_ntt_rlwe_mul_ntt_polynomial_assign(g, &ntt_polynomial);
-            std::mem::swap(space.data_mut(), ntt_polynomial.data_mut());
+            ntt_rlwe.add_ntt_rlwe_mul_ntt_polynomial_assign(g, space);
         });
 
         ntt_rlwe
@@ -349,15 +334,11 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
         destination.set_zero();
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         self.iter().for_each(|g_rlwe| {
-            polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space);
+            polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
 
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            destination.add_ntt_rlwe_mul_ntt_polynomial_assign(g_rlwe, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            destination.add_ntt_rlwe_mul_ntt_polynomial_assign(g_rlwe, decompose_space);
         })
     }
 
@@ -383,15 +364,11 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
         destination.set_zero();
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         self.iter().for_each(|g_rlwe| {
-            polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space);
+            polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
 
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            destination.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g_rlwe, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            destination.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g_rlwe, decompose_space);
         })
     }
 
