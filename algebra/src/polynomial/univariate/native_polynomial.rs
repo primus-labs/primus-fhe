@@ -311,8 +311,8 @@ impl<F: NTTField> Polynomial<F> {
     /// # Attention
     ///
     /// **`self`** will be modified *after* performing this decomposition.
-    pub fn decompose_lsb_bits_inplace(&mut self, basis: Basis<F>, destination: &mut Self) {
-        debug_assert_eq!(destination.coeff_count(), self.coeff_count());
+    pub fn decompose_lsb_bits_inplace(&mut self, basis: Basis<F>, destination: &mut [F]) {
+        debug_assert_eq!(destination.len(), self.coeff_count());
         let mask = basis.mask();
         let bits = basis.bits();
 

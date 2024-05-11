@@ -203,15 +203,10 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
 
         destination.set_zero();
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         self.iter().for_each(|g_ntru| {
-            polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space);
+            polynomial_space.decompose_lsb_bits_inplace(self.basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            destination.add_ntt_ntru_mul_ntt_polynomial_assign(g_ntru, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            destination.add_ntt_ntru_mul_ntt_polynomial_assign(g_ntru, decompose_space);
         })
     }
 

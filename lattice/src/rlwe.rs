@@ -792,15 +792,11 @@ impl<F: NTTField> NTTRLWE<F> {
 
         polynomial_space.copy_from(polynomial);
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         gadget_rlwe.iter().for_each(|g| {
-            polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
+            polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
 
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, decompose_space);
         })
     }
 
@@ -824,15 +820,10 @@ impl<F: NTTField> NTTRLWE<F> {
 
         polynomial_space.copy_from(polynomial);
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         gadget_rlwe.iter().for_each(|g| {
-            polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
+            polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, decompose_space);
         })
     }
 
@@ -852,15 +843,10 @@ impl<F: NTTField> NTTRLWE<F> {
         let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
         let basis = gadget_rlwe.basis();
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         gadget_rlwe.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, decompose_space);
         })
     }
 
@@ -880,15 +866,11 @@ impl<F: NTTField> NTTRLWE<F> {
 
         let mut polynomial = -polynomial;
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         gadget_rlwe.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
 
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign(g, decompose_space);
         })
     }
 
@@ -911,15 +893,10 @@ impl<F: NTTField> NTTRLWE<F> {
 
         let mut polynomial = -polynomial;
 
-        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
-
         gadget_rlwe.iter().for_each(|g| {
-            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
             ntt_table.transform_slice(decompose_space.as_mut_slice());
-
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
-            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, &ntt_polynomial);
-            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, decompose_space);
         })
     }
 
