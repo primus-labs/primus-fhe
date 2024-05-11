@@ -247,7 +247,7 @@ impl<F: NTTField> EvaluationKey<F> {
             parameters.bootstrapping_basis(),
         );
 
-        let mut extract = acc.extract_lwe();
+        let mut extract = acc.extract_lwe_reverse_locally();
         *extract.b_mut() += F::new(F::MODULUS_VALUE >> 3);
 
         let key_switched = self.key_switching_key.key_switch(extract);

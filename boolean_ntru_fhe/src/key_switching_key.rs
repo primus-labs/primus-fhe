@@ -78,7 +78,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
         let len = key_switching_basis.decompose_len();
 
-        // f = [f_0, -f_{N-1},..., -f_1]
+        // f = [-f_0, f_{N-1},..., f_1]
         let mut key = secret_key_pack.ring_secret_key().as_slice().to_vec();
         key[0] = -key[0];
         key[1..].reverse();
