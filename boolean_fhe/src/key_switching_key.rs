@@ -82,7 +82,6 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
         // z = [z_0, -z_{N-1},..., -z_1]
         let mut key = secret_key_pack.rlwe_secret_key().as_slice().to_vec();
-        // key[0] = -key[0];
         key[1..].reverse();
         key[1..].iter_mut().for_each(|v| *v = -*v);
 
