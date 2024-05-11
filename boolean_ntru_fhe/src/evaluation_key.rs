@@ -257,9 +257,7 @@ impl<F: NTTField> EvaluationKey<F> {
             .step_by(twice_ntru_dimension_div_lwe_modulus)
             .for_each(|v| *v += half_delta);
 
-        let extract = acc.extract_lwe_locally();
-
-        let key_switched = self.key_switching_key.key_switch(extract);
+        let key_switched = self.key_switching_key.key_switch(&acc);
         self.modulus_switch(key_switched, &mut c);
         c
     }

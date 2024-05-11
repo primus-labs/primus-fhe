@@ -325,6 +325,13 @@ impl<F: NTTField> RLWE<F> {
         LWE::<F>::new(a, b[0])
     }
 
+    /// Extract an LWE sample from RLWE reverselly.
+    #[inline]
+    pub fn extract_lwe_reverse_locally(self) -> LWE<F> {
+        let Self { a, b } = self;
+        LWE::<F>::new(a.data(), b[0])
+    }
+
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
     pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
         &mut self,
@@ -430,7 +437,7 @@ impl<F: NTTField> RLWE<F> {
             median,
         );
 
-        median.add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
+        median.add_assign_gadget_rlwe_mul_polynomial_fast(
             small_ntt_rgsw.c_m(),
             self.b(),
             decompose_space,
@@ -759,7 +766,7 @@ impl<F: NTTField> NTTRLWE<F> {
         let mut decompose_space = DecompositionSpace::new(coeff_count);
         let mut polynomial_space = PolynomialSpace::new(coeff_count);
 
-        self.add_assign_gadget_rlwe_mul_polynomial_inplace(
+        self.add_assign_gadget_rlwe_mul_polynomial(
             gadget_rlwe,
             polynomial,
             &mut decompose_space,
@@ -770,7 +777,7 @@ impl<F: NTTField> NTTRLWE<F> {
 
     /// Performs `self = self + gadget_rlwe * polynomial`.
     #[inline]
-    pub fn add_assign_gadget_rlwe_mul_polynomial_inplace(
+    pub fn add_assign_gadget_rlwe_mul_polynomial(
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
@@ -802,7 +809,7 @@ impl<F: NTTField> NTTRLWE<F> {
     /// The result coefficients may be in [0, 2*modulus) for some case,
     /// and fall back to [0, modulus) for normal case,
     #[inline]
-    pub fn add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
+    pub fn add_assign_gadget_rlwe_mul_polynomial_fast(
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
         polynomial: &Polynomial<F>,
@@ -821,6 +828,34 @@ impl<F: NTTField> NTTRLWE<F> {
 
         gadget_rlwe.iter().for_each(|g| {
             polynomial_space.decompose_lsb_bits_inplace(basis, decompose_space);
+            ntt_table.transform_slice(decompose_space.as_mut_slice());
+
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+            self.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g, &ntt_polynomial);
+            std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
+        })
+    }
+
+    /// Performs `self = self + gadget_rlwe * polynomial`.
+    ///
+    /// The result coefficients may be in [0, 2*modulus) for some case,
+    /// and fall back to [0, modulus) for normal case,
+    #[inline]
+    pub fn add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
+        &mut self,
+        gadget_rlwe: &NTTGadgetRLWE<F>,
+        polynomial: &mut Polynomial<F>,
+        decompose_space: &mut DecompositionSpace<F>,
+    ) {
+        let coeff_count = polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+        let ntt_table = F::get_ntt_table(coeff_count.trailing_zeros()).unwrap();
+        let basis = gadget_rlwe.basis();
+
+        let mut ntt_polynomial = NTTPolynomial::new(Vec::new());
+
+        gadget_rlwe.iter().for_each(|g| {
+            polynomial.decompose_lsb_bits_inplace(basis, decompose_space);
             ntt_table.transform_slice(decompose_space.as_mut_slice());
 
             std::mem::swap(decompose_space.data_mut(), ntt_polynomial.data_mut());
