@@ -316,7 +316,7 @@ impl<F: NTTField> Polynomial<F> {
         let mask = basis.mask();
         let bits = basis.bits();
 
-        destination.into_iter().zip(self).for_each(|(d_i, p_i)| {
+        destination.iter_mut().zip(self).for_each(|(d_i, p_i)| {
             p_i.decompose_lsb_bits_at(d_i, mask, bits);
         });
     }
