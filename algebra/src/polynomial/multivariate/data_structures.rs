@@ -27,10 +27,10 @@ pub struct ListOfProductsOfPolynomials<F: Field> {
     /// number of variables of the polynomial
     pub num_variables: usize,
     /// list of reference to products (as usize) of multilinear extension
-    /// (index, (a, b)) where `index` indicates the location of MLE and
-    /// (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
-    #[allow(clippy::type_complexity)]
-    pub products: Vec<(F, Vec<(usize, (F, F))>)>,
+    pub products: Vec<(F, Vec<usize>)>,
+    /// Stores the linear operations, each of which is successively (in the same order) perfomed over the each MLE of each product stored in the above `products`
+    /// so each (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
+    pub linear_ops: Vec<Vec<(F, F)>>,
     /// Stores multilinear extensions in which product multiplicand can refer to.
     pub flattened_ml_extensions: Vec<Rc<DenseMultilinearExtension<F>>>,
     raw_pointers_lookup_table: HashMap<*const DenseMultilinearExtension<F>, usize>,
@@ -66,6 +66,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
             max_multiplicands: 0,
             num_variables,
             products: Vec::new(),
+            linear_ops: Vec::new(),
             flattened_ml_extensions: Vec::new(),
             raw_pointers_lookup_table: HashMap::new(),
         }
@@ -85,8 +86,8 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         self.max_multiplicands = self.max_multiplicands.max(product.len());
         assert_eq!(product.len(), op_coefficient.len());
         assert!(!product.is_empty());
-        let mut indexed_product_with_op: Vec<(usize, (F, F))> =
-            Vec::with_capacity(op_coefficient.len());
+        let mut indexed_product: Vec<usize> = Vec::with_capacity(op_coefficient.len());
+        let mut linear_ops = Vec::with_capacity(op_coefficient.len());
 
         // (a, b) is the linear operation perfomed on the original MLE pointed by m
         for (m, (a, b)) in product.iter().zip(op_coefficient) {
@@ -96,15 +97,18 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
             );
             let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
             if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
-                indexed_product_with_op.push((*index, (*a, *b)));
+                indexed_product.push(*index);
+                linear_ops.push((*a, *b));
             } else {
                 let curr_index = self.flattened_ml_extensions.len();
                 self.flattened_ml_extensions.push(m.clone());
                 self.raw_pointers_lookup_table.insert(m_ptr, curr_index);
-                indexed_product_with_op.push((curr_index, (*a, *b)));
+                indexed_product.push(curr_index);
+                linear_ops.push((*a, *b));
             }
         }
-        self.products.push((coefficient, indexed_product_with_op));
+        self.products.push((coefficient, indexed_product));
+        self.linear_ops.push(linear_ops);
     }
 
     /// Standard add_product in the sumcheck
@@ -117,21 +121,40 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         coefficient: F,
     ) {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
-        let mut op_coefficient: Vec<(F, F)> = Vec::with_capacity(product.len());
+        let mut linear_ops: Vec<(F, F)> = Vec::with_capacity(product.len());
         for _ in 0..product.len() {
-            op_coefficient.push((F::ONE, F::ZERO));
+            linear_ops.push((F::ONE, F::ZERO));
         }
-        self.add_product_with_linear_op(product, &op_coefficient, coefficient);
+        self.add_product_with_linear_op(product, &linear_ops, coefficient);
     }
 
     /// Evaluate the polynomial at point `point`
     pub fn evaluate(&self, point: &[F]) -> F {
-        self.products.iter().fold(F::ZERO, |result, (c, p)| {
-            result
-                + p.iter().fold(*c, |acc, &i| {
-                    // acc * (f(point) * a + b)
-                    acc * (self.flattened_ml_extensions[i.0].evaluate(point) * i.1 .0 + i.1 .1)
-                })
-        })
+        // self.products.iter().zip(self.linear_ops.iter())
+        //     .map(|((c, p), ops)| {
+        //         *c * p.iter().zip(ops.iter())
+        //             .map(|(&i, &(a, b))| {
+        //                 self.flattened_ml_extensions[i].evaluate(point) * a + b
+        //             })
+        //             .product()
+        //     })
+        //     .sum()
+        self.products
+            .iter()
+            .zip(self.linear_ops.iter())
+            .fold(F::ZERO, |result, ((c, p), ops)| {
+                result
+                    + p.iter().zip(ops.iter()).fold(*c, |acc, (&i, &(a, b))| {
+                        acc * (self.flattened_ml_extensions[i].evaluate(point) * a + b)
+                    })
+            })
+
+        // self.products.iter().fold(F::ZERO, |result, (c, p)| {
+        //     result
+        //         + p.iter().fold(*c, |acc, &i| {
+        //             // acc * (f(point) * a + b)
+        //             acc * (self.flattened_ml_extensions[i.0].evaluate(point) * i.1 .0 + i.1 .1)
+        //         })
+        // })
     }
 }
