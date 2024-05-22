@@ -189,13 +189,13 @@ fn test_batch_bit_decomposition() {
         )),
     ];
 
-    let d_bits = d
+    let d_bits: Vec<_> = d
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
 
     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
-    for d_instance in &d_bits {
+    for d_instance in d_bits.iter() {
         decomposed_bits.add_decomposed_bits_instance(d_instance);
     }
 

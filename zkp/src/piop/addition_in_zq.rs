@@ -164,9 +164,9 @@ impl<F: Field> AdditionInZqSubclaim<F> {
     pub fn verify_subclaim(
         &self,
         q: F,
-        abc: &Vec<Rc<DenseMultilinearExtension<F>>>,
+        abc: &[Rc<DenseMultilinearExtension<F>>],
         k: &DenseMultilinearExtension<F>,
-        abc_bits: &Vec<Vec<Rc<DenseMultilinearExtension<F>>>>,
+        abc_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         info: &AdditionInZqInstanceInfo<F>,
     ) -> bool {
