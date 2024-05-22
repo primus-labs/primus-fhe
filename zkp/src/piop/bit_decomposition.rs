@@ -164,7 +164,7 @@ impl<F: Field> DecomposedBits<F> {
 
 impl<F: Field> BitDecompositionSubClaim<F> {
     /// verify the subclaim
-    /// 
+    ///
     /// # Argument
     ///   
     /// * `d_val` stores each value to be decomposed

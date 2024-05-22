@@ -60,7 +60,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         prover_msg: ProverMsg<F>,
         verifier_state: &mut VerifierState<F>,
         rng: &mut R,
-    ) {
+    ) -> Option<VerifierMsg<F>> {
         if verifier_state.finished {
             panic!("incorrect verifier state: Verifier is already finished.")
         }
@@ -82,6 +82,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         } else {
             verifier_state.round += 1;
         }
+        Some(msg)
     }
 
     /// check the proof and generate the reduced subclaim
