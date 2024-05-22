@@ -136,15 +136,6 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
 
     /// Evaluate the polynomial at point `point`
     pub fn evaluate(&self, point: &[F]) -> F {
-        // self.products.iter().zip(self.linear_ops.iter())
-        //     .map(|((c, p), ops)| {
-        //         *c * p.iter().zip(ops.iter())
-        //             .map(|(&i, &(a, b))| {
-        //                 self.flattened_ml_extensions[i].evaluate(point) * a + b
-        //             })
-        //             .product()
-        //     })
-        //     .sum()
         self.products
             .iter()
             .zip(self.linear_ops.iter())
@@ -154,13 +145,5 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
                         acc * (self.flattened_ml_extensions[i].evaluate(point) * a + b)
                     })
             })
-
-        // self.products.iter().fold(F::ZERO, |result, (c, p)| {
-        //     result
-        //         + p.iter().fold(*c, |acc, &i| {
-        //             // acc * (f(point) * a + b)
-        //             acc * (self.flattened_ml_extensions[i.0].evaluate(point) * i.1 .0 + i.1 .1)
-        //         })
-        // })
     }
 }
