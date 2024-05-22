@@ -17,6 +17,10 @@ rand_distr = { workspace = true }
 rand_chacha = "0.3.1"
 rayon = { workspace = true }
 
+[features]
+default = []
+count_ntt = ["algebra/count_ntt"]
+
 [dev-dependencies]
 criterion = { workspace = true }
 

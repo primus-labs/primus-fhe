@@ -79,7 +79,7 @@ macro_rules! impl_reduce_ops_for_primitive {
 
                 let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
 
-                debug_assert_eq!(gcd, 1);
+                assert_eq!(gcd, 1);
 
                 if inv > 0 {
                     inv as Self

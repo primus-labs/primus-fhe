@@ -75,15 +75,20 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// Add a list of multilinear extensions that is meant to be multiplied together.
     /// Here we wrap a linear operation on the same MLE so that we can add the
     /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
+    /// Here we wrap a linear operation on the same MLE so that we can add the
+    /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
     /// The resulting polynomial will be multiplied by the scalar `coefficient`.
+    pub fn add_product_with_linear_op(
     pub fn add_product_with_linear_op(
         &mut self,
         product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
+        op_coefficient: &[(F, F)],
         op_coefficient: &[(F, F)],
         coefficient: F,
     ) {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
         self.max_multiplicands = self.max_multiplicands.max(product.len());
+        assert_eq!(product.len(), op_coefficient.len());
         assert_eq!(product.len(), op_coefficient.len());
         assert!(!product.is_empty());
         let mut indexed_product: Vec<usize> = Vec::with_capacity(op_coefficient.len());
@@ -95,6 +100,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
                 m.num_vars, self.num_variables,
                 "product has a multiplicand with wrong number of variables"
             );
+            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
             let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
             if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
                 indexed_product.push(*index);

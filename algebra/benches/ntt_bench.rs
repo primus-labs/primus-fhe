@@ -3,7 +3,7 @@ use algebra::{
     Basis, FieldUniformSampler, NTTField, Polynomial,
 };
 use algebra_derive::{Field, Prime, NTT};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use rand::prelude::*;
 
 #[derive(Field, Prime, NTT)]
@@ -57,9 +57,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Polynomial decompose");
 
     group.bench_function("polynomial decompose", |b| {
-        b.iter(|| {
-            a.clone().decompose(basis);
-        })
+        b.iter_batched(|| a.clone(), |a| a.decompose(basis), BatchSize::SmallInput)
     });
 
     group.bench_function("polynomial decompose inplace", |b| {

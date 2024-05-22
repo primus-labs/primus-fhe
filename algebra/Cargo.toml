@@ -16,12 +16,17 @@ rand_distr = { workspace = true }
 
 [features]
 default = []
+count_ntt = []
 
 [dev-dependencies]
 criterion = { workspace = true }
 
 [[bench]]
 name = "ntt_bench"
+harness = false
+
+[[bench]]
+name = "modulus_bench"
 harness = false
 
 [package.metadata.docs.rs]
