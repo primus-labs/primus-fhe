@@ -4,7 +4,7 @@ use algebra::{DenseMultilinearExtension, Field};
 /// Generate MLE of the ideneity function eq(u,x) for x \in \{0, 1\}^dim
 pub fn gen_identity_evaluations<F: Field>(u: &[F]) -> DenseMultilinearExtension<F> {
     let dim = u.len();
-    let mut evaluations: Vec<_> = (0..(1 << dim)).map(|_| F::ZERO).collect();
+    let mut evaluations: Vec<_> = vec![F::ZERO; 1 << dim];
     evaluations[0] = F::ONE;
     for i in 0..dim {
         // The index represents a point in {0,1}^`num_vars` in little endian form.

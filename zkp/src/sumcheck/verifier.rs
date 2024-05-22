@@ -60,7 +60,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         prover_msg: ProverMsg<F>,
         verifier_state: &mut VerifierState<F>,
         rng: &mut R,
-    ) -> Option<VerifierMsg<F>> {
+    ) {
         if verifier_state.finished {
             panic!("incorrect verifier state: Verifier is already finished.")
         }
@@ -82,7 +82,6 @@ impl<F: Field> IPForMLSumcheck<F> {
         } else {
             verifier_state.round += 1;
         }
-        Some(msg)
     }
 
     /// check the proof and generate the reduced subclaim
@@ -130,7 +129,7 @@ impl<F: Field> IPForMLSumcheck<F> {
 
 /// Interpolate the *unique* univariate polynomial of degree *at most*
 /// p_i.len() - 1 passing through y-values in p_i at x = 0, ..., p_i.len() - 1,
-/// and evalute this polynomial at `eval_at`.
+/// and evaluate this polynomial at `eval_at`.
 /// In other words, efficiently compute
 /// \sum_{i=0}^{len p_i - 1} p_i\[i\] * (\prod_{j!=i}(eval_at - j)/(i - j))
 pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
