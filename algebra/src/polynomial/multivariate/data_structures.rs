@@ -79,10 +79,8 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
     /// The resulting polynomial will be multiplied by the scalar `coefficient`.
     pub fn add_product_with_linear_op(
-    pub fn add_product_with_linear_op(
         &mut self,
         product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
-        op_coefficient: &[(F, F)],
         op_coefficient: &[(F, F)],
         coefficient: F,
     ) {
@@ -100,7 +98,6 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
                 m.num_vars, self.num_variables,
                 "product has a multiplicand with wrong number of variables"
             );
-            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
             let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
             if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
                 indexed_product.push(*index);
