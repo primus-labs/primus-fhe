@@ -58,7 +58,7 @@ fn test_trivial_addition_in_zq() {
     ));
 
     // decompose bits of every element in a, b, c
-    let abc_bits = abc
+    let abc_bits: Vec<_> = abc
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
@@ -127,7 +127,7 @@ fn test_random_addition_in_zq() {
     ));
 
     // decompose bits of every element in a, b, c
-    let abc_bits = abc
+    let abc_bits: Vec<_> = abc
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
