@@ -406,7 +406,7 @@ pub struct DefaultFieldTernary128(u32);
 
 /// Default Parameters
 pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
-    lwe_dimension: 780,
+    lwe_dimension: 590,
     lwe_modulus: 1024,
     lwe_noise_std_dev: 3.20,
     secret_key_type: SecretKeyType::Ternary,
@@ -414,8 +414,8 @@ pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = Con
     rlwe_modulus: 132120577,
     rlwe_noise_std_dev: 3.20,
     bootstrapping_basis_bits: 7,
-    key_switching_basis_bits: 4,
-    key_switching_std_dev: 3.2 * ((1 << 7) as f64),
+    key_switching_basis_bits: 1,
+    key_switching_std_dev: 3.2 * ((1 << 12) as f64),
 };
 
 /// Default 128-bits security Parameters
