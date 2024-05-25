@@ -347,9 +347,6 @@ impl<F: NTTField> ParametersBuilder<F> {
         let rlwe_dimension = self.rlwe_dimension.unwrap();
         let rlwe_modulus = self.rlwe_modulus.unwrap();
 
-        if !lwe_dimension.is_power_of_two() {
-            return Err(FHEError::LweDimensionUnValid(lwe_dimension));
-        }
         // N = 2^i
         if !rlwe_dimension.is_power_of_two() {
             return Err(FHEError::RlweDimensionUnValid(rlwe_dimension));
@@ -409,7 +406,7 @@ pub struct DefaultFieldTernary128(u32);
 
 /// Default Parameters
 pub const CONST_DEFAULT_TERNARY_128_BITS_PARAMERTERS: ConstParameters<u32> = ConstParameters::<u32> {
-    lwe_dimension: 512,
+    lwe_dimension: 780,
     lwe_modulus: 1024,
     lwe_noise_std_dev: 3.20,
     secret_key_type: SecretKeyType::Ternary,
