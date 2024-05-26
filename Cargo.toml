@@ -4,8 +4,9 @@ members = [
     "algebra",
     "lattice",
     "algebra_derive",
-    "boolean_fhe",
-    "boolean_ntru_fhe",
+    "fhe",
+    "zkfhe",
+    "fhe_core",
 ]
 
 resolver = "2"
