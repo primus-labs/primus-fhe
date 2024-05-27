@@ -27,7 +27,10 @@ pub struct ListOfProductsOfPolynomials<F: Field> {
     /// number of variables of the polynomial
     pub num_variables: usize,
     /// list of reference to products (as usize) of multilinear extension
-    pub products: Vec<(F, Vec<usize>)>,
+    /// (index, (a, b)) where `index` indicates the location of MLE and
+    /// (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
+    #[allow(clippy::type_complexity)]
+    pub products: Vec<(F, Vec<(usize, (F, F))>)>,
     /// Stores multilinear extensions in which product multiplicand can refer to.
     pub flattened_ml_extensions: Vec<Rc<DenseMultilinearExtension<F>>>,
     raw_pointers_lookup_table: HashMap<*const DenseMultilinearExtension<F>, usize>,
@@ -69,32 +72,56 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     }
 
     /// Add a list of multilinear extensions that is meant to be multiplied together.
+    /// Here we wrap a linear operation on the same MLE so that we can add the
+    /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
     /// The resulting polynomial will be multiplied by the scalar `coefficient`.
+    pub fn add_product_with_linear_op(
+        &mut self,
+        product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
+        op_coefficient: &[(F, F)],
+        coefficient: F,
+    ) {
+        let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
+        self.max_multiplicands = self.max_multiplicands.max(product.len());
+        assert_eq!(product.len(), op_coefficient.len());
+        assert!(!product.is_empty());
+        let mut indexed_product_with_op: Vec<(usize, (F, F))> =
+            Vec::with_capacity(op_coefficient.len());
+
+        // (a, b) is the linear operation perfomed on the original MLE pointed by m
+        for (m, (a, b)) in product.iter().zip(op_coefficient) {
+            assert_eq!(
+                m.num_vars, self.num_variables,
+                "product has a multiplicand with wrong number of variables"
+            );
+            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
+            if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
+                indexed_product_with_op.push((*index, (*a, *b)));
+            } else {
+                let curr_index = self.flattened_ml_extensions.len();
+                self.flattened_ml_extensions.push(m.clone());
+                self.raw_pointers_lookup_table.insert(m_ptr, curr_index);
+                indexed_product_with_op.push((curr_index, (*a, *b)));
+            }
+        }
+        self.products.push((coefficient, indexed_product_with_op));
+    }
+
+    /// Standard add_product in the sumcheck
+    /// Add a list of multilinear extensions that is meant to be multiplied together.
+    /// The resulting polynomial will be multiplied by the scalar `coefficient`.
+    #[inline]
     pub fn add_product(
         &mut self,
         product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
         coefficient: F,
     ) {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
-        let mut indexed_product: Vec<usize> = Vec::with_capacity(product.len());
-        self.max_multiplicands = self.max_multiplicands.max(product.len());
-        assert!(!product.is_empty());
-        for m in product {
-            assert_eq!(
-                m.num_vars, self.num_variables,
-                "product has a multiplicand with wrong number of variables"
-            );
-            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(&m);
-            if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
-                indexed_product.push(*index);
-            } else {
-                let curr_index = self.flattened_ml_extensions.len();
-                self.flattened_ml_extensions.push(m.clone());
-                self.raw_pointers_lookup_table.insert(m_ptr, curr_index);
-                indexed_product.push(curr_index);
-            }
+        let mut op_coefficient: Vec<(F, F)> = Vec::with_capacity(product.len());
+        for _ in 0..product.len() {
+            op_coefficient.push((F::ONE, F::ZERO));
         }
-        self.products.push((coefficient, indexed_product));
+        self.add_product_with_linear_op(product, &op_coefficient, coefficient);
     }
 
     /// Evaluate the polynomial at point `point`
@@ -102,7 +129,8 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         self.products.iter().fold(F::ZERO, |result, (c, p)| {
             result
                 + p.iter().fold(*c, |acc, &i| {
-                    acc * self.flattened_ml_extensions[i].evaluate(point)
+                    // acc * (f(point) * a + b)
+                    acc * (self.flattened_ml_extensions[i.0].evaluate(point) * i.1 .0 + i.1 .1)
                 })
         })
     }

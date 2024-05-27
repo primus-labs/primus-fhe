@@ -1,5 +1,5 @@
 use algebra::modulus::PowOf2Modulus;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use lattice::LWE;
 use rand::prelude::*;
 use rand_distr::Uniform;
@@ -24,7 +24,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("LWE");
 
     group.bench_function("LWE add component wise clone", |b| {
-        b.iter(|| black_box(&c0).clone().add_component_wise(black_box(&c1)))
+        b.iter_batched(
+            || c0.clone(),
+            |c0| c0.add_component_wise(black_box(&c1)),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("LWE add component wise collect", |b| {
@@ -32,11 +36,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("LWE add reduce component wise clone", |b| {
-        b.iter(|| {
-            black_box(&c0)
-                .clone()
-                .add_reduce_component_wise(black_box(&c1), black_box(modulus))
-        })
+        b.iter_batched(
+            || c0.clone(),
+            |c0| c0.add_reduce_component_wise(black_box(&c1), black_box(modulus)),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("LWE add reduce component wise collect", |b| {
@@ -44,7 +48,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("LWE sub component wise clone", |b| {
-        b.iter(|| black_box(&c0).clone().sub_component_wise(black_box(&c1)))
+        b.iter_batched(
+            || c0.clone(),
+            |c0| c0.sub_component_wise(black_box(&c1)),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("LWE sub component wise collect", |b| {
@@ -52,11 +60,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("LWE sub reduce component wise clone", |b| {
-        b.iter(|| {
-            black_box(&c0)
-                .clone()
-                .sub_reduce_component_wise(black_box(&c1), black_box(modulus))
-        })
+        b.iter_batched(
+            || c0.clone(),
+            |c0| c0.sub_reduce_component_wise(black_box(&c1), black_box(modulus)),
+            BatchSize::SmallInput,
+        )
     });
 
     group.bench_function("LWE sub reduce component wise collect", |b| {
