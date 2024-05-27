@@ -332,6 +332,15 @@ impl<F: NTTField> RLWE<F> {
         LWE::<F>::new(a.data(), b[0])
     }
 
+    /// Extract an LWE sample from part of RLWE reverselly.
+    #[inline]
+    pub fn extract_partial_lwe_reverse_locally(self, dimension: usize) -> LWE<F> {
+        let Self { a, b } = self;
+        let mut a = a.data();
+        a.truncate(dimension);
+        LWE::<F>::new(a, b[0])
+    }
+
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
     pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
         &mut self,

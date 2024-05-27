@@ -84,9 +84,6 @@ pub struct ConstParameters<Scalar> {
 impl<F: NTTField> Parameters<F> {
     /// Create a new Parameter instance.
     pub fn new(params: ConstParameters<F::Value>) -> Result<Self, FHECoreError> {
-        if !params.lwe_dimension.is_power_of_two() {
-            return Err(FHECoreError::LweDimensionUnValid(params.lwe_dimension));
-        }
         // N = 2^i
         if !params.ring_dimension.is_power_of_two() {
             return Err(FHECoreError::RlweDimensionUnValid(params.ring_dimension));
