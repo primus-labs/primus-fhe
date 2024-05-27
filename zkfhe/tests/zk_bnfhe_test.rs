@@ -2,7 +2,9 @@ use algebra::NTTField;
 
 use fhe_core::{and, majority, nand, nor, not, or, xnor, xor, LWECiphertext, LWEModulusType};
 use rand::prelude::*;
-use zkfhe::ntru_bfhe::{Decryptor, Encryptor, Evaluator, KeyGen, DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS};
+use zkfhe::ntru_bfhe::{
+    Decryptor, Encryptor, Evaluator, KeyGen, DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS,
+};
 
 #[test]
 #[ignore = "run slowly in test mode, disable it for github action"]
