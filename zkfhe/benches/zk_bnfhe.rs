@@ -7,7 +7,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let default_parameters = DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS.clone();
+    let default_parameters = *DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS;
 
     // generate keys
     let sk = KeyGen::generate_secret_key(default_parameters);

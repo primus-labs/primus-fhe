@@ -12,7 +12,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS.clone();
+    let params = *DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS;
 
     let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as LWEModulusType;
 
