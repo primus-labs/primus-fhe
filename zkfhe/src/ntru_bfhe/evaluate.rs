@@ -39,7 +39,7 @@ impl<F: NTTField> EvaluationKey<F> {
         Self {
             blind_rotation_key,
             key_switching_key,
-            parameters: parameters.clone(),
+            parameters: *parameters,
         }
     }
 

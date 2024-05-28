@@ -31,10 +31,10 @@ impl<F: NTTField> EvaluationKey<F> {
         assert_eq!(parameters.blind_rotation_type(), BlindRotationType::RLWE);
 
         let chi = parameters.ring_noise_distribution();
-        let blind_rotation_key = RLWEBlindRotationKey::generate(&secret_key_pack, chi, &mut *csrng);
+        let blind_rotation_key = RLWEBlindRotationKey::generate(secret_key_pack, chi, &mut *csrng);
 
         let chi = parameters.key_switching_noise_distribution();
-        let key_switching_key = KeySwitchingKey::generate(&secret_key_pack, chi, &mut *csrng);
+        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
 
         Self {
             blind_rotation_key,
@@ -77,7 +77,7 @@ impl<F: NTTField> Evaluator<F> {
     #[inline]
     pub fn new(sk: &SecretKeyPack<F>) -> Self {
         Self {
-            ek: EvaluationKey::new(&sk),
+            ek: EvaluationKey::new(sk),
         }
     }
 
