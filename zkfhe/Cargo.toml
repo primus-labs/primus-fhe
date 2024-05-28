@@ -20,13 +20,13 @@ count_ntt = ["algebra/count_ntt"]
 [dev-dependencies]
 criterion = { workspace = true }
 
-# [[bench]]
-# name = "zk_bfhe"
-# harness = false
+[[bench]]
+name = "zk_bfhe"
+harness = false
 
-# [[bench]]
-# name = "zk_bnfhe"
-# harness = false
+[[bench]]
+name = "zk_bnfhe"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

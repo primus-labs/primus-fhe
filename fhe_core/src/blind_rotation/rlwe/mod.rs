@@ -40,7 +40,7 @@ impl<F: NTTField> BlindRotationKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn bootstrapping(
+    pub fn blind_rotate(
         &self,
         init_acc: RLWE<F>,
         lwe_a: &[LWEModulusType],
