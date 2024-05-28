@@ -13,6 +13,8 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 rand = { workspace = true }
 rand_distr = { workspace = true }
+bytemuck = { workspace = true }
+rand_core = {workspace = true}
 
 [features]
 default = []
