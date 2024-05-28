@@ -2,7 +2,8 @@
 
 use bytemuck::{Pod, Zeroable};
 use std::{
-    fmt::{Debug, Display}, ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign}
+    fmt::{Debug, Display},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign},
 };
 
 #[cfg(target_arch = "aarch64")]
