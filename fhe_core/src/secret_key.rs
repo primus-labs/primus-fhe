@@ -10,7 +10,8 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
 use crate::{
-    ciphertext::LWECiphertext, decode, encode, LWEBoolMessage, LWEModulusType, Parameters,
+    ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEBoolMessage, LWEModulusType,
+    Parameters,
 };
 
 /// The distribution type of the LWE Secret Key
@@ -69,40 +70,37 @@ impl<F: NTTField> SecretKeyPack<F> {
     }
 
     /// Creates a new [`SecretKeyPack<F>`].
-    pub fn new_for_rlwe(parameters: Parameters<F>) -> Self {
+    pub fn new(parameters: Parameters<F>) -> Self {
         let mut csrng = ChaCha12Rng::from_entropy();
 
         let lwe_secret_key = Self::create_lwe_secret_key(&parameters, &mut csrng);
 
         let ring_dimension = parameters.ring_dimension();
-        let ring_secret_key = Polynomial::random(ring_dimension, &mut csrng);
-        let ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
 
-        Self {
-            lwe_secret_key,
-            ring_secret_key,
-            ntt_ring_secret_key,
-            ntt_inv_ring_secret_key: None,
-            parameters,
-            csrng: RefCell::new(csrng),
+        let ring_secret_key;
+        let ntt_ring_secret_key;
+        let ntt_inv_ring_secret_key;
+
+        match parameters.blind_rotation_type() {
+            BlindRotationType::RLWE => {
+                ring_secret_key = Polynomial::random(ring_dimension, &mut csrng);
+                ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
+                ntt_inv_ring_secret_key = None;
+            }
+            BlindRotationType::NTRU => {
+                let four = F::ONE + F::ONE + F::ONE + F::ONE;
+                let chi = parameters.ring_noise_distribution();
+                ring_secret_key = {
+                    let mut ring_secret_key =
+                        Polynomial::random_with_gaussian(ring_dimension, &mut csrng, chi);
+                    ring_secret_key.mul_scalar_assign(four);
+                    ring_secret_key[0] += F::ONE;
+                    ring_secret_key
+                };
+                ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
+                ntt_inv_ring_secret_key = Some((&ntt_ring_secret_key).inv());
+            }
         }
-    }
-
-    /// Creates a new [`SecretKeyPack<F>`].
-    pub fn new_for_ntru(parameters: Parameters<F>) -> Self {
-        let mut csrng = ChaCha12Rng::from_entropy();
-
-        let lwe_secret_key = Self::create_lwe_secret_key(&parameters, &mut csrng);
-
-        let four = F::ONE + F::ONE + F::ONE + F::ONE;
-        let ring_dimension = parameters.ring_dimension();
-        let chi = parameters.ring_noise_distribution();
-        let mut ring_secret_key = Polynomial::random_with_gaussian(ring_dimension, &mut csrng, chi);
-        ring_secret_key.mul_scalar_assign(four);
-        ring_secret_key[0] += F::ONE;
-        let ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
-        let ntt_inv_ring_secret_key = Some((&ntt_ring_secret_key).inv());
-
         Self {
             lwe_secret_key,
             ring_secret_key,

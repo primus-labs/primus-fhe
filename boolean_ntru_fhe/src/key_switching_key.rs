@@ -40,7 +40,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
             );
         });
 
-        <RLWE<F>>::from(init).extract_short_lwe_reverse_locally(n)
+        <RLWE<F>>::from(init).extract_partial_lwe_reverse_locally(n)
     }
 }
 

@@ -334,7 +334,7 @@ impl<F: NTTField> RLWE<F> {
 
     /// Extract an LWE sample from RLWE reverselly.
     #[inline]
-    pub fn extract_short_lwe_reverse_locally(self, dimension: usize) -> LWE<F> {
+    pub fn extract_partial_lwe_reverse_locally(self, dimension: usize) -> LWE<F> {
         let Self { a, b } = self;
         let mut a = a.data();
         a.truncate(dimension);

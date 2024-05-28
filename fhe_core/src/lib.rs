@@ -12,11 +12,14 @@ mod ciphertext;
 
 mod secret_key;
 
+mod key_switch;
+
+mod modulus_switch;
 pub mod utils;
 
 pub use error::FHECoreError;
 
-pub use parameter::{ConstParameters, DefaultFieldU32, Parameters};
+pub use parameter::{BlindRotationType, ConstParameters, DefaultFieldU32, Parameters};
 
 pub use bool_plaintext::{decode, encode, LWEBoolMessage, LWEModulusType};
 pub use ciphertext::{
@@ -24,3 +27,7 @@ pub use ciphertext::{
 };
 
 pub use secret_key::{SecretKeyPack, SecretKeyType};
+
+pub use key_switch::KeySwitchingKey;
+
+pub use modulus_switch::{lwe_modulus_switch, lwe_modulus_switch_inplace};

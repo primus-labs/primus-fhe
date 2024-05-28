@@ -16,6 +16,15 @@ pub struct LWEParameters {
     pub lwe_noise_std_dev: f64,
 }
 
+/// Use `RLWE` or `NTRU` to perform blind rotation.
+#[derive(Debug, Clone, Copy)]
+pub enum BlindRotationType {
+    /// Use `RLWE` to perform blind rotation.
+    RLWE,
+    /// Use `NTRU` to perform blind rotation.
+    NTRU,
+}
+
 /// Parameters for blind rotation.
 #[derive(Debug, Clone, Copy)]
 pub struct BlindRotationParameters<F: NTTField> {
@@ -29,6 +38,8 @@ pub struct BlindRotationParameters<F: NTTField> {
     pub blind_rotation_basis: Basis<F>,
     /// Refers to **`2N/q`** in the paper.
     pub twice_ring_dimension_div_lwe_modulus: usize,
+    /// Use `RLWE` or `NTRU` to perform blind rotation.
+    pub blind_rotation_type: BlindRotationType,
 }
 
 /// Parameters for key switching.
@@ -62,6 +73,9 @@ pub struct ConstParameters<Scalar> {
     pub lwe_noise_std_dev: f64,
     /// LWE Secret Key distribution Type
     pub secret_key_type: SecretKeyType,
+
+    /// Use `RLWE` or `NTRU` to perform blind rotation.
+    pub blind_rotation_type: BlindRotationType,
 
     /// Ring polynomial dimension, refers to **`N`** in the paper.
     pub ring_dimension: usize,
@@ -125,6 +139,7 @@ impl<F: NTTField> Parameters<F> {
             ring_noise_std_dev: params.ring_noise_std_dev,
             blind_rotation_basis: Basis::<F>::new(params.blind_rotation_basis_bits),
             twice_ring_dimension_div_lwe_modulus,
+            blind_rotation_type: params.blind_rotation_type,
         };
 
         let key_switching_params = KeySwitchingParameters::<F> {
@@ -187,6 +202,12 @@ impl<F: NTTField> Parameters<F> {
     pub fn twice_ring_dimension_div_lwe_modulus(&self) -> usize {
         self.blind_rotation_params
             .twice_ring_dimension_div_lwe_modulus
+    }
+
+    /// Use `RLWE` or `NTRU` to perform blind rotation.
+    #[inline]
+    pub fn blind_rotation_type(&self) -> BlindRotationType {
+        self.blind_rotation_params.blind_rotation_type
     }
 
     /// Returns the gadget basis of this [`Parameters<F>`],
