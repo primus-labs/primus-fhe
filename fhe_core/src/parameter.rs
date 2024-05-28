@@ -122,7 +122,7 @@ impl<F: NTTField> Parameters<F> {
         let temp = (ring_modulus_u - 1) / (ring_dimension << 1);
         if temp * (ring_dimension << 1) != (ring_modulus_u - 1) {
             return Err(FHECoreError::RingModulusAndDimensionNotCompatible {
-                ring_modulus: ring_modulus_u,
+                coeff_modulus: ring_modulus_u,
                 ring_dimension,
             });
         }

@@ -1,8 +1,10 @@
+use std::slice::ChunksExact;
+
 use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
 
-use crate::{BlindRotationType, LWEModulusType, SecretKeyPack};
+use crate::{BlindRotationType, LWEModulusType, NTRUCiphertext, SecretKeyPack};
 
 /// The Key Switching Key.
 ///
@@ -15,8 +17,6 @@ pub struct KeySwitchingKey<F: NTTField> {
     lwe_dimension: usize,
     /// Key Switching Key data
     key: Vec<NTTGadgetRLWE<F>>,
-    /// Use `RLWE` or `NTRU` to perform blind rotation.
-    blind_rotation_type: BlindRotationType,
 }
 
 impl<F: NTTField> KeySwitchingKey<F> {
@@ -134,32 +134,45 @@ impl<F: NTTField> KeySwitchingKey<F> {
                 .collect()
         };
 
-        Self {
-            lwe_dimension,
-            key,
-            blind_rotation_type,
-        }
+        Self { lwe_dimension, key }
     }
 
     /// Performs key switching operation.
-    pub fn key_switch(&self, ciphertext: &LWE<F>) -> LWE<F> {
-        let n = self.lwe_dimension.next_power_of_two();
+    pub fn key_switch_for_rlwe(&self, ciphertext: &LWE<F>) -> LWE<F> {
+        let extended_lwe_dimension = self.lwe_dimension.next_power_of_two();
 
-        let mut init = match self.blind_rotation_type {
-            BlindRotationType::RLWE => <NTTRLWE<F>>::new(
-                NTTPolynomial::zero(n),
-                NTTPolynomial::new(vec![ciphertext.b(); n]),
-            ),
-            // Because the lwe ciphertext extracted from a ntru ciphertext always has `b = 0`.
-            BlindRotationType::NTRU => <NTTRLWE<F>>::zero(n),
-        };
+        let init = <NTTRLWE<F>>::new(
+            NTTPolynomial::zero(extended_lwe_dimension),
+            NTTPolynomial::new(vec![ciphertext.b(); extended_lwe_dimension]),
+        );
 
-        let mut polynomial_space = PolynomialSpace::new(n);
-        let mut decompose_space = DecompositionSpace::new(n);
+        let iter = ciphertext.a().chunks_exact(extended_lwe_dimension);
 
-        let a_iter = ciphertext.a().chunks_exact(n);
+        self.key_switch_inner(extended_lwe_dimension, init, iter)
+    }
 
-        self.key.iter().zip(a_iter).for_each(|(k_i, a_i)| {
+    /// Performs key switching operation.
+    pub fn key_switch_for_ntru(&self, ciphertext: &NTRUCiphertext<F>) -> LWE<F> {
+        let extended_lwe_dimension = self.lwe_dimension.next_power_of_two();
+
+        // Because the lwe ciphertext extracted from a ntru ciphertext always has `b = 0`.
+        let init = <NTTRLWE<F>>::zero(extended_lwe_dimension);
+
+        let iter = ciphertext.as_slice().chunks_exact(extended_lwe_dimension);
+
+        self.key_switch_inner(extended_lwe_dimension, init, iter)
+    }
+
+    fn key_switch_inner(
+        &self,
+        extended_lwe_dimension: usize,
+        mut init: NTTRLWE<F>,
+        iter: ChunksExact<F>,
+    ) -> LWE<F> {
+        let mut polynomial_space = PolynomialSpace::new(extended_lwe_dimension);
+        let mut decompose_space = DecompositionSpace::new(extended_lwe_dimension);
+
+        self.key.iter().zip(iter).for_each(|(k_i, a_i)| {
             polynomial_space.copy_from(a_i);
             init.add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
                 k_i,

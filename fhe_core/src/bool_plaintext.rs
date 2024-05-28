@@ -8,6 +8,7 @@ pub type LWEModulusType = u16;
 #[inline]
 pub fn encode(message: LWEBoolMessage, lwe_modulus: LWEModulusType) -> LWEModulusType {
     if message {
+        // q/4
         lwe_modulus >> 2
     } else {
         0

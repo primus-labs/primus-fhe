@@ -1,32 +1,32 @@
 /// Errors that may occur.
 #[derive(thiserror::Error, Debug)]
 pub enum FHECoreError {
-    /// Error that occurs when the given polynomial dimension is not valid.
+    /// Error that occurs when the given polynomial modulus dimension of ring is not valid.
     #[error("Polynoomial dimension of Ring is not valid!:{0}")]
     RingDimensionUnValid(
         /// Polynomial dimension of Ring.
         usize,
     ),
     /// Error that occurs when the given lwe modulus
-    /// is not compatible with polynomial dimension of Ring.
+    /// is not compatible with polynomial modulus dimension of ring.
     #[error(
-        "LWE modulus {lwe_modulus} is not compatible with polynomial dimension {ring_dimension}!"
+        "LWE modulus {lwe_modulus} is not compatible with polynomial modulus dimension {ring_dimension}!"
     )]
     LweModulusRingDimensionNotCompatible {
         /// LWE modulus.
         lwe_modulus: usize,
-        /// Polynomial dimension of Ring.
+        /// Polynomial modulus dimension of ring.
         ring_dimension: usize,
     },
-    /// Error that occurs when the given polynomial modulus
-    /// is not compatible with polynomial dimension of Ring.
+    /// Error that occurs when the given coefficients modulus
+    /// is not compatible with polynomial modulus dimension of ring.
     #[error(
-        "Polynomial modulus {ring_modulus} is not compatible with polynomial dimension {ring_dimension}!"
+        "Coefficients modulus {coeff_modulus} is not compatible with polynomial modulus dimension {ring_dimension}!"
     )]
     RingModulusAndDimensionNotCompatible {
-        /// Polynomial modulus of Ring.
-        ring_modulus: usize,
-        /// Polynomial dimension of Ring.
+        /// Coefficients modulus of ring.
+        coeff_modulus: usize,
+        /// Polynomial modulus dimension of ring.
         ring_dimension: usize,
     },
 }

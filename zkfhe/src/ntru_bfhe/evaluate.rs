@@ -3,7 +3,7 @@ use fhe_core::{
     lwe_modulus_switch_inplace, KeySwitchingKey, LWECiphertext, LWEModulusType,
     NTRUBlindRotationKey, NTRUCiphertext, Parameters, SecretKeyPack,
 };
-use lattice::{LWE, NTRU};
+use lattice::NTRU;
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
@@ -64,9 +64,7 @@ impl<F: NTTField> EvaluationKey<F> {
             .step_by(twice_ntru_dimension_div_lwe_modulus)
             .for_each(|v| *v += half_delta);
 
-        let extract = LWE::new(acc.given_inner(), F::ZERO);
-
-        let key_switched = self.key_switching_key.key_switch(&extract);
+        let key_switched = self.key_switching_key.key_switch_for_ntru(&acc);
 
         lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
         c

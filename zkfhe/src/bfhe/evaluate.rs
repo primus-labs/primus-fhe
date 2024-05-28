@@ -57,7 +57,7 @@ impl<F: NTTField> EvaluationKey<F> {
         let mut extract = acc.extract_lwe_reverse_locally();
         *extract.b_mut() += F::new(F::MODULUS_VALUE >> 3);
 
-        let key_switched = self.key_switching_key.key_switch(&extract);
+        let key_switched = self.key_switching_key.key_switch_for_rlwe(&extract);
 
         lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
         c
