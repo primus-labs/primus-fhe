@@ -217,7 +217,7 @@ impl Aes {
             *ct = _mm_aesenclast_si128(*ct, self.0[10].0);
         }
 
-        ctxt.map(|x| Block(x))
+        ctxt.map(Block)
     }
 
     #[inline]
