@@ -47,7 +47,7 @@ impl<F: NTTField> BlindRotationKey<F> {
         ntru_dimension: usize,
         twice_ntru_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEModulusType>,
-        bootstrapping_basis: Basis<F>,
+        blind_rotation_basis: Basis<F>,
     ) -> NTRU<F> {
         match self {
             BlindRotationKey::Binary(bootstrapping_key) => bootstrapping_key.blind_rotate(
@@ -63,7 +63,7 @@ impl<F: NTTField> BlindRotationKey<F> {
                 ntru_dimension,
                 twice_ntru_dimension_div_lwe_modulus,
                 lwe_modulus,
-                bootstrapping_basis,
+                blind_rotation_basis,
             ),
         }
     }

@@ -1,0 +1,35 @@
+[package]
+name = "zkfhe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+algebra = { path = "../algebra" }
+lattice = { path = "../lattice" }
+fhe_core = { path = "../fhe_core" }
+
+rand = { workspace = true }
+rand_chacha = "0.3.1"
+rayon = { workspace = true }
+once_cell = { workspace = true }
+
+[features]
+default = []
+count_ntt = ["algebra/count_ntt"]
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+# [[bench]]
+# name = "zk_bfhe"
+# harness = false
+
+# [[bench]]
+# name = "zk_bnfhe"
+# harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+# enable unstable features in the documentation
+rustdoc-args = ["--cfg", "docsrs"]
+# RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --no-deps

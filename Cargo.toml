@@ -5,6 +5,7 @@ members = [
     "lattice",
     "algebra_derive",
     "fhe_core",
+    "zkfhe",
     "boolean_fhe",
     "boolean_ntru_fhe",
     "zkp",

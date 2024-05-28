@@ -70,6 +70,12 @@ impl<F: NTTField> NTRU<F> {
         self.data.set_zero();
     }
 
+    /// Returns the `data` of this [`NTRU<F>`].
+    #[inline]
+    pub fn given_inner(self) -> Vec<F> {
+        self.data.data()
+    }
+
     /// Returns a reference to the `data` of this [`NTRU<F>`].
     #[inline]
     pub fn data(&self) -> &Polynomial<F> {

@@ -29,14 +29,14 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         ntru_dimension: usize,
         twice_ntru_dimension_div_lwe_modulus: usize,
         lwe_modulus: PowOf2Modulus<LWEModulusType>,
-        bootstrapping_basis: Basis<F>,
+        blind_rotation_basis: Basis<F>,
     ) -> NTRU<F> {
         let decompose_space = &mut DecompositionSpace::new(ntru_dimension);
         let ntt_polynomial = &mut NTTPolynomialSpace::new(ntru_dimension);
         let polynomial_space = &mut PolynomialSpace::new(ntru_dimension);
         let median = &mut NTTNTRUSpace::new(ntru_dimension);
         let external_product = &mut NTRUSpace::new(ntru_dimension);
-        let evaluation_key = &mut NTTGadgetNTRUSpace::new(ntru_dimension, bootstrapping_basis);
+        let evaluation_key = &mut NTTGadgetNTRUSpace::new(ntru_dimension, blind_rotation_basis);
 
         let ntt_table = F::get_ntt_table(ntru_dimension.trailing_zeros()).unwrap();
 
