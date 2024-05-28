@@ -5,3 +5,4 @@ pub mod ntt;
 
 pub use addition_in_zq::{AdditionInZq, AdditionInZqInstance};
 pub use bit_decomposition::{BitDecomposition, DecomposedBits, DecomposedBitsInfo};
+pub use ntt::{NTTIOP, NTTInstance, NTTInstanceInfo};
