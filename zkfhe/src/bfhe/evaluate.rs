@@ -1,7 +1,7 @@
 use algebra::{reduce::AddReduceAssign, NTTField, Polynomial};
 use fhe_core::{
-    lwe_modulus_switch_inplace, KeySwitchingKey, LWECiphertext, LWEModulusType, Parameters,
-    RLWEBlindRotationKey, RLWECiphertext, SecretKeyPack,
+    lwe_modulus_switch_inplace, BlindRotationType, KeySwitchingKey, LWECiphertext, LWEModulusType,
+    Parameters, RLWEBlindRotationKey, RLWECiphertext, SecretKeyPack,
 };
 use lattice::RLWE;
 
@@ -27,6 +27,8 @@ impl<F: NTTField> EvaluationKey<F> {
     pub fn new(secret_key_pack: &SecretKeyPack<F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();
         let parameters = secret_key_pack.parameters();
+
+        assert_eq!(parameters.blind_rotation_type(), BlindRotationType::RLWE);
 
         let chi = parameters.ring_noise_distribution();
         let blind_rotation_key = RLWEBlindRotationKey::generate(&secret_key_pack, chi, &mut *csrng);

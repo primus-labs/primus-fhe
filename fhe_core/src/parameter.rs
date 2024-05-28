@@ -17,7 +17,7 @@ pub struct LWEParameters {
 }
 
 /// Use `RLWE` or `NTRU` to perform blind rotation.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlindRotationType {
     /// Use `RLWE` to perform blind rotation.
     RLWE,
