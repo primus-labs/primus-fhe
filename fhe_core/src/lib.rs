@@ -12,6 +12,7 @@ mod ciphertext;
 
 mod secret_key;
 
+mod blind_rotation;
 mod key_switch;
 
 mod modulus_switch;
@@ -28,6 +29,7 @@ pub use ciphertext::{
 
 pub use secret_key::{SecretKeyPack, SecretKeyType};
 
+pub use blind_rotation::{NTRUBlindRotationKey, RLWEBlindRotationKey};
 pub use key_switch::KeySwitchingKey;
 
 pub use modulus_switch::{lwe_modulus_switch, lwe_modulus_switch_inplace};
