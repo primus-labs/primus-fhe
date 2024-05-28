@@ -47,7 +47,7 @@ impl<F: NTTField> EvaluationKey<F> {
     pub fn bootstrap(&self, mut c: LWECiphertext, init_acc: RLWECiphertext<F>) -> LWECiphertext {
         let parameters = self.parameters();
 
-        let acc = self.blind_rotation_key.blind_rotate(
+        let mut acc = self.blind_rotation_key.blind_rotate(
             init_acc,
             c.a(),
             parameters.ring_dimension(),
@@ -56,10 +56,9 @@ impl<F: NTTField> EvaluationKey<F> {
             parameters.blind_rotation_basis(),
         );
 
-        let mut extract = acc.extract_lwe_reverse_locally();
-        *extract.b_mut() += F::new(F::MODULUS_VALUE >> 3);
+        acc.b_mut()[0] += F::new(F::MODULUS_VALUE >> 3);
 
-        let key_switched = self.key_switching_key.key_switch_for_rlwe(&extract);
+        let key_switched = self.key_switching_key.key_switch_for_rlwe(&acc);
 
         lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
         c

@@ -138,15 +138,15 @@ impl<F: NTTField> KeySwitchingKey<F> {
     }
 
     /// Performs key switching operation.
-    pub fn key_switch_for_rlwe(&self, ciphertext: &LWE<F>) -> LWE<F> {
+    pub fn key_switch_for_rlwe(&self, ciphertext: &RLWE<F>) -> LWE<F> {
         let extended_lwe_dimension = self.lwe_dimension.next_power_of_two();
 
         let init = <NTTRLWE<F>>::new(
             NTTPolynomial::zero(extended_lwe_dimension),
-            NTTPolynomial::new(vec![ciphertext.b(); extended_lwe_dimension]),
+            NTTPolynomial::new(vec![ciphertext.b()[0]; extended_lwe_dimension]),
         );
 
-        let iter = ciphertext.a().chunks_exact(extended_lwe_dimension);
+        let iter = ciphertext.a_slice().chunks_exact(extended_lwe_dimension);
 
         self.key_switch_inner(extended_lwe_dimension, init, iter)
     }
