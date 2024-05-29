@@ -9,7 +9,7 @@ pub fn lwe_modulus_switch<F: Field>(c: LWE<F>, modulus_after: LWEModulusType) ->
     let modulus_after_f64: f64 = modulus_after.as_into();
 
     let switch = |v: F| {
-        (v.get().as_into() * modulus_after_f64 / modulus_before_f64).floor() as LWEModulusType
+        (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor() as LWEModulusType
     };
 
     let a: Vec<LWEModulusType> = c.a().iter().copied().map(switch).collect();
@@ -28,7 +28,7 @@ pub fn lwe_modulus_switch_inplace<F: Field>(
     let modulus_after_f64: f64 = modulus_after.as_into();
 
     let switch = |v: F| {
-        (v.get().as_into() * modulus_after_f64 / modulus_before_f64).floor() as LWEModulusType
+        (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor() as LWEModulusType
     };
 
     destination

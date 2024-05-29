@@ -77,7 +77,7 @@ impl<F: Field> Distribution<F> for FieldUniformSampler<F> {
                 break hi;
             }
         };
-        F::new(hi.as_into())
+        F::lazy_new(hi.as_into())
     }
 }
 
@@ -90,7 +90,7 @@ pub struct FieldBinarySampler;
 impl<F: Field> Distribution<F> for FieldBinarySampler {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
-        F::new((rng.next_u32() & 0b1).as_into())
+        F::lazy_new((rng.next_u32() & 0b1).as_into())
     }
 }
 
@@ -207,9 +207,9 @@ impl<F: Field> Distribution<F> for FieldDiscreteGaussianSampler {
             if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
                 if round < 0. {
-                    return F::new(F::MODULUS_VALUE - (-round).as_into());
+                    return F::lazy_new(F::MODULUS_VALUE - (-round).as_into());
                 } else {
-                    return F::new(round.as_into());
+                    return F::lazy_new(round.as_into());
                 }
             }
         }

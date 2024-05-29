@@ -99,12 +99,12 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
 
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
-            fn new(value: #field_ty) -> Self {
+            fn lazy_new(value: #field_ty) -> Self {
                 Self(value)
             }
 
             #[inline]
-            fn checked_new(value: Self::Value) -> Self {
+            fn new(value: Self::Value) -> Self {
                 if value < #modulus {
                     Self(value)
                 } else {
@@ -114,23 +114,8 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
             }
 
             #[inline]
-            fn get(self) -> #field_ty {
+            fn value(self) -> #field_ty {
                 self.0
-            }
-
-            #[inline]
-            fn set(&mut self, value: Self::Value) {
-                self.0 = value;
-            }
-
-            #[inline]
-            fn checked_set(&mut self, value: Self::Value) {
-                if value < #modulus {
-                    self.0 = value;
-                } else {
-                    use ::algebra::reduce::ReduceAssign;
-                    self.0.reduce_assign(<Self as ::algebra::ModulusConfig>::MODULUS);
-                }
             }
 
             #[inline]

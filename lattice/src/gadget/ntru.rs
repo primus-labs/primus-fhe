@@ -266,7 +266,7 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
                 &mut rng,
             );
             data.push(r);
-            basis_power = F::new(basis_power.get() * basis_value);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
         let r = <NTTNTRU<F>>::generate_random_value_sample(

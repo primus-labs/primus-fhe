@@ -10,9 +10,11 @@ use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
 
 mod ntt_fields;
 mod prime_fields;
+mod baby_bear;
 
 pub use ntt_fields::NTTField;
 pub use prime_fields::PrimeField;
+pub use baby_bear::BabyBear;
 
 /// A trait defining the algebraic structure of a mathematical field.
 ///
@@ -98,19 +100,13 @@ pub trait Field:
     const TWICE_MODULUS_VALUE: Self::Value;
 
     /// Creates a new instance.
-    fn new(value: Self::Value) -> Self;
+    fn lazy_new(value: Self::Value) -> Self;
 
     /// Creates and checks a new instance.
-    fn checked_new(value: Self::Value) -> Self;
+    fn new(value: Self::Value) -> Self;
 
     /// Gets inner value.
-    fn get(self) -> Self::Value;
-
-    /// Resets inner value.
-    fn set(&mut self, value: Self::Value);
-
-    /// Resets and checks inner value.
-    fn checked_set(&mut self, value: Self::Value);
+    fn value(self) -> Self::Value;
 
     /// Return `self * scalar`.
     fn mul_scalar(self, scalar: Self::Value) -> Self;
