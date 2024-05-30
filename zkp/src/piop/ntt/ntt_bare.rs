@@ -1,4 +1,5 @@
-//! PIOP for NTT (The algorithm is derived from Chap3.1 in zkCNN: https://eprint.iacr.org/2021/673)
+//! PIOP for NTT Bare without delegation
+//! The algorithm is derived from Chap3.1 in zkCNN: https://eprint.iacr.org/2021/673
 //! The prover wants to convince that Number Theoretic Transform (NTT) algorithm.
 //! NTT is widely used for the multiplication of two polynomials in field.
 //! 
@@ -184,57 +185,92 @@ impl<F: Field> NTTBareSubclaim<F> {
         u_v.extend(&self.point);
         return self.expected_evaluation == coeffs.evaluate(&self.point) * fourier_matrix.evaluate(&u_v)
     }
+
+    /// verify the subcliam for sumcheck
+    /// Compared to the `verify_subcliam`, verify delegate the computation F(u, v) to the prover,
+    /// so in this case verify can receives the evaluation F(u, v).
+    /// 
+    /// $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
+    /// 
+    /// 1. a(u) = claimed_sum
+    /// 2. c(v) * F(u, v) = expected_evaluation
+    /// # Arguments
+    /// 
+    /// * f_delegation: F(u, v) computed by prover
+    /// * points: a(x) oracle
+    /// * coeffs: c(x) oracle
+    /// * u: the random point sampled by verifier before executing the sumcheck protocol
+    pub fn verify_subcliam_with_delegation(
+        &self,
+        f_delegation: F,
+        points: &DenseMultilinearExtension<F>,
+        coeffs: &DenseMultilinearExtension<F>,
+        u: &[F],
+        info: &NTTInstanceInfo<F>,
+    ) -> bool {
+        // check 1: a(u) = claimed_sum
+        if self.claimed_sum != points.evaluate(u) {
+            return false;
+        }
+
+        // check 2: c(v) * F(u, v) = expected_evaluation
+        return self.expected_evaluation == coeffs.evaluate(&self.point) * f_delegation
+    }
 }
 
 impl<F: Field> NTTBareIOP<F> {
     /// prove 
     pub fn prove(
         ntt_instance: &NTTInstance<F>,
+        f_u: &Rc<DenseMultilinearExtension<F>>,
         u: &[F],
     ) -> NTTBareProof<F> {
         let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
         let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, ntt_instance, u)
+        Self::prove_as_subprotocol(&mut fs_rng, f_u, ntt_instance, u).0
     }
 
     /// prove 
     pub fn prove_as_subprotocol(
         fs_rng: &mut impl RngCore,
+        f_u: &Rc<DenseMultilinearExtension<F>>,
         ntt_instance: &NTTInstance<F>,
         u: &[F],
-    ) -> NTTBareProof<F> {
+    ) -> (NTTBareProof<F>, ProverState<F>) {
         let log_n = ntt_instance.log_n;
 
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(log_n);
 
         let mut product = Vec::with_capacity(2);
-
-        let f_u_evaluations = init_fourier_table(&u, &ntt_instance.ntt_table);
-        product.push(Rc::new(f_u_evaluations));
+        product.push(Rc::clone(f_u));
         product.push(Rc::clone(&ntt_instance.coeffs));
         poly.add_product(product, F::ONE);
 
-        NTTBareProof {
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
-            .expect("ntt bare proof failed").0,
+        let (prover_msg, prover_state) = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
+        .expect("ntt bare proof failed");
+
+        (NTTBareProof {
+            sumcheck_msg: prover_msg,
             claimed_sum: ntt_instance.points.evaluate(&u),
-        }
+        },
+        prover_state)
     }
 
+
     /// verify
-    pub fn verifier(
-        proof: &NTTBareProof<F>,
+    pub fn verify(
+        ntt_bare_proof: &NTTBareProof<F>,
         ntt_instance_info: &NTTInstanceInfo<F>,
     ) -> NTTBareSubclaim<F> {
         let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
         let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verifier_as_subprotocol(&mut fs_rng, proof, ntt_instance_info)
+        Self::verify_as_subprotocol(&mut fs_rng, ntt_bare_proof, ntt_instance_info)
     }
 
     /// verify
-    pub fn verifier_as_subprotocol(
+    pub fn verify_as_subprotocol(
         fs_rng: &mut impl RngCore,
-        proof: &NTTBareProof<F>,
+        ntt_bare_proof: &NTTBareProof<F>,
         ntt_instance_info: &NTTInstanceInfo<F>,
     ) -> NTTBareSubclaim<F> {
         // TODO sample randomness via Fiat-Shamir RNG
@@ -242,11 +278,11 @@ impl<F: Field> NTTBareIOP<F> {
             max_multiplicands: 2,
             num_variables: ntt_instance_info.log_n,
         };
-        let subclaim = MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, proof.claimed_sum, &proof.sumcheck_msg)
-            .expect("ntt verification failed");
+        let subclaim = MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, ntt_bare_proof.claimed_sum, &ntt_bare_proof.sumcheck_msg)
+            .expect("ntt bare verification failed");
 
         NTTBareSubclaim {
-            claimed_sum: proof.claimed_sum,
+            claimed_sum: ntt_bare_proof.claimed_sum,
             point: subclaim.point,
             expected_evaluation: subclaim.expected_evaluations,
         }

@@ -11,6 +11,7 @@ use rand_distr::Distribution;
 use std::{mem::swap, rc::Rc};
 use std::vec;
 use zkp::piop::{NTTIOP, NTTInstance, NTTBareIOP};
+use zkp::piop::ntt::ntt_bare::init_fourier_table;
 
 #[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
@@ -192,8 +193,9 @@ fn test_ntt_bare() {
     let ntt_instance_info = ntt_instance.info();
 
     let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = NTTBareIOP::prove(&ntt_instance, &u);
-    let subclaim = NTTBareIOP::verifier(&proof, &ntt_instance_info);
+    let f_u = Rc::new(init_fourier_table(&u, &ntt_instance.ntt_table));
+    let proof = NTTBareIOP::prove(&ntt_instance, &f_u, &u);
+    let subclaim = NTTBareIOP::verify(&proof, &ntt_instance_info);
 
     let fourier_matrix = Rc::new(obtain_fourier_matrix_oracle(log_n as u32));
     assert!(subclaim.verify_subcliam(&fourier_matrix, &points, &coeff, &u, &ntt_instance_info));
@@ -234,7 +236,7 @@ fn test_ntt_sumcheck() {
 
     let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
     let proof = NTTIOP::prove(&ntt_instance, &u);
-    let subclaim = NTTIOP::verifier(&proof, &ntt_instance_info, &u);
+    let subclaim = NTTIOP::verify(&proof, &ntt_instance_info, &u);
 
     let fourier_matrix = Rc::new(obtain_fourier_matrix_oracle(log_n as u32));
     // assert!(subclaim.verify_subcliam(&fourier_matrix, &points, &coeff, &u, &ntt_instance_info));
