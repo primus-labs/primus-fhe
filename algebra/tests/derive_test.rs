@@ -8,15 +8,18 @@ pub struct Fp32(u32);
 mod tests {
     use super::*;
 
-    use algebra::modulus::baby_bear::from_monty;
-    use algebra::modulus::baby_bear::to_monty;
+    use algebra::modulus::from_monty;
+    use algebra::modulus::to_canonical_u64;
+    use algebra::modulus::to_monty;
     use algebra::modulus::BabyBearModulus;
     use algebra::modulus::BarrettModulus;
+    use algebra::modulus::GoldilocksModulus;
     use algebra::reduce::*;
     use algebra::BabyBear;
     use algebra::Basis;
     use algebra::Field;
     use algebra::FieldUniformSampler;
+    use algebra::Goldilocks;
     use algebra::ModulusConfig;
     use algebra::PrimeField;
     use num_traits::Inv;
@@ -299,6 +302,153 @@ mod tests {
             .enumerate()
             .fold(BabyBear::lazy_new(0), |acc, (i, d)| {
                 acc + d.mul_scalar(B.pow(i as T) as T)
+            });
+
+        assert_eq!(compose, a);
+    }
+
+    #[test]
+    fn goldilocks_test() {
+        let p = Goldilocks::MODULUS_VALUE;
+
+        let distr = Uniform::new(0, p);
+        let mut rng = thread_rng();
+
+        assert!(Goldilocks::is_prime_field());
+
+        // add
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = ((a as u128 + b as u128) % (p as u128)) as u64;
+        assert_eq!(
+            Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b),
+            Goldilocks::lazy_new(c)
+        );
+
+        // add_assign
+        let mut a = Goldilocks::lazy_new(a);
+        a += Goldilocks::lazy_new(b);
+        assert_eq!(a, Goldilocks::lazy_new(c));
+
+        // sub
+        let a = rng.sample(distr);
+        let b = rng.gen_range(0..=a);
+        let c = (a - b) % p;
+        assert_eq!(
+            Goldilocks::lazy_new(a) - Goldilocks::lazy_new(b),
+            Goldilocks::lazy_new(c)
+        );
+
+        // sub_assign
+        let mut a = Goldilocks::lazy_new(a);
+        a -= Goldilocks::lazy_new(b);
+        assert_eq!(a, Goldilocks::lazy_new(c));
+
+        // mul
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = ((a as u128 * b as u128) % p as u128) as u64;
+        assert_eq!(
+            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(b),
+            Goldilocks::lazy_new(c)
+        );
+
+        // mul_assign
+        let mut a = Goldilocks::lazy_new(a);
+        a *= Goldilocks::lazy_new(b);
+        assert_eq!(a, Goldilocks::lazy_new(c));
+
+        // div
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let b_inv = to_canonical_u64(b.pow_reduce(p - 2, GoldilocksModulus));
+        let c = ((a as u128 * b_inv as u128) % (p as u128)) as u64;
+        assert_eq!(
+            Goldilocks::lazy_new(a) / Goldilocks::lazy_new(b),
+            Goldilocks::lazy_new(c)
+        );
+
+        // div_assign
+        let mut a = Goldilocks::lazy_new(a);
+        a /= Goldilocks::lazy_new(b);
+        assert_eq!(a, Goldilocks::lazy_new(c));
+
+        // neg
+        let a = rng.sample(distr);
+        let a_neg = -Goldilocks::lazy_new(a);
+        assert_eq!(Goldilocks::lazy_new(a) + a_neg, Goldilocks::ZERO);
+
+        let a = Goldilocks::ZERO;
+        assert_eq!(a, -a);
+
+        // inv
+        let a = rng.sample(distr);
+        let a_inv = to_canonical_u64(a.pow_reduce(p - 2, GoldilocksModulus));
+        assert_eq!(Goldilocks::lazy_new(a).inv(), Goldilocks::lazy_new(a_inv));
+        assert_eq!(
+            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(a_inv),
+            Goldilocks::ONE
+        );
+
+        // associative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b)) + Goldilocks::lazy_new(c),
+            Goldilocks::lazy_new(a) + (Goldilocks::lazy_new(b) + Goldilocks::lazy_new(c))
+        );
+        assert_eq!(
+            (Goldilocks::lazy_new(a) * Goldilocks::lazy_new(b)) * Goldilocks::lazy_new(c),
+            Goldilocks::lazy_new(a) * (Goldilocks::lazy_new(b) * Goldilocks::lazy_new(c))
+        );
+
+        // commutative
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        assert_eq!(
+            Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b),
+            Goldilocks::lazy_new(b) + Goldilocks::lazy_new(a)
+        );
+        assert_eq!(
+            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(b),
+            Goldilocks::lazy_new(b) * Goldilocks::lazy_new(a)
+        );
+
+        // identity
+        let a = rng.sample(distr);
+        assert_eq!(
+            Goldilocks::lazy_new(a) + Goldilocks::lazy_new(0),
+            Goldilocks::lazy_new(a)
+        );
+        assert_eq!(
+            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(1),
+            Goldilocks::lazy_new(a)
+        );
+
+        // distribute
+        let a = rng.sample(distr);
+        let b = rng.sample(distr);
+        let c = rng.sample(distr);
+        assert_eq!(
+            (Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b)) * Goldilocks::lazy_new(c),
+            (Goldilocks::lazy_new(a) * Goldilocks::lazy_new(c))
+                + (Goldilocks::lazy_new(b) * Goldilocks::lazy_new(c))
+        );
+
+        const BITS: u32 = 2;
+        const B: u32 = 1 << BITS;
+        let basis = <Basis<Goldilocks>>::new(BITS);
+        let rng = &mut thread_rng();
+
+        let uniform = <FieldUniformSampler<Goldilocks>>::new();
+        let a: Goldilocks = uniform.sample(rng);
+        let decompose = a.decompose(basis);
+        let compose = decompose
+            .into_iter()
+            .enumerate()
+            .fold(Goldilocks::lazy_new(0), |acc, (i, d)| {
+                acc + d.mul_scalar((B as u64).pow(i as u32) as u64)
             });
 
         assert_eq!(compose, a);

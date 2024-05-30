@@ -7,11 +7,7 @@ use num_traits::{Inv, One, Pow, Zero};
 
 use crate::{
     div_ceil,
-    modulus::{
-        self,
-        baby_bear::{from_monty, to_monty, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO},
-        BabyBearModulus,
-    },
+    modulus::{self, from_monty, to_monty, BabyBearModulus, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO},
     reduce::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
@@ -34,7 +30,7 @@ impl Field for BabyBear {
 
     const NEG_ONE: Self = BabyBear(MONTY_NEG_ONE);
 
-    const MODULUS_VALUE: Self::Value = modulus::baby_bear::P;
+    const MODULUS_VALUE: Self::Value = modulus::BABY_BEAR_P;
 
     #[inline]
     fn lazy_new(value: Self::Value) -> Self {

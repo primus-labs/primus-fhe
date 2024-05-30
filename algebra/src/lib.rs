@@ -18,7 +18,7 @@ pub mod utils;
 
 pub use decompose_basis::Basis;
 pub use error::AlgebraError;
-pub use field::{Field, NTTField, PrimeField, BabyBear};
+pub use field::{BabyBear, Field, Goldilocks, NTTField, PrimeField};
 pub use polynomial::multivariate::{
     DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
