@@ -9,7 +9,6 @@ lattice = { path = "../lattice" }
 fhe_core = { path = "../fhe_core" }
 
 rand = { workspace = true }
-rand_chacha = "0.3.1"
 rayon = { workspace = true }
 once_cell = { workspace = true }
 
