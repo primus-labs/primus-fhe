@@ -448,7 +448,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .fold(Goldilocks::lazy_new(0), |acc, (i, d)| {
-                acc + d.mul_scalar((B as u64).pow(i as u32) as u64)
+                acc + d.mul_scalar((B as u64).pow(i as u32))
             });
 
         assert_eq!(compose, a);
