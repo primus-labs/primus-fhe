@@ -95,8 +95,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
 
             const MODULUS_VALUE: Self::Value = #modulus;
 
-            const TWICE_MODULUS_VALUE: Self::Value = #modulus << 1;
-
             #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
             #[inline]
             fn lazy_new(value: #field_ty) -> Self {

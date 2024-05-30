@@ -11,6 +11,7 @@ use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
 mod ntt_fields;
 mod prime_fields;
 mod baby_bear;
+mod goldilocks;
 
 pub use ntt_fields::NTTField;
 pub use prime_fields::PrimeField;
@@ -95,9 +96,6 @@ pub trait Field:
 
     /// q
     const MODULUS_VALUE: Self::Value;
-
-    /// 2q
-    const TWICE_MODULUS_VALUE: Self::Value;
 
     /// Creates a new instance.
     fn lazy_new(value: Self::Value) -> Self;

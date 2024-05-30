@@ -25,7 +25,9 @@ pub struct BabyBear(u32);
 
 impl Field for BabyBear {
     type Value = u32;
+
     type Order = u32;
+
     const ONE: Self = BabyBear(MONTY_ONE);
 
     const ZERO: Self = BabyBear(MONTY_ZERO);
@@ -33,8 +35,6 @@ impl Field for BabyBear {
     const NEG_ONE: Self = BabyBear(MONTY_NEG_ONE);
 
     const MODULUS_VALUE: Self::Value = modulus::baby_bear::P;
-
-    const TWICE_MODULUS_VALUE: Self::Value = Self::MODULUS_VALUE << 1;
 
     #[inline]
     fn lazy_new(value: Self::Value) -> Self {

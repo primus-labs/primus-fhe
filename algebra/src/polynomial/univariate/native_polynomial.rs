@@ -267,7 +267,7 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
     }
 }
 
-impl<F: NTTField> Polynomial<F> {
+impl<F: Field> Polynomial<F> {
     /// Decompose `self` according to `basis`.
     pub fn decompose(mut self, basis: Basis<F>) -> Vec<Self> {
         let mask = basis.mask();
