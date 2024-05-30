@@ -10,7 +10,7 @@ use rand::prelude::*;
 use rand_distr::Distribution;
 use std::{mem::swap, rc::Rc};
 use std::vec;
-use zkp::piop::{NTTIOP, NTTInstance};
+use zkp::piop::{NTTIOP, NTTInstance, NTTBareIOP};
 
 #[derive(Field, Prime, NTT)]
 #[modulus = 132120577]
@@ -158,6 +158,47 @@ fn test_ntt_transform_normal_order() {
     let points = ntt_transform_normal_order(log_n, &coeff);
     assert_eq!(points, points_naive);
 }
+
+#[test]
+fn test_ntt_bare() {
+    let log_n = 10;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let mut power = FF::ONE;
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+
+    let mut rng = thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let coeff = PolyFF::random(1<<log_n, &mut rng).data();
+    let points = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n, 
+        ntt_transform_normal_order(log_n as u32, &coeff)
+    ));
+    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n, 
+        coeff
+    ));
+
+    let ntt_instance = NTTInstance::from_slice(
+        log_n, 
+        &ntt_table, 
+        &coeff, 
+        &points, 
+    );
+    let ntt_instance_info = ntt_instance.info();
+
+    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
+    let proof = NTTBareIOP::prove(&ntt_instance, &u);
+    let subclaim = NTTBareIOP::verifier(&proof, &ntt_instance_info);
+
+    let fourier_matrix = Rc::new(obtain_fourier_matrix_oracle(log_n as u32));
+    assert!(subclaim.verify_subcliam(&fourier_matrix, &points, &coeff, &u, &ntt_instance_info));
+}
+
 
 #[test]
 fn test_ntt_sumcheck() {

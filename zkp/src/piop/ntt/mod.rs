@@ -32,6 +32,7 @@ use rand_distr::Distribution;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
+pub mod ntt_bare;
 /// SNARKs for NTT, i.e. $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
 pub struct NTTIOP<F: Field>(#[doc(hidden)] PhantomData<F>);
 
@@ -65,6 +66,8 @@ pub struct NTTSubclaim<F: Field> {
     ///
     pub final_point: Vec<F>,
 }
+
+
 
 /// Stores the NTT instance with the corresponding NTT table
 pub struct NTTInstance<F: Field> {
