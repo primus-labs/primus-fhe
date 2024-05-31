@@ -30,7 +30,7 @@ mod ops;
 /// data. Here, `b` = 2^T::BITS
 ///
 /// It's efficient if many reductions are performed with a single modulus.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BarrettModulus<T: Copy> {
     /// the value to indicate the modulus
     value: T,

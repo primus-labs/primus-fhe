@@ -148,6 +148,52 @@ where
     }
 }
 
+#[cfg(feature = "count_ntt")]
+/// Module for `ntt` and `intt` counting.
+pub mod count {
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+    pub(super) static NTT_COUNT: AtomicU32 = AtomicU32::new(0);
+    pub(super) static INTT_COUNT: AtomicU32 = AtomicU32::new(0);
+    pub(super) static COUNT_ENABLE: AtomicBool = AtomicBool::new(false);
+
+    /// Enable counting `ntt` and `intt`.
+    #[inline]
+    pub fn enable_count_ntt_and_intt() {
+        COUNT_ENABLE.store(true, Ordering::Relaxed);
+    }
+
+    /// Disable counting `ntt` and `intt`.
+    #[inline]
+    pub fn disable_count_ntt_and_intt() {
+        COUNT_ENABLE.store(false, Ordering::Relaxed);
+    }
+
+    /// Get the `ntt` count.
+    #[inline]
+    pub fn get_ntt_count() -> u32 {
+        NTT_COUNT.load(Ordering::Relaxed)
+    }
+
+    /// Get the `intt` count.
+    #[inline]
+    pub fn get_intt_count() -> u32 {
+        INTT_COUNT.load(Ordering::Relaxed)
+    }
+
+    /// Clear the `ntt` count, set `ntt` count to 0.
+    #[inline]
+    pub fn clear_ntt_count() {
+        NTT_COUNT.store(0, Ordering::Relaxed);
+    }
+
+    /// Clear the `intt` count, set `intt` count to 0.
+    #[inline]
+    pub fn clear_intt_count() {
+        INTT_COUNT.store(0, Ordering::Relaxed);
+    }
+}
+
 impl<F> MonomialNTT<F> for NTTTable<F>
 where
     F: NTTField<Table = Self>,
@@ -248,6 +294,14 @@ where
 
         debug_assert_eq!(values.len(), 1 << log_n);
 
+        #[cfg(feature = "count_ntt")]
+        {
+            use std::sync::atomic::Ordering;
+            if count::COUNT_ENABLE.load(Ordering::Relaxed) {
+                count::NTT_COUNT.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
         let roots = self.root_powers();
         let mut root_iter = roots[1..].iter().copied();
 
@@ -271,6 +325,14 @@ where
         let log_n = self.coeff_count_power();
 
         debug_assert_eq!(values.len(), 1 << log_n);
+
+        #[cfg(feature = "count_ntt")]
+        {
+            use std::sync::atomic::Ordering;
+            if count::COUNT_ENABLE.load(Ordering::Relaxed) {
+                count::INTT_COUNT.fetch_add(1, Ordering::Relaxed);
+            }
+        }
 
         let roots = self.inv_root_powers();
         let mut root_iter = roots[1..].iter().copied();

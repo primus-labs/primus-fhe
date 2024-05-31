@@ -7,7 +7,7 @@ use rand_distr::{Distribution, Normal};
 
 use crate::{AlgebraError, AsFrom, AsInto, Field, Widening, WrappingOps};
 
-///
+/// A trait to impl uniform for `Field`.
 pub trait UniformBase: Copy {
     /// The type for uniform sample.
     type Sample: Copy
@@ -90,7 +90,7 @@ pub struct FieldBinarySampler;
 impl<F: Field> Distribution<F> for FieldBinarySampler {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
-        F::new((rng.next_u32() & 0b1).as_into())
+        [F::ZERO, F::ONE][(rng.next_u32() & 0b1) as usize]
     }
 }
 
