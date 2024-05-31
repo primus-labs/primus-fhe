@@ -1,6 +1,6 @@
 use algebra::{
     derive::{Field, Prime, NTT},
-    DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension,
+    DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use rand::prelude::*;
