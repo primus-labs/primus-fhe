@@ -2,34 +2,31 @@
 //! The algorithm is derived from Chap3.1 in zkCNN: https://eprint.iacr.org/2021/673
 //! The prover wants to convince that Number Theoretic Transform (NTT) algorithm.
 //! NTT is widely used for the multiplication of two polynomials in field.
-//! 
+//!
 //! The goal of this IOP is to prove:
 //!
 //! Given M instances of addition in Zq, the main idea of this IOP is to prove:
 //! For y \in \{0, 1\}^N:
 //!     $$a(y) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(y, x) }$$
 //! where c represents the coefficients of a degree-{N-1} polynomial and a represents the evaulations at (ω^1, ω^3, ..., ω^{2N-1}),
-//! 
+//!
 //! Here ω is the primitive 2N-th root of unity such that ω^{2N} = 1.
-//! F is the standard Fourier matrix with only 2N distinct values and F(y, x) = ω^{(2Y-1)X} where Y and X are the field representations for the binary representations y and x, respectively. 
-//! 
+//! F is the standard Fourier matrix with only 2N distinct values and F(y, x) = ω^{(2Y-1)X} where Y and X are the field representations for the binary representations y and x, respectively.
+//!
 //! The LHS and RHS of the above equation are both MLE for y, so it can be reduced to check at a random point due to Schwartz-Zippel Lemma.
 //! The remaining thing is to prove $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$ with the sumcheck protocol
 //! where u is the random challenge from the verifier.
 
+use crate::sumcheck::prover::ProverMsg;
+use crate::sumcheck::prover::ProverState;
+use crate::sumcheck::MLSumcheck;
 use std::marker::PhantomData;
 use std::rc::Rc;
-use crate::sumcheck::prover::ProverState;
-use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::{prover::ProverMsg, Proof};
-use crate::sumcheck::{self, MLSumcheck};
-use crate::utils::{eval_identity_function, gen_identity_evaluations};
 
 use algebra::{
-    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
-    FieldUniformSampler,
+    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
+    PolynomialInfo,
 };
-use rand_distr::Distribution;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
@@ -56,7 +53,7 @@ pub struct NTTBareProof<F: Field> {
 pub struct NTTBareSubclaim<F: Field> {
     /// the claimed sum is a(u)
     pub claimed_sum: F,
-    /// the proof is reduced to the evaluation of this point (denoted by v) 
+    /// the proof is reduced to the evaluation of this point (denoted by v)
     pub point: Vec<F>,
     /// the proof is reduced to the evaluation equals to c(v) \cdot F(u, v)
     pub expected_evaluation: F,
@@ -68,25 +65,28 @@ pub struct NTTBareSubclaim<F: Field> {
 /// Compared to the original induction, the main differences here are F(y, x)  = ω^{(2Y+1) * X} and Y = \sum_{i = 0} y_i * 2^i.
 /// The latter one indicates that we use little-endian.
 /// As a result, the equation (8) in zkCNN is = ω^X * \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X})
-/// 
+///
 /// # Arguments
 /// * u: the random point
 /// * ω: It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 /// In order to delegate the computation F(u, v) to prover, we decompose the ω^X term into the grand product.
 /// Hence, the final equation is = \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) * ω^{2^i * x_i}
-pub fn naive_init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinearExtension<F> {
+pub fn naive_init_fourier_table<F: Field>(
+    u: &[F],
+    ntt_table: &[F],
+) -> DenseMultilinearExtension<F> {
     let log_n = u.len();
     let m = ntt_table.len(); // m = 2n = 2 * (1 << dim)
 
     let mut evaluations: Vec<_> = (0..(1 << log_n)).map(|_| F::ONE).collect();
 
-    for x in 0..(1 << log_n) {
-        for i in 0..log_n {
+    for (x, eval_at_x) in evaluations.iter_mut().enumerate().take(1 << log_n) {
+        for (i, &u_i) in u.iter().enumerate().take(log_n) {
             let idx = (1 << (i + 1)) * x % m;
 
             let x_i = (x >> i) & 1;
             let x_i_idx = (1 << i) * x_i;
-            evaluations[x] *= ( (F::ONE - u[i]) + u[i] * ntt_table[idx] ) * ntt_table[x_i_idx];
+            *eval_at_x *= ((F::ONE - u_i) + u_i * ntt_table[idx]) * ntt_table[x_i_idx];
         }
     }
 
@@ -96,16 +96,16 @@ pub fn naive_init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMult
 /// Generate MLE for the Fourier function F(u, x) for x \in \{0, 1\}^dim where u is the random point.
 /// Dynamic programming implementaion for initializing F(u, x) in NTT (derived from zkCNN: https://eprint.iacr.org/2021/673)
 /// `N` is the dimension of the vector used to represent the polynomial in NTT.
-/// 
+///
 /// In NTT, the Fourier matrix is different since we choose these points: ω^1, ω^3, ..., ω^{2N-1}
 /// Compared to the original induction, the main differences here are F(y, x)  = ω^{(2Y-1) * X} and Y = \sum_{i = 0} y_i * 2^i.
 /// The latter one indicates that we use little-endian.
 /// As a result, the equation (8) in zkCNN is = ω^X * \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X})
-/// 
+///
 /// In order to delegate the computation F(u, v) to prover, we decompose the ω^X term into the grand product.
 /// Hence, the final equation is = \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) * ω^{2^i * x_i}
 /// * (This function is the dynamic programming version of the above function.)
-/// 
+///
 /// # Arguments
 /// * u: the random point
 /// * ω: It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
@@ -123,10 +123,11 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
     // The reason why we update the table with u_i in reverse order is that
     // in round i, ω^{2^{i + 1} is the (M / (2^{i+1}))-th root of unity, e.g. i = dim - 1, ω^{2^{i + 1} is the 2-th root of unity.
     // Hence, we need to align this with the update method in dynamic programming.
-    // 
+    //
     // Note that the last term ω^{2^i * x_i} is indeed multiplied in the normal order, from x_0 to x_{log{n-1}}
     // since we actually iterate from the LSB to MSB  when updating the table from size 1, 2, 4, 8, ..., n in dynamic programming.
-    for i in (0..log_n).rev() { // i starts from log_n - 1 and ends to 0
+    for i in (0..log_n).rev() {
+        // i starts from log_n - 1 and ends to 0
         let this_round_dim = log_n - i;
         let last_round_dim = this_round_dim - 1;
         let this_round_table_size = 1 << this_round_dim;
@@ -138,15 +139,17 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
             // the bit index in this iteration is last_round_dim = this_round_dim - 1
             // If x >= last_round_table_size, meaning the bit = 1, we need to multiply by ω^{2^last_round_dim * 1}
             if x >= last_round_table_size {
-                evaluations[x] = evaluations[x % last_round_table_size] * (F::ONE - u[i] + u[i] * ntt_table[idx]) * ntt_table[1 << last_round_dim];
+                evaluations[x] = evaluations[x % last_round_table_size]
+                    * (F::ONE - u[i] + u[i] * ntt_table[idx])
+                    * ntt_table[1 << last_round_dim];
             }
             // the bit index in this iteration is last_round_dim = this_round_dim - 1
             // If x < last_round_table_size, meaning the bit = 0, we do not need to multiply because ω^{2^last_round_dim * 0} = 1
             else {
-                evaluations[x] = evaluations[x % last_round_table_size] * (F::ONE - u[i] + u[i] * ntt_table[idx]);
+                evaluations[x] = evaluations[x % last_round_table_size]
+                    * (F::ONE - u[i] + u[i] * ntt_table[idx]);
             }
         }
-    
     }
     DenseMultilinearExtension::from_evaluations_vec(log_n, evaluations)
 }
@@ -154,11 +157,11 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
 impl<F: Field> NTTBareSubclaim<F> {
     /// verify the subcliam for sumcheck
     /// $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
-    /// 
+    ///
     /// 1. a(u) = claimed_sum
     /// 2. c(v) * F(u, v) = expected_evaluation
     /// # Arguments
-    /// 
+    ///
     /// * fourier_matrix: F(x, y) oracle
     /// * points: a(x) oracle
     /// * coeffs: c(x) oracle
@@ -183,19 +186,19 @@ impl<F: Field> NTTBareSubclaim<F> {
         let mut u_v: Vec<_> = Vec::with_capacity(info.log_n << 1);
         u_v.extend(u);
         u_v.extend(&self.point);
-        return self.expected_evaluation == coeffs.evaluate(&self.point) * fourier_matrix.evaluate(&u_v)
+        self.expected_evaluation == coeffs.evaluate(&self.point) * fourier_matrix.evaluate(&u_v)
     }
 
     /// verify the subcliam for sumcheck
     /// Compared to the `verify_subcliam`, verify delegate the computation F(u, v) to the prover,
     /// so in this case verify can receives the evaluation F(u, v).
-    /// 
+    ///
     /// $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
-    /// 
+    ///
     /// 1. a(u) = claimed_sum
     /// 2. c(v) * F(u, v) = expected_evaluation
     /// # Arguments
-    /// 
+    ///
     /// * f_delegation: F(u, v) computed by prover
     /// * points: a(x) oracle
     /// * coeffs: c(x) oracle
@@ -206,7 +209,6 @@ impl<F: Field> NTTBareSubclaim<F> {
         points: &DenseMultilinearExtension<F>,
         coeffs: &DenseMultilinearExtension<F>,
         u: &[F],
-        info: &NTTInstanceInfo<F>,
     ) -> bool {
         // check 1: a(u) = claimed_sum
         if self.claimed_sum != points.evaluate(u) {
@@ -214,12 +216,12 @@ impl<F: Field> NTTBareSubclaim<F> {
         }
 
         // check 2: c(v) * F(u, v) = expected_evaluation
-        return self.expected_evaluation == coeffs.evaluate(&self.point) * f_delegation
+        self.expected_evaluation == coeffs.evaluate(&self.point) * f_delegation
     }
 }
 
 impl<F: Field> NTTBareIOP<F> {
-    /// prove 
+    /// prove
     pub fn prove(
         ntt_instance: &NTTInstance<F>,
         f_u: &Rc<DenseMultilinearExtension<F>>,
@@ -230,7 +232,7 @@ impl<F: Field> NTTBareIOP<F> {
         Self::prove_as_subprotocol(&mut fs_rng, f_u, ntt_instance, u).0
     }
 
-    /// prove 
+    /// prove
     pub fn prove_as_subprotocol(
         fs_rng: &mut impl RngCore,
         f_u: &Rc<DenseMultilinearExtension<F>>,
@@ -241,21 +243,20 @@ impl<F: Field> NTTBareIOP<F> {
 
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(log_n);
 
-        let mut product = Vec::with_capacity(2);
-        product.push(Rc::clone(f_u));
-        product.push(Rc::clone(&ntt_instance.coeffs));
+        let product = vec![Rc::clone(f_u), Rc::clone(&ntt_instance.coeffs)];
         poly.add_product(product, F::ONE);
 
-        let (prover_msg, prover_state) = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
-        .expect("ntt bare proof failed");
+        let (prover_msg, prover_state) =
+            MLSumcheck::prove_as_subprotocol(fs_rng, &poly).expect("ntt bare proof failed");
 
-        (NTTBareProof {
-            sumcheck_msg: prover_msg,
-            claimed_sum: ntt_instance.points.evaluate(&u),
-        },
-        prover_state)
+        (
+            NTTBareProof {
+                sumcheck_msg: prover_msg,
+                claimed_sum: ntt_instance.points.evaluate(u),
+            },
+            prover_state,
+        )
     }
-
 
     /// verify
     pub fn verify(
@@ -278,8 +279,13 @@ impl<F: Field> NTTBareIOP<F> {
             max_multiplicands: 2,
             num_variables: ntt_instance_info.log_n,
         };
-        let subclaim = MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, ntt_bare_proof.claimed_sum, &ntt_bare_proof.sumcheck_msg)
-            .expect("ntt bare verification failed");
+        let subclaim = MLSumcheck::verify_as_subprotocol(
+            fs_rng,
+            &poly_info,
+            ntt_bare_proof.claimed_sum,
+            &ntt_bare_proof.sumcheck_msg,
+        )
+        .expect("ntt bare verification failed");
 
         NTTBareSubclaim {
             claimed_sum: ntt_bare_proof.claimed_sum,
@@ -291,13 +297,14 @@ impl<F: Field> NTTBareIOP<F> {
 
 #[cfg(test)]
 mod test {
+    use algebra::{
+        derive::{Field, Prime, NTT},
+        DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension, NTTField,
+    };
     use rand::thread_rng;
     use rand_distr::Distribution;
-    use algebra::{
-        derive::{Field, Prime, NTT}, DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension, NTTField
-    };
 
-    use super::{naive_init_fourier_table, init_fourier_table};
+    use super::{init_fourier_table, naive_init_fourier_table};
 
     macro_rules! field_vec {
         ($t:ty; $elem:expr; $n:expr)=>{
@@ -320,8 +327,8 @@ mod test {
         let m = 1 << (dim + 1); // M = 2N = 2 * (1 << dim)
         let u = field_vec!(FF; 1, 1);
         let v = field_vec!(FF; 0, 1);
-        
-        let mut u_v = Vec::with_capacity(dim<<1);
+
+        let mut u_v = Vec::with_capacity(dim << 1);
         u_v.extend(&u);
         u_v.extend(&v);
 
@@ -330,7 +337,7 @@ mod test {
 
         let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::ZERO).collect();
         let mut ntt_table = Vec::with_capacity(m as usize);
-    
+
         let mut power = FF::ONE;
         for _ in 0..m {
             ntt_table.push(power);
@@ -338,8 +345,8 @@ mod test {
         }
 
         // In little endian, the index for F[i, j] is i + (j << dim)
-        for i in 0..1<<dim {
-            for j in 0..1<<dim {
+        for i in 0..1 << dim {
+            for j in 0..1 << dim {
                 let idx_power = (2 * i + 1) * j % m;
                 let idx_fourier = i + (j << dim);
                 fourier_matrix[idx_fourier as usize] = ntt_table[idx_power as usize];
@@ -362,8 +369,8 @@ mod test {
         let m = 1 << (dim + 1); // M = 2N = 2 * (1 << dim)
         let u: Vec<_> = (0..dim).map(|_| sampler.sample(&mut rng)).collect();
         let v: Vec<_> = (0..dim).map(|_| sampler.sample(&mut rng)).collect();
-        
-        let mut u_v: Vec<_> = Vec::with_capacity(dim<<1);
+
+        let mut u_v: Vec<_> = Vec::with_capacity(dim << 1);
         u_v.extend(&u);
         u_v.extend(&v);
 
@@ -372,7 +379,7 @@ mod test {
 
         let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::ZERO).collect();
         let mut ntt_table = Vec::with_capacity(m as usize);
-    
+
         let mut power = FF::ONE;
         for _ in 0..m {
             ntt_table.push(power);
@@ -380,8 +387,8 @@ mod test {
         }
 
         // In little endian, the index for F[i, j] is i + (j << dim)
-        for i in 0..1<<dim {
-            for j in 0..1<<dim {
+        for i in 0..1 << dim {
+            for j in 0..1 << dim {
                 let idx_power = (2 * i + 1) * j % m;
                 let idx_fourier = i + (j << dim);
                 fourier_matrix[idx_fourier as usize] = ntt_table[idx_power as usize];

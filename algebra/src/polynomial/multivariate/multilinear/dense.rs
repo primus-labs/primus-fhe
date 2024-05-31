@@ -86,8 +86,14 @@ impl<F: Field> DenseMultilinearExtension<F> {
     /// original evaluations: f(x, b) for x \in \{0, 1\}^{k-1} and b\{0, 1\}
     /// resulting two mles: f0(x) = f(x, 0) for x \in \{0, 1\}^{k-1} and f1(x) x \in \{0, 1\}^{k-1}
     pub fn split_halves(&self) -> (Self, Self) {
-        let left = Self::from_evaluations_slice(self.num_vars - 1, &self.evaluations[0..1 << (self.num_vars - 1)]);
-        let right = Self::from_evaluations_slice(self.num_vars - 1, &self.evaluations[1 << (self.num_vars - 1)..]);
+        let left = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[0..1 << (self.num_vars - 1)],
+        );
+        let right = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[1 << (self.num_vars - 1)..],
+        );
         (left, right)
     }
 
@@ -157,7 +163,6 @@ impl<F: Field> MultilinearExtension<F> for DenseMultilinearExtension<F> {
         Self::from_evaluations_vec(nv - dim, poly)
     }
 
-    /// f
     fn fix_variables_from_right(&self, partial_point: &[F]) -> Self {
         assert!(
             partial_point.len() <= self.num_vars,
@@ -167,7 +172,7 @@ impl<F: Field> MultilinearExtension<F> for DenseMultilinearExtension<F> {
         let nv = self.num_vars;
         let dim = partial_point.len();
 
-        for i in 1..dim+1 {
+        for i in 1..dim + 1 {
             let r = partial_point[dim - i];
             let bit_set = 1 << (nv - i);
             for b in 0..(1 << (nv - i)) {
@@ -176,7 +181,7 @@ impl<F: Field> MultilinearExtension<F> for DenseMultilinearExtension<F> {
                 poly[b] = left + r * (right - left);
             }
         }
-        
+
         poly.truncate(1 << (nv - dim));
         Self::from_evaluations_vec(nv - dim, poly)
     }
