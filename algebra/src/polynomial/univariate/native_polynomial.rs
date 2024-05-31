@@ -2,6 +2,7 @@ use std::ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAss
 use std::slice::{Iter, IterMut, SliceIndex};
 use std::vec::IntoIter;
 
+use num_traits::Inv;
 use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
@@ -216,9 +217,7 @@ impl<F: Field> Polynomial<F> {
             Self::new(gaussian.sample_iter(rng).take(n).collect())
         }
     }
-}
 
-impl<F: Field> Polynomial<F> {
     /// Generate a random [`Polynomial<F>`].
     #[inline]
     pub fn random<R>(n: usize, rng: R) -> Self
@@ -312,12 +311,12 @@ impl<F: NTTField> Polynomial<F> {
     /// # Attention
     ///
     /// **`self`** will be modified *after* performing this decomposition.
-    pub fn decompose_lsb_bits_inplace(&mut self, basis: Basis<F>, destination: &mut Self) {
-        debug_assert_eq!(destination.coeff_count(), self.coeff_count());
+    pub fn decompose_lsb_bits_inplace(&mut self, basis: Basis<F>, destination: &mut [F]) {
+        debug_assert_eq!(destination.len(), self.coeff_count());
         let mask = basis.mask();
         let bits = basis.bits();
 
-        destination.into_iter().zip(self).for_each(|(d_i, p_i)| {
+        destination.iter_mut().zip(self).for_each(|(d_i, p_i)| {
             p_i.decompose_lsb_bits_at(d_i, mask, bits);
         });
     }
@@ -645,6 +644,27 @@ impl<F: Field> Neg for &Polynomial<F> {
     fn neg(self) -> Self::Output {
         let data = self.iter().map(|&e| -e).collect();
         <Polynomial<F>>::new(data)
+    }
+}
+
+impl<F: NTTField> Inv for Polynomial<F> {
+    type Output = Self;
+
+    #[inline]
+    fn inv(self) -> Self::Output {
+        self.into_ntt_polynomial().inv().into_native_polynomial()
+    }
+}
+
+impl<F: NTTField> Inv for &Polynomial<F> {
+    type Output = Polynomial<F>;
+
+    #[inline]
+    fn inv(self) -> Self::Output {
+        self.clone()
+            .into_ntt_polynomial()
+            .inv()
+            .into_native_polynomial()
     }
 }
 
