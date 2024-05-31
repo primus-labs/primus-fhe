@@ -23,6 +23,8 @@ mod tests {
     use algebra::ModulusConfig;
     use algebra::PrimeField;
     use num_traits::Inv;
+    use num_traits::One;
+    use num_traits::Zero;
     use rand::distributions::Uniform;
     use rand::thread_rng;
     use rand::Rng;
@@ -89,16 +91,16 @@ mod tests {
         // neg
         let a = rng.sample(distr);
         let a_neg = -FF::lazy_new(a);
-        assert_eq!(FF::lazy_new(a) + a_neg, FF::ZERO);
+        assert_eq!(FF::lazy_new(a) + a_neg, FF::zero());
 
-        let a = FF::ZERO;
+        let a = FF::zero();
         assert_eq!(a, -a);
 
         // inv
         let a = rng.sample(distr);
         let a_inv = a.pow_reduce(p - 2, BarrettModulus::<T>::new(p));
         assert_eq!(FF::lazy_new(a).inv(), FF::lazy_new(a_inv));
-        assert_eq!(FF::lazy_new(a) * FF::lazy_new(a_inv), FF::ONE);
+        assert_eq!(FF::lazy_new(a) * FF::lazy_new(a_inv), FF::one());
 
         // associative
         let a = rng.sample(distr);
@@ -229,9 +231,9 @@ mod tests {
         // neg
         let a = rng.sample(distr);
         let a_neg = -BabyBear::lazy_new(a);
-        assert_eq!(BabyBear::lazy_new(a) + a_neg, BabyBear::ZERO);
+        assert_eq!(BabyBear::lazy_new(a) + a_neg, BabyBear::zero());
 
-        let a = BabyBear::ZERO;
+        let a = BabyBear::zero();
         assert_eq!(a, -a);
 
         // inv
@@ -240,7 +242,7 @@ mod tests {
         assert_eq!(BabyBear::lazy_new(a).inv(), BabyBear::lazy_new(a_inv));
         assert_eq!(
             BabyBear::lazy_new(a) * BabyBear::lazy_new(a_inv),
-            BabyBear::ONE
+            BabyBear::one()
         );
 
         // associative
@@ -376,9 +378,9 @@ mod tests {
         // neg
         let a = rng.sample(distr);
         let a_neg = -Goldilocks::lazy_new(a);
-        assert_eq!(Goldilocks::lazy_new(a) + a_neg, Goldilocks::ZERO);
+        assert_eq!(Goldilocks::lazy_new(a) + a_neg, Goldilocks::zero());
 
-        let a = Goldilocks::ZERO;
+        let a = Goldilocks::zero();
         assert_eq!(a, -a);
 
         // inv
@@ -387,7 +389,7 @@ mod tests {
         assert_eq!(Goldilocks::lazy_new(a).inv(), Goldilocks::lazy_new(a_inv));
         assert_eq!(
             Goldilocks::lazy_new(a) * Goldilocks::lazy_new(a_inv),
-            Goldilocks::ONE
+            Goldilocks::one()
         );
 
         // associative

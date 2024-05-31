@@ -79,7 +79,7 @@ impl<F: Field> Polynomial<F> {
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
         Self {
-            data: vec![F::ZERO; coeff_count],
+            data: vec![F::zero(); coeff_count],
         }
     }
 
@@ -92,7 +92,7 @@ impl<F: Field> Polynomial<F> {
     /// Sets `self` to `0`.
     #[inline]
     pub fn set_zero(&mut self) {
-        self.data.fill(F::ZERO);
+        self.data.fill(F::zero());
     }
 
     /// Copy the coefficients from another slice.
@@ -180,7 +180,7 @@ impl<F: Field> Polynomial<F> {
         self.data
             .iter()
             .rev()
-            .fold(F::ZERO, |acc, &a| a.add_mul(acc, x))
+            .fold(F::zero(), |acc, &a| a.add_mul(acc, x))
     }
 
     /// Generate a random binary [`Polynomial<F>`].

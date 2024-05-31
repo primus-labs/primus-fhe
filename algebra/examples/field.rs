@@ -43,8 +43,8 @@ fn main() -> Result<(), algebra::AlgebraError> {
     // you can get two special value `one` and `zero`
     let _one = FF::one();
     let _zero = FF::zero();
-    let one = FF::ONE;
-    let zero = FF::ZERO;
+    let one = FF::one();
+    let zero = FF::zero();
 
     // check `one` and `zero` by function
     assert!(one.is_one());

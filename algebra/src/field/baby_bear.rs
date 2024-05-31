@@ -24,11 +24,10 @@ impl Field for BabyBear {
 
     type Order = u32;
 
-    const ONE: Self = BabyBear(MONTY_ONE);
-
-    const ZERO: Self = BabyBear(MONTY_ZERO);
-
-    const NEG_ONE: Self = BabyBear(MONTY_NEG_ONE);
+    #[inline]
+    fn neg_one()->Self {
+        Self(MONTY_NEG_ONE)
+    }
 
     const MODULUS_VALUE: Self::Value = modulus::BABY_BEAR_P;
 
@@ -104,7 +103,7 @@ impl Field for BabyBear {
         let mask = basis.mask();
         let bits = basis.bits();
 
-        let mut ret: Vec<Self> = vec![Self::ZERO; len];
+        let mut ret: Vec<Self> = vec![Self::zero(); len];
 
         for v in ret.iter_mut() {
             if temp == 0 {
@@ -302,17 +301,17 @@ impl Pow<u32> for BabyBear {
 impl Zero for BabyBear {
     #[inline]
     fn is_zero(&self) -> bool {
-        *self == Self::ZERO
+        *self == Self(MONTY_ZERO)
     }
 
     #[inline]
     fn set_zero(&mut self) {
-        *self = Self::ZERO;
+        *self = Self(MONTY_ZERO);
     }
 
     #[inline]
     fn zero() -> Self {
-        Self::ZERO
+        Self(MONTY_ZERO)
     }
 }
 
@@ -322,17 +321,17 @@ impl One for BabyBear {
     where
         Self: PartialEq,
     {
-        *self == Self::ONE
+        *self == Self(MONTY_ONE)
     }
 
     #[inline]
     fn set_one(&mut self) {
-        *self = Self::ONE;
+        *self = Self(MONTY_ONE);
     }
 
     #[inline]
     fn one() -> Self {
-        Self::ONE
+        Self(MONTY_ONE)
     }
 }
 

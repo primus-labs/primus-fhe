@@ -87,11 +87,16 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
 
             type Order = #field_ty;
 
-            const ONE: Self = Self(1);
+            // const ONE: Self = Self(1);
 
-            const ZERO: Self = Self(0);
+            // const ZERO: Self = Self(0);
 
-            const NEG_ONE: Self = Self(#modulus - 1);
+            // const NEG_ONE: Self = Self(#modulus - 1);
+
+            #[inline]
+            fn neg_one() -> Self {
+                Self(#modulus - 1)
+            }
 
             const MODULUS_VALUE: Self::Value = #modulus;
 

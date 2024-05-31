@@ -57,7 +57,7 @@ where
 
         let inv_root = F::from_root(*ordinal_root_powers.last().unwrap());
 
-        debug_assert_eq!(root * inv_root, F::ONE);
+        debug_assert_eq!(root * inv_root, F::one());
 
         let root_one = ordinal_root_powers[0];
 
@@ -199,8 +199,8 @@ where
     F: NTTField<Table = Self>,
 {
     fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
-        if coeff == F::ZERO {
-            values.fill(F::ZERO);
+        if coeff == F::zero() {
+            values.fill(F::zero());
             return;
         }
 
@@ -214,7 +214,7 @@ where
 
         let mask = usize::MAX >> (usize::BITS - log_n - 1);
 
-        if coeff == F::ONE {
+        if coeff == F::one() {
             values
                 .iter_mut()
                 .zip(&self.reverse_lsbs)
@@ -222,7 +222,7 @@ where
                     let index = ((2 * i + 1) * degree) & mask;
                     *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
                 })
-        } else if coeff == F::NEG_ONE {
+        } else if coeff == F::neg_one() {
             values
                 .iter_mut()
                 .zip(&self.reverse_lsbs)
@@ -244,7 +244,7 @@ where
 
     fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]) {
         if degree == 0 {
-            values.fill(F::ONE);
+            values.fill(F::one());
             return;
         }
 

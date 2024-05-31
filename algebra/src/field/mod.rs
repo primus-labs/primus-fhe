@@ -41,6 +41,7 @@ pub trait Field:
     + Copy
     + Send
     + Sync
+    + 'static
     + Debug
     + Display
     + Default
@@ -86,17 +87,20 @@ pub trait Field:
     /// The type of the field's order.
     type Order: Copy;
 
-    /// 1
-    const ONE: Self;
+    // /// 1
+    // const ONE: Self;
 
-    /// 0
-    const ZERO: Self;
+    // /// 0
+    // const ZERO: Self;
 
-    /// -1
-    const NEG_ONE: Self;
+    // /// -1
+    // const NEG_ONE: Self;
 
     /// q
     const MODULUS_VALUE: Self::Value;
+
+    /// -1
+    fn neg_one()->Self;
 
     /// Creates a new instance.
     fn lazy_new(value: Self::Value) -> Self;

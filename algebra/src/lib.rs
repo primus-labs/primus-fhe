@@ -9,6 +9,7 @@ mod field;
 mod polynomial;
 mod primitive;
 mod random;
+mod extension;
 
 pub mod derive;
 pub mod modulus;
@@ -31,3 +32,4 @@ pub use random::{
     FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
 };
 pub use reduce::ModulusConfig;
+pub use extension::*;

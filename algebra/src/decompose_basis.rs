@@ -28,7 +28,7 @@ impl<F: Field> Basis<F> {
     /// Creates a new [`Basis<F>`] with the given basis' bits number.
     pub fn new(bits: u32) -> Self {
         let mask = F::mask(bits);
-        let basis = mask + F::ONE.value();
+        let basis = mask + F::one().value();
         let decompose_len = F::decompose_len(basis);
 
         Self {

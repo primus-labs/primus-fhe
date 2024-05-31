@@ -147,13 +147,13 @@ impl<F: Field> DecomposedBits<F> {
                 let mut product: Vec<_> = Vec::with_capacity(base + 1);
                 let mut op_coefficient: Vec<_> = Vec::with_capacity(base + 1);
                 product.push(Rc::clone(&identity_func_at_u));
-                op_coefficient.push((F::ONE, F::ZERO));
+                op_coefficient.push((F::one(), F::zero()));
 
-                let mut minus_k = F::ZERO;
+                let mut minus_k = F::zero();
                 for _ in 0..base {
                     product.push(Rc::clone(bit));
-                    op_coefficient.push((F::ONE, minus_k));
-                    minus_k -= F::ONE;
+                    op_coefficient.push((F::one(), minus_k));
+                    minus_k -= F::one();
                 }
                 poly.add_product_with_linear_op(product, &op_coefficient, *r_iter.next().unwrap());
             }
@@ -188,8 +188,8 @@ impl<F: Field> BitDecompositionSubClaim<F> {
             .collect();
 
         // base_pow = [1, B, ..., B^{l-1}]
-        let mut base_pow = vec![F::ONE; decomposed_bits_info.bits_len as usize];
-        base_pow.iter_mut().fold(F::ONE, |acc, pow| {
+        let mut base_pow = vec![F::one(); decomposed_bits_info.bits_len as usize];
+        base_pow.iter_mut().fold(F::one(), |acc, pow| {
             *pow *= acc;
             acc * decomposed_bits_info.base
         });
@@ -202,7 +202,7 @@ impl<F: Field> BitDecompositionSubClaim<F> {
                 *val == bits
                     .iter()
                     .zip(base_pow.iter())
-                    .fold(F::ZERO, |acc, (bit, pow)| acc + *pow * *bit)
+                    .fold(F::zero(), |acc, (bit, pow)| acc + *pow * *bit)
             })
         {
             return false;
@@ -215,10 +215,10 @@ impl<F: Field> BitDecompositionSubClaim<F> {
         d_bits_at_point.iter().for_each(|bits| {
             bits.iter().for_each(|bit| {
                 let mut prod = *r.next().unwrap();
-                let mut minus_k = F::ZERO;
+                let mut minus_k = F::zero();
                 for _ in 0..(1 << decomposed_bits_info.base_len) {
                     prod *= *bit + minus_k;
-                    minus_k -= F::ONE;
+                    minus_k -= F::one();
                 }
                 evaluation += prod;
             })
@@ -284,7 +284,7 @@ impl<F: Field> BitDecomposition<F> {
             num_variables: decomposed_bits_info.num_vars,
         };
         let subclaim =
-            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::ZERO, &proof.sumcheck_msg)
+            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::zero(), &proof.sumcheck_msg)
                 .expect("bit decomposition verification failed");
         BitDecompositionSubClaim {
             randomness,

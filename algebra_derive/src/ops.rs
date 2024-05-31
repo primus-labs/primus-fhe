@@ -210,15 +210,17 @@ pub(crate) fn div_reduce_ops(name: &Ident) -> TokenStream {
     }
 }
 
-pub(crate) fn inv_reduce_ops(name: &Ident, modulus: &TokenStream) -> TokenStream {
+pub(crate) fn inv_reduce_ops(name: &Ident, _modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::num_traits::Inv for #name {
             type Output = Self;
 
             #[inline]
             fn inv(self) -> Self::Output {
-                use ::algebra::reduce::InvReduce;
-                Self(self.0.inv_reduce(#modulus))
+                // use ::algebra::reduce::InvReduce;
+                // Self(self.0.inv_reduce(#modulus))
+                use num_traits::Pow;
+                self.pow(<Self as ::algebra::Field>::MODULUS_VALUE - 2)
             }
         }
     }

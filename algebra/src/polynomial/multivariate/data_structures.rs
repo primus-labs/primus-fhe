@@ -119,14 +119,14 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
         let mut op_coefficient: Vec<(F, F)> = Vec::with_capacity(product.len());
         for _ in 0..product.len() {
-            op_coefficient.push((F::ONE, F::ZERO));
+            op_coefficient.push((F::one(), F::zero()));
         }
         self.add_product_with_linear_op(product, &op_coefficient, coefficient);
     }
 
     /// Evaluate the polynomial at point `point`
     pub fn evaluate(&self, point: &[F]) -> F {
-        self.products.iter().fold(F::ZERO, |result, (c, p)| {
+        self.products.iter().fold(F::zero(), |result, (c, p)| {
             result
                 + p.iter().fold(*c, |acc, &i| {
                     // acc * (f(point) * a + b)

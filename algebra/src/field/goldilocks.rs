@@ -26,11 +26,10 @@ impl Field for Goldilocks {
 
     const MODULUS_VALUE: Self::Value = modulus::GOLDILOCKS_P;
 
-    const ZERO: Self = Self(0);
-
-    const ONE: Self = Self(1);
-
-    const NEG_ONE: Self = Self(modulus::GOLDILOCKS_P - 1);
+    #[inline]
+    fn neg_one()->Self {
+        Self(modulus::GOLDILOCKS_P - 1)
+    }
 
     #[inline]
     fn lazy_new(value: Self::Value) -> Self {
@@ -104,7 +103,7 @@ impl Field for Goldilocks {
         let mask = basis.mask();
         let bits = basis.bits();
 
-        let mut ret: Vec<Self> = vec![Self::ZERO; len];
+        let mut ret: Vec<Self> = vec![Self::zero(); len];
 
         for v in ret.iter_mut() {
             if temp == 0 {
@@ -325,17 +324,17 @@ impl Pow<u64> for Goldilocks {
 impl Zero for Goldilocks {
     #[inline]
     fn is_zero(&self) -> bool {
-        *self == Self::ZERO
+        *self == Self(0)
     }
 
     #[inline]
     fn set_zero(&mut self) {
-        *self = Self::ZERO;
+        *self = Self(0);
     }
 
     #[inline]
     fn zero() -> Self {
-        Self::ZERO
+        Self(0)
     }
 }
 
@@ -345,17 +344,17 @@ impl One for Goldilocks {
     where
         Self: PartialEq,
     {
-        *self == Self::ONE
+        *self == Self(1)
     }
 
     #[inline]
     fn set_one(&mut self) {
-        *self = Self::ONE;
+        *self = Self(1);
     }
 
     #[inline]
     fn one() -> Self {
-        Self::ONE
+        Self(1)
     }
 }
 

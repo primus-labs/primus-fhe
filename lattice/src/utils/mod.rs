@@ -14,5 +14,5 @@ pub fn dot_product<F: Field>(u: &[F], v: &[F]) -> F {
     debug_assert_eq!(u.len(), v.len());
     u.iter()
         .zip(v)
-        .fold(F::ZERO, |acc, (&x, &y)| acc.add_mul(x, y))
+        .fold(F::zero(), |acc, (&x, &y)| acc.add_mul(x, y))
 }

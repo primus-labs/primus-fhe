@@ -6,7 +6,7 @@ use algebra::{
     ModulusConfig, Polynomial,
 };
 use lattice::*;
-use num_traits::Inv;
+use num_traits::{Inv, One};
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
@@ -229,7 +229,7 @@ fn test_ntru_he() {
 
     let mut s = PolyFF::random_with_ternary(N, &mut rng);
     s.mul_scalar_assign(Fp32(4));
-    s[0] += FF::ONE;
+    s[0] += FF::one();
 
     let inv_s = (&s).inv();
 
@@ -504,7 +504,7 @@ fn test_gadget_ntru_mul_ntru() {
 
     let mut s = PolyFF::random_with_ternary(N, &mut rng);
     s.mul_scalar_assign(Fp32(4));
-    s[0] += FF::ONE;
+    s[0] += FF::one();
 
     let inv_s = (&s).inv();
 

@@ -110,7 +110,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         // the degree of univariate polynomial sent by prover at this round
         let degree = prover_state.max_multiplicands;
 
-        let zeros = (vec![F::ZERO; degree + 1], vec![F::ZERO; degree + 1]);
+        let zeros = (vec![F::zero(); degree + 1], vec![F::zero(); degree + 1]);
         // In effect, this fold is essentially doing simply:
         // for b in 0..1 << (nv - i)
         // The goal is to evaluate degree + 1 points for each b, all of which has been fixed with the same (i-1) variables.

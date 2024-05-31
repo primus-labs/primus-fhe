@@ -158,7 +158,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
@@ -182,7 +182,7 @@ impl<F: NTTField> GadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
@@ -418,7 +418,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..(len - 1) {
             let r = <NTTRLWE<F>>::generate_random_value_sample(
@@ -454,7 +454,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..(len - 1) {
             let mut r =

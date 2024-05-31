@@ -70,7 +70,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
 
         // extract `base_len` bits as one "bit" at a time
         for _ in 0..bits_len {
-            let mut bit = vec![F::ZERO; self.evaluations.len()];
+            let mut bit = vec![F::zero(); self.evaluations.len()];
             bit.iter_mut().zip(val.iter_mut()).for_each(|(b_i, v_i)| {
                 v_i.decompose_lsb_bits_at(b_i, mask, base_len);
             });
@@ -190,7 +190,7 @@ impl<F: Field> Zero for DenseMultilinearExtension<F> {
     fn zero() -> Self {
         Self {
             num_vars: 0,
-            evaluations: vec![F::ZERO],
+            evaluations: vec![F::zero()],
         }
     }
 
