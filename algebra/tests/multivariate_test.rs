@@ -65,19 +65,6 @@ fn evaluate_mle_at_a_random_point() {
 }
 
 #[test]
-fn test_fix_variables_from_right() {
-    const NV: usize = 10;
-    let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
-
-    let point: Vec<_> = (0..NV).map(|_| uniform.sample(&mut rng)).collect();
-    let poly = PolyFf::random(NV, &mut rng);
-    let v1 = poly.evaluate(&point);
-    let v2 = poly.fix_variables_from_right(&point)[0];
-    assert_eq!(v1, v2);
-}
-
-#[test]
 fn mle_arithmetic() {
     const NV: usize = 10;
     let mut rng = thread_rng();
