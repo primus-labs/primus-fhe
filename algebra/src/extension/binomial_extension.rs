@@ -259,7 +259,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> AddAssign
 {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
-        *self = self.clone() + rhs;
+        *self = *self + rhs;
     }
 }
 
@@ -269,7 +269,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Add<&Self>
     type Output = Self;
     #[inline]
     fn add(self, rhs: &Self) -> Self::Output {
-        self + rhs.clone()
+        self + *rhs
     }
 }
 
@@ -278,7 +278,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> AddAssign<&Self>
 {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
-        *self += rhs.clone()
+        *self += *rhs
     }
 }
 
@@ -287,7 +287,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> AddAssign<F>
 {
     #[inline]
     fn add_assign(&mut self, rhs: F) {
-        *self = self.clone() + rhs;
+        *self = *self + rhs;
     }
 }
 
@@ -322,7 +322,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Sub<&Self>
 
     #[inline]
     fn sub(self, rhs: &Self) -> Self::Output {
-        self - rhs.clone()
+        self - *rhs
     }
 }
 
@@ -331,7 +331,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> SubAssign<&Self>
 {
     #[inline]
     fn sub_assign(&mut self, rhs: &Self) {
-        *self -= rhs.clone()
+        *self -= *rhs
     }
 }
 
@@ -340,7 +340,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> SubAssign
 {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
-        *self = self.clone() - rhs;
+        *self = *self - rhs;
     }
 }
 
@@ -349,7 +349,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> SubAssign<F>
 {
     #[inline]
     fn sub_assign(&mut self, rhs: F) {
-        *self = self.clone() - rhs;
+        *self = *self - rhs;
     }
 }
 
@@ -366,8 +366,8 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Mul for BinomialExtensi
         match D {
             2 => {
                 let mut res = Self::default();
-                res.value[0] = a[0].clone() * b[0].clone() + a[1].clone() * w_af * b[1].clone();
-                res.value[1] = a[0].clone() * b[1].clone() + a[1].clone() * b[0].clone();
+                res.value[0] = a[0] * b[0] + a[1] * w_af * b[1];
+                res.value[1] = a[0] * b[1] + a[1] * b[0];
                 res
             }
             3 => Self {
@@ -379,9 +379,9 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Mul for BinomialExtensi
                 for i in 0..D {
                     for j in 0..D {
                         if i + j >= D {
-                            res.value[i + j - D] += a[i].clone() * w_af.clone() * b[j].clone();
+                            res.value[i + j - D] += a[i] * w_af * b[j];
                         } else {
-                            res.value[i + j] += a[i].clone() * b[j].clone();
+                            res.value[i + j] += a[i] * b[j];
                         }
                     }
                 }
@@ -397,7 +397,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Mul<F> for BinomialExte
     #[inline]
     fn mul(self, rhs: F) -> Self::Output {
         Self {
-            value: self.value.map(|x| x * rhs.clone()),
+            value: self.value.map(|x| x * rhs),
         }
     }
 }
@@ -409,7 +409,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Mul<&Self>
 
     #[inline]
     fn mul(self, rhs: &Self) -> Self::Output {
-        self * rhs.clone()
+        self * (*rhs)
     }
 }
 
@@ -418,7 +418,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> MulAssign<&Self>
 {
     #[inline]
     fn mul_assign(&mut self, rhs: &Self) {
-        *self *= rhs.clone()
+        *self *= *rhs
     }
 }
 
@@ -427,7 +427,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> MulAssign
 {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
-        *self = self.clone() * rhs;
+        *self = *self * rhs;
     }
 }
 
@@ -436,7 +436,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> MulAssign<F>
 {
     #[inline]
     fn mul_assign(&mut self, rhs: F) {
-        *self = self.clone() * rhs;
+        *self = *self * rhs;
     }
 }
 
@@ -447,7 +447,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Div
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        self * rhs.clone().inv()
+        self * (rhs.inv())
     }
 }
 
@@ -458,7 +458,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Div<&Self>
 
     #[inline]
     fn div(self, rhs: &Self) -> Self::Output {
-        self / rhs.clone()
+        self / (*rhs)
     }
 }
 
@@ -467,7 +467,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> DivAssign
 {
     #[inline]
     fn div_assign(&mut self, rhs: Self) {
-        *self = self.clone() / rhs
+        *self = *self / rhs
     }
 }
 
@@ -476,7 +476,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> DivAssign<&S
 {
     #[inline]
     fn div_assign(&mut self, rhs: &Self) {
-        *self /= rhs.clone();
+        *self /= *rhs;
     }
 }
 
@@ -571,10 +571,10 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> BinomialExte
     pub fn square(&self) -> Self {
         match D {
             2 => {
-                let a = self.value.clone();
+                let a = self.value;
                 let mut res = Self::default();
                 res.value[0] = a[0] * a[0] + a[1] * a[1] * F::w();
-                res.value[1] = (a[0].clone() * a[1]) + (a[0].clone() * a[1]);
+                res.value[1] = (a[0] * a[1]) + (a[0] * a[1]);
 
                 res
             }
@@ -584,7 +584,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> BinomialExte
                     .try_into()
                     .unwrap(),
             },
-            _ => <Self as Mul<Self>>::mul(self.clone(), self.clone()),
+            _ => <Self as Mul<Self>>::mul(*self, *self),
         }
     }
 
@@ -651,20 +651,20 @@ fn cubic_inv<F: Field>(a: &[F], w: F) -> [F; 3] {
 /// karatsuba multiplication for cubic extension field
 #[inline]
 fn cubic_mul<F: Field>(a: &[F], b: &[F], w: F) -> [F; 3] {
-    let a0_b0 = a[0].clone() * b[0].clone();
-    let a1_b1 = a[1].clone() * b[1].clone();
-    let a2_b2 = a[2].clone() * b[2].clone();
+    let a0_b0 = a[0] * b[0];
+    let a1_b1 = a[1] * b[1];
+    let a2_b2 = a[2] * b[2];
 
-    let c0 = a0_b0.clone()
-        + ((a[1].clone() + a[2].clone()) * (b[1].clone() + b[2].clone())
-            - a1_b1.clone()
-            - a2_b2.clone())
+    let c0 = a0_b0
+        + ((a[1] + a[2]) * (b[1] + b[2])
+            - a1_b1
+            - a2_b2)
             * w;
-    let c1 = (a[0].clone() + a[1].clone()) * (b[0].clone() + b[1].clone())
-        - a0_b0.clone()
-        - a1_b1.clone()
-        + a2_b2.clone() * w;
-    let c2 = (a[0].clone() + a[2].clone()) * (b[0].clone() + b[2].clone()) - a0_b0 - a2_b2 + a1_b1;
+    let c1 = (a[0] + a[1]) * (b[0] + b[1])
+        - a0_b0
+        - a1_b1
+        + a2_b2 * w;
+    let c2 = (a[0] + a[2]) * (b[0] + b[2]) - a0_b0 - a2_b2 + a1_b1;
 
     [c0, c1, c2]
 }
@@ -672,11 +672,11 @@ fn cubic_mul<F: Field>(a: &[F], b: &[F], w: F) -> [F; 3] {
 /// Section 11.3.6a in Handbook of Elliptic and Hyperelliptic Curve Cryptography.
 #[inline]
 fn cubic_square<F: Field>(a: &[F], w: F) -> [F; 3] {
-    let w_a2 = a[2].clone() * w;
+    let w_a2 = a[2] * w;
 
-    let c0 = a[0] * a[0] + (a[1].clone() * w_a2.clone()) + (a[1].clone() * w_a2.clone());
-    let c1 = w_a2 * a[2].clone() + (a[0].clone() * a[1].clone()) + (a[0].clone() * a[1].clone());
-    let c2 = a[1] * a[1] + (a[0].clone() * a[2].clone()) + (a[0].clone() * a[2].clone());
+    let c0 = a[0] * a[0] + (a[1] * w_a2) + (a[1] * w_a2);
+    let c1 = w_a2 * a[2] + (a[0] * a[1]) + (a[0] * a[1]);
+    let c2 = a[1] * a[1] + (a[0] * a[2]) + (a[0] * a[2]);
 
     [c0, c1, c2]
 }

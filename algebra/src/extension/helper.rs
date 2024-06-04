@@ -16,8 +16,8 @@ impl<F: Field> Iterator for Powers<F> {
     type Item = F;
 
     fn next(&mut self) -> Option<F> {
-        let result = self.current.clone();
-        self.current *= self.base.clone();
+        let result = self.current;
+        self.current *= self.base;
         Some(result)
     }
 }
@@ -30,7 +30,7 @@ pub(crate) fn powers<F: Field>(base: &F) -> Powers<F> {
 #[inline]
 pub(crate) fn shifted_powers<F: Field>(base: &F, start: F) -> Powers<F> {
     Powers {
-        base: base.clone(),
+        base: *base,
         current: start,
     }
 }
@@ -50,7 +50,7 @@ pub fn naive_poly_mul<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
     let mut product = vec![F::zero(); a.len() + b.len() - 1];
     for (i, c1) in a.iter().enumerate() {
         for (j, c2) in b.iter().enumerate() {
-            product[i + j] += c1.clone() * c2.clone();
+            product[i + j] += *c1 * (*c2);
         }
     }
     product

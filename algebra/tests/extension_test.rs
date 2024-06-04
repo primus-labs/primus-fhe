@@ -22,6 +22,7 @@ mod tests {
         assert_eq!(a - b, -(b - a));
         assert_eq!(a + c, c_ext + a);
         assert_eq!(a - c, -(c_ext - a));
+        assert_eq!((a / b) * b, a);
 
         assert_eq!(a * b, b * a);
         assert_eq!(a * c, a * c_ext);
@@ -46,6 +47,7 @@ mod tests {
         assert_eq!(a + c, c_ext + a);
         assert_eq!(a + c, c_ext + a);
         assert_eq!(a - c, -(c_ext - a));
+        assert_eq!((a / b) * b, a);
 
         assert_eq!(a * b, b * a);
         assert_eq!(a * c, a * c_ext);
