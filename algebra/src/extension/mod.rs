@@ -101,7 +101,8 @@ pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
     }
 
     /// Power packed
-    fn ext_powers_packed(&self) -> impl Iterator<Item = Self::ExtensionPacking> {
+    // fn ext_powers_packed(&self) -> impl Iterator<Item = Self::ExtensionPacking> {
+    fn ext_powers_packed(&self) -> Vec<Self::ExtensionPacking> {
         let powers: Vec<_> = powers(self).take(Base::WIDTH + 1).collect();
         // Transpose first WIDTH powers
         let current = Self::ExtensionPacking::from_base_fn(|i| {
@@ -112,7 +113,7 @@ pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
             Base::from(powers[Base::WIDTH].as_base_slice()[i])
         });
 
-        core::iter::successors(Some(current), move |&current| Some(current * multiplier))
+        core::iter::successors(Some(current), move |&current| Some(current * multiplier)).collect()
     }
 }
 
