@@ -108,9 +108,8 @@ pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
             Base::from_fn(|j| powers[j].as_base_slice()[i])
         });
         // Broadcast self^WIDTH
-        let multiplier = Self::ExtensionPacking::from_base_fn(|i| {
-            powers[Base::WIDTH].as_base_slice()[i]
-        });
+        let multiplier =
+            Self::ExtensionPacking::from_base_fn(|i| powers[Base::WIDTH].as_base_slice()[i]);
 
         core::iter::successors(Some(current), move |&current| Some(current * multiplier))
     }

@@ -655,15 +655,8 @@ fn cubic_mul<F: Field>(a: &[F], b: &[F], w: F) -> [F; 3] {
     let a1_b1 = a[1] * b[1];
     let a2_b2 = a[2] * b[2];
 
-    let c0 = a0_b0
-        + ((a[1] + a[2]) * (b[1] + b[2])
-            - a1_b1
-            - a2_b2)
-            * w;
-    let c1 = (a[0] + a[1]) * (b[0] + b[1])
-        - a0_b0
-        - a1_b1
-        + a2_b2 * w;
+    let c0 = a0_b0 + ((a[1] + a[2]) * (b[1] + b[2]) - a1_b1 - a2_b2) * w;
+    let c1 = (a[0] + a[1]) * (b[0] + b[1]) - a0_b0 - a1_b1 + a2_b2 * w;
     let c2 = (a[0] + a[2]) * (b[0] + b[2]) - a0_b0 - a2_b2 + a1_b1;
 
     [c0, c1, c2]
