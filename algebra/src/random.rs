@@ -90,7 +90,7 @@ pub struct FieldBinarySampler;
 impl<F: Field> Distribution<F> for FieldBinarySampler {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
-        F::lazy_new((rng.next_u32() & 0b1).as_into())
+        [F::zero(), F::one()][(rng.next_u32() & 0b1) as usize]
     }
 }
 

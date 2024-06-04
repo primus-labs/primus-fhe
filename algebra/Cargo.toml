@@ -13,6 +13,8 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 rand = { workspace = true }
 rand_distr = { workspace = true }
+bytemuck = { workspace = true }
+rand_core = { workspace = true }
 itertools = "0.13.0"
 
 [features]
@@ -21,6 +23,7 @@ count_ntt = []
 
 [dev-dependencies]
 criterion = { workspace = true }
+rand_chacha = "0.3.1"
 
 [[bench]]
 name = "ntt_bench"
@@ -28,6 +31,10 @@ harness = false
 
 [[bench]]
 name = "modulus_bench"
+harness = false
+
+[[bench]]
+name = "sample"
 harness = false
 
 [package.metadata.docs.rs]

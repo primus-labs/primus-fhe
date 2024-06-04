@@ -2,12 +2,11 @@ use std::cell::RefCell;
 
 use algebra::{
     reduce::{AddReduceAssign, DotProductReduce, SubReduce},
+    utils::Prg,
     NTTField, NTTPolynomial, Polynomial,
 };
 use lattice::{sample_binary_values, sample_ternary_values};
 use num_traits::Inv;
-use rand::SeedableRng;
-use rand_chacha::ChaCha12Rng;
 
 use crate::{
     ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEBoolMessage, LWEModulusType,
@@ -51,14 +50,11 @@ pub struct SecretKeyPack<F: NTTField> {
     /// boolean fhe's parameters
     parameters: Parameters<F>,
     /// cryptographically secure random number generator
-    csrng: RefCell<ChaCha12Rng>,
+    csrng: RefCell<Prg>,
 }
 
 impl<F: NTTField> SecretKeyPack<F> {
-    fn create_lwe_secret_key(
-        parameters: &Parameters<F>,
-        csrng: &mut ChaCha12Rng,
-    ) -> Vec<LWEModulusType> {
+    fn create_lwe_secret_key(parameters: &Parameters<F>, csrng: &mut Prg) -> Vec<LWEModulusType> {
         let lwe_dimension = parameters.lwe_dimension();
 
         match parameters.secret_key_type() {
@@ -71,7 +67,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Creates a new [`SecretKeyPack<F>`].
     pub fn new(parameters: Parameters<F>) -> Self {
-        let mut csrng = ChaCha12Rng::from_entropy();
+        let mut csrng = Prg::new();
 
         let lwe_secret_key = Self::create_lwe_secret_key(&parameters, &mut csrng);
 
@@ -143,13 +139,13 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Returns the csrng of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn csrng(&self) -> std::cell::Ref<'_, ChaCha12Rng> {
+    pub fn csrng(&self) -> std::cell::Ref<'_, Prg> {
         self.csrng.borrow()
     }
 
     /// Returns the csrng of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn csrng_mut(&self) -> std::cell::RefMut<'_, ChaCha12Rng> {
+    pub fn csrng_mut(&self) -> std::cell::RefMut<'_, Prg> {
         self.csrng.borrow_mut()
     }
 

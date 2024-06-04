@@ -9,22 +9,19 @@ where
     F: Field,
     R: Rng + CryptoRng,
 {
+    let s = [F::zero(), F::one()];
     let mut v = vec![F::zero(); length];
     let mut iter = v.chunks_exact_mut(32);
     for chunk in &mut iter {
         let mut r = rng.next_u32();
         for elem in chunk.iter_mut() {
-            if r & 0b1 == 1 {
-                *elem = F::one();
-            }
+            *elem = s[(r & 0b1) as usize];
             r >>= 1;
         }
     }
     let mut r = rng.next_u32();
     for elem in iter.into_remainder() {
-        if r & 0b1 == 1 {
-            *elem = F::one();
-        }
+        *elem = s[(r & 0b1) as usize];
         r >>= 1;
     }
     v
