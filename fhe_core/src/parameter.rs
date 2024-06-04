@@ -300,7 +300,7 @@ mod tests {
         let b = DefaultExtendsionFieldU32x4::random(&mut rng);
 
         let c: DefaultFieldU32 = FieldUniformSampler::new().sample(&mut rng);
-        let c_ext = DefaultExtendsionFieldU32x4::from_base(c.clone());
+        let c_ext = DefaultExtendsionFieldU32x4::from_base(c);
 
         assert_eq!(a + b, b + a);
         assert_eq!(a + c, c_ext + a);

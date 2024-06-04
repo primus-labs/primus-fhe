@@ -16,7 +16,7 @@ mod tests {
         let b = BabyBearExetension::random(&mut rng);
 
         let c: BabyBear = FieldUniformSampler::new().sample(&mut rng);
-        let c_ext = BabyBearExetension::from_base(c.clone());
+        let c_ext = BabyBearExetension::from_base(c);
 
         assert_eq!(a + b, b + a);
         assert_eq!(a - b, -(b - a));
@@ -41,7 +41,7 @@ mod tests {
         let b = GoldilocksExtension::random(&mut rng);
 
         let c: Goldilocks = FieldUniformSampler::new().sample(&mut rng);
-        let c_ext = GoldilocksExtension::from_base(c.clone());
+        let c_ext = GoldilocksExtension::from_base(c);
 
         assert_eq!(a + b, b + a);
         assert_eq!(a + c, c_ext + a);
