@@ -1,3 +1,7 @@
+mod extension;
+
+pub use extension::BabyBearExetension;
+
 use std::{
     fmt::Display,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
@@ -12,7 +16,7 @@ use crate::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
     },
-    Field, PrimeField,
+    Field, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of BabyBear field.
@@ -25,7 +29,7 @@ impl Field for BabyBear {
     type Order = u32;
 
     #[inline]
-    fn neg_one()->Self {
+    fn neg_one() -> Self {
         Self(MONTY_NEG_ONE)
     }
 
@@ -341,11 +345,43 @@ impl PrimeField for BabyBear {
     }
 }
 
-#[test]
-fn new_test() {
-    let a = 10;
-    let b = from_monty(to_monty(a));
+impl Packable for BabyBear {}
 
-    println!("a: {}", a);
-    println!("b: {}", b);
+impl TwoAdicField for BabyBear {
+    const TWO_ADICITY: usize = 27;
+
+    fn two_adic_generator(bits: usize) -> Self {
+        assert!(bits <= Self::TWO_ADICITY);
+        match bits {
+            0 => Self::one(),
+            1 => Self(to_monty(0x78000000)),
+            2 => Self(to_monty(0x67055c21)),
+            3 => Self(to_monty(0x5ee99486)),
+            4 => Self(to_monty(0xbb4c4e4)),
+            5 => Self(to_monty(0x2d4cc4da)),
+            6 => Self(to_monty(0x669d6090)),
+            7 => Self(to_monty(0x17b56c64)),
+            8 => Self(to_monty(0x67456167)),
+            9 => Self(to_monty(0x688442f9)),
+            10 => Self(to_monty(0x145e952d)),
+            11 => Self(to_monty(0x4fe61226)),
+            12 => Self(to_monty(0x4c734715)),
+            13 => Self(to_monty(0x11c33e2a)),
+            14 => Self(to_monty(0x62c3d2b1)),
+            15 => Self(to_monty(0x77cad399)),
+            16 => Self(to_monty(0x54c131f4)),
+            17 => Self(to_monty(0x4cabd6a6)),
+            18 => Self(to_monty(0x5cf5713f)),
+            19 => Self(to_monty(0x3e9430e8)),
+            20 => Self(to_monty(0xba067a3)),
+            21 => Self(to_monty(0x18adc27d)),
+            22 => Self(to_monty(0x21fd55bc)),
+            23 => Self(to_monty(0x4b859b3d)),
+            24 => Self(to_monty(0x3bd57996)),
+            25 => Self(to_monty(0x4483d85a)),
+            26 => Self(to_monty(0x3a26eef8)),
+            27 => Self(to_monty(0x1a427a41)),
+            _ => unreachable!("Already asserted that bits <= Self::TWO_ADICITY"),
+        }
+    }
 }

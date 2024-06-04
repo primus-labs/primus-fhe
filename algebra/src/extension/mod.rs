@@ -167,3 +167,24 @@ pub trait HasFrobenius<F: Field + Packable>: ExtensionField<F> {
             .collect()
     }
 }
+
+/// A field which supplies information like the two-adicity of its multiplicative group, and methods
+/// for obtaining two-adic generators.
+pub trait TwoAdicField: Field {
+    /// The number of factors of two in this field's multiplicative group.
+    const TWO_ADICITY: usize;
+
+    /// Returns a generator of the multiplicative group of order `2^bits`.
+    /// Assumes `bits < TWO_ADICITY`, otherwise the result is undefined.
+    #[must_use]
+    fn two_adic_generator(bits: usize) -> Self;
+}
+
+/// Optional trait for implementing Two Adic Binomial Extension Field.
+pub trait HasTwoAdicBionmialExtension<const D: usize>: BinomiallyExtendable<D> {
+    /// EXT_TWO_ADICITY
+    const EXT_TWO_ADICITY: usize;
+
+    /// ext_two_adic_generator
+    fn ext_two_adic_generator(bits: usize) -> [Self; D];
+}

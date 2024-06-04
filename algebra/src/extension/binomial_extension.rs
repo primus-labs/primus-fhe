@@ -6,10 +6,11 @@ use std::{
 
 use itertools::Itertools;
 use num_traits::{Inv, One, Pow, Zero};
+use rand_distr::{Distribution, Standard};
 
 use crate::{
     field_to_array, powers, AbstractExtensionField, ExtensionField, Field, HasFrobenius,
-    PackedField,
+    HasTwoAdicBionmialExtension, PackedField, TwoAdicField,
 };
 
 use super::{BinomiallyExtendable, Packable};
@@ -610,7 +611,6 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> BinomialExtensionField<
                 let a = self.value.clone();
                 let mut res = Self::default();
                 res.value[0] = a[0] * a[0] + a[1] * a[1] * F::w();
-                // res.value[1] = a[0].clone() * a[1].double();
                 res.value[1] = (a[0].clone() * a[1]) + (a[0].clone() * a[1]);
 
                 res
@@ -622,6 +622,32 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> BinomialExtensionField<
                     .unwrap(),
             },
             _ => <Self as Mul<Self>>::mul(self.clone(), self.clone()),
+        }
+    }
+}
+
+impl<F: BinomiallyExtendable<D> + Packable, const D: usize>
+    Distribution<BinomialExtensionField<F, D>> for Standard
+where
+    Standard: Distribution<F>,
+{
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> BinomialExtensionField<F, D> {
+        let mut res = [F::zero(); D];
+        for r in res.iter_mut() {
+            *r = Standard.sample(rng);
+        }
+        BinomialExtensionField::<F, D>::from_base_slice(&res)
+    }
+}
+
+impl<F: Field + HasTwoAdicBionmialExtension<D> + Packable, const D: usize> TwoAdicField
+    for BinomialExtensionField<F, D>
+{
+    const TWO_ADICITY: usize = F::EXT_TWO_ADICITY;
+
+    fn two_adic_generator(bits: usize) -> Self {
+        Self {
+            value: F::ext_two_adic_generator(bits),
         }
     }
 }

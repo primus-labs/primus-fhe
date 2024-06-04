@@ -1,3 +1,5 @@
+mod extension;
+
 use std::{
     fmt::Display,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
@@ -27,7 +29,7 @@ impl Field for Goldilocks {
     const MODULUS_VALUE: Self::Value = modulus::GOLDILOCKS_P;
 
     #[inline]
-    fn neg_one()->Self {
+    fn neg_one() -> Self {
         Self(modulus::GOLDILOCKS_P - 1)
     }
 

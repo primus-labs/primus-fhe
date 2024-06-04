@@ -3,13 +3,15 @@
 
 //! Define arithmetic operations.
 
+mod baby_bear;
 mod decompose_basis;
 mod error;
+mod extension;
 mod field;
+mod goldilocks;
 mod polynomial;
 mod primitive;
 mod random;
-mod extension;
 
 pub mod derive;
 pub mod modulus;
@@ -17,9 +19,12 @@ pub mod reduce;
 pub mod transformation;
 pub mod utils;
 
+pub use baby_bear::{BabyBear,BabyBearExetension};
 pub use decompose_basis::Basis;
 pub use error::AlgebraError;
-pub use field::{BabyBear, Field, Goldilocks, NTTField, PrimeField};
+pub use extension::*;
+pub use field::{Field, NTTField, PrimeField};
+pub use goldilocks::Goldilocks;
 pub use polynomial::multivariate::{
     DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
@@ -32,4 +37,3 @@ pub use random::{
     FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
 };
 pub use reduce::ModulusConfig;
-pub use extension::*;

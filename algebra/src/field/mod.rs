@@ -8,13 +8,9 @@ use num_traits::{Inv, One, Pow, PrimInt, Zero};
 use crate::random::UniformBase;
 use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
 
-mod baby_bear;
-mod goldilocks;
 mod ntt_fields;
 mod prime_fields;
 
-pub use baby_bear::BabyBear;
-pub use goldilocks::Goldilocks;
 pub use ntt_fields::NTTField;
 pub use prime_fields::PrimeField;
 
@@ -100,7 +96,7 @@ pub trait Field:
     const MODULUS_VALUE: Self::Value;
 
     /// -1
-    fn neg_one()->Self;
+    fn neg_one() -> Self;
 
     /// Creates a new instance.
     fn lazy_new(value: Self::Value) -> Self;
