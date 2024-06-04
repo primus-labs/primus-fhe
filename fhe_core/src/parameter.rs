@@ -1,5 +1,6 @@
 use algebra::{
-    derive::*, modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
+    derive::*, modulus::PowOf2Modulus, Basis, BinomialExtensionField, BinomiallyExtendable, Field,
+    FieldDiscreteGaussianSampler, HasTwoAdicBionmialExtension, NTTField, Packable,
 };
 use lattice::DiscreteGaussian;
 
@@ -253,3 +254,64 @@ impl<F: NTTField> Parameters<F> {
 #[modulus = 132120577]
 #[repr(transparent)]
 pub struct DefaultFieldU32(u32);
+
+impl BinomiallyExtendable<4> for DefaultFieldU32 {
+    // Verifiable in Sage with
+    // `R.<x> = GF(p)[]; assert (x^4 - 5).is_irreducible()`.
+    fn w() -> Self {
+        Self::new(5)
+    }
+
+    fn dth_root() -> Self {
+        Self::new(130039810)
+    }
+
+    fn ext_generator() -> [Self; 4] {
+        std::unimplemented!()
+    }
+}
+
+impl HasTwoAdicBionmialExtension<4> for DefaultFieldU32 {
+    const EXT_TWO_ADICITY: usize = 1;
+
+    fn ext_two_adic_generator(_bits: usize) -> [Self; 4] {
+        std::unimplemented!()
+    }
+}
+
+impl Packable for DefaultFieldU32 {}
+
+/// Default extension field of default 32-bit field.
+pub type DefaultExtendsionFieldU32x4 = BinomialExtensionField<DefaultFieldU32, 4>;
+
+mod tests {
+    #[test]
+    fn default_extension_field() {
+        use crate::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
+        use algebra::{AbstractExtensionField, FieldUniformSampler};
+        use num_traits::{Inv, One};
+        use rand::distributions::Distribution;
+        use rand::thread_rng;
+
+        let mut rng = thread_rng();
+
+        let a = DefaultExtendsionFieldU32x4::random(&mut rng);
+
+        let b = DefaultExtendsionFieldU32x4::random(&mut rng);
+
+        let c: DefaultFieldU32 = FieldUniformSampler::new().sample(&mut rng);
+        let c_ext = DefaultExtendsionFieldU32x4::from_base(c.clone());
+
+        assert_eq!(a + b, b + a);
+        assert_eq!(a + c, c_ext + a);
+        assert_eq!(a + c, c_ext + a);
+        assert_eq!(a - c, -(c_ext - a));
+
+        assert_eq!(a * b, b * a);
+        assert_eq!(a * c, a * c_ext);
+
+        let a_inv = a.inv();
+
+        assert_eq!(a * a_inv, DefaultExtendsionFieldU32x4::one());
+    }
+}

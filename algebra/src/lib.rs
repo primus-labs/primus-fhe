@@ -19,12 +19,12 @@ pub mod reduce;
 pub mod transformation;
 pub mod utils;
 
-pub use baby_bear::{BabyBear,BabyBearExetension};
+pub use baby_bear::{BabyBear, BabyBearExetension};
 pub use decompose_basis::Basis;
 pub use error::AlgebraError;
 pub use extension::*;
 pub use field::{Field, NTTField, PrimeField};
-pub use goldilocks::Goldilocks;
+pub use goldilocks::{Goldilocks, GoldilocksExtension};
 pub use polynomial::multivariate::{
     DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };

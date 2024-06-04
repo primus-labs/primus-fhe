@@ -20,7 +20,9 @@ pub mod utils;
 
 pub use error::FHECoreError;
 
-pub use parameter::{BlindRotationType, ConstParameters, DefaultFieldU32, Parameters};
+pub use parameter::{
+    BlindRotationType, ConstParameters, DefaultExtendsionFieldU32x4, DefaultFieldU32, Parameters,
+};
 
 pub use bool_plaintext::{decode, encode, LWEBoolMessage, LWEModulusType};
 pub use ciphertext::{

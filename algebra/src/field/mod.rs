@@ -99,7 +99,10 @@ pub trait Field:
     fn neg_one() -> Self;
 
     /// Creates a new instance.
-    fn lazy_new(value: Self::Value) -> Self;
+    /// Can be overloaded with optimized implemetation.
+    fn lazy_new(value: Self::Value) -> Self {
+        Self::new(value)
+    }
 
     /// Creates and checks a new instance.
     fn new(value: Self::Value) -> Self;
@@ -108,40 +111,55 @@ pub trait Field:
     fn value(self) -> Self::Value;
 
     /// Return `self * scalar`.
-    fn mul_scalar(self, scalar: Self::Value) -> Self;
+    // fn mul_scalar(self, scalar: Self::Value) -> Self;
 
     /// Performs `self + a * b`.
-    fn add_mul(self, a: Self, b: Self) -> Self;
+    /// Can be overloaded with optimized implementation.
+    fn add_mul(self, a: Self, b: Self) -> Self {
+        self + a * b
+    }
 
     /// Performs `self = self + a * b`.
-    fn add_mul_assign(&mut self, a: Self, b: Self);
+    fn add_mul_assign(&mut self, a: Self, b: Self) {
+        *self = self.add_mul(a, b);
+    }
 
     /// Performs `self * rhs`.
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
-    fn mul_fast(self, rhs: Self) -> Self;
+    /// Can be overloaded with optimized implementation.
+
+    fn mul_fast(self, rhs: Self) -> Self {
+        self * rhs
+    }
 
     /// Performs `self *= rhs`.
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
-    fn mul_assign_fast(&mut self, rhs: Self);
+    fn mul_assign_fast(&mut self, rhs: Self) {
+        *self = self.mul_fast(rhs);
+    }
 
     /// Performs `self + a * b`.
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
-    fn add_mul_fast(self, a: Self, b: Self) -> Self;
+    fn add_mul_fast(self, a: Self, b: Self) -> Self {
+        self + a * b
+    }
 
     /// Performs `self = self + a * b`.
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
-    fn add_mul_assign_fast(&mut self, a: Self, b: Self);
+    fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
+        *self = self.add_mul_fast(a, b);
+    }
 
     /// mask, return a number with `bits` 1s.
-    fn mask(bits: u32) -> Self::Value;
+    fn mask(_bits: u32) -> Self::Value;
 
     /// Get the length of decompose vector.
     fn decompose_len(basis: Self::Value) -> usize;

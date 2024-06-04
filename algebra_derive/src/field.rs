@@ -121,11 +121,11 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
                 self.0
             }
 
-            #[inline]
-            fn mul_scalar(self, scalar: Self::Value) -> Self {
-                use ::algebra::reduce::MulReduce;
-                Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
-            }
+            // #[inline]
+            // fn mul_scalar(self, scalar: Self::Value) -> Self {
+            //     use ::algebra::reduce::MulReduce;
+            //     Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
+            // }
 
             #[inline]
             fn add_mul(self, a: Self, b: Self) -> Self {

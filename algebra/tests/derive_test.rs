@@ -8,26 +8,16 @@ pub struct Fp32(u32);
 mod tests {
     use super::*;
 
-    use algebra::modulus::from_monty;
-    use algebra::modulus::to_canonical_u64;
-    use algebra::modulus::to_monty;
-    use algebra::modulus::BabyBearModulus;
-    use algebra::modulus::BarrettModulus;
-    use algebra::modulus::GoldilocksModulus;
-    use algebra::reduce::*;
-    use algebra::BabyBear;
-    use algebra::Basis;
-    use algebra::Field;
-    use algebra::FieldUniformSampler;
-    use algebra::Goldilocks;
-    use algebra::ModulusConfig;
-    use algebra::PrimeField;
-    use num_traits::Inv;
-    use num_traits::One;
-    use num_traits::Zero;
-    use rand::distributions::Uniform;
-    use rand::thread_rng;
-    use rand::Rng;
+    use algebra::{
+        modulus::{
+            from_monty, to_canonical_u64, to_monty, BabyBearModulus, BarrettModulus,
+            GoldilocksModulus,
+        },
+        reduce::*,
+        BabyBear, Basis, Field, FieldUniformSampler, Goldilocks, ModulusConfig, PrimeField,
+    };
+    use num_traits::{Inv, One, Zero};
+    use rand::{distributions::Uniform, thread_rng, Rng};
     use rand_distr::Distribution;
 
     type FF = Fp32;
@@ -156,7 +146,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .fold(FF::lazy_new(0), |acc, (i, d)| {
-                acc + d.mul_scalar(B.pow(i as T) as T)
+                acc + d * FF::new(B.pow(i as T) as T)
             });
 
         assert_eq!(compose, a);
@@ -303,7 +293,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .fold(BabyBear::lazy_new(0), |acc, (i, d)| {
-                acc + d.mul_scalar(B.pow(i as T) as T)
+                acc + d * BabyBear::new(B.pow(i as T) as T)
             });
 
         assert_eq!(compose, a);
@@ -450,7 +440,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .fold(Goldilocks::lazy_new(0), |acc, (i, d)| {
-                acc + d.mul_scalar((B as u64).pow(i as u32))
+                acc + d * Goldilocks::new((B as u64).pow(i as u32))
             });
 
         assert_eq!(compose, a);

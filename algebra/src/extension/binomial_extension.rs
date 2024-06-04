@@ -6,11 +6,12 @@ use std::{
 
 use itertools::Itertools;
 use num_traits::{Inv, One, Pow, Zero};
+use rand::{CryptoRng, Rng};
 use rand_distr::{Distribution, Standard};
 
 use crate::{
-    field_to_array, powers, AbstractExtensionField, ExtensionField, Field, HasFrobenius,
-    HasTwoAdicBionmialExtension, PackedField, TwoAdicField,
+    field_to_array, powers, AbstractExtensionField, ExtensionField, Field, FieldUniformSampler,
+    HasFrobenius, HasTwoAdicBionmialExtension, PackedField, TwoAdicField,
 };
 
 use super::{BinomiallyExtendable, Packable};
@@ -155,13 +156,6 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
     const MODULUS_VALUE: Self::Value = F::MODULUS_VALUE;
 
     #[inline]
-    fn lazy_new(value: Self::Value) -> Self {
-        Self {
-            value: field_to_array(F::new(value)),
-        }
-    }
-
-    #[inline]
     fn new(value: Self::Value) -> Self {
         Self::lazy_new(value)
     }
@@ -169,42 +163,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
     #[inline]
     /// Need to re-implement
     fn value(self) -> Self::Value {
-        self.value[0].value()
-    }
-
-    #[inline]
-    fn mul_scalar(self, scalar: Self::Value) -> Self {
-        self * Self::new(scalar)
-    }
-
-    #[inline]
-    fn add_mul(self, a: Self, b: Self) -> Self {
-        self + a * b
-    }
-
-    #[inline]
-    fn add_mul_assign(&mut self, a: Self, b: Self) {
-        *self += a * b
-    }
-
-    #[inline]
-    fn add_mul_fast(self, a: Self, b: Self) -> Self {
-        self + a * b
-    }
-
-    #[inline]
-    fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
-        *self += a * b
-    }
-
-    #[inline]
-    fn mul_fast(self, rhs: Self) -> Self {
-        self * rhs
-    }
-
-    #[inline]
-    fn mul_assign_fast(&mut self, rhs: Self) {
-        *self *= rhs
+        std::unimplemented!()
     }
 
     #[inline]
@@ -213,8 +172,8 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
     }
 
     #[inline]
-    fn decompose(self, basis: crate::Basis<Self>) -> Vec<Self> {
-        vec![Self::zero(); basis.decompose_len()]
+    fn decompose(self, _basis: crate::Basis<Self>) -> Vec<Self> {
+        std::unimplemented!()
     }
 
     #[inline]
@@ -223,15 +182,19 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
     }
 
     #[inline]
-    fn decompose_at(self, _basis: crate::Basis<Self>, _destination: &mut [Self]) {}
-
-    #[inline]
-    fn decompose_lsb_bits(&mut self, _mask: Self::Value, _bits: u32) -> Self {
-        Self::zero()
+    fn decompose_at(self, _basis: crate::Basis<Self>, _destination: &mut [Self]) {
+        std::unimplemented!()
     }
 
     #[inline]
-    fn decompose_lsb_bits_at(&mut self, _destination: &mut Self, _mask: Self::Value, _bits: u32) {}
+    fn decompose_lsb_bits(&mut self, _mask: Self::Value, _bits: u32) -> Self {
+        std::unimplemented!()
+    }
+
+    #[inline]
+    fn decompose_lsb_bits_at(&mut self, _destination: &mut Self, _mask: Self::Value, _bits: u32) {
+        std::unimplemented!()
+    }
 }
 
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Display
@@ -575,7 +538,7 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Pow<u128>
     // *****WARNING******
     // Need to re-implement
     fn pow(self, _rhs: u128) -> Self::Output {
-        self
+        std::unimplemented!()
     }
 }
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> One
@@ -602,7 +565,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> One
     }
 }
 
-impl<F: Field + BinomiallyExtendable<D>, const D: usize> BinomialExtensionField<F, D> {
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> BinomialExtensionField<F, D> {
     /// square
     #[inline(always)]
     pub fn square(&self) -> Self {
@@ -623,6 +586,11 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> BinomialExtensionField<
             },
             _ => <Self as Mul<Self>>::mul(self.clone(), self.clone()),
         }
+    }
+
+    /// Returns a uniform random element.
+    pub fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        Self::from_base_fn(|_| FieldUniformSampler::new().sample(rng))
     }
 }
 

@@ -51,41 +51,6 @@ impl Field for BabyBear {
     }
 
     #[inline]
-    fn mul_scalar(self, scalar: Self::Value) -> Self {
-        Self(self.0.mul_reduce(to_monty(scalar), BabyBearModulus))
-    }
-
-    #[inline]
-    fn add_mul(self, a: Self, b: Self) -> Self {
-        self + a * b
-    }
-
-    #[inline]
-    fn add_mul_assign(&mut self, a: Self, b: Self) {
-        *self += a * b;
-    }
-
-    #[inline]
-    fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
-        self.add_mul_assign(a, b);
-    }
-
-    #[inline]
-    fn add_mul_fast(self, a: Self, b: Self) -> Self {
-        self.add_mul(a, b)
-    }
-
-    #[inline]
-    fn mul_fast(self, rhs: Self) -> Self {
-        self * rhs
-    }
-
-    #[inline]
-    fn mul_assign_fast(&mut self, rhs: Self) {
-        *self *= rhs;
-    }
-
-    #[inline]
     fn mask(bits: u32) -> Self::Value {
         u32::MAX >> (u32::BITS - bits)
     }

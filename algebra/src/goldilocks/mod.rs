@@ -1,5 +1,7 @@
 mod extension;
 
+pub use extension::GoldilocksExtension;
+
 use std::{
     fmt::Display,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
@@ -14,7 +16,7 @@ use crate::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
     },
-    Field, PrimeField,
+    Field, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of Goldilocks field
@@ -46,41 +48,6 @@ impl Field for Goldilocks {
     #[inline]
     fn value(self) -> Self::Value {
         to_canonical_u64(self.0)
-    }
-
-    #[inline]
-    fn mul_scalar(self, scalar: Self::Value) -> Self {
-        Self(self.0.mul_reduce(scalar, GoldilocksModulus))
-    }
-
-    #[inline]
-    fn add_mul(self, a: Self, b: Self) -> Self {
-        self + a * b
-    }
-
-    #[inline]
-    fn add_mul_fast(self, a: Self, b: Self) -> Self {
-        self + a * b
-    }
-
-    #[inline]
-    fn add_mul_assign(&mut self, a: Self, b: Self) {
-        *self += a * b;
-    }
-
-    #[inline]
-    fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
-        *self += a * b;
-    }
-
-    #[inline]
-    fn mul_fast(self, rhs: Self) -> Self {
-        self * rhs
-    }
-
-    #[inline]
-    fn mul_assign_fast(&mut self, rhs: Self) {
-        *self *= rhs;
     }
 
     #[inline]
@@ -365,4 +332,26 @@ impl PrimeField for Goldilocks {
     fn is_prime_field() -> bool {
         true
     }
+}
+
+impl Packable for Goldilocks {}
+
+impl TwoAdicField for Goldilocks {
+    const TWO_ADICITY: usize = 32;
+
+    fn two_adic_generator(bits: usize) -> Self {
+        // TODO: Consider a `match` which may speed this up.
+        assert!(bits <= Self::TWO_ADICITY);
+        let base = Self::new(1_753_635_133_440_165_772); // generates the whole 2^TWO_ADICITY group
+        exp_power_of_2(base, Self::TWO_ADICITY - bits)
+    }
+}
+
+#[must_use]
+fn exp_power_of_2<F: Field>(x: F, power_log: usize) -> F {
+    let mut res = x;
+    for _ in 0..power_log {
+        res = res * res;
+    }
+    res
 }
