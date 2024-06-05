@@ -172,7 +172,7 @@ impl<F: Field> BitDecompositionSubClaim<F> {
     /// * `u` is the common random challenge from the verifier, used to instantiate every sum.
     pub fn verify_subclaim(
         &self,
-        d_val: &[DenseMultilinearExtension<F>],
+        d_val: &[Rc<DenseMultilinearExtension<F>>],
         d_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         decomposed_bits_info: &DecomposedBitsInfo<F>,
