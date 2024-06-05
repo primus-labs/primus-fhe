@@ -2,6 +2,7 @@
 pub mod addition_in_zq;
 pub mod bit_decomposition;
 pub mod ntt;
+pub mod rlwe_mul_rgsw;
 
 pub use addition_in_zq::{AdditionInZq, AdditionInZqInstance};
 pub use bit_decomposition::{BitDecomposition, DecomposedBits, DecomposedBitsInfo};
