@@ -208,3 +208,55 @@ fn test_ntt_with_delegation() {
 
     assert!(subclaim.verify_subcliam(&points, &coeff, &u, &ntt_instance_info));
 }
+
+#[test]
+fn test_ntt_combined_with_delegation() {
+    let log_n = 3;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let mut power = FF::ONE;
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+
+    let mut rng = thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let mut coeff1 = PolyFF::random(1 << log_n, &mut rng);
+    let points1 = DenseMultilinearExtension::from_evaluations_vec(
+        log_n,
+        ntt_transform_normal_order(log_n as u32, coeff1.as_ref()),
+    );
+
+    let mut coeff2 = PolyFF::random(1 << log_n, &mut rng);
+    let points2 = DenseMultilinearExtension::from_evaluations_vec(
+        log_n,
+        ntt_transform_normal_order(log_n as u32, coeff2.as_ref()),
+    );
+
+    let r_1 = uniform.sample(&mut rng);
+    let r_2 = uniform.sample(&mut rng);
+    coeff1.mul_scalar_assign(r_1);
+    coeff2.mul_scalar_assign(r_2);
+    let coeff = coeff1 + coeff2;
+
+    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n,
+        coeff.data(),
+    ));
+    let mut points =
+        <DenseMultilinearExtension<FF>>::from_evaluations_vec(log_n, vec![FF::ZERO; 1 << log_n]);
+    points += (r_1, &points1);
+    points += (r_2, &points2);
+    let points = Rc::new(points);
+
+    let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
+    let ntt_instance_info = ntt_instance.info();
+
+    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
+    let proof = NTTIOP::prove(&ntt_instance, &u);
+    let subclaim = NTTIOP::verify(&proof, &ntt_instance_info, &u);
+
+    assert!(subclaim.verify_subcliam(&points, &coeff, &u, &ntt_instance_info));
+}
