@@ -1,10 +1,12 @@
+use crate::utils::merkle_tree::MerkleTree;
+
 use super::*;
 
 /// Verifier of Brakedown PCS
 #[derive(Debug, Clone, Default)]
-pub struct BrakedownVerifier<F: Field, R: RngCore + Default> {
+pub struct BrakedownVerifier<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> {
     /// brakedown pcs parameter
-    vp: VerifierParam<F>,
+    vp: VerifierParam<F, C>,
 
     /// verifier challenges prover using this source of randomness
     /// which can be substituted by Fiat-Shamir transformation
@@ -30,15 +32,34 @@ pub struct BrakedownVerifier<F: Field, R: RngCore + Default> {
     residual_tensor: Vec<F>,
 }
 
-impl<F: Field, R: RngCore + Default> BrakedownVerifier<F, R> {
+impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> BrakedownVerifier<F, C, R> {
     /// create a verifier
     #[inline]
-    pub fn new(vp: VerifierParam<F>, randomness: R) -> Self {
+    pub fn new(vp: VerifierParam<F, C>, randomness: R) -> Self {
         BrakedownVerifier {
             vp,
             randomness,
             ..Default::default()
         }
+    }
+
+    /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
+    /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
+    #[inline]
+    fn num_query(&self) -> usize {
+        let num_query = ceil(
+            -(self.vp.lambda as f64)
+                / (1.0 - self.vp.code.distance() * self.vp.code.proximity_gap()).log2(),
+        );
+        min(num_query, self.vp.code.codeword_len())
+    }
+
+    /// return the size of proof given column_num c and row_num r, which consists of the following two parts:
+    /// size of the product of random vector and commited matrix: 1*c
+    /// size of the random selected columns of commited matrix: self.spec.num_opening() * r
+    #[inline]
+    pub fn proof_size(&self, c: usize, r: usize) -> usize {
+        c + self.num_query() * r
     }
 
     /// receive the commitment i.e. the merkle root
@@ -62,12 +83,12 @@ impl<F: Field, R: RngCore + Default> BrakedownVerifier<F, R> {
     #[inline]
     pub fn random_queries(&mut self) -> &Vec<usize> {
         // rename variables for convenience
-        let num_queries = self.vp.brakedown.num_queries();
-        let codeword_len = self.vp.brakedown.codeword_len();
+        let num_queries = self.num_query();
+        let codeword_len = self.vp.code.codeword_len();
 
         // generate a random set of queries or a set of full queries
         if num_queries < codeword_len {
-            let index_distr: Uniform<usize> = Uniform::new(0, self.vp.brakedown.codeword_len());
+            let index_distr: Uniform<usize> = Uniform::new(0, self.vp.code.codeword_len());
             self.queries = (&mut self.randomness)
                 .sample_iter(index_distr)
                 .take(num_queries)
@@ -85,18 +106,17 @@ impl<F: Field, R: RngCore + Default> BrakedownVerifier<F, R> {
     #[inline]
     pub fn receive_answer(&mut self, answer: &Vec<F>) {
         // input check
-        assert!(answer.len() == self.vp.brakedown.message_len());
-        self.answer = answer.clone();
+        assert!(answer.len() == self.vp.code.message_len());
+        self.answer.clone_from(answer);
 
         // encode the answer
-        self.answer
-            .resize(self.vp.brakedown.codeword_len(), F::ZERO);
-        self.vp.brakedown.encode(&mut self.answer);
+        self.answer.resize(self.vp.code.codeword_len(), F::ZERO);
+        self.vp.code.encode(&mut self.answer);
     }
 
     /// check the answer
     #[inline]
-    pub fn check_answer(&mut self, merkle_paths: &Vec<Vec<Hash>>, columns: &Vec<Vec<F>>) -> bool {
+    pub fn check_answer(&mut self, merkle_paths: &Vec<Vec<Hash>>, columns: &[Vec<F>]) -> bool {
         // input check
         assert!(self.challenge.len() == self.vp.num_rows);
         assert!(columns.len() == self.queries.len());
@@ -129,24 +149,7 @@ impl<F: Field, R: RngCore + Default> BrakedownVerifier<F, R> {
                 assert!(leaf == hashes[0]);
 
                 // check the merkle path is consistent with the merkle root
-                let root = hashes[1..]
-                    .iter()
-                    .enumerate()
-                    .fold(leaf, |acc, (idx, hash)| {
-                        if (column_idx >> idx) & 1 == 0 {
-                            hasher.update(acc);
-                            hasher.update(hash);
-                        } else {
-                            hasher.update(hash);
-                            hasher.update(acc);
-                        }
-                        let mut hash = Hash::default();
-                        hash.copy_from_slice(hasher.finalize_reset().as_slice());
-                        hash
-                    });
-                if root != self.root {
-                    check = false
-                }
+                check = MerkleTree::check(&self.root, column_idx, hashes);
             });
         check
     }
@@ -172,9 +175,9 @@ impl<F: Field, R: RngCore + Default> BrakedownVerifier<F, R> {
     /// decompose a evaluation point x into two tensor q1, q2 that
     /// f(x) = q1 M q2 where M is the committed matrix
     #[inline]
-    pub fn tensor_decompose(&mut self, point: &Vec<F>) -> Vec<F> {
+    pub fn tensor_decompose(&mut self, point: &[F]) -> Vec<F> {
         let left_point_len = self.vp.num_rows.ilog2() as usize;
-        let right_point_len = self.vp.brakedown.message_len().ilog2() as usize;
+        let right_point_len = self.vp.code.message_len().ilog2() as usize;
         assert!(left_point_len + right_point_len == point.len());
 
         self.challenge = Self::lagrange_basis(&point[right_point_len..]);
@@ -183,7 +186,7 @@ impl<F: Field, R: RngCore + Default> BrakedownVerifier<F, R> {
 
         assert!(self.challenge.len() == self.vp.num_rows);
 
-        assert!(self.residual_tensor.len() == self.vp.brakedown.message_len());
+        assert!(self.residual_tensor.len() == self.vp.code.message_len());
 
         self.challenge.clone()
     }

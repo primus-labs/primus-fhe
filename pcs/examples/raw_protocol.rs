@@ -13,7 +13,7 @@ pub struct FF(u64);
 
 fn main() {
     // sample a polynomial
-    let num_vars = 12;
+    let num_vars = 20;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)
@@ -26,16 +26,16 @@ fn main() {
     let verifier_rng = rand::thread_rng(); // private randomness of the verifier or public randomness from fiat-shamir transformation
 
     // specification of the brakedown protocol
-    let spec = BrakedownCodeSpec::new(32.0, 0.1195, 0.0284, 1.9, 60, 10);
+    let spec = BrakedownCodeSpec::new(32, 0.1195, 0.0284, 1.9, 60, 10);
 
     // Setup
 
     // prover and verifier transparently reach a consensus of field, variables number, pcs specification
-    let (pp, vp) = BrakedownProtocol::<FF>::setup(num_vars, 0, spec, setup_rng);
+    let (pp, vp) = BrakedownProtocol::<FF>::setup(128, num_vars, 0, spec, setup_rng);
     println!(
         "message_len: {:?}\ncodeword_len: {:?}",
-        &pp.brakedown.message_len(),
-        &pp.brakedown.codeword_len()
+        &pp.code.message_len(),
+        &pp.code.codeword_len()
     );
     let mut prover = BrakedownProver::new(pp);
     let mut verifier = BrakedownVerifier::new(vp, verifier_rng);

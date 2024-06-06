@@ -2,7 +2,7 @@
 pub mod brakedown;
 
 use algebra::{Field, MultilinearExtension};
-use rand::RngCore;
+use rand::{CryptoRng, Rng};
 use std::fmt::Debug;
 
 type Point<F, P> = <P as MultilinearExtension<F>>::Point;
@@ -24,7 +24,7 @@ pub trait PolynomialCommitmentScheme<F: Field, S>: Clone + Debug {
     fn setup(
         poly_size: usize,
         spec: S,
-        rng: impl RngCore,
+        rng: impl Rng + CryptoRng,
     ) -> (Self::ProverParam, Self::VerifierParam);
 
     /// commit

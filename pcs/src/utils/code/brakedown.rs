@@ -1,11 +1,11 @@
 use crate::utils::{
-    arithmetic::{ceil, h, SparseMatrix, SparseMatrixDimension},
+    arithmetic::{ceil, entropy, SparseMatrix, SparseMatrixDimension},
     code::{LinearCode, ReedSolomonCode},
 };
 
 use algebra::Field;
 use itertools::Itertools;
-use rand::RngCore;
+use rand::{CryptoRng, Rng};
 use std::{
     cmp::{max, min},
     f64,
@@ -14,27 +14,36 @@ use std::{
 };
 
 /// BrakedownCode Specification
+///
 /// names of the parameters are consistent with the paper
 #[derive(Clone, Debug, Default)]
 pub struct BrakedownCodeSpec {
-    // security parameter
-    lambda: f64,
+    /// security parameter
+    lambda: usize,
+
     // code parameter
     alpha: f64,
     beta: f64,
+    /// inversion of ideal code rate
     r: f64,
-    field_size_bits: usize,     // log_2(|F|)
-    recursion_threshold: usize, // for message_len < recursion threshold, call ReedSolomanCode
+    /// log_2(|F|)
+    field_size_bits: usize,
+    /// for message_len < recursion threshold, call ReedSolomanCode   
+    recursion_threshold: usize,
+
     // code property
-    distance: f64, // relative distance of the code
-    rate: f64, // ideal code rate. the real code rate is message_len/codeword_len, considering error of float points' computation
+    /// relative distance of the code
+    distance: f64,
+    /// ideal code rate,
+    /// the real code rate is message_len/codeword_len, considering error of float points' computation
+    rate: f64,
 }
 
 impl BrakedownCodeSpec {
     /// create an instance of BrakedownCodeSpec
     #[inline]
     pub fn new(
-        lambda: f64,
+        lambda: usize,
         alpha: f64,
         beta: f64,
         r: f64,
@@ -76,7 +85,7 @@ impl BrakedownCodeSpec {
     /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
     #[inline]
     pub fn num_queries(&self) -> usize {
-        ceil(-self.lambda / (1.0 - self.distance / 3.0).log2())
+        ceil(-(self.lambda as f64) / (1.0 - self.distance / 3.0).log2())
     }
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
@@ -84,7 +93,7 @@ impl BrakedownCodeSpec {
     #[inline]
     pub fn extension_field_size(&self, message_len: usize) -> usize {
         let n = message_len;
-        self.codeword_len(n) * ceil(f64::powf(2f64, self.lambda))
+        self.codeword_len(n) * ceil(f64::powf(2f64, self.lambda as f64))
     }
 
     /// return the size of proof given column_num c and row_num r, which consists of the following two parts:
@@ -95,14 +104,39 @@ impl BrakedownCodeSpec {
         c + self.num_queries() * r
     }
 
+    /// find the message_len that has optimal proof size, given num_vars
+    #[inline]
+    pub fn optimize_message_len(&self, num_vars: usize) -> usize {
+        let log_threshold = (self.recursion_threshold + 1).next_power_of_two().ilog2() as usize;
+        // iterate over (proof_size, message_len/row_len) to find optimal message-len
+        (log_threshold..=num_vars)
+            .fold(
+                (usize::MAX, 0_usize),
+                |(min_proof_size, row_len), log_row_len| {
+                    let proof_size =
+                        self.proof_size(1 << log_row_len, 1 << (num_vars - log_row_len));
+                    if proof_size < min_proof_size {
+                        (proof_size, 1 << log_row_len)
+                    } else {
+                        (min_proof_size, row_len)
+                    }
+                },
+            )
+            .1
+    }
+
     /// return the codeword length of the given message length under this set of code parameters
     #[inline]
     pub fn codeword_len(&self, message_len: usize) -> usize {
         let (a, b) = self.dimensions(message_len);
-        message_len + // the systematic part
-        a[..a.len()-1].iter().map(|a| a.m).sum::<usize>() + // the upper part (the last a.m is consumed by Reedsolomon code)
-        b.last().unwrap().n +// the Reedsolomon code length
-        b.iter().map(|b| b.m).sum::<usize>() // the lower part
+        // the systematic part
+        message_len +
+        // the upper part (the last a.m is consumed by Reedsolomon code)
+        a[..a.len()-1].iter().map(|a| a.column_num).sum::<usize>() +
+        // the Reedsolomon code length
+        b.last().unwrap().row_num +
+        // the lower part
+        b.iter().map(|b| b.column_num).sum::<usize>()
     }
 
     /// returh the number of nonzere elements in each row of A_n
@@ -112,9 +146,9 @@ impl BrakedownCodeSpec {
         let alpha = self.alpha;
         let beta = self.beta;
         min(
-            max(ceil(1.28 * beta * n), ceil(beta * n) + 4),
+            max((1.28 * beta * n).ceil() as usize, ceil(beta * n) + 4),
             ceil(
-                ((110.0 / n) + h(beta) + alpha * h(1.28 * beta / alpha))
+                ((110.0 / n) + entropy(beta) + alpha * entropy(1.28 * beta / alpha))
                     / (beta * (alpha / (1.28 * beta)).log2()),
             ),
         )
@@ -133,7 +167,7 @@ impl BrakedownCodeSpec {
         min(
             ceil((2.0 * beta + ((r - 1.0) + 110.0 / n) / log2_q) * n),
             ceil(
-                (r * alpha * h(beta / r) + mu * h(nu / mu) + 110.0 / n)
+                (r * alpha * entropy(beta / r) + mu * entropy(nu / mu) + 110.0 / n)
                     / (alpha * beta * (mu / nu).log2()),
             ),
         )
@@ -144,7 +178,7 @@ impl BrakedownCodeSpec {
     /// we iteratively produce all A, B we need
     /// at iteration 1 i.e. the beginning
     /// A(n) = M_{n, alpha * n, c_n}
-    /// B(n) = M_{alpha, (r - 1 - r * alpha) * n, d_n}
+    /// B(n) = M_{alpha * r * n, (r - 1 - r * alpha) * n, d_n}
     /// with M_{n, m, d} denotes row_num, column_num, nonzero_num, respectively
 
     /// at iteration 2
@@ -172,9 +206,9 @@ impl BrakedownCodeSpec {
         let b = a
             .iter()
             .map(|a| {
-                let n_prime = ceil(a.m as f64 * self.rate);
-                let m_prime = ceil(a.n as f64 * self.rate) - a.m - n_prime;
-                SparseMatrixDimension::new(n_prime, m_prime, min(self.d_n(a.n), m_prime))
+                let n_prime = ceil(a.column_num as f64 * self.rate);
+                let m_prime = ceil(a.row_num as f64 * self.rate) - a.column_num - n_prime;
+                SparseMatrixDimension::new(n_prime, m_prime, min(self.d_n(a.row_num), m_prime))
             })
             .collect();
 
@@ -186,7 +220,7 @@ impl BrakedownCodeSpec {
     fn matrices<F: Field>(
         &self,
         message_len: usize,
-        mut rng: impl RngCore,
+        mut rng: impl Rng + CryptoRng,
     ) -> (Vec<SparseMatrix<F>>, Vec<SparseMatrix<F>>) {
         let (a, b) = self.dimensions(message_len);
         a.into_iter()
@@ -218,7 +252,7 @@ pub struct BrakedownCode<F> {
 impl<F: Field> BrakedownCode<F> {
     /// create an instance of BrakedownCode
     #[inline]
-    pub fn new(spec: BrakedownCodeSpec, message_len: usize, rng: impl RngCore) -> Self {
+    pub fn new(spec: BrakedownCodeSpec, message_len: usize, rng: impl Rng + CryptoRng) -> Self {
         //assert!(1 << num_vars > spec.recursion_threshold);
 
         let (a, b) = spec.matrices(message_len, rng);
@@ -266,12 +300,18 @@ impl<F: Field> LinearCode<F> for BrakedownCode<F> {
         self.codeword_len
     }
 
+    #[inline]
+    fn distance(&self) -> f64 {
+        self.spec.distance
+    }
+
     /// iteratively encode
-    /// Enc: x0 -> x0 = x0 | x1 = x0 * A0 | x2 = x1 * A1 | x3 = x3 * A3 | ... | x{k-1} = x{k-2} * A{k-1} |
-    ///            xk = ReedSoloman(x * Ak) |
-    ///            x{k+1} = xk * B | x_{k+2} = (x_{k-1}|x_k|x_{k+1})*B | x_{k+3} =  (x_{k-2}|x_{k-1}|x_k|x_{k+1}|x_{k+2})*B | ...
-    /// all A, B above are different!
-    /// A, B are stored in self.a, self.b
+    /// Enc(x_0) = x_0 | x_1 | ... | x_{k-1} | x_k | x_{k+1} | ... | x_l
+    /// where
+    /// \forall 0 <= i < k-1, x_{i+1} = x_i * A_i
+    /// \forall 0 <= i < l-k-1, x_{k+i+1} = ( x_{k-i} |...| x_{k+i} ) * B_{l-k-i}
+    /// x_k = ReedSolomanCode
+
     fn encode(&self, mut target: impl AsMut<[F]>) {
         // target[0..message_len] is the message
         // target has the length of codeword_len
@@ -281,23 +321,24 @@ impl<F: Field> LinearCode<F> for BrakedownCode<F> {
         // compute x1 = x*A | x2 = x*A^2| x3 = x*A^3| ... | x_{k-1} = x*A^{k-1}
         let mut input_offset = 0;
         self.a[..self.a.len() - 1].iter().for_each(|a| {
-            let (input, output) = target[input_offset..].split_at_mut(a.dimension.n);
-            a.dot_into(input, &mut output[..a.dimension.m]);
-            input_offset += a.dimension.n;
+            let (input, output) = target[input_offset..].split_at_mut(a.dimension.row_num);
+            a.multiply_vector(input, &mut output[..a.dimension.column_num]);
+            input_offset += a.dimension.row_num;
         });
 
         // compute x_k = ReedSoloman(x*A^k)
         let a_last = self.a.last().unwrap();
         let b_last = self.b.last().unwrap();
 
-        let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.n);
+        let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.row_num);
 
-        a_last.dot_into(input, &mut output[..a_last.dimension.m]);
-        let reedsolomon_code = ReedSolomonCode::new(a_last.dimension.m, b_last.dimension.n);
-        reedsolomon_code.encode(&mut output[..b_last.dimension.n]);
+        a_last.multiply_vector(input, &mut output[..a_last.dimension.column_num]);
+        let reedsolomon_code =
+            ReedSolomonCode::new(a_last.dimension.column_num, b_last.dimension.row_num);
+        reedsolomon_code.encode(&mut output[..b_last.dimension.row_num]);
 
-        let mut output_offset = input_offset + a_last.dimension.n + b_last.dimension.n;
-        input_offset += a_last.dimension.n + a_last.dimension.m;
+        let mut output_offset = input_offset + a_last.dimension.row_num + b_last.dimension.row_num;
+        input_offset += a_last.dimension.row_num + a_last.dimension.column_num;
 
         // compute x_{k+1} = x_k*B | x_{k+2} = (x_{k-1}|x_k|x_{k+1})*B | x_{k+3} =  (x_{k-2}|x_{k-1}|x_k|x_{k+1}|x_{k+2})*B | ...
         self.a
@@ -305,16 +346,16 @@ impl<F: Field> LinearCode<F> for BrakedownCode<F> {
             .rev()
             .zip(self.b.iter().rev())
             .for_each(|(a, b)| {
-                input_offset -= a.dimension.m;
+                input_offset -= a.dimension.column_num;
                 let (input, output) = target.split_at_mut(output_offset);
-                b.dot_into(
-                    &input[input_offset..input_offset + b.dimension.n],
-                    &mut output[..b.dimension.m],
+                b.multiply_vector(
+                    &input[input_offset..input_offset + b.dimension.row_num],
+                    &mut output[..b.dimension.column_num],
                 );
-                output_offset += b.dimension.m;
+                output_offset += b.dimension.column_num;
             });
 
-        assert_eq!(input_offset, self.a[0].dimension.n);
+        assert_eq!(input_offset, self.a[0].dimension.row_num);
         assert_eq!(output_offset, target.len());
     }
 }
@@ -344,22 +385,22 @@ mod test {
     ///  test correctness of sets of parameters taken from Figure 2 in [GLSTW21](https://eprint.iacr.org/2021/1043.pdf).
     #[test]
     fn spec_127_bit_field() {
-        let spec1 = BrakedownCodeSpec::new(128.0, 0.1195, 0.0284, 1.420, 127, 30);
+        let spec1 = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.420, 127, 30);
         assert_spec_correct(spec1, 0.02, 6, 33, 13265);
 
-        let spec2 = BrakedownCodeSpec::new(128.0, 0.1380, 0.0444, 1.470, 127, 30);
+        let spec2 = BrakedownCodeSpec::new(128, 0.1380, 0.0444, 1.470, 127, 30);
         assert_spec_correct(spec2, 0.03, 7, 26, 8768);
 
-        let spec3 = BrakedownCodeSpec::new(128.0, 0.1780, 0.0610, 1.521, 127, 30);
+        let spec3 = BrakedownCodeSpec::new(128, 0.1780, 0.0610, 1.521, 127, 30);
         assert_spec_correct(spec3, 0.04, 7, 22, 6593);
 
-        let spec4 = BrakedownCodeSpec::new(128.0, 0.2000, 0.0820, 1.640, 127, 30);
+        let spec4 = BrakedownCodeSpec::new(128, 0.2000, 0.0820, 1.640, 127, 30);
         assert_spec_correct(spec4, 0.05, 8, 19, 5279);
 
-        let spec5 = BrakedownCodeSpec::new(128.0, 0.2110, 0.0970, 1.616, 127, 30);
+        let spec5 = BrakedownCodeSpec::new(128, 0.2110, 0.0970, 1.616, 127, 30);
         assert_spec_correct(spec5, 0.06, 9, 21, 4390);
 
-        let spec6 = BrakedownCodeSpec::new(128.0, 0.2380, 0.1205, 1.720, 1, 30);
+        let spec6 = BrakedownCodeSpec::new(128, 0.2380, 0.1205, 1.720, 1, 30);
         assert_spec_correct(spec6, 0.07, 10, 20, 3755);
     }
 
@@ -370,7 +411,7 @@ mod test {
     #[test]
     fn print() {
         let rng = rand::thread_rng();
-        let spec = BrakedownCodeSpec::new(127.0, 0.1195, 0.0284, 1.420, 31, 5);
+        let spec = BrakedownCodeSpec::new(127, 0.1195, 0.0284, 1.420, 31, 5);
         let brakedown_code = BrakedownCode::new(spec, 300, rng);
 
         // input your message here
@@ -403,7 +444,7 @@ mod test {
         let mut rng = rand::thread_rng();
         let field_distr = FieldUniformSampler::new();
 
-        let spec = BrakedownCodeSpec::new(128.0, 0.1195, 0.0284, 1.420, 31, 30);
+        let spec = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
         let brakedown_code: BrakedownCode<FF32> = BrakedownCode::new(spec, 5000, &mut rng);
 
         let message_len = brakedown_code.message_len;
@@ -448,7 +489,7 @@ mod test {
         let mut rng = rand::thread_rng();
         let field_distr = FieldUniformSampler::new();
 
-        let spec = BrakedownCodeSpec::new(128.0, 0.1195, 0.0284, 1.420, 31, 30);
+        let spec = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
         let brakedown_code: BrakedownCode<FF32> = BrakedownCode::new(spec, 5000, &mut rng);
 
         let message_len = brakedown_code.message_len;

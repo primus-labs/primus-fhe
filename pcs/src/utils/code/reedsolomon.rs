@@ -5,6 +5,7 @@ use algebra::Field;
 use std::{cmp::min, iter};
 
 /// ReedSolomonCode
+#[derive(Default)]
 pub struct ReedSolomonCode {
     message_len: usize,
     codeword_len: usize,
@@ -39,6 +40,16 @@ impl<F: Field> LinearCode<F> for ReedSolomonCode {
     #[inline]
     fn codeword_len(&self) -> usize {
         self.codeword_len
+    }
+
+    #[inline]
+    fn distance(&self) -> f64 {
+        (self.codeword_len - self.message_len + 1) as f64 / self.codeword_len as f64
+    }
+
+    #[inline]
+    fn proximity_gap(&self) -> f64 {
+        1.0 / 2.0
     }
 
     #[inline]

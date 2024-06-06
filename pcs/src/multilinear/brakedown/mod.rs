@@ -1,16 +1,19 @@
-use crate::utils::code::{BrakedownCode, BrakedownCodeSpec, LinearCode};
+use crate::utils::{
+    arithmetic::{ceil, is_power_of_two},
+    code::{BrakedownCode, BrakedownCodeSpec, LinearCode},
+};
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
-use rand::{distributions::Uniform, Rng, RngCore};
+use rand::{distributions::Uniform, CryptoRng, Rng};
 use sha3::{Digest, Sha3_256};
-use std::marker::PhantomData;
+use std::{cmp::min, marker::PhantomData};
 
 /// prover of brakedown pcs
 pub mod prover;
 /// verifier of brakedown pcs
 pub mod verifier;
 
-type ProverParam<F> = BrakedownParam<F>;
-type VerifierParam<F> = BrakedownParam<F>;
+type ProverParam<F, C> = BrakedownParam<F, C>;
+type VerifierParam<F, C> = BrakedownParam<F, C>;
 type Polynomial<F> = DenseMultilinearExtension<F>;
 /// 256bit hash value, whose length is determined by the security paranter
 type Hash = [u8; 32];
@@ -19,19 +22,23 @@ type Hash = [u8; 32];
 ///
 /// prover's pcs parameters and verifier's pcs parameters are the same for brakedown pcs
 #[derive(Clone, Debug, Default)]
-pub struct BrakedownParam<F: Field> {
+pub struct BrakedownParam<F: Field, C: LinearCode<F>> {
+    /// security parameter
+    pub lambda: usize,
     /// the number of the variables of the multilinear polynomial
     pub num_vars: usize,
     /// the number of the rows of the evaluation matrix of the multilinear polynomial
     pub num_rows: usize,
     /// the linear code in brakedown pcs
-    pub brakedown: BrakedownCode<F>,
+    pub code: C,
+    /// phantomdata
+    _marker: PhantomData<F>,
 }
 
 /// Protocol of Brakedown PCS
 #[derive(Debug, Clone, Default)]
 pub struct BrakedownProtocol<F: Field> {
-    field: PhantomData<F>,
+    _marker: PhantomData<F>,
 }
 
 impl<F: Field> BrakedownProtocol<F> {
@@ -41,51 +48,38 @@ impl<F: Field> BrakedownProtocol<F> {
     /// message length of the code (which enables variant overhead tradeoffs),
     /// code specification ( whic requires the same randomness for prover and verifier to generate the code)
     pub fn setup(
+        lambda: usize,
         num_vars: usize,
-        message_lenn: usize,
-        spec: BrakedownCodeSpec,
-        rng: impl RngCore,
-    ) -> (ProverParam<F>, VerifierParam<F>) {
+        mut message_len: usize,
+        code_spec: BrakedownCodeSpec,
+        rng: impl Rng + CryptoRng,
+    ) -> (
+        ProverParam<F, BrakedownCode<F>>,
+        VerifierParam<F, BrakedownCode<F>>,
+    ) {
         // if message_len not specified, choose message_len that minimizes the proof size
-        // let mut row_len = 0;
-        // let _ = 0;
-        // if message_len != 0 {
-        //     assert!(is_power_of_two(message_len));
-        // } else {
-        //     let log_threshold = (spec.recursion_threshold() + 1).next_power_of_two().ilog2() as usize;
-        //     (_, row_len) =
-        //     (log_threshold..=num_vars).fold((usize::MAX, 0), |(min_proof_size, row_len), log_row_len| {
-        //         let proof_size = spec.proof_size(1 << log_row_len, 1 << (num_vars - log_row_len));
-        //         if proof_size < min_proof_size {
-        //             (proof_size, 1 << log_row_len)
-        //         } else {
-        //             (min_proof_size, row_len)
-        //         }
-        //     });
-        // }
-        println!("num_query: {}", spec.num_queries());
-        let mut message_len: usize = 0;
-        if message_lenn == 0 {
-            message_len = 1 << (num_vars / 2 + 1);
+        if message_len != 0 {
+            assert!(is_power_of_two(message_len));
+        } else {
+            message_len = code_spec.optimize_message_len(num_vars);
         }
+
+        // println!("num_query: {}", code_spec.num_queries());
 
         // input check
         assert!(1 << num_vars >= message_len);
 
         // create the pcs parameter
-        let brakedown: BrakedownCode<F> = BrakedownCode::new(spec, message_len, rng);
+        let brakedown: BrakedownCode<F> = BrakedownCode::new(code_spec, message_len, rng);
         let param = BrakedownParam {
+            lambda,
             num_vars,
             num_rows: (1 << num_vars) / brakedown.message_len(),
-            brakedown,
+            code: brakedown,
+            _marker: PhantomData,
         };
         let pp = param.clone();
         let vp = param;
         (pp, vp)
     }
 }
-
-// #[inline]
-// fn is_power_of_two(x: usize) -> bool {
-//     x != 0 && (x & (x - 1)) == 0
-// }

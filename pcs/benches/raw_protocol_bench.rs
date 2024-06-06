@@ -15,7 +15,7 @@ pub struct FF(u64);
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     // sample a polynomial
-    let num_vars = 11;
+    let num_vars = 20;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)
@@ -25,30 +25,37 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         .sample_iter(FieldUniformSampler::new())
         .take(num_vars)
         .collect();
+    println!(
+        "polynomial size: {} coefficients, {} variables",
+        1 << num_vars,
+        num_vars
+    );
 
     // randomness
     let setup_rng = rand::thread_rng(); // public randomness
     let verifier_rng = rand::thread_rng(); // private randomness of the verifier or public randomness from fiat-shamir transformation
                                            // specification of the brakedown protocol
-    let spec = BrakedownCodeSpec::new(128.0, 0.1195, 0.0284, 1.9, 60, 10);
+    let code_spec = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
     // Setup
 
     // prover and verifier transparently reach a consensus of field, variables number, pcs specification
-    let (pp, vp) = BrakedownProtocol::<FF>::setup(num_vars, 0, spec, setup_rng);
+    let (pp, vp) = BrakedownProtocol::<FF>::setup(128, num_vars, 0, code_spec, setup_rng);
     println!(
-        "message_len: {:?}\ncodeword_len: {:?}",
-        &pp.brakedown.message_len(),
-        &pp.brakedown.codeword_len()
+        "message_len(row_len): {:?}\ncodeword_len: {:?}",
+        &pp.code.message_len(),
+        &pp.code.codeword_len()
     );
+    println!("row_num: {}", pp.num_rows);
     let mut prover = BrakedownProver::new(pp);
     let mut verifier = BrakedownVerifier::new(vp, verifier_rng);
     let first_queries = verifier.random_queries().clone();
     let challenge = verifier.random_challenge().clone();
     let tensor = verifier.tensor_decompose(&point).clone();
-    //let second_queries = verifier.random_queries().clone();
+    let second_queries = verifier.random_queries().clone();
+    println!("number of queries: {}", prover.pp.code.num_queries());
 
-    let mut group = c.benchmark_group("prover");
+    let mut group = c.benchmark_group("brakedown pcs");
 
     group.bench_function(&format!("prove poly of num_vars {}", num_vars), |b| {
         b.iter(|| {
@@ -56,7 +63,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             prover.answer_challenge(&challenge);
             prover.answer_queries(&first_queries);
             prover.answer_challenge(&tensor);
-            //prover.answer_queries(&second_queries);
+            prover.answer_queries(&second_queries);
         })
     });
 
@@ -65,12 +72,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let answer = prover.answer_challenge(&challenge);
     let (first_merkle_paths, first_columns) = prover.answer_queries(&first_queries);
     let product = prover.answer_challenge(&tensor);
-    //let (second_merkle_paths, second_columns) = prover.answer_queries(&second_queries);
+    let (second_merkle_paths, second_columns) = prover.answer_queries(&second_queries);
 
-    let raw_proof_size =
-        mem::size_of_val(&(root, answer, first_merkle_paths, first_columns, product));
+    let raw_proof_size = mem::size_of_val(&(
+        root,
+        answer,
+        first_merkle_paths.clone(),
+        first_columns.clone(),
+        product,
+        second_merkle_paths.clone(),
+        second_columns.clone(),
+    ));
     println!("raw proof size: {} bytes", raw_proof_size);
-    //println!("{}", prover.pp.brakedown.num_queries());
 
     // verifier time
 
@@ -89,8 +102,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             verifier.check_answer(&first_merkle_paths, &first_columns);
             verifier.tensor_decompose(&point);
             verifier.receive_answer(&product);
-            // save the duplicate work
-            //verifier.check_answer(&second_merkle_paths, &second_columns);
+            verifier.check_answer(&second_merkle_paths, &second_columns);
         })
     });
 
