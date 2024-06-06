@@ -48,7 +48,7 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> BrakedownVerifier
     #[inline]
     fn num_query(&self) -> usize {
         let num_query = ceil(
-            -(self.vp.lambda as f64)
+            -(self.vp.security_bit as f64)
                 / (1.0 - self.vp.code.distance() * self.vp.code.proximity_gap()).log2(),
         );
         min(num_query, self.vp.code.codeword_len())

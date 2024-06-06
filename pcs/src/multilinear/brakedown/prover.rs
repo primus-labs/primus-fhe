@@ -4,7 +4,7 @@ use super::*;
 
 /// Prover of Brakedown PCS
 #[derive(Debug, Clone, Default)]
-pub struct BrakedownProver<F: Field, C: LinearCode<F>> {
+pub struct PcsProver<F: Field, C: LinearCode<F>> {
     /// brakedown pcs parameter
     pub pp: ProverParam<F, C>,
 
@@ -23,11 +23,11 @@ pub struct BrakedownProver<F: Field, C: LinearCode<F>> {
     root: Hash,
 }
 
-impl<F: Field, C: LinearCode<F>> BrakedownProver<F, C> {
+impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
     /// instansiate a brakedown prover from given prover parameters
     #[inline]
     pub fn new(pp: ProverParam<F, C>) -> Self {
-        BrakedownProver {
+        PcsProver {
             pp,
             ..Default::default()
         }

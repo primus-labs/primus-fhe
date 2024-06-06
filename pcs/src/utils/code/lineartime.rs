@@ -17,7 +17,7 @@ use std::{
 ///
 /// names of the parameters are consistent with the paper
 #[derive(Clone, Debug, Default)]
-pub struct BrakedownCodeSpec {
+pub struct LinearTimeCodeSpec {
     /// security parameter
     lambda: usize,
 
@@ -39,7 +39,7 @@ pub struct BrakedownCodeSpec {
     rate: f64,
 }
 
-impl BrakedownCodeSpec {
+impl LinearTimeCodeSpec {
     /// create an instance of BrakedownCodeSpec
     #[inline]
     pub fn new(
@@ -82,13 +82,6 @@ impl BrakedownCodeSpec {
     }
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
-    /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
-    #[inline]
-    pub fn num_queries(&self) -> usize {
-        ceil(-(self.lambda as f64) / (1.0 - self.distance / 3.0).log2())
-    }
-
-    /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
     /// return the needed size of the extension field, which accounts for the (codeword_len/|F|) part
     #[inline]
     pub fn extension_field_size(&self, message_len: usize) -> usize {
@@ -96,33 +89,50 @@ impl BrakedownCodeSpec {
         self.codeword_len(n) * ceil(f64::powf(2f64, self.lambda as f64))
     }
 
-    /// return the size of proof given column_num c and row_num r, which consists of the following two parts:
-    /// size of the product of random vector and commited matrix: 1*c
-    /// size of the random selected columns of commited matrix: self.spec.num_opening() * r
+    /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
+    /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
     #[inline]
-    pub fn proof_size(&self, c: usize, r: usize) -> usize {
-        c + self.num_queries() * r
+    pub fn num_queries(&self) -> usize {
+        ceil(-(self.lambda as f64) / (1.0 - self.distance / 3.0).log2())
     }
 
-    /// find the message_len that has optimal proof size, given num_vars
-    #[inline]
-    pub fn optimize_message_len(&self, num_vars: usize) -> usize {
-        let log_threshold = (self.recursion_threshold + 1).next_power_of_two().ilog2() as usize;
-        // iterate over (proof_size, message_len/row_len) to find optimal message-len
-        (log_threshold..=num_vars)
-            .fold(
-                (usize::MAX, 0_usize),
-                |(min_proof_size, row_len), log_row_len| {
-                    let proof_size =
-                        self.proof_size(1 << log_row_len, 1 << (num_vars - log_row_len));
-                    if proof_size < min_proof_size {
-                        (proof_size, 1 << log_row_len)
-                    } else {
-                        (min_proof_size, row_len)
-                    }
-                },
-            )
-            .1
+    // /// return the size of proof given column_num c and row_num r, which consists of the following two parts:
+    // /// size of the product of random vector and commited matrix: 1*c
+    // /// size of the random selected columns of commited matrix: self.spec.num_opening() * r
+    // #[inline]
+    // pub fn proof_size(&self, c: usize, r: usize) -> usize {
+    //     c + self.num_queries() * r
+    // }
+
+    // /// find the message_len that has optimal proof size, given num_vars
+    // #[inline]
+    // pub fn optimize_message_len(&self, num_vars: usize) -> usize {
+    //     let log_threshold = (self.recursion_threshold + 1).next_power_of_two().ilog2() as usize;
+    //     // iterate over (proof_size, message_len/row_len) to find optimal message-len
+    //     (log_threshold..=num_vars)
+    //         .fold(
+    //             (usize::MAX, 0_usize),
+    //             |(min_proof_size, row_len), log_row_len| {
+    //                 let proof_size =
+    //                     self.proof_size(1 << log_row_len, 1 << (num_vars - log_row_len));
+    //                 if proof_size < min_proof_size {
+    //                     (proof_size, 1 << log_row_len)
+    //                 } else {
+    //                     (min_proof_size, row_len)
+    //                 }
+    //             },
+    //         )
+    //         .1
+    // }
+
+    /// relative distance of the code
+    pub fn distance(&self) -> f64 {
+        self.distance
+    }
+
+    /// proximity gap of the code
+    pub fn proximity_gap(&self) -> f64 {
+        1.0 / 3.0
     }
 
     /// return the codeword length of the given message length under this set of code parameters
@@ -239,9 +249,9 @@ impl BrakedownCodeSpec {
 ///
 /// This implementation uses an equavailent iterative encoding method for efficiency
 #[derive(Clone, Debug, Default)]
-pub struct BrakedownCode<F> {
+pub struct LinearTimeCode<F> {
     /// specification
-    pub spec: BrakedownCodeSpec,
+    pub spec: LinearTimeCodeSpec,
     message_len: usize,
     codeword_len: usize,
     num_opening: usize,
@@ -249,10 +259,10 @@ pub struct BrakedownCode<F> {
     b: Vec<SparseMatrix<F>>,
 }
 
-impl<F: Field> BrakedownCode<F> {
+impl<F: Field> LinearTimeCode<F> {
     /// create an instance of BrakedownCode
     #[inline]
-    pub fn new(spec: BrakedownCodeSpec, message_len: usize, rng: impl Rng + CryptoRng) -> Self {
+    pub fn new(spec: LinearTimeCodeSpec, message_len: usize, rng: impl Rng + CryptoRng) -> Self {
         //assert!(1 << num_vars > spec.recursion_threshold);
 
         let (a, b) = spec.matrices(message_len, rng);
@@ -289,7 +299,7 @@ impl<F: Field> BrakedownCode<F> {
     }
 }
 
-impl<F: Field> LinearCode<F> for BrakedownCode<F> {
+impl<F: Field> LinearCode<F> for LinearTimeCode<F> {
     #[inline]
     fn message_len(&self) -> usize {
         self.message_len
@@ -363,13 +373,13 @@ impl<F: Field> LinearCode<F> for BrakedownCode<F> {
 #[cfg(test)]
 mod test {
 
-    use crate::utils::code::{BrakedownCode, BrakedownCodeSpec, LinearCode};
+    use crate::utils::code::{LinearCode, LinearTimeCode, LinearTimeCodeSpec};
     use algebra::{derive::*, Field, FieldUniformSampler};
     use rand::Rng;
 
     /// test whether a set of parameters is correct
     fn assert_spec_correct(
-        spec: BrakedownCodeSpec,
+        spec: LinearTimeCodeSpec,
         distance: f64,
         c_n: usize,
         d_n: usize,
@@ -385,22 +395,22 @@ mod test {
     ///  test correctness of sets of parameters taken from Figure 2 in [GLSTW21](https://eprint.iacr.org/2021/1043.pdf).
     #[test]
     fn spec_127_bit_field() {
-        let spec1 = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.420, 127, 30);
+        let spec1 = LinearTimeCodeSpec::new(128, 0.1195, 0.0284, 1.420, 127, 30);
         assert_spec_correct(spec1, 0.02, 6, 33, 13265);
 
-        let spec2 = BrakedownCodeSpec::new(128, 0.1380, 0.0444, 1.470, 127, 30);
+        let spec2 = LinearTimeCodeSpec::new(128, 0.1380, 0.0444, 1.470, 127, 30);
         assert_spec_correct(spec2, 0.03, 7, 26, 8768);
 
-        let spec3 = BrakedownCodeSpec::new(128, 0.1780, 0.0610, 1.521, 127, 30);
+        let spec3 = LinearTimeCodeSpec::new(128, 0.1780, 0.0610, 1.521, 127, 30);
         assert_spec_correct(spec3, 0.04, 7, 22, 6593);
 
-        let spec4 = BrakedownCodeSpec::new(128, 0.2000, 0.0820, 1.640, 127, 30);
+        let spec4 = LinearTimeCodeSpec::new(128, 0.2000, 0.0820, 1.640, 127, 30);
         assert_spec_correct(spec4, 0.05, 8, 19, 5279);
 
-        let spec5 = BrakedownCodeSpec::new(128, 0.2110, 0.0970, 1.616, 127, 30);
+        let spec5 = LinearTimeCodeSpec::new(128, 0.2110, 0.0970, 1.616, 127, 30);
         assert_spec_correct(spec5, 0.06, 9, 21, 4390);
 
-        let spec6 = BrakedownCodeSpec::new(128, 0.2380, 0.1205, 1.720, 1, 30);
+        let spec6 = LinearTimeCodeSpec::new(128, 0.2380, 0.1205, 1.720, 1, 30);
         assert_spec_correct(spec6, 0.07, 10, 20, 3755);
     }
 
@@ -411,8 +421,8 @@ mod test {
     #[test]
     fn print() {
         let rng = rand::thread_rng();
-        let spec = BrakedownCodeSpec::new(127, 0.1195, 0.0284, 1.420, 31, 5);
-        let brakedown_code = BrakedownCode::new(spec, 300, rng);
+        let spec = LinearTimeCodeSpec::new(127, 0.1195, 0.0284, 1.420, 31, 5);
+        let brakedown_code = LinearTimeCode::new(spec, 300, rng);
 
         // input your message here
         let mut target = vec![FF32::ONE; brakedown_code.codeword_len()];
@@ -444,8 +454,8 @@ mod test {
         let mut rng = rand::thread_rng();
         let field_distr = FieldUniformSampler::new();
 
-        let spec = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
-        let brakedown_code: BrakedownCode<FF32> = BrakedownCode::new(spec, 5000, &mut rng);
+        let spec = LinearTimeCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
+        let brakedown_code: LinearTimeCode<FF32> = LinearTimeCode::new(spec, 5000, &mut rng);
 
         let message_len = brakedown_code.message_len;
         let codeword_len = brakedown_code.codeword_len;
@@ -489,8 +499,8 @@ mod test {
         let mut rng = rand::thread_rng();
         let field_distr = FieldUniformSampler::new();
 
-        let spec = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
-        let brakedown_code: BrakedownCode<FF32> = BrakedownCode::new(spec, 5000, &mut rng);
+        let spec = LinearTimeCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
+        let brakedown_code: LinearTimeCode<FF32> = LinearTimeCode::new(spec, 5000, &mut rng);
 
         let message_len = brakedown_code.message_len;
         let codeword_len = brakedown_code.codeword_len;

@@ -1,6 +1,6 @@
 use crate::utils::{
     arithmetic::{ceil, is_power_of_two},
-    code::{BrakedownCode, BrakedownCodeSpec, LinearCode},
+    code::{LinearCode, LinearTimeCode, LinearTimeCodeSpec, ReedSolomonCode},
 };
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
 use rand::{distributions::Uniform, CryptoRng, Rng};
@@ -12,8 +12,8 @@ pub mod prover;
 /// verifier of brakedown pcs
 pub mod verifier;
 
-type ProverParam<F, C> = BrakedownParam<F, C>;
-type VerifierParam<F, C> = BrakedownParam<F, C>;
+type ProverParam<F, C> = PcsParam<F, C>;
+type VerifierParam<F, C> = PcsParam<F, C>;
 type Polynomial<F> = DenseMultilinearExtension<F>;
 /// 256bit hash value, whose length is determined by the security paranter
 type Hash = [u8; 32];
@@ -22,9 +22,9 @@ type Hash = [u8; 32];
 ///
 /// prover's pcs parameters and verifier's pcs parameters are the same for brakedown pcs
 #[derive(Clone, Debug, Default)]
-pub struct BrakedownParam<F: Field, C: LinearCode<F>> {
+pub struct PcsParam<F: Field, C: LinearCode<F>> {
     /// security parameter
-    pub lambda: usize,
+    pub security_bit: usize,
     /// the number of the variables of the multilinear polynomial
     pub num_vars: usize,
     /// the number of the rows of the evaluation matrix of the multilinear polynomial
@@ -38,48 +38,150 @@ pub struct BrakedownParam<F: Field, C: LinearCode<F>> {
 /// Protocol of Brakedown PCS
 #[derive(Debug, Clone, Default)]
 pub struct BrakedownProtocol<F: Field> {
+    security_bit: usize,
+    num_vars: usize,
+    message_len: usize,
+    code: LinearTimeCode<F>,
     _marker: PhantomData<F>,
 }
 
 impl<F: Field> BrakedownProtocol<F> {
-    /// transparent setup to reach a consensus of
+    /// instantiate a brakedown protocol with a consensus of
     /// field of the polynomial,
     /// variable number of the polynomial,
     /// message length of the code (which enables variant overhead tradeoffs),
     /// code specification ( whic requires the same randomness for prover and verifier to generate the code)
-    pub fn setup(
-        lambda: usize,
+    pub fn new(
+        security_bit: usize,
         num_vars: usize,
-        mut message_len: usize,
-        code_spec: BrakedownCodeSpec,
+        message_len: usize,
+        code_spec: LinearTimeCodeSpec,
         rng: impl Rng + CryptoRng,
-    ) -> (
-        ProverParam<F, BrakedownCode<F>>,
-        VerifierParam<F, BrakedownCode<F>>,
-    ) {
-        // if message_len not specified, choose message_len that minimizes the proof size
-        if message_len != 0 {
-            assert!(is_power_of_two(message_len));
-        } else {
-            message_len = code_spec.optimize_message_len(num_vars);
-        }
-
-        // println!("num_query: {}", code_spec.num_queries());
-
+    ) -> Self {
         // input check
+        assert!(is_power_of_two(message_len));
         assert!(1 << num_vars >= message_len);
 
-        // create the pcs parameter
-        let brakedown: BrakedownCode<F> = BrakedownCode::new(code_spec, message_len, rng);
-        let param = BrakedownParam {
-            lambda,
+        // create the code based on code_spec
+        let code: LinearTimeCode<F> = LinearTimeCode::new(code_spec.clone(), message_len, rng);
+
+        Self {
+            security_bit,
             num_vars,
-            num_rows: (1 << num_vars) / brakedown.message_len(),
-            code: brakedown,
+            message_len,
+            code,
+            ..Default::default()
+        }
+    }
+
+    /// generate prover paramters and verifier parameters
+    pub fn setup(
+        &self,
+    ) -> (
+        ProverParam<F, LinearTimeCode<F>>,
+        VerifierParam<F, LinearTimeCode<F>>,
+    ) {
+        let param = PcsParam {
+            security_bit: self.security_bit,
+            num_vars: self.num_vars,
+            num_rows: (1 << self.num_vars) / self.message_len,
+            code: self.code.clone(),
             _marker: PhantomData,
         };
+
         let pp = param.clone();
         let vp = param;
         (pp, vp)
+    }
+
+    /// compute relative proof size
+    #[inline]
+    pub fn proof_size(&self, c: usize, r: usize) -> usize {
+        c + self.num_query() * r
+    }
+
+    /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
+    /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
+    #[inline]
+    pub fn num_query(&self) -> usize {
+        ceil(
+            -(self.security_bit as f64)
+                / (1.0 - self.code.distance() * self.code.proximity_gap()).log2(),
+        )
+    }
+}
+
+/// Protocol of Brakedown PCS
+#[derive(Debug, Clone, Default)]
+pub struct ShockwaveProtocol<F: Field> {
+    security_bit: usize,
+    num_vars: usize,
+    message_len: usize,
+    code: ReedSolomonCode<F>,
+    _marker: PhantomData<F>,
+}
+
+impl<F: Field> ShockwaveProtocol<F> {
+    /// instantiate a brakedown protocol with a consensus of
+    /// field of the polynomial,
+    /// variable number of the polynomial,
+    /// message length of the code (which enables variant overhead tradeoffs),
+    /// code specification ( whic requires the same randomness for prover and verifier to generate the code)
+    pub fn new(
+        security_bit: usize,
+        num_vars: usize,
+        message_len: usize,
+        codeword_len: usize,
+    ) -> Self {
+        // input check
+        assert!(is_power_of_two(message_len));
+        assert!(1 << num_vars >= message_len);
+
+        // create the code based on code_spec
+        let code: ReedSolomonCode<F> = ReedSolomonCode::new(message_len, codeword_len);
+
+        Self {
+            security_bit,
+            num_vars,
+            message_len,
+            code,
+            ..Default::default()
+        }
+    }
+
+    /// generate prover paramters and verifier parameters
+    pub fn setup(
+        &self,
+    ) -> (
+        ProverParam<F, ReedSolomonCode<F>>,
+        VerifierParam<F, ReedSolomonCode<F>>,
+    ) {
+        let param = PcsParam {
+            security_bit: self.security_bit,
+            num_vars: self.num_vars,
+            num_rows: (1 << self.num_vars) / self.message_len,
+            code: self.code.clone(),
+            _marker: PhantomData,
+        };
+
+        let pp = param.clone();
+        let vp = param;
+        (pp, vp)
+    }
+
+    /// compute relative proof size
+    #[inline]
+    pub fn proof_size(&self, c: usize, r: usize) -> usize {
+        c + self.num_query() * r
+    }
+
+    /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
+    /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
+    #[inline]
+    pub fn num_query(&self) -> usize {
+        ceil(
+            -(self.security_bit as f64)
+                / (1.0 - self.code.distance() * self.code.proximity_gap()).log2(),
+        )
     }
 }

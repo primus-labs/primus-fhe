@@ -2,28 +2,30 @@ use crate::utils::code::LinearCode;
 
 use algebra::Field;
 
-use std::{cmp::min, iter};
+use std::{cmp::min, iter, marker::PhantomData};
 
 /// ReedSolomonCode
-#[derive(Default)]
-pub struct ReedSolomonCode {
+#[derive(Default, Debug, Clone)]
+pub struct ReedSolomonCode<F> {
     message_len: usize,
     codeword_len: usize,
+    _marker: PhantomData<F>,
 }
 
-impl ReedSolomonCode {
+impl<F: Field> ReedSolomonCode<F> {
     /// create an instance of ReedSolomonCode
     #[inline]
     pub fn new(message_len: usize, codeword_len: usize) -> Self {
         Self {
             message_len,
             codeword_len,
+            ..Default::default()
         }
     }
 
     /// evaluate the polynomial of coeffs at point x
     #[inline]
-    fn evaluate<F: Field>(coeffs: &[F], x: &F) -> F {
+    fn evaluate(coeffs: &[F], x: &F) -> F {
         coeffs
             .iter()
             .rev()
@@ -31,7 +33,7 @@ impl ReedSolomonCode {
     }
 }
 
-impl<F: Field> LinearCode<F> for ReedSolomonCode {
+impl<F: Field> LinearCode<F> for ReedSolomonCode<F> {
     #[inline]
     fn message_len(&self) -> usize {
         self.message_len

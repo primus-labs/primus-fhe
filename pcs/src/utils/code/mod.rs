@@ -1,7 +1,7 @@
-mod brakedown;
+mod lineartime;
 mod reedsolomon;
 
-pub use brakedown::{BrakedownCode, BrakedownCodeSpec};
+pub use lineartime::{LinearTimeCode, LinearTimeCodeSpec};
 pub use reedsolomon::ReedSolomonCode;
 
 /// LinearCode

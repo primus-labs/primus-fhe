@@ -1,10 +1,8 @@
 use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler};
 use criterion::{criterion_group, criterion_main, Criterion};
 use pcs::{
-    multilinear::brakedown::{
-        prover::BrakedownProver, verifier::BrakedownVerifier, BrakedownProtocol,
-    },
-    utils::code::{BrakedownCodeSpec, LinearCode},
+    multilinear::brakedown::{prover::PcsProver, verifier::BrakedownVerifier, BrakedownProtocol},
+    utils::code::{LinearCode, LinearTimeCodeSpec},
 };
 use rand::Rng;
 use std::mem;
@@ -35,19 +33,21 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let setup_rng = rand::thread_rng(); // public randomness
     let verifier_rng = rand::thread_rng(); // private randomness of the verifier or public randomness from fiat-shamir transformation
                                            // specification of the brakedown protocol
-    let code_spec = BrakedownCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
+    let code_spec = LinearTimeCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
     // Setup
 
+    let protocol =
+        BrakedownProtocol::<FF>::new(128, num_vars, (1 << num_vars) >> 1, code_spec, setup_rng);
     // prover and verifier transparently reach a consensus of field, variables number, pcs specification
-    let (pp, vp) = BrakedownProtocol::<FF>::setup(128, num_vars, 0, code_spec, setup_rng);
+    let (pp, vp) = protocol.setup();
     println!(
         "message_len(row_len): {:?}\ncodeword_len: {:?}",
         &pp.code.message_len(),
         &pp.code.codeword_len()
     );
     println!("row_num: {}", pp.num_rows);
-    let mut prover = BrakedownProver::new(pp);
+    let mut prover = PcsProver::new(pp);
     let mut verifier = BrakedownVerifier::new(vp, verifier_rng);
     let first_queries = verifier.random_queries().clone();
     let challenge = verifier.random_challenge().clone();
