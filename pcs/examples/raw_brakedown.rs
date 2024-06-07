@@ -1,6 +1,6 @@
 use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension};
 use pcs::{
-    multilinear::brakedown::{prover::PcsProver, verifier::BrakedownVerifier, BrakedownProtocol},
+    multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
     utils::code::{LinearCode, LinearTimeCodeSpec},
 };
 use rand::Rng;
@@ -38,7 +38,7 @@ fn main() {
         &pp.code.codeword_len()
     );
     let mut prover = PcsProver::new(pp);
-    let mut verifier = BrakedownVerifier::new(vp, verifier_rng);
+    let mut verifier = PcsVerifier::new(vp, verifier_rng);
 
     // Commitment
 

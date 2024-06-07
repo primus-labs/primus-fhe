@@ -105,6 +105,12 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
         answer
     }
 
+    /// answer tensor
+    #[inline]
+    pub fn answer_tensor(&self, challenge: &Vec<F>) -> Vec<F> {
+        self.answer_challenge(&lagrange_basis(&challenge))
+    }
+
     /// prover answers the query of columns of given indexes
     /// and gives merkle paths as the proof of its consistency with the commitment i.e. merkle root
     #[inline]

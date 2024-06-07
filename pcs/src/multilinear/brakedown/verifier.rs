@@ -4,7 +4,7 @@ use super::*;
 
 /// Verifier of Brakedown PCS
 #[derive(Debug, Clone, Default)]
-pub struct BrakedownVerifier<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> {
+pub struct PcsVerifier<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> {
     /// brakedown pcs parameter
     vp: VerifierParam<F, C>,
 
@@ -32,11 +32,11 @@ pub struct BrakedownVerifier<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + De
     residual_tensor: Vec<F>,
 }
 
-impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> BrakedownVerifier<F, C, R> {
+impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C, R> {
     /// create a verifier
     #[inline]
     pub fn new(vp: VerifierParam<F, C>, randomness: R) -> Self {
-        BrakedownVerifier {
+        PcsVerifier {
             vp,
             randomness,
             ..Default::default()
@@ -46,7 +46,7 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> BrakedownVerifier
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
     /// return the number of columns needed to open, which accounts for the (1-delta/3)^num_opening part
     #[inline]
-    fn num_query(&self) -> usize {
+    pub fn num_query(&self) -> usize {
         let num_query = ceil(
             -(self.vp.security_bit as f64)
                 / (1.0 - self.vp.code.distance() * self.vp.code.proximity_gap()).log2(),
@@ -77,6 +77,19 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> BrakedownVerifier
             .take(self.vp.num_rows)
             .collect();
         &self.challenge
+    }
+
+    /// tensor challenge
+    pub fn random_tensor(&mut self) -> Vec<F> {
+        assert!(is_power_of_two(self.vp.num_rows));
+        let tensor_len = self.vp.num_rows.ilog2() as usize;
+        let field_distr: FieldUniformSampler<F> = FieldUniformSampler::new();
+        let tensor: Vec<F> = (&mut self.randomness)
+            .sample_iter(field_distr)
+            .take(tensor_len)
+            .collect();
+        self.challenge = Self::lagrange_basis(&tensor);
+        tensor
     }
 
     /// generate random queries

@@ -1,5 +1,5 @@
 use crate::utils::{
-    arithmetic::{ceil, is_power_of_two},
+    arithmetic::{ceil, is_power_of_two, lagrange_basis},
     code::{LinearCode, LinearTimeCode, LinearTimeCodeSpec, ReedSolomonCode},
 };
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
@@ -96,8 +96,8 @@ impl<F: Field> BrakedownProtocol<F> {
 
     /// compute relative proof size
     #[inline]
-    pub fn proof_size(&self, c: usize, r: usize) -> usize {
-        c + self.num_query() * r
+    pub fn proof_size(&self) -> usize {
+        self.code.codeword_len() + self.num_query() * ( 1<<self.num_vars )/self.message_len
     }
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
@@ -171,8 +171,8 @@ impl<F: Field> ShockwaveProtocol<F> {
 
     /// compute relative proof size
     #[inline]
-    pub fn proof_size(&self, c: usize, r: usize) -> usize {
-        c + self.num_query() * r
+    pub fn proof_size(&self) -> usize {
+        self.code.codeword_len() + self.num_query() * (1<<self.num_vars)/self.code.message_len()
     }
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)

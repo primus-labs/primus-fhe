@@ -19,10 +19,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         .take(1 << num_vars)
         .collect();
     let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
-    let point: Vec<FF> = rand::thread_rng()
-        .sample_iter(FieldUniformSampler::new())
-        .take(num_vars)
-        .collect();
     println!(
         "polynomial size: {} coefficients, {} variables",
         1 << num_vars,
@@ -67,10 +63,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     println!("row_num: {}", pp.num_rows);
     let mut prover = PcsProver::new(pp);
     let mut verifier = PcsVerifier::new(vp, verifier_rng);
-    let first_queries = verifier.random_queries().clone();
-    let challenge = verifier.random_challenge().clone();
-    let tensor = verifier.tensor_decompose(&point).clone();
-    let second_queries = verifier.random_queries().clone();
+    let queries = verifier.random_queries().clone();
+    let tensor = verifier.random_tensor();
     println!("number of queries: {}", prover.pp.code.num_queries());
 
     let mut group = c.benchmark_group("brakedown pcs");
@@ -78,10 +72,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function(&format!("prover overall time of poly of num_vars {}", num_vars), |b| {
         b.iter(|| {
             prover.commit_poly(&poly);
-            prover.answer_challenge(&challenge);
-            prover.answer_queries(&first_queries);
-            prover.answer_challenge(&tensor);
-            prover.answer_queries(&second_queries);
+            prover.answer_tensor(&tensor);
+            prover.answer_queries(&queries);
         })
     });
 
@@ -91,27 +83,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    group.bench_function(&format!("prover answer challenge time of poly of num_vars {}", num_vars), |b| {
+    group.bench_function(&format!("prover answer tensor time of poly of num_vars {}", num_vars), |b| {
         b.iter(|| {
-            prover.answer_challenge(&challenge);
+            prover.answer_tensor(&tensor);
         })
     });
 
     group.bench_function(&format!("prover answer queries time of poly of num_vars {}", num_vars), |b| {
         b.iter(|| {
-            prover.answer_queries(&first_queries);
+            prover.answer_queries(&queries);
         })
     });
 
 
-
-
     // proof size
     let root = prover.commit_poly(&poly);
-    let answer = prover.answer_challenge(&challenge);
-    let (first_merkle_paths, first_columns) = prover.answer_queries(&first_queries);
+    let answer = prover.answer_tensor(&tensor);
+    let (first_merkle_paths, first_columns) = prover.answer_queries(&queries);
     let product = prover.answer_challenge(&tensor);
-    let (second_merkle_paths, second_columns) = prover.answer_queries(&second_queries);
 
     let raw_proof_size = mem::size_of_val(&(
         root,
@@ -119,35 +108,28 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         first_merkle_paths.clone(),
         first_columns.clone(),
         product,
-        second_merkle_paths.clone(),
-        second_columns.clone(),
     ));
     println!("raw proof size: {} bytes", raw_proof_size);
 
     // verifier time
 
     let root = prover.commit_poly(&poly);
-    let answer = prover.answer_challenge(&challenge);
-    let (first_merkle_paths, first_columns) = prover.answer_queries(&first_queries);
-    let product = prover.answer_challenge(&tensor);
-    //let (second_merkle_paths, second_columns) = prover.answer_queries(&second_queries);
+    let answer = prover.answer_tensor(&tensor);
+    let (merkle_paths, columns) = prover.answer_queries(&queries);
 
     group.bench_function(&format!("verify overall time of poly of num_vars {}", num_vars), |b| {
         b.iter(|| {
             verifier.receive_root(&root);
-            verifier.random_challenge();
+            verifier.random_tensor();
             verifier.receive_answer(&answer);
             verifier.random_queries();
-            verifier.check_answer(&first_merkle_paths, &first_columns);
-            verifier.tensor_decompose(&point);
-            verifier.receive_answer(&product);
-            verifier.check_answer(&second_merkle_paths, &second_columns);
+            verifier.check_answer(&merkle_paths, &columns);
         })
     });
 
     group.bench_function(&format!("verify random challenge time of poly of num_vars {}", num_vars), |b| {
         b.iter(|| {
-            verifier.random_challenge();
+            verifier.random_tensor();
         })
     });
 
@@ -165,13 +147,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function(&format!("verify check answer time of poly of num_vars {}", num_vars), |b| {
         b.iter(|| {
-            verifier.check_answer(&first_merkle_paths, &first_columns);
-        })
-    });
-
-    group.bench_function(&format!("verify tensor decompose time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            verifier.tensor_decompose(&point);
+            verifier.check_answer(&merkle_paths, &columns);
         })
     });
 

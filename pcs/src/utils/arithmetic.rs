@@ -125,3 +125,23 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
 pub fn is_power_of_two(x: usize) -> bool {
     x != 0 && (x & (x - 1)) == 0
 }
+
+/// compute the lagrange basis of a given point (which is a series of point of one dimension)
+#[inline]
+pub fn lagrange_basis<F: Field>(points: &[F]) -> Vec<F> {
+    let mut basis = vec![F::ONE];
+    points.iter().for_each(|point| {
+        basis.extend(
+            basis
+                .iter()
+                .map(|x| *x * (F::ONE - point))
+                .collect::<Vec<F>>(),
+        );
+        let prev_len = basis.len() >> 1;
+        basis.iter_mut().take(prev_len).for_each(|x| *x *= point);
+    });
+    assert!(basis.len() == 1 << points.len());
+
+    basis.reverse();
+    basis
+}

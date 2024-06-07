@@ -263,7 +263,7 @@ impl<F: Field> LinearTimeCode<F> {
     /// create an instance of BrakedownCode
     #[inline]
     pub fn new(spec: LinearTimeCodeSpec, message_len: usize, rng: impl Rng + CryptoRng) -> Self {
-        //assert!(1 << num_vars > spec.recursion_threshold);
+        assert!(message_len >= spec.recursion_threshold);
 
         let (a, b) = spec.matrices(message_len, rng);
         let codeword_len = spec.codeword_len(message_len);
