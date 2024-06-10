@@ -302,6 +302,17 @@ impl<F: Field> NTTInstance<F> {
             points: Rc::clone(points),
         }
     }
+
+    /// Constuct a new instance from given info
+    #[inline]
+    pub fn from_info(info: &NTTInstanceInfo<F>) -> Self {
+        Self {
+            log_n: info.log_n,
+            ntt_table: info.ntt_table.to_owned(),
+            coeffs: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(info.log_n, vec![F::ZERO; 1 << info.log_n])),
+            points: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(info.log_n, vec![F::ZERO; 1 << info.log_n])),
+        }
+    }
 }
 
 impl<F: Field> NTTSubclaim<F> {
