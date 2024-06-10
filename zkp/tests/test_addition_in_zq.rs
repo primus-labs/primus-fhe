@@ -62,6 +62,7 @@ fn test_trivial_addition_in_zq() {
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
+    let abd_bits_ref: Vec<_> = abc_bits.iter().map(|x| x).collect();
 
     let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
     let addition_info = abc_instance.info();
@@ -70,7 +71,7 @@ fn test_trivial_addition_in_zq() {
 
     let proof = AdditionInZq::prove(&abc_instance, &u);
     let subclaim = AdditionInZq::verify(&proof, &addition_info.decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abc_bits, &u, &addition_info));
+    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abd_bits_ref, &u, &addition_info));
 }
 
 #[test]
@@ -131,6 +132,7 @@ fn test_random_addition_in_zq() {
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
+    let abc_bits_ref: Vec<_> = abc_bits.iter().map(|x| x).collect();
 
     let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
     let addition_info = abc_instance.info();
@@ -139,5 +141,5 @@ fn test_random_addition_in_zq() {
 
     let proof = AdditionInZq::prove(&abc_instance, &u);
     let subclaim = AdditionInZq::verify(&proof, &addition_info.decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abc_bits, &u, &addition_info));
+    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abc_bits_ref, &u, &addition_info));
 }
