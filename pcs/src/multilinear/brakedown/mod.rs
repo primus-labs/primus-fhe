@@ -1,6 +1,6 @@
 use crate::utils::{
     arithmetic::{ceil, is_power_of_two, lagrange_basis},
-    code::{LinearCode, LinearTimeCode, LinearTimeCodeSpec, ReedSolomonCode},
+    code::{LinearCode, ExpanderCode, ExpanderCodeSpec, ReedSolomonCode},
 };
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
 use rand::{distributions::Uniform, CryptoRng, Rng};
@@ -41,7 +41,7 @@ pub struct BrakedownProtocol<F: Field> {
     security_bit: usize,
     num_vars: usize,
     message_len: usize,
-    code: LinearTimeCode<F>,
+    code: ExpanderCode<F>,
     _marker: PhantomData<F>,
 }
 
@@ -55,7 +55,7 @@ impl<F: Field> BrakedownProtocol<F> {
         security_bit: usize,
         num_vars: usize,
         message_len: usize,
-        code_spec: LinearTimeCodeSpec,
+        code_spec: ExpanderCodeSpec,
         rng: impl Rng + CryptoRng,
     ) -> Self {
         // input check
@@ -63,7 +63,7 @@ impl<F: Field> BrakedownProtocol<F> {
         assert!(1 << num_vars >= message_len);
 
         // create the code based on code_spec
-        let code: LinearTimeCode<F> = LinearTimeCode::new(code_spec.clone(), message_len, rng);
+        let code: ExpanderCode<F> = ExpanderCode::new(code_spec.clone(), message_len, rng);
 
         Self {
             security_bit,
@@ -78,8 +78,8 @@ impl<F: Field> BrakedownProtocol<F> {
     pub fn setup(
         &self,
     ) -> (
-        ProverParam<F, LinearTimeCode<F>>,
-        VerifierParam<F, LinearTimeCode<F>>,
+        ProverParam<F, ExpanderCode<F>>,
+        VerifierParam<F, ExpanderCode<F>>,
     ) {
         let param = PcsParam {
             security_bit: self.security_bit,
@@ -97,7 +97,7 @@ impl<F: Field> BrakedownProtocol<F> {
     /// compute relative proof size
     #[inline]
     pub fn proof_size(&self) -> usize {
-        self.code.codeword_len() + self.num_query() * ( 1<<self.num_vars )/self.message_len
+        self.code.codeword_len() + self.num_query() * (1 << self.num_vars) / self.message_len
     }
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
@@ -172,7 +172,7 @@ impl<F: Field> ShockwaveProtocol<F> {
     /// compute relative proof size
     #[inline]
     pub fn proof_size(&self) -> usize {
-        self.code.codeword_len() + self.num_query() * (1<<self.num_vars)/self.code.message_len()
+        self.code.codeword_len() + self.num_query() * (1 << self.num_vars) / self.code.message_len()
     }
 
     /// the soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)

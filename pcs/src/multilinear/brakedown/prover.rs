@@ -14,7 +14,7 @@ pub struct PcsProver<F: Field, C: LinearCode<F>> {
     /// the first message_len columns compose the unencoded matrix since the code is systematic
     ///
     /// every codeword_len items is a codeword, and the first message_len items in every codeword_len items is its message
-    matrix: Vec<F>,
+    pub matrix: Vec<F>,
 
     /// prover merklizes the columns of the matrix and stores the merkle tree
     merkle_tree: MerkleTree,
@@ -107,8 +107,8 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
 
     /// answer tensor
     #[inline]
-    pub fn answer_tensor(&self, challenge: &Vec<F>) -> Vec<F> {
-        self.answer_challenge(&lagrange_basis(&challenge))
+    pub fn answer_tensor(&self, challenge: &[F]) -> Vec<F> {
+        self.answer_challenge(&lagrange_basis(challenge))
     }
 
     /// prover answers the query of columns of given indexes

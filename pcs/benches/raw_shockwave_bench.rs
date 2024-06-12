@@ -31,7 +31,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     // randomness
     let verifier_rng = rand::thread_rng(); // private randomness of the verifier or public randomness from fiat-shamir transformation
-    // specification of the brakedown protocol
+                                           // specification of the brakedown protocol
 
     // Setup
 
@@ -40,7 +40,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut min_proof_size = usize::MAX;
     for log_message_len in 4..num_vars {
         let message_len = 1 << log_message_len;
-        let protocol =ShockwaveProtocol::<FF>::new(128, num_vars, message_len, 2 * message_len);
+        let protocol = ShockwaveProtocol::<FF>::new(128, num_vars, message_len, 2 * message_len);
         if protocol.proof_size() < min_proof_size {
             opt_message_len = message_len;
             min_proof_size = protocol.proof_size();
@@ -52,7 +52,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     // setup
 
-    let protocol =ShockwaveProtocol::<FF>::new(128, num_vars, message_len, 2 * message_len);
+    let protocol = ShockwaveProtocol::<FF>::new(128, num_vars, message_len, 2 * message_len);
 
     // prover and verifier transparently reach a consensus of field, variables number, pcs specification
     let (pp, vp) = protocol.setup();
@@ -72,36 +72,54 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("brakedown pcs");
 
-    group.bench_function(&format!("shockwave prover overall time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            prover.commit_poly(&poly);
-            prover.answer_challenge(&challenge);
-            prover.answer_queries(&first_queries);
-            prover.answer_challenge(&tensor);
-            prover.answer_queries(&second_queries);
-        })
-    });
+    group.bench_function(
+        &format!(
+            "shockwave prover overall time of poly of num_vars {}",
+            num_vars
+        ),
+        |b| {
+            b.iter(|| {
+                prover.commit_poly(&poly);
+                prover.answer_challenge(&challenge);
+                prover.answer_queries(&first_queries);
+                prover.answer_challenge(&tensor);
+                prover.answer_queries(&second_queries);
+            })
+        },
+    );
 
-    group.bench_function(&format!("prover commit time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            prover.commit_poly(&poly);
-        })
-    });
+    group.bench_function(
+        &format!("prover commit time of poly of num_vars {}", num_vars),
+        |b| {
+            b.iter(|| {
+                prover.commit_poly(&poly);
+            })
+        },
+    );
 
-    group.bench_function(&format!("prover answer challenge time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            prover.answer_challenge(&challenge);
-        })
-    });
+    group.bench_function(
+        &format!(
+            "prover answer challenge time of poly of num_vars {}",
+            num_vars
+        ),
+        |b| {
+            b.iter(|| {
+                prover.answer_challenge(&challenge);
+            })
+        },
+    );
 
-    group.bench_function(&format!("prover answer queries time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            prover.answer_queries(&first_queries);
-        })
-    });
-
-
-
+    group.bench_function(
+        &format!(
+            "prover answer queries time of poly of num_vars {}",
+            num_vars
+        ),
+        |b| {
+            b.iter(|| {
+                prover.answer_queries(&first_queries);
+            })
+        },
+    );
 
     // proof size
     let root = prover.commit_poly(&poly);
@@ -129,54 +147,81 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let product = prover.answer_challenge(&tensor);
     //let (second_merkle_paths, second_columns) = prover.answer_queries(&second_queries);
 
-    group.bench_function(&format!("verify overall time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            verifier.receive_root(&root);
-            verifier.random_challenge();
-            verifier.receive_answer(&answer);
-            verifier.random_queries();
-            verifier.check_answer(&first_merkle_paths, &first_columns);
-            verifier.tensor_decompose(&point);
-            verifier.receive_answer(&product);
-            verifier.check_answer(&second_merkle_paths, &second_columns);
-        })
-    });
+    group.bench_function(
+        &format!("verify overall time of poly of num_vars {}", num_vars),
+        |b| {
+            b.iter(|| {
+                verifier.receive_root(&root);
+                verifier.random_challenge();
+                verifier.receive_answer(&answer);
+                verifier.random_queries();
+                verifier.check_answer(&first_merkle_paths, &first_columns);
+                verifier.tensor_decompose(&point);
+                verifier.receive_answer(&product);
+                verifier.check_answer(&second_merkle_paths, &second_columns);
+            })
+        },
+    );
 
-    group.bench_function(&format!("verify random challenge time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            verifier.random_challenge();
-        })
-    });
+    group.bench_function(
+        &format!(
+            "verify random challenge time of poly of num_vars {}",
+            num_vars
+        ),
+        |b| {
+            b.iter(|| {
+                verifier.random_challenge();
+            })
+        },
+    );
 
-    group.bench_function(&format!("verify receive answer time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            verifier.receive_answer(&answer);
-        })
-    });
+    group.bench_function(
+        &format!(
+            "verify receive answer time of poly of num_vars {}",
+            num_vars
+        ),
+        |b| {
+            b.iter(|| {
+                verifier.receive_answer(&answer);
+            })
+        },
+    );
 
-    group.bench_function(&format!("verify random queries time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            verifier.random_queries();
-        })
-    });
+    group.bench_function(
+        &format!(
+            "verify random queries time of poly of num_vars {}",
+            num_vars
+        ),
+        |b| {
+            b.iter(|| {
+                verifier.random_queries();
+            })
+        },
+    );
 
-    group.bench_function(&format!("verify check answer time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            verifier.check_answer(&first_merkle_paths, &first_columns);
-        })
-    });
+    group.bench_function(
+        &format!("verify check answer time of poly of num_vars {}", num_vars),
+        |b| {
+            b.iter(|| {
+                verifier.check_answer(&first_merkle_paths, &first_columns);
+            })
+        },
+    );
 
-    group.bench_function(&format!("verify tensor decompose time of poly of num_vars {}", num_vars), |b| {
-        b.iter(|| {
-            verifier.tensor_decompose(&point);
-        })
-    });
+    group.bench_function(
+        &format!(
+            "verify tensor decompose time of poly of num_vars {}",
+            num_vars
+        ),
+        |b| {
+            b.iter(|| {
+                verifier.tensor_decompose(&point);
+            })
+        },
+    );
 
     group.finish();
 }
 
-
-
 criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
-

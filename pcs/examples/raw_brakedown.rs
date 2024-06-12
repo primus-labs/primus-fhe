@@ -1,9 +1,10 @@
 use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension};
 use pcs::{
     multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
-    utils::code::{LinearCode, LinearTimeCodeSpec},
+    utils::code::{LinearCode, ExpanderCodeSpec},
 };
 use rand::Rng;
+use std::mem;
 
 #[derive(Field)]
 #[modulus = 1152921504606846883] // field_size_bit = 5
@@ -24,7 +25,7 @@ fn main() {
     let verifier_rng = rand::thread_rng(); // private randomness of the verifier or public randomness from fiat-shamir transformation
 
     // specification of the brakedown protocol
-    let spec = LinearTimeCodeSpec::new(32, 0.1195, 0.0284, 1.9, 60, 10);
+    let spec = ExpanderCodeSpec::new(32, 0.1195, 0.0284, 1.9, 60, 10);
 
     // Setup
 
@@ -117,6 +118,7 @@ fn main() {
 
     // check the correctness
     assert!(true_evaluation == pcs_evaluation);
+
 }
 
 // fn optimize_message_len(&self) -> usize {

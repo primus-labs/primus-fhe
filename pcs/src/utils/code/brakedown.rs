@@ -17,7 +17,7 @@ use std::{
 ///
 /// names of the parameters are consistent with the paper
 #[derive(Clone, Debug, Default)]
-pub struct LinearTimeCodeSpec {
+pub struct ExpanderCodeSpec {
     /// security parameter
     lambda: usize,
 
@@ -39,7 +39,7 @@ pub struct LinearTimeCodeSpec {
     rate: f64,
 }
 
-impl LinearTimeCodeSpec {
+impl ExpanderCodeSpec {
     /// create an instance of BrakedownCodeSpec
     #[inline]
     pub fn new(
@@ -142,11 +142,11 @@ impl LinearTimeCodeSpec {
         // the systematic part
         message_len +
         // the upper part (the last a.m is consumed by Reedsolomon code)
-        a[..a.len()-1].iter().map(|a| a.column_num).sum::<usize>() +
+        a[..a.len()-1].iter().map(|a| a.column).sum::<usize>() +
         // the Reedsolomon code length
-        b.last().unwrap().row_num +
+        b.last().unwrap().row +
         // the lower part
-        b.iter().map(|b| b.column_num).sum::<usize>()
+        b.iter().map(|b| b.column).sum::<usize>()
     }
 
     /// returh the number of nonzere elements in each row of A_n
@@ -216,9 +216,9 @@ impl LinearTimeCodeSpec {
         let b = a
             .iter()
             .map(|a| {
-                let n_prime = ceil(a.column_num as f64 * self.rate);
-                let m_prime = ceil(a.row_num as f64 * self.rate) - a.column_num - n_prime;
-                SparseMatrixDimension::new(n_prime, m_prime, min(self.d_n(a.row_num), m_prime))
+                let n_prime = ceil(a.column as f64 * self.r);
+                let m_prime = ceil(a.row as f64 * self.r) - a.row - n_prime;
+                SparseMatrixDimension::new(n_prime, m_prime, min(self.d_n(a.row), m_prime))
             })
             .collect();
 
@@ -249,20 +249,22 @@ impl LinearTimeCodeSpec {
 ///
 /// This implementation uses an equavailent iterative encoding method for efficiency
 #[derive(Clone, Debug, Default)]
-pub struct LinearTimeCode<F> {
+pub struct ExpanderCode<F> {
     /// specification
-    pub spec: LinearTimeCodeSpec,
+    pub spec: ExpanderCodeSpec,
     message_len: usize,
     codeword_len: usize,
     num_opening: usize,
-    a: Vec<SparseMatrix<F>>,
-    b: Vec<SparseMatrix<F>>,
+    ///
+    pub a: Vec<SparseMatrix<F>>,
+    ///
+    pub b: Vec<SparseMatrix<F>>,
 }
 
-impl<F: Field> LinearTimeCode<F> {
+impl<F: Field> ExpanderCode<F> {
     /// create an instance of BrakedownCode
     #[inline]
-    pub fn new(spec: LinearTimeCodeSpec, message_len: usize, rng: impl Rng + CryptoRng) -> Self {
+    pub fn new(spec: ExpanderCodeSpec, message_len: usize, rng: impl Rng + CryptoRng) -> Self {
         assert!(message_len >= spec.recursion_threshold);
 
         let (a, b) = spec.matrices(message_len, rng);
@@ -299,7 +301,7 @@ impl<F: Field> LinearTimeCode<F> {
     }
 }
 
-impl<F: Field> LinearCode<F> for LinearTimeCode<F> {
+impl<F: Field> LinearCode<F> for ExpanderCode<F> {
     #[inline]
     fn message_len(&self) -> usize {
         self.message_len
@@ -322,33 +324,34 @@ impl<F: Field> LinearCode<F> for LinearTimeCode<F> {
     /// \forall 0 <= i < l-k-1, x_{k+i+1} = ( x_{k-i} |...| x_{k+i} ) * B_{l-k-i}
     /// x_k = ReedSolomanCode
 
-    fn encode(&self, mut target: impl AsMut<[F]>) {
+    fn encode(&self, target: &mut [F]) {
         // target[0..message_len] is the message
         // target has the length of codeword_len
-        let target = target.as_mut();
+        // let target = target.as_mut();
         assert_eq!(target.len(), self.codeword_len);
 
         // compute x1 = x*A | x2 = x*A^2| x3 = x*A^3| ... | x_{k-1} = x*A^{k-1}
         let mut input_offset = 0;
         self.a[..self.a.len() - 1].iter().for_each(|a| {
-            let (input, output) = target[input_offset..].split_at_mut(a.dimension.row_num);
-            a.multiply_vector(input, &mut output[..a.dimension.column_num]);
-            input_offset += a.dimension.row_num;
+            let (input, output) = target[input_offset..].split_at_mut(a.dimension.row);
+            //println!("{:?}\n\n", input);
+            a.multiply_vector(input, &mut output[..a.dimension.column]);
+            input_offset += a.dimension.row;
         });
 
         // compute x_k = ReedSoloman(x*A^k)
         let a_last = self.a.last().unwrap();
         let b_last = self.b.last().unwrap();
 
-        let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.row_num);
+        let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.row);
+        a_last.multiply_vector(input, &mut output[..a_last.dimension.column]);
 
-        a_last.multiply_vector(input, &mut output[..a_last.dimension.column_num]);
         let reedsolomon_code =
-            ReedSolomonCode::new(a_last.dimension.column_num, b_last.dimension.row_num);
-        reedsolomon_code.encode(&mut output[..b_last.dimension.row_num]);
+            ReedSolomonCode::new(a_last.dimension.column, b_last.dimension.row);
+        reedsolomon_code.encode(&mut output[..b_last.dimension.row]);
 
-        let mut output_offset = input_offset + a_last.dimension.row_num + b_last.dimension.row_num;
-        input_offset += a_last.dimension.row_num + a_last.dimension.column_num;
+        let mut output_offset = input_offset + a_last.dimension.row + b_last.dimension.row;
+        input_offset += a_last.dimension.row + a_last.dimension.column;
 
         // compute x_{k+1} = x_k*B | x_{k+2} = (x_{k-1}|x_k|x_{k+1})*B | x_{k+3} =  (x_{k-2}|x_{k-1}|x_k|x_{k+1}|x_{k+2})*B | ...
         self.a
@@ -356,16 +359,17 @@ impl<F: Field> LinearCode<F> for LinearTimeCode<F> {
             .rev()
             .zip(self.b.iter().rev())
             .for_each(|(a, b)| {
-                input_offset -= a.dimension.column_num;
+                input_offset -= a.dimension.column;
                 let (input, output) = target.split_at_mut(output_offset);
+                //println!("{:?}\n\n", input);
                 b.multiply_vector(
-                    &input[input_offset..input_offset + b.dimension.row_num],
-                    &mut output[..b.dimension.column_num],
+                    &input[input_offset..input_offset + b.dimension.row],
+                    &mut output[..b.dimension.column],
                 );
-                output_offset += b.dimension.column_num;
+                output_offset += b.dimension.column;
             });
 
-        assert_eq!(input_offset, self.a[0].dimension.row_num);
+        assert_eq!(input_offset, self.a[0].dimension.row);
         assert_eq!(output_offset, target.len());
     }
 }
@@ -373,13 +377,13 @@ impl<F: Field> LinearCode<F> for LinearTimeCode<F> {
 #[cfg(test)]
 mod test {
 
-    use crate::utils::code::{LinearCode, LinearTimeCode, LinearTimeCodeSpec};
+    use crate::utils::code::{LinearCode, ExpanderCode, ExpanderCodeSpec};
     use algebra::{derive::*, Field, FieldUniformSampler};
     use rand::Rng;
 
     /// test whether a set of parameters is correct
     fn assert_spec_correct(
-        spec: LinearTimeCodeSpec,
+        spec: ExpanderCodeSpec,
         distance: f64,
         c_n: usize,
         d_n: usize,
@@ -395,22 +399,22 @@ mod test {
     ///  test correctness of sets of parameters taken from Figure 2 in [GLSTW21](https://eprint.iacr.org/2021/1043.pdf).
     #[test]
     fn spec_127_bit_field() {
-        let spec1 = LinearTimeCodeSpec::new(128, 0.1195, 0.0284, 1.420, 127, 30);
+        let spec1 = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.420, 127, 30);
         assert_spec_correct(spec1, 0.02, 6, 33, 13265);
 
-        let spec2 = LinearTimeCodeSpec::new(128, 0.1380, 0.0444, 1.470, 127, 30);
+        let spec2 = ExpanderCodeSpec::new(128, 0.1380, 0.0444, 1.470, 127, 30);
         assert_spec_correct(spec2, 0.03, 7, 26, 8768);
 
-        let spec3 = LinearTimeCodeSpec::new(128, 0.1780, 0.0610, 1.521, 127, 30);
+        let spec3 = ExpanderCodeSpec::new(128, 0.1780, 0.0610, 1.521, 127, 30);
         assert_spec_correct(spec3, 0.04, 7, 22, 6593);
 
-        let spec4 = LinearTimeCodeSpec::new(128, 0.2000, 0.0820, 1.640, 127, 30);
+        let spec4 = ExpanderCodeSpec::new(128, 0.2000, 0.0820, 1.640, 127, 30);
         assert_spec_correct(spec4, 0.05, 8, 19, 5279);
 
-        let spec5 = LinearTimeCodeSpec::new(128, 0.2110, 0.0970, 1.616, 127, 30);
+        let spec5 = ExpanderCodeSpec::new(128, 0.2110, 0.0970, 1.616, 127, 30);
         assert_spec_correct(spec5, 0.06, 9, 21, 4390);
 
-        let spec6 = LinearTimeCodeSpec::new(128, 0.2380, 0.1205, 1.720, 1, 30);
+        let spec6 = ExpanderCodeSpec::new(128, 0.2380, 0.1205, 1.720, 1, 30);
         assert_spec_correct(spec6, 0.07, 10, 20, 3755);
     }
 
@@ -421,8 +425,8 @@ mod test {
     #[test]
     fn print() {
         let rng = rand::thread_rng();
-        let spec = LinearTimeCodeSpec::new(127, 0.1195, 0.0284, 1.420, 31, 5);
-        let brakedown_code = LinearTimeCode::new(spec, 300, rng);
+        let spec = ExpanderCodeSpec::new(127, 0.1195, 0.0284, 1.420, 31, 5);
+        let brakedown_code = ExpanderCode::new(spec, 300, rng);
 
         // input your message here
         let mut target = vec![FF32::ONE; brakedown_code.codeword_len()];
@@ -454,8 +458,8 @@ mod test {
         let mut rng = rand::thread_rng();
         let field_distr = FieldUniformSampler::new();
 
-        let spec = LinearTimeCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
-        let brakedown_code: LinearTimeCode<FF32> = LinearTimeCode::new(spec, 5000, &mut rng);
+        let spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
+        let brakedown_code: ExpanderCode<FF32> = ExpanderCode::new(spec, 5000, &mut rng);
 
         let message_len = brakedown_code.message_len;
         let codeword_len = brakedown_code.codeword_len;
@@ -499,8 +503,8 @@ mod test {
         let mut rng = rand::thread_rng();
         let field_distr = FieldUniformSampler::new();
 
-        let spec = LinearTimeCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
-        let brakedown_code: LinearTimeCode<FF32> = LinearTimeCode::new(spec, 5000, &mut rng);
+        let spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
+        let brakedown_code: ExpanderCode<FF32> = ExpanderCode::new(spec, 5000, &mut rng);
 
         let message_len = brakedown_code.message_len;
         let codeword_len = brakedown_code.codeword_len;

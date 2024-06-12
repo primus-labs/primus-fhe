@@ -8,21 +8,24 @@ use rand::{distributions::Uniform, CryptoRng, Rng};
 #[derive(Clone, Copy, Debug)]
 pub struct SparseMatrixDimension {
     /// the number of rows of the sparse matrix
-    pub row_num: usize,
+    pub row: usize,
     /// the number of columns of the sparse matrix
-    pub column_num: usize,
+    pub column: usize,
     /// the number of nonzero elements in each row of the sparse matrix
-    pub nonzero_num: usize,
+    pub nonzero: usize,
 }
 
 impl SparseMatrixDimension {
     /// create an instance of SparseMatrixDimension
     #[inline]
-    pub fn new(row_num: usize, column_num: usize, nonzero_num: usize) -> Self {
+    pub fn new(row: usize, column: usize, nonzero: usize) -> Self {
+        //println!("row {}", row_num);
+        //println!("column {}", column_num);
+        //println!("nonzero {}", nonzero_num);
         Self {
-            row_num,
-            column_num,
-            nonzero_num,
+            row: row,
+            column: column,
+            nonzero: nonzero,
         }
     }
 }
@@ -39,7 +42,7 @@ pub struct SparseMatrix<F> {
 impl<F: Field> SparseMatrix<F> {
     /// create a random sparse matrix in a row major manner, given the dimension and randomness
     pub fn random(dimension: SparseMatrixDimension, mut rng: impl Rng + CryptoRng) -> Self {
-        let index_distr: Uniform<usize> = Uniform::new(0, dimension.column_num);
+        let index_distr: Uniform<usize> = Uniform::new(0, dimension.column);
         let field_distr: FieldUniformSampler<F> = FieldUniformSampler::new();
         let mut row = BTreeSet::<usize>::new();
         let cells = iter::repeat_with(|| {
@@ -48,14 +51,14 @@ impl<F: Field> SparseMatrix<F> {
             (&mut rng)
                 .sample_iter(index_distr)
                 .filter(|index| row.insert(*index))
-                .take(dimension.nonzero_num)
+                .take(dimension.nonzero)
                 .count();
             // sample the random field elements at these indexes
             row.iter()
                 .map(|index| (*index, rng.sample(field_distr)))
                 .collect::<Vec<(usize, F)>>()
         })
-        .take(dimension.nonzero_num)
+        .take(dimension.nonzero)
         .flatten()
         .collect();
         Self { dimension, cells }
@@ -64,16 +67,15 @@ impl<F: Field> SparseMatrix<F> {
     /// provide each row of the sparse matrix
     #[inline]
     fn rows(&self) -> impl Iterator<Item = &[(usize, F)]> {
-        self.cells.chunks_exact(self.dimension.nonzero_num)
+        self.cells.chunks_exact(self.dimension.nonzero)
     }
 
     /// store the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix into target
     /// target should keep clean (all zeros) before calling dot_into()
     #[inline]
-    pub fn multiply_vector(&self, vector: &[F], mut target: impl AsMut<[F]>) {
-        let target = target.as_mut();
-        assert_eq!(self.dimension.row_num, vector.len());
-        assert_eq!(self.dimension.column_num, target.len());
+    pub fn multiply_vector(&self, vector: &[F], target: &mut[F]) {
+        assert_eq!(self.dimension.row, vector.len());
+        assert_eq!(self.dimension.column, target.len());
 
         // t = v * M
         // t = \sum_{i=1}^{n} v_i * M_i
@@ -83,12 +85,15 @@ impl<F: Field> SparseMatrix<F> {
                 target[*column] += *item * coeff;
             })
         });
+
+        println!("input\n {:?}\n", vector);
+        println!("output\n {:?}\n\n", target);
     }
 
-    /// return the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix
+/// return the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix
     #[inline]
     pub fn dot(&self, array: &[F]) -> Vec<F> {
-        let mut target = vec![F::ZERO; self.dimension.column_num];
+        let mut target = vec![F::ZERO; self.dimension.column];
         self.multiply_vector(array, &mut target);
         target
     }
@@ -119,6 +124,7 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
         d
     }
 }
+
 
 /// compute whether the input is a power of two
 #[inline]

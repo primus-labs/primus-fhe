@@ -1,7 +1,7 @@
-mod lineartime;
+mod brakedown;
 mod reedsolomon;
 
-pub use lineartime::{LinearTimeCode, LinearTimeCodeSpec};
+pub use brakedown::{ExpanderCode, ExpanderCodeSpec};
 pub use reedsolomon::ReedSolomonCode;
 
 /// LinearCode
@@ -23,5 +23,6 @@ pub trait LinearCode<F>: Sync + Send + Default {
     /// store the message in target[..message_len] with target[message_len..] keeping clean (all zero)
     /// encode the message into the codeword and store the codeword in target[..codeword_len]
     /// normally tagert.len() == codeword_len
-    fn encode(&self, target: impl AsMut<[F]>);
+    fn encode(&self, target: &mut [F]);
 }
+
