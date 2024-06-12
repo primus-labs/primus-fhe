@@ -2,7 +2,7 @@ use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler};
 use criterion::{criterion_group, criterion_main, Criterion};
 use pcs::{
     multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
-    utils::code::{ExpanderCodeSpec, LinearCode},
+    utils::code::{ExpanderCode, ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
 use std::mem;
@@ -43,8 +43,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     for log_message_len in 4..num_vars {
         let message_len = 1 << log_message_len;
         let setup_rng = rand::thread_rng();
-        let protocol =
-            BrakedownProtocol::<FF>::new(128, num_vars, message_len, code_spec.clone(), setup_rng);
+        let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>>::new(
+            128,
+            num_vars,
+            message_len,
+            code_spec.clone(),
+            setup_rng,
+        );
         if protocol.proof_size() < min_proof_size {
             opt_message_len = message_len;
             min_proof_size = protocol.proof_size();
@@ -56,7 +61,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     // setup
 
-    let protocol = BrakedownProtocol::<FF>::new(128, num_vars, message_len, code_spec, setup_rng);
+    let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>>::new(
+        128,
+        num_vars,
+        message_len,
+        code_spec,
+        setup_rng,
+    );
     // prover and verifier transparently reach a consensus of field, variables number, pcs specification
     let (pp, vp) = protocol.setup();
     println!(

@@ -1,6 +1,6 @@
 use crate::utils::{
     arithmetic::{ceil, is_power_of_two, lagrange_basis},
-    code::{ExpanderCode, ExpanderCodeSpec, LinearCode, ReedSolomonCode},
+    code::{LinearCode, LinearCodeSpec, ReedSolomonCode},
 };
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
 use rand::{distributions::Uniform, CryptoRng, Rng};
@@ -37,15 +37,15 @@ pub struct PcsParam<F: Field, C: LinearCode<F>> {
 
 /// Protocol of Brakedown PCS
 #[derive(Debug, Clone, Default)]
-pub struct BrakedownProtocol<F: Field> {
+pub struct BrakedownProtocol<F: Field, C: LinearCode<F>> {
     security_bit: usize,
     num_vars: usize,
     message_len: usize,
-    code: ExpanderCode<F>,
+    code: C,
     _marker: PhantomData<F>,
 }
 
-impl<F: Field> BrakedownProtocol<F> {
+impl<F: Field, C: LinearCode<F>> BrakedownProtocol<F, C> {
     /// instantiate a brakedown protocol with a consensus of
     /// field of the polynomial,
     /// variable number of the polynomial,
@@ -55,7 +55,7 @@ impl<F: Field> BrakedownProtocol<F> {
         security_bit: usize,
         num_vars: usize,
         message_len: usize,
-        code_spec: ExpanderCodeSpec,
+        code_spec: impl LinearCodeSpec<F, Code = C>,
         rng: impl Rng + CryptoRng,
     ) -> Self {
         // input check
@@ -63,7 +63,8 @@ impl<F: Field> BrakedownProtocol<F> {
         assert!(1 << num_vars >= message_len);
 
         // create the code based on code_spec
-        let code: ExpanderCode<F> = ExpanderCode::new(code_spec.clone(), message_len, rng);
+        let code = code_spec.code(message_len, message_len, rng);
+        //let code: ExpanderCode<F> = ExpanderCode::new(code_spec.clone(), message_len, rng);
 
         Self {
             security_bit,
@@ -75,12 +76,7 @@ impl<F: Field> BrakedownProtocol<F> {
     }
 
     /// generate prover paramters and verifier parameters
-    pub fn setup(
-        &self,
-    ) -> (
-        ProverParam<F, ExpanderCode<F>>,
-        VerifierParam<F, ExpanderCode<F>>,
-    ) {
+    pub fn setup(&self) -> (ProverParam<F, C>, VerifierParam<F, C>) {
         let param = PcsParam {
             security_bit: self.security_bit,
             num_vars: self.num_vars,

@@ -2,10 +2,11 @@ mod expander;
 mod reedsolomon;
 
 pub use expander::{ExpanderCode, ExpanderCodeSpec};
+use rand::{CryptoRng, Rng};
 pub use reedsolomon::ReedSolomonCode;
 
 /// LinearCode
-pub trait LinearCode<F>: Sync + Send + Default {
+pub trait LinearCode<F>: Sync + Send + Default + Clone {
     /// return the message length of the code
     fn message_len(&self) -> usize;
 
@@ -24,4 +25,13 @@ pub trait LinearCode<F>: Sync + Send + Default {
     /// encode the message into the codeword and store the codeword in target[..codeword_len]
     /// normally tagert.len() == codeword_len
     fn encode(&self, target: &mut [F]);
+}
+
+/// Code Spec
+pub trait LinearCodeSpec<F>: Sync + Send + Default {
+    /// Linear Code
+    type Code: LinearCode<F>;
+    /// generate LinearCode
+    fn code(&self, message_ln: usize, codeword_len: usize, rng: impl Rng + CryptoRng)
+        -> Self::Code;
 }

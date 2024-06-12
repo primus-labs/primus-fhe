@@ -13,6 +13,8 @@ use std::{
     iter,
 };
 
+use super::LinearCodeSpec;
+
 /// BrakedownCode Specification
 ///
 /// names of the parameters are consistent with the paper
@@ -95,35 +97,6 @@ impl ExpanderCodeSpec {
     pub fn num_queries(&self) -> usize {
         ceil(-(self.lambda as f64) / (1.0 - self.distance / 3.0).log2())
     }
-
-    // /// return the size of proof given column_num c and row_num r, which consists of the following two parts:
-    // /// size of the product of random vector and commited matrix: 1*c
-    // /// size of the random selected columns of commited matrix: self.spec.num_opening() * r
-    // #[inline]
-    // pub fn proof_size(&self, c: usize, r: usize) -> usize {
-    //     c + self.num_queries() * r
-    // }
-
-    // /// find the message_len that has optimal proof size, given num_vars
-    // #[inline]
-    // pub fn optimize_message_len(&self, num_vars: usize) -> usize {
-    //     let log_threshold = (self.recursion_threshold + 1).next_power_of_two().ilog2() as usize;
-    //     // iterate over (proof_size, message_len/row_len) to find optimal message-len
-    //     (log_threshold..=num_vars)
-    //         .fold(
-    //             (usize::MAX, 0_usize),
-    //             |(min_proof_size, row_len), log_row_len| {
-    //                 let proof_size =
-    //                     self.proof_size(1 << log_row_len, 1 << (num_vars - log_row_len));
-    //                 if proof_size < min_proof_size {
-    //                     (proof_size, 1 << log_row_len)
-    //                 } else {
-    //                     (min_proof_size, row_len)
-    //                 }
-    //             },
-    //         )
-    //         .1
-    // }
 
     /// relative distance of the code
     pub fn distance(&self) -> f64 {
@@ -242,6 +215,18 @@ impl ExpanderCodeSpec {
                 )
             })
             .unzip()
+    }
+}
+
+impl<F: Field> LinearCodeSpec<F> for ExpanderCodeSpec {
+    type Code = ExpanderCode<F>;
+    fn code(
+        &self,
+        message_len: usize,
+        _codeword_len: usize,
+        rng: impl Rng + CryptoRng,
+    ) -> Self::Code {
+        ExpanderCode::<F>::new(self.clone(), message_len, rng)
     }
 }
 

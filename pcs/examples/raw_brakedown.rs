@@ -1,7 +1,7 @@
 use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension};
 use pcs::{
     multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
-    utils::code::{ExpanderCodeSpec, LinearCode},
+    utils::code::{ExpanderCode, ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
 
@@ -28,8 +28,13 @@ fn main() {
 
     // Setup
 
-    let protocol =
-        BrakedownProtocol::<FF>::new(128, num_vars, (1 << num_vars) >> 1, spec, setup_rng);
+    let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>>::new(
+        128,
+        num_vars,
+        (1 << num_vars) >> 1,
+        spec,
+        setup_rng,
+    );
     // prover and verifier transparently reach a consensus of field, variables number, pcs specification
     let (pp, vp) = protocol.setup();
     println!(
