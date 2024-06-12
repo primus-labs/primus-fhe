@@ -1,7 +1,7 @@
-mod brakedown;
+mod expander;
 mod reedsolomon;
 
-pub use brakedown::{ExpanderCode, ExpanderCodeSpec};
+pub use expander::{ExpanderCode, ExpanderCodeSpec};
 pub use reedsolomon::ReedSolomonCode;
 
 /// LinearCode
@@ -25,4 +25,3 @@ pub trait LinearCode<F>: Sync + Send + Default {
     /// normally tagert.len() == codeword_len
     fn encode(&self, target: &mut [F]);
 }
-

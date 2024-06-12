@@ -56,7 +56,7 @@ impl<F: Field> LinearCode<F> for ReedSolomonCode<F> {
 
     #[inline]
     fn encode(&self, target: &mut [F]) {
-        let input = target.as_mut()[..min(self.message_len, self.codeword_len)].to_vec();
+        let input = target[..min(self.message_len, self.codeword_len)].to_vec();
         let points = iter::successors(Some(F::ONE), move |state| Some(F::ONE + state));
         target
             .as_mut()

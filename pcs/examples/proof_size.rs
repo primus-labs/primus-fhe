@@ -1,11 +1,10 @@
 use algebra::{derive::*, DenseMultilinearExtension, Field, FieldUniformSampler};
-use criterion::{criterion_group, criterion_main, Criterion};
 use pcs::{
     multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
-    utils::code::{LinearCode, ExpanderCodeSpec},
+    utils::code::{ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
-use std::mem;
+use std::mem::size_of_val;
 
 #[derive(Field, Prime, NTT)]
 #[modulus = 63]
@@ -13,7 +12,7 @@ pub struct FF(u64);
 
 fn main() {
     // sample a polynomial
-    let num_vars = 6;
+    let num_vars = 20;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)
@@ -54,7 +53,7 @@ fn main() {
     let message_len = opt_message_len;
     println!("message_len: {}", message_len);
 
-    // setup
+    // set up parameters
 
     let protocol = BrakedownProtocol::<FF>::new(128, num_vars, message_len, code_spec, setup_rng);
     // prover and verifier transparently reach a consensus of field, variables number, pcs specification
@@ -65,62 +64,49 @@ fn main() {
         &pp.code.codeword_len()
     );
     println!("row_num: {}", pp.num_rows);
+    println!("number of queries: {}", pp.code.num_queries());
+
     let mut prover = PcsProver::new(pp);
     let mut verifier = PcsVerifier::new(vp, verifier_rng);
+
+    // verfier
     let first_queries = verifier.random_queries().clone();
     let challenge = verifier.random_challenge().clone();
     let tensor = verifier.tensor_decompose(&point).clone();
     let second_queries = verifier.random_queries().clone();
-    println!("number of queries: {}", prover.pp.code.num_queries());
 
-    
-    // proof size
-    let root = prover.commit_poly(&poly);
+    // prover
+    let _root = prover.commit_poly(&poly);
     let answer = prover.answer_challenge(&challenge);
     let (first_merkle_paths, first_columns) = prover.answer_queries(&first_queries);
     let product = prover.answer_challenge(&tensor);
     let (second_merkle_paths, second_columns) = prover.answer_queries(&second_queries);
 
-    let mut proof_len = 0;
-    let mut hash_len = 0;
+    println!("length of challenge vector: {}", challenge.len());
+    println!("length of merkle_path vector: {}", first_merkle_paths.len());
+    println!("length of columns vector: {}", first_columns.len());
 
-    proof_len += mem::size_of_val(&root);
-    proof_len += mem::size_of_val(&answer);
-    hash_len += mem::size_of_val(&first_merkle_paths);
-    proof_len += mem::size_of_val(&first_columns);
-    proof_len += mem::size_of_val(&product);
-    hash_len += mem::size_of_val(&second_merkle_paths);
-    proof_len += mem::size_of_val(&second_columns);
-
-    println!("{:?}",first_columns);
-    println!("{}",first_columns.len());
-    println!("{}",first_columns[0].len());
-
-
-    // let raw_proof_size = mem::size_of_val(&(
-    //     root,
-    //     answer,
-    //     first_merkle_paths.clone(),
-    //     first_columns.clone(),
-    //     product,
-    //     second_merkle_paths.clone(),
-    //     second_columns.clone(),
-    // ));
-
-    let field_size = mem::size_of_val(&FF::ZERO);
+    let field_size = size_of_val(&FF::ZERO);
     println!("FF size: {} bytes", field_size);
 
-    println!("{:?}", prover.matrix);
-    
-    println!("proof size: {} bytes", proof_len);
-    println!("hash size: {} bytes", hash_len);
-    
+    let hash_vector_size = size_of_val(&*first_merkle_paths);
+    let field_vector_size = size_of_val(&*answer) + size_of_val(&*first_columns);
+    let overall_proof_size = hash_vector_size + field_vector_size;
 
-    // verifier time
+    println!("overall hash vector size {} bytes", hash_vector_size);
+    println!("overall field vector size {} bytes", field_vector_size);
+    println!(
+        "overall proof size for random point: {} bytes",
+        overall_proof_size
+    );
 
-    let root = prover.commit_poly(&poly);
-    let answer = prover.answer_challenge(&challenge);
-    let (first_merkle_paths, first_columns) = prover.answer_queries(&first_queries);
-    let product = prover.answer_challenge(&tensor);
-    //let (second_merkle_paths, second_columns) = prover.answer_queries(&second_queries);
+    let overall_proof_size_arbitrary_point = overall_proof_size
+        + size_of_val(&*product)
+        + size_of_val(&*second_merkle_paths)
+        + size_of_val(&*second_columns);
+
+    println!(
+        "overall proof size for arbitrary point: {} bytes",
+        overall_proof_size_arbitrary_point
+    );
 }

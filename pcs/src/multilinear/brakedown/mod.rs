@@ -1,6 +1,6 @@
 use crate::utils::{
     arithmetic::{ceil, is_power_of_two, lagrange_basis},
-    code::{LinearCode, ExpanderCode, ExpanderCodeSpec, ReedSolomonCode},
+    code::{ExpanderCode, ExpanderCodeSpec, LinearCode, ReedSolomonCode},
 };
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
 use rand::{distributions::Uniform, CryptoRng, Rng};

@@ -2,7 +2,7 @@ use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler};
 use criterion::{criterion_group, criterion_main, Criterion};
 use pcs::{
     multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
-    utils::code::{LinearCode, ExpanderCodeSpec},
+    utils::code::{ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
 use std::mem;

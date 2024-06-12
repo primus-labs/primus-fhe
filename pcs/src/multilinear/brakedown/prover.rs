@@ -1,6 +1,6 @@
-use crate::utils::merkle_tree::MerkleTree;
-
 use super::*;
+use crate::utils::merkle_tree::MerkleTree;
+use itertools::Itertools;
 
 /// Prover of Brakedown PCS
 #[derive(Debug, Clone, Default)]
@@ -35,7 +35,7 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
 
     /// prover commits to given polynomial and returns its commitment
     #[inline]
-    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> Hash {
+    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> MerkleTree {
         // input check
         assert!(poly.num_vars == self.pp.num_vars);
 
@@ -71,13 +71,14 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
             });
 
         let merkle_tree = MerkleTree::commit(hashes);
+        let merkle_root = MerkleTree::root(merkle_tree.depth, merkle_tree.root);
 
         // prover stores the results
         self.matrix = matrix;
         self.root.clone_from(&merkle_tree.root);
         self.merkle_tree = merkle_tree;
 
-        self.root
+        merkle_root
     }
 
     /// prover answer the challenge by computing the product of the challenging vector and the committed matrix,
@@ -114,7 +115,7 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
     /// prover answers the query of columns of given indexes
     /// and gives merkle paths as the proof of its consistency with the commitment i.e. merkle root
     #[inline]
-    pub fn answer_queries(&self, queries: &[usize]) -> (Vec<Vec<Hash>>, Vec<Vec<F>>) {
+    pub fn answer_queries(&self, queries: &[usize]) -> (Vec<Hash>, Vec<F>) {
         // rename variables for convenience
         let codeword_len = self.pp.code.codeword_len();
         let num_rows = self.pp.num_rows;
@@ -123,14 +124,14 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
         (
             queries
                 .iter()
-                .map(|idx| self.merkle_tree.query(*idx))
+                .flat_map(|idx| self.merkle_tree.query(*idx))
                 .collect(),
             queries
                 .iter()
-                .map(|idx| {
+                .flat_map(|idx| {
                     (0..num_rows)
                         .map(|row_idx| self.matrix[row_idx * codeword_len + idx])
-                        .collect()
+                        .collect_vec()
                 })
                 .collect(),
         )

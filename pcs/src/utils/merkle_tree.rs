@@ -14,6 +14,15 @@ pub struct MerkleTree {
 }
 
 impl MerkleTree {
+    /// instantiate a merkle tree that only has root
+    pub fn root(depth: usize, root: Hash) -> Self {
+        Self {
+            depth,
+            root,
+            tree: Vec::new(),
+        }
+    }
+
     /// instantiate a merkle tree by committing the leaves
     pub fn commit(mut tree: Vec<Hash>) -> Self {
         // resize the size from leaves size to tree size

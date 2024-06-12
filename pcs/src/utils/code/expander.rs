@@ -36,7 +36,7 @@ pub struct ExpanderCodeSpec {
     distance: f64,
     /// ideal code rate,
     /// the real code rate is message_len/codeword_len, considering error of float points' computation
-    rate: f64,
+    pub rate: f64,
 }
 
 impl ExpanderCodeSpec {
@@ -217,10 +217,10 @@ impl ExpanderCodeSpec {
             .iter()
             .map(|a| {
                 let n_prime = ceil(a.column as f64 * self.r);
-                let m_prime = ceil(a.row as f64 * self.r) - a.row - n_prime;
+                let m_prime = ceil(a.row as f64 * self.r) - a.column - n_prime;
                 SparseMatrixDimension::new(n_prime, m_prime, min(self.d_n(a.row), m_prime))
             })
-            .collect();
+            .collect_vec();
 
         (a, b)
     }
@@ -255,9 +255,9 @@ pub struct ExpanderCode<F> {
     message_len: usize,
     codeword_len: usize,
     num_opening: usize,
-    ///
+    /// random matrices which represent expander graphs w.h.p.
     pub a: Vec<SparseMatrix<F>>,
-    ///
+    /// random matrices which represent expander graphs w.h.p.
     pub b: Vec<SparseMatrix<F>>,
 }
 
@@ -346,8 +346,7 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
         let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.row);
         a_last.multiply_vector(input, &mut output[..a_last.dimension.column]);
 
-        let reedsolomon_code =
-            ReedSolomonCode::new(a_last.dimension.column, b_last.dimension.row);
+        let reedsolomon_code = ReedSolomonCode::new(a_last.dimension.column, b_last.dimension.row);
         reedsolomon_code.encode(&mut output[..b_last.dimension.row]);
 
         let mut output_offset = input_offset + a_last.dimension.row + b_last.dimension.row;
@@ -377,7 +376,7 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
 #[cfg(test)]
 mod test {
 
-    use crate::utils::code::{LinearCode, ExpanderCode, ExpanderCodeSpec};
+    use crate::utils::code::{ExpanderCode, ExpanderCodeSpec, LinearCode};
     use algebra::{derive::*, Field, FieldUniformSampler};
     use rand::Rng;
 

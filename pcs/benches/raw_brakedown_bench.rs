@@ -2,7 +2,7 @@ use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler};
 use criterion::{criterion_group, criterion_main, Criterion};
 use pcs::{
     multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
-    utils::code::{LinearCode, ExpanderCodeSpec},
+    utils::code::{ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
 use std::mem;
@@ -13,7 +13,7 @@ pub struct FF(u64);
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     // sample a polynomial
-    let num_vars = 22;
+    let num_vars = 15;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)

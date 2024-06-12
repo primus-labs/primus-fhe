@@ -1,10 +1,9 @@
 use algebra::{derive::*, DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension};
 use pcs::{
     multilinear::brakedown::{prover::PcsProver, verifier::PcsVerifier, BrakedownProtocol},
-    utils::code::{LinearCode, ExpanderCodeSpec},
+    utils::code::{ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
-use std::mem;
 
 #[derive(Field)]
 #[modulus = 1152921504606846883] // field_size_bit = 5
@@ -12,7 +11,7 @@ pub struct FF(u64);
 
 fn main() {
     // sample a polynomial
-    let num_vars = 20;
+    let num_vars = 15;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)
@@ -118,7 +117,6 @@ fn main() {
 
     // check the correctness
     assert!(true_evaluation == pcs_evaluation);
-
 }
 
 // fn optimize_message_len(&self) -> usize {

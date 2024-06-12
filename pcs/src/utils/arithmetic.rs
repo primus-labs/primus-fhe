@@ -23,9 +23,9 @@ impl SparseMatrixDimension {
         //println!("column {}", column_num);
         //println!("nonzero {}", nonzero_num);
         Self {
-            row: row,
-            column: column,
-            nonzero: nonzero,
+            row,
+            column,
+            nonzero,
         }
     }
 }
@@ -58,7 +58,7 @@ impl<F: Field> SparseMatrix<F> {
                 .map(|index| (*index, rng.sample(field_distr)))
                 .collect::<Vec<(usize, F)>>()
         })
-        .take(dimension.nonzero)
+        .take(dimension.row)
         .flatten()
         .collect();
         Self { dimension, cells }
@@ -73,7 +73,7 @@ impl<F: Field> SparseMatrix<F> {
     /// store the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix into target
     /// target should keep clean (all zeros) before calling dot_into()
     #[inline]
-    pub fn multiply_vector(&self, vector: &[F], target: &mut[F]) {
+    pub fn multiply_vector(&self, vector: &[F], target: &mut [F]) {
         assert_eq!(self.dimension.row, vector.len());
         assert_eq!(self.dimension.column, target.len());
 
@@ -85,12 +85,9 @@ impl<F: Field> SparseMatrix<F> {
                 target[*column] += *item * coeff;
             })
         });
-
-        println!("input\n {:?}\n", vector);
-        println!("output\n {:?}\n\n", target);
     }
 
-/// return the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix
+    /// return the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix
     #[inline]
     pub fn dot(&self, array: &[F]) -> Vec<F> {
         let mut target = vec![F::ZERO; self.dimension.column];
@@ -124,7 +121,6 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
         d
     }
 }
-
 
 /// compute whether the input is a power of two
 #[inline]

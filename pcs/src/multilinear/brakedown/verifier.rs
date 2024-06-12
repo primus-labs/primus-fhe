@@ -13,7 +13,7 @@ pub struct PcsVerifier<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default>
     randomness: R,
 
     /// commitment of the polynomia i.e. the merkle root
-    root: Hash,
+    root: MerkleTree,
 
     /// chanllenge,
     /// either a random vector or
@@ -64,8 +64,8 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
 
     /// receive the commitment i.e. the merkle root
     #[inline]
-    pub fn receive_root(&mut self, root: &Hash) {
-        self.root = *root;
+    pub fn receive_root(&mut self, root: &MerkleTree) {
+        self.root = root.clone();
     }
 
     /// generate a random challenge
@@ -129,11 +129,11 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
 
     /// check the answer
     #[inline]
-    pub fn check_answer(&mut self, merkle_paths: &Vec<Vec<Hash>>, columns: &[Vec<F>]) -> bool {
+    pub fn check_answer(&mut self, merkle_paths: &[Hash], columns: &[F]) -> bool {
         // input check
         assert!(self.challenge.len() == self.vp.num_rows);
-        assert!(columns.len() == self.queries.len());
-        assert!(merkle_paths.len() == self.queries.len());
+        assert!(columns.len() == self.queries.len() * self.vp.num_rows);
+        assert!(merkle_paths.len() == self.queries.len() * (self.root.depth + 1));
 
         // check merkle
         let check_merkel = self.check_merkle(merkle_paths, columns);
@@ -145,12 +145,12 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
     /// check the hash of column is the same as the merkle leave
     /// check the merkle path is consistent with the merkle root
     #[inline]
-    fn check_merkle(&self, merkle_paths: &Vec<Vec<Hash>>, columns: &[Vec<F>]) -> bool {
+    fn check_merkle(&self, merkle_paths: &[Hash], columns: &[F]) -> bool {
         let mut check = true;
         let mut hasher = Sha3_256::new();
         columns
-            .iter()
-            .zip(merkle_paths)
+            .chunks_exact(self.vp.num_rows)
+            .zip(merkle_paths.chunks_exact(self.root.depth + 1))
             .zip(&self.queries)
             .for_each(|((column, hashes), column_idx)| {
                 // check the hash of column is the same as the merkle leave
@@ -162,26 +162,29 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
                 assert!(leaf == hashes[0]);
 
                 // check the merkle path is consistent with the merkle root
-                check = MerkleTree::check(&self.root, column_idx, hashes);
+                check = MerkleTree::check(&self.root.root, column_idx, hashes);
             });
         check
     }
 
     /// check the consistency of entry of answers with the product of challenge and column, at the given indexes
     #[inline]
-    fn check_consistency(&self, columns: &[Vec<F>]) -> bool {
+    fn check_consistency(&self, columns: &[F]) -> bool {
         let mut check = true;
-        columns.iter().zip(&self.queries).for_each(|(column, idx)| {
-            assert!(column.len() == self.vp.num_rows);
-            let product = column
-                .iter()
-                .zip(&self.challenge)
-                .map(|(x0, x1)| *x0 * x1)
-                .fold(F::ZERO, |acc, x| acc + x);
-            if product != self.answer[*idx] {
-                check = false
-            };
-        });
+        columns
+            .chunks_exact(self.vp.num_rows)
+            .zip(&self.queries)
+            .for_each(|(column, idx)| {
+                assert!(column.len() == self.vp.num_rows);
+                let product = column
+                    .iter()
+                    .zip(&self.challenge)
+                    .map(|(x0, x1)| *x0 * x1)
+                    .fold(F::ZERO, |acc, x| acc + x);
+                if product != self.answer[*idx] {
+                    check = false
+                };
+            });
         check
     }
 
