@@ -606,6 +606,7 @@ impl<F: Field> NTTIOP<F> {
             requested_point = subclaim.point;
         }
 
+        // TODO: handle the case that log = 1
         assert_eq!(requested_point.len(), 1);
         NTTSubclaim {
             ntt_bare_subclaim,

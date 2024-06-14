@@ -8,3 +8,4 @@ pub use addition_in_zq::{AdditionInZq, AdditionInZqInstance};
 pub use bit_decomposition::{BitDecomposition, DecomposedBits, DecomposedBitsInfo};
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
+pub use rlwe_mul_rgsw::{RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance};
