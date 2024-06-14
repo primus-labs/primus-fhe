@@ -4,6 +4,7 @@ use pcs::{
     utils::code::{ExpanderCode, ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
+use sha3::Sha3_256;
 
 #[derive(Field)]
 #[modulus = 1152921504606846883] // field_size_bit = 5
@@ -28,7 +29,7 @@ fn main() {
 
     // Setup
 
-    let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>>::new(
+    let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>, Sha3_256>::new(
         128,
         num_vars,
         (1 << num_vars) >> 1,

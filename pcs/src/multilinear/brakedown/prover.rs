@@ -4,9 +4,9 @@ use itertools::Itertools;
 
 /// Prover of Brakedown PCS
 #[derive(Debug, Clone, Default)]
-pub struct PcsProver<F: Field, C: LinearCode<F>> {
+pub struct PcsProver<F: Field, C: LinearCode<F>, H: Hash> {
     /// brakedown pcs parameter
-    pub pp: ProverParam<F, C>,
+    pub pp: ProverParam<F, C, H>,
 
     /// brakedown pcs structures the coefficients of the polynomial in lagrange basis (or evaluations on the hypercube) as a matrix.
     ///
@@ -17,16 +17,16 @@ pub struct PcsProver<F: Field, C: LinearCode<F>> {
     pub matrix: Vec<F>,
 
     /// prover merklizes the columns of the matrix and stores the merkle tree
-    merkle_tree: MerkleTree,
+    merkle_tree: MerkleTree<H>,
 
     /// polynomial commitment, which is the root of the merkle tree
-    root: Hash,
+    root: H::Output,
 }
 
-impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
+impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
     /// instansiate a brakedown prover from given prover parameters
     #[inline]
-    pub fn new(pp: ProverParam<F, C>) -> Self {
+    pub fn new(pp: ProverParam<F, C, H>) -> Self {
         PcsProver {
             pp,
             ..Default::default()
@@ -35,7 +35,7 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
 
     /// prover commits to given polynomial and returns its commitment
     #[inline]
-    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> MerkleTree {
+    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> MerkleTree<H> {
         // input check
         assert!(poly.num_vars == self.pp.num_vars);
 
@@ -56,8 +56,8 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
 
         // hash each column of the matrix into a hash value
         // prepare the container of the entire merkle tree, pushing the layers of merkle tree into this container from bottom to top
-        let mut hashes: Vec<Hash> = vec![Hash::default(); codeword_len];
-        let mut hasher = Sha3_256::new();
+        let mut hashes: Vec<H::Output> = vec![H::Output::default(); codeword_len];
+        let mut hasher = H::new();
         hashes[..codeword_len]
             .iter_mut()
             .enumerate()
@@ -66,8 +66,8 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
                     .iter()
                     .skip(index)
                     .step_by(codeword_len)
-                    .for_each(|item| hasher.update(item.to_string()));
-                hash.copy_from_slice(hasher.finalize_reset().as_slice());
+                    .for_each(|item| hasher.update_string(item.to_string()));
+                *hash = hasher.output_reset();
             });
 
         let merkle_tree = MerkleTree::commit(hashes);
@@ -115,7 +115,7 @@ impl<F: Field, C: LinearCode<F>> PcsProver<F, C> {
     /// prover answers the query of columns of given indexes
     /// and gives merkle paths as the proof of its consistency with the commitment i.e. merkle root
     #[inline]
-    pub fn answer_queries(&self, queries: &[usize]) -> (Vec<Hash>, Vec<F>) {
+    pub fn answer_queries(&self, queries: &[usize]) -> (Vec<H::Output>, Vec<F>) {
         // rename variables for convenience
         let codeword_len = self.pp.code.codeword_len();
         let num_rows = self.pp.num_rows;

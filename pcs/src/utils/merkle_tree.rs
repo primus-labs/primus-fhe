@@ -1,21 +1,19 @@
-use sha3::{Digest, Sha3_256};
-
-type Hash = [u8; 32];
+use crate::utils::hash::Hash;
 
 /// Merkle Tree for Vector Commitment
 #[derive(Debug, Clone, Default)]
-pub struct MerkleTree {
+pub struct MerkleTree<H: Hash> {
     /// the depth of the merkle tree
     pub depth: usize,
     /// the root of the merkle tree
-    pub root: Hash,
+    pub root: H::Output,
     /// the merkle tree
-    pub tree: Vec<Hash>,
+    pub tree: Vec<H::Output>,
 }
 
-impl MerkleTree {
+impl<H: Hash> MerkleTree<H> {
     /// instantiate a merkle tree that only has root
-    pub fn root(depth: usize, root: Hash) -> Self {
+    pub fn root(depth: usize, root: H::Output) -> Self {
         Self {
             depth,
             root,
@@ -24,14 +22,14 @@ impl MerkleTree {
     }
 
     /// instantiate a merkle tree by committing the leaves
-    pub fn commit(mut tree: Vec<Hash>) -> Self {
+    pub fn commit(mut tree: Vec<H::Output>) -> Self {
         // resize the size from leaves size to tree size
         let depth = tree.len().next_power_of_two().ilog2() as usize;
         let size = (1 << (depth + 1)) - 1;
-        tree.resize(size, Hash::default());
+        tree.resize(size, H::Output::default());
 
         // merklize the leaves
-        let mut hasher = Sha3_256::new();
+        let mut hasher = H::new();
         let mut base = 0; // use base to index the start of the lower layer
         for depth in (1..=depth).rev() {
             // view the lower layer as the input and the upper layer as its output
@@ -44,9 +42,9 @@ impl MerkleTree {
                 .chunks_exact(2)
                 .zip(outputs.iter_mut())
                 .for_each(|(input, output)| {
-                    hasher.update(input[0]);
-                    hasher.update(input[1]);
-                    output.copy_from_slice(hasher.finalize_reset().as_slice());
+                    hasher.update_hash_value(input[0]);
+                    hasher.update_hash_value(input[1]);
+                    *output = hasher.output_reset();
                 });
             base += input_len;
         }
@@ -59,9 +57,9 @@ impl MerkleTree {
     /// return merkle paths of the indexed leaf
     /// which consists of the leaf hash and neighbour hashes
     #[inline]
-    pub fn query(&self, leaf_idx: usize) -> Vec<Hash> {
+    pub fn query(&self, leaf_idx: usize) -> Vec<H::Output> {
         let mut base = 0;
-        let mut merkle_path: Vec<Hash> = Vec::new();
+        let mut merkle_path: Vec<H::Output> = Vec::new();
         merkle_path.push(self.tree[leaf_idx]);
         (1..=self.depth).rev().enumerate().for_each(|(idx, depth)| {
             let layer_len = 1 << depth;
@@ -74,23 +72,20 @@ impl MerkleTree {
 
     /// check whether the merkle path is consistent with the root
     #[inline]
-    pub fn check(committed_root: &Hash, leaf_idx: &usize, path: &[Hash]) -> bool {
-        let mut hasher = Sha3_256::new();
+    pub fn check(committed_root: &H::Output, leaf_idx: &usize, path: &[H::Output]) -> bool {
+        let mut hasher = H::new();
 
         let leaf = path[0];
         let path_root = path[1..].iter().enumerate().fold(leaf, |acc, (idx, hash)| {
             if (leaf_idx >> idx) & 1 == 0 {
-                hasher.update(acc);
-                hasher.update(hash);
+                hasher.update_hash_value(acc);
+                hasher.update_hash_value(*hash); ////?
             } else {
-                hasher.update(hash);
-                hasher.update(acc);
+                hasher.update_hash_value(*hash);
+                hasher.update_hash_value(acc);
             }
             hasher
-                .finalize_reset()
-                .as_slice()
-                .try_into()
-                .expect("hasher doesn't return Hash [u8;32]")
+                .output_reset()
         });
 
         path_root == *committed_root

@@ -27,7 +27,3 @@ harness = false
 [[bench]]
 name = "raw_brakedown_bench"
 harness = false
-
-[[bench]]
-name = "raw_shockwave_bench"
-harness = false

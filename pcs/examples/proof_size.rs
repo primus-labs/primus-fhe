@@ -4,6 +4,7 @@ use pcs::{
     utils::code::{ExpanderCode, ExpanderCodeSpec, LinearCode},
 };
 use rand::Rng;
+use sha3::Sha3_256;
 use std::mem::size_of_val;
 
 #[derive(Field, Prime, NTT)]
@@ -42,7 +43,7 @@ fn main() {
     for log_message_len in 4..num_vars {
         let message_len = 1 << log_message_len;
         let setup_rng = rand::thread_rng();
-        let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>>::new(
+        let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>, Sha3_256>::new(
             128,
             num_vars,
             message_len,
@@ -60,7 +61,7 @@ fn main() {
 
     // set up parameters
 
-    let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>>::new(
+    let protocol = BrakedownProtocol::<FF, ExpanderCode<FF>, Sha3_256>::new(
         128,
         num_vars,
         message_len,

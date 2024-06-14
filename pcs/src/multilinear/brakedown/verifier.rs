@@ -4,16 +4,16 @@ use super::*;
 
 /// Verifier of Brakedown PCS
 #[derive(Debug, Clone, Default)]
-pub struct PcsVerifier<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> {
+pub struct PcsVerifier<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> {
     /// brakedown pcs parameter
-    vp: VerifierParam<F, C>,
+    vp: VerifierParam<F, C, H>,
 
     /// verifier challenges prover using this source of randomness
     /// which can be substituted by Fiat-Shamir transformation
     randomness: R,
 
     /// commitment of the polynomia i.e. the merkle root
-    root: MerkleTree,
+    root: MerkleTree<H>,
 
     /// chanllenge,
     /// either a random vector or
@@ -32,10 +32,10 @@ pub struct PcsVerifier<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default>
     residual_tensor: Vec<F>,
 }
 
-impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C, R> {
+impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerifier<F, C, H, R> {
     /// create a verifier
     #[inline]
-    pub fn new(vp: VerifierParam<F, C>, randomness: R) -> Self {
+    pub fn new(vp: VerifierParam<F, C, H>, randomness: R) -> Self {
         PcsVerifier {
             vp,
             randomness,
@@ -64,7 +64,7 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
 
     /// receive the commitment i.e. the merkle root
     #[inline]
-    pub fn receive_root(&mut self, root: &MerkleTree) {
+    pub fn receive_root(&mut self, root: &MerkleTree<H>) {
         self.root = root.clone();
     }
 
@@ -129,7 +129,7 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
 
     /// check the answer
     #[inline]
-    pub fn check_answer(&mut self, merkle_paths: &[Hash], columns: &[F]) -> bool {
+    pub fn check_answer(&mut self, merkle_paths: &[H::Output], columns: &[F]) -> bool {
         // input check
         assert!(self.challenge.len() == self.vp.num_rows);
         assert!(columns.len() == self.queries.len() * self.vp.num_rows);
@@ -145,9 +145,9 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
     /// check the hash of column is the same as the merkle leave
     /// check the merkle path is consistent with the merkle root
     #[inline]
-    fn check_merkle(&self, merkle_paths: &[Hash], columns: &[F]) -> bool {
+    fn check_merkle(&self, merkle_paths: &[H::Output], columns: &[F]) -> bool {
         let mut check = true;
-        let mut hasher = Sha3_256::new();
+        let mut hasher = H::new();
         columns
             .chunks_exact(self.vp.num_rows)
             .zip(merkle_paths.chunks_exact(self.root.depth + 1))
@@ -156,13 +156,12 @@ impl<F: Field, C: LinearCode<F>, R: Rng + CryptoRng + Default> PcsVerifier<F, C,
                 // check the hash of column is the same as the merkle leave
                 column
                     .iter()
-                    .for_each(|item| hasher.update(item.to_string()));
-                let mut leaf = Hash::default();
-                leaf.copy_from_slice(hasher.finalize_reset().as_slice());
+                    .for_each(|item| hasher.update_string(item.to_string()));
+                let leaf = hasher.output_reset();
                 assert!(leaf == hashes[0]);
 
                 // check the merkle path is consistent with the merkle root
-                check = MerkleTree::check(&self.root.root, column_idx, hashes);
+                check = MerkleTree::<H>::check(&self.root.root, column_idx, hashes);
             });
         check
     }
