@@ -108,7 +108,7 @@ fn test_batch_trivial_bit_decomposition_base_2() {
             )),
         ],
     ];
-    let d_bits_ref: Vec<_> = d_bits.iter().map(|x| x).collect();
+    let d_bits_ref: Vec<_> = d_bits.iter().collect();
 
     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
     for d_instance in &d_bits {
@@ -194,7 +194,7 @@ fn test_batch_bit_decomposition() {
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
-    let d_bits_ref: Vec<_> = d_bits.iter().map(|x| x).collect();
+    let d_bits_ref: Vec<_> = d_bits.iter().collect();
 
     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
     for d_instance in d_bits.iter() {

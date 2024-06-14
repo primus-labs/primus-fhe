@@ -62,7 +62,7 @@ fn test_trivial_addition_in_zq() {
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
-    let abd_bits_ref: Vec<_> = abc_bits.iter().map(|x| x).collect();
+    let abd_bits_ref: Vec<_> = abc_bits.iter().collect();
 
     let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
     let addition_info = abc_instance.info();
@@ -132,7 +132,7 @@ fn test_random_addition_in_zq() {
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
-    let abc_bits_ref: Vec<_> = abc_bits.iter().map(|x| x).collect();
+    let abc_bits_ref: Vec<_> = abc_bits.iter().collect();
 
     let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
     let addition_info = abc_instance.info();

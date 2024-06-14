@@ -89,9 +89,12 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
 /// In other words, the orders of input and output are both normal order.
 fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &[F]) -> Vec<F> {
     assert_eq!(points.len(), (1 << log_n) as usize);
-    let reversed_points = sort_array_with_reversed_bits(&points, log_n);
+    let reversed_points = sort_array_with_reversed_bits(points, log_n);
     let ntt_poly = <NTTPolynomial<F>>::from_slice(&reversed_points);
-    F::get_ntt_table(log_n).unwrap().inverse_transform(&ntt_poly).data()
+    F::get_ntt_table(log_n)
+        .unwrap()
+        .inverse_transform(&ntt_poly)
+        .data()
 }
 
 /// Construct the fourier matrix and then compute the matrix-vector product with the coefficents.

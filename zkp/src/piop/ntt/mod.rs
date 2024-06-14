@@ -309,8 +309,14 @@ impl<F: Field> NTTInstance<F> {
         Self {
             log_n: info.log_n,
             ntt_table: info.ntt_table.to_owned(),
-            coeffs: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(info.log_n, vec![F::ZERO; 1 << info.log_n])),
-            points: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(info.log_n, vec![F::ZERO; 1 << info.log_n])),
+            coeffs: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(
+                info.log_n,
+                vec![F::ZERO; 1 << info.log_n],
+            )),
+            points: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(
+                info.log_n,
+                vec![F::ZERO; 1 << info.log_n],
+            )),
         }
     }
 }
