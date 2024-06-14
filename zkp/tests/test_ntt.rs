@@ -1,6 +1,6 @@
 use algebra::{
     derive::{Field, Prime, NTT},
-    DenseMultilinearExtension, Field, FieldUniformSampler,
+    DenseMultilinearExtension, Field, FieldUniformSampler, NTTPolynomial,
 };
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use rand::prelude::*;
@@ -72,6 +72,7 @@ fn sort_array_with_reversed_bits<F: Clone + Copy>(input: &[F], log_n: u32) -> Ve
 }
 
 /// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal oder
+/// In other words, the orders of input and output are both normal order.
 /// ```plain
 /// normal order:        0  1  2  3  4  5  6  7
 ///
@@ -82,6 +83,15 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
     let poly = <Polynomial<F>>::from_slice(coeff);
     let ntt_form: Vec<_> = F::get_ntt_table(log_n).unwrap().transform(&poly).data();
     sort_array_with_reversed_bits(&ntt_form, log_n)
+}
+
+/// Invoke the existing api to perform ntt inverse transform and convert the bit-reversed order to normal oder
+/// In other words, the orders of input and output are both normal order.
+fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &[F]) -> Vec<F> {
+    assert_eq!(points.len(), (1 << log_n) as usize);
+    let reversed_points = sort_array_with_reversed_bits(&points, log_n);
+    let ntt_poly = <NTTPolynomial<F>>::from_slice(&reversed_points);
+    F::get_ntt_table(log_n).unwrap().inverse_transform(&ntt_poly).data()
 }
 
 /// Construct the fourier matrix and then compute the matrix-vector product with the coefficents.
@@ -138,6 +148,20 @@ fn test_ntt_transform_normal_order() {
     let points_naive = naive_ntt_transform_normal_order(log_n, &coeff);
     let points = ntt_transform_normal_order(log_n, &coeff);
     assert_eq!(points, points_naive);
+}
+
+#[test]
+fn test_ntt_inverse_transform_normal_order() {
+    let log_n = 10;
+    let coeff = PolyFF::random(1 << log_n, thread_rng()).data();
+    let points = ntt_transform_normal_order(log_n, &coeff);
+    let coeff_rec = ntt_inverse_transform_normal_order(log_n, &points);
+    assert_eq!(coeff, coeff_rec);
+
+    let points = PolyFF::random(1 << log_n, thread_rng()).data();
+    let coeff = ntt_inverse_transform_normal_order(log_n, &points);
+    let points_rec = ntt_transform_normal_order(log_n, &coeff);
+    assert_eq!(points, points_rec);
 }
 
 #[test]
