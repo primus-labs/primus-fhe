@@ -72,7 +72,7 @@ impl<H: Hash> MerkleTree<H> {
 
     /// check whether the merkle path is consistent with the root
     #[inline]
-    pub fn check(committed_root: &H::Output, leaf_idx: &usize, path: &[H::Output]) -> bool {
+    pub fn check(committed_root: H::Output, leaf_idx: usize, path: &[H::Output]) -> bool {
         let mut hasher = H::new();
 
         let leaf = path[0];
@@ -84,10 +84,9 @@ impl<H: Hash> MerkleTree<H> {
                 hasher.update_hash_value(*hash);
                 hasher.update_hash_value(acc);
             }
-            hasher
-                .output_reset()
+            hasher.output_reset()
         });
 
-        path_root == *committed_root
+        path_root == committed_root
     }
 }

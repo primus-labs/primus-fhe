@@ -19,9 +19,6 @@ impl SparseMatrixDimension {
     /// create an instance of SparseMatrixDimension
     #[inline]
     pub fn new(row: usize, column: usize, nonzero: usize) -> Self {
-        //println!("row {}", row_num);
-        //println!("column {}", column_num);
-        //println!("nonzero {}", nonzero_num);
         Self {
             row,
             column,

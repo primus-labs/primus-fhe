@@ -25,12 +25,12 @@ pub trait Hash: Clone + Default + Sized {
 impl Hash for Sha3_256 {
     type Output = [u8; 32];
 
-    fn update_hash_value(&mut self, input: Self::Output) {
-        self.update(input);
+    fn update_hash_value(&mut self, hashed: Self::Output) {
+        self.update(hashed);
     }
 
-    fn update_string(&mut self, input: String) {
-        self.update(input);
+    fn update_string(&mut self, hashed: String) {
+        self.update(hashed);
     }
 
     fn output_reset(&mut self) -> Self::Output {

@@ -161,7 +161,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerif
                 assert!(leaf == hashes[0]);
 
                 // check the merkle path is consistent with the merkle root
-                check = MerkleTree::<H>::check(&self.root.root, column_idx, hashes);
+                check = MerkleTree::<H>::check(self.root.root, *column_idx, hashes);
             });
         check
     }
