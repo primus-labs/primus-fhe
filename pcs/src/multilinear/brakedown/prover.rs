@@ -1,5 +1,5 @@
 use super::*;
-use crate::utils::merkle_tree::MerkleTree;
+use crate::utils::merkle_tree::{MerkleRoot, MerkleTree};
 use itertools::Itertools;
 
 /// Prover of Brakedown PCS
@@ -35,7 +35,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
 
     /// prover commits to given polynomial and returns its commitment
     #[inline]
-    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> MerkleTree<H> {
+    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> MerkleRoot<H> {
         // input check
         assert!(poly.num_vars == self.pp.num_vars);
 
@@ -70,8 +70,8 @@ impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
                 *hash = hasher.output_reset();
             });
 
-        let merkle_tree = MerkleTree::commit(hashes);
-        let merkle_root = MerkleTree::root(merkle_tree.depth, merkle_tree.root);
+        let merkle_tree = MerkleTree::new(hashes);
+        let merkle_root = MerkleRoot::new(merkle_tree.depth, merkle_tree.root);
 
         // prover stores the results
         self.matrix = matrix;
@@ -84,7 +84,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
     /// prover answer the challenge by computing the product of the challenging vector and the committed matrix,
     /// while computing the product can also be viewed as a linear combination of rows of the matrix with challenging vector as the coefficients
     #[inline]
-    pub fn answer_challenge(&self, challenge: &Vec<F>) -> Vec<F> {
+    pub fn answer_challenge(&self, challenge: &[F]) -> Vec<F> {
         // rename variables for convenience
         let coeffs = challenge;
         let message_len = self.pp.code.message_len();
@@ -120,20 +120,22 @@ impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
         let codeword_len = self.pp.code.codeword_len();
         let num_rows = self.pp.num_rows;
 
-        // returns queried columns and their merkle paths
-        (
-            queries
-                .iter()
-                .flat_map(|idx| self.merkle_tree.query(*idx))
-                .collect(),
-            queries
-                .iter()
-                .flat_map(|idx| {
-                    (0..num_rows)
-                        .map(|row_idx| self.matrix[row_idx * codeword_len + idx])
-                        .collect_vec()
-                })
-                .collect(),
-        )
+        // build merkle proof
+        let merkle_proof = queries
+            .iter()
+            .flat_map(|idx| self.merkle_tree.query(*idx))
+            .collect();
+
+        // collect columns as answers
+        let columns = queries
+            .iter()
+            .flat_map(|idx| {
+                (0..num_rows)
+                    .map(|row_idx| self.matrix[row_idx * codeword_len + idx])
+                    .collect_vec()
+            })
+            .collect();
+
+        (merkle_proof, columns)
     }
 }

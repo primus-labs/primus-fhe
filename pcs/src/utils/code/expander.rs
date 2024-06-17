@@ -52,13 +52,17 @@ impl ExpanderCodeSpec {
         field_size_bits: usize,
         recursion_threshold: usize,
     ) -> Self {
+        assert!(r != 0.0);
         let rate = 1f64 / r;
         let distance = beta / r;
+
+        //  parameter constraints taken from Page 18 in [GLSTW21](https://eprint.iacr.org/2021/1043.pdf).
         assert!(0f64 < rate && rate < 1f64);
         assert!(0f64 < distance && distance < 1f64);
         assert!(0f64 < alpha && alpha < 1f64);
         assert!(1.28 * beta < alpha);
         assert!((1f64 - alpha) * r > (1f64 + 2f64 * beta));
+
         Self {
             lambda,
             alpha,
@@ -178,7 +182,7 @@ impl ExpanderCodeSpec {
     ) -> (Vec<SparseMatrixDimension>, Vec<SparseMatrixDimension>) {
         let n = message_len;
         let n0 = self.recursion_threshold;
-        assert!(n > n0);
+        assert!(n >= n0);
 
         let a = iter::successors(Some(n), |n| Some(ceil(*n as f64 * self.alpha)))
             .tuple_windows()
@@ -269,7 +273,7 @@ impl<F: Field> ExpanderCode<F> {
     /// size of the product of random vector and commited matrix: 1*c
     /// size of the random selected columns of commited matrix: self.spec.num_opening() * r
     #[inline]
-    pub fn proof_size(&self, c: usize, r: usize) -> usize {
+    pub fn estimated_proof_size(&self, c: usize, r: usize) -> usize {
         c + self.num_opening * r
     }
 
@@ -312,15 +316,14 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
     fn encode(&self, target: &mut [F]) {
         // target[0..message_len] is the message
         // target has the length of codeword_len
-        // let target = target.as_mut();
         assert_eq!(target.len(), self.codeword_len);
+        target[self.message_len..].iter().all(|&x| x == F::ZERO);
 
         // compute x1 = x*A | x2 = x*A^2| x3 = x*A^3| ... | x_{k-1} = x*A^{k-1}
         let mut input_offset = 0;
         self.a[..self.a.len() - 1].iter().for_each(|a| {
             let (input, output) = target[input_offset..].split_at_mut(a.dimension.row);
-            //println!("{:?}\n\n", input);
-            a.multiply_vector(input, &mut output[..a.dimension.column]);
+            a.add_multiplied_vector(input, &mut output[..a.dimension.column]);
             input_offset += a.dimension.row;
         });
 
@@ -329,7 +332,7 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
         let b_last = self.b.last().unwrap();
 
         let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.row);
-        a_last.multiply_vector(input, &mut output[..a_last.dimension.column]);
+        a_last.add_multiplied_vector(input, &mut output[..a_last.dimension.column]);
 
         let reedsolomon_code = ReedSolomonCode::new(a_last.dimension.column, b_last.dimension.row);
         reedsolomon_code.encode(&mut output[..b_last.dimension.row]);
@@ -345,8 +348,7 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
             .for_each(|(a, b)| {
                 input_offset -= a.dimension.column;
                 let (input, output) = target.split_at_mut(output_offset);
-                //println!("{:?}\n\n", input);
-                b.multiply_vector(
+                b.add_multiplied_vector(
                     &input[input_offset..input_offset + b.dimension.row],
                     &mut output[..b.dimension.column],
                 );
@@ -492,8 +494,6 @@ mod test {
 
         let message_len = brakedown_code.message_len;
         let codeword_len = brakedown_code.codeword_len;
-
-        // println!("{:?}\nmessage_len: {}\ncodeword: {}", brakedown_code.spec, message_len, codeword_len);
 
         let check_times = 100;
         for _ in 0..check_times {

@@ -50,9 +50,9 @@ fn main() {
             code_spec.clone(),
             setup_rng,
         );
-        if protocol.proof_size() < min_proof_size {
+        if protocol.estimated_proof_size() < min_proof_size {
             opt_message_len = message_len;
-            min_proof_size = protocol.proof_size();
+            min_proof_size = protocol.estimated_proof_size();
         }
     }
 

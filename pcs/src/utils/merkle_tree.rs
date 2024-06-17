@@ -1,5 +1,21 @@
 use crate::utils::hash::Hash;
 
+/// Root of the Merkle Tree only
+#[derive(Debug, Clone, Default)]
+pub struct MerkleRoot<H: Hash> {
+    /// the depth of the merkle tree
+    pub depth: usize,
+    /// the root of the merkle tree
+    pub root: H::Output,
+}
+
+impl<H: Hash> MerkleRoot<H> {
+    /// instantiate a merkle root
+    pub fn new(depth: usize, root: H::Output) -> Self {
+        Self { depth, root }
+    }
+}
+
 /// Merkle Tree for Vector Commitment
 #[derive(Debug, Clone, Default)]
 pub struct MerkleTree<H: Hash> {
@@ -12,17 +28,8 @@ pub struct MerkleTree<H: Hash> {
 }
 
 impl<H: Hash> MerkleTree<H> {
-    /// instantiate a merkle tree that only has root
-    pub fn root(depth: usize, root: H::Output) -> Self {
-        Self {
-            depth,
-            root,
-            tree: Vec::new(),
-        }
-    }
-
     /// instantiate a merkle tree by committing the leaves
-    pub fn commit(mut tree: Vec<H::Output>) -> Self {
+    pub fn new(mut tree: Vec<H::Output>) -> Self {
         // resize the size from leaves size to tree size
         let depth = tree.len().next_power_of_two().ilog2() as usize;
         let size = (1 << (depth + 1)) - 1;
@@ -30,7 +37,8 @@ impl<H: Hash> MerkleTree<H> {
 
         // merklize the leaves
         let mut hasher = H::new();
-        let mut base = 0; // use base to index the start of the lower layer
+        // use base to index the start of the lower layer
+        let mut base = 0;
         for depth in (1..=depth).rev() {
             // view the lower layer as the input and the upper layer as its output
             let input_len = 1 << depth;

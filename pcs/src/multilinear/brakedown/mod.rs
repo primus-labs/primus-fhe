@@ -1,5 +1,5 @@
 use crate::utils::{
-    arithmetic::{ceil, is_power_of_two, lagrange_basis},
+    arithmetic::{ceil, lagrange_basis},
     code::{LinearCode, LinearCodeSpec},
     hash::Hash,
 };
@@ -15,8 +15,6 @@ pub mod verifier;
 type ProverParam<F, C, H> = PcsParam<F, C, H>;
 type VerifierParam<F, C, H> = PcsParam<F, C, H>;
 type Polynomial<F> = DenseMultilinearExtension<F>;
-/// 256bit hash value, whose length is determined by the security paranter
-// type Hash = [u8; 32];
 
 /// Parameters of Brakedown Multilinear Polynomial Commitment Scheme
 ///
@@ -59,7 +57,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash> BrakedownProtocol<F, C, H> {
         rng: impl Rng + CryptoRng,
     ) -> Self {
         // input check
-        assert!(is_power_of_two(message_len));
+        assert!(message_len.is_power_of_two());
         assert!(1 << num_vars >= message_len);
 
         // create the code based on code_spec
@@ -92,7 +90,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash> BrakedownProtocol<F, C, H> {
 
     /// compute relative proof size
     #[inline]
-    pub fn proof_size(&self) -> usize {
+    pub fn estimated_proof_size(&self) -> usize {
         self.code.codeword_len() + self.num_query() * (1 << self.num_vars) / self.message_len
     }
 

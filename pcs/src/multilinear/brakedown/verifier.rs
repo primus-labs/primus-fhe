@@ -1,4 +1,7 @@
-use crate::utils::merkle_tree::MerkleTree;
+use crate::utils::{
+    arithmetic::lagrange_basis,
+    merkle_tree::{MerkleRoot, MerkleTree},
+};
 
 use super::*;
 
@@ -13,7 +16,7 @@ pub struct PcsVerifier<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng +
     randomness: R,
 
     /// commitment of the polynomia i.e. the merkle root
-    root: MerkleTree<H>,
+    root: MerkleRoot<H>,
 
     /// chanllenge,
     /// either a random vector or
@@ -64,7 +67,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerif
 
     /// receive the commitment i.e. the merkle root
     #[inline]
-    pub fn receive_root(&mut self, root: &MerkleTree<H>) {
+    pub fn receive_root(&mut self, root: &MerkleRoot<H>) {
         self.root = root.clone();
     }
 
@@ -81,14 +84,14 @@ impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerif
 
     /// tensor challenge
     pub fn random_tensor(&mut self) -> Vec<F> {
-        assert!(is_power_of_two(self.vp.num_rows));
+        assert!(self.vp.num_rows.is_power_of_two());
         let tensor_len = self.vp.num_rows.ilog2() as usize;
         let field_distr: FieldUniformSampler<F> = FieldUniformSampler::new();
         let tensor: Vec<F> = (&mut self.randomness)
             .sample_iter(field_distr)
             .take(tensor_len)
             .collect();
-        self.challenge = Self::lagrange_basis(&tensor);
+        self.challenge = lagrange_basis(&tensor);
         tensor
     }
 
@@ -117,11 +120,10 @@ impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerif
     /// receive the answer which is a message, and then
     /// encode the answer into a codeword
     #[inline]
-    pub fn receive_answer(&mut self, answer: &Vec<F>) {
+    pub fn receive_answer(&mut self, answer: &[F]) {
         // input check
         assert!(answer.len() == self.vp.code.message_len());
-        self.answer.clone_from(answer);
-
+        self.answer = answer.to_vec();
         // encode the answer
         self.answer.resize(self.vp.code.codeword_len(), F::ZERO);
         self.vp.code.encode(&mut self.answer);
@@ -158,10 +160,10 @@ impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerif
                     .iter()
                     .for_each(|item| hasher.update_string(item.to_string()));
                 let leaf = hasher.output_reset();
-                assert!(leaf == hashes[0]);
 
                 // check the merkle path is consistent with the merkle root
-                check = MerkleTree::<H>::check(self.root.root, *column_idx, hashes);
+                check = (leaf == hashes[0])
+                    & MerkleTree::<H>::check(self.root.root, *column_idx, hashes);
             });
         check
     }
@@ -195,35 +197,15 @@ impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerif
         let right_point_len = self.vp.code.message_len().ilog2() as usize;
         assert!(left_point_len + right_point_len == point.len());
 
-        self.challenge = Self::lagrange_basis(&point[right_point_len..]);
+        self.challenge = lagrange_basis(&point[right_point_len..]);
 
-        self.residual_tensor = Self::lagrange_basis(&point[..right_point_len]);
+        self.residual_tensor = lagrange_basis(&point[..right_point_len]);
 
         assert!(self.challenge.len() == self.vp.num_rows);
 
         assert!(self.residual_tensor.len() == self.vp.code.message_len());
 
         self.challenge.clone()
-    }
-
-    /// compute the lagrange basis of a given point (which is a series of point of one dimension)
-    #[inline]
-    fn lagrange_basis(points: &[F]) -> Vec<F> {
-        let mut basis = vec![F::ONE];
-        points.iter().for_each(|point| {
-            basis.extend(
-                basis
-                    .iter()
-                    .map(|x| *x * (F::ONE - point))
-                    .collect::<Vec<F>>(),
-            );
-            let prev_len = basis.len() >> 1;
-            basis.iter_mut().take(prev_len).for_each(|x| *x *= point);
-        });
-        assert!(basis.len() == 1 << points.len());
-
-        basis.reverse();
-        basis
     }
 
     /// compute the residual produc

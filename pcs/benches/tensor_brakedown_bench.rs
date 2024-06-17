@@ -27,9 +27,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     // randomness
-    let setup_rng = rand::thread_rng(); // public randomness
-    let verifier_rng = rand::thread_rng(); // private randomness of the verifier or public randomness from fiat-shamir transformation
-                                           // specification of the brakedown protocol
+
+    // public randomness
+    let setup_rng = rand::thread_rng();
+    // private randomness of the verifier or public randomness from fiat-shamir transformation
+    let verifier_rng = rand::thread_rng();
+    // specification of the brakedown protocol
     let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
     // Setup
@@ -47,9 +50,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             code_spec.clone(),
             setup_rng,
         );
-        if protocol.proof_size() < min_proof_size {
+        if protocol.estimated_proof_size() < min_proof_size {
             opt_message_len = message_len;
-            min_proof_size = protocol.proof_size();
+            min_proof_size = protocol.estimated_proof_size();
         }
     }
 

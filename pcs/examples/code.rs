@@ -15,11 +15,7 @@ fn main() {
     //let code_spec: ExpanderCodeSpec = ExpanderCodeSpec::new(127, 0.1195, 0.0284, 1.9, 60, 10);
     let code_spec: ExpanderCodeSpec = ExpanderCodeSpec::new(127, 0.2380, 0.1205, 1.720, 60, 10);
 
-    //println!("{:?}\n\n", code_spec);
-
     let code = ExpanderCode::<FF>::new(code_spec, message.len(), thread_rng());
-
-    //println!("{:?}", message);
 
     message.resize(code.codeword_len(), FF::ZERO);
 
