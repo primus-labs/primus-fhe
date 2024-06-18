@@ -1,5 +1,5 @@
 //! PIOP for multiplication between RLWE ciphertext and RGSW ciphertext
-//! The prover wants to convince the correctness of the multiplication between the RLWE ciphertext and the RGSW ciphetext
+//! The prover wants to convince verifier the correctness of the multiplication between the RLWE ciphertext and the RGSW ciphetext
 //!
 //! Input: (a, b) is a RLWE ciphertext and (c, f) is a RGSW ciphertext where RLWE' = Vec<RLWE> and RGSW = RLWE' \times RLWE'.
 //! Output: (g, h) is a RLWE ciphertext
@@ -9,7 +9,7 @@
 //! Note that (c, f) is given in the NTT form.
 //!
 //! The multiplication between RLWE and RGSW is performed as follows:
-//! 1. Decompose the coefficeints of the input RLWE into k bits: a -> (a_0, ..., a_k-1) and b -> (b_0, ..., b_k-1).
+//! 1. Decompose the coefficients of the input RLWE into k bits: a -> (a_0, ..., a_k-1) and b -> (b_0, ..., b_k-1).
 //!    Note that these are polynomials in the FHE context but oracles in the ZKP context.
 //!    This can be proven with our Bit Decomposition IOP.
 //! 2. Perform NTT on these bits:
