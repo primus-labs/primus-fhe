@@ -1,6 +1,6 @@
-use algebra::derive::{Field, Prime, NTT};
+use algebra::derive::{Field, Prime, NTT, DecomposableField, FheField};
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, DecomposableField, FheField, Prime, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -14,7 +14,7 @@ mod tests {
             GoldilocksModulus,
         },
         reduce::*,
-        BabyBear, Basis, Field, FieldUniformSampler, Goldilocks, ModulusConfig, PrimeField,
+        BabyBear, Basis, Field, DecomposableField, FieldUniformSampler, Goldilocks, ModulusConfig, PrimeField,
     };
     use num_traits::{Inv, One, Zero};
     use rand::{distributions::Uniform, thread_rng, Rng};
@@ -37,51 +37,51 @@ mod tests {
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = (a + b) % p;
-        assert_eq!(FF::lazy_new(a) + FF::lazy_new(b), FF::lazy_new(c));
+        assert_eq!(FF::new(a) + FF::new(b), FF::new(c));
 
         // add_assign
-        let mut a = FF::lazy_new(a);
-        a += FF::lazy_new(b);
-        assert_eq!(a, FF::lazy_new(c));
+        let mut a = FF::new(a);
+        a += FF::new(b);
+        assert_eq!(a, FF::new(c));
 
         // sub
         let a = rng.sample(distr);
         let b = rng.gen_range(0..=a);
         let c = (a - b) % p;
-        assert_eq!(FF::lazy_new(a) - FF::lazy_new(b), FF::lazy_new(c));
+        assert_eq!(FF::new(a) - FF::new(b), FF::new(c));
 
         // sub_assign
-        let mut a = FF::lazy_new(a);
-        a -= FF::lazy_new(b);
-        assert_eq!(a, FF::lazy_new(c));
+        let mut a = FF::new(a);
+        a -= FF::new(b);
+        assert_eq!(a, FF::new(c));
 
         // mul
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = ((a as W * b as W) % p as W) as T;
-        assert_eq!(FF::lazy_new(a) * FF::lazy_new(b), FF::lazy_new(c));
+        assert_eq!(FF::new(a) * FF::new(b), FF::new(c));
 
         // mul_assign
-        let mut a = FF::lazy_new(a);
-        a *= FF::lazy_new(b);
-        assert_eq!(a, FF::lazy_new(c));
+        let mut a = FF::new(a);
+        a *= FF::new(b);
+        assert_eq!(a, FF::new(c));
 
         // div
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let b_inv = b.pow_reduce(p - 2, BarrettModulus::<T>::new(p));
         let c = ((a as W * b_inv as W) % p as W) as T;
-        assert_eq!(FF::lazy_new(a) / FF::lazy_new(b), FF::lazy_new(c));
+        assert_eq!(FF::new(a) / FF::new(b), FF::new(c));
 
         // div_assign
-        let mut a = FF::lazy_new(a);
-        a /= FF::lazy_new(b);
-        assert_eq!(a, FF::lazy_new(c));
+        let mut a = FF::new(a);
+        a /= FF::new(b);
+        assert_eq!(a, FF::new(c));
 
         // neg
         let a = rng.sample(distr);
-        let a_neg = -FF::lazy_new(a);
-        assert_eq!(FF::lazy_new(a) + a_neg, FF::zero());
+        let a_neg = -FF::new(a);
+        assert_eq!(FF::new(a) + a_neg, FF::zero());
 
         let a = FF::zero();
         assert_eq!(a, -a);
@@ -89,46 +89,46 @@ mod tests {
         // inv
         let a = rng.sample(distr);
         let a_inv = a.pow_reduce(p - 2, BarrettModulus::<T>::new(p));
-        assert_eq!(FF::lazy_new(a).inv(), FF::lazy_new(a_inv));
-        assert_eq!(FF::lazy_new(a) * FF::lazy_new(a_inv), FF::one());
+        assert_eq!(FF::new(a).inv(), FF::new(a_inv));
+        assert_eq!(FF::new(a) * FF::new(a_inv), FF::one());
 
         // associative
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = rng.sample(distr);
         assert_eq!(
-            (FF::lazy_new(a) + FF::lazy_new(b)) + FF::lazy_new(c),
-            FF::lazy_new(a) + (FF::lazy_new(b) + FF::lazy_new(c))
+            (FF::new(a) + FF::new(b)) + FF::new(c),
+            FF::new(a) + (FF::new(b) + FF::new(c))
         );
         assert_eq!(
-            (FF::lazy_new(a) * FF::lazy_new(b)) * FF::lazy_new(c),
-            FF::lazy_new(a) * (FF::lazy_new(b) * FF::lazy_new(c))
+            (FF::new(a) * FF::new(b)) * FF::new(c),
+            FF::new(a) * (FF::new(b) * FF::new(c))
         );
 
         // commutative
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         assert_eq!(
-            FF::lazy_new(a) + FF::lazy_new(b),
-            FF::lazy_new(b) + FF::lazy_new(a)
+            FF::new(a) + FF::new(b),
+            FF::new(b) + FF::new(a)
         );
         assert_eq!(
-            FF::lazy_new(a) * FF::lazy_new(b),
-            FF::lazy_new(b) * FF::lazy_new(a)
+            FF::new(a) * FF::new(b),
+            FF::new(b) * FF::new(a)
         );
 
         // identity
         let a = rng.sample(distr);
-        assert_eq!(FF::lazy_new(a) + FF::lazy_new(0), FF::lazy_new(a));
-        assert_eq!(FF::lazy_new(a) * FF::lazy_new(1), FF::lazy_new(a));
+        assert_eq!(FF::new(a) + FF::new(0), FF::new(a));
+        assert_eq!(FF::new(a) * FF::new(1), FF::new(a));
 
         // distribute
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = rng.sample(distr);
         assert_eq!(
-            (FF::lazy_new(a) + FF::lazy_new(b)) * FF::lazy_new(c),
-            (FF::lazy_new(a) * FF::lazy_new(c)) + (FF::lazy_new(b) * FF::lazy_new(c))
+            (FF::new(a) + FF::new(b)) * FF::new(c),
+            (FF::new(a) * FF::new(c)) + (FF::new(b) * FF::new(c))
         );
     }
 
@@ -145,7 +145,7 @@ mod tests {
         let compose = decompose
             .into_iter()
             .enumerate()
-            .fold(FF::lazy_new(0), |acc, (i, d)| {
+            .fold(FF::new(0), |acc, (i, d)| {
                 acc + d * FF::new(B.pow(i as T) as T)
             });
 
@@ -166,42 +166,42 @@ mod tests {
         let b = rng.sample(distr);
         let c = (a + b) % p;
         assert_eq!(
-            BabyBear::lazy_new(a) + BabyBear::lazy_new(b),
-            BabyBear::lazy_new(c)
+            BabyBear::new(a) + BabyBear::new(b),
+            BabyBear::new(c)
         );
 
         // add_assign
-        let mut a = BabyBear::lazy_new(a);
-        a += BabyBear::lazy_new(b);
-        assert_eq!(a, BabyBear::lazy_new(c));
+        let mut a = BabyBear::new(a);
+        a += BabyBear::new(b);
+        assert_eq!(a, BabyBear::new(c));
 
         // sub
         let a = rng.sample(distr);
         let b = rng.gen_range(0..=a);
         let c = (a - b) % p;
         assert_eq!(
-            BabyBear::lazy_new(a) - BabyBear::lazy_new(b),
-            BabyBear::lazy_new(c)
+            BabyBear::new(a) - BabyBear::new(b),
+            BabyBear::new(c)
         );
 
         // sub_assign
-        let mut a = BabyBear::lazy_new(a);
-        a -= BabyBear::lazy_new(b);
-        assert_eq!(a, BabyBear::lazy_new(c));
+        let mut a = BabyBear::new(a);
+        a -= BabyBear::new(b);
+        assert_eq!(a, BabyBear::new(c));
 
         // mul
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = ((a as W * b as W) % p as W) as T;
         assert_eq!(
-            BabyBear::lazy_new(a) * BabyBear::lazy_new(b),
-            BabyBear::lazy_new(c)
+            BabyBear::new(a) * BabyBear::new(b),
+            BabyBear::new(c)
         );
 
         // mul_assign
-        let mut a = BabyBear::lazy_new(a);
-        a *= BabyBear::lazy_new(b);
-        assert_eq!(a, BabyBear::lazy_new(c));
+        let mut a = BabyBear::new(a);
+        a *= BabyBear::new(b);
+        assert_eq!(a, BabyBear::new(c));
 
         // div
         let a = rng.sample(distr);
@@ -209,19 +209,19 @@ mod tests {
         let b_inv = from_monty((to_monty(b)).pow_reduce(p - 2, BabyBearModulus));
         let c = ((a as W * b_inv as W) % (p as W)) as T;
         assert_eq!(
-            BabyBear::lazy_new(a) / BabyBear::lazy_new(b),
-            BabyBear::lazy_new(c)
+            BabyBear::new(a) / BabyBear::new(b),
+            BabyBear::new(c)
         );
 
         // div_assign
-        let mut a = BabyBear::lazy_new(a);
-        a /= BabyBear::lazy_new(b);
-        assert_eq!(a, BabyBear::lazy_new(c));
+        let mut a = BabyBear::new(a);
+        a /= BabyBear::new(b);
+        assert_eq!(a, BabyBear::new(c));
 
         // neg
         let a = rng.sample(distr);
-        let a_neg = -BabyBear::lazy_new(a);
-        assert_eq!(BabyBear::lazy_new(a) + a_neg, BabyBear::zero());
+        let a_neg = -BabyBear::new(a);
+        assert_eq!(BabyBear::new(a) + a_neg, BabyBear::zero());
 
         let a = BabyBear::zero();
         assert_eq!(a, -a);
@@ -229,9 +229,9 @@ mod tests {
         // inv
         let a = rng.sample(distr);
         let a_inv = from_monty((to_monty(a)).pow_reduce(p - 2, BabyBearModulus));
-        assert_eq!(BabyBear::lazy_new(a).inv(), BabyBear::lazy_new(a_inv));
+        assert_eq!(BabyBear::new(a).inv(), BabyBear::new(a_inv));
         assert_eq!(
-            BabyBear::lazy_new(a) * BabyBear::lazy_new(a_inv),
+            BabyBear::new(a) * BabyBear::new(a_inv),
             BabyBear::one()
         );
 
@@ -240,35 +240,35 @@ mod tests {
         let b = rng.sample(distr);
         let c = rng.sample(distr);
         assert_eq!(
-            (BabyBear::lazy_new(a) + BabyBear::lazy_new(b)) + BabyBear::lazy_new(c),
-            BabyBear::lazy_new(a) + (BabyBear::lazy_new(b) + BabyBear::lazy_new(c))
+            (BabyBear::new(a) + BabyBear::new(b)) + BabyBear::new(c),
+            BabyBear::new(a) + (BabyBear::new(b) + BabyBear::new(c))
         );
         assert_eq!(
-            (BabyBear::lazy_new(a) * BabyBear::lazy_new(b)) * BabyBear::lazy_new(c),
-            BabyBear::lazy_new(a) * (BabyBear::lazy_new(b) * BabyBear::lazy_new(c))
+            (BabyBear::new(a) * BabyBear::new(b)) * BabyBear::new(c),
+            BabyBear::new(a) * (BabyBear::new(b) * BabyBear::new(c))
         );
 
         // commutative
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         assert_eq!(
-            BabyBear::lazy_new(a) + BabyBear::lazy_new(b),
-            BabyBear::lazy_new(b) + BabyBear::lazy_new(a)
+            BabyBear::new(a) + BabyBear::new(b),
+            BabyBear::new(b) + BabyBear::new(a)
         );
         assert_eq!(
-            BabyBear::lazy_new(a) * BabyBear::lazy_new(b),
-            BabyBear::lazy_new(b) * BabyBear::lazy_new(a)
+            BabyBear::new(a) * BabyBear::new(b),
+            BabyBear::new(b) * BabyBear::new(a)
         );
 
         // identity
         let a = rng.sample(distr);
         assert_eq!(
-            BabyBear::lazy_new(a) + BabyBear::lazy_new(0),
-            BabyBear::lazy_new(a)
+            BabyBear::new(a) + BabyBear::new(0),
+            BabyBear::new(a)
         );
         assert_eq!(
-            BabyBear::lazy_new(a) * BabyBear::lazy_new(1),
-            BabyBear::lazy_new(a)
+            BabyBear::new(a) * BabyBear::new(1),
+            BabyBear::new(a)
         );
 
         // distribute
@@ -276,9 +276,9 @@ mod tests {
         let b = rng.sample(distr);
         let c = rng.sample(distr);
         assert_eq!(
-            (BabyBear::lazy_new(a) + BabyBear::lazy_new(b)) * BabyBear::lazy_new(c),
-            (BabyBear::lazy_new(a) * BabyBear::lazy_new(c))
-                + (BabyBear::lazy_new(b) * BabyBear::lazy_new(c))
+            (BabyBear::new(a) + BabyBear::new(b)) * BabyBear::new(c),
+            (BabyBear::new(a) * BabyBear::new(c))
+                + (BabyBear::new(b) * BabyBear::new(c))
         );
 
         const BITS: u32 = 2;
@@ -292,7 +292,7 @@ mod tests {
         let compose = decompose
             .into_iter()
             .enumerate()
-            .fold(BabyBear::lazy_new(0), |acc, (i, d)| {
+            .fold(BabyBear::new(0), |acc, (i, d)| {
                 acc + d * BabyBear::new(B.pow(i as T) as T)
             });
 
@@ -313,42 +313,42 @@ mod tests {
         let b = rng.sample(distr);
         let c = ((a as u128 + b as u128) % (p as u128)) as u64;
         assert_eq!(
-            Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b),
-            Goldilocks::lazy_new(c)
+            Goldilocks::new(a) + Goldilocks::new(b),
+            Goldilocks::new(c)
         );
 
         // add_assign
-        let mut a = Goldilocks::lazy_new(a);
-        a += Goldilocks::lazy_new(b);
-        assert_eq!(a, Goldilocks::lazy_new(c));
+        let mut a = Goldilocks::new(a);
+        a += Goldilocks::new(b);
+        assert_eq!(a, Goldilocks::new(c));
 
         // sub
         let a = rng.sample(distr);
         let b = rng.gen_range(0..=a);
         let c = (a - b) % p;
         assert_eq!(
-            Goldilocks::lazy_new(a) - Goldilocks::lazy_new(b),
-            Goldilocks::lazy_new(c)
+            Goldilocks::new(a) - Goldilocks::new(b),
+            Goldilocks::new(c)
         );
 
         // sub_assign
-        let mut a = Goldilocks::lazy_new(a);
-        a -= Goldilocks::lazy_new(b);
-        assert_eq!(a, Goldilocks::lazy_new(c));
+        let mut a = Goldilocks::new(a);
+        a -= Goldilocks::new(b);
+        assert_eq!(a, Goldilocks::new(c));
 
         // mul
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = ((a as u128 * b as u128) % p as u128) as u64;
         assert_eq!(
-            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(b),
-            Goldilocks::lazy_new(c)
+            Goldilocks::new(a) * Goldilocks::new(b),
+            Goldilocks::new(c)
         );
 
         // mul_assign
-        let mut a = Goldilocks::lazy_new(a);
-        a *= Goldilocks::lazy_new(b);
-        assert_eq!(a, Goldilocks::lazy_new(c));
+        let mut a = Goldilocks::new(a);
+        a *= Goldilocks::new(b);
+        assert_eq!(a, Goldilocks::new(c));
 
         // div
         let a = rng.sample(distr);
@@ -356,19 +356,19 @@ mod tests {
         let b_inv = to_canonical_u64(b.pow_reduce(p - 2, GoldilocksModulus));
         let c = ((a as u128 * b_inv as u128) % (p as u128)) as u64;
         assert_eq!(
-            Goldilocks::lazy_new(a) / Goldilocks::lazy_new(b),
-            Goldilocks::lazy_new(c)
+            Goldilocks::new(a) / Goldilocks::new(b),
+            Goldilocks::new(c)
         );
 
         // div_assign
-        let mut a = Goldilocks::lazy_new(a);
-        a /= Goldilocks::lazy_new(b);
-        assert_eq!(a, Goldilocks::lazy_new(c));
+        let mut a = Goldilocks::new(a);
+        a /= Goldilocks::new(b);
+        assert_eq!(a, Goldilocks::new(c));
 
         // neg
         let a = rng.sample(distr);
-        let a_neg = -Goldilocks::lazy_new(a);
-        assert_eq!(Goldilocks::lazy_new(a) + a_neg, Goldilocks::zero());
+        let a_neg = -Goldilocks::new(a);
+        assert_eq!(Goldilocks::new(a) + a_neg, Goldilocks::zero());
 
         let a = Goldilocks::zero();
         assert_eq!(a, -a);
@@ -376,9 +376,9 @@ mod tests {
         // inv
         let a = rng.sample(distr);
         let a_inv = to_canonical_u64(a.pow_reduce(p - 2, GoldilocksModulus));
-        assert_eq!(Goldilocks::lazy_new(a).inv(), Goldilocks::lazy_new(a_inv));
+        assert_eq!(Goldilocks::new(a).inv(), Goldilocks::new(a_inv));
         assert_eq!(
-            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(a_inv),
+            Goldilocks::new(a) * Goldilocks::new(a_inv),
             Goldilocks::one()
         );
 
@@ -387,35 +387,35 @@ mod tests {
         let b = rng.sample(distr);
         let c = rng.sample(distr);
         assert_eq!(
-            (Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b)) + Goldilocks::lazy_new(c),
-            Goldilocks::lazy_new(a) + (Goldilocks::lazy_new(b) + Goldilocks::lazy_new(c))
+            (Goldilocks::new(a) + Goldilocks::new(b)) + Goldilocks::new(c),
+            Goldilocks::new(a) + (Goldilocks::new(b) + Goldilocks::new(c))
         );
         assert_eq!(
-            (Goldilocks::lazy_new(a) * Goldilocks::lazy_new(b)) * Goldilocks::lazy_new(c),
-            Goldilocks::lazy_new(a) * (Goldilocks::lazy_new(b) * Goldilocks::lazy_new(c))
+            (Goldilocks::new(a) * Goldilocks::new(b)) * Goldilocks::new(c),
+            Goldilocks::new(a) * (Goldilocks::new(b) * Goldilocks::new(c))
         );
 
         // commutative
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         assert_eq!(
-            Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b),
-            Goldilocks::lazy_new(b) + Goldilocks::lazy_new(a)
+            Goldilocks::new(a) + Goldilocks::new(b),
+            Goldilocks::new(b) + Goldilocks::new(a)
         );
         assert_eq!(
-            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(b),
-            Goldilocks::lazy_new(b) * Goldilocks::lazy_new(a)
+            Goldilocks::new(a) * Goldilocks::new(b),
+            Goldilocks::new(b) * Goldilocks::new(a)
         );
 
         // identity
         let a = rng.sample(distr);
         assert_eq!(
-            Goldilocks::lazy_new(a) + Goldilocks::lazy_new(0),
-            Goldilocks::lazy_new(a)
+            Goldilocks::new(a) + Goldilocks::new(0),
+            Goldilocks::new(a)
         );
         assert_eq!(
-            Goldilocks::lazy_new(a) * Goldilocks::lazy_new(1),
-            Goldilocks::lazy_new(a)
+            Goldilocks::new(a) * Goldilocks::new(1),
+            Goldilocks::new(a)
         );
 
         // distribute
@@ -423,9 +423,9 @@ mod tests {
         let b = rng.sample(distr);
         let c = rng.sample(distr);
         assert_eq!(
-            (Goldilocks::lazy_new(a) + Goldilocks::lazy_new(b)) * Goldilocks::lazy_new(c),
-            (Goldilocks::lazy_new(a) * Goldilocks::lazy_new(c))
-                + (Goldilocks::lazy_new(b) * Goldilocks::lazy_new(c))
+            (Goldilocks::new(a) + Goldilocks::new(b)) * Goldilocks::new(c),
+            (Goldilocks::new(a) * Goldilocks::new(c))
+                + (Goldilocks::new(b) * Goldilocks::new(c))
         );
 
         const BITS: u32 = 2;
@@ -439,7 +439,7 @@ mod tests {
         let compose = decompose
             .into_iter()
             .enumerate()
-            .fold(Goldilocks::lazy_new(0), |acc, (i, d)| {
+            .fold(Goldilocks::new(0), |acc, (i, d)| {
                 acc + d * Goldilocks::new((B as u64).pow(i as u32))
             });
 

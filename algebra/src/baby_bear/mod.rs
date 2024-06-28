@@ -16,7 +16,7 @@ use crate::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
     },
-    Field, Packable, PrimeField, TwoAdicField,
+    DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of BabyBear field.
@@ -25,26 +25,22 @@ pub struct BabyBear(u32);
 
 impl Field for BabyBear {
     type Value = u32;
-
     type Order = u32;
+
+    const MODULUS_VALUE: Self::Value = modulus::BABY_BEAR_P;
 
     #[inline]
     fn neg_one() -> Self {
         Self(MONTY_NEG_ONE)
     }
 
-    const MODULUS_VALUE: Self::Value = modulus::BABY_BEAR_P;
-
-    #[inline]
-    fn lazy_new(value: Self::Value) -> Self {
-        BabyBear(to_monty(value))
-    }
-
     #[inline]
     fn new(value: Self::Value) -> Self {
-        Self::lazy_new(value)
+        Self(to_monty(value))
     }
+}
 
+impl DecomposableField for BabyBear {
     #[inline]
     fn value(self) -> Self::Value {
         from_monty(self.0)
@@ -114,6 +110,13 @@ impl Field for BabyBear {
         let value = self.value();
         *destination = Self::new(value & mask);
         *self = Self::new(value >> bits);
+    }
+}
+
+impl FheField for BabyBear {
+    #[inline]
+    fn lazy_new(value: Self::Value) -> Self {
+        BabyBear(to_monty(value))
     }
 }
 

@@ -1,7 +1,7 @@
 use std::vec;
 
 use algebra::{
-    derive::{Field, Prime},
+    derive::{DecomposableField, Field, Prime},
     Basis, DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension,
 };
@@ -19,7 +19,7 @@ macro_rules! field_vec {
     }
 }
 
-#[derive(Field, Prime)]
+#[derive(Field, DecomposableField, Prime)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 

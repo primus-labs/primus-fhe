@@ -4,6 +4,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
+use rand::{CryptoRng, Rng};
 
 use crate::random::UniformBase;
 use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
@@ -75,7 +76,6 @@ pub trait Field:
         + Widening
         + WrappingOps
         + Into<u64>
-        + AsFrom<u32>
         + AsInto<f64>
         + AsFrom<f64>
         + UniformBase;
@@ -83,35 +83,74 @@ pub trait Field:
     /// The type of the field's order.
     type Order: Copy;
 
-    // /// 1
-    // const ONE: Self;
-
-    // /// 0
-    // const ZERO: Self;
-
-    // /// -1
-    // const NEG_ONE: Self;
-
     /// q
     const MODULUS_VALUE: Self::Value;
 
     /// -1
     fn neg_one() -> Self;
 
+    /// convert values into field element
+    fn new(value: Self::Value) -> Self;
+
+    /// generate a random element.
+    fn random<R: CryptoRng + Rng>(rng: &mut R) -> Self {
+        let range = <Self::Value as UniformBase>::Sample::as_from(Self::MODULUS_VALUE);
+        let thresh = range.wrapping_neg() % range;
+
+        let hi = loop {
+            let (lo, hi) = <Self::Value as UniformBase>::gen_sample(rng).widen_mul(range);
+            if lo >= thresh {
+                break hi;
+            }
+        };
+
+        Self::new(hi.as_into())
+    }
+}
+
+/// A trait defined for decomposable field, this is mainly for base field in FHE.
+pub trait DecomposableField: Field {
+    /// Gets inner value.
+    fn value(self) -> Self::Value;
+
+    /// mask, return a number with `bits` 1s.
+    fn mask(bits: u32) -> Self::Value;
+
+    /// Get the length of decompose vector.
+    fn decompose_len(basis: Self::Value) -> usize;
+
+    /// Decompose `self` according to `basis`,
+    /// return the decomposed vector.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose(self, basis: Basis<Self>) -> Vec<Self>;
+
+    /// Decompose `self` according to `basis`,
+    /// put the decomposed result into `destination`.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose_at(self, basis: Basis<Self>, destination: &mut [Self]);
+
+    /// Decompose `self` according to `basis`'s `mask` and `bits`,
+    /// return the least significant decomposed part.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose_lsb_bits(&mut self, mask: Self::Value, bits: u32) -> Self;
+
+    /// Decompose `self` according to `basis`'s `mask` and `bits`,
+    /// put the least significant decomposed part into `destination`.
+    ///
+    /// Now we focus on power-of-two basis.
+    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32);
+}
+
+/// A trait defined for specific fields used and optimized for FHE.
+pub trait FheField: DecomposableField {
     /// Creates a new instance.
     /// Can be overloaded with optimized implemetation.
     fn lazy_new(value: Self::Value) -> Self {
         Self::new(value)
     }
-
-    /// Creates and checks a new instance.
-    fn new(value: Self::Value) -> Self;
-
-    /// Gets inner value.
-    fn value(self) -> Self::Value;
-
-    /// Return `self * scalar`.
-    // fn mul_scalar(self, scalar: Self::Value) -> Self;
 
     /// Performs `self + a * b`.
     /// Can be overloaded with optimized implementation.
@@ -157,34 +196,4 @@ pub trait Field:
     fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
         *self = self.add_mul_fast(a, b);
     }
-
-    /// mask, return a number with `bits` 1s.
-    fn mask(_bits: u32) -> Self::Value;
-
-    /// Get the length of decompose vector.
-    fn decompose_len(basis: Self::Value) -> usize;
-
-    /// Decompose `self` according to `basis`,
-    /// return the decomposed vector.
-    ///
-    /// Now we focus on power-of-two basis.
-    fn decompose(self, basis: Basis<Self>) -> Vec<Self>;
-
-    /// Decompose `self` according to `basis`,
-    /// put the decomposed result into `destination`.
-    ///
-    /// Now we focus on power-of-two basis.
-    fn decompose_at(self, basis: Basis<Self>, destination: &mut [Self]);
-
-    /// Decompose `self` according to `basis`'s `mask` and `bits`,
-    /// return the least significant decomposed part.
-    ///
-    /// Now we focus on power-of-two basis.
-    fn decompose_lsb_bits(&mut self, mask: Self::Value, bits: u32) -> Self;
-
-    /// Decompose `self` according to `basis`'s `mask` and `bits`,
-    /// put the least significant decomposed part into `destination`.
-    ///
-    /// Now we focus on power-of-two basis.
-    fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32);
 }

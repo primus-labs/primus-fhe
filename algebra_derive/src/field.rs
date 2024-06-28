@@ -87,24 +87,12 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
 
             type Order = #field_ty;
 
-            // const ONE: Self = Self(1);
-
-            // const ZERO: Self = Self(0);
-
-            // const NEG_ONE: Self = Self(#modulus - 1);
-
             #[inline]
             fn neg_one() -> Self {
                 Self(#modulus - 1)
             }
 
             const MODULUS_VALUE: Self::Value = #modulus;
-
-            #[doc = concat!("Creates a new [`", stringify!(#name), "`].")]
-            #[inline]
-            fn lazy_new(value: #field_ty) -> Self {
-                Self(value)
-            }
 
             #[inline]
             fn new(value: Self::Value) -> Self {
@@ -114,116 +102,6 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
                     use ::algebra::reduce::Reduce;
                     Self(value.reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
                 }
-            }
-
-            #[inline]
-            fn value(self) -> #field_ty {
-                self.0
-            }
-
-            // #[inline]
-            // fn mul_scalar(self, scalar: Self::Value) -> Self {
-            //     use ::algebra::reduce::MulReduce;
-            //     Self(self.0.mul_reduce(scalar, <Self as ::algebra::ModulusConfig>::MODULUS))
-            // }
-
-            #[inline]
-            fn add_mul(self, a: Self, b: Self) -> Self {
-                use ::algebra::Widening;
-                use ::algebra::reduce::Reduce;
-                Self(a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
-            }
-
-            #[inline]
-            fn add_mul_assign(&mut self, a: Self, b: Self) {
-                use ::algebra::Widening;
-                use ::algebra::reduce::Reduce;
-                self.0 = a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
-            }
-
-            #[inline]
-            fn mul_fast(self, rhs: Self) -> Self {
-                use ::algebra::reduce::LazyMulReduce;
-                Self(self.0.lazy_mul_reduce(rhs.0, <Self as ::algebra::ModulusConfig>::MODULUS))
-            }
-
-            #[inline]
-            fn mul_assign_fast(&mut self, rhs: Self) {
-                use ::algebra::reduce::LazyMulReduceAssign;
-                self.0.lazy_mul_reduce_assign(rhs.0, <Self as ::algebra::ModulusConfig>::MODULUS)
-            }
-
-            #[inline]
-            fn add_mul_fast(self, a: Self, b: Self) -> Self {
-                use ::algebra::Widening;
-                use ::algebra::reduce::LazyReduce;
-                Self(a.0.carry_mul(b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
-            }
-
-            #[inline]
-            fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
-                use ::algebra::Widening;
-                use ::algebra::reduce::LazyReduce;
-                self.0 = a.0.carry_mul(b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS);
-            }
-
-            #[inline]
-            fn mask(bits: u32) -> Self::Value {
-                #field_ty::MAX >> (#field_ty::BITS - bits)
-            }
-
-            #[inline]
-            fn decompose_len(basis: Self::Value) -> usize {
-                debug_assert!(basis.is_power_of_two() && basis > 1);
-                ::algebra::div_ceil(<Self as ::algebra::ModulusConfig>::MODULUS.bit_count(), basis.trailing_zeros()) as usize
-            }
-
-            fn decompose(self, basis: ::algebra::Basis<Self>) -> Vec<Self> {
-                let mut temp = self.0;
-
-                let len = basis.decompose_len();
-                let mask = basis.mask();
-                let bits = basis.bits();
-
-                let mut ret: Vec<Self> = vec![#name(0); len];
-
-                for v in ret.iter_mut() {
-                    if temp == 0 {
-                        break;
-                    }
-                    *v = Self(temp & mask);
-                    temp >>= bits;
-                }
-
-                ret
-            }
-
-            fn decompose_at(self, basis: ::algebra::Basis<Self>, destination: &mut [Self]) {
-                let mut temp = self.0;
-
-                let mask = basis.mask();
-                let bits = basis.bits();
-
-                for v in destination {
-                    if temp == 0 {
-                        break;
-                    }
-                    *v = Self(temp & mask);
-                    temp >>= bits;
-                }
-            }
-
-            #[inline]
-            fn decompose_lsb_bits(&mut self, mask: Self::Value, bits: u32) -> Self {
-                let temp = Self(self.0 & mask);
-                self.0 >>= bits;
-                temp
-            }
-
-            #[inline]
-            fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32) {
-                *destination = Self(self.0 & mask);
-                self.0 >>= bits;
             }
         }
     }

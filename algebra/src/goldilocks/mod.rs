@@ -16,17 +16,28 @@ use crate::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
     },
-    Field, Packable, PrimeField, TwoAdicField,
+    DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of Goldilocks field
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Goldilocks(u64);
 
-impl Field for Goldilocks {
-    type Order = u64;
+impl Goldilocks {
+    #[inline]
+    fn as_canonical_u64(&self) -> u64 {
+        let mut c = self.0;
+        // We only need one condition subtraction, since 2 * ORDER would not fit in a u64.
+        if c >= modulus::GOLDILOCKS_P {
+            c -= modulus::GOLDILOCKS_P;
+        }
+        c
+    }
+}
 
+impl Field for Goldilocks {
     type Value = u64;
+    type Order = u64;
 
     const MODULUS_VALUE: Self::Value = modulus::GOLDILOCKS_P;
 
@@ -36,15 +47,17 @@ impl Field for Goldilocks {
     }
 
     #[inline]
-    fn lazy_new(value: Self::Value) -> Self {
-        Self(value)
-    }
-
-    #[inline]
     fn new(value: Self::Value) -> Self {
         Self(value)
     }
 
+    // #[inline]
+    // fn lazy_new(value: Self::Value) -> Self {
+    //     Self(value)
+    // }
+}
+
+impl DecomposableField for Goldilocks {
     #[inline]
     fn value(self) -> Self::Value {
         to_canonical_u64(self.0)
@@ -116,6 +129,8 @@ impl Field for Goldilocks {
         *self = Self(value >> bits);
     }
 }
+
+impl FheField for Goldilocks {}
 
 impl Display for Goldilocks {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -246,7 +261,7 @@ impl DivAssign<&Self> for Goldilocks {
 impl PartialEq for Goldilocks {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.value() == other.value()
+        self.as_canonical_u64() == other.as_canonical_u64()
     }
 }
 
@@ -262,7 +277,7 @@ impl PartialOrd for Goldilocks {
 impl Ord for Goldilocks {
     #[inline]
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.value().cmp(&other.value())
+        self.as_canonical_u64().cmp(&&other.as_canonical_u64())
     }
 }
 
@@ -342,7 +357,7 @@ impl TwoAdicField for Goldilocks {
     fn two_adic_generator(bits: usize) -> Self {
         // TODO: Consider a `match` which may speed this up.
         assert!(bits <= Self::TWO_ADICITY);
-        let base = Self::new(1_753_635_133_440_165_772); // generates the whole 2^TWO_ADICITY group
+        let base = Self(1_753_635_133_440_165_772); // generates the whole 2^TWO_ADICITY group
         exp_power_of_2(base, Self::TWO_ADICITY - bits)
     }
 }

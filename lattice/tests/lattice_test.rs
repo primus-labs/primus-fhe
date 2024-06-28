@@ -1,8 +1,8 @@
-use algebra::derive::{Field, Prime, NTT};
+use algebra::derive::{DecomposableField, FheField, Field, Prime, NTT};
 use algebra::modulus::PowOf2Modulus;
 use algebra::reduce::{AddReduce, MulReduce, SubReduce};
 use algebra::{
-    Basis, Field, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
+    Basis, Field, DecomposableField, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
     ModulusConfig, Polynomial,
 };
 use lattice::*;
@@ -10,7 +10,7 @@ use num_traits::{Inv, One};
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 

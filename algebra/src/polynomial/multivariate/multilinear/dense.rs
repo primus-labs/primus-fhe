@@ -7,7 +7,7 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::{Field, FieldUniformSampler};
+use crate::{DecomposableField, Field, FieldUniformSampler};
 
 use super::MultilinearExtension;
 use std::rc::Rc;
@@ -52,6 +52,20 @@ impl<F: Field> DenseMultilinearExtension<F> {
         }
     }
 
+    /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
+    pub fn iter(&self) -> Iter<'_, F> {
+        self.evaluations.iter()
+    }
+
+    /// Returns a mutable iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<'_, F> {
+        self.evaluations.iter_mut()
+    }
+}
+
+impl<F: DecomposableField> DenseMultilinearExtension<F> {
     /// Decompose bits of each evaluation of the origianl MLE.
     /// The bit deomposition is only applied for power-of-two base.
     /// * base_len: the length of base, i.e. log_2(base)
@@ -80,18 +94,6 @@ impl<F: Field> DenseMultilinearExtension<F> {
             )));
         }
         bits
-    }
-
-    /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
-    #[inline]
-    pub fn iter(&self) -> Iter<'_, F> {
-        self.evaluations.iter()
-    }
-
-    /// Returns a mutable iterator that iterates over the evaluations over {0,1}^`num_vars`
-    #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<'_, F> {
-        self.evaluations.iter_mut()
     }
 }
 

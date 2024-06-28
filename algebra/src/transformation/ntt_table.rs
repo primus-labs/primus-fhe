@@ -1,3 +1,4 @@
+use crate::field::FheField;
 use crate::modulus::ShoupFactor;
 use crate::utils::ReverseLsbs;
 use crate::{Field, NTTField, NTTPolynomial, Polynomial, Widening, WrappingOps};
@@ -370,7 +371,7 @@ where
 }
 
 #[inline]
-fn guard<F: Field>(a: F) -> F {
+fn guard<F: FheField>(a: F) -> F {
     if a.value() >= (F::MODULUS_VALUE << 1) {
         F::lazy_new(a.value() - (F::MODULUS_VALUE << 1))
     } else {
@@ -379,7 +380,7 @@ fn guard<F: Field>(a: F) -> F {
 }
 
 #[inline]
-fn ntt_normalize_assign<F: Field>(a: &mut F) {
+fn ntt_normalize_assign<F: FheField>(a: &mut F) {
     let mut r = a.value();
     if r >= (F::MODULUS_VALUE << 1) {
         r = r - (F::MODULUS_VALUE << 1);
@@ -391,19 +392,19 @@ fn ntt_normalize_assign<F: Field>(a: &mut F) {
 }
 
 #[inline]
-fn intt_normalize_assign<F: Field>(a: &mut F) {
+fn intt_normalize_assign<F: FheField>(a: &mut F) {
     if a.value() >= F::MODULUS_VALUE {
         *a = F::lazy_new(a.value() - F::MODULUS_VALUE)
     }
 }
 
 #[inline]
-fn add_no_reduce<F: Field>(a: F, b: F) -> F {
+fn add_no_reduce<F: FheField>(a: F, b: F) -> F {
     F::lazy_new(a.value() + b.value())
 }
 
 #[inline]
-fn add_fast<F: Field>(a: F, b: F) -> F {
+fn add_fast<F: FheField>(a: F, b: F) -> F {
     let r = a.value() + b.value();
     if r >= (F::MODULUS_VALUE << 1) {
         F::lazy_new(r - (F::MODULUS_VALUE << 1))
@@ -413,7 +414,7 @@ fn add_fast<F: Field>(a: F, b: F) -> F {
 }
 
 #[inline]
-fn sub_fast<F: Field>(a: F, b: F) -> F {
+fn sub_fast<F: FheField>(a: F, b: F) -> F {
     F::lazy_new(a.value() + (F::MODULUS_VALUE << 1) - b.value())
 }
 

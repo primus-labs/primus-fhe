@@ -144,57 +144,65 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> AbstractExte
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
     for BinomialExtensionField<F, D>
 {
-    type Order = u128;
     type Value = F::Value;
+    type Order = u128;
 
+    #[inline]
     fn neg_one() -> Self {
         Self {
             value: field_to_array::<F, D>(F::neg_one()),
         }
     }
 
-    const MODULUS_VALUE: Self::Value = F::MODULUS_VALUE;
-
     #[inline]
     fn new(value: Self::Value) -> Self {
-        Self::lazy_new(value)
+        Self {
+            value: field_to_array(F::new(value)),
+        }
     }
 
-    #[inline]
-    /// Need to re-implement
-    fn value(self) -> Self::Value {
-        std::unimplemented!()
-    }
+    const MODULUS_VALUE: Self::Value = F::MODULUS_VALUE;
 
-    #[inline]
-    fn mask(bits: u32) -> Self::Value {
-        F::mask(bits)
-    }
+    // #[inline]
+    // fn new(value: Self::Value) -> Self {
+    //     Self::lazy_new(value)
+    // }
 
-    #[inline]
-    fn decompose(self, _basis: crate::Basis<Self>) -> Vec<Self> {
-        std::unimplemented!()
-    }
+    // #[inline]
+    // /// Need to re-implement
+    // fn value(self) -> Self::Value {
+    //     std::unimplemented!()
+    // }
 
-    #[inline]
-    fn decompose_len(basis: Self::Value) -> usize {
-        F::decompose_len(basis)
-    }
+    // #[inline]
+    // fn mask(bits: u32) -> Self::Value {
+    //     F::mask(bits)
+    // }
+    //
+    // #[inline]
+    // fn decompose(self, _basis: crate::Basis<Self>) -> Vec<Self> {
+    //     std::unimplemented!()
+    // }
 
-    #[inline]
-    fn decompose_at(self, _basis: crate::Basis<Self>, _destination: &mut [Self]) {
-        std::unimplemented!()
-    }
+    // #[inline]
+    // fn decompose_len(basis: Self::Value) -> usize {
+    //     F::decompose_len(basis)
+    // }
 
-    #[inline]
-    fn decompose_lsb_bits(&mut self, _mask: Self::Value, _bits: u32) -> Self {
-        std::unimplemented!()
-    }
+    // #[inline]
+    // fn decompose_at(self, _basis: crate::Basis<Self>, _destination: &mut [Self]) {
+    //     std::unimplemented!()
+    // }
 
-    #[inline]
-    fn decompose_lsb_bits_at(&mut self, _destination: &mut Self, _mask: Self::Value, _bits: u32) {
-        std::unimplemented!()
-    }
+    // #[inline]
+    // fn decompose_lsb_bits(&mut self, _mask: Self::Value, _bits: u32) -> Self {
+    //     std::unimplemented!()
+    // }
+
+    // #[inline]
+    // fn decompose_lsb_bits_at(&mut self, _destination: &mut Self, _mask: Self::Value, _bits: u32) {
+    //     std::unimplemented!()
+    // }
 }
 
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Display

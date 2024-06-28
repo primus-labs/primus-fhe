@@ -66,9 +66,9 @@ where
         let a = x[0].count_ones() + x[1].count_ones() + x[2].count_ones();
         let b = x[3].count_ones() + x[4].count_ones() + x[5].count_ones();
         if a >= b {
-            F::lazy_new(NumCast::from(a - b).unwrap())
+            F::new(NumCast::from(a - b).unwrap())
         } else {
-            F::lazy_new(modulus - NumCast::from(b - a).unwrap())
+            F::new(modulus - NumCast::from(b - a).unwrap())
         }
     };
 

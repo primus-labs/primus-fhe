@@ -1,5 +1,5 @@
 use algebra::{
-    derive::{Field, Prime, NTT},
+    derive::{Field, Prime, NTT, DecomposableField, FheField},
     transformation::{AbstractNTT, MonomialNTT},
     Basis, Field, FieldUniformSampler, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
 };
@@ -7,7 +7,7 @@ use num_traits::{One, Zero};
 use rand::{thread_rng, Rng};
 use rand_distr::Distribution;
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 

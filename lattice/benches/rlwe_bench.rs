@@ -2,7 +2,7 @@ use algebra::{derive::*, FieldUniformSampler, Polynomial};
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use lattice::RLWE;
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct FF(u32);
 

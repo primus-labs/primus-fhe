@@ -7,7 +7,10 @@ use rand::{CryptoRng, Rng};
 use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
-use crate::{Basis, Field, FieldDiscreteGaussianSampler, FieldUniformSampler, NTTField};
+use crate::{
+    Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, FieldUniformSampler,
+    NTTField,
+};
 
 use super::NTTPolynomial;
 
@@ -174,13 +177,13 @@ impl<F: Field> Polynomial<F> {
         self.data.iter_mut().for_each(|v| *v = -*v);
     }
 
-    /// Treats `self` as a function `f`. Given `x`, outputs `f(x)`.
+    /// Evaluate p(x).
     #[inline]
     pub fn evaluate(&self, x: F) -> F {
         self.data
             .iter()
             .rev()
-            .fold(F::zero(), |acc, &a| a.add_mul(acc, x))
+            .fold(F::zero(), |acc, &a| a + acc * x)
     }
 
     /// Generate a random binary [`Polynomial<F>`].
@@ -267,7 +270,7 @@ impl<F: Field, I: SliceIndex<[F]>> Index<I> for Polynomial<F> {
     }
 }
 
-impl<F: Field> Polynomial<F> {
+impl<F: DecomposableField> Polynomial<F> {
     /// Decompose `self` according to `basis`.
     pub fn decompose(mut self, basis: Basis<F>) -> Vec<Self> {
         let mask = basis.mask();

@@ -250,7 +250,7 @@ impl<F: NTTField> Parameters<F> {
 }
 
 /// Default Field for Default Parameters
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 #[repr(transparent)]
 pub struct DefaultFieldU32(u32);

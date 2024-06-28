@@ -32,7 +32,7 @@ impl HasTwoAdicBionmialExtension<2> for Goldilocks {
         assert!(bits <= 33);
 
         if bits == 33 {
-            [Self::zero(), Self::new(15659105665374529263)]
+            [Self::zero(), Self(15659105665374529263)]
         } else {
             [Self::two_adic_generator(bits), Self::zero()]
         }

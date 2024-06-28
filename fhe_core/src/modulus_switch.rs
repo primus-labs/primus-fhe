@@ -1,10 +1,10 @@
-use algebra::{AsInto, Field};
+use algebra::{AsInto, DecomposableField};
 use lattice::LWE;
 
 use crate::{LWECiphertext, LWEModulusType};
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch<F: Field>(c: LWE<F>, modulus_after: LWEModulusType) -> LWECiphertext {
+pub fn lwe_modulus_switch<F: DecomposableField>(c: LWE<F>, modulus_after: LWEModulusType) -> LWECiphertext {
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
@@ -19,7 +19,7 @@ pub fn lwe_modulus_switch<F: Field>(c: LWE<F>, modulus_after: LWEModulusType) ->
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch_inplace<F: Field>(
+pub fn lwe_modulus_switch_inplace<F: DecomposableField>(
     c: LWE<F>,
     modulus_after: LWEModulusType,
     destination: &mut LWECiphertext,

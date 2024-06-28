@@ -1,5 +1,5 @@
 use algebra::{
-    derive::*, Field, FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler,
+    derive::*, Field, DecomposableField, FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler,
     FieldUniformSampler, Polynomial, PrimeField,
 };
 use num_traits::{Inv, One, Pow, Zero};
@@ -25,7 +25,7 @@ use rand::prelude::*;
 //
 // It's based the Derive macro `Prime`.
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct FF(u64);
 

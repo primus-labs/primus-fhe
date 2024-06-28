@@ -77,7 +77,7 @@ impl<F: Field> Distribution<F> for FieldUniformSampler<F> {
                 break hi;
             }
         };
-        F::lazy_new(hi.as_into())
+        F::new(hi.as_into())
     }
 }
 
@@ -207,9 +207,9 @@ impl<F: Field> Distribution<F> for FieldDiscreteGaussianSampler {
             if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
                 if round < 0. {
-                    return F::lazy_new(F::MODULUS_VALUE - (-round).as_into());
+                    return F::new(F::MODULUS_VALUE - (-round).as_into());
                 } else {
-                    return F::lazy_new(round.as_into());
+                    return F::new(round.as_into());
                 }
             }
         }
