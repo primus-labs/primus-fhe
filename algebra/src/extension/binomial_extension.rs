@@ -163,46 +163,6 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
 
     const MODULUS_VALUE: Self::Value = F::MODULUS_VALUE;
 
-    // #[inline]
-    // fn new(value: Self::Value) -> Self {
-    //     Self::lazy_new(value)
-    // }
-
-    // #[inline]
-    // /// Need to re-implement
-    // fn value(self) -> Self::Value {
-    //     std::unimplemented!()
-    // }
-
-    // #[inline]
-    // fn mask(bits: u32) -> Self::Value {
-    //     F::mask(bits)
-    // }
-    //
-    // #[inline]
-    // fn decompose(self, _basis: crate::Basis<Self>) -> Vec<Self> {
-    //     std::unimplemented!()
-    // }
-
-    // #[inline]
-    // fn decompose_len(basis: Self::Value) -> usize {
-    //     F::decompose_len(basis)
-    // }
-
-    // #[inline]
-    // fn decompose_at(self, _basis: crate::Basis<Self>, _destination: &mut [Self]) {
-    //     std::unimplemented!()
-    // }
-
-    // #[inline]
-    // fn decompose_lsb_bits(&mut self, _mask: Self::Value, _bits: u32) -> Self {
-    //     std::unimplemented!()
-    // }
-
-    // #[inline]
-    // fn decompose_lsb_bits_at(&mut self, _destination: &mut Self, _mask: Self::Value, _bits: u32) {
-    //     std::unimplemented!()
-    // }
 }
 
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Display
