@@ -1,6 +1,6 @@
 use algebra::Basis;
 use algebra::{
-    derive::{DecomposableField, Field, Prime, FheField, NTT},
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
     DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 // use protocol::bit_decomposition::{BitDecomposition, DecomposedBits};

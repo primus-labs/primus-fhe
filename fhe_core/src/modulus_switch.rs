@@ -4,7 +4,10 @@ use lattice::LWE;
 use crate::{LWECiphertext, LWEModulusType};
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch<F: DecomposableField>(c: LWE<F>, modulus_after: LWEModulusType) -> LWECiphertext {
+pub fn lwe_modulus_switch<F: DecomposableField>(
+    c: LWE<F>,
+    modulus_after: LWEModulusType,
+) -> LWECiphertext {
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 

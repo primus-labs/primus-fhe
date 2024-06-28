@@ -8,8 +8,7 @@ use rand_distr::Distribution;
 
 use crate::transformation::AbstractNTT;
 use crate::{
-    Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, FieldUniformSampler,
-    NTTField,
+    Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, FieldUniformSampler, NTTField,
 };
 
 use super::NTTPolynomial;

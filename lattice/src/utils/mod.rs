@@ -15,7 +15,6 @@ pub fn dot_product<F: Field>(u: &[F], v: &[F]) -> F {
     u.iter().zip(v).fold(F::zero(), |acc, (&x, &y)| acc + x * y)
 }
 
-
 /// Performs dot product for two slices, optimized for FheField
 #[inline]
 pub fn doc_product<F: FheField>(u: &[F], v: &[F]) -> F {

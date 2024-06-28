@@ -10,10 +10,10 @@ pub(super) fn derive(input: &DeriveInput) -> Result<TokenStream> {
     Ok(impl_fhe_field(input))
 }
 
-fn impl_fhe_field(input: Input) -> TokenStream{
+fn impl_fhe_field(input: Input) -> TokenStream {
     let name = &input.ident;
 
-    quote!{
+    quote! {
         impl ::algebra::FheField for #name{
             #[inline]
             fn add_mul(self, a: Self, b: Self) -> Self {

@@ -162,7 +162,6 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
     }
 
     const MODULUS_VALUE: Self::Value = F::MODULUS_VALUE;
-
 }
 
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Display

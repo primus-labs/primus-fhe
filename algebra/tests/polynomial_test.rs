@@ -1,5 +1,5 @@
 use algebra::{
-    derive::{Field, Prime, NTT, DecomposableField, FheField},
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
     transformation::{AbstractNTT, MonomialNTT},
     Basis, Field, FieldUniformSampler, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
 };

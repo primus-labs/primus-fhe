@@ -1,4 +1,4 @@
-use algebra::derive::{Field, Prime, NTT, DecomposableField, FheField};
+use algebra::derive::{DecomposableField, FheField, Field, Prime, NTT};
 
 #[derive(Field, DecomposableField, FheField, Prime, NTT)]
 #[modulus = 132120577]
@@ -14,7 +14,8 @@ mod tests {
             GoldilocksModulus,
         },
         reduce::*,
-        BabyBear, Basis, Field, DecomposableField, FieldUniformSampler, Goldilocks, ModulusConfig, PrimeField,
+        BabyBear, Basis, DecomposableField, Field, FieldUniformSampler, Goldilocks, ModulusConfig,
+        PrimeField,
     };
     use num_traits::{Inv, One, Zero};
     use rand::{distributions::Uniform, thread_rng, Rng};
@@ -108,14 +109,8 @@ mod tests {
         // commutative
         let a = rng.sample(distr);
         let b = rng.sample(distr);
-        assert_eq!(
-            FF::new(a) + FF::new(b),
-            FF::new(b) + FF::new(a)
-        );
-        assert_eq!(
-            FF::new(a) * FF::new(b),
-            FF::new(b) * FF::new(a)
-        );
+        assert_eq!(FF::new(a) + FF::new(b), FF::new(b) + FF::new(a));
+        assert_eq!(FF::new(a) * FF::new(b), FF::new(b) * FF::new(a));
 
         // identity
         let a = rng.sample(distr);
@@ -165,10 +160,7 @@ mod tests {
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = (a + b) % p;
-        assert_eq!(
-            BabyBear::new(a) + BabyBear::new(b),
-            BabyBear::new(c)
-        );
+        assert_eq!(BabyBear::new(a) + BabyBear::new(b), BabyBear::new(c));
 
         // add_assign
         let mut a = BabyBear::new(a);
@@ -179,10 +171,7 @@ mod tests {
         let a = rng.sample(distr);
         let b = rng.gen_range(0..=a);
         let c = (a - b) % p;
-        assert_eq!(
-            BabyBear::new(a) - BabyBear::new(b),
-            BabyBear::new(c)
-        );
+        assert_eq!(BabyBear::new(a) - BabyBear::new(b), BabyBear::new(c));
 
         // sub_assign
         let mut a = BabyBear::new(a);
@@ -193,10 +182,7 @@ mod tests {
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = ((a as W * b as W) % p as W) as T;
-        assert_eq!(
-            BabyBear::new(a) * BabyBear::new(b),
-            BabyBear::new(c)
-        );
+        assert_eq!(BabyBear::new(a) * BabyBear::new(b), BabyBear::new(c));
 
         // mul_assign
         let mut a = BabyBear::new(a);
@@ -208,10 +194,7 @@ mod tests {
         let b = rng.sample(distr);
         let b_inv = from_monty((to_monty(b)).pow_reduce(p - 2, BabyBearModulus));
         let c = ((a as W * b_inv as W) % (p as W)) as T;
-        assert_eq!(
-            BabyBear::new(a) / BabyBear::new(b),
-            BabyBear::new(c)
-        );
+        assert_eq!(BabyBear::new(a) / BabyBear::new(b), BabyBear::new(c));
 
         // div_assign
         let mut a = BabyBear::new(a);
@@ -230,10 +213,7 @@ mod tests {
         let a = rng.sample(distr);
         let a_inv = from_monty((to_monty(a)).pow_reduce(p - 2, BabyBearModulus));
         assert_eq!(BabyBear::new(a).inv(), BabyBear::new(a_inv));
-        assert_eq!(
-            BabyBear::new(a) * BabyBear::new(a_inv),
-            BabyBear::one()
-        );
+        assert_eq!(BabyBear::new(a) * BabyBear::new(a_inv), BabyBear::one());
 
         // associative
         let a = rng.sample(distr);
@@ -262,14 +242,8 @@ mod tests {
 
         // identity
         let a = rng.sample(distr);
-        assert_eq!(
-            BabyBear::new(a) + BabyBear::new(0),
-            BabyBear::new(a)
-        );
-        assert_eq!(
-            BabyBear::new(a) * BabyBear::new(1),
-            BabyBear::new(a)
-        );
+        assert_eq!(BabyBear::new(a) + BabyBear::new(0), BabyBear::new(a));
+        assert_eq!(BabyBear::new(a) * BabyBear::new(1), BabyBear::new(a));
 
         // distribute
         let a = rng.sample(distr);
@@ -277,8 +251,7 @@ mod tests {
         let c = rng.sample(distr);
         assert_eq!(
             (BabyBear::new(a) + BabyBear::new(b)) * BabyBear::new(c),
-            (BabyBear::new(a) * BabyBear::new(c))
-                + (BabyBear::new(b) * BabyBear::new(c))
+            (BabyBear::new(a) * BabyBear::new(c)) + (BabyBear::new(b) * BabyBear::new(c))
         );
 
         const BITS: u32 = 2;
@@ -312,10 +285,7 @@ mod tests {
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = ((a as u128 + b as u128) % (p as u128)) as u64;
-        assert_eq!(
-            Goldilocks::new(a) + Goldilocks::new(b),
-            Goldilocks::new(c)
-        );
+        assert_eq!(Goldilocks::new(a) + Goldilocks::new(b), Goldilocks::new(c));
 
         // add_assign
         let mut a = Goldilocks::new(a);
@@ -326,10 +296,7 @@ mod tests {
         let a = rng.sample(distr);
         let b = rng.gen_range(0..=a);
         let c = (a - b) % p;
-        assert_eq!(
-            Goldilocks::new(a) - Goldilocks::new(b),
-            Goldilocks::new(c)
-        );
+        assert_eq!(Goldilocks::new(a) - Goldilocks::new(b), Goldilocks::new(c));
 
         // sub_assign
         let mut a = Goldilocks::new(a);
@@ -340,10 +307,7 @@ mod tests {
         let a = rng.sample(distr);
         let b = rng.sample(distr);
         let c = ((a as u128 * b as u128) % p as u128) as u64;
-        assert_eq!(
-            Goldilocks::new(a) * Goldilocks::new(b),
-            Goldilocks::new(c)
-        );
+        assert_eq!(Goldilocks::new(a) * Goldilocks::new(b), Goldilocks::new(c));
 
         // mul_assign
         let mut a = Goldilocks::new(a);
@@ -355,10 +319,7 @@ mod tests {
         let b = rng.sample(distr);
         let b_inv = to_canonical_u64(b.pow_reduce(p - 2, GoldilocksModulus));
         let c = ((a as u128 * b_inv as u128) % (p as u128)) as u64;
-        assert_eq!(
-            Goldilocks::new(a) / Goldilocks::new(b),
-            Goldilocks::new(c)
-        );
+        assert_eq!(Goldilocks::new(a) / Goldilocks::new(b), Goldilocks::new(c));
 
         // div_assign
         let mut a = Goldilocks::new(a);
@@ -409,14 +370,8 @@ mod tests {
 
         // identity
         let a = rng.sample(distr);
-        assert_eq!(
-            Goldilocks::new(a) + Goldilocks::new(0),
-            Goldilocks::new(a)
-        );
-        assert_eq!(
-            Goldilocks::new(a) * Goldilocks::new(1),
-            Goldilocks::new(a)
-        );
+        assert_eq!(Goldilocks::new(a) + Goldilocks::new(0), Goldilocks::new(a));
+        assert_eq!(Goldilocks::new(a) * Goldilocks::new(1), Goldilocks::new(a));
 
         // distribute
         let a = rng.sample(distr);
@@ -424,8 +379,7 @@ mod tests {
         let c = rng.sample(distr);
         assert_eq!(
             (Goldilocks::new(a) + Goldilocks::new(b)) * Goldilocks::new(c),
-            (Goldilocks::new(a) * Goldilocks::new(c))
-                + (Goldilocks::new(b) * Goldilocks::new(c))
+            (Goldilocks::new(a) * Goldilocks::new(c)) + (Goldilocks::new(b) * Goldilocks::new(c))
         );
 
         const BITS: u32 = 2;
