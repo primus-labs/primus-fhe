@@ -1,5 +1,5 @@
 //! Round IOP
-//! The round operation is defined as the scaling operation, followed with a floor operation.
+//! The round operation is the scaling operation, followed by a floor operation.
 //!
 //! The round operation takes as input a \in F_Q and outputs b \in Zq such that b = \floor (a * q) / Q.
 //! In some senses, this operation maps an interval of F_Q into an element of Zq.
