@@ -1,9 +1,9 @@
 //! Round IOP
 //! The round operation is defined as the scaling operation, followed with a floor operation.
-//! 
+//!
 //! The round operation takes as input a \in F_Q and outputs b \in Zq such that b = \floor (a * q) / Q.
 //! In some senses, this operation maps an interval of F_Q into an element of Zq.
-//! 
+//!
 //! The prover is going to prove: for x \in {0, 1}^\logM
 //! 1. b(x) \in [q] -> which can be proven with a range check since q is a power-of-two
 //! 2. c(x) \in [1, ..., k]
