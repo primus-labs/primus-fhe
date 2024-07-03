@@ -75,8 +75,6 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// Add a list of multilinear extensions that is meant to be multiplied together.
     /// Here we wrap a linear operation on the same MLE so that we can add the
     /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
-    /// Here we wrap a linear operation on the same MLE so that we can add the
-    /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
     /// The resulting polynomial will be multiplied by the scalar `coefficient`.
     pub fn add_product_with_linear_op(
         &mut self,
