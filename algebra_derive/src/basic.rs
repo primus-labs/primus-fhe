@@ -123,18 +123,42 @@ pub(crate) fn impl_one(name: &Ident) -> TokenStream {
 
 pub(crate) fn impl_ser(name: &Ident, field_ty: &Type) -> TokenStream {
     let serializer_fn = match field_ty {
+        Type::Path(type_path) if type_path.path.is_ident("u8") => quote! { serialize_u8 },
+        Type::Path(type_path) if type_path.path.is_ident("u16") => quote! { serialize_u16 },
         Type::Path(type_path) if type_path.path.is_ident("u32") => quote! { serialize_u32 },
         Type::Path(type_path) if type_path.path.is_ident("u64") => quote! { serialize_u64 },
         _ => panic!("Unsupported type"),
     };
 
     quote! {
-        impl ::serde::ser::Serialize for #name {
+        impl ::serde::Serialize for #name {
             #[inline]
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where S: ::serde::ser::Serializer,
+            where S: ::serde::Serializer,
             {
                 serializer.#serializer_fn(self.0)
+            }
+        }
+    }
+}
+
+pub(crate) fn impl_deser(name: &Ident, field_ty: &Type) -> TokenStream {
+    let deser_type = match field_ty {
+        Type::Path(type_path) if type_path.path.is_ident("u8") => quote! { u8 },
+        Type::Path(type_path) if type_path.path.is_ident("u16") => quote! { u16 },
+        Type::Path(type_path) if type_path.path.is_ident("u32") => quote! { u32 },
+        Type::Path(type_path) if type_path.path.is_ident("u64") => quote! { u64 },
+        _ => panic!("Unsupported type"),
+    };
+
+    quote! {
+        impl<'de> ::serde::Deserialize<'de> for #name {
+            #[inline]
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where D: ::serde::Deserializer<'de>,
+            {
+                let value = #deser_type::deserialize(deserializer)?;
+                Ok(::algebra::Field::new(value))
             }
         }
     }

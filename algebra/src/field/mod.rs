@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::random::UniformBase;
 use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
@@ -48,6 +48,7 @@ pub trait Field:
     + Zero
     + One
     + Serialize
+    + for<'de> Deserialize<'de>
     + Add<Self, Output = Self>
     + Sub<Self, Output = Self>
     + Mul<Self, Output = Self>
