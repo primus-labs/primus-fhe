@@ -15,6 +15,9 @@ rand = { workspace = true }
 rand_distr = { workspace = true }
 bytemuck = { workspace = true }
 rand_core = { workspace = true }
+merlin = { workspace = true }
+serde = { workspace = true }
+bincode = {workspace = true}
 
 [features]
 default = []
