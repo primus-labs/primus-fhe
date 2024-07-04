@@ -44,3 +44,9 @@ impl<F: Field + Serialize> IOPTranscript<F> {
         challenge
     }
 }
+
+impl<F: Field> Default for IOPTranscript<F> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
