@@ -1,5 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
+use syn::Type;
 
 pub(crate) fn basic(name: &Ident, modulus: &TokenStream) -> TokenStream {
     let name_str = name.to_string();
@@ -115,6 +116,25 @@ pub(crate) fn impl_one(name: &Ident) -> TokenStream {
             fn is_one(&self) -> bool
             {
                 self.0 == 1
+            }
+        }
+    }
+}
+
+pub(crate) fn impl_ser(name: &Ident, field_ty: &Type) -> TokenStream {
+    let serializer_fn = match field_ty {
+        Type::Path(type_path) if type_path.path.is_ident("u32") => quote! { serialize_u32 },
+        Type::Path(type_path) if type_path.path.is_ident("u64") => quote! { serialize_u64 },
+        _ => panic!("Unsupported type"),
+    };
+
+    quote! {
+        impl ::serde::ser::Serialize for #name {
+            #[inline]
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where S: ::serde::ser::Serializer,
+            {
+                serializer.#serializer_fn(self.0)
             }
         }
     }

@@ -11,7 +11,7 @@ use super::{Block, Prg};
 
 /// An IOP transcript consists of a Merlin transcript and a `sampler``
 /// to sample uniform field elements.
-pub struct IOPTranscript<F: Field + Serialize> {
+pub struct IOPTranscript<F: Field> {
     transcript: Transcript,
     sampler: FieldUniformSampler<F>,
     _marker: PhantomData<F>,

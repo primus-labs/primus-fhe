@@ -13,6 +13,7 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 rand = { workspace = true }
 rand_distr = { workspace = true }
+serde = { workspace = true}
 
 itertools = "0.12.1"
 sha3 = "0.10.6"
