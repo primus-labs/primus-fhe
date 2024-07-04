@@ -54,7 +54,7 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 
     Ok(quote! {
         #impl_ser
-        
+
         #impl_basic
 
         #impl_zero
