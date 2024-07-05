@@ -33,15 +33,13 @@ impl<F: NTTField> EvaluationKey<F> {
         let chi = parameters.ring_noise_distribution();
         let blind_rotation_key = RLWEBlindRotationKey::generate(secret_key_pack, chi, &mut *csrng);
 
-        let key_switching_key;
-
-        match parameters.steps_after_blind_rotation() {
+        let key_switching_key = match parameters.steps_after_blind_rotation() {
             StepsAfterBr::KsMs => {
                 let chi = parameters.key_switching_noise_distribution();
-                key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
+                KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng)
             }
-            StepsAfterBr::Ms => key_switching_key = KeySwitchingKey::default(),
-        }
+            StepsAfterBr::Ms => KeySwitchingKey::default(),
+        };
 
         Self {
             blind_rotation_key,
