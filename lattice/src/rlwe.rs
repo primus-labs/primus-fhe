@@ -341,6 +341,63 @@ impl<F: NTTField> RLWE<F> {
         LWE::<F>::new(a, b[0])
     }
 
+    /// Perform `destination = self * (Y^r - 1)` for functional bootstrapping where `Y = X^(2N/q)`.
+    pub fn mul_monic_monomial_sub_one_inplace<T: NumCast>(
+        &self, // N
+        rlwe_dimension: usize,
+        // 2N/q
+        twice_rlwe_dimension_div_lwe_modulus: usize,
+        r: T,
+        destination: &mut RLWE<F>,
+    ) {
+        let r = num_traits::cast::<T, usize>(r).unwrap() * twice_rlwe_dimension_div_lwe_modulus;
+
+        if r <= rlwe_dimension {
+            #[inline]
+            fn rotate_sub<F: NTTField>(
+                x: &mut Polynomial<F>,
+                y: &Polynomial<F>,
+                r: usize,
+                n_sub_r: usize,
+            ) {
+                x[0..r]
+                    .iter_mut()
+                    .zip(y[n_sub_r..].iter())
+                    .for_each(|(u, &v)| *u = -v);
+                x[r..]
+                    .iter_mut()
+                    .zip(y[0..n_sub_r].iter())
+                    .for_each(|(u, &v)| *u = v);
+                *x -= y;
+            }
+            let n_sub_r = rlwe_dimension - r;
+            rotate_sub(destination.a_mut(), self.a(), r, n_sub_r);
+            rotate_sub(destination.b_mut(), self.b(), r, n_sub_r);
+        } else {
+            #[inline]
+            fn rotate_sub<F: NTTField>(
+                x: &mut Polynomial<F>,
+                y: &Polynomial<F>,
+                r: usize,
+                n_sub_r: usize,
+            ) {
+                x[0..r]
+                    .iter_mut()
+                    .zip(y[n_sub_r..].iter())
+                    .for_each(|(u, &v)| *u = v);
+                x[r..]
+                    .iter_mut()
+                    .zip(y[0..n_sub_r].iter())
+                    .for_each(|(u, &v)| *u = -v);
+                *x -= y;
+            }
+            let r = r - rlwe_dimension;
+            let n_sub_r = rlwe_dimension - r;
+            rotate_sub(destination.a_mut(), self.a(), r, n_sub_r);
+            rotate_sub(destination.b_mut(), self.b(), r, n_sub_r);
+        }
+    }
+
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
     pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
         &mut self,
@@ -421,6 +478,37 @@ impl<F: NTTField> RLWE<F> {
             .mul_polynomial(self.a())
             .add_gadget_rlwe_mul_polynomial(small_ntt_rgsw.c_m(), self.b())
             .into()
+    }
+
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
+    /// output the [`RLWE<F>`] result back to `self`.
+    ///
+    /// # Attention
+    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    #[inline]
+    pub fn mul_assign_small_ntt_rgsw(
+        &mut self,
+        small_ntt_rgsw: &NTTRGSW<F>,
+        // Pre allocate space
+        decompose_space: &mut DecompositionSpace<F>,
+        polynomial_space: &mut PolynomialSpace<F>,
+        median: &mut NTTRLWESpace<F>,
+    ) {
+        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
+            self.a(),
+            decompose_space,
+            polynomial_space,
+            median,
+        );
+
+        median.add_assign_gadget_rlwe_mul_polynomial_fast(
+            small_ntt_rgsw.c_m(),
+            self.b(),
+            decompose_space,
+            polynomial_space,
+        );
+
+        median.inverse_transform_inplace(self)
     }
 
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
