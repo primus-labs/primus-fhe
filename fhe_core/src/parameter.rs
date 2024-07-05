@@ -121,9 +121,12 @@ impl<F: NTTField> Parameters<F> {
         let secret_key_type = params.secret_key_type;
         let ring_secret_key_type = params.ring_secret_key_type;
         let steps_after_blind_rotation = params.steps_after_blind_rotation;
+        let blind_rotation_type = params.blind_rotation_type;
 
         if let StepsAfterBr::Ms = steps_after_blind_rotation {
-            if !(lwe_dimension == ring_dimension
+            // Currently, only support RLWE Blind Rotation for this mode
+            if !(blind_rotation_type == BlindRotationType::RLWE
+                && lwe_dimension == ring_dimension
                 && ((secret_key_type == SecretKeyType::Binary
                     && ring_secret_key_type == RingSecretKeyType::Binary)
                     || (secret_key_type == SecretKeyType::Ternary
@@ -171,7 +174,7 @@ impl<F: NTTField> Parameters<F> {
             ring_noise_std_dev: params.ring_noise_std_dev,
             blind_rotation_basis: Basis::<F>::new(params.blind_rotation_basis_bits),
             twice_ring_dimension_div_lwe_modulus,
-            blind_rotation_type: params.blind_rotation_type,
+            blind_rotation_type,
         };
 
         let key_switching_params = KeySwitchingParameters::<F> {
@@ -180,9 +183,9 @@ impl<F: NTTField> Parameters<F> {
         };
 
         Ok(Self {
-            secret_key_type: params.secret_key_type,
-            ring_secret_key_type: params.ring_secret_key_type,
-            steps_after_blind_rotation: params.steps_after_blind_rotation,
+            secret_key_type,
+            ring_secret_key_type,
+            steps_after_blind_rotation,
             lwe_params,
             blind_rotation_params,
             key_switching_params,
@@ -280,6 +283,18 @@ impl<F: NTTField> Parameters<F> {
     #[inline]
     pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussianSampler {
         FieldDiscreteGaussianSampler::new(0.0, self.key_switching_std_dev()).unwrap()
+    }
+
+    /// Returns the ring secret key type of this [`Parameters<F>`].
+    #[inline]
+    pub fn ring_secret_key_type(&self) -> RingSecretKeyType {
+        self.ring_secret_key_type
+    }
+
+    /// Returns the steps after blind rotation of this [`Parameters<F>`].
+    #[inline]
+    pub fn steps_after_blind_rotation(&self) -> StepsAfterBr {
+        self.steps_after_blind_rotation
     }
 }
 

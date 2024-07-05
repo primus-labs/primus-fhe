@@ -1,7 +1,7 @@
 use algebra::{reduce::AddReduceAssign, NTTField, Polynomial};
 use fhe_core::{
     lwe_modulus_switch_inplace, BlindRotationType, KeySwitchingKey, LWECiphertext, LWEModulusType,
-    Parameters, RLWEBlindRotationKey, RLWECiphertext, SecretKeyPack,
+    Parameters, RLWEBlindRotationKey, RLWECiphertext, SecretKeyPack, StepsAfterBr,
 };
 use lattice::RLWE;
 
@@ -33,8 +33,15 @@ impl<F: NTTField> EvaluationKey<F> {
         let chi = parameters.ring_noise_distribution();
         let blind_rotation_key = RLWEBlindRotationKey::generate(secret_key_pack, chi, &mut *csrng);
 
-        let chi = parameters.key_switching_noise_distribution();
-        let key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
+        let key_switching_key;
+
+        match parameters.steps_after_blind_rotation() {
+            StepsAfterBr::KsMs => {
+                let chi = parameters.key_switching_noise_distribution();
+                key_switching_key = KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng);
+            }
+            StepsAfterBr::Ms => key_switching_key = KeySwitchingKey::default(),
+        }
 
         Self {
             blind_rotation_key,
@@ -58,9 +65,19 @@ impl<F: NTTField> EvaluationKey<F> {
 
         acc.b_mut()[0] += F::new(F::MODULUS_VALUE >> 3);
 
-        let key_switched = self.key_switching_key.key_switch_for_rlwe(&acc);
+        match parameters.steps_after_blind_rotation() {
+            StepsAfterBr::KsMs => {
+                let key_switched = self.key_switching_key.key_switch_for_rlwe(&acc);
 
-        lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
+                lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
+            }
+            StepsAfterBr::Ms => {
+                let lwe = acc.extract_lwe_reverse_locally();
+
+                lwe_modulus_switch_inplace(lwe, parameters.lwe_modulus().value(), &mut c);
+            }
+        }
+
         c
     }
 }

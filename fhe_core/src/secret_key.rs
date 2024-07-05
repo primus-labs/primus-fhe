@@ -1,4 +1,4 @@
-use std::{cell::RefCell, default};
+use std::cell::RefCell;
 
 use algebra::{
     reduce::{AddReduceAssign, DotProductReduce, SubReduce},
@@ -10,7 +10,7 @@ use num_traits::Inv;
 
 use crate::{
     ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEBoolMessage, LWEModulusType,
-    Parameters,
+    Parameters, StepsAfterBr,
 };
 
 /// The distribution type of the LWE Secret Key
@@ -92,11 +92,30 @@ impl<F: NTTField> SecretKeyPack<F> {
         let ntt_inv_ring_secret_key;
 
         match parameters.blind_rotation_type() {
-            BlindRotationType::RLWE => {
-                ring_secret_key = Polynomial::random(ring_dimension, &mut csrng);
-                ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
-                ntt_inv_ring_secret_key = None;
-            }
+            BlindRotationType::RLWE => match parameters.steps_after_blind_rotation() {
+                StepsAfterBr::KsMs => {
+                    ring_secret_key = Polynomial::random(ring_dimension, &mut csrng);
+                    ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
+                    ntt_inv_ring_secret_key = None;
+                }
+                StepsAfterBr::Ms => {
+                    // negative convertion
+                    let convert = |v: &LWEModulusType| match *v {
+                        0 => F::ZERO,
+                        1 => F::NEG_ONE,
+                        _ => F::ONE,
+                    };
+
+                    // s = [s_0, -s_{n-1},..., -s_1]
+                    let mut s = <Polynomial<F>>::new(lwe_secret_key.iter().map(convert).collect());
+                    s[0] = -s[0];
+                    s[1..].reverse();
+
+                    ring_secret_key = s;
+                    ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
+                    ntt_inv_ring_secret_key = None;
+                }
+            },
             BlindRotationType::NTRU => {
                 let four = F::ONE + F::ONE + F::ONE + F::ONE;
                 let chi = parameters.ring_noise_distribution();
