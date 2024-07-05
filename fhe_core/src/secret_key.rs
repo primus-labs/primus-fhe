@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, default};
 
 use algebra::{
     reduce::{AddReduceAssign, DotProductReduce, SubReduce},
@@ -14,13 +14,27 @@ use crate::{
 };
 
 /// The distribution type of the LWE Secret Key
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum SecretKeyType {
     /// Binary SecretKey Distribution
     Binary,
     /// Ternary SecretKey Distribution
     #[default]
     Ternary,
+}
+
+/// The distribution type of the Ring Secret Key
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub enum RingSecretKeyType {
+    /// Binary SecretKey Distribution
+    Binary,
+    /// Ternary SecretKey Distribution
+    #[default]
+    Ternary,
+    /// Gaussian SecretKey Distribution
+    Gaussian,
+    /// Uniform SecretKey Distribution
+    Uniform,
 }
 
 /// LWE Secret key
