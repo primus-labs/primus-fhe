@@ -66,7 +66,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                 );
 
                 // external_product = (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                external_product.mul_assign_small_ntt_rgsw(
+                external_product.mul_assign_ntt_rgsw(
                     evaluation_key,
                     decompose_space,
                     polynomial_space,

@@ -21,7 +21,7 @@ pub mod utils;
 pub use error::FHECoreError;
 
 pub use parameter::{
-    BlindRotationType, ConstParameters, DefaultFieldU32, Parameters, StepsAfterBr,
+    BlindRotationType, ConstParameters, DefaultFieldU32, Parameters, StepsAfterBR,
 };
 
 pub use bool_plaintext::{decode, encode, LWEBoolMessage, LWEModulusType};

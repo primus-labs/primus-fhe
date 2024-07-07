@@ -44,7 +44,7 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
                     rlwe_space,
                 );
                 // rlwe_space = (Y^{-a_i} - 1) * ACC * RGSW(s_i)
-                rlwe_space.mul_assign_small_ntt_rgsw(
+                rlwe_space.mul_assign_ntt_rgsw(
                     s_i,
                     decompose_space,
                     polynomial_space,

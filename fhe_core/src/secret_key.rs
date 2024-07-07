@@ -10,7 +10,7 @@ use num_traits::Inv;
 
 use crate::{
     ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEBoolMessage, LWEModulusType,
-    Parameters, StepsAfterBr,
+    Parameters, StepsAfterBR,
 };
 
 /// The distribution type of the LWE Secret Key
@@ -94,8 +94,8 @@ impl<F: NTTField> SecretKeyPack<F> {
         match parameters.blind_rotation_type() {
             BlindRotationType::RLWE => {
                 ring_secret_key = match parameters.steps_after_blind_rotation() {
-                    StepsAfterBr::KsMs => Polynomial::random(ring_dimension, &mut csrng),
-                    StepsAfterBr::Ms => {
+                    StepsAfterBR::KsMs => Polynomial::random(ring_dimension, &mut csrng),
+                    StepsAfterBR::Ms => {
                         assert!(
                             parameters.ring_secret_key_type() == RingSecretKeyType::Binary
                                 || parameters.ring_secret_key_type() == RingSecretKeyType::Ternary

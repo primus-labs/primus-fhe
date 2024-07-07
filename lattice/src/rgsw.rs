@@ -111,14 +111,14 @@ impl<F: NTTField> RGSW<F> {
         let c0_data: Vec<RLWE<F>> = self
             .c_neg_s_m()
             .iter()
-            .map(|rlwe| rlwe.mul_small_ntt_rgsw(small_ntt_rgsw))
+            .map(|rlwe| rlwe.mul_ntt_rgsw(small_ntt_rgsw))
             .collect();
         let c_neg_s_m = GadgetRLWE::new(c0_data, basis);
 
         let c1_data: Vec<RLWE<F>> = self
             .c_m()
             .iter()
-            .map(|rlwe| rlwe.mul_small_ntt_rgsw(small_ntt_rgsw))
+            .map(|rlwe| rlwe.mul_ntt_rgsw(small_ntt_rgsw))
             .collect();
         let c_m = GadgetRLWE::new(c1_data, basis);
 

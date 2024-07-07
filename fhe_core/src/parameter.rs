@@ -7,7 +7,7 @@ use crate::{FHECoreError, LWEModulusType, RingSecretKeyType, SecretKeyType};
 
 /// The steps after blind rotarion.
 #[derive(Debug, Default, Clone, Copy)]
-pub enum StepsAfterBr {
+pub enum StepsAfterBR {
     /// Key Switch and Modulus Switch
     #[default]
     KsMs,
@@ -66,7 +66,7 @@ pub struct KeySwitchingParameters<F: NTTField> {
 pub struct Parameters<F: NTTField> {
     secret_key_type: SecretKeyType,
     ring_secret_key_type: RingSecretKeyType,
-    steps_after_blind_rotation: StepsAfterBr,
+    steps_after_blind_rotation: StepsAfterBR,
     lwe_params: LWEParameters,
     blind_rotation_params: BlindRotationParameters<F>,
     key_switching_params: KeySwitchingParameters<F>,
@@ -102,7 +102,7 @@ pub struct ConstParameters<Scalar> {
     pub blind_rotation_basis_bits: u32,
 
     /// The steps after blind rotarion.
-    pub steps_after_blind_rotation: StepsAfterBr,
+    pub steps_after_blind_rotation: StepsAfterBR,
 
     /// Decompose basis for `Q` used for key switching.
     pub key_switching_basis_bits: u32,
@@ -123,7 +123,7 @@ impl<F: NTTField> Parameters<F> {
         let steps_after_blind_rotation = params.steps_after_blind_rotation;
         let blind_rotation_type = params.blind_rotation_type;
 
-        if let StepsAfterBr::Ms = steps_after_blind_rotation {
+        if let StepsAfterBR::Ms = steps_after_blind_rotation {
             // Currently, only support RLWE Blind Rotation for this mode
             if !(blind_rotation_type == BlindRotationType::RLWE
                 && lwe_dimension == ring_dimension
@@ -293,7 +293,7 @@ impl<F: NTTField> Parameters<F> {
 
     /// Returns the steps after blind rotation of this [`Parameters<F>`].
     #[inline]
-    pub fn steps_after_blind_rotation(&self) -> StepsAfterBr {
+    pub fn steps_after_blind_rotation(&self) -> StepsAfterBR {
         self.steps_after_blind_rotation
     }
 }

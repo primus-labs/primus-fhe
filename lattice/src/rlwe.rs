@@ -341,7 +341,7 @@ impl<F: NTTField> RLWE<F> {
         LWE::<F>::new(a, b[0])
     }
 
-    /// Perform `destination = self * (Y^r - 1)` for functional bootstrapping where `Y = X^(2N/q)`.
+    /// Perform `destination = self * (Y^r - 1)` for bootstrapping where `Y = X^(2N/q)`.
     pub fn mul_monic_monomial_sub_one_inplace<T: NumCast>(
         &self, // N
         rlwe_dimension: usize,
@@ -398,7 +398,7 @@ impl<F: NTTField> RLWE<F> {
         }
     }
 
-    /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
+    /// Perform `self = self + rhs * Y^r` for bootstrapping where `Y = X^(2N/q)`.
     pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
         &mut self,
         rhs: &Self,
@@ -453,48 +453,47 @@ impl<F: NTTField> RLWE<F> {
         }
     }
 
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_rgsw` [`RGSW<F>`],
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `rgsw` [`RGSW<F>`],
     /// return a [`RLWE<F>`].
     ///
     /// # Attention
-    /// The message of **`small_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    /// The message of **`rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
     #[inline]
-    pub fn mul_small_rgsw(&self, small_rgsw: &RGSW<F>) -> RLWE<F> {
-        small_rgsw
-            .c_neg_s_m()
+    pub fn mul_rgsw(&self, rgsw: &RGSW<F>) -> RLWE<F> {
+        rgsw.c_neg_s_m()
             .mul_polynomial(self.a())
-            .add_gadget_rlwe_mul_polynomial(small_rgsw.c_m(), self.b())
+            .add_gadget_rlwe_mul_polynomial(rgsw.c_m(), self.b())
     }
 
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_rgsw` [`NTTRGSW<F>`],
     /// return a [`RLWE<F>`].
     ///
     /// # Attention
-    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    /// The message of **`ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
     #[inline]
-    pub fn mul_small_ntt_rgsw(&self, small_ntt_rgsw: &NTTRGSW<F>) -> RLWE<F> {
-        small_ntt_rgsw
+    pub fn mul_ntt_rgsw(&self, ntt_rgsw: &NTTRGSW<F>) -> RLWE<F> {
+        ntt_rgsw
             .c_neg_s_m()
             .mul_polynomial(self.a())
-            .add_gadget_rlwe_mul_polynomial(small_ntt_rgsw.c_m(), self.b())
+            .add_gadget_rlwe_mul_polynomial(ntt_rgsw.c_m(), self.b())
             .into()
     }
 
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_rgsw` [`NTTRGSW<F>`],
     /// output the [`RLWE<F>`] result back to `self`.
     ///
     /// # Attention
-    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    /// The message of **`ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
     #[inline]
-    pub fn mul_assign_small_ntt_rgsw(
+    pub fn mul_assign_ntt_rgsw(
         &mut self,
-        small_ntt_rgsw: &NTTRGSW<F>,
+        ntt_rgsw: &NTTRGSW<F>,
         // Pre allocate space
         decompose_space: &mut DecompositionSpace<F>,
         polynomial_space: &mut PolynomialSpace<F>,
         median: &mut NTTRLWESpace<F>,
     ) {
-        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
+        ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
             self.a(),
             decompose_space,
             polynomial_space,
@@ -502,7 +501,7 @@ impl<F: NTTField> RLWE<F> {
         );
 
         median.add_assign_gadget_rlwe_mul_polynomial_fast(
-            small_ntt_rgsw.c_m(),
+            ntt_rgsw.c_m(),
             self.b(),
             decompose_space,
             polynomial_space,
@@ -511,15 +510,15 @@ impl<F: NTTField> RLWE<F> {
         median.inverse_transform_inplace(self)
     }
 
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `small_ntt_rgsw` [`NTTRGSW<F>`],
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_rgsw` [`NTTRGSW<F>`],
     /// output the [`RLWE<F>`] result into `destination`.
     ///
     /// # Attention
-    /// The message of **`small_ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    /// The message of **`ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
     #[inline]
-    pub fn mul_small_ntt_rgsw_inplace(
+    pub fn mul_ntt_rgsw_inplace(
         &self,
-        small_ntt_rgsw: &NTTRGSW<F>,
+        ntt_rgsw: &NTTRGSW<F>,
         // Pre allocate space
         decompose_space: &mut DecompositionSpace<F>,
         polynomial_space: &mut PolynomialSpace<F>,
@@ -527,7 +526,7 @@ impl<F: NTTField> RLWE<F> {
         // Output destination
         destination: &mut RLWE<F>,
     ) {
-        small_ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
+        ntt_rgsw.c_neg_s_m().mul_polynomial_inplace_fast(
             self.a(),
             decompose_space,
             polynomial_space,
@@ -535,7 +534,7 @@ impl<F: NTTField> RLWE<F> {
         );
 
         median.add_assign_gadget_rlwe_mul_polynomial_fast(
-            small_ntt_rgsw.c_m(),
+            ntt_rgsw.c_m(),
             self.b(),
             decompose_space,
             polynomial_space,

@@ -1,7 +1,7 @@
 use algebra::Field;
 use fhe_core::{
     BlindRotationType, ConstParameters, DefaultFieldU32, Parameters, RingSecretKeyType,
-    SecretKeyType, StepsAfterBr,
+    SecretKeyType, StepsAfterBR,
 };
 use once_cell::sync::Lazy;
 
@@ -19,7 +19,7 @@ pub static DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS: Lazy<Parameters<DefaultFie
             ring_noise_std_dev: 3.20 * 2.175,
             ring_secret_key_type: RingSecretKeyType::Ternary,
             blind_rotation_basis_bits: 6,
-            steps_after_blind_rotation: StepsAfterBr::KsMs,
+            steps_after_blind_rotation: StepsAfterBR::KsMs,
             key_switching_basis_bits: 1,
             key_switching_std_dev: 3.2 * ((1 << 12) as f64),
         })
