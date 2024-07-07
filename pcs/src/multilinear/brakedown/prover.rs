@@ -2,25 +2,38 @@ use super::*;
 use crate::utils::merkle_tree::{MerkleRoot, MerkleTree};
 use itertools::Itertools;
 
+/// Polynoial Commitment of Brakedown
+pub struct BrakedownPolyCommitment<H: Hash>(MerkleRoot<H>);
+
+/// Opening proof of Brakedown.
+pub struct BrakedownOpenProof<F: Field, H: Hash> {
+    // Random linear combination of messages.
+    rlc_msgs: Vec<F>,
+
+    // The opening columns according to the queres.
+    opening_columns: Vec<F>,
+
+    // Merkle paths.
+    merkle_paths: Vec<H::Output>,
+
+    // tensor times polynomial matrix
+    product: Vec<F>,    
+}
+
 /// Prover of Brakedown PCS
 #[derive(Debug, Clone, Default)]
 pub struct PcsProver<F: Field, C: LinearCode<F>, H: Hash> {
-    /// brakedown pcs parameter
+    /// Brakedown pcs parameter
     pub pp: ProverParam<F, C, H>,
 
-    /// brakedown pcs structures the coefficients of the polynomial in lagrange basis (or evaluations on the hypercube) as a matrix.
-    ///
-    /// while the entire matrix variable represents the vector containing the encoded matrix in a row-major manner,
-    /// the first message_len columns compose the unencoded matrix since the code is systematic
-    ///
-    /// every codeword_len items is a codeword, and the first message_len items in every codeword_len items is its message
+    /// Brakedown pcs structures the coefficients of the polynomial in lagrange basis (or evaluations on the hypercube) as a matrix.
+    /// While the entire matrix variable represents the vector containing the encoded matrix in a row-major manner,
+    /// the first message_len columns compose the unencoded matrix since the code is systematic.
+    /// Every codeword_len items is a codeword, and the first message_len items in every codeword_len items is its message
     pub matrix: Vec<F>,
 
     /// prover merklizes the columns of the matrix and stores the merkle tree
     merkle_tree: MerkleTree<H>,
-
-    /// polynomial commitment, which is the root of the merkle tree
-    root: H::Output,
 }
 
 impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
@@ -35,7 +48,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
 
     /// prover commits to given polynomial and returns its commitment
     #[inline]
-    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> MerkleRoot<H> {
+    pub fn commit_poly(&mut self, poly: &Polynomial<F>) -> BrakedownPolyCommitment<H> {
         // input check
         assert!(poly.num_vars == self.pp.num_vars);
 
@@ -58,35 +71,30 @@ impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
         // prepare the container of the entire merkle tree, pushing the layers of merkle tree into this container from bottom to top
         let mut hashes: Vec<H::Output> = vec![H::Output::default(); codeword_len];
         let mut hasher = H::new();
-        hashes[..codeword_len]
-            .iter_mut()
-            .enumerate()
-            .for_each(|(index, hash)| {
-                matrix
-                    .iter()
-                    .skip(index)
-                    .step_by(codeword_len)
-                    .for_each(|item| hasher.update_string(item.to_string()));
-                *hash = hasher.output_reset();
-            });
-
-        let merkle_tree = MerkleTree::new(hashes);
-        let merkle_root = MerkleRoot::new(merkle_tree.depth, merkle_tree.root);
+        hashes.iter_mut().enumerate().for_each(|(index, hash)| {
+            matrix
+                .iter()
+                .skip(index)
+                .step_by(codeword_len)
+                .for_each(|item| hasher.update_string(item.to_string()));
+            *hash = hasher.output_reset();
+        });
 
         // prover stores the results
+        self.merkle_tree.generate(&hashes);
         self.matrix = matrix;
-        self.root.clone_from(&merkle_tree.root);
-        self.merkle_tree = merkle_tree;
 
-        merkle_root
+        BrakedownPolyCommitment(MerkleRoot::new(
+            self.merkle_tree.depth,
+            self.merkle_tree.root,
+        ))
     }
 
     /// prover answer the challenge by computing the product of the challenging vector and the committed matrix,
     /// while computing the product can also be viewed as a linear combination of rows of the matrix with challenging vector as the coefficients
     #[inline]
     pub fn answer_challenge(&self, challenge: &[F]) -> Vec<F> {
-        // rename variables for convenience
-        let coeffs = challenge;
+        assert_eq!(challenge.len(), self.pp.num_rows);
         let message_len = self.pp.code.message_len();
         let codeword_len = self.pp.code.codeword_len();
 
@@ -94,7 +102,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash> PcsProver<F, C, H> {
         let mut answer = vec![F::ZERO; message_len];
         self.matrix
             .chunks_exact(codeword_len)
-            .zip(coeffs)
+            .zip(challenge)
             .for_each(|(row, coeff)| {
                 row.iter()
                     .take(message_len)

@@ -208,7 +208,7 @@ impl<F: Field, C: LinearCode<F>, H: Hash, R: Rng + CryptoRng + Default> PcsVerif
         self.challenge.clone()
     }
 
-    /// compute the residual produc
+    /// compute the residual product
     pub fn residual_product(&self) -> F {
         self.answer
             .iter()

@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use merlin::Transcript;
 use rand::SeedableRng;
 use rand_distr::Distribution;
 use serde::Serialize;
@@ -9,19 +8,19 @@ use crate::{Field, FieldUniformSampler};
 
 use super::{Block, Prg};
 
-/// An IOP transcript consists of a Merlin transcript and a `sampler``
+/// A transcript consists of a Merlin transcript and a `sampler``
 /// to sample uniform field elements.
-pub struct IOPTranscript<F: Field> {
-    transcript: Transcript,
+pub struct Transcript<F: Field> {
+    transcript: merlin::Transcript,
     sampler: FieldUniformSampler<F>,
     _marker: PhantomData<F>,
 }
 
-impl<F: Field + Serialize> IOPTranscript<F> {
+impl<F: Field + Serialize> Transcript<F> {
     /// Create a new IOP transcript.
     pub fn new() -> Self {
         Self {
-            transcript: Transcript::new(b""),
+            transcript: merlin::Transcript::new(b""),
             sampler: FieldUniformSampler::new(),
             _marker: PhantomData,
         }
@@ -45,7 +44,7 @@ impl<F: Field + Serialize> IOPTranscript<F> {
     }
 }
 
-impl<F: Field> Default for IOPTranscript<F> {
+impl<F: Field> Default for Transcript<F> {
     fn default() -> Self {
         Self::new()
     }
