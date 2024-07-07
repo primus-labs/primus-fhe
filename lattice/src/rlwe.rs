@@ -563,27 +563,6 @@ impl<F: NTTField> RLWE<F> {
 
         Self { a, b: e }
     }
-
-    /// Generate a `RLWE<F>` sample which encrypts `0`.
-    pub fn generate_random_zero_sample_slower<R>(
-        secret_key: &Polynomial<F>,
-        error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
-    ) -> Self
-    where
-        R: Rng + CryptoRng,
-    {
-        let rlwe_dimension = secret_key.coeff_count();
-        let a = <Polynomial<F>>::random(rlwe_dimension, &mut rng);
-
-        let mut a_ntt = a.clone().into_ntt_polynomial();
-        a_ntt *= secret_key;
-
-        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler);
-        e += a_ntt.into_native_polynomial();
-
-        Self { a, b: e }
-    }
 }
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
