@@ -3,7 +3,17 @@ use algebra::{
 };
 use lattice::DiscreteGaussian;
 
-use crate::{FHECoreError, LWEModulusType, SecretKeyType};
+use crate::{FHECoreError, LWEModulusType, RingSecretKeyType, SecretKeyType};
+
+/// The steps after blind rotarion.
+#[derive(Debug, Default, Clone, Copy)]
+pub enum StepsAfterBR {
+    /// Key Switch and Modulus Switch
+    #[default]
+    KsMs,
+    /// Modulus Switch
+    Ms,
+}
 
 /// Parameters for LWE.
 #[derive(Debug, Clone, Copy)]
@@ -55,6 +65,8 @@ pub struct KeySwitchingParameters<F: NTTField> {
 #[derive(Debug, Clone, Copy)]
 pub struct Parameters<F: NTTField> {
     secret_key_type: SecretKeyType,
+    ring_secret_key_type: RingSecretKeyType,
+    steps_after_blind_rotation: StepsAfterBR,
     lwe_params: LWEParameters,
     blind_rotation_params: BlindRotationParameters<F>,
     key_switching_params: KeySwitchingParameters<F>,
@@ -83,9 +95,14 @@ pub struct ConstParameters<Scalar> {
     pub ring_modulus: Scalar,
     /// The ring noise error's standard deviation for rlwe and ntru
     pub ring_noise_std_dev: f64,
+    /// The distribution type of the Ring Secret Key
+    pub ring_secret_key_type: RingSecretKeyType,
 
     /// Decompose basis for `Q` used for blind rotation accumulator
     pub blind_rotation_basis_bits: u32,
+
+    /// The steps after blind rotarion.
+    pub steps_after_blind_rotation: StepsAfterBR,
 
     /// Decompose basis for `Q` used for key switching.
     pub key_switching_basis_bits: u32,
@@ -96,9 +113,28 @@ pub struct ConstParameters<Scalar> {
 impl<F: NTTField> Parameters<F> {
     /// Create a new Parameter instance.
     pub fn new(params: ConstParameters<F::Value>) -> Result<Self, FHECoreError> {
+        let lwe_dimension = params.lwe_dimension;
         let lwe_modulus = params.lwe_modulus;
         let ring_dimension = params.ring_dimension;
         let ring_modulus = params.ring_modulus;
+
+        let secret_key_type = params.secret_key_type;
+        let ring_secret_key_type = params.ring_secret_key_type;
+        let steps_after_blind_rotation = params.steps_after_blind_rotation;
+        let blind_rotation_type = params.blind_rotation_type;
+
+        if let StepsAfterBR::Ms = steps_after_blind_rotation {
+            // Currently, only support RLWE Blind Rotation for this mode
+            if !(blind_rotation_type == BlindRotationType::RLWE
+                && lwe_dimension == ring_dimension
+                && ((secret_key_type == SecretKeyType::Binary
+                    && ring_secret_key_type == RingSecretKeyType::Binary)
+                    || (secret_key_type == SecretKeyType::Ternary
+                        && ring_secret_key_type == RingSecretKeyType::Ternary)))
+            {
+                return Err(FHECoreError::StepsParametersNotCompatible);
+            }
+        }
 
         // N = 2^i
         if !ring_dimension.is_power_of_two() {
@@ -138,7 +174,7 @@ impl<F: NTTField> Parameters<F> {
             ring_noise_std_dev: params.ring_noise_std_dev,
             blind_rotation_basis: Basis::<F>::new(params.blind_rotation_basis_bits),
             twice_ring_dimension_div_lwe_modulus,
-            blind_rotation_type: params.blind_rotation_type,
+            blind_rotation_type,
         };
 
         let key_switching_params = KeySwitchingParameters::<F> {
@@ -147,7 +183,9 @@ impl<F: NTTField> Parameters<F> {
         };
 
         Ok(Self {
-            secret_key_type: params.secret_key_type,
+            secret_key_type,
+            ring_secret_key_type,
+            steps_after_blind_rotation,
             lwe_params,
             blind_rotation_params,
             key_switching_params,
@@ -245,6 +283,18 @@ impl<F: NTTField> Parameters<F> {
     #[inline]
     pub fn key_switching_noise_distribution(&self) -> FieldDiscreteGaussianSampler {
         FieldDiscreteGaussianSampler::new(0.0, self.key_switching_std_dev()).unwrap()
+    }
+
+    /// Returns the ring secret key type of this [`Parameters<F>`].
+    #[inline]
+    pub fn ring_secret_key_type(&self) -> RingSecretKeyType {
+        self.ring_secret_key_type
+    }
+
+    /// Returns the steps after blind rotation of this [`Parameters<F>`].
+    #[inline]
+    pub fn steps_after_blind_rotation(&self) -> StepsAfterBR {
+        self.steps_after_blind_rotation
     }
 }
 

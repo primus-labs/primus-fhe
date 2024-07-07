@@ -394,7 +394,7 @@ fn test_rgsw_mul_rlwe() {
         (RLWE::new(a, b), e)
     };
 
-    let rlwe_mul = rlwe.mul_small_rgsw(&rgsw);
+    let rlwe_mul = rlwe.mul_rgsw(&rgsw);
     let decrypt_mul = rlwe_mul.b() - rlwe_mul.a() * &s;
 
     let decoded_m0m1: Vec<u32> = m0m1.into_iter().map(decode).collect();
