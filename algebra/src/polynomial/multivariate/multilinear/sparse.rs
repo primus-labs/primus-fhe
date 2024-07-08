@@ -1,6 +1,6 @@
 use std::slice::{Iter, IterMut};
 
-use crate::Field;
+use crate::{DenseMultilinearExtension, Field};
 
 /// sparse polynomial
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -49,5 +49,15 @@ impl<F: Field> SparsePolynomial<F> {
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'_, (usize, F)> {
         self.evaluations.iter_mut()
+    }
+
+    /// transform sparse representation into dense representation
+    #[inline]
+    pub fn dense(&self) -> DenseMultilinearExtension<F> {
+        let mut evaluations = vec![F::ZERO; 1 << self.num_vars];
+        self.evaluations.iter().for_each(|(idx, item)| {
+            evaluations[*idx] = *item;
+        });
+        DenseMultilinearExtension::from_evaluations_vec(self.num_vars, evaluations)
     }
 }
