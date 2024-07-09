@@ -1,11 +1,12 @@
 use algebra::{Field, FieldUniformSampler};
+use serde::{Deserialize, Serialize};
 
 use std::{collections::BTreeSet, fmt::Debug, iter};
 
 use rand::{distributions::Uniform, CryptoRng, Rng};
 
 /// a dimension that specifies a sparse matrix of row_num = n, column_num = m, with d nonzero elements in each row
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SparseMatrixDimension {
     /// the number of rows of the sparse matrix
     pub row: usize,
@@ -28,7 +29,7 @@ impl SparseMatrixDimension {
 }
 
 /// SparseMatrix
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SparseMatrix<F> {
     /// the dimension that specifies the shape of this sparse matrix
     pub dimension: SparseMatrixDimension,

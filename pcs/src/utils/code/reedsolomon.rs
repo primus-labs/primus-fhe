@@ -1,11 +1,12 @@
 use crate::utils::code::LinearCode;
 
 use algebra::Field;
+use serde::{Deserialize, Serialize};
 
 use std::{cmp::min, iter, marker::PhantomData};
 
 /// ReedSolomonCode
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct ReedSolomonCode<F> {
     message_len: usize,
     codeword_len: usize,

@@ -1,11 +1,20 @@
 use std::fmt::Debug;
 
+use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 
 /// Hash
 pub trait Hash: Debug + Clone + Default + Sized {
     /// output
-    type Output: Clone + Copy + PartialEq + Default + Debug + Sized + AsRef<[u8]>;
+    type Output: Clone
+        + Copy
+        + PartialEq
+        + Default
+        + Debug
+        + Sized
+        + AsRef<[u8]>
+        + Serialize
+        + for<'de> Deserialize<'de>;
 
     /// new
     fn new() -> Self {

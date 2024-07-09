@@ -32,6 +32,5 @@ pub trait LinearCodeSpec<F>: Sync + Send + Default {
     /// Linear Code
     type Code: LinearCode<F>;
     /// generate LinearCode
-    fn code(&self, message_ln: usize, codeword_len: usize, rng: impl Rng + CryptoRng)
-        -> Self::Code;
+    fn code(&self, message_ln: usize, rng: &mut (impl Rng + CryptoRng)) -> Self::Code;
 }

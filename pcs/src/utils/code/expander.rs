@@ -6,6 +6,7 @@ use crate::utils::{
 use algebra::Field;
 use itertools::Itertools;
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::{max, min},
     f64,
@@ -18,7 +19,7 @@ use super::LinearCodeSpec;
 /// BrakedownCode Specification
 ///
 /// names of the parameters are consistent with the paper
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ExpanderCodeSpec {
     /// security parameter
     lambda: usize,
@@ -224,12 +225,7 @@ impl ExpanderCodeSpec {
 
 impl<F: Field> LinearCodeSpec<F> for ExpanderCodeSpec {
     type Code = ExpanderCode<F>;
-    fn code(
-        &self,
-        message_len: usize,
-        _codeword_len: usize,
-        rng: impl Rng + CryptoRng,
-    ) -> Self::Code {
+    fn code(&self, message_len: usize, rng: &mut (impl Rng + CryptoRng)) -> Self::Code {
         ExpanderCode::<F>::new(self.clone(), message_len, rng)
     }
 }
@@ -237,7 +233,7 @@ impl<F: Field> LinearCodeSpec<F> for ExpanderCodeSpec {
 /// BrakedownCode is linear-time encodable code, using a recursive encoding method in spirit
 ///
 /// This implementation uses an equavailent iterative encoding method for efficiency
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ExpanderCode<F> {
     /// specification
     pub spec: ExpanderCodeSpec,
@@ -253,7 +249,11 @@ pub struct ExpanderCode<F> {
 impl<F: Field> ExpanderCode<F> {
     /// create an instance of BrakedownCode
     #[inline]
-    pub fn new(spec: ExpanderCodeSpec, message_len: usize, rng: impl Rng + CryptoRng) -> Self {
+    pub fn new(
+        spec: ExpanderCodeSpec,
+        message_len: usize,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Self {
         assert!(message_len >= spec.recursion_threshold);
 
         let (a, b) = spec.matrices(message_len, rng);
@@ -410,9 +410,9 @@ mod test {
 
     #[test]
     fn print() {
-        let rng = rand::thread_rng();
+        let mut rng = rand::thread_rng();
         let spec = ExpanderCodeSpec::new(127, 0.1195, 0.0284, 1.420, 31, 5);
-        let brakedown_code = ExpanderCode::new(spec, 300, rng);
+        let brakedown_code = ExpanderCode::new(spec, 300, &mut rng);
 
         // input your message here
         let mut target = vec![FF32::ONE; brakedown_code.codeword_len()];

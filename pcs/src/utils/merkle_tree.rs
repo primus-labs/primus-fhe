@@ -1,7 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 use crate::utils::hash::Hash;
+use bincode::Result;
 
 /// Root of the Merkle Tree only
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MerkleRoot<H: Hash> {
     /// The depth of the merkle tree
     pub depth: usize,
@@ -13,6 +16,16 @@ impl<H: Hash> MerkleRoot<H> {
     /// Instantiate a merkle root
     pub fn new(depth: usize, root: H::Output) -> Self {
         Self { depth, root }
+    }
+
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
     }
 }
 
@@ -43,12 +56,12 @@ impl<H: Hash> MerkleTree<H> {
     /// Instantiate a merkle tree by committing the leaves
     /// In this case, we assume all the input leafs as the hashed values.
     pub fn generate(&mut self, leaves: &[H::Output]) {
-        // resize the size from leaves size to tree size
+        // Resize the size from leaves size to tree size
         self.input_size = leaves.len();
         let depth = leaves.len().next_power_of_two().ilog2() as usize;
         let size = (1 << (depth + 1)) - 1;
-        self.tree.copy_from_slice(leaves);
-        self.tree.resize(size, H::Output::default());
+        self.tree = vec![H::Output::default(); size];
+        self.tree[..leaves.len()].copy_from_slice(leaves);
 
         // merklize the leaves
         let mut hasher = H::new();
@@ -95,7 +108,7 @@ impl<H: Hash> MerkleTree<H> {
 
     /// check whether the merkle path is consistent with the root
     #[inline]
-    pub fn check(committed_root: H::Output, leaf_idx: usize, path: &[H::Output]) -> bool {
+    pub fn check(committed_root: &H::Output, leaf_idx: usize, path: &[H::Output]) -> bool {
         let mut hasher = H::new();
 
         let leaf = path[0];
@@ -110,6 +123,6 @@ impl<H: Hash> MerkleTree<H> {
             hasher.output_reset()
         });
 
-        path_root == committed_root
+        path_root == *committed_root
     }
 }
