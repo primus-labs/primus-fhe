@@ -119,6 +119,12 @@ where
         (challenge, residual_tensor)
     }
 
+    /// Generate tensor from point.
+    fn tensor_from_point(pp: &BrakedownParams<F, C>, point: &[F]) -> Vec<F> {
+        let len = pp.num_vars() - pp.num_rows().ilog2() as usize;
+        lagrange_basis(&point[len..])
+    }
+
     /// Check the merkle paths and consistency
     fn check_query_answers(
         pp: &BrakedownParams<F, C>,
@@ -315,12 +321,12 @@ where
         point: &crate::Point<F, Self::Polynomial>,
         trans: &mut Transcript<F>,
     ) -> Self::Proof {
-        // Hash the parameters and the commitment to transcript.
-        trans.append_message(&pp.to_bytes().unwrap());
+        assert_eq!(point.len(), pp.num_vars());
+        // Hash the commitment to transcript.
         trans.append_message(&commitment.to_bytes().unwrap());
 
         // Compute the tensor from the random point, see [DP23](https://eprint.iacr.org/2023/630.pdf).
-        let (tensor, _) = Self::tensor_decompose(pp, point);
+        let tensor = Self::tensor_from_point(pp, point);
 
         let rlc_msgs = Self::answer_challenge(pp, &tensor, state);
 
@@ -348,8 +354,9 @@ where
         proof: &Self::Proof,
         trans: &mut Transcript<F>,
     ) -> bool {
-        // Hash the parameters and the commitment to transcript.
-        trans.append_message(&pp.to_bytes().unwrap());
+        assert_eq!(point.len(), pp.num_vars());
+
+        // Hash the commitment to transcript.
         trans.append_message(&commitment.to_bytes().unwrap());
 
         let (tensor, residual) = Self::tensor_decompose(pp, point);

@@ -52,6 +52,7 @@ fn pcs_test() {
     let eval = poly.evaluate(&point);
 
     let mut trans = Transcript::<FF>::new();
+
     let check = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
         &pp, &comm, &point, eval, &proof, &mut trans,
     );
