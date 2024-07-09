@@ -23,13 +23,5 @@ sha3 = "0.10.6"
 criterion = { workspace = true }
 
 [[bench]]
-name = "tensor_brakedown_bench"
-harness = false
-
-[[bench]]
-name = "raw_brakedown_bench"
-harness = false
-
-[[bench]]
 name = "brakedown_pcs"
 harness = false
