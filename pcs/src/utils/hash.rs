@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 
-/// Hash
+/// Define the Hash trait
 pub trait Hash: Debug + Clone + Default + Sized {
     /// output
     type Output: Clone
@@ -16,18 +16,18 @@ pub trait Hash: Debug + Clone + Default + Sized {
         + Serialize
         + for<'de> Deserialize<'de>;
 
-    /// new
+    /// Create a new instance.
     fn new() -> Self {
         Self::default()
     }
 
-    /// update with a hash value as input
+    /// Update with input
     fn update_hash_value(&mut self, input: &[u8]);
 
-    /// update with a string as input
+    /// Update with a string as input
     fn update_string(&mut self, input: String);
 
-    /// output a hash value and reset
+    /// Uutput a hash value and reset
     fn output_reset(&mut self) -> Self::Output;
 }
 

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::utils::hash::Hash;
 use bincode::Result;
 
-/// Root of the Merkle Tree only
+/// Root of the Merkle Tree
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MerkleRoot<H: Hash> {
     /// The depth of the merkle tree
@@ -55,6 +55,10 @@ impl<H: Hash> MerkleTree<H> {
 
     /// Instantiate a merkle tree by committing the leaves
     /// In this case, we assume all the input leafs as the hashed values.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `leaves` - The leaves used to generate the merkle tree.
     pub fn generate(&mut self, leaves: &[H::Output]) {
         // Resize the size from leaves size to tree size
         self.input_size = leaves.len();
@@ -63,17 +67,19 @@ impl<H: Hash> MerkleTree<H> {
         self.tree = vec![H::Output::default(); size];
         self.tree[..leaves.len()].copy_from_slice(leaves);
 
-        // merklize the leaves
+        // Merklize the leaves
         let mut hasher = H::new();
-        // use base to index the start of the lower layer
+
+        // Use base to index the start of the lower layer
         let mut base = 0;
         for depth in (1..=depth).rev() {
-            // view the lower layer as the input and the upper layer as its output
+            // View the lower layer as the input and the upper layer as its output
             let input_len = 1 << depth;
             let output_len = input_len >> 1;
             let (inputs, outputs) =
                 self.tree[base..base + input_len + output_len].split_at_mut(input_len);
-            // compute the output of the hash function given the input
+            
+            // Compute the output of the hash function given the input
             inputs
                 .chunks_exact(2)
                 .zip(outputs.iter_mut())
@@ -106,7 +112,7 @@ impl<H: Hash> MerkleTree<H> {
         merkle_path
     }
 
-    /// check whether the merkle path is consistent with the root
+    /// Check whether the merkle path is consistent with the root
     #[inline]
     pub fn check(committed_root: &H::Output, leaf_idx: usize, path: &[H::Output]) -> bool {
         let mut hasher = H::new();
@@ -115,7 +121,7 @@ impl<H: Hash> MerkleTree<H> {
         let path_root = path[1..].iter().enumerate().fold(leaf, |acc, (idx, hash)| {
             if (leaf_idx >> idx) & 1 == 0 {
                 hasher.update_hash_value(acc.as_ref());
-                hasher.update_hash_value(hash.as_ref()); ////?
+                hasher.update_hash_value(hash.as_ref());
             } else {
                 hasher.update_hash_value(hash.as_ref());
                 hasher.update_hash_value(acc.as_ref());

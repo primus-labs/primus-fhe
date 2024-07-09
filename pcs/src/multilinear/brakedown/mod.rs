@@ -1,21 +1,17 @@
 mod data_structure;
-/// prover of brakedown pcs
-pub mod prover;
-/// verifier of brakedown pcs
-pub mod verifier;
 
-use std::marker::PhantomData;
+pub use data_structure::{
+    BrakedownCommitmentState, BrakedownOpenProof, BrakedownParams, BrakedownPolyCommitment,
+};
 
 use algebra::{
     utils::{Block, Prg, Transcript},
     DenseMultilinearExtension, Field,
 };
-pub use data_structure::{
-    BrakedownCommitmentState, BrakedownOpenProof, BrakedownParams, BrakedownPolyCommitment,
-};
 use itertools::Itertools;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 use crate::{
     utils::{
@@ -126,7 +122,7 @@ where
         pp: &BrakedownParams<F, C>,
         challenge: &[F],
         queries: &[usize],
-        rlc_msg: &[F],
+        encoded_rlc_msg: &[F],
         merkle_paths: &[H::Output],
         columns: &[F],
         commitment: &BrakedownPolyCommitment<H>,
@@ -138,11 +134,10 @@ where
 
         // Check merkle paths.
         let merkle_check = Self::check_merkle(pp, queries, merkle_paths, columns, commitment);
-        println!("merkle check: {:?}", merkle_check);
 
         // Check consistency.
-        let consistency_check = Self::check_consistency(pp, queries, challenge, rlc_msg, columns);
-        println!("consistency check: {:?}", consistency_check);
+        let consistency_check =
+            Self::check_consistency(pp, queries, challenge, encoded_rlc_msg, columns);
 
         merkle_check & consistency_check
     }
@@ -182,7 +177,7 @@ where
         pp: &BrakedownParams<F, C>,
         queries: &[usize],
         challenge: &[F],
-        rlc_msg: &[F],
+        encoded_rlc_msg: &[F],
         columns: &[F],
     ) -> bool {
         let mut check = true;
@@ -195,7 +190,7 @@ where
                     .zip(challenge)
                     .fold(F::ZERO, |acc, (x0, x1)| acc + *x0 * x1);
 
-                check &= product == rlc_msg[*idx];
+                check &= product == encoded_rlc_msg[*idx];
             });
 
         check
@@ -338,7 +333,6 @@ where
         let (merkle_paths, opening_columns) = Self::answer_queries(pp, &queries, state);
 
         let (tensor, _) = Self::tensor_decompose(pp, point);
-        println!("prover tensor: {:?}", tensor);
 
         let partial_product = Self::answer_challenge(pp, &tensor, state);
 
@@ -387,28 +381,15 @@ where
             commitment,
         );
 
-        println!("proximity check: {:?}", check);
-
         let (tensor, residual) = Self::tensor_decompose(pp, point);
-
-        println!("verifier tensor: {:?}", tensor);
 
         // Encode partial_product
         assert_eq!(proof.partial_product.len(), pp.code().message_len());
         encoded_msg[..proof.partial_product.len()].copy_from_slice(&proof.partial_product);
         pp.code().encode(&mut encoded_msg);
 
-        check &= Self::check_query_answers(
-            pp,
-            &tensor,
-            &queries,
-            &encoded_msg,
-            &proof.merkle_paths,
-            &proof.opening_columns,
-            commitment,
-        );
-
-        println!("tensor check: {:?}", check);
+        check &=
+            Self::check_consistency(pp, &queries, &tensor, &encoded_msg, &proof.opening_columns);
 
         check &= eval == Self::residual_product(&proof.partial_product, &residual);
 
