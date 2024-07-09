@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use algebra::{
     derive::Field,
     utils::{Prg, Transcript},
@@ -76,5 +78,17 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, criterion_benchmark);
+fn configure() -> Criterion {
+    Criterion::default()
+        .warm_up_time(Duration::new(5, 0))
+        .measurement_time(Duration::new(10, 0))
+        .sample_size(10)
+}
+
+criterion_group! {
+    name = benches;
+    config = configure();
+    targets =criterion_benchmark
+}
+
 criterion_main!(benches);
