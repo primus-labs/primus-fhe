@@ -1,3 +1,5 @@
+//! Implementation of Brakedown PCS, note that it is optimized for unformly random points, as described in [DP23](https://eprint.iacr.org/2023/630.pdf)
+
 mod data_structure;
 
 pub use data_structure::{
@@ -317,11 +319,10 @@ where
         trans.append_message(&pp.to_bytes().unwrap());
         trans.append_message(&commitment.to_bytes().unwrap());
 
-        // Apply FS to get the random challenge.
-        let challenge = trans.get_vec_and_append_challenge(pp.num_rows());
+        // Compute the tensor from the random point, see [DP23](https://eprint.iacr.org/2023/630.pdf).
+        let (tensor, _) = Self::tensor_decompose(pp, point);
 
-        // Generate the random linear combination of the rows of the message.
-        let rlc_msgs = Self::answer_challenge(pp, &challenge, state);
+        let rlc_msgs = Self::answer_challenge(pp, &tensor, state);
 
         // Hash rlc to transcript.
         trans.append_elements(&rlc_msgs);
@@ -332,15 +333,10 @@ where
         // Generate the proofs for random queries.
         let (merkle_paths, opening_columns) = Self::answer_queries(pp, &queries, state);
 
-        let (tensor, _) = Self::tensor_decompose(pp, point);
-
-        let partial_product = Self::answer_challenge(pp, &tensor, state);
-
         BrakedownOpenProof {
             rlc_msgs,
-            opening_columns,
             merkle_paths,
-            partial_product,
+            opening_columns,
         }
     }
 
@@ -356,8 +352,7 @@ where
         trans.append_message(&pp.to_bytes().unwrap());
         trans.append_message(&commitment.to_bytes().unwrap());
 
-        // Apply FS to get the random challenge.
-        let challenge = trans.get_vec_and_append_challenge(pp.num_rows());
+        let (tensor, residual) = Self::tensor_decompose(pp, point);
 
         // Encode the answered random linear combination.
         assert_eq!(proof.rlc_msgs.len(), pp.code().message_len());
@@ -371,9 +366,10 @@ where
         // Sample random queries.
         let queries = Self::random_queries(pp, trans);
 
+        // Proximity check.
         let mut check = Self::check_query_answers(
             pp,
-            &challenge,
+            &tensor,
             &queries,
             &encoded_msg,
             &proof.merkle_paths,
@@ -381,17 +377,8 @@ where
             commitment,
         );
 
-        let (tensor, residual) = Self::tensor_decompose(pp, point);
-
-        // Encode partial_product
-        assert_eq!(proof.partial_product.len(), pp.code().message_len());
-        encoded_msg[..proof.partial_product.len()].copy_from_slice(&proof.partial_product);
-        pp.code().encode(&mut encoded_msg);
-
-        check &=
-            Self::check_consistency(pp, &queries, &tensor, &encoded_msg, &proof.opening_columns);
-
-        check &= eval == Self::residual_product(&proof.partial_product, &residual);
+        // Consistency check.
+        check &= eval == Self::residual_product(&proof.rlc_msgs, &residual);
 
         check
     }

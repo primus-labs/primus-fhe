@@ -128,7 +128,7 @@ impl<F: Field, C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>> Brakedo
 pub type BrakedownPolyCommitment<H> = MerkleRoot<H>;
 
 /// Opening proof of Brakedown.
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct BrakedownOpenProof<F, H: Hash> {
     /// Random linear combination of messages.
     pub rlc_msgs: Vec<F>,
@@ -138,9 +138,6 @@ pub struct BrakedownOpenProof<F, H: Hash> {
 
     /// Merkle paths.
     pub merkle_paths: Vec<H::Output>,
-
-    /// tensor times polynomial matrix
-    pub partial_product: Vec<F>,
 }
 
 impl<F: Field + Serialize + for<'de> Deserialize<'de>, H: Hash> BrakedownOpenProof<F, H> {
@@ -156,6 +153,7 @@ impl<F: Field + Serialize + for<'de> Deserialize<'de>, H: Hash> BrakedownOpenPro
 }
 
 /// Commitment state of Brakedown
+#[derive(Debug, Default)]
 pub struct BrakedownCommitmentState<F: Field, H: Hash> {
     /// The matrix that represents the polynomial.
     pub matrix: Vec<F>,

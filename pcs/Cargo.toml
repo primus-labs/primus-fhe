@@ -29,3 +29,7 @@ harness = false
 [[bench]]
 name = "raw_brakedown_bench"
 harness = false
+
+[[bench]]
+name = "brakedown_pcs"
+harness = false
