@@ -114,6 +114,4 @@
 //     assert!(true_evaluation == pcs_evaluation);
 // }
 
-fn main(){
-    
-}
+fn main() {}

@@ -11,7 +11,6 @@ pub mod utils;
 use algebra::{utils::Transcript, Field, MultilinearExtension};
 use rand::{CryptoRng, Rng};
 
-
 type Point<F, P> = <P as MultilinearExtension<F>>::Point;
 
 /// Polymomial Commitment Scheme

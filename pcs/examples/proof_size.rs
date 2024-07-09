@@ -122,4 +122,4 @@
 //         overall_proof_size_arbitrary_point
 //     );
 // }
-fn main(){}
+fn main() {}

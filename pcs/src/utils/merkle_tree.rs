@@ -55,9 +55,9 @@ impl<H: Hash> MerkleTree<H> {
 
     /// Instantiate a merkle tree by committing the leaves
     /// In this case, we assume all the input leafs as the hashed values.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `leaves` - The leaves used to generate the merkle tree.
     pub fn generate(&mut self, leaves: &[H::Output]) {
         // Resize the size from leaves size to tree size
@@ -78,7 +78,7 @@ impl<H: Hash> MerkleTree<H> {
             let output_len = input_len >> 1;
             let (inputs, outputs) =
                 self.tree[base..base + input_len + output_len].split_at_mut(input_len);
-            
+
             // Compute the output of the hash function given the input
             inputs
                 .chunks_exact(2)
