@@ -23,7 +23,10 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `polynomial` - inputs in normal order, outputs in bit-reversed order
-    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F>;
+    #[inline]
+    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
+        self.transform_inplace(polynomial.clone())
+    }
 
     /// Perform a fast number theory transform in place.
     ///
@@ -32,7 +35,11 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `polynomial` - inputs in normal order, outputs in bit-reversed order
-    fn transform_inplace(&self, polynomial: Polynomial<F>) -> NTTPolynomial<F>;
+    #[inline]
+    fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
+        self.transform_slice(polynomial.as_mut_slice());
+        NTTPolynomial::<F>::new(polynomial.data())
+    }
 
     /// Perform a fast inverse number theory transform.
     ///
@@ -41,7 +48,10 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `ntt_polynomial` - inputs in bit-reversed order, outputs in normal order
-    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F>;
+    #[inline]
+    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_inplace(ntt_polynomial.clone())
+    }
 
     /// Perform a fast inverse number theory transform in place.
     ///
@@ -50,7 +60,11 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `ntt_polynomial` - inputs in bit-reversed order, outputs in normal order
-    fn inverse_transform_inplace(&self, ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F>;
+    #[inline]
+    fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
+        Polynomial::<F>::new(ntt_polynomial.data())
+    }
 
     /// Perform a fast number theory transform in place.
     ///

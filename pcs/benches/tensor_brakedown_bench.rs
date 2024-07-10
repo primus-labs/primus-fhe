@@ -85,7 +85,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("brakedown pcs");
 
     group.bench_function(
-        &format!("prover overall time of poly of num_vars {}", num_vars),
+        format!("prover overall time of poly of num_vars {}", num_vars),
         |b| {
             b.iter(|| {
                 prover.commit_poly(&poly);
@@ -96,7 +96,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     group.bench_function(
-        &format!("prover commit time of poly of num_vars {}", num_vars),
+        format!("prover commit time of poly of num_vars {}", num_vars),
         |b| {
             b.iter(|| {
                 prover.commit_poly(&poly);
@@ -105,7 +105,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     group.bench_function(
-        &format!("prover answer tensor time of poly of num_vars {}", num_vars),
+        format!("prover answer tensor time of poly of num_vars {}", num_vars),
         |b| {
             b.iter(|| {
                 prover.answer_tensor(&tensor);
@@ -114,7 +114,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     group.bench_function(
-        &format!(
+        format!(
             "prover answer queries time of poly of num_vars {}",
             num_vars
         ),
@@ -147,7 +147,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let (merkle_paths, columns) = prover.answer_queries(&queries);
 
     group.bench_function(
-        &format!("verify overall time of poly of num_vars {}", num_vars),
+        format!("verify overall time of poly of num_vars {}", num_vars),
         |b| {
             b.iter(|| {
                 verifier.receive_root(&root);
@@ -160,7 +160,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     group.bench_function(
-        &format!(
+        format!(
             "verify random challenge time of poly of num_vars {}",
             num_vars
         ),
@@ -172,7 +172,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     group.bench_function(
-        &format!(
+        format!(
             "verify receive answer time of poly of num_vars {}",
             num_vars
         ),
@@ -184,7 +184,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     group.bench_function(
-        &format!(
+        format!(
             "verify random queries time of poly of num_vars {}",
             num_vars
         ),
@@ -196,7 +196,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
 
     group.bench_function(
-        &format!("verify check answer time of poly of num_vars {}", num_vars),
+        format!("verify check answer time of poly of num_vars {}", num_vars),
         |b| {
             b.iter(|| {
                 verifier.check_answer(&merkle_paths, &columns);

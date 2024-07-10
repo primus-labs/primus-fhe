@@ -71,8 +71,8 @@ pub struct DecomposedBits<F: Field> {
 /// Stores the parameters used for bit decomposation.
 ///
 /// * It is required to decompose over a power-of-2 base.
+///
 /// These parameters are used as the verifier key.
-#[derive(Clone)]
 pub struct DecomposedBitsInfo<F: Field> {
     /// base
     pub base: F,

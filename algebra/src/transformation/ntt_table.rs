@@ -1,6 +1,6 @@
 use crate::modulus::ShoupFactor;
 use crate::utils::ReverseLsbs;
-use crate::{Field, NTTField, NTTPolynomial, Polynomial, Widening, WrappingOps};
+use crate::{Field, NTTField, Widening, WrappingOps};
 
 use super::{AbstractNTT, MonomialNTT};
 
@@ -267,28 +267,6 @@ impl<F> AbstractNTT<F> for NTTTable<F>
 where
     F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
-    #[inline]
-    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_inplace(polynomial.clone())
-    }
-
-    #[inline]
-    fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_slice(polynomial.as_mut_slice());
-        NTTPolynomial::<F>::new(polynomial.data())
-    }
-
-    #[inline]
-    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_inplace(ntt_polynomial.clone())
-    }
-
-    #[inline]
-    fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
-        Polynomial::<F>::new(ntt_polynomial.data())
-    }
-
     fn transform_slice(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 

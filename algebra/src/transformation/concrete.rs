@@ -8,7 +8,7 @@ mod impl_ntt_prime32 {
 
     use crate::{
         transformation::{AbstractNTT, MonomialNTT},
-        Field, NTTField, NTTPolynomial, Polynomial,
+        Field, NTTField,
     };
 
     impl<F> AbstractNTT<F> for Plan
@@ -16,35 +16,13 @@ mod impl_ntt_prime32 {
         F: NTTField + Field<Value = u32>,
     {
         #[inline]
-        fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
-            self.transform_inplace(polynomial.clone())
-        }
-
-        #[inline]
-        fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
-            self.transform_slice(polynomial.as_mut_slice());
-            NTTPolynomial::<F>::new(polynomial.data())
-        }
-
-        #[inline]
-        fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
-            self.inverse_transform_inplace(ntt_polynomial.clone())
-        }
-
-        #[inline]
-        fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
-            self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
-            Polynomial::<F>::new(ntt_polynomial.data())
-        }
-
-        #[inline]
         fn transform_slice(&self, polynomial_slice: &mut [F]) {
-            self.fwd(unsafe { transmute(polynomial_slice) });
+            self.fwd(unsafe { transmute::<&mut [F], &mut [u32]>(polynomial_slice) });
         }
 
         #[inline]
         fn inverse_transform_slice(&self, ntt_polynomial_slice: &mut [F]) {
-            self.inv(unsafe { transmute(ntt_polynomial_slice) })
+            self.inv(unsafe { transmute::<&mut [F], &mut [u32]>(ntt_polynomial_slice) })
         }
     }
 
@@ -102,7 +80,7 @@ mod impl_ntt_prime64 {
 
     use crate::{
         transformation::{AbstractNTT, MonomialNTT},
-        Field, NTTField, NTTPolynomial, Polynomial,
+        Field, NTTField,
     };
 
     impl<F> AbstractNTT<F> for Plan
@@ -110,35 +88,13 @@ mod impl_ntt_prime64 {
         F: NTTField + Field<Value = u64>,
     {
         #[inline]
-        fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
-            self.transform_inplace(polynomial.clone())
-        }
-
-        #[inline]
-        fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
-            self.transform_slice(polynomial.as_mut_slice());
-            NTTPolynomial::<F>::new(polynomial.data())
-        }
-
-        #[inline]
-        fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
-            self.inverse_transform_inplace(ntt_polynomial.clone())
-        }
-
-        #[inline]
-        fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
-            self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
-            Polynomial::<F>::new(ntt_polynomial.data())
-        }
-
-        #[inline]
         fn transform_slice(&self, polynomial_slice: &mut [F]) {
-            self.fwd(unsafe { transmute(polynomial_slice) });
+            self.fwd(unsafe { transmute::<&mut [F], &mut [u64]>(polynomial_slice) });
         }
 
         #[inline]
         fn inverse_transform_slice(&self, ntt_polynomial_slice: &mut [F]) {
-            self.inv(unsafe { transmute(ntt_polynomial_slice) })
+            self.inv(unsafe { transmute::<&mut [F], &mut [u64]>(ntt_polynomial_slice) })
         }
     }
 
