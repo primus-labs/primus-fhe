@@ -17,6 +17,10 @@ serde = { workspace = true}
 [dev-dependencies]
 criterion = { workspace = true }
 
+[features]
+default = []
+nightly = ["algebra/nightly"]
+
 [[bench]]
 name = "lwe_bench"
 harness = false
