@@ -114,7 +114,7 @@ impl<F: NTTField> Evaluator<F> {
     /// * Input: ciphertext `c`, with message `true`(resp. `false`).
     /// * Output: ciphertext with message `false`(resp. `true`).
     ///
-    /// Link: https://eprint.iacr.org/2020/086
+    /// Link: <https://eprint.iacr.org/2020/086>
     pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();

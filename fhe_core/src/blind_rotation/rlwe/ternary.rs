@@ -15,7 +15,7 @@ pub struct TernaryBlindRotationKey<F: NTTField> {
 }
 
 impl<F: NTTField> TernaryBlindRotationKey<F> {
-    /// Creates a new [`TernaryBootstrappingKey<F>`].
+    /// Creates a new [`TernaryBlindRotationKey<F>`].
     #[inline]
     pub fn new(key: Vec<(NTTRGSW<F>, NTTRGSW<F>)>) -> Self {
         Self { key }
@@ -80,7 +80,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
             })
     }
 
-    /// Generates the [`TernaryBootstrappingKey<F>`].
+    /// Generates the [`TernaryBlindRotationKey<F>`].
     pub(crate) fn generate<Rng>(
         blind_rotation_basis: Basis<F>,
         lwe_secret_key: &[LWEModulusType],

@@ -5,7 +5,7 @@ use num_traits::PrimInt;
 #[derive(Debug, Clone, Copy)]
 pub struct Basis<T: PrimInt + Bits> {
     basis: T,
-    /// The length of the vector of the decomposed [`T`] based on the basis.
+    /// The length of the vector of the decomposed `T` based on the basis.
     decompose_len: usize,
     /// A value of the `bits` 1, used for some bit-operation.
     mask: T,
