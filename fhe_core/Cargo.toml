@@ -12,3 +12,4 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 rand_chacha = "0.3.1"
 once_cell = { workspace = true }
+serde = {workspace = true}

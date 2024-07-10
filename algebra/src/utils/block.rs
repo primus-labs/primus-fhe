@@ -38,7 +38,12 @@ unsafe impl Zeroable for Block {}
 
 impl Block {
     /// The constant block with value `0`.
-    pub const ZERO: Block = Block(unsafe { std::mem::transmute(0u128) });
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    pub const ZERO: Block = Block(unsafe { std::mem::transmute::<u128, __m128i>(0u128) });
+
+    /// The constant block with value `0`.
+    #[cfg(target_arch = "aarch64")]
+    pub const ZERO: Block = Block(unsafe { std::mem::transmute::<u128, uint8x16_t>(0u128) });
 
     #[inline(always)]
     /// New a Block with a byte slice with length 16.

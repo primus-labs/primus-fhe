@@ -29,4 +29,8 @@ pub enum FHECoreError {
         /// Polynomial modulus dimension of ring.
         ring_dimension: usize,
     },
+    /// Error that occurs when the given steps after blind rotation
+    /// is not compatible with other parameters.
+    #[error("Steps after blind rotation is not compatible with other parameters!")]
+    StepsParametersNotCompatible,
 }

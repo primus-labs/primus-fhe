@@ -4,7 +4,7 @@ use syn::{DeriveInput, Result, Type};
 
 use crate::{
     ast::Input,
-    basic::{basic, display, impl_one, impl_zero},
+    basic::{basic, display, impl_deser, impl_one, impl_ser, impl_zero},
     ops::*,
 };
 
@@ -22,6 +22,10 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
     let modulus = modulus_value.into_token_stream();
 
     let field_ty = input.field.ty;
+
+    let impl_ser = impl_ser(name, field_ty);
+
+    let impl_deser = impl_deser(name, field_ty);
 
     let impl_basic = basic(name, &modulus);
 
@@ -51,6 +55,10 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
     let impl_field = impl_field(name, field_ty, &modulus);
 
     Ok(quote! {
+        #impl_ser
+
+        #impl_deser
+
         #impl_basic
 
         #impl_zero
