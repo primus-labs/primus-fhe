@@ -4,8 +4,10 @@
 //! Using this module, you can speed up multiplication
 //! of polynomials, large integers, and so on.
 
+mod concrete;
 mod ntt_table;
 
+pub use concrete::{prime32, prime64};
 #[cfg(feature = "count_ntt")]
 pub use ntt_table::count;
 pub use ntt_table::NTTTable;
