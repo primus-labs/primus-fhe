@@ -157,7 +157,7 @@ fn test_random_zq_to_rq() {
     let mut r = Vec::new();
     let mut s = Vec::new();
     let mut c = Vec::new();
-    let mut c_sp = Vec::new();
+    let mut c_dense_matrix = Vec::new();
 
     a_over_fq.iter().for_each(|x| {
         let mut x = FF::new(x.get());
@@ -171,9 +171,9 @@ fn test_random_zq_to_rq() {
                 c_num_vars as usize,
                 vec![((x - q).get() as usize, -FF::ONE)],
             )));
-            let mut cc = vec![FF::ZERO; q.get() as usize];
-            cc[(x - q).get() as usize] = -FF::ONE;
-            c_sp.extend(cc);
+            let mut c_dense_row = vec![FF::ZERO; q.get() as usize];
+            c_dense_row[(x - q).get() as usize] = -FF::ONE;
+            c_dense_matrix.extend(c_dense_row);
         } else {
             k.push(FF::ZERO);
             r.push(x);
@@ -182,9 +182,9 @@ fn test_random_zq_to_rq() {
                 c_num_vars as usize,
                 vec![(x.get() as usize, FF::ONE)],
             )));
-            let mut cc = vec![FF::ZERO; q.get() as usize];
-            cc[x.get() as usize] = FF::ONE;
-            c_sp.extend(cc);
+            let mut c_dense_row = vec![FF::ZERO; q.get() as usize];
+            c_dense_row[x.get() as usize] = FF::ONE;
+            c_dense_matrix.extend(c_dense_row);
         }
     });
 
@@ -198,7 +198,7 @@ fn test_random_zq_to_rq() {
         Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, s));
     let c_dense = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars + c_num_vars as usize,
-        c_sp,
+        c_dense_matrix,
     ));
 
     let r_bits: Vec<_> = vec![r.get_decomposed_mles(base_len, bits_len)];
@@ -223,6 +223,173 @@ fn test_random_zq_to_rq() {
         q.get() as usize,
         a,
         &c_dense,
+        k.as_ref(),
+        vec![r].as_ref(),
+        s.as_ref(),
+        &r_bits,
+        &u,
+        &info
+    ));
+}
+
+#[test]
+fn test_trivial_zq_to_rq_without_oracle() {
+    let mut rng = thread_rng();
+    let sampler = <FieldUniformSampler<FF>>::new();
+    let p = 132120577;
+    let q = 8;
+    let c_num_vars = 3;
+    let base_len: u32 = 1;
+    let base: FF = FF::new(2);
+    let num_vars = 2;
+    let bits_len: u32 = 3;
+
+    let a = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        field_vec!(FF; 0, 3, 5, 7),
+    ));
+
+    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        field_vec!(FF; 0, 0, 1, 1),
+    ));
+
+    let r = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        field_vec!(FF; 0, 6, 2, 6),
+    ));
+
+    let s = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        field_vec!(FF; 1, 7, p-3, p-7),
+    ));
+
+    let c_sparse = vec![
+        Rc::new(SparsePolynomial::from_evaluations_vec(
+            c_num_vars,
+            vec![(0, FF::ONE)],
+        )),
+        Rc::new(SparsePolynomial::from_evaluations_vec(
+            c_num_vars,
+            vec![(6, FF::ONE)],
+        )),
+        Rc::new(SparsePolynomial::from_evaluations_vec(
+            c_num_vars,
+            vec![(2, -FF::ONE)],
+        )),
+        Rc::new(SparsePolynomial::from_evaluations_vec(
+            c_num_vars,
+            vec![(6, -FF::ONE)],
+        )),
+    ];
+
+    let r_bits = vec![r.get_decomposed_mles(base_len, bits_len)];
+    let instance = TransformZqtoRQInstance::from_vec(
+        q,
+        q,
+        c_sparse.clone(),
+        a.clone(),
+        &k,
+        &r,
+        &s,
+        base,
+        base_len,
+        bits_len,
+    );
+    let info = instance.info();
+    let u: Vec<_> = (0..num_vars).map(|_| sampler.sample(&mut rng)).collect();
+    let proof = TransformZqtoRQ::prove(&instance, &u);
+    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, 3);
+
+    assert!(subclaim.verify_subclaim_without_oracle(
+        q,
+        a,
+        &c_sparse,
+        k.as_ref(),
+        vec![r].as_ref(),
+        s.as_ref(),
+        &r_bits,
+        &u,
+        &info
+    ));
+}
+
+#[test]
+fn test_random_zq_to_rq_without_oracle() {
+    let mut rng = thread_rng();
+    let uniform_fq = <FieldUniformSampler<Fq>>::new();
+    let uniform_fp = <FieldUniformSampler<FF>>::new();
+    let num_vars = 10;
+    let q = FF::new(Fq::MODULUS_VALUE);
+    let c_num_vars = q.get().ilog2();
+    let base_len: u32 = 3;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
+
+    // generate a random instance
+    let a_over_fq: Vec<_> = (0..(1 << num_vars))
+        .map(|_| uniform_fq.sample(&mut rng))
+        .collect();
+    let mut a = Vec::new();
+    let mut k = Vec::new();
+    let mut r = Vec::new();
+    let mut s = Vec::new();
+    let mut c_sparse = Vec::new();
+
+    a_over_fq.iter().for_each(|x| {
+        let mut x = FF::new(x.get());
+        a.push(x);
+        x = FF::new(2) * x;
+        if x >= q {
+            k.push(FF::ONE);
+            r.push(x - q);
+            s.push(-(x - q + FF::ONE));
+            c_sparse.push(Rc::new(SparsePolynomial::from_evaluations_vec(
+                c_num_vars as usize,
+                vec![((x - q).get() as usize, -FF::ONE)],
+            )));
+        } else {
+            k.push(FF::ZERO);
+            r.push(x);
+            s.push(x + FF::ONE);
+            c_sparse.push(Rc::new(SparsePolynomial::from_evaluations_vec(
+                c_num_vars as usize,
+                vec![(x.get() as usize, FF::ONE)],
+            )));
+        }
+    });
+
+    let a: Rc<DenseMultilinearExtension<FF>> =
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, a));
+    let k: Rc<DenseMultilinearExtension<FF>> =
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, k));
+    let r: Rc<DenseMultilinearExtension<FF>> =
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, r));
+    let s: Rc<DenseMultilinearExtension<FF>> =
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, s));
+
+    let r_bits: Vec<_> = vec![r.get_decomposed_mles(base_len, bits_len)];
+    let instance = TransformZqtoRQInstance::<FF>::from_vec(
+        q.get() as usize,
+        q.get() as usize,
+        c_sparse.clone(),
+        a.clone(),
+        &k,
+        &r,
+        &s,
+        base,
+        base_len,
+        bits_len,
+    );
+    let info = instance.info();
+    let u: Vec<_> = (0..num_vars).map(|_| uniform_fp.sample(&mut rng)).collect();
+    let proof = TransformZqtoRQ::prove(&instance, &u);
+    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, c_num_vars as usize);
+
+    assert!(subclaim.verify_subclaim_without_oracle(
+        q.get() as usize,
+        a,
+        &c_sparse,
         k.as_ref(),
         vec![r].as_ref(),
         s.as_ref(),

@@ -441,4 +441,81 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
 
         (F::ONE + F::ONE) * (n / q) * a.evaluate(u) == n * k.evaluate(u) + r[0].evaluate(u)
     }
+
+    /// verify the sumcliam
+    /// * a stores the input and c stores the output of transformation from Zq to RQ
+    /// * k, r, s stores the introduced witness
+    /// * r_bits stores the decomposed bits for r
+    /// * u is the common random challenge from the verifier, used to instantiate the sumcheck.
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    pub fn verify_subclaim_without_oracle(
+        &self,
+        q: usize,
+        a: Rc<DenseMultilinearExtension<F>>,
+        c_sparse: &[Rc<SparsePolynomial<F>>],
+        k: &DenseMultilinearExtension<F>,
+        r: &[Rc<DenseMultilinearExtension<F>>],
+        s: &DenseMultilinearExtension<F>,
+        r_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        u: &[F],
+        info: &TransformZqtoRQInstanceInfo<F>,
+    ) -> bool {
+        assert_eq!(r_bits.len(), 1);
+        assert_eq!(r.len(), 1);
+
+        // check 1: subclaim for rangecheck, r \in [Zq]
+        if !self
+            .rangecheck_subclaim
+            .verify_subclaim(r, r_bits, u, &info.decomposed_bits_info)
+        {
+            return false;
+        }
+
+        // check 2: subclaim for sumcheck, i.e. eq(u, point) * k(point) * (1 - k(point)) = 0
+        let eval_k = k.evaluate(&self.sumcheck_points[0]);
+        if eval_identity_function(u, &self.sumcheck_points[0]) * eval_k * (F::ONE - eval_k)
+            != self.sumcheck_expected_evaluations[0]
+        {
+            return false;
+        }
+
+        // check 3: subclaim for sumcheck, i.e. eq(u, point) * ((r(point) + 1) * (1 - 2 * k(point)) - s(point)) = 0
+        if eval_identity_function(u, &self.sumcheck_points[1])
+            * ((r[0].evaluate(&self.sumcheck_points[1]) + F::ONE)
+                * (F::ONE - (F::ONE + F::ONE) * k.evaluate(&self.sumcheck_points[1]))
+                - s.evaluate(&self.sumcheck_points[1]))
+            != self.sumcheck_expected_evaluations[1]
+        {
+            return false;
+        }
+
+        // check 4: subclaim for sumcheck, i.e. c(u, point) * t(point) = s(u)
+        let eq_u = gen_identity_evaluations(u);
+        let eq_v = gen_identity_evaluations(&self.sumcheck_points[2]);
+        let mut eval_c_u = F::ZERO;
+        c_sparse.iter().enumerate().for_each(|(x_idx, c)| {
+            assert_eq!(c.evaluations.len(), 1);
+            let (y_idx, c_val) = c.evaluations[0];
+            eval_c_u += eq_u[x_idx] * eq_v[y_idx] * c_val;
+        });
+
+        let t_evaluations = (1..=info.n)
+            .map(|i| F::new(F::Value::as_from(i as u32)))
+            .collect();
+        let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            info.n.ilog(2) as usize,
+            t_evaluations,
+        ));
+        if eval_c_u * t.evaluate(&self.sumcheck_points[2]) != self.sumcheck_expected_evaluations[2]
+        {
+            return false;
+        }
+
+        // check 5: (2n/q) * a(u) = k(u) * n + r(u)
+        let n = F::new(F::Value::as_from(info.n as u32));
+        let q = F::new(F::Value::as_from(q as u32));
+
+        (F::ONE + F::ONE) * (n / q) * a.evaluate(u) == n * k.evaluate(u) + r[0].evaluate(u)
+    }
 }
