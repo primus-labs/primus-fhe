@@ -15,7 +15,7 @@ type FF = Fp32; // field type
 type PolyFF = Polynomial<FF>;
 type NTTPolyFF = NTTPolynomial<FF>;
 
-const LOG_N: usize = 3;
+const LOG_N: usize = 5;
 const N: usize = 1 << LOG_N; // length
 const BITS: u32 = 3;
 const B: usize = 1 << BITS; // base
