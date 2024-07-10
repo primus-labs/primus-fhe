@@ -18,10 +18,11 @@ rand_core = { workspace = true }
 merlin = { workspace = true }
 serde = { workspace = true }
 bincode = { workspace = true }
-concrete-ntt = "0.1.2"
+concrete-ntt = { version = "0.1.2" }
 
 [features]
 default = []
+nightly = ["concrete-ntt/nightly"]
 count_ntt = []
 
 [dev-dependencies]
