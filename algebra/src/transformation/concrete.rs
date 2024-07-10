@@ -22,7 +22,9 @@ mod impl_ntt_prime32 {
 
         #[inline]
         fn inverse_transform_slice(&self, ntt_polynomial_slice: &mut [F]) {
-            self.inv(unsafe { transmute::<&mut [F], &mut [u32]>(ntt_polynomial_slice) })
+            let values = unsafe { transmute::<&mut [F], &mut [u32]>(ntt_polynomial_slice) };
+            self.inv(values);
+            self.normalize(values);
         }
     }
 
