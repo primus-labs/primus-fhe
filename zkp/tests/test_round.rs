@@ -32,7 +32,7 @@ fn decode(c: FF) -> u32 {
 
 #[test]
 fn test_round() {
-    assert_eq!(decode(FF::new(1)), 0);
+    assert_eq!(decode(FF::new(0)), 0);
     assert_eq!(decode(FF::new(FP / 4)), 0);
     assert_eq!(decode(FF::new(FP / 4 + 1)), 1);
     assert_eq!(decode(FF::new(FP / 2)), 1);
@@ -52,7 +52,7 @@ fn test_round_naive_iop() {
 
     let input = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars,
-        field_vec!(FF; 1, FP/4, FP/4 + 1, FP/2 + 1),
+        field_vec!(FF; 0, FP/4, FP/4 + 1, FP/2 + 1),
     ));
     let output = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars,

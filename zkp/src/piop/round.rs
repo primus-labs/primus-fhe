@@ -21,6 +21,7 @@ use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::Proof;
 use crate::utils::eval_identity_function;
 use crate::utils::gen_identity_evaluations;
+use itertools::izip;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::vec;
@@ -51,7 +52,7 @@ pub struct RoundIOPProof<F: Field> {
 /// Round Instance used as prover keys
 pub struct RoundInstance<F: Field> {
     /// number of variables
-    pub num_vars: u32,
+    pub num_vars: usize,
     /// k = Q - 1 / q where q is the modulus of the output
     pub k: F,
     /// delta = 2^{k_bit_len} - k
@@ -103,7 +104,6 @@ impl<F: Field> RoundInstance<F> {
     #[inline]
     pub fn info(&self) -> RoundInstanceInfo<F> {
         RoundInstanceInfo {
-            // q: self.q,
             k: self.k,
             delta: self.delta,
             output_bits_info: self.output_bits.info(),
@@ -114,7 +114,6 @@ impl<F: Field> RoundInstance<F> {
     /// Compute the witness required in proof and construct the instance
     #[inline]
     pub fn new(
-        // q: F,
         k: F,
         delta: F,
         input: Rc<DenseMultilinearExtension<F>>,
@@ -132,13 +131,29 @@ impl<F: Field> RoundInstance<F> {
         let mut output_bits = DecomposedBits::from_info(output_bits_info);
         output_bits.add_value_instance(&output);
 
-        // c = a - b * k
-        let offset = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        // set w = 1 iff a = 0 & b = 0
+        let option = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
             input
                 .iter()
                 .zip(output.iter())
-                .map(|(a, b)| *a - *b * k)
+                .map(|(a, b)| match (a.is_zero(), b.is_zero()) {
+                    (true, true) => F::ONE,
+                    _ => F::ZERO,
+                })
+                .collect(),
+        ));
+
+        // Note that we must set c \in [1, k] when w = 1 to ensure that c(x) \in [1, k] for all x \in {0,1}^logn
+        // if w = 0: c = a - b * k
+        // if w = 1: c = 1 defaultly
+        let offset = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            izip!(option.iter(), input.iter(), output.iter())
+                .map(|(w, a, b)| match w.is_zero() {
+                    true => *a - *b * k,
+                    false => F::ONE,
+                })
                 .collect(),
         ));
 
@@ -158,21 +173,8 @@ impl<F: Field> RoundInstance<F> {
         // decompose c - 1 + delta
         offset_aux_bits.add_value_instance(&c_minus_one_delta);
 
-        // w = 1 iff a = 0 & b = 0
-        let option = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            input
-                .iter()
-                .zip(output.iter())
-                .map(|(a, b)| match (a.is_zero(), b.is_zero()) {
-                    (true, true) => F::ONE,
-                    _ => F::ZERO,
-                })
-                .collect(),
-        ));
-
         Self {
-            num_vars: num_vars as u32,
+            num_vars,
             k,
             delta,
             input,
@@ -272,7 +274,7 @@ impl<F: Field> RoundIOP<F> {
     ) -> RoundIOPProof<F> {
         let uniform = <FieldUniformSampler<F>>::new();
 
-        let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars as usize);
+        let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars);
         let identity_func_at_u = Rc::new(gen_identity_evaluations(u));
 
         // randomly combine two sumcheck protocols
@@ -280,7 +282,7 @@ impl<F: Field> RoundIOP<F> {
         let r_1 = uniform.sample(fs_rng);
         let r_2 = uniform.sample(fs_rng);
 
-        // sumcheck for \sum_{x} eq(u, x) * w(x) * (1-w(x)) = 0, i.e. w(x)\in\{0,1\}^l
+        // sumcheck1 for \sum_{x} eq(u, x) * w(x) * (1-w(x)) = 0, i.e. w(x)\in\{0,1\}^l with random coefficient r_1
         poly.add_product_with_linear_op(
             [
                 Rc::clone(&identity_func_at_u),
@@ -291,7 +293,11 @@ impl<F: Field> RoundIOP<F> {
             r_1,
         );
 
-        // sumcheck
+        // sumcheck2 for \sum_{x} eq(u, x) * [w(x) * (a(x) * \lambda_1 + b(x) * \lambda_2)+(1 - w(x)) * (a(x) - b(x) * k - c(x))]=0
+        // with random coefficient r_2 where \lambda_1 and \lambda_2 are chosen by the verifier
+
+        // The following steps add five products composing the function in the above sumcheck protocol
+        // product: eq(u, x) * w(x) * (a(x) * \lambda_1)
         poly.add_product_with_linear_op(
             [
                 Rc::clone(&identity_func_at_u),
@@ -301,7 +307,7 @@ impl<F: Field> RoundIOP<F> {
             &[(F::ONE, F::ZERO), (F::ONE, F::ZERO), (lambda_1, F::ZERO)],
             r_2,
         );
-
+        // product: eq(u, x) * w(x) * (b(x) * \lambda_2)
         poly.add_product_with_linear_op(
             [
                 Rc::clone(&identity_func_at_u),
@@ -311,34 +317,34 @@ impl<F: Field> RoundIOP<F> {
             &[(F::ONE, F::ZERO), (F::ONE, F::ZERO), (lambda_2, F::ZERO)],
             r_2,
         );
-
+        // product: eq(u, x) * (1 - w(x)) * a(x)
         poly.add_product_with_linear_op(
             [
                 Rc::clone(&identity_func_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.input),
             ],
-            &[(-F::ONE, F::ONE), (F::ONE, F::ZERO), (F::ONE, F::ZERO)],
+            &[(F::ONE, F::ZERO), (-F::ONE, F::ONE), (F::ONE, F::ZERO)],
             r_2,
         );
-
+        // product: eq(u, x) * (1 - w(x)) * (-k * b(x))
         poly.add_product_with_linear_op(
             [
                 Rc::clone(&identity_func_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.output),
             ],
-            &[(-F::ONE, F::ONE), (F::ONE, F::ZERO), (-instance.k, F::ZERO)],
+            &[(F::ONE, F::ZERO), (-F::ONE, F::ONE), (-instance.k, F::ZERO)],
             r_2,
         );
-
+        // product: eq(u, x) * (1 - w(x)) * (-c(x))
         poly.add_product_with_linear_op(
             [
                 Rc::clone(&identity_func_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.offset),
             ],
-            &[(-F::ONE, F::ONE), (F::ONE, F::ZERO), (-F::ONE, F::ZERO)],
+            &[(F::ONE, F::ZERO), (-F::ONE, F::ONE), (-F::ONE, F::ZERO)],
             r_2,
         );
 
