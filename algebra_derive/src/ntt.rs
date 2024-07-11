@@ -16,6 +16,8 @@ fn impl_ntt(input: Input) -> TokenStream {
 
     let modulus_value = input.attrs.modulus_value;
     let modulus = modulus_value.into_token_stream();
+
+    #[cfg(feature = "concrete-ntt")]
     let table = match modulus_value {
         ModulusValue::U32(_) => quote! {::algebra::transformation::prime32::ConcreteTable<Self>},
         ModulusValue::U64(_) => quote! {::algebra::transformation::prime64::ConcreteTable<Self>},
@@ -23,13 +25,18 @@ fn impl_ntt(input: Input) -> TokenStream {
             quote! {::algebra::transformation::NTTTable<Self>}
         }
     };
+    #[cfg(not(feature = "concrete-ntt"))]
+    let table = quote! {::algebra::transformation::NTTTable<Self>};
 
+    #[cfg(feature = "concrete-ntt")]
     let root = match modulus_value {
         ModulusValue::U32(_) | ModulusValue::U64(_) => quote! {Self},
         ModulusValue::U8(_) | ModulusValue::U16(_) => {
             quote! {::algebra::modulus::ShoupFactor<<Self as ::algebra::Field>::Value>}
         }
     };
+    #[cfg(not(feature = "concrete-ntt"))]
+    let root = quote! {::algebra::modulus::ShoupFactor<<Self as ::algebra::Field>::Value>};
 
     let ntt_table = format_ident!("NTT_TABLE{}", name.to_string().to_uppercase());
     let ntt_mutex = format_ident!("NTT_MUTEX{}", name.to_string().to_uppercase());
@@ -188,7 +195,9 @@ fn impl_ntt(input: Input) -> TokenStream {
     }
 }
 
+#[allow(unused_variables)]
 fn impl_from_root(modulus_value: ModulusValue) -> TokenStream {
+    #[cfg(feature = "concrete-ntt")]
     match modulus_value {
         ModulusValue::U32(_) | ModulusValue::U64(_) => {
             quote! {
@@ -207,9 +216,19 @@ fn impl_from_root(modulus_value: ModulusValue) -> TokenStream {
             }
         }
     }
+
+    #[cfg(not(feature = "concrete-ntt"))]
+    quote! {
+        #[inline]
+        fn from_root(root: Self::Root) -> Self {
+            Self(root.value())
+        }
+    }
 }
 
+#[allow(unused_variables)]
 fn impl_to_root(modulus_value: ModulusValue, modulus: &TokenStream) -> TokenStream {
+    #[cfg(feature = "concrete-ntt")]
     match modulus_value {
         ModulusValue::U32(_) | ModulusValue::U64(_) => {
             quote! {
@@ -228,9 +247,19 @@ fn impl_to_root(modulus_value: ModulusValue, modulus: &TokenStream) -> TokenStre
             }
         }
     }
+
+    #[cfg(not(feature = "concrete-ntt"))]
+    quote! {
+        #[inline]
+        fn to_root(self) -> Self::Root {
+            Self::Root::new(self.0, #modulus)
+        }
+    }
 }
 
+#[allow(unused_variables)]
 fn impl_mul_root(modulus_value: ModulusValue, modulus: &TokenStream) -> TokenStream {
+    #[cfg(feature = "concrete-ntt")]
     match modulus_value {
         ModulusValue::U32(_) | ModulusValue::U64(_) => {
             quote! {
@@ -250,9 +279,20 @@ fn impl_mul_root(modulus_value: ModulusValue, modulus: &TokenStream) -> TokenStr
             }
         }
     }
+
+    #[cfg(not(feature = "concrete-ntt"))]
+    quote! {
+        #[inline]
+        fn mul_root(self, root: Self::Root) -> Self {
+            use ::algebra::reduce::MulReduce;
+            Self(self.0.mul_reduce(root, #modulus))
+        }
+    }
 }
 
+#[allow(unused_variables)]
 fn impl_mul_root_assign(modulus_value: ModulusValue, modulus: &TokenStream) -> TokenStream {
+    #[cfg(feature = "concrete-ntt")]
     match modulus_value {
         ModulusValue::U32(_) | ModulusValue::U64(_) => {
             quote! {
@@ -272,9 +312,20 @@ fn impl_mul_root_assign(modulus_value: ModulusValue, modulus: &TokenStream) -> T
             }
         }
     }
+
+    #[cfg(not(feature = "concrete-ntt"))]
+    quote! {
+        #[inline]
+        fn mul_root_assign(&mut self, root: Self::Root) {
+            use ::algebra::reduce::MulReduceAssign;
+            self.0.mul_reduce_assign(root, #modulus);
+        }
+    }
 }
 
+#[allow(unused_variables)]
 fn impl_generate_ntt_table(modulus_value: ModulusValue, table: &TokenStream) -> TokenStream {
+    #[cfg(feature = "concrete-ntt")]
     match modulus_value {
         ModulusValue::U32(_) | ModulusValue::U64(_) => {
             quote! {
@@ -312,6 +363,35 @@ fn impl_generate_ntt_table(modulus_value: ModulusValue, table: &TokenStream) -> 
                     ))
                 }
             }
+        }
+    }
+
+    #[cfg(not(feature = "concrete-ntt"))]
+    quote! {
+        fn generate_ntt_table(log_n: u32) -> Result<Self::Table, ::algebra::AlgebraError> {
+            let n = 1usize << log_n;
+
+            let root_one = Self(1).to_root();
+
+            let root = Self::try_minimal_primitive_root((n * 2).try_into().unwrap())?;
+
+            let root_factor = root.to_root();
+            let mut power = root;
+
+            let mut ordinal_root_powers = vec![Self::Root::default(); n * 2];
+            let mut iter = ordinal_root_powers.iter_mut();
+            *iter.next().unwrap() = root_one;
+            *iter.next().unwrap() = root_factor;
+            for root_power in iter {
+                power.mul_root_assign(root_factor);
+                *root_power = power.to_root();
+            }
+
+            Ok(Self::Table::new(
+                root,
+                log_n,
+                ordinal_root_powers,
+            ))
         }
     }
 }

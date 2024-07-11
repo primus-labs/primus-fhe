@@ -16,4 +16,5 @@ serde = { workspace = true }
 
 [features]
 default = []
+concrete-ntt = ["algebra/concrete-ntt", "lattice/concrete-ntt"]
 nightly = ["algebra/nightly", "lattice/nightly"]

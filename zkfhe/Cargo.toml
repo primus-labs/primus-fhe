@@ -14,6 +14,11 @@ once_cell = { workspace = true }
 
 [features]
 default = []
+concrete-ntt = [
+    "algebra/concrete-ntt",
+    "lattice/concrete-ntt",
+    "fhe_core/concrete-ntt",
+]
 nightly = ["algebra/nightly", "lattice/nightly", "fhe_core/nightly"]
 count_ntt = ["algebra/count_ntt"]
 
