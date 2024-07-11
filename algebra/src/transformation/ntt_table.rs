@@ -267,6 +267,11 @@ impl<F> AbstractNTT<F> for NTTTable<F>
 where
     F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
+    #[inline]
+    fn root(&self) -> F {
+        self.root
+    }
+
     fn transform_slice(&self, values: &mut [F]) {
         let log_n = self.coeff_count_power();
 

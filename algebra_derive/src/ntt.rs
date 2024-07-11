@@ -17,8 +17,8 @@ fn impl_ntt(input: Input) -> TokenStream {
     let modulus_value = input.attrs.modulus_value;
     let modulus = modulus_value.into_token_stream();
     let table = match modulus_value {
-        ModulusValue::U32(_) => quote! {::algebra::transformation::prime32::Plan},
-        ModulusValue::U64(_) => quote! {::algebra::transformation::prime64::Plan},
+        ModulusValue::U32(_) => quote! {::algebra::transformation::prime32::ConcreteTable<Self>},
+        ModulusValue::U64(_) => quote! {::algebra::transformation::prime64::ConcreteTable<Self>},
         ModulusValue::U8(_) | ModulusValue::U16(_) => {
             quote! {::algebra::transformation::NTTTable<Self>}
         }
@@ -38,7 +38,7 @@ fn impl_ntt(input: Input) -> TokenStream {
     let to_root = impl_to_root(modulus_value, &modulus);
     let mul_root = impl_mul_root(modulus_value, &modulus);
     let mul_root_assign = impl_mul_root_assign(modulus_value, &modulus);
-    let generate_ntt_table = impl_generate_ntt_table(modulus_value, &modulus, &table);
+    let generate_ntt_table = impl_generate_ntt_table(modulus_value, &table);
 
     quote! {
         static mut #ntt_table: ::once_cell::sync::OnceCell<::std::collections::HashMap<u32, ::std::sync::Arc<<#name as ::algebra::NTTField>::Table>>>
@@ -274,17 +274,13 @@ fn impl_mul_root_assign(modulus_value: ModulusValue, modulus: &TokenStream) -> T
     }
 }
 
-fn impl_generate_ntt_table(
-    modulus_value: ModulusValue,
-    modulus: &TokenStream,
-    table: &TokenStream,
-) -> TokenStream {
+fn impl_generate_ntt_table(modulus_value: ModulusValue, table: &TokenStream) -> TokenStream {
     match modulus_value {
         ModulusValue::U32(_) | ModulusValue::U64(_) => {
             quote! {
                 #[inline]
                 fn generate_ntt_table(log_n: u32) -> Result<Self::Table, ::algebra::AlgebraError> {
-                    <#table>::try_new(1usize << log_n, #modulus).ok_or(::algebra::AlgebraError::NTTTableError)
+                    <#table>::new(log_n)
                 }
             }
         }

@@ -16,6 +16,9 @@ use crate::{NTTField, NTTPolynomial, Polynomial};
 
 /// An abstract layer for ntt table
 pub trait AbstractNTT<F: NTTField> {
+    /// Get the root for number theory transform.
+    fn root(&self) -> F;
+
     /// Perform a fast number theory transform.
     ///
     /// This function transforms a [`Polynomial<F>`] to a [`NTTPolynomial<F>`].

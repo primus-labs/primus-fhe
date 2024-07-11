@@ -1,36 +1,63 @@
-pub use concrete_ntt::prime32;
-pub use concrete_ntt::prime64;
-
-mod impl_ntt_prime32 {
+/// ntt for 32bits
+pub mod prime32 {
     use std::mem::transmute;
 
     use concrete_ntt::prime32::Plan;
 
     use crate::{
         transformation::{AbstractNTT, MonomialNTT},
-        Field, NTTField,
+        AlgebraError, Field, NTTField,
     };
 
-    impl<F> AbstractNTT<F> for Plan
+    /// Negacyclic NTT plan for 32bit primes.
+    pub struct ConcreteTable<F>
     where
-        F: NTTField + Field<Value = u32>,
+        F: NTTField<Table = Self> + Field<Value = u32>,
+    {
+        root: F,
+        plan: Plan,
+    }
+
+    impl<F> ConcreteTable<F>
+    where
+        F: NTTField<Table = Self> + Field<Value = u32>,
+    {
+        /// Instantiation
+        #[inline]
+        pub fn new(log_n: u32) -> Result<Self, AlgebraError> {
+            let plan =
+                Plan::try_new(1 << log_n, F::MODULUS_VALUE).ok_or(AlgebraError::NTTTableError)?;
+            let root = F::new(plan.root());
+            Ok(Self { root, plan })
+        }
+    }
+
+    impl<F> AbstractNTT<F> for ConcreteTable<F>
+    where
+        F: NTTField<Table = Self> + Field<Value = u32>,
     {
         #[inline]
+        fn root(&self) -> F {
+            self.root
+        }
+
+        #[inline]
         fn transform_slice(&self, polynomial_slice: &mut [F]) {
-            self.fwd(unsafe { transmute::<&mut [F], &mut [u32]>(polynomial_slice) });
+            self.plan
+                .fwd(unsafe { transmute::<&mut [F], &mut [u32]>(polynomial_slice) });
         }
 
         #[inline]
         fn inverse_transform_slice(&self, ntt_polynomial_slice: &mut [F]) {
             let values = unsafe { transmute::<&mut [F], &mut [u32]>(ntt_polynomial_slice) };
-            self.inv(values);
-            self.normalize(values);
+            self.plan.inv(values);
+            self.plan.normalize(values);
         }
     }
 
-    impl<F> MonomialNTT<F> for Plan
+    impl<F> MonomialNTT<F> for ConcreteTable<F>
     where
-        F: NTTField + Field<Value = u32>,
+        F: NTTField<Table = Self> + Field<Value = u32>,
     {
         #[inline]
         fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
@@ -44,15 +71,15 @@ mod impl_ntt_prime32 {
                 return;
             }
 
-            let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
-            values.fill(0);
+            values.fill(F::ZERO);
             if degree < values.len() {
-                values[degree] = coeff.get();
+                values[degree] = coeff;
             } else {
-                values[degree - values.len()] = (-coeff).get();
+                values[degree - values.len()] = -coeff;
             }
+            let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
 
-            self.fwd(values)
+            self.plan.fwd(values)
         }
 
         #[inline]
@@ -62,47 +89,79 @@ mod impl_ntt_prime32 {
                 return;
             }
 
-            let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
-            values.fill(0);
+            values.fill(F::ZERO);
             if degree < values.len() {
-                values[degree] = 1;
+                values[degree] = F::ONE;
             } else {
-                values[degree - values.len()] = self.modulus() - 1;
+                values[degree - values.len()] = F::NEG_ONE;
             }
+            let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
 
-            self.fwd(values)
+            self.plan.fwd(values)
         }
     }
 }
 
-mod impl_ntt_prime64 {
+/// ntt for 64bits
+pub mod prime64 {
     use std::mem::transmute;
 
     use concrete_ntt::prime64::Plan;
 
     use crate::{
         transformation::{AbstractNTT, MonomialNTT},
-        Field, NTTField,
+        AlgebraError, Field, NTTField,
     };
 
-    impl<F> AbstractNTT<F> for Plan
+    /// Negacyclic NTT plan for 64bit primes.
+    pub struct ConcreteTable<F>
     where
-        F: NTTField + Field<Value = u64>,
+        F: NTTField<Table = Self> + Field<Value = u64>,
+    {
+        root: F,
+        plan: Plan,
+    }
+
+    impl<F> ConcreteTable<F>
+    where
+        F: NTTField<Table = Self> + Field<Value = u64>,
+    {
+        /// Instantiation
+        #[inline]
+        pub fn new(log_n: u32) -> Result<Self, AlgebraError> {
+            let plan =
+                Plan::try_new(1 << log_n, F::MODULUS_VALUE).ok_or(AlgebraError::NTTTableError)?;
+            let root = F::new(plan.root());
+            Ok(Self { root, plan })
+        }
+    }
+
+    impl<F> AbstractNTT<F> for ConcreteTable<F>
+    where
+        F: NTTField<Table = Self> + Field<Value = u64>,
     {
         #[inline]
+        fn root(&self) -> F {
+            self.root
+        }
+
+        #[inline]
         fn transform_slice(&self, polynomial_slice: &mut [F]) {
-            self.fwd(unsafe { transmute::<&mut [F], &mut [u64]>(polynomial_slice) });
+            self.plan
+                .fwd(unsafe { transmute::<&mut [F], &mut [u64]>(polynomial_slice) });
         }
 
         #[inline]
         fn inverse_transform_slice(&self, ntt_polynomial_slice: &mut [F]) {
-            self.inv(unsafe { transmute::<&mut [F], &mut [u64]>(ntt_polynomial_slice) })
+            let values = unsafe { transmute::<&mut [F], &mut [u64]>(ntt_polynomial_slice) };
+            self.plan.inv(values);
+            self.plan.normalize(values);
         }
     }
 
-    impl<F> MonomialNTT<F> for Plan
+    impl<F> MonomialNTT<F> for ConcreteTable<F>
     where
-        F: NTTField + Field<Value = u64>,
+        F: NTTField<Table = Self> + Field<Value = u64>,
     {
         #[inline]
         fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
@@ -116,15 +175,15 @@ mod impl_ntt_prime64 {
                 return;
             }
 
-            let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
-            values.fill(0);
+            values.fill(F::ZERO);
             if degree < values.len() {
-                values[degree] = coeff.get();
+                values[degree] = coeff;
             } else {
-                values[degree - values.len()] = (-coeff).get();
+                values[degree - values.len()] = -coeff;
             }
+            let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
 
-            self.fwd(values)
+            self.plan.fwd(values)
         }
 
         #[inline]
@@ -134,15 +193,15 @@ mod impl_ntt_prime64 {
                 return;
             }
 
-            let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
-            values.fill(0);
+            values.fill(F::ZERO);
             if degree < values.len() {
-                values[degree] = 1;
+                values[degree] = F::ONE;
             } else {
-                values[degree - values.len()] = self.modulus() - 1;
+                values[degree - values.len()] = F::NEG_ONE;
             }
+            let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
 
-            self.fwd(values)
+            self.plan.fwd(values)
         }
     }
 }
