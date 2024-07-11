@@ -90,6 +90,7 @@ pub struct NTTInstance<F: Field> {
 }
 
 /// Stores the corresponding NTT table for the verifier
+#[derive(Clone)]
 pub struct NTTInstanceInfo<F: Field> {
     /// log_n is the number of the variables
     /// the degree of the polynomial is N - 1
@@ -300,6 +301,23 @@ impl<F: Field> NTTInstance<F> {
             ntt_table: ntt_table.clone(),
             coeffs: Rc::clone(coeffs),
             points: Rc::clone(points),
+        }
+    }
+
+    /// Constuct a new instance from given info
+    #[inline]
+    pub fn from_info(info: &NTTInstanceInfo<F>) -> Self {
+        Self {
+            log_n: info.log_n,
+            ntt_table: info.ntt_table.to_owned(),
+            coeffs: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(
+                info.log_n,
+                vec![F::ZERO; 1 << info.log_n],
+            )),
+            points: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(
+                info.log_n,
+                vec![F::ZERO; 1 << info.log_n],
+            )),
         }
     }
 }
@@ -594,6 +612,7 @@ impl<F: Field> NTTIOP<F> {
             requested_point = subclaim.point;
         }
 
+        // TODO: handle the case that log = 1
         assert_eq!(requested_point.len(), 1);
         NTTSubclaim {
             ntt_bare_subclaim,

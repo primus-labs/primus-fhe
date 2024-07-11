@@ -166,7 +166,7 @@ impl<F: Field> AdditionInZqSubclaim<F> {
         q: F,
         abc: &[Rc<DenseMultilinearExtension<F>>],
         k: &DenseMultilinearExtension<F>,
-        abc_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        abc_bits: &[&Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         info: &AdditionInZqInstanceInfo<F>,
     ) -> bool {

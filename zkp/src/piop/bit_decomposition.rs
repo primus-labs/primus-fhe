@@ -72,6 +72,7 @@ pub struct DecomposedBits<F: Field> {
 ///
 /// * It is required to decompose over a power-of-2 base.
 /// These parameters are used as the verifier key.
+#[derive(Clone)]
 pub struct DecomposedBitsInfo<F: Field> {
     /// base
     pub base: F,
@@ -107,6 +108,18 @@ impl<F: Field> DecomposedBits<F> {
             bits_len,
             num_vars,
             instances: Vec::new(),
+        }
+    }
+
+    /// Initiate the polynomial from the given info used for sumcheck protocol
+    #[inline]
+    pub fn from_info(info: &DecomposedBitsInfo<F>) -> Self {
+        DecomposedBits {
+            base: info.base,
+            base_len: info.base_len,
+            bits_len: info.bits_len,
+            num_vars: info.num_vars,
+            instances: Vec::with_capacity(info.num_instances),
         }
     }
 
@@ -173,7 +186,7 @@ impl<F: Field> BitDecompositionSubClaim<F> {
     pub fn verify_subclaim(
         &self,
         d_val: &[Rc<DenseMultilinearExtension<F>>],
-        d_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        d_bits: &[&Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> bool {
