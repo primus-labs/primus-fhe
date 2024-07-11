@@ -90,6 +90,7 @@ pub struct NTTInstance<F: Field> {
 }
 
 /// Stores the corresponding NTT table for the verifier
+#[derive(Clone)]
 pub struct NTTInstanceInfo<F: Field> {
     /// log_n is the number of the variables
     /// the degree of the polynomial is N - 1
