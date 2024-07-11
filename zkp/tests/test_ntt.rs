@@ -178,6 +178,7 @@ fn test_ntt_bare_without_delegation() {
         ntt_table.push(power);
         power *= root;
     }
+    let ntt_table = Rc::new(ntt_table);
 
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
@@ -200,7 +201,7 @@ fn test_ntt_bare_without_delegation() {
 
     // Without delegation, the verifier needs to compute F(u, v) on its own.
     let fourier_matrix = Rc::new(obtain_fourier_matrix_oracle(log_n as u32));
-    assert!(subclaim.verify_subcliam(&fourier_matrix, &points, &coeff, &u, &ntt_instance_info));
+    assert!(subclaim.verify_subclaim(&fourier_matrix, &points, &coeff, &u, &ntt_instance_info));
 }
 
 #[test]
@@ -214,6 +215,7 @@ fn test_ntt_with_delegation() {
         ntt_table.push(power);
         power *= root;
     }
+    let ntt_table = Rc::new(ntt_table);
 
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
@@ -247,6 +249,7 @@ fn test_ntt_combined_with_delegation() {
         ntt_table.push(power);
         power *= root;
     }
+    let ntt_table = Rc::new(ntt_table);
 
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();

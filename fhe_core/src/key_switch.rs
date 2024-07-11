@@ -11,7 +11,7 @@ use crate::{BlindRotationType, LWEModulusType, NTRUCiphertext, SecretKeyPack};
 /// This struct stores the key
 /// that switch a ciphertext of the ring Secret Key
 /// to a [`LWE<F>`] ciphertext of the LWE Secret Key.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct KeySwitchingKey<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
