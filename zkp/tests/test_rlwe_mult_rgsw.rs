@@ -173,7 +173,7 @@ fn gen_rlwe_mult_rgsw_instance<F: Field + NTTField>(
         )),
     };
 
-    RlweMultRgswInstance::new(
+    RlweMultRgswInstance::from(
         basis_info,
         ntt_info,
         randomness_ntt,
@@ -215,10 +215,11 @@ fn test_trivial_rlwe_mult_rgsw() {
         ntt_table.push(power);
         power *= root;
     }
+    let ntt_table = Rc::new(ntt_table);
     let ntt_info = NTTInstanceInfo { log_n, ntt_table };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -232,7 +233,7 @@ fn test_trivial_rlwe_mult_rgsw() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),

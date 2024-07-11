@@ -57,27 +57,24 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                     evaluation_key,
                 );
 
-                // external_product = ACC * evaluation_key
-                //                  = ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                acc.mul_small_ntt_rgsw_inplace(
+                // external_product = (Y^{-a_i} - 1) * ACC
+                acc.mul_monic_monomial_sub_one_inplace(
+                    rlwe_dimension,
+                    twice_rlwe_dimension_div_lwe_modulus,
+                    a_i.neg_reduce(lwe_modulus),
+                    external_product,
+                );
+
+                // external_product = (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                external_product.mul_assign_ntt_rgsw(
                     evaluation_key,
                     decompose_space,
                     polynomial_space,
                     median,
-                    external_product,
                 );
 
-                // ACC = ACC - external_product
-                //     = ACC - ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                acc.sub_assign_element_wise(external_product);
-                // ACC = ACC - ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}) + Y^{-a_i} * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                //     = ACC + (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                acc.add_assign_rhs_mul_monic_monomial(
-                    external_product,
-                    rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_modulus,
-                    a_i.neg_reduce(lwe_modulus),
-                );
+                // ACC = ACC + (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                acc.add_assign_element_wise(external_product);
 
                 acc
             })

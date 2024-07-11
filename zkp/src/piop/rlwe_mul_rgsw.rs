@@ -37,6 +37,7 @@ use algebra::{
     DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension, PolynomialInfo,
 };
+use itertools::izip;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
@@ -60,7 +61,7 @@ pub struct RlweMultRgswProof<F: Field> {
 /// subclaim reutrned to verifier
 pub struct RlweMultRgswSubclaim<F: Field> {
     /// subclaim returned from the Bit Decomposition IOP
-    pub bit_decomposition_subcliam: BitDecompositionSubClaim<F>,
+    pub bit_decomposition_subclaim: BitDecompositionSubClaim<F>,
     /// randomness used to randomize 2k + 2 ntt instances
     pub randomness_ntt: Vec<F>,
     /// subclaim returned from the NTT IOP
@@ -92,10 +93,10 @@ pub struct RlweCiphertexts<F: Field> {
 
 impl<F: Field> RlweCiphertexts<F> {
     /// Construct an empty rlweciphertexts
-    pub fn new(bits_len: u32) -> Self {
+    pub fn new(bits_len: usize) -> Self {
         Self {
-            a_bits: Vec::with_capacity(bits_len as usize),
-            b_bits: Vec::with_capacity(bits_len as usize),
+            a_bits: Vec::with_capacity(bits_len),
+            b_bits: Vec::with_capacity(bits_len),
         }
     }
 
@@ -136,13 +137,14 @@ pub struct RlweMultRgswInstance<F: Field> {
     pub bits_rgsw_c_ntt: RlweCiphertexts<F>,
     /// bits_rgsw_c_ntt: the ntt form of the second part (f) in the RGSW ciphertext
     pub bits_rgsw_f_ntt: RlweCiphertexts<F>,
-    /// output rlwe ciphertext: store the output ciphertext (g', h') in the NTT-form
+    /// output_rlwe_ntt: store the output ciphertext (g', h') in the NTT-form
     pub output_rlwe_ntt: RlweCiphertext<F>,
-    /// output rlwe ciphertext: store the output ciphertext (g, h) in the coefficient-form
+    /// output_rlwe: store the output ciphertext (g, h) in the coefficient-form
     pub output_rlwe: RlweCiphertext<F>,
 }
 
 /// store the information used to verify
+#[derive(Clone)]
 pub struct RlweMultRgswInfo<F: Field> {
     /// information of ntt instance
     pub ntt_info: NTTInstanceInfo<F>,
@@ -160,10 +162,10 @@ impl<F: Field> RlweMultRgswInstance<F> {
         }
     }
 
-    /// Construct the instance
+    /// Construct the instance from reference
     #[allow(clippy::too_many_arguments)]
     #[inline]
-    pub fn new(
+    pub fn from(
         decomposed_bits_info: &DecomposedBitsInfo<F>,
         ntt_info: &NTTInstanceInfo<F>,
         randomness_ntt: &[F],
@@ -187,25 +189,17 @@ impl<F: Field> RlweMultRgswInstance<F> {
         let mut r_iter = randomness_ntt.iter();
 
         // k ntt instances for a_i =NTT equal= a_i'
-        bits_rlwe
-            .a_bits
-            .iter()
-            .zip(bits_rlwe_ntt.a_bits.iter())
-            .for_each(|(coeffs, points)| {
-                let r = *r_iter.next().unwrap();
-                ntt_coeffs += (r, coeffs);
-                ntt_points += (r, points);
-            });
+        for (coeffs, points) in izip!(&bits_rlwe.a_bits, &bits_rlwe_ntt.a_bits) {
+            let r = *r_iter.next().unwrap();
+            ntt_coeffs += (r, coeffs);
+            ntt_points += (r, points);
+        }
         // k ntt instances for b_i =NTT equal= b_i'
-        bits_rlwe
-            .b_bits
-            .iter()
-            .zip(bits_rlwe_ntt.b_bits.iter())
-            .for_each(|(coeffs, points)| {
-                let r = *r_iter.next().unwrap();
-                ntt_coeffs += (r, coeffs);
-                ntt_points += (r, points);
-            });
+        for (coeffs, points) in izip!(&bits_rlwe.b_bits, &bits_rlwe_ntt.b_bits) {
+            let r = *r_iter.next().unwrap();
+            ntt_coeffs += (r, coeffs);
+            ntt_points += (r, points);
+        }
         // 1 ntt instances for g =NTT equal= g'
         let r = *r_iter.next().unwrap();
         ntt_coeffs += (r, &output_rlwe.a);
@@ -239,8 +233,18 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
     /// verify the subclaim
     ///
     /// # Arguments
+    /// * `u`: random point choosen by verifier
+    /// * `randomness_ntt`: randomness used for combining a batch of ntt instances into a single one
     /// * `ntt_coeffs`: coefficient form of the randomized ntt instance
     /// * `ntt_points`: point-value form of the randomized ntt instance
+    /// * `input_rlwe`: rlwe = (a, b) storing the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
+    /// * `bits_rlwe`: bits_rlwe = (a_bits, b_bits) where a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
+    /// * `bits_rlwe_ntt`: ntt form of the above bit decomposition result
+    /// * `bits_rgsw_c_ntt`: the ntt form of the first part (c) in the RGSW ciphertext
+    /// * `bits_rgsw_f_ntt`: the ntt form of the second part (f) in the RGSW ciphertext
+    /// * `output_rlwe_ntt`: store the output ciphertext (g', h') in the NTT-form
+    /// * `output_rlwe`: store the output ciphertext (g, h) in the coefficient-form
+    /// * `info`: contains the info for verifying ntt and bit decomposition
     #[allow(clippy::too_many_arguments)]
     pub fn verify_subclaim(
         &self,
@@ -266,24 +270,17 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
         let mut coeffs_eval = F::ZERO;
         let mut points_eval = F::ZERO;
         let mut r_iter = randomness_ntt.iter();
-        bits_rlwe
-            .a_bits
-            .iter()
-            .zip(bits_rlwe_ntt.a_bits.iter())
-            .for_each(|(coeffs, points)| {
-                let r = r_iter.next().unwrap();
-                coeffs_eval += *r * coeffs.evaluate(u);
-                points_eval += *r * points.evaluate(u);
-            });
-        bits_rlwe
-            .b_bits
-            .iter()
-            .zip(bits_rlwe_ntt.b_bits.iter())
-            .for_each(|(coeffs, points)| {
-                let r = r_iter.next().unwrap();
-                coeffs_eval += *r * coeffs.evaluate(u);
-                points_eval += *r * points.evaluate(u);
-            });
+
+        for (coeffs, points) in izip!(&bits_rlwe.a_bits, &bits_rlwe_ntt.a_bits) {
+            let r = r_iter.next().unwrap();
+            coeffs_eval += *r * coeffs.evaluate(u);
+            points_eval += *r * points.evaluate(u);
+        }
+        for (coeffs, points) in izip!(&bits_rlwe.b_bits, &bits_rlwe_ntt.b_bits) {
+            let r = r_iter.next().unwrap();
+            coeffs_eval += *r * coeffs.evaluate(u);
+            points_eval += *r * points.evaluate(u);
+        }
         let r = r_iter.next().unwrap();
         coeffs_eval += *r * output_rlwe.a.evaluate(u);
         points_eval += *r * output_rlwe_ntt.a.evaluate(u);
@@ -295,6 +292,7 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
             return false;
         }
 
+        // TODO: For ease of implementation, we pass the resulting randomized ntt_instance but it can be omitted after combined with PCS.
         // check 2: check the subclaim returned from the ntt iop
         if !self
             .ntt_subclaim
@@ -306,7 +304,7 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
         // check 3: check the subclaim returned from the bit decomposition iop
         let d_bits = vec![&bits_rlwe.a_bits, &bits_rlwe.b_bits];
         let d_val = vec![input_rlwe.a.clone(), input_rlwe.b.clone()];
-        if !self.bit_decomposition_subcliam.verify_subclaim(
+        if !self.bit_decomposition_subclaim.verify_subclaim(
             &d_val,
             &d_bits,
             u,
@@ -315,32 +313,39 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
             return false;
         }
 
-        // 4. check 4: check the subclaim returned from the sumcheck protocol
+        // 4. check 4: check the subclaim returned from the sumcheck protocol consisting of two sub-sumcheck protocols
         let mut sum1_eval = F::ZERO;
         let mut sum2_eval = F::ZERO;
-        bits_rlwe_ntt
-            .iter_a()
-            .zip(bits_rlwe_ntt.iter_b())
-            .zip(bits_rgsw_c_ntt.a_bits.iter())
-            .zip(bits_rgsw_f_ntt.a_bits.iter())
-            .for_each(|(((a, b), c), f)| {
-                sum1_eval += (a.evaluate(&self.sumcheck_subclaim.point)
-                    * c.evaluate(&self.sumcheck_subclaim.point))
-                    + (b.evaluate(&self.sumcheck_subclaim.point)
-                        * f.evaluate(&self.sumcheck_subclaim.point));
-            });
 
-        bits_rlwe_ntt
-            .iter_a()
-            .zip(bits_rlwe_ntt.iter_b())
-            .zip(bits_rgsw_c_ntt.b_bits.iter())
-            .zip(bits_rgsw_f_ntt.b_bits.iter())
-            .for_each(|(((a, b), c), f)| {
-                sum2_eval += a.evaluate(&self.sumcheck_subclaim.point)
-                    * c.evaluate(&self.sumcheck_subclaim.point)
-                    + b.evaluate(&self.sumcheck_subclaim.point)
-                        * f.evaluate(&self.sumcheck_subclaim.point);
-            });
+        // The first part is to evaluate at a random point g' = \sum_{i = 0}^{k-1} a_i' \cdot c_i + b_i' \cdot f_i
+        // It is the reduction claim of prover asserting the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
+        // where u is randomly sampled by the verifier.
+        for (a, b, c, f) in izip!(
+            &bits_rlwe_ntt.a_bits,
+            &bits_rlwe_ntt.b_bits,
+            &bits_rgsw_c_ntt.a_bits,
+            &bits_rgsw_f_ntt.a_bits
+        ) {
+            sum1_eval += (a.evaluate(&self.sumcheck_subclaim.point)
+                * c.evaluate(&self.sumcheck_subclaim.point))
+                + (b.evaluate(&self.sumcheck_subclaim.point)
+                    * f.evaluate(&self.sumcheck_subclaim.point));
+        }
+
+        // The second part is to evaluate at a random point h' = \sum_{i = 0}^{k-1} a_i' \cdot c_i' + b_i' \cdot f_i'
+        // It is the reduction claim of prover asserting the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i'(x) + b_i'(x) \cdot f_i'(x) - g'(x)) = 0
+        // where u is randomly sampled by the verifier.
+        for (a, b, c, f) in izip!(
+            &bits_rlwe_ntt.a_bits,
+            &bits_rlwe_ntt.b_bits,
+            &bits_rgsw_c_ntt.b_bits,
+            &bits_rgsw_f_ntt.b_bits
+        ) {
+            sum2_eval += (a.evaluate(&self.sumcheck_subclaim.point)
+                * c.evaluate(&self.sumcheck_subclaim.point))
+                + (b.evaluate(&self.sumcheck_subclaim.point)
+                    * f.evaluate(&self.sumcheck_subclaim.point));
+        }
 
         self.sumcheck_subclaim.expected_evaluations
             == eval_identity_function(u, &self.sumcheck_subclaim.point)
@@ -385,32 +390,30 @@ impl<F: Field> RlweMultRgswIOP<F> {
         // When proving g'(x) = \sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) for x \in \{0, 1\}^\log n,
         // prover claims the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
         // where u is randomly sampled by the verifier.
-        instance
-            .bits_rlwe_ntt
-            .iter_a()
-            .zip(instance.bits_rlwe_ntt.iter_b())
-            .zip(instance.bits_rgsw_c_ntt.a_bits.iter())
-            .zip(instance.bits_rgsw_f_ntt.a_bits.iter())
-            .for_each(|(((a, b), c), f)| {
-                let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(&identity_func_at_u)];
-                let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(&identity_func_at_u)];
-                poly.add_product(prod1, r_1);
-                poly.add_product(prod2, r_1);
-            });
+        for (a, b, c, f) in izip!(
+            &instance.bits_rlwe_ntt.a_bits,
+            &instance.bits_rlwe_ntt.b_bits,
+            &instance.bits_rgsw_c_ntt.a_bits,
+            &instance.bits_rgsw_f_ntt.a_bits
+        ) {
+            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(&identity_func_at_u)];
+            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(&identity_func_at_u)];
+            poly.add_product(prod1, r_1);
+            poly.add_product(prod2, r_1);
+        }
 
         // Sumcheck protocol for proving: h' = \sum_{i = 0}^{k-1} a_i' \cdot c_i' + b_i' \cdot f_i'
-        instance
-            .bits_rlwe_ntt
-            .iter_a()
-            .zip(instance.bits_rlwe_ntt.iter_b())
-            .zip(instance.bits_rgsw_c_ntt.b_bits.iter())
-            .zip(instance.bits_rgsw_f_ntt.b_bits.iter())
-            .for_each(|(((a, b), c), f)| {
-                let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(&identity_func_at_u)];
-                let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(&identity_func_at_u)];
-                poly.add_product(prod1, r_2);
-                poly.add_product(prod2, r_2);
-            });
+        for (a, b, c, f) in izip!(
+            &instance.bits_rlwe_ntt.a_bits,
+            &instance.bits_rlwe_ntt.b_bits,
+            &instance.bits_rgsw_c_ntt.b_bits,
+            &instance.bits_rgsw_f_ntt.b_bits
+        ) {
+            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(&identity_func_at_u)];
+            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(&identity_func_at_u)];
+            poly.add_product(prod1, r_2);
+            poly.add_product(prod2, r_2);
+        }
 
         poly.add_product(
             [
@@ -470,7 +473,7 @@ impl<F: Field> RlweMultRgswIOP<F> {
         };
 
         RlweMultRgswSubclaim {
-            bit_decomposition_subcliam: BitDecomposition::verifier_as_subprotocol(
+            bit_decomposition_subclaim: BitDecomposition::verifier_as_subprotocol(
                 fs_rng,
                 &proof.bit_decomposition_proof,
                 &info.decomposed_bits_info,
