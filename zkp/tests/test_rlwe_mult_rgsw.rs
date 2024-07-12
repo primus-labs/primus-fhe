@@ -209,7 +209,7 @@ fn test_trivial_rlwe_mult_rgsw() {
     let log_n = num_vars;
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
     let mut power = FF::ONE;
     for _ in 0..m {
         ntt_table.push(power);
