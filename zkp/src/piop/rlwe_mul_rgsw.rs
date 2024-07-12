@@ -30,7 +30,6 @@ use crate::sumcheck::Proof;
 use crate::utils::{eval_identity_function, gen_identity_evaluations};
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::slice::Iter;
 use std::vec;
 
 use algebra::{
@@ -104,18 +103,6 @@ impl<F: Field> RlweCiphertexts<F> {
     pub fn add_rlwe(&mut self, a: DenseMultilinearExtension<F>, b: DenseMultilinearExtension<F>) {
         self.a_bits.push(Rc::new(a));
         self.b_bits.push(Rc::new(b));
-    }
-
-    /// Returns an iter that iterates a_bits
-    #[inline]
-    pub fn iter_a(&self) -> Iter<Rc<DenseMultilinearExtension<F>>> {
-        self.a_bits.iter()
-    }
-
-    /// Returns an iter that iterates b_bits
-    #[inline]
-    pub fn iter_b(&self) -> Iter<Rc<DenseMultilinearExtension<F>>> {
-        self.b_bits.iter()
     }
 }
 

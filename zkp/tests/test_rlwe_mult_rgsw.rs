@@ -3,6 +3,7 @@ use algebra::{
     Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
+use itertools::izip;
 use rand_distr::Distribution;
 use std::rc::Rc;
 use std::vec;
@@ -125,30 +126,28 @@ fn gen_rlwe_mult_rgsw_instance<F: Field + NTTField>(
 
     // 3. Compute the output of ntt form with the RGSW ciphertext and the decomposed bits of ntt form
     let mut output_g_ntt = vec![F::ZERO; 1 << ntt_info.log_n];
-    bits_rlwe_ntt
-        .iter_a()
-        .zip(bits_rlwe_ntt.iter_b())
-        .zip(bits_rgsw_c_ntt.a_bits.iter())
-        .zip(bits_rgsw_f_ntt.a_bits.iter())
-        .for_each(|(((a, b), c), f)| {
-            output_g_ntt.iter_mut().enumerate().for_each(|(i, g_i)| {
-                *g_i +=
-                    (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
-            });
+    for (a, b, c, f) in izip!(
+        &bits_rlwe_ntt.a_bits,
+        &bits_rlwe_ntt.b_bits,
+        &bits_rgsw_c_ntt.a_bits,
+        &bits_rgsw_f_ntt.a_bits
+    ) {
+        output_g_ntt.iter_mut().enumerate().for_each(|(i, g_i)| {
+            *g_i += (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
         });
+    }
 
     let mut output_h_ntt = vec![F::ZERO; 1 << ntt_info.log_n];
-    bits_rlwe_ntt
-        .iter_a()
-        .zip(bits_rlwe_ntt.iter_b())
-        .zip(bits_rgsw_c_ntt.b_bits.iter())
-        .zip(bits_rgsw_c_ntt.b_bits.iter())
-        .for_each(|(((a, b), c), f)| {
-            output_h_ntt.iter_mut().enumerate().for_each(|(i, h_i)| {
-                *h_i +=
-                    (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
-            });
+    for (a, b, c, f) in izip!(
+        &bits_rlwe_ntt.a_bits,
+        &bits_rlwe_ntt.b_bits,
+        &bits_rgsw_c_ntt.b_bits,
+        &bits_rgsw_f_ntt.b_bits
+    ) {
+        output_h_ntt.iter_mut().enumerate().for_each(|(i, h_i)| {
+            *h_i += (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
         });
+    }
 
     // 4. Compute the output of coefficient form
     let output_rlwe = RlweCiphertext {
