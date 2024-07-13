@@ -61,43 +61,20 @@ pub mod prime32 {
     {
         #[inline]
         fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
-            if coeff == F::ZERO {
-                values.fill(F::ZERO);
-                return;
-            }
-
-            if degree == 0 {
-                values.fill(coeff);
-                return;
-            }
-
-            values.fill(F::ZERO);
-            if degree < values.len() {
-                values[degree] = coeff;
-            } else {
-                values[degree - values.len()] = -coeff;
-            }
             let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
-
-            self.plan.fwd(values)
+            self.plan.fwd_monomial(coeff.get(), degree, values);
         }
 
         #[inline]
         fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]) {
-            if degree == 0 {
-                values.fill(F::ONE);
-                return;
-            }
-
-            values.fill(F::ZERO);
-            if degree < values.len() {
-                values[degree] = F::ONE;
-            } else {
-                values[degree - values.len()] = F::NEG_ONE;
-            }
             let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
+            self.plan.fwd_coeff_one_monomial(degree, values);
+        }
 
-            self.plan.fwd(values)
+        #[inline]
+        fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
+            let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
+            self.plan.fwd_coeff_neg_one_monomial(degree, values);
         }
     }
 }
@@ -165,43 +142,20 @@ pub mod prime64 {
     {
         #[inline]
         fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
-            if coeff == F::ZERO {
-                values.fill(F::ZERO);
-                return;
-            }
-
-            if degree == 0 {
-                values.fill(coeff);
-                return;
-            }
-
-            values.fill(F::ZERO);
-            if degree < values.len() {
-                values[degree] = coeff;
-            } else {
-                values[degree - values.len()] = -coeff;
-            }
             let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
-
-            self.plan.fwd(values)
+            self.plan.fwd_monomial(coeff.get(), degree, values);
         }
 
         #[inline]
         fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]) {
-            if degree == 0 {
-                values.fill(F::ONE);
-                return;
-            }
-
-            values.fill(F::ZERO);
-            if degree < values.len() {
-                values[degree] = F::ONE;
-            } else {
-                values[degree - values.len()] = F::NEG_ONE;
-            }
             let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
+            self.plan.fwd_coeff_one_monomial(degree, values);
+        }
 
-            self.plan.fwd(values)
+        #[inline]
+        fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
+            let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
+            self.plan.fwd_coeff_neg_one_monomial(degree, values);
         }
     }
 }
