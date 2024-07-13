@@ -49,6 +49,15 @@ fn test_transform_monomial() {
 
     table.transform_monomial(coeff, degree, b.as_mut_slice());
     assert_eq!(a, b);
+
+    let mut a = PolyFF::zero(N);
+    let mut b = NTTPolyFF::zero(N);
+    a[degree] = FF::NEG_ONE;
+
+    let a = table.transform_inplace(a);
+
+    table.transform_monomial(FF::NEG_ONE, degree, b.as_mut_slice());
+    assert_eq!(a, b);
 }
 
 #[test]

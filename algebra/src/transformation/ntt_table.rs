@@ -209,8 +209,9 @@ where
             return;
         }
 
+        let n = self.coeff_count();
         let log_n = self.coeff_count_power();
-        debug_assert_eq!(values.len(), 1 << log_n);
+        debug_assert_eq!(values.len(), n);
 
         let mask = usize::MAX >> (usize::BITS - log_n - 1);
 
@@ -227,9 +228,8 @@ where
                 .iter_mut()
                 .zip(&self.reverse_lsbs)
                 .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) })
-                        .neg();
+                    let index = (((2 * i + 1) * degree) & mask) ^ n;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
                 })
         } else {
             values
