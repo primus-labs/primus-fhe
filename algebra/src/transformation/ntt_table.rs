@@ -261,6 +261,27 @@ where
                 *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
             })
     }
+
+    fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
+        if degree == 0 {
+            values.fill(F::NEG_ONE);
+            return;
+        }
+
+        let n = self.coeff_count();
+        let log_n = self.coeff_count_power();
+        debug_assert_eq!(values.len(), n);
+
+        let mask = usize::MAX >> (usize::BITS - log_n - 1);
+
+        values
+            .iter_mut()
+            .zip(&self.reverse_lsbs)
+            .for_each(|(v, &i)| {
+                let index = (((2 * i + 1) * degree) & mask) ^ n;
+                *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+            })
+    }
 }
 
 impl<F> AbstractNTT<F> for NTTTable<F>
