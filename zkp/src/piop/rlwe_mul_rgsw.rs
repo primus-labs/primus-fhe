@@ -90,6 +90,20 @@ pub struct RlweCiphertexts<F: Field> {
     pub b_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
 }
 
+impl<F: Field> RlweCiphertext<F> {
+    /// just for test
+    #[inline]
+    pub fn random<R>(rng: &mut R, num_vars: usize) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self {
+            a: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
+            b: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
+        }
+    }
+}
+
 impl<F: Field> RlweCiphertexts<F> {
     /// Construct an empty rlweciphertexts
     pub fn new(bits_len: usize) -> Self {
@@ -103,6 +117,22 @@ impl<F: Field> RlweCiphertexts<F> {
     pub fn add_rlwe(&mut self, a: DenseMultilinearExtension<F>, b: DenseMultilinearExtension<F>) {
         self.a_bits.push(Rc::new(a));
         self.b_bits.push(Rc::new(b));
+    }
+
+    /// just for test
+    #[inline]
+    pub fn random<R>(bits_len: usize, rng: &mut R, num_vars: usize) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self {
+            a_bits: (0..bits_len)
+                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+                .collect(),
+            b_bits: (0..bits_len)
+                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+                .collect(),
+        }
     }
 }
 
@@ -164,44 +194,31 @@ impl<F: Field> RlweMultRgswInstance<F> {
         output_rlwe_ntt: &RlweCiphertext<F>,
         output_rlwe: &RlweCiphertext<F>,
     ) -> Self {
-        let num_vars = ntt_info.log_n;
         let num_ntt_instance = (decomposed_bits_info.bits_len << 1) + 2;
         assert_eq!(randomness_ntt.len(), num_ntt_instance as usize);
 
-        // randomize 2k + 1 ntt instances to obtain the randomized ntt instance
-        let mut ntt_coeffs =
-            DenseMultilinearExtension::from_evaluations_vec(num_vars, vec![F::ZERO; 1 << num_vars]);
-        let mut ntt_points =
-            DenseMultilinearExtension::from_evaluations_vec(num_vars, vec![F::ZERO; 1 << num_vars]);
+        // randomize 2k + 1 ntt instances into a single one ntt instance
+        let mut ntt_instance = NTTInstance::from_info(ntt_info);
         let mut r_iter = randomness_ntt.iter();
 
         // k ntt instances for a_i =NTT equal= a_i'
         for (coeffs, points) in izip!(&bits_rlwe.a_bits, &bits_rlwe_ntt.a_bits) {
             let r = *r_iter.next().unwrap();
-            ntt_coeffs += (r, coeffs);
-            ntt_points += (r, points);
+            ntt_instance.add_ntt(r, coeffs, points);
         }
         // k ntt instances for b_i =NTT equal= b_i'
         for (coeffs, points) in izip!(&bits_rlwe.b_bits, &bits_rlwe_ntt.b_bits) {
             let r = *r_iter.next().unwrap();
-            ntt_coeffs += (r, coeffs);
-            ntt_points += (r, points);
+            ntt_instance.add_ntt(r, coeffs, points);
         }
         // 1 ntt instances for g =NTT equal= g'
         let r = *r_iter.next().unwrap();
-        ntt_coeffs += (r, &output_rlwe.a);
-        ntt_points += (r, &output_rlwe_ntt.a);
+        ntt_instance.add_ntt(r, &output_rlwe.a, &output_rlwe_ntt.a);
+
         // 1 ntt instances for h =NTT equal= h'
         let r = *r_iter.next().unwrap();
-        ntt_coeffs += (r, &output_rlwe.b);
-        ntt_points += (r, &output_rlwe_ntt.b);
+        ntt_instance.add_ntt(r, &output_rlwe.b, &output_rlwe_ntt.b);
 
-        let ntt_instance = NTTInstance::from_slice(
-            num_vars,
-            &ntt_info.ntt_table,
-            &Rc::new(ntt_coeffs),
-            &Rc::new(ntt_points),
-        );
         RlweMultRgswInstance {
             ntt_instance,
             decomposed_bits_info: decomposed_bits_info.clone(),
