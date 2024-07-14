@@ -9,8 +9,8 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use algebra::{
-    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
-    MultilinearExtension, PolynomialInfo,
+    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
+    PolynomialInfo,
 };
 use itertools::izip;
 use rand::{RngCore, SeedableRng};
@@ -200,8 +200,8 @@ impl<F: Field> AccumulatorInstance<F> {
             &witness.bits_rgsw_c_ntt.a_bits,
             &witness.bits_rgsw_f_ntt.a_bits
         ) {
-            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(&identity_func_at_u)];
-            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(&identity_func_at_u)];
+            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(identity_func_at_u)];
+            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(identity_func_at_u)];
             self.poly.add_product(prod1, r_1);
             self.poly.add_product(prod2, r_1);
         }
@@ -212,8 +212,8 @@ impl<F: Field> AccumulatorInstance<F> {
             &witness.bits_rgsw_c_ntt.b_bits,
             &witness.bits_rgsw_f_ntt.b_bits
         ) {
-            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(&identity_func_at_u)];
-            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(&identity_func_at_u)];
+            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(identity_func_at_u)];
+            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(identity_func_at_u)];
             self.poly.add_product(prod1, r_2);
             self.poly.add_product(prod2, r_2);
         }
@@ -221,14 +221,14 @@ impl<F: Field> AccumulatorInstance<F> {
         self.poly.add_product(
             [
                 Rc::clone(&witness.output_rlwe_ntt.a),
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(identity_func_at_u),
             ],
             -r_1,
         );
         self.poly.add_product(
             [
                 Rc::clone(&witness.output_rlwe_ntt.b),
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(identity_func_at_u),
             ],
             -r_2,
         );
@@ -314,6 +314,7 @@ impl<F: Field> AccumulatorSubclaim<F> {
     /// * ntt_points: the final random ntt instance to be proved
     /// * witness: all the winess when updating the accumulator
     /// * info: info used to verify
+    #[allow(clippy::too_many_arguments)]
     pub fn verify_subclaim(
         &self,
         u: &[F],
@@ -328,7 +329,7 @@ impl<F: Field> AccumulatorSubclaim<F> {
             (info.num_updations as u32) * ((info.decomposed_bits_info.bits_len << 1) + 3);
         assert_eq!(randomness_ntt.len(), num_ntt_instance as usize);
         assert_eq!(u.len(), info.ntt_info.log_n);
-        assert_eq!(randomness_sumcheck.len(), (2 * info.num_updations) as usize);
+        assert_eq!(randomness_sumcheck.len(), 2 * info.num_updations);
 
         // check 1: check the consistency of the randomized ntt instance and the original ntt instances
         let mut coeffs_eval = F::ZERO;
