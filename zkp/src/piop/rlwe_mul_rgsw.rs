@@ -90,20 +90,6 @@ pub struct RlweCiphertexts<F: Field> {
     pub b_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
 }
 
-impl<F: Field> RlweCiphertext<F> {
-    /// just for test
-    #[inline]
-    pub fn random<R>(rng: &mut R, num_vars: usize) -> Self
-    where
-        R: rand::Rng + rand::CryptoRng,
-    {
-        Self {
-            a: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
-            b: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
-        }
-    }
-}
-
 impl<F: Field> RlweCiphertexts<F> {
     /// Construct an empty rlweciphertexts
     pub fn new(bits_len: usize) -> Self {
@@ -117,22 +103,6 @@ impl<F: Field> RlweCiphertexts<F> {
     pub fn add_rlwe(&mut self, a: DenseMultilinearExtension<F>, b: DenseMultilinearExtension<F>) {
         self.a_bits.push(Rc::new(a));
         self.b_bits.push(Rc::new(b));
-    }
-
-    /// just for test
-    #[inline]
-    pub fn random<R>(bits_len: usize, rng: &mut R, num_vars: usize) -> Self
-    where
-        R: rand::Rng + rand::CryptoRng,
-    {
-        Self {
-            a_bits: (0..bits_len)
-                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
-                .collect(),
-            b_bits: (0..bits_len)
-                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
-                .collect(),
-        }
     }
 }
 

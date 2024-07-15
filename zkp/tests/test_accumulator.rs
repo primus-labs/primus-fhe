@@ -1,6 +1,6 @@
 use algebra::{
     derive::{Field, Prime, NTT},
-    Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
+    Basis, DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension,
 };
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
 use itertools::izip;
@@ -24,6 +24,45 @@ type FF = Fp32;
 #[derive(Field, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
+
+trait RandomCiphertext {
+    fn random<R>(rng: &mut R, num_vars: usize) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng;
+}
+
+impl<F: Field> RandomCiphertext for RlweCiphertext<F> {
+    fn random<R>(rng: &mut R, num_vars: usize) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self {
+            a: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
+            b: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
+        }
+    }
+}
+trait RandomCiphertexts {
+    fn random<R>(bits_len: usize, rng: &mut R, num_vars: usize) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng;
+}
+
+impl<F: Field> RandomCiphertexts for RlweCiphertexts<F> {
+    fn random<R>(bits_len: usize, rng: &mut R, num_vars: usize) -> Self
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
+        Self {
+            a_bits: (0..bits_len)
+                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+                .collect(),
+            b_bits: (0..bits_len)
+                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+                .collect(),
+        }
+    }
+}
 
 /// Given an `index` of `len` bits, output a new index where the bits are reversed.
 fn reverse_bits(index: usize, len: u32) -> usize {
