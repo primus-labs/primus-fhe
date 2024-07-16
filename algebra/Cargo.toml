@@ -21,7 +21,7 @@ bincode = { workspace = true }
 concrete-ntt = { git = "https://github.com/pado-labs/concrete-ntt", branch = "main", optional = true }
 
 [features]
-default = []
+default = ["concrete-ntt"]
 concrete-ntt = ["dep:concrete-ntt", "algebra_derive/concrete-ntt"]
 nightly = ["concrete-ntt?/nightly"]
 count_ntt = []

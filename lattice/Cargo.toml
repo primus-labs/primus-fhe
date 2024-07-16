@@ -18,7 +18,7 @@ serde = { workspace = true }
 criterion = { workspace = true }
 
 [features]
-default = []
+default = ["concrete-ntt"]
 concrete-ntt = ["algebra/concrete-ntt"]
 nightly = ["algebra/nightly"]
 
