@@ -9,7 +9,7 @@ pub mod prime32 {
         AlgebraError, Field, NTTField,
     };
 
-    /// Negacyclic NTT plan for 32bit primes.
+    /// Wrapping concrete NTT for 32bit primes.
     pub struct ConcreteTable<F>
     where
         F: NTTField<Table = Self> + Field<Value = u32>,
@@ -90,7 +90,7 @@ pub mod prime64 {
         AlgebraError, Field, NTTField,
     };
 
-    /// Negacyclic NTT plan for 64bit primes.
+    /// Wrapping concrete NTT for 64bit primes.
     pub struct ConcreteTable<F>
     where
         F: NTTField<Table = Self> + Field<Value = u64>,
