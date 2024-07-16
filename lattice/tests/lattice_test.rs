@@ -20,7 +20,7 @@ type PolyFF = Polynomial<FF>;
 
 const RR: Inner = 1024;
 
-const LOG_N: usize = 3;
+const LOG_N: usize = 5;
 const N: usize = 1 << LOG_N; // length
 const BITS: u32 = 3;
 const B: usize = 1 << BITS; // base

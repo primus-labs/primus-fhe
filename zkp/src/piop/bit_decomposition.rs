@@ -9,7 +9,7 @@
 //! the main idea of this IOP is to prove:
 //! For x \in \{0, 1\}^l
 //! 1. d(x) = \sum_{i=0}^{log M - 1} B^i d_i(x) => can be reduced to the evaluation of a random point
-//! 2. For every i \in [l]: \prod_{k = 0}^B (d_i(x) - k) = 0 =>
+//! 2. For every i \in \[l\]: \prod_{k = 0}^B (d_i(x) - k) = 0 =>
 //!     a) each of which can be reduced to prove the following sum
 //!        $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //!        where u is the common random challenge from the verifier, used to instantiate every sum,
@@ -71,6 +71,7 @@ pub struct DecomposedBits<F: Field> {
 /// Stores the parameters used for bit decomposation.
 ///
 /// * It is required to decompose over a power-of-2 base.
+///
 /// These parameters are used as the verifier key.
 #[derive(Clone)]
 pub struct DecomposedBitsInfo<F: Field> {
