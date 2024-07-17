@@ -68,7 +68,14 @@ impl<F: NTTField> EvaluationKey<F> {
 
         let key_switched = self.key_switching_key.key_switch_for_ntru(&acc);
 
-        lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
+        let round_method = parameters.modulus_switch_round_method();
+
+        lwe_modulus_switch_inplace(
+            key_switched,
+            parameters.lwe_modulus().value(),
+            round_method,
+            &mut c,
+        );
         c
     }
 }
