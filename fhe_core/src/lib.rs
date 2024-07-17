@@ -34,4 +34,4 @@ pub use secret_key::{RingSecretKeyType, SecretKeyPack, SecretKeyType};
 pub use blind_rotation::{NTRUBlindRotationKey, RLWEBlindRotationKey};
 pub use key_switch::KeySwitchingKey;
 
-pub use modulus_switch::{lwe_modulus_switch, lwe_modulus_switch_inplace};
+pub use modulus_switch::{lwe_modulus_switch, lwe_modulus_switch_inplace, ModulusSwitchRoundMethod};
