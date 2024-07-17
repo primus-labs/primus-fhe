@@ -154,7 +154,8 @@ impl<F: NTTField> Parameters<F> {
         }
 
         // q|2N
-        let lwe_modulus_u: usize = lwe_modulus.into();
+        #[allow(clippy::unnecessary_fallible_conversions)]
+        let lwe_modulus_u: usize = lwe_modulus.try_into().unwrap();
         let twice_ring_dimension_div_lwe_modulus = (ring_dimension << 1) / lwe_modulus_u;
         if twice_ring_dimension_div_lwe_modulus * lwe_modulus_u != (ring_dimension << 1) {
             return Err(FHECoreError::LweModulusRingDimensionNotCompatible {

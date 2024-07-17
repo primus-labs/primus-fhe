@@ -23,7 +23,7 @@ pub fn lwe_modulus_switch<F: Field>(
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
-    let switch: Box<dyn Fn(F) -> u16> = match round_method {
+    let switch: Box<dyn Fn(F) -> LWEModulusType> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
             (v.get().as_into() * modulus_after_f64 / modulus_before_f64).round() as LWEModulusType
         }),
@@ -51,7 +51,7 @@ pub fn lwe_modulus_switch_inplace<F: Field>(
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
-    let switch: Box<dyn Fn(F) -> u16> = match round_method {
+    let switch: Box<dyn Fn(F) -> LWEModulusType> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
             (v.get().as_into() * modulus_after_f64 / modulus_before_f64).round() as LWEModulusType
         }),
