@@ -12,10 +12,15 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 rand_distr = { workspace = true }
 rand = { workspace = true }
-serde = { workspace = true}
+serde = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+
+[features]
+default = ["concrete-ntt"]
+concrete-ntt = ["algebra/concrete-ntt"]
+nightly = ["algebra/nightly"]
 
 [[bench]]
 name = "lwe_bench"

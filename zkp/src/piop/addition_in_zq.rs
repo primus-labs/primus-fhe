@@ -4,7 +4,7 @@
 //!
 //! Given M instances of addition in Zq, the main idea of this IOP is to prove:
 //! For x \in \{0, 1\}^l
-//! 1. a(x), b(c), c(x) \in [q] => these range check can be batchly proved by the Bit Decomposition IOP
+//! 1. a(x), b(c), c(x) \in \[q\] => these range check can be batchly proved by the Bit Decomposition IOP
 //! 2. k(x) \cdot (1 - k(x)) = 0  => can be reduced to prove the sum
 //!     $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [k(x) \cdot (1 - k(x))] = 0$
 //!     where u is the common random challenge from the verifier, used to instantiate the sum,
@@ -166,7 +166,7 @@ impl<F: Field> AdditionInZqSubclaim<F> {
         q: F,
         abc: &[Rc<DenseMultilinearExtension<F>>],
         k: &DenseMultilinearExtension<F>,
-        abc_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        abc_bits: &[&Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         info: &AdditionInZqInstanceInfo<F>,
     ) -> bool {
