@@ -2,7 +2,7 @@
 
 members = [
     "algebra",
-    "algebra_derive",
+    "algebra_derive", "fhe",
     "fhe_core",
     "lattice",
     "fhe",
