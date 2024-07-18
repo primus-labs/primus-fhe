@@ -4,7 +4,7 @@ use lattice::{RLWE, LWE, RGSW};
 use fhe_core::{RLWEBlindRotationKey,lwe_modulus_switch};
 
 const N:usize= 1024;
-const u:usize= 1<<29;
+const U:u32= 1<<29;
 pub struct SK<F:Field<Value=u32>+NTTField>{
     key: Vec<F>
 }
@@ -33,7 +33,7 @@ impl<F:Field<Value=u32>+NTTField> SK<F> {
         let temp = binary_key.blind_rotate(
             acc,
             ciphertext_change,
-            n,
+            N,
             modulus,
             ls,
         );
@@ -47,26 +47,23 @@ impl<F:Field<Value=u32>+NTTField> SK<F> {
         cb:LWE<F>,
         key:RLWEBlindRotationKey<F>,
     )->LWE<F>{
-        let n = 1<<10;
-        let mut temp: Vec<F> = vec![0.into();n];
-        for i in 0..n+1{
+        let mut temp: Vec<F> = vec![0.into();N];
+        for i in 0..N+1{
             temp[i] = -ca.a()[i] - cb.a()[i];
         }
         let offset = F::new(1<<29);
-        temp[n] = temp[n] + offset;
-        let lwe_temp=LWE::new(temp,n.into());
+        temp[N] = temp[N] + offset;
+        let lwe_temp=LWE::new(temp,N.into());
         let res = Self::gatebootstrapping(lwe_temp,key);
         return res;
     }
 
-    pub fn greater_hcmp( //暂时OK
+    pub fn greater_hcmp(
         cipher1: &RLWE<F>,
         cipher2: &RGSW<F>,
     )->LWE<F>{
-        //取值是否会更改cipher1的实际数值？
         let mul = cipher1.mul_small_rgsw(&cipher2);
-        let n = 1 << 10;
-        let ts= vec![F::ONE;n];
+        let ts= vec![F::ONE;N];
         let test_plaintext = NTTPolynomial::<F>::new(ts);
         let x = (RLWE::a(&mul))*(&test_plaintext);
         let y = (RLWE::b(&mul))*(&test_plaintext);
@@ -92,19 +89,17 @@ impl<F:Field<Value=u32>+NTTField> SK<F> {
             let low_res= Self::greater_arbhcmp(cipher1,cipher2,cipher_size-1,gatebootstrappingkey);
             let mul = cipher1[cipher_size-1].mul_small_rgsw(&cipher2[cipher_size-1]);
             let equal_res = RLWE::extract_lwe(&mul);
-            let n = 1<< 10;
-            //这个n对吗
             let high_res =  Self::greater_hcmp(&cipher1[cipher_size-1],&cipher2[cipher_size-1]);
-            let mut high_plus = vec![F::ZERO;n];
-            for i in 0..n+1{
+            let mut high_plus = vec![F::ZERO;N];
+            for i in 0..N+1{
                 high_plus[i] = high_res.a()[i] + high_res.a()[i];
             }
-            let mut tlwelvl1: Vec<F> = vec![0.into();n];
-            for i in 0..n+1{
+            let mut tlwelvl1: Vec<F> = vec![0.into();N];
+            for i in 0..N+1{
                 tlwelvl1[i] = low_res.a()[i] + equal_res.a()[i] + high_plus[i];
             }
             let offset = F::new(1<< 10);
-            tlwelvl1[n] = tlwelvl1[n] + offset;
+            tlwelvl1[N] = tlwelvl1[N] + offset;
             let new_lwe=LWE::new(tlwelvl1,low_res.b());
             let res = Self::gatebootstrapping(new_lwe,key_clone);
             return res;
@@ -117,11 +112,10 @@ impl<F:Field<Value=u32>+NTTField> SK<F> {
     )->LWE<F>{
         let mul = cipher1.mul_small_rgsw(&cipher2);
         let mut res = RLWE::extract_lwe(&mul);
-        //这个extract是取的0位吗？
-        for elem in res.a_mut().iter_mut(){//n是定值吗，还是说只需要看已存在的就行
+        for elem in res.a_mut().iter_mut(){
             *elem = *elem + *elem;
         }
-        //res[lvl1::n]-=lvl1::u
+        res.a_mut()[N]=res.a()[N]-F::new(U);
         return res;
     }
 
@@ -147,7 +141,7 @@ impl<F:Field<Value=u32>+NTTField> SK<F> {
 
 
 
-    pub fn less_hcmp(  //暂时ok
+    pub fn less_hcmp(
         cipher1: &RLWE<F>,
         cipher2: &RGSW<F>,
     )->LWE<F>{
