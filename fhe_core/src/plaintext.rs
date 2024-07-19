@@ -131,12 +131,19 @@ pub trait LWEPlainContainer<C>: Copy + Send + Sync + Into<C> + Shrink<C> {}
 
 macro_rules! plain_impl {
     (@ $M:ty, $($C:ty),*) => {
+        impl LWEPlainContainer<$M> for $M {}
         $(
             impl LWEPlainContainer<$C> for $M {}
         )*
     };
     () =>{
         plain_impl!(@ bool, u8, u16, u32, u64);
+        plain_impl!(@ u8, u16, u32, u64);
+        plain_impl!(@ u16, u32, u64);
+        plain_impl!(@ u32, u64);
+        plain_impl!(@ u64,);
+
+
     }
 }
 

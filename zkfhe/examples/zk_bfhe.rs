@@ -109,6 +109,7 @@ fn main() {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn join_bit_opearions<M: LWEPlainContainer<C>, C: LWECipherContainer, F: NTTField>(
     eval: &Evaluator<M, C, F>,
     x: &LWECiphertext<C>,
