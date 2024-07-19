@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use algebra::Field;
 use fhe_core::{
     BlindRotationType, ConstParameters, DefaultFieldU32, ModulusSwitchRoundMethod, Parameters,
@@ -6,11 +8,13 @@ use fhe_core::{
 use once_cell::sync::Lazy;
 
 /// Default 128-bits security Parameters
-pub static DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS: Lazy<Parameters<DefaultFieldU32>> =
+pub static DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS: Lazy<Parameters<bool, u16, DefaultFieldU32>> =
     Lazy::new(|| {
-        Parameters::<DefaultFieldU32>::new(ConstParameters {
+        Parameters::<bool, u16, DefaultFieldU32>::new(ConstParameters {
             lwe_dimension: 590,
             lwe_modulus: 1024,
+            real_message_size: 2,
+            padding_message_size: 4,
             lwe_noise_std_dev: 3.20,
             secret_key_type: SecretKeyType::Ternary,
             blind_rotation_type: BlindRotationType::NTRU,
@@ -23,6 +27,7 @@ pub static DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS: Lazy<Parameters<DefaultFie
             key_switching_basis_bits: 1,
             key_switching_std_dev: 3.2 * ((1 << 12) as f64),
             modulus_switcing_round_method: ModulusSwitchRoundMethod::Floor,
+            phantom: PhantomData,
         })
         .unwrap()
     });

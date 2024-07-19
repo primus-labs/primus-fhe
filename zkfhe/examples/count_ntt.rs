@@ -2,12 +2,14 @@
 #[cfg(feature = "count_ntt")]
 use algebra::transformation::count;
 
-use fhe_core::{utils::nand, LWEModulusType};
+use fhe_core::utils::nand;
 use rand::Rng;
 use zkfhe::{
     bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMERTERS},
     Decryptor, Encryptor, KeyGen,
 };
+
+type LWEModulusType = u16;
 
 fn main() {
     // set random generator

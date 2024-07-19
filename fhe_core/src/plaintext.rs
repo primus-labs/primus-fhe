@@ -1,22 +1,85 @@
 use std::{
     fmt::Display,
     marker::PhantomData,
-    ops::{Add, BitAnd, Shl, Shr},
+    ops::{Shl, Shr},
 };
 
-use num_traits::ConstOne;
+use algebra::{
+    modulus::PowOf2Modulus,
+    reduce::{
+        AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, NegReduce,
+        SubReduce,
+    },
+    AsFrom, AsInto,
+};
+use num_traits::{ConstOne, ConstZero, PrimInt};
+use rand::distributions::uniform::SampleUniform;
 
+pub trait Shrink<C> {
+    /// shrink to small container.
+    fn shrink(c: C) -> Self;
+}
+
+macro_rules! shrink_impl {
+    (@ bool, $($C:ty),*) => {
+        impl Shrink<bool> for bool {
+            #[inline(always)]
+            fn shrink(c: bool) -> bool {
+                c
+            }
+
+        }
+        $(
+            impl Shrink<$C> for bool {
+                #[inline]
+                fn shrink(c: $C) -> bool {
+                    match c {
+                        0 => false,
+                        1 => true,
+                        _ => panic!("shrink error!")
+                    }
+                }
+
+            }
+        )*
+    };
+    (@@ $M:ty, $($C:ty),*) => {
+        impl Shrink<$M> for $M {
+            #[inline(always)]
+            fn shrink(c: $M) -> $M {
+                c
+            }
+
+        }
+        $(
+            impl Shrink<$C> for $M {
+                #[inline(always)]
+                fn shrink(c: $C) -> $M {
+                    c.try_into().unwrap()
+                }
+
+            }
+        )*
+    };
+    () =>{
+        shrink_impl!(@ bool, u8, u16, u32, u64);
+        shrink_impl!(@@ u8, u16, u32, u64);
+        shrink_impl!(@@ u16, u32, u64);
+        shrink_impl!(@@ u32, u64);
+        shrink_impl!(@@ u64,);
+    }
+}
+
+shrink_impl!();
+
+#[derive(Debug, Clone, Copy)]
 /// A struct for `encode` and `decode`.
 pub struct Code<M, C>
 where
-    M: Into<C>,
-    C: Copy
-        + ConstOne
-        + Add<Output = C>
-        + Shl<u32, Output = C>
-        + Shr<u32, Output = C>
-        + BitAnd<Output = C>,
+    M: LWEPlainContainer<C>,
+    C: LWECipherContainer,
 {
+    real_message_size: C,
     t_mask: C,
     q_bits_sub_t_bits: u32,
     phantom: PhantomData<M>,
@@ -24,15 +87,27 @@ where
 
 impl<M, C> Code<M, C>
 where
-    M: Into<C> + TryFrom<C>,
-    C: Copy
-        + Display
-        + ConstOne
-        + Add<Output = C>
-        + Shl<u32, Output = C>
-        + Shr<u32, Output = C>
-        + BitAnd<Output = C>,
+    M: LWEPlainContainer<C>,
+    C: LWECipherContainer,
 {
+    /// Generate the coder.
+    #[inline]
+    pub fn new(real_message_size: C, padding_message_size: C, q: C) -> Self {
+        assert!(real_message_size <= padding_message_size && padding_message_size < q);
+        assert!(padding_message_size.count_ones() == 1);
+        assert!(q.count_ones() == 1);
+        let t_bits = padding_message_size.trailing_zeros();
+        let q_bits = q.trailing_zeros();
+        let q_bits_sub_t_bits = q_bits - t_bits;
+
+        Self {
+            real_message_size,
+            t_mask: padding_message_size - C::ONE,
+            q_bits_sub_t_bits,
+            phantom: PhantomData,
+        }
+    }
+
     /// Encodes a message
     #[inline]
     pub fn encode(&self, message: M) -> C {
@@ -43,42 +118,72 @@ where
     #[inline]
     pub fn decode(&self, cipher: C) -> M {
         let temp = cipher >> (self.q_bits_sub_t_bits - 1);
-        let decoded = ((temp >> 1) + (temp & C::ONE)) & self.t_mask;
+        let decoded = ((temp >> 1u32) + (temp & C::ONE)) & self.t_mask;
 
-        match M::try_from(decoded) {
-            Ok(m) => m,
-            Err(_) => panic!("Wrong decoding output: {}", decoded),
-        }
+        assert!(decoded <= self.real_message_size);
+
+        M::shrink(decoded)
     }
 }
 
-/// LWE bool Plain text
-pub type LWEMessageType = bool;
+/// LWE plain text container trait
+pub trait LWEPlainContainer<C>: Copy + Send + Sync + Into<C> + Shrink<C> {}
 
-/// LWE modulus type
-pub type LWEModulusType = u16;
-
-/// Encodes a message
-#[inline]
-pub fn encode(message: LWEMessageType, lwe_modulus: LWEModulusType) -> LWEModulusType {
-    if message {
-        // q/4
-        lwe_modulus >> 2
-    } else {
-        0
+macro_rules! plain_impl {
+    (@ $M:ty, $($C:ty),*) => {
+        $(
+            impl LWEPlainContainer<$C> for $M {}
+        )*
+    };
+    () =>{
+        plain_impl!(@ bool, u8, u16, u32, u64);
     }
 }
 
-/// Decodes a plain text
-pub fn decode(plaintext: LWEModulusType, lwe_modulus: LWEModulusType) -> LWEMessageType {
-    assert!(lwe_modulus.is_power_of_two() && lwe_modulus >= 8);
+plain_impl!();
 
-    let temp = plaintext >> (lwe_modulus.trailing_zeros() - 3);
-    let decoded = ((temp >> 1) + (temp & 1)) & 3;
-
-    match decoded {
-        0 => false,
-        1 => true,
-        _ => panic!("Wrong decoding output: {:?}", decoded),
-    }
+/// LWE cipher text container trait
+pub trait LWECipherContainer:
+    PrimInt
+    + Send
+    + Sync
+    + Display
+    + ConstOne
+    + ConstZero
+    + Shl<u32, Output = Self>
+    + Shr<u32, Output = Self>
+    + AsFrom<u32>
+    + AsFrom<f64>
+    + AsInto<f64>
+    + AsInto<usize>
+    + TryInto<usize>
+    + SampleUniform
+    + AddReduce<PowOf2Modulus<Self>, Output = Self>
+    + SubReduce<PowOf2Modulus<Self>, Output = Self>
+    + MulReduce<PowOf2Modulus<Self>, Output = Self>
+    + AddReduceAssign<PowOf2Modulus<Self>>
+    + MulReduceAssign<PowOf2Modulus<Self>>
+    + NegReduce<PowOf2Modulus<Self>, Output = Self>
+    + DotProductReduce<PowOf2Modulus<Self>, Output = Self>
+{
+    /// 2
+    const TWO: Self;
+    /// Generate the corresponding power of 2 modulus.
+    fn to_power_of_2_modulus(self) -> PowOf2Modulus<Self>;
 }
+
+macro_rules! cipher_impl {
+    ($($T:ty),*) => {
+        $(
+            impl LWECipherContainer for $T {
+                const TWO: Self = 2;
+                #[inline]
+                fn to_power_of_2_modulus(self) -> PowOf2Modulus<Self> {
+                    PowOf2Modulus::<$T>::new(self)
+                }
+            }
+        )*
+    };
+}
+
+cipher_impl!(u8, u16, u32, u64);

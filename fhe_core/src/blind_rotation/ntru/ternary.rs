@@ -1,5 +1,5 @@
 use algebra::{
-    modulus::PowOf2Modulus, reduce::NegReduce, transformation::MonomialNTT, Basis,
+    modulus::PowOf2Modulus, transformation::MonomialNTT, AsInto, Basis,
     FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
 };
 use lattice::{
@@ -7,7 +7,7 @@ use lattice::{
     NTTPolynomialSpace, PolynomialSpace, NTRU,
 };
 
-use crate::LWEModulusType;
+use crate::LWECipherContainer;
 
 #[derive(Debug, Clone)]
 pub struct TernaryBlindRotationKey<F: NTTField> {
@@ -22,13 +22,13 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn blind_rotate(
+    pub fn blind_rotate<C: LWECipherContainer>(
         &self,
         init_acc: NTRU<F>,
-        lwe_a: &[LWEModulusType],
+        lwe_a: &[C],
         ntru_dimension: usize,
         twice_ntru_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEModulusType>,
+        lwe_modulus: PowOf2Modulus<C>,
         blind_rotation_basis: Basis<F>,
     ) -> NTRU<F> {
         let decompose_space = &mut DecompositionSpace::new(ntru_dimension);
@@ -44,7 +44,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                let degree = (a_i as usize) * twice_ntru_dimension_div_lwe_modulus;
+                let degree = AsInto::<usize>::as_into(a_i) * twice_ntru_dimension_div_lwe_modulus;
 
                 // ntt_polynomial = -Y^{a_i}
                 ntt_table.transform_coeff_neg_one_monomial(degree, ntt_polynomial.as_mut_slice());
@@ -83,20 +83,21 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
     }
 
     /// Generates the [`TernaryBlindRotationKey<F>`].
-    pub(crate) fn generate<Rng>(
+    pub(crate) fn generate<Rng, C>(
         bootstrapping_basis: Basis<F>,
-        lwe_secret_key: &[LWEModulusType],
+        lwe_secret_key: &[C],
         chi: FieldDiscreteGaussianSampler,
         inv_secret_key: &NTTPolynomial<F>,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
+        C: LWECipherContainer,
     {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s == 0 {
+                if s == C::ZERO {
                     (
                         <NTTGadgetNTRU<F>>::generate_random_zero_sample(
                             inv_secret_key,
@@ -111,7 +112,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                             &mut rng,
                         ),
                     )
-                } else if s == 1 {
+                } else if s == C::ONE {
                     (
                         <NTTGadgetNTRU<F>>::generate_random_one_sample(
                             inv_secret_key,

@@ -1,15 +1,11 @@
 use std::cell::RefCell;
 
-use algebra::{
-    reduce::{AddReduceAssign, DotProductReduce, SubReduce},
-    utils::Prg,
-    NTTField, NTTPolynomial, Polynomial,
-};
+use algebra::{utils::Prg, NTTField, NTTPolynomial, Polynomial};
 use lattice::{sample_binary_values, sample_ternary_values};
 use num_traits::Inv;
 
 use crate::{
-    ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEMessageType, LWEModulusType,
+    ciphertext::LWECiphertext, BlindRotationType, LWECipherContainer, LWEPlainContainer,
     Parameters, StepsAfterBR,
 };
 
@@ -37,9 +33,6 @@ pub enum RingSecretKeyType {
     Uniform,
 }
 
-/// LWE Secret key
-pub type LWESecretKey = Vec<LWEModulusType>;
-
 /// Ring Secret key
 pub type RingSecretKey<F> = Polynomial<F>;
 
@@ -52,9 +45,9 @@ pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 /// ring secret key, ntt version ring secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
-pub struct SecretKeyPack<F: NTTField> {
+pub struct SecretKeyPack<M: LWEPlainContainer<C>, C: LWECipherContainer, F: NTTField> {
     /// LWE secret key
-    lwe_secret_key: LWESecretKey,
+    lwe_secret_key: Vec<C>,
     /// ring secret key
     ring_secret_key: RingSecretKey<F>,
     /// ntt version ring secret key
@@ -62,13 +55,13 @@ pub struct SecretKeyPack<F: NTTField> {
     /// ntt version inverse ring secret key
     ntt_inv_ring_secret_key: Option<NTTRingSecretKey<F>>,
     /// boolean fhe's parameters
-    parameters: Parameters<F>,
+    parameters: Parameters<M, C, F>,
     /// cryptographically secure random number generator
     csrng: RefCell<Prg>,
 }
 
-impl<F: NTTField> SecretKeyPack<F> {
-    fn create_lwe_secret_key(parameters: &Parameters<F>, csrng: &mut Prg) -> Vec<LWEModulusType> {
+impl<M: LWEPlainContainer<C>, C: LWECipherContainer, F: NTTField> SecretKeyPack<M, C, F> {
+    fn create_lwe_secret_key(parameters: &Parameters<M, C, F>, csrng: &mut Prg) -> Vec<C> {
         let lwe_dimension = parameters.lwe_dimension();
 
         match parameters.secret_key_type() {
@@ -80,7 +73,7 @@ impl<F: NTTField> SecretKeyPack<F> {
     }
 
     /// Creates a new [`SecretKeyPack<F>`].
-    pub fn new(parameters: Parameters<F>) -> Self {
+    pub fn new(parameters: Parameters<M, C, F>) -> Self {
         let mut csrng = Prg::new();
 
         let lwe_secret_key = Self::create_lwe_secret_key(&parameters, &mut csrng);
@@ -101,10 +94,14 @@ impl<F: NTTField> SecretKeyPack<F> {
                                 || parameters.ring_secret_key_type() == RingSecretKeyType::Ternary
                         );
                         // negative convertion
-                        let convert = |v: &LWEModulusType| match *v {
-                            0 => F::zero(),
-                            1 => F::neg_one(),
-                            _ => F::one(),
+                        let convert = |v: &C| {
+                            if *v == C::ZERO {
+                                F::zero()
+                            } else if *v == C::ONE {
+                                F::neg_one()
+                            } else {
+                                F::one()
+                            }
                         };
 
                         // s = [s_0, -s_{n-1},..., -s_1]
@@ -145,7 +142,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Returns the lwe secret key of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn lwe_secret_key(&self) -> &[LWEModulusType] {
+    pub fn lwe_secret_key(&self) -> &[C] {
         &self.lwe_secret_key
     }
 
@@ -169,7 +166,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Returns the parameters of this [`SecretKeyPack<F>`].
     #[inline]
-    pub fn parameters(&self) -> &Parameters<F> {
+    pub fn parameters(&self) -> &Parameters<M, C, F> {
         &self.parameters
     }
 
@@ -185,9 +182,9 @@ impl<F: NTTField> SecretKeyPack<F> {
         self.csrng.borrow_mut()
     }
 
-    /// Encrypts [`LWEModulusType`] into [`LWECiphertext`].
+    /// Encrypts message into [`LWECiphertext`].
     #[inline]
-    pub fn encrypt(&self, message: LWEMessageType) -> LWECiphertext {
+    pub fn encrypt(&self, message: M) -> LWECiphertext<C> {
         let lwe_modulus = self.parameters.lwe_modulus();
         let noise_distribution = self.parameters.lwe_noise_distribution();
         let lwe_modulus_value = lwe_modulus.value();
@@ -203,35 +200,34 @@ impl<F: NTTField> SecretKeyPack<F> {
 
         cipher
             .b_mut()
-            .add_reduce_assign(encode(message, lwe_modulus_value), lwe_modulus);
+            .add_reduce_assign(self.parameters.lwe_coder().encode(message), lwe_modulus);
 
         cipher
     }
 
-    /// Decrypts the [`LWECiphertext`] back to [`LWEBoolMessage`]
+    /// Decrypts the [`LWECiphertext`] back to message
     #[inline]
-    pub fn decrypt(&self, cipher_text: &LWECiphertext) -> bool {
+    pub fn decrypt(&self, cipher_text: &LWECiphertext<C>) -> M {
         let lwe_modulus = self.parameters.lwe_modulus();
 
-        let a_mul_s =
-            LWEModulusType::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+        let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
-        decode(plaintext, lwe_modulus.value())
+        self.parameters.lwe_coder().decode(plaintext)
     }
 
-    /// Decrypts the [`LWECiphertext`] back to [`LWEBoolMessage`]
+    /// Decrypts the [`LWECiphertext`] back to message
     #[inline]
-    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext) -> (bool, LWEModulusType) {
+    pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext<C>) -> (M, C) {
         let lwe_modulus = self.parameters.lwe_modulus();
 
-        let a_mul_s =
-            LWEModulusType::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+        let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
 
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
-        let message = decode(plaintext, lwe_modulus.value());
+        let coder = self.parameters.lwe_coder();
+        let message = coder.decode(plaintext);
 
-        let fresh = encode(message, lwe_modulus.value());
+        let fresh = coder.encode(message);
 
         (
             message,

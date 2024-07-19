@@ -1,8 +1,10 @@
 use algebra::NTTField;
-use fhe_core::{utils::*, LWECiphertext, LWEModulusType, SecretKeyPack};
+use fhe_core::{utils::*, LWECipherContainer, LWECiphertext, LWEPlainContainer, SecretKeyPack};
 use rand::Rng;
 use zkfhe::ntru_bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS};
 use zkfhe::{Decryptor, Encryptor};
+
+type LWEModulusType = u16;
 
 fn main() {
     // set random generator
@@ -105,29 +107,29 @@ fn main() {
     }
 }
 
-fn join_bit_opearions<F: NTTField>(
-    evk: &Evaluator<F>,
-    x: &LWECiphertext,
-    y: &LWECiphertext,
-    z: &LWECiphertext,
+fn join_bit_opearions<M: LWEPlainContainer<C>, C: LWECipherContainer, F: NTTField>(
+    evk: &Evaluator<M, C, F>,
+    x: &LWECiphertext<C>,
+    y: &LWECiphertext<C>,
+    z: &LWECiphertext<C>,
 ) -> (
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
+    LWECiphertext<C>,
+    LWECiphertext<C>,
+    LWECiphertext<C>,
+    LWECiphertext<C>,
+    LWECiphertext<C>,
+    LWECiphertext<C>,
+    LWECiphertext<C>,
+    LWECiphertext<C>,
 ) {
-    let mut ct_and: Option<LWECiphertext> = None;
-    let mut ct_nand: Option<LWECiphertext> = None;
-    let mut ct_or: Option<LWECiphertext> = None;
-    let mut ct_nor: Option<LWECiphertext> = None;
-    let mut ct_xor: Option<LWECiphertext> = None;
-    let mut ct_xnor: Option<LWECiphertext> = None;
-    let mut ct_majority: Option<LWECiphertext> = None;
-    let mut ct_mux: Option<LWECiphertext> = None;
+    let mut ct_and: Option<LWECiphertext<C>> = None;
+    let mut ct_nand: Option<LWECiphertext<C>> = None;
+    let mut ct_or: Option<LWECiphertext<C>> = None;
+    let mut ct_nor: Option<LWECiphertext<C>> = None;
+    let mut ct_xor: Option<LWECiphertext<C>> = None;
+    let mut ct_xnor: Option<LWECiphertext<C>> = None;
+    let mut ct_majority: Option<LWECiphertext<C>> = None;
+    let mut ct_mux: Option<LWECiphertext<C>> = None;
 
     rayon::scope(|s| {
         s.spawn(|_| ct_and = Some(evk.and(x, y)));

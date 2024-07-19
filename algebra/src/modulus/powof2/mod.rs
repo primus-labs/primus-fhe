@@ -1,3 +1,7 @@
+use std::ops::Add;
+
+use num_traits::ConstOne;
+
 #[macro_use]
 mod internal_macros;
 
@@ -17,6 +21,14 @@ impl<T: Copy> PowOf2Modulus<T> {
     #[inline]
     pub const fn mask(&self) -> T {
         self.mask
+    }
+}
+
+impl<T: Copy + ConstOne + Add<Output = T>> PowOf2Modulus<T> {
+    /// Returns the value of this [`PowOf2Modulus<T>`].
+    #[inline]
+    pub fn value(self) -> T {
+        self.mask + T::ONE
     }
 }
 

@@ -4,7 +4,9 @@ use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial}
 use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
 
-use crate::{BlindRotationType, LWEModulusType, NTRUCiphertext, SecretKeyPack};
+use crate::{
+    BlindRotationType, LWECipherContainer, LWEPlainContainer, NTRUCiphertext, SecretKeyPack,
+};
 
 /// The Key Switching Key.
 ///
@@ -21,13 +23,15 @@ pub struct KeySwitchingKey<F: NTTField> {
 
 impl<F: NTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R>(
-        secret_key_pack: &SecretKeyPack<F>,
+    pub fn generate<R, M, C>(
+        secret_key_pack: &SecretKeyPack<M, C, F>,
         chi: FieldDiscreteGaussianSampler,
         mut rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
+        M: LWEPlainContainer<C>,
+        C: LWECipherContainer,
     {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();
@@ -39,10 +43,14 @@ impl<F: NTTField> KeySwitchingKey<F> {
         assert!(extended_lwe_dimension <= ring_dimension);
 
         // negative convertion
-        let convert = |v: &LWEModulusType| match *v {
-            0 => F::zero(),
-            1 => F::neg_one(),
-            _ => F::one(),
+        let convert = |v: &C| {
+            if *v == C::ZERO {
+                F::zero()
+            } else if *v == C::ONE {
+                F::neg_one()
+            } else {
+                F::one()
+            }
         };
 
         // s = [s_0, 0,..., 0, -s_{n-1},..., -s_1]
