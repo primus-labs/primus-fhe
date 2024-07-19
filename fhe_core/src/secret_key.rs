@@ -9,7 +9,7 @@ use lattice::{sample_binary_values, sample_ternary_values};
 use num_traits::Inv;
 
 use crate::{
-    ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEBoolMessage, LWEModulusType,
+    ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEMessageType, LWEModulusType,
     Parameters, StepsAfterBR,
 };
 
@@ -187,7 +187,7 @@ impl<F: NTTField> SecretKeyPack<F> {
 
     /// Encrypts [`LWEModulusType`] into [`LWECiphertext`].
     #[inline]
-    pub fn encrypt(&self, message: LWEBoolMessage) -> LWECiphertext {
+    pub fn encrypt(&self, message: LWEMessageType) -> LWECiphertext {
         let lwe_modulus = self.parameters.lwe_modulus();
         let noise_distribution = self.parameters.lwe_noise_distribution();
         let lwe_modulus_value = lwe_modulus.value();
