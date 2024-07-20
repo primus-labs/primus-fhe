@@ -3,32 +3,28 @@ use algebra::{Field, NTTField, NTTPolynomial, Polynomial,modulus::PowOf2Modulus}
 use lattice::{RLWE, LWE, RGSW};
 use fhe_core::{RLWEBlindRotationKey,lwe_modulus_switch};
 
+// N:dimension
 const N:usize= 1024;
 const U:u32= 1<<29;
 
+/// Complete the bootstrapping operation with LWE Ciphertext *`ciphertext`*, vector *`test_vector`* and BlindRotationKey `key`
 pub fn gatebootstrapping<F:Field<Value=u32>+NTTField>(
     ciphertext: LWE<F>,
+    test_vector:Vec<F>,
     key:RLWEBlindRotationKey<F>,
 )->LWE<F>{
-    //modulus_switching:q->2n
     let switch = lwe_modulus_switch(ciphertext,2048);
-    //lwe
     let ciphertext_change=switch.a();
-    //blind_rotate key
     let binary_key=match key {
         RLWEBlindRotationKey::Binary(binary_key)=> binary_key,
         RLWEBlindRotationKey::Ternary(_)=>panic!(),
     };
-    //rlwe.a:poly.-u,rlwe.b:0,u=1<<29
-    //-(1<<29)=3758096384
-    let num1 = F::new(3758096384); //lvl1
-    let vector1= vec![num1;N+1];
     let vector2= vec![F::ZERO;N+1];
-    let text1 = Polynomial::<F>::new(vector1);
+    let text1 = Polynomial::<F>::new(test_vector);
     let text2 = Polynomial::<F>::new(vector2);
     let acc=RLWE::new(text1,text2);
     let modulus:usize = 1;
-    let m = 2048; //2N
+    let m = 2048;
     let lwe_modulus = PowOf2Modulus::<u32>::new(m);
     let temp = binary_key.blind_rotate(
         acc,
@@ -42,6 +38,13 @@ pub fn gatebootstrapping<F:Field<Value=u32>+NTTField>(
 }
 
 
+/// Performs the homomorphic and operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `ca`, with message `a`.
+/// * Input: LWE ciphertext `cb`, with message `b`.
+/// * Output: LWE ciphertext with message `a and b`.
 pub fn homand<F:Field<Value=u32>+NTTField>(
     ca:LWE<F>,
     cb:LWE<F>,
@@ -54,10 +57,21 @@ pub fn homand<F:Field<Value=u32>+NTTField>(
     let offset = F::new(U);
     temp[N] = temp[N] + offset;
     let lwe_temp=LWE::new(temp,N.into());
-    let res = gatebootstrapping(lwe_temp,key);
+    let num = F::new(3758096384);
+    let test= vec![num;N+1];
+    //使用targetp,u是lvl1的
+    let res = gatebootstrapping(lwe_temp,test,key);
     return res;
 }
 
+
+/// Performs the greater homomorphic comparison "greater" operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `cipher1`, with message `a`.
+/// * Input: RGSW ciphertext `cipher2`, with message `b`.
+/// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=0.
 pub fn greater_hcmp<F:Field<Value=u32>+NTTField>(
     cipher1: &RLWE<F>,
     cipher2: &RGSW<F>,
@@ -77,7 +91,16 @@ pub fn greater_hcmp<F:Field<Value=u32>+NTTField>(
 }
 
 
-pub fn greater_arbhcmp<F:Field<Value=u32>+NTTField>(
+/// Performs the fixed-precision homomorphic comparison "greater" operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `cipher1`, with message `a`.
+/// * Input: RGSW ciphertext `cipher2`, with message `b`.
+/// * Input: ciphersize `cipher_size`.
+/// * Input: BlindRotationKey `gatebootstrappingkey`.
+/// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=0.
+pub fn greater_arbhcmp_fixed<F:Field<Value=u32>+NTTField>(
     cipher1: &Vec<RLWE<F>>,
     cipher2: &Vec<RGSW<F>>,
     cipher_size:usize,
@@ -88,7 +111,7 @@ pub fn greater_arbhcmp<F:Field<Value=u32>+NTTField>(
     }
     else{
         let key_clone = gatebootstrappingkey.clone();
-        let low_res= greater_arbhcmp(cipher1,cipher2,cipher_size-1,gatebootstrappingkey);
+        let low_res= greater_arbhcmp_fixed(cipher1,cipher2,cipher_size-1,gatebootstrappingkey);
         let mul = cipher1[cipher_size-1].mul_small_rgsw(&cipher2[cipher_size-1]);
         let equal_res = RLWE::extract_lwe(&mul);
         let high_res =  greater_hcmp(&cipher1[cipher_size-1],&cipher2[cipher_size-1]);
@@ -103,13 +126,67 @@ pub fn greater_arbhcmp<F:Field<Value=u32>+NTTField>(
         let offset = F::new(U>>1);
         tlwelvl1[N] = tlwelvl1[N] + offset;
         let new_lwe=LWE::new(tlwelvl1,low_res.b());
-        let res = gatebootstrapping(new_lwe,key_clone);
+        let num = F::new(3758096384);
+        let test= vec![num;N+1];
+        let res = gatebootstrapping(new_lwe,test,key_clone);
         return res;
     }
 }
 
 
+/// Performs the arbitary-precision homomorphic comparison "greater" operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `cipher1`, with message `a`.
+/// * Input: RGSW ciphertext `cipher2`, with message `b`.
+/// * Input: ciphersize `cipher_size`.
+/// * Input: chosen scale `scale_bits`.
+/// * Input: BlindRotationKey `gatebootstrappingkey`.
+/// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=0.
+pub fn greater_arbhcmp_arbitary<F:Field<Value=u32>+NTTField>(
+    cipher1: &Vec<RLWE<F>>,
+    cipher2: &Vec<RGSW<F>>,
+    cipher_size:usize,
+    scale_bits:usize,
+    gatebootstrappingkey:RLWEBlindRotationKey<F>,
+)->LWE<F>{
+    if cipher_size == 1{
+        return greater_hcmp(&cipher1[0],&cipher2[0]);
+    }
+    else{
+        let key_clone = gatebootstrappingkey.clone();
+        let low_res= greater_arbhcmp_fixed(cipher1,cipher2,cipher_size-1,gatebootstrappingkey);
+        let mul = cipher1[cipher_size-1].mul_small_rgsw(&cipher2[cipher_size-1]);
+        let equal_res = RLWE::extract_lwe(&mul);
+        let high_res =  greater_hcmp(&cipher1[cipher_size-1],&cipher2[cipher_size-1]);
+        let mut high_plus = vec![F::ZERO;N+1];
+        for i in 0..N+1{
+            high_plus[i] = high_res.a()[i] + high_res.a()[i];
+        }
+        let mut tlwelvl1: Vec<F> = vec![0.into();N+1];
+        for i in 0..N+1{
+            tlwelvl1[i] = low_res.a()[i] + equal_res.a()[i] + high_plus[i];
+        }
+        let offset = F::new(U>>1);
+        let c =F::new(1<<(scale_bits-1));
+        tlwelvl1[N] = tlwelvl1[N] + offset;
+        let new_lwe=LWE::new(tlwelvl1,low_res.b());
+        let test= vec![c;N+1];
+        let mut res = gatebootstrapping(new_lwe,test,key_clone);
+        res.a_mut()[N]=res.a_mut()[N]+c;
+        return res;
+    }
+}
 
+
+/// Performs the homomorphic comparison "equality" operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `cipher1`, with message `a`.
+/// * Input: RGSW ciphertext `cipher2`, with message `b`.
+/// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=0.
 pub fn equality_hcmp<F:Field<Value=u32>+NTTField>(
     cipher1: &RLWE<F>,
     cipher2: &RGSW<F>,
@@ -124,6 +201,13 @@ pub fn equality_hcmp<F:Field<Value=u32>+NTTField>(
 }
 
 
+/// Performs the arbitary-precision homomorphic comparison "equality" operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `cipher1`, with message `a`.
+/// * Input: RGSW ciphertext `cipher2`, with message `b`.
+/// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=0.
 pub fn equality_arbhcmp<F:Field<Value=u32>+NTTField>(
     cipher1: &Vec<RLWE<F>>,
     cipher2: &Vec<RGSW<F>>,
@@ -143,6 +227,13 @@ pub fn equality_arbhcmp<F:Field<Value=u32>+NTTField>(
 }
 
 
+/// Performs the greater homomorphic comparison "less" operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `cipher1`, with message `a`.
+/// * Input: RGSW ciphertext `cipher2`, with message `b`.
+/// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=0.
 pub fn less_hcmp<F:Field<Value=u32>+NTTField>(
     cipher1: &RLWE<F>,
     cipher2: &RGSW<F>,
@@ -159,7 +250,15 @@ pub fn less_hcmp<F:Field<Value=u32>+NTTField>(
     return res;
 }
 
-
+/// Performs the fixed-precision homomorphic comparison "less" operation.
+///
+/// # Arguments
+///
+/// * Input: LWE ciphertext `cipher1`, with message `a`.
+/// * Input: RGSW ciphertext `cipher2`, with message `b`.
+/// * Input: ciphersize `cipher_size`.
+/// * Input: BlindRotationKey `gatebootstrappingkey`.
+/// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=0.
 pub fn less_arbhcmp<F:Field<Value=u32>+NTTField>(
     cipher1: &Vec<RLWE<F>>,
     cipher2: &Vec<RGSW<F>>,
@@ -186,7 +285,9 @@ pub fn less_arbhcmp<F:Field<Value=u32>+NTTField>(
         let offset = F::new(U>>1);
         tlwelvl1[N] = tlwelvl1[N] + offset;
         let new_lwe=LWE::new(tlwelvl1,low_res.b());
-        let res = gatebootstrapping(new_lwe,key_clone);
+        let num = F::new(3758096384);
+        let test= vec![num;N+1];
+        let res = gatebootstrapping(new_lwe,test,key_clone);
         return res;
     }
 }
