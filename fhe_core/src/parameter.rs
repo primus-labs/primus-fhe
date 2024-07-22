@@ -7,7 +7,7 @@ use algebra::{
 use lattice::DiscreteGaussian;
 
 use crate::{
-    Code, FHECoreError, LWECipherValueContainer, LWEPlainContainer, ModulusSwitchRoundMethod,
+    FHECoreError, LWECipherValueContainer, LWEPlainContainer, ModulusSwitchRoundMethod,
     RingSecretKeyType, SecretKeyType,
 };
 
@@ -23,15 +23,22 @@ pub enum StepsAfterBR {
 
 /// Parameters for LWE.
 #[derive(Debug, Clone, Copy)]
-pub struct LWEParameters<M: LWEPlainContainer<C>, C: LWECipherValueContainer> {
+pub struct LWEParameters<M: LWEPlainContainer, C: LWECipherValueContainer> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
     pub lwe_modulus: PowOf2Modulus<C>,
     /// The lwe noise error's standard deviation
     pub lwe_noise_std_dev: f64,
-    /// LWE `encode` and `decode`.
-    pub code: Code<M, C>,
+    /// LWE message space.
+    pub m: u64,
+    /// LWE message space with padding.
+    pub t: u64,
+    /// `q/t`, it should be a power of 2.
+    pub delta: u64,
+    /// `delta`'s trailing zeros
+    pub delta_trailing_zeros: u32,
+    pub phantom: std::marker::PhantomData<M>,
 }
 
 /// Use `RLWE` or `NTRU` to perform blind rotation.
@@ -77,7 +84,7 @@ pub struct ModulusSwitchParameters {
 
 /// Parameters for FHE
 #[derive(Debug, Clone, Copy)]
-pub struct Parameters<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> {
+pub struct Parameters<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
     secret_key_type: SecretKeyType,
     ring_secret_key_type: RingSecretKeyType,
     steps_after_blind_rotation: StepsAfterBR,
@@ -91,15 +98,15 @@ pub struct Parameters<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NT
 ///
 /// This type is used for setting some default Parameters.
 #[derive(Debug, Clone, Copy)]
-pub struct ConstParameters<M: LWEPlainContainer<C>, C: LWECipherValueContainer, FieldContainer> {
+pub struct ConstParameters<M: LWEPlainContainer, C: LWECipherValueContainer, FieldContainer> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
     pub lwe_modulus: C,
     /// LWE message space(not contain padding).
-    pub real_message_size: C,
+    pub m: C,
     /// LWE message space(may contain padding).
-    pub padding_message_size: C,
+    pub t: C,
     /// The lwe noise error's standard deviation
     pub lwe_noise_std_dev: f64,
     /// LWE Secret Key distribution Type
@@ -135,7 +142,7 @@ pub struct ConstParameters<M: LWEPlainContainer<C>, C: LWECipherValueContainer, 
     pub phantom: PhantomData<M>,
 }
 
-impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> Parameters<M, C, F> {
+impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> Parameters<M, C, F> {
     /// Create a new Parameter instance.
     pub fn new(params: ConstParameters<M, C, F::Value>) -> Result<Self, FHECoreError> {
         let lwe_dimension = params.lwe_dimension;
@@ -177,8 +184,8 @@ impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> Parameter
         }
 
         // 2N|(Q-1)
-        let t: u64 = ring_modulus.into();
-        let ring_modulus_u = t.try_into().unwrap();
+        let temp: u64 = ring_modulus.into();
+        let ring_modulus_u = temp.try_into().unwrap();
         let temp = (ring_modulus_u - 1) / (ring_dimension << 1);
         if temp * (ring_dimension << 1) != (ring_modulus_u - 1) {
             return Err(FHECoreError::RingModulusAndDimensionNotCompatible {
@@ -187,15 +194,21 @@ impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> Parameter
             });
         }
 
+        let m: u64 = params.m.as_into();
+        let t: u64 = params.t.as_into();
+        let q: u64 = lwe_modulus.as_into();
+        assert!(m <= t && t <= q);
+        assert!(t.is_power_of_two() && q.is_power_of_two());
+        let delta = q / t;
         let lwe_params = LWEParameters {
-            lwe_dimension: params.lwe_dimension,
+            lwe_dimension,
             lwe_modulus: lwe_modulus.to_power_of_2_modulus(),
             lwe_noise_std_dev: params.lwe_noise_std_dev,
-            code: Code::new(
-                params.real_message_size,
-                params.padding_message_size,
-                lwe_modulus,
-            ),
+            m,
+            t,
+            delta,
+            delta_trailing_zeros: delta.trailing_zeros(),
+            phantom: PhantomData,
         };
 
         let blind_rotation_params = BlindRotationParameters::<F> {
@@ -239,16 +252,34 @@ impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> Parameter
         self.lwe_params.lwe_modulus
     }
 
+    /// Returns the `m` of this [`Parameters<F>`], refers to **`m`** in the paper.
+    #[inline]
+    pub fn m(&self) -> u64 {
+        self.lwe_params.m
+    }
+
+    /// Returns the `t` of this [`Parameters<F>`], refers to **`m`** in the paper.
+    #[inline]
+    pub fn t(&self) -> u64 {
+        self.lwe_params.t
+    }
+
+    /// Returns the `delta` of this [`Parameters<F>`], refers to **`m`** in the paper.
+    #[inline]
+    pub fn delta(&self) -> u64 {
+        self.lwe_params.delta
+    }
+
+    /// Returns the `delta_trailing_zeros` of this [`Parameters<F>`], refers to **`m`** in the paper.
+    #[inline]
+    pub fn delta_trailing_zeros(&self) -> u32 {
+        self.lwe_params.delta_trailing_zeros
+    }
+
     /// Returns the lwe noise error's standard deviation of this [`Parameters<F>`].
     #[inline]
     pub fn lwe_noise_std_dev(&self) -> f64 {
         self.lwe_params.lwe_noise_std_dev
-    }
-
-    /// Returns the lwe coder of this [`Parameters<F>`].
-    #[inline]
-    pub fn lwe_coder(&self) -> Code<M, C> {
-        self.lwe_params.code
     }
 
     /// Returns the LWE Secret Key distribution Type of this [`Parameters<F>`].

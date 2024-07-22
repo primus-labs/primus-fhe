@@ -5,8 +5,8 @@ use lattice::{sample_binary_values, sample_ternary_values};
 use num_traits::Inv;
 
 use crate::{
-    ciphertext::LWECiphertext, BlindRotationType, LWECipherValueContainer, LWEPlainContainer,
-    Parameters, StepsAfterBR,
+    ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWECipherValueContainer,
+    LWEPlainContainer, Parameters, StepsAfterBR,
 };
 
 /// The distribution type of the LWE Secret Key
@@ -45,7 +45,7 @@ pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 /// ring secret key, ntt version ring secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
-pub struct SecretKeyPack<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> {
+pub struct SecretKeyPack<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
     /// LWE secret key
     lwe_secret_key: Vec<C>,
     /// ring secret key
@@ -60,7 +60,7 @@ pub struct SecretKeyPack<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F:
     csrng: RefCell<Prg>,
 }
 
-impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> SecretKeyPack<M, C, F> {
+impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> SecretKeyPack<M, C, F> {
     fn create_lwe_secret_key(parameters: &Parameters<M, C, F>, csrng: &mut Prg) -> Vec<C> {
         let lwe_dimension = parameters.lwe_dimension();
 
@@ -198,9 +198,14 @@ impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> SecretKey
             &mut *csrng,
         );
 
-        cipher
-            .b_mut()
-            .add_reduce_assign(self.parameters.lwe_coder().encode(message), lwe_modulus);
+        cipher.b_mut().add_reduce_assign(
+            encode(
+                message,
+                self.parameters.m(),
+                self.parameters.delta_trailing_zeros(),
+            ),
+            lwe_modulus,
+        );
 
         cipher
     }
@@ -213,7 +218,11 @@ impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> SecretKey
         let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
-        self.parameters.lwe_coder().decode(plaintext)
+        decode(
+            plaintext,
+            self.parameters.m(),
+            self.parameters.delta_trailing_zeros(),
+        )
     }
 
     /// Decrypts the [`LWECiphertext`] back to message
@@ -224,10 +233,18 @@ impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> SecretKey
         let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
 
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
-        let coder = self.parameters.lwe_coder();
-        let message = coder.decode(plaintext);
 
-        let fresh = coder.encode(message);
+        let message = decode(
+            plaintext,
+            self.parameters.m(),
+            self.parameters.delta_trailing_zeros(),
+        );
+
+        let fresh = encode(
+            message,
+            self.parameters.m(),
+            self.parameters.delta_trailing_zeros(),
+        );
 
         (
             message,

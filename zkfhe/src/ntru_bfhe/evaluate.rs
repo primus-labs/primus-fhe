@@ -8,7 +8,7 @@ use lattice::NTRU;
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
-pub struct EvaluationKey<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> {
+pub struct EvaluationKey<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
     /// Blind rotation key
     blind_rotation_key: NTRUBlindRotationKey<F>,
     /// Key Switching Key
@@ -17,7 +17,7 @@ pub struct EvaluationKey<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F:
     parameters: Parameters<M, C, F>,
 }
 
-impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> EvaluationKey<M, C, F> {
+impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> EvaluationKey<M, C, F> {
     /// Returns the parameters of this [`EvaluationKey<F>`].
     #[inline]
     pub fn parameters(&self) -> &Parameters<M, C, F> {
@@ -87,11 +87,11 @@ impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> Evaluatio
 
 /// Evaluator
 #[derive(Debug, Clone)]
-pub struct Evaluator<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> {
+pub struct Evaluator<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
     ek: EvaluationKey<M, C, F>,
 }
 
-impl<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField> Evaluator<M, C, F> {
+impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> Evaluator<M, C, F> {
     /// Create a new instance.
     pub fn new(sk: &SecretKeyPack<M, C, F>) -> Self {
         Self {

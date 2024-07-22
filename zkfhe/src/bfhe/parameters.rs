@@ -13,8 +13,8 @@ pub static DEFAULT_TERNARY_128_BITS_PARAMERTERS: Lazy<Parameters<bool, u16, Defa
         Parameters::<bool, u16, DefaultFieldU32>::new(ConstParameters {
             lwe_dimension: 1024,
             lwe_modulus: 1024,
-            real_message_size: 2,
-            padding_message_size: 4,
+            m: 2,
+            t: 4,
             lwe_noise_std_dev: 3.20,
             secret_key_type: SecretKeyType::Ternary,
             blind_rotation_type: BlindRotationType::RLWE,

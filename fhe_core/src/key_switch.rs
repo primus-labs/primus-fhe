@@ -30,7 +30,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        M: LWEPlainContainer<C>,
+        M: LWEPlainContainer,
         C: LWECipherValueContainer,
     {
         let parameters = secret_key_pack.parameters();

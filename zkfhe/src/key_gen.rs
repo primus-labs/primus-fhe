@@ -9,7 +9,7 @@ pub struct KeyGen;
 impl KeyGen {
     /// Generate key pair
     #[inline]
-    pub fn generate_secret_key<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField>(
+    pub fn generate_secret_key<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField>(
         params: Parameters<M, C, F>,
     ) -> SecretKeyPack<M, C, F> {
         SecretKeyPack::new(params)

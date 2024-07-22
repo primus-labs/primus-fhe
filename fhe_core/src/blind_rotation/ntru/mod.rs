@@ -76,7 +76,7 @@ impl<F: NTTField> BlindRotationKey<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        M: LWEPlainContainer<C>,
+        M: LWEPlainContainer,
         C: LWECipherValueContainer,
     {
         let parameters = secret_key_pack.parameters();

@@ -1,17 +1,35 @@
-use fhe_core::Code;
+use algebra::modulus::PowOf2Modulus;
+use algebra::reduce::{AddReduce, SubReduce};
+use fhe_core::{decode, encode};
+
+type M = u8;
+type C = u16;
 
 fn main() {
-    let real_message_size = 64;
-    let q = 8192;
-    let coder = <Code<u8, u16>>::new(real_message_size, real_message_size * 2, q);
+    let m: u64 = 64;
+    let t: u64 = 128;
+    let q: u64 = 8192;
 
-    let noise_max = q / (real_message_size * 4);
+    let delta = q / t;
+    let delta_trailing_zeros = delta.trailing_zeros();
 
-    let message = 61;
-    let encoded = coder.encode(message);
+    let noise_max = (q / (m * 4)) as C;
+
+    let modulus = PowOf2Modulus::<u16>::new(q as C);
+
+    let message: M = 0;
+    let encoded: C = encode(message, m, delta_trailing_zeros);
     println!("Encode:{}->{}", message, encoded);
-    let decoded = coder.decode(encoded + noise_max - 1);
+    let decoded: M = decode(
+        encoded.add_reduce(noise_max - 1, modulus),
+        m,
+        delta_trailing_zeros,
+    );
     println!("Decode:{}->{}", encoded, decoded);
-    let decoded = coder.decode(encoded - noise_max + 1);
+    let decoded: M = decode(
+        encoded.sub_reduce(noise_max - 1, modulus),
+        m,
+        delta_trailing_zeros,
+    );
     println!("Decode:{}->{}", encoded, decoded);
 }
