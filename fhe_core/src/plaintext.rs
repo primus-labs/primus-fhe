@@ -78,6 +78,8 @@ where
     /// Refer to `m` of the LWE,
     /// which is the real message space of the scheme.
     real_message_size: C,
+    /// Refer to `m-1` of the LWE.
+    m_mask: C,
     /// Refer to `t-1` of the LWE.
     ///
     /// `t` is message space which is used to perform LWE operation.
@@ -104,6 +106,7 @@ where
 
         Self {
             real_message_size,
+            m_mask: real_message_size - C::ONE,
             t_mask: padding_message_size - C::ONE,
             q_bits_sub_t_bits,
             phantom: PhantomData,
@@ -123,9 +126,9 @@ where
         // Move the message to the least significant part of `C`.
         // Leave one more bit for round.
         let temp = cipher >> (self.q_bits_sub_t_bits - 1);
-        let decoded = ((temp >> 1u32) + (temp & C::ONE)) & self.t_mask;
+        let decoded = (((temp >> 1u32) + (temp & C::ONE)) & self.t_mask) & self.m_mask;
 
-        assert!(decoded <= self.real_message_size);
+        assert!(decoded < self.real_message_size);
 
         M::shrink(decoded)
     }
