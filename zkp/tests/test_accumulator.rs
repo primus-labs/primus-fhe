@@ -25,42 +25,31 @@ type FF = Fp32;
 #[modulus = 59]
 pub struct Fq(u32);
 
-trait RandomCiphertext {
-    fn random<R>(rng: &mut R, num_vars: usize) -> Self
-    where
-        R: rand::Rng + rand::CryptoRng;
-}
-
-impl<F: Field> RandomCiphertext for RlweCiphertext<F> {
-    fn random<R>(rng: &mut R, num_vars: usize) -> Self
-    where
-        R: rand::Rng + rand::CryptoRng,
-    {
-        Self {
-            a: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
-            b: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
-        }
+fn random_rlwe_ciphertext<F: Field, R>(rng: &mut R, num_vars: usize) -> RlweCiphertext<F>
+where
+    R: rand::Rng + rand::CryptoRng,
+{
+    RlweCiphertext {
+        a: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
+        b: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
     }
 }
-trait RandomCiphertexts {
-    fn random<R>(bits_len: usize, rng: &mut R, num_vars: usize) -> Self
-    where
-        R: rand::Rng + rand::CryptoRng;
-}
 
-impl<F: Field> RandomCiphertexts for RlweCiphertexts<F> {
-    fn random<R>(bits_len: usize, rng: &mut R, num_vars: usize) -> Self
-    where
-        R: rand::Rng + rand::CryptoRng,
-    {
-        Self {
-            a_bits: (0..bits_len)
-                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
-                .collect(),
-            b_bits: (0..bits_len)
-                .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
-                .collect(),
-        }
+fn random_rlwe_ciphertexts<F: Field, R>(
+    bits_len: usize,
+    rng: &mut R,
+    num_vars: usize,
+) -> RlweCiphertexts<F>
+where
+    R: rand::Rng + rand::CryptoRng,
+{
+    RlweCiphertexts {
+        a_bits: (0..bits_len)
+            .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+            .collect(),
+        b_bits: (0..bits_len)
+            .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+            .collect(),
     }
 }
 
@@ -292,7 +281,7 @@ fn test_trivial_accumulator() {
     let ntt_table = Rc::new(ntt_table);
     let ntt_info = NTTInstanceInfo { log_n, ntt_table };
 
-    let mut accumulator = <RlweCiphertext<FF>>::random(&mut rng, num_vars);
+    let mut accumulator = random_rlwe_ciphertext(&mut rng, num_vars);
     let mut accumulator_instance = <AccumulatorInstance<FF>>::new(num_vars, &ntt_info, &basis_info);
 
     // number of updations in ACC
@@ -325,8 +314,8 @@ fn test_trivial_accumulator() {
             num_vars, &random_d,
         ));
         let rgsw_ntt = (
-            <RlweCiphertexts<FF>>::random(basis_info.bits_len as usize, &mut rng, num_vars),
-            <RlweCiphertexts<FF>>::random(basis_info.bits_len as usize, &mut rng, num_vars),
+            random_rlwe_ciphertexts(basis_info.bits_len as usize, &mut rng, num_vars),
+            random_rlwe_ciphertexts(basis_info.bits_len as usize, &mut rng, num_vars),
         );
         let witness = update_accumulator(&accumulator, input_d, rgsw_ntt, &basis_info, &ntt_info);
 
