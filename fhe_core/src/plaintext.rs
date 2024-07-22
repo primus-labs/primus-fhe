@@ -27,7 +27,6 @@ macro_rules! shrink_impl {
             fn shrink(c: bool) -> bool {
                 c
             }
-
         }
         $(
             impl Shrink<$C> for bool {
@@ -39,7 +38,6 @@ macro_rules! shrink_impl {
                         _ => panic!("shrink error!")
                     }
                 }
-
             }
         )*
     };
@@ -49,7 +47,6 @@ macro_rules! shrink_impl {
             fn shrink(c: $M) -> $M {
                 c
             }
-
         }
         $(
             impl Shrink<$C> for $M {
@@ -57,11 +54,10 @@ macro_rules! shrink_impl {
                 fn shrink(c: $C) -> $M {
                     c.try_into().unwrap()
                 }
-
             }
         )*
     };
-    () =>{
+    () => {
         shrink_impl!(@ bool, u8, u16, u32, u64);
         shrink_impl!(@@ u8, u16, u32, u64);
         shrink_impl!(@@ u16, u32, u64);
@@ -83,7 +79,7 @@ where
     /// which is the real message space of the scheme.
     real_message_size: C,
     /// Refer to `t-1` of the LWE.
-    /// 
+    ///
     /// `t` is message space which is used to perform LWE operation.
     t_mask: C,
     /// `q`'s bit count sub `t`'s bit count.
@@ -124,7 +120,7 @@ where
     /// Decodes a plain text
     #[inline]
     pub fn decode(&self, cipher: C) -> M {
-        // Move the message to the least significant part of `C`. 
+        // Move the message to the least significant part of `C`.
         // Leave one more bit for round.
         let temp = cipher >> (self.q_bits_sub_t_bits - 1);
         let decoded = ((temp >> 1u32) + (temp & C::ONE)) & self.t_mask;
@@ -151,8 +147,6 @@ macro_rules! plain_impl {
         plain_impl!(@ u16, u32, u64);
         plain_impl!(@ u32, u64);
         plain_impl!(@ u64,);
-
-
     }
 }
 
