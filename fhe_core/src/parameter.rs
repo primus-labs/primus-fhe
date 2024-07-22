@@ -3,7 +3,9 @@ use algebra::{
 };
 use lattice::DiscreteGaussian;
 
-use crate::{FHECoreError, LWEModulusType, RingSecretKeyType, SecretKeyType};
+use crate::{
+    FHECoreError, LWEModulusType, ModulusSwitchRoundMethod, RingSecretKeyType, SecretKeyType,
+};
 
 /// The steps after blind rotarion.
 #[derive(Debug, Default, Clone, Copy)]
@@ -61,6 +63,12 @@ pub struct KeySwitchingParameters<F: NTTField> {
     pub key_switching_std_dev: f64,
 }
 
+/// Parameters for modulus switching.
+#[derive(Debug, Clone, Copy)]
+pub struct ModulusSwitchParameters {
+    pub round_method: ModulusSwitchRoundMethod,
+}
+
 /// Parameters for FHE
 #[derive(Debug, Clone, Copy)]
 pub struct Parameters<F: NTTField> {
@@ -70,6 +78,7 @@ pub struct Parameters<F: NTTField> {
     lwe_params: LWEParameters,
     blind_rotation_params: BlindRotationParameters<F>,
     key_switching_params: KeySwitchingParameters<F>,
+    modulus_switch_params: ModulusSwitchParameters,
 }
 
 /// The parameters of the fully homomorphic encryption scheme.
@@ -108,6 +117,9 @@ pub struct ConstParameters<Scalar> {
     pub key_switching_basis_bits: u32,
     /// The rlwe noise error's standard deviation for key switching.
     pub key_switching_std_dev: f64,
+
+    /// Modulus Switch round method.
+    pub modulus_switcing_round_method: ModulusSwitchRoundMethod,
 }
 
 impl<F: NTTField> Parameters<F> {
@@ -142,7 +154,8 @@ impl<F: NTTField> Parameters<F> {
         }
 
         // q|2N
-        let lwe_modulus_u: usize = lwe_modulus.into();
+        #[allow(clippy::unnecessary_fallible_conversions)]
+        let lwe_modulus_u: usize = lwe_modulus.try_into().unwrap();
         let twice_ring_dimension_div_lwe_modulus = (ring_dimension << 1) / lwe_modulus_u;
         if twice_ring_dimension_div_lwe_modulus * lwe_modulus_u != (ring_dimension << 1) {
             return Err(FHECoreError::LweModulusRingDimensionNotCompatible {
@@ -182,6 +195,10 @@ impl<F: NTTField> Parameters<F> {
             key_switching_std_dev: params.key_switching_std_dev,
         };
 
+        let modulus_switch_params = ModulusSwitchParameters {
+            round_method: params.modulus_switcing_round_method,
+        };
+
         Ok(Self {
             secret_key_type,
             ring_secret_key_type,
@@ -189,6 +206,7 @@ impl<F: NTTField> Parameters<F> {
             lwe_params,
             blind_rotation_params,
             key_switching_params,
+            modulus_switch_params,
         })
     }
 
@@ -295,6 +313,12 @@ impl<F: NTTField> Parameters<F> {
     #[inline]
     pub fn steps_after_blind_rotation(&self) -> StepsAfterBR {
         self.steps_after_blind_rotation
+    }
+
+    /// Returns the modulus switch round method of this [`Parameters<F>`].
+    #[inline]
+    pub fn modulus_switch_round_method(&self) -> ModulusSwitchRoundMethod {
+        self.modulus_switch_params.round_method
     }
 }
 

@@ -25,7 +25,7 @@ type PolyFF = Polynomial<FF>;
 fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtension<FF> {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let root = FF::get_ntt_table(log_n).unwrap().root();
     let mut power = FF::ONE;
     for _ in 0..m {
         ntt_table.push(power);
@@ -103,7 +103,7 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
     assert_eq!(coeff.len(), (1 << log_n) as usize);
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let root = FF::get_ntt_table(log_n).unwrap().root();
     let mut power = FF::ONE;
     for _ in 0..m {
         ntt_table.push(power);
@@ -169,10 +169,10 @@ fn test_ntt_inverse_transform_normal_order() {
 
 #[test]
 fn test_ntt_bare_without_delegation() {
-    let log_n = 10;
+    let log_n: usize = 10;
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
     let mut power = FF::ONE;
     for _ in 0..m {
         ntt_table.push(power);
@@ -206,10 +206,10 @@ fn test_ntt_bare_without_delegation() {
 
 #[test]
 fn test_ntt_with_delegation() {
-    let log_n = 10;
+    let log_n: usize = 10;
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
     let mut power = FF::ONE;
     for _ in 0..m {
         ntt_table.push(power);
@@ -240,10 +240,10 @@ fn test_ntt_with_delegation() {
 
 #[test]
 fn test_ntt_combined_with_delegation() {
-    let log_n = 3;
+    let log_n: usize = 5;
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::try_minimal_primitive_root(m).unwrap();
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
     let mut power = FF::ONE;
     for _ in 0..m {
         ntt_table.push(power);
