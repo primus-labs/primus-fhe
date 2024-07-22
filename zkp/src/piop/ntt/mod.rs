@@ -84,9 +84,9 @@ pub struct NTTInstance<F: Field> {
     /// stores {ω^0, ω^1, ..., ω^{2N-1}}
     pub ntt_table: Rc<Vec<F>>,
     /// coefficient representation of the polynomial
-    pub coeffs: Rc<DenseMultilinearExtension<F>>,
+    pub coeffs: DenseMultilinearExtension<F>,
     /// point-evaluation representation of the polynomial
-    pub points: Rc<DenseMultilinearExtension<F>>,
+    pub points: DenseMultilinearExtension<F>,
 }
 
 /// Stores the corresponding NTT table for the verifier
@@ -277,14 +277,14 @@ impl<F: Field> NTTInstance<F> {
     pub fn from_vec(
         log_n: usize,
         ntt_table: &Rc<Vec<F>>,
-        coeffs: &Rc<DenseMultilinearExtension<F>>,
-        points: &Rc<DenseMultilinearExtension<F>>,
+        coeffs: DenseMultilinearExtension<F>,
+        points: DenseMultilinearExtension<F>,
     ) -> Self {
         Self {
             log_n,
             ntt_table: ntt_table.clone(),
-            coeffs: Rc::clone(coeffs),
-            points: Rc::clone(points),
+            coeffs,
+            points,
         }
     }
 
@@ -299,8 +299,8 @@ impl<F: Field> NTTInstance<F> {
         Self {
             log_n,
             ntt_table: ntt_table.clone(),
-            coeffs: Rc::clone(coeffs),
-            points: Rc::clone(points),
+            coeffs: coeffs.as_ref().clone(),
+            points: points.as_ref().clone(),
         }
     }
 
@@ -310,15 +310,27 @@ impl<F: Field> NTTInstance<F> {
         Self {
             log_n: info.log_n,
             ntt_table: info.ntt_table.to_owned(),
-            coeffs: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(
+            coeffs: <DenseMultilinearExtension<F>>::from_evaluations_vec(
                 info.log_n,
                 vec![F::ZERO; 1 << info.log_n],
-            )),
-            points: Rc::new(<DenseMultilinearExtension<F>>::from_evaluations_vec(
+            ),
+            points: <DenseMultilinearExtension<F>>::from_evaluations_vec(
                 info.log_n,
                 vec![F::ZERO; 1 << info.log_n],
-            )),
+            ),
         }
+    }
+
+    /// add ntt_instance
+    #[inline]
+    pub fn add_ntt(
+        &mut self,
+        r: F,
+        coeffs: &Rc<DenseMultilinearExtension<F>>,
+        points: &Rc<DenseMultilinearExtension<F>>,
+    ) {
+        self.coeffs += (r, coeffs);
+        self.points += (r, points);
     }
 }
 
@@ -612,6 +624,7 @@ impl<F: Field> NTTIOP<F> {
             requested_point = subclaim.point;
         }
 
+        // TODO: handle the case that log = 1
         // TODO: handle the case that log = 1
         assert_eq!(requested_point.len(), 1);
         NTTSubclaim {

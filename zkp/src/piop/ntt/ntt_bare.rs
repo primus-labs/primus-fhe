@@ -240,7 +240,7 @@ impl<F: Field> NTTBareIOP<F> {
 
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(log_n);
 
-        let product = vec![Rc::clone(f_u), Rc::clone(&ntt_instance.coeffs)];
+        let product = vec![Rc::clone(f_u), Rc::new(ntt_instance.coeffs.clone())];
         poly.add_product(product, F::ONE);
 
         let (prover_msg, prover_state) =
