@@ -79,8 +79,14 @@ where
     M: LWEPlainContainer<C>,
     C: LWECipherContainer,
 {
+    /// Refer to `m` of the LWE,
+    /// which is the real message space of the scheme.
     real_message_size: C,
+    /// Refer to `t-1` of the LWE.
+    /// 
+    /// `t` is message space which is used to perform LWE operation.
     t_mask: C,
+    /// `q`'s bit count sub `t`'s bit count.
     q_bits_sub_t_bits: u32,
     phantom: PhantomData<M>,
 }
@@ -111,12 +117,15 @@ where
     /// Encodes a message
     #[inline]
     pub fn encode(&self, message: M) -> C {
+        // Shift the message to the most significant part of `C`.
         message.into() << self.q_bits_sub_t_bits
     }
 
     /// Decodes a plain text
     #[inline]
     pub fn decode(&self, cipher: C) -> M {
+        // Move the message to the least significant part of `C`. 
+        // Leave one more bit for round.
         let temp = cipher >> (self.q_bits_sub_t_bits - 1);
         let decoded = ((temp >> 1u32) + (temp & C::ONE)) & self.t_mask;
 
