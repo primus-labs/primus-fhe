@@ -5,7 +5,7 @@ use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, 
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    BlindRotationType, LWECipherContainer, LWEPlainContainer, NTRUCiphertext, SecretKeyPack,
+    BlindRotationType, LWECipherValueContainer, LWEPlainContainer, NTRUCiphertext, SecretKeyPack,
 };
 
 /// The Key Switching Key.
@@ -31,7 +31,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
     where
         R: Rng + CryptoRng,
         M: LWEPlainContainer<C>,
-        C: LWECipherContainer,
+        C: LWECipherValueContainer,
     {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();

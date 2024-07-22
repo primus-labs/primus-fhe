@@ -1,5 +1,7 @@
 use algebra::NTTField;
-use fhe_core::{utils::*, LWECipherContainer, LWECiphertext, LWEPlainContainer, SecretKeyPack};
+use fhe_core::{
+    utils::*, LWECipherValueContainer, LWECiphertext, LWEPlainContainer, SecretKeyPack,
+};
 use rand::Rng;
 use zkfhe::ntru_bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS};
 use zkfhe::{Decryptor, Encryptor};
@@ -108,7 +110,7 @@ fn main() {
 }
 
 #[allow(clippy::type_complexity)]
-fn join_bit_opearions<M: LWEPlainContainer<C>, C: LWECipherContainer, F: NTTField>(
+fn join_bit_opearions<M: LWEPlainContainer<C>, C: LWECipherValueContainer, F: NTTField>(
     evk: &Evaluator<M, C, F>,
     x: &LWECiphertext<C>,
     y: &LWECiphertext<C>,

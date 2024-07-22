@@ -1,7 +1,7 @@
 use algebra::{AsInto, DecomposableField, FheField};
 use lattice::LWE;
 
-use crate::{LWECipherContainer, LWECiphertext};
+use crate::{LWECipherValueContainer, LWECiphertext};
 
 /// Modulus Switch round method.
 #[derive(Debug, Clone, Copy)]
@@ -15,7 +15,7 @@ pub enum ModulusSwitchRoundMethod {
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch<C: LWECipherContainer, F: FheField>(
+pub fn lwe_modulus_switch<C: LWECipherValueContainer, F: FheField>(
     c: LWE<F>,
     modulus_after: C,
     round_method: ModulusSwitchRoundMethod,
@@ -42,7 +42,7 @@ pub fn lwe_modulus_switch<C: LWECipherContainer, F: FheField>(
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch_inplace<C: LWECipherContainer, F: DecomposableField>(
+pub fn lwe_modulus_switch_inplace<C: LWECipherValueContainer, F: DecomposableField>(
     c: LWE<F>,
     modulus_after: C,
     round_method: ModulusSwitchRoundMethod,

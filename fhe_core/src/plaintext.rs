@@ -73,7 +73,7 @@ shrink_impl!();
 pub struct Code<M, C>
 where
     M: LWEPlainContainer<C>,
-    C: LWECipherContainer,
+    C: LWECipherValueContainer,
 {
     /// Refer to `m` of the LWE,
     /// which is the real message space of the scheme.
@@ -90,7 +90,7 @@ where
 impl<M, C> Code<M, C>
 where
     M: LWEPlainContainer<C>,
-    C: LWECipherContainer,
+    C: LWECipherValueContainer,
 {
     /// Generate the coder.
     #[inline]
@@ -152,8 +152,8 @@ macro_rules! plain_impl {
 
 plain_impl!();
 
-/// LWE cipher text container trait
-pub trait LWECipherContainer:
+/// The inner value container trait of LWE cipher text.
+pub trait LWECipherValueContainer:
     PrimInt
     + Send
     + Sync
@@ -185,7 +185,7 @@ pub trait LWECipherContainer:
 macro_rules! cipher_impl {
     ($($T:ty),*) => {
         $(
-            impl LWECipherContainer for $T {
+            impl LWECipherValueContainer for $T {
                 const TWO: Self = 2;
                 #[inline]
                 fn to_power_of_2_modulus(self) -> PowOf2Modulus<Self> {

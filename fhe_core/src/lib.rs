@@ -28,7 +28,7 @@ pub use parameter::{
 pub use ciphertext::{
     LWECiphertext, NTRUCiphertext, NTTNTRUCiphertext, NTTRLWECiphertext, RLWECiphertext,
 };
-pub use plaintext::{Code, LWECipherContainer, LWEPlainContainer};
+pub use plaintext::{Code, LWECipherValueContainer, LWEPlainContainer};
 
 pub use secret_key::{RingSecretKeyType, SecretKeyPack, SecretKeyType};
 
