@@ -63,16 +63,28 @@ impl<F: NTTField> EvaluationKey<F> {
 
         acc.b_mut()[0] += F::new(F::MODULUS_VALUE >> 3);
 
+        let round_method = parameters.modulus_switch_round_method();
+
         match parameters.steps_after_blind_rotation() {
             StepsAfterBR::KsMs => {
                 let key_switched = self.key_switching_key.key_switch_for_rlwe(&acc);
 
-                lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
+                lwe_modulus_switch_inplace(
+                    key_switched,
+                    parameters.lwe_modulus().value(),
+                    round_method,
+                    &mut c,
+                );
             }
             StepsAfterBR::Ms => {
                 let lwe = acc.extract_lwe_reverse_locally();
 
-                lwe_modulus_switch_inplace(lwe, parameters.lwe_modulus().value(), &mut c);
+                lwe_modulus_switch_inplace(
+                    lwe,
+                    parameters.lwe_modulus().value(),
+                    round_method,
+                    &mut c,
+                );
             }
         }
 
@@ -114,7 +126,7 @@ impl<F: NTTField> Evaluator<F> {
     /// * Input: ciphertext `c`, with message `true`(resp. `false`).
     /// * Output: ciphertext with message `false`(resp. `true`).
     ///
-    /// Link: https://eprint.iacr.org/2020/086
+    /// Link: <https://eprint.iacr.org/2020/086>
     pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_modulus();

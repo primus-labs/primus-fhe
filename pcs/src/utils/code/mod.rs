@@ -5,33 +5,32 @@ pub use expander::{ExpanderCode, ExpanderCodeSpec};
 use rand::{CryptoRng, Rng};
 pub use reedsolomon::ReedSolomonCode;
 
-/// LinearCode
+/// Define the trait of linear code
 pub trait LinearCode<F>: Sync + Send + Default + Clone {
-    /// return the message length of the code
+    /// Return the message length of the code
     fn message_len(&self) -> usize;
 
-    /// return the codeword length of the code
+    /// Return the codeword length of the code
     fn codeword_len(&self) -> usize;
 
-    /// return the relative distance of the code
+    /// Return the relative distance of the code
     fn distance(&self) -> f64;
 
-    /// return the proximity gap of the code
+    /// Return the proximity gap of the code
     fn proximity_gap(&self) -> f64 {
         1.0 / 3.0
     }
 
-    /// store the message in target[..message_len] with target[message_len..] keeping clean (all zero)
-    /// encode the message into the codeword and store the codeword in target[..codeword_len]
-    /// normally tagert.len() == codeword_len
+    /// Encode the message into the target.
+    /// Store the message in target[..message_len] with target[message_len..].
+    /// Encode the message into the codeword and store the codeword in target.
     fn encode(&self, target: &mut [F]);
 }
 
-/// Code Spec
+/// Define the trait of linear code specification.
 pub trait LinearCodeSpec<F>: Sync + Send + Default {
-    /// Linear Code
+    /// The type of linear code
     type Code: LinearCode<F>;
-    /// generate LinearCode
-    fn code(&self, message_ln: usize, codeword_len: usize, rng: impl Rng + CryptoRng)
-        -> Self::Code;
+    /// Generate the instance of linear code
+    fn code(&self, message_ln: usize, rng: &mut (impl Rng + CryptoRng)) -> Self::Code;
 }

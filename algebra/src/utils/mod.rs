@@ -18,4 +18,4 @@ pub use prime::*;
 pub use reverse::*;
 pub use sample::*;
 pub use sse2neon::*;
-pub use transcript::IOPTranscript;
+pub use transcript::Transcript;

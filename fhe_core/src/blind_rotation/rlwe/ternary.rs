@@ -15,7 +15,7 @@ pub struct TernaryBlindRotationKey<F: NTTField> {
 }
 
 impl<F: NTTField> TernaryBlindRotationKey<F> {
-    /// Creates a new [`TernaryBootstrappingKey<F>`].
+    /// Creates a new [`TernaryBlindRotationKey<F>`].
     #[inline]
     pub fn new(key: Vec<(NTTRGSW<F>, NTTRGSW<F>)>) -> Self {
         Self { key }
@@ -47,8 +47,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                 let degree = (a_i as usize) * twice_rlwe_dimension_div_lwe_modulus;
 
                 // ntt_polynomial = -Y^{a_i}
-                ntt_table.transform_coeff_one_monomial(degree, ntt_polynomial.as_mut_slice());
-                ntt_polynomial.neg_assign();
+                ntt_table.transform_coeff_neg_one_monomial(degree, ntt_polynomial.as_mut_slice());
 
                 // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}
                 s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
@@ -80,7 +79,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
             })
     }
 
-    /// Generates the [`TernaryBootstrappingKey<F>`].
+    /// Generates the [`TernaryBlindRotationKey<F>`].
     pub(crate) fn generate<Rng>(
         blind_rotation_basis: Basis<F>,
         lwe_secret_key: &[LWEModulusType],

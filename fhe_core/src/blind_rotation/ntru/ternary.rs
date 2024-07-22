@@ -47,8 +47,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                 let degree = (a_i as usize) * twice_ntru_dimension_div_lwe_modulus;
 
                 // ntt_polynomial = -Y^{a_i}
-                ntt_table.transform_coeff_one_monomial(degree, ntt_polynomial.as_mut_slice());
-                ntt_polynomial.neg_assign();
+                ntt_table.transform_coeff_neg_one_monomial(degree, ntt_polynomial.as_mut_slice());
 
                 // evaluation_key = NTRU'(s_i_0) - NTRU'(s_i_1)*Y^{a_i}
                 s_i.0.add_ntt_gadget_ntru_mul_ntt_polynomial_inplace(
