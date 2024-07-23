@@ -75,8 +75,6 @@ pub struct TransformZqtoRQInstance<F: Field> {
     pub num_vars: usize,
     /// modulus of Zq
     pub q: usize,
-    /// modulus of RQ
-    pub capital_q: usize,
     /// row_num of c
     pub m: usize,
     /// column_num of c
@@ -101,8 +99,6 @@ pub struct TransformZqtoRQInstanceInfo<F: Field> {
     pub num_vars: usize,
     /// modulus of Zq
     pub q: usize,
-    /// modulus of RQ
-    pub capital_q: usize,
     /// row_num of c
     pub m: usize,
     /// column_num of c
@@ -118,7 +114,6 @@ impl<F: Field> TransformZqtoRQInstance<F> {
         TransformZqtoRQInstanceInfo {
             num_vars: self.num_vars,
             q: self.q,
-            capital_q: self.capital_q,
             m: self.m,
             n: self.n,
             decomposed_bits_info: self.r_bits.info(),
@@ -130,7 +125,6 @@ impl<F: Field> TransformZqtoRQInstance<F> {
     #[allow(clippy::too_many_arguments)]
     pub fn from_vec(
         q: usize,
-        capital_q: usize,
         c: Vec<Rc<SparsePolynomial<F>>>,
         a: Rc<DenseMultilinearExtension<F>>,
         k: &Rc<DenseMultilinearExtension<F>>,
@@ -160,7 +154,6 @@ impl<F: Field> TransformZqtoRQInstance<F> {
 
         Self {
             q,
-            capital_q,
             m,
             n,
             num_vars,

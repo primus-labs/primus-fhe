@@ -108,7 +108,6 @@ fn test_trivial_zq_to_rq() {
     let r_bits = vec![r.get_decomposed_mles(base_len, bits_len)];
     let instance = TransformZqtoRQInstance::from_vec(
         q,
-        q,
         c.clone(),
         a.clone(),
         &k,
@@ -204,7 +203,6 @@ fn test_random_zq_to_rq() {
     let r_bits: Vec<_> = vec![r.get_decomposed_mles(base_len, bits_len)];
     let instance = TransformZqtoRQInstance::<FF>::from_vec(
         q.get() as usize,
-        q.get() as usize,
         c.clone(),
         a.clone(),
         &k,
@@ -285,7 +283,6 @@ fn test_trivial_zq_to_rq_without_oracle() {
 
     let r_bits = vec![r.get_decomposed_mles(base_len, bits_len)];
     let instance = TransformZqtoRQInstance::from_vec(
-        q,
         q,
         c_sparse.clone(),
         a.clone(),
@@ -370,7 +367,6 @@ fn test_random_zq_to_rq_without_oracle() {
 
     let r_bits: Vec<_> = vec![r.get_decomposed_mles(base_len, bits_len)];
     let instance = TransformZqtoRQInstance::<FF>::from_vec(
-        q.get() as usize,
         q.get() as usize,
         c_sparse.clone(),
         a.clone(),
