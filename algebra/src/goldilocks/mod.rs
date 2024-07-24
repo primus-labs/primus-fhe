@@ -324,7 +324,7 @@ impl One for Goldilocks {
     where
         Self: PartialEq,
     {
-        self.0 == 1
+        *self == Self(1)
     }
 
     #[inline]
