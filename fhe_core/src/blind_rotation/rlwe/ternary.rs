@@ -7,7 +7,7 @@ use lattice::{
     NTTRGSW, RLWE,
 };
 
-use crate::LWECipherValueContainer;
+use crate::LWEModulusType;
 
 #[derive(Debug, Clone)]
 pub struct TernaryBlindRotationKey<F: NTTField> {
@@ -22,7 +22,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn blind_rotate<C: LWECipherValueContainer>(
+    pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: RLWE<F>,
         lwe_a: &[C],
@@ -89,7 +89,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
-        C: LWECipherValueContainer,
+        C: LWEModulusType,
     {
         let key = lwe_secret_key
             .iter()

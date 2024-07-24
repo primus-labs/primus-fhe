@@ -70,8 +70,8 @@ shrink_impl!();
 #[inline]
 pub fn encode<M, C>(message: M, t: u64, q: u64) -> C
 where
-    M: LWEPlainContainer,
-    C: LWECipherValueContainer,
+    M: LWEMsgType,
+    C: LWEModulusType,
 {
     debug_assert!(q.is_power_of_two() && t.is_power_of_two());
     // Shift the message to the most significant part of `C`.
@@ -88,8 +88,8 @@ where
 #[inline]
 pub fn decode<M, C>(cipher: C, t: u64, q: u64) -> M
 where
-    M: LWEPlainContainer,
-    C: LWECipherValueContainer,
+    M: LWEMsgType,
+    C: LWEModulusType,
 {
     debug_assert!(q.is_power_of_two() && t.is_power_of_two());
     // Move the message to the least significant part of `C`.
@@ -102,12 +102,12 @@ where
 }
 
 /// LWE plain text container trait
-pub trait LWEPlainContainer: Copy + Send + Sync + AsInto<u64> + Shrink {}
+pub trait LWEMsgType: Copy + Send + Sync + AsInto<u64> + Shrink {}
 
 macro_rules! plain_impl {
     (@ $($M:ty),*) => {
         $(
-            impl LWEPlainContainer for $M {}
+            impl LWEMsgType for $M {}
         )*
     };
     () =>{
@@ -118,7 +118,7 @@ macro_rules! plain_impl {
 plain_impl!();
 
 /// The inner value container trait of LWE cipher text.
-pub trait LWECipherValueContainer:
+pub trait LWEModulusType:
     PrimInt
     + Send
     + Sync
@@ -153,7 +153,7 @@ pub trait LWECipherValueContainer:
 macro_rules! cipher_impl {
     ($($T:ty),*) => {
         $(
-            impl LWECipherValueContainer for $T {
+            impl LWEModulusType for $T {
                 const TWO: Self = 2;
                 #[inline]
                 fn to_power_of_2_modulus(self) -> PowOf2Modulus<Self> {

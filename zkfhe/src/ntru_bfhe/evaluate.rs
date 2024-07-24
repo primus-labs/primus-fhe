@@ -1,14 +1,13 @@
 use algebra::{AsInto, NTTField, Polynomial};
 use fhe_core::{
-    lwe_modulus_switch_inplace, BlindRotationType, KeySwitchingKey, LWECipherValueContainer,
-    LWECiphertext, LWEPlainContainer, NTRUBlindRotationKey, NTRUCiphertext, Parameters,
-    SecretKeyPack,
+    lwe_modulus_switch_inplace, BlindRotationType, KeySwitchingKey, LWECiphertext, LWEModulusType,
+    LWEMsgType, NTRUBlindRotationKey, NTRUCiphertext, Parameters, SecretKeyPack,
 };
 use lattice::NTRU;
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
-pub struct EvaluationKey<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
+pub struct EvaluationKey<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
     /// Blind rotation key
     blind_rotation_key: NTRUBlindRotationKey<F>,
     /// Key Switching Key
@@ -17,7 +16,7 @@ pub struct EvaluationKey<M: LWEPlainContainer, C: LWECipherValueContainer, F: NT
     parameters: Parameters<M, C, F>,
 }
 
-impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> EvaluationKey<M, C, F> {
+impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> EvaluationKey<M, C, F> {
     /// Returns the parameters of this [`EvaluationKey<F>`].
     #[inline]
     pub fn parameters(&self) -> &Parameters<M, C, F> {
@@ -87,11 +86,11 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> EvaluationKe
 
 /// Evaluator
 #[derive(Debug, Clone)]
-pub struct Evaluator<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
+pub struct Evaluator<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
     ek: EvaluationKey<M, C, F>,
 }
 
-impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> Evaluator<M, C, F> {
+impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Evaluator<M, C, F> {
     /// Create a new instance.
     pub fn new(sk: &SecretKeyPack<M, C, F>) -> Self {
         Self {
@@ -324,7 +323,7 @@ fn init_nand_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
@@ -347,7 +346,7 @@ fn init_and_majority_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
@@ -372,7 +371,7 @@ fn init_nand_and_majority_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let mut v = Polynomial::zero(ntru_dimension);
 
@@ -418,7 +417,7 @@ fn init_or_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
@@ -441,7 +440,7 @@ fn init_nor_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
@@ -464,7 +463,7 @@ fn init_xor_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
@@ -487,7 +486,7 @@ fn init_xnor_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
@@ -512,7 +511,7 @@ fn init_or_nor_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let mut v = Polynomial::zero(ntru_dimension);
 
@@ -560,7 +559,7 @@ fn init_xor_xnor_acc<C, F>(
 ) -> NTRU<F>
 where
     F: NTTField,
-    C: LWECipherValueContainer,
+    C: LWEModulusType,
 {
     let mut v = Polynomial::zero(ntru_dimension);
 

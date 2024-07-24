@@ -5,8 +5,8 @@ use lattice::{sample_binary_values, sample_ternary_values};
 use num_traits::Inv;
 
 use crate::{
-    ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWECipherValueContainer,
-    LWEPlainContainer, Parameters, StepsAfterBR,
+    ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEModulusType, LWEMsgType,
+    Parameters, StepsAfterBR,
 };
 
 /// The distribution type of the LWE Secret Key
@@ -45,7 +45,7 @@ pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 /// ring secret key, ntt version ring secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
-pub struct SecretKeyPack<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
+pub struct SecretKeyPack<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
     /// LWE secret key
     lwe_secret_key: Vec<C>,
     /// ring secret key
@@ -60,7 +60,7 @@ pub struct SecretKeyPack<M: LWEPlainContainer, C: LWECipherValueContainer, F: NT
     csrng: RefCell<Prg>,
 }
 
-impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> SecretKeyPack<M, C, F> {
+impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> SecretKeyPack<M, C, F> {
     fn create_lwe_secret_key(parameters: &Parameters<M, C, F>, csrng: &mut Prg) -> Vec<C> {
         let lwe_dimension = parameters.lwe_dimension();
 

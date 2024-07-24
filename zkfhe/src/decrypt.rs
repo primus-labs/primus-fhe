@@ -1,14 +1,14 @@
 //! implementation of decryption.
 
 use algebra::NTTField;
-use fhe_core::{LWECipherValueContainer, LWECiphertext, LWEPlainContainer, SecretKeyPack};
+use fhe_core::{LWECiphertext, LWEModulusType, LWEMsgType, SecretKeyPack};
 
 /// Encryptor
-pub struct Decryptor<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
+pub struct Decryptor<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
     sk: SecretKeyPack<M, C, F>,
 }
 
-impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> Decryptor<M, C, F> {
+impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Decryptor<M, C, F> {
     /// Create a Decryptor instance.
     #[inline]
     pub fn new(sk: SecretKeyPack<M, C, F>) -> Self {

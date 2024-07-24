@@ -1,12 +1,12 @@
 use algebra::NTTField;
-use fhe_core::{utils::*, LWECipherValueContainer, LWECiphertext, LWEPlainContainer};
+use fhe_core::{utils::*, LWECiphertext, LWEModulusType, LWEMsgType};
 use rand::Rng;
 use zkfhe::{
     bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMERTERS},
     Decryptor, Encryptor, KeyGen,
 };
 
-type LWEModulusType = u16;
+type C = u16;
 
 fn main() {
     // set random generator
@@ -15,9 +15,9 @@ fn main() {
     // set parameter
     let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
 
-    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as LWEModulusType;
+    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as C;
 
-    let check_noise = |noise: LWEModulusType, op: &str| {
+    let check_noise = |noise: C, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"
@@ -110,7 +110,7 @@ fn main() {
 }
 
 #[allow(clippy::type_complexity)]
-fn join_bit_opearions<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField>(
+fn join_bit_opearions<M: LWEMsgType, C: LWEModulusType, F: NTTField>(
     eval: &Evaluator<M, C, F>,
     x: &LWECiphertext<C>,
     y: &LWECiphertext<C>,

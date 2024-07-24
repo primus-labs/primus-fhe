@@ -2,7 +2,7 @@ use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTFi
 use lattice::RLWE;
 use rand::{CryptoRng, Rng};
 
-use crate::{LWECipherValueContainer, LWEPlainContainer, SecretKeyPack, SecretKeyType};
+use crate::{LWEModulusType, LWEMsgType, SecretKeyPack, SecretKeyType};
 
 mod binary;
 mod ternary;
@@ -40,7 +40,7 @@ impl<F: NTTField> BlindRotationKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn blind_rotate<C: LWECipherValueContainer>(
+    pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: RLWE<F>,
         lwe_a: &[C],
@@ -76,8 +76,8 @@ impl<F: NTTField> BlindRotationKey<F> {
     ) -> Self
     where
         R: Rng + CryptoRng,
-        M: LWEPlainContainer,
-        C: LWECipherValueContainer,
+        M: LWEMsgType,
+        C: LWEModulusType,
     {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {

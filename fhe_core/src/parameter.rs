@@ -7,8 +7,8 @@ use algebra::{
 use lattice::DiscreteGaussian;
 
 use crate::{
-    FHECoreError, LWECipherValueContainer, LWEPlainContainer, ModulusSwitchRoundMethod,
-    RingSecretKeyType, SecretKeyType,
+    FHECoreError, LWEModulusType, LWEMsgType, ModulusSwitchRoundMethod, RingSecretKeyType,
+    SecretKeyType,
 };
 
 /// The steps after blind rotarion.
@@ -23,7 +23,7 @@ pub enum StepsAfterBR {
 
 /// Parameters for LWE.
 #[derive(Debug, Clone, Copy)]
-pub struct LWEParameters<M: LWEPlainContainer, C: LWECipherValueContainer> {
+pub struct LWEParameters<M: LWEMsgType, C: LWEModulusType> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
@@ -80,7 +80,7 @@ pub struct ModulusSwitchParameters {
 
 /// Parameters for FHE
 #[derive(Debug, Clone, Copy)]
-pub struct Parameters<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> {
+pub struct Parameters<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
     secret_key_type: SecretKeyType,
     ring_secret_key_type: RingSecretKeyType,
     steps_after_blind_rotation: StepsAfterBR,
@@ -94,7 +94,7 @@ pub struct Parameters<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTFi
 ///
 /// This type is used for setting some default Parameters.
 #[derive(Debug, Clone, Copy)]
-pub struct ConstParameters<M: LWEPlainContainer, C: LWECipherValueContainer, FieldContainer> {
+pub struct ConstParameters<M: LWEMsgType, C: LWEModulusType, FieldContainer> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
@@ -138,7 +138,7 @@ pub struct ConstParameters<M: LWEPlainContainer, C: LWECipherValueContainer, Fie
     pub phantom: PhantomData<M>,
 }
 
-impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> Parameters<M, C, F> {
+impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Parameters<M, C, F> {
     /// Create a new Parameter instance.
     pub fn new(params: ConstParameters<M, C, F::Value>) -> Result<Self, FHECoreError> {
         let lwe_dimension = params.lwe_dimension;

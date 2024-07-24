@@ -3,7 +3,7 @@ use algebra::{
 };
 use lattice::{DecompositionSpace, NTRUSpace, NTTGadgetNTRU, NTTNTRUSpace, PolynomialSpace, NTRU};
 
-use crate::LWECipherValueContainer;
+use crate::LWEModulusType;
 
 #[derive(Debug, Clone)]
 pub struct BinaryBlindRotationKey<F: NTTField> {
@@ -18,7 +18,7 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn blind_rotate<C: LWECipherValueContainer>(
+    pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: NTRU<F>,
         lwe_a: &[C],
@@ -67,7 +67,7 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
-        C: LWECipherValueContainer,
+        C: LWEModulusType,
     {
         let key = lwe_secret_key
             .iter()
