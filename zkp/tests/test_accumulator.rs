@@ -1,9 +1,10 @@
 use algebra::{
-    derive::{Field, Prime, NTT},
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
     Basis, DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension,
 };
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
 use itertools::izip;
+use num_traits::One;
 use rand_distr::Distribution;
 use std::rc::Rc;
 use std::vec;
@@ -15,13 +16,13 @@ use zkp::{
     utils::gen_identity_evaluations,
 };
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, DecomposableField, Prime, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 // field type
 type FF = Fp32;
 
-#[derive(Field, Prime)]
+#[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
@@ -201,7 +202,7 @@ fn update_accumulator<F: Field + NTTField>(
     assert_eq!(bits_rlwe_ntt.a_bits.len(), bits_rgsw_f_ntt.a_bits.len());
 
     // 6. Compute the output of ntt form with the RGSW ciphertext and the decomposed bits of ntt form
-    let mut output_g_ntt = vec![F::ZERO; 1 << ntt_info.log_n];
+    let mut output_g_ntt = vec![F::zero(); 1 << ntt_info.log_n];
     for (a, b, c, f) in izip!(
         &bits_rlwe_ntt.a_bits,
         &bits_rlwe_ntt.b_bits,
@@ -213,7 +214,7 @@ fn update_accumulator<F: Field + NTTField>(
         });
     }
 
-    let mut output_h_ntt = vec![F::ZERO; 1 << ntt_info.log_n];
+    let mut output_h_ntt = vec![F::zero(); 1 << ntt_info.log_n];
     for (a, b, c, f) in izip!(
         &bits_rlwe_ntt.a_bits,
         &bits_rlwe_ntt.b_bits,
@@ -273,7 +274,7 @@ fn test_trivial_accumulator() {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::ONE;
+    let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
         power *= root;

@@ -342,7 +342,7 @@ where
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
-    let neg_q_div_8 = F::new(q - q_div_8.get());
+    let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_nand_and_majority_acc(
         b,
@@ -364,7 +364,7 @@ where
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
-    let neg_q_div_8 = F::new(q - q_div_8.get());
+    let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_nand_and_majority_acc(
         b,
@@ -433,7 +433,7 @@ where
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
-    let neg_q_div_8 = F::new(q - q_div_8.get());
+    let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_or_nor_acc(
         b,
@@ -455,7 +455,7 @@ where
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
-    let neg_q_div_8 = F::new(q - q_div_8.get());
+    let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_or_nor_acc(
         b,
@@ -477,7 +477,7 @@ where
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
-    let neg_q_div_8 = F::new(q - q_div_8.get());
+    let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_xor_xnor_acc(
         b,
@@ -499,7 +499,7 @@ where
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
-    let neg_q_div_8 = F::new(q - q_div_8.get());
+    let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_xor_xnor_acc(
         b,

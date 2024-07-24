@@ -40,9 +40,9 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
         // negative convertion
         let convert = |v: &LWEModulusType| match *v {
-            0 => F::ZERO,
-            1 => F::NEG_ONE,
-            _ => F::ONE,
+            0 => F::zero(),
+            1 => F::neg_one(),
+            _ => F::one(),
         };
 
         // s = [s_0, 0,..., 0, -s_{n-1},..., -s_1]
@@ -53,7 +53,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
                 .map(convert)
                 .collect(),
         );
-        s.resize(extended_lwe_dimension, F::ZERO);
+        s.resize(extended_lwe_dimension, F::zero());
         s[0] = -s[0];
         s[1..].reverse();
 

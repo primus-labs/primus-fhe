@@ -1,5 +1,5 @@
 use algebra::{
-    modulus::{baby_bear::to_monty, *},
+    modulus::{to_monty, *},
     reduce::*,
 };
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};

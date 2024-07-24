@@ -154,8 +154,8 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
     // It store the evaluations of all F(u, x) for x \in \{0, 1\}^dim.
     // Note that in our implementation, we use little endian form, so the index `0b1011`
     // represents the point `P(1,1,0,1)` in {0,1}^`dim`
-    let mut evaluations: Vec<_> = vec![F::ZERO; 1 << log_n];
-    evaluations[0] = F::ONE;
+    let mut evaluations: Vec<_> = vec![F::zero(); 1 << log_n];
+    evaluations[0] = F::one();
 
     // stores all the intermediate evaluations of the table (i.e. F(u, x)) and the term ω^{2^{i + 1} * X} in each iteration
     let mut intermediate_mles = <IntermediateMLEs<F>>::new(log_n as u32);
@@ -174,7 +174,7 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
         let this_round_table_size = 1 << this_round_dim;
         let last_round_table_size = 1 << last_round_dim;
 
-        let mut evaluations_w_term = vec![F::ZERO; this_round_table_size];
+        let mut evaluations_w_term = vec![F::zero(); this_round_table_size];
         for x in (0..this_round_table_size).rev() {
             // idx is to indicate the power ω^{2^{i + 1} * X} in ntt_table
             let idx = (1 << (i + 1)) * x % m;
@@ -182,14 +182,14 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
             // If x >= last_round_table_size, meaning the bit = 1, we need to multiply by ω^{2^last_round_dim * 1}
             if x >= last_round_table_size {
                 evaluations[x] = evaluations[x % last_round_table_size]
-                    * (F::ONE - u[i] + u[i] * ntt_table[idx])
+                    * (F::one() - u[i] + u[i] * ntt_table[idx])
                     * ntt_table[1 << last_round_dim];
             }
             // the bit index in this iteration is last_round_dim = this_round_dim - 1
             // If x < last_round_table_size, meaning the bit = 0, we do not need to multiply because ω^{2^last_round_dim * 0} = 1
             else {
                 evaluations[x] = evaluations[x % last_round_table_size]
-                    * (F::ONE - u[i] + u[i] * ntt_table[idx]);
+                    * (F::one() - u[i] + u[i] * ntt_table[idx]);
             }
             evaluations_w_term[x] = ntt_table[idx];
         }
@@ -220,7 +220,7 @@ pub fn naive_w_power_times_x_table<F: Field>(
     let m = 1 << log_m; // M = 2N = 2 * (1 << dim)
     assert_eq!(ntt_table.len(), m);
 
-    let mut evaluations: Vec<_> = (0..(1 << x_dim)).map(|_| F::ONE).collect();
+    let mut evaluations: Vec<_> = (0..(1 << x_dim)).map(|_| F::one()).collect();
     for x in 0..(1 << x_dim) {
         evaluations[x] = ntt_table[(1 << exp) * x % m];
     }
@@ -252,11 +252,11 @@ pub fn eval_w_power_times_x<F: Field>(
     assert_eq!(ntt_table.len(), 1 << log_m);
     assert_eq!(x_dim, r.len());
     assert!(exp + x_dim <= log_m);
-    let mut prod = F::ONE;
+    let mut prod = F::one();
 
     for (i, &r_i) in r.iter().enumerate() {
         let log_exp = (exp + i) % log_m;
-        prod *= F::ONE - r_i + r_i * ntt_table[1 << log_exp];
+        prod *= F::one() - r_i + r_i * ntt_table[1 << log_exp];
     }
 
     prod
@@ -312,11 +312,11 @@ impl<F: Field> NTTInstance<F> {
             ntt_table: info.ntt_table.to_owned(),
             coeffs: <DenseMultilinearExtension<F>>::from_evaluations_vec(
                 info.log_n,
-                vec![F::ZERO; 1 << info.log_n],
+                vec![F::zero(); 1 << info.log_n],
             ),
             points: <DenseMultilinearExtension<F>>::from_evaluations_vec(
                 info.log_n,
-                vec![F::ZERO; 1 << info.log_n],
+                vec![F::zero(); 1 << info.log_n],
             ),
         }
     }
@@ -359,9 +359,9 @@ impl<F: Field> NTTSubclaim<F> {
 
         // check2: check the final claim returned from the last round of delegation
         let idx = 1 << (info.log_n);
-        let eval = eval_identity_function(&self.final_point, &[F::ZERO])
-            + eval_identity_function(&self.final_point, &[F::ONE])
-                * (F::ONE - u[info.log_n - 1] + u[info.log_n - 1] * info.ntt_table[idx])
+        let eval = eval_identity_function(&self.final_point, &[F::zero()])
+            + eval_identity_function(&self.final_point, &[F::one()])
+                * (F::one() - u[info.log_n - 1] + u[info.log_n - 1] * info.ntt_table[idx])
                 * info.ntt_table[1];
 
         self.delegation_final_claim == eval
@@ -425,19 +425,19 @@ impl<F: Field> NTTIOP<F> {
         // left product is \tilde{\beta}((x, b),(z,0)) * \tilde{A}_{F}^{(k-1)}(z) ( (1-u_{i})+u_{i} * \tilde{ω}^{(k)}_{i+1}(z, 0)
         // right product is \tilde{\beta}((x, b),(z,1)) * \tilde{A}_{F}^{(k-1)}(z) ( (1-u_{i})+u_{i} * \tilde{ω}^{(k)}_{i+1}(z, 1) * ω^{2^k}
         product_left.push(Rc::new(eq_func_left));
-        ops_left.push((F::ONE, F::ZERO));
+        ops_left.push((F::one(), F::zero()));
         product_left.push(Rc::clone(f));
-        ops_left.push((F::ONE, F::ZERO));
+        ops_left.push((F::one(), F::zero()));
         product_left.push(Rc::new(w_left));
-        ops_left.push((u_i, F::ONE - u_i));
-        poly.add_product_with_linear_op(product_left, &ops_left, F::ONE);
+        ops_left.push((u_i, F::one() - u_i));
+        poly.add_product_with_linear_op(product_left, &ops_left, F::one());
 
         product_right.push(Rc::new(eq_func_right));
-        ops_right.push((F::ONE, F::ZERO));
+        ops_right.push((F::one(), F::zero()));
         product_right.push(Rc::clone(f));
-        ops_right.push((F::ONE, F::ZERO));
+        ops_right.push((F::one(), F::zero()));
         product_right.push(Rc::new(w_right));
-        ops_right.push((u_i, F::ONE - u_i));
+        ops_right.push((u_i, F::one() - u_i));
         poly.add_product_with_linear_op(product_right, &ops_right, w_coeff);
 
         MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
@@ -547,8 +547,8 @@ impl<F: Field> NTTIOP<F> {
         let mut r_right: Vec<_> = Vec::with_capacity(round + 1);
         r_left.extend(&subclaim.point);
         r_right.extend(&subclaim.point);
-        r_left.push(F::ZERO);
-        r_right.push(F::ONE);
+        r_left.push(F::zero());
+        r_right.push(F::one());
 
         // compute $\ω^{(k)}_{i+1}(x,b ) = \ω^{2^{i+1}\cdot j}$ for $j = X+2^{i+1}\cdot b$ at point (r, 0) and (r, 1)
         // exp: i + 1 = n - k
@@ -559,10 +559,10 @@ impl<F: Field> NTTIOP<F> {
 
         let eval = eval_identity_function(x_b_point, &r_left)
             * reduced_claim
-            * (F::ONE - u_i + u_i * w_left)
+            * (F::one() - u_i + u_i * w_left)
             + eval_identity_function(x_b_point, &r_right)
                 * reduced_claim
-                * (F::ONE - u_i + u_i * w_right)
+                * (F::one() - u_i + u_i * w_right)
                 * ntt_table[1 << round];
 
         eval == subclaim.expected_evaluations
@@ -640,15 +640,16 @@ impl<F: Field> NTTIOP<F> {
 mod test {
     use crate::piop::ntt::{eval_w_power_times_x, naive_w_power_times_x_table};
     use algebra::{
-        derive::{Field, Prime, NTT},
-        DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension, NTTField,
+        derive::{DecomposableField, FheField, Field, Prime, NTT},
+        DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension, NTTField,
     };
+    use num_traits::{One, Zero};
     use rand::thread_rng;
     use rand_distr::Distribution;
 
     use super::init_fourier_table_overall;
 
-    #[derive(Field, Prime, NTT)]
+    #[derive(Field, DecomposableField, FheField, Prime, NTT)]
     #[modulus = 132120577]
     pub struct Fp32(u32);
     // field type
@@ -671,10 +672,10 @@ mod test {
         // root is the M-th root of unity
         let root = FF::try_minimal_primitive_root(m).unwrap();
 
-        let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::ZERO).collect();
+        let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::zero()).collect();
         let mut ntt_table = Vec::with_capacity(m as usize);
 
-        let mut power = FF::ONE;
+        let mut power = FF::one();
         for _ in 0..m {
             ntt_table.push(power);
             power *= root;
@@ -706,7 +707,7 @@ mod test {
 
         let mut ntt_table = Vec::with_capacity(m as usize);
 
-        let mut power = FF::ONE;
+        let mut power = FF::one();
         for _ in 0..m {
             ntt_table.push(power);
             power *= root;

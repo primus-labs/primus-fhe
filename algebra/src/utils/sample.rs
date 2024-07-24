@@ -9,8 +9,8 @@ where
     F: Field,
     R: Rng + CryptoRng,
 {
-    let s = [F::ZERO, F::ONE];
-    let mut v = vec![F::ZERO; length];
+    let s = [F::zero(), F::one()];
+    let mut v = vec![F::zero(); length];
     let mut iter = v.chunks_exact_mut(32);
     for chunk in &mut iter {
         let mut r = rng.next_u32();
@@ -33,8 +33,8 @@ where
     F: Field,
     R: Rng + CryptoRng,
 {
-    let s = [F::ZERO, F::ZERO, F::ONE, F::NEG_ONE];
-    let mut v = vec![F::ZERO; length];
+    let s = [F::zero(), F::zero(), F::one(), F::neg_one()];
+    let mut v = vec![F::zero(); length];
     let mut iter = v.chunks_exact_mut(16);
     for chunk in &mut iter {
         let mut r = rng.next_u32();

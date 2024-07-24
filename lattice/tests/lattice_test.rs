@@ -1,16 +1,16 @@
-use algebra::derive::{Field, Prime, NTT};
+use algebra::derive::{DecomposableField, FheField, Field, Prime, NTT};
 use algebra::modulus::PowOf2Modulus;
 use algebra::reduce::{AddReduce, MulReduce, SubReduce};
 use algebra::{
-    Basis, Field, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
-    ModulusConfig, Polynomial,
+    Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, FieldTernarySampler,
+    FieldUniformSampler, ModulusConfig, Polynomial,
 };
 use lattice::*;
-use num_traits::Inv;
+use num_traits::{Inv, One};
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -157,12 +157,12 @@ fn encode(m: Inner) -> FF {
 
 #[inline]
 fn decode(c: FF) -> Inner {
-    (c.get() as f64 * FT as f64 / FP as f64).round() as Inner % FT
+    (c.value() as f64 * FT as f64 / FP as f64).round() as Inner % FT
 }
 
 #[inline]
 fn min_to_zero(value: FF) -> Inner {
-    value.get().min(FP - value.get())
+    value.value().min(FP - value.value())
 }
 
 #[test]
@@ -229,7 +229,7 @@ fn test_ntru_he() {
 
     let mut s = PolyFF::random_with_ternary(N, &mut rng);
     s.mul_scalar_assign(Fp32(4));
-    s[0] += FF::ONE;
+    s[0] += FF::one();
 
     let inv_s = (&s).inv();
 
@@ -504,7 +504,7 @@ fn test_gadget_ntru_mul_ntru() {
 
     let mut s = PolyFF::random_with_ternary(N, &mut rng);
     s.mul_scalar_assign(Fp32(4));
-    s[0] += FF::ONE;
+    s[0] += FF::one();
 
     let inv_s = (&s).inv();
 

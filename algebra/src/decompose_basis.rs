@@ -1,13 +1,13 @@
 //! The basis for decomposition of the [`Field`].
 
-use crate::Field;
+use crate::{DecomposableField, Field};
 
 /// This basis struct is used for decomposition of the [`Field`].
 ///
 /// It is designed for powers of 2 basis.
 /// In this case, decomposition will become simple and efficient.
 #[derive(Debug, Clone, Copy)]
-pub struct Basis<F: Field> {
+pub struct Basis<F: DecomposableField> {
     basis: F::Value,
     /// The length of the vector of the decomposed [`Field`] based on the basis.
     decompose_len: usize,
@@ -17,18 +17,18 @@ pub struct Basis<F: Field> {
     bits: u32,
 }
 
-impl<F: Field> Default for Basis<F> {
+impl<F: DecomposableField> Default for Basis<F> {
     #[inline]
     fn default() -> Self {
         Self::new(1)
     }
 }
 
-impl<F: Field> Basis<F> {
+impl<F: DecomposableField> Basis<F> {
     /// Creates a new [`Basis<F>`] with the given basis' bits number.
     pub fn new(bits: u32) -> Self {
         let mask = F::mask(bits);
-        let basis = mask + F::ONE.get();
+        let basis = mask + F::one().value();
         let decompose_len = F::decompose_len(basis);
 
         Self {

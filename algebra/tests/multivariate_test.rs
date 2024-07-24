@@ -1,7 +1,7 @@
 use std::vec;
 
 use algebra::{
-    derive::{Field, Prime},
+    derive::{DecomposableField, Field, Prime},
     Basis, DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension,
 };
@@ -19,7 +19,7 @@ macro_rules! field_vec {
     }
 }
 
-#[derive(Field, Prime)]
+#[derive(Field, DecomposableField, Prime)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -117,7 +117,7 @@ fn mle_arithmetic() {
             let evaluation = decomposed_polys
                 .iter()
                 .enumerate()
-                .fold(FF::ZERO, |acc, (i, bit)| {
+                .fold(FF::zero(), |acc, (i, bit)| {
                     acc + bit.evaluate(&point) * base.pow(i as u32)
                 });
             assert_eq!(poly1.evaluate(&point), evaluation);
@@ -143,7 +143,7 @@ fn trivial_decomposed_mles() {
     let evaluation = decomposed_polys
         .iter()
         .enumerate()
-        .fold(FF::ZERO, |acc, (i, bit)| {
+        .fold(FF::zero(), |acc, (i, bit)| {
             acc + bit.evaluate(&point) * base.pow(i as u32)
         });
 

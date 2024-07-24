@@ -158,13 +158,13 @@ impl<F: NTTField> GadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
             r.b_mut_slice()[0] += basis_power;
             data.push(r);
-            basis_power = F::new(basis_power.get() * basis_value);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
         Self { data, basis }
@@ -182,13 +182,13 @@ impl<F: NTTField> GadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
             let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
             r.a_mut_slice()[0] += basis_power;
             data.push(r);
-            basis_power = F::new(basis_power.get() * basis_value);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
         Self { data, basis }
@@ -418,7 +418,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..(len - 1) {
             let r = <NTTRLWE<F>>::generate_random_value_sample(
@@ -428,7 +428,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
                 &mut rng,
             );
             data.push(r);
-            basis_power = F::new(basis_power.get() * basis_value);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
         let r = <NTTRLWE<F>>::generate_random_value_sample(
@@ -454,14 +454,14 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..(len - 1) {
             let mut r =
                 <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
             r.a_mut_slice().iter_mut().for_each(|v| *v += basis_power);
             data.push(r);
-            basis_power = F::new(basis_power.get() * basis_value);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
         let mut r = <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);

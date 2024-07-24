@@ -4,7 +4,7 @@ use std::{fmt::Debug, sync::Arc};
 
 use crate::transformation::{AbstractNTT, MonomialNTT};
 
-use super::PrimeField;
+use super::{FheField, PrimeField};
 
 /// A trait for fields where Number Theoretic Transforms (NTT) can be performed.
 /// It's optimized for the vector with the length of power of two.
@@ -16,7 +16,7 @@ use super::PrimeField;
 ///
 /// Implementing types must provide functionality to work with roots of unity, decompose elements
 /// with respect to a basis, and generate and manage tables for NTT operations.
-pub trait NTTField: PrimeField + From<usize> {
+pub trait NTTField: PrimeField + FheField + From<usize> {
     /// An abstraction over the data structure used to store precomputed values for NTT.
     type Table: AbstractNTT<Self> + MonomialNTT<Self>;
 

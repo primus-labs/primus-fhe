@@ -1,8 +1,9 @@
 use algebra::{
-    derive::{Field, Prime, NTT},
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
     DenseMultilinearExtension, Field, FieldUniformSampler, NTTPolynomial,
 };
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
+use num_traits::{One, Zero};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use std::rc::Rc;
@@ -10,7 +11,7 @@ use std::vec;
 use zkp::piop::ntt::ntt_bare::init_fourier_table;
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -26,13 +27,13 @@ fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtension<FF> {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n).unwrap().root();
-    let mut power = FF::ONE;
+    let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
         power *= root;
     }
 
-    let mut fourier_matrix = vec![FF::ZERO; (1 << log_n) * (1 << log_n)];
+    let mut fourier_matrix = vec![FF::zero(); (1 << log_n) * (1 << log_n)];
     // In little endian, the index for F[i, j] is i + (j << dim)
     for i in 0..1 << log_n {
         for j in 0..1 << log_n {
@@ -104,13 +105,13 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n).unwrap().root();
-    let mut power = FF::ONE;
+    let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
         power *= root;
     }
 
-    let mut fourier_matrix = vec![FF::ZERO; (1 << log_n) * (1 << log_n)];
+    let mut fourier_matrix = vec![FF::zero(); (1 << log_n) * (1 << log_n)];
     // In little endian, the index for F[i, j] is i + (j << dim)
     for i in 0..1 << log_n {
         for j in 0..1 << log_n {
@@ -120,7 +121,7 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
         }
     }
 
-    let mut ntt_form = vec![FF::ZERO; 1 << log_n];
+    let mut ntt_form = vec![FF::zero(); 1 << log_n];
     for i in 0..1 << log_n {
         for j in 0..1 << log_n {
             ntt_form[i] += coeff[j] * fourier_matrix[i + (j << log_n)];
@@ -173,7 +174,7 @@ fn test_ntt_bare_without_delegation() {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::ONE;
+    let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
         power *= root;
@@ -210,7 +211,7 @@ fn test_ntt_with_delegation() {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::ONE;
+    let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
         power *= root;
@@ -244,7 +245,7 @@ fn test_ntt_combined_with_delegation() {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::ONE;
+    let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
         power *= root;
@@ -276,7 +277,7 @@ fn test_ntt_combined_with_delegation() {
         coeff.data(),
     ));
     let mut points =
-        <DenseMultilinearExtension<FF>>::from_evaluations_vec(log_n, vec![FF::ZERO; 1 << log_n]);
+        <DenseMultilinearExtension<FF>>::from_evaluations_vec(log_n, vec![FF::zero(); 1 << log_n]);
     points += (r_1, &points1);
     points += (r_2, &points2);
     let points = Rc::new(points);

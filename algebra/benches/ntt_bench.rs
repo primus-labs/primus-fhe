@@ -2,11 +2,11 @@ use algebra::{
     transformation::{AbstractNTT, MonomialNTT},
     Basis, FieldUniformSampler, NTTField, Polynomial,
 };
-use algebra_derive::{Field, Prime, NTT};
+use algebra_derive::{DecomposableField, FheField, Field, Prime, NTT};
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use rand::prelude::*;
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp(u32);
 

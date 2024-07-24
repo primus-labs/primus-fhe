@@ -62,7 +62,7 @@ pub mod prime32 {
         #[inline]
         fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
             let values = unsafe { transmute::<&mut [F], &mut [u32]>(values) };
-            self.plan.fwd_monomial(coeff.get(), degree, values);
+            self.plan.fwd_monomial(coeff.value(), degree, values);
         }
 
         #[inline]
@@ -143,7 +143,7 @@ pub mod prime64 {
         #[inline]
         fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
             let values = unsafe { transmute::<&mut [F], &mut [u64]>(values) };
-            self.plan.fwd_monomial(coeff.get(), degree, values);
+            self.plan.fwd_monomial(coeff.value(), degree, values);
         }
 
         #[inline]

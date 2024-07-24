@@ -58,7 +58,7 @@ where
         let codeword_len = pp.code().codeword_len();
 
         // Compute the answer as a linear combination.
-        let mut answer = vec![F::ZERO; num_cols];
+        let mut answer = vec![F::zero(); num_cols];
         state
             .matrix
             .chunks_exact(codeword_len)
@@ -196,7 +196,7 @@ where
                 let product = column
                     .iter()
                     .zip(challenge)
-                    .fold(F::ZERO, |acc, (x0, x1)| acc + *x0 * x1);
+                    .fold(F::zero(), |acc, (x0, x1)| acc + *x0 * x1);
 
                 check &= product == encoded_rlc_msg[*idx];
             });
@@ -210,7 +210,7 @@ where
         answer
             .iter()
             .zip(residual)
-            .fold(F::ZERO, |acc, (x0, x1)| acc + *x0 * x1)
+            .fold(F::zero(), |acc, (x0, x1)| acc + *x0 * x1)
     }
 }
 
@@ -273,7 +273,7 @@ where
         let num_rows = pp.num_rows();
         let codeword_len = pp.code().codeword_len();
 
-        let mut matrix = vec![F::ZERO; num_rows * codeword_len];
+        let mut matrix = vec![F::zero(); num_rows * codeword_len];
 
         // Fill each row of the matrix with a message and
         // encode the message into a codeword.
@@ -363,7 +363,7 @@ where
 
         // Encode the answered random linear combination.
         assert_eq!(proof.rlc_msgs.len(), pp.code().message_len());
-        let mut encoded_msg = vec![F::ZERO; pp.code().codeword_len()];
+        let mut encoded_msg = vec![F::zero(); pp.code().codeword_len()];
         encoded_msg[..proof.rlc_msgs.len()].copy_from_slice(&proof.rlc_msgs);
         pp.code().encode(&mut encoded_msg);
 

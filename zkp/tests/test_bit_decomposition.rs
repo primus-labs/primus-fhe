@@ -1,6 +1,6 @@
 use algebra::Basis;
 use algebra::{
-    derive::{Field, Prime, NTT},
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
     DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 // use protocol::bit_decomposition::{BitDecomposition, DecomposedBits};
@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::vec;
 use zkp::piop::{BitDecomposition, DecomposedBits};
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 

@@ -102,9 +102,9 @@ impl<F: NTTField> SecretKeyPack<F> {
                         );
                         // negative convertion
                         let convert = |v: &LWEModulusType| match *v {
-                            0 => F::ZERO,
-                            1 => F::NEG_ONE,
-                            _ => F::ONE,
+                            0 => F::zero(),
+                            1 => F::neg_one(),
+                            _ => F::one(),
                         };
 
                         // s = [s_0, -s_{n-1},..., -s_1]
@@ -120,13 +120,13 @@ impl<F: NTTField> SecretKeyPack<F> {
                 ntt_inv_ring_secret_key = None;
             }
             BlindRotationType::NTRU => {
-                let four = F::ONE + F::ONE + F::ONE + F::ONE;
+                let four = F::one() + F::one() + F::one() + F::one();
                 let chi = parameters.ring_noise_distribution();
                 ring_secret_key = {
                     let mut ring_secret_key =
                         Polynomial::random_with_gaussian(ring_dimension, &mut csrng, chi);
                     ring_secret_key.mul_scalar_assign(four);
-                    ring_secret_key[0] += F::ONE;
+                    ring_secret_key[0] += F::one();
                     ring_secret_key
                 };
                 ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();

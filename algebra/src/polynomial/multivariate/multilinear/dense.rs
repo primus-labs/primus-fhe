@@ -7,7 +7,7 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::{Field, FieldUniformSampler};
+use crate::{DecomposableField, Field, FieldUniformSampler};
 
 use super::MultilinearExtension;
 use std::rc::Rc;
@@ -52,6 +52,35 @@ impl<F: Field> DenseMultilinearExtension<F> {
         }
     }
 
+    /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
+    pub fn iter(&self) -> Iter<'_, F> {
+        self.evaluations.iter()
+    }
+
+    /// Returns a mutable iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<'_, F> {
+        self.evaluations.iter_mut()
+    }
+
+    /// Split the mle into two mles with one less variable, eliminating the far right variable
+    /// original evaluations: f(x, b) for x \in \{0, 1\}^{k-1} and b\{0, 1\}
+    /// resulting two mles: f0(x) = f(x, 0) for x \in \{0, 1\}^{k-1} and f1(x) = f(x, 1) for x \in \{0, 1\}^{k-1}
+    pub fn split_halves(&self) -> (Self, Self) {
+        let left = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[0..1 << (self.num_vars - 1)],
+        );
+        let right = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[1 << (self.num_vars - 1)..],
+        );
+        (left, right)
+    }
+}
+
+impl<F: DecomposableField> DenseMultilinearExtension<F> {
     /// Decompose bits of each evaluation of the origianl MLE.
     /// The bit deomposition is only applied for power-of-two base.
     /// * base_len: the length of base, i.e. log_2(base)
@@ -71,7 +100,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
 
         // extract `base_len` bits as one "bit" at a time
         for _ in 0..bits_len {
-            let mut bit = vec![F::ZERO; self.evaluations.len()];
+            let mut bit = vec![F::zero(); self.evaluations.len()];
             bit.iter_mut().zip(val.iter_mut()).for_each(|(b_i, v_i)| {
                 v_i.decompose_lsb_bits_at(b_i, mask, base_len);
             });
@@ -81,33 +110,6 @@ impl<F: Field> DenseMultilinearExtension<F> {
             )));
         }
         bits
-    }
-
-    /// Split the mle into two mles with one less variable, eliminating the far right variable
-    /// original evaluations: f(x, b) for x \in \{0, 1\}^{k-1} and b\{0, 1\}
-    /// resulting two mles: f0(x) = f(x, 0) for x \in \{0, 1\}^{k-1} and f1(x) = f(x, 1) for x \in \{0, 1\}^{k-1}
-    pub fn split_halves(&self) -> (Self, Self) {
-        let left = Self::from_evaluations_slice(
-            self.num_vars - 1,
-            &self.evaluations[0..1 << (self.num_vars - 1)],
-        );
-        let right = Self::from_evaluations_slice(
-            self.num_vars - 1,
-            &self.evaluations[1 << (self.num_vars - 1)..],
-        );
-        (left, right)
-    }
-
-    /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
-    #[inline]
-    pub fn iter(&self) -> Iter<'_, F> {
-        self.evaluations.iter()
-    }
-
-    /// Returns a mutable iterator that iterates over the evaluations over {0,1}^`num_vars`
-    #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<'_, F> {
-        self.evaluations.iter_mut()
     }
 }
 
@@ -206,7 +208,7 @@ impl<F: Field> Zero for DenseMultilinearExtension<F> {
     fn zero() -> Self {
         Self {
             num_vars: 0,
-            evaluations: vec![F::ZERO],
+            evaluations: vec![F::zero()],
         }
     }
 

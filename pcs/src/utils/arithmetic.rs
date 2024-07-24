@@ -106,7 +106,7 @@ impl<F: Field> SparseMatrix<F> {
     /// * `array` - The vector that are multiplied by the sparse matrix.
     #[inline]
     pub fn dot(&self, array: &[F]) -> Vec<F> {
-        let mut target = vec![F::ZERO; self.dimension.num_col];
+        let mut target = vec![F::zero(); self.dimension.num_col];
         self.add_multiplied_vector(array, &mut target);
         target
     }
@@ -141,12 +141,12 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
 /// Compute the lagrange basis of a given point (which is a series of point of one dimension)
 #[inline]
 pub fn lagrange_basis<F: Field>(points: &[F]) -> Vec<F> {
-    let mut basis = vec![F::ONE];
+    let mut basis = vec![F::one()];
     points.iter().for_each(|point| {
         basis.extend(
             basis
                 .iter()
-                .map(|x| *x * (F::ONE - point))
+                .map(|x| *x * (F::one() - point))
                 .collect::<Vec<F>>(),
         );
         let prev_len = basis.len() >> 1;
