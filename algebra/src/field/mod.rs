@@ -148,17 +148,20 @@ pub trait DecomposableField: Field {
 pub trait FheField: DecomposableField {
     /// Creates a new instance.
     /// Can be overloaded with optimized implemetation.
+    #[inline]
     fn lazy_new(value: Self::Value) -> Self {
         Self::new(value)
     }
 
     /// Performs `self + a * b`.
     /// Can be overloaded with optimized implementation.
+    #[inline]
     fn add_mul(self, a: Self, b: Self) -> Self {
         self + a * b
     }
 
     /// Performs `self = self + a * b`.
+    #[inline]
     fn add_mul_assign(&mut self, a: Self, b: Self) {
         *self = self.add_mul(a, b);
     }
@@ -168,7 +171,7 @@ pub trait FheField: DecomposableField {
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
     /// Can be overloaded with optimized implementation.
-
+    #[inline]
     fn mul_fast(self, rhs: Self) -> Self {
         self * rhs
     }
@@ -177,6 +180,7 @@ pub trait FheField: DecomposableField {
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
+    #[inline]
     fn mul_assign_fast(&mut self, rhs: Self) {
         *self = self.mul_fast(rhs);
     }
@@ -185,6 +189,7 @@ pub trait FheField: DecomposableField {
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
+    #[inline]
     fn add_mul_fast(self, a: Self, b: Self) -> Self {
         self + a * b
     }
@@ -193,6 +198,7 @@ pub trait FheField: DecomposableField {
     ///
     /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
     /// and falling back to [0, modulus) for normal case.
+    #[inline]
     fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
         *self = self.add_mul_fast(a, b);
     }

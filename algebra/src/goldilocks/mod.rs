@@ -50,11 +50,6 @@ impl Field for Goldilocks {
     fn new(value: Self::Value) -> Self {
         Self(value)
     }
-
-    // #[inline]
-    // fn lazy_new(value: Self::Value) -> Self {
-    //     Self(value)
-    // }
 }
 
 impl DecomposableField for Goldilocks {
@@ -133,6 +128,7 @@ impl DecomposableField for Goldilocks {
 impl FheField for Goldilocks {}
 
 impl Display for Goldilocks {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -308,7 +304,7 @@ impl Pow<u64> for Goldilocks {
 impl Zero for Goldilocks {
     #[inline]
     fn is_zero(&self) -> bool {
-        *self == Self(0)
+        self.0 == 0
     }
 
     #[inline]
@@ -328,7 +324,7 @@ impl One for Goldilocks {
     where
         Self: PartialEq,
     {
-        *self == Self(1)
+        self.0 == 1
     }
 
     #[inline]
