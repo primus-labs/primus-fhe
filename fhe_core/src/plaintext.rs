@@ -82,7 +82,6 @@ where
 
 /// Decodes a plain text.
 ///
-/// `m` is the real message space of the scheme.
 /// `t` is message space, `q` is cipher text space.
 /// This function needs `q` and `t` are power of 2.
 #[inline]
