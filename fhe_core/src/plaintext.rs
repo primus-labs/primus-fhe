@@ -80,7 +80,7 @@ where
     cipher.as_into()
 }
 
-/// Decodes a plain text
+/// Decodes a plain text.
 ///
 /// `m` is the real message space of the scheme.
 /// `t` is message space, `q` is cipher text space.

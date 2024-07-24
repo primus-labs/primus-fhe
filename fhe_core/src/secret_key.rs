@@ -199,7 +199,7 @@ impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> SecretKeyPack<M, C, F> {
         );
 
         cipher.b_mut().add_reduce_assign(
-            encode(message, self.parameters.t(), self.parameters.q()),
+            encode(message, self.parameters.t(), lwe_modulus_value.as_into()),
             lwe_modulus,
         );
 
@@ -214,21 +214,27 @@ impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> SecretKeyPack<M, C, F> {
         let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
-        decode(plaintext, self.parameters.t(), self.parameters.q())
+        decode(
+            plaintext,
+            self.parameters.t(),
+            lwe_modulus.value().as_into(),
+        )
     }
 
     /// Decrypts the [`LWECiphertext`] back to message
     #[inline]
     pub fn decrypt_with_noise(&self, cipher_text: &LWECiphertext<C>) -> (M, C) {
         let lwe_modulus = self.parameters.lwe_modulus();
+        let t: u64 = self.parameters.t();
+        let q: u64 = lwe_modulus.value().as_into();
 
         let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
 
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
-        let message = decode(plaintext, self.parameters.t(), self.parameters.q());
+        let message = decode(plaintext, t, q);
 
-        let fresh = encode(message, self.parameters.t(), self.parameters.q());
+        let fresh = encode(message, t, q);
 
         (
             message,
