@@ -6,14 +6,15 @@ type M = u8;
 type C = u16;
 
 fn main() {
-    let m: u64 = 2;
     let t: u64 = 4;
     let q: u64 = 512;
 
-    let noise_max = (q / (m * 4)) as C;
+    // q/2t
+    let noise_max = (q / (t * 2)) as C;
 
     let modulus = PowOf2Modulus::<u16>::new(q as C);
 
+    // check all message are encoded and decoded correctly, even with noise.
     for i in 0..t {
         let message: M = i.try_into().unwrap();
 
@@ -26,7 +27,7 @@ fn main() {
         let decoded: M = decode(encoded.add_reduce(noise_max - 1, modulus), t, q);
         assert_eq!(decoded, message);
 
-        // add noise
+        // sub noise
         let decoded: M = decode(encoded.sub_reduce(noise_max - 1, modulus), t, q);
         assert_eq!(decoded, message);
     }

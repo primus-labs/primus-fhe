@@ -80,7 +80,7 @@ where
     cipher.as_into()
 }
 
-/// Decodes a plain text.
+/// Decodes an encode value.
 ///
 /// `t` is message space, `q` is cipher text space.
 /// This function needs `q` and `t` are power of 2.
