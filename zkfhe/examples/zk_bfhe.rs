@@ -7,7 +7,7 @@ use zkfhe::{
 };
 
 type M = bool;
-type LMT = u16;
+type C = u16;
 
 fn main() {
     // set random generator
@@ -16,9 +16,9 @@ fn main() {
     // set parameter
     let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
 
-    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as LMT;
+    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as C;
 
-    let check_noise = |noise: LMT, op: &str| {
+    let check_noise = |noise: C, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"
@@ -111,29 +111,29 @@ fn main() {
 }
 
 #[allow(clippy::type_complexity)]
-fn join_bit_opearions<C: LWEModulusType, F: NTTField>(
-    eval: &Evaluator<C, F>,
-    x: &LWECiphertext<C>,
-    y: &LWECiphertext<C>,
-    z: &LWECiphertext<C>,
+fn join_bit_opearions<T: LWEModulusType, F: NTTField>(
+    eval: &Evaluator<T, F>,
+    x: &LWECiphertext<T>,
+    y: &LWECiphertext<T>,
+    z: &LWECiphertext<T>,
 ) -> (
-    LWECiphertext<C>,
-    LWECiphertext<C>,
-    LWECiphertext<C>,
-    LWECiphertext<C>,
-    LWECiphertext<C>,
-    LWECiphertext<C>,
-    LWECiphertext<C>,
-    LWECiphertext<C>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
 ) {
-    let mut ct_and: Option<LWECiphertext<C>> = None;
-    let mut ct_nand: Option<LWECiphertext<C>> = None;
-    let mut ct_or: Option<LWECiphertext<C>> = None;
-    let mut ct_nor: Option<LWECiphertext<C>> = None;
-    let mut ct_xor: Option<LWECiphertext<C>> = None;
-    let mut ct_xnor: Option<LWECiphertext<C>> = None;
-    let mut ct_majority: Option<LWECiphertext<C>> = None;
-    let mut ct_mux: Option<LWECiphertext<C>> = None;
+    let mut ct_and: Option<LWECiphertext<T>> = None;
+    let mut ct_nand: Option<LWECiphertext<T>> = None;
+    let mut ct_or: Option<LWECiphertext<T>> = None;
+    let mut ct_nor: Option<LWECiphertext<T>> = None;
+    let mut ct_xor: Option<LWECiphertext<T>> = None;
+    let mut ct_xnor: Option<LWECiphertext<T>> = None;
+    let mut ct_majority: Option<LWECiphertext<T>> = None;
+    let mut ct_mux: Option<LWECiphertext<T>> = None;
 
     rayon::scope(|s| {
         s.spawn(|_| ct_and = Some(eval.and(x, y)));
