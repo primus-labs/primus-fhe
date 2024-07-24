@@ -50,31 +50,29 @@ macro_rules! shrink_impl {
 
 shrink_impl!();
 
-/// Encodes a message
+/// Encodes a message.
 ///
-/// `m` is the real message space of the scheme.
-/// `delta` equals to `q/t`.
+/// `t` is message space, `q` is cipher text space.
 /// This function needs `q` and `t` are power of 2.
 #[inline]
-pub fn encode<M, C>(message: M, m: u64, delta_trailing_zeros: u32) -> C
+pub fn encode<M, C>(message: M, t: u64, q: u64) -> C
 where
     M: LWEPlainContainer,
     C: LWECipherValueContainer,
 {
     // Shift the message to the most significant part of `C`.
     let message: u64 = message.as_into();
-    assert!(message < m);
-    let cipher: u64 = message << delta_trailing_zeros;
+    let cipher: u64 = message << (q / t).trailing_zeros();
     cipher.as_into()
 }
 
 /// Decodes a plain text
 ///
 /// `m` is the real message space of the scheme.
-/// `delta` equals to `q/t`.
+/// `t` is message space, `q` is cipher text space.
 /// This function needs `q` and `t` are power of 2.
 #[inline]
-pub fn decode<M, C>(cipher: C, m: u64, delta_trailing_zeros: u32) -> M
+pub fn decode<M, C>(cipher: C, m: u64, t: u64, q: u64) -> M
 where
     M: LWEPlainContainer,
     C: LWECipherValueContainer,
@@ -82,7 +80,7 @@ where
     // Move the message to the least significant part of `C`.
     // Leave one more bit for round.
     let cipher: u64 = cipher.as_into();
-    let temp = cipher >> (delta_trailing_zeros - 1);
+    let temp = cipher >> ((q / t).trailing_zeros() - 1);
     let decoded = ((temp >> 1u32) + (temp & 1)) % m;
 
     M::shrink(decoded)

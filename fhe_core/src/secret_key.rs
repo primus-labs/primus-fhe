@@ -199,11 +199,7 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> SecretKeyPac
         );
 
         cipher.b_mut().add_reduce_assign(
-            encode(
-                message,
-                self.parameters.m(),
-                self.parameters.delta_trailing_zeros(),
-            ),
+            encode(message, self.parameters.t(), self.parameters.q()),
             lwe_modulus,
         );
 
@@ -221,7 +217,8 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> SecretKeyPac
         decode(
             plaintext,
             self.parameters.m(),
-            self.parameters.delta_trailing_zeros(),
+            self.parameters.t(),
+            self.parameters.q(),
         )
     }
 
@@ -237,14 +234,11 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> SecretKeyPac
         let message = decode(
             plaintext,
             self.parameters.m(),
-            self.parameters.delta_trailing_zeros(),
+            self.parameters.t(),
+            self.parameters.q(),
         );
 
-        let fresh = encode(
-            message,
-            self.parameters.m(),
-            self.parameters.delta_trailing_zeros(),
-        );
+        let fresh = encode(message, self.parameters.t(), self.parameters.q());
 
         (
             message,

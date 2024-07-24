@@ -34,11 +34,7 @@ pub struct LWEParameters<M: LWEPlainContainer, C: LWECipherValueContainer> {
     pub m: u64,
     /// LWE message space with padding.
     pub t: u64,
-    /// `q/t`, it should be a power of 2.
-    pub delta: u64,
-    /// `delta`'s trailing zeros
-    pub delta_trailing_zeros: u32,
-    pub phantom: std::marker::PhantomData<M>,
+    pub phantom: PhantomData<M>,
 }
 
 /// Use `RLWE` or `NTRU` to perform blind rotation.
@@ -199,15 +195,12 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> Parameters<M
         let q: u64 = lwe_modulus.as_into();
         assert!(m <= t && t <= q);
         assert!(t.is_power_of_two() && q.is_power_of_two());
-        let delta = q / t;
         let lwe_params = LWEParameters {
             lwe_dimension,
             lwe_modulus: lwe_modulus.to_power_of_2_modulus(),
             lwe_noise_std_dev: params.lwe_noise_std_dev,
             m,
             t,
-            delta,
-            delta_trailing_zeros: delta.trailing_zeros(),
             phantom: PhantomData,
         };
 
@@ -264,16 +257,10 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> Parameters<M
         self.lwe_params.t
     }
 
-    /// Returns the `delta` of this [`Parameters<F>`], refers to **`m`** in the paper.
+    /// Returns the `q` of this [`Parameters<F>`], refers to **`q`** in the paper.
     #[inline]
-    pub fn delta(&self) -> u64 {
-        self.lwe_params.delta
-    }
-
-    /// Returns the `delta_trailing_zeros` of this [`Parameters<F>`], refers to **`m`** in the paper.
-    #[inline]
-    pub fn delta_trailing_zeros(&self) -> u32 {
-        self.lwe_params.delta_trailing_zeros
+    pub fn q(&self) -> u64 {
+        self.lwe_params.lwe_modulus.value().as_into()
     }
 
     /// Returns the lwe noise error's standard deviation of this [`Parameters<F>`].
