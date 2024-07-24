@@ -32,19 +32,32 @@ macro_rules! shrink_impl {
             }
         }
     };
+    (@ u64) => {
+        impl Shrink for u64 {
+            #[inline(always)]
+            fn shrink(c: u64) -> u64 {
+                c
+            }
+        }
+    };
     (@@ $($M:ty),*) => {
         $(
             impl Shrink for $M {
                 #[inline(always)]
                 fn shrink(c: u64) -> $M {
-                    c as $M
+                    if c > <$M>::MAX as u64 {
+                        panic!("shrink error!")
+                    } else {
+                        c as $M
+                    }
                 }
             }
         )*
     };
     () => {
         shrink_impl!(@ bool);
-        shrink_impl!(@@ u8, u16, u32, u64);
+        shrink_impl!(@ u64);
+        shrink_impl!(@@ u8, u16, u32);
     }
 }
 
@@ -60,6 +73,7 @@ where
     M: LWEPlainContainer,
     C: LWECipherValueContainer,
 {
+    debug_assert!(q.is_power_of_two() && t.is_power_of_two());
     // Shift the message to the most significant part of `C`.
     let message: u64 = message.as_into();
     let cipher: u64 = message << (q / t).trailing_zeros();
@@ -77,6 +91,7 @@ where
     M: LWEPlainContainer,
     C: LWECipherValueContainer,
 {
+    debug_assert!(q.is_power_of_two() && t.is_power_of_two());
     // Move the message to the least significant part of `C`.
     // Leave one more bit for round.
     let cipher: u64 = cipher.as_into();
