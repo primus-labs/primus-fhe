@@ -277,7 +277,7 @@ impl PartialOrd for Goldilocks {
 impl Ord for Goldilocks {
     #[inline]
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_canonical_u64().cmp(&&other.as_canonical_u64())
+        self.as_canonical_u64().cmp(&other.as_canonical_u64())
     }
 }
 
