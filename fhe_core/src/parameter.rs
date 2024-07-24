@@ -31,8 +31,6 @@ pub struct LWEParameters<M: LWEMsgType, C: LWEModulusType> {
     /// The lwe noise error's standard deviation
     pub lwe_noise_std_dev: f64,
     /// LWE message space.
-    pub m: u64,
-    /// LWE message space with padding.
     pub t: u64,
     pub phantom: PhantomData<M>,
 }
@@ -99,9 +97,7 @@ pub struct ConstParameters<M: LWEMsgType, C: LWEModulusType, FieldContainer> {
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
     pub lwe_modulus: C,
-    /// LWE message space(not contain padding).
-    pub m: C,
-    /// LWE message space(may contain padding).
+    /// LWE message space.
     pub t: C,
     /// The lwe noise error's standard deviation
     pub lwe_noise_std_dev: f64,
@@ -190,16 +186,14 @@ impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Parameters<M, C, F> {
             });
         }
 
-        let m: u64 = params.m.as_into();
         let t: u64 = params.t.as_into();
         let q: u64 = lwe_modulus.as_into();
-        assert!(m <= t && t <= q);
+        assert!(t <= q);
         assert!(t.is_power_of_two() && q.is_power_of_two());
         let lwe_params = LWEParameters {
             lwe_dimension,
             lwe_modulus: lwe_modulus.to_power_of_2_modulus(),
             lwe_noise_std_dev: params.lwe_noise_std_dev,
-            m,
             t,
             phantom: PhantomData,
         };
@@ -243,12 +237,6 @@ impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Parameters<M, C, F> {
     #[inline]
     pub fn lwe_modulus(&self) -> PowOf2Modulus<C> {
         self.lwe_params.lwe_modulus
-    }
-
-    /// Returns the `m` of this [`Parameters<F>`], refers to **`m`** in the paper.
-    #[inline]
-    pub fn m(&self) -> u64 {
-        self.lwe_params.m
     }
 
     /// Returns the `t` of this [`Parameters<F>`], refers to **`m`** in the paper.
