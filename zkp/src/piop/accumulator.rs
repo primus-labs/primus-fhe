@@ -295,7 +295,7 @@ impl<F: Field> AccumulatorIOP<F> {
             sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
                 fs_rng,
                 &info.poly_info,
-                F::ZERO,
+                F::zero(),
                 &proof.sumcheck_msg,
             )
             .expect("sumcheck protocol in rlwe mult rgsw failed"),
@@ -332,8 +332,8 @@ impl<F: Field> AccumulatorSubclaim<F> {
         assert_eq!(randomness_sumcheck.len(), 2 * info.num_updations);
 
         // check 1: check the consistency of the randomized ntt instance and the original ntt instances
-        let mut coeffs_eval = F::ZERO;
-        let mut points_eval = F::ZERO;
+        let mut coeffs_eval = F::zero();
+        let mut points_eval = F::zero();
         let mut r_iter = randomness_ntt.iter();
 
         for witness in witnesses {
@@ -395,10 +395,10 @@ impl<F: Field> AccumulatorSubclaim<F> {
         let mut r = randomness_sumcheck.iter();
 
         // 4. check 4: check the subclaim returned from the sumcheck protocol consisting of two sub-sumcheck protocols
-        let mut sum_eval = F::ZERO;
+        let mut sum_eval = F::zero();
         for witness in witnesses {
-            let mut sum1_eval = F::ZERO;
-            let mut sum2_eval = F::ZERO;
+            let mut sum1_eval = F::zero();
+            let mut sum2_eval = F::zero();
             // The first part is to evaluate at a random point g' = \sum_{i = 0}^{k-1} a_i' \cdot c_i + b_i' \cdot f_i
             // It is the reduction claim of prover asserting the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
             // where u is randomly sampled by the verifier.

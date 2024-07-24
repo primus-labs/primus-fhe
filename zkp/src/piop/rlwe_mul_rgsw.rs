@@ -241,8 +241,8 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
         assert_eq!(self.randomness_sumcheck.len(), 2);
 
         // check 1: check the consistency of the randomized ntt oracle and the original oracles
-        let mut coeffs_eval = F::ZERO;
-        let mut points_eval = F::ZERO;
+        let mut coeffs_eval = F::zero();
+        let mut points_eval = F::zero();
         let mut r_iter = randomness_ntt.iter();
 
         for (coeffs, points) in izip!(&bits_rlwe.a_bits, &bits_rlwe_ntt.a_bits) {
@@ -288,8 +288,8 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
         }
 
         // 4. check 4: check the subclaim returned from the sumcheck protocol consisting of two sub-sumcheck protocols
-        let mut sum1_eval = F::ZERO;
-        let mut sum2_eval = F::ZERO;
+        let mut sum1_eval = F::zero();
+        let mut sum2_eval = F::zero();
 
         // The first part is to evaluate at a random point g' = \sum_{i = 0}^{k-1} a_i' \cdot c_i + b_i' \cdot f_i
         // It is the reduction claim of prover asserting the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
@@ -463,7 +463,7 @@ impl<F: Field> RlweMultRgswIOP<F> {
             sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
                 fs_rng,
                 &poly_info,
-                F::ZERO,
+                F::zero(),
                 &proof.sumcheck_msg,
             )
             .expect("sumcheck protocol in rlwe mult rgsw failed"),

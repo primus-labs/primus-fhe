@@ -265,7 +265,7 @@ where
 
     fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
         if degree == 0 {
-            values.fill(F::NEG_ONE);
+            values.fill(F::neg_one());
             return;
         }
 

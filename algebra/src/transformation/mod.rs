@@ -100,12 +100,12 @@ pub trait MonomialNTT<F: NTTField> {
     /// Perform a fast number theory transform for **monomial** `X^degree` in place.
     #[inline]
     fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]) {
-        self.transform_monomial(F::ONE, degree, values);
+        self.transform_monomial(F::one(), degree, values);
     }
 
     /// Perform a fast number theory transform for **monomial** `-X^degree` in place.
     #[inline]
     fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
-        self.transform_monomial(F::NEG_ONE, degree, values);
+        self.transform_monomial(F::neg_one(), degree, values);
     }
 }

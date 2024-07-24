@@ -21,6 +21,7 @@ use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::Proof;
 use crate::utils::eval_identity_function;
 use crate::utils::gen_identity_evaluations;
+use algebra::DecomposableField;
 use itertools::izip;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -110,7 +111,9 @@ impl<F: Field> RoundInstance<F> {
             offset_bits_info: self.offset_aux_bits.info(),
         }
     }
+}
 
+impl<F: DecomposableField> RoundInstance<F> {
     /// Compute the witness required in proof and construct the instance
     #[inline]
     pub fn new(
@@ -132,14 +135,14 @@ impl<F: Field> RoundInstance<F> {
         output_bits.add_value_instance(&output);
 
         // set w = 1 iff a = 0 & b = 0
-        let option = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        let option = Rc::new(DenseMultilinearExtension::<F>::from_evaluations_vec(
             num_vars,
             input
                 .iter()
                 .zip(output.iter())
                 .map(|(a, b)| match (a.is_zero(), b.is_zero()) {
-                    (true, true) => F::ONE,
-                    _ => F::ZERO,
+                    (true, true) => F::one(),
+                    _ => F::zero(),
                 })
                 .collect(),
         ));
@@ -152,7 +155,7 @@ impl<F: Field> RoundInstance<F> {
             izip!(option.iter(), input.iter(), output.iter())
                 .map(|(w, a, b)| match w.is_zero() {
                     true => *a - *b * k,
-                    false => F::ONE,
+                    false => F::one(),
                 })
                 .collect(),
         ));
@@ -161,7 +164,7 @@ impl<F: Field> RoundInstance<F> {
         // c - 1
         let c_minus_one = DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
-            offset.iter().map(|x| *x - F::ONE).collect(),
+            offset.iter().map(|x| *x - F::one()).collect(),
         );
         // c - 1 + delta
         let c_minus_one_delta = DenseMultilinearExtension::from_evaluations_vec(
@@ -219,7 +222,7 @@ impl<F: Field> RoundIOPSubclaim<F> {
         let d_bits = vec![offset_aux_bits_1, offset_aux_bits_2];
         let c_minus_one = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             offset.num_vars,
-            offset.iter().map(|x| *x - F::ONE).collect(),
+            offset.iter().map(|x| *x - F::one()).collect(),
         ));
         let c_minus_one_delta = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             offset.num_vars,
@@ -244,11 +247,11 @@ impl<F: Field> RoundIOPSubclaim<F> {
         let offset_eval = offset.evaluate(&self.sumcheck_subclaim.point);
 
         self.sumcheck_subclaim.expected_evaluations
-            == r_1 * eq_val * option_eval * (F::ONE - option_eval)
+            == r_1 * eq_val * option_eval * (F::one() - option_eval)
                 + r_2
                     * eq_val
                     * (option_eval * (input_eval * lambda_1 + output_eval * lambda_2)
-                        + (F::ONE - option_eval)
+                        + (F::one() - option_eval)
                             * (input_eval - output_eval * info.k - offset_eval))
     }
 }
@@ -289,7 +292,11 @@ impl<F: Field> RoundIOP<F> {
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.option),
             ],
-            &[(F::ONE, F::ZERO), (F::ONE, F::ZERO), (-F::ONE, F::ONE)],
+            &[
+                (F::one(), F::zero()),
+                (F::one(), F::zero()),
+                (-F::one(), F::one()),
+            ],
             r_1,
         );
 
@@ -304,7 +311,11 @@ impl<F: Field> RoundIOP<F> {
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.input),
             ],
-            &[(F::ONE, F::ZERO), (F::ONE, F::ZERO), (lambda_1, F::ZERO)],
+            &[
+                (F::one(), F::zero()),
+                (F::one(), F::zero()),
+                (lambda_1, F::zero()),
+            ],
             r_2,
         );
         // product: eq(u, x) * w(x) * (b(x) * \lambda_2)
@@ -314,7 +325,11 @@ impl<F: Field> RoundIOP<F> {
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.output),
             ],
-            &[(F::ONE, F::ZERO), (F::ONE, F::ZERO), (lambda_2, F::ZERO)],
+            &[
+                (F::one(), F::zero()),
+                (F::one(), F::zero()),
+                (lambda_2, F::zero()),
+            ],
             r_2,
         );
         // product: eq(u, x) * (1 - w(x)) * a(x)
@@ -324,7 +339,11 @@ impl<F: Field> RoundIOP<F> {
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.input),
             ],
-            &[(F::ONE, F::ZERO), (-F::ONE, F::ONE), (F::ONE, F::ZERO)],
+            &[
+                (F::one(), F::zero()),
+                (-F::one(), F::one()),
+                (F::one(), F::zero()),
+            ],
             r_2,
         );
         // product: eq(u, x) * (1 - w(x)) * (-k * b(x))
@@ -334,7 +353,11 @@ impl<F: Field> RoundIOP<F> {
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.output),
             ],
-            &[(F::ONE, F::ZERO), (-F::ONE, F::ONE), (-instance.k, F::ZERO)],
+            &[
+                (F::one(), F::zero()),
+                (-F::one(), F::one()),
+                (-instance.k, F::zero()),
+            ],
             r_2,
         );
         // product: eq(u, x) * (1 - w(x)) * (-c(x))
@@ -344,7 +367,11 @@ impl<F: Field> RoundIOP<F> {
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.offset),
             ],
-            &[(F::ONE, F::ZERO), (-F::ONE, F::ONE), (-F::ONE, F::ZERO)],
+            &[
+                (F::one(), F::zero()),
+                (-F::one(), F::one()),
+                (-F::one(), F::zero()),
+            ],
             r_2,
         );
 
@@ -404,7 +431,7 @@ impl<F: Field> RoundIOP<F> {
             sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
                 fs_rng,
                 &poly_info,
-                F::ZERO,
+                F::zero(),
                 &proof.sumcheck_msg,
             )
             .expect("sumcheck protocol for round operation failed"),

@@ -299,7 +299,7 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
 
     fn encode(&self, target: &mut [F]) {
         assert_eq!(target.len(), self.codeword_len);
-        target[self.message_len..].fill(F::ZERO);
+        target[self.message_len..].fill(F::zero());
 
         // Compute x1 = x*A | x2 = x*A^2| x3 = x*A^3| ... | x_{k-1} = x*A^{k-1}
         let mut input_offset = 0;

@@ -42,7 +42,7 @@ impl<F: Field> ReedSolomonCode<F> {
         coeffs
             .iter()
             .rev()
-            .fold(F::ZERO, |acc, coeff| acc * x + coeff)
+            .fold(F::zero(), |acc, coeff| acc * x + coeff)
     }
 }
 
@@ -70,7 +70,7 @@ impl<F: Field> LinearCode<F> for ReedSolomonCode<F> {
     #[inline]
     fn encode(&self, target: &mut [F]) {
         let input = target[..min(self.message_len, self.codeword_len)].to_vec();
-        let points = iter::successors(Some(F::ONE), move |state| Some(F::ONE + state));
+        let points = iter::successors(Some(F::one()), move |state| Some(F::one() + state));
         target
             .as_mut()
             .iter_mut()

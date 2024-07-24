@@ -1,18 +1,19 @@
 use algebra::{
-    derive::{Field, Prime, NTT},
-    Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
+    derive::{DecomposableField, Field, Prime},
+    Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
+use num_traits::{One, Zero};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{AdditionInZq, AdditionInZqInstance};
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, DecomposableField, Prime)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
-#[derive(Field, Prime)]
+#[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
@@ -96,10 +97,10 @@ fn test_random_addition_in_zq() {
         .iter()
         .zip(b.iter())
         .map(|(x, y)| {
-            if x.get() + y.get() >= Fq::MODULUS_VALUE {
-                (*x + *y, Fq::ONE)
+            if x.value() + y.value() >= Fq::MODULUS_VALUE {
+                (*x + *y, Fq::one())
             } else {
-                (*x + *y, Fq::ZERO)
+                (*x + *y, Fq::zero())
             }
         })
         .collect();
@@ -110,21 +111,21 @@ fn test_random_addition_in_zq() {
         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
             // Convert to Fp
-            a.iter().map(|x: &Fq| FF::new(x.get())).collect(),
+            a.iter().map(|x: &Fq| FF::new(x.value())).collect(),
         )),
         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
-            b.iter().map(|x: &Fq| FF::new(x.get())).collect(),
+            b.iter().map(|x: &Fq| FF::new(x.value())).collect(),
         )),
         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
-            c.iter().map(|x: &Fq| FF::new(x.get())).collect(),
+            c.iter().map(|x: &Fq| FF::new(x.value())).collect(),
         )),
     ];
 
     let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars,
-        k.iter().map(|x: &Fq| FF::new(x.get())).collect(),
+        k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
     ));
 
     // decompose bits of every element in a, b, c

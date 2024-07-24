@@ -32,13 +32,13 @@ pub fn eval_identity_function<F: Field>(u: &[F], v: &[F]) -> F {
 mod test {
     use crate::utils::{eval_identity_function, gen_identity_evaluations};
     use algebra::{
-        derive::{Field, Prime, NTT},
+        derive::{Field, Prime},
         FieldUniformSampler, MultilinearExtension,
     };
     use rand::thread_rng;
     use rand_distr::Distribution;
 
-    #[derive(Field, Prime, NTT)]
+    #[derive(Field, Prime)]
     #[modulus = 132120577]
     pub struct Fp32(u32);
     // field type

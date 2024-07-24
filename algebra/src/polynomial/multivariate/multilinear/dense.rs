@@ -63,6 +63,21 @@ impl<F: Field> DenseMultilinearExtension<F> {
     pub fn iter_mut(&mut self) -> IterMut<'_, F> {
         self.evaluations.iter_mut()
     }
+
+    /// Split the mle into two mles with one less variable, eliminating the far right variable
+    /// original evaluations: f(x, b) for x \in \{0, 1\}^{k-1} and b\{0, 1\}
+    /// resulting two mles: f0(x) = f(x, 0) for x \in \{0, 1\}^{k-1} and f1(x) = f(x, 1) for x \in \{0, 1\}^{k-1}
+    pub fn split_halves(&self) -> (Self, Self) {
+        let left = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[0..1 << (self.num_vars - 1)],
+        );
+        let right = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[1 << (self.num_vars - 1)..],
+        );
+        (left, right)
+    }
 }
 
 impl<F: DecomposableField> DenseMultilinearExtension<F> {
@@ -95,33 +110,6 @@ impl<F: DecomposableField> DenseMultilinearExtension<F> {
             )));
         }
         bits
-    }
-
-    /// Split the mle into two mles with one less variable, eliminating the far right variable
-    /// original evaluations: f(x, b) for x \in \{0, 1\}^{k-1} and b\{0, 1\}
-    /// resulting two mles: f0(x) = f(x, 0) for x \in \{0, 1\}^{k-1} and f1(x) = f(x, 1) for x \in \{0, 1\}^{k-1}
-    pub fn split_halves(&self) -> (Self, Self) {
-        let left = Self::from_evaluations_slice(
-            self.num_vars - 1,
-            &self.evaluations[0..1 << (self.num_vars - 1)],
-        );
-        let right = Self::from_evaluations_slice(
-            self.num_vars - 1,
-            &self.evaluations[1 << (self.num_vars - 1)..],
-        );
-        (left, right)
-    }
-
-    /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
-    #[inline]
-    pub fn iter(&self) -> Iter<'_, F> {
-        self.evaluations.iter()
-    }
-
-    /// Returns a mutable iterator that iterates over the evaluations over {0,1}^`num_vars`
-    #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<'_, F> {
-        self.evaluations.iter_mut()
     }
 }
 

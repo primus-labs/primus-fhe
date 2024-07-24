@@ -78,7 +78,7 @@ pub fn naive_init_fourier_table<F: Field>(
     let log_n = u.len();
     let m = ntt_table.len(); // m = 2n = 2 * (1 << dim)
 
-    let mut evaluations = vec![F::ONE; 1 << log_n];
+    let mut evaluations = vec![F::one(); 1 << log_n];
 
     for (x, eval_at_x) in evaluations.iter_mut().enumerate() {
         for (i, &u_i) in u.iter().enumerate().take(log_n) {
@@ -86,7 +86,7 @@ pub fn naive_init_fourier_table<F: Field>(
 
             let x_i = (x >> i) & 1;
             let x_i_idx = (1 << i) * x_i;
-            *eval_at_x *= ((F::ONE - u_i) + u_i * ntt_table[idx]) * ntt_table[x_i_idx];
+            *eval_at_x *= ((F::one() - u_i) + u_i * ntt_table[idx]) * ntt_table[x_i_idx];
         }
     }
 
@@ -116,8 +116,8 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
     // It store the evaluations of all F(u, x) for x \in \{0, 1\}^dim.
     // Note that in our implementation, we use little endian form, so the index `0b1011`
     // represents the point `P(1,1,0,1)` in {0,1}^`dim`
-    let mut evaluations: Vec<_> = vec![F::ZERO; 1 << log_n];
-    evaluations[0] = F::ONE;
+    let mut evaluations: Vec<_> = vec![F::zero(); 1 << log_n];
+    evaluations[0] = F::one();
 
     // * Compute \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) * ω^{2^i * x_i}
     // The reason why we update the table with u_i in reverse order is that
@@ -138,13 +138,13 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
             let bit = j >> k;
             if bit == 1 {
                 evaluations[j] = evaluations[j % last_table_size]
-                    * (F::ONE - u[i] + u[i] * ntt_table[idx])
+                    * (F::one() - u[i] + u[i] * ntt_table[idx])
                     * ntt_table[last_table_size];
             }
             // If bit = 0, we do not need to multiply because ω^{2^k * 0} = 1
             else {
                 evaluations[j] =
-                    evaluations[j % last_table_size] * (F::ONE - u[i] + u[i] * ntt_table[idx]);
+                    evaluations[j % last_table_size] * (F::one() - u[i] + u[i] * ntt_table[idx]);
             }
         }
     }
@@ -241,7 +241,7 @@ impl<F: Field> NTTBareIOP<F> {
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(log_n);
 
         let product = vec![Rc::clone(f_u), Rc::new(ntt_instance.coeffs.clone())];
-        poly.add_product(product, F::ONE);
+        poly.add_product(product, F::one());
 
         let (prover_msg, prover_state) =
             MLSumcheck::prove_as_subprotocol(fs_rng, &poly).expect("ntt bare proof failed");
@@ -295,9 +295,10 @@ impl<F: Field> NTTBareIOP<F> {
 #[cfg(test)]
 mod test {
     use algebra::{
-        derive::{Field, Prime, NTT},
+        derive::{DecomposableField, FheField, Field, Prime, NTT},
         DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension, NTTField,
     };
+    use num_traits::{One, Zero};
     use rand::thread_rng;
     use rand_distr::Distribution;
 
@@ -312,7 +313,7 @@ mod test {
         }
     }
 
-    #[derive(Field, Prime, NTT)]
+    #[derive(Field, DecomposableField, FheField, Prime, NTT)]
     #[modulus = 132120577]
     pub struct Fp32(u32);
     // field type
@@ -332,10 +333,10 @@ mod test {
         // root is the M-th root of unity
         let root = FF::try_minimal_primitive_root(m).unwrap();
 
-        let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::ZERO).collect();
+        let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::zero()).collect();
         let mut ntt_table = Vec::with_capacity(m as usize);
 
-        let mut power = FF::ONE;
+        let mut power = FF::one();
         for _ in 0..m {
             ntt_table.push(power);
             power *= root;
@@ -374,10 +375,10 @@ mod test {
         // root is the M-th root of unity
         let root = FF::try_minimal_primitive_root(m).unwrap();
 
-        let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::ZERO).collect();
+        let mut fourier_matrix: Vec<_> = (0..(1 << dim) * (1 << dim)).map(|_| FF::zero()).collect();
         let mut ntt_table = Vec::with_capacity(m as usize);
 
-        let mut power = FF::ONE;
+        let mut power = FF::one();
         for _ in 0..m {
             ntt_table.push(power);
             power *= root;

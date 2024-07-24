@@ -102,9 +102,9 @@ impl<F: NTTField> SecretKeyPack<F> {
                         );
                         // negative convertion
                         let convert = |v: &LWEModulusType| match *v {
-                            0 => F::ZERO,
-                            1 => F::NEG_ONE,
-                            _ => F::ONE,
+                            0 => F::zero(),
+                            1 => F::neg_one(),
+                            _ => F::one(),
                         };
 
                         // s = [s_0, -s_{n-1},..., -s_1]

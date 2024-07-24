@@ -53,11 +53,11 @@ fn test_transform_monomial() {
 
     let mut a = PolyFF::zero(N);
     let mut b = NTTPolyFF::zero(N);
-    a[degree] = FF::NEG_ONE;
+    a[degree] = FF::neg_one();
 
     let a = table.transform_inplace(a);
 
-    table.transform_monomial(FF::NEG_ONE, degree, b.as_mut_slice());
+    table.transform_monomial(FF::neg_one(), degree, b.as_mut_slice());
     assert_eq!(a, b);
 }
 

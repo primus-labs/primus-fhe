@@ -1,4 +1,5 @@
-use algebra::{derive::*, Field, FieldUniformSampler};
+use algebra::{derive::*, FieldUniformSampler};
+use num_traits::Zero;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec, LinearCode};
 use rand::Rng;
 
@@ -24,12 +25,12 @@ fn linearity_check() {
         let k_0 = rng.sample(field_distr);
         let k_1 = rng.sample(field_distr);
 
-        let mut codeword = vec![FF32::ZERO; codeword_len];
+        let mut codeword = vec![FF32::zero(); codeword_len];
         codeword[..message_len]
             .iter_mut()
             .for_each(|x| *x = rng.sample(field_distr));
 
-        let mut codeword_add = vec![FF32::ZERO; codeword_len];
+        let mut codeword_add = vec![FF32::zero(); codeword_len];
         codeword_add[..message_len]
             .iter_mut()
             .for_each(|x| *x = rng.sample(field_distr));

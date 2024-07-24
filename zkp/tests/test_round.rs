@@ -1,13 +1,13 @@
 use algebra::{
-    derive::{Field, Prime, NTT},
-    DenseMultilinearExtension, Field, FieldUniformSampler,
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
+    DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 use rand_distr::Distribution;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{DecomposedBitsInfo, RoundIOP, RoundInstance};
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -27,7 +27,7 @@ macro_rules! field_vec {
 
 #[inline]
 fn decode(c: FF) -> u32 {
-    (c.get() as f64 * FT as f64 / FP as f64).floor() as u32 % FT
+    (c.value() as f64 * FT as f64 / FP as f64).floor() as u32 % FT
 }
 
 #[test]

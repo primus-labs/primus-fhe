@@ -19,7 +19,7 @@
 //! then the resulting purported sum is:
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
-use algebra::{DenseMultilinearExtension, Field, MultilinearExtension};
+use algebra::{DecomposableField, DenseMultilinearExtension, Field, MultilinearExtension};
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -138,16 +138,6 @@ impl<F: Field> DecomposedBits<F> {
         self.instances.push(decomposed_bits.to_vec());
     }
 
-    /// Use the base defined in this instance to perform decomposition over the input value.
-    /// Then add the result into this instance, meaning to add l sumcheck protocols.
-    /// * decomposed_bits: store each bit
-    #[inline]
-    pub fn add_value_instance(&mut self, value: &DenseMultilinearExtension<F>) {
-        assert_eq!(self.num_vars, value.num_vars);
-        self.instances
-            .push(value.get_decomposed_mles(self.base_len, self.bits_len));
-    }
-
     #[inline]
     /// Batch all the sumcheck protocol, each corresponding to range-check one single bit.
     /// * randomness: randomness used to linearly combine bits_len * num_instances sumcheck protocols
@@ -183,6 +173,18 @@ impl<F: Field> DecomposedBits<F> {
             }
         }
         poly
+    }
+}
+
+impl<F: DecomposableField> DecomposedBits<F> {
+    /// Use the base defined in this instance to perform decomposition over the input value.
+    /// Then add the result into this instance, meaning to add l sumcheck protocols.
+    /// * decomposed_bits: store each bit
+    #[inline]
+    pub fn add_value_instance(&mut self, value: &DenseMultilinearExtension<F>) {
+        assert_eq!(self.num_vars, value.num_vars);
+        self.instances
+            .push(value.get_decomposed_mles(self.base_len, self.bits_len));
     }
 }
 
