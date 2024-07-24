@@ -68,7 +68,14 @@ impl<F: NTTField> EvaluationKey<F> {
 
         let key_switched = self.key_switching_key.key_switch_for_ntru(&acc);
 
-        lwe_modulus_switch_inplace(key_switched, parameters.lwe_modulus().value(), &mut c);
+        let round_method = parameters.modulus_switch_round_method();
+
+        lwe_modulus_switch_inplace(
+            key_switched,
+            parameters.lwe_modulus().value(),
+            round_method,
+            &mut c,
+        );
         c
     }
 }
@@ -94,7 +101,7 @@ impl<F: NTTField> Evaluator<F> {
     /// * Input: ciphertext `c`, with message `true`(resp. `false`).
     /// * Output: ciphertext with message `false`(resp. `true`).
     ///
-    /// Link: https://eprint.iacr.org/2020/086
+    /// Link: <https://eprint.iacr.org/2020/086>
     pub fn not(&self, c: &LWECiphertext) -> LWECiphertext {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_modulus();

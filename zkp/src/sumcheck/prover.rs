@@ -24,10 +24,10 @@ pub struct ProverState<F: Field> {
     pub randomness: Vec<F>,
     /// Stores the list of products that is meant to be added together.
     /// Each multiplicand is represented by the index in flattened_ml_extensions
-    /// (index, (a, b)) where `index` indicates the location of MLE and
-    /// (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
-    #[allow(clippy::type_complexity)]
-    pub list_of_products: Vec<(F, Vec<(usize, (F, F))>)>,
+    pub list_of_products: Vec<(F, Vec<usize>)>,
+    /// Stores the linear operations, each of which is successively (in the same order) perfomed over the each MLE of each product stored in the above `products`
+    /// so each (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
+    pub linear_ops: Vec<Vec<(F, F)>>,
     /// Stores a list of multilinear extensions in which `self.list_of_products` point to
     pub flattened_ml_extensions: Vec<DenseMultilinearExtension<F>>,
     /// Number of variables
@@ -66,6 +66,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         ProverState {
             randomness: Vec::with_capacity(polynomial.num_variables),
             list_of_products: polynomial.products.clone(),
+            linear_ops: polynomial.linear_ops.clone(),
             flattened_ml_extensions,
             num_vars: polynomial.num_variables,
             max_multiplicands: polynomial.max_multiplicands,
@@ -117,14 +118,16 @@ impl<F: Field> IPForMLSumcheck<F> {
         // Note that the function proved in the sumcheck is a sum of products.
         let fold_result = (0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
             // This loop is evaluating each product over the specific degree + 1 points.
-            for (coefficient, products) in &prover_state.list_of_products {
+            for ((coefficient, products), linear_ops) in prover_state
+                .list_of_products
+                .iter()
+                .zip(prover_state.linear_ops.iter())
+            {
                 product.fill(*coefficient);
                 // This loop is evaluating each MLE to update the product via performing the accumulated multiplication.
-                for &jth_product in products {
+                for (&jth_product, &(op_a, op_b)) in products.iter().zip(linear_ops.iter()) {
                     // (a, b) is a wrapped linear operation over original MLE
-                    let table = &prover_state.flattened_ml_extensions[jth_product.0];
-                    let op_a = jth_product.1 .0;
-                    let op_b = jth_product.1 .1;
+                    let table = &prover_state.flattened_ml_extensions[jth_product];
                     let mut start = (table[b << 1] * op_a) + op_b;
                     let step = (table[(b << 1) + 1] * op_a) + op_b - start;
                     // Evaluate each point P(t) for t = 0..degree + 1 via the accumulated addition instead of the multiplication by t.

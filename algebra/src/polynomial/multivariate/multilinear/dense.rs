@@ -70,6 +70,7 @@ impl<F: DecomposableField> DenseMultilinearExtension<F> {
     /// The bit deomposition is only applied for power-of-two base.
     /// * base_len: the length of base, i.e. log_2(base)
     /// * bits_len: the lenth of decomposed bits
+    ///
     /// The resulting decomposition bits are respectively wrapped into `Rc` struct, which can be more easilier added into the ListsOfProducts.
     #[inline]
     pub fn get_decomposed_mles(
@@ -94,6 +95,33 @@ impl<F: DecomposableField> DenseMultilinearExtension<F> {
             )));
         }
         bits
+    }
+
+    /// Split the mle into two mles with one less variable, eliminating the far right variable
+    /// original evaluations: f(x, b) for x \in \{0, 1\}^{k-1} and b\{0, 1\}
+    /// resulting two mles: f0(x) = f(x, 0) for x \in \{0, 1\}^{k-1} and f1(x) = f(x, 1) for x \in \{0, 1\}^{k-1}
+    pub fn split_halves(&self) -> (Self, Self) {
+        let left = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[0..1 << (self.num_vars - 1)],
+        );
+        let right = Self::from_evaluations_slice(
+            self.num_vars - 1,
+            &self.evaluations[1 << (self.num_vars - 1)..],
+        );
+        (left, right)
+    }
+
+    /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
+    pub fn iter(&self) -> Iter<'_, F> {
+        self.evaluations.iter()
+    }
+
+    /// Returns a mutable iterator that iterates over the evaluations over {0,1}^`num_vars`
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<'_, F> {
+        self.evaluations.iter_mut()
     }
 }
 
@@ -257,6 +285,17 @@ impl<'a, F: Field> AddAssign<(F, &'a DenseMultilinearExtension<F>)>
 {
     #[inline]
     fn add_assign(&mut self, (f, rhs): (F, &'a DenseMultilinearExtension<F>)) {
+        self.iter_mut()
+            .zip(rhs.iter())
+            .for_each(|(x, y)| *x += f.mul(y));
+    }
+}
+
+impl<'a, F: Field> AddAssign<(F, &'a Rc<DenseMultilinearExtension<F>>)>
+    for DenseMultilinearExtension<F>
+{
+    #[inline]
+    fn add_assign(&mut self, (f, rhs): (F, &'a Rc<DenseMultilinearExtension<F>>)) {
         self.iter_mut()
             .zip(rhs.iter())
             .for_each(|(x, y)| *x += f.mul(y));

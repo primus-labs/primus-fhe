@@ -10,17 +10,31 @@ use num_traits::Inv;
 
 use crate::{
     ciphertext::LWECiphertext, decode, encode, BlindRotationType, LWEBoolMessage, LWEModulusType,
-    Parameters,
+    Parameters, StepsAfterBR,
 };
 
 /// The distribution type of the LWE Secret Key
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum SecretKeyType {
     /// Binary SecretKey Distribution
     Binary,
     /// Ternary SecretKey Distribution
     #[default]
     Ternary,
+}
+
+/// The distribution type of the Ring Secret Key
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub enum RingSecretKeyType {
+    /// Binary SecretKey Distribution
+    Binary,
+    /// Ternary SecretKey Distribution
+    #[default]
+    Ternary,
+    /// Gaussian SecretKey Distribution
+    Gaussian,
+    /// Uniform SecretKey Distribution
+    Uniform,
 }
 
 /// LWE Secret key
@@ -79,7 +93,29 @@ impl<F: NTTField> SecretKeyPack<F> {
 
         match parameters.blind_rotation_type() {
             BlindRotationType::RLWE => {
-                ring_secret_key = Polynomial::random(ring_dimension, &mut csrng);
+                ring_secret_key = match parameters.steps_after_blind_rotation() {
+                    StepsAfterBR::KsMs => Polynomial::random(ring_dimension, &mut csrng),
+                    StepsAfterBR::Ms => {
+                        assert!(
+                            parameters.ring_secret_key_type() == RingSecretKeyType::Binary
+                                || parameters.ring_secret_key_type() == RingSecretKeyType::Ternary
+                        );
+                        // negative convertion
+                        let convert = |v: &LWEModulusType| match *v {
+                            0 => F::ZERO,
+                            1 => F::NEG_ONE,
+                            _ => F::ONE,
+                        };
+
+                        // s = [s_0, -s_{n-1},..., -s_1]
+                        let mut s =
+                            <Polynomial<F>>::new(lwe_secret_key.iter().map(convert).collect());
+                        s[0] = -s[0];
+                        s[1..].reverse();
+
+                        s
+                    }
+                };
                 ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
                 ntt_inv_ring_secret_key = None;
             }

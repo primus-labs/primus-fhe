@@ -68,7 +68,7 @@ impl<F: NTTField> BlindRotationKey<F> {
         }
     }
 
-    /// Generates the [`BootstrappingKey<F>`].
+    /// Generates the [`BlindRotationKey<F>`].
     pub fn generate<R>(
         secret_key_pack: &SecretKeyPack<F>,
         chi: FieldDiscreteGaussianSampler,

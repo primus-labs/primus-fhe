@@ -9,7 +9,7 @@
 //! the main idea of this IOP is to prove:
 //! For x \in \{0, 1\}^l
 //! 1. d(x) = \sum_{i=0}^{log M - 1} B^i d_i(x) => can be reduced to the evaluation of a random point
-//! 2. For every i \in [l]: \prod_{k = 0}^B (d_i(x) - k) = 0 =>
+//! 2. For every i \in \[l\]: \prod_{k = 0}^B (d_i(x) - k) = 0 =>
 //!     a) each of which can be reduced to prove the following sum
 //!        $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //!        where u is the common random challenge from the verifier, used to instantiate every sum,
@@ -71,7 +71,9 @@ pub struct DecomposedBits<F: Field> {
 /// Stores the parameters used for bit decomposation.
 ///
 /// * It is required to decompose over a power-of-2 base.
+///
 /// These parameters are used as the verifier key.
+#[derive(Clone)]
 pub struct DecomposedBitsInfo<F: Field> {
     /// base
     pub base: F,
@@ -110,6 +112,18 @@ impl<F: Field> DecomposedBits<F> {
         }
     }
 
+    /// Initiate the polynomial from the given info used for sumcheck protocol
+    #[inline]
+    pub fn from_info(info: &DecomposedBitsInfo<F>) -> Self {
+        DecomposedBits {
+            base: info.base,
+            base_len: info.base_len,
+            bits_len: info.bits_len,
+            num_vars: info.num_vars,
+            instances: Vec::with_capacity(info.num_instances),
+        }
+    }
+
     #[inline]
     /// Add one bit decomposition instance, meaning to add l sumcheck protocols.
     /// * decomposed_bits: store each bit
@@ -122,6 +136,16 @@ impl<F: Field> DecomposedBits<F> {
             assert_eq!(bit.num_vars, self.num_vars);
         }
         self.instances.push(decomposed_bits.to_vec());
+    }
+
+    /// Use the base defined in this instance to perform decomposition over the input value.
+    /// Then add the result into this instance, meaning to add l sumcheck protocols.
+    /// * decomposed_bits: store each bit
+    #[inline]
+    pub fn add_value_instance(&mut self, value: &DenseMultilinearExtension<F>) {
+        assert_eq!(self.num_vars, value.num_vars);
+        self.instances
+            .push(value.get_decomposed_mles(self.base_len, self.bits_len));
     }
 
     #[inline]
@@ -172,8 +196,8 @@ impl<F: Field> BitDecompositionSubClaim<F> {
     /// * `u` is the common random challenge from the verifier, used to instantiate every sum.
     pub fn verify_subclaim(
         &self,
-        d_val: &[DenseMultilinearExtension<F>],
-        d_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        d_val: &[Rc<DenseMultilinearExtension<F>>],
+        d_bits: &[&Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> bool {

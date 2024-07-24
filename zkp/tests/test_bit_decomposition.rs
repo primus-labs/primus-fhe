@@ -33,7 +33,10 @@ fn test_single_trivial_bit_decomposition_base_2() {
     let bits_len: u32 = 2;
     let num_vars = 2;
 
-    let d = DenseMultilinearExtension::from_evaluations_vec(num_vars, field_vec!(FF; 0, 1, 2, 3));
+    let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        field_vec!(FF; 0, 1, 2, 3),
+    ));
     let d_bits = vec![
         // 0th bit
         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
@@ -51,7 +54,7 @@ fn test_single_trivial_bit_decomposition_base_2() {
     prover_key.add_decomposed_bits_instance(&d_bits);
 
     let d_verifier = vec![d];
-    let d_bits_verifier = vec![d_bits.clone()];
+    let d_bits_verifier = vec![&d_bits];
 
     let decomposed_bits_info = prover_key.info();
     let u = field_vec!(FF; 0, 0);
@@ -70,8 +73,14 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
     let d = vec![
-        DenseMultilinearExtension::from_evaluations_vec(num_vars, field_vec!(FF; 0, 1, 2, 3)),
-        DenseMultilinearExtension::from_evaluations_vec(num_vars, field_vec!(FF; 0, 1, 2, 3)),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 0, 1, 2, 3),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 0, 1, 2, 3),
+        )),
     ];
     let d_bits = vec![
         vec![
@@ -99,6 +108,7 @@ fn test_batch_trivial_bit_decomposition_base_2() {
             )),
         ],
     ];
+    let d_bits_ref: Vec<_> = d_bits.iter().collect();
 
     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
     for d_instance in &d_bits {
@@ -110,7 +120,7 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
     let proof = BitDecomposition::prove(&decomposed_bits, &u);
     let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d, &d_bits, &u, &decomposed_bits_info));
+    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
 }
 
 #[test]
@@ -122,16 +132,16 @@ fn test_single_bit_decomposition() {
 
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
-    let d = DenseMultilinearExtension::from_evaluations_vec(
+    let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars,
         (0..(1 << num_vars))
             .map(|_| uniform.sample(&mut rng))
             .collect(),
-    );
+    ));
 
     let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
     let d_verifier = vec![d];
-    let d_bits_verifier = vec![d_bits_prover.clone()];
+    let d_bits_verifier = vec![&d_bits_prover];
 
     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
     decomposed_bits.add_decomposed_bits_instance(&d_bits_prover);
@@ -154,36 +164,37 @@ fn test_batch_bit_decomposition() {
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
     let d = vec![
-        DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
                 .collect(),
-        ),
-        DenseMultilinearExtension::from_evaluations_vec(
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
                 .collect(),
-        ),
-        DenseMultilinearExtension::from_evaluations_vec(
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
                 .collect(),
-        ),
-        DenseMultilinearExtension::from_evaluations_vec(
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
                 .collect(),
-        ),
+        )),
     ];
 
     let d_bits: Vec<_> = d
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
+    let d_bits_ref: Vec<_> = d_bits.iter().collect();
 
     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
     for d_instance in d_bits.iter() {
@@ -195,5 +206,5 @@ fn test_batch_bit_decomposition() {
     let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
     let proof = BitDecomposition::prove(&decomposed_bits, &u);
     let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d, &d_bits, &u, &decomposed_bits_info));
+    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
 }

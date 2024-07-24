@@ -20,7 +20,7 @@ type PolyFF = Polynomial<FF>;
 
 const RR: Inner = 1024;
 
-const LOG_N: usize = 3;
+const LOG_N: usize = 5;
 const N: usize = 1 << LOG_N; // length
 const BITS: u32 = 3;
 const B: usize = 1 << BITS; // base
@@ -394,7 +394,7 @@ fn test_rgsw_mul_rlwe() {
         (RLWE::new(a, b), e)
     };
 
-    let rlwe_mul = rlwe.mul_small_rgsw(&rgsw);
+    let rlwe_mul = rlwe.mul_rgsw(&rgsw);
     let decrypt_mul = rlwe_mul.b() - rlwe_mul.a() * &s;
 
     let decoded_m0m1: Vec<u32> = m0m1.into_iter().map(decode).collect();

@@ -1,7 +1,7 @@
 use crate::field::FheField;
 use crate::modulus::ShoupFactor;
 use crate::utils::ReverseLsbs;
-use crate::{Field, NTTField, NTTPolynomial, Polynomial, Widening, WrappingOps};
+use crate::{Field, NTTField, Widening, WrappingOps};
 
 use super::{AbstractNTT, MonomialNTT};
 
@@ -210,8 +210,9 @@ where
             return;
         }
 
+        let n = self.coeff_count();
         let log_n = self.coeff_count_power();
-        debug_assert_eq!(values.len(), 1 << log_n);
+        debug_assert_eq!(values.len(), n);
 
         let mask = usize::MAX >> (usize::BITS - log_n - 1);
 
@@ -228,9 +229,8 @@ where
                 .iter_mut()
                 .zip(&self.reverse_lsbs)
                 .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) })
-                        .neg();
+                    let index = (((2 * i + 1) * degree) & mask) ^ n;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
                 })
         } else {
             values
@@ -262,6 +262,27 @@ where
                 *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
             })
     }
+
+    fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
+        if degree == 0 {
+            values.fill(F::NEG_ONE);
+            return;
+        }
+
+        let n = self.coeff_count();
+        let log_n = self.coeff_count_power();
+        debug_assert_eq!(values.len(), n);
+
+        let mask = usize::MAX >> (usize::BITS - log_n - 1);
+
+        values
+            .iter_mut()
+            .zip(&self.reverse_lsbs)
+            .for_each(|(v, &i)| {
+                let index = (((2 * i + 1) * degree) & mask) ^ n;
+                *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+            })
+    }
 }
 
 impl<F> AbstractNTT<F> for NTTTable<F>
@@ -269,25 +290,8 @@ where
     F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
     #[inline]
-    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_inplace(polynomial.clone())
-    }
-
-    #[inline]
-    fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_slice(polynomial.as_mut_slice());
-        NTTPolynomial::<F>::new(polynomial.data())
-    }
-
-    #[inline]
-    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_inplace(ntt_polynomial.clone())
-    }
-
-    #[inline]
-    fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
-        Polynomial::<F>::new(ntt_polynomial.data())
+    fn root(&self) -> F {
+        self.root
     }
 
     fn transform_slice(&self, values: &mut [F]) {

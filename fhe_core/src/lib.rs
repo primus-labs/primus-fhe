@@ -21,7 +21,9 @@ pub mod utils;
 pub use error::FHECoreError;
 
 pub use parameter::{
-    BlindRotationType, ConstParameters, DefaultExtendsionFieldU32x4, DefaultFieldU32, Parameters,
+    
+    BlindRotationType, ConstParameters, DefaultExtendsionFieldU32x4, DefaultFieldU32, Parameters, StepsAfterBR,
+,
 };
 
 pub use bool_plaintext::{decode, encode, LWEBoolMessage, LWEModulusType};
@@ -29,9 +31,11 @@ pub use ciphertext::{
     LWECiphertext, NTRUCiphertext, NTTNTRUCiphertext, NTTRLWECiphertext, RLWECiphertext,
 };
 
-pub use secret_key::{SecretKeyPack, SecretKeyType};
+pub use secret_key::{RingSecretKeyType, SecretKeyPack, SecretKeyType};
 
 pub use blind_rotation::{NTRUBlindRotationKey, RLWEBlindRotationKey};
 pub use key_switch::KeySwitchingKey;
 
-pub use modulus_switch::{lwe_modulus_switch, lwe_modulus_switch_inplace};
+pub use modulus_switch::{
+    lwe_modulus_switch, lwe_modulus_switch_inplace, ModulusSwitchRoundMethod,
+};

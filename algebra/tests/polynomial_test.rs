@@ -16,7 +16,7 @@ type FF = Fp32; // field type
 type PolyFF = Polynomial<FF>;
 type NTTPolyFF = NTTPolynomial<FF>;
 
-const LOG_N: usize = 3;
+const LOG_N: usize = 5;
 const N: usize = 1 << LOG_N; // length
 const BITS: u32 = 3;
 const B: usize = 1 << BITS; // base
@@ -49,6 +49,15 @@ fn test_transform_monomial() {
     let a = table.transform_inplace(a);
 
     table.transform_monomial(coeff, degree, b.as_mut_slice());
+    assert_eq!(a, b);
+
+    let mut a = PolyFF::zero(N);
+    let mut b = NTTPolyFF::zero(N);
+    a[degree] = FF::NEG_ONE;
+
+    let a = table.transform_inplace(a);
+
+    table.transform_monomial(FF::NEG_ONE, degree, b.as_mut_slice());
     assert_eq!(a, b);
 }
 
