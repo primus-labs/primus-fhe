@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use algebra::{
     derive::*, modulus::PowOf2Modulus, Basis, BinomialExtensionField, BinomiallyExtendable, Field,
     FieldDiscreteGaussianSampler, HasTwoAdicBionmialExtension, NTTField, Packable,
@@ -7,8 +5,7 @@ use algebra::{
 use lattice::DiscreteGaussian;
 
 use crate::{
-    FHECoreError, LWEModulusType, LWEMsgType, ModulusSwitchRoundMethod, RingSecretKeyType,
-    SecretKeyType,
+    FHECoreError, LWEModulusType, ModulusSwitchRoundMethod, RingSecretKeyType, SecretKeyType,
 };
 
 /// The steps after blind rotarion.
@@ -23,7 +20,7 @@ pub enum StepsAfterBR {
 
 /// Parameters for LWE.
 #[derive(Debug, Clone, Copy)]
-pub struct LWEParameters<M: LWEMsgType, C: LWEModulusType> {
+pub struct LWEParameters<C: LWEModulusType> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
@@ -32,7 +29,6 @@ pub struct LWEParameters<M: LWEMsgType, C: LWEModulusType> {
     pub lwe_noise_std_dev: f64,
     /// LWE message space.
     pub t: u64,
-    pub phantom: PhantomData<M>,
 }
 
 /// Use `RLWE` or `NTRU` to perform blind rotation.
@@ -78,11 +74,11 @@ pub struct ModulusSwitchParameters {
 
 /// Parameters for FHE
 #[derive(Debug, Clone, Copy)]
-pub struct Parameters<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
+pub struct Parameters<C: LWEModulusType, F: NTTField> {
     secret_key_type: SecretKeyType,
     ring_secret_key_type: RingSecretKeyType,
     steps_after_blind_rotation: StepsAfterBR,
-    lwe_params: LWEParameters<M, C>,
+    lwe_params: LWEParameters<C>,
     blind_rotation_params: BlindRotationParameters<F>,
     key_switching_params: KeySwitchingParameters<F>,
     modulus_switch_params: ModulusSwitchParameters,
@@ -92,7 +88,7 @@ pub struct Parameters<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
 ///
 /// This type is used for setting some default Parameters.
 #[derive(Debug, Clone, Copy)]
-pub struct ConstParameters<M: LWEMsgType, C: LWEModulusType, FieldContainer> {
+pub struct ConstParameters<C: LWEModulusType, FieldContainer> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     pub lwe_dimension: usize,
     /// LWE cipher modulus, refers to **`q`** in the paper.
@@ -129,14 +125,11 @@ pub struct ConstParameters<M: LWEMsgType, C: LWEModulusType, FieldContainer> {
 
     /// Modulus Switch round method.
     pub modulus_switcing_round_method: ModulusSwitchRoundMethod,
-
-    /// phantom
-    pub phantom: PhantomData<M>,
 }
 
-impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Parameters<M, C, F> {
+impl<C: LWEModulusType, F: NTTField> Parameters<C, F> {
     /// Create a new Parameter instance.
-    pub fn new(params: ConstParameters<M, C, F::Value>) -> Result<Self, FHECoreError> {
+    pub fn new(params: ConstParameters<C, F::Value>) -> Result<Self, FHECoreError> {
         let lwe_dimension = params.lwe_dimension;
         let lwe_modulus = params.lwe_modulus;
         let ring_dimension = params.ring_dimension;
@@ -195,7 +188,6 @@ impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Parameters<M, C, F> {
             lwe_modulus: lwe_modulus.to_power_of_2_modulus(),
             lwe_noise_std_dev: params.lwe_noise_std_dev,
             t,
-            phantom: PhantomData,
         };
 
         let blind_rotation_params = BlindRotationParameters::<F> {

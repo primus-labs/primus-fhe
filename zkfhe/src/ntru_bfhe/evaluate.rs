@@ -1,30 +1,30 @@
 use algebra::{AsInto, NTTField, Polynomial};
 use fhe_core::{
     lwe_modulus_switch_inplace, BlindRotationType, KeySwitchingKey, LWECiphertext, LWEModulusType,
-    LWEMsgType, NTRUBlindRotationKey, NTRUCiphertext, Parameters, SecretKeyPack,
+    NTRUBlindRotationKey, NTRUCiphertext, Parameters, SecretKeyPack,
 };
 use lattice::NTRU;
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
-pub struct EvaluationKey<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
+pub struct EvaluationKey<C: LWEModulusType, F: NTTField> {
     /// Blind rotation key
     blind_rotation_key: NTRUBlindRotationKey<F>,
     /// Key Switching Key
     key_switching_key: KeySwitchingKey<F>,
     /// The parameters of the fully homomorphic encryption scheme.
-    parameters: Parameters<M, C, F>,
+    parameters: Parameters<C, F>,
 }
 
-impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> EvaluationKey<M, C, F> {
+impl<C: LWEModulusType, F: NTTField> EvaluationKey<C, F> {
     /// Returns the parameters of this [`EvaluationKey<F>`].
     #[inline]
-    pub fn parameters(&self) -> &Parameters<M, C, F> {
+    pub fn parameters(&self) -> &Parameters<C, F> {
         &self.parameters
     }
 
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
-    pub fn new(secret_key_pack: &SecretKeyPack<M, C, F>) -> Self {
+    pub fn new(secret_key_pack: &SecretKeyPack<C, F>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();
         let parameters = secret_key_pack.parameters();
 
@@ -86,13 +86,13 @@ impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> EvaluationKey<M, C, F> {
 
 /// Evaluator
 #[derive(Debug, Clone)]
-pub struct Evaluator<M: LWEMsgType, C: LWEModulusType, F: NTTField> {
-    ek: EvaluationKey<M, C, F>,
+pub struct Evaluator<C: LWEModulusType, F: NTTField> {
+    ek: EvaluationKey<C, F>,
 }
 
-impl<M: LWEMsgType, C: LWEModulusType, F: NTTField> Evaluator<M, C, F> {
+impl<C: LWEModulusType, F: NTTField> Evaluator<C, F> {
     /// Create a new instance.
-    pub fn new(sk: &SecretKeyPack<M, C, F>) -> Self {
+    pub fn new(sk: &SecretKeyPack<C, F>) -> Self {
         Self {
             ek: EvaluationKey::new(sk),
         }

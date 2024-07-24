@@ -1,12 +1,13 @@
 use algebra::NTTField;
-use fhe_core::{utils::*, LWECiphertext, LWEModulusType, LWEMsgType};
+use fhe_core::{utils::*, LWECiphertext, LWEModulusType};
 use rand::Rng;
 use zkfhe::{
     bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMERTERS},
     Decryptor, Encryptor, KeyGen,
 };
 
-type C = u16;
+type M = bool;
+type LMT = u16;
 
 fn main() {
     // set random generator
@@ -15,9 +16,9 @@ fn main() {
     // set parameter
     let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
 
-    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as C;
+    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as LMT;
 
-    let check_noise = |noise: C, op: &str| {
+    let check_noise = |noise: LMT, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"
@@ -45,7 +46,7 @@ fn main() {
     for i in 1..10 {
         // not
         let ct_not = eval.not(&x);
-        let (m, noise) = dec.decrypt_with_noise(&ct_not);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_not);
         assert_eq!(m, not(a), "Noise: {noise}");
         check_noise(noise, "not");
 
@@ -62,37 +63,37 @@ fn main() {
         check_noise(noise, "majority");
 
         // and
-        let (m, noise) = dec.decrypt_with_noise(&ct_and);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_and);
         assert_eq!(m, and(a, b), "Noise: {noise}");
         check_noise(noise, "and");
 
         // nand
-        let (m, noise) = dec.decrypt_with_noise(&ct_nand);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_nand);
         assert_eq!(m, nand(a, b), "Noise: {noise}");
         check_noise(noise, "nand");
 
         // xor
-        let (mx, noise) = dec.decrypt_with_noise(&ct_xor);
+        let (mx, noise) = dec.decrypt_with_noise::<M>(&ct_xor);
         assert_eq!(mx, xor(a, b), "Noise: {noise}");
         check_noise(noise, "xor");
 
         // xnor
-        let (m, noise) = dec.decrypt_with_noise(&ct_xnor);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_xnor);
         assert_eq!(m, xnor(a, b), "Noise: {noise}");
         check_noise(noise, "xnor");
 
         // or
-        let (m, noise) = dec.decrypt_with_noise(&ct_or);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_or);
         assert_eq!(m, or(a, b), "Noise: {noise}");
         check_noise(noise, "or");
 
         // nor
-        let (m, noise) = dec.decrypt_with_noise(&ct_nor);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_nor);
         assert_eq!(m, nor(a, b), "Noise: {noise}");
         check_noise(noise, "nor");
 
         // mux
-        let (m, noise) = dec.decrypt_with_noise(&ct_mux);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_mux);
         assert_eq!(m, if a { b } else { c }, "Noise: {noise}");
         check_noise(noise, "mux");
 
@@ -110,8 +111,8 @@ fn main() {
 }
 
 #[allow(clippy::type_complexity)]
-fn join_bit_opearions<M: LWEMsgType, C: LWEModulusType, F: NTTField>(
-    eval: &Evaluator<M, C, F>,
+fn join_bit_opearions<C: LWEModulusType, F: NTTField>(
+    eval: &Evaluator<C, F>,
     x: &LWECiphertext<C>,
     y: &LWECiphertext<C>,
     z: &LWECiphertext<C>,

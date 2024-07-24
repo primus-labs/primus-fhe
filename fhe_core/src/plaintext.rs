@@ -65,8 +65,15 @@ shrink_impl!();
 
 /// Encodes a message.
 ///
-/// `t` is message space, `q` is cipher text space.
-/// This function needs `q` and `t` are power of 2.
+/// # Parameters
+///
+/// - `t` is message space
+/// - `q` is LWE modulus value.
+/// - This function needs `q` and `t` are power of 2.
+///
+/// # Panic
+///
+/// Panics if the message exceeds the message space.
 #[inline]
 pub fn encode<M, C>(message: M, t: u64, q: u64) -> C
 where
@@ -76,14 +83,25 @@ where
     debug_assert!(q.is_power_of_two() && t.is_power_of_two());
     // Shift the message to the most significant part of `C`.
     let message: u64 = message.as_into();
+    assert!(
+        message < t,
+        "message {message} is bigger than the message space"
+    );
     let cipher: u64 = message << (q / t).trailing_zeros();
     cipher.as_into()
 }
 
 /// Decodes an encode value.
 ///
-/// `t` is message space, `q` is cipher text space.
-/// This function needs `q` and `t` are power of 2.
+/// # Parameters
+///
+/// - `t` is message space
+/// - `q` is LWE modulus value.
+/// - This function needs `q` and `t` are power of 2.
+///
+/// # Panic
+///
+/// Panics if the decoded message cannot fit in `M`.
 #[inline]
 pub fn decode<M, C>(cipher: C, t: u64, q: u64) -> M
 where

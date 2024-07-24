@@ -4,7 +4,7 @@ use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial}
 use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
 
-use crate::{BlindRotationType, LWEModulusType, LWEMsgType, NTRUCiphertext, SecretKeyPack};
+use crate::{BlindRotationType, LWEModulusType, NTRUCiphertext, SecretKeyPack};
 
 /// The Key Switching Key.
 ///
@@ -21,14 +21,13 @@ pub struct KeySwitchingKey<F: NTTField> {
 
 impl<F: NTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R, M, C>(
-        secret_key_pack: &SecretKeyPack<M, C, F>,
+    pub fn generate<R, C>(
+        secret_key_pack: &SecretKeyPack<C, F>,
         chi: FieldDiscreteGaussianSampler,
         mut rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
-        M: LWEMsgType,
         C: LWEModulusType,
     {
         let parameters = secret_key_pack.parameters();

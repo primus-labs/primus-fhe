@@ -2,7 +2,7 @@ use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTFi
 use lattice::RLWE;
 use rand::{CryptoRng, Rng};
 
-use crate::{LWEModulusType, LWEMsgType, SecretKeyPack, SecretKeyType};
+use crate::{LWEModulusType, SecretKeyPack, SecretKeyType};
 
 mod binary;
 mod ternary;
@@ -69,14 +69,13 @@ impl<F: NTTField> BlindRotationKey<F> {
     }
 
     /// Generates the [`BlindRotationKey<F>`].
-    pub fn generate<R, M, C>(
-        secret_key_pack: &SecretKeyPack<M, C, F>,
+    pub fn generate<R, C>(
+        secret_key_pack: &SecretKeyPack<C, F>,
         chi: FieldDiscreteGaussianSampler,
         rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
-        M: LWEMsgType,
         C: LWEModulusType,
     {
         let parameters = secret_key_pack.parameters();
