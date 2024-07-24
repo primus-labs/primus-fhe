@@ -214,12 +214,7 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> SecretKeyPac
         let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
-        decode(
-            plaintext,
-            self.parameters.m(),
-            self.parameters.t(),
-            self.parameters.q(),
-        )
+        decode(plaintext, self.parameters.t(), self.parameters.q())
     }
 
     /// Decrypts the [`LWECiphertext`] back to message
@@ -231,12 +226,7 @@ impl<M: LWEPlainContainer, C: LWECipherValueContainer, F: NTTField> SecretKeyPac
 
         let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
 
-        let message = decode(
-            plaintext,
-            self.parameters.m(),
-            self.parameters.t(),
-            self.parameters.q(),
-        );
+        let message = decode(plaintext, self.parameters.t(), self.parameters.q());
 
         let fresh = encode(message, self.parameters.t(), self.parameters.q());
 

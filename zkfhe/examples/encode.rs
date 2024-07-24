@@ -19,15 +19,15 @@ fn main() {
 
         let encoded: C = encode(message, t, q);
 
-        let decoded: M = decode(encoded, m, t, q);
+        let decoded: M = decode(encoded, t, q);
         assert_eq!(decoded, message);
 
         // add noise
-        let decoded: M = decode(encoded.add_reduce(noise_max - 1, modulus), m, t, q);
+        let decoded: M = decode(encoded.add_reduce(noise_max - 1, modulus), t, q);
         assert_eq!(decoded, message);
 
         // add noise
-        let decoded: M = decode(encoded.sub_reduce(noise_max - 1, modulus), m, t, q);
+        let decoded: M = decode(encoded.sub_reduce(noise_max - 1, modulus), t, q);
         assert_eq!(decoded, message);
     }
 }
