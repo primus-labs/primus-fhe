@@ -101,7 +101,7 @@ where
     M::shrink(decoded)
 }
 
-/// LWE plain text container trait
+/// Trait for LWE message type.
 pub trait LWEMsgType: Copy + Send + Sync + AsInto<u64> + Shrink {}
 
 macro_rules! plain_impl {
@@ -117,7 +117,7 @@ macro_rules! plain_impl {
 
 plain_impl!();
 
-/// The inner value container trait of LWE cipher text.
+/// Trait for LWE cipher text modulus value type.
 pub trait LWEModulusType:
     PrimInt
     + Send
