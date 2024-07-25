@@ -4,7 +4,7 @@ use rand::SeedableRng;
 use rand_distr::Distribution;
 use serde::Serialize;
 
-use crate::{Field, FieldUniformSampler};
+use crate::{BinomialExtensionField, Field, FieldUniformSampler};
 
 use super::{Block, Prg};
 
@@ -69,6 +69,34 @@ impl<F: Field + Serialize> Transcript<F> {
         self.append_message(&bincode::serialize(&challenge).unwrap());
 
         challenge
+    }
+
+    /// Generate the challenge for extension field from the current transcript
+    /// and append it to the transcript.
+    pub fn get_ext_field_and_append_challenge<const D: usize>(
+        &mut self,
+    ) -> BinomialExtensionField<F, D> {
+        BinomialExtensionField {
+            value: self
+                .get_vec_and_append_challenge(D)
+                .try_into()
+                .expect("slice has the wrong length"),
+        }
+    }
+
+    /// Generate the challenge vector for extension field from the current transcript
+    /// and append it to the transcript.
+    pub fn get_vec_ext_field_and_append_challenge<const D: usize>(
+        &mut self,
+        num: usize,
+    ) -> Vec<BinomialExtensionField<F, D>> {
+        let challenges = self.get_vec_and_append_challenge(num * D);
+        challenges
+            .chunks_exact(D)
+            .map(|ext| BinomialExtensionField {
+                value: ext.try_into().expect("slice has the wrong length"),
+            })
+            .collect()
     }
 }
 
