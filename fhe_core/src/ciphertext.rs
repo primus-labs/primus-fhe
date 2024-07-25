@@ -1,5 +1,5 @@
 /// LWE Ciphertext
-pub type LWECiphertext = lattice::LWE<crate::LWEModulusType>;
+pub type LWECiphertext<C> = lattice::LWE<C>;
 
 /// RLWE Ciphertext
 pub type RLWECiphertext<F> = lattice::RLWE<F>;

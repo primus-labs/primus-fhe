@@ -40,13 +40,13 @@ impl<F: NTTField> BlindRotationKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn blind_rotate(
+    pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[LWEModulusType],
+        lwe_a: &[C],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEModulusType>,
+        lwe_modulus: PowOf2Modulus<C>,
         blind_rotation_basis: Basis<F>,
     ) -> RLWE<F> {
         match self {
@@ -69,13 +69,14 @@ impl<F: NTTField> BlindRotationKey<F> {
     }
 
     /// Generates the [`BlindRotationKey<F>`].
-    pub fn generate<R>(
-        secret_key_pack: &SecretKeyPack<F>,
+    pub fn generate<R, C>(
+        secret_key_pack: &SecretKeyPack<C, F>,
         chi: FieldDiscreteGaussianSampler,
         rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
+        C: LWEModulusType,
     {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {

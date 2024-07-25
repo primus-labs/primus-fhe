@@ -15,51 +15,51 @@ pub enum ModulusSwitchRoundMethod {
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch<F: FheField>(
+pub fn lwe_modulus_switch<C: LWEModulusType, F: FheField>(
     c: LWE<F>,
-    modulus_after: LWEModulusType,
+    modulus_after: C,
     round_method: ModulusSwitchRoundMethod,
-) -> LWECiphertext {
+) -> LWECiphertext<C> {
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
-    let switch: Box<dyn Fn(F) -> LWEModulusType> = match round_method {
+    let switch: Box<dyn Fn(F) -> C> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
-            (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round() as LWEModulusType
+            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).round())
         }),
         ModulusSwitchRoundMethod::Floor => Box::new(|v: F| {
-            (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor() as LWEModulusType
+            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor())
         }),
         ModulusSwitchRoundMethod::Ceil => Box::new(|v: F| {
-            (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil() as LWEModulusType
+            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil())
         }),
     };
 
-    let a: Vec<LWEModulusType> = c.a().iter().copied().map(&switch).collect();
+    let a: Vec<C> = c.a().iter().copied().map(&switch).collect();
     let b = switch(c.b());
 
     LWECiphertext::new(a, b)
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch_inplace<F: DecomposableField>(
+pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: DecomposableField>(
     c: LWE<F>,
-    modulus_after: LWEModulusType,
+    modulus_after: C,
     round_method: ModulusSwitchRoundMethod,
-    destination: &mut LWECiphertext,
+    destination: &mut LWECiphertext<C>,
 ) {
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
-    let switch: Box<dyn Fn(F) -> LWEModulusType> = match round_method {
+    let switch: Box<dyn Fn(F) -> C> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
-            (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round() as LWEModulusType
+            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).round())
         }),
         ModulusSwitchRoundMethod::Floor => Box::new(|v: F| {
-            (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor() as LWEModulusType
+            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor())
         }),
         ModulusSwitchRoundMethod::Ceil => Box::new(|v: F| {
-            (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil() as LWEModulusType
+            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil())
         }),
     };
 

@@ -7,8 +7,8 @@ mod error;
 
 mod parameter;
 
-mod bool_plaintext;
 mod ciphertext;
+mod plaintext;
 
 mod secret_key;
 
@@ -25,10 +25,10 @@ pub use parameter::{
     StepsAfterBR,
 };
 
-pub use bool_plaintext::{decode, encode, LWEBoolMessage, LWEModulusType};
 pub use ciphertext::{
     LWECiphertext, NTRUCiphertext, NTTNTRUCiphertext, NTTRLWECiphertext, RLWECiphertext,
 };
+pub use plaintext::{decode, encode, LWEModulusType, LWEMsgType};
 
 pub use secret_key::{RingSecretKeyType, SecretKeyPack, SecretKeyType};
 

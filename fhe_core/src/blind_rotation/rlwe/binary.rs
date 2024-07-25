@@ -1,6 +1,5 @@
 use algebra::{
-    modulus::PowOf2Modulus, reduce::NegReduce, Basis, FieldDiscreteGaussianSampler, NTTField,
-    NTTPolynomial,
+    modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
 };
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
@@ -19,13 +18,13 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
     }
 
     /// Performs the bootstrapping operation
-    pub fn blind_rotate(
+    pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: RLWE<F>,
-        lwe_a: &[LWEModulusType],
+        lwe_a: &[C],
         rlwe_dimension: usize,
         twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<LWEModulusType>,
+        lwe_modulus: PowOf2Modulus<C>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
@@ -57,20 +56,21 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
     }
 
     /// Generates the [`BinaryBlindRotationKey<F>`].
-    pub(crate) fn generate<Rng>(
+    pub(crate) fn generate<Rng, C>(
         blind_rotation_basis: Basis<F>,
-        lwe_secret_key: &[LWEModulusType],
+        lwe_secret_key: &[C],
         chi: FieldDiscreteGaussianSampler,
         rlwe_secret_key: &NTTPolynomial<F>,
         mut rng: Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
+        C: LWEModulusType,
     {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s == 0 {
+                if s == C::ZERO {
                     <NTTRGSW<F>>::generate_random_zero_sample(
                         rlwe_secret_key,
                         blind_rotation_basis,
