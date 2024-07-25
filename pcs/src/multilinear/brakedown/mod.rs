@@ -254,13 +254,9 @@ where
     type CommitmentState = BrakedownCommitmentState<F, H>;
     type Proof = BrakedownOpenProof<F, H>;
 
-    fn setup(
-        num_vars: usize,
-        code_spec: Option<S>,
-        rng: &mut (impl rand::Rng + rand::CryptoRng),
-    ) -> Self::Parameters {
+    fn setup(num_vars: usize, code_spec: Option<S>) -> Self::Parameters {
         let code_spec = code_spec.expect("Need a code spec");
-        BrakedownParams::<F, C>::new(num_vars, code_spec, rng)
+        BrakedownParams::<F, C>::new(num_vars, code_spec)
     }
 
     fn commit(

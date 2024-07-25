@@ -1,7 +1,6 @@
 use algebra::{
-    derive::Field,
-    utils::{Prg, Transcript},
-    DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension,
+    derive::Field, utils::Transcript, DenseMultilinearExtension, FieldUniformSampler,
+    MultilinearExtension,
 };
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
@@ -25,7 +24,6 @@ fn pcs_test() {
 
     let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
 
-    let mut rng = Prg::new();
     type Hash = Sha256;
 
     let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
@@ -33,7 +31,6 @@ fn pcs_test() {
     let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
         num_vars,
         Some(code_spec),
-        &mut rng,
     );
 
     let mut trans = Transcript::<FF>::new();

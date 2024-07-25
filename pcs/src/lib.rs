@@ -9,7 +9,6 @@ pub mod multilinear;
 pub mod utils;
 
 use algebra::{utils::Transcript, Field, MultilinearExtension};
-use rand::{CryptoRng, Rng};
 
 type Point<F, P> = <P as MultilinearExtension<F>>::Point;
 
@@ -27,11 +26,7 @@ pub trait PolynomialCommitmentScheme<F: Field, S> {
     type Proof;
 
     /// The Setup phase.
-    fn setup(
-        num_vars: usize,
-        code_spec: Option<S>,
-        rng: &mut (impl Rng + CryptoRng),
-    ) -> Self::Parameters;
+    fn setup(num_vars: usize, code_spec: Option<S>) -> Self::Parameters;
 
     /// The Commit phase.
     fn commit(

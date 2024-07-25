@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use algebra::Field;
-use rand::{CryptoRng, Rng};
+use algebra::{utils::Prg, Field};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{
@@ -13,6 +13,7 @@ use crate::utils::{
 use bincode::Result;
 
 use crate::multilinear::brakedown::BRAKEDOWN_SECURITY_BIT;
+use rayon::prelude::*;
 
 /// Define the structure of Brakedown parameters.
 #[derive(Serialize, Deserialize)]
@@ -33,11 +34,7 @@ impl<F: Field, C: LinearCode<F>> BrakedownParams<F, C> {
     /// * `num_vars` - The number of variables supported.
     /// * `code_spec` - The specification of the code.
     /// * `rng` - Randomness generator.
-    pub fn new(
-        num_vars: usize,
-        code_spec: impl LinearCodeSpec<F, Code = C>,
-        rng: &mut (impl Rng + CryptoRng),
-    ) -> Self {
+    pub fn new(num_vars: usize, code_spec: impl LinearCodeSpec<F, Code = C>) -> Self {
         // Find the optimal num_cols to minimize proof size.
 
         // Estimated number of queries.
@@ -50,26 +47,32 @@ impl<F: Field, C: LinearCode<F>> BrakedownParams<F, C> {
             codeword_len + l * (1 << num_vars) / msg_len
         };
 
-        let mut min_proof_size = usize::MAX;
-        let mut num_cols = 0;
-        let mut code = C::default();
+        let mut proof_size = vec![0usize; num_vars - 4];
+        let msg_lens: Vec<usize> = (4..num_vars).collect();
 
-        for log_msg_len in 4..num_vars {
-            let msg_len = 1 << log_msg_len;
-            let internal_code = code_spec.code(msg_len, rng);
-            let proof_size = estimated_proof_size(
-                internal_code.codeword_len(),
-                estimated_queries(internal_code.distance(), internal_code.proximity_gap()),
-                msg_len,
-            );
-            if proof_size < min_proof_size {
-                num_cols = msg_len;
-                min_proof_size = proof_size;
-                code = internal_code;
-            }
-        }
+        msg_lens
+            .par_iter()
+            .zip(proof_size.par_iter_mut())
+            .for_each(|(msg_len, size)| {
+                let mut rng = Prg::new();
+                let msg_len = 1 << msg_len;
+                let code = code_spec.code(msg_len, &mut rng);
+                *size = estimated_proof_size(
+                    code.codeword_len(),
+                    estimated_queries(code.distance(), code.proximity_gap()),
+                    msg_len,
+                );
+            });
+
+        let index = proof_size
+            .iter()
+            .position_min()
+            .expect("can not find smallest proof size");
+
+        let num_cols = 1 << msg_lens[index];
 
         let num_rows = (1 << num_vars) / num_cols;
+        let code = code_spec.code(num_cols, &mut Prg::new());
 
         Self {
             security_bit: BRAKEDOWN_SECURITY_BIT,

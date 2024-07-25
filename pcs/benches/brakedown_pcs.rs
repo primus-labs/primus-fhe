@@ -1,9 +1,8 @@
 use std::time::Duration;
 
 use algebra::{
-    derive::Field,
-    utils::{Prg, Transcript},
-    DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension,
+    derive::Field, utils::Transcript, DenseMultilinearExtension, FieldUniformSampler,
+    MultilinearExtension,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pcs::{
@@ -29,8 +28,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
 
-    let mut rng = Prg::new();
-
     let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
     let point: Vec<FF> = rand::thread_rng()
@@ -44,7 +41,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
         num_vars,
         Some(code_spec),
-        &mut rng,
     );
 
     let mut trans = Transcript::<FF>::new();
