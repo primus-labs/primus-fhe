@@ -12,6 +12,7 @@ use algebra::{
 };
 use itertools::Itertools;
 use rand::SeedableRng;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -33,14 +34,14 @@ pub const BRAKEDOWN_SECURITY_BIT: usize = 128;
 pub struct BrakedownPCS<F, H, C, S>(PhantomData<(F, H, C, S)>)
 where
     F: Field,
-    H: Hash,
+    H: Hash + Sync + Send,
     C: LinearCode<F>,
     S: LinearCodeSpec<F, Code = C>;
 
 impl<F, H, C, S> BrakedownPCS<F, H, C, S>
 where
     F: Field,
-    H: Hash,
+    H: Hash + Sync + Send,
     C: LinearCode<F>,
     S: LinearCodeSpec<F, Code = C>,
 {
@@ -217,7 +218,7 @@ where
 impl<F, H, C, S> BrakedownPCS<F, H, C, S>
 where
     F: Field + Serialize,
-    H: Hash,
+    H: Hash + Send + Sync,
     C: LinearCode<F>,
     S: LinearCodeSpec<F, Code = C>,
 {
@@ -242,7 +243,7 @@ where
 impl<F, H, C, S> PolynomialCommitmentScheme<F, S> for BrakedownPCS<F, H, C, S>
 where
     F: Field + Serialize,
-    H: Hash,
+    H: Hash + Sync + Send,
     C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
     S: LinearCodeSpec<F, Code = C>,
 {
@@ -278,8 +279,8 @@ where
         // Fill each row of the matrix with a message and
         // encode the message into a codeword.
         matrix
-            .chunks_exact_mut(codeword_len)
-            .zip(poly.evaluations.chunks_exact(num_cols))
+            .par_chunks_exact_mut(codeword_len)
+            .zip(poly.evaluations.par_chunks_exact(num_cols))
             .for_each(|(row, eval)| {
                 row[..num_cols].copy_from_slice(eval);
                 pp.code().encode(row)
@@ -289,8 +290,9 @@ where
         // Prepare the container of the entire merkle tree, pushing the
         // layers of merkle tree into this container from bottom to top.
         let mut hashes = vec![H::Output::default(); codeword_len];
-        let mut hasher = H::new();
-        hashes.iter_mut().enumerate().for_each(|(index, hash)| {
+
+        hashes.par_iter_mut().enumerate().for_each(|(index, hash)| {
+            let mut hasher = H::new();
             matrix
                 .iter()
                 .skip(index)

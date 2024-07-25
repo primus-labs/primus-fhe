@@ -154,7 +154,7 @@ impl<F: Field + Serialize + for<'de> Deserialize<'de>, H: Hash> BrakedownOpenPro
 
 /// Commitment state of Brakedown
 #[derive(Debug, Default)]
-pub struct BrakedownCommitmentState<F: Field, H: Hash> {
+pub struct BrakedownCommitmentState<F: Field, H: Hash + Send + Sync> {
     /// The matrix that represents the polynomial.
     pub matrix: Vec<F>,
     /// The Merkle tree generated from the matrix.

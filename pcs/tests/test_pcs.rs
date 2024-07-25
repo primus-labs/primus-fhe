@@ -9,7 +9,7 @@ use pcs::{
     PolynomialCommitmentScheme,
 };
 use rand::Rng;
-use sha3::Sha3_256;
+use sha2::Sha256;
 
 #[derive(Field)]
 #[modulus = 1152921504606846883]
@@ -26,10 +26,11 @@ fn pcs_test() {
     let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
 
     let mut rng = Prg::new();
+    type Hash = Sha256;
 
     let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
-    let pp = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
+    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
         num_vars,
         Some(code_spec),
         &mut rng,
@@ -38,14 +39,14 @@ fn pcs_test() {
     let mut trans = Transcript::<FF>::new();
 
     let (comm, state) =
-        BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly);
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly);
 
     let point: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(num_vars)
         .collect();
 
-    let proof = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::open(
+    let proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::open(
         &pp, &comm, &state, &point, &mut trans,
     );
 
@@ -53,7 +54,7 @@ fn pcs_test() {
 
     let mut trans = Transcript::<FF>::new();
 
-    let check = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
+    let check = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
         &pp, &comm, &point, eval, &proof, &mut trans,
     );
 

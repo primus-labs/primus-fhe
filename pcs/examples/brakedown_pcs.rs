@@ -11,14 +11,14 @@ use pcs::{
     PolynomialCommitmentScheme,
 };
 use rand::Rng;
-use sha3::Sha3_256;
+use sha2::Sha256;
 
 #[derive(Field)]
 #[modulus = 1152921504606846883]
 pub struct FF(u64);
 
 fn main() {
-    let num_vars = 20;
+    let num_vars = 24;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)
@@ -30,8 +30,10 @@ fn main() {
 
     let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
+    type Hash = Sha256;
+
     let start = Instant::now();
-    let pp = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
+    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
         num_vars,
         Some(code_spec),
         &mut rng,
@@ -42,7 +44,7 @@ fn main() {
 
     let start = Instant::now();
     let (comm, state) =
-        BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly);
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly);
     println!("commit time: {:?} ms", start.elapsed().as_millis());
 
     let point: Vec<FF> = rand::thread_rng()
@@ -51,7 +53,7 @@ fn main() {
         .collect();
 
     let start = Instant::now();
-    let proof = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::open(
+    let proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::open(
         &pp, &comm, &state, &point, &mut trans,
     );
     println!("open time: {:?} ms", start.elapsed().as_millis());
@@ -61,7 +63,7 @@ fn main() {
     let mut trans = Transcript::<FF>::new();
 
     let start = Instant::now();
-    let check = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
+    let check = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
         &pp, &comm, &point, eval, &proof, &mut trans,
     );
     println!("verify time: {:?} ms", start.elapsed().as_millis());

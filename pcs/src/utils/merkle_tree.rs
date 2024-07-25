@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::hash::Hash;
 use bincode::Result;
+use rayon::prelude::*;
 
 /// Root of the Merkle Tree
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -31,7 +32,7 @@ impl<H: Hash> MerkleRoot<H> {
 
 /// Merkle Tree for Vector Commitment
 #[derive(Debug, Clone, Default)]
-pub struct MerkleTree<H: Hash> {
+pub struct MerkleTree<H: Hash + Send + Sync> {
     /// the depth of the merkle tree
     pub depth: usize,
     /// the root of the merkle tree
@@ -42,7 +43,7 @@ pub struct MerkleTree<H: Hash> {
     pub input_size: usize,
 }
 
-impl<H: Hash> MerkleTree<H> {
+impl<H: Hash + Send + Sync> MerkleTree<H> {
     /// Create a new instance.
     pub fn new() -> Self {
         Self {
@@ -67,9 +68,6 @@ impl<H: Hash> MerkleTree<H> {
         self.tree = vec![H::Output::default(); size];
         self.tree[..leaves.len()].copy_from_slice(leaves);
 
-        // Merklize the leaves
-        let mut hasher = H::new();
-
         // Use base to index the start of the lower layer
         let mut base = 0;
         for depth in (1..=depth).rev() {
@@ -81,9 +79,10 @@ impl<H: Hash> MerkleTree<H> {
 
             // Compute the output of the hash function given the input
             inputs
-                .chunks_exact(2)
-                .zip(outputs.iter_mut())
+                .par_chunks_exact(2)
+                .zip(outputs.par_iter_mut())
                 .for_each(|(input, output)| {
+                    let mut hasher = H::new();
                     hasher.update_hash_value(input[0].as_ref());
                     hasher.update_hash_value(input[1].as_ref());
                     *output = hasher.output_reset();

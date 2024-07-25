@@ -14,7 +14,7 @@ use pcs::{
     PolynomialCommitmentScheme,
 };
 use rand::Rng;
-use sha3::Sha3_256;
+use sha2::Sha256;
 
 #[derive(Field)]
 #[modulus = 1152921504606846883]
@@ -40,7 +40,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let eval = poly.evaluate(&point);
 
-    let pp = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
+    type Hash = Sha256;
+    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
         num_vars,
         Some(code_spec),
         &mut rng,
@@ -54,13 +55,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function(&format!("num_vars: {}, commit time: ", num_vars), |b| {
         b.iter(|| {
             (comm, state) =
-                BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly)
+                BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly)
         })
     });
 
     c.bench_function(&format!("num_vars: {}, opening time: ", num_vars), |b| {
         b.iter(|| {
-            proof = BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::open(
+            proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::open(
                 &pp, &comm, &state, &point, &mut trans,
             )
         })
@@ -70,7 +71,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         &format!("num_vars: {}, verification time: ", num_vars),
         |b| {
             b.iter(|| {
-                BrakedownPCS::<FF, Sha3_256, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
+                BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
                     &pp, &comm, &point, eval, &proof, &mut trans,
                 )
             })
