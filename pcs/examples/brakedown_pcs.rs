@@ -18,7 +18,7 @@ use sha2::Sha256;
 pub struct FF(u64);
 
 fn main() {
-    let num_vars = 24;
+    let num_vars = 20;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)

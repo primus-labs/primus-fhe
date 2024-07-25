@@ -141,12 +141,11 @@ where
         assert_eq!(columns.len(), queries.len() * pp.num_rows());
         assert_eq!(merkle_paths.len(), queries.len() * (commitment.depth + 1));
 
-        // Check merkle paths.
-        let merkle_check = Self::check_merkle(pp, queries, merkle_paths, columns, commitment);
-
-        // Check consistency.
-        let consistency_check =
-            Self::check_consistency(pp, queries, challenge, encoded_rlc_msg, columns);
+        // Check merkle paths and consistency.
+        let (merkle_check, consistency_check) = rayon::join(
+            || Self::check_merkle(pp, queries, merkle_paths, columns, commitment),
+            || Self::check_consistency(pp, queries, challenge, encoded_rlc_msg, columns),
+        );
 
         merkle_check & consistency_check
     }
@@ -161,13 +160,13 @@ where
         commitment: &BrakedownPolyCommitment<H>,
     ) -> bool {
         let mut check = true;
-        let mut hasher = H::new();
 
-        columns
-            .chunks_exact(pp.num_rows())
-            .zip(merkle_paths.chunks_exact(commitment.depth + 1))
+        let res: Vec<bool> = columns
+            .par_chunks_exact(pp.num_rows())
+            .zip(merkle_paths.par_chunks_exact(commitment.depth + 1))
             .zip(queries)
-            .for_each(|((column, hashes), column_idx)| {
+            .map(|((column, hashes), column_idx)| {
+                let mut hasher = H::new();
                 // Check the hash of column is the same as the merkle leave.
                 column
                     .iter()
@@ -175,9 +174,11 @@ where
                 let leaf = hasher.output_reset();
 
                 // Check the merkle path is consistent with the merkle root
-                check &= (leaf == hashes[0])
-                    & MerkleTree::<H>::check(&commitment.root, *column_idx, hashes);
-            });
+                (leaf == hashes[0]) & MerkleTree::<H>::check(&commitment.root, *column_idx, hashes)
+            })
+            .collect();
+
+        res.iter().for_each(|b| check &= *b);
         check
     }
 
@@ -285,7 +286,6 @@ where
                 row[..num_cols].copy_from_slice(eval);
                 pp.code().encode(row)
             });
-
         // Hash each column of the matrix into a hash value.
         // Prepare the container of the entire merkle tree, pushing the
         // layers of merkle tree into this container from bottom to top.
