@@ -161,7 +161,7 @@ fn test_random_zq_to_rq() {
     let mut c_dense_matrix = Vec::new();
 
     a_over_fq.iter().for_each(|x| {
-        let mut x = FF::new(x.value() as u32);
+        let mut x = FF::new(x.value());
         a.push(x);
         x = FF::new(2) * x;
         if x >= q {
@@ -218,7 +218,7 @@ fn test_random_zq_to_rq() {
     let info = instance.info();
     let u: Vec<_> = (0..num_vars).map(|_| uniform_fp.sample(&mut rng)).collect();
     let proof = TransformZqtoRQ::prove(&instance, &u);
-    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, c_num_vars as usize);
+    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, c_num_vars);
 
     assert!(subclaim.verify_subclaim(
         q.value() as usize,
@@ -338,7 +338,7 @@ fn test_random_zq_to_rq_without_oracle() {
     let mut c_sparse = Vec::new();
 
     a_over_fq.iter().for_each(|x| {
-        let mut x = FF::new(x.value() as u32);
+        let mut x = FF::new(x.value());
         a.push(x);
         x = FF::new(2) * x;
         if x >= q {
@@ -346,7 +346,7 @@ fn test_random_zq_to_rq_without_oracle() {
             r.push(x - q);
             s.push(-(x - q + FF::one()));
             c_sparse.push(Rc::new(SparsePolynomial::from_evaluations_vec(
-                c_num_vars as usize,
+                c_num_vars,
                 vec![((x - q).value() as usize, -FF::one())],
             )));
         } else {
@@ -354,7 +354,7 @@ fn test_random_zq_to_rq_without_oracle() {
             r.push(x);
             s.push(x + FF::one());
             c_sparse.push(Rc::new(SparsePolynomial::from_evaluations_vec(
-                c_num_vars as usize,
+                c_num_vars,
                 vec![(x.value() as usize, FF::one())],
             )));
         }
@@ -385,7 +385,7 @@ fn test_random_zq_to_rq_without_oracle() {
     let info = instance.info();
     let u: Vec<_> = (0..num_vars).map(|_| uniform_fp.sample(&mut rng)).collect();
     let proof = TransformZqtoRQ::prove(&instance, &u);
-    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, c_num_vars as usize);
+    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, c_num_vars);
 
     assert!(subclaim.verify_subclaim_without_oracle(
         q.value() as usize,
