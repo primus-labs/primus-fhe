@@ -4,8 +4,12 @@
 //! Using this module, you can speed up multiplication
 //! of polynomials, large integers, and so on.
 
+#[cfg(feature = "concrete-ntt")]
+mod concrete;
 mod ntt_table;
 
+#[cfg(feature = "concrete-ntt")]
+pub use concrete::{prime32, prime64};
 #[cfg(feature = "count_ntt")]
 pub use ntt_table::count;
 pub use ntt_table::NTTTable;
@@ -14,6 +18,9 @@ use crate::{NTTField, NTTPolynomial, Polynomial};
 
 /// An abstract layer for ntt table
 pub trait AbstractNTT<F: NTTField> {
+    /// Get the root for number theory transform.
+    fn root(&self) -> F;
+
     /// Perform a fast number theory transform.
     ///
     /// This function transforms a [`Polynomial<F>`] to a [`NTTPolynomial<F>`].
@@ -21,7 +28,10 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `polynomial` - inputs in normal order, outputs in bit-reversed order
-    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F>;
+    #[inline]
+    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
+        self.transform_inplace(polynomial.clone())
+    }
 
     /// Perform a fast number theory transform in place.
     ///
@@ -30,7 +40,11 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `polynomial` - inputs in normal order, outputs in bit-reversed order
-    fn transform_inplace(&self, polynomial: Polynomial<F>) -> NTTPolynomial<F>;
+    #[inline]
+    fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
+        self.transform_slice(polynomial.as_mut_slice());
+        NTTPolynomial::<F>::new(polynomial.data())
+    }
 
     /// Perform a fast inverse number theory transform.
     ///
@@ -39,7 +53,10 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `ntt_polynomial` - inputs in bit-reversed order, outputs in normal order
-    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F>;
+    #[inline]
+    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_inplace(ntt_polynomial.clone())
+    }
 
     /// Perform a fast inverse number theory transform in place.
     ///
@@ -48,7 +65,11 @@ pub trait AbstractNTT<F: NTTField> {
     /// # Arguments
     ///
     /// * `ntt_polynomial` - inputs in bit-reversed order, outputs in normal order
-    fn inverse_transform_inplace(&self, ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F>;
+    #[inline]
+    fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
+        self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
+        Polynomial::<F>::new(ntt_polynomial.data())
+    }
 
     /// Perform a fast number theory transform in place.
     ///
@@ -77,5 +98,14 @@ pub trait MonomialNTT<F: NTTField> {
     fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]);
 
     /// Perform a fast number theory transform for **monomial** `X^degree` in place.
-    fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]);
+    #[inline]
+    fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]) {
+        self.transform_monomial(F::one(), degree, values);
+    }
+
+    /// Perform a fast number theory transform for **monomial** `-X^degree` in place.
+    #[inline]
+    fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
+        self.transform_monomial(F::neg_one(), degree, values);
+    }
 }

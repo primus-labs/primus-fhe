@@ -9,12 +9,6 @@ macro_rules! impl_powof2_modulus {
                 assert!(value > 1 && value.is_power_of_two());
                 Self { mask: value - 1 }
             }
-
-            /// Returns the value of this [`PowOf2Modulus<T>`].
-            #[inline]
-            pub const fn value(self) -> $SelfT {
-                self.mask + 1
-            }
         }
 
         impl $crate::reduce::Reduce<PowOf2Modulus<Self>> for $SelfT {

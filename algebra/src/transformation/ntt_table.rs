@@ -1,6 +1,7 @@
+use crate::field::FheField;
 use crate::modulus::ShoupFactor;
 use crate::utils::ReverseLsbs;
-use crate::{Field, NTTField, NTTPolynomial, Polynomial, Widening, WrappingOps};
+use crate::{Field, NTTField, Widening, WrappingOps};
 
 use super::{AbstractNTT, MonomialNTT};
 
@@ -57,7 +58,7 @@ where
 
         let inv_root = F::from_root(*ordinal_root_powers.last().unwrap());
 
-        debug_assert_eq!(root * inv_root, F::ONE);
+        debug_assert_eq!(root * inv_root, F::one());
 
         let root_one = ordinal_root_powers[0];
 
@@ -199,8 +200,8 @@ where
     F: NTTField<Table = Self>,
 {
     fn transform_monomial(&self, coeff: F, degree: usize, values: &mut [F]) {
-        if coeff == F::ZERO {
-            values.fill(F::ZERO);
+        if coeff == F::zero() {
+            values.fill(F::zero());
             return;
         }
 
@@ -209,12 +210,13 @@ where
             return;
         }
 
+        let n = self.coeff_count();
         let log_n = self.coeff_count_power();
-        debug_assert_eq!(values.len(), 1 << log_n);
+        debug_assert_eq!(values.len(), n);
 
         let mask = usize::MAX >> (usize::BITS - log_n - 1);
 
-        if coeff == F::ONE {
+        if coeff == F::one() {
             values
                 .iter_mut()
                 .zip(&self.reverse_lsbs)
@@ -222,14 +224,13 @@ where
                     let index = ((2 * i + 1) * degree) & mask;
                     *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
                 })
-        } else if coeff == F::NEG_ONE {
+        } else if coeff == F::neg_one() {
             values
                 .iter_mut()
                 .zip(&self.reverse_lsbs)
                 .for_each(|(v, &i)| {
-                    let index = ((2 * i + 1) * degree) & mask;
-                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) })
-                        .neg();
+                    let index = (((2 * i + 1) * degree) & mask) ^ n;
+                    *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
                 })
         } else {
             values
@@ -244,7 +245,7 @@ where
 
     fn transform_coeff_one_monomial(&self, degree: usize, values: &mut [F]) {
         if degree == 0 {
-            values.fill(F::ONE);
+            values.fill(F::one());
             return;
         }
 
@@ -261,6 +262,27 @@ where
                 *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
             })
     }
+
+    fn transform_coeff_neg_one_monomial(&self, degree: usize, values: &mut [F]) {
+        if degree == 0 {
+            values.fill(F::neg_one());
+            return;
+        }
+
+        let n = self.coeff_count();
+        let log_n = self.coeff_count_power();
+        debug_assert_eq!(values.len(), n);
+
+        let mask = usize::MAX >> (usize::BITS - log_n - 1);
+
+        values
+            .iter_mut()
+            .zip(&self.reverse_lsbs)
+            .for_each(|(v, &i)| {
+                let index = (((2 * i + 1) * degree) & mask) ^ n;
+                *v = F::from_root(unsafe { *self.ordinal_root_powers.get_unchecked(index) });
+            })
+    }
 }
 
 impl<F> AbstractNTT<F> for NTTTable<F>
@@ -268,25 +290,8 @@ where
     F: NTTField<Table = Self, Root = ShoupFactor<<F as Field>::Value>>,
 {
     #[inline]
-    fn transform(&self, polynomial: &Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_inplace(polynomial.clone())
-    }
-
-    #[inline]
-    fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
-        self.transform_slice(polynomial.as_mut_slice());
-        NTTPolynomial::<F>::new(polynomial.data())
-    }
-
-    #[inline]
-    fn inverse_transform(&self, ntt_polynomial: &NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_inplace(ntt_polynomial.clone())
-    }
-
-    #[inline]
-    fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
-        self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
-        Polynomial::<F>::new(ntt_polynomial.data())
+    fn root(&self) -> F {
+        self.root
     }
 
     fn transform_slice(&self, values: &mut [F]) {
@@ -370,59 +375,59 @@ where
 }
 
 #[inline]
-fn guard<F: Field>(a: F) -> F {
-    if a.get() >= F::TWICE_MODULUS_VALUE {
-        F::new(a.get() - F::TWICE_MODULUS_VALUE)
+fn guard<F: FheField>(a: F) -> F {
+    if a.value() >= (F::MODULUS_VALUE << 1) {
+        F::lazy_new(a.value() - (F::MODULUS_VALUE << 1))
     } else {
         a
     }
 }
 
 #[inline]
-fn ntt_normalize_assign<F: Field>(a: &mut F) {
-    let mut r = a.get();
-    if r >= F::TWICE_MODULUS_VALUE {
-        r = r - F::TWICE_MODULUS_VALUE;
+fn ntt_normalize_assign<F: FheField>(a: &mut F) {
+    let mut r = a.value();
+    if r >= (F::MODULUS_VALUE << 1) {
+        r = r - (F::MODULUS_VALUE << 1);
     }
     if r >= F::MODULUS_VALUE {
         r = r - F::MODULUS_VALUE;
     }
-    a.set(r);
+    *a = F::lazy_new(r);
 }
 
 #[inline]
-fn intt_normalize_assign<F: Field>(a: &mut F) {
-    if a.get() >= F::MODULUS_VALUE {
-        a.set(a.get() - F::MODULUS_VALUE)
+fn intt_normalize_assign<F: FheField>(a: &mut F) {
+    if a.value() >= F::MODULUS_VALUE {
+        *a = F::lazy_new(a.value() - F::MODULUS_VALUE)
     }
 }
 
 #[inline]
-fn add_no_reduce<F: Field>(a: F, b: F) -> F {
-    F::new(a.get() + b.get())
+fn add_no_reduce<F: FheField>(a: F, b: F) -> F {
+    F::lazy_new(a.value() + b.value())
 }
 
 #[inline]
-fn add_fast<F: Field>(a: F, b: F) -> F {
-    let r = a.get() + b.get();
-    if r >= F::TWICE_MODULUS_VALUE {
-        F::new(r - F::TWICE_MODULUS_VALUE)
+fn add_fast<F: FheField>(a: F, b: F) -> F {
+    let r = a.value() + b.value();
+    if r >= (F::MODULUS_VALUE << 1) {
+        F::lazy_new(r - (F::MODULUS_VALUE << 1))
     } else {
-        F::new(r)
+        F::lazy_new(r)
     }
 }
 
 #[inline]
-fn sub_fast<F: Field>(a: F, b: F) -> F {
-    F::new(a.get() + F::TWICE_MODULUS_VALUE - b.get())
+fn sub_fast<F: FheField>(a: F, b: F) -> F {
+    F::lazy_new(a.value() + (F::MODULUS_VALUE << 1) - b.value())
 }
 
 #[inline]
 fn mul_root_fast<F: NTTField>(a: F, root: ShoupFactor<F::Value>) -> F {
-    let (_, hw) = a.get().widen_mul(root.quotient());
-    F::new(
+    let (_, hw) = a.value().widen_mul(root.quotient());
+    F::lazy_new(
         root.value()
-            .wrapping_mul(a.get())
+            .wrapping_mul(a.value())
             .wrapping_sub(hw.wrapping_mul(F::MODULUS_VALUE)),
     )
 }

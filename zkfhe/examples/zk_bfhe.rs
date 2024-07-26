@@ -6,6 +6,9 @@ use zkfhe::{
     Decryptor, Encryptor, KeyGen,
 };
 
+type M = bool;
+type C = u16;
+
 fn main() {
     // set random generator
     let mut rng = rand::thread_rng();
@@ -13,9 +16,9 @@ fn main() {
     // set parameter
     let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
 
-    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as LWEModulusType;
+    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as C;
 
-    let check_noise = |noise: LWEModulusType, op: &str| {
+    let check_noise = |noise: C, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"
@@ -43,7 +46,7 @@ fn main() {
     for i in 1..10 {
         // not
         let ct_not = eval.not(&x);
-        let (m, noise) = dec.decrypt_with_noise(&ct_not);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_not);
         assert_eq!(m, not(a), "Noise: {noise}");
         check_noise(noise, "not");
 
@@ -60,37 +63,37 @@ fn main() {
         check_noise(noise, "majority");
 
         // and
-        let (m, noise) = dec.decrypt_with_noise(&ct_and);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_and);
         assert_eq!(m, and(a, b), "Noise: {noise}");
         check_noise(noise, "and");
 
         // nand
-        let (m, noise) = dec.decrypt_with_noise(&ct_nand);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_nand);
         assert_eq!(m, nand(a, b), "Noise: {noise}");
         check_noise(noise, "nand");
 
         // xor
-        let (mx, noise) = dec.decrypt_with_noise(&ct_xor);
+        let (mx, noise) = dec.decrypt_with_noise::<M>(&ct_xor);
         assert_eq!(mx, xor(a, b), "Noise: {noise}");
         check_noise(noise, "xor");
 
         // xnor
-        let (m, noise) = dec.decrypt_with_noise(&ct_xnor);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_xnor);
         assert_eq!(m, xnor(a, b), "Noise: {noise}");
         check_noise(noise, "xnor");
 
         // or
-        let (m, noise) = dec.decrypt_with_noise(&ct_or);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_or);
         assert_eq!(m, or(a, b), "Noise: {noise}");
         check_noise(noise, "or");
 
         // nor
-        let (m, noise) = dec.decrypt_with_noise(&ct_nor);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_nor);
         assert_eq!(m, nor(a, b), "Noise: {noise}");
         check_noise(noise, "nor");
 
         // mux
-        let (m, noise) = dec.decrypt_with_noise(&ct_mux);
+        let (m, noise) = dec.decrypt_with_noise::<M>(&ct_mux);
         assert_eq!(m, if a { b } else { c }, "Noise: {noise}");
         check_noise(noise, "mux");
 
@@ -107,29 +110,30 @@ fn main() {
     }
 }
 
-fn join_bit_opearions<F: NTTField>(
-    eval: &Evaluator<F>,
-    x: &LWECiphertext,
-    y: &LWECiphertext,
-    z: &LWECiphertext,
+#[allow(clippy::type_complexity)]
+fn join_bit_opearions<T: LWEModulusType, F: NTTField>(
+    eval: &Evaluator<T, F>,
+    x: &LWECiphertext<T>,
+    y: &LWECiphertext<T>,
+    z: &LWECiphertext<T>,
 ) -> (
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
-    LWECiphertext,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
+    LWECiphertext<T>,
 ) {
-    let mut ct_and: Option<LWECiphertext> = None;
-    let mut ct_nand: Option<LWECiphertext> = None;
-    let mut ct_or: Option<LWECiphertext> = None;
-    let mut ct_nor: Option<LWECiphertext> = None;
-    let mut ct_xor: Option<LWECiphertext> = None;
-    let mut ct_xnor: Option<LWECiphertext> = None;
-    let mut ct_majority: Option<LWECiphertext> = None;
-    let mut ct_mux: Option<LWECiphertext> = None;
+    let mut ct_and: Option<LWECiphertext<T>> = None;
+    let mut ct_nand: Option<LWECiphertext<T>> = None;
+    let mut ct_or: Option<LWECiphertext<T>> = None;
+    let mut ct_nor: Option<LWECiphertext<T>> = None;
+    let mut ct_xor: Option<LWECiphertext<T>> = None;
+    let mut ct_xnor: Option<LWECiphertext<T>> = None;
+    let mut ct_majority: Option<LWECiphertext<T>> = None;
+    let mut ct_mux: Option<LWECiphertext<T>> = None;
 
     rayon::scope(|s| {
         s.spawn(|_| ct_and = Some(eval.and(x, y)));

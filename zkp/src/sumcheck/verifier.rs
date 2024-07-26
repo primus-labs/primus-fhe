@@ -142,13 +142,13 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     let mut prod = eval_at;
     evals.push(eval_at);
 
-    let mut check = F::ZERO;
+    let mut check = F::zero();
     // We return early if 0 <= eval_at <  len, i.e. if the desired value has been passed
     for i in 1..len {
         if eval_at == check {
             return p_i[i - 1];
         }
-        check += F::ONE;
+        check += F::one();
 
         let tmp = eval_at - check;
         evals.push(tmp);
@@ -159,7 +159,7 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     }
     // Now check = len - 1
 
-    let mut res = F::ZERO;
+    let mut res = F::zero();
     // We want to compute the denominator \prod (j!=i) (i-j) for a given i in 0..len
     //
     // we start from the last step for i = len - 1, which is
@@ -193,10 +193,10 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     // = \sum_{i=0}^{len p_i - 1} * prod / (evals[i] * denom[i]) where denom[i-1] = - denom[i] * (len-i) / i.
     // So we use denom_up / denom_down to update denom[i] in reverse.
     let mut denom_up = field_factorial::<F>(len - 1);
-    let mut denom_down = F::ONE;
+    let mut denom_down = F::one();
 
     let mut i_as_field = check; // len-1
-    let mut len_minust_i_as_field = F::ONE;
+    let mut len_minust_i_as_field = F::one();
     for i in (0..len).rev() {
         res += p_i[i] * prod * denom_down / (denom_up * evals[i]);
 
@@ -205,8 +205,8 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
         if i != 0 {
             denom_up *= -len_minust_i_as_field;
             denom_down *= i_as_field;
-            i_as_field -= F::ONE;
-            len_minust_i_as_field += F::ONE;
+            i_as_field -= F::one();
+            len_minust_i_as_field += F::one();
         }
     }
     res
@@ -215,11 +215,11 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
 /// Compute the factorial(a) = 1 * 2 * ... * a
 #[inline]
 fn field_factorial<F: Field>(a: usize) -> F {
-    let mut res = F::ONE;
-    let mut acc = F::ONE;
+    let mut res = F::one();
+    let mut acc = F::one();
     for _i in 1..=a {
         res *= acc;
-        acc += F::ONE;
+        acc += F::one();
     }
     res
 }
@@ -231,6 +231,7 @@ mod test {
         derive::{Field, Prime},
         Field, FieldUniformSampler, Polynomial,
     };
+    use num_traits::{One, Zero};
     use rand::SeedableRng;
     use rand_chacha::ChaCha12Rng;
     use rand_distr::Distribution;
@@ -260,10 +261,10 @@ mod test {
         let poly = UniPolyFf::random(20 - 1, &mut prng);
 
         let mut evals: Vec<FF> = Vec::with_capacity(20);
-        let mut point = FF::ZERO;
+        let mut point = FF::zero();
         evals.push(poly.evaluate(point));
         for _i in 1..20 {
-            point += FF::ONE;
+            point += FF::one();
             evals.push(poly.evaluate(point));
         }
         let query = <FieldUniformSampler<FF>>::new().sample(&mut prng);

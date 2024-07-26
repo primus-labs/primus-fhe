@@ -1,12 +1,13 @@
 use algebra::{
-    derive::{Field, Prime, NTT},
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
     transformation::{AbstractNTT, MonomialNTT},
     Basis, Field, FieldUniformSampler, ModulusConfig, NTTField, NTTPolynomial, Polynomial,
 };
+use num_traits::{One, Zero};
 use rand::{thread_rng, Rng};
 use rand_distr::Distribution;
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
@@ -15,7 +16,7 @@ type FF = Fp32; // field type
 type PolyFF = Polynomial<FF>;
 type NTTPolyFF = NTTPolynomial<FF>;
 
-const LOG_N: usize = 3;
+const LOG_N: usize = 5;
 const N: usize = 1 << LOG_N; // length
 const BITS: u32 = 3;
 const B: usize = 1 << BITS; // base
@@ -49,6 +50,15 @@ fn test_transform_monomial() {
 
     table.transform_monomial(coeff, degree, b.as_mut_slice());
     assert_eq!(a, b);
+
+    let mut a = PolyFF::zero(N);
+    let mut b = NTTPolyFF::zero(N);
+    a[degree] = FF::neg_one();
+
+    let a = table.transform_inplace(a);
+
+    table.transform_monomial(FF::neg_one(), degree, b.as_mut_slice());
+    assert_eq!(a, b);
 }
 
 #[test]
@@ -62,18 +72,18 @@ fn test_monomial_property() {
     let mut a = NTTPolyFF::zero(N);
     let mut b = NTTPolyFF::zero(N);
 
-    table.transform_monomial(Fp32::ONE, degree, a.as_mut_slice());
-    table.transform_monomial(Fp32::NEG_ONE, degree + N, b.as_mut_slice());
+    table.transform_monomial(Fp32::one(), degree, a.as_mut_slice());
+    table.transform_monomial(Fp32::neg_one(), degree + N, b.as_mut_slice());
     assert_eq!(a, b);
 
-    table.transform_monomial(Fp32::NEG_ONE, degree, a.as_mut_slice());
-    table.transform_monomial(Fp32::ONE, degree + N, b.as_mut_slice());
+    table.transform_monomial(Fp32::neg_one(), degree, a.as_mut_slice());
+    table.transform_monomial(Fp32::one(), degree + N, b.as_mut_slice());
     assert_eq!(a, b);
 
     let degree = rng.gen_range(N..N * 2);
 
-    table.transform_monomial(Fp32::NEG_ONE, N * 2 - degree, a.as_mut_slice());
-    table.transform_monomial(Fp32::ONE, N * 2 - (degree - N), b.as_mut_slice());
+    table.transform_monomial(Fp32::neg_one(), N * 2 - degree, a.as_mut_slice());
+    table.transform_monomial(Fp32::one(), N * 2 - (degree - N), b.as_mut_slice());
     assert_eq!(a, b);
 }
 
@@ -122,7 +132,7 @@ fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<
     assert_eq!(lhs.coeff_count(), rhs.coeff_count());
     let coeff_count = lhs.coeff_count();
 
-    let mut result = vec![F::ZERO; coeff_count];
+    let mut result = vec![F::zero(); coeff_count];
     let poly1: &[F] = lhs.as_ref();
     let poly2: &[F] = rhs.as_ref();
 
@@ -214,15 +224,15 @@ fn test_poly_eval() {
         poly.evaluate(FF::max()),
         poly.iter()
             .enumerate()
-            .fold(FF::ZERO, |acc, (i, a)| if i & 1 == 0 {
+            .fold(FF::zero(), |acc, (i, a)| if i & 1 == 0 {
                 acc + a
             } else {
                 acc - a
             })
     );
-    assert_eq!(poly.evaluate(FF::ZERO), poly[0]);
+    assert_eq!(poly.evaluate(FF::zero()), poly[0]);
     assert_eq!(
-        poly.evaluate(FF::ONE),
-        poly.iter().fold(FF::ZERO, |acc, a| acc + a)
+        poly.evaluate(FF::one()),
+        poly.iter().fold(FF::zero(), |acc, a| acc + a)
     );
 }

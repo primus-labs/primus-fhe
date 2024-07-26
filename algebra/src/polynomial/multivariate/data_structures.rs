@@ -124,7 +124,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
         let mut linear_ops: Vec<(F, F)> = Vec::with_capacity(product.len());
         for _ in 0..product.len() {
-            linear_ops.push((F::ONE, F::ZERO));
+            linear_ops.push((F::one(), F::zero()));
         }
         self.add_product_with_linear_op(product, &linear_ops, coefficient);
     }
@@ -134,7 +134,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         self.products
             .iter()
             .zip(self.linear_ops.iter())
-            .fold(F::ZERO, |result, ((c, p), ops)| {
+            .fold(F::zero(), |result, ((c, p), ops)| {
                 result
                     + p.iter().zip(ops.iter()).fold(*c, |acc, (&i, &(a, b))| {
                         acc * (self.flattened_ml_extensions[i].evaluate(point) * a + b)

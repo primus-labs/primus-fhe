@@ -90,7 +90,7 @@ pub struct FieldBinarySampler;
 impl<F: Field> Distribution<F> for FieldBinarySampler {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
-        [F::ZERO, F::ONE][(rng.next_u32() & 0b1) as usize]
+        [F::zero(), F::one()][(rng.next_u32() & 0b1) as usize]
     }
 }
 
@@ -105,7 +105,7 @@ pub struct FieldTernarySampler;
 impl<F: Field> Distribution<F> for FieldTernarySampler {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
-        [F::ZERO, F::ZERO, F::ONE, F::NEG_ONE][(rng.next_u32() & 0b11) as usize]
+        [F::zero(), F::zero(), F::one(), F::neg_one()][(rng.next_u32() & 0b11) as usize]
     }
 }
 

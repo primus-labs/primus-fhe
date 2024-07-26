@@ -7,7 +7,8 @@ use crate::reduce::{MulReduce, PowReduce};
 mod ops;
 
 const EPSILON: u64 = (1 << 32) - 1;
-const P: u64 = 0xFFFF_FFFF_0000_0001;
+/// The module for Goldilocks field
+pub const P: u64 = 0xFFFF_FFFF_0000_0001;
 
 /// Goldilocks Prime Modulus.
 ///

@@ -11,7 +11,7 @@ use crate::{BlindRotationType, LWEModulusType, NTRUCiphertext, SecretKeyPack};
 /// This struct stores the key
 /// that switch a ciphertext of the ring Secret Key
 /// to a [`LWE<F>`] ciphertext of the LWE Secret Key.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct KeySwitchingKey<F: NTTField> {
     /// LWE vector dimension, refers to **`n`** in the paper.
     lwe_dimension: usize,
@@ -21,13 +21,14 @@ pub struct KeySwitchingKey<F: NTTField> {
 
 impl<F: NTTField> KeySwitchingKey<F> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R>(
-        secret_key_pack: &SecretKeyPack<F>,
+    pub fn generate<R, C>(
+        secret_key_pack: &SecretKeyPack<C, F>,
         chi: FieldDiscreteGaussianSampler,
         mut rng: R,
     ) -> Self
     where
         R: Rng + CryptoRng,
+        C: LWEModulusType,
     {
         let parameters = secret_key_pack.parameters();
         let lwe_dimension = parameters.lwe_dimension();
@@ -39,10 +40,14 @@ impl<F: NTTField> KeySwitchingKey<F> {
         assert!(extended_lwe_dimension <= ring_dimension);
 
         // negative convertion
-        let convert = |v: &LWEModulusType| match *v {
-            0 => F::ZERO,
-            1 => F::NEG_ONE,
-            _ => F::ONE,
+        let convert = |v: &C| {
+            if *v == C::ZERO {
+                F::zero()
+            } else if *v == C::ONE {
+                F::neg_one()
+            } else {
+                F::one()
+            }
         };
 
         // s = [s_0, 0,..., 0, -s_{n-1},..., -s_1]
@@ -53,7 +58,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
                 .map(convert)
                 .collect(),
         );
-        s.resize(extended_lwe_dimension, F::ZERO);
+        s.resize(extended_lwe_dimension, F::zero());
         s[0] = -s[0];
         s[1..].reverse();
 

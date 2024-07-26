@@ -4,6 +4,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
+use rand::{CryptoRng, Rng};
 
 use crate::random::UniformBase;
 use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
@@ -37,6 +38,7 @@ pub trait Field:
     + Copy
     + Send
     + Sync
+    + 'static
     + Debug
     + Display
     + Default
@@ -74,7 +76,6 @@ pub trait Field:
         + Widening
         + WrappingOps
         + Into<u64>
-        + AsFrom<u32>
         + AsInto<f64>
         + AsFrom<f64>
         + UniformBase;
@@ -82,68 +83,35 @@ pub trait Field:
     /// The type of the field's order.
     type Order: Copy;
 
-    /// 1
-    const ONE: Self;
-
-    /// 0
-    const ZERO: Self;
-
-    /// -1
-    const NEG_ONE: Self;
-
     /// q
     const MODULUS_VALUE: Self::Value;
 
-    /// 2q
-    const TWICE_MODULUS_VALUE: Self::Value;
+    /// -1
+    fn neg_one() -> Self;
 
-    /// Creates a new instance.
+    /// convert values into field element
     fn new(value: Self::Value) -> Self;
 
-    /// Creates and checks a new instance.
-    fn checked_new(value: Self::Value) -> Self;
+    /// generate a random element.
+    fn random<R: CryptoRng + Rng>(rng: &mut R) -> Self {
+        let range = <Self::Value as UniformBase>::Sample::as_from(Self::MODULUS_VALUE);
+        let thresh = range.wrapping_neg() % range;
 
+        let hi = loop {
+            let (lo, hi) = <Self::Value as UniformBase>::gen_sample(rng).widen_mul(range);
+            if lo >= thresh {
+                break hi;
+            }
+        };
+
+        Self::new(hi.as_into())
+    }
+}
+
+/// A trait defined for decomposable field, this is mainly for base field in FHE.
+pub trait DecomposableField: Field {
     /// Gets inner value.
-    fn get(self) -> Self::Value;
-
-    /// Resets inner value.
-    fn set(&mut self, value: Self::Value);
-
-    /// Resets and checks inner value.
-    fn checked_set(&mut self, value: Self::Value);
-
-    /// Return `self * scalar`.
-    fn mul_scalar(self, scalar: Self::Value) -> Self;
-
-    /// Performs `self + a * b`.
-    fn add_mul(self, a: Self, b: Self) -> Self;
-
-    /// Performs `self = self + a * b`.
-    fn add_mul_assign(&mut self, a: Self, b: Self);
-
-    /// Performs `self * rhs`.
-    ///
-    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
-    /// and falling back to [0, modulus) for normal case.
-    fn mul_fast(self, rhs: Self) -> Self;
-
-    /// Performs `self *= rhs`.
-    ///
-    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
-    /// and falling back to [0, modulus) for normal case.
-    fn mul_assign_fast(&mut self, rhs: Self);
-
-    /// Performs `self + a * b`.
-    ///
-    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
-    /// and falling back to [0, modulus) for normal case.
-    fn add_mul_fast(self, a: Self, b: Self) -> Self;
-
-    /// Performs `self = self + a * b`.
-    ///
-    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
-    /// and falling back to [0, modulus) for normal case.
-    fn add_mul_assign_fast(&mut self, a: Self, b: Self);
+    fn value(self) -> Self::Value;
 
     /// mask, return a number with `bits` 1s.
     fn mask(bits: u32) -> Self::Value;
@@ -174,4 +142,64 @@ pub trait Field:
     ///
     /// Now we focus on power-of-two basis.
     fn decompose_lsb_bits_at(&mut self, destination: &mut Self, mask: Self::Value, bits: u32);
+}
+
+/// A trait defined for specific fields used and optimized for FHE.
+pub trait FheField: DecomposableField {
+    /// Creates a new instance.
+    /// Can be overloaded with optimized implemetation.
+    #[inline]
+    fn lazy_new(value: Self::Value) -> Self {
+        Self::new(value)
+    }
+
+    /// Performs `self + a * b`.
+    /// Can be overloaded with optimized implementation.
+    #[inline]
+    fn add_mul(self, a: Self, b: Self) -> Self {
+        self + a * b
+    }
+
+    /// Performs `self = self + a * b`.
+    #[inline]
+    fn add_mul_assign(&mut self, a: Self, b: Self) {
+        *self = self.add_mul(a, b);
+    }
+
+    /// Performs `self * rhs`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    /// Can be overloaded with optimized implementation.
+    #[inline]
+    fn mul_fast(self, rhs: Self) -> Self {
+        self * rhs
+    }
+
+    /// Performs `self *= rhs`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    #[inline]
+    fn mul_assign_fast(&mut self, rhs: Self) {
+        *self = self.mul_fast(rhs);
+    }
+
+    /// Performs `self + a * b`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    #[inline]
+    fn add_mul_fast(self, a: Self, b: Self) -> Self {
+        self + a * b
+    }
+
+    /// Performs `self = self + a * b`.
+    ///
+    /// The result is in [0, 2*modulus) for some special modulus, such as `BarrettModulus`,
+    /// and falling back to [0, modulus) for normal case.
+    #[inline]
+    fn add_mul_assign_fast(&mut self, a: Self, b: Self) {
+        *self = self.add_mul_fast(a, b);
+    }
 }

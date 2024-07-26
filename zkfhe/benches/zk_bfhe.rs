@@ -5,6 +5,8 @@ use zkfhe::{
     Encryptor, KeyGen,
 };
 
+type M = bool;
+
 pub fn criterion_benchmark(c: &mut Criterion) {
     // set random generator
     let mut rng = rand::thread_rng();
@@ -20,13 +22,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let encryptor = Encryptor::new(sk);
     println!("Evaluation Key Generation done!\n");
 
-    let m0 = rng.gen();
+    let m0: M = rng.gen();
     let c0 = encryptor.encrypt(m0);
 
-    let m1 = rng.gen();
+    let m1: M = rng.gen();
     let c1 = encryptor.encrypt(m1);
 
-    let m2 = rng.gen();
+    let m2: M = rng.gen();
     let c2 = encryptor.encrypt(m2);
 
     c.bench_function("rlwe not", |b| b.iter(|| evaluator.not(black_box(&c0))));

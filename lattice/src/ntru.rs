@@ -167,7 +167,7 @@ impl<F: NTTField> NTRU<F> {
         a[1..].reverse();
         a[0] = -a[0];
 
-        LWE::<F>::new(a, F::ZERO)
+        LWE::<F>::new(a, F::zero())
     }
 
     /// Extract an LWE sample from [`NTRU<F>`].
@@ -177,7 +177,7 @@ impl<F: NTTField> NTRU<F> {
         a[1..].reverse();
         a[0] = -a[0];
 
-        LWE::<F>::new(a, F::ZERO)
+        LWE::<F>::new(a, F::zero())
     }
 
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.

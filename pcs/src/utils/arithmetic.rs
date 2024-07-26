@@ -1,77 +1,93 @@
 use algebra::{Field, FieldUniformSampler};
+use serde::{Deserialize, Serialize};
 
 use std::{collections::BTreeSet, fmt::Debug, iter};
 
 use rand::{distributions::Uniform, CryptoRng, Rng};
 
-/// a dimension that specifies a sparse matrix of row_num = n, column_num = m, with d nonzero elements in each row
-#[derive(Clone, Copy, Debug)]
+/// Define the dimension that specifies a sparse matrix.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SparseMatrixDimension {
     /// the number of rows of the sparse matrix
-    pub row: usize,
+    pub num_row: usize,
     /// the number of columns of the sparse matrix
-    pub column: usize,
+    pub num_col: usize,
     /// the number of nonzero elements in each row of the sparse matrix
-    pub nonzero: usize,
+    pub num_nonzero: usize,
 }
 
 impl SparseMatrixDimension {
     /// create an instance of SparseMatrixDimension
+    ///
+    /// # Arguments.
+    ///
+    /// * `num_row` - the number of rows.
+    /// * `num_col` - the number of columns.
+    /// * `num_nonzero` - the number of non-zero elements.
     #[inline]
-    pub fn new(row: usize, column: usize, nonzero: usize) -> Self {
+    pub fn new(num_row: usize, num_col: usize, num_nonzero: usize) -> Self {
         Self {
-            row,
-            column,
-            nonzero,
+            num_row,
+            num_col,
+            num_nonzero,
         }
     }
 }
 
-/// SparseMatrix
-#[derive(Clone, Debug)]
+/// Define the struct of SparseMatrix
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SparseMatrix<F> {
-    /// the dimension that specifies the shape of this sparse matrix
+    /// The dimension that specifies the shape of this sparse matrix
     pub dimension: SparseMatrixDimension,
-    /// the elements of sparse matrix in a row major manner
+    /// The elements of sparse matrix in a row major manner
     pub cells: Vec<(usize, F)>,
 }
 
 impl<F: Field> SparseMatrix<F> {
-    /// create a random sparse matrix in a row major manner, given the dimension and randomness
-    pub fn random(dimension: SparseMatrixDimension, mut rng: impl Rng + CryptoRng) -> Self {
-        let index_distr: Uniform<usize> = Uniform::new(0, dimension.column);
+    /// Generate a random sparse matrix.
+    ///
+    /// # Arguments.
+    ///
+    /// * `dimension` - The dimension of the sparse matrix.
+    /// * `rng` - The randomness generator.
+    pub fn random(dimension: SparseMatrixDimension, rng: &mut (impl Rng + CryptoRng)) -> Self {
+        let index_distr: Uniform<usize> = Uniform::new(0, dimension.num_col);
         let field_distr: FieldUniformSampler<F> = FieldUniformSampler::new();
         let mut row = BTreeSet::<usize>::new();
         let cells = iter::repeat_with(|| {
             // sample which indexes of this row are nonempty
             row.clear();
-            (&mut rng)
-                .sample_iter(index_distr)
+            rng.sample_iter(index_distr)
                 .filter(|index| row.insert(*index))
-                .take(dimension.nonzero)
+                .take(dimension.num_nonzero)
                 .count();
             // sample the random field elements at these indexes
             row.iter()
                 .map(|index| (*index, rng.sample(field_distr)))
                 .collect::<Vec<(usize, F)>>()
         })
-        .take(dimension.row)
+        .take(dimension.num_row)
         .flatten()
         .collect();
         Self { dimension, cells }
     }
 
-    /// provide each row of the sparse matrix
+    /// Return the rows of the sparse matrix.
     #[inline]
     fn rows(&self) -> impl Iterator<Item = &[(usize, F)]> {
-        self.cells.chunks_exact(self.dimension.nonzero)
+        self.cells.chunks_exact(self.dimension.num_nonzero)
     }
 
-    /// add the (1 x m) dot product of the (1 x n) vector and this (n x m) matrix to the (1 x m) target
+    /// Compute multiplication-then-addition.
+    ///
+    /// # Arguments
+    ///
+    /// * `vecotr` - The vector that are multiplied by the sparce matrix.
+    /// * `target` - The vector that are added to the multiplication, and stores the result.
     #[inline]
     pub fn add_multiplied_vector(&self, vector: &[F], target: &mut [F]) {
-        assert_eq!(self.dimension.row, vector.len());
-        assert_eq!(self.dimension.column, target.len());
+        assert_eq!(self.dimension.num_row, vector.len());
+        assert_eq!(self.dimension.num_col, target.len());
 
         // t = v * M
         // t = \sum_{i=1}^{n} v_i * M_i
@@ -83,16 +99,20 @@ impl<F: Field> SparseMatrix<F> {
         });
     }
 
-    /// return the (1 x m) dot product of a (1 x n) vector and this (n x m) matrix
+    /// The dot product of a vector and the sparse matrix.
+    ///
+    /// # Arguments
+    ///
+    /// * `array` - The vector that are multiplied by the sparse matrix.
     #[inline]
     pub fn dot(&self, array: &[F]) -> Vec<F> {
-        let mut target = vec![F::ZERO; self.dimension.column];
+        let mut target = vec![F::zero(); self.dimension.num_col];
         self.add_multiplied_vector(array, &mut target);
         target
     }
 }
 
-/// compute the entropy: H(p) = -p \log_2(p) - (1 - p) \log_2(1 - p)
+/// Compute the entropy: H(p) = -p \log_2(p) - (1 - p) \log_2(1 - p)
 #[inline]
 pub fn entropy(p: f64) -> f64 {
     assert!(0f64 < p && p < 1f64);
@@ -100,13 +120,13 @@ pub fn entropy(p: f64) -> f64 {
     -p * p.log2() - one_minus_p * one_minus_p.log2()
 }
 
-/// compute the ceil
+/// Compute the ceil
 #[inline]
 pub fn ceil(v: f64) -> usize {
     v.ceil() as usize
 }
 
-/// compute the division and take the ceil
+/// Compute the division and take the ceil
 #[inline]
 pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
     let d = dividend / divisor;
@@ -118,15 +138,15 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
     }
 }
 
-/// compute the lagrange basis of a given point (which is a series of point of one dimension)
+/// Compute the lagrange basis of a given point (which is a series of point of one dimension)
 #[inline]
 pub fn lagrange_basis<F: Field>(points: &[F]) -> Vec<F> {
-    let mut basis = vec![F::ONE];
+    let mut basis = vec![F::one()];
     points.iter().for_each(|point| {
         basis.extend(
             basis
                 .iter()
-                .map(|x| *x * (F::ONE - point))
+                .map(|x| *x * (F::one() - point))
                 .collect::<Vec<F>>(),
         );
         let prev_len = basis.len() >> 1;

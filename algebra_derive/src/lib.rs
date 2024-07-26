@@ -5,6 +5,8 @@
 mod ast;
 mod attr;
 mod basic;
+mod decomposable_field;
+mod fhe_field;
 mod field;
 mod ntt;
 mod ops;
@@ -58,6 +60,24 @@ pub fn derive_prime(input: TokenStream) -> TokenStream {
 
     prime::derive(&input)
         .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+#[proc_macro_derive(DecomposableField, attributes(modulus))]
+pub fn derive_decomposable_field(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    decomposable_field::derive(&input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+#[proc_macro_derive(FheField, attributes(modulus))]
+pub fn derive_fhe_field(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    fhe_field::derive(&input)
+        .unwrap_or_else(|err| err.into_compile_error())
         .into()
 }
 

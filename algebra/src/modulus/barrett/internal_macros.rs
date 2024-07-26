@@ -225,9 +225,9 @@ macro_rules! impl_barrett_modulus {
                 let b_plus_a_left = ratio[1] as $WideT * self[0] as $WideT + (a >> <$SelfT>::BITS);
 
                 let c = ratio[0] as $WideT * self[1] as $WideT;
-                let d = ratio[1] as $WideT * self[1] as $WideT;
+                let d = ratio[1].wrapping_mul(self[1]);
 
-                let tmp = d.wrapping_add((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT;
+                let tmp = d.wrapping_add(((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT);
 
                 // Step 2.
                 self[0].wrapping_sub(tmp.wrapping_mul(modulus.value()))
@@ -329,9 +329,9 @@ macro_rules! impl_barrett_modulus {
                 let b_plus_a_left = ratio[1] as $WideT * self.0 as $WideT + (a >> <$SelfT>::BITS);
 
                 let c = ratio[0] as $WideT * self.1 as $WideT;
-                let d = ratio[1] as $WideT * self.1 as $WideT;
+                let d = ratio[1].wrapping_mul(self.1);
 
-                let tmp = d.wrapping_add((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT;
+                let tmp = d.wrapping_add(((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT);
 
                 // Step 2.
                 self.0.wrapping_sub(tmp.wrapping_mul(modulus.value()))

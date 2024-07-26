@@ -4,7 +4,7 @@
 //!
 //! Given M instances of addition in Zq, the main idea of this IOP is to prove:
 //! For x \in \{0, 1\}^l
-//! 1. a(x), b(c), c(x) \in [q] => these range check can be batchly proved by the Bit Decomposition IOP
+//! 1. a(x), b(c), c(x) \in \[q\] => these range check can be batchly proved by the Bit Decomposition IOP
 //! 2. k(x) \cdot (1 - k(x)) = 0  => can be reduced to prove the sum
 //!     $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [k(x) \cdot (1 - k(x))] = 0$
 //!     where u is the common random challenge from the verifier, used to instantiate the sum,
@@ -24,8 +24,8 @@ use crate::utils::eval_identity_function;
 use crate::sumcheck::MLSumcheck;
 use crate::utils::gen_identity_evaluations;
 use algebra::{
-    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
-    PolynomialInfo,
+    DecomposableField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
+    MultilinearExtension, PolynomialInfo,
 };
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -82,7 +82,9 @@ impl<F: Field> AdditionInZqInstance<F> {
             decomposed_bits_info: self.abc_bits.info(),
         }
     }
+}
 
+impl<F: DecomposableField> AdditionInZqInstance<F> {
     /// Construct a new instance from vector
     #[inline]
     pub fn from_vec(
@@ -166,7 +168,7 @@ impl<F: Field> AdditionInZqSubclaim<F> {
         q: F,
         abc: &[Rc<DenseMultilinearExtension<F>>],
         k: &DenseMultilinearExtension<F>,
-        abc_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        abc_bits: &[&Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         info: &AdditionInZqInstanceInfo<F>,
     ) -> bool {
@@ -183,7 +185,7 @@ impl<F: Field> AdditionInZqSubclaim<F> {
 
         // check 2: subclaim for sumcheck, i.e. eq(u, point) * k(point) * (1 - k(point)) = 0
         let eval_k = k.evaluate(&self.sumcheck_point);
-        if eval_identity_function(u, &self.sumcheck_point) * eval_k * (F::ONE - eval_k)
+        if eval_identity_function(u, &self.sumcheck_point) * eval_k * (F::one() - eval_k)
             != self.sumcheck_expected_evaluations
         {
             return false;
@@ -222,14 +224,14 @@ impl<F: Field> AdditionInZq<F> {
         let mut product = Vec::with_capacity(3);
         let mut op_coefficient = Vec::with_capacity(3);
         product.push(Rc::new(gen_identity_evaluations(u)));
-        op_coefficient.push((F::ONE, F::ZERO));
+        op_coefficient.push((F::one(), F::zero()));
 
         product.push(Rc::clone(&addition_instance.k));
-        op_coefficient.push((F::ONE, F::ZERO));
+        op_coefficient.push((F::one(), F::zero()));
         product.push(Rc::clone(&addition_instance.k));
-        op_coefficient.push((-F::ONE, F::ONE));
+        op_coefficient.push((-F::one(), F::one()));
 
-        poly.add_product_with_linear_op(product, &op_coefficient, F::ONE);
+        poly.add_product_with_linear_op(product, &op_coefficient, F::one());
         let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for addition in Zq failed");
 
@@ -271,7 +273,7 @@ impl<F: Field> AdditionInZq<F> {
         };
 
         let subclaim =
-            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::ZERO, &proof.sumcheck_msg)
+            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::zero(), &proof.sumcheck_msg)
                 .expect("sumcheck protocol in addition in Zq failed");
         AdditionInZqSubclaim {
             rangecheck_subclaim,

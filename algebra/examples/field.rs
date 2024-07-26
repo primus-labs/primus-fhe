@@ -1,6 +1,6 @@
 use algebra::{
-    derive::*, Field, FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler,
-    FieldUniformSampler, Polynomial, PrimeField,
+    derive::*, DecomposableField, Field, FieldBinarySampler, FieldDiscreteGaussianSampler,
+    FieldTernarySampler, FieldUniformSampler, Polynomial, PrimeField,
 };
 use num_traits::{Inv, One, Pow, Zero};
 use rand::prelude::*;
@@ -25,7 +25,7 @@ use rand::prelude::*;
 //
 // It's based the Derive macro `Prime`.
 
-#[derive(Field, Prime, NTT)]
+#[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct FF(u64);
 
@@ -35,7 +35,7 @@ fn main() -> Result<(), algebra::AlgebraError> {
     // You can generate a value by yourself
     let mut a = FF::new(9);
     // You can get the inner value by `get` function
-    let a_in = a.get();
+    let a_in = a.value();
     assert_eq!(a_in, 9);
     // You can get the max value
     let mut b = FF::max();
@@ -43,8 +43,8 @@ fn main() -> Result<(), algebra::AlgebraError> {
     // you can get two special value `one` and `zero`
     let _one = FF::one();
     let _zero = FF::zero();
-    let one = FF::ONE;
-    let zero = FF::ZERO;
+    let one = FF::one();
+    let zero = FF::zero();
 
     // check `one` and `zero` by function
     assert!(one.is_one());

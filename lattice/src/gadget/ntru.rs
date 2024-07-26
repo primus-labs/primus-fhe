@@ -256,7 +256,7 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
     {
         let len = basis.decompose_len();
         let basis_value = basis.basis();
-        let mut basis_power = F::ONE;
+        let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..(len - 1) {
             let r = <NTTNTRU<F>>::generate_random_value_sample(
@@ -266,7 +266,7 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
                 &mut rng,
             );
             data.push(r);
-            basis_power = F::new(basis_power.get() * basis_value);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
         let r = <NTTNTRU<F>>::generate_random_value_sample(

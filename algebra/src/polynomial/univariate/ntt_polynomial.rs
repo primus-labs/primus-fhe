@@ -75,7 +75,7 @@ impl<F: Field> NTTPolynomial<F> {
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
         Self {
-            data: vec![F::ZERO; coeff_count],
+            data: vec![F::zero(); coeff_count],
         }
     }
 
@@ -88,7 +88,7 @@ impl<F: Field> NTTPolynomial<F> {
     /// Sets `self` to `0`.
     #[inline]
     pub fn set_zero(&mut self) {
-        self.data.fill(F::ZERO);
+        self.data.fill(F::zero());
     }
 
     /// Copy the coefficients from another slice.

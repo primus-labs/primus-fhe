@@ -2,12 +2,15 @@
 #[cfg(feature = "count_ntt")]
 use algebra::transformation::count;
 
-use fhe_core::{utils::nand, LWEModulusType};
+use fhe_core::utils::nand;
 use rand::Rng;
 use zkfhe::{
     bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMERTERS},
     Decryptor, Encryptor, KeyGen,
 };
+
+type M = bool;
+type C = u16;
 
 fn main() {
     // set random generator
@@ -16,9 +19,9 @@ fn main() {
     // set parameter
     let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
 
-    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as LWEModulusType;
+    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as C;
 
-    let check_noise = |noise: LWEModulusType, op: &str| {
+    let check_noise = |noise: C, op: &str| {
         assert!(
             noise < noise_max,
             "Type: {op}\nNoise: {noise} >= {noise_max}"
@@ -53,7 +56,7 @@ fn main() {
         println!("intt count: {}", count::get_intt_count());
     }
 
-    let (m, noise) = decryptor.decrypt_with_noise(&ct);
+    let (m, noise) = decryptor.decrypt_with_noise::<M>(&ct);
     assert_eq!(m, nand(a, b), "Noise: {noise}");
     check_noise(noise, "nand");
 
@@ -73,7 +76,7 @@ fn main() {
         println!("intt count: {}", count::get_intt_count());
     }
 
-    let (m, noise) = decryptor.decrypt_with_noise(&ct);
+    let (m, noise) = decryptor.decrypt_with_noise::<M>(&ct);
     assert_eq!(m, if a { b } else { c }, "Noise: {noise}");
     check_noise(noise, "mux");
 }
