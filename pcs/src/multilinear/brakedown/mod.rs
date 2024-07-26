@@ -8,7 +8,7 @@ pub use data_structure::{
 
 use algebra::{
     utils::{Block, Prg, Transcript},
-    DenseMultilinearExtension, Field,
+    AbstractExtensionField, DenseMultilinearExtension, Field,
 };
 use itertools::Itertools;
 use rand::SeedableRng;
@@ -31,19 +31,21 @@ pub const BRAKEDOWN_SECURITY_BIT: usize = 128;
 
 /// The PCS struct for Brakedown.
 #[derive(Debug, Clone)]
-pub struct BrakedownPCS<F, H, C, S>(PhantomData<(F, H, C, S)>)
-where
-    F: Field,
-    H: Hash + Sync + Send,
-    C: LinearCode<F>,
-    S: LinearCodeSpec<F, Code = C>;
-
-impl<F, H, C, S> BrakedownPCS<F, H, C, S>
+pub struct BrakedownPCS<F, H, C, S, EF>(PhantomData<(F, H, C, S, EF)>)
 where
     F: Field,
     H: Hash + Sync + Send,
     C: LinearCode<F>,
     S: LinearCodeSpec<F, Code = C>,
+    EF: AbstractExtensionField<F>;
+
+impl<F, H, C, S, EF> BrakedownPCS<F, H, C, S, EF>
+where
+    F: Field,
+    H: Hash + Sync + Send,
+    C: LinearCode<F>,
+    S: LinearCodeSpec<F, Code = C>,
+    EF: AbstractExtensionField<F>,
 {
     /// Prover answers the challenge by computing the product of the challenge vector
     /// and the commited matirx.
@@ -51,15 +53,15 @@ where
     /// of the matrix with challenge vector as the coefficients.
     fn answer_challenge(
         pp: &BrakedownParams<F, C>,
-        challenge: &[F],
+        challenge: &[EF],
         state: &BrakedownCommitmentState<F, H>,
-    ) -> Vec<F> {
+    ) -> Vec<EF> {
         assert_eq!(challenge.len(), pp.num_rows());
         let num_cols = pp.code().message_len();
         let codeword_len = pp.code().codeword_len();
 
         // Compute the answer as a linear combination.
-        let mut answer = vec![F::zero(); num_cols];
+        let mut answer = vec![EF::zero(); num_cols];
         state
             .matrix
             .chunks_exact(codeword_len)
@@ -69,7 +71,7 @@ where
                     .take(num_cols)
                     .enumerate()
                     .for_each(|(idx, item)| {
-                        answer[idx] += (*item) * coeff;
+                        answer[idx] += *coeff * *item;
                     })
             });
         answer
@@ -105,7 +107,7 @@ where
 
     /// Decompose an evaluation of point x into two tensors q1, q2 such that
     /// f(x) = q1 * M * q2 where M is the committed matrix.
-    fn tensor_decompose(pp: &BrakedownParams<F, C>, point: &[F]) -> (Vec<F>, Vec<F>) {
+    fn tensor_decompose(pp: &BrakedownParams<F, C>, point: &[EF]) -> (Vec<EF>, Vec<EF>) {
         let left_point_len = pp.num_rows().ilog2() as usize;
         let right_point_len = pp.code().message_len().ilog2() as usize;
         assert_eq!(left_point_len + right_point_len, point.len());
@@ -120,18 +122,18 @@ where
         (challenge, residual_tensor)
     }
 
-    /// Generate tensor from point.
-    fn tensor_from_point(pp: &BrakedownParams<F, C>, point: &[F]) -> Vec<F> {
+    /// Generate tensor from points.
+    fn tensor_from_points(pp: &BrakedownParams<F, C>, points: &[EF]) -> Vec<EF> {
         let len = pp.num_vars() - pp.num_rows().ilog2() as usize;
-        lagrange_basis(&point[len..])
+        lagrange_basis(&points[len..])
     }
 
     /// Check the merkle paths and consistency
     fn check_query_answers(
         pp: &BrakedownParams<F, C>,
-        challenge: &[F],
+        challenge: &[EF],
         queries: &[usize],
-        encoded_rlc_msg: &[F],
+        encoded_rlc_msg: &[EF],
         merkle_paths: &[H::Output],
         columns: &[F],
         commitment: &BrakedownPolyCommitment<H>,
@@ -186,8 +188,8 @@ where
     fn check_consistency(
         pp: &BrakedownParams<F, C>,
         queries: &[usize],
-        challenge: &[F],
-        encoded_rlc_msg: &[F],
+        challenge: &[EF],
+        encoded_rlc_msg: &[EF],
         columns: &[F],
     ) -> bool {
         let mut check = true;
@@ -198,7 +200,7 @@ where
                 let product = column
                     .iter()
                     .zip(challenge)
-                    .fold(F::zero(), |acc, (x0, x1)| acc + *x0 * x1);
+                    .fold(EF::zero(), |acc, (x0, x1)| acc + (*x1) * (*x0));
 
                 check &= product == encoded_rlc_msg[*idx];
             });
@@ -208,20 +210,21 @@ where
 
     /// Compute the residual product (i.e., the inner product)
     #[inline]
-    fn residual_product(answer: &[F], residual: &[F]) -> F {
+    fn residual_product(answer: &[EF], residual: &[EF]) -> EF {
         answer
             .iter()
             .zip(residual)
-            .fold(F::zero(), |acc, (x0, x1)| acc + *x0 * x1)
+            .fold(EF::zero(), |acc, (x0, x1)| acc + *x0 * x1)
     }
 }
 
-impl<F, H, C, S> BrakedownPCS<F, H, C, S>
+impl<F, H, C, S, EF> BrakedownPCS<F, H, C, S, EF>
 where
     F: Field + Serialize,
     H: Hash + Send + Sync,
     C: LinearCode<F>,
     S: LinearCodeSpec<F, Code = C>,
+    EF: AbstractExtensionField<F>,
 {
     /// Generate random queries.
     fn random_queries(pp: &BrakedownParams<F, C>, trans: &mut Transcript<F>) -> Vec<usize> {
@@ -241,18 +244,20 @@ where
     }
 }
 
-impl<F, H, C, S> PolynomialCommitmentScheme<F, S> for BrakedownPCS<F, H, C, S>
+impl<F, H, C, S, EF> PolynomialCommitmentScheme<F, S> for BrakedownPCS<F, H, C, S, EF>
 where
     F: Field + Serialize,
     H: Hash + Sync + Send,
     C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
     S: LinearCodeSpec<F, Code = C>,
+    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     type Parameters = BrakedownParams<F, C>;
     type Polynomial = DenseMultilinearExtension<F>;
     type Commitment = BrakedownPolyCommitment<H>;
     type CommitmentState = BrakedownCommitmentState<F, H>;
-    type Proof = BrakedownOpenProof<F, H>;
+    type Proof = BrakedownOpenProof<F, H, EF>;
+    type Point = EF;
 
     fn setup(num_vars: usize, code_spec: Option<S>) -> Self::Parameters {
         let code_spec = code_spec.expect("Need a code spec");
@@ -316,20 +321,20 @@ where
         pp: &Self::Parameters,
         commitment: &Self::Commitment,
         state: &Self::CommitmentState,
-        point: &crate::Point<F, Self::Polynomial>,
+        points: &[Self::Point],
         trans: &mut Transcript<F>,
     ) -> Self::Proof {
-        assert_eq!(point.len(), pp.num_vars());
+        assert_eq!(points.len(), pp.num_vars());
         // Hash the commitment to transcript.
         trans.append_message(&commitment.to_bytes().unwrap());
 
         // Compute the tensor from the random point, see [DP23](https://eprint.iacr.org/2023/630.pdf).
-        let tensor = Self::tensor_from_point(pp, point);
+        let tensor = Self::tensor_from_points(pp, points);
 
         let rlc_msgs = Self::answer_challenge(pp, &tensor, state);
 
         // Hash rlc to transcript.
-        trans.append_elements(&rlc_msgs);
+        trans.append_ext_field_elements(&rlc_msgs);
 
         // Sample random queries.
         let queries = Self::random_queries(pp, trans);
@@ -347,26 +352,26 @@ where
     fn verify(
         pp: &Self::Parameters,
         commitment: &Self::Commitment,
-        point: &crate::Point<F, Self::Polynomial>,
-        eval: F,
+        points: &[Self::Point],
+        eval: Self::Point,
         proof: &Self::Proof,
         trans: &mut Transcript<F>,
     ) -> bool {
-        assert_eq!(point.len(), pp.num_vars());
+        assert_eq!(points.len(), pp.num_vars());
 
         // Hash the commitment to transcript.
         trans.append_message(&commitment.to_bytes().unwrap());
 
-        let (tensor, residual) = Self::tensor_decompose(pp, point);
+        let (tensor, residual) = Self::tensor_decompose(pp, points);
 
         // Encode the answered random linear combination.
         assert_eq!(proof.rlc_msgs.len(), pp.code().message_len());
-        let mut encoded_msg = vec![F::zero(); pp.code().codeword_len()];
+        let mut encoded_msg = vec![EF::zero(); pp.code().codeword_len()];
         encoded_msg[..proof.rlc_msgs.len()].copy_from_slice(&proof.rlc_msgs);
-        pp.code().encode(&mut encoded_msg);
+        pp.code().encode_ext(&mut encoded_msg);
 
         // Hash rlc to transcript.
-        trans.append_elements(&proof.rlc_msgs);
+        trans.append_ext_field_elements(&proof.rlc_msgs);
 
         // Sample random queries.
         let queries = Self::random_queries(pp, trans);

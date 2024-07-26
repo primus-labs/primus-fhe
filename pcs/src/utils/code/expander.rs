@@ -341,4 +341,53 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
         assert_eq!(input_offset, self.a[0].dimension.num_row);
         assert_eq!(output_offset, target.len());
     }
+
+    fn encode_ext<EF>(&self, target: &mut [EF])
+    where
+        F: Field,
+        EF: algebra::AbstractExtensionField<F>,
+    {
+        assert_eq!(target.len(), self.codeword_len);
+        target[self.message_len..].fill(EF::zero());
+
+        // Compute x1 = x*A | x2 = x*A^2| x3 = x*A^3| ... | x_{k-1} = x*A^{k-1}
+        let mut input_offset = 0;
+        self.a[..self.a.len() - 1].iter().for_each(|a| {
+            let (input, output) = target[input_offset..].split_at_mut(a.dimension.num_row);
+            a.add_multiplied_vector_ext(input, &mut output[..a.dimension.num_col]);
+            input_offset += a.dimension.num_row;
+        });
+
+        // Compute x_k = ReedSoloman(x*A^k)
+        let a_last = self.a.last().unwrap();
+        let b_last = self.b.last().unwrap();
+
+        let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.num_row);
+        a_last.add_multiplied_vector_ext(input, &mut output[..a_last.dimension.num_col]);
+
+        let reedsolomon_code =
+            ReedSolomonCode::new(a_last.dimension.num_col, b_last.dimension.num_row);
+        reedsolomon_code.encode(&mut output[..b_last.dimension.num_row]);
+
+        let mut output_offset = input_offset + a_last.dimension.num_row + b_last.dimension.num_row;
+        input_offset += a_last.dimension.num_row + a_last.dimension.num_col;
+
+        // Compute x_{k+1} = x_k*B | x_{k+2} = (x_{k-1}|x_k|x_{k+1})*B | x_{k+3} =  (x_{k-2}|x_{k-1}|x_k|x_{k+1}|x_{k+2})*B | ...
+        self.a
+            .iter()
+            .rev()
+            .zip(self.b.iter().rev())
+            .for_each(|(a, b)| {
+                input_offset -= a.dimension.num_col;
+                let (input, output) = target.split_at_mut(output_offset);
+                b.add_multiplied_vector_ext(
+                    &input[input_offset..input_offset + b.dimension.num_row],
+                    &mut output[..b.dimension.num_col],
+                );
+                output_offset += b.dimension.num_col;
+            });
+
+        assert_eq!(input_offset, self.a[0].dimension.num_row);
+        assert_eq!(output_offset, target.len());
+    }
 }

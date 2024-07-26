@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use algebra::{utils::Prg, Field};
+use algebra::{utils::Prg, AbstractExtensionField, Field};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
@@ -132,9 +132,14 @@ pub type BrakedownPolyCommitment<H> = MerkleRoot<H>;
 
 /// Opening proof of Brakedown.
 #[derive(Default, Serialize, Deserialize)]
-pub struct BrakedownOpenProof<F, H: Hash> {
+pub struct BrakedownOpenProof<F, H, EF>
+where
+    F: Field,
+    H: Hash,
+    EF: AbstractExtensionField<F>,
+{
     /// Random linear combination of messages.
-    pub rlc_msgs: Vec<F>,
+    pub rlc_msgs: Vec<EF>,
 
     /// The opening columns according to the queres.
     pub opening_columns: Vec<F>,
@@ -143,7 +148,12 @@ pub struct BrakedownOpenProof<F, H: Hash> {
     pub merkle_paths: Vec<H::Output>,
 }
 
-impl<F: Field + Serialize + for<'de> Deserialize<'de>, H: Hash> BrakedownOpenProof<F, H> {
+impl<F, H, EF> BrakedownOpenProof<F, H, EF>
+where
+    F: Field + Serialize + for<'de> Deserialize<'de>,
+    H: Hash,
+    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+{
     /// Convert into bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         bincode::serialize(&self)

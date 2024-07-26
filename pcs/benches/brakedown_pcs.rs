@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use algebra::{
-    derive::Field, utils::Transcript, DenseMultilinearExtension, FieldUniformSampler,
-    MultilinearExtension,
+    utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtension, FieldUniformSampler,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pcs::{
@@ -15,9 +14,7 @@ use pcs::{
 use rand::Rng;
 use sha2::Sha256;
 
-#[derive(Field)]
-#[modulus = 1152921504606846883]
-pub struct FF(u64);
+type FF = BabyBear;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let num_vars = 20;
@@ -30,18 +27,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
-    let point: Vec<FF> = rand::thread_rng()
+    let point: Vec<BabyBearExetension> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(num_vars)
         .collect();
 
-    let eval = poly.evaluate(&point);
+    let eval = poly.evaluate_ext(&point);
 
     type Hash = Sha256;
-    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
-        num_vars,
-        Some(code_spec),
-    );
+    let pp =
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::setup(
+            num_vars,
+            Some(code_spec),
+        );
 
     let mut trans = Transcript::<FF>::new();
     let mut comm = BrakedownPolyCommitment::default();
@@ -50,14 +48,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function(&format!("num_vars: {}, commit time: ", num_vars), |b| {
         b.iter(|| {
-            (comm, state) =
-                BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly)
+            (comm, state) = BrakedownPCS::<
+                FF,
+                Hash,
+                ExpanderCode<FF>,
+                ExpanderCodeSpec,
+                BabyBearExetension,
+            >::commit(&pp, &poly)
         })
     });
 
     c.bench_function(&format!("num_vars: {}, opening time: ", num_vars), |b| {
         b.iter(|| {
-            proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::open(
+            proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::open(
                 &pp, &comm, &state, &point, &mut trans,
             )
         })
@@ -67,7 +70,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         &format!("num_vars: {}, verification time: ", num_vars),
         |b| {
             b.iter(|| {
-                BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
+                BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec,BabyBearExetension>::verify(
                     &pp, &comm, &point, eval, &proof, &mut trans,
                 )
             })

@@ -1,19 +1,15 @@
 use algebra::{
-    derive::Field, utils::Transcript, DenseMultilinearExtension, FieldUniformSampler,
-    MultilinearExtension,
+    utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtension, FieldUniformSampler,
 };
 use pcs::{
-    multilinear::brakedown::BrakedownPCS,
+    multilinear::{brakedown::BrakedownPCS, BrakedownOpenProof},
     utils::code::{ExpanderCode, ExpanderCodeSpec},
     PolynomialCommitmentScheme,
 };
 use rand::Rng;
 use sha2::Sha256;
 
-#[derive(Field)]
-#[modulus = 1152921504606846883]
-pub struct FF(u64);
-
+type FF = BabyBear;
 #[test]
 fn pcs_test() {
     let num_vars = 10;
@@ -28,32 +24,41 @@ fn pcs_test() {
 
     let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
 
-    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::setup(
-        num_vars,
-        Some(code_spec),
-    );
+    let pp =
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::setup(
+            num_vars,
+            Some(code_spec),
+        );
 
     let mut trans = Transcript::<FF>::new();
 
     let (comm, state) =
-        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::commit(&pp, &poly);
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::commit(
+            &pp, &poly,
+        );
 
-    let point: Vec<FF> = rand::thread_rng()
+    let point: Vec<BabyBearExetension> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(num_vars)
         .collect();
 
-    let proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::open(
-        &pp, &comm, &state, &point, &mut trans,
-    );
+    let proof =
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::open(
+            &pp, &comm, &state, &point, &mut trans,
+        );
 
-    let eval = poly.evaluate(&point);
+    let buffer = proof.to_bytes().unwrap();
+
+    let eval = poly.evaluate_ext(&point);
 
     let mut trans = Transcript::<FF>::new();
 
-    let check = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec>::verify(
-        &pp, &comm, &point, eval, &proof, &mut trans,
-    );
+    let proof = BrakedownOpenProof::<FF, Hash, BabyBearExetension>::from_bytes(&buffer).unwrap();
+
+    let check =
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::verify(
+            &pp, &comm, &point, eval, &proof, &mut trans,
+        );
 
     assert!(check);
 }

@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// Implementation of Goldilocks field
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct Goldilocks(u64);
 
 impl Goldilocks {
@@ -366,25 +366,4 @@ fn exp_power_of_2<F: Field>(x: F, power_log: usize) -> F {
         res = res * res;
     }
     res
-}
-
-impl Serialize for Goldilocks {
-    #[inline]
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_u64(self.value())
-    }
-}
-
-impl<'de> Deserialize<'de> for Goldilocks {
-    #[inline]
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = u64::deserialize(deserializer)?;
-        Ok(Self::new(value))
-    }
 }

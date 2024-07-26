@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// Implementation of BabyBear field.
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
 pub struct BabyBear(u32);
 
 impl Field for BabyBear {
@@ -352,26 +352,5 @@ impl TwoAdicField for BabyBear {
             27 => Self(to_monty(0x1a427a41)),
             _ => unreachable!("Already asserted that bits <= Self::TWO_ADICITY"),
         }
-    }
-}
-
-impl Serialize for BabyBear {
-    #[inline]
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_u32(self.value())
-    }
-}
-
-impl<'de> Deserialize<'de> for BabyBear {
-    #[inline]
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = u32::deserialize(deserializer)?;
-        Ok(Self::new(value))
     }
 }
