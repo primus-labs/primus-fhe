@@ -7,12 +7,6 @@ use algebra::Field;
 use itertools::Itertools;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use std::{
-    cmp::{max, min},
-    f64,
-    fmt::Debug,
-    iter,
-};
 
 use super::LinearCodeSpec;
 
@@ -108,8 +102,8 @@ impl ExpanderCodeSpec {
         let n = message_len as f64;
         let alpha = self.alpha;
         let beta = self.beta;
-        min(
-            max((1.28 * beta * n).ceil() as usize, ceil(beta * n) + 4),
+        std::cmp::min(
+            std::cmp::max((1.28 * beta * n).ceil() as usize, ceil(beta * n) + 4),
             ceil(
                 ((110.0 / n) + entropy(beta) + alpha * entropy(1.28 * beta / alpha))
                     / (beta * (alpha / (1.28 * beta)).log2()),
@@ -127,7 +121,7 @@ impl ExpanderCodeSpec {
         let r = self.r;
         let mu = r - 1f64 - r * alpha; // intermediate value
         let nu = beta + alpha * beta + 0.03; // intermediate value
-        min(
+        std::cmp::min(
             ceil((2.0 * beta + ((r - 1.0) + 110.0 / n) / log2_q) * n),
             ceil(
                 (r * alpha * entropy(beta / r) + mu * entropy(nu / mu) + 110.0 / n)
@@ -158,10 +152,10 @@ impl ExpanderCodeSpec {
         let n0 = self.recursion_threshold;
         assert!(n >= n0);
 
-        let a = iter::successors(Some(n), |n| Some(ceil(*n as f64 * self.alpha)))
+        let a = std::iter::successors(Some(n), |n| Some(ceil(*n as f64 * self.alpha)))
             .tuple_windows()
             .take_while(|(n, _)| n > &n0)
-            .map(|(n, m)| SparseMatrixDimension::new(n, m, min(self.c_n(n), m)))
+            .map(|(n, m)| SparseMatrixDimension::new(n, m, std::cmp::min(self.c_n(n), m)))
             .collect_vec();
 
         let b = a
@@ -169,7 +163,11 @@ impl ExpanderCodeSpec {
             .map(|a| {
                 let n_prime = ceil(a.num_col as f64 * self.r);
                 let m_prime = ceil(a.num_row as f64 * self.r) - a.num_col - n_prime;
-                SparseMatrixDimension::new(n_prime, m_prime, min(self.d_n(a.num_row), m_prime))
+                SparseMatrixDimension::new(
+                    n_prime,
+                    m_prime,
+                    std::cmp::min(self.d_n(a.num_row), m_prime),
+                )
             })
             .collect_vec();
 
