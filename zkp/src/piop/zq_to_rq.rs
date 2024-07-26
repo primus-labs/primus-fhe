@@ -430,7 +430,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
 
         // check 5: (2n/q) * a(u) = k(u) * n + r(u)
         let n = F::new(F::Value::as_from(info.n as u32));
-        let n_divied_by_q = F::new(F::Value::as_from((info.n/q) as u32));
+        let n_divied_by_q = F::new(F::Value::as_from((info.n / q) as u32));
 
         (F::ONE + F::ONE) * n_divied_by_q * a.evaluate(u) == n * k.evaluate(u) + r[0].evaluate(u)
     }
@@ -507,7 +507,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
 
         // check 5: (2n/q) * a(u) = k(u) * n + r(u)
         let n = F::new(F::Value::as_from(info.n as u32));
-        let n_divied_by_q = F::new(F::Value::as_from((info.n/q) as u32));
+        let n_divied_by_q = F::new(F::Value::as_from((info.n / q) as u32));
 
         (F::ONE + F::ONE) * n_divied_by_q * a.evaluate(u) == n * k.evaluate(u) + r[0].evaluate(u)
     }
