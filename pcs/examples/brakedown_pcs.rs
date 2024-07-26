@@ -13,6 +13,8 @@ use sha2::Sha256;
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
 
 fn main() {
     let num_vars = 24;
@@ -23,9 +25,7 @@ fn main() {
 
     let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
 
-    let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
-
-    type Hash = Sha256;
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0284, 1.9, BASE_FIELD_BITS, 10);
 
     let start = Instant::now();
     let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::setup(

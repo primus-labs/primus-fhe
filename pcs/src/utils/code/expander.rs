@@ -19,9 +19,6 @@ use super::LinearCodeSpec;
 /// BrakedownCode Specification
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ExpanderCodeSpec {
-    // Security parameter
-    lambda: usize,
-
     // Code parameter alpha
     alpha: f64,
 
@@ -31,8 +28,8 @@ pub struct ExpanderCodeSpec {
     // Inversion of ideal code rate
     r: f64,
 
-    // Size of the field.
-    field_size_bits: usize,
+    // Size of the base field.
+    base_field_bits: usize,
 
     // The threshold to call ReedSoloman Code.
     recursion_threshold: usize,
@@ -48,11 +45,11 @@ impl ExpanderCodeSpec {
     /// Create an instance of BrakedownCodeSpec
     #[inline]
     pub fn new(
-        lambda: usize,
+        // lambda: usize,
         alpha: f64,
         beta: f64,
         r: f64,
-        field_size_bits: usize,
+        base_field_bits: usize,
         recursion_threshold: usize,
     ) -> Self {
         assert!(r != 0.0);
@@ -67,36 +64,14 @@ impl ExpanderCodeSpec {
         assert!((1f64 - alpha) * r > (1f64 + 2f64 * beta));
 
         Self {
-            lambda,
             alpha,
             beta,
             r,
-            field_size_bits,
+            base_field_bits,
             recursion_threshold,
             distance,
             rate,
         }
-    }
-
-    /// Return the size of the field.
-    #[inline]
-    pub fn field_size_bits(&self) -> usize {
-        self.field_size_bits
-    }
-
-    /// Return the recursion threshold
-    #[inline]
-    pub fn recursion_threshold(&self) -> usize {
-        self.recursion_threshold
-    }
-
-    /// The expected size of the extension field.
-    /// The soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
-    /// The expeted extension field size is bounded by (codeword_len/|F|)
-    #[inline]
-    pub fn extension_field_size(&self, message_len: usize) -> usize {
-        let n = message_len;
-        self.codeword_len(n) * ceil(f64::powf(2f64, self.lambda as f64))
     }
 
     /// The relative distance of the code
@@ -145,7 +120,7 @@ impl ExpanderCodeSpec {
     // Return the num of nonzere elements in each row of B_n
     #[inline]
     fn d_n(&self, message_len: usize) -> usize {
-        let log2_q = self.field_size_bits as f64;
+        let log2_q = self.base_field_bits as f64;
         let n = message_len as f64;
         let alpha = self.alpha;
         let beta = self.beta;

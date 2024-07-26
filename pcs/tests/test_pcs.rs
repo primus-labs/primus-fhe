@@ -10,6 +10,10 @@ use rand::Rng;
 use sha2::Sha256;
 
 type FF = BabyBear;
+type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
+
 #[test]
 fn pcs_test() {
     let num_vars = 10;
@@ -20,32 +24,27 @@ fn pcs_test() {
 
     let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
 
-    type Hash = Sha256;
+    // let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0284, 1.9, BASE_FIELD_BITS, 10);
 
-    let code_spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.9, 60, 10);
-
-    let pp =
-        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::setup(
-            num_vars,
-            Some(code_spec),
-        );
+    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::setup(
+        num_vars,
+        Some(code_spec),
+    );
 
     let mut trans = Transcript::<FF>::new();
 
     let (comm, state) =
-        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::commit(
-            &pp, &poly,
-        );
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::commit(&pp, &poly);
 
-    let point: Vec<BabyBearExetension> = rand::thread_rng()
+    let point: Vec<EF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(num_vars)
         .collect();
 
-    let proof =
-        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::open(
-            &pp, &comm, &state, &point, &mut trans,
-        );
+    let proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::open(
+        &pp, &comm, &state, &point, &mut trans,
+    );
 
     let buffer = proof.to_bytes().unwrap();
 
@@ -53,12 +52,11 @@ fn pcs_test() {
 
     let mut trans = Transcript::<FF>::new();
 
-    let proof = BrakedownOpenProof::<FF, Hash, BabyBearExetension>::from_bytes(&buffer).unwrap();
+    let proof = BrakedownOpenProof::<FF, Hash, EF>::from_bytes(&buffer).unwrap();
 
-    let check =
-        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, BabyBearExetension>::verify(
-            &pp, &comm, &point, eval, &proof, &mut trans,
-        );
+    let check = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::verify(
+        &pp, &comm, &point, eval, &proof, &mut trans,
+    );
 
     assert!(check);
 }

@@ -14,7 +14,7 @@ fn linearity_check() {
     let mut rng = rand::thread_rng();
     let field_distr = FieldUniformSampler::new();
 
-    let spec = ExpanderCodeSpec::new(128, 0.1195, 0.0284, 1.420, 31, 30);
+    let spec = ExpanderCodeSpec::new(0.1195, 0.0284, 1.420, 31, 30);
     let brakedown_code: ExpanderCode<FF32> = ExpanderCode::new(spec, 5000, &mut rng);
 
     let message_len = brakedown_code.message_len;
