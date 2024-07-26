@@ -144,7 +144,7 @@ fn test_random_zq_to_rq() {
     let uniform_fp = <FieldUniformSampler<FF>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
-    let c_num_vars = q.value() as usize;
+    let c_num_vars = (q.value() as usize).ilog2() as usize;
     let base_len: u32 = 3;
     let base: FF = FF::new(1 << base_len);
     let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
@@ -322,7 +322,7 @@ fn test_random_zq_to_rq_without_oracle() {
     let uniform_fp = <FieldUniformSampler<FF>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
-    let c_num_vars = q.value() as usize;
+    let c_num_vars = (q.value() as usize).ilog2() as usize;
     let base_len: u32 = 3;
     let base: FF = FF::new(1 << base_len);
     let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
