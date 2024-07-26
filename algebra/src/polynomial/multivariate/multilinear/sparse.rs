@@ -54,7 +54,7 @@ impl<F: Field> SparsePolynomial<F> {
     /// Transform sparse representation into dense representation
     #[inline]
     pub fn to_dense(&self) -> DenseMultilinearExtension<F> {
-        let mut evaluations = vec![F::ZERO; 1 << self.num_vars];
+        let mut evaluations = vec![F::zero(); 1 << self.num_vars];
         self.evaluations.iter().for_each(|(idx, item)| {
             evaluations[*idx] = *item;
         });

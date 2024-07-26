@@ -39,8 +39,8 @@ use crate::utils::eval_identity_function;
 use crate::sumcheck::MLSumcheck;
 use crate::utils::gen_identity_evaluations;
 use algebra::{
-    AsFrom, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
-    PolynomialInfo, SparsePolynomial,
+    AsFrom, DecomposableField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
+    MultilinearExtension, PolynomialInfo, SparsePolynomial,
 };
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -107,7 +107,7 @@ pub struct TransformZqtoRQInstanceInfo<F: Field> {
     pub decomposed_bits_info: DecomposedBitsInfo<F>,
 }
 
-impl<F: Field> TransformZqtoRQInstance<F> {
+impl<F: Field + DecomposableField> TransformZqtoRQInstance<F> {
     /// Extract the information of addition in Zq for verification
     #[inline]
     pub fn info(&self) -> TransformZqtoRQInstanceInfo<F> {
@@ -208,12 +208,12 @@ impl<F: Field> TransformZqtoRQ<F> {
         let mut product = Vec::with_capacity(3);
         let mut op_coefficient = Vec::with_capacity(3);
         product.push(Rc::new(gen_identity_evaluations(u)));
-        op_coefficient.push((F::ONE, F::ZERO));
+        op_coefficient.push((F::one(), F::zero()));
         product.push(Rc::clone(&transform_instance.k));
-        op_coefficient.push((F::ONE, F::ZERO));
+        op_coefficient.push((F::one(), F::zero()));
         product.push(Rc::clone(&transform_instance.k));
-        op_coefficient.push((-F::ONE, F::ONE));
-        poly.add_product_with_linear_op(product, &op_coefficient, F::ONE);
+        op_coefficient.push((-F::one(), F::one()));
+        poly.add_product_with_linear_op(product, &op_coefficient, F::one());
 
         let first_sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for transformation from Zq to RQ failed");
@@ -224,20 +224,20 @@ impl<F: Field> TransformZqtoRQ<F> {
         let mut product = Vec::with_capacity(3);
         let mut op_coefficient = Vec::with_capacity(3);
         product.push(Rc::new(gen_identity_evaluations(u)));
-        op_coefficient.push((F::ONE, F::ZERO));
+        op_coefficient.push((F::one(), F::zero()));
         product.push(Rc::clone(&transform_instance.r));
-        op_coefficient.push((F::ONE, F::ONE));
+        op_coefficient.push((F::one(), F::one()));
         product.push(Rc::clone(&transform_instance.k));
-        op_coefficient.push((-(F::ONE + F::ONE), F::ONE));
-        poly.add_product_with_linear_op(product, &op_coefficient, F::ONE);
+        op_coefficient.push((-(F::one() + F::one()), F::one()));
+        poly.add_product_with_linear_op(product, &op_coefficient, F::one());
 
         let mut product = Vec::with_capacity(2);
         let mut op_coefficient = Vec::with_capacity(2);
         product.push(Rc::new(gen_identity_evaluations(u)));
-        op_coefficient.push((F::ONE, F::ZERO));
+        op_coefficient.push((F::one(), F::zero()));
         product.push(Rc::clone(&transform_instance.s));
-        op_coefficient.push((-F::ONE, F::ZERO));
-        poly.add_product_with_linear_op(product, &op_coefficient, F::ONE);
+        op_coefficient.push((-F::one(), F::zero()));
+        poly.add_product_with_linear_op(product, &op_coefficient, F::one());
 
         let second_sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for transformation from Zq to RQ failed");
@@ -247,7 +247,7 @@ impl<F: Field> TransformZqtoRQ<F> {
 
         // construct c_u
         let eq_u = gen_identity_evaluations(u).evaluations;
-        let mut c_u_evaluations = vec![F::ZERO; transform_instance.n];
+        let mut c_u_evaluations = vec![F::zero(); transform_instance.n];
         transform_instance
             .c
             .iter()
@@ -264,7 +264,7 @@ impl<F: Field> TransformZqtoRQ<F> {
 
         // construct t
         let t_evaluations = (1..=transform_instance.n)
-            .map(|i| F::new(F::Value::as_from(i as u32)))
+            .map(|i| F::new(F::Value::as_from(i as f64)))
             .collect();
         let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             c_num_vars,
@@ -275,10 +275,10 @@ impl<F: Field> TransformZqtoRQ<F> {
         let mut product = Vec::with_capacity(2);
         let mut op_coefficient = Vec::with_capacity(2);
         product.push(Rc::clone(&c_u));
-        op_coefficient.push((F::ONE, F::ZERO));
+        op_coefficient.push((F::one(), F::zero()));
         product.push(Rc::clone(&t));
-        op_coefficient.push((F::ONE, F::ZERO));
-        poly.add_product_with_linear_op(product, &op_coefficient, F::ONE);
+        op_coefficient.push((F::one(), F::zero()));
+        poly.add_product_with_linear_op(product, &op_coefficient, F::one());
 
         let third_sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for transformation from Zq to RQ failed");
@@ -329,13 +329,21 @@ impl<F: Field> TransformZqtoRQ<F> {
             num_variables: decomposed_bits_info.num_vars,
         };
 
-        let first_subclaim =
-            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::ZERO, &proof.sumcheck_msgs[0])
-                .expect("sumcheck protocol for transformation from Zq to RQ failed");
+        let first_subclaim = MLSumcheck::verify_as_subprotocol(
+            fs_rng,
+            &poly_info,
+            F::zero(),
+            &proof.sumcheck_msgs[0],
+        )
+        .expect("sumcheck protocol for transformation from Zq to RQ failed");
 
-        let second_subclaim =
-            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::ZERO, &proof.sumcheck_msgs[1])
-                .expect("sumcheck protocol for transformation from Zq to RQ failed");
+        let second_subclaim = MLSumcheck::verify_as_subprotocol(
+            fs_rng,
+            &poly_info,
+            F::zero(),
+            &proof.sumcheck_msgs[1],
+        )
+        .expect("sumcheck protocol for transformation from Zq to RQ failed");
 
         let poly_info = PolynomialInfo {
             max_multiplicands: 2,
@@ -381,7 +389,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
         k: &DenseMultilinearExtension<F>,
         r: &[Rc<DenseMultilinearExtension<F>>],
         s: &DenseMultilinearExtension<F>,
-        r_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        r_bits: &[&Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         info: &TransformZqtoRQInstanceInfo<F>,
     ) -> bool {
@@ -398,7 +406,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
 
         // check 2: subclaim for sumcheck, i.e. eq(u, point) * k(point) * (1 - k(point)) = 0
         let eval_k = k.evaluate(&self.sumcheck_points[0]);
-        if eval_identity_function(u, &self.sumcheck_points[0]) * eval_k * (F::ONE - eval_k)
+        if eval_identity_function(u, &self.sumcheck_points[0]) * eval_k * (F::one() - eval_k)
             != self.sumcheck_expected_evaluations[0]
         {
             return false;
@@ -406,8 +414,8 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
 
         // check 3: subclaim for sumcheck, i.e. eq(u, point) * ((r(point) + 1) * (1 - 2 * k(point)) - s(point)) = 0
         if eval_identity_function(u, &self.sumcheck_points[1])
-            * ((r[0].evaluate(&self.sumcheck_points[1]) + F::ONE)
-                * (F::ONE - (F::ONE + F::ONE) * k.evaluate(&self.sumcheck_points[1]))
+            * ((r[0].evaluate(&self.sumcheck_points[1]) + F::one())
+                * (F::one() - (F::one() + F::one()) * k.evaluate(&self.sumcheck_points[1]))
                 - s.evaluate(&self.sumcheck_points[1]))
             != self.sumcheck_expected_evaluations[1]
         {
@@ -417,7 +425,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
         // check 4: subclaim for sumcheck, i.e. c(u, point) * t(point) = s(u)
         let eval_c_u = c_dense.evaluate(&[&self.sumcheck_points[2], u].concat());
         let t_evaluations = (1..=info.n)
-            .map(|i| F::new(F::Value::as_from(i as u32)))
+            .map(|i| F::new(F::Value::as_from(i as f64)))
             .collect();
         let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             info.n.ilog(2) as usize,
@@ -429,10 +437,11 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
         }
 
         // check 5: (2n/q) * a(u) = k(u) * n + r(u)
-        let n = F::new(F::Value::as_from(info.n as u32));
-        let n_divied_by_q = F::new(F::Value::as_from((info.n / q) as u32));
+        let n = F::new(F::Value::as_from(info.n as f64));
+        let n_divied_by_q = F::new(F::Value::as_from((info.n / q) as f64));
 
-        (F::ONE + F::ONE) * n_divied_by_q * a.evaluate(u) == n * k.evaluate(u) + r[0].evaluate(u)
+        (F::one() + F::one()) * n_divied_by_q * a.evaluate(u)
+            == n * k.evaluate(u) + r[0].evaluate(u)
     }
 
     /// verify the sumcliam
@@ -450,7 +459,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
         k: &DenseMultilinearExtension<F>,
         r: &[Rc<DenseMultilinearExtension<F>>],
         s: &DenseMultilinearExtension<F>,
-        r_bits: &[Vec<Rc<DenseMultilinearExtension<F>>>],
+        r_bits: &[&Vec<Rc<DenseMultilinearExtension<F>>>],
         u: &[F],
         info: &TransformZqtoRQInstanceInfo<F>,
     ) -> bool {
@@ -467,7 +476,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
 
         // check 2: subclaim for sumcheck, i.e. eq(u, point) * k(point) * (1 - k(point)) = 0
         let eval_k = k.evaluate(&self.sumcheck_points[0]);
-        if eval_identity_function(u, &self.sumcheck_points[0]) * eval_k * (F::ONE - eval_k)
+        if eval_identity_function(u, &self.sumcheck_points[0]) * eval_k * (F::one() - eval_k)
             != self.sumcheck_expected_evaluations[0]
         {
             return false;
@@ -475,8 +484,8 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
 
         // check 3: subclaim for sumcheck, i.e. eq(u, point) * ((r(point) + 1) * (1 - 2 * k(point)) - s(point)) = 0
         if eval_identity_function(u, &self.sumcheck_points[1])
-            * ((r[0].evaluate(&self.sumcheck_points[1]) + F::ONE)
-                * (F::ONE - (F::ONE + F::ONE) * k.evaluate(&self.sumcheck_points[1]))
+            * ((r[0].evaluate(&self.sumcheck_points[1]) + F::one())
+                * (F::one() - (F::one() + F::one()) * k.evaluate(&self.sumcheck_points[1]))
                 - s.evaluate(&self.sumcheck_points[1]))
             != self.sumcheck_expected_evaluations[1]
         {
@@ -486,7 +495,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
         // check 4: subclaim for sumcheck, i.e. c(u, point) * t(point) = s(u)
         let eq_u = gen_identity_evaluations(u);
         let eq_v = gen_identity_evaluations(&self.sumcheck_points[2]);
-        let mut eval_c_u = F::ZERO;
+        let mut eval_c_u = F::zero();
         c_sparse.iter().enumerate().for_each(|(x_idx, c)| {
             assert_eq!(c.evaluations.len(), 1);
             let (y_idx, c_val) = c.evaluations[0];
@@ -494,7 +503,7 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
         });
 
         let t_evaluations = (1..=info.n)
-            .map(|i| F::new(F::Value::as_from(i as u32)))
+            .map(|i| F::new(F::Value::as_from(i as f64)))
             .collect();
         let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             info.n.ilog(2) as usize,
@@ -506,9 +515,10 @@ impl<F: Field> TransformZqtoRQSubclaim<F> {
         }
 
         // check 5: (2n/q) * a(u) = k(u) * n + r(u)
-        let n = F::new(F::Value::as_from(info.n as u32));
-        let n_divied_by_q = F::new(F::Value::as_from((info.n / q) as u32));
+        let n = F::new(F::Value::as_from(info.n as f64));
+        let n_divied_by_q = F::new(F::Value::as_from((info.n / q) as f64));
 
-        (F::ONE + F::ONE) * n_divied_by_q * a.evaluate(u) == n * k.evaluate(u) + r[0].evaluate(u)
+        (F::one() + F::one()) * n_divied_by_q * a.evaluate(u)
+            == n * k.evaluate(u) + r[0].evaluate(u)
     }
 }
