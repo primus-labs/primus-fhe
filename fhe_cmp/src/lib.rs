@@ -3,4 +3,5 @@
 
 //! Implementation of fhe
 
+pub mod cmp;
 pub mod comparison;
