@@ -3,7 +3,7 @@
 members = [
     "algebra",
     "algebra_derive",
-    "fhe",
+    "fhe_cmp",
     "fhe_core",
     "lattice",
     "fhe",
