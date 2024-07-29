@@ -1,4 +1,4 @@
-use algebra::{Field, FieldUniformSampler};
+use algebra::{AbstractExtensionField, Field, FieldUniformSampler};
 use serde::{Deserialize, Serialize};
 
 use std::{collections::BTreeSet, fmt::Debug, iter};
@@ -99,6 +99,31 @@ impl<F: Field> SparseMatrix<F> {
         });
     }
 
+    /// Compute multiplication-then-addition.
+    ///
+    /// # Arguments
+    ///
+    /// * `vecotr` - The vector in the extension field that are multiplied by the sparce matrix.
+    /// * `target` - The vector in the extension field that are added to the multiplication, and stores the result.
+    #[inline]
+    pub fn add_multiplied_vector_ext<EF: AbstractExtensionField<F>>(
+        &self,
+        vector: &[EF],
+        target: &mut [EF],
+    ) {
+        assert_eq!(self.dimension.num_row, vector.len());
+        assert_eq!(self.dimension.num_col, target.len());
+
+        // t = v * M
+        // t = \sum_{i=1}^{n} v_i * M_i
+        // t is the linear combination of rows of M with v as the coefficients
+        self.rows().zip(vector.iter()).for_each(|(cells, item)| {
+            cells.iter().for_each(|(column, coeff)| {
+                target[*column] += *item * (*coeff);
+            })
+        });
+    }
+
     /// The dot product of a vector and the sparse matrix.
     ///
     /// # Arguments
@@ -140,14 +165,14 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
 
 /// Compute the lagrange basis of a given point (which is a series of point of one dimension)
 #[inline]
-pub fn lagrange_basis<F: Field>(points: &[F]) -> Vec<F> {
-    let mut basis = vec![F::one()];
+pub fn lagrange_basis<F: Field, EF: AbstractExtensionField<F>>(points: &[EF]) -> Vec<EF> {
+    let mut basis = vec![EF::one()];
     points.iter().for_each(|point| {
         basis.extend(
             basis
                 .iter()
-                .map(|x| *x * (F::one() - point))
-                .collect::<Vec<F>>(),
+                .map(|x| *x * (EF::one() - point))
+                .collect::<Vec<EF>>(),
         );
         let prev_len = basis.len() >> 1;
         basis.iter_mut().take(prev_len).for_each(|x| *x *= point);

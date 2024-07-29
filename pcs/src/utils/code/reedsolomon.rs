@@ -1,6 +1,6 @@
 use crate::utils::code::LinearCode;
 
-use algebra::Field;
+use algebra::{AbstractExtensionField, Field};
 use serde::{Deserialize, Serialize};
 
 use std::{cmp::min, iter, marker::PhantomData};
@@ -38,11 +38,24 @@ impl<F: Field> ReedSolomonCode<F> {
     /// * `coeffs` - The coefficients.
     /// * `x` - The point.
     #[inline]
-    fn evaluate(coeffs: &[F], x: &F) -> F {
+    fn evaluate(coeffs: &[F], x: F) -> F {
         coeffs
             .iter()
             .rev()
             .fold(F::zero(), |acc, coeff| acc * x + coeff)
+    }
+    /// Evaluate the polynomial at point x with coefficients in the extension field
+    ///
+    /// # Arguments.
+    ///
+    /// * `coeffs` - The coefficients.
+    /// * `x` - The point.
+    #[inline]
+    fn evaluate_ext<EF: AbstractExtensionField<F>>(coeffs: &[EF], x: F) -> EF {
+        coeffs
+            .iter()
+            .rev()
+            .fold(EF::zero(), |acc, coeff| acc * x + coeff)
     }
 }
 
@@ -75,6 +88,20 @@ impl<F: Field> LinearCode<F> for ReedSolomonCode<F> {
             .as_mut()
             .iter_mut()
             .zip(points)
-            .for_each(|(target, x)| *target = Self::evaluate(&input, &x));
+            .for_each(|(target, x)| *target = Self::evaluate(&input, x));
+    }
+
+    fn encode_ext<EF>(&self, target: &mut [EF])
+    where
+        F: Field,
+        EF: algebra::AbstractExtensionField<F>,
+    {
+        let input = target[..min(self.message_len, self.codeword_len)].to_vec();
+        let points = iter::successors(Some(F::one()), move |state| Some(F::one() + state));
+        target
+            .as_mut()
+            .iter_mut()
+            .zip(points)
+            .for_each(|(target, x)| *target = Self::evaluate_ext(&input, x));
     }
 }

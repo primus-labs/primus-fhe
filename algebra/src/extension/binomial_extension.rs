@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     array,
     fmt::Display,
@@ -8,6 +9,11 @@ use itertools::Itertools;
 use num_traits::{Inv, One, Pow, Zero};
 use rand::{CryptoRng, Rng};
 use rand_distr::{Distribution, Standard};
+use serde::{
+    de::{SeqAccess, Visitor},
+    ser::SerializeSeq,
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 use crate::{
     field_to_array, powers, AbstractExtensionField, ExtensionField, Field, FieldUniformSampler,
@@ -588,7 +594,60 @@ impl<F: Field + HasTwoAdicBionmialExtension<D> + Packable, const D: usize> TwoAd
     }
 }
 
-///Section 11.3.6b in Handbook of Elliptic and Hyperelliptic Curve Cryptography.
+impl<F: Serialize, const D: usize> Serialize for BinomialExtensionField<F, D> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(D))?;
+        for item in &self.value {
+            seq.serialize_element(item)?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de, F: Deserialize<'de> + Default + Copy, const D: usize> Deserialize<'de>
+    for BinomialExtensionField<F, D>
+{
+    fn deserialize<DE>(deserializer: DE) -> Result<Self, DE::Error>
+    where
+        DE: Deserializer<'de>,
+    {
+        struct ArrayVisitor<F, const D: usize> {
+            marker: std::marker::PhantomData<F>,
+        }
+
+        impl<'de, F: Copy + Deserialize<'de> + Default, const D: usize> Visitor<'de>
+            for ArrayVisitor<F, D>
+        {
+            type Value = BinomialExtensionField<F, D>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(&format!("an array of length {}", D))
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                let mut value = [F::default(); D];
+                for (i, v) in value.iter_mut().enumerate().take(D) {
+                    *v = seq
+                        .next_element()?
+                        .ok_or_else(|| serde::de::Error::invalid_length(i, &self))?;
+                }
+                Ok(BinomialExtensionField { value })
+            }
+        }
+
+        deserializer.deserialize_seq(ArrayVisitor {
+            marker: std::marker::PhantomData,
+        })
+    }
+}
+
+/// Section 11.3.6b in Handbook of Elliptic and Hyperelliptic Curve Cryptography.
 #[inline]
 fn qudratic_inv<F: Field>(a: &[F], w: F) -> [F; 2] {
     let scalar = (a[0] * a[0] - w * a[1] * a[1]).inv();
@@ -608,7 +667,7 @@ fn cubic_inv<F: Field>(a: &[F], w: F) -> [F; 3] {
         - (F::one() + F::one() + F::one()) * a2_w * a0_a1)
         .inv();
 
-    //scalar*[a0^2-wa1a2, wa2^2-a0a1, a1^2-a0a2]
+    // scalar*[a0^2-wa1a2, wa2^2-a0a1, a1^2-a0a2]
     [
         scalar * (a0_square - a[1] * a2_w),
         scalar * (a2_w * a[2] - a0_a1),

@@ -1,6 +1,7 @@
 mod expander;
 mod reedsolomon;
 
+use algebra::{AbstractExtensionField, Field};
 pub use expander::{ExpanderCode, ExpanderCodeSpec};
 use rand::{CryptoRng, Rng};
 pub use reedsolomon::ReedSolomonCode;
@@ -25,6 +26,12 @@ pub trait LinearCode<F>: Sync + Send + Default + Clone {
     /// Store the message in target[..message_len] with target[message_len..].
     /// Encode the message into the codeword and store the codeword in target.
     fn encode(&self, target: &mut [F]);
+
+    /// Encode message in extension field.
+    fn encode_ext<EF>(&self, target: &mut [EF])
+    where
+        F: Field,
+        EF: AbstractExtensionField<F>;
 }
 
 /// Define the trait of linear code specification.

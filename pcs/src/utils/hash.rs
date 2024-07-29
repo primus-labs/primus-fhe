@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
-use sha3::{Digest, Sha3_256};
+use sha2::{Digest, Sha256};
 
 /// Define the Hash trait
 pub trait Hash: Debug + Clone + Default + Sized {
@@ -14,7 +14,9 @@ pub trait Hash: Debug + Clone + Default + Sized {
         + Sized
         + AsRef<[u8]>
         + Serialize
-        + for<'de> Deserialize<'de>;
+        + for<'de> Deserialize<'de>
+        + Sync
+        + Send;
 
     /// Create a new instance.
     fn new() -> Self {
@@ -31,17 +33,20 @@ pub trait Hash: Debug + Clone + Default + Sized {
     fn output_reset(&mut self) -> Self::Output;
 }
 
-impl Hash for Sha3_256 {
+impl Hash for Sha256 {
     type Output = [u8; 32];
 
-    fn update_hash_value(&mut self, hashed: &[u8]) {
-        self.update(hashed);
+    #[inline]
+    fn update_hash_value(&mut self, input: &[u8]) {
+        self.update(input);
     }
 
-    fn update_string(&mut self, hashed: String) {
-        self.update(hashed);
+    #[inline]
+    fn update_string(&mut self, input: String) {
+        self.update(input);
     }
 
+    #[inline]
     fn output_reset(&mut self) -> Self::Output {
         self.finalize_reset().into()
     }

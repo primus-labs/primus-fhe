@@ -7,7 +7,7 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::{DecomposableField, Field, FieldUniformSampler};
+use crate::{AbstractExtensionField, DecomposableField, Field, FieldUniformSampler};
 
 use super::MultilinearExtension;
 use std::rc::Rc;
@@ -77,6 +77,37 @@ impl<F: Field> DenseMultilinearExtension<F> {
             &self.evaluations[1 << (self.num_vars - 1)..],
         );
         (left, right)
+    }
+
+    /// Evaluate a point in the extension field.
+    #[inline]
+    pub fn evaluate_ext<EF>(&self, ext_point: &[EF]) -> EF
+    where
+        EF: AbstractExtensionField<F>,
+    {
+        assert_eq!(ext_point.len(), self.num_vars, "The point size is invalid.");
+        let mut poly: Vec<_> = self
+            .evaluations
+            .iter()
+            .map(|&eval| EF::from_base(eval))
+            .collect();
+        let nv = self.num_vars;
+        let dim = ext_point.len();
+        // evaluate nv variable of partial point from left to right
+        // with dim rounds and \sum_{i=1}^{dim} 2^(nv - i)
+        // (If dim = nv, then the complexity is 2^{nv}.)
+        for i in 1..dim + 1 {
+            // fix a single variable to evaluate (1 << (nv - i)) evaluations from the last round
+            // with complexity of 2^(1 << (nv - i)) field multiplications
+            let r = ext_point[i - 1];
+            for b in 0..(1 << (nv - i)) {
+                let left = poly[b << 1];
+                let right = poly[(b << 1) + 1];
+                poly[b] = r * (right - left) + left;
+            }
+        }
+        poly.truncate(1 << (nv - dim));
+        poly[0]
     }
 }
 

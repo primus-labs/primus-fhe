@@ -4,7 +4,7 @@ use rand::SeedableRng;
 use rand_distr::Distribution;
 use serde::Serialize;
 
-use crate::{Field, FieldUniformSampler};
+use crate::{AbstractExtensionField, Field, FieldUniformSampler};
 
 use super::{Block, Prg};
 
@@ -40,6 +40,17 @@ impl<F: Field + Serialize> Transcript<F> {
         self.append_message(&bincode::serialize(elems).unwrap());
     }
 
+    /// Append extension field elements to the transcript.
+    #[inline]
+    pub fn append_ext_field_elements<EF: AbstractExtensionField<F>>(&mut self, elems: &[EF]) {
+        let elems: Vec<F> = elems
+            .iter()
+            .flat_map(|x| x.as_base_slice())
+            .cloned()
+            .collect();
+        self.append_message(&bincode::serialize(&elems).unwrap());
+    }
+
     /// Generate the challenge bytes from the current transcript
     #[inline]
     pub fn get_challenge_bytes(&mut self, bytes: &mut [u8]) {
@@ -69,6 +80,31 @@ impl<F: Field + Serialize> Transcript<F> {
         self.append_message(&bincode::serialize(&challenge).unwrap());
 
         challenge
+    }
+
+    /// Generate the challenge for extension field from the current transcript
+    /// and append it to the transcript.
+    #[inline]
+    pub fn get_ext_field_and_append_challenge<EF>(&mut self) -> EF
+    where
+        EF: AbstractExtensionField<F>,
+    {
+        let value = self.get_vec_and_append_challenge(EF::D);
+        EF::from_base_slice(&value)
+    }
+
+    /// Generate the challenge vector for extension field from the current transcript
+    /// and append it to the transcript.
+    #[inline]
+    pub fn get_vec_ext_field_and_append_challenge<EF>(&mut self, num: usize) -> Vec<EF>
+    where
+        EF: AbstractExtensionField<F>,
+    {
+        let challenges = self.get_vec_and_append_challenge(num * EF::D);
+        challenges
+            .chunks_exact(EF::D)
+            .map(|ext| EF::from_base_slice(ext))
+            .collect()
     }
 }
 
