@@ -72,7 +72,16 @@ fn main(){
     let rotationkey = RLWEBlindRotationKey::generate(&sk,sampler,&mut rng);
     let vec1 = vec![in1_0,in1_1];
     let vec2 = vec![in2_0,in2_1];
-    let out = comparison::greater_arbhcmp_fixed(&vec1, &vec2,2,rotationkey);
+    let out1 = comparison::greater_arbhcmp_fixed(&vec1, &vec2,2,rotationkey);
+    let out1_a=out1.a();
+    let mut num1 = FF::new(0);
+    for i in 0..1024{
+        num1 = num1 +code[i]*out1_a[i];
+    }
+    let decoded_value1 = decode(out1.b()-num1);
+    //low_res恒为1，无误 equal_res为0 high_res 有问题
+    println!("{}",decoded_value1);
+    /*
     let out_a=out.a();
     let mut num = FF::new(0);
     for i in 0..1024{
@@ -80,7 +89,7 @@ fn main(){
     }
     let decoded_value = decode(out.b()-num);
     println!("{}",decoded_value);
-
+    */
 
 
     
