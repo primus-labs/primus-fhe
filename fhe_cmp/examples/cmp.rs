@@ -182,15 +182,19 @@ fn test_all(){
     //now, we have 2 ciphertext, num1 and num2 representing 1 in rlwe and rgsw
     //test rlwe_turn
     //num before rotate
+    println!("rlwe before turn");
     println!("{:?}",num1);
     //num after rotate
     let in1_0=comparison::rlwe_turn(num1,2);
+    println!("rlwe after turn");
     println!("{:?}",in1_0);
     //test rgsw_turn
     //num before rotate
+    println!("rgsw before turn");
     println!("{:?}",num2);
     let in2_0=comparison::rgsw_turn(num2,1);
     //num after rotate
+    println!("rgsw after turn");
     println!("{:?}",in2_0);
     //gatebootstrapping have problems, so no test here
  
