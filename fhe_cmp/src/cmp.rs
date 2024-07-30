@@ -69,25 +69,46 @@ pub fn rgsw_turn<F: Field<Value = u32> + NTTField>(mut ciphertext: RGSW<F>, num:
 /// Complete the bootstrapping operation with LWE Ciphertext *`ciphertext`*, vector *`test_vector`* and BlindRotationKey `key`
 pub fn gatebootstrapping<F:Field<Value=u32>+NTTField>(
     ciphertext: LWE<F>,
-    test_vector:Vec<F>,
+    mut test_vector:Vec<F>,
     key:RLWEBlindRotationKey<F>,
 )->LWE<F>{
-    let switch = lwe_modulus_switch(ciphertext,2048,ModulusSwitchRoundMethod::Round);
-    let ciphertext_change=switch.a();
+    let mod_after:u32=2048;
+    let switch = lwe_modulus_switch(ciphertext,mod_after,ModulusSwitchRoundMethod::Round);
+    let ciphertext_change_a=switch.a();
+    let ciphertext_change_b=switch.b();
     let binary_key=match key {
         RLWEBlindRotationKey::Binary(binary_key)=> binary_key,
         RLWEBlindRotationKey::Ternary(_)=>panic!(),
     };
-    let vector2= vec![F::new(0);N];
-    let text1 = Polynomial::<F>::new(test_vector);
-    let text2 = Polynomial::<F>::new(vector2);
-    let acc=RLWE::new(text2,text1);
+    let ciphertext_change_b = ciphertext_change_b as usize;
+    println!("{}",ciphertext_change_b);
+    println!("{:?}",test_vector);
+    if ciphertext_change_b<1024{
+        test_vector.rotate_right(ciphertext_change_b);
+        for elem in test_vector.iter_mut().take(ciphertext_change_b) {
+            *elem = -*elem;
+        }
+    }else if ciphertext_change_b==1024{
+        for elem in test_vector.iter_mut() {
+            *elem = -*elem;
+        }
+    }else{
+        test_vector.rotate_right(ciphertext_change_b-1024);
+        for elem in test_vector.iter_mut().rev().take(2048-ciphertext_change_b) {
+            *elem = -*elem;
+        }
+    }
+    println!("{:?}",test_vector);
+    let vector1= vec![F::new(0);N];
+    let text1 = Polynomial::<F>::new(vector1);
+    let text2 = Polynomial::<F>::new(test_vector);
+    let acc=RLWE::new(text1,text2);
     let modulus:usize = 1;
     let m = 2048;
     let l_modulus = PowOf2Modulus::<u32>::new(m);
     let temp = binary_key.blind_rotate(
         acc,
-        ciphertext_change,
+        ciphertext_change_a,
         N,
         modulus,
         l_modulus,
@@ -175,6 +196,7 @@ pub fn greater_arbhcmp_fixed<F:Field<Value=u32>+NTTField>(
 )->LWE<F>{
     if cipher_size == 1{
         return greater_hcmp(&cipher1[0],&cipher2[0]);
+        
     }
     else{
         let key_clone = gatebootstrappingkey.clone();
@@ -182,19 +204,22 @@ pub fn greater_arbhcmp_fixed<F:Field<Value=u32>+NTTField>(
         let mul = cipher1[cipher_size-1].mul_rgsw(&cipher2[cipher_size-1]);
         let equal_res = RLWE::extract_lwe(&mul);
         let mut high_res =  greater_hcmp(&cipher1[cipher_size-1],&cipher2[cipher_size-1]);
+        //到目前为止，high_res和equal_res都是正确的;
         for elem in high_res.a_mut().iter_mut() {
             *elem = *elem + *elem;
         }
         *high_res.b_mut()=*high_res.b_mut()+*high_res.b_mut();
+        //目前没有问题,low,high,equal都是正确的
+        let u = 132120577/8;
+        let offset = F::new(u/2);
         let mut tlwelvl1_a: Vec<F> = vec![0.into();N];
         for i in 0..N{
             tlwelvl1_a[i] = low_res.a()[i] + equal_res.a()[i] + high_res.a()[i];
         }
         let mut tlwelvl1_b = low_res.b() + equal_res.b() + high_res.b();
-        let u = 132120577/8;
-        let offset = F::new(u>>1);
         tlwelvl1_b = tlwelvl1_b + offset;
         let new_lwe=LWE::new(tlwelvl1_a,tlwelvl1_b);
+        //目前为止正确，offset未验证
         let test= vec![F::new(u);N];
         let res = gatebootstrapping(new_lwe,test,key_clone);
         return res;
