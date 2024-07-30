@@ -175,6 +175,8 @@ fn test_all(){
         sk.ntt_ring_secret_key()
     );
     let num1=RLWE::from(ntt_num1);
+    let num0_0=num1.clone();
+    let mut num0_2=num2.clone();
     let num1_1=num1.clone();
     let num2_1=num2.clone();
     let num1_2=num1.clone();
@@ -182,22 +184,42 @@ fn test_all(){
     //now, we have 2 ciphertext, num1 and num2 representing 1 in rlwe and rgsw
     //test rlwe_turn
     //num before rotate
-    println!("rlwe before turn");
-    println!("{:?}",num1);
     //num after rotate
+
+
     let in1_0=comparison::rlwe_turn(num1,2);
-    println!("rlwe after turn");
-    println!("{:?}",in1_0);
+    let mut vec_0=vec![FF::new(0);1024];
+    vec_0[2]=FF::new(1);
+    let pol_0=Polynomial::new(vec_0);
+    let mul_0=num0_0.a() * (&pol_0);
+    let mul_1=num0_0.b() * (&pol_0);
+    assert_eq!(in1_0.a(),&mul_0);
+    assert_eq!(in1_0.b(),&mul_1);
+
+
     //test rgsw_turn
-    //num before rotate
-    println!("rgsw before turn");
-    println!("{:?}",num2);
     let in2_0=comparison::rgsw_turn(num2,1);
-    //num after rotate
-    println!("rgsw after turn");
+    let mut vec_1=vec![FF::new(0);1024];
+    vec_1[1]=FF::new(1);
+    let pol_1=Polynomial::new(vec_1);
+    for elem_out in num0_2.c_neg_s_m_mut().iter_mut() {
+        let a = elem_out.a_mut();
+        *a= (*a).clone()*(&pol_1);
+        let b =elem_out.b_mut();
+        *b=(*b).clone()*(&pol_1);
+    }
+    for elem_out in num0_2.c_m_mut().iter_mut() {
+        let a = elem_out.a_mut();
+        *a= (*a).clone()*(&pol_1);
+        let b =elem_out.b_mut();
+        *b=(*b).clone()*(&pol_1);
+    }
+    println!("{:?}",num0_2);
     println!("{:?}",in2_0);
+
     //gatebootstrapping have problems, so no test here
  
+
     //test greater_hcmp:if in1_0's number > in2_0's number, then it will give back encrypted 1, otherwise -1(I use 2 and 1 to show)
     let out1 = comparison::greater_hcmp(&in1_0,&in2_0);
     let out1_a=out1.a();
