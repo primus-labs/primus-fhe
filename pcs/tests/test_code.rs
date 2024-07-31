@@ -93,10 +93,6 @@ fn code_distance_test() {
             .map(|(x_0, x_1)| (x_0 != x_1) as usize)
             .sum();
         let num_expected = (brakedown_code.distance() * codeword_len as f64) as usize;
-        println!(
-            "different entries: real num {}, expected num {}",
-            num_real, num_expected
-        );
         assert!(num_real >= num_expected);
     }
 }

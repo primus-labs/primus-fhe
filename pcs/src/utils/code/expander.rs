@@ -162,7 +162,7 @@ impl ExpanderCodeSpec {
             .iter()
             .map(|a| {
                 let n_prime = ceil(a.num_col as f64 * self.r);
-                let m_prime = ceil(a.num_row as f64 * self.r) - a.num_col - n_prime;
+                let m_prime = ceil(a.num_row as f64 * self.r) - a.num_row - n_prime;
                 SparseMatrixDimension::new(
                     n_prime,
                     m_prime,
