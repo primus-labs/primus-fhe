@@ -7,14 +7,14 @@ use fhe_core::{BlindRotationType, ConstParameters, ModulusSwitchRoundMethod, Par
     SecretKeyPack, SecretKeyType, StepsAfterBR,RLWEBlindRotationKey};
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct FF(u32);
+#[modulus = 81720453121]
+pub struct FF(u64);
 pub type RingSecretKey<FF> = Polynomial<FF>;
 pub type NTTRingSecretKey<FF> = NTTPolynomial<FF>;
 
-type Inner = u32; // inner type
+type Inner = u64; // inner type
 
-const FP: Inner = FF::MODULUS_VALUE; // ciphertext space
+const FP: Inner = 81720453121; // ciphertext space
 const FT: Inner = 8; // message space
 
 #[inline]
@@ -28,9 +28,8 @@ fn decode(c: FF) -> Inner {
 }
 
 fn main(){
-/* 
     let mut rng = thread_rng();
-    let param=Parameters::<u16, FF>::new(ConstParameters {
+    let param=Parameters::<u64, FF>::new(ConstParameters {
         lwe_dimension: 1024,
         lwe_modulus: 1024,
         t: 4,
@@ -38,7 +37,7 @@ fn main(){
         secret_key_type: SecretKeyType::Binary,
         blind_rotation_type: BlindRotationType::RLWE,
         ring_dimension: 1024,
-        ring_modulus: FF::MODULUS_VALUE,
+        ring_modulus: 81720453121,
         ring_noise_std_dev: 3.20 * 2.175,
         ring_secret_key_type: RingSecretKeyType::Binary,
         blind_rotation_basis_bits: 3,
@@ -52,6 +51,7 @@ fn main(){
     let value = 1;
     let basis = <Basis<FF>>::new(3);
     let sampler = param.ring_noise_distribution();
+    let code = sk.ring_secret_key().as_slice();
     let ntt_num1=NTTRLWE::generate_random_value_sample(
         sk.ntt_ring_secret_key(),
         encode(value),
@@ -65,11 +65,11 @@ fn main(){
         sk.ntt_ring_secret_key()
     );
     let num1=RLWE::from(ntt_num1);
+
     let in1_0=comparison::rlwe_turn(num1,1);
     let in2_0=comparison::rgsw_turn(num2,0);
     let in1_1=in1_0.clone();
-    let in2_1=in2_0.clone();
-    let code = sk.ring_secret_key().as_slice();
+    let in2_1=in2_0.clone();   
     let rotationkey = RLWEBlindRotationKey::generate(&sk,sampler,&mut rng);
     let vec1 = vec![in1_0,in1_1];
     let vec2 = vec![in2_0,in2_1];
@@ -93,9 +93,9 @@ fn main(){
     */
 
 
-    
-
-/*
+/*    
+    let in1=comparison::rlwe_turn(num1,1);
+    let in2=comparison::rgsw_turn(num2,0);
     let out1 = comparison::greater_hcmp(&in1,&in2);
     let out2 = comparison::equality_hcmp(&in1, &in2);
     let out3 = comparison::less_hcmp(&in1, &in2);
@@ -132,10 +132,10 @@ fn main(){
     println!("{}",decoded_value2);
     println!("{}",decoded_value3);
 */
-*/
-test_all();
+
 }
 
+/* 
 fn test_all(){
     //init
     let mut rng = thread_rng();
@@ -256,3 +256,4 @@ fn test_all(){
 
 
 }
+*/
