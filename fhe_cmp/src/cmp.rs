@@ -6,6 +6,10 @@ use fhe_core::{RLWEBlindRotationKey,lwe_modulus_switch,ModulusSwitchRoundMethod}
 const N:usize= 1024;
 
 
+
+
+
+
 /// Performs the rlwe rotation operation.
 ///
 /// # Arguments
@@ -13,7 +17,7 @@ const N:usize= 1024;
 /// * Input: RLWE ciphertext `ciphertext`.
 /// * Input: usize number `num`.
 /// * Output:RLWE ciphertext `ciphertext*x^num`.
-pub fn rlwe_turn<F:Field<Value=u32>+NTTField>(
+pub fn rlwe_turn<F:Field<Value=u64>+NTTField>(
     mut ciphertext:RLWE<F>,
     num:usize,
 )->RLWE<F>{
@@ -39,7 +43,7 @@ pub fn rlwe_turn<F:Field<Value=u32>+NTTField>(
 /// * Input: RGSW ciphertext `ciphertext`.
 /// * Input: usize number `num`.
 /// * Output:RGSW ciphertext `ciphertext*x^(-num)`.
-pub fn rgsw_turn<F: Field<Value = u32> + NTTField>(mut ciphertext: RGSW<F>, num: usize) -> RGSW<F> {
+pub fn rgsw_turn<F: Field<Value = u64> + NTTField>(mut ciphertext: RGSW<F>, num: usize) -> RGSW<F> {
     for elem_out in ciphertext.c_neg_s_m_mut().iter_mut() {
         let (a, b) = elem_out.a_b_mut_slices();
         a.rotate_left(num);
@@ -67,12 +71,12 @@ pub fn rgsw_turn<F: Field<Value = u32> + NTTField>(mut ciphertext: RGSW<F>, num:
 
 
 /// Complete the bootstrapping operation with LWE Ciphertext *`ciphertext`*, vector *`test_vector`* and BlindRotationKey `key`
-pub fn gatebootstrapping<F:Field<Value=u32>+NTTField>(
+pub fn gatebootstrapping<F:Field<Value=u64>+NTTField>(
     ciphertext: LWE<F>,
     mut test_vector:Vec<F>,
     key:RLWEBlindRotationKey<F>,
 )->LWE<F>{
-    let mod_after:u32=2048;
+    let mod_after:u64=2048;
     let switch = lwe_modulus_switch(ciphertext,mod_after,ModulusSwitchRoundMethod::Round);
     let ciphertext_change_a=switch.a();
     let ciphertext_change_b=switch.b();
@@ -81,8 +85,6 @@ pub fn gatebootstrapping<F:Field<Value=u32>+NTTField>(
         RLWEBlindRotationKey::Ternary(_)=>panic!(),
     };
     let ciphertext_change_b = ciphertext_change_b as usize;
-    println!("{}",ciphertext_change_b);
-    println!("{:?}",test_vector);
     if ciphertext_change_b<1024{
         test_vector.rotate_right(ciphertext_change_b);
         for elem in test_vector.iter_mut().take(ciphertext_change_b) {
@@ -98,14 +100,13 @@ pub fn gatebootstrapping<F:Field<Value=u32>+NTTField>(
             *elem = -*elem;
         }
     }
-    println!("{:?}",test_vector);
     let vector1= vec![F::new(0);N];
     let text1 = Polynomial::<F>::new(vector1);
     let text2 = Polynomial::<F>::new(test_vector);
     let acc=RLWE::new(text1,text2);
     let modulus:usize = 1;
     let m = 2048;
-    let l_modulus = PowOf2Modulus::<u32>::new(m);
+    let l_modulus = PowOf2Modulus::<u64>::new(m);
     let temp = binary_key.blind_rotate(
         acc,
         ciphertext_change_a,
@@ -127,7 +128,7 @@ pub fn gatebootstrapping<F:Field<Value=u32>+NTTField>(
 /// * Input: LWE ciphertext `ca`, with message `a`.
 /// * Input: LWE ciphertext `cb`, with message `b`.
 /// * Output: LWE ciphertext with message `a and b`.
-pub fn homand<F:Field<Value=u32>+NTTField>(
+pub fn homand<F:Field<Value=u64>+NTTField>(
     ca:LWE<F>,
     cb:LWE<F>,
     key:RLWEBlindRotationKey<F>,
@@ -156,7 +157,7 @@ pub fn homand<F:Field<Value=u32>+NTTField>(
 /// * Input: LWE ciphertext `cipher1`, with message `a`.
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2, otherwise -1.
-pub fn greater_hcmp<F:Field<Value=u32>+NTTField>(
+pub fn greater_hcmp<F:Field<Value=u64>+NTTField>(
     cipher1: &RLWE<F>,
     cipher2: &RGSW<F>,
 )->LWE<F>{
@@ -188,7 +189,7 @@ pub fn greater_hcmp<F:Field<Value=u32>+NTTField>(
 /// * Input: ciphersize `cipher_size`.
 /// * Input: BlindRotationKey `gatebootstrappingkey`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=0.
-pub fn greater_arbhcmp_fixed<F:Field<Value=u32>+NTTField>(
+pub fn greater_arbhcmp_fixed<F:Field<Value=u64>+NTTField>(
     cipher1: &Vec<RLWE<F>>,
     cipher2: &Vec<RGSW<F>>,
     cipher_size:usize,
@@ -210,7 +211,7 @@ pub fn greater_arbhcmp_fixed<F:Field<Value=u32>+NTTField>(
         }
         *high_res.b_mut()=*high_res.b_mut()+*high_res.b_mut();
         //目前没有问题,low,high,equal都是正确的
-        let u = 132120577/8;
+        let u = 81720453121/8;
         let offset = F::new(u/2);
         let mut tlwelvl1_a: Vec<F> = vec![0.into();N];
         for i in 0..N{
@@ -239,7 +240,7 @@ pub fn greater_arbhcmp_fixed<F:Field<Value=u32>+NTTField>(
 /// * Input: chosen scale `scale_bits`.
 /// * Input: BlindRotationKey `gatebootstrappingkey`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=0.
-pub fn greater_arbhcmp_arbitary<F:Field<Value=u32>+NTTField>(
+pub fn greater_arbhcmp_arbitary<F:Field<Value=u64>+NTTField>(
     cipher1: &Vec<RLWE<F>>,
     cipher2: &Vec<RGSW<F>>,
     cipher_size:usize,
@@ -282,7 +283,7 @@ pub fn greater_arbhcmp_arbitary<F:Field<Value=u32>+NTTField>(
 /// * Input: LWE ciphertext `cipher1`, with message `a`.
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
-pub fn equality_hcmp<F:Field<Value=u32>+NTTField>(
+pub fn equality_hcmp<F:Field<Value=u64>+NTTField>(
     cipher1: &RLWE<F>,
     cipher2: &RGSW<F>,
 )->LWE<F>{
@@ -291,7 +292,7 @@ pub fn equality_hcmp<F:Field<Value=u32>+NTTField>(
     for elem in res.a_mut().iter_mut() {
         *elem = *elem + *elem;
     }
-    let u = 132120577/8;
+    let u = 7156359169/8;
     *res.b_mut()=*res.b_mut()+*res.b_mut()-F::new(u);
     return res;
 }
@@ -304,7 +305,7 @@ pub fn equality_hcmp<F:Field<Value=u32>+NTTField>(
 /// * Input: LWE ciphertext `cipher1`, with message `a`.
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=0.
-pub fn equality_arbhcmp<F:Field<Value=u32>+NTTField>(
+pub fn equality_arbhcmp<F:Field<Value=u64>+NTTField>(
     cipher1: &Vec<RLWE<F>>,
     cipher2: &Vec<RGSW<F>>,
     cipher_size:usize,
@@ -333,7 +334,7 @@ pub fn equality_arbhcmp<F:Field<Value=u32>+NTTField>(
 /// * Input: LWE ciphertext `cipher1`, with message `a`.
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=0.
-pub fn less_hcmp<F:Field<Value=u32>+NTTField>(
+pub fn less_hcmp<F:Field<Value=u64>+NTTField>(
     cipher1: &RLWE<F>,
     cipher2: &RGSW<F>,
 )->LWE<F>{
@@ -359,7 +360,7 @@ pub fn less_hcmp<F:Field<Value=u32>+NTTField>(
 /// * Input: ciphersize `cipher_size`.
 /// * Input: BlindRotationKey `gatebootstrappingkey`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=0.
-pub fn less_arbhcmp<F:Field<Value=u32>+NTTField>(
+pub fn less_arbhcmp<F:Field<Value=u64>+NTTField>(
     cipher1: &Vec<RLWE<F>>,
     cipher2: &Vec<RGSW<F>>,
     cipher_size:usize,
