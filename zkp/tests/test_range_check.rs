@@ -54,11 +54,9 @@ fn test_trivial_range_check() {
         m_evaluations[idx] += Fp32::one();
     });
     let m = DenseMultilinearExtension::from_evaluations_slice(num_vars_t, &m_evaluations);
-    println!("m: {:?}", &m.evaluations);
-    dbg!(&m);
 
     let mut r = sampler.sample(&mut rng);
-    while t[0] <= r && r <= t[1 << num_vars_t - 1] {
+    while t[0] <= r && r <= t[(1 << num_vars_t) - 1] {
         r = sampler.sample(&mut rng);
     }
 
@@ -76,14 +74,6 @@ fn test_trivial_range_check() {
                 .map(|(x_t, x_m)| *x_m / (r - x_t))
                 .collect(),
         );
-
-    t_inverse
-        .iter()
-        .zip(m.iter())
-        .zip(t.iter())
-        .for_each(|((x_t_inverse, x_m), x_t)| {
-            assert_eq!(*x_t_inverse * (r - x_t) - x_m, Fp32::zero());
-        });
 
     let instance = RangeCheckInstance::from_slice(&f, &f_inverse, &t_inverse, &m, range);
     let info = instance.info();
