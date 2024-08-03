@@ -1,5 +1,5 @@
 use algebra::{derive::*, FieldUniformSampler};
-use num_traits::{Zero, One};
+use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec, LinearCode};
 use rand::Rng;
 
@@ -61,7 +61,6 @@ fn linearity_check() {
     }
 }
 
-
 /// test the real code distance is larger or equal to the ideal minimum code distance
 /// two random codewords have large distance to each other with high probability, making it inefficient to find two closed codewords
 /// the test iteratively adds 1 to the first element of the message and compare its codeword to the original codeword
@@ -69,10 +68,10 @@ fn linearity_check() {
 fn code_distance_test() {
     let mut rng = rand::thread_rng();
     let field_distr = FieldUniformSampler::new();
-    
+
     let spec = ExpanderCodeSpec::new(0.1195, 0.0284, 1.420, 31, 30);
     let brakedown_code: ExpanderCode<FF32> = ExpanderCode::new(spec, 5000, &mut rng);
-    
+
     let message_len = brakedown_code.message_len;
     let codeword_len = brakedown_code.codeword_len;
 
@@ -80,7 +79,7 @@ fn code_distance_test() {
     target_0[..message_len]
         .iter_mut()
         .for_each(|x| *x = rng.sample(field_distr));
-    
+
     let mut target_1 = target_0.clone();
     let check_times = 30;
     for _ in 0..check_times {
