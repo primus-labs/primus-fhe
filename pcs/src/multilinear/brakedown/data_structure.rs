@@ -39,22 +39,28 @@ impl<F: Field, C: LinearCode<F>> BrakedownParams<F, C> {
         let estimated_queries = |distance: f64, gap: f64| {
             ceil(-(BRAKEDOWN_SECURITY_BIT as f64) / (1.0 - distance * gap).log2())
         };
-        let num_queries = estimated_queries(code_spec.distance().unwrap(), code_spec.proximity_gap().unwrap());
+        let num_queries = estimated_queries(
+            code_spec.distance().unwrap(),
+            code_spec.proximity_gap().unwrap(),
+        );
 
         // Estimated proof size.
-        let estimated_proof_size = |msg_len: usize| {
-            msg_len + num_queries * (1 << num_vars) / msg_len
-        };
+        let estimated_proof_size =
+            |msg_len: usize| msg_len + num_queries * (1 << num_vars) / msg_len;
 
         // estimated proof size := num_cols + num_queries * num_rows = num_cols + (num_queries * (2 ^ num_vars)) / num_cols
-        // optimal num_cols is the closest power of 2 to ((2 ^ num_vars) * num_queries) ^ (1/2) 
-        let sqrt = ((2 ^ num_vars * num_queries) as f64).sqrt();
-        let lower = 2_usize.pow((sqrt as f64).log2().floor() as u32);
-        let upper = 2_usize.pow((sqrt as f64).log2().ceil() as u32);
-        
-        let num_cols = if estimated_proof_size(lower) < estimated_proof_size(upper) { lower } else { upper };
+        // optimal num_cols is the closest power of 2 to ((2 ^ num_vars) * num_queries) ^ (1/2)
+        let sqrt = (((2 ^ num_vars) * num_queries) as f64).sqrt();
+        let lower = 2_usize.pow(sqrt.log2().floor() as u32);
+        let upper = 2_usize.pow(sqrt.log2().ceil() as u32);
+
+        let num_cols = if estimated_proof_size(lower) < estimated_proof_size(upper) {
+            lower
+        } else {
+            upper
+        };
         let num_rows = (1 << num_vars) / num_cols;
-        
+
         let code = code_spec.code(num_cols, &mut Prg::new());
 
         Self {

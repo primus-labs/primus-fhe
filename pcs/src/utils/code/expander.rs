@@ -208,7 +208,6 @@ impl<F: Field> LinearCodeSpec<F> for ExpanderCodeSpec {
     fn proximity_gap(&self) -> Result<f64, String> {
         Ok(self.proximity_gap())
     }
-
 }
 
 /// Define the struct of linear expander code.
