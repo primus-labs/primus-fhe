@@ -32,14 +32,14 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::vec;
 
+use algebra::utils::Transcript;
 use algebra::{
     DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension, PolynomialInfo,
 };
 use itertools::izip;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
+use serde::Serialize;
 
 use super::bit_decomposition::{BitDecomposition, BitDecompositionProof, BitDecompositionSubClaim};
 use super::ntt::{NTTProof, NTTSubclaim};
@@ -131,7 +131,7 @@ pub struct RlweMultRgswInstance<F: Field> {
 }
 
 /// store the information used to verify
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct RlweMultRgswInfo<F: Field> {
     /// information of ntt instance
     pub ntt_info: NTTInstanceInfo<F>,
@@ -333,16 +333,15 @@ impl<F: Field> RlweMultRgswSubclaim<F> {
 impl<F: Field> RlweMultRgswIOP<F> {
     /// prove the multiplication between RLWE ciphertext and RGSW ciphertext
     pub fn prove(instance: &RlweMultRgswInstance<F>, u: &[F]) -> RlweMultRgswProof<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, instance, u)
+        let mut trans = Transcript::<F>::new();
+        Self::prove_as_subprotocol(&mut trans, instance, u)
     }
 
     /// prove the multiplication between RLWE ciphertext and RGSW ciphertext
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
     pub fn prove_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         instance: &RlweMultRgswInstance<F>,
         u: &[F],
     ) -> RlweMultRgswProof<F> {
@@ -357,9 +356,9 @@ impl<F: Field> RlweMultRgswIOP<F> {
         let identity_func_at_u = Rc::new(gen_identity_evaluations(u));
 
         // randomly combine two sumcheck protocols
-        // TODO sample randomness via Fiat-Shamir RNG
-        let r_1 = uniform.sample(fs_rng);
-        let r_2 = uniform.sample(fs_rng);
+        let mut fs_rng = trans.rng(b"rlwe mul rgsw");
+        let r_1 = uniform.sample(&mut fs_rng);
+        let r_2 = uniform.sample(&mut fs_rng);
         // Sumcheck protocol for proving: g' = \sum_{i = 0}^{k-1} a_i' \cdot c_i + b_i' \cdot f_i
         // When proving g'(x) = \sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) for x \in \{0, 1\}^\log n,
         // prover claims the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
@@ -406,12 +405,12 @@ impl<F: Field> RlweMultRgswIOP<F> {
 
         RlweMultRgswProof {
             bit_decomposition_proof: BitDecomposition::prove_as_subprotocol(
-                fs_rng,
+                trans,
                 &decomposed_bits,
                 u,
             ),
-            ntt_proof: NTTIOP::prove_as_subprotocol(fs_rng, &instance.ntt_instance, u),
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
+            ntt_proof: NTTIOP::prove_as_subprotocol(trans, &instance.ntt_instance, u),
+            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &poly)
                 .expect("sumcheck fail in rlwe * rgsw")
                 .0,
         }
@@ -424,23 +423,22 @@ impl<F: Field> RlweMultRgswIOP<F> {
         u: &[F],
         info: &RlweMultRgswInfo<F>,
     ) -> RlweMultRgswSubclaim<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verify_as_subprotocol(&mut fs_rng, proof, randomness_ntt, u, info)
+        let mut trans = Transcript::<F>::new();
+        Self::verify_as_subprotocol(&mut trans, proof, randomness_ntt, u, info)
     }
 
     /// verify the proof with provided RNG
     pub fn verify_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         proof: &RlweMultRgswProof<F>,
         randomness_ntt: &[F],
         u: &[F],
         info: &RlweMultRgswInfo<F>,
     ) -> RlweMultRgswSubclaim<F> {
         let uniform = <FieldUniformSampler<F>>::new();
-        // TODO sample randomness via Fiat-Shamir RNG
-        let r_1 = uniform.sample(fs_rng);
-        let r_2 = uniform.sample(fs_rng);
+        let mut fs_rng = trans.rng(b"rlwe mul rgsw");
+        let r_1 = uniform.sample(&mut fs_rng);
+        let r_2 = uniform.sample(&mut fs_rng);
         let poly_info = PolynomialInfo {
             max_multiplicands: 3,
             num_variables: info.ntt_info.log_n,
@@ -448,20 +446,15 @@ impl<F: Field> RlweMultRgswIOP<F> {
 
         RlweMultRgswSubclaim {
             bit_decomposition_subclaim: BitDecomposition::verifier_as_subprotocol(
-                fs_rng,
+                trans,
                 &proof.bit_decomposition_proof,
                 &info.decomposed_bits_info,
             ),
-            ntt_subclaim: NTTIOP::verify_as_subprotocol(
-                fs_rng,
-                &proof.ntt_proof,
-                &info.ntt_info,
-                u,
-            ),
+            ntt_subclaim: NTTIOP::verify_as_subprotocol(trans, &proof.ntt_proof, &info.ntt_info, u),
             randomness_ntt: randomness_ntt.to_owned(),
             randomness_sumcheck: vec![r_1, r_2],
             sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
-                fs_rng,
+                trans,
                 &poly_info,
                 F::zero(),
                 &proof.sumcheck_msg,

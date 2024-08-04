@@ -23,12 +23,11 @@ use crate::sumcheck::MLSumcheck;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use algebra::utils::Transcript;
 use algebra::{
     DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
     PolynomialInfo,
 };
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
 
 use super::{NTTInstance, NTTInstanceInfo};
 
@@ -224,18 +223,18 @@ impl<F: Field> NTTBareIOP<F> {
         f_u: &Rc<DenseMultilinearExtension<F>>,
         u: &[F],
     ) -> NTTBareProof<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, f_u, ntt_instance, u).0
+        let mut trans = Transcript::<F>::new();
+        Self::prove_as_subprotocol(&mut trans, f_u, ntt_instance, u).0
     }
 
     /// prove
     pub fn prove_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         f_u: &Rc<DenseMultilinearExtension<F>>,
         ntt_instance: &NTTInstance<F>,
         u: &[F],
     ) -> (NTTBareProof<F>, ProverState<F>) {
+        trans.feed(b"ntt bare", &ntt_instance.info());
         let log_n = ntt_instance.log_n;
 
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(log_n);
@@ -244,7 +243,7 @@ impl<F: Field> NTTBareIOP<F> {
         poly.add_product(product, F::one());
 
         let (prover_msg, prover_state) =
-            MLSumcheck::prove_as_subprotocol(fs_rng, &poly).expect("ntt bare proof failed");
+            MLSumcheck::prove_as_subprotocol(trans, &poly).expect("ntt bare proof failed");
 
         (
             NTTBareProof {
@@ -260,24 +259,23 @@ impl<F: Field> NTTBareIOP<F> {
         ntt_bare_proof: &NTTBareProof<F>,
         ntt_instance_info: &NTTInstanceInfo<F>,
     ) -> NTTBareSubclaim<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verify_as_subprotocol(&mut fs_rng, ntt_bare_proof, ntt_instance_info)
+        let mut trans = Transcript::<F>::new();
+        Self::verify_as_subprotocol(&mut trans, ntt_bare_proof, ntt_instance_info)
     }
 
     /// verify
     pub fn verify_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         ntt_bare_proof: &NTTBareProof<F>,
         ntt_instance_info: &NTTInstanceInfo<F>,
     ) -> NTTBareSubclaim<F> {
-        // TODO sample randomness via Fiat-Shamir RNG
+        trans.feed(b"ntt bare", &ntt_instance_info);
         let poly_info = PolynomialInfo {
             max_multiplicands: 2,
             num_variables: ntt_instance_info.log_n,
         };
         let subclaim = MLSumcheck::verify_as_subprotocol(
-            fs_rng,
+            trans,
             &poly_info,
             ntt_bare_proof.claimed_sum,
             &ntt_bare_proof.sumcheck_msg,

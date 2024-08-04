@@ -28,20 +28,6 @@ pub struct BinomialExtensionField<F, const D: usize> {
     pub(crate) value: [F; D],
 }
 
-impl<F: Field, const D: usize> Serialize for BinomialExtensionField<F, D> 
-where F: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer {
-        let mut seq = serializer.serialize_tuple(D)?;
-        for e in &self.value {
-            seq.serialize_element(e)?;
-        }
-        seq.end()
-    }
-}
-
 impl<F: Field, const D: usize> Default for BinomialExtensionField<F, D> {
     #[inline]
     fn default() -> Self {

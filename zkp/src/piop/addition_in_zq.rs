@@ -24,11 +24,10 @@ use crate::utils::eval_identity_function;
 use crate::sumcheck::MLSumcheck;
 use crate::utils::gen_identity_evaluations;
 use algebra::{
-    DecomposableField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
-    MultilinearExtension, PolynomialInfo,
+    utils::Transcript, DecomposableField, DenseMultilinearExtension, Field,
+    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
+use serde::Serialize;
 
 /// SNARKs for addition in Zq, i.e. a + b = c (mod q)
 pub struct AdditionInZq<F: Field>(PhantomData<F>);
@@ -66,6 +65,7 @@ pub struct AdditionInZqInstance<F: Field> {
 }
 
 /// Stores the parameters used for addition in Zq and the public info for verifier.
+#[derive(Serialize)]
 pub struct AdditionInZqInstanceInfo<F: Field> {
     /// modulus in addition
     pub q: F,
@@ -199,22 +199,21 @@ impl<F: Field> AdditionInZqSubclaim<F> {
 impl<F: Field> AdditionInZq<F> {
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
     pub fn prove(addition_instance: &AdditionInZqInstance<F>, u: &[F]) -> AdditionInZqProof<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, addition_instance, u)
+        let mut trans = Transcript::<F>::new();
+        Self::prove_as_subprotocol(&mut trans, addition_instance, u)
     }
 
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
     pub fn prove_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         addition_instance: &AdditionInZqInstance<F>,
         u: &[F],
     ) -> AdditionInZqProof<F> {
         // 1. rangecheck
         let rangecheck_msg =
-            BitDecomposition::prove_as_subprotocol(fs_rng, &addition_instance.abc_bits, u);
+            BitDecomposition::prove_as_subprotocol(trans, &addition_instance.abc_bits, u);
 
         let dim = u.len();
         assert_eq!(dim, addition_instance.num_vars);
@@ -232,7 +231,7 @@ impl<F: Field> AdditionInZq<F> {
         op_coefficient.push((-F::one(), F::one()));
 
         poly.add_product_with_linear_op(product, &op_coefficient, F::one());
-        let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
+        let sumcheck_proof = MLSumcheck::prove_as_subprotocol(trans, &poly)
             .expect("sumcheck for addition in Zq failed");
 
         AdditionInZqProof {
@@ -246,22 +245,20 @@ impl<F: Field> AdditionInZq<F> {
         proof: &AdditionInZqProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> AdditionInZqSubclaim<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verifier_as_subprotocol(&mut fs_rng, proof, decomposed_bits_info)
+        let mut trans = Transcript::<F>::new();
+        Self::verifier_as_subprotocol(&mut trans, proof, decomposed_bits_info)
     }
 
     /// Verify addition in Zq given the proof and the verification key for bit decomposistion
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
     pub fn verifier_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         proof: &AdditionInZqProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> AdditionInZqSubclaim<F> {
-        // TODO sample randomness via Fiat-Shamir RNG
         let rangecheck_subclaim = BitDecomposition::verifier_as_subprotocol(
-            fs_rng,
+            trans,
             &proof.rangecheck_msg,
             decomposed_bits_info,
         );
@@ -273,7 +270,7 @@ impl<F: Field> AdditionInZq<F> {
         };
 
         let subclaim =
-            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::zero(), &proof.sumcheck_msg)
+            MLSumcheck::verify_as_subprotocol(trans, &poly_info, F::zero(), &proof.sumcheck_msg)
                 .expect("sumcheck protocol in addition in Zq failed");
         AdditionInZqSubclaim {
             rangecheck_subclaim,

@@ -1,13 +1,11 @@
 //! Implement AES-based PRG.
 
-use crate::{utils::{aes::Aes, Block}, Field};
-use crate::utils::transcript::Transcript;
+use crate::utils::{aes::Aes, Block};
 use rand::Rng;
 use rand_core::{
     block::{BlockRng, BlockRngCore},
     CryptoRng, RngCore, SeedableRng,
 };
-use serde::Serialize;
 
 ///Struct of PRG Core
 #[derive(Clone, Copy, Debug)]
@@ -51,7 +49,7 @@ impl CryptoRng for PrgCore {}
 #[derive(Clone, Debug)]
 pub struct Prg(BlockRng<PrgCore>);
 
-// /// Random 
+// /// Random
 // pub trait FeedableRng: RngCore {
 //     /// Setup
 //     fn setup() -> Self;
@@ -71,7 +69,7 @@ pub struct Prg(BlockRng<PrgCore>);
 //     }
 
 //     fn feed<M: Serialize>(&mut self, msg: &M) {
-        
+
 //     }
 // }
 

@@ -29,13 +29,13 @@ impl<F: Field> Transcript<F> {
 }
 
 impl<F: Field> Transcript<F> {
-    ///
-    pub fn feed<M: Serialize>(&mut self, msg: &M) {
-        // self.append_message(&bincode::serialize(s).unwrap());
-        self.transcript.append_message(b"", &bincode::serialize(msg).unwrap());
+    /// Feed the message for the transcript to get a PRG.
+    pub fn feed<M: Serialize>(&mut self, label: &'static [u8], msg: &M) {
+        self.transcript
+            .append_message(label, &bincode::serialize(msg).unwrap());
     }
 
-    /// gen
+    /// Generate PRG based on the transcript.
     pub fn rng(&mut self, label: &'static [u8]) -> Prg {
         let mut seed = [0u8; 16];
         self.transcript.challenge_bytes(label, &mut seed);

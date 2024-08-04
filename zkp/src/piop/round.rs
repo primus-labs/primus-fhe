@@ -21,6 +21,7 @@ use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::Proof;
 use crate::utils::eval_identity_function;
 use crate::utils::gen_identity_evaluations;
+use algebra::utils::Transcript;
 use algebra::DecomposableField;
 use itertools::izip;
 use std::marker::PhantomData;
@@ -31,8 +32,6 @@ use algebra::{
     DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension, PolynomialInfo,
 };
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
 
 use super::bit_decomposition::{BitDecomposition, BitDecompositionProof, BitDecompositionSubClaim};
@@ -263,14 +262,13 @@ impl<F: Field> RoundIOP<F> {
         u: &[F],
         (lambda_1, lambda_2): (F, F),
     ) -> RoundIOPProof<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, instance, u, (lambda_1, lambda_2))
+        let mut trans = Transcript::<F>::new();
+        Self::prove_as_subprotocol(&mut trans, instance, u, (lambda_1, lambda_2))
     }
 
     /// Prove round operation
     pub fn prove_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         instance: &RoundInstance<F>,
         u: &[F],
         (lambda_1, lambda_2): (F, F),
@@ -281,9 +279,9 @@ impl<F: Field> RoundIOP<F> {
         let identity_func_at_u = Rc::new(gen_identity_evaluations(u));
 
         // randomly combine two sumcheck protocols
-        // TODO sample randomness via Fiat-Shamir RNG
-        let r_1 = uniform.sample(fs_rng);
-        let r_2 = uniform.sample(fs_rng);
+        let mut fs_rng = trans.rng(b"randomness for sumcheck");
+        let r_1 = uniform.sample(&mut fs_rng);
+        let r_2 = uniform.sample(&mut fs_rng);
 
         // sumcheck1 for \sum_{x} eq(u, x) * w(x) * (1-w(x)) = 0, i.e. w(x)\in\{0,1\}^l with random coefficient r_1
         poly.add_product_with_linear_op(
@@ -377,16 +375,16 @@ impl<F: Field> RoundIOP<F> {
 
         RoundIOPProof {
             bit_decomp_proof_output: BitDecomposition::prove_as_subprotocol(
-                fs_rng,
+                trans,
                 &instance.output_bits,
                 u,
             ),
             bit_decomp_proof_offset: BitDecomposition::prove_as_subprotocol(
-                fs_rng,
+                trans,
                 &instance.offset_aux_bits,
                 u,
             ),
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
+            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &poly)
                 .expect("sumcheck for round operation failed")
                 .0,
         }
@@ -394,14 +392,13 @@ impl<F: Field> RoundIOP<F> {
 
     /// verify
     pub fn verify(proof: &RoundIOPProof<F>, info: &RoundInstanceInfo<F>) -> RoundIOPSubclaim<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verify_as_subprotocol(&mut fs_rng, proof, info)
+        let mut trans = Transcript::<F>::new();
+        Self::verify_as_subprotocol(&mut trans, proof, info)
     }
 
     /// verify with given rng
     pub fn verify_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         proof: &RoundIOPProof<F>,
         info: &RoundInstanceInfo<F>,
     ) -> RoundIOPSubclaim<F> {
@@ -409,9 +406,9 @@ impl<F: Field> RoundIOP<F> {
         assert_eq!(num_vars, info.offset_bits_info.num_vars);
         let uniform = <FieldUniformSampler<F>>::new();
         // randomly combine two sumcheck protocols
-        // TODO sample randomness via Fiat-Shamir RNG
-        let r_1 = uniform.sample(fs_rng);
-        let r_2 = uniform.sample(fs_rng);
+        let mut fs_rng = trans.rng(b"randomness for sumcheck");
+        let r_1 = uniform.sample(&mut fs_rng);
+        let r_2 = uniform.sample(&mut fs_rng);
 
         let poly_info = PolynomialInfo {
             max_multiplicands: 3,
@@ -419,17 +416,17 @@ impl<F: Field> RoundIOP<F> {
         };
         RoundIOPSubclaim {
             bit_decomp_output_subclaim: BitDecomposition::verifier_as_subprotocol(
-                fs_rng,
+                trans,
                 &proof.bit_decomp_proof_output,
                 &info.output_bits_info,
             ),
             bit_decomp_offset_subclaim: BitDecomposition::verifier_as_subprotocol(
-                fs_rng,
+                trans,
                 &proof.bit_decomp_proof_offset,
                 &info.offset_bits_info,
             ),
             sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
-                fs_rng,
+                trans,
                 &poly_info,
                 F::zero(),
                 &proof.sumcheck_msg,

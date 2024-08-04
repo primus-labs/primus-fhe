@@ -26,7 +26,7 @@ pub struct VerifierState<F: Field> {
     max_multiplicands: usize,
     finished: bool,
     /// a list storing the univariate polynomial in evaluations sent by the prover at each round
-    polynomials_received: Vec<Vec<F>>,
+    polynomials_received: Vec<Rc<Vec<F>>>,
     /// a list storing the randomness sampled by the verifier at each round
     randomness: Vec<F>,
 }

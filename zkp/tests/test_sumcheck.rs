@@ -1,5 +1,6 @@
 use algebra::{
     derive::{Field, Prime},
+    utils::Transcript,
     DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
     MultilinearExtension,
 };
@@ -107,15 +108,15 @@ fn test_polynomial_as_subprotocol(
     nv: usize,
     num_multiplicands_range: (usize, usize),
     num_products: usize,
-    prover_rng: &mut impl RngCore,
-    verifier_rng: &mut impl RngCore,
+    prover_trans: &mut Transcript<FF>,
+    verifier_rng: &mut Transcript<FF>,
 ) {
     let mut rng = thread_rng();
     let (poly, asserted_sum) =
         random_list_of_products::<FF, _>(nv, num_multiplicands_range, num_products, &mut rng);
     let poly_info = poly.info();
     let (proof, prover_state) =
-        MLSumcheck::prove_as_subprotocol(prover_rng, &poly).expect("fail to prove");
+        MLSumcheck::prove_as_subprotocol(prover_trans, &poly).expect("fail to prove");
     let subclaim =
         MLSumcheck::verify_as_subprotocol(verifier_rng, &poly_info, asserted_sum, &proof)
             .expect("fail to verify");
@@ -138,15 +139,15 @@ fn test_trivial_polynomial() {
 
         let mut seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
         thread_rng().fill(&mut seed);
-        let mut prover_rng = ChaCha12Rng::from_seed(seed);
-        let mut verifier_rng = ChaCha12Rng::from_seed(seed);
+        let mut prover_trans = Transcript::<FF>::new();
+        let mut verifier_trans = Transcript::<FF>::new();
 
         test_polynomial_as_subprotocol(
             nv,
             num_multiplicands_range,
             num_products,
-            &mut prover_rng,
-            &mut verifier_rng,
+            &mut prover_trans,
+            &mut verifier_trans,
         )
     }
 }
@@ -163,39 +164,36 @@ fn test_normal_polynomial() {
 
         let mut seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
         thread_rng().fill(&mut seed);
-        let mut prover_rng = ChaCha12Rng::from_seed(seed);
-        let mut verifier_rng = ChaCha12Rng::from_seed(seed);
+        let mut prover_trans = Transcript::<FF>::new();
+        let mut verifier_trans = Transcript::<FF>::new();
 
         test_polynomial_as_subprotocol(
             nv,
             num_multiplicands_range,
             num_products,
-            &mut prover_rng,
-            &mut verifier_rng,
+            &mut prover_trans,
+            &mut verifier_trans,
         )
     }
 }
 
-// TODO TEST
-// #[test]
-// #[should_panic]
+#[test]
+#[should_panic]
 fn test_normal_polynomial_different_transcript_fails() {
     let nv = 12;
     let num_multiplicands_range = (4, 9);
     let num_products = 5;
 
-    let mut prover_seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-    let mut verifier_seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-    thread_rng().fill(&mut prover_seed);
-    thread_rng().fill(&mut verifier_seed);
-    let mut prover_rng = ChaCha12Rng::from_seed(prover_seed);
-    let mut verifier_rng = ChaCha12Rng::from_seed(verifier_seed);
+    let mut prover_trans = Transcript::<FF>::new();
+    prover_trans.feed(b"msg", &"prover");
+    let mut verifier_trans = Transcript::<FF>::new();
+    verifier_trans.feed(b"msg", &"verifier");
     test_polynomial_as_subprotocol(
         nv,
         num_multiplicands_range,
         num_products,
-        &mut prover_rng,
-        &mut verifier_rng,
+        &mut prover_trans,
+        &mut verifier_trans,
     )
 }
 

@@ -8,13 +8,13 @@ use crate::utils::eval_identity_function;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use algebra::utils::Transcript;
 use algebra::{
     DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
     PolynomialInfo,
 };
 use itertools::izip;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
+use serde::Serialize;
 
 use super::bit_decomposition::{BitDecomposition, BitDecompositionProof, BitDecompositionSubClaim};
 use super::ntt::{NTTProof, NTTSubclaim};
@@ -86,6 +86,7 @@ pub struct AccumulatorInstance<F: Field> {
 }
 
 /// Store the Accumulator info used to verify
+#[derive(Serialize)]
 pub struct AccumulatorInstanceInfo<F: Field> {
     /// number of updations in Accumulator denoted by t
     pub num_updations: usize,
@@ -238,25 +239,24 @@ impl<F: Field> AccumulatorInstance<F> {
 impl<F: Field> AccumulatorIOP<F> {
     /// prove the accumulator updation
     pub fn prove(instance: &AccumulatorInstance<F>, u: &[F]) -> AccumulatorProof<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, instance, u)
+        let mut trans = Transcript::<F>::new();
+        Self::prove_as_subprotocol(&mut trans, instance, u)
     }
 
     /// prove the accumulator updation
     pub fn prove_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         instance: &AccumulatorInstance<F>,
         u: &[F],
     ) -> AccumulatorProof<F> {
         AccumulatorProof {
             bit_decomposition_proof: BitDecomposition::prove_as_subprotocol(
-                fs_rng,
+                trans,
                 &instance.decomposed_bits,
                 u,
             ),
-            ntt_proof: NTTIOP::prove_as_subprotocol(fs_rng, &instance.ntt_instance, u),
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(fs_rng, &instance.poly)
+            ntt_proof: NTTIOP::prove_as_subprotocol(trans, &instance.ntt_instance, u),
+            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &instance.poly)
                 .expect("sumcheck fail in accumulator updation")
                 .0,
         }
@@ -268,32 +268,26 @@ impl<F: Field> AccumulatorIOP<F> {
         u: &[F],
         info: &AccumulatorInstanceInfo<F>,
     ) -> AccumulatorSubclaim<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verify_as_subprotocol(&mut fs_rng, proof, u, info)
+        let mut trans = Transcript::<F>::new();
+        Self::verify_as_subprotocol(&mut trans, proof, u, info)
     }
 
     /// verify the proof with provided RNG
     pub fn verify_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         proof: &AccumulatorProof<F>,
         u: &[F],
         info: &AccumulatorInstanceInfo<F>,
     ) -> AccumulatorSubclaim<F> {
         AccumulatorSubclaim {
             bit_decomposition_subclaim: BitDecomposition::verifier_as_subprotocol(
-                fs_rng,
+                trans,
                 &proof.bit_decomposition_proof,
                 &info.decomposed_bits_info,
             ),
-            ntt_subclaim: NTTIOP::verify_as_subprotocol(
-                fs_rng,
-                &proof.ntt_proof,
-                &info.ntt_info,
-                u,
-            ),
+            ntt_subclaim: NTTIOP::verify_as_subprotocol(trans, &proof.ntt_proof, &info.ntt_info, u),
             sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
-                fs_rng,
+                trans,
                 &info.poly_info,
                 F::zero(),
                 &proof.sumcheck_msg,

@@ -19,7 +19,9 @@
 //! then the resulting purported sum is:
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
+use algebra::utils::Transcript;
 use algebra::{DecomposableField, DenseMultilinearExtension, Field, MultilinearExtension};
+use serde::Serialize;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
@@ -28,8 +30,6 @@ use crate::sumcheck::prover::ProverMsg;
 use crate::sumcheck::MLSumcheck;
 use crate::utils::{eval_identity_function, gen_identity_evaluations};
 use algebra::{FieldUniformSampler, ListOfProductsOfPolynomials, PolynomialInfo};
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
 
 /// SNARKs for bit decomposition
@@ -73,7 +73,7 @@ pub struct DecomposedBits<F: Field> {
 /// * It is required to decompose over a power-of-2 base.
 ///
 /// These parameters are used as the verifier key.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct DecomposedBitsInfo<F: Field> {
     /// base
     pub base: F,
@@ -256,27 +256,32 @@ impl<F: Field> BitDecompositionSubClaim<F> {
 impl<F: Field> BitDecomposition<F> {
     /// Prove bit decomposition given the decomposed bits as prover key.
     pub fn prove(decomposed_bits: &DecomposedBits<F>, u: &[F]) -> BitDecompositionProof<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, decomposed_bits, u)
+        let mut trans = Transcript::<F>::new();
+        Self::prove_as_subprotocol(&mut trans, decomposed_bits, u)
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
     pub fn prove_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         decomposed_bits: &DecomposedBits<F>,
         u: &[F],
     ) -> BitDecompositionProof<F> {
         let num_bits = decomposed_bits.instances.len() * decomposed_bits.bits_len as usize;
-        // TODO sample randomness via Fiat-Shamir RNG
+        trans.feed(b"decomposed bits", &decomposed_bits.info());
+
         // batch `len_bits` sumcheck protocols into one with random linear combination
         let sampler = <FieldUniformSampler<F>>::new();
-        let randomness: Vec<_> = (0..num_bits).map(|_| sampler.sample(fs_rng)).collect();
+        let randomness: Vec<_> = (0..num_bits)
+            .map(|_| {
+                sampler.sample(&mut trans.rng(b"generate randomness to batch sumcheck protocols"))
+            })
+            .collect();
         let poly = decomposed_bits.randomized_sumcheck(&randomness, u);
+        trans.feed(b"sumcheck protocol", &poly.info());
         BitDecompositionProof {
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
+            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &poly)
                 .expect("bit decomposition failed")
                 .0,
         }
@@ -287,30 +292,34 @@ impl<F: Field> BitDecomposition<F> {
         proof: &BitDecompositionProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> BitDecompositionSubClaim<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verifier_as_subprotocol(&mut fs_rng, proof, decomposed_bits_info)
+        let mut trans = Transcript::<F>::new();
+        Self::verifier_as_subprotocol(&mut trans, proof, decomposed_bits_info)
     }
 
     /// Verify bit decomposition given the basic information of decomposed bits as verifier key.
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
     pub fn verifier_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         proof: &BitDecompositionProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> BitDecompositionSubClaim<F> {
         let num_bits = decomposed_bits_info.num_instances * decomposed_bits_info.bits_len as usize;
-        // TODO sample randomness via Fiat-Shamir RNG
+        trans.feed(b"decomposed bits", decomposed_bits_info);
         // batch `len_bits` sumcheck protocols into one with random linear combination
         let sampler = <FieldUniformSampler<F>>::new();
-        let randomness: Vec<_> = (0..num_bits).map(|_| sampler.sample(fs_rng)).collect();
+        let randomness: Vec<_> = (0..num_bits)
+            .map(|_| {
+                sampler.sample(&mut trans.rng(b"generate randomness to batch sumcheck protocols"))
+            })
+            .collect();
         let poly_info = PolynomialInfo {
             max_multiplicands: 1 + (1 << decomposed_bits_info.base_len),
             num_variables: decomposed_bits_info.num_vars,
         };
+        trans.feed(b"sumcheck protocol", &poly_info);
         let subclaim =
-            MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::zero(), &proof.sumcheck_msg)
+            MLSumcheck::verify_as_subprotocol(trans, &poly_info, F::zero(), &proof.sumcheck_msg)
                 .expect("bit decomposition verification failed");
         BitDecompositionSubClaim {
             randomness,
