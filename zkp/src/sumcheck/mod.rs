@@ -1,7 +1,7 @@
 //! Interactive Proof Protocol used for Multilinear Sumcheck
 // It is derived from https://github.com/arkworks-rs/sumcheck/blob/master/src/ml_sumcheck/protocol/mod.rs.
 
-use algebra::{Field, ListOfProductsOfPolynomials, PolynomialInfo};
+use algebra::{utils::Block, Field, ListOfProductsOfPolynomials, PolynomialInfo};
 use prover::{ProverMsg, ProverState};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 use verifier::SubClaim;
 pub mod prover;
 pub mod verifier;
+use algebra::{utils::{Prg, Transcript}};
 
 /// IP for MLSumcheck   
 pub struct IPForMLSumcheck<F: Field> {
@@ -42,10 +43,8 @@ impl<F: Field> MLSumcheck<F> {
     pub fn prove(
         polynomial: &ListOfProductsOfPolynomials<F>,
     ) -> Result<Proof<F>, crate::error::Error> {
-        // TODO switch to the Fiat-Shamir RNG
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, polynomial).map(|r| r.0)
+        let mut fs_prg = Prg::from_seed(Block::default());
+        Self::prove_as_subprotocol(&mut fs_prg, polynomial).map(|r| r.0)
     }
 
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
@@ -55,16 +54,19 @@ impl<F: Field> MLSumcheck<F> {
         fs_rng: &mut impl RngCore,
         polynomial: &ListOfProductsOfPolynomials<F>,
     ) -> Result<(Proof<F>, ProverState<F>), crate::error::Error> {
-        // TODO update Fiat-Shamir RNG using polynomial.info()
+        // TODO: change interface
+        let mut trans = Transcript::<F>::new();
+        trans.feed(&polynomial.info());
 
         let mut prover_state = IPForMLSumcheck::prover_init(polynomial);
         let mut verifier_msg = None;
         let mut prover_msgs = Vec::with_capacity(polynomial.num_variables);
         for _ in 0..polynomial.num_variables {
             let prover_msg = IPForMLSumcheck::prove_round(&mut prover_state, &verifier_msg);
-            // TODO update Fiat-Shamir RNG using prover's message
+            trans.feed(&prover_msg);
             prover_msgs.push(prover_msg);
-            verifier_msg = Some(IPForMLSumcheck::sample_round(fs_rng));
+            
+            verifier_msg = Some(IPForMLSumcheck::sample_round(&mut trans.rng(b"sumcheck randomness")));
         }
         prover_state
             .randomness
@@ -79,9 +81,9 @@ impl<F: Field> MLSumcheck<F> {
         proof: &Proof<F>,
     ) -> Result<SubClaim<F>, crate::Error> {
         // TODO switch to the Fiat-Shamir RNG
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verify_as_subprotocol(&mut fs_rng, polynomial_info, claimed_sum, proof)
+        let mut fs_prg = Prg::from_seed(Block::default());
+        let mut trans = Transcript::<F>::new();
+        Self::verify_as_subprotocol(&mut fs_prg, polynomial_info, claimed_sum, proof)
     }
 
     /// This function does the same thing as `verify`, but it uses a `Fiat-Shamir RNG`` as the transcript to generate the
@@ -92,13 +94,16 @@ impl<F: Field> MLSumcheck<F> {
         claimed_sum: F,
         proof: &Proof<F>,
     ) -> Result<SubClaim<F>, crate::Error> {
-        // TODO update Fiat-Shamir RNG using polynomial.info()
+        // TODO: change impl
+        let mut trans = Transcript::<F>::new();
+        trans.feed(polynomial_info);
+
         let mut verifier_state = IPForMLSumcheck::verifier_init(polynomial_info);
         for i in 0..polynomial_info.num_variables {
             let prover_msg = proof.get(i).expect("proof is incomplete");
-            // TODO update Fiat-Shamir RNG using prover's message
+            trans.feed(prover_msg);
 
-            IPForMLSumcheck::verify_round((*prover_msg).clone(), &mut verifier_state, fs_rng);
+            IPForMLSumcheck::verify_round((*prover_msg).clone(), &mut verifier_state, &mut trans.rng(b"sumcheck randomness"));
         }
 
         IPForMLSumcheck::check_and_generate_subclaim(verifier_state, claimed_sum)

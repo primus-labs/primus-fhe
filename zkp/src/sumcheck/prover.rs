@@ -6,6 +6,8 @@ use std::vec;
 
 use algebra::Field;
 use algebra::{DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension};
+use serde::ser::SerializeSeq;
+use serde::Serialize;
 
 use super::verifier::VerifierMsg;
 use super::IPForMLSumcheck;
@@ -15,7 +17,19 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct ProverMsg<F: Field> {
     /// evaluations on P(0), P(1), P(2), ...
-    pub(crate) evaluations: Rc<Vec<F>>,
+    pub(crate) evaluations: Vec<F>,
+}
+
+impl<F: Field> Serialize for ProverMsg<F> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        let mut seq = serializer.serialize_seq(Some(self.evaluations.len()))?;
+        for e in &self.evaluations {
+            seq.serialize_element(e)?;
+        }
+        seq.end()
+    }
 }
 
 /// Prover State
@@ -146,7 +160,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         let products_sum = fold_result.0;
 
         ProverMsg {
-            evaluations: Rc::new(products_sum),
+            evaluations: products_sum,
         }
     }
 }

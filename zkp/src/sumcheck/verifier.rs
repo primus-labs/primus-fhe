@@ -5,13 +5,14 @@ use std::vec;
 
 use algebra::{Field, FieldUniformSampler, PolynomialInfo};
 use rand::distributions::Distribution;
+use serde::Serialize;
 
 use crate::error::Error;
 use std::rc::Rc;
 
 use super::{prover::ProverMsg, IPForMLSumcheck};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 /// verifier message
 pub struct VerifierMsg<F: Field> {
     /// randomness sampled by verifier
@@ -25,7 +26,7 @@ pub struct VerifierState<F: Field> {
     max_multiplicands: usize,
     finished: bool,
     /// a list storing the univariate polynomial in evaluations sent by the prover at each round
-    polynomials_received: Vec<Rc<Vec<F>>>,
+    polynomials_received: Vec<Vec<F>>,
     /// a list storing the randomness sampled by the verifier at each round
     randomness: Vec<F>,
 }

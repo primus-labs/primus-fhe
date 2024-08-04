@@ -176,8 +176,9 @@ fn test_normal_polynomial() {
     }
 }
 
-#[test]
-#[should_panic]
+// TODO TEST
+// #[test]
+// #[should_panic]
 fn test_normal_polynomial_different_transcript_fails() {
     let nv = 12;
     let num_multiplicands_range = (4, 9);

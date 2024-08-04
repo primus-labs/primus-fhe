@@ -1,11 +1,13 @@
 //! Implement AES-based PRG.
 
-use crate::utils::{aes::Aes, Block};
+use crate::{utils::{aes::Aes, Block}, Field};
+use crate::utils::transcript::Transcript;
 use rand::Rng;
 use rand_core::{
     block::{BlockRng, BlockRngCore},
     CryptoRng, RngCore, SeedableRng,
 };
+use serde::Serialize;
 
 ///Struct of PRG Core
 #[derive(Clone, Copy, Debug)]
@@ -48,6 +50,30 @@ impl CryptoRng for PrgCore {}
 /// Struct of PRG
 #[derive(Clone, Debug)]
 pub struct Prg(BlockRng<PrgCore>);
+
+// /// Random 
+// pub trait FeedableRng: RngCore {
+//     /// Setup
+//     fn setup() -> Self;
+//     /// Provide randomness for the generator, given the message
+//     fn feed<M: Serialize>(&mut self, msg: &M);
+// }
+// /// PRG with feedable transcript
+// pub struct TranscriptRng<F: Field> {
+//     trans: Transcript<F>,
+// }
+
+// impl<F: Field> FeedableRng for TranscriptRng<F> {
+//     fn setup() -> Self {
+//         Self {
+//             trans: Transcript::new(),
+//         }
+//     }
+
+//     fn feed<M: Serialize>(&mut self, msg: &M) {
+        
+//     }
+// }
 
 impl RngCore for Prg {
     #[inline(always)]

@@ -8,6 +8,7 @@ use itertools::Itertools;
 use num_traits::{Inv, One, Pow, Zero};
 use rand::{CryptoRng, Rng};
 use rand_distr::{Distribution, Standard};
+use serde::{ser::{SerializeSeq, SerializeTuple}, Serialize};
 
 use crate::{
     field_to_array, powers, AbstractExtensionField, ExtensionField, Field, FieldUniformSampler,
@@ -20,6 +21,20 @@ use super::{BinomiallyExtendable, Packable};
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
 pub struct BinomialExtensionField<F, const D: usize> {
     pub(crate) value: [F; D],
+}
+
+impl<F: Field, const D: usize> Serialize for BinomialExtensionField<F, D> 
+where F: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer {
+        let mut seq = serializer.serialize_tuple(D)?;
+        for e in &self.value {
+            seq.serialize_element(e)?;
+        }
+        seq.end()
+    }
 }
 
 impl<F: Field, const D: usize> Default for BinomialExtensionField<F, D> {

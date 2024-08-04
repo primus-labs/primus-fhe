@@ -5,6 +5,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssi
 
 use num_traits::{Inv, One, Pow, PrimInt, Zero};
 use rand::{CryptoRng, Rng};
+use serde::Serialize;
 
 use crate::random::UniformBase;
 use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
@@ -67,6 +68,7 @@ pub trait Field:
     + Neg<Output = Self>
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
+    + Serialize
 {
     /// The inner type of this field.
     type Value: Debug
@@ -78,7 +80,8 @@ pub trait Field:
         + Into<u64>
         + AsInto<f64>
         + AsFrom<f64>
-        + UniformBase;
+        + UniformBase
+        + Serialize;
 
     /// The type of the field's order.
     type Order: Copy;
