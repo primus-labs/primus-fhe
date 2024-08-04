@@ -48,10 +48,10 @@ fn test_trivial_range_check() {
     ));
 
     // compute the counting number m
-    let mut m_evaluations = vec![Fp32::zero(); 1 << num_vars_t];
+    let mut m_evaluations = vec![FF::zero(); 1 << num_vars_t];
     f.iter().for_each(|x| {
         let idx: usize = x.value() as usize;
-        m_evaluations[idx] += Fp32::one();
+        m_evaluations[idx] += FF::one();
     });
     let m = DenseMultilinearExtension::from_evaluations_slice(num_vars_t, &m_evaluations);
 
@@ -61,12 +61,12 @@ fn test_trivial_range_check() {
     }
 
     // compute t, inverse f and inverse t
-    let f_inverse: DenseMultilinearExtension<Fp32> =
+    let f_inverse: DenseMultilinearExtension<FF> =
         DenseMultilinearExtension::from_evaluations_vec(
             num_vars_f,
-            f.iter().map(|x_f| Fp32::one() / (r - x_f)).collect(),
+            f.iter().map(|x_f| FF::one() / (r - x_f)).collect(),
         );
-    let t_inverse: DenseMultilinearExtension<Fp32> =
+    let t_inverse: DenseMultilinearExtension<FF> =
         DenseMultilinearExtension::from_evaluations_vec(
             num_vars_t,
             t.iter()
@@ -76,6 +76,66 @@ fn test_trivial_range_check() {
         );
 
     let instance = RangeCheckInstance::from_slice(&f, &f_inverse, &t_inverse, &m, range);
+    let info = instance.info();
+
+    let u: Vec<_> = (0..num_vars_f).map(|_| sampler.sample(&mut rng)).collect();
+
+    let proof = RangeCheck::prove(&instance, &u, r);
+    let subclaim = RangeCheck::verify(&proof, &info);
+    assert!(subclaim.verify_subclaim(f, &f_inverse, &t_inverse, &t, &m, &u, r, &info));
+}
+
+
+#[test]
+fn test_random_range_check() {
+    let mut rng = thread_rng();
+    let sampler = <FieldUniformSampler<FF>>::new();
+
+    let num_vars_f = 16;
+    let num_vars_t = 6;
+    let range = 1 << num_vars_t;
+    
+    let f_evaluations: Vec<FF> = (0..(1 << num_vars_f)).map(|_| FF::new(rng.gen_range(0..range))).collect();
+    let f = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars_f,
+        f_evaluations
+    ));
+
+    let t_evaluations: Vec<FF> = (0..range).map(|x| FF::new(x)).collect();
+    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars_t,
+        t_evaluations
+    ));
+
+    // compute the counting number m
+    let mut m_evaluations = vec![FF::zero(); 1 << num_vars_t];
+    f.iter().for_each(|x| {
+        let idx: usize = x.value() as usize;
+        m_evaluations[idx] += FF::one();
+    });
+    let m = DenseMultilinearExtension::from_evaluations_slice(num_vars_t, &m_evaluations);
+
+    let mut r = sampler.sample(&mut rng);
+    while t[0] <= r && r <= t[(1 << num_vars_t) - 1] {
+        r = sampler.sample(&mut rng);
+    }
+
+    // compute t, inverse f and inverse t
+    let f_inverse: DenseMultilinearExtension<FF> =
+        DenseMultilinearExtension::from_evaluations_vec(
+            num_vars_f,
+            f.iter().map(|x_f| FF::one() / (r - x_f)).collect(),
+        );
+    let t_inverse: DenseMultilinearExtension<FF> =
+        DenseMultilinearExtension::from_evaluations_vec(
+            num_vars_t,
+            t.iter()
+                .zip(m.evaluations.iter())
+                .map(|(x_t, x_m)| *x_m / (r - x_t))
+                .collect(),
+        );
+
+    let instance = RangeCheckInstance::from_slice(&f, &f_inverse, &t_inverse, &m, range as usize);
     let info = instance.info();
 
     let u: Vec<_> = (0..num_vars_f).map(|_| sampler.sample(&mut rng)).collect();
