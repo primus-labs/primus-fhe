@@ -196,9 +196,19 @@ impl ExpanderCodeSpec {
 
 impl<F: Field> LinearCodeSpec<F> for ExpanderCodeSpec {
     type Code = ExpanderCode<F>;
+
     fn code(&self, message_len: usize, rng: &mut (impl Rng + CryptoRng)) -> Self::Code {
         ExpanderCode::<F>::new(self.clone(), message_len, rng)
     }
+
+    fn distance(&self) -> Result<f64, String> {
+        Ok(self.distance())
+    }
+
+    fn proximity_gap(&self) -> Result<f64, String> {
+        Ok(self.proximity_gap())
+    }
+
 }
 
 /// Define the struct of linear expander code.
