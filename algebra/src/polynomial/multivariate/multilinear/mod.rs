@@ -7,8 +7,10 @@ use num_traits::Zero;
 use crate::Field;
 
 mod dense;
+mod sparse;
 
 pub use dense::DenseMultilinearExtension;
+pub use sparse::SparsePolynomial;
 
 /// This trait describes an interface for the multilinear extension
 /// of an array.

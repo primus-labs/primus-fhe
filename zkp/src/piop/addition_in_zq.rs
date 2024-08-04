@@ -271,6 +271,7 @@ impl<F: Field> AdditionInZq<F> {
             max_multiplicands: 3,
             num_variables: decomposed_bits_info.num_vars,
         };
+
         let subclaim =
             MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::zero(), &proof.sumcheck_msg)
                 .expect("sumcheck protocol in addition in Zq failed");

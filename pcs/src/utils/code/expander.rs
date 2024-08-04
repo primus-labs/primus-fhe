@@ -7,21 +7,12 @@ use algebra::Field;
 use itertools::Itertools;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use std::{
-    cmp::{max, min},
-    f64,
-    fmt::Debug,
-    iter,
-};
 
 use super::LinearCodeSpec;
 
 /// BrakedownCode Specification
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ExpanderCodeSpec {
-    // Security parameter
-    lambda: usize,
-
     // Code parameter alpha
     alpha: f64,
 
@@ -31,8 +22,8 @@ pub struct ExpanderCodeSpec {
     // Inversion of ideal code rate
     r: f64,
 
-    // Size of the field.
-    field_size_bits: usize,
+    // Size of the base field.
+    base_field_bits: usize,
 
     // The threshold to call ReedSoloman Code.
     recursion_threshold: usize,
@@ -48,11 +39,11 @@ impl ExpanderCodeSpec {
     /// Create an instance of BrakedownCodeSpec
     #[inline]
     pub fn new(
-        lambda: usize,
+        // lambda: usize,
         alpha: f64,
         beta: f64,
         r: f64,
-        field_size_bits: usize,
+        base_field_bits: usize,
         recursion_threshold: usize,
     ) -> Self {
         assert!(r != 0.0);
@@ -67,36 +58,14 @@ impl ExpanderCodeSpec {
         assert!((1f64 - alpha) * r > (1f64 + 2f64 * beta));
 
         Self {
-            lambda,
             alpha,
             beta,
             r,
-            field_size_bits,
+            base_field_bits,
             recursion_threshold,
             distance,
             rate,
         }
-    }
-
-    /// Return the size of the field.
-    #[inline]
-    pub fn field_size_bits(&self) -> usize {
-        self.field_size_bits
-    }
-
-    /// Return the recursion threshold
-    #[inline]
-    pub fn recursion_threshold(&self) -> usize {
-        self.recursion_threshold
-    }
-
-    /// The expected size of the extension field.
-    /// The soundness error specified by the security parameter for proximity test: (1-delta/3)^num_opening + (codeword_len/|F|)
-    /// The expeted extension field size is bounded by (codeword_len/|F|)
-    #[inline]
-    pub fn extension_field_size(&self, message_len: usize) -> usize {
-        let n = message_len;
-        self.codeword_len(n) * ceil(f64::powf(2f64, self.lambda as f64))
     }
 
     /// The relative distance of the code
@@ -133,8 +102,8 @@ impl ExpanderCodeSpec {
         let n = message_len as f64;
         let alpha = self.alpha;
         let beta = self.beta;
-        min(
-            max((1.28 * beta * n).ceil() as usize, ceil(beta * n) + 4),
+        std::cmp::min(
+            std::cmp::max((1.28 * beta * n).ceil() as usize, ceil(beta * n) + 4),
             ceil(
                 ((110.0 / n) + entropy(beta) + alpha * entropy(1.28 * beta / alpha))
                     / (beta * (alpha / (1.28 * beta)).log2()),
@@ -145,14 +114,14 @@ impl ExpanderCodeSpec {
     // Return the num of nonzere elements in each row of B_n
     #[inline]
     fn d_n(&self, message_len: usize) -> usize {
-        let log2_q = self.field_size_bits as f64;
+        let log2_q = self.base_field_bits as f64;
         let n = message_len as f64;
         let alpha = self.alpha;
         let beta = self.beta;
         let r = self.r;
         let mu = r - 1f64 - r * alpha; // intermediate value
         let nu = beta + alpha * beta + 0.03; // intermediate value
-        min(
+        std::cmp::min(
             ceil((2.0 * beta + ((r - 1.0) + 110.0 / n) / log2_q) * n),
             ceil(
                 (r * alpha * entropy(beta / r) + mu * entropy(nu / mu) + 110.0 / n)
@@ -183,10 +152,10 @@ impl ExpanderCodeSpec {
         let n0 = self.recursion_threshold;
         assert!(n >= n0);
 
-        let a = iter::successors(Some(n), |n| Some(ceil(*n as f64 * self.alpha)))
+        let a = std::iter::successors(Some(n), |n| Some(ceil(*n as f64 * self.alpha)))
             .tuple_windows()
             .take_while(|(n, _)| n > &n0)
-            .map(|(n, m)| SparseMatrixDimension::new(n, m, min(self.c_n(n), m)))
+            .map(|(n, m)| SparseMatrixDimension::new(n, m, std::cmp::min(self.c_n(n), m)))
             .collect_vec();
 
         let b = a
@@ -194,7 +163,11 @@ impl ExpanderCodeSpec {
             .map(|a| {
                 let n_prime = ceil(a.num_col as f64 * self.r);
                 let m_prime = ceil(a.num_row as f64 * self.r) - a.num_col - n_prime;
-                SparseMatrixDimension::new(n_prime, m_prime, min(self.d_n(a.num_row), m_prime))
+                SparseMatrixDimension::new(
+                    n_prime,
+                    m_prime,
+                    std::cmp::min(self.d_n(a.num_row), m_prime),
+                )
             })
             .collect_vec();
 
@@ -332,6 +305,55 @@ impl<F: Field> LinearCode<F> for ExpanderCode<F> {
                 input_offset -= a.dimension.num_col;
                 let (input, output) = target.split_at_mut(output_offset);
                 b.add_multiplied_vector(
+                    &input[input_offset..input_offset + b.dimension.num_row],
+                    &mut output[..b.dimension.num_col],
+                );
+                output_offset += b.dimension.num_col;
+            });
+
+        assert_eq!(input_offset, self.a[0].dimension.num_row);
+        assert_eq!(output_offset, target.len());
+    }
+
+    fn encode_ext<EF>(&self, target: &mut [EF])
+    where
+        F: Field,
+        EF: algebra::AbstractExtensionField<F>,
+    {
+        assert_eq!(target.len(), self.codeword_len);
+        target[self.message_len..].fill(EF::zero());
+
+        // Compute x1 = x*A | x2 = x*A^2| x3 = x*A^3| ... | x_{k-1} = x*A^{k-1}
+        let mut input_offset = 0;
+        self.a[..self.a.len() - 1].iter().for_each(|a| {
+            let (input, output) = target[input_offset..].split_at_mut(a.dimension.num_row);
+            a.add_multiplied_vector_ext(input, &mut output[..a.dimension.num_col]);
+            input_offset += a.dimension.num_row;
+        });
+
+        // Compute x_k = ReedSoloman(x*A^k)
+        let a_last = self.a.last().unwrap();
+        let b_last = self.b.last().unwrap();
+
+        let (input, output) = target[input_offset..].split_at_mut(a_last.dimension.num_row);
+        a_last.add_multiplied_vector_ext(input, &mut output[..a_last.dimension.num_col]);
+
+        let reedsolomon_code =
+            ReedSolomonCode::new(a_last.dimension.num_col, b_last.dimension.num_row);
+        reedsolomon_code.encode(&mut output[..b_last.dimension.num_row]);
+
+        let mut output_offset = input_offset + a_last.dimension.num_row + b_last.dimension.num_row;
+        input_offset += a_last.dimension.num_row + a_last.dimension.num_col;
+
+        // Compute x_{k+1} = x_k*B | x_{k+2} = (x_{k-1}|x_k|x_{k+1})*B | x_{k+3} =  (x_{k-2}|x_{k-1}|x_k|x_{k+1}|x_{k+2})*B | ...
+        self.a
+            .iter()
+            .rev()
+            .zip(self.b.iter().rev())
+            .for_each(|(a, b)| {
+                input_offset -= a.dimension.num_col;
+                let (input, output) = target.split_at_mut(output_offset);
+                b.add_multiplied_vector_ext(
                     &input[input_offset..input_offset + b.dimension.num_row],
                     &mut output[..b.dimension.num_col],
                 );

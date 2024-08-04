@@ -1,7 +1,7 @@
 mod extension;
 
 pub use extension::BabyBearExetension;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use std::{
     fmt::Display,
@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// Implementation of BabyBear field.
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize)]
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
 pub struct BabyBear(u32);
 
 impl Field for BabyBear {

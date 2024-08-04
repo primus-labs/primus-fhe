@@ -1,7 +1,7 @@
 mod extension;
 
 pub use extension::GoldilocksExtension;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use std::{
     fmt::Display,
@@ -21,7 +21,7 @@ use crate::{
 };
 
 /// Implementation of Goldilocks field
-#[derive(Debug, Default, Clone, Copy, Serialize)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct Goldilocks(u64);
 
 impl Goldilocks {
