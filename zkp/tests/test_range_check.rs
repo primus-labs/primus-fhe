@@ -61,19 +61,17 @@ fn test_trivial_range_check() {
     }
 
     // compute t, inverse f and inverse t
-    let f_inverse: DenseMultilinearExtension<FF> =
-        DenseMultilinearExtension::from_evaluations_vec(
-            num_vars_f,
-            f.iter().map(|x_f| FF::one() / (r - x_f)).collect(),
-        );
-    let t_inverse: DenseMultilinearExtension<FF> =
-        DenseMultilinearExtension::from_evaluations_vec(
-            num_vars_t,
-            t.iter()
-                .zip(m.evaluations.iter())
-                .map(|(x_t, x_m)| *x_m / (r - x_t))
-                .collect(),
-        );
+    let f_inverse: DenseMultilinearExtension<FF> = DenseMultilinearExtension::from_evaluations_vec(
+        num_vars_f,
+        f.iter().map(|x_f| FF::one() / (r - x_f)).collect(),
+    );
+    let t_inverse: DenseMultilinearExtension<FF> = DenseMultilinearExtension::from_evaluations_vec(
+        num_vars_t,
+        t.iter()
+            .zip(m.evaluations.iter())
+            .map(|(x_t, x_m)| *x_m / (r - x_t))
+            .collect(),
+    );
 
     let instance = RangeCheckInstance::from_slice(&f, &f_inverse, &t_inverse, &m, range);
     let info = instance.info();
@@ -85,7 +83,6 @@ fn test_trivial_range_check() {
     assert!(subclaim.verify_subclaim(f, &f_inverse, &t_inverse, &t, &m, &u, r, &info));
 }
 
-
 #[test]
 fn test_random_range_check() {
     let mut rng = thread_rng();
@@ -94,17 +91,19 @@ fn test_random_range_check() {
     let num_vars_f = 16;
     let num_vars_t = 6;
     let range = 1 << num_vars_t;
-    
-    let f_evaluations: Vec<FF> = (0..(1 << num_vars_f)).map(|_| FF::new(rng.gen_range(0..range))).collect();
+
+    let f_evaluations: Vec<FF> = (0..(1 << num_vars_f))
+        .map(|_| FF::new(rng.gen_range(0..range)))
+        .collect();
     let f = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars_f,
-        f_evaluations
+        f_evaluations,
     ));
 
     let t_evaluations: Vec<FF> = (0..range).map(|x| FF::new(x)).collect();
     let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars_t,
-        t_evaluations
+        t_evaluations,
     ));
 
     // compute the counting number m
@@ -121,19 +120,17 @@ fn test_random_range_check() {
     }
 
     // compute t, inverse f and inverse t
-    let f_inverse: DenseMultilinearExtension<FF> =
-        DenseMultilinearExtension::from_evaluations_vec(
-            num_vars_f,
-            f.iter().map(|x_f| FF::one() / (r - x_f)).collect(),
-        );
-    let t_inverse: DenseMultilinearExtension<FF> =
-        DenseMultilinearExtension::from_evaluations_vec(
-            num_vars_t,
-            t.iter()
-                .zip(m.evaluations.iter())
-                .map(|(x_t, x_m)| *x_m / (r - x_t))
-                .collect(),
-        );
+    let f_inverse: DenseMultilinearExtension<FF> = DenseMultilinearExtension::from_evaluations_vec(
+        num_vars_f,
+        f.iter().map(|x_f| FF::one() / (r - x_f)).collect(),
+    );
+    let t_inverse: DenseMultilinearExtension<FF> = DenseMultilinearExtension::from_evaluations_vec(
+        num_vars_t,
+        t.iter()
+            .zip(m.evaluations.iter())
+            .map(|(x_t, x_m)| *x_m / (r - x_t))
+            .collect(),
+    );
 
     let instance = RangeCheckInstance::from_slice(&f, &f_inverse, &t_inverse, &m, range as usize);
     let info = instance.info();
