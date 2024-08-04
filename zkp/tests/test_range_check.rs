@@ -100,7 +100,7 @@ fn test_random_range_check() {
         f_evaluations,
     ));
 
-    let t_evaluations: Vec<FF> = (0..range).map(|x| FF::new(x)).collect();
+    let t_evaluations: Vec<FF> = (0..range).map(FF::new).collect();
     let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars_t,
         t_evaluations,
