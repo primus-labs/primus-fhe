@@ -43,7 +43,6 @@ impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<
             code_spec.distance().unwrap(),
             code_spec.proximity_gap().unwrap(),
         );
-        //dbg!(num_queries);
 
         // Estimated proof size.
         let estimated_proof_size =
@@ -53,11 +52,8 @@ impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<
         // since message is on extension field
         // optimal num_cols is the closest power of 2 to ((2 ^ num_vars) * num_queries / D) ^ (1/2)
         let sqrt = (((1 << num_vars) * num_queries / EF::D) as f64).sqrt();
-        //dbg!(sqrt);
         let lower = 2_usize.pow(sqrt.log2().floor() as u32);
-        //dbg!(lower);
         let upper = 2_usize.pow(sqrt.log2().ceil() as u32);
-        //dbg!(upper);
 
         let num_cols = if estimated_proof_size(lower) < estimated_proof_size(upper) {
             lower
@@ -65,9 +61,6 @@ impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<
             upper
         };
         let num_rows = (1 << num_vars) / num_cols;
-
-        dbg!(num_cols);
-        dbg!(num_rows);
 
         let code = code_spec.code(num_cols, &mut Prg::new());
 
