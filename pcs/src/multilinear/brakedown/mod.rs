@@ -52,7 +52,7 @@ where
     /// The computation of the product can be viewed as a linear combination of rows
     /// of the matrix with challenge vector as the coefficients.
     fn answer_challenge(
-        pp: &BrakedownParams<F, C>,
+        pp: &BrakedownParams<F, EF, C>,
         challenge: &[EF],
         state: &BrakedownCommitmentState<F, H>,
     ) -> Vec<EF> {
@@ -80,7 +80,7 @@ where
     /// Prover answers the query of columns of given indices
     /// and gives merkle paths as the proof of its consistency with the merkle root.
     fn answer_queries(
-        pp: &BrakedownParams<F, C>,
+        pp: &BrakedownParams<F, EF, C>,
         queries: &[usize],
         state: &BrakedownCommitmentState<F, H>,
     ) -> (Vec<H::Output>, Vec<F>) {
@@ -107,7 +107,7 @@ where
 
     /// Decompose an evaluation of point x into two tensors q1, q2 such that
     /// f(x) = q1 * M * q2 where M is the committed matrix.
-    fn tensor_decompose(pp: &BrakedownParams<F, C>, point: &[EF]) -> (Vec<EF>, Vec<EF>) {
+    fn tensor_decompose(pp: &BrakedownParams<F, EF, C>, point: &[EF]) -> (Vec<EF>, Vec<EF>) {
         let left_point_len = pp.num_rows().ilog2() as usize;
         let right_point_len = pp.code().message_len().ilog2() as usize;
         assert_eq!(left_point_len + right_point_len, point.len());
@@ -123,14 +123,14 @@ where
     }
 
     /// Generate tensor from points.
-    fn tensor_from_points(pp: &BrakedownParams<F, C>, points: &[EF]) -> Vec<EF> {
+    fn tensor_from_points(pp: &BrakedownParams<F, EF, C>, points: &[EF]) -> Vec<EF> {
         let len = pp.num_vars() - pp.num_rows().ilog2() as usize;
         lagrange_basis(&points[len..])
     }
 
     /// Check the merkle paths and consistency
     fn check_query_answers(
-        pp: &BrakedownParams<F, C>,
+        pp: &BrakedownParams<F, EF, C>,
         challenge: &[EF],
         queries: &[usize],
         encoded_rlc_msg: &[EF],
@@ -155,7 +155,7 @@ where
     /// Check the hash of column is the same as the merkle leave.
     /// Check the merkle paths are consistent with the merkle root.
     fn check_merkle(
-        pp: &BrakedownParams<F, C>,
+        pp: &BrakedownParams<F, EF, C>,
         queries: &[usize],
         merkle_paths: &[H::Output],
         columns: &[F],
@@ -186,7 +186,7 @@ where
 
     /// Check the consistency of entries
     fn check_consistency(
-        pp: &BrakedownParams<F, C>,
+        pp: &BrakedownParams<F, EF, C>,
         queries: &[usize],
         challenge: &[EF],
         encoded_rlc_msg: &[EF],
@@ -227,7 +227,7 @@ where
     EF: AbstractExtensionField<F>,
 {
     /// Generate random queries.
-    fn random_queries(pp: &BrakedownParams<F, C>, trans: &mut Transcript<F>) -> Vec<usize> {
+    fn random_queries(pp: &BrakedownParams<F, EF, C>, trans: &mut Transcript<F>) -> Vec<usize> {
         let num_queries = pp.num_query();
         let codeword_len = pp.code().codeword_len();
 
@@ -252,7 +252,7 @@ where
     S: LinearCodeSpec<F, Code = C>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
-    type Parameters = BrakedownParams<F, C>;
+    type Parameters = BrakedownParams<F, EF, C>;
     type Polynomial = DenseMultilinearExtension<F>;
     type Commitment = BrakedownPolyCommitment<H>;
     type CommitmentState = BrakedownCommitmentState<F, H>;
@@ -261,7 +261,7 @@ where
 
     fn setup(num_vars: usize, code_spec: Option<S>) -> Self::Parameters {
         let code_spec = code_spec.expect("Need a code spec");
-        BrakedownParams::<F, C>::new(num_vars, code_spec)
+        BrakedownParams::<F, EF, C>::new(num_vars, code_spec)
     }
 
     fn commit(
