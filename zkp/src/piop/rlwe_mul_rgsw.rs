@@ -356,9 +356,9 @@ impl<F: Field> RlweMultRgswIOP<F> {
         let identity_func_at_u = Rc::new(gen_identity_evaluations(u));
 
         // randomly combine two sumcheck protocols
-        let mut fs_rng = trans.rng(b"rlwe mul rgsw");
-        let r_1 = uniform.sample(&mut fs_rng);
-        let r_2 = uniform.sample(&mut fs_rng);
+        let r = trans.get_vec_challenge(b"randomness to combine 2 sumchecks", 2);
+        let r_1 = r[0];
+        let r_2 = r[1];
         // Sumcheck protocol for proving: g' = \sum_{i = 0}^{k-1} a_i' \cdot c_i + b_i' \cdot f_i
         // When proving g'(x) = \sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) for x \in \{0, 1\}^\log n,
         // prover claims the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
@@ -404,13 +404,13 @@ impl<F: Field> RlweMultRgswIOP<F> {
         );
 
         RlweMultRgswProof {
-            bit_decomposition_proof: BitDecomposition::prove_as_subprotocol(
+            bit_decomposition_proof: BitDecomposition::prove(
                 trans,
                 &decomposed_bits,
                 u,
             ),
             ntt_proof: NTTIOP::prove_as_subprotocol(trans, &instance.ntt_instance, u),
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &poly)
+            sumcheck_msg: MLSumcheck::prove(trans, &poly)
                 .expect("sumcheck fail in rlwe * rgsw")
                 .0,
         }
@@ -436,16 +436,16 @@ impl<F: Field> RlweMultRgswIOP<F> {
         info: &RlweMultRgswInfo<F>,
     ) -> RlweMultRgswSubclaim<F> {
         let uniform = <FieldUniformSampler<F>>::new();
-        let mut fs_rng = trans.rng(b"rlwe mul rgsw");
-        let r_1 = uniform.sample(&mut fs_rng);
-        let r_2 = uniform.sample(&mut fs_rng);
+        let r = trans.get_vec_challenge(b"randomness to combine 2 sumchecks", 2);
+        let r_1 = r[0];
+        let r_2 = r[1];
         let poly_info = PolynomialInfo {
             max_multiplicands: 3,
             num_variables: info.ntt_info.log_n,
         };
 
         RlweMultRgswSubclaim {
-            bit_decomposition_subclaim: BitDecomposition::verifier_as_subprotocol(
+            bit_decomposition_subclaim: BitDecomposition::verifier(
                 trans,
                 &proof.bit_decomposition_proof,
                 &info.decomposed_bits_info,
@@ -453,7 +453,7 @@ impl<F: Field> RlweMultRgswIOP<F> {
             ntt_subclaim: NTTIOP::verify_as_subprotocol(trans, &proof.ntt_proof, &info.ntt_info, u),
             randomness_ntt: randomness_ntt.to_owned(),
             randomness_sumcheck: vec![r_1, r_2],
-            sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
+            sumcheck_subclaim: MLSumcheck::verify(
                 trans,
                 &poly_info,
                 F::zero(),

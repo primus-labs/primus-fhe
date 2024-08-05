@@ -279,9 +279,9 @@ impl<F: Field> RoundIOP<F> {
         let identity_func_at_u = Rc::new(gen_identity_evaluations(u));
 
         // randomly combine two sumcheck protocols
-        let mut fs_rng = trans.rng(b"randomness for sumcheck");
-        let r_1 = uniform.sample(&mut fs_rng);
-        let r_2 = uniform.sample(&mut fs_rng);
+        let r = trans.get_vec_challenge(b"randomness for sumcheck", 2);
+        let r_1 = r[0];
+        let r_2 = r[1];
 
         // sumcheck1 for \sum_{x} eq(u, x) * w(x) * (1-w(x)) = 0, i.e. w(x)\in\{0,1\}^l with random coefficient r_1
         poly.add_product_with_linear_op(
@@ -374,17 +374,17 @@ impl<F: Field> RoundIOP<F> {
         );
 
         RoundIOPProof {
-            bit_decomp_proof_output: BitDecomposition::prove_as_subprotocol(
+            bit_decomp_proof_output: BitDecomposition::prove(
                 trans,
                 &instance.output_bits,
                 u,
             ),
-            bit_decomp_proof_offset: BitDecomposition::prove_as_subprotocol(
+            bit_decomp_proof_offset: BitDecomposition::prove(
                 trans,
                 &instance.offset_aux_bits,
                 u,
             ),
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &poly)
+            sumcheck_msg: MLSumcheck::prove(trans, &poly)
                 .expect("sumcheck for round operation failed")
                 .0,
         }
@@ -406,26 +406,26 @@ impl<F: Field> RoundIOP<F> {
         assert_eq!(num_vars, info.offset_bits_info.num_vars);
         let uniform = <FieldUniformSampler<F>>::new();
         // randomly combine two sumcheck protocols
-        let mut fs_rng = trans.rng(b"randomness for sumcheck");
-        let r_1 = uniform.sample(&mut fs_rng);
-        let r_2 = uniform.sample(&mut fs_rng);
+        let r = trans.get_vec_challenge(b"randomness for sumcheck", 2);
+        let r_1 = r[0];
+        let r_2 = r[1];
 
         let poly_info = PolynomialInfo {
             max_multiplicands: 3,
             num_variables: num_vars,
         };
         RoundIOPSubclaim {
-            bit_decomp_output_subclaim: BitDecomposition::verifier_as_subprotocol(
+            bit_decomp_output_subclaim: BitDecomposition::verifier(
                 trans,
                 &proof.bit_decomp_proof_output,
                 &info.output_bits_info,
             ),
-            bit_decomp_offset_subclaim: BitDecomposition::verifier_as_subprotocol(
+            bit_decomp_offset_subclaim: BitDecomposition::verifier(
                 trans,
                 &proof.bit_decomp_proof_offset,
                 &info.offset_bits_info,
             ),
-            sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
+            sumcheck_subclaim: MLSumcheck::verify(
                 trans,
                 &poly_info,
                 F::zero(),

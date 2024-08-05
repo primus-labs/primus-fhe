@@ -234,7 +234,7 @@ impl<F: Field> NTTBareIOP<F> {
         ntt_instance: &NTTInstance<F>,
         u: &[F],
     ) -> (NTTBareProof<F>, ProverState<F>) {
-        trans.feed(b"ntt bare", &ntt_instance.info());
+        trans.append_message(b"ntt bare", &ntt_instance.info());
         let log_n = ntt_instance.log_n;
 
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(log_n);
@@ -243,7 +243,7 @@ impl<F: Field> NTTBareIOP<F> {
         poly.add_product(product, F::one());
 
         let (prover_msg, prover_state) =
-            MLSumcheck::prove_as_subprotocol(trans, &poly).expect("ntt bare proof failed");
+            MLSumcheck::prove(trans, &poly).expect("ntt bare proof failed");
 
         (
             NTTBareProof {
@@ -269,12 +269,12 @@ impl<F: Field> NTTBareIOP<F> {
         ntt_bare_proof: &NTTBareProof<F>,
         ntt_instance_info: &NTTInstanceInfo<F>,
     ) -> NTTBareSubclaim<F> {
-        trans.feed(b"ntt bare", &ntt_instance_info);
+        trans.append_message(b"ntt bare", &ntt_instance_info);
         let poly_info = PolynomialInfo {
             max_multiplicands: 2,
             num_variables: ntt_instance_info.log_n,
         };
-        let subclaim = MLSumcheck::verify_as_subprotocol(
+        let subclaim = MLSumcheck::verify(
             trans,
             &poly_info,
             ntt_bare_proof.claimed_sum,

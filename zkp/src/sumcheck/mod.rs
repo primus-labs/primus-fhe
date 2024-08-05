@@ -39,31 +39,21 @@ impl<F: Field> MLSumcheck<F> {
     ///
     /// $$\sum_{i=0}^{n}C_i\cdot\prod_{j=0}^{m_i}P_{ij}$$
     pub fn prove(
-        polynomial: &ListOfProductsOfPolynomials<F>,
-    ) -> Result<Proof<F>, crate::error::Error> {
-        let mut trans = Transcript::<F>::new();
-        Self::prove_as_subprotocol(&mut trans, polynomial).map(|r| r.0)
-    }
-
-    /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-    /// verifier challenges. Additionally, it returns the prover's state in addition to the proof.
-    /// Both of these allow this sumcheck to be better used as a part of a larger protocol.
-    pub fn prove_as_subprotocol(
         trans: &mut Transcript<F>,
         polynomial: &ListOfProductsOfPolynomials<F>,
     ) -> Result<(Proof<F>, ProverState<F>), crate::error::Error> {
-        trans.feed(b"polynomial info", &polynomial.info());
+        trans.append_message(b"polynomial info", &polynomial.info());
 
         let mut prover_state = IPForMLSumcheck::prover_init(polynomial);
         let mut verifier_msg = None;
         let mut prover_msgs = Vec::with_capacity(polynomial.num_variables);
         for _ in 0..polynomial.num_variables {
             let prover_msg = IPForMLSumcheck::prove_round(&mut prover_state, &verifier_msg);
-            trans.feed(b"sumcheck msg", &prover_msg);
+            trans.append_message(b"sumcheck msg", &prover_msg);
             prover_msgs.push(prover_msg);
 
             verifier_msg = Some(IPForMLSumcheck::sample_round(
-                &mut trans.rng(b"sumcheck randomness"),
+                trans,
             ));
         }
         prover_state
@@ -74,34 +64,23 @@ impl<F: Field> MLSumcheck<F> {
 
     /// verify the proof using `polynomial_info` as the verifier key
     pub fn verify(
-        polynomial_info: &PolynomialInfo,
-        claimed_sum: F,
-        proof: &Proof<F>,
-    ) -> Result<SubClaim<F>, crate::Error> {
-        let mut trans = Transcript::<F>::new();
-        Self::verify_as_subprotocol(&mut trans, polynomial_info, claimed_sum, proof)
-    }
-
-    /// This function does the same thing as `verify`, but it uses a `Fiat-Shamir RNG`` as the transcript to generate the
-    /// verifier challenges. This allows this sumcheck to be used as a part of a larger protocol.
-    pub fn verify_as_subprotocol(
         trans: &mut Transcript<F>,
         polynomial_info: &PolynomialInfo,
         claimed_sum: F,
         proof: &Proof<F>,
     ) -> Result<SubClaim<F>, crate::Error> {
         // let mut trans = Transcript::<F>::new();
-        trans.feed(b"polynomial info", polynomial_info);
+        trans.append_message(b"polynomial info", polynomial_info);
 
         let mut verifier_state = IPForMLSumcheck::verifier_init(polynomial_info);
         for i in 0..polynomial_info.num_variables {
             let prover_msg = proof.get(i).expect("proof is incomplete");
-            trans.feed(b"sumcheck msg", prover_msg);
+            trans.append_message(b"sumcheck msg", prover_msg);
 
             IPForMLSumcheck::verify_round(
                 (*prover_msg).clone(),
                 &mut verifier_state,
-                &mut trans.rng(b"sumcheck randomness"),
+                trans,
             );
         }
 

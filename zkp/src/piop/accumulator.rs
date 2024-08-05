@@ -250,13 +250,13 @@ impl<F: Field> AccumulatorIOP<F> {
         u: &[F],
     ) -> AccumulatorProof<F> {
         AccumulatorProof {
-            bit_decomposition_proof: BitDecomposition::prove_as_subprotocol(
+            bit_decomposition_proof: BitDecomposition::prove(
                 trans,
                 &instance.decomposed_bits,
                 u,
             ),
             ntt_proof: NTTIOP::prove_as_subprotocol(trans, &instance.ntt_instance, u),
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &instance.poly)
+            sumcheck_msg: MLSumcheck::prove(trans, &instance.poly)
                 .expect("sumcheck fail in accumulator updation")
                 .0,
         }
@@ -280,13 +280,13 @@ impl<F: Field> AccumulatorIOP<F> {
         info: &AccumulatorInstanceInfo<F>,
     ) -> AccumulatorSubclaim<F> {
         AccumulatorSubclaim {
-            bit_decomposition_subclaim: BitDecomposition::verifier_as_subprotocol(
+            bit_decomposition_subclaim: BitDecomposition::verifier(
                 trans,
                 &proof.bit_decomposition_proof,
                 &info.decomposed_bits_info,
             ),
             ntt_subclaim: NTTIOP::verify_as_subprotocol(trans, &proof.ntt_proof, &info.ntt_info, u),
-            sumcheck_subclaim: MLSumcheck::verify_as_subprotocol(
+            sumcheck_subclaim: MLSumcheck::verify(
                 trans,
                 &info.poly_info,
                 F::zero(),

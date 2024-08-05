@@ -3,7 +3,7 @@
 
 use std::vec;
 
-use algebra::{Field, FieldUniformSampler, PolynomialInfo};
+use algebra::{utils::Transcript, Field, FieldUniformSampler, PolynomialInfo};
 use rand::distributions::Distribution;
 use serde::Serialize;
 
@@ -57,10 +57,10 @@ impl<F: Field> IPForMLSumcheck<F> {
     /// Normally, this function should perform actual verification. Instead, `verify_round` only samples
     /// and stores randomness and perform verifications altogether in `check_and_generate_subclaim` at
     /// the last step.
-    pub fn verify_round<R: rand::RngCore>(
+    pub fn verify_round(
         prover_msg: ProverMsg<F>,
         verifier_state: &mut VerifierState<F>,
-        rng: &mut R,
+        trans: &mut Transcript<F>,
     ) -> Option<VerifierMsg<F>> {
         if verifier_state.finished {
             panic!("incorrect verifier state: Verifier is already finished.")
@@ -68,7 +68,7 @@ impl<F: Field> IPForMLSumcheck<F> {
 
         // Now, verifier should check if the received P(0) + P(1) = expected. The check is moved to
         // `check_and_generate_subclaim`, and will be done after the last round.
-        let msg = Self::sample_round(rng);
+        let msg = Self::sample_round(trans);
         verifier_state.randomness.push(msg.randomness);
         verifier_state
             .polynomials_received
@@ -122,9 +122,9 @@ impl<F: Field> IPForMLSumcheck<F> {
 
     /// Simulate a verifier message without doing verification
     #[inline]
-    pub fn sample_round<R: rand::RngCore>(rng: &mut R) -> VerifierMsg<F> {
+    pub fn sample_round(trans: &mut Transcript<F>) -> VerifierMsg<F> {
         VerifierMsg {
-            randomness: FieldUniformSampler::new().sample(rng),
+            randomness: trans.get_challenge(b"random point in each round"),
         }
     }
 }

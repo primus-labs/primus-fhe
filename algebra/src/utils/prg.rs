@@ -49,30 +49,6 @@ impl CryptoRng for PrgCore {}
 #[derive(Clone, Debug)]
 pub struct Prg(BlockRng<PrgCore>);
 
-// /// Random
-// pub trait FeedableRng: RngCore {
-//     /// Setup
-//     fn setup() -> Self;
-//     /// Provide randomness for the generator, given the message
-//     fn feed<M: Serialize>(&mut self, msg: &M);
-// }
-// /// PRG with feedable transcript
-// pub struct TranscriptRng<F: Field> {
-//     trans: Transcript<F>,
-// }
-
-// impl<F: Field> FeedableRng for TranscriptRng<F> {
-//     fn setup() -> Self {
-//         Self {
-//             trans: Transcript::new(),
-//         }
-//     }
-
-//     fn feed<M: Serialize>(&mut self, msg: &M) {
-
-//     }
-// }
-
 impl RngCore for Prg {
     #[inline(always)]
     fn next_u32(&mut self) -> u32 {

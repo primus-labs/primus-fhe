@@ -232,7 +232,7 @@ where
         let codeword_len = pp.code().codeword_len();
 
         let mut seed = [0u8; 16];
-        trans.get_challenge_bytes(&mut seed);
+        trans.get_challenge_bytes(b"Generate random queries", &mut seed);
         let mut prg = Prg::from_seed(Block::from(seed));
 
         // Generate a random set of queries.
@@ -326,7 +326,8 @@ where
     ) -> Self::Proof {
         assert_eq!(points.len(), pp.num_vars());
         // Hash the commitment to transcript.
-        trans.append_message(&commitment.to_bytes().unwrap());
+        trans.append_message(b"commitment", &commitment);
+        // trans.append_message(&commitment.to_bytes().unwrap());
 
         // Compute the tensor from the random point, see [DP23](https://eprint.iacr.org/2023/630.pdf).
         let tensor = Self::tensor_from_points(pp, points);
@@ -334,7 +335,7 @@ where
         let rlc_msgs = Self::answer_challenge(pp, &tensor, state);
 
         // Hash rlc to transcript.
-        trans.append_ext_field_elements(&rlc_msgs);
+        trans.append_message(b"rlc", &rlc_msgs);
 
         // Sample random queries.
         let queries = Self::random_queries(pp, trans);
@@ -360,7 +361,7 @@ where
         assert_eq!(points.len(), pp.num_vars());
 
         // Hash the commitment to transcript.
-        trans.append_message(&commitment.to_bytes().unwrap());
+        trans.append_message(b"commitment", &commitment);
 
         let (tensor, residual) = Self::tensor_decompose(pp, points);
 
@@ -371,7 +372,7 @@ where
         pp.code().encode_ext(&mut encoded_msg);
 
         // Hash rlc to transcript.
-        trans.append_ext_field_elements(&proof.rlc_msgs);
+        trans.append_message(b"rlc", &proof.rlc_msgs);
 
         // Sample random queries.
         let queries = Self::random_queries(pp, trans);

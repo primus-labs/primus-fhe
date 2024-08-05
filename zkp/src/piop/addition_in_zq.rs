@@ -213,7 +213,7 @@ impl<F: Field> AdditionInZq<F> {
     ) -> AdditionInZqProof<F> {
         // 1. rangecheck
         let rangecheck_msg =
-            BitDecomposition::prove_as_subprotocol(trans, &addition_instance.abc_bits, u);
+            BitDecomposition::prove(trans, &addition_instance.abc_bits, u);
 
         let dim = u.len();
         assert_eq!(dim, addition_instance.num_vars);
@@ -231,7 +231,7 @@ impl<F: Field> AdditionInZq<F> {
         op_coefficient.push((-F::one(), F::one()));
 
         poly.add_product_with_linear_op(product, &op_coefficient, F::one());
-        let sumcheck_proof = MLSumcheck::prove_as_subprotocol(trans, &poly)
+        let sumcheck_proof = MLSumcheck::prove(trans, &poly)
             .expect("sumcheck for addition in Zq failed");
 
         AdditionInZqProof {
@@ -257,7 +257,7 @@ impl<F: Field> AdditionInZq<F> {
         proof: &AdditionInZqProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> AdditionInZqSubclaim<F> {
-        let rangecheck_subclaim = BitDecomposition::verifier_as_subprotocol(
+        let rangecheck_subclaim = BitDecomposition::verifier(
             trans,
             &proof.rangecheck_msg,
             decomposed_bits_info,
@@ -270,7 +270,7 @@ impl<F: Field> AdditionInZq<F> {
         };
 
         let subclaim =
-            MLSumcheck::verify_as_subprotocol(trans, &poly_info, F::zero(), &proof.sumcheck_msg)
+            MLSumcheck::verify(trans, &poly_info, F::zero(), &proof.sumcheck_msg)
                 .expect("sumcheck protocol in addition in Zq failed");
         AdditionInZqSubclaim {
             rangecheck_subclaim,

@@ -1,3 +1,4 @@
+use algebra::utils::Transcript;
 use algebra::Basis;
 use algebra::{
     derive::{DecomposableField, FheField, Field, Prime, NTT},
@@ -6,6 +7,7 @@ use algebra::{
 // use protocol::bit_decomposition::{BitDecomposition, DecomposedBits};
 use rand::prelude::*;
 use rand_distr::Distribution;
+use zkp::sumcheck::prover;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{BitDecomposition, DecomposedBits};
@@ -57,9 +59,11 @@ fn test_single_trivial_bit_decomposition_base_2() {
     let d_bits_verifier = vec![&d_bits];
 
     let decomposed_bits_info = prover_key.info();
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
     let u = field_vec!(FF; 0, 0);
-    let proof = BitDecomposition::prove(&prover_key, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
+    let proof = BitDecomposition::prove(&mut prover_trans, &prover_key, &u);
+    let subclaim = BitDecomposition::verifier(&mut verifier_trans,&proof, &decomposed_bits_info);
     assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &u, &decomposed_bits_info));
 }
 
@@ -116,11 +120,14 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     }
 
     let decomposed_bits_info = decomposed_bits.info();
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = BitDecomposition::prove(&decomposed_bits, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
+    let proof = BitDecomposition::prove(&mut prover_trans, &decomposed_bits, &prover_u);
+    let subclaim = BitDecomposition::verifier(&mut verifier_trans, &proof, &decomposed_bits_info);
+    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &verifier_u, &decomposed_bits_info));
 }
 
 #[test]
@@ -148,10 +155,13 @@ fn test_single_bit_decomposition() {
 
     let decomposed_bits_info = decomposed_bits.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = BitDecomposition::prove(&decomposed_bits, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &u, &decomposed_bits_info));
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let proof = BitDecomposition::prove(&mut prover_trans, &decomposed_bits, &prover_u);
+    let subclaim = BitDecomposition::verifier(&mut verifier_trans, &proof, &decomposed_bits_info);
+    assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &verifier_u, &decomposed_bits_info));
 }
 
 #[test]
@@ -203,8 +213,11 @@ fn test_batch_bit_decomposition() {
 
     let decomposed_bits_info = decomposed_bits.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = BitDecomposition::prove(&decomposed_bits, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let proof = BitDecomposition::prove(&mut prover_trans,&decomposed_bits, &prover_u);
+    let subclaim = BitDecomposition::verifier(&mut verifier_trans, &proof, &decomposed_bits_info);
+    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &verifier_u, &decomposed_bits_info));
 }

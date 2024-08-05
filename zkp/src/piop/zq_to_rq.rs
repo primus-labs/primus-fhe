@@ -197,7 +197,7 @@ impl<F: Field> TransformZqtoRQ<F> {
 
         // 1. rangecheck for r
         let rangecheck_msg =
-            BitDecomposition::prove_as_subprotocol(trans, &transform_instance.r_bits, u);
+            BitDecomposition::prove(trans, &transform_instance.r_bits, u);
 
         // 2. execute sumcheck for \sum_{x \in {0,1}^logM} eq(u, x) * k(x) * (1-k(x)) = 0 i.e. k(x) \in \{0,1\}^dim
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(dim);
@@ -212,7 +212,7 @@ impl<F: Field> TransformZqtoRQ<F> {
         op_coefficient.push((-F::one(), F::one()));
         poly.add_product_with_linear_op(product, &op_coefficient, F::one());
 
-        let first_sumcheck_proof = MLSumcheck::prove_as_subprotocol(trans, &poly)
+        let first_sumcheck_proof = MLSumcheck::prove(trans, &poly)
             .expect("sumcheck for transformation from Zq to RQ failed");
 
         // 3. execute sumcheck for \sum_{x \in {0,1}^logM} eq(u,x)((r(x) + 1) * (1 - 2k(x)) - s(x)) = 0 i.e. (r(x) + 1)(1 - 2k(x)) = s(x) for x in \{0,1\}^dim
@@ -236,7 +236,7 @@ impl<F: Field> TransformZqtoRQ<F> {
         op_coefficient.push((-F::one(), F::zero()));
         poly.add_product_with_linear_op(product, &op_coefficient, F::one());
 
-        let second_sumcheck_proof = MLSumcheck::prove_as_subprotocol(trans, &poly)
+        let second_sumcheck_proof = MLSumcheck::prove(trans, &poly)
             .expect("sumcheck for transformation from Zq to RQ failed");
 
         // 4. sumcheck for \sum_{y \in {0,1}^logN} c(u,y)t(y) = s(u)
@@ -277,7 +277,7 @@ impl<F: Field> TransformZqtoRQ<F> {
         op_coefficient.push((F::one(), F::zero()));
         poly.add_product_with_linear_op(product, &op_coefficient, F::one());
 
-        let third_sumcheck_proof = MLSumcheck::prove_as_subprotocol(trans, &poly)
+        let third_sumcheck_proof = MLSumcheck::prove(trans, &poly)
             .expect("sumcheck for transformation from Zq to RQ failed");
 
         TransformZqtoRQProof {
@@ -311,7 +311,7 @@ impl<F: Field> TransformZqtoRQ<F> {
         c_num_vars: usize,
     ) -> TransformZqtoRQSubclaim<F> {
         // 1. rangecheck
-        let rangecheck_subclaim = BitDecomposition::verifier_as_subprotocol(
+        let rangecheck_subclaim = BitDecomposition::verifier(
             trans,
             &proof.rangecheck_msg,
             decomposed_bits_info,
@@ -323,7 +323,7 @@ impl<F: Field> TransformZqtoRQ<F> {
             num_variables: decomposed_bits_info.num_vars,
         };
 
-        let first_subclaim = MLSumcheck::verify_as_subprotocol(
+        let first_subclaim = MLSumcheck::verify(
             trans,
             &poly_info,
             F::zero(),
@@ -331,7 +331,7 @@ impl<F: Field> TransformZqtoRQ<F> {
         )
         .expect("sumcheck protocol for transformation from Zq to RQ failed");
 
-        let second_subclaim = MLSumcheck::verify_as_subprotocol(
+        let second_subclaim = MLSumcheck::verify(
             trans,
             &poly_info,
             F::zero(),
@@ -343,7 +343,7 @@ impl<F: Field> TransformZqtoRQ<F> {
             max_multiplicands: 2,
             num_variables: c_num_vars,
         };
-        let third_subclaim = MLSumcheck::verify_as_subprotocol(
+        let third_subclaim = MLSumcheck::verify(
             trans,
             &poly_info,
             proof.s_u,

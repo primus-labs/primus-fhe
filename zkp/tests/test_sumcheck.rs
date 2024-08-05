@@ -79,9 +79,10 @@ fn test_protocol(nv: usize, num_multiplicands_range: (usize, usize), num_product
     let mut verifier_state = IPForMLSumcheck::verifier_init(&poly_info);
     let mut verifier_msg = None;
 
+    let mut trans = Transcript::<FF>::new();
     for _ in 0..poly.num_variables {
         let prover_message = IPForMLSumcheck::prove_round(&mut prover_state, &verifier_msg);
-        verifier_msg = IPForMLSumcheck::verify_round(prover_message, &mut verifier_state, &mut rng);
+        verifier_msg = IPForMLSumcheck::verify_round(prover_message, &mut verifier_state, &mut trans);
     }
     let subclaim = IPForMLSumcheck::check_and_generate_subclaim(verifier_state, asserted_sum)
         .expect("fail to generate subclaim");
@@ -96,8 +97,10 @@ fn test_polynomial(nv: usize, num_multiplicands_range: (usize, usize), num_produ
     let (poly, asserted_sum) =
         random_list_of_products::<FF, _>(nv, num_multiplicands_range, num_products, &mut rng);
     let poly_info = poly.info();
-    let proof = MLSumcheck::prove(&poly).expect("fail to prove");
-    let subclaim = MLSumcheck::verify(&poly_info, asserted_sum, &proof).expect("fail to verify");
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let proof = MLSumcheck::prove(&mut prover_trans, &poly).expect("fail to prove");
+    let subclaim = MLSumcheck::verify(&mut verifier_trans, &poly_info, asserted_sum, &proof.0).expect("fail to verify");
     assert!(
         poly.evaluate(&subclaim.point) == subclaim.expected_evaluations,
         "wrong subclaim"
@@ -116,9 +119,9 @@ fn test_polynomial_as_subprotocol(
         random_list_of_products::<FF, _>(nv, num_multiplicands_range, num_products, &mut rng);
     let poly_info = poly.info();
     let (proof, prover_state) =
-        MLSumcheck::prove_as_subprotocol(prover_trans, &poly).expect("fail to prove");
+        MLSumcheck::prove(prover_trans, &poly).expect("fail to prove");
     let subclaim =
-        MLSumcheck::verify_as_subprotocol(verifier_rng, &poly_info, asserted_sum, &proof)
+        MLSumcheck::verify(verifier_rng, &poly_info, asserted_sum, &proof)
             .expect("fail to verify");
     assert!(
         poly.evaluate(&subclaim.point) == subclaim.expected_evaluations,
@@ -185,9 +188,9 @@ fn test_normal_polynomial_different_transcript_fails() {
     let num_products = 5;
 
     let mut prover_trans = Transcript::<FF>::new();
-    prover_trans.feed(b"msg", &"prover");
+    prover_trans.append_message(b"msg", &"prover");
     let mut verifier_trans = Transcript::<FF>::new();
-    verifier_trans.feed(b"msg", &"verifier");
+    verifier_trans.append_message(b"msg", &"verifier");
     test_polynomial_as_subprotocol(
         nv,
         num_multiplicands_range,
@@ -211,9 +214,9 @@ fn zero_polynomial_should_error() {
 fn test_extract_sum() {
     let mut rng = thread_rng();
     let (poly, asserted_sum) = random_list_of_products::<FF, _>(8, (3, 4), 3, &mut rng);
-
-    let proof = MLSumcheck::prove(&poly).expect("fail to prove");
-    assert_eq!(MLSumcheck::extract_sum(&proof), asserted_sum);
+    let mut prover_trans = Transcript::<FF>::new();
+    let proof = MLSumcheck::prove(&mut prover_trans, &poly).expect("fail to prove");
+    assert_eq!(MLSumcheck::extract_sum(&proof.0), asserted_sum);
 }
 
 #[test]
@@ -268,9 +271,12 @@ fn test_shared_reference() {
     drop(prover);
 
     let poly_info = poly.info();
-    let proof = MLSumcheck::prove(&poly).expect("fail to prove");
-    let asserted_sum = MLSumcheck::extract_sum(&proof);
-    let subclaim = MLSumcheck::verify(&poly_info, asserted_sum, &proof).expect("fail to verify");
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    let proof = MLSumcheck::prove(&mut prover_trans, &poly).expect("fail to prove");
+    let asserted_sum = MLSumcheck::extract_sum(&proof.0);
+    let subclaim = MLSumcheck::verify(&mut verifier_trans, &poly_info, asserted_sum, &proof.0).expect("fail to verify");
     assert!(
         poly.evaluate(&subclaim.point) == subclaim.expected_evaluations,
         "wrong subclaim"

@@ -255,33 +255,20 @@ impl<F: Field> BitDecompositionSubClaim<F> {
 
 impl<F: Field> BitDecomposition<F> {
     /// Prove bit decomposition given the decomposed bits as prover key.
-    pub fn prove(decomposed_bits: &DecomposedBits<F>, u: &[F]) -> BitDecompositionProof<F> {
-        let mut trans = Transcript::<F>::new();
-        Self::prove_as_subprotocol(&mut trans, decomposed_bits, u)
-    }
-
-    /// Prove bit decomposition given the decomposed bits as prover key.
-    /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-    /// verifier challenges.
-    pub fn prove_as_subprotocol(
+    pub fn prove(
         trans: &mut Transcript<F>,
         decomposed_bits: &DecomposedBits<F>,
         u: &[F],
     ) -> BitDecompositionProof<F> {
         let num_bits = decomposed_bits.instances.len() * decomposed_bits.bits_len as usize;
-        trans.feed(b"decomposed bits", &decomposed_bits.info());
+        trans.append_message(b"decomposed bits", &decomposed_bits.info());
 
         // batch `len_bits` sumcheck protocols into one with random linear combination
-        let sampler = <FieldUniformSampler<F>>::new();
-        let randomness: Vec<_> = (0..num_bits)
-            .map(|_| {
-                sampler.sample(&mut trans.rng(b"generate randomness to batch sumcheck protocols"))
-            })
-            .collect();
+        let randomness = trans.get_vec_challenge(b"randomness to combine sumcheck protocols", num_bits);
         let poly = decomposed_bits.randomized_sumcheck(&randomness, u);
-        trans.feed(b"sumcheck protocol", &poly.info());
+        trans.append_message(b"sumcheck protocol", &poly.info());
         BitDecompositionProof {
-            sumcheck_msg: MLSumcheck::prove_as_subprotocol(trans, &poly)
+            sumcheck_msg: MLSumcheck::prove(trans, &poly)
                 .expect("bit decomposition failed")
                 .0,
         }
@@ -289,37 +276,21 @@ impl<F: Field> BitDecomposition<F> {
 
     /// Verify bit decomposition given the basic information of decomposed bits as verifier key.
     pub fn verifier(
-        proof: &BitDecompositionProof<F>,
-        decomposed_bits_info: &DecomposedBitsInfo<F>,
-    ) -> BitDecompositionSubClaim<F> {
-        let mut trans = Transcript::<F>::new();
-        Self::verifier_as_subprotocol(&mut trans, proof, decomposed_bits_info)
-    }
-
-    /// Verify bit decomposition given the basic information of decomposed bits as verifier key.
-    /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-    /// verifier challenges.
-    pub fn verifier_as_subprotocol(
         trans: &mut Transcript<F>,
         proof: &BitDecompositionProof<F>,
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> BitDecompositionSubClaim<F> {
         let num_bits = decomposed_bits_info.num_instances * decomposed_bits_info.bits_len as usize;
-        trans.feed(b"decomposed bits", decomposed_bits_info);
+        trans.append_message(b"decomposed bits", decomposed_bits_info);
         // batch `len_bits` sumcheck protocols into one with random linear combination
-        let sampler = <FieldUniformSampler<F>>::new();
-        let randomness: Vec<_> = (0..num_bits)
-            .map(|_| {
-                sampler.sample(&mut trans.rng(b"generate randomness to batch sumcheck protocols"))
-            })
-            .collect();
+        let randomness = trans.get_vec_challenge(b"randomness to combine sumcheck protocols", num_bits);
         let poly_info = PolynomialInfo {
             max_multiplicands: 1 + (1 << decomposed_bits_info.base_len),
             num_variables: decomposed_bits_info.num_vars,
-        };
-        trans.feed(b"sumcheck protocol", &poly_info);
+        }; 
+        trans.append_message(b"sumcheck protocol", &poly_info);
         let subclaim =
-            MLSumcheck::verify_as_subprotocol(trans, &poly_info, F::zero(), &proof.sumcheck_msg)
+            MLSumcheck::verify(trans, &poly_info, F::zero(), &proof.sumcheck_msg)
                 .expect("bit decomposition verification failed");
         BitDecompositionSubClaim {
             randomness,

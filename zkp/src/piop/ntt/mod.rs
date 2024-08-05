@@ -111,7 +111,8 @@ impl<F: Field + Serialize> Serialize for NTTInstanceInfo<F> {
     where
         S: serde::Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(self.ntt_table.len()))?;
+        let mut seq = serializer.serialize_seq(Some(self.ntt_table.len() + 1))?;
+        seq.serialize_element(&self.log_n)?;
         for e in self.ntt_table.iter() {
             seq.serialize_element(e)?;
         }
@@ -453,7 +454,7 @@ impl<F: Field> NTTIOP<F> {
         ops_right.push((u_i, F::one() - u_i));
         poly.add_product_with_linear_op(product_right, &ops_right, w_coeff);
 
-        MLSumcheck::prove_as_subprotocol(trans, &poly)
+        MLSumcheck::prove(trans, &poly)
             .expect("ntt proof of delegation failed in round {round}")
     }
 
@@ -463,7 +464,7 @@ impl<F: Field> NTTIOP<F> {
         ntt_instance: &NTTInstance<F>,
         u: &[F],
     ) -> NTTProof<F> {
-        trans.feed(b"ntt", &ntt_instance.info());
+        trans.append_message(b"ntt", &ntt_instance.info());
         let log_n = ntt_instance.log_n;
 
         let intermediate_mles = init_fourier_table_overall(u, &ntt_instance.ntt_table);
@@ -587,7 +588,7 @@ impl<F: Field> NTTIOP<F> {
         ntt_instance_info: &NTTInstanceInfo<F>,
         u: &[F],
     ) -> NTTSubclaim<F> {
-        trans.feed(b"ntt", ntt_instance_info);
+        trans.append_message(b"ntt", ntt_instance_info);
         let log_n = ntt_instance_info.log_n;
         assert_eq!(proof.delegation_sumcheck_msgs.len(), log_n - 1);
         assert_eq!(proof.delegation_claimed_sums.len(), log_n - 1);
@@ -606,7 +607,7 @@ impl<F: Field> NTTIOP<F> {
                 max_multiplicands: 3,
                 num_variables: k,
             };
-            let subclaim = MLSumcheck::verify_as_subprotocol(
+            let subclaim = MLSumcheck::verify(
                 trans,
                 &poly_info,
                 proof.delegation_claimed_sums[cnt],
