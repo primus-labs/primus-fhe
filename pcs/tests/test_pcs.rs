@@ -16,7 +16,7 @@ const BASE_FIELD_BITS: usize = 31;
 
 #[test]
 fn pcs_test() {
-    let num_vars = 10;
+    let num_vars = 20;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)

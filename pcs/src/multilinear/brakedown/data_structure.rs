@@ -51,15 +51,20 @@ impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<
         // estimated proof size := num_cols + num_queries * num_rows = D * num_cols + (num_queries * (2 ^ num_vars)) / num_cols
         // since message is on extension field
         // optimal num_cols is the closest power of 2 to ((2 ^ num_vars) * num_queries / D) ^ (1/2)
+
         let sqrt = (((1 << num_vars) * num_queries / EF::D) as f64).sqrt();
         let lower = 2_usize.pow(sqrt.log2().floor() as u32);
         let upper = 2_usize.pow(sqrt.log2().ceil() as u32);
 
-        let num_cols = if estimated_proof_size(lower) < estimated_proof_size(upper) {
+        let mut num_cols = if estimated_proof_size(lower) < estimated_proof_size(upper) {
             lower
         } else {
             upper
         };
+        if num_cols > (1 << num_vars) {
+            num_cols = 1 << num_vars;
+        }
+
         let num_rows = (1 << num_vars) / num_cols;
 
         let code = code_spec.code(num_cols, &mut Prg::new());
