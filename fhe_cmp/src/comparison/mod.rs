@@ -4,9 +4,6 @@ use algebra::{modulus::PowOf2Modulus, Field, NTTField, Polynomial};
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
 use lattice::{LWE, RGSW, RLWE};
 
-// N:dimension
-const N: usize = 1024;
-
 /// Performs the rlwe rotation operation.
 ///
 /// # Arguments
@@ -18,10 +15,10 @@ pub fn rlwe_turn<F: NTTField>(ciphertext: &mut RLWE<F>, num: usize) {
     let (a, b) = ciphertext.a_b_mut_slices();
     a.rotate_right(num);
     b.rotate_right(num);
-    for elem in &mut a[0..num] {
+    for elem in &mut a[..num] {
         *elem = -*elem;
     }
-    for elem in &mut b[0..num] {
+    for elem in &mut b[..num] {
         *elem = -*elem;
     }
 }
@@ -33,10 +30,10 @@ pub fn rlwe_turn<F: NTTField>(ciphertext: &mut RLWE<F>, num: usize) {
 /// * Input: RGSW ciphertext `ciphertext`.
 /// * Input: usize number `num`.
 /// * Output:RGSW ciphertext `ciphertext*x^(-num)`.
-pub fn rgsw_turn<F: NTTField>(ciphertext: &mut RGSW<F>, num: usize) {
+pub fn rgsw_turn<F: NTTField>(ciphertext: &mut RGSW<F>, num: usize, poly_length: usize) {
+    let start = poly_length.checked_sub(num).unwrap();
     for rlwe in ciphertext.c_neg_s_m_mut().iter_mut() {
         let (a, b) = rlwe.a_b_mut_slices();
-        let start = a.len() - num;
         a.rotate_left(num);
         b.rotate_left(num);
         for elem in &mut a[start..] {
@@ -48,7 +45,6 @@ pub fn rgsw_turn<F: NTTField>(ciphertext: &mut RGSW<F>, num: usize) {
     }
     for rlwe in ciphertext.c_m_mut().iter_mut() {
         let (a, b) = rlwe.a_b_mut_slices();
-        let start = a.len() - num;
         a.rotate_left(num);
         b.rotate_left(num);
         for elem in &mut a[start..] {
@@ -66,43 +62,43 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
     mut test_vector: Vec<F>,
     key: &RLWEBlindRotationKey<F>,
 ) -> LWE<F> {
-    let mod_after: u64 = 2048;
+    let poly_len = test_vector.len();
+    let mod_after: u64 = poly_len as u64 * 2;
     let switch = lwe_modulus_switch(ciphertext, mod_after, ModulusSwitchRoundMethod::Round);
-    let ciphertext_change_a = switch.a();
-    let ciphertext_change_b = switch.b();
+    let a = switch.a();
+    let b = switch.b();
     let binary_key = match key {
         RLWEBlindRotationKey::Binary(binary_key) => binary_key,
         RLWEBlindRotationKey::Ternary(_) => panic!(),
     };
-    let ciphertext_change_b = ciphertext_change_b as usize;
-    if ciphertext_change_b <= 1024 {
-        test_vector.rotate_right(ciphertext_change_b);
-        for elem in &mut test_vector[..ciphertext_change_b] {
+    let b = b as usize;
+    if b <= poly_len {
+        test_vector.rotate_right(b);
+        for elem in &mut test_vector[..b] {
             *elem = -*elem;
         }
     } else {
-        let len = ciphertext_change_b - 1024;
+        let len = b - poly_len;
         test_vector.rotate_right(len);
         for elem in &mut test_vector[len..] {
             *elem = -*elem;
         }
     }
 
-    let text1 = Polynomial::<F>::zero(N);
-    let text2 = Polynomial::<F>::new(test_vector);
-    let acc = RLWE::new(text1, text2);
+    let acc = RLWE::new(
+        Polynomial::<F>::zero(poly_len),
+        Polynomial::<F>::new(test_vector),
+    );
     let twice_rlwe_dimension_div_lwe_modulus: usize = 1;
-    let m = 2048;
-    let lwe_modulus = PowOf2Modulus::<u64>::new(m);
+    let lwe_modulus = PowOf2Modulus::<u64>::new(mod_after);
     let temp = binary_key.blind_rotate(
         acc,
-        ciphertext_change_a,
-        N,
+        a,
+        poly_len,
         twice_rlwe_dimension_div_lwe_modulus,
         lwe_modulus,
     );
-    let temp_extract = RLWE::extract_lwe(&temp);
-    return temp_extract;
+    RLWE::extract_lwe(&temp)
 }
 
 /*
@@ -143,9 +139,10 @@ pub fn homand<F:Field<Value=u64>+NTTField>(
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2, otherwise 0.
 pub fn greater_hcmp<F: NTTField>(cipher1: &RLWE<F>, cipher2: &RGSW<F>, half_delta: F) -> LWE<F> {
+    let poly_len = cipher1.a().coeff_count();
     let mul = cipher1.mul_rgsw(&cipher2);
 
-    let vector = vec![F::neg_one(); N];
+    let vector = vec![F::neg_one(); poly_len];
     let test_plaintext = Polynomial::<F>::new(vector);
 
     let trlwe_mul_a = mul.a() * &test_plaintext;
@@ -169,20 +166,24 @@ pub fn greater_hcmp<F: NTTField>(cipher1: &RLWE<F>, cipher2: &RGSW<F>, half_delt
 /// * Input: BlindRotationKey `gatebootstrappingkey`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=0.
 pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
-    cipher1: &Vec<RLWE<F>>,
-    cipher2: &Vec<RGSW<F>>,
-    cipher_size: usize,
+    cipher1: &[RLWE<F>],
+    cipher2: &[RGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
     delta: F,
     half_delta: F,
 ) -> LWE<F> {
-    if cipher_size == 1 {
-        return greater_hcmp(&cipher1[0], &cipher2[0], half_delta);
+    let len = cipher1.len();
+    assert_eq!(len, cipher2.len());
+    assert!(len > 0);
+    if len == 1 {
+        greater_hcmp(&cipher1[0], &cipher2[0], half_delta)
     } else {
+        let (cipher1_last, cipher1_others) = cipher1.split_last().unwrap();
+        let (cipher2_last, cipher2_others) = cipher2.split_last().unwrap();
+
         let mut low_res = greater_arbhcmp_fixed(
-            cipher1,
-            cipher2,
-            cipher_size - 1,
+            cipher1_others,
+            cipher2_others,
             gatebootstrappingkey,
             delta,
             half_delta,
@@ -192,15 +193,11 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         }
         *low_res.b_mut() = low_res.b() + low_res.b() + low_res.b() + low_res.b();
 
-        let mul = cipher1[cipher_size - 1].mul_rgsw(&cipher2[cipher_size - 1]);
+        let mul = cipher1_last.mul_rgsw(cipher2_last);
         let mut eq_res = RLWE::extract_lwe(&mul);
         *eq_res.b_mut() += half_delta;
 
-        let mut gt_res = greater_hcmp(
-            &cipher1[cipher_size - 1],
-            &cipher2[cipher_size - 1],
-            half_delta,
-        );
+        let mut gt_res = greater_hcmp(cipher1_last, cipher2_last, half_delta);
         //到目前为止，gt_res和eq_res都是正确的;
         for elem in gt_res.a_mut().iter_mut() {
             *elem = *elem + *elem;
@@ -209,23 +206,20 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
 
         //目前没有问题,low,high,equal都是正确的
         let offset = half_delta;
-        let mut tlwelvl1_a: Vec<F> = vec![0.into(); eq_res.a().len()];
-        for i in 0..N {
-            tlwelvl1_a[i] = eq_res.a()[i] + low_res.a()[i] + gt_res.a()[i];
-        }
-        let mut tlwelvl1_b = eq_res.b() + low_res.b() + gt_res.b();
-        tlwelvl1_b = tlwelvl1_b + offset;
-        let new_lwe = LWE::new(tlwelvl1_a, tlwelvl1_b);
+        let mut new_lwe = eq_res
+            .add_component_wise(&low_res)
+            .add_component_wise(&gt_res);
+        *new_lwe.b_mut() += offset;
         //目前为止正确，offset未验证
-        let mut test = vec![F::zero(); N];
-        let chunk = N / 8;
+        let poly_len = cipher1_last.a().coeff_count();
+        let mut test = vec![F::zero(); poly_len];
+        let chunk = poly_len / 8;
         test[chunk * 2..chunk * 3]
             .iter_mut()
             .for_each(|v| *v = delta);
         test[chunk * 5..].iter_mut().for_each(|v| *v = delta);
 
-        let res = gatebootstrapping(new_lwe, test, gatebootstrappingkey);
-        return res;
+        gatebootstrapping(new_lwe, test, gatebootstrappingkey)
     }
 }
 
@@ -295,7 +289,7 @@ pub fn equality_hcmp<F: Field<Value = u64> + NTTField>(
     }
     let u = 7156359169 / 8;
     *res.b_mut() = *res.b_mut() + *res.b_mut() - F::new(u);
-    return res;
+    res
 }
 
 /*
@@ -335,14 +329,14 @@ pub fn equality_arbhcmp<F:Field<Value=u64>+NTTField>(
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=0.
 pub fn less_hcmp<F: Field<Value = u64> + NTTField>(cipher1: &RLWE<F>, cipher2: &RGSW<F>) -> LWE<F> {
+    let poly_len = cipher1.a().coeff_count();
     let mul = cipher1.mul_rgsw(&cipher2);
-    let vector = vec![F::one(); N];
+    let vector = vec![F::one(); poly_len];
     let test_plaintext = Polynomial::<F>::new(vector);
-    let trlwe_mul_a = mul.a() * (&test_plaintext);
-    let trlwe_mul_b = mul.b() * (&test_plaintext);
+    let trlwe_mul_a = mul.a() * &test_plaintext;
+    let trlwe_mul_b = mul.b() * test_plaintext;
     let trlwe_mul = RLWE::new(trlwe_mul_a, trlwe_mul_b);
-    let res = RLWE::extract_lwe(&trlwe_mul);
-    return res;
+    RLWE::extract_lwe(&trlwe_mul)
 }
 
 /*
