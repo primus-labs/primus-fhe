@@ -53,8 +53,8 @@ impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<
         // optimal num_cols is the closest power of 2 to ((2 ^ num_vars) * num_queries / D) ^ (1/2)
 
         let sqrt = (((1 << num_vars) * num_queries / EF::D) as f64).sqrt();
-        let lower = 2_usize.pow(sqrt.log2().floor() as u32);
-        let upper = 2_usize.pow(sqrt.log2().ceil() as u32);
+        let lower = 1 << sqrt.log2().floor() as u32;
+        let upper = 1 << sqrt.log2().ceil() as u32;
 
         let mut num_cols = if estimated_proof_size(lower) < estimated_proof_size(upper) {
             lower
