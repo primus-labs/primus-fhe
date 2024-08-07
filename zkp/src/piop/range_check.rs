@@ -1,5 +1,26 @@
-//! range check
-//! document to be done
+//! PIOP for range check
+//! The prover wants to convince that lookups f are all in range
+//!
+//! <==> \forall x in H_f f(x) \in [range]
+//!
+//! <==> \forall x in H_f f(x) \in {t(x) | x \in H_t} := {0, 1, 2, ..., range - 1}  
+//!      where |H_f| is the size of lookups and |H_t| is the size of table / range
+//!
+//! <==> \exists m s.t. \forall y, \sum_{x \in H_f} 1 / y - f(x) = \sum_{x \in H_t} m(x) / y - t(x)
+//!
+//! <==> \sum_{x \in H_f} 1 / r - f(x) = \sum_{x \in H_t} m(x) / r - t(x)
+//!      where r is a random challenge from verifier (a single random element since y is a single variable)
+//!
+//! <==> \sum_{x \in H_f} f_inverse(x) = \sum_{x \in H_t} t_inverse(x)
+//!      \forall x \in H_f, f_inverse(x) * (r - f(x)) = 1
+//!      \forall x \in H_t, t_inverse(x) * (r - t(x)) = m(x)
+//!
+//! <==> \sum_{x \in H_f} f_inverse(x) = c_sum
+//!      \sum_{x \in H_t} t_inverse(x) = c_sum
+//!      \sum_{x \in H_f} eq(x, u) * f_inverse(x) * (r - f(x)) = 1
+//!      \sum_{x \in H_t} eq(x, u) * (t_inverse(x) * (r - t(x)) -m(x)) = 0
+//!      where u is a random challenge given from verifier (a vector of random element) and c_sum is some constant
+
 use std::marker::PhantomData;
 use std::rc::Rc;
 
