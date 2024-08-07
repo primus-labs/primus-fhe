@@ -12,7 +12,7 @@ use num_traits::Zero;
 use rand::prelude::*;
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 1152921504606830593]
+#[modulus = 132120577]
 pub struct FF(u64);
 
 pub type RingSecretKey<FF> = Polynomial<FF>;
@@ -50,10 +50,10 @@ fn main() {
         secret_key_type: SecretKeyType::Binary,
         blind_rotation_type: BlindRotationType::RLWE,
         ring_dimension: 1024,
-        ring_modulus: 1152921504606830593,
-        ring_noise_std_dev: 3.20 * 2.175,
+        ring_modulus: 132120577,
+        ring_noise_std_dev: 3.20,
         ring_secret_key_type: RingSecretKeyType::Binary,
-        blind_rotation_basis_bits: 3,
+        blind_rotation_basis_bits: 1,
         steps_after_blind_rotation: StepsAfterBR::Ms,
         key_switching_basis_bits: 1,
         key_switching_std_dev: 3.20 * 2.175,
@@ -79,13 +79,14 @@ fn main() {
     let mut num2 =
         RGSW::generate_random_one_sample(&mut rng, basis, sampler, sk.ntt_ring_secret_key());
 
-    comparison::rlwe_turn(&mut num1, 1);
+    comparison::rlwe_turn(&mut num1, 0);
     comparison::rgsw_turn(&mut num2, 0, poly_length);
 
     let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
     let vec1 = vec![num1.clone(), num1];
     let vec2 = vec![num2.clone(), num2];
-    let out1 = comparison::greater_arbhcmp_fixed(&vec1, &vec2, &rotationkey, DEELTA, HALF_DEELTA);
+    let out1 =
+        comparison::greater_arbhcmp_fixed(&vec1, &vec2, &rotationkey, DEELTA, HALF_DEELTA, code);
 
     let a_mul_s = code
         .iter()

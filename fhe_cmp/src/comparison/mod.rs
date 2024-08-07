@@ -1,6 +1,6 @@
 //!
 
-use algebra::{modulus::PowOf2Modulus, Field, NTTField, Polynomial};
+use algebra::{modulus::PowOf2Modulus, AsFrom, AsInto, Field, NTTField, Polynomial};
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
 use lattice::{LWE, RGSW, RLWE};
 
@@ -171,7 +171,16 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
     delta: F,
     half_delta: F,
+    sk: &[F],
 ) -> LWE<F> {
+    let q: f64 = F::MODULUS_VALUE.as_into();
+    let decode = |c: F| -> F {
+        F::new(F::Value::as_from(
+            (AsInto::<f64>::as_into(c.value()) * 16.0f64 / q)
+                .round()
+                .rem_euclid(16.0),
+        ))
+    };
     let len = cipher1.len();
     assert_eq!(len, cipher2.len());
     assert!(len > 0);
@@ -187,17 +196,40 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
             gatebootstrappingkey,
             delta,
             half_delta,
+            sk,
         );
+        let dec = low_res.b()
+            - low_res
+                .a()
+                .iter()
+                .zip(sk)
+                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
+        println!("low_res:{}", decode(dec));
         for elem in low_res.a_mut().iter_mut() {
             *elem = *elem + *elem + *elem + *elem;
         }
         *low_res.b_mut() = low_res.b() + low_res.b() + low_res.b() + low_res.b();
 
         let mul = cipher1_last.mul_rgsw(cipher2_last);
-        let mut eq_res = RLWE::extract_lwe(&mul);
-        *eq_res.b_mut() += half_delta;
+        let eq_res = RLWE::extract_lwe(&mul);
+        let eq_res = eq_res.add_component_wise_ref(&eq_res);
+
+        let dec = eq_res.b()
+            - eq_res
+                .a()
+                .iter()
+                .zip(sk)
+                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
+        println!("eq_res:{}", decode(dec));
 
         let mut gt_res = greater_hcmp(cipher1_last, cipher2_last, half_delta);
+        let dec = gt_res.b()
+            - gt_res
+                .a()
+                .iter()
+                .zip(sk)
+                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
+        println!("gt_res:{}", decode(dec));
         //到目前为止，gt_res和eq_res都是正确的;
         for elem in gt_res.a_mut().iter_mut() {
             *elem = *elem + *elem;
@@ -210,6 +242,14 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
             .add_component_wise(&low_res)
             .add_component_wise(&gt_res);
         *new_lwe.b_mut() += offset;
+
+        let dec = new_lwe.b()
+            - new_lwe
+                .a()
+                .iter()
+                .zip(sk)
+                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
+        println!("new_lwe:{}", decode(dec));
         //目前为止正确，offset未验证
         let poly_len = cipher1_last.a().coeff_count();
         let mut test = vec![F::zero(); poly_len];
