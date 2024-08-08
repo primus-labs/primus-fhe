@@ -1,13 +1,14 @@
 use algebra::{
     derive::{DecomposableField, FheField, Field, Prime, NTT},
-    DecomposableField, Field, NTTPolynomial, Polynomial,
+    Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
+    Polynomial,
 };
 use fhe_cmp::comparison;
 use fhe_core::{
     BlindRotationType, ConstParameters, ModulusSwitchRoundMethod, Parameters, RLWEBlindRotationKey,
     RingSecretKeyType, SecretKeyPack, SecretKeyType, StepsAfterBR,
 };
-use lattice::{NTTRLWE, RGSW, RLWE};
+use lattice::{RGSW, RLWE};
 use num_traits::Zero;
 use rand::prelude::*;
 
@@ -15,8 +16,8 @@ use rand::prelude::*;
 #[modulus = 132120577]
 pub struct FF(u64);
 
-pub type RingSecretKey<FF> = Polynomial<FF>;
-pub type NTTRingSecretKey<FF> = NTTPolynomial<FF>;
+pub type RingSecretKey<F> = Polynomial<F>;
+pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 
 type Inner = u64; // inner type
 
@@ -30,14 +31,63 @@ const HALF_DEELTA: FF = FF((FP as f64 / (FT as f64 * 2.0)) as Inner);
 //     FF::new((m as f64 * FP as f64 / FT as f64).round() as Inner)
 // }
 
-#[inline]
-fn half_encode(m: Inner) -> FF {
-    FF::new((m as f64 * FP as f64 / (FT as f64 * 2.0)).round() as Inner)
-}
+// #[inline]
+// fn half_encode(m: Inner) -> FF {
+//     FF::new((m as f64 * FP as f64 / (FT as f64 * 2.0)).round() as Inner)
+// }
 
 #[inline]
 fn decode(c: FF) -> Inner {
     (c.value() as f64 * FT as f64 / FP as f64).round() as Inner % FT
+}
+
+fn rgsw_values<F, R>(
+    values: &[usize],
+    ntt_ring_secret_key: &NTTRingSecretKey<F>,
+    error_sampler: FieldDiscreteGaussianSampler,
+    mut rng: R,
+    basis: Basis<F>,
+    poly_length: usize,
+) -> Vec<RGSW<F>>
+where
+    R: Rng + CryptoRng,
+    F: NTTField,
+{
+    let len = values.len();
+    let mut res = Vec::with_capacity(len);
+    for &v in values {
+        let mut rgsw =
+            RGSW::generate_random_one_sample(&mut rng, basis, error_sampler, ntt_ring_secret_key);
+
+        comparison::rgsw_turn(&mut rgsw, v, poly_length);
+        res.push(rgsw);
+    }
+
+    res
+}
+
+fn rlwe_values<F, R>(
+    values: &[usize],
+    ntt_ring_secret_key: &NTTRingSecretKey<F>,
+    error_sampler: FieldDiscreteGaussianSampler,
+    mut rng: R,
+    half_delta: F,
+) -> Vec<RLWE<F>>
+where
+    R: Rng + CryptoRng,
+    F: NTTField,
+{
+    let len = values.len();
+    let mut res = Vec::with_capacity(len);
+    for &v in values {
+        let mut rlwe =
+            RLWE::generate_random_zero_sample(ntt_ring_secret_key, error_sampler, &mut rng);
+        rlwe.b_mut()[0] += half_delta;
+        comparison::rlwe_turn(&mut rlwe, v);
+        res.push(rlwe)
+    }
+
+    res
 }
 
 fn main() {
@@ -67,31 +117,31 @@ fn main() {
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
     let lwe_sk = sk.lwe_secret_key();
+    let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
 
-    let value = 1;
-    let ntt_num1 = NTTRLWE::generate_random_value_sample(
+    let vec1 = rlwe_values(
+        &[1, 1],
         sk.ntt_ring_secret_key(),
-        half_encode(value),
         sampler,
         &mut rng,
+        HALF_DEELTA,
     );
-    let mut num1 = RLWE::from(ntt_num1);
+    let vec2 = rgsw_values(
+        &[0, 0],
+        sk.ntt_ring_secret_key(),
+        sampler,
+        &mut rng,
+        basis,
+        poly_length,
+    );
 
-    let mut num2 =
-        RGSW::generate_random_one_sample(&mut rng, basis, sampler, sk.ntt_ring_secret_key());
-
-    comparison::rlwe_turn(&mut num1, 0);
-    comparison::rgsw_turn(&mut num2, 5, poly_length);
-
-    let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
-    let vec1 = vec![num1.clone(), num1];
-    let vec2 = vec![num2.clone(), num2];
     let out1 = comparison::greater_arbhcmp_fixed(
         &vec1,
         &vec2,
         &rotationkey,
         DEELTA,
         HALF_DEELTA,
+        poly_length,
         lwe_sk,
         rlwe_sk,
     );
@@ -99,7 +149,7 @@ fn main() {
     let a_mul_s = rlwe_sk
         .iter()
         .zip(out1.a())
-        .fold(FF::zero(), |acc, (&s_i, &a_i)| acc + s_i * a_i);
+        .fold(FF::zero(), |acc, (&s, &a)| acc + s * a);
     let decoded_value1 = decode(out1.b() - a_mul_s);
     //low_res恒为1，无误 equal_res为0 high_res 有问题
     println!("{}", decoded_value1);

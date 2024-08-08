@@ -157,11 +157,15 @@ pub fn homand<F:Field<Value=u64>+NTTField>(
 /// * Input: LWE ciphertext `cipher1`, with message `a`.
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2, otherwise 0.
-pub fn greater_hcmp<F: NTTField>(cipher1: &RLWE<F>, cipher2: &RGSW<F>, half_delta: F) -> LWE<F> {
-    let poly_len = cipher1.a().coeff_count();
+pub fn greater_hcmp<F: NTTField>(
+    cipher1: &RLWE<F>,
+    cipher2: &RGSW<F>,
+    half_delta: F,
+    poly_length: usize,
+) -> LWE<F> {
     let mul = cipher1.mul_rgsw(&cipher2);
 
-    let vector = vec![F::neg_one(); poly_len];
+    let vector = vec![F::neg_one(); poly_length];
     let test_plaintext = Polynomial::<F>::new(vector);
 
     let trlwe_mul_a = mul.a() * &test_plaintext;
@@ -172,7 +176,7 @@ pub fn greater_hcmp<F: NTTField>(cipher1: &RLWE<F>, cipher2: &RGSW<F>, half_delt
 
     *res.b_mut() += half_delta;
 
-    return res;
+    res
 }
 
 /// Performs the fixed-precision homomorphic comparison "greater" operation.
@@ -190,6 +194,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
     delta: F,
     half_delta: F,
+    poly_length: usize,
     lwe_sk: &[u64],
     rlwe_sk: &[F],
 ) -> LWE<F> {
@@ -205,32 +210,34 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
     assert_eq!(len, cipher2.len());
     assert!(len > 0);
     if len == 1 {
-        greater_hcmp(&cipher1[0], &cipher2[0], half_delta)
+        greater_hcmp(&cipher1[0], &cipher2[0], half_delta, poly_length)
     } else {
         let (cipher1_last, cipher1_others) = cipher1.split_last().unwrap();
         let (cipher2_last, cipher2_others) = cipher2.split_last().unwrap();
 
         // neg sk
-        let mut low_res = greater_arbhcmp_fixed(
+        let mut low_part_gt_res = greater_arbhcmp_fixed(
             cipher1_others,
             cipher2_others,
             gatebootstrappingkey,
             delta,
             half_delta,
+            poly_length,
             lwe_sk,
             rlwe_sk,
         );
-        let dec = low_res.b()
-            - low_res
+        let dec = low_part_gt_res.b()
+            - low_part_gt_res
                 .a()
                 .iter()
                 .zip(rlwe_sk)
                 .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
-        println!("low_res:{}", decode(dec));
-        for elem in low_res.a_mut().iter_mut() {
+        println!("low_part_gt_res:{}", decode(dec));
+        for elem in low_part_gt_res.a_mut().iter_mut() {
             *elem = *elem + *elem + *elem + *elem;
         }
-        *low_res.b_mut() = low_res.b() + low_res.b() + low_res.b() + low_res.b();
+        *low_part_gt_res.b_mut() =
+            low_part_gt_res.b() + low_part_gt_res.b() + low_part_gt_res.b() + low_part_gt_res.b();
 
         let mul = cipher1_last.mul_rgsw(cipher2_last);
         let eq_res = RLWE::extract_lwe(&mul);
@@ -244,7 +251,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
                 .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
         println!("eq_res:{}", decode(dec));
 
-        let mut gt_res = greater_hcmp(cipher1_last, cipher2_last, half_delta);
+        let mut gt_res = greater_hcmp(cipher1_last, cipher2_last, half_delta, poly_length);
         let dec = gt_res.b()
             - gt_res
                 .a()
@@ -260,7 +267,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
 
         //目前没有问题,low,high,equal都是正确的
         let mut new_lwe = eq_res
-            .add_component_wise(&low_res)
+            .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
 
         let dec = new_lwe.b()
@@ -277,10 +284,9 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         a[0] = -a[0];
 
         //目前为止正确，offset未验证
-        let poly_len = cipher1_last.a().coeff_count();
-        let mut test = vec![F::zero(); poly_len];
+        let mut test = vec![F::zero(); poly_length];
         let mu = -delta;
-        let chunk = poly_len / 8;
+        let chunk = poly_length / 8;
         test[chunk * 2..chunk * 3].iter_mut().for_each(|v| *v = mu);
         test[chunk * 5..].iter_mut().for_each(|v| *v = mu);
         test.reverse();
