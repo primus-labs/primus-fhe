@@ -116,7 +116,6 @@ fn main() {
     let poly_length = param.ring_dimension();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let lwe_sk = sk.lwe_secret_key();
     let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
 
     let vec1 = rlwe_values(
@@ -142,8 +141,6 @@ fn main() {
         DEELTA,
         HALF_DEELTA,
         poly_length,
-        lwe_sk,
-        rlwe_sk,
     );
 
     let a_mul_s = rlwe_sk
