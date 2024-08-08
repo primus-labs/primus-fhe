@@ -341,6 +341,19 @@ impl<F: NTTField> RLWE<F> {
         LWE::<F>::new(a, b[0])
     }
 
+    /// Extract an LWE sample from RLWE.
+    #[inline]
+    pub fn extract_partial_lwe_locally(self, dimension: usize) -> LWE<F> {
+        let Self { a, b } = self;
+
+        let mut a = (-a).data();
+        a[0] = -a[0];
+        a[1..].reverse();
+
+        a.truncate(dimension);
+        LWE::<F>::new(a, b[0])
+    }
+
     /// Perform `destination = self * (Y^r - 1)` for bootstrapping where `Y = X^(2N/q)`.
     pub fn mul_monic_monomial_sub_one_inplace<T: NumCast>(
         &self, // N
@@ -957,7 +970,7 @@ impl<F: NTTField> NTTRLWE<F> {
     pub fn sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
-        polynomial: Polynomial<F>,
+        polynomial: &mut Polynomial<F>,
         decompose_space: &mut DecompositionSpace<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
@@ -966,7 +979,7 @@ impl<F: NTTField> NTTRLWE<F> {
         let decompose_space = decompose_space.get_mut();
         let basis = gadget_rlwe.basis();
 
-        let mut polynomial = -polynomial;
+        polynomial.neg_assign();
 
         gadget_rlwe.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
