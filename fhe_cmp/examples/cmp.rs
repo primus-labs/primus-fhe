@@ -42,16 +42,16 @@ fn decode(c: FF) -> Inner {
 
 fn main() {
     let mut rng = thread_rng();
-    let param = Parameters::<u32, FF>::new(ConstParameters {
+    let param = Parameters::<u64, FF>::new(ConstParameters {
         lwe_dimension: 1024,
-        lwe_modulus: 1024,
+        lwe_modulus: 2048,
         t: 16,
         lwe_noise_std_dev: 3.20,
         secret_key_type: SecretKeyType::Binary,
         blind_rotation_type: BlindRotationType::RLWE,
         ring_dimension: 1024,
         ring_modulus: 132120577,
-        ring_noise_std_dev: 3.20,
+        ring_noise_std_dev: 0.1,
         ring_secret_key_type: RingSecretKeyType::Binary,
         blind_rotation_basis_bits: 1,
         steps_after_blind_rotation: StepsAfterBR::Ms,
@@ -65,7 +65,8 @@ fn main() {
     let basis = param.blind_rotation_basis();
     let poly_length = param.ring_dimension();
     let sampler = param.ring_noise_distribution();
-    let code = sk.ring_secret_key().as_slice();
+    let rlwe_sk = sk.ring_secret_key().as_slice();
+    let lwe_sk = sk.lwe_secret_key();
 
     let value = 1;
     let ntt_num1 = NTTRLWE::generate_random_value_sample(
@@ -80,15 +81,22 @@ fn main() {
         RGSW::generate_random_one_sample(&mut rng, basis, sampler, sk.ntt_ring_secret_key());
 
     comparison::rlwe_turn(&mut num1, 0);
-    comparison::rgsw_turn(&mut num2, 0, poly_length);
+    comparison::rgsw_turn(&mut num2, 5, poly_length);
 
     let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
     let vec1 = vec![num1.clone(), num1];
     let vec2 = vec![num2.clone(), num2];
-    let out1 =
-        comparison::greater_arbhcmp_fixed(&vec1, &vec2, &rotationkey, DEELTA, HALF_DEELTA, code);
+    let out1 = comparison::greater_arbhcmp_fixed(
+        &vec1,
+        &vec2,
+        &rotationkey,
+        DEELTA,
+        HALF_DEELTA,
+        lwe_sk,
+        rlwe_sk,
+    );
 
-    let a_mul_s = code
+    let a_mul_s = rlwe_sk
         .iter()
         .zip(out1.a())
         .fold(FF::zero(), |acc, (&s_i, &a_i)| acc + s_i * a_i);

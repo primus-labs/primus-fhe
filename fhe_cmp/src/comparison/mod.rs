@@ -1,6 +1,10 @@
 //!
 
-use algebra::{modulus::PowOf2Modulus, AsFrom, AsInto, Field, NTTField, Polynomial};
+use algebra::{
+    modulus::PowOf2Modulus,
+    reduce::{AddReduce, MulReduce, SubReduce},
+    AsFrom, AsInto, Field, NTTField, Polynomial,
+};
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
 use lattice::{LWE, RGSW, RLWE};
 
@@ -61,12 +65,27 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
     ciphertext: LWE<F>,
     mut test_vector: Vec<F>,
     key: &RLWEBlindRotationKey<F>,
+    lwe_sk: &[u64],
 ) -> LWE<F> {
     let poly_len = test_vector.len();
     let mod_after: u64 = poly_len as u64 * 2;
     let switch = lwe_modulus_switch(ciphertext, mod_after, ModulusSwitchRoundMethod::Round);
+
+    let lwe_modulus = PowOf2Modulus::<u64>::new(mod_after);
+
     let a = switch.a();
     let b = switch.b();
+    let dec = b.sub_reduce(
+        a.iter().zip(lwe_sk).fold(0u64, |acc, (&a, &s)| {
+            acc.add_reduce(a.mul_reduce(s, lwe_modulus), lwe_modulus)
+        }),
+        lwe_modulus,
+    );
+
+    let temp = dec >> (mod_after.trailing_zeros() - 16u64.trailing_zeros() - 1);
+    let decode = ((temp >> 1) + (temp & 1)) % 16u64;
+    println!("after ms:{}", decode);
+
     let binary_key = match key {
         RLWEBlindRotationKey::Binary(binary_key) => binary_key,
         RLWEBlindRotationKey::Ternary(_) => panic!(),
@@ -90,7 +109,7 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
         Polynomial::<F>::new(test_vector),
     );
     let twice_rlwe_dimension_div_lwe_modulus: usize = 1;
-    let lwe_modulus = PowOf2Modulus::<u64>::new(mod_after);
+
     let temp = binary_key.blind_rotate(
         acc,
         a,
@@ -171,7 +190,8 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
     delta: F,
     half_delta: F,
-    sk: &[F],
+    lwe_sk: &[u64],
+    rlwe_sk: &[F],
 ) -> LWE<F> {
     let q: f64 = F::MODULUS_VALUE.as_into();
     let decode = |c: F| -> F {
@@ -190,19 +210,21 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         let (cipher1_last, cipher1_others) = cipher1.split_last().unwrap();
         let (cipher2_last, cipher2_others) = cipher2.split_last().unwrap();
 
+        // neg sk
         let mut low_res = greater_arbhcmp_fixed(
             cipher1_others,
             cipher2_others,
             gatebootstrappingkey,
             delta,
             half_delta,
-            sk,
+            lwe_sk,
+            rlwe_sk,
         );
         let dec = low_res.b()
             - low_res
                 .a()
                 .iter()
-                .zip(sk)
+                .zip(rlwe_sk)
                 .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
         println!("low_res:{}", decode(dec));
         for elem in low_res.a_mut().iter_mut() {
@@ -218,7 +240,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
             - eq_res
                 .a()
                 .iter()
-                .zip(sk)
+                .zip(rlwe_sk)
                 .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
         println!("eq_res:{}", decode(dec));
 
@@ -227,7 +249,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
             - gt_res
                 .a()
                 .iter()
-                .zip(sk)
+                .zip(rlwe_sk)
                 .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
         println!("gt_res:{}", decode(dec));
         //到目前为止，gt_res和eq_res都是正确的;
@@ -237,29 +259,34 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         *gt_res.b_mut() = gt_res.b() + gt_res.b();
 
         //目前没有问题,low,high,equal都是正确的
-        let offset = half_delta;
         let mut new_lwe = eq_res
             .add_component_wise(&low_res)
             .add_component_wise(&gt_res);
-        *new_lwe.b_mut() += offset;
 
         let dec = new_lwe.b()
             - new_lwe
                 .a()
                 .iter()
-                .zip(sk)
+                .zip(rlwe_sk)
                 .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
         println!("new_lwe:{}", decode(dec));
+
+        let a = new_lwe.a_mut();
+        a.iter_mut().for_each(|v| *v = -*v);
+        a[1..].reverse();
+        a[0] = -a[0];
+
         //目前为止正确，offset未验证
         let poly_len = cipher1_last.a().coeff_count();
         let mut test = vec![F::zero(); poly_len];
+        let mu = -delta;
         let chunk = poly_len / 8;
-        test[chunk * 2..chunk * 3]
-            .iter_mut()
-            .for_each(|v| *v = delta);
-        test[chunk * 5..].iter_mut().for_each(|v| *v = delta);
+        test[chunk * 2..chunk * 3].iter_mut().for_each(|v| *v = mu);
+        test[chunk * 5..].iter_mut().for_each(|v| *v = mu);
+        test.reverse();
+        test.rotate_right(chunk / 2);
 
-        gatebootstrapping(new_lwe, test, gatebootstrappingkey)
+        gatebootstrapping(new_lwe, test, gatebootstrappingkey, lwe_sk)
     }
 }
 
