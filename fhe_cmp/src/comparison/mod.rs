@@ -65,7 +65,6 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
     ciphertext: LWE<F>,
     mut test_vector: Vec<F>,
     key: &RLWEBlindRotationKey<F>,
-    lwe_sk: &[u64],
 ) -> LWE<F> {
     let poly_len = test_vector.len();
     let mod_after: u64 = poly_len as u64 * 2;
@@ -75,16 +74,6 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
 
     let a = switch.a();
     let b = switch.b();
-    let dec = b.sub_reduce(
-        a.iter().zip(lwe_sk).fold(0u64, |acc, (&a, &s)| {
-            acc.add_reduce(a.mul_reduce(s, lwe_modulus), lwe_modulus)
-        }),
-        lwe_modulus,
-    );
-
-    let temp = dec >> (mod_after.trailing_zeros() - 16u64.trailing_zeros() - 1);
-    let decode = ((temp >> 1) + (temp & 1)) % 16u64;
-    println!("after ms:{}", decode);
 
     let binary_key = match key {
         RLWEBlindRotationKey::Binary(binary_key) => binary_key,
@@ -195,17 +184,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
     delta: F,
     half_delta: F,
     poly_length: usize,
-    lwe_sk: &[u64],
-    rlwe_sk: &[F],
 ) -> LWE<F> {
-    let q: f64 = F::MODULUS_VALUE.as_into();
-    let decode = |c: F| -> F {
-        F::new(F::Value::as_from(
-            (AsInto::<f64>::as_into(c.value()) * 16.0f64 / q)
-                .round()
-                .rem_euclid(16.0),
-        ))
-    };
     let len = cipher1.len();
     assert_eq!(len, cipher2.len());
     assert!(len > 0);
@@ -215,7 +194,6 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         let (cipher1_last, cipher1_others) = cipher1.split_last().unwrap();
         let (cipher2_last, cipher2_others) = cipher2.split_last().unwrap();
 
-        // neg sk
         let mut low_part_gt_res = greater_arbhcmp_fixed(
             cipher1_others,
             cipher2_others,
@@ -223,42 +201,18 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
             delta,
             half_delta,
             poly_length,
-            lwe_sk,
-            rlwe_sk,
         );
-        let dec = low_part_gt_res.b()
-            - low_part_gt_res
-                .a()
-                .iter()
-                .zip(rlwe_sk)
-                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
-        println!("low_part_gt_res:{}", decode(dec));
+
         for elem in low_part_gt_res.a_mut().iter_mut() {
             *elem = *elem + *elem + *elem + *elem;
         }
         *low_part_gt_res.b_mut() =
             low_part_gt_res.b() + low_part_gt_res.b() + low_part_gt_res.b() + low_part_gt_res.b();
 
-        let mul = cipher1_last.mul_rgsw(cipher2_last);
-        let eq_res = RLWE::extract_lwe(&mul);
+        let eq_res = cipher1_last.mul_rgsw(cipher2_last).extract_lwe_locally();
         let eq_res = eq_res.add_component_wise_ref(&eq_res);
 
-        let dec = eq_res.b()
-            - eq_res
-                .a()
-                .iter()
-                .zip(rlwe_sk)
-                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
-        println!("eq_res:{}", decode(dec));
-
         let mut gt_res = greater_hcmp(cipher1_last, cipher2_last, half_delta, poly_length);
-        let dec = gt_res.b()
-            - gt_res
-                .a()
-                .iter()
-                .zip(rlwe_sk)
-                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
-        println!("gt_res:{}", decode(dec));
         //到目前为止，gt_res和eq_res都是正确的;
         for elem in gt_res.a_mut().iter_mut() {
             *elem = *elem + *elem;
@@ -270,20 +224,11 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
             .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
 
-        let dec = new_lwe.b()
-            - new_lwe
-                .a()
-                .iter()
-                .zip(rlwe_sk)
-                .fold(F::zero(), |acc, (&a, &s)| acc + a * s);
-        println!("new_lwe:{}", decode(dec));
-
         let a = new_lwe.a_mut();
         a.iter_mut().for_each(|v| *v = -*v);
         a[1..].reverse();
         a[0] = -a[0];
 
-        //目前为止正确，offset未验证
         let mut test = vec![F::zero(); poly_length];
         let mu = -delta;
         let chunk = poly_length / 8;
@@ -292,7 +237,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         test.reverse();
         test.rotate_right(chunk / 2);
 
-        gatebootstrapping(new_lwe, test, gatebootstrappingkey, lwe_sk)
+        gatebootstrapping(new_lwe, test, gatebootstrappingkey)
     }
 }
 
