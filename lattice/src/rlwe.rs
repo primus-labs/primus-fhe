@@ -346,9 +346,9 @@ impl<F: NTTField> RLWE<F> {
     pub fn extract_partial_lwe_locally(self, dimension: usize) -> LWE<F> {
         let Self { a, b } = self;
 
-        let mut a = (-a).data();
-        a[0] = -a[0];
+        let mut a = a.data();
         a[1..].reverse();
+        a[1..].iter_mut().for_each(|v| *v = -*v);
 
         a.truncate(dimension);
         LWE::<F>::new(a, b[0])
