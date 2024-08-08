@@ -1,10 +1,6 @@
 //!
 
-use algebra::{
-    modulus::PowOf2Modulus,
-    reduce::{AddReduce, MulReduce, SubReduce},
-    AsFrom, AsInto, Field, NTTField, Polynomial,
-};
+use algebra::{modulus::PowOf2Modulus, Field, NTTField, Polynomial};
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
 use lattice::{LWE, RGSW, RLWE};
 
