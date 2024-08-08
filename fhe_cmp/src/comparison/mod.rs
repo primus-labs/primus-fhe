@@ -216,14 +216,9 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         *gt_res.b_mut() = gt_res.b() + gt_res.b();
 
         //目前没有问题,low,high,equal都是正确的
-        let mut new_lwe = eq_res
+        let new_lwe = eq_res
             .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
-
-        let a = new_lwe.a_mut();
-        a.iter_mut().for_each(|v| *v = -*v);
-        a[1..].reverse();
-        a[0] = -a[0];
 
         let mut test = vec![F::zero(); poly_length];
         let mu = -delta;
