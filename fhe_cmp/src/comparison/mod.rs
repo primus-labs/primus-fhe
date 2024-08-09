@@ -220,7 +220,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         *gt_res.b_mut() = gt_res.b() + gt_res.b();
 
 
-        let mut new_lwe = eq_res
+        let new_lwe = eq_res
             .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
 
@@ -347,7 +347,7 @@ pub fn equality_arbhcmp_fixed<F:Field<Value=u64>+NTTField>(
     }else{
         let (cipher1_last, cipher1_others) = cipher1.split_last().unwrap();
         let (cipher2_last, cipher2_others) = cipher2.split_last().unwrap();
-        let mut low_res = equality_arbhcmp_fixed(
+        let low_res = equality_arbhcmp_fixed(
             cipher1_others,
             cipher2_others,
             gatebootstrappingkey,
@@ -355,7 +355,7 @@ pub fn equality_arbhcmp_fixed<F:Field<Value=u64>+NTTField>(
             half_delta,
             poly_length,
         );
-        let mut gt_res = equality_hcmp(cipher1_last, cipher2_last);
+        let gt_res = equality_hcmp(cipher1_last, cipher2_last);
         let res= homand(&low_res, &gt_res, poly_length, delta, gatebootstrappingkey);
         res
     }
@@ -448,7 +448,7 @@ pub fn less_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         *gt_res.b_mut() = gt_res.b() + gt_res.b();
 
 
-        let mut new_lwe = eq_res
+        let new_lwe = eq_res
             .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
 
