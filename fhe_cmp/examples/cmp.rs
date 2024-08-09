@@ -3,7 +3,7 @@ use algebra::{
     Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
     Polynomial,
 };
-use fhe_cmp::comparison;
+mod comparison;
 use fhe_core::{
     BlindRotationType, ConstParameters, ModulusSwitchRoundMethod, Parameters, RLWEBlindRotationKey,
     RingSecretKeyType, SecretKeyPack, SecretKeyType, StepsAfterBR,
@@ -58,7 +58,6 @@ where
     for &v in values {
         let mut rgsw =
             RGSW::generate_random_one_sample(&mut rng, basis, error_sampler, ntt_ring_secret_key);
-
         comparison::rgsw_turn(&mut rgsw, v, poly_length);
         res.push(rgsw);
     }
@@ -118,6 +117,7 @@ fn main() {
     let rlwe_sk = sk.ring_secret_key().as_slice();
     let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
 
+ 
     let vec1 = rlwe_values(
         &[1, 1],
         sk.ntt_ring_secret_key(),
@@ -126,14 +126,14 @@ fn main() {
         HALF_DEELTA,
     );
     let vec2 = rgsw_values(
-        &[0, 0],
+        &[1, 1],
         sk.ntt_ring_secret_key(),
         sampler,
         &mut rng,
         basis,
         poly_length,
     );
-
+ 
     let out1 = comparison::greater_arbhcmp_fixed(
         &vec1,
         &vec2,
@@ -148,8 +148,34 @@ fn main() {
         .zip(out1.a())
         .fold(FF::zero(), |acc, (&s, &a)| acc + s * a);
     let decoded_value1 = decode(out1.b() - a_mul_s);
-    //low_res恒为1，无误 equal_res为0 high_res 有问题
     println!("{}", decoded_value1);
+
+
+
+ /* 
+
+    let mut num1=RLWE::generate_random_zero_sample(
+    sk.ntt_ring_secret_key(),
+    sampler,
+    &mut rng
+    );
+    num1.b_mut()[0] += HALF_DEELTA;
+    let mut num2=RGSW::generate_random_one_sample(&mut rng, basis, sampler,sk.ntt_ring_secret_key());
+    let turn1=6;
+    let turn2=4;
+    comparison::rlwe_turn(&mut num1, turn1);
+    comparison::rgsw_turn(&mut num2, turn2, poly_length);
+    let out =comparison::equality_hcmp(&num1, &num2);
+    //let out = comparison::less_hcmp(&num1, &num2,HALF_DEELTA,poly_length);
+    let a_mul_s = rlwe_sk
+    .iter()
+    .zip(out.a())
+    .fold(FF::zero(), |acc, (&s, &a)| acc + s * a);
+    let decoded_value1 = decode(out.b() - a_mul_s);
+    println!("{}", decoded_value1);
+
+*/
+
     /*
     let out_a=out.a();
     let mut num = FF::new(0);
