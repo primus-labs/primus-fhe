@@ -3,7 +3,7 @@ use algebra::{
     Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
     Polynomial,
 };
-mod comparison;
+use fhe_cmp::comparison;
 use fhe_core::{
     BlindRotationType, ConstParameters, ModulusSwitchRoundMethod, Parameters, RLWEBlindRotationKey,
     RingSecretKeyType, SecretKeyPack, SecretKeyType, StepsAfterBR,
