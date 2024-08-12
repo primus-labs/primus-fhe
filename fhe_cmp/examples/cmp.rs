@@ -117,7 +117,6 @@ fn main() {
     let rlwe_sk = sk.ring_secret_key().as_slice();
     let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
 
- 
     let vec1 = rlwe_values(
         &[1, 1],
         sk.ntt_ring_secret_key(),
@@ -126,21 +125,15 @@ fn main() {
         HALF_DEELTA,
     );
     let vec2 = rgsw_values(
-        &[1, 1],
+        &[1, 0],
         sk.ntt_ring_secret_key(),
         sampler,
         &mut rng,
         basis,
         poly_length,
     );
- 
-    let out1 = comparison::equality_arbhcmp_fixed(
-        &vec1,
-        &vec2,
-        &rotationkey,
-        FF::new(param.ring_modulus()),
-        poly_length,
-    );
+
+    let out1 = comparison::equality_arbhcmp_fixed(&vec1, &vec2, &rotationkey, poly_length);
 
     let a_mul_s = rlwe_sk
         .iter()
@@ -149,31 +142,29 @@ fn main() {
     let decoded_value1 = decode(out1.b() - a_mul_s);
     println!("{}", decoded_value1);
 
+    /*
 
+        let mut num1=RLWE::generate_random_zero_sample(
+        sk.ntt_ring_secret_key(),
+        sampler,
+        &mut rng
+        );
+        num1.b_mut()[0] += HALF_DEELTA;
+        let mut num2=RGSW::generate_random_one_sample(&mut rng, basis, sampler,sk.ntt_ring_secret_key());
+        let turn1=6;
+        let turn2=6;
+        comparison::rlwe_turn(&mut num1, turn1);
+        comparison::rgsw_turn(&mut num2, turn2, poly_length);
+        let out =comparison::less_hcmp(&num1, &num2,HALF_DEELTA,poly_length);
+        //let out = comparison::less_hcmp(&num1, &num2,HALF_DEELTA,poly_length);
+        let a_mul_s = rlwe_sk
+        .iter()
+        .zip(out.a())
+        .fold(FF::zero(), |acc, (&s, &a)| acc + s * a);
+        let decoded_value1 = decode(out.b() - a_mul_s);
+        println!("{}", decoded_value1);
 
- /* 
-
-    let mut num1=RLWE::generate_random_zero_sample(
-    sk.ntt_ring_secret_key(),
-    sampler,
-    &mut rng
-    );
-    num1.b_mut()[0] += HALF_DEELTA;
-    let mut num2=RGSW::generate_random_one_sample(&mut rng, basis, sampler,sk.ntt_ring_secret_key());
-    let turn1=6;
-    let turn2=6;
-    comparison::rlwe_turn(&mut num1, turn1);
-    comparison::rgsw_turn(&mut num2, turn2, poly_length);
-    let out =comparison::less_hcmp(&num1, &num2,HALF_DEELTA,poly_length);
-    //let out = comparison::less_hcmp(&num1, &num2,HALF_DEELTA,poly_length);
-    let a_mul_s = rlwe_sk
-    .iter()
-    .zip(out.a())
-    .fold(FF::zero(), |acc, (&s, &a)| acc + s * a);
-    let decoded_value1 = decode(out.b() - a_mul_s);
-    println!("{}", decoded_value1);
-
-*/
+    */
 
     /*
     let out_a=out.a();

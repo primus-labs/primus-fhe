@@ -1,19 +1,8 @@
 //!
 
-use algebra::{modulus::PowOf2Modulus, Field, NTTField, Polynomial,AsInto};
-use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, Parameters, RLWEBlindRotationKey};
+use algebra::{modulus::PowOf2Modulus, Field, NTTField, Polynomial};
+use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
 use lattice::{LWE, RGSW, RLWE};
-
-
-
-
-
-
-
-
-
-
-
 
 /// Performs the rlwe rotation operation.
 ///
@@ -73,7 +62,6 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
     mut test_vector: Vec<F>,
     key: &RLWEBlindRotationKey<F>,
 ) -> LWE<F> {
-
     let poly_len = test_vector.len();
     let mod_after: u64 = poly_len as u64 * 2;
 
@@ -118,8 +106,6 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
     RLWE::extract_lwe(&temp)
 }
 
-
-
 /// Performs the homomorphic and operation.
 ///
 /// # Arguments
@@ -127,39 +113,31 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
 /// * Input: LWE ciphertext `ca`, with message `a`.
 /// * Input: LWE ciphertext `cb`, with message `b`.
 /// * Output: LWE ciphertext with message `a and b`.
-pub fn homand<F:Field<Value=u64>+NTTField>(
-    ca:&LWE<F>,
-    cb:&LWE<F>,
-    key:&RLWEBlindRotationKey<F>,
-    ring_modulus:F,
-    poly_length: usize
-)->LWE<F>{
+pub fn homand<F: Field<Value = u64> + NTTField>(
+    ca: &LWE<F>,
+    cb: &LWE<F>,
+    key: &RLWEBlindRotationKey<F>,
+    poly_length: usize,
+) -> LWE<F> {
     let mut temp = ca.add_component_wise_ref(cb);
     for elem in temp.a_mut().iter_mut() {
         *elem = *elem + *elem + *elem + *elem;
     }
-    *temp.b_mut() =
-        temp.b() + temp.b() + temp.b() + temp.b();
+    *temp.b_mut() = temp.b() + temp.b() + temp.b() + temp.b();
+
     let mut test = vec![F::zero(); poly_length];
-    let test_len = test.len();
-    let x = test_len>>2;
-    let twice_rlwe_dimension_div_lwe_modulus=1;
-    let q =ring_modulus.value();
-    let q_div_32=F::new(q>>5);
-    let neq_q_div_32=F::new(q-q_div_32.value());
-    test[0..=x]
-        .iter_mut()
-        .step_by(twice_rlwe_dimension_div_lwe_modulus)
-        .for_each(|a| *a = neq_q_div_32);
-    let mut iter = test[x..]
-        .iter_mut()
-        .step_by(twice_rlwe_dimension_div_lwe_modulus);
+    let x = poly_length >> 2;
+    let q_div_32 = F::new(F::MODULUS_VALUE >> 5);
+    let neg_q_div_32 = F::new(F::MODULUS_VALUE - q_div_32.value());
+    test[0..=x].iter_mut().for_each(|a| *a = neg_q_div_32);
+    let mut iter = test[x..].iter_mut();
     iter.next();
     iter.for_each(|a| *a = q_div_32);
-    gatebootstrapping(temp, test, key)
+
+    let mut r = gatebootstrapping(temp, test, key);
+    *r.b_mut() += q_div_32;
+    r
 }
-
-
 
 /// Performs the greater homomorphic comparison "greater" operation.
 ///
@@ -241,11 +219,9 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         }
         *gt_res.b_mut() = gt_res.b() + gt_res.b();
 
-
         let new_lwe = eq_res
             .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
-
 
         let mut test = vec![F::zero(); poly_length];
         let mu = -delta;
@@ -259,8 +235,7 @@ pub fn greater_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
     }
 }
 
-
-/* 
+/*
 pub fn greater_arbhcmp_arbitary<F: Field<Value = u64> + NTTField>(
     cipher1: &[RLWE<F>],
     cipher2: &[RGSW<F>],
@@ -304,7 +279,7 @@ pub fn greater_arbhcmp_arbitary<F: Field<Value = u64> + NTTField>(
         }
         *gt_res.b_mut() = gt_res.b() + gt_res.b();
 
-        
+
         let mut new_lwe = eq_res
             .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
@@ -345,7 +320,6 @@ pub fn equality_hcmp<F: Field<Value = u64> + NTTField>(
     res
 }
 
-
 /// Performs the arbitary-precision homomorphic comparison "equality" operation.
 ///
 /// # Arguments
@@ -353,36 +327,32 @@ pub fn equality_hcmp<F: Field<Value = u64> + NTTField>(
 /// * Input: LWE ciphertext `cipher1`, with message `a`.
 /// * Input: RGSW ciphertext `cipher2`, with message `b`.
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=0.
-pub fn equality_arbhcmp_fixed<F:Field<Value=u64>+NTTField>(
+pub fn equality_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
     cipher1: &[RLWE<F>],
     cipher2: &[RGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
-    rlwe_modulus:F,
+
     poly_length: usize,
-)->LWE<F>{
+) -> LWE<F> {
     let len = cipher1.len();
     assert_eq!(len, cipher2.len());
     assert!(len > 0);
     if len == 1 {
         equality_hcmp(&cipher1[0], &cipher2[0])
-    }else{
+    } else {
         let (cipher1_last, cipher1_others) = cipher1.split_last().unwrap();
         let (cipher2_last, cipher2_others) = cipher2.split_last().unwrap();
         let low_res = equality_arbhcmp_fixed(
             cipher1_others,
             cipher2_others,
             gatebootstrappingkey,
-            rlwe_modulus,
             poly_length,
         );
         let gt_res = equality_hcmp(cipher1_last, cipher2_last);
-        let res= homand(&low_res, &gt_res, gatebootstrappingkey,rlwe_modulus, poly_length);
+        let res = homand(&low_res, &gt_res, gatebootstrappingkey, poly_length);
         res
     }
 }
-
-
-
 
 /// Performs the greater homomorphic comparison "less" operation.
 ///
@@ -413,8 +383,6 @@ pub fn less_hcmp<F: Field<Value = u64> + NTTField>(
 
     res
 }
-
-
 
 /// Performs the fixed-precision homomorphic comparison "less" operation.
 ///
@@ -467,11 +435,9 @@ pub fn less_arbhcmp_fixed<F: Field<Value = u64> + NTTField>(
         }
         *gt_res.b_mut() = gt_res.b() + gt_res.b();
 
-
         let new_lwe = eq_res
             .add_component_wise(&low_part_gt_res)
             .add_component_wise(&gt_res);
-
 
         let mut test = vec![F::zero(); poly_length];
         let mu = -delta;
