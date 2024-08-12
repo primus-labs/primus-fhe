@@ -14,7 +14,7 @@ fn main() {
     // set parameter
     let params = *DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS;
 
-    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as C;
+    let noise_max = (params.lwe_cipher_modulus_value() as f64 / 16.0) as C;
 
     let check_noise = |noise: C, op: &str| {
         assert!(
@@ -109,8 +109,8 @@ fn main() {
 }
 
 #[allow(clippy::type_complexity)]
-fn join_bit_opearions<T: LWEModulusType, F: NTTField>(
-    evk: &Evaluator<T, F>,
+fn join_bit_opearions<T: LWEModulusType, F: NTTField, Qks: NTTField>(
+    evk: &Evaluator<T, F, Qks>,
     x: &LWECiphertext<T>,
     y: &LWECiphertext<T>,
     z: &LWECiphertext<T>,

@@ -1,6 +1,6 @@
 use std::slice::ChunksExact;
 
-use algebra::{FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
+use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, RLWE};
 use rand::{CryptoRng, Rng};
 
@@ -12,6 +12,66 @@ enum Operation {
     SubAMulS,
 }
 
+/// A enum type for different key switching purposes.
+#[derive(Debug, Clone)]
+pub enum EitherKeySwitchingKey<Q: NTTField, Qks: NTTField> {
+    /// Modulus Switch, Key Switch and Modulus Switch
+    MsKsMs(KeySwitchingKey<Qks>),
+    /// Key Switch and Modulus Switch
+    KsMs(KeySwitchingKey<Q>),
+    /// Modulus Switch
+    Ms,
+}
+
+impl<Q: NTTField, Qks: NTTField> EitherKeySwitchingKey<Q, Qks> {
+    /// Returns `true` if the either key switching key is [`MsKsMs`].
+    ///
+    /// [`MsKsMs`]: EitherKeySwitchingKey::MsKsMs
+    #[must_use]
+    pub fn is_ms_ks_ms(&self) -> bool {
+        matches!(self, Self::MsKsMs(..))
+    }
+
+    /// .
+    pub fn as_ms_ks_ms(&self) -> Option<&KeySwitchingKey<Qks>> {
+        if let Self::MsKsMs(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `true` if the either key switching key is [`KsMs`].
+    ///
+    /// [`KsMs`]: EitherKeySwitchingKey::KsMs
+    #[must_use]
+    pub fn is_ks_ms(&self) -> bool {
+        matches!(self, Self::KsMs(..))
+    }
+
+    /// .
+    pub fn as_ks_ms(&self) -> Option<&KeySwitchingKey<Q>> {
+        if let Self::KsMs(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `true` if the either key switching key is [`Ms`].
+    ///
+    /// [`Ms`]: EitherKeySwitchingKey::Ms
+    #[must_use]
+    pub fn is_ms(&self) -> bool {
+        matches!(self, Self::Ms)
+    }
+}
+
+enum RingSK<'s, F: NTTField> {
+    Owned(Polynomial<F>),
+    Ref(&'s Polynomial<F>),
+}
+
 /// The Key Switching Key.
 ///
 /// This struct stores the key
@@ -19,16 +79,18 @@ enum Operation {
 /// to a [`LWE<F>`] ciphertext of the LWE Secret Key.
 #[derive(Debug, Clone, Default)]
 pub struct KeySwitchingKey<F: NTTField> {
-    /// LWE vector dimension, refers to **`n`** in the paper.
+    /// LWE vector dimension, refers to **n** in the paper.
     lwe_dimension: usize,
     /// Key Switching Key data
     key: Vec<NTTGadgetRLWE<F>>,
 }
 
 impl<F: NTTField> KeySwitchingKey<F> {
-    /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R, C>(
-        secret_key_pack: &SecretKeyPack<C, F>,
+    fn generate_inner<R, C>(
+        lwe_sk: &[C],
+        ring_sk: RingSK<'_, F>,
+        ntt_ring_sk: Option<&NTTPolynomial<F>>,
+        key_switching_basis: Basis<F>,
         chi: FieldDiscreteGaussianSampler,
         rng: &mut R,
     ) -> Self
@@ -36,14 +98,12 @@ impl<F: NTTField> KeySwitchingKey<F> {
         R: Rng + CryptoRng,
         C: LWEModulusType,
     {
-        let parameters = secret_key_pack.parameters();
-        let lwe_dimension = parameters.lwe_dimension();
-        let key_switching_basis = parameters.key_switching_basis();
-
+        let lwe_dimension = lwe_sk.len();
         let extended_lwe_dimension = lwe_dimension.next_power_of_two();
-        let ring_dimension = parameters.ring_dimension();
-
-        assert!(extended_lwe_dimension <= ring_dimension);
+        let ring_dimension = match ring_sk {
+            RingSK::Owned(ref sk) => sk.coeff_count(),
+            RingSK::Ref(sk) => sk.coeff_count(),
+        };
 
         // convertion
         let convert = |v: &C| {
@@ -57,13 +117,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
         };
 
         // s = [s_0, s_1,..., s_{n-1}, 0,..., 0]
-        let mut s = <Polynomial<F>>::new(
-            secret_key_pack
-                .lwe_secret_key()
-                .iter()
-                .map(convert)
-                .collect(),
-        );
+        let mut s = <Polynomial<F>>::new(lwe_sk.iter().map(convert).collect());
         s.resize(extended_lwe_dimension, F::zero());
 
         let lwe_sk = s.into_ntt_polynomial();
@@ -72,16 +126,22 @@ impl<F: NTTField> KeySwitchingKey<F> {
         let basis = F::new(key_switching_basis.basis());
 
         let key = if extended_lwe_dimension == ring_dimension {
-            let mut ring_sk = secret_key_pack.ntt_ring_secret_key().clone();
+            let mut sk = match ntt_ring_sk {
+                Some(sk) => sk.clone(),
+                None => match ring_sk {
+                    RingSK::Owned(sk) => sk.into_ntt_polynomial(),
+                    RingSK::Ref(sk) => sk.clone().into_ntt_polynomial(),
+                },
+            };
 
             let k = (0..len)
                 .map(|i| {
                     let mut sample = <NTTRLWE<F>>::generate_random_zero_sample(&lwe_sk, chi, rng);
 
-                    *sample.b_mut() += &ring_sk;
+                    *sample.b_mut() += &sk;
 
                     if i < len - 1 {
-                        ring_sk.mul_scalar_assign(basis);
+                        sk.mul_scalar_assign(basis);
                     }
 
                     sample
@@ -89,14 +149,16 @@ impl<F: NTTField> KeySwitchingKey<F> {
                 .collect();
             vec![NTTGadgetRLWE::new(k, key_switching_basis)]
         } else {
-            let key: Vec<Polynomial<F>> = secret_key_pack
-                .ring_secret_key()
-                .as_slice()
-                .chunks_exact(extended_lwe_dimension)
-                .map(|part| Polynomial::from_slice(part))
-                .collect();
+            let key_chunks: Vec<Polynomial<F>> = match ring_sk {
+                RingSK::Owned(ref sk) => sk.as_slice(),
+                RingSK::Ref(sk) => sk.as_slice(),
+            }
+            .chunks_exact(extended_lwe_dimension)
+            .map(|part| Polynomial::from_slice(part))
+            .collect();
 
-            key.into_iter()
+            key_chunks
+                .into_iter()
                 .map(|z| {
                     let mut ntt_z = z.into_ntt_polynomial();
                     let k = (0..len)
@@ -119,6 +181,81 @@ impl<F: NTTField> KeySwitchingKey<F> {
         };
 
         Self { lwe_dimension, key }
+    }
+
+    /// Generates a new [`KeySwitchingKey`].
+    pub fn generate_for_q<R, C, Qks>(
+        secret_key_pack: &SecretKeyPack<C, F, Qks>,
+        chi: FieldDiscreteGaussianSampler,
+        rng: R,
+    ) -> KeySwitchingKey<F>
+    where
+        R: Rng + CryptoRng,
+        C: LWEModulusType,
+        Qks: NTTField,
+    {
+        let parameters = secret_key_pack.parameters();
+
+        let lwe_dimension = parameters.lwe_dimension();
+        let extended_lwe_dimension = lwe_dimension.next_power_of_two();
+        let ring_dimension = parameters.ring_dimension();
+        assert!(extended_lwe_dimension <= ring_dimension);
+
+        let key_switching_basis = parameters.key_switching_basis_q();
+
+        Self::generate_inner(
+            secret_key_pack.lwe_secret_key(),
+            RingSK::Ref(secret_key_pack.ring_secret_key()),
+            Some(secret_key_pack.ntt_ring_secret_key()),
+            key_switching_basis,
+            chi,
+            rng,
+        )
+    }
+
+    /// Generates a new [`KeySwitchingKey`].
+    pub fn generate_for_qks<R, C, Q>(
+        secret_key_pack: &SecretKeyPack<C, Q, F>,
+        chi: FieldDiscreteGaussianSampler,
+        rng: R,
+    ) -> KeySwitchingKey<F>
+    where
+        R: Rng + CryptoRng,
+        C: LWEModulusType,
+        Q: NTTField,
+    {
+        let parameters = secret_key_pack.parameters();
+
+        let lwe_dimension = parameters.lwe_dimension();
+        let extended_lwe_dimension = lwe_dimension.next_power_of_two();
+        let ring_dimension = parameters.ring_dimension();
+        assert!(extended_lwe_dimension <= ring_dimension);
+
+        let key_switching_basis = parameters.key_switching_basis_qks();
+
+        let ring_secret_key = secret_key_pack.ring_secret_key();
+
+        // convertion
+        let convert = |v: &Q| {
+            if v.is_zero() {
+                F::zero()
+            } else if v.is_one() {
+                F::one()
+            } else {
+                F::neg_one()
+            }
+        };
+
+        let ring_secret_key = <Polynomial<F>>::new(ring_secret_key.iter().map(convert).collect());
+
+        Self::generate_inner(
+            secret_key_pack.lwe_secret_key(),
+            RingSK::Owned(ring_secret_key),
+            None,
+            key_switching_basis,
+            chi,
+            rng,
+        )
     }
 
     /// Performs key switching operation.
