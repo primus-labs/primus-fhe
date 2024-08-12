@@ -134,12 +134,11 @@ fn main() {
         poly_length,
     );
  
-    let out1 = comparison::greater_arbhcmp_fixed(
+    let out1 = comparison::equality_arbhcmp_fixed(
         &vec1,
         &vec2,
         &rotationkey,
-        DEELTA,
-        HALF_DEELTA,
+        FF::new(param.ring_modulus()),
         poly_length,
     );
 
@@ -162,10 +161,10 @@ fn main() {
     num1.b_mut()[0] += HALF_DEELTA;
     let mut num2=RGSW::generate_random_one_sample(&mut rng, basis, sampler,sk.ntt_ring_secret_key());
     let turn1=6;
-    let turn2=4;
+    let turn2=6;
     comparison::rlwe_turn(&mut num1, turn1);
     comparison::rgsw_turn(&mut num2, turn2, poly_length);
-    let out =comparison::equality_hcmp(&num1, &num2);
+    let out =comparison::less_hcmp(&num1, &num2,HALF_DEELTA,poly_length);
     //let out = comparison::less_hcmp(&num1, &num2,HALF_DEELTA,poly_length);
     let a_mul_s = rlwe_sk
     .iter()
