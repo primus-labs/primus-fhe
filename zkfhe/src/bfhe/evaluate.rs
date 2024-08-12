@@ -34,6 +34,7 @@ impl<C: LWEModulusType, F: NTTField> EvaluationKey<C, F> {
         let blind_rotation_key = RLWEBlindRotationKey::generate(secret_key_pack, chi, &mut *csrng);
 
         let key_switching_key = match parameters.steps_after_blind_rotation() {
+            StepsAfterBR::MsKsMs => todo!(),
             StepsAfterBR::KsMs => {
                 let chi = parameters.key_switching_noise_distribution();
                 KeySwitchingKey::generate(secret_key_pack, chi, &mut *csrng)
@@ -70,6 +71,7 @@ impl<C: LWEModulusType, F: NTTField> EvaluationKey<C, F> {
         let round_method = parameters.modulus_switch_round_method();
 
         match parameters.steps_after_blind_rotation() {
+            StepsAfterBR::MsKsMs => todo!(),
             StepsAfterBR::KsMs => {
                 let key_switched = self.key_switching_key.key_switch_for_rlwe(acc);
 

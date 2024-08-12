@@ -11,6 +11,8 @@ use crate::{
 /// The steps after blind rotarion.
 #[derive(Debug, Default, Clone, Copy)]
 pub enum StepsAfterBR {
+    /// Modulus Switch, Key Switch and Modulus Switch
+    MsKsMs,
     /// Key Switch and Modulus Switch
     #[default]
     KsMs,

@@ -87,6 +87,7 @@ impl<C: LWEModulusType, F: NTTField> SecretKeyPack<C, F> {
         match parameters.blind_rotation_type() {
             BlindRotationType::RLWE => {
                 ring_secret_key = match parameters.steps_after_blind_rotation() {
+                    StepsAfterBR::MsKsMs => todo!(),
                     StepsAfterBR::KsMs => Polynomial::random(ring_dimension, &mut csrng),
                     StepsAfterBR::Ms => {
                         assert!(
