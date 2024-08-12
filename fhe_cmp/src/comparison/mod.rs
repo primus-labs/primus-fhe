@@ -1,8 +1,19 @@
 //!
 
-use algebra::{modulus::PowOf2Modulus, Field, NTTField, Polynomial};
-use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
+use algebra::{modulus::PowOf2Modulus, Field, NTTField, Polynomial,AsInto};
+use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, Parameters, RLWEBlindRotationKey};
 use lattice::{LWE, RGSW, RLWE};
+
+
+
+
+
+
+
+
+
+
+
 
 /// Performs the rlwe rotation operation.
 ///
@@ -62,8 +73,10 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
     mut test_vector: Vec<F>,
     key: &RLWEBlindRotationKey<F>,
 ) -> LWE<F> {
+
     let poly_len = test_vector.len();
     let mod_after: u64 = poly_len as u64 * 2;
+
     let switch = lwe_modulus_switch(ciphertext, mod_after, ModulusSwitchRoundMethod::Round);
 
     let lwe_modulus = PowOf2Modulus::<u64>::new(mod_after);
@@ -117,24 +130,33 @@ pub fn gatebootstrapping<F: Field<Value = u64> + NTTField>(
 pub fn homand<F:Field<Value=u64>+NTTField>(
     ca:&LWE<F>,
     cb:&LWE<F>,
-    poly_length: usize,
-    delta: F,
     key:&RLWEBlindRotationKey<F>,
+    ring_modulus:F,
+    poly_length: usize
 )->LWE<F>{
-    let mut temp: Vec<F> = vec![0.into();poly_length];
-    for i in 0..poly_length{
-        temp[i] = ca.a()[i] + cb.a()[i];
+    let mut temp = ca.add_component_wise_ref(cb);
+    for elem in temp.a_mut().iter_mut() {
+        *elem = *elem + *elem + *elem + *elem;
     }
-    let temp_b=ca.b()+cb.b()+delta;
-    let lwe_temp=LWE::new(temp,temp_b);
-
+    *temp.b_mut() =
+        temp.b() + temp.b() + temp.b() + temp.b();
     let mut test = vec![F::zero(); poly_length];
-    let mu = -delta;
-    let chunk = poly_length / 8;
-    test[chunk * 2..chunk * 3].iter_mut().for_each(|v| *v = mu);
-    test[chunk * 5..].iter_mut().for_each(|v| *v = mu);
-    test.reverse();
-    gatebootstrapping(lwe_temp, test, key)
+    let test_len = test.len();
+    let x = test_len>>2;
+    let twice_rlwe_dimension_div_lwe_modulus=1;
+    let q =ring_modulus.value();
+    let q_div_32=F::new(q>>5);
+    let neq_q_div_32=F::new(q-q_div_32.value());
+    test[0..=x]
+        .iter_mut()
+        .step_by(twice_rlwe_dimension_div_lwe_modulus)
+        .for_each(|a| *a = neq_q_div_32);
+    let mut iter = test[x..]
+        .iter_mut()
+        .step_by(twice_rlwe_dimension_div_lwe_modulus);
+    iter.next();
+    iter.for_each(|a| *a = q_div_32);
+    gatebootstrapping(temp, test, key)
 }
 
 
@@ -335,8 +357,7 @@ pub fn equality_arbhcmp_fixed<F:Field<Value=u64>+NTTField>(
     cipher1: &[RLWE<F>],
     cipher2: &[RGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
-    delta: F,
-    half_delta: F,
+    rlwe_modulus:F,
     poly_length: usize,
 )->LWE<F>{
     let len = cipher1.len();
@@ -351,12 +372,11 @@ pub fn equality_arbhcmp_fixed<F:Field<Value=u64>+NTTField>(
             cipher1_others,
             cipher2_others,
             gatebootstrappingkey,
-            delta,
-            half_delta,
+            rlwe_modulus,
             poly_length,
         );
         let gt_res = equality_hcmp(cipher1_last, cipher2_last);
-        let res= homand(&low_res, &gt_res, poly_length, delta, gatebootstrappingkey);
+        let res= homand(&low_res, &gt_res, gatebootstrappingkey,rlwe_modulus, poly_length);
         res
     }
 }
