@@ -19,11 +19,11 @@ pub static DEFAULT_TERNARY_128_BITS_PARAMERTERS: Lazy<Parameters<u16, DefaultFie
             ring_modulus: DefaultFieldU32::MODULUS_VALUE,
             ring_noise_standard_deviation: 3.20 * ((1 << 1) as f64),
             ring_secret_key_type: RingSecretKeyType::Ternary,
-            blind_rotation_basis_bits: 3,
+            blind_rotation_basis_bits: 8,
             key_switching_basis_bits: 1,
             key_switching_standard_deviation: 3.2 * ((1 << 1) as f64),
             modulus_switcing_round_method: ModulusSwitchRoundMethod::Round,
-            steps: Steps::BrKsMs,
+            steps: Steps::BrMsKs,
         })
         .unwrap()
     });
