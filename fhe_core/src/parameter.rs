@@ -5,7 +5,7 @@ use algebra::{
 use lattice::DiscreteGaussian;
 
 use crate::{
-    FHECoreError, LWEModulusType, ModulusSwitchRoundMethod, RingSecretKeyType, SecretKeyType,
+    FHECoreError, LWEModulusType, LWESecretKeyType, ModulusSwitchRoundMethod, RingSecretKeyType,
 };
 
 /// The steps after blind rotation.
@@ -32,7 +32,7 @@ pub struct LWEParameters<C: LWEModulusType> {
     /// **LWE** cipher modulus value, refers to **q** in the paper.
     pub cipher_modulus_value: C,
     /// The distribution type of the LWE Secret Key.
-    pub secret_key_type: SecretKeyType,
+    pub secret_key_type: LWESecretKeyType,
     /// **LWE** noise error's standard deviation.
     pub noise_standard_deviation: f64,
 }
@@ -110,7 +110,7 @@ pub struct ConstParameters<C: LWEModulusType, Q, Qks> {
     /// The **LWE** noise error's standard deviation.
     pub lwe_noise_standard_deviation: f64,
     /// **LWE** Secret Key distribution Type.
-    pub secret_key_type: SecretKeyType,
+    pub secret_key_type: LWESecretKeyType,
 
     /// Use `RLWE` or `NTRU` to perform blind rotation.
     pub blind_rotation_type: BlindRotationType,
@@ -174,9 +174,9 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Parameters<C, Q, Qks> {
                 // Currently, only support RLWE Blind Rotation for this mode
                 if !(blind_rotation_type == BlindRotationType::RLWE
                     && lwe_dimension == ring_dimension
-                    && ((secret_key_type == SecretKeyType::Binary
+                    && ((secret_key_type == LWESecretKeyType::Binary
                         && ring_secret_key_type == RingSecretKeyType::Binary)
-                        || (secret_key_type == SecretKeyType::Ternary
+                        || (secret_key_type == LWESecretKeyType::Ternary
                             && ring_secret_key_type == RingSecretKeyType::Ternary)))
                 {
                     return Err(FHECoreError::StepsParametersNotCompatible);
@@ -284,7 +284,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Parameters<C, Q, Qks> {
 
     /// Returns the LWE Secret Key distribution Type of this [`Parameters<C, Q, Qks>`].
     #[inline]
-    pub fn secret_key_type(&self) -> SecretKeyType {
+    pub fn secret_key_type(&self) -> LWESecretKeyType {
         self.lwe_params.secret_key_type
     }
 

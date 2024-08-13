@@ -30,7 +30,7 @@ pub use ciphertext::{
 };
 pub use plaintext::{decode, encode, LWEModulusType, LWEMsgType};
 
-pub use secret_key::{RingSecretKeyType, SecretKeyPack, SecretKeyType};
+pub use secret_key::{LWESecretKeyType, RingSecretKeyType, SecretKeyPack};
 
 pub use blind_rotation::{NTRUBlindRotationKey, RLWEBlindRotationKey};
 pub use key_switch::{EitherKeySwitchingKey, KeySwitchingKey};

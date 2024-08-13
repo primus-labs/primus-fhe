@@ -11,7 +11,7 @@ use crate::{
 
 /// The distribution type of the LWE Secret Key.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub enum SecretKeyType {
+pub enum LWESecretKeyType {
     /// Binary SecretKey Distribution.
     Binary,
     /// Ternary SecretKey Distribution.
@@ -66,8 +66,8 @@ pub struct SecretKeyPack<C: LWEModulusType, Q: NTTField, Qks: NTTField> {
 impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
     fn create_lwe_secret_key(params: &LWEParameters<C>, csrng: &mut Prg) -> Vec<C> {
         match params.secret_key_type {
-            SecretKeyType::Binary => sample_binary_values(params.dimension, csrng),
-            SecretKeyType::Ternary => {
+            LWESecretKeyType::Binary => sample_binary_values(params.dimension, csrng),
+            LWESecretKeyType::Ternary => {
                 sample_ternary_values(params.cipher_modulus_value, params.dimension, csrng)
             }
         }

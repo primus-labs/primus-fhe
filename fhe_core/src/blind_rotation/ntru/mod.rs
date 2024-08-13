@@ -2,7 +2,7 @@ use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTFi
 use lattice::NTRU;
 use rand::{CryptoRng, Rng};
 
-use crate::{LWEModulusType, SecretKeyPack, SecretKeyType};
+use crate::{LWEModulusType, LWESecretKeyType, SecretKeyPack};
 
 mod binary;
 mod ternary;
@@ -81,20 +81,22 @@ impl<F: NTTField> BlindRotationKey<F> {
     {
         let parameters = secret_key_pack.parameters();
         match parameters.secret_key_type() {
-            SecretKeyType::Binary => BlindRotationKey::Binary(BinaryBlindRotationKey::generate(
+            LWESecretKeyType::Binary => BlindRotationKey::Binary(BinaryBlindRotationKey::generate(
                 parameters.blind_rotation_basis(),
                 secret_key_pack.lwe_secret_key(),
                 chi,
                 secret_key_pack.ntt_inv_ring_secret_key().unwrap(),
                 rng,
             )),
-            SecretKeyType::Ternary => BlindRotationKey::Ternary(TernaryBlindRotationKey::generate(
-                parameters.blind_rotation_basis(),
-                secret_key_pack.lwe_secret_key(),
-                chi,
-                secret_key_pack.ntt_inv_ring_secret_key().unwrap(),
-                rng,
-            )),
+            LWESecretKeyType::Ternary => {
+                BlindRotationKey::Ternary(TernaryBlindRotationKey::generate(
+                    parameters.blind_rotation_basis(),
+                    secret_key_pack.lwe_secret_key(),
+                    chi,
+                    secret_key_pack.ntt_inv_ring_secret_key().unwrap(),
+                    rng,
+                ))
+            }
         }
     }
 }
