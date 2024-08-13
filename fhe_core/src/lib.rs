@@ -22,7 +22,7 @@ pub use error::FHECoreError;
 
 pub use parameter::{
     BlindRotationType, ConstParameters, DefaultExtendsionFieldU32x4, DefaultFieldU32, DefaultQks,
-    Parameters, StepsAfterBR,
+    Parameters, RelationOfqAnd2N, Steps,
 };
 
 pub use ciphertext::{
@@ -30,12 +30,14 @@ pub use ciphertext::{
 };
 pub use plaintext::{decode, encode, LWEModulusType, LWEMsgType};
 
-pub use secret_key::{LWESecretKeyType, RingSecretKeyType, SecretKeyPack};
+pub use secret_key::{
+    LWESecretKeyType, NTTRingSecretKey, RingSecretKey, RingSecretKeyType, SecretKeyPack,
+};
 
 pub use blind_rotation::{NTRUBlindRotationKey, RLWEBlindRotationKey};
-pub use key_switch::{EitherKeySwitchingKey, KeySwitchingKey};
+pub use key_switch::{KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey};
 
 pub use modulus_switch::{
-    lwe_modulus_switch, lwe_modulus_switch_between_field, lwe_modulus_switch_inplace,
-    rlwe_modulus_switch_between_field, ModulusSwitchRoundMethod,
+    lwe_modulus_switch, lwe_modulus_switch_between_modulus_inplace, lwe_modulus_switch_inplace,
+    ModulusSwitchRoundMethod,
 };

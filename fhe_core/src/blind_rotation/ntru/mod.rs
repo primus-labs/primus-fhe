@@ -69,18 +69,17 @@ impl<F: NTTField> BlindRotationKey<F> {
     }
 
     /// Generates the [`BlindRotationKey<F>`].
-    pub fn generate<R, C, Qks>(
-        secret_key_pack: &SecretKeyPack<C, F, Qks>,
+    pub fn generate<R, C>(
+        secret_key_pack: &SecretKeyPack<C, F>,
         chi: FieldDiscreteGaussianSampler,
         rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
         C: LWEModulusType,
-        Qks: NTTField,
     {
         let parameters = secret_key_pack.parameters();
-        match parameters.secret_key_type() {
+        match parameters.lwe_secret_key_type() {
             LWESecretKeyType::Binary => BlindRotationKey::Binary(BinaryBlindRotationKey::generate(
                 parameters.blind_rotation_basis(),
                 secret_key_pack.lwe_secret_key(),

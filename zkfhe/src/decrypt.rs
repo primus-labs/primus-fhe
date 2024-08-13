@@ -4,14 +4,14 @@ use algebra::NTTField;
 use fhe_core::{LWECiphertext, LWEModulusType, LWEMsgType, SecretKeyPack};
 
 /// Encryptor
-pub struct Decryptor<C: LWEModulusType, Q: NTTField, Qks: NTTField> {
-    sk: SecretKeyPack<C, Q, Qks>,
+pub struct Decryptor<C: LWEModulusType, Q: NTTField> {
+    sk: SecretKeyPack<C, Q>,
 }
 
-impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Decryptor<C, Q, Qks> {
+impl<C: LWEModulusType, Q: NTTField> Decryptor<C, Q> {
     /// Create a Decryptor instance.
     #[inline]
-    pub fn new(sk: SecretKeyPack<C, Q, Qks>) -> Self {
+    pub fn new(sk: SecretKeyPack<C, Q>) -> Self {
         Self { sk }
     }
 

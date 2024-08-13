@@ -111,8 +111,8 @@ fn main() {
 }
 
 #[allow(clippy::type_complexity)]
-fn join_bit_opearions<T: LWEModulusType, F: NTTField, Qks: NTTField>(
-    eval: &Evaluator<T, F, Qks>,
+fn join_bit_opearions<T: LWEModulusType, F: NTTField>(
+    eval: &Evaluator<T, F>,
     x: &LWECiphertext<T>,
     y: &LWECiphertext<T>,
     z: &LWECiphertext<T>,

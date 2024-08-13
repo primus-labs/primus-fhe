@@ -70,7 +70,7 @@ impl<T: PrimInt + Bits> Basis<T> {
 ///
 /// **`self`** will be modified *after* performing this decomposition.
 pub fn decompose_lsb_bits_inplace<T: PrimInt + Bits>(
-    mut data: Vec<T>,
+    data: &mut [T],
     basis: Basis<T>,
     destination: &mut [T],
 ) {
@@ -78,12 +78,8 @@ pub fn decompose_lsb_bits_inplace<T: PrimInt + Bits>(
     let mask = basis.mask();
     let bits = basis.bits();
 
-    destination
-        .iter_mut()
-        .zip(&mut data)
-        .for_each(|(d_i, p_i)| {
-            let temp = *p_i & mask;
-            *p_i = *p_i >> bits;
-            *d_i = temp;
-        });
+    destination.iter_mut().zip(data).for_each(|(d_i, p_i)| {
+        *d_i = *p_i & mask;
+        *p_i = *p_i >> bits;
+    });
 }

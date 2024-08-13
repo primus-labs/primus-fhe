@@ -6,7 +6,7 @@ use num_traits::Inv;
 
 use crate::{
     ciphertext::LWECiphertext, decode, encode, parameter::LWEParameters, BlindRotationType,
-    LWEModulusType, LWEMsgType, Parameters, StepsAfterBR,
+    LWEModulusType, LWEMsgType, Parameters, Steps,
 };
 
 /// The distribution type of the LWE Secret Key.
@@ -45,7 +45,7 @@ pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 /// ring secret key, ntt version ring secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
-pub struct SecretKeyPack<C: LWEModulusType, Q: NTTField, Qks: NTTField> {
+pub struct SecretKeyPack<C: LWEModulusType, Q: NTTField> {
     /// LWE secret key
     lwe_secret_key: Vec<C>,
 
@@ -57,13 +57,13 @@ pub struct SecretKeyPack<C: LWEModulusType, Q: NTTField, Qks: NTTField> {
     ntt_inv_ring_secret_key: Option<NTTRingSecretKey<Q>>,
 
     /// boolean fhe's parameters
-    parameters: Parameters<C, Q, Qks>,
+    parameters: Parameters<C, Q>,
 
     /// cryptographically secure random number generator
     csrng: RefCell<Prg>,
 }
 
-impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
+impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
     fn create_lwe_secret_key(params: &LWEParameters<C>, csrng: &mut Prg) -> Vec<C> {
         match params.secret_key_type {
             LWESecretKeyType::Binary => sample_binary_values(params.dimension, csrng),
@@ -73,8 +73,8 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
         }
     }
 
-    /// Creates a new [`SecretKeyPack<C, Q, Qks>`].
-    pub fn new(params: Parameters<C, Q, Qks>) -> Self {
+    /// Creates a new [`SecretKeyPack<C, Q>`].
+    pub fn new(params: Parameters<C, Q>) -> Self {
         let mut csrng = Prg::new();
 
         let lwe_secret_key = Self::create_lwe_secret_key(&params.lwe_params(), &mut csrng);
@@ -87,8 +87,8 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
 
         match params.blind_rotation_type() {
             BlindRotationType::RLWE => {
-                ring_secret_key = match params.steps_after_blind_rotation() {
-                    StepsAfterBR::MsKsMs => match params.ring_secret_key_type() {
+                ring_secret_key = match params.steps() {
+                    Steps::BrMsKs => match params.ring_secret_key_type() {
                         RingSecretKeyType::Binary => {
                             Polynomial::random_with_binary(ring_dimension, &mut csrng)
                         }
@@ -98,7 +98,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
                         RingSecretKeyType::Gaussian => unimplemented!(),
                         RingSecretKeyType::Uniform => panic!(),
                     },
-                    StepsAfterBR::KsMs => match params.ring_secret_key_type() {
+                    Steps::BrKsMs => match params.ring_secret_key_type() {
                         RingSecretKeyType::Binary => {
                             Polynomial::random_with_binary(ring_dimension, &mut csrng)
                         }
@@ -114,7 +114,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
                             Polynomial::random(ring_dimension, &mut csrng)
                         }
                     },
-                    StepsAfterBR::Ms => {
+                    Steps::BrMs => {
                         assert!(
                             params.ring_secret_key_type() == RingSecretKeyType::Binary
                                 || params.ring_secret_key_type() == RingSecretKeyType::Ternary
@@ -162,43 +162,43 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
         }
     }
 
-    /// Returns the lwe secret key of this [`SecretKeyPack<C, Q, Qks>`].
+    /// Returns the lwe secret key of this [`SecretKeyPack<C, Q>`].
     #[inline]
     pub fn lwe_secret_key(&self) -> &[C] {
         &self.lwe_secret_key
     }
 
-    /// Returns the ring secret key of this [`SecretKeyPack<C, Q, Qks>`].
+    /// Returns the ring secret key of this [`SecretKeyPack<C, Q>`].
     #[inline]
     pub fn ring_secret_key(&self) -> &RingSecretKey<Q> {
         &self.ring_secret_key
     }
 
-    /// Returns the ntt ring secret key of this [`SecretKeyPack<C, Q, Qks>`].
+    /// Returns the ntt ring secret key of this [`SecretKeyPack<C, Q>`].
     #[inline]
     pub fn ntt_ring_secret_key(&self) -> &NTTRingSecretKey<Q> {
         &self.ntt_ring_secret_key
     }
 
-    /// Returns a reference to the ntt inv ring secret key of this [`SecretKeyPack<C, Q, Qks>`].
+    /// Returns a reference to the ntt inv ring secret key of this [`SecretKeyPack<C, Q>`].
     #[inline]
     pub fn ntt_inv_ring_secret_key(&self) -> Option<&NTTPolynomial<Q>> {
         self.ntt_inv_ring_secret_key.as_ref()
     }
 
-    /// Returns the parameters of this [`SecretKeyPack<C, Q, Qks>`].
+    /// Returns the parameters of this [`SecretKeyPack<C, Q>`].
     #[inline]
-    pub fn parameters(&self) -> &Parameters<C, Q, Qks> {
+    pub fn parameters(&self) -> &Parameters<C, Q> {
         &self.parameters
     }
 
-    /// Returns the csrng of this [`SecretKeyPack<C, Q, Qks>`].
+    /// Returns the csrng of this [`SecretKeyPack<C, Q>`].
     #[inline]
     pub fn csrng(&self) -> std::cell::Ref<'_, Prg> {
         self.csrng.borrow()
     }
 
-    /// Returns the csrng of this [`SecretKeyPack<C, Q, Qks>`].
+    /// Returns the csrng of this [`SecretKeyPack<C, Q>`].
     #[inline]
     pub fn csrng_mut(&self) -> std::cell::RefMut<'_, Prg> {
         self.csrng.borrow_mut()
@@ -209,7 +209,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
     pub fn encrypt<M: LWEMsgType>(&self, message: M) -> LWECiphertext<C> {
         let lwe_modulus = self.parameters.lwe_cipher_modulus();
         let noise_distribution = self.parameters.lwe_noise_distribution();
-        let lwe_modulus_value = lwe_modulus.value();
+        let lwe_modulus_value = self.parameters.lwe_cipher_modulus_value();
         let mut csrng = self.csrng_mut();
 
         let mut cipher = LWECiphertext::generate_random_zero_sample(
@@ -232,7 +232,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
         cipher
     }
 
-    /// Decrypts the [`LWECiphertext`] back to message
+    /// Decrypts the [`LWECiphertext`] back to message.
     #[inline]
     pub fn decrypt<M: LWEMsgType>(&self, cipher_text: &LWECiphertext<C>) -> M {
         let lwe_modulus = self.parameters.lwe_cipher_modulus();
@@ -247,7 +247,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> SecretKeyPack<C, Q, Qks> {
         )
     }
 
-    /// Decrypts the [`LWECiphertext`] back to message
+    /// Decrypts the [`LWECiphertext`] back to message.
     #[inline]
     pub fn decrypt_with_noise<M: LWEMsgType>(&self, cipher_text: &LWECiphertext<C>) -> (M, C) {
         let lwe_modulus = self.parameters.lwe_cipher_modulus();

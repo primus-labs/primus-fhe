@@ -1,5 +1,5 @@
-use algebra::{AsFrom, AsInto, DecomposableField, FheField, NTTField, Polynomial};
-use lattice::{LWE, RLWE};
+use algebra::{AsInto, DecomposableField, FheField};
+use lattice::LWE;
 
 use crate::{LWECiphertext, LWEModulusType};
 
@@ -73,65 +73,27 @@ pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: DecomposableField>(
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch_between_field<Q: FheField, Qks: FheField>(
-    c: LWE<Q>,
+pub fn lwe_modulus_switch_between_modulus_inplace<C: LWEModulusType>(
+    c: &mut LWE<C>,
+    modulus_before: C,
+    modulus_after: C,
     round_method: ModulusSwitchRoundMethod,
-) -> LWECiphertext<Qks> {
-    let modulus_before_f64: f64 = Q::MODULUS_VALUE.as_into();
-    let modulus_after_f64: f64 = Qks::MODULUS_VALUE.as_into();
+) {
+    let modulus_before_f64: f64 = modulus_before.as_into();
+    let modulus_after_f64: f64 = modulus_after.as_into();
 
-    let switch: Box<dyn Fn(Q) -> Qks> = match round_method {
-        ModulusSwitchRoundMethod::Round => Box::new(|v: Q| {
-            Qks::lazy_new(Qks::Value::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round(),
-            ))
+    let switch: Box<dyn Fn(C) -> C> = match round_method {
+        ModulusSwitchRoundMethod::Round => Box::new(|v: C| {
+            C::as_from((AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).round())
         }),
-        ModulusSwitchRoundMethod::Floor => Box::new(|v: Q| {
-            Qks::lazy_new(Qks::Value::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor(),
-            ))
+        ModulusSwitchRoundMethod::Floor => Box::new(|v: C| {
+            C::as_from((AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).floor())
         }),
-        ModulusSwitchRoundMethod::Ceil => Box::new(|v: Q| {
-            Qks::lazy_new(Qks::Value::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil(),
-            ))
+        ModulusSwitchRoundMethod::Ceil => Box::new(|v: C| {
+            C::as_from((AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).ceil())
         }),
     };
 
-    let a: Vec<Qks> = c.a().iter().copied().map(&switch).collect();
-    let b = switch(c.b());
-
-    LWECiphertext::new(a, b)
-}
-
-/// Implementation of modulus switching.
-pub fn rlwe_modulus_switch_between_field<Q: NTTField, Qks: NTTField>(
-    c: RLWE<Q>,
-    round_method: ModulusSwitchRoundMethod,
-) -> RLWE<Qks> {
-    let modulus_before_f64: f64 = Q::MODULUS_VALUE.as_into();
-    let modulus_after_f64: f64 = Qks::MODULUS_VALUE.as_into();
-
-    let switch: Box<dyn Fn(Q) -> Qks> = match round_method {
-        ModulusSwitchRoundMethod::Round => Box::new(|v: Q| {
-            Qks::lazy_new(Qks::Value::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round(),
-            ))
-        }),
-        ModulusSwitchRoundMethod::Floor => Box::new(|v: Q| {
-            Qks::lazy_new(Qks::Value::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor(),
-            ))
-        }),
-        ModulusSwitchRoundMethod::Ceil => Box::new(|v: Q| {
-            Qks::lazy_new(Qks::Value::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil(),
-            ))
-        }),
-    };
-
-    let a: Vec<Qks> = c.a().iter().copied().map(&switch).collect();
-    let b: Vec<Qks> = c.b().iter().copied().map(&switch).collect();
-
-    RLWE::new(Polynomial::new(a), Polynomial::new(b))
+    c.a_mut().iter_mut().for_each(|v| *v = switch(*v));
+    *c.b_mut() = switch(c.b());
 }

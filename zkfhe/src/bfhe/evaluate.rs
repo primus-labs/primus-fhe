@@ -1,31 +1,32 @@
 use algebra::{AsInto, NTTField, Polynomial};
 use fhe_core::{
-    lwe_modulus_switch_inplace, rlwe_modulus_switch_between_field, BlindRotationType,
-    EitherKeySwitchingKey, KeySwitchingKey, LWECiphertext, LWEModulusType, Parameters,
-    RLWEBlindRotationKey, RLWECiphertext, SecretKeyPack, StepsAfterBR,
+    lwe_modulus_switch, lwe_modulus_switch_between_modulus_inplace, lwe_modulus_switch_inplace,
+    BlindRotationType, KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey, LWECiphertext,
+    LWEModulusType, Parameters, RLWEBlindRotationKey, RLWECiphertext, RelationOfqAnd2N,
+    SecretKeyPack, Steps,
 };
 use lattice::RLWE;
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
-pub struct EvaluationKey<C: LWEModulusType, Q: NTTField, Qks: NTTField> {
+pub struct EvaluationKey<C: LWEModulusType, Q: NTTField> {
     /// Blind rotation key
     blind_rotation_key: RLWEBlindRotationKey<Q>,
     /// Key Switching Key
-    key_switching_key: EitherKeySwitchingKey<Q, Qks>,
+    key_switching_key: KeySwitchingKeyEnum<C, Q>,
     /// The parameters of the fully homomorphic encryption scheme.
-    parameters: Parameters<C, Q, Qks>,
+    parameters: Parameters<C, Q>,
 }
 
-impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> EvaluationKey<C, Q, Qks> {
+impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
     /// Returns the parameters of this [`EvaluationKey<F>`].
     #[inline]
-    pub fn parameters(&self) -> &Parameters<C, Q, Qks> {
+    pub fn parameters(&self) -> &Parameters<C, Q> {
         &self.parameters
     }
 
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
-    pub fn new(secret_key_pack: &SecretKeyPack<C, Q, Qks>) -> Self {
+    pub fn new(secret_key_pack: &SecretKeyPack<C, Q>) -> Self {
         let mut csrng = secret_key_pack.csrng_mut();
         let parameters = secret_key_pack.parameters();
 
@@ -34,24 +35,19 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> EvaluationKey<C, Q, Qks> {
         let chi = parameters.ring_noise_distribution();
         let blind_rotation_key = RLWEBlindRotationKey::generate(secret_key_pack, chi, &mut *csrng);
 
-        let key_switching_key = match parameters.steps_after_blind_rotation() {
-            StepsAfterBR::MsKsMs => {
-                let chi = parameters.key_switching_noise_distribution();
-                EitherKeySwitchingKey::MsKsMs(KeySwitchingKey::generate_for_qks(
+        let key_switching_key = match parameters.steps() {
+            Steps::BrMsKs => {
+                KeySwitchingKeyEnum::LWE(KeySwitchingLWEKey::generate(secret_key_pack, &mut *csrng))
+            }
+            Steps::BrKsMs => {
+                let chi = parameters.key_switching_noise_distribution_for_ring();
+                KeySwitchingKeyEnum::RLWE(KeySwitchingRLWEKey::generate(
                     secret_key_pack,
                     chi,
                     &mut *csrng,
                 ))
             }
-            StepsAfterBR::KsMs => {
-                let chi = parameters.key_switching_noise_distribution();
-                EitherKeySwitchingKey::KsMs(KeySwitchingKey::generate_for_q(
-                    secret_key_pack,
-                    chi,
-                    &mut *csrng,
-                ))
-            }
-            StepsAfterBR::Ms => EitherKeySwitchingKey::Ms,
+            Steps::BrMs => KeySwitchingKeyEnum::None,
         };
 
         Self {
@@ -68,29 +64,54 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> EvaluationKey<C, Q, Qks> {
         init_acc: RLWECiphertext<Q>,
     ) -> LWECiphertext<C> {
         let parameters = self.parameters();
+        let round_method = parameters.modulus_switch_round_method();
+
+        let (twice_rlwe_dimension_div_lwe_modulus, lwe_modulus) =
+            match parameters.relation_of_q_and_2_n() {
+                RelationOfqAnd2N::Lt {
+                    twice_ring_dimension_div_lwe_modulus,
+                } => (
+                    twice_ring_dimension_div_lwe_modulus,
+                    parameters.lwe_cipher_modulus(),
+                ),
+                RelationOfqAnd2N::Gt => (
+                    1,
+                    C::as_from((parameters.ring_dimension() << 1) as u64).to_power_of_2_modulus(),
+                ),
+                RelationOfqAnd2N::Eq => (1, parameters.lwe_cipher_modulus()),
+            };
 
         let mut acc = self.blind_rotation_key.blind_rotate(
             init_acc,
             c.a(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
-            parameters.lwe_cipher_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
+            lwe_modulus,
             parameters.blind_rotation_basis(),
         );
 
         acc.b_mut()[0] += Q::new(Q::MODULUS_VALUE >> 3);
 
-        let round_method = parameters.modulus_switch_round_method();
+        match parameters.steps() {
+            Steps::BrMsKs => {
+                let acc = acc.extract_lwe_locally();
+                let cipher =
+                    lwe_modulus_switch(acc, parameters.lwe_cipher_modulus_value(), round_method);
 
-        match parameters.steps_after_blind_rotation() {
-            StepsAfterBR::MsKsMs => {
-                let acc: RLWE<Qks> = rlwe_modulus_switch_between_field(acc, round_method);
+                let ksk = match self.key_switching_key {
+                    KeySwitchingKeyEnum::LWE(ref ksk) => ksk,
+                    _ => panic!(),
+                };
 
-                let key_switched = self
-                    .key_switching_key
-                    .as_ms_ks_ms()
-                    .unwrap()
-                    .key_switch_for_rlwe(acc);
+                c = ksk.key_switch_for_lwe(cipher);
+            }
+            Steps::BrKsMs => {
+                let ksk = match self.key_switching_key {
+                    KeySwitchingKeyEnum::RLWE(ref ksk) => ksk,
+                    _ => panic!(),
+                };
+
+                let key_switched = ksk.key_switch_for_rlwe(acc);
 
                 lwe_modulus_switch_inplace(
                     key_switched,
@@ -99,21 +120,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> EvaluationKey<C, Q, Qks> {
                     &mut c,
                 );
             }
-            StepsAfterBR::KsMs => {
-                let key_switched = self
-                    .key_switching_key
-                    .as_ks_ms()
-                    .unwrap()
-                    .key_switch_for_rlwe(acc);
-
-                lwe_modulus_switch_inplace(
-                    key_switched,
-                    parameters.lwe_cipher_modulus_value(),
-                    round_method,
-                    &mut c,
-                );
-            }
-            StepsAfterBR::Ms => {
+            Steps::BrMs => {
                 let lwe = acc.extract_lwe_locally();
 
                 lwe_modulus_switch_inplace(
@@ -131,14 +138,14 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> EvaluationKey<C, Q, Qks> {
 
 /// Evaluator
 #[derive(Debug, Clone)]
-pub struct Evaluator<C: LWEModulusType, Q: NTTField, Qks: NTTField> {
-    ek: EvaluationKey<C, Q, Qks>,
+pub struct Evaluator<C: LWEModulusType, Q: NTTField> {
+    ek: EvaluationKey<C, Q>,
 }
 
-impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
+impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     /// Create a new instance.
     #[inline]
-    pub fn new(sk: &SecretKeyPack<C, Q, Qks>) -> Self {
+    pub fn new(sk: &SecretKeyPack<C, Q>) -> Self {
         Self {
             ek: EvaluationKey::new(sk),
         }
@@ -146,7 +153,7 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
 
     /// Returns a reference to the parameters of this [`Evaluator<F>`].
     #[inline]
-    pub fn parameters(&self) -> &Parameters<C, Q, Qks> {
+    pub fn parameters(&self) -> &Parameters<C, Q> {
         self.ek.parameters()
     }
 
@@ -185,12 +192,29 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut add,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
 
         let init_acc: RLWECiphertext<Q> = init_nand_acc(
             add.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(add, init_acc)
@@ -207,12 +231,29 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut add,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
 
         let init_acc: RLWECiphertext<Q> = init_and_majority_acc(
             add.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(add, init_acc)
@@ -229,12 +270,29 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut add,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
 
         let init_acc: RLWECiphertext<Q> = init_or_acc(
             add.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(add, init_acc)
@@ -251,12 +309,29 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         let parameters = self.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut add,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
 
         let init_acc: RLWECiphertext<Q> = init_nor_acc(
             add.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(add, init_acc)
@@ -274,12 +349,29 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         let lwe_modulus = parameters.lwe_cipher_modulus();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
-        sub.scalar_mul_reduce_inplac(C::TWO, lwe_modulus);
+        sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
+
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut sub,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
 
         let init_acc: RLWECiphertext<Q> = init_xor_acc(
             sub.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(sub, init_acc)
@@ -297,12 +389,29 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         let lwe_modulus = parameters.lwe_cipher_modulus();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
-        sub.scalar_mul_reduce_inplac(C::TWO, lwe_modulus);
+        sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
+
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut sub,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
 
         let init_acc: RLWECiphertext<Q> = init_xnor_acc(
             sub.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(sub, init_acc)
@@ -329,10 +438,27 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
         add.add_reduce_inplace_component_wise(c2, lwe_modulus);
 
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut add,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
+
         let init_acc: RLWECiphertext<Q> = init_and_majority_acc(
             add.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(add, init_acc)
@@ -363,10 +489,27 @@ impl<C: LWEModulusType, Q: NTTField, Qks: NTTField> Evaluator<C, Q, Qks> {
         // (a & b) | (!a & c)
         t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
 
+        let round_method = parameters.modulus_switch_round_method();
+        let twice_rlwe_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
+            RelationOfqAnd2N::Gt => {
+                lwe_modulus_switch_between_modulus_inplace(
+                    &mut t0,
+                    parameters.lwe_cipher_modulus_value(),
+                    C::as_from((parameters.ring_dimension() << 1) as u64),
+                    round_method,
+                );
+                1
+            }
+            RelationOfqAnd2N::Lt {
+                twice_ring_dimension_div_lwe_modulus,
+            } => twice_ring_dimension_div_lwe_modulus,
+            RelationOfqAnd2N::Eq => 1,
+        };
+
         let init_acc: RLWECiphertext<Q> = init_or_acc(
             t0.b(),
             parameters.ring_dimension(),
-            parameters.twice_ring_dimension_div_lwe_modulus(),
+            twice_rlwe_dimension_div_lwe_modulus,
         );
 
         self.bootstrap(t0, init_acc)
