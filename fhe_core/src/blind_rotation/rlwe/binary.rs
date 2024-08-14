@@ -17,14 +17,14 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
         Self { key }
     }
 
-    /// Performs the bootstrapping operation
+    /// Performs the blind rotation operation.
     pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: RLWE<F>,
         lwe_a: &[C],
         rlwe_dimension: usize,
-        twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<C>,
+        twice_rlwe_dimension_div_lwe_cipher_modulus: usize,
+        lwe_cipher_modulus: PowOf2Modulus<C>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
@@ -38,8 +38,8 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
                 // rlwe_space = (Y^{-a_i} - 1) * ACC
                 acc.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_modulus,
-                    a_i.neg_reduce(lwe_modulus),
+                    twice_rlwe_dimension_div_lwe_cipher_modulus,
+                    a_i.neg_reduce(lwe_cipher_modulus),
                     rlwe_space,
                 );
                 // rlwe_space = (Y^{-a_i} - 1) * ACC * RGSW(s_i)
@@ -57,10 +57,10 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
 
     /// Generates the [`BinaryBlindRotationKey<F>`].
     pub(crate) fn generate<Rng, C>(
-        blind_rotation_basis: Basis<F>,
         lwe_secret_key: &[C],
-        chi: FieldDiscreteGaussianSampler,
         rlwe_secret_key: &NTTPolynomial<F>,
+        blind_rotation_basis: Basis<F>,
+        chi: FieldDiscreteGaussianSampler,
         rng: &mut Rng,
     ) -> Self
     where
@@ -70,7 +70,7 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s == C::ZERO {
+                if s.is_zero() {
                     <NTTRGSW<F>>::generate_random_zero_sample(
                         rlwe_secret_key,
                         blind_rotation_basis,

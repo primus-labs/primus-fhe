@@ -21,14 +21,14 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         Self { key }
     }
 
-    /// Performs the bootstrapping operation
+    /// Performs the blind rotation operation.
     pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: NTRU<F>,
         lwe_a: &[C],
         ntru_dimension: usize,
-        twice_ntru_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<C>,
+        twice_ntru_dimension_div_lwe_cipher_modulus: usize,
+        lwe_cipher_modulus: PowOf2Modulus<C>,
         blind_rotation_basis: Basis<F>,
     ) -> NTRU<F> {
         let decompose_space = &mut DecompositionSpace::new(ntru_dimension);
@@ -44,7 +44,8 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                let degree = AsInto::<usize>::as_into(a_i) * twice_ntru_dimension_div_lwe_modulus;
+                let degree =
+                    AsInto::<usize>::as_into(a_i) * twice_ntru_dimension_div_lwe_cipher_modulus;
 
                 // ntt_polynomial = -Y^{a_i}
                 ntt_table.transform_coeff_neg_one_monomial(degree, ntt_polynomial.as_mut_slice());
@@ -74,8 +75,8 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                 acc.add_assign_rhs_mul_monic_monomial(
                     external_product,
                     ntru_dimension,
-                    twice_ntru_dimension_div_lwe_modulus,
-                    a_i.neg_reduce(lwe_modulus),
+                    twice_ntru_dimension_div_lwe_cipher_modulus,
+                    a_i.neg_reduce(lwe_cipher_modulus),
                 );
 
                 acc
@@ -84,10 +85,10 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
 
     /// Generates the [`TernaryBlindRotationKey<F>`].
     pub(crate) fn generate<Rng, C>(
-        bootstrapping_basis: Basis<F>,
         lwe_secret_key: &[C],
+        ntru_inv_secret_key: &NTTPolynomial<F>,
+        blind_rotation_basis: Basis<F>,
         chi: FieldDiscreteGaussianSampler,
-        inv_secret_key: &NTTPolynomial<F>,
         rng: &mut Rng,
     ) -> Self
     where
@@ -97,32 +98,32 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s == C::ZERO {
+                if s.is_zero() {
                     (
                         <NTTGadgetNTRU<F>>::generate_random_zero_sample(
-                            inv_secret_key,
-                            bootstrapping_basis,
+                            ntru_inv_secret_key,
+                            blind_rotation_basis,
                             chi,
                             rng,
                         ),
                         <NTTGadgetNTRU<F>>::generate_random_zero_sample(
-                            inv_secret_key,
-                            bootstrapping_basis,
+                            ntru_inv_secret_key,
+                            blind_rotation_basis,
                             chi,
                             rng,
                         ),
                     )
-                } else if s == C::ONE {
+                } else if s.is_one() {
                     (
                         <NTTGadgetNTRU<F>>::generate_random_one_sample(
-                            inv_secret_key,
-                            bootstrapping_basis,
+                            ntru_inv_secret_key,
+                            blind_rotation_basis,
                             chi,
                             rng,
                         ),
                         <NTTGadgetNTRU<F>>::generate_random_zero_sample(
-                            inv_secret_key,
-                            bootstrapping_basis,
+                            ntru_inv_secret_key,
+                            blind_rotation_basis,
                             chi,
                             rng,
                         ),
@@ -130,14 +131,14 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                 } else {
                     (
                         <NTTGadgetNTRU<F>>::generate_random_zero_sample(
-                            inv_secret_key,
-                            bootstrapping_basis,
+                            ntru_inv_secret_key,
+                            blind_rotation_basis,
                             chi,
                             rng,
                         ),
                         <NTTGadgetNTRU<F>>::generate_random_one_sample(
-                            inv_secret_key,
-                            bootstrapping_basis,
+                            ntru_inv_secret_key,
+                            blind_rotation_basis,
                             chi,
                             rng,
                         ),

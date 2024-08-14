@@ -359,11 +359,12 @@ impl<F: NTTField> RLWE<F> {
         &self, // N
         rlwe_dimension: usize,
         // 2N/q
-        twice_rlwe_dimension_div_lwe_modulus: usize,
+        twice_rlwe_dimension_div_lwe_cipher_modulus: usize,
         r: T,
         destination: &mut RLWE<F>,
     ) {
-        let r = num_traits::cast::<T, usize>(r).unwrap() * twice_rlwe_dimension_div_lwe_modulus;
+        let r =
+            num_traits::cast::<T, usize>(r).unwrap() * twice_rlwe_dimension_div_lwe_cipher_modulus;
 
         if r <= rlwe_dimension {
             #[inline]

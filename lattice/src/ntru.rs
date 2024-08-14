@@ -187,10 +187,11 @@ impl<F: NTTField> NTRU<F> {
         // N
         ntru_dimension: usize,
         // 2N/q
-        twice_ntru_dimension_div_lwe_modulus: usize,
+        twice_ntru_dimension_div_lwe_cipher_modulus: usize,
         r: T,
     ) {
-        let r = num_traits::cast::<T, usize>(r).unwrap() * twice_ntru_dimension_div_lwe_modulus;
+        let r =
+            num_traits::cast::<T, usize>(r).unwrap() * twice_ntru_dimension_div_lwe_cipher_modulus;
         if r <= ntru_dimension {
             #[inline]
             fn rotate_add<F: NTTField>(
@@ -486,25 +487,25 @@ impl<F: NTTField> NTTNTRU<F> {
 
     /// Generate a `NTTNTRU<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
-        inv_secret_key: &NTTPolynomial<F>,
+        ntru_inv_secret_key: &NTTPolynomial<F>,
         error_sampler: FieldDiscreteGaussianSampler,
         rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
-        let ntru_dimension = inv_secret_key.coeff_count();
+        let ntru_dimension = ntru_inv_secret_key.coeff_count();
 
         let mut data = <Polynomial<F>>::random_with_gaussian(ntru_dimension, rng, error_sampler)
             .into_ntt_polynomial();
-        data *= inv_secret_key;
+        data *= ntru_inv_secret_key;
 
         Self { data }
     }
 
     /// Generate a `NTTNTRU<F>` sample which encrypts `value`.
     pub fn generate_random_value_sample<R>(
-        inv_secret_key: &NTTPolynomial<F>,
+        ntru_inv_secret_key: &NTTPolynomial<F>,
         value: F,
         error_sampler: FieldDiscreteGaussianSampler,
         rng: &mut R,
@@ -512,11 +513,11 @@ impl<F: NTTField> NTTNTRU<F> {
     where
         R: Rng + CryptoRng,
     {
-        let ntru_dimension = inv_secret_key.coeff_count();
+        let ntru_dimension = ntru_inv_secret_key.coeff_count();
 
         let mut data = <Polynomial<F>>::random_with_gaussian(ntru_dimension, rng, error_sampler)
             .into_ntt_polynomial();
-        data *= inv_secret_key;
+        data *= ntru_inv_secret_key;
         data.iter_mut().for_each(|v| *v += value);
 
         Self { data }

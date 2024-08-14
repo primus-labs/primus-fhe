@@ -10,9 +10,9 @@ use lattice::RLWE;
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
 pub struct EvaluationKey<C: LWEModulusType, Q: NTTField> {
-    /// Blind rotation key
+    /// Blind rotation key.
     blind_rotation_key: RLWEBlindRotationKey<Q>,
-    /// Key Switching Key
+    /// Key switching key.
     key_switching_key: KeySwitchingKeyEnum<C, Q>,
     /// The parameters of the fully homomorphic encryption scheme.
     parameters: Parameters<C, Q>,
@@ -32,21 +32,21 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
 
         assert_eq!(parameters.blind_rotation_type(), BlindRotationType::RLWE);
 
-        let chi = parameters.ring_noise_distribution();
-        let blind_rotation_key = RLWEBlindRotationKey::generate(secret_key_pack, chi, &mut *csrng);
+        let blind_rotation_key = RLWEBlindRotationKey::generate(
+            secret_key_pack,
+            parameters.ring_noise_distribution(),
+            &mut *csrng,
+        );
 
         let key_switching_key = match parameters.steps() {
             Steps::BrMsKs => {
                 KeySwitchingKeyEnum::LWE(KeySwitchingLWEKey::generate(secret_key_pack, &mut *csrng))
             }
-            Steps::BrKsMs => {
-                let chi = parameters.key_switching_noise_distribution_for_ring();
-                KeySwitchingKeyEnum::RLWE(KeySwitchingRLWEKey::generate(
-                    secret_key_pack,
-                    chi,
-                    &mut *csrng,
-                ))
-            }
+            Steps::BrKsMs => KeySwitchingKeyEnum::RLWE(KeySwitchingRLWEKey::generate(
+                secret_key_pack,
+                parameters.key_switching_noise_distribution_for_ring(),
+                &mut *csrng,
+            )),
             Steps::BrMs => KeySwitchingKeyEnum::None,
         };
 

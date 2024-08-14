@@ -21,14 +21,14 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         Self { key }
     }
 
-    /// Performs the bootstrapping operation
+    /// Performs the blind rotation operation.
     pub fn blind_rotate<C: LWEModulusType>(
         &self,
         init_acc: RLWE<F>,
         lwe_a: &[C],
         rlwe_dimension: usize,
-        twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<C>,
+        twice_rlwe_dimension_div_lwe_cipher_modulus: usize,
+        lwe_cipher_modulus: PowOf2Modulus<C>,
         blind_rotation_basis: Basis<F>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
@@ -44,7 +44,8 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                let degree = AsInto::<usize>::as_into(a_i) * twice_rlwe_dimension_div_lwe_modulus;
+                let degree =
+                    AsInto::<usize>::as_into(a_i) * twice_rlwe_dimension_div_lwe_cipher_modulus;
 
                 // ntt_polynomial = -Y^{a_i}
                 ntt_table.transform_coeff_neg_one_monomial(degree, ntt_polynomial.as_mut_slice());
@@ -59,8 +60,8 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                 // external_product = (Y^{-a_i} - 1) * ACC
                 acc.mul_monic_monomial_sub_one_inplace(
                     rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_modulus,
-                    a_i.neg_reduce(lwe_modulus),
+                    twice_rlwe_dimension_div_lwe_cipher_modulus,
+                    a_i.neg_reduce(lwe_cipher_modulus),
                     external_product,
                 );
 
@@ -81,10 +82,10 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
 
     /// Generates the [`TernaryBlindRotationKey<F>`].
     pub(crate) fn generate<Rng, C>(
-        blind_rotation_basis: Basis<F>,
         lwe_secret_key: &[C],
-        chi: FieldDiscreteGaussianSampler,
         rlwe_secret_key: &NTTPolynomial<F>,
+        blind_rotation_basis: Basis<F>,
+        chi: FieldDiscreteGaussianSampler,
         rng: &mut Rng,
     ) -> Self
     where
@@ -94,7 +95,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s == C::ONE {
+                if s.is_one() {
                     (
                         <NTTRGSW<F>>::generate_random_one_sample(
                             rlwe_secret_key,
@@ -109,7 +110,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                             rng,
                         ),
                     )
-                } else if s == C::ZERO {
+                } else if s.is_zero() {
                     (
                         <NTTRGSW<F>>::generate_random_zero_sample(
                             rlwe_secret_key,
