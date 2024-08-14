@@ -1,9 +1,8 @@
 use algebra::{AsInto, NTTField, Polynomial};
 use fhe_core::{
     lwe_modulus_switch_between_modulus_inplace, lwe_modulus_switch_inplace, BlindRotationType,
-    KeySwitchingKeyEnum, KeySwitchingRLWEKey, LWECiphertext, LWEModulusType,
-    ModulusSwitchBeforeBlindRotation, NTRUBlindRotationKey, NTRUCiphertext, Parameters,
-    SecretKeyPack, Steps,
+    KeySwitchingKeyEnum, KeySwitchingRLWEKey, LWECiphertext, LWEModulusType, NTRUBlindRotationKey,
+    NTRUCiphertext, Parameters, SecretKeyPack, Steps,
 };
 use lattice::NTRU;
 

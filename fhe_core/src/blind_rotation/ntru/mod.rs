@@ -1,6 +1,5 @@
-use algebra::{modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField};
+use algebra::{modulus::PowOf2Modulus, Basis, NTTField};
 use lattice::NTRU;
-use rand::{CryptoRng, Rng};
 
 use crate::{LWEModulusType, LWESecretKeyType, SecretKeyPack};
 

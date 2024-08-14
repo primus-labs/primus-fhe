@@ -1,6 +1,5 @@
 use algebra::{modulus::PowOf2Modulus, NTTField};
 use lattice::{decompose_lsb_bits_inplace, Basis, LWE};
-use rand::{CryptoRng, Rng};
 
 use crate::{LWEModulusType, SecretKeyPack};
 

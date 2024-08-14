@@ -129,10 +129,10 @@ impl<F: NTTField> RGSW<F> {
 impl<F: NTTField> RGSW<F> {
     /// Generate a `RGSW<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
-        rng: &mut R,
+        secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        secret_key: &NTTPolynomial<F>,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -155,10 +155,10 @@ impl<F: NTTField> RGSW<F> {
 
     /// Generate a `RGSW<F>` sample which encrypts `1`.
     pub fn generate_random_one_sample<R>(
-        rng: &mut R,
+        secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        secret_key: &NTTPolynomial<F>,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
