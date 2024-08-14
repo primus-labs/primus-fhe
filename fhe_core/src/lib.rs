@@ -22,7 +22,7 @@ pub use error::FHECoreError;
 
 pub use parameter::{
     BlindRotationType, ConstParameters, DefaultExtendsionFieldU32x4, DefaultFieldU32, DefaultQks,
-    Parameters, RelationOfqAnd2N, Steps,
+    ModulusSwitchBeforeBlindRotation, Parameters, Steps,
 };
 
 pub use ciphertext::{

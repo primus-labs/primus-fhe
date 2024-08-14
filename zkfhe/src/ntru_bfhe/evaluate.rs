@@ -1,8 +1,9 @@
 use algebra::{AsInto, NTTField, Polynomial};
 use fhe_core::{
     lwe_modulus_switch_between_modulus_inplace, lwe_modulus_switch_inplace, BlindRotationType,
-    KeySwitchingKeyEnum, KeySwitchingRLWEKey, LWECiphertext, LWEModulusType, NTRUBlindRotationKey,
-    NTRUCiphertext, Parameters, RelationOfqAnd2N, SecretKeyPack, Steps,
+    KeySwitchingKeyEnum, KeySwitchingRLWEKey, LWECiphertext, LWEModulusType,
+    ModulusSwitchBeforeBlindRotation, NTRUBlindRotationKey, NTRUCiphertext, Parameters,
+    SecretKeyPack, Steps,
 };
 use lattice::NTRU;
 
@@ -53,31 +54,16 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
         init_acc: NTRUCiphertext<Q>,
     ) -> LWECiphertext<C> {
         let parameters = self.parameters();
-        let round_method = parameters.modulus_switch_round_method();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let mut factor = 1;
-
-        match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Gt => {
-                lwe_modulus_switch_between_modulus_inplace(
-                    &mut c,
-                    parameters.lwe_cipher_modulus_value(),
-                    C::as_from((parameters.ring_dimension() << 1) as u64),
-                    round_method,
-                );
-            }
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => factor = twice_ring_dimension_div_lwe_modulus,
-            RelationOfqAnd2N::Eq => (),
-        }
+        let factor = ms.twice_ring_dimension_div_lwe_cipher_modulus();
 
         let mut acc = self.blind_rotation_key.blind_rotate(
             init_acc,
             c.a(),
             parameters.ring_dimension(),
             factor,
-            parameters.lwe_cipher_modulus(),
+            ms.lwe_cipher_modulus_for_blind_rotation(),
             parameters.blind_rotation_basis(),
         );
 
@@ -101,7 +87,7 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
                 lwe_modulus_switch_inplace(
                     key_switched,
                     parameters.lwe_cipher_modulus_value(),
-                    round_method,
+                    parameters.modulus_switch_round_method(),
                     &mut c,
                 );
                 c
@@ -153,20 +139,23 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn nand(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut add,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_nand_acc(
             add.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(add, init_acc)
@@ -182,20 +171,23 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn and(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut add,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_and_majority_acc(
             add.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(add, init_acc)
@@ -211,20 +203,23 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn or(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut add,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_or_acc(
             add.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(add, init_acc)
@@ -240,20 +235,23 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn nor(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut add,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_nor_acc(
             add.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(add, init_acc)
@@ -269,21 +267,24 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn xor(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut sub,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_xor_acc(
             sub.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(sub, init_acc)
@@ -299,21 +300,24 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn xnor(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut sub,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_xnor_acc(
             sub.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(sub, init_acc)
@@ -336,21 +340,24 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     ) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
         add.add_reduce_inplace_component_wise(c2, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut add,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_and_majority_acc(
             add.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(add, init_acc)
@@ -373,6 +380,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     ) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
+        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let not_c0 = self.not(c0);
 
@@ -381,17 +389,19 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         // (a & b) | (!a & c)
         t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
 
-        let twice_ring_dimension_div_lwe_modulus = match parameters.relation_of_q_and_2_n() {
-            RelationOfqAnd2N::Lt {
-                twice_ring_dimension_div_lwe_modulus,
-            } => twice_ring_dimension_div_lwe_modulus,
-            _ => 1,
-        };
+        if ms.need_modulus_switch() {
+            lwe_modulus_switch_between_modulus_inplace(
+                &mut t0,
+                parameters.lwe_cipher_modulus_value(),
+                ms.new_lwe_cipher_modulus_value(),
+                parameters.modulus_switch_round_method(),
+            );
+        }
 
         let init_acc: NTRUCiphertext<Q> = init_or_acc(
             t0.b(),
             parameters.ring_dimension(),
-            twice_ring_dimension_div_lwe_modulus,
+            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
         );
 
         self.ek.bootstrap(t0, init_acc)
