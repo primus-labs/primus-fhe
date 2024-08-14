@@ -231,8 +231,25 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         };
 
         match steps {
-            Steps::BrMsKs => {}
-            Steps::BrKsMs => {}
+            Steps::BrMsKs => {
+                if blind_rotation_type == BlindRotationType::NTRU {
+                    // This method is not supportting `NTRU` now.
+                    return Err(FHECoreError::StepsParametersNotCompatible);
+                }
+                if !(ring_secret_key_type == RingSecretKeyType::Binary
+                    || ring_secret_key_type == RingSecretKeyType::Ternary)
+                {
+                    // `RingSecretKeyType::Gaussian` is unimplemented.
+                    return Err(FHECoreError::StepsParametersNotCompatible);
+                }
+            }
+            Steps::BrKsMs => {
+                if blind_rotation_type == BlindRotationType::NTRU
+                    && ring_secret_key_type != RingSecretKeyType::Ternary
+                {
+                    return Err(FHECoreError::StepsParametersNotCompatible);
+                }
+            }
             Steps::BrMs => {
                 // Currently, only support RLWE Blind Rotation for this mode
                 if !(blind_rotation_type == BlindRotationType::RLWE
@@ -357,6 +374,12 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         self.blind_rotation_params.noise_standard_deviation
     }
 
+    /// Returns the ring secret key type of this [`Parameters<C, Q>`].
+    #[inline]
+    pub fn ring_secret_key_type(&self) -> RingSecretKeyType {
+        self.blind_rotation_params.secret_key_type
+    }
+
     /// Use `RLWE` or `NTRU` to perform blind rotation.
     #[inline]
     pub fn blind_rotation_type(&self) -> BlindRotationType {
@@ -387,7 +410,7 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
     #[inline]
     pub fn lwe_noise_distribution(&self) -> DiscreteGaussian<C> {
         DiscreteGaussian::new(
-            self.lwe_cipher_modulus().value(),
+            self.lwe_cipher_modulus_value(),
             0.0,
             self.lwe_noise_standard_deviation(),
         )
@@ -411,17 +434,11 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
     #[inline]
     pub fn key_switching_noise_distribution_for_lwe(&self) -> DiscreteGaussian<C> {
         DiscreteGaussian::new(
-            self.lwe_cipher_modulus().value(),
+            self.lwe_cipher_modulus_value(),
             0.0,
-            self.lwe_noise_standard_deviation(),
+            self.key_switching_noise_standard_deviation(),
         )
         .unwrap()
-    }
-
-    /// Returns the ring secret key type of this [`Parameters<C, Q>`].
-    #[inline]
-    pub fn ring_secret_key_type(&self) -> RingSecretKeyType {
-        self.blind_rotation_params.secret_key_type
     }
 
     /// Returns the steps of whole bootstrapping of this [`Parameters<C, Q>`].
