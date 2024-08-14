@@ -26,21 +26,15 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
 
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<C, Q>) -> Self {
-        let mut csrng = secret_key_pack.csrng_mut();
         let parameters = secret_key_pack.parameters();
-
         assert_eq!(parameters.blind_rotation_type(), BlindRotationType::NTRU);
 
-        let chi = parameters.ring_noise_distribution();
-        let blind_rotation_key = NTRUBlindRotationKey::generate(secret_key_pack, chi, &mut *csrng);
+        let blind_rotation_key = NTRUBlindRotationKey::generate(secret_key_pack);
 
-        let chi = parameters.key_switching_noise_distribution_for_ring();
         let key_switching_key = match parameters.steps() {
-            Steps::BrKsMs => KeySwitchingKeyEnum::RLWE(KeySwitchingRLWEKey::generate(
-                secret_key_pack,
-                chi,
-                &mut *csrng,
-            )),
+            Steps::BrKsMs => {
+                KeySwitchingKeyEnum::RLWE(KeySwitchingRLWEKey::generate(secret_key_pack))
+            }
             Steps::BrMsKs => unimplemented!(),
             Steps::BrMs => panic!(),
         };

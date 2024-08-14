@@ -1,8 +1,7 @@
 use std::slice::ChunksExact;
 
-use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial};
+use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, RLWE};
-use rand::{CryptoRng, Rng};
 
 use crate::{LWEModulusType, NTRUCiphertext, SecretKeyPack};
 
@@ -27,13 +26,8 @@ pub struct KeySwitchingRLWEKey<Q: NTTField> {
 
 impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R, C>(
-        secret_key_pack: &SecretKeyPack<C, Q>,
-        chi: FieldDiscreteGaussianSampler,
-        mut rng: R,
-    ) -> KeySwitchingRLWEKey<Q>
+    pub fn generate<C>(secret_key_pack: &SecretKeyPack<C, Q>) -> KeySwitchingRLWEKey<Q>
     where
-        R: Rng + CryptoRng,
         C: LWEModulusType,
     {
         let parameters = secret_key_pack.parameters();
@@ -42,6 +36,9 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
         let extended_lwe_dimension = lwe_dimension.next_power_of_two();
         let ring_dimension = parameters.ring_dimension();
         assert!(extended_lwe_dimension <= ring_dimension);
+
+        let chi = parameters.key_switching_noise_distribution_for_ring();
+        let mut csrng = secret_key_pack.csrng_mut();
 
         let key_switching_basis = Basis::<Q>::new(parameters.key_switching_basis_bits());
 
@@ -77,7 +74,7 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
             let k = (0..len)
                 .map(|i| {
                     let mut sample =
-                        <NTTRLWE<Q>>::generate_random_zero_sample(&lwe_sk, chi, &mut rng);
+                        <NTTRLWE<Q>>::generate_random_zero_sample(&lwe_sk, chi, &mut *csrng);
 
                     *sample.b_mut() += &sk;
 
@@ -103,8 +100,11 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
                     let mut ntt_z = z.into_ntt_polynomial();
                     let k = (0..len)
                         .map(|i| {
-                            let mut sample =
-                                <NTTRLWE<Q>>::generate_random_zero_sample(&lwe_sk, chi, &mut rng);
+                            let mut sample = <NTTRLWE<Q>>::generate_random_zero_sample(
+                                &lwe_sk,
+                                chi,
+                                &mut *csrng,
+                            );
 
                             *sample.b_mut() += &ntt_z;
 

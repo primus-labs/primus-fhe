@@ -122,9 +122,9 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
                         assert_eq!(params.lwe_dimension(), params.ring_dimension());
                         // convertion
                         let convert = |v: &C| {
-                            if *v == C::ZERO {
+                            if v.is_zero() {
                                 Q::zero()
-                            } else if *v == C::ONE {
+                            } else if v.is_one() {
                                 Q::one()
                             } else {
                                 Q::neg_one()
@@ -207,56 +207,56 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
     /// Encrypts message into [`LWECiphertext`].
     #[inline]
     pub fn encrypt<M: LWEMsgType>(&self, message: M) -> LWECiphertext<C> {
-        let lwe_modulus = self.parameters.lwe_cipher_modulus();
+        let cipher_modulus = self.parameters.lwe_cipher_modulus();
+        let cipher_modulus_value = self.parameters.lwe_cipher_modulus_value();
         let noise_distribution = self.parameters.lwe_noise_distribution();
-        let lwe_modulus_value = self.parameters.lwe_cipher_modulus_value();
         let mut csrng = self.csrng_mut();
 
-        let mut cipher = LWECiphertext::generate_random_zero_sample(
+        let mut ciphertext = LWECiphertext::generate_random_zero_sample(
             self.lwe_secret_key(),
-            lwe_modulus_value,
-            lwe_modulus,
+            cipher_modulus_value,
+            cipher_modulus,
             noise_distribution,
             &mut *csrng,
         );
 
-        cipher.b_mut().add_reduce_assign(
+        ciphertext.b_mut().add_reduce_assign(
             encode(
                 message,
                 self.parameters.lwe_plain_modulus(),
-                lwe_modulus_value.as_into(),
+                cipher_modulus_value.as_into(),
             ),
-            lwe_modulus,
+            cipher_modulus,
         );
 
-        cipher
+        ciphertext
     }
 
     /// Decrypts the [`LWECiphertext`] back to message.
     #[inline]
     pub fn decrypt<M: LWEMsgType>(&self, cipher_text: &LWECiphertext<C>) -> M {
-        let lwe_modulus = self.parameters.lwe_cipher_modulus();
+        let cipher_modulus = self.parameters.lwe_cipher_modulus();
 
-        let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
-        let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
+        let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), cipher_modulus);
+        let plaintext = cipher_text.b().sub_reduce(a_mul_s, cipher_modulus);
 
         decode(
             plaintext,
             self.parameters.lwe_plain_modulus(),
-            lwe_modulus.value().as_into(),
+            self.parameters.lwe_cipher_modulus_value().as_into(),
         )
     }
 
     /// Decrypts the [`LWECiphertext`] back to message.
     #[inline]
     pub fn decrypt_with_noise<M: LWEMsgType>(&self, cipher_text: &LWECiphertext<C>) -> (M, C) {
-        let lwe_modulus = self.parameters.lwe_cipher_modulus();
+        let cipher_modulus = self.parameters.lwe_cipher_modulus();
         let t: u64 = self.parameters.lwe_plain_modulus();
-        let q: u64 = lwe_modulus.value().as_into();
+        let q: u64 = self.parameters.lwe_cipher_modulus_value().as_into();
 
-        let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), lwe_modulus);
+        let a_mul_s = C::dot_product_reduce(cipher_text.a(), self.lwe_secret_key(), cipher_modulus);
 
-        let plaintext = cipher_text.b().sub_reduce(a_mul_s, lwe_modulus);
+        let plaintext = cipher_text.b().sub_reduce(a_mul_s, cipher_modulus);
 
         let message = decode(plaintext, t, q);
 
@@ -265,8 +265,8 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
         (
             message,
             plaintext
-                .sub_reduce(fresh, lwe_modulus)
-                .min(fresh.sub_reduce(plaintext, lwe_modulus)),
+                .sub_reduce(fresh, cipher_modulus)
+                .min(fresh.sub_reduce(plaintext, cipher_modulus)),
         )
     }
 }

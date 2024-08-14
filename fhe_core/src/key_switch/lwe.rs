@@ -21,12 +21,8 @@ pub struct KeySwitchingLWEKey<C: LWEModulusType> {
 
 impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
     /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<R, Q>(
-        secret_key_pack: &SecretKeyPack<C, Q>,
-        mut rng: R,
-    ) -> KeySwitchingLWEKey<C>
+    pub fn generate<Q>(secret_key_pack: &SecretKeyPack<C, Q>) -> KeySwitchingLWEKey<C>
     where
-        R: Rng + CryptoRng,
         Q: NTTField,
     {
         let params = secret_key_pack.parameters();
@@ -35,6 +31,8 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
         let lwe_cipher_modulus_value = params.lwe_cipher_modulus_value();
         let lwe_cipher_modulus = params.lwe_cipher_modulus();
         let noise_distribution = params.key_switching_noise_distribution_for_lwe();
+
+        let mut csrng = secret_key_pack.csrng_mut();
 
         let key_switching_basis =
             lattice::Basis::<C>::new(params.key_switching_basis_bits(), lwe_cipher_modulus_value);
@@ -72,7 +70,7 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
                             lwe_cipher_modulus_value,
                             lwe_cipher_modulus,
                             noise_distribution,
-                            &mut rng,
+                            &mut *csrng,
                         );
 
                         cipher.b_mut().add_reduce_assign(z, lwe_cipher_modulus);
