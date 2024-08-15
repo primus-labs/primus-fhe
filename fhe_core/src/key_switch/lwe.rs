@@ -15,11 +15,17 @@ pub struct KeySwitchingLWEKey<C: LWEModulusType> {
     modulus: PowOf2Modulus<C>,
     basis: Basis<C>,
     /// Key Switching Key data
-    key: Vec<Vec<LWE<C>>>,
+    ///
+    /// k_{i, j, v}
+    ///
+    /// i \in \{0, dks-1\}
+    /// j \in \{0, N-1\}
+    /// v \in \{1, bks-1\}
+    key: Vec<Vec<Vec<LWE<C>>>>,
 }
 
 impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
-    /// Generates a new [`KeySwitchingKey`].
+    /// Generates a new [`KeySwitchingLWEKey`].
     pub fn generate<Q>(secret_key_pack: &SecretKeyPack<C, Q>) -> KeySwitchingLWEKey<C>
     where
         Q: NTTField,
@@ -56,25 +62,35 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
 
         let len = key_switching_basis.decompose_len();
         let basis = key_switching_basis.basis();
+        let basis_usize: usize = basis.try_into().ok().unwrap();
 
         let sk = secret_key_pack.lwe_secret_key();
 
-        let key: Vec<Vec<LWE<C>>> = (0..len)
+        let key: Vec<Vec<Vec<LWE<C>>>> = (0..len)
             .map(|j| {
-                let inner: Vec<LWE<C>> = ring_sk
+                let inner: Vec<Vec<LWE<C>>> = ring_sk
                     .iter()
                     .map(|&z| {
-                        let mut cipher = LWE::generate_random_zero_sample(
-                            sk,
-                            lwe_cipher_modulus_value,
-                            lwe_cipher_modulus,
-                            noise_distribution,
-                            &mut *csrng,
-                        );
+                        let mut res = Vec::with_capacity(basis_usize - 2);
+                        let mut v = C::ONE;
+                        while v < basis {
+                            let mut cipher = LWE::generate_random_zero_sample(
+                                sk,
+                                lwe_cipher_modulus_value,
+                                lwe_cipher_modulus,
+                                noise_distribution,
+                                &mut *csrng,
+                            );
 
-                        cipher.b_mut().add_reduce_assign(z, lwe_cipher_modulus);
+                            cipher.b_mut().add_reduce_assign(
+                                v.mul_reduce(z, lwe_cipher_modulus),
+                                lwe_cipher_modulus,
+                            );
 
-                        cipher
+                            res.push(cipher);
+                            v = v + C::ONE;
+                        }
+                        res
                     })
                     .collect();
 
@@ -107,7 +123,10 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
         self.key.iter().for_each(|inner| {
             decompose_lsb_bits_inplace(a, self.basis, &mut decomposed);
             decomposed.iter().zip(inner).for_each(|(&d_i, s_i)| {
-                result.add_assign_rhs_mul_scalar_reduce(s_i, d_i, self.modulus);
+                if !d_i.is_zero() {
+                    let index: usize = d_i.try_into().ok().unwrap() - 1;
+                    result.add_reduce_inplace_component_wise(&s_i[index], self.modulus);
+                }
             });
         });
 

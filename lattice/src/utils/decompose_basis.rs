@@ -20,7 +20,10 @@ impl<T: PrimInt + Bits> Basis<T> {
     ///
     /// Panics if .
     pub fn new(bits: u32, modulus: T) -> Self {
-        let modulus_bits = T::N_BITS - modulus.leading_zeros();
+        let mut modulus_bits = T::N_BITS - modulus.leading_zeros();
+        if modulus.count_ones() == 1 {
+            modulus_bits -= 1;
+        }
         if bits > modulus_bits || bits == T::N_BITS {
             panic!("bits");
         }
