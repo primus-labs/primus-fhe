@@ -23,15 +23,29 @@ pub fn lwe_modulus_switch<C: LWEModulusType, F: FheField>(
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
+    let reduce = |v: C| {
+        if v < modulus_after {
+            v
+        } else {
+            v - modulus_after
+        }
+    };
+
     let switch: Box<dyn Fn(F) -> C> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
-            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).round())
+            reduce(C::as_from(
+                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round(),
+            ))
         }),
         ModulusSwitchRoundMethod::Floor => Box::new(|v: F| {
-            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor())
+            reduce(C::as_from(
+                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor(),
+            ))
         }),
         ModulusSwitchRoundMethod::Ceil => Box::new(|v: F| {
-            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil())
+            reduce(C::as_from(
+                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil(),
+            ))
         }),
     };
 
@@ -51,15 +65,29 @@ pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: DecomposableField>(
     let modulus_before_f64: f64 = F::MODULUS_VALUE.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
+    let reduce = |v: C| {
+        if v < modulus_after {
+            v
+        } else {
+            v - modulus_after
+        }
+    };
+
     let switch: Box<dyn Fn(F) -> C> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
-            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).round())
+            reduce(C::as_from(
+                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round(),
+            ))
         }),
         ModulusSwitchRoundMethod::Floor => Box::new(|v: F| {
-            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor())
+            reduce(C::as_from(
+                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor(),
+            ))
         }),
         ModulusSwitchRoundMethod::Ceil => Box::new(|v: F| {
-            C::as_from((v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil())
+            reduce(C::as_from(
+                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil(),
+            ))
         }),
     };
 
@@ -82,15 +110,29 @@ pub fn lwe_modulus_switch_between_modulus_inplace<C: LWEModulusType>(
     let modulus_before_f64: f64 = modulus_before.as_into();
     let modulus_after_f64: f64 = modulus_after.as_into();
 
+    let reduce = |v: C| {
+        if v < modulus_after {
+            v
+        } else {
+            v - modulus_after
+        }
+    };
+
     let switch: Box<dyn Fn(C) -> C> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: C| {
-            C::as_from((AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).round())
+            reduce(C::as_from(
+                (AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).round(),
+            ))
         }),
         ModulusSwitchRoundMethod::Floor => Box::new(|v: C| {
-            C::as_from((AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).floor())
+            reduce(C::as_from(
+                (AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).floor(),
+            ))
         }),
         ModulusSwitchRoundMethod::Ceil => Box::new(|v: C| {
-            C::as_from((AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).ceil())
+            reduce(C::as_from(
+                (AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).ceil(),
+            ))
         }),
     };
 
