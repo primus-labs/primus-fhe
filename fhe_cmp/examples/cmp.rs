@@ -43,16 +43,15 @@ fn main() {
         modulus_switcing_round_method: ModulusSwitchRoundMethod::Round,
     })
     .unwrap();
-
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let poly_length = param.ring_dimension();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
+for i in 0..10{
     let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
-    let message_space = param.t() as usize;
-    let x = 3;
-    let y = 3;
+    let x = rng.gen_range(0..100000);
+    let y = rng.gen_range(0..100000);
     let (value1,value2) = initial(
         x, 
         y, 
@@ -65,7 +64,7 @@ fn main() {
         HALF_DEELTA,
     );
     let out1 = comparison::less_arbhcmp(&value1, &value2, &rotationkey, DEELTA, HALF_DEELTA, poly_length);
-    let out2 = comparison::equality_arbhcmp(&value1,&value2, &rotationkey, message_space, poly_length);
+    let out2 = comparison::equality_arbhcmp(&value1,&value2, &rotationkey,poly_length);
     let out3 = comparison::greater_arbhcmp(&value1, &value2, &rotationkey, DEELTA, HALF_DEELTA, poly_length);
     let a_mul_s1 = rlwe_sk
         .iter()
@@ -82,20 +81,24 @@ fn main() {
     let decoded_value1 = decode(out1.b() - a_mul_s1);
     let decoded_value2 = decode(out2.b() - a_mul_s2);
     let decoded_value3 = decode(out3.b() - a_mul_s3);
-    if x > y {
-        if decoded_value1 != 1 && decoded_value2 != 0 && decoded_value3 != 0{
-            println!("error!");
+    if x < y {
+        if decoded_value1 != 1 || decoded_value2 != 0 || decoded_value3 != 0{
+            println!("{},{}",x,y);
+            println!("error1!");
         }
     }else if x == y {
-        if decoded_value1 != 0 && decoded_value2 != 1 && decoded_value3 != 0{
-            println!("error!");
+        if decoded_value1 != 0 || decoded_value2 != 1 || decoded_value3 != 0{
+            println!("{},{}",x,y);
+            println!("error2!");
         }
     }else{
-        if decoded_value1 != 0 && decoded_value2 != 0 && decoded_value3 != 1{
-            println!("error!");
+        if decoded_value1 != 0 || decoded_value2 != 0 || decoded_value3 != 1{
+            println!("{},{}",x,y);
+            println!("error3!");
         }
     }
-
+    println!("{}",i);
+}
 
 }
 
