@@ -252,11 +252,15 @@ pub fn homand<F: Field<Value = u64> + NTTField>(
     ca: &LWE<F>,
     cb: &LWE<F>,
     key: &RLWEBlindRotationKey<F>,
+    message_space: usize,
     poly_length: usize,
 ) -> LWE<F> {
     let mut temp = ca.add_component_wise_ref(cb);
+    let magnify = message_space.ilog2()-2;
     for elem in temp.a_mut().iter_mut() {
-        *elem = *elem + *elem + *elem + *elem;
+        for _ in 0..magnify {
+            *elem = *elem + *elem;
+        }
     }
     *temp.b_mut() = temp.b() + temp.b() + temp.b() + temp.b();
     let mut test = vec![F::zero(); poly_length];
@@ -392,6 +396,7 @@ pub fn equality_arbhcmp<F: Field<Value = u64> + NTTField>(
     cipher1: &[RLWE<F>],
     cipher2: &[RGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
+    message_space: usize,
     poly_length: usize,
 ) -> LWE<F> {
     let len = cipher1.len();
@@ -406,10 +411,11 @@ pub fn equality_arbhcmp<F: Field<Value = u64> + NTTField>(
             cipher1_others,
             cipher2_others,
             gatebootstrappingkey,
+            message_space,
             poly_length,
         );
         let gt_res = equality_hcmp(cipher1_last, cipher2_last);
-        let res = homand(&low_res, &gt_res, gatebootstrappingkey, poly_length);
+        let res = homand(&low_res, &gt_res, gatebootstrappingkey, message_space, poly_length);
         res
     }
 }
