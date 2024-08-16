@@ -13,21 +13,16 @@ use rand::prelude::*;
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
 pub struct FF(u64);
-
-
 type Inner = u64; // inner type
-
 const FP: Inner = FF::MODULUS_VALUE; // ciphertext space
 const FT: Inner = 16; // message space
 const DEELTA: FF = FF((FP as f64 / FT as f64) as Inner);
 const HALF_DEELTA: FF = FF((FP as f64 / (FT as f64 * 2.0)) as Inner);
 
-
 #[inline]
 fn decode(c: FF) -> Inner {
     (c.value() as f64 * FT as f64 / FP as f64).round() as Inner % FT
 }
-
 fn main() {
     let mut rng = thread_rng();
     let param = Parameters::<u64, FF>::new(ConstParameters {
@@ -54,11 +49,10 @@ fn main() {
     let poly_length = param.ring_dimension();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-
-for number in 0..1000{
     let rotationkey = RLWEBlindRotationKey::generate(&sk, sampler, &mut rng);
-    let x = thread_rng().gen_range(0..1000000000);
-    let y = thread_rng().gen_range(0..1000000000);
+    let message_space = param.t() as usize;
+    let x = 3;
+    let y = 3;
     let (value1,value2) = initial(
         x, 
         y, 
@@ -71,7 +65,7 @@ for number in 0..1000{
         HALF_DEELTA,
     );
     let out1 = comparison::less_arbhcmp(&value1, &value2, &rotationkey, DEELTA, HALF_DEELTA, poly_length);
-    let out2 = comparison::equality_arbhcmp(&value1,&value2, &rotationkey, poly_length);
+    let out2 = comparison::equality_arbhcmp(&value1,&value2, &rotationkey, message_space, poly_length);
     let out3 = comparison::greater_arbhcmp(&value1, &value2, &rotationkey, DEELTA, HALF_DEELTA, poly_length);
     let a_mul_s1 = rlwe_sk
         .iter()
@@ -101,8 +95,7 @@ for number in 0..1000{
             println!("error!");
         }
     }
-    println!("{}",number);
-}
 
 
 }
+
