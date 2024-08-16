@@ -1,6 +1,4 @@
-use algebra::{
-    modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
-};
+use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial};
 use lattice::{DecompositionSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, NTTRGSW, RLWE};
 
 use crate::LWEModulusType;
@@ -23,8 +21,6 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
         init_acc: RLWE<F>,
         lwe_a: &[C],
         rlwe_dimension: usize,
-        twice_rlwe_dimension_div_lwe_cipher_modulus: usize,
-        lwe_cipher_modulus: PowOf2Modulus<C>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
@@ -35,21 +31,16 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                // rlwe_space = (Y^{-a_i} - 1) * ACC
-                acc.mul_monic_monomial_sub_one_inplace(
-                    rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_cipher_modulus,
-                    a_i.neg_reduce(lwe_cipher_modulus),
-                    rlwe_space,
-                );
-                // rlwe_space = (Y^{-a_i} - 1) * ACC * RGSW(s_i)
+                // rlwe_space = (X^{a_i} - 1) * ACC
+                acc.mul_monic_monomial_sub_one_inplace(rlwe_dimension, a_i.as_into(), rlwe_space);
+                // rlwe_space = (X^{a_i} - 1) * ACC * RGSW(s_i)
                 rlwe_space.mul_assign_ntt_rgsw(
                     s_i,
                     decompose_space,
                     polynomial_space,
                     ntt_rlwe_space,
                 );
-                // ACC = ACC + (Y^{-a_i} - 1) * ACC * RGSW(s_i)
+                // ACC = ACC + (X^{a_i} - 1) * ACC * RGSW(s_i)
                 acc.add_assign_element_wise(rlwe_space);
                 acc
             })

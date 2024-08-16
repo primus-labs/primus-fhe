@@ -9,60 +9,67 @@ use crate::{
 };
 
 /// The steps of whole bootstrapping.
+///
+/// First `Modulus Switch` or `Scale` is decided by following two case:
+/// - `Modulus Switch`: `q > 2N`, `2N|q`
+/// - `Scale`:`q < 2N`, `q|2N`
 #[derive(Debug, Default, Clone, Copy)]
 pub enum Steps {
-    /// Modulus Switch -> Blind Rotation -> Modulus Switch -> Key Switch.
-    ///
-    /// ### Case: q >= 2N, 2N|q
+    /// Modulus Switch or Scale? -> Blind Rotation -> Modulus Switch -> Key Switch.
     ///
     /// (n, q) -> (n, 2N) -> (N, Q) -> (N, q) -> (n, q)
     BrMsKs,
-    /// Blind Rotation -> Key Switch -> Modulus Switch.
+    /// Modulus Switch or Scale? -> Blind Rotation -> Key Switch -> Modulus Switch.
     ///
-    /// ### Case: q <= 2N, q|2N
-    ///
-    /// (n, q) -> (N, Q) -> (n, Q) -> (n, q)
+    /// (n, q) -> (n, 2N) -> (N, Q) -> (n, Q) -> (n, q)
     #[default]
     BrKsMs,
-    /// Blind Rotation -> Modulus Switch.
+    /// Modulus Switch or Scale? -> Blind Rotation -> Modulus Switch.
     ///
     /// ### Case: n = N
     ///
-    /// (n, q) -> (N, Q) -> (n, q)
+    /// (n, q) -> (n, 2N) -> (N, Q) -> (n, q)
     BrMs,
 }
 
-/// Indicate whether to perform a modulus switch before blind rotation.
+/// The process type before blind rotation
 #[derive(Debug, Clone, Copy)]
-pub struct ModulusSwitchBeforeBlindRotation<C: LWEModulusType> {
-    /// whethe performs the modulus switch
-    need_modulus_switch: bool,
-    /// `2N`
-    new_lwe_cipher_modulus_value: C,
-    /// after modulus switch
-    twice_ring_dimension_div_lwe_cipher_modulus: usize,
-    lwe_cipher_modulus_for_blind_rotation: PowOf2Modulus<C>,
+pub enum ProcessType {
+    /// Modulus Switch
+    ModulusSwitch,
+    /// Scale with the ratio.
+    Scale {
+        /// `2N/q`
+        ratio: usize,
+    },
+    /// Do nothing.
+    Noop,
 }
 
-impl<C: LWEModulusType> ModulusSwitchBeforeBlindRotation<C> {
-    /// Returns the need modulus switch of this [`ModulusSwitchBeforeBlindRotation<C>`].
-    pub fn need_modulus_switch(&self) -> bool {
-        self.need_modulus_switch
+/// Indicate whether to perform a `modulus switch`, `scale` or `noop` before blind rotation.
+#[derive(Debug, Clone, Copy)]
+pub struct ProcessBeforeBlindRotation<C: LWEModulusType> {
+    process: ProcessType,
+    lut_step: usize,
+    /// `2N`
+    twice_ring_dimension_value: C,
+    twice_ring_dimension_modulus: PowOf2Modulus<C>,
+}
+
+impl<C: LWEModulusType> ProcessBeforeBlindRotation<C> {
+    /// Returns the `process` of this [`ProcessBeforeBlindRotation<C>`].
+    pub fn process(&self) -> ProcessType {
+        self.process
     }
 
-    /// Returns the new lwe cipher modulus value of this [`ModulusSwitchBeforeBlindRotation<C>`].
-    pub fn new_lwe_cipher_modulus_value(&self) -> C {
-        self.new_lwe_cipher_modulus_value
+    /// Returns twice ring dimension value of this [`ProcessBeforeBlindRotation<C>`].
+    pub fn twice_ring_dimension_value(&self) -> C {
+        self.twice_ring_dimension_value
     }
 
-    /// Returns the twice ring dimension div lwe cipher modulus of this [`ModulusSwitchBeforeBlindRotation<C>`].
-    pub fn twice_ring_dimension_div_lwe_cipher_modulus(&self) -> usize {
-        self.twice_ring_dimension_div_lwe_cipher_modulus
-    }
-
-    /// Returns the lwe cipher modulus for blind rotation of this [`ModulusSwitchBeforeBlindRotation<C>`].
-    pub fn lwe_cipher_modulus_for_blind_rotation(&self) -> PowOf2Modulus<C> {
-        self.lwe_cipher_modulus_for_blind_rotation
+    /// Returns twice ring dimension modulus of this [`ProcessBeforeBlindRotation<C>`].
+    pub fn twice_ring_dimension_modulus(&self) -> PowOf2Modulus<C> {
+        self.twice_ring_dimension_modulus
     }
 }
 
@@ -133,7 +140,7 @@ pub struct Parameters<C: LWEModulusType, Q: NTTField> {
     blind_rotation_params: BlindRotationParameters<Q>,
     key_switching_params: KeySwitchingParameters,
     modulus_switch_params: ModulusSwitchParameters,
-    modulus_switch_before_blind_rotation: ModulusSwitchBeforeBlindRotation<C>,
+    process_before_blind_rotation: ProcessBeforeBlindRotation<C>,
     steps: Steps,
 }
 
@@ -177,7 +184,7 @@ pub struct ConstParameters<C: LWEModulusType, Q> {
     pub key_switching_standard_deviation: f64,
 
     /// Modulus Switch round method.
-    pub modulus_switcing_round_method: ModulusSwitchRoundMethod,
+    pub modulus_switching_round_method: ModulusSwitchRoundMethod,
 }
 
 impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
@@ -192,43 +199,6 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         let secret_key_type = params.lwe_secret_key_type;
         let ring_secret_key_type = params.ring_secret_key_type;
         let blind_rotation_type = params.blind_rotation_type;
-
-        let q: usize = lwe_cipher_modulus.try_into().ok().unwrap();
-        let twice_ring_dimension = ring_dimension << 1;
-        assert!(twice_ring_dimension != 0, "Ring dimension is too large!");
-
-        // `q|2N` or `2N|q`
-        let modulus_switch_before_blind_rotation = if q <= twice_ring_dimension {
-            let factor = twice_ring_dimension / q;
-            if factor * q != twice_ring_dimension {
-                return Err(FHECoreError::LweModulusRingDimensionNotCompatible {
-                    lwe_modulus: q,
-                    ring_dimension,
-                });
-            }
-            ModulusSwitchBeforeBlindRotation {
-                need_modulus_switch: false,
-                new_lwe_cipher_modulus_value: lwe_cipher_modulus,
-                twice_ring_dimension_div_lwe_cipher_modulus: factor,
-                lwe_cipher_modulus_for_blind_rotation: lwe_cipher_modulus.to_power_of_2_modulus(),
-            }
-        } else {
-            let factor = q / twice_ring_dimension;
-            if factor * twice_ring_dimension != q {
-                return Err(FHECoreError::LweModulusRingDimensionNotCompatible {
-                    lwe_modulus: q,
-                    ring_dimension,
-                });
-            }
-            let twice_ring_modulus_modulus_value = C::as_from(twice_ring_dimension as u64);
-            ModulusSwitchBeforeBlindRotation {
-                need_modulus_switch: true,
-                new_lwe_cipher_modulus_value: twice_ring_modulus_modulus_value,
-                twice_ring_dimension_div_lwe_cipher_modulus: 1,
-                lwe_cipher_modulus_for_blind_rotation: twice_ring_modulus_modulus_value
-                    .to_power_of_2_modulus(),
-            }
-        };
 
         match steps {
             Steps::BrMsKs => {
@@ -269,12 +239,59 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
             return Err(FHECoreError::RingDimensionUnValid(ring_dimension));
         }
 
+        let q: usize = lwe_cipher_modulus.try_into().ok().unwrap();
+        let twice_ring_dimension = ring_dimension << 1;
+        assert!(twice_ring_dimension != 0, "Ring dimension is too large!");
+
+        let twice_ring_dimension_value = C::try_from(twice_ring_dimension as u64).ok().unwrap();
+        let twice_ring_dimension_modulus = twice_ring_dimension_value.to_power_of_2_modulus();
+
+        // `q|2N` or `2N|q`
+        let process_before_blind_rotation = if q == twice_ring_dimension {
+            ProcessBeforeBlindRotation {
+                process: ProcessType::Noop,
+                lut_step: 1,
+                twice_ring_dimension_value: lwe_cipher_modulus,
+                twice_ring_dimension_modulus: lwe_cipher_modulus.to_power_of_2_modulus(),
+            }
+        } else if q < twice_ring_dimension {
+            let ratio = twice_ring_dimension / q;
+            if ratio * q != twice_ring_dimension {
+                return Err(FHECoreError::LweModulusRingDimensionNotCompatible {
+                    lwe_modulus: q,
+                    ring_dimension,
+                });
+            }
+
+            ProcessBeforeBlindRotation {
+                process: ProcessType::Scale { ratio },
+                lut_step: ratio,
+                twice_ring_dimension_value,
+                twice_ring_dimension_modulus,
+            }
+        } else {
+            let ratio = q / twice_ring_dimension;
+            if ratio * twice_ring_dimension != q {
+                return Err(FHECoreError::LweModulusRingDimensionNotCompatible {
+                    lwe_modulus: q,
+                    ring_dimension,
+                });
+            }
+
+            ProcessBeforeBlindRotation {
+                process: ProcessType::ModulusSwitch,
+                lut_step: 1,
+                twice_ring_dimension_value,
+                twice_ring_dimension_modulus,
+            }
+        };
+
         // 2N|(Q-1)
-        let ring_modulus_u = Into::<u64>::into(ring_modulus).try_into().unwrap();
-        let factor = (ring_modulus_u - 1) / (ring_dimension << 1);
-        if factor * (ring_dimension << 1) != (ring_modulus_u - 1) {
+        let coeff_modulus = Into::<u64>::into(ring_modulus).try_into().unwrap();
+        let factor = (coeff_modulus - 1) / (twice_ring_dimension);
+        if factor * (twice_ring_dimension) != (coeff_modulus - 1) {
             return Err(FHECoreError::RingModulusAndDimensionNotCompatible {
-                coeff_modulus: ring_modulus_u,
+                coeff_modulus,
                 ring_dimension,
             });
         }
@@ -307,7 +324,7 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         };
 
         let modulus_switch_params = ModulusSwitchParameters {
-            round_method: params.modulus_switcing_round_method,
+            round_method: params.modulus_switching_round_method,
         };
 
         Ok(Self {
@@ -315,7 +332,7 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
             blind_rotation_params,
             key_switching_params,
             modulus_switch_params,
-            modulus_switch_before_blind_rotation,
+            process_before_blind_rotation,
             steps,
         })
     }
@@ -332,13 +349,13 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         self.lwe_params.plain_modulus
     }
 
-    /// Returns the LWE modulus of this [`Parameters<C, Q>`], refers to **q** in the paper.
+    /// Returns the LWE cipher modulus of this [`Parameters<C, Q>`], refers to **q** in the paper.
     #[inline]
     pub fn lwe_cipher_modulus(&self) -> PowOf2Modulus<C> {
         self.lwe_params.cipher_modulus
     }
 
-    /// Returns the LWE cipher modulus of this [`Parameters<C, Q>`], refers to **q** in the paper.
+    /// Returns the LWE cipher modulus value of this [`Parameters<C, Q>`], refers to **q** in the paper.
     #[inline]
     pub fn lwe_cipher_modulus_value(&self) -> C {
         self.lwe_params.cipher_modulus_value
@@ -459,10 +476,16 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         self.lwe_params
     }
 
-    /// Returns the modulus switch indicator before blind rotation of this [`Parameters<C, Q>`].
+    /// Returns the process before blind rotation of this [`Parameters<C, Q>`].
     #[inline]
-    pub fn modulus_switch_before_blind_rotation(&self) -> ModulusSwitchBeforeBlindRotation<C> {
-        self.modulus_switch_before_blind_rotation
+    pub fn process_before_blind_rotation(&self) -> ProcessBeforeBlindRotation<C> {
+        self.process_before_blind_rotation
+    }
+
+    /// Returns the lut step of this [`Parameters<C, Q>`].
+    #[inline]
+    pub fn lut_step(&self) -> usize {
+        self.process_before_blind_rotation.lut_step
     }
 }
 

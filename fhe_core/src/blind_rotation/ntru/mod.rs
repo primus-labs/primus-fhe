@@ -1,4 +1,4 @@
-use algebra::{modulus::PowOf2Modulus, Basis, NTTField};
+use algebra::{Basis, NTTField};
 use lattice::NTRU;
 
 use crate::{LWEModulusType, LWESecretKeyType, SecretKeyPack};
@@ -44,24 +44,16 @@ impl<F: NTTField> BlindRotationKey<F> {
         init_acc: NTRU<F>,
         lwe_a: &[C],
         ntru_dimension: usize,
-        twice_ntru_dimension_div_lwe_cipher_modulus: usize,
-        lwe_cipher_modulus: PowOf2Modulus<C>,
         blind_rotation_basis: Basis<F>,
     ) -> NTRU<F> {
         match self {
-            BlindRotationKey::Binary(bootstrapping_key) => bootstrapping_key.blind_rotate(
-                init_acc,
-                lwe_a,
-                ntru_dimension,
-                twice_ntru_dimension_div_lwe_cipher_modulus,
-                lwe_cipher_modulus,
-            ),
+            BlindRotationKey::Binary(bootstrapping_key) => {
+                bootstrapping_key.blind_rotate(init_acc, lwe_a, ntru_dimension)
+            }
             BlindRotationKey::Ternary(bootstrapping_key) => bootstrapping_key.blind_rotate(
                 init_acc,
                 lwe_a,
                 ntru_dimension,
-                twice_ntru_dimension_div_lwe_cipher_modulus,
-                lwe_cipher_modulus,
                 blind_rotation_basis,
             ),
         }

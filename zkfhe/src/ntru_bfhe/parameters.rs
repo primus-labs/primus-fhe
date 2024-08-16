@@ -22,7 +22,7 @@ pub static DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS: Lazy<Parameters<u16, Defau
             blind_rotation_basis_bits: 6,
             key_switching_basis_bits: 1,
             key_switching_standard_deviation: 3.2 * ((1 << 12) as f64),
-            modulus_switcing_round_method: ModulusSwitchRoundMethod::Floor,
+            modulus_switching_round_method: ModulusSwitchRoundMethod::Floor,
             steps: Steps::BrKsMs,
         })
         .unwrap()

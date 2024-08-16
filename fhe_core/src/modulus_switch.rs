@@ -101,7 +101,7 @@ pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: DecomposableField>(
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch_between_modulus_inplace<C: LWEModulusType>(
+pub fn lwe_modulus_switch_assign_between_modulus<C: LWEModulusType>(
     c: &mut LWE<C>,
     modulus_before: C,
     modulus_after: C,

@@ -3,7 +3,6 @@ use algebra::{
     ntt_add_mul_assign, ntt_add_mul_inplace, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
     Polynomial,
 };
-use num_traits::NumCast;
 use rand::{CryptoRng, Rng};
 
 use crate::{DecompositionSpace, NTTGadgetNTRU, NTTNTRUSpace, PolynomialSpace, LWE};
@@ -181,17 +180,13 @@ impl<F: NTTField> NTRU<F> {
     }
 
     /// Perform `self = self + rhs * Y^r` for functional bootstrapping where `Y = X^(2N/q)`.
-    pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
+    pub fn add_assign_rhs_mul_monic_monomial(
         &mut self,
         rhs: &Self,
         // N
         ntru_dimension: usize,
-        // 2N/q
-        twice_ntru_dimension_div_lwe_cipher_modulus: usize,
-        r: T,
+        r: usize,
     ) {
-        let r =
-            num_traits::cast::<T, usize>(r).unwrap() * twice_ntru_dimension_div_lwe_cipher_modulus;
         if r <= ntru_dimension {
             #[inline]
             fn rotate_add<F: NTTField>(
@@ -229,7 +224,7 @@ impl<F: NTTField> NTRU<F> {
                     .for_each(|(u, v)| *u -= v);
             }
             let r = r - ntru_dimension;
-            let n_sub_r = ntru_dimension - r;
+            let n_sub_r = ntru_dimension.checked_sub(r).unwrap();
             rotate_add(self.data_mut(), rhs.data(), r, n_sub_r);
         }
     }

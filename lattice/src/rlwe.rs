@@ -5,7 +5,6 @@ use algebra::{
     ntt_mul_inplace, transformation::AbstractNTT, FieldDiscreteGaussianSampler, NTTField,
     NTTPolynomial, Polynomial,
 };
-use num_traits::NumCast;
 use rand::{CryptoRng, Rng};
 
 use crate::{
@@ -48,6 +47,7 @@ impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
     /// An instance of [`RLWE<F>`].
     #[inline]
     fn from((a, b): (Polynomial<F>, Polynomial<F>)) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
         Self { a, b }
     }
 }
@@ -65,6 +65,7 @@ impl<F: NTTField> From<(NTTPolynomial<F>, NTTPolynomial<F>)> for RLWE<F> {
     /// An instance of `Self` containing the converted polynomials.
     #[inline]
     fn from((a, b): (NTTPolynomial<F>, NTTPolynomial<F>)) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
         Self {
             a: <Polynomial<F>>::from(a),
             b: <Polynomial<F>>::from(b),
@@ -95,12 +96,14 @@ impl<F: NTTField> RLWE<F> {
     /// Creates a new [`RLWE<F>`].
     #[inline]
     pub fn new(a: Polynomial<F>, b: Polynomial<F>) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
         Self { a, b }
     }
 
     /// Creates a new [`RLWE<F>`] with reference of [`Polynomial<F>`].
     #[inline]
     pub fn from_ref(a: &Polynomial<F>, b: &Polynomial<F>) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
         Self {
             a: a.clone(),
             b: b.clone(),
@@ -192,6 +195,12 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn a_b_mut_slices(&mut self) -> (&mut [F], &mut [F]) {
         (self.a.as_mut_slice(), self.b.as_mut_slice())
+    }
+
+    /// Gets the dimension of this [`RLWE<F>`].
+    #[inline]
+    pub fn dimension(&self) -> usize {
+        self.a.coeff_count()
     }
 
     /// Perform element-wise addition of two [`RLWE<F>`].
@@ -354,18 +363,13 @@ impl<F: NTTField> RLWE<F> {
         LWE::<F>::new(a, b[0])
     }
 
-    /// Perform `destination = self * (Y^r - 1)` for bootstrapping where `Y = X^(2N/q)`.
-    pub fn mul_monic_monomial_sub_one_inplace<T: NumCast>(
+    /// Perform `destination = self * (X^r - 1)`.
+    pub fn mul_monic_monomial_sub_one_inplace(
         &self, // N
         rlwe_dimension: usize,
-        // 2N/q
-        twice_rlwe_dimension_div_lwe_cipher_modulus: usize,
-        r: T,
+        r: usize,
         destination: &mut RLWE<F>,
     ) {
-        let r =
-            num_traits::cast::<T, usize>(r).unwrap() * twice_rlwe_dimension_div_lwe_cipher_modulus;
-
         if r <= rlwe_dimension {
             #[inline]
             fn rotate_sub<F: NTTField>(
@@ -406,23 +410,20 @@ impl<F: NTTField> RLWE<F> {
                 *x -= y;
             }
             let r = r - rlwe_dimension;
-            let n_sub_r = rlwe_dimension - r;
+            let n_sub_r = rlwe_dimension.checked_sub(r).expect("r > 2N !");
             rotate_sub(destination.a_mut(), self.a(), r, n_sub_r);
             rotate_sub(destination.b_mut(), self.b(), r, n_sub_r);
         }
     }
 
-    /// Perform `self = self + rhs * Y^r` for bootstrapping where `Y = X^(2N/q)`.
-    pub fn add_assign_rhs_mul_monic_monomial<T: NumCast>(
+    /// Perform `self = self + rhs * X^r`.
+    pub fn add_assign_rhs_mul_monic_monomial(
         &mut self,
         rhs: &Self,
         // N
         rlwe_dimension: usize,
-        // 2N/q
-        twice_rlwe_dimension_div_lwe_modulus: usize,
-        r: T,
+        r: usize,
     ) {
-        let r = num_traits::cast::<T, usize>(r).unwrap() * twice_rlwe_dimension_div_lwe_modulus;
         if r <= rlwe_dimension {
             #[inline]
             fn rotate_add<F: NTTField>(
@@ -461,7 +462,7 @@ impl<F: NTTField> RLWE<F> {
                     .for_each(|(u, v)| *u -= v);
             }
             let r = r - rlwe_dimension;
-            let n_sub_r = rlwe_dimension - r;
+            let n_sub_r = rlwe_dimension.checked_sub(r).unwrap();
             rotate_add(self.a_mut(), rhs.a(), r, n_sub_r);
             rotate_add(self.b_mut(), rhs.b(), r, n_sub_r);
         }
@@ -612,6 +613,7 @@ impl<F: NTTField> From<RLWE<F>> for NTTRLWE<F> {
 impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for NTTRLWE<F> {
     #[inline]
     fn from((a, b): (Polynomial<F>, Polynomial<F>)) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
         Self {
             a: <NTTPolynomial<F>>::from(a),
             b: <NTTPolynomial<F>>::from(b),
@@ -623,12 +625,14 @@ impl<F: NTTField> NTTRLWE<F> {
     /// Creates a new [`NTTRLWE<F>`].
     #[inline]
     pub fn new(a: NTTPolynomial<F>, b: NTTPolynomial<F>) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
         Self { a, b }
     }
 
     /// Creates a new [`NTTRLWE<F>`] with reference of [`NTTPolynomial<F>`].
     #[inline]
     pub fn from_ref(a: &NTTPolynomial<F>, b: &NTTPolynomial<F>) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
         Self {
             a: a.clone(),
             b: b.clone(),
@@ -724,6 +728,12 @@ impl<F: NTTField> NTTRLWE<F> {
     #[inline]
     pub fn a_b_mut_slices(&mut self) -> (&mut [F], &mut [F]) {
         (self.a.as_mut_slice(), self.b.as_mut_slice())
+    }
+
+    /// Gets the dimension of this [`NTTRLWE<F>`].
+    #[inline]
+    pub fn dimension(&self) -> usize {
+        self.a.coeff_count()
     }
 
     /// Perform element-wise addition of two [`NTTRLWE<F>`].

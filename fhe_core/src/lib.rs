@@ -22,7 +22,7 @@ pub use error::FHECoreError;
 
 pub use parameter::{
     BlindRotationType, ConstParameters, DefaultExtendsionFieldU32x4, DefaultFieldU32, DefaultQks,
-    ModulusSwitchBeforeBlindRotation, Parameters, Steps,
+    Parameters, ProcessBeforeBlindRotation, ProcessType, Steps,
 };
 
 pub use ciphertext::{
@@ -38,6 +38,6 @@ pub use blind_rotation::{NTRUBlindRotationKey, RLWEBlindRotationKey};
 pub use key_switch::{KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey};
 
 pub use modulus_switch::{
-    lwe_modulus_switch, lwe_modulus_switch_between_modulus_inplace, lwe_modulus_switch_inplace,
+    lwe_modulus_switch, lwe_modulus_switch_assign_between_modulus, lwe_modulus_switch_inplace,
     ModulusSwitchRoundMethod,
 };

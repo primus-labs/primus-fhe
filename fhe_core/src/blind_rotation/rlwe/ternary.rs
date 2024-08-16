@@ -1,6 +1,5 @@
 use algebra::{
-    modulus::PowOf2Modulus, transformation::MonomialNTT, AsInto, Basis,
-    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
+    transformation::MonomialNTT, Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
 };
 use lattice::{
     DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
@@ -27,8 +26,6 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         init_acc: RLWE<F>,
         lwe_a: &[C],
         rlwe_dimension: usize,
-        twice_rlwe_dimension_div_lwe_cipher_modulus: usize,
-        lwe_cipher_modulus: PowOf2Modulus<C>,
         blind_rotation_basis: Basis<F>,
     ) -> RLWE<F> {
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
@@ -44,28 +41,28 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
             .iter()
             .zip(lwe_a)
             .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                let degree =
-                    AsInto::<usize>::as_into(a_i) * twice_rlwe_dimension_div_lwe_cipher_modulus;
+                let a_i = a_i.as_into();
 
-                // ntt_polynomial = -Y^{a_i}
-                ntt_table.transform_coeff_neg_one_monomial(degree, ntt_polynomial.as_mut_slice());
+                let neg_a_i: usize = if a_i != 0 {
+                    (rlwe_dimension << 1) - a_i
+                } else {
+                    0
+                };
 
-                // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}
+                // ntt_polynomial = -X^{-a_i}
+                ntt_table.transform_coeff_neg_one_monomial(neg_a_i, ntt_polynomial.as_mut_slice());
+
+                // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*X^{-a_i}
                 s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
                     &s_i.1,
                     ntt_polynomial,
                     evaluation_key,
                 );
 
-                // external_product = (Y^{-a_i} - 1) * ACC
-                acc.mul_monic_monomial_sub_one_inplace(
-                    rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_cipher_modulus,
-                    a_i.neg_reduce(lwe_cipher_modulus),
-                    external_product,
-                );
+                // external_product = (X^{a_i} - 1) * ACC
+                acc.mul_monic_monomial_sub_one_inplace(rlwe_dimension, a_i, external_product);
 
-                // external_product = (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                // external_product = (X^{a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*X^{-a_i})
                 external_product.mul_assign_ntt_rgsw(
                     evaluation_key,
                     decompose_space,
@@ -73,7 +70,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                     median,
                 );
 
-                // ACC = ACC + (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
+                // ACC = ACC + (X^{a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*X^{-a_i})
                 acc.add_assign_element_wise(external_product);
 
                 acc

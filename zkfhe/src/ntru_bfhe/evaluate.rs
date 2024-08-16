@@ -1,8 +1,8 @@
-use algebra::{AsInto, NTTField, Polynomial};
+use algebra::{NTTField, Polynomial};
 use fhe_core::{
-    lwe_modulus_switch_between_modulus_inplace, lwe_modulus_switch_inplace, BlindRotationType,
+    lwe_modulus_switch_assign_between_modulus, lwe_modulus_switch_inplace, BlindRotationType,
     KeySwitchingKeyEnum, KeySwitchingRLWEKey, LWECiphertext, LWEModulusType, NTRUBlindRotationKey,
-    NTRUCiphertext, Parameters, SecretKeyPack, Steps,
+    Parameters, ProcessType, SecretKeyPack, Steps,
 };
 use lattice::NTRU;
 
@@ -46,23 +46,48 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
         }
     }
 
-    /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and initial `ACC`.
-    pub fn bootstrap(
-        &self,
-        mut c: LWECiphertext<C>,
-        init_acc: NTRUCiphertext<Q>,
-    ) -> LWECiphertext<C> {
+    /// Complete the bootstrapping operation with LWE Ciphertext **c** and lookup table `lut`.
+    pub fn bootstrap(&self, mut c: LWECiphertext<C>, mut lut: Polynomial<Q>) -> LWECiphertext<C> {
         let parameters = self.parameters();
-        let ms = parameters.modulus_switch_before_blind_rotation();
+        let pre = parameters.process_before_blind_rotation();
+        let rlwe_dimension = parameters.ring_dimension();
+        let round_method = parameters.modulus_switch_round_method();
 
-        let factor = ms.twice_ring_dimension_div_lwe_cipher_modulus();
+        match pre.process() {
+            ProcessType::ModulusSwitch => {
+                lwe_modulus_switch_assign_between_modulus(
+                    &mut c,
+                    parameters.lwe_cipher_modulus_value(),
+                    pre.twice_ring_dimension_value(),
+                    round_method,
+                );
+            }
+            ProcessType::Scale { ratio } => {
+                let ratio = C::as_from(ratio as u64);
+                c.a_mut().iter_mut().for_each(|v| *v = *v * ratio);
+                *c.b_mut() = c.b() * ratio;
+            }
+            ProcessType::Noop => (),
+        }
+
+        // lut * X^{-b}
+        let r: usize = c
+            .b()
+            .neg_reduce(pre.twice_ring_dimension_modulus())
+            .as_into();
+        if r <= rlwe_dimension {
+            lut.as_mut_slice().rotate_right(r);
+            lut[..r].iter_mut().for_each(|v| *v = v.neg());
+        } else {
+            let r = r - rlwe_dimension;
+            lut.as_mut_slice().rotate_right(r);
+            lut[r..].iter_mut().for_each(|v| *v = v.neg());
+        }
 
         let mut acc = self.blind_rotation_key.blind_rotate(
-            init_acc,
+            NTRU::new(lut),
             c.a(),
             parameters.ring_dimension(),
-            factor,
-            ms.lwe_cipher_modulus_for_blind_rotation(),
             parameters.blind_rotation_basis(),
         );
 
@@ -70,7 +95,7 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
 
         acc.data_mut()
             .iter_mut()
-            .step_by(factor)
+            .step_by(parameters.lut_step())
             .for_each(|v| *v += half_delta);
 
         match parameters.steps() {
@@ -138,26 +163,12 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn nand(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut add,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_nand_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_nand_acc(
-            add.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(add, init_acc)
+        self.ek.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic and operation.
@@ -170,26 +181,12 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn and(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut add,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_and_majority_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_and_majority_acc(
-            add.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(add, init_acc)
+        self.ek.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic or operation.
@@ -202,26 +199,12 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn or(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut add,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_or_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_or_acc(
-            add.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(add, init_acc)
+        self.ek.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic nor operation.
@@ -234,26 +217,12 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn nor(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
-        let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
+        let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut add,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_nor_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_nor_acc(
-            add.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(add, init_acc)
+        self.ek.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic xor operation.
@@ -266,27 +235,13 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn xor(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut sub,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_xor_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_xor_acc(
-            sub.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(sub, init_acc)
+        self.ek.bootstrap(sub, lut)
     }
 
     /// Performs the homomorphic xnor operation.
@@ -299,27 +254,13 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     pub fn xnor(&self, c0: &LWECiphertext<C>, c1: &LWECiphertext<C>) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut sub,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_xnor_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_xnor_acc(
-            sub.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(sub, init_acc)
+        self.ek.bootstrap(sub, lut)
     }
 
     /// Performs the homomorphic majority operation.
@@ -339,27 +280,13 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     ) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
         add.add_reduce_inplace_component_wise(c2, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut add,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_and_majority_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_and_majority_acc(
-            add.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(add, init_acc)
+        self.ek.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic mux operation.
@@ -379,7 +306,6 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     ) -> LWECiphertext<C> {
         let parameters = self.ek.parameters();
         let lwe_modulus = parameters.lwe_cipher_modulus();
-        let ms = parameters.modulus_switch_before_blind_rotation();
 
         let not_c0 = self.not(c0);
 
@@ -388,41 +314,25 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         // (a & b) | (!a & c)
         t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
 
-        if ms.need_modulus_switch() {
-            lwe_modulus_switch_between_modulus_inplace(
-                &mut t0,
-                parameters.lwe_cipher_modulus_value(),
-                ms.new_lwe_cipher_modulus_value(),
-                parameters.modulus_switch_round_method(),
-            );
-        }
+        let lut = init_or_lut(parameters.ring_dimension(), parameters.lut_step());
 
-        let init_acc: NTRUCiphertext<Q> = init_or_acc(
-            t0.b(),
-            parameters.ring_dimension(),
-            ms.twice_ring_dimension_div_lwe_cipher_modulus(),
-        );
-
-        self.ek.bootstrap(t0, init_acc)
+        self.ek.bootstrap(t0, lut)
     }
 }
 
-/// init acc for bootstrapping which performs homomorphic `nand`.
-fn init_nand_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `nand`.
+fn init_nand_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
-    init_nand_and_majority_acc(
-        b,
+    init_nand_and_majority_lut(
         ntru_dimension,
         twice_ntru_dimension_div_lwe_modulus,
         q_div_8,
@@ -430,22 +340,19 @@ where
     )
 }
 
-/// init acc for bootstrapping which performs homomorphic `and` or `majority`.
-fn init_and_majority_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `and` or `majority`.
+fn init_and_majority_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
-    init_nand_and_majority_acc(
-        b,
+    init_nand_and_majority_lut(
         ntru_dimension,
         twice_ntru_dimension_div_lwe_modulus,
         neg_q_div_8,
@@ -453,70 +360,46 @@ where
     )
 }
 
-/// init acc for bootstrapping which performs homomorphic `nand`, `and` or `majority`.
-fn init_nand_and_majority_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `nand`, `and` or `majority`.
+fn init_nand_and_majority_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
     value_0_1: F, // [−q/8, 3q/8)
     value_2_3: F, // [3q/8, 7q/8)
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let mut v = Polynomial::zero(ntru_dimension);
 
-    let b = AsInto::<usize>::as_into(b) * twice_ntru_dimension_div_lwe_modulus;
+    let y = (ntru_dimension >> 1) + (ntru_dimension >> 2); // 3N/4
 
-    let x = ntru_dimension >> 2; // N/4
-    let y = (ntru_dimension >> 1) + x; // 3N/4
-    let z = ntru_dimension + y; // 7N/4
-    if b < y || b >= z {
-        let mid = if b < y { b + x } else { b - z };
-        v[0..=mid]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus)
-            .for_each(|a| *a = value_0_1);
+    v[..y]
+        .iter_mut()
+        .step_by(twice_ntru_dimension_div_lwe_modulus)
+        .for_each(|a| *a = value_0_1);
 
-        let mut iter = v[mid..]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus);
-        iter.next();
-        iter.for_each(|a| *a = value_2_3);
-    } else {
-        let mid = b - y;
-        v[0..=mid]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus)
-            .for_each(|a| *a = value_2_3);
+    v[y..]
+        .iter_mut()
+        .step_by(twice_ntru_dimension_div_lwe_modulus)
+        .for_each(|a| *a = value_2_3);
 
-        let mut iter = v[mid..]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus);
-        iter.next();
-        iter.for_each(|a| *a = value_0_1);
-    }
-
-    NTRU::new(v)
+    v
 }
 
-/// init acc for bootstrapping which performs homomorphic `or` or `xor`.
-fn init_or_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `or` or `xor`.
+fn init_or_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
-    init_or_nor_acc(
-        b,
+    init_or_nor_lut(
         ntru_dimension,
         twice_ntru_dimension_div_lwe_modulus,
         q_div_8,
@@ -524,22 +407,19 @@ where
     )
 }
 
-/// init acc for bootstrapping which performs homomorphic `nor` or `xnor`.
-fn init_nor_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `nor` or `xnor`.
+fn init_nor_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
-    init_or_nor_acc(
-        b,
+    init_or_nor_lut(
         ntru_dimension,
         twice_ntru_dimension_div_lwe_modulus,
         neg_q_div_8,
@@ -547,22 +427,19 @@ where
     )
 }
 
-/// init acc for bootstrapping which performs homomorphic `xor`.
-fn init_xor_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `xor`.
+fn init_xor_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
-    init_xor_xnor_acc(
-        b,
+    init_xor_xnor_lut(
         ntru_dimension,
         twice_ntru_dimension_div_lwe_modulus,
         q_div_8,
@@ -570,22 +447,19 @@ where
     )
 }
 
-/// init acc for bootstrapping which performs homomorphic `xnor`.
-fn init_xnor_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `xnor`.
+fn init_xnor_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let q = F::MODULUS_VALUE;
     let q_div_8 = F::new(q >> 3);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
-    init_xor_xnor_acc(
-        b,
+    init_xor_xnor_lut(
         ntru_dimension,
         twice_ntru_dimension_div_lwe_modulus,
         neg_q_div_8,
@@ -593,97 +467,56 @@ where
     )
 }
 
-/// init acc for bootstrapping which performs homomorphic `or`, `nor`, `xor` or `xnor`.
-fn init_or_nor_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `or`, `nor`, `xor` or `xnor`.
+fn init_or_nor_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
     value_1_2: F, // [q/8, 5q/8)
     value_3_0: F, // [−3q/8, q/8)
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let mut v = Polynomial::zero(ntru_dimension);
 
-    let b = AsInto::<usize>::as_into(b) * twice_ntru_dimension_div_lwe_modulus;
-
     let x = ntru_dimension >> 2; // N/4
-    let y = (ntru_dimension >> 1) + x; // 3N/4
-    let z = ntru_dimension + x; // 5N/4
-    if b < x || b >= z {
-        let mid = if b < x { b + y } else { b - z };
-        v[0..=mid]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus)
-            .for_each(|a| *a = value_3_0);
 
-        let mut iter = v[mid..]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus);
-        iter.next();
-        iter.for_each(|a| *a = value_1_2);
-    } else {
-        let mid = b - x;
-        v[0..=mid]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus)
-            .for_each(|a| *a = value_1_2);
+    v[..x]
+        .iter_mut()
+        .step_by(twice_ntru_dimension_div_lwe_modulus)
+        .for_each(|a| *a = value_3_0);
 
-        let mut iter = v[mid..]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus);
-        iter.next();
-        iter.for_each(|a| *a = value_3_0);
-    }
+    v[x..]
+        .iter_mut()
+        .step_by(twice_ntru_dimension_div_lwe_modulus)
+        .for_each(|a| *a = value_1_2);
 
-    NTRU::new(v)
+    v
 }
 
-/// init acc for bootstrapping which performs homomorphic `xor` or `xnor`.
-fn init_xor_xnor_acc<C, F>(
-    b: C,
+/// init lut for bootstrapping which performs homomorphic `xor` or `xnor`.
+fn init_xor_xnor_lut<F>(
     ntru_dimension: usize,
     twice_ntru_dimension_div_lwe_modulus: usize,
     value_2: F, // [q/4, 3q/4)
     value_0: F, // [−q/4, q/4)
-) -> NTRU<F>
+) -> Polynomial<F>
 where
     F: NTTField,
-    C: LWEModulusType,
 {
     let mut v = Polynomial::zero(ntru_dimension);
 
-    let b = AsInto::<usize>::as_into(b) * twice_ntru_dimension_div_lwe_modulus;
-
     let x = ntru_dimension >> 1; // N/2
-    let y = ntru_dimension + x; // 3N/2
-    if b < x || b >= y {
-        let mid = if b < x { b + x } else { b - y };
-        v[0..=mid]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus)
-            .for_each(|a| *a = value_0);
 
-        let mut iter = v[mid..]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus);
-        iter.next();
-        iter.for_each(|a| *a = value_2);
-    } else {
-        let mid = b - x;
-        v[0..=mid]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus)
-            .for_each(|a| *a = value_2);
+    v[..x]
+        .iter_mut()
+        .step_by(twice_ntru_dimension_div_lwe_modulus)
+        .for_each(|a| *a = value_0);
 
-        let mut iter = v[mid..]
-            .iter_mut()
-            .step_by(twice_ntru_dimension_div_lwe_modulus);
-        iter.next();
-        iter.for_each(|a| *a = value_0);
-    }
+    v[x..]
+        .iter_mut()
+        .step_by(twice_ntru_dimension_div_lwe_modulus)
+        .for_each(|a| *a = value_2);
 
-    NTRU::new(v)
+    v
 }

@@ -1,6 +1,4 @@
-use algebra::{
-    modulus::PowOf2Modulus, Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
-};
+use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial};
 use lattice::{DecompositionSpace, NTRUSpace, NTTGadgetNTRU, NTTNTRUSpace, PolynomialSpace, NTRU};
 
 use crate::LWEModulusType;
@@ -23,8 +21,6 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
         init_acc: NTRU<F>,
         lwe_a: &[C],
         ntru_dimension: usize,
-        twice_ntru_dimension_div_lwe_cipher_modulus: usize,
-        lwe_cipher_modulus: PowOf2Modulus<C>,
     ) -> NTRU<F> {
         let decompose_space = &mut DecompositionSpace::new(ntru_dimension);
         let polynomial_space = &mut PolynomialSpace::new(ntru_dimension);
@@ -45,13 +41,12 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
                 );
                 // ACC = ACC - ACC * NTRU'(s_i)
                 acc.sub_assign_element_wise(acc_mul_gadget_ntru);
-                // ACC = ACC - ACC * NTRU'(s_i) + Y^{-a_i} * ACC * NTRU'(s_i)
-                //     = ACC + (Y^{-a_i} - 1) * ACC * NTRU'(s_i)
+                // ACC = ACC - ACC * NTRU'(s_i) + X^{a_i} * ACC * NTRU'(s_i)
+                //     = ACC + (X^{a_i} - 1) * ACC * NTRU'(s_i)
                 acc.add_assign_rhs_mul_monic_monomial(
                     acc_mul_gadget_ntru,
                     ntru_dimension,
-                    twice_ntru_dimension_div_lwe_cipher_modulus,
-                    a_i.neg_reduce(lwe_cipher_modulus),
+                    a_i.as_into(),
                 );
                 acc
             })
