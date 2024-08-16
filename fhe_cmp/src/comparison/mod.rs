@@ -252,15 +252,11 @@ pub fn homand<F: Field<Value = u64> + NTTField>(
     ca: &LWE<F>,
     cb: &LWE<F>,
     key: &RLWEBlindRotationKey<F>,
-    message_space: usize,
     poly_length: usize,
 ) -> LWE<F> {
     let mut temp = ca.add_component_wise_ref(cb);
-    let magnify = message_space.ilog2()-2;
     for elem in temp.a_mut().iter_mut() {
-        for _ in 0..magnify {
-            *elem = *elem + *elem;
-        }
+            *elem = *elem + *elem + *elem + *elem;
     }
     *temp.b_mut() = temp.b() + temp.b() + temp.b() + temp.b();
     let mut test = vec![F::zero(); poly_length];
@@ -396,7 +392,6 @@ pub fn equality_arbhcmp<F: Field<Value = u64> + NTTField>(
     cipher1: &[RLWE<F>],
     cipher2: &[RGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
-    message_space: usize,
     poly_length: usize,
 ) -> LWE<F> {
     let len = cipher1.len();
@@ -411,11 +406,10 @@ pub fn equality_arbhcmp<F: Field<Value = u64> + NTTField>(
             cipher1_others,
             cipher2_others,
             gatebootstrappingkey,
-            message_space,
             poly_length,
         );
         let gt_res = equality_hcmp(cipher1_last, cipher2_last);
-        let res = homand(&low_res, &gt_res, gatebootstrappingkey, message_space, poly_length);
+        let res = homand(&low_res, &gt_res, gatebootstrappingkey,  poly_length);
         res
     }
 }
@@ -436,7 +430,6 @@ pub fn less_hcmp<F: Field<Value = u64> + NTTField>(
     poly_length: usize,
 ) -> LWE<F> {
     let mul = cipher1.mul_rgsw(&cipher2);
-
     let mut vector = vec![F::one(); poly_length];
     vector[0] = F::neg_one();
     let test_plaintext = Polynomial::<F>::new(vector);
@@ -471,7 +464,7 @@ pub fn less_arbhcmp<F: Field<Value = u64> + NTTField>(
     assert_eq!(len, cipher2.len());
     assert!(len > 0);
     if len == 1 {
-        greater_hcmp(&cipher1[0], &cipher2[0], half_delta, poly_length)
+        less_hcmp(&cipher1[0], &cipher2[0], half_delta, poly_length)
     } else {
         let (cipher1_last, cipher1_others) = cipher1.split_last().unwrap();
         let (cipher2_last, cipher2_others) = cipher2.split_last().unwrap();
