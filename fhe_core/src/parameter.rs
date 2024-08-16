@@ -247,6 +247,7 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         let twice_ring_dimension_modulus = twice_ring_dimension_value.to_power_of_2_modulus();
 
         // `q|2N` or `2N|q`
+        #[allow(clippy::comparison_chain)]
         let process_before_blind_rotation = if q == twice_ring_dimension {
             ProcessBeforeBlindRotation {
                 process: ProcessType::Noop,
