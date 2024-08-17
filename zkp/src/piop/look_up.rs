@@ -339,8 +339,6 @@ impl<F: Field + DecomposableField> Lookup<F> {
             }
         }
 
-        
-
         let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for rangecheck failed");
         sumcheck_msg.push(sumcheck_proof.0);
