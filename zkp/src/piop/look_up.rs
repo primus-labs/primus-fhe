@@ -1,24 +1,32 @@
 //! PIOP for range check
 //! The prover wants to convince that lookups f are all in range
 //!
-//! <==> \forall x in H_f f(x) \in [range]
+//! <==> \forall x \in H_f, \forall i \in [lookup_num], f_i(x) \in [range]
 //!
-//! <==> \forall x in H_f f(x) \in {t(x) | x \in H_t} := {0, 1, 2, ..., range - 1}  
-//!      where |H_f| is the size of lookups and |H_t| is the size of table / range
+//! <==> \forall x in H_f, \forall i \in [lookup_num], f_i(x) \in {t(x) | x \in H_t} := {0, 1, 2, ..., range - 1}  
+//!      where |H_f| is the size of one lookup and |H_t| is the size of table / range
 //!
-//! <==> \exists m s.t. \forall y, \sum_{x \in H_f} 1 / y - f(x) = \sum_{x \in H_t} m(x) / y - t(x)
+//! <==> \exists m s.t. \forall y, \sum_{i} \sum_{x \in H_f} 1 / f_i(x) - y = \sum_{x \in H_t} m(x) / t(x) - y
 //!
-//! <==> \sum_{x \in H_f} 1 / r - f(x) = \sum_{x \in H_t} m(x) / r - t(x)
+//! <==> \sum_{i} \sum_{x \in H_f} 1 / f_i(x) - r = \sum_{x \in H_t} m(x) / t(x) - r
 //!      where r is a random challenge from verifier (a single random element since y is a single variable)
 //!
-//! <==> \sum_{x \in H_f} f_inverse(x) = \sum_{x \in H_t} t_inverse(x)
-//!      \forall x \in H_f, f_inverse(x) * (r - f(x)) = 1
-//!      \forall x \in H_t, t_inverse(x) * (r - t(x)) = m(x)
+//! <==> \sum_{x \in H_f} \sum_{i \in [block_num]} h_i(x) = \sum_{x \in H_t} h_t(x)
+//!      \forall i \in [block_num] \forall x \in H_f, h(x) * \prod_{j \in [block_size]}(f_j(x) - r) = \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r)
+//!      \forall x \in H_t, h_t(x) * (t(x) - r) = m(x)
 //!
-//! <==> \sum_{x \in H_f} f_inverse(x) = c_sum
-//!      \sum_{x \in H_t} t_inverse(x) = c_sum
-//!      \sum_{x \in H_f} eq(x, u) * f_inverse(x) * (r - f(x)) = 1
-//!      \sum_{x \in H_t} eq(x, u) * (t_inverse(x) * (r - t(x)) -m(x)) = 0
+//! <==> \sum_{x \in H_f} \sum_{i \in [block_num]} h_i(x) = c_sum
+//!      \sum_{x \in H_t} h_t(x) = c_sum
+//!      \sum_{x \in H_f} \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r)) = 0
+//!      \sum_{x \in H_t} eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = 0
+//!      where u is a random challenge given from verifier (a vector of random element) and c_sum is some constant
+//!
+//! <==> \sum_{x \in H_f} \sum_{i \in [block_num]} h_i(x)
+//!                     + \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
+//!                     = c_sum
+//!      \sum_{x \in H_t} h_t(x)
+//!                     + eq(x, u) * (h_t(x) * (t(x) - r) - m(x))
+//!                     = c_sum
 //!      where u is a random challenge given from verifier (a vector of random element) and c_sum is some constant
 
 use std::marker::PhantomData;
@@ -30,10 +38,10 @@ use crate::utils::eval_identity_function;
 use crate::sumcheck::MLSumcheck;
 use crate::utils::gen_identity_evaluations;
 use algebra::{
-    DecomposableField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
+    AsFrom, DecomposableField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
     MultilinearExtension, PolynomialInfo,
 };
-use rand::{seq::IteratorRandom, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
 /// SNARKs for range check in [T] := [0, T-1]
@@ -53,11 +61,10 @@ pub struct LookupProof<F: Field> {
 }
 
 /// oracles
+#[derive(Clone)]
 pub struct LookupOracle<F: Field> {
     /// f_inverse
     pub h_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
-    /// hpi
-    pub phi_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// t_inverse
     pub t_inverse: Rc<DenseMultilinearExtension<F>>,
     /// m
@@ -78,8 +85,10 @@ pub struct LookupInstance<F: Field> {
     pub num_vars_f: usize,
     /// number of variables for range,
     pub num_vars_t: usize,
-    /// chunk_size
+    /// block_size
     pub block_size: usize,
+    /// range
+    pub range: usize,
     /// inputs f
     pub f_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// inputs t
@@ -92,6 +101,8 @@ pub struct LookupInstanceInfo {
     pub num_vars_f: usize,
     /// number of variables for range,
     pub num_vars_t: usize,
+    /// range
+    pub range: usize,
     /// chunk
     pub block_size: usize,
     /// block num
@@ -105,6 +116,7 @@ impl<F: Field> LookupInstance<F> {
         LookupInstanceInfo {
             num_vars_f: self.num_vars_f,
             num_vars_t: self.num_vars_t,
+            range: self.range,
             block_size: self.block_size,
             l: self.f_vec.len() / self.block_size,
         }
@@ -116,16 +128,27 @@ impl<F: Field> LookupInstance<F> {
     #[inline]
     pub fn from_vec(
         f: Vec<Rc<DenseMultilinearExtension<F>>>,
-        t: Rc<DenseMultilinearExtension<F>>,
-        chunk_size: usize,
+        range: usize,
+        block_size: usize,
     ) -> Self {
         let num_vars_f = f[0].num_vars;
         f.iter().for_each(|x| assert_eq!(x.num_vars, num_vars_f));
 
+        let num_vars_t = range.checked_next_power_of_two().unwrap_or(0).ilog(2) as usize;
+        let mut t_evaluations: Vec<_> = (0..range)
+            .map(|i| F::new(F::Value::as_from(i as f64)))
+            .collect();
+        t_evaluations.resize(1 << num_vars_t, F::zero());
+        let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars_t,
+            t_evaluations,
+        ));
+
         Self {
-            num_vars_f: num_vars_f,
+            num_vars_f,
             num_vars_t: t.num_vars,
-            block_size: chunk_size,
+            range,
+            block_size,
             f_vec: f,
             t,
         }
@@ -134,19 +157,30 @@ impl<F: Field> LookupInstance<F> {
     /// Construct a new instance from slice
     #[inline]
     pub fn from_slice(
-        f: &Vec<Rc<DenseMultilinearExtension<F>>>,
-        t: &Rc<DenseMultilinearExtension<F>>,
+        f: &[Rc<DenseMultilinearExtension<F>>],
+        range: usize,
         block_size: usize,
     ) -> Self {
         let num_vars_f = f[0].num_vars;
         f.iter().for_each(|x| assert_eq!(x.num_vars, num_vars_f));
 
+        let num_vars_t = range.checked_next_power_of_two().unwrap_or(0).ilog(2) as usize;
+        let mut t_evaluations: Vec<_> = (0..range)
+            .map(|i| F::new(F::Value::as_from(i as f64)))
+            .collect();
+        t_evaluations.resize(1 << num_vars_t, F::zero());
+        let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars_t,
+            t_evaluations,
+        ));
+
         Self {
-            num_vars_f: num_vars_f,
+            num_vars_f,
             num_vars_t: t.num_vars,
+            range,
             block_size,
-            f_vec: f.clone(),
-            t: Rc::clone(t),
+            f_vec: f.to_vec(),
+            t,
         }
     }
 }
@@ -172,33 +206,44 @@ impl<F: Field + DecomposableField> Lookup<F> {
     ) -> (LookupProof<F>, LookupOracle<F>) {
         let num_vars_f = instance.num_vars_f;
         let num_vars_t = instance.num_vars_t;
-
-        // assume divisible
         let block_size = instance.block_size;
-        let l = instance.f_vec.len() / instance.block_size;
+        let block_num = instance.f_vec.len() / instance.block_size;
+        assert_eq!(block_size * block_num, instance.f_vec.len());
 
+        // prepare randomness
         let u = &randomness[..randomness.len() - 1];
         let u_f = &u[0..instance.num_vars_f];
         let u_t = &u[0..instance.num_vars_t];
-        let u_l = &u[0..l];
+        let u_l = &u[0..block_num];
         let r = randomness[randomness.len() - 1];
 
+        // construct m
         let mut m_evaluations = vec![F::zero(); 1 << num_vars_t];
         instance.f_vec.iter().flat_map(|f| f.iter()).for_each(|x| {
             let idx: usize = x.value().into() as usize;
             m_evaluations[idx] += F::one();
         });
 
+        if (1 << num_vars_t) > instance.range {
+            let divided = m_evaluations[0]
+                / F::new(F::Value::as_from(
+                    ((1 << num_vars_t) - instance.range + 1) as f64,
+                ));
+            m_evaluations[0] = divided;
+            m_evaluations[instance.range..(1 << num_vars_t)].fill(divided);
+        }
+
         let m = Rc::new(DenseMultilinearExtension::from_evaluations_slice(
             num_vars_t,
             &m_evaluations,
         ));
 
-        let phi_vec: Vec<Rc<DenseMultilinearExtension<F>>> = instance
+        // construct inversed_shifted_f i.e. 1/x-r
+        let shifted_f_vec: Vec<Rc<DenseMultilinearExtension<F>>> = instance
             .f_vec
             .iter()
             .map(|f| {
-                let evaluations = f.evaluations.iter().map(|x| r - *x).collect();
+                let evaluations = f.evaluations.iter().map(|x| *x - r).collect();
                 Rc::new(DenseMultilinearExtension::from_evaluations_vec(
                     num_vars_f,
                     evaluations,
@@ -206,159 +251,119 @@ impl<F: Field + DecomposableField> Lookup<F> {
             })
             .collect();
 
-        let h_vec: Vec<Rc<DenseMultilinearExtension<F>>> = phi_vec
-            .chunks_exact(instance.block_size)
-            .map(|chunk| {
-                let mut h = vec![F::zero(); 1 << num_vars_f];
-                chunk.iter().for_each(|phi| {
-                    phi.iter()
-                        .enumerate()
-                        .for_each(|(i, x)| h[i] += F::one() / x)
-                });
+        let inversed_shifted_f_evaluation_vec = batch_inverse(
+            &shifted_f_vec
+                .iter()
+                .flat_map(|f| f.iter())
+                .cloned()
+                .collect::<Vec<F>>(),
+        );
+
+        // let inversed_shifted_f_vec: Vec<Rc<DenseMultilinearExtension<F>>> =
+        //     inversed_shifted_f_evaluation_vec
+        //         .chunks_exact(1 << num_vars_f)
+        //         .map(|evaluations| {
+        //             Rc::new(DenseMultilinearExtension::from_evaluations_slice(
+        //                 num_vars_f,
+        //                 evaluations,
+        //             ))
+        //         })
+        //         .collect();
+
+        // construct h
+        let h_vec: Vec<Rc<DenseMultilinearExtension<F>>> = inversed_shifted_f_evaluation_vec
+            .chunks_exact(block_size * (1 << num_vars_f))
+            .map(|block| {
                 Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-                    num_vars_f, h,
+                    num_vars_f,
+                    block.chunks(1 << num_vars_f).fold(
+                        vec![F::zero(); 1 << num_vars_f],
+                        |mut acc, f| {
+                            f.iter().enumerate().for_each(|(i, &val)| {
+                                acc[i] += val;
+                            });
+                            acc
+                        },
+                    ),
                 ))
             })
             .collect();
 
-        let t_inverse = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        let h_t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars_t,
-            instance
-                .t
-                .iter()
-                .zip(m.evaluations.iter())
-                .map(|(x_t, x_m)| *x_m / (r - x_t))
-                .collect(),
+            batch_inverse(
+                &instance
+                    .t
+                    .evaluations
+                    .iter()
+                    .map(|x| *x - r)
+                    .collect::<Vec<F>>(),
+            )
+            .iter()
+            .zip(m.evaluations.iter())
+            .map(|(x_t, x_m)| *x_m * x_t)
+            .collect(),
         ));
 
         // compute c_sum = sum of f_inverse at H_F
-        let c_sum = t_inverse
-            .evaluations
-            .iter()
-            .fold(F::zero(), |sum, x| sum + x);
-
-        dbg!(c_sum);
-
-        let mut sum = F::zero();
-        h_vec.iter().flat_map(|h| h.iter()).for_each(|x| {
-            sum += x;
-        });
-
-        dbg!(sum);
+        let c_sum = h_t.evaluations.iter().fold(F::zero(), |sum, x| sum + x);
 
         let mut sumcheck_msg = Vec::new();
 
+        // execute sumcheck for
+        // \sum_{x \in H_f}
+        //                  \sum_{i \in [block_num]} h_i(x)
+        //                + \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
+        //                = c_sum
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_f);
-        h_vec
-            .iter()
-            .enumerate()
-            .zip(u_l.iter())
-            .for_each(|((i, h), u_coef)| {
-                let product = vec![h.clone()];
-                let op_coef = vec![(F::one(), F::zero())];
-                poly.add_product_with_linear_op(product, &op_coef, F::one());
+        for ((i, h), u_coef) in h_vec.iter().enumerate().zip(u_l.iter()) {
+            let product = vec![h.clone()];
+            let op_coef = vec![(F::one(), F::zero())];
+            poly.add_product_with_linear_op(product, &op_coef, F::one());
 
-                let chunk = &phi_vec[i * block_size..(i + 1) * block_size];
-                let id_u = Rc::new(gen_identity_evaluations(u_f));
-                let mut id_op_coef = vec![(F::one(), F::zero()); block_size + 2];
+            let block = &shifted_f_vec[i * block_size..(i + 1) * block_size];
+            let id_u = Rc::new(gen_identity_evaluations(u_f));
+            let mut id_op_coef = vec![(F::one(), F::zero()); block_size + 2];
 
-                let mut product = chunk.to_vec();
-                product.extend(vec![id_u.clone(), h.clone()]);
-                poly.add_product_with_linear_op(product, &id_op_coef, *u_coef);
+            let mut product = block.to_vec();
+            product.extend(vec![id_u.clone(), h.clone()]);
+            poly.add_product_with_linear_op(product, &id_op_coef, *u_coef);
 
-                id_op_coef.pop();
-                id_op_coef.pop();
+            id_op_coef.pop();
+            id_op_coef.pop();
 
-                for j in 0..block_size {
-                    let mut product = chunk.to_vec();
-                    product[j] = id_u.clone();
-                    poly.add_product_with_linear_op(product, &id_op_coef, -*u_coef);
-                }
-            });
+            for j in 0..block_size {
+                let mut product = block.to_vec();
+                product[j] = id_u.clone();
+                poly.add_product_with_linear_op(product, &id_op_coef, -*u_coef);
+            }
+        }
+
+        
 
         let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for rangecheck failed");
         sumcheck_msg.push(sumcheck_proof.0);
 
-        // // 1. execute sumcheck for \sum_{x\in H_F} f_inverse(x) = c_sum
-        // let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_f);
-        // let product = vec![Rc::clone(&f_inverse)];
-        // let op_coef = vec![(F::one(), F::zero())];
-        // poly.add_product_with_linear_op(product, &op_coef, F::one());
-        // let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
-        //     .expect("sumcheck for rangecheck failed");
-        // sumcheck_msg.push(sumcheck_proof.0);
-
-        // 2. execute sumcheck for \sum_{x\in H_T} t_inverse(x) = c_sum
+        // execute sumcheck for \sum_{x \in H_t} h_t(x)  + eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = c_sum
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_t);
+        let id_ut = Rc::new(gen_identity_evaluations(u_t));
 
-
-
-        let product = vec![Rc::clone(&t_inverse)];
+        let product = vec![Rc::clone(&h_t)];
         let op_coef = vec![(F::one(), F::zero())];
         poly.add_product_with_linear_op(product, &op_coef, F::one());
 
-        let mut product = Vec::with_capacity(3);
-        let mut op_coef = Vec::with_capacity(3);
-        product.push(Rc::new(gen_identity_evaluations(u_t)));
-        op_coef.push((F::one(), F::zero()));
-        product.push(Rc::clone(&t_inverse));
-        op_coef.push((F::one(), F::zero()));
-        product.push(Rc::clone(&instance.t));
-        op_coef.push((-F::one(), r));
+        let product = vec![id_ut.clone(), h_t.clone(), instance.t.clone()];
+        let op_coef = vec![(F::one(), F::zero()), (F::one(), F::zero()), (F::one(), -r)];
         poly.add_product_with_linear_op(product, &op_coef, F::one());
 
-        let mut product = Vec::with_capacity(2);
-        let mut op_coef = Vec::with_capacity(2);
-        product.push(Rc::new(gen_identity_evaluations(u_t)));
-        op_coef.push((F::one(), F::zero()));
-        product.push(Rc::clone(&m));
-        op_coef.push((F::one(), F::zero()));
+        let product = vec![id_ut.clone(), m.clone()];
+        let op_coef = vec![(F::one(), F::zero()), (F::one(), F::zero())];
         poly.add_product_with_linear_op(product, &op_coef, -F::one());
 
         let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
             .expect("sumcheck for rangecheck failed");
         sumcheck_msg.push(sumcheck_proof.0);
-
-        // // 3. execute sumcheck for \sum_{x\in H_F} eq(x, u) f_inverse(x) (r - f(x)) = 1
-        // let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_f);
-        // let mut product = Vec::with_capacity(3);
-        // let mut op_coef = Vec::with_capacity(3);
-        // product.push(Rc::new(gen_identity_evaluations(u_f)));
-        // op_coef.push((F::one(), F::zero()));
-        // product.push(Rc::clone(&f_inverse));
-        // op_coef.push((F::one(), F::zero()));
-        // product.push(instance.fs.clone());
-        // op_coef.push((-F::one(), r));
-        // poly.add_product_with_linear_op(product, &op_coef, F::one());
-        // let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
-        //     .expect("sumcheck for rangecheck failed");
-        // sumcheck_msg.push(sumcheck_proof.0);
-
-        // 4. execute sumcheck for \sum_{x\in H_T} eq(x, u) (t_inverse(x) (r - t(x)) - m(x)) = 0
-        // let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_t);
-
-        // let mut product = Vec::with_capacity(3);
-        // let mut op_coef = Vec::with_capacity(3);
-        // product.push(Rc::new(gen_identity_evaluations(u_t)));
-        // op_coef.push((F::one(), F::zero()));
-        // product.push(Rc::clone(&t_inverse));
-        // op_coef.push((F::one(), F::zero()));
-        // product.push(Rc::clone(&instance.t));
-        // op_coef.push((-F::one(), r));
-        // poly.add_product_with_linear_op(product, &op_coef, F::one());
-
-        // let mut product = Vec::with_capacity(2);
-        // let mut op_coef = Vec::with_capacity(2);
-        // product.push(Rc::new(gen_identity_evaluations(u_t)));
-        // op_coef.push((F::one(), F::zero()));
-        // product.push(Rc::clone(&m));
-        // op_coef.push((F::one(), F::zero()));
-        // poly.add_product_with_linear_op(product, &op_coef, -F::one());
-
-        // let sumcheck_proof = MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
-        //     .expect("sumcheck for rangecheck failed");
-        // sumcheck_msg.push(sumcheck_proof.0);
 
         (
             LookupProof {
@@ -367,8 +372,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
             },
             LookupOracle {
                 h_vec,
-                phi_vec,
-                t_inverse,
+                t_inverse: h_t,
                 m,
             },
         )
@@ -391,11 +395,16 @@ impl<F: Field + DecomposableField> Lookup<F> {
     ) -> LookupSubclaim<F> {
         // TODO sample randomness via Fiat-Shamir RNG
 
-        let chunk_size = info.block_size;
+        let block_size = info.block_size;
 
-        // 1. execute sumcheck for \sum_{x\in H_F} f_inverse(x) = c_sum
+        // execute sumcheck for
+        // \sum_{x \in H_f}
+        // \sum_{i \in [block_num]}  h_i(x)
+        //                         + \ eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r)
+        //                         - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
+        //                         = c_sum
         let poly_info = PolynomialInfo {
-            max_multiplicands: chunk_size + 2,
+            max_multiplicands: block_size + 2,
             num_variables: info.num_vars_f,
         };
         let first_subclaim = MLSumcheck::verify_as_subprotocol(
@@ -406,7 +415,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
         )
         .expect("sumcheck protocol in range check failed");
 
-        // 2. execute sumcheck for \sum_{x\in H_T} t_inverse(x) = c_sum
+        // execute sumcheck for \sum_{x \in H_t} h_t(x)  + eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = c_sum
         let poly_info = PolynomialInfo {
             max_multiplicands: 3,
             num_variables: info.num_vars_t,
@@ -419,40 +428,11 @@ impl<F: Field + DecomposableField> Lookup<F> {
         )
         .expect("sumcheck protocol in range check failed");
 
-        // // 3. execute sumcheck for \sum_{x\in H_F} eq(x, u) f_inverse(x) (r - f(x)) = 1
-        // let poly_info = PolynomialInfo {
-        //     max_multiplicands: 3,
-        //     num_variables: info.num_vars_f,
-        // };
-        // let third_subclaim =
-        //     MLSumcheck::verify_as_subprotocol(fs_rng, &poly_info, F::one(), &proof.sumcheck_msg[2])
-        //         .expect("sumcheck protocol in range check failed");
-
-        // // 4. execute sumcheck for \sum_{x\in H_T} eq(x, u) (t_inverse(x) (r - t(x)) - m(x)) = 0
-        // let poly_info = PolynomialInfo {
-        //     max_multiplicands: 3,
-        //     num_variables: info.num_vars_t,
-        // };
-        // let forth_subclaim = MLSumcheck::verify_as_subprotocol(
-        //     fs_rng,
-        //     &poly_info,
-        //     F::zero(),
-        //     &proof.sumcheck_msg[2],
-        // )
-        // .expect("sumcheck protocol in range check failed");
-
         LookupSubclaim {
-            sumcheck_points: vec![
-                first_subclaim.point,
-                second_subclaim.point,
-                // third_subclaim.point,
-                //forth_subclaim.point,
-            ],
+            sumcheck_points: vec![first_subclaim.point, second_subclaim.point],
             sumcheck_expected_evaluations: vec![
                 first_subclaim.expected_evaluations,
                 second_subclaim.expected_evaluations,
-                // third_subclaim.expected_evaluations,
-                //forth_subclaim.expected_evaluations,
             ],
         }
     }
@@ -465,7 +445,6 @@ impl<F: Field> LookupSubclaim<F> {
     pub fn verify_subclaim(
         &self,
         f_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
-        t: Rc<DenseMultilinearExtension<F>>,
         oracle: LookupOracle<F>,
         randomness: &[F],
         info: &LookupInstanceInfo,
@@ -478,22 +457,31 @@ impl<F: Field> LookupSubclaim<F> {
 
         let block_size = info.block_size;
         let h_vec = oracle.h_vec;
-        let phi_vec = oracle.phi_vec;
         let t_inverse = oracle.t_inverse;
         let m = oracle.m;
 
+        let num_vars_t = info.range.checked_next_power_of_two().unwrap_or(0).ilog(2) as usize;
+        let mut t_evaluations: Vec<_> = (0..info.range)
+            .map(|i| F::new(F::Value::as_from(i as f64)))
+            .collect();
+        t_evaluations.resize(1 << num_vars_t, F::zero());
+        let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars_t,
+            t_evaluations,
+        ));
+
         let mut eval = F::zero();
         let point = &self.sumcheck_points[0];
-        for ((h, phi_block), r) in h_vec
+        for ((h, f_block), r_k) in h_vec
             .iter()
-            .zip(phi_vec.chunks_exact(block_size))
+            .zip(f_vec.chunks_exact(block_size))
             .zip(u_l.iter())
         {
             let h_eval = h.evaluate(point);
 
             let eq_eval = eval_identity_function(u_f, point);
 
-            let phi_eval_block: Vec<F> = phi_block.iter().map(|phi| phi.evaluate(point)).collect();
+            let phi_eval_block: Vec<F> = f_block.iter().map(|f| f.evaluate(point) - r).collect();
 
             let sum_of_products: F = (0..phi_eval_block.len())
                 .map(|i| {
@@ -501,44 +489,27 @@ impl<F: Field> LookupSubclaim<F> {
                         .iter()
                         .enumerate()
                         .filter(|&(index, _)| index != i)
-                        .map(|(_, val)| val.clone())
+                        .map(|(_, val)| *val)
                         .fold(F::one(), |acc, x| acc * x) // 使用 fold 手动计算乘积
                 })
                 .fold(F::zero(), |acc, x| acc + x);
 
             let product = phi_eval_block.iter().fold(F::one(), |acc, x| acc * x);
 
-            eval += h_eval + eq_eval * r * (h_eval * product - sum_of_products);
+            eval += h_eval + eq_eval * r_k * (h_eval * product - sum_of_products);
         }
 
         if eval != self.sumcheck_expected_evaluations[0] {
             return false;
         }
 
-        // // 1. check sumcheck for \sum_{x\in H_F} f_inverse(x) = c_sum
-        // if f_inverse.evaluate(&self.sumcheck_points[0]) != self.sumcheck_expected_evaluations[0] {
-        //     return false;
-        // }
-
-        // 2. execute sumcheck for \sum_{x\in H_T} t_inverse(x) = c_sum
-        // if t_inverse.evaluate(&self.sumcheck_points[1]) != self.sumcheck_expected_evaluations[1] {
-        //     return false;
-        // }
-
-        // // 3. execute sumcheck for \sum_{x\in H_F} eq(x, u) f_inverse(x) (r - f(x)) = 1
-        // let eval_f_inverse = f_inverse.evaluate(&self.sumcheck_points[2]);
-        // let eval_f = f.evaluate(&self.sumcheck_points[2]);
-        // let eval_eq = eval_identity_function(u_f, &self.sumcheck_points[2]);
-        // if eval_eq * eval_f_inverse * (r - eval_f) != self.sumcheck_expected_evaluations[2] {
-        //     return false;
-        // }
-
         // 4. execute sumcheck for \sum_{x\in H_T} eq(x, u) (t_inverse(x) (r - t(x)) - m(x)) = 0
         let eval_t_inverse = t_inverse.evaluate(&self.sumcheck_points[1]);
         let eval_t = t.evaluate(&self.sumcheck_points[1]);
         let eval_eq = eval_identity_function(u_t, &self.sumcheck_points[1]);
         let eval_m = m.evaluate(&self.sumcheck_points[1]);
-        if t_inverse.evaluate(&self.sumcheck_points[1]) + eval_eq * (eval_t_inverse * (r - eval_t) - eval_m)
+        if t_inverse.evaluate(&self.sumcheck_points[1])
+            + eval_eq * (eval_t_inverse * (eval_t - r) - eval_m)
             != self.sumcheck_expected_evaluations[1]
         {
             return false;
@@ -546,4 +517,100 @@ impl<F: Field> LookupSubclaim<F> {
 
         true
     }
+}
+
+// credit@Plonky3
+/// Batch multiplicative inverses with Montgomery's trick
+/// This is Montgomery's trick. At a high level, we invert the product of the given field
+/// elements, then derive the individual inverses from that via multiplication.
+///
+/// The usual Montgomery trick involves calculating an array of cumulative products,
+/// resulting in a long dependency chain. To increase instruction-level parallelism, we
+/// compute WIDTH separate cumulative product arrays that only meet at the end.
+///
+/// # Panics
+/// Might panic if asserts or unwraps uncover a bug.
+pub fn batch_inverse<F: Field>(x: &[F]) -> Vec<F> {
+    // Higher WIDTH increases instruction-level parallelism, but too high a value will cause us
+    // to run out of registers.
+    const WIDTH: usize = 4;
+    // JN note: WIDTH is 4. The code is specialized to this value and will need
+    // modification if it is changed. I tried to make it more generic, but Rust's const
+    // generics are not yet good enough.
+
+    // Handle special cases. Paradoxically, below is repetitive but concise.
+    // The branches should be very predictable.
+    let n = x.len();
+    if n == 0 {
+        return Vec::new();
+    } else if n == 1 {
+        return vec![x[0].inv()];
+    } else if n == 2 {
+        let x01 = x[0] * x[1];
+        let x01inv = x01.inv();
+        return vec![x01inv * x[1], x01inv * x[0]];
+    } else if n == 3 {
+        let x01 = x[0] * x[1];
+        let x012 = x01 * x[2];
+        let x012inv = x012.inv();
+        let x01inv = x012inv * x[2];
+        return vec![x01inv * x[1], x01inv * x[0], x012inv * x01];
+    }
+    debug_assert!(n >= WIDTH);
+
+    // Buf is reused for a few things to save allocations.
+    // Fill buf with cumulative product of x, only taking every 4th value. Concretely, buf will
+    // be [
+    //   x[0], x[1], x[2], x[3],
+    //   x[0] * x[4], x[1] * x[5], x[2] * x[6], x[3] * x[7],
+    //   x[0] * x[4] * x[8], x[1] * x[5] * x[9], x[2] * x[6] * x[10], x[3] * x[7] * x[11],
+    //   ...
+    // ].
+    // If n is not a multiple of WIDTH, the result is truncated from the end. For example,
+    // for n == 5, we get [x[0], x[1], x[2], x[3], x[0] * x[4]].
+    let mut buf: Vec<F> = Vec::with_capacity(n);
+    // cumul_prod holds the last WIDTH elements of buf. This is redundant, but it's how we
+    // convince LLVM to keep the values in the registers.
+    let mut cumul_prod: [F; WIDTH] = x[..WIDTH].try_into().unwrap();
+    buf.extend(cumul_prod);
+    for (i, &xi) in x[WIDTH..].iter().enumerate() {
+        cumul_prod[i % WIDTH] *= xi;
+        buf.push(cumul_prod[i % WIDTH]);
+    }
+    debug_assert_eq!(buf.len(), n);
+
+    let mut a_inv = {
+        // This is where the four dependency chains meet.
+        // Take the last four elements of buf and invert them all.
+        let c01 = cumul_prod[0] * cumul_prod[1];
+        let c23 = cumul_prod[2] * cumul_prod[3];
+        let c0123 = c01 * c23;
+        let c0123inv = c0123.inv();
+        let c01inv = c0123inv * c23;
+        let c23inv = c0123inv * c01;
+        [
+            c01inv * cumul_prod[1],
+            c01inv * cumul_prod[0],
+            c23inv * cumul_prod[3],
+            c23inv * cumul_prod[2],
+        ]
+    };
+
+    for i in (WIDTH..n).rev() {
+        // buf[i - WIDTH] has not been written to by this loop, so it equals
+        // x[i % WIDTH] * x[i % WIDTH + WIDTH] * ... * x[i - WIDTH].
+        buf[i] = buf[i - WIDTH] * a_inv[i % WIDTH];
+        // buf[i] now holds the inverse of x[i].
+        a_inv[i % WIDTH] *= x[i];
+    }
+    for i in (0..WIDTH).rev() {
+        buf[i] = a_inv[i];
+    }
+
+    for (&bi, &xi) in buf.iter().zip(x) {
+        // Sanity check only.
+        debug_assert_eq!(bi * xi, F::one());
+    }
+
+    buf
 }

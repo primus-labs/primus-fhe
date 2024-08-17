@@ -35,6 +35,7 @@ fn test_trivial_range_check() {
     let num_vars_f = 4;
     let num_vars_t = 3;
     let block_size = 2;
+    let range = 7;
 
     // construct randomness
 
@@ -52,31 +53,26 @@ fn test_trivial_range_check() {
 
     let f0 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars_f,
-        field_vec!(FF; 1, 6, 7, 2, 7, 0, 1, 6, 3, 2, 1, 0, 4, 1, 1, 6),
+        field_vec!(FF; 1, 6, 3, 2, 3, 0, 1, 6, 3, 2, 1, 0, 4, 1, 1, 6),
     ));
     let f1 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars_f,
-        field_vec!(FF; 4, 6, 7, 3, 7, 0, 1, 6, 3, 2, 1, 0, 4, 1, 1, 6),
+        field_vec!(FF; 4, 6, 5, 3, 4, 0, 1, 6, 3, 2, 1, 0, 4, 1, 1, 6),
     ));
     let f2 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars_f,
-        field_vec!(FF; 4, 6, 7, 2, 7, 0, 1, 1, 3, 2, 1, 0, 4, 1, 1, 6),
+        field_vec!(FF; 4, 6, 1, 2, 3, 0, 1, 1, 3, 2, 1, 0, 4, 1, 1, 6),
     ));
     let f3 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars_f,
-        field_vec!(FF; 4, 6, 5, 2, 7, 0, 1, 6, 3, 2, 1, 0, 7, 1, 1, 6),
+        field_vec!(FF; 4, 6, 5, 2, 4, 0, 1, 6, 3, 2, 1, 0, 6, 1, 1, 6),
     ));
 
     let f_vec = vec![f0, f1, f2, f3];
 
-    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars_t,
-        field_vec!(FF; 0, 1, 2, 3, 4, 5, 6, 7),
-    ));
-
     // construct instance
 
-    let instance = LookupInstance::from_slice(&f_vec, &t, block_size);
+    let instance = LookupInstance::from_slice(&f_vec, range, block_size);
     let info = instance.info();
 
     // prove
@@ -86,26 +82,25 @@ fn test_trivial_range_check() {
     // verify
 
     let subclaim = Lookup::verify(&proof, &info);
-    assert!(subclaim.verify_subclaim(f_vec, t, oracle, &randomness, &info));
+    assert!(subclaim.verify_subclaim(f_vec, oracle, &randomness, &info));
 }
 
 #[test]
 fn test_random_range_check() {
     // prepare parameters
 
-    let num_vars_f = 16;
-    let num_vars_t = 3;
-    let block_size = 8;
+    let num_vars_f = 8;
+    let block_size = 4;
     let block_num = 8;
     let lookup_num = block_num * block_size;
-    let range = 1 << num_vars_t;
+    let range = 59;
 
     // construct randomness
 
     let mut rng = thread_rng();
     let sampler = <FieldUniformSampler<FF>>::new();
     let mut r = sampler.sample(&mut rng);
-    while FF::new(0) <= r && r < FF::new(1 << num_vars_t) {
+    while FF::new(0) <= r && r < FF::new(range) {
         r = sampler.sample(&mut rng);
     }
     let mut u: Vec<_> = (0..num_vars_f).map(|_| sampler.sample(&mut rng)).collect();
@@ -114,7 +109,7 @@ fn test_random_range_check() {
 
     // construct a random example
 
-    let f_vec = (0..lookup_num)
+    let f_vec: Vec<Rc<DenseMultilinearExtension<Fp32>>> = (0..lookup_num)
         .map(|_| {
             let f_evaluations: Vec<FF> = (0..(1 << num_vars_f))
                 .map(|_| FF::new(rng.gen_range(0..range)))
@@ -126,15 +121,9 @@ fn test_random_range_check() {
         })
         .collect();
 
-    let t_evaluations: Vec<FF> = (0..range).map(FF::new).collect();
-    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars_t,
-        t_evaluations,
-    ));
-
     // construct instance
 
-    let instance = LookupInstance::from_slice(&f_vec, &t, block_size);
+    let instance = LookupInstance::from_slice(&f_vec, range as usize, block_size);
     let info = instance.info();
 
     // prove
@@ -144,5 +133,5 @@ fn test_random_range_check() {
     // verify
 
     let subclaim = Lookup::verify(&proof, &info);
-    assert!(subclaim.verify_subclaim(f_vec, t, oracle, &randomness, &info));
+    assert!(subclaim.verify_subclaim(f_vec, oracle, &randomness, &info));
 }
