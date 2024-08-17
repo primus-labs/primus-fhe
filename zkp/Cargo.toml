@@ -16,3 +16,13 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true }
+
+criterion = { workspace = true }
+
+[[bench]]
+name = "range_check_lookup"
+harness = false
+
+[[bench]]
+name = "range_check_bit_decomposition"
+harness = false

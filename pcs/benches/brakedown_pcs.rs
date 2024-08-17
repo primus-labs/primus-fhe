@@ -84,7 +84,7 @@ fn configure() -> Criterion {
 criterion_group! {
     name = benches;
     config = configure();
-    targets =criterion_benchmark
+    targets = criterion_benchmark
 }
 
 criterion_main!(benches);
