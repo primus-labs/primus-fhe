@@ -1,12 +1,12 @@
 // It is derived from https://github.com/arkworks-rs/sumcheck/blob/master/src/ml_sumcheck/data_structures.rs .
 
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, marker::PhantomData, rc::Rc};
 
 use serde::Serialize;
 
-use crate::Field;
+use crate::{AbstractExtensionField, Field};
 
-use super::{DenseMultilinearExtension, MultilinearExtension};
+use super::{multilinear::UF, DenseMultilinearExtension, MultilinearExtension};
 
 /// Stores a list of products of `DenseMultilinearExtension` that is meant to be added together.
 ///
@@ -23,23 +23,25 @@ use super::{DenseMultilinearExtension, MultilinearExtension};
 ///
 /// The resulting polynomial is used as the prover key.
 #[derive(Clone)]
-pub struct ListOfProductsOfPolynomials<F: Field> {
+pub struct ListOfProductsOfPolynomials<F: Field, EF: AbstractExtensionField<F>> {
     /// max number of multiplicands in each product
     pub max_multiplicands: usize,
     /// number of variables of the polynomial
     pub num_variables: usize,
     /// list of reference to products (as usize) of multilinear extension
-    pub products: Vec<(F, Vec<usize>)>,
+    pub products: Vec<(EF, Vec<usize>)>,
     /// Stores the linear operations, each of which is successively (in the same order) perfomed over the each MLE of each product stored in the above `products`
     /// so each (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
-    pub linear_ops: Vec<Vec<(F, F)>>,
+    #[allow(clippy::type_complexity)]
+    pub linear_ops: Vec<Vec<(UF<F, EF>, UF<F, EF>)>>,
     /// Stores multilinear extensions in which product multiplicand can refer to.
-    pub flattened_ml_extensions: Vec<Rc<DenseMultilinearExtension<F>>>,
-    raw_pointers_lookup_table: HashMap<*const DenseMultilinearExtension<F>, usize>,
+    pub flattened_ml_extensions: Vec<Rc<DenseMultilinearExtension<F, EF>>>,
+    raw_pointers_lookup_table: HashMap<*const DenseMultilinearExtension<F, EF>, usize>,
+    _marker: PhantomData<F>,
 }
 
 /// Extract the max number of multiplicands and number of variables of the list of products.
-impl<F: Field> ListOfProductsOfPolynomials<F> {
+impl<F: Field, EF: AbstractExtensionField<F>> ListOfProductsOfPolynomials<F, EF> {
     /// Extract the max number of multiplicands and number of variables of the list of products.
     #[inline]
     pub fn info(&self) -> PolynomialInfo {
@@ -60,7 +62,7 @@ pub struct PolynomialInfo {
     pub num_variables: usize,
 }
 
-impl<F: Field> ListOfProductsOfPolynomials<F> {
+impl<F: Field, EF: AbstractExtensionField<F>> ListOfProductsOfPolynomials<F, EF> {
     /// Returns an empty polynomial
     #[inline]
     pub fn new(num_variables: usize) -> Self {
@@ -71,6 +73,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
             linear_ops: Vec::new(),
             flattened_ml_extensions: Vec::new(),
             raw_pointers_lookup_table: HashMap::new(),
+            _marker: PhantomData,
         }
     }
 
@@ -78,13 +81,14 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     /// Here we wrap a linear operation on the same MLE so that we can add the
     /// product like f(x) \cdot (2f(x) + 3) \cdot (4f(x) + 4) with only one Rc.
     /// The resulting polynomial will be multiplied by the scalar `coefficient`.
+    #[allow(clippy::type_complexity)]
     pub fn add_product_with_linear_op(
         &mut self,
-        product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
-        op_coefficient: &[(F, F)],
-        coefficient: F,
+        product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F, EF>>>,
+        op_coefficient: &[(UF<F, EF>, UF<F, EF>)],
+        coefficient: EF,
     ) {
-        let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
+        let product: Vec<Rc<DenseMultilinearExtension<F, EF>>> = product.into_iter().collect();
         self.max_multiplicands = self.max_multiplicands.max(product.len());
         assert_eq!(product.len(), op_coefficient.len());
         assert_eq!(product.len(), op_coefficient.len());
@@ -98,7 +102,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
                 m.num_vars, self.num_variables,
                 "product has a multiplicand with wrong number of variables"
             );
-            let m_ptr: *const DenseMultilinearExtension<F> = Rc::as_ptr(m);
+            let m_ptr: *const DenseMultilinearExtension<F, EF> = Rc::as_ptr(m);
             if let Some(index) = self.raw_pointers_lookup_table.get(&m_ptr) {
                 indexed_product.push(*index);
                 linear_ops.push((*a, *b));
@@ -120,27 +124,27 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     #[inline]
     pub fn add_product(
         &mut self,
-        product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F>>>,
-        coefficient: F,
+        product: impl IntoIterator<Item = Rc<DenseMultilinearExtension<F, EF>>>,
+        coefficient: EF,
     ) {
-        let product: Vec<Rc<DenseMultilinearExtension<F>>> = product.into_iter().collect();
-        let mut linear_ops: Vec<(F, F)> = Vec::with_capacity(product.len());
+        let product: Vec<Rc<DenseMultilinearExtension<F, EF>>> = product.into_iter().collect();
+        let mut linear_ops: Vec<(UF<F, EF>, UF<F, EF>)> = Vec::with_capacity(product.len());
         for _ in 0..product.len() {
-            linear_ops.push((F::one(), F::zero()));
+            linear_ops.push((UF::BaseField(F::one()), UF::BaseField(F::zero())));
         }
         self.add_product_with_linear_op(product, &linear_ops, coefficient);
     }
 
     /// Evaluate the polynomial at point `point`
-    pub fn evaluate(&self, point: &[F]) -> F {
-        self.products
-            .iter()
-            .zip(self.linear_ops.iter())
-            .fold(F::zero(), |result, ((c, p), ops)| {
+    pub fn evaluate(&self, point: &[EF]) -> EF {
+        self.products.iter().zip(self.linear_ops.iter()).fold(
+            EF::zero(),
+            |result, ((c, p), ops)| {
                 result
-                    + p.iter().zip(ops.iter()).fold(*c, |acc, (&i, &(a, b))| {
-                        acc * (self.flattened_ml_extensions[i].evaluate(point) * a + b)
+                    + p.iter().zip(ops.iter()).fold(*c, |acc, (i, &(a, b))| {
+                        acc * (b + a * self.flattened_ml_extensions[*i].evaluate(point))
                     })
-            })
+            },
+        )
     }
 }

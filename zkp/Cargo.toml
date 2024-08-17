@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 algebra = { path = "../algebra" }
+fhe_core = { path = "../fhe_core" }
 
 rand = { workspace = true }
 thiserror = { workspace = true }

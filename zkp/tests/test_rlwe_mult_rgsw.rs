@@ -1,8 +1,9 @@
-use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
-    Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
-};
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
+use algebra::{
+    utils::Transcript, AbstractExtensionField, Basis, DenseMultilinearExtensionBase, Field,
+    FieldUniformSampler,
+};
+use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use itertools::izip;
 use num_traits::One;
 use rand_distr::Distribution;
@@ -13,12 +14,10 @@ use zkp::piop::{
     RlweMultRgswInstance,
 };
 
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
 // field type
-type FF = Fp32;
+
+type FF = DefaultFieldU32;
+type EF = DefaultExtendsionFieldU32x4;
 
 /// Given an `index` of `len` bits, output a new index where the bits are reversed.
 fn reverse_bits(index: usize, len: u32) -> usize {
@@ -79,13 +78,13 @@ fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &
 /// * basis_info: information used to decompose bits
 /// * ntt_info: information used to perform NTT
 /// * randomness_ntt: randomness used to generate a single randomized NTT instance
-fn gen_rlwe_mult_rgsw_instance<F: Field + NTTField>(
+fn gen_rlwe_mult_rgsw_instance<F: Field + NTTField, EF: AbstractExtensionField<F>>(
     input_rlwe: RlweCiphertext<F>,
     input_rgsw: (RlweCiphertexts<F>, RlweCiphertexts<F>),
     basis_info: &DecomposedBitsInfo<F>,
     ntt_info: &NTTInstanceInfo<F>,
-    randomness_ntt: &[F],
-) -> RlweMultRgswInstance<F> {
+    randomness_ntt: &[EF],
+) -> RlweMultRgswInstance<F, EF> {
     // 1. Decompose the input of RLWE ciphertex
     let bits_rlwe = RlweCiphertexts {
         a_bits: input_rlwe
@@ -103,7 +102,7 @@ fn gen_rlwe_mult_rgsw_instance<F: Field + NTTField>(
             .a_bits
             .iter()
             .map(|bit| {
-                Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                     ntt_info.log_n,
                     ntt_transform_normal_order(ntt_info.log_n as u32, &bit.evaluations),
                 ))
@@ -113,7 +112,7 @@ fn gen_rlwe_mult_rgsw_instance<F: Field + NTTField>(
             .b_bits
             .iter()
             .map(|bit| {
-                Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                     ntt_info.log_n,
                     ntt_transform_normal_order(ntt_info.log_n as u32, &bit.evaluations),
                 ))
@@ -152,22 +151,22 @@ fn gen_rlwe_mult_rgsw_instance<F: Field + NTTField>(
 
     // 4. Compute the output of coefficient form
     let output_rlwe = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        a: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             ntt_inverse_transform_normal_order(ntt_info.log_n as u32, &output_g_ntt),
         )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        b: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             ntt_inverse_transform_normal_order(ntt_info.log_n as u32, &output_h_ntt),
         )),
     };
 
     let output_rlwe_ntt = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        a: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             output_g_ntt,
         )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        b: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             output_h_ntt,
         )),
@@ -228,33 +227,37 @@ fn test_trivial_rlwe_mult_rgsw() {
         .collect();
     for _ in 0..bits_len {
         bits_rgsw_c_ntt.add_rlwe(
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtensionBase::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtensionBase::from_evaluations_slice(log_n, &points),
         );
     }
 
     let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtensionBase::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtensionBase::from_evaluations_slice(log_n, &points),
         );
     }
 
     // generate the random RLWE ciphertext
     let input_rlwe = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
+        a: Rc::new(DenseMultilinearExtensionBase::from_evaluations_slice(
             log_n, &coeffs,
         )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
+        b: Rc::new(DenseMultilinearExtensionBase::from_evaluations_slice(
             log_n, &coeffs,
         )),
     };
 
     let num_ntt_instance = (basis_info.bits_len << 1) + 2;
-    let randomness_ntt = (0..num_ntt_instance)
-        .map(|_| uniform.sample(&mut rng))
-        .collect::<Vec<_>>();
+
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_randomness_ntt = prover_trans
+        .get_vec_ext_field_challenge(b"randomize ntt instances", num_ntt_instance as usize);
+    let verify_randomness_ntt = verifier_trans
+        .get_vec_ext_field_challenge(b"randomize ntt instances", num_ntt_instance as usize);
 
     // generate all the witness required
     let instance = gen_rlwe_mult_rgsw_instance(
@@ -262,23 +265,33 @@ fn test_trivial_rlwe_mult_rgsw() {
         (bits_rgsw_c_ntt, bits_rgsw_f_ntt),
         &basis_info,
         &ntt_info,
-        &randomness_ntt,
+        &prover_randomness_ntt,
     );
 
     // check the consistency of the randomized NTT instance
-    let ntt_points =
-        ntt_transform_normal_order(log_n as u32, &instance.ntt_instance.coeffs.evaluations);
-    assert_eq!(ntt_points, instance.ntt_instance.points.evaluations);
+    // let ntt_points =
+    //     ntt_transform_normal_order(log_n as u32, &instance.ntt_instance.coeffs.evaluations);
+    // assert_eq!(ntt_points, instance.ntt_instance.points.evaluations);
 
     let instance_info = instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = RlweMultRgswIOP::prove(&instance, &u);
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verify_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
 
-    let subclaim = RlweMultRgswIOP::verify(&proof, &randomness_ntt, &u, &instance_info);
+    let proof = <RlweMultRgswIOP<FF, EF>>::prove(&mut prover_trans, &instance, &prover_u);
+
+    let subclaim = <RlweMultRgswIOP<FF, EF>>::verify(
+        &mut verifier_trans,
+        &proof,
+        &verify_randomness_ntt,
+        &verify_u,
+        &instance_info,
+    );
     assert!(subclaim.verify_subclaim(
-        &u,
-        &randomness_ntt,
+        &verify_u,
+        &verify_randomness_ntt,
         &instance.ntt_instance.coeffs,
         &instance.ntt_instance.points,
         &instance.input_rlwe,

@@ -1,6 +1,8 @@
 use algebra::{
     derive::{DecomposableField, FheField, Field, Prime, NTT},
-    DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
+    utils::Transcript,
+    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtensionBase, Field,
+    FieldUniformSampler,
 };
 use rand_distr::Distribution;
 use std::rc::Rc;
@@ -8,11 +10,13 @@ use std::vec;
 use zkp::piop::{DecomposedBitsInfo, RoundIOP, RoundInstance};
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
+#[modulus = 2013265921]
+pub struct Fp32(u64);
 
-type FF = Fp32; // field type
-const FP: u32 = 132120577; // ciphertext space
+// field type
+type FF = BabyBear;
+type EF = BabyBearExetension;
+const FP: u32 = 2013265921; // ciphertext space
 const FT: u32 = 4; // message space
 const FK: u32 = (FP - 1) / FT;
 
@@ -41,20 +45,20 @@ fn test_round() {
 
 #[test]
 fn test_round_naive_iop() {
-    // k = (132120577 - 1) / FT = 33030144 = 2^25 - 2^19
+    // delta = (1 << k_bits_len) - FK
     let k = FF::new(FK);
-    let k_bits_len: u32 = 25;
-    let delta: FF = FF::new(1 << 19);
+    let k_bits_len: u32 = 31;
+    let delta: FF = FF::new((1 << k_bits_len) - FK);
 
     let base_len: u32 = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 2;
 
-    let input = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let input = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, FP/4, FP/4 + 1, FP/2 + 1),
     ));
-    let output = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let output = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 0, 1, 2),
     ));
@@ -85,18 +89,30 @@ fn test_round_naive_iop() {
 
     let info = instance.info();
 
-    let mut rng = rand::thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let lambda_1 = uniform.sample(&mut rng);
-    let lambda_2 = uniform.sample(&mut rng);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
 
-    let proof = RoundIOP::prove(&instance, &u, (lambda_1, lambda_2));
-    let subclaim = RoundIOP::verify(&proof, &instance.info());
+    let p_lambda: Vec<EF> =
+        prover_trans.get_vec_ext_field_challenge(b"random point to randomize sumcheck protocol", 2);
+    let v_lambda: Vec<EF> = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to randomize sumcheck protocol", 2);
+    assert_eq!(p_lambda, v_lambda);
+
+    let proof = <RoundIOP<FF, EF>>::prove(
+        &mut prover_trans,
+        &instance,
+        &prover_u,
+        (p_lambda[0], p_lambda[1]),
+    );
+    let subclaim = <RoundIOP<FF, EF>>::verify(&mut verifier_trans, &proof, &instance.info());
 
     assert!(subclaim.verify_subclaim(
-        &u,
-        (lambda_1, lambda_2),
+        &verifier_u,
+        (v_lambda[0], v_lambda[1]),
         &instance.input,
         &instance.output,
         &instance.output_bits.instances[0],
@@ -113,22 +129,22 @@ fn test_round_random_iop() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
 
-    // k = (132120577 - 1) / FT = 33030144 = 2^25 - 2^19
+    // delta = (1 << k_bits_len) - FK
     let k = FF::new(FK);
-    let k_bits_len: u32 = 25;
-    let delta: FF = FF::new(1 << 19);
+    let k_bits_len: u32 = 31;
+    let delta: FF = FF::new((1 << k_bits_len) - FK);
 
     let base_len: u32 = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 10;
 
-    let input = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let input = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         (0..1 << num_vars)
             .map(|_| uniform.sample(&mut rng))
             .collect(),
     ));
-    let output = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let output = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
@@ -159,16 +175,29 @@ fn test_round_random_iop() {
 
     let info = instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let lambda_1 = uniform.sample(&mut rng);
-    let lambda_2 = uniform.sample(&mut rng);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
 
-    let proof = RoundIOP::prove(&instance, &u, (lambda_1, lambda_2));
-    let subclaim = RoundIOP::verify(&proof, &instance.info());
+    let p_lambda: Vec<EF> =
+        prover_trans.get_vec_ext_field_challenge(b"random point to randomize sumcheck protocol", 2);
+    let v_lambda: Vec<EF> = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to randomize sumcheck protocol", 2);
+
+    let proof = <RoundIOP<FF, EF>>::prove(
+        &mut prover_trans,
+        &instance,
+        &prover_u,
+        (p_lambda[0], p_lambda[1]),
+    );
+    let subclaim = <RoundIOP<FF, EF>>::verify(&mut verifier_trans, &proof, &instance.info());
 
     assert!(subclaim.verify_subclaim(
-        &u,
-        (lambda_1, lambda_2),
+        &verifier_u,
+        (v_lambda[0], v_lambda[1]),
         &instance.input,
         &instance.output,
         &instance.output_bits.instances[0],

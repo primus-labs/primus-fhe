@@ -1,7 +1,8 @@
 use algebra::{
-    derive::*, Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
-    SparsePolynomial,
+    derive::*, utils::Transcript, Basis, DecomposableField, DenseMultilinearExtensionBase, Field,
+    FieldUniformSampler, SparsePolynomial,
 };
+use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use num_traits::{One, Zero};
 use rand::prelude::*;
 use rand_distr::Distribution;
@@ -9,16 +10,13 @@ use std::rc::Rc;
 use std::vec;
 use zkp::piop::zq_to_rq::{TransformZqtoRQ, TransformZqtoRQInstance};
 
-#[derive(Field, Prime, DecomposableField)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
 #[derive(Field, DecomposableField)]
 #[modulus = 512]
 pub struct Fq(u32);
 
 // field type
-type FF = Fp32;
+type FF = DefaultFieldU32;
+type EF = DefaultExtendsionFieldU32x4;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -48,9 +46,7 @@ macro_rules! field_vec {
 
 #[test]
 fn test_trivial_zq_to_rq() {
-    let mut rng = thread_rng();
-    let sampler = <FieldUniformSampler<FF>>::new();
-    let p = 132120577;
+    let p = DefaultFieldU32::MODULUS_VALUE;
     let q = 8;
     let c_num_vars = 3;
     let base_len: u32 = 1;
@@ -58,22 +54,22 @@ fn test_trivial_zq_to_rq() {
     let num_vars = 2;
     let bits_len: u32 = 3;
 
-    let a = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let a = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 3, 5, 7),
     ));
 
-    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let k = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 0, 1, 1),
     ));
 
-    let r = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let r = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 6, 2, 6),
     ));
 
-    let s = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let s = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 1, 7, p-3, p-7),
     ));
@@ -97,7 +93,7 @@ fn test_trivial_zq_to_rq() {
         )),
     ];
 
-    let c_dense = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let c_dense = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         c_num_vars + num_vars,
         field_vec!(FF; 
             1, 0, 0, 0, 0, 0, 0, 0,
@@ -120,9 +116,17 @@ fn test_trivial_zq_to_rq() {
         bits_len,
     );
     let info = instance.info();
-    let u: Vec<_> = (0..num_vars).map(|_| sampler.sample(&mut rng)).collect();
-    let proof = TransformZqtoRQ::prove(&instance, &u);
-    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, 3);
+
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u: Vec<EF> = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verify_u: Vec<EF> = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+
+    let proof = TransformZqtoRQ::prove(&mut prover_trans, &instance, &prover_u);
+    let subclaim =
+        TransformZqtoRQ::verify(&mut verifier_trans, &proof, &info.decomposed_bits_info, 3);
 
     assert!(subclaim.verify_subclaim(
         q,
@@ -132,7 +136,7 @@ fn test_trivial_zq_to_rq() {
         vec![r].as_ref(),
         s.as_ref(),
         &r_bits,
-        &u,
+        &verify_u,
         &info
     ));
 }
@@ -141,7 +145,6 @@ fn test_trivial_zq_to_rq() {
 fn test_random_zq_to_rq() {
     let mut rng = thread_rng();
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
-    let uniform_fp = <FieldUniformSampler<FF>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
     let c_num_vars = (q.value() as usize).ilog2() as usize;
@@ -189,15 +192,19 @@ fn test_random_zq_to_rq() {
         }
     });
 
-    let a: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, a));
-    let k: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, k));
-    let r: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, r));
-    let s: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, s));
-    let c_dense = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let a: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, a),
+    );
+    let k: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, k),
+    );
+    let r: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, r),
+    );
+    let s: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, s),
+    );
+    let c_dense = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars + c_num_vars,
         c_dense_matrix,
     ));
@@ -216,9 +223,20 @@ fn test_random_zq_to_rq() {
         bits_len,
     );
     let info = instance.info();
-    let u: Vec<_> = (0..num_vars).map(|_| uniform_fp.sample(&mut rng)).collect();
-    let proof = TransformZqtoRQ::prove(&instance, &u);
-    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, c_num_vars);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u: Vec<EF> = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verify_u: Vec<EF> = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+
+    let proof = TransformZqtoRQ::prove(&mut prover_trans, &instance, &prover_u);
+    let subclaim = TransformZqtoRQ::verify(
+        &mut verifier_trans,
+        &proof,
+        &info.decomposed_bits_info,
+        c_num_vars,
+    );
 
     assert!(subclaim.verify_subclaim(
         q.value() as usize,
@@ -228,16 +246,14 @@ fn test_random_zq_to_rq() {
         vec![r].as_ref(),
         s.as_ref(),
         &r_bits,
-        &u,
+        &verify_u,
         &info
     ));
 }
 
 #[test]
 fn test_trivial_zq_to_rq_without_oracle() {
-    let mut rng = thread_rng();
-    let sampler = <FieldUniformSampler<FF>>::new();
-    let p = 132120577;
+    let p = DefaultFieldU32::MODULUS_VALUE;
     let q = 8;
     let c_num_vars = 3;
     let base_len: u32 = 1;
@@ -245,22 +261,22 @@ fn test_trivial_zq_to_rq_without_oracle() {
     let num_vars = 2;
     let bits_len: u32 = 3;
 
-    let a = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let a = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 3, 5, 7),
     ));
 
-    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let k = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 0, 1, 1),
     ));
 
-    let r = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let r = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 6, 2, 6),
     ));
 
-    let s = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let s = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 1, 7, p-3, p-7),
     ));
@@ -298,9 +314,15 @@ fn test_trivial_zq_to_rq_without_oracle() {
         bits_len,
     );
     let info = instance.info();
-    let u: Vec<_> = (0..num_vars).map(|_| sampler.sample(&mut rng)).collect();
-    let proof = TransformZqtoRQ::prove(&instance, &u);
-    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, 3);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u: Vec<EF> = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verify_u: Vec<EF> = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let proof = TransformZqtoRQ::prove(&mut prover_trans, &instance, &prover_u);
+    let subclaim =
+        TransformZqtoRQ::verify(&mut verifier_trans, &proof, &info.decomposed_bits_info, 3);
 
     assert!(subclaim.verify_subclaim_without_oracle(
         q,
@@ -310,7 +332,7 @@ fn test_trivial_zq_to_rq_without_oracle() {
         vec![r].as_ref(),
         s.as_ref(),
         &r_bits,
-        &u,
+        &verify_u,
         &info
     ));
 }
@@ -319,7 +341,6 @@ fn test_trivial_zq_to_rq_without_oracle() {
 fn test_random_zq_to_rq_without_oracle() {
     let mut rng = thread_rng();
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
-    let uniform_fp = <FieldUniformSampler<FF>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
     let c_num_vars = (q.value() as usize).ilog2() as usize;
@@ -360,14 +381,18 @@ fn test_random_zq_to_rq_without_oracle() {
         }
     });
 
-    let a: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, a));
-    let k: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, k));
-    let r: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, r));
-    let s: Rc<DenseMultilinearExtension<FF>> =
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, s));
+    let a: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, a),
+    );
+    let k: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, k),
+    );
+    let r: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, r),
+    );
+    let s: Rc<DenseMultilinearExtensionBase<FF>> = Rc::new(
+        DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, s),
+    );
 
     let tmp = r.get_decomposed_mles(base_len, bits_len);
     let r_bits: Vec<_> = vec![&tmp];
@@ -383,9 +408,20 @@ fn test_random_zq_to_rq_without_oracle() {
         bits_len,
     );
     let info = instance.info();
-    let u: Vec<_> = (0..num_vars).map(|_| uniform_fp.sample(&mut rng)).collect();
-    let proof = TransformZqtoRQ::prove(&instance, &u);
-    let subclaim = TransformZqtoRQ::verify(&proof, &info.decomposed_bits_info, c_num_vars);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u: Vec<EF> = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verify_u: Vec<EF> = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+
+    let proof = TransformZqtoRQ::prove(&mut prover_trans, &instance, &prover_u);
+    let subclaim = TransformZqtoRQ::verify(
+        &mut verifier_trans,
+        &proof,
+        &info.decomposed_bits_info,
+        c_num_vars,
+    );
 
     assert!(subclaim.verify_subclaim_without_oracle(
         q.value() as usize,
@@ -395,7 +431,7 @@ fn test_random_zq_to_rq_without_oracle() {
         vec![r].as_ref(),
         s.as_ref(),
         &r_bits,
-        &u,
+        &verify_u,
         &info
     ));
 }

@@ -1,23 +1,23 @@
 use algebra::utils::Transcript;
-use algebra::Basis;
 use algebra::{
     derive::{DecomposableField, FheField, Field, Prime, NTT},
-    DenseMultilinearExtension, Field, FieldUniformSampler,
+    Field, FieldUniformSampler,
 };
+use algebra::{BabyBear, BabyBearExetension, Basis, DenseMultilinearExtensionBase};
 // use protocol::bit_decomposition::{BitDecomposition, DecomposedBits};
 use rand::prelude::*;
 use rand_distr::Distribution;
-use zkp::sumcheck::prover;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{BitDecomposition, DecomposedBits};
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
+#[modulus = 2013265921]
+pub struct Fp32(u64);
 
 // field type
-type FF = Fp32;
+type FF = BabyBear;
+type EF = BabyBearExetension;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -35,18 +35,18 @@ fn test_single_trivial_bit_decomposition_base_2() {
     let bits_len: u32 = 2;
     let num_vars = 2;
 
-    let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let d = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 0, 1, 2, 3),
     ));
     let d_bits = vec![
         // 0th bit
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             field_vec!(FF; 0, 1, 0, 1),
         )),
         // 1st bit
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             field_vec!(FF; 0, 0, 1, 1),
         )),
@@ -61,9 +61,10 @@ fn test_single_trivial_bit_decomposition_base_2() {
     let decomposed_bits_info = prover_key.info();
     let mut prover_trans = Transcript::<FF>::new();
     let mut verifier_trans = Transcript::<FF>::new();
-    let u = field_vec!(FF; 0, 0);
-    let proof = BitDecomposition::prove(&mut prover_trans, &prover_key, &u);
-    let subclaim = BitDecomposition::verifier(&mut verifier_trans,&proof, &decomposed_bits_info);
+    let u = field_vec!(EF; 0, 0);
+    let proof = <BitDecomposition<FF, EF>>::prove(&mut prover_trans, &prover_key, &u);
+    let subclaim =
+        <BitDecomposition<FF, EF>>::verify(&mut verifier_trans, &proof, &decomposed_bits_info);
     assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &u, &decomposed_bits_info));
 }
 
@@ -74,14 +75,12 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     let bits_len: u32 = 2;
     let num_vars = 2;
 
-    let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
     let d = vec![
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             field_vec!(FF; 0, 1, 2, 3),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             field_vec!(FF; 0, 1, 2, 3),
         )),
@@ -89,24 +88,24 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     let d_bits = vec![
         vec![
             // 0th bit
-            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                 num_vars,
                 field_vec!(FF; 0, 1, 0, 1),
             )),
             // 1st bit
-            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                 num_vars,
                 field_vec!(FF; 0, 0, 1, 1),
             )),
         ],
         vec![
             // 0th bit
-            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                 num_vars,
                 field_vec!(FF; 0, 1, 0, 1),
             )),
             // 1st bit
-            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                 num_vars,
                 field_vec!(FF; 0, 0, 1, 1),
             )),
@@ -122,11 +121,14 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     let decomposed_bits_info = decomposed_bits.info();
     let mut prover_trans = Transcript::<FF>::new();
     let mut verifier_trans = Transcript::<FF>::new();
-    let prover_u = prover_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
-    let verifier_u = verifier_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
 
-    let proof = BitDecomposition::prove(&mut prover_trans, &decomposed_bits, &prover_u);
-    let subclaim = BitDecomposition::verifier(&mut verifier_trans, &proof, &decomposed_bits_info);
+    let proof = <BitDecomposition<FF, EF>>::prove(&mut prover_trans, &decomposed_bits, &prover_u);
+    let subclaim =
+        <BitDecomposition<FF, EF>>::verify(&mut verifier_trans, &proof, &decomposed_bits_info);
     assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &verifier_u, &decomposed_bits_info));
 }
 
@@ -139,7 +141,7 @@ fn test_single_bit_decomposition() {
 
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
-    let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let d = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         (0..(1 << num_vars))
             .map(|_| uniform.sample(&mut rng))
@@ -157,11 +159,19 @@ fn test_single_bit_decomposition() {
 
     let mut prover_trans = Transcript::<FF>::new();
     let mut verifier_trans = Transcript::<FF>::new();
-    let prover_u = prover_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
-    let verifier_u = verifier_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
-    let proof = BitDecomposition::prove(&mut prover_trans, &decomposed_bits, &prover_u);
-    let subclaim = BitDecomposition::verifier(&mut verifier_trans, &proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &verifier_u, &decomposed_bits_info));
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let proof = <BitDecomposition<FF, EF>>::prove(&mut prover_trans, &decomposed_bits, &prover_u);
+    let subclaim =
+        <BitDecomposition<FF, EF>>::verify(&mut verifier_trans, &proof, &decomposed_bits_info);
+    assert!(subclaim.verify_subclaim(
+        &d_verifier,
+        &d_bits_verifier,
+        &verifier_u,
+        &decomposed_bits_info
+    ));
 }
 
 #[test]
@@ -174,25 +184,25 @@ fn test_batch_bit_decomposition() {
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
     let d = vec![
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
                 .collect(),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
                 .collect(),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
                 .collect(),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             (0..(1 << num_vars))
                 .map(|_| uniform.sample(&mut rng))
@@ -215,9 +225,12 @@ fn test_batch_bit_decomposition() {
 
     let mut prover_trans = Transcript::<FF>::new();
     let mut verifier_trans = Transcript::<FF>::new();
-    let prover_u = prover_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
-    let verifier_u = verifier_trans.get_vec_challenge(b"random point to instantiate sumcheck protocol", num_vars);
-    let proof = BitDecomposition::prove(&mut prover_trans,&decomposed_bits, &prover_u);
-    let subclaim = BitDecomposition::verifier(&mut verifier_trans, &proof, &decomposed_bits_info);
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let proof = <BitDecomposition<FF, EF>>::prove(&mut prover_trans, &decomposed_bits, &prover_u);
+    let subclaim =
+        <BitDecomposition<FF, EF>>::verify(&mut verifier_trans, &proof, &decomposed_bits_info);
     assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &verifier_u, &decomposed_bits_info));
 }

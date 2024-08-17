@@ -8,7 +8,7 @@ pub use data_structure::{
 
 use algebra::{
     utils::{Block, Prg, Transcript},
-    AbstractExtensionField, DenseMultilinearExtension, Field,
+    AbstractExtensionField, DenseMultilinearExtensionBase, Field,
 };
 use itertools::Itertools;
 use rand::SeedableRng;
@@ -253,7 +253,7 @@ where
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     type Parameters = BrakedownParams<F, C>;
-    type Polynomial = DenseMultilinearExtension<F>;
+    type Polynomial = DenseMultilinearExtensionBase<F>;
     type Commitment = BrakedownPolyCommitment<H>;
     type CommitmentState = BrakedownCommitmentState<F, H>;
     type Proof = BrakedownOpenProof<F, H, EF>;

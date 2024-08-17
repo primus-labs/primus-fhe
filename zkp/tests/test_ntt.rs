@@ -1,32 +1,33 @@
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
-    DenseMultilinearExtension, Field, FieldUniformSampler, NTTPolynomial,
+    derive::{Field, Prime},
+    utils::Transcript,
+    DecomposableField, DenseMultilinearExtension, DenseMultilinearExtensionBase, Field,
+    FieldUniformSampler, NTTPolynomial,
 };
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
+use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use num_traits::{One, Zero};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::ntt::ntt_bare::init_fourier_table;
+use zkp::piop::ntt::{ntt_bare::init_fourier_table, NTTInstanceExt};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
-
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
 
 #[derive(Field, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
-// field type
-type FF = Fp32;
+type FF = DefaultFieldU32;
+type EF = DefaultExtendsionFieldU32x4;
+
 type PolyFF = Polynomial<FF>;
 
-fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtension<FF> {
+fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtensionBase<FF> {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n).unwrap().root();
+
     let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
@@ -42,7 +43,7 @@ fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtension<FF> {
             fourier_matrix[idx_fourier as usize] = ntt_table[idx_power as usize];
         }
     }
-    DenseMultilinearExtension::from_evaluations_vec((log_n << 1) as usize, fourier_matrix)
+    DenseMultilinearExtensionBase::from_evaluations_vec((log_n << 1) as usize, fourier_matrix)
 }
 
 /// Given an `index` of `len` bits, output a new index where the bits are reversed.
@@ -105,13 +106,13 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n).unwrap().root();
-    let mut power = FF::one();
+    let mut power = DefaultFieldU32::one();
     for _ in 0..m {
         ntt_table.push(power);
         power *= root;
     }
 
-    let mut fourier_matrix = vec![FF::zero(); (1 << log_n) * (1 << log_n)];
+    let mut fourier_matrix = vec![DefaultFieldU32::zero(); (1 << log_n) * (1 << log_n)];
     // In little endian, the index for F[i, j] is i + (j << dim)
     for i in 0..1 << log_n {
         for j in 0..1 << log_n {
@@ -121,7 +122,7 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
         }
     }
 
-    let mut ntt_form = vec![FF::zero(); 1 << log_n];
+    let mut ntt_form = vec![DefaultFieldU32::zero(); 1 << log_n];
     for i in 0..1 << log_n {
         for j in 0..1 << log_n {
             ntt_form[i] += coeff[j] * fourier_matrix[i + (j << log_n)];
@@ -150,7 +151,7 @@ fn test_ntt_transform_normal_order() {
     let log_n = 10;
     let coeff = PolyFF::random(1 << log_n, thread_rng()).data();
     let points_naive = naive_ntt_transform_normal_order(log_n, &coeff);
-    let points = ntt_transform_normal_order(log_n, &coeff);
+    let points = ntt_transform_normal_order::<FF>(log_n, &coeff);
     assert_eq!(points, points_naive);
 }
 
@@ -182,27 +183,46 @@ fn test_ntt_bare_without_delegation() {
     let ntt_table = Rc::new(ntt_table);
 
     let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
     let coeff = PolyFF::random(1 << log_n, &mut rng).data();
-    let points = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let points = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         log_n,
-        ntt_transform_normal_order(log_n as u32, &coeff),
+        ntt_transform_normal_order(log_n as u32, &coeff)
+            .iter()
+            .map(|x| FF::new(x.value()))
+            .collect(),
     ));
-    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        log_n, coeff,
+    let coeff = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
+        log_n,
+        coeff.iter().map(|x| FF::new(x.value())).collect(),
     ));
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
 
-    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-    let f_u = Rc::new(init_fourier_table(&u, &ntt_instance.ntt_table));
-    let proof = NTTBareIOP::prove(&ntt_instance, &f_u, &u);
-    let subclaim = NTTBareIOP::verify(&proof, &ntt_instance_info);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", log_n);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", log_n);
+
+    let f_u = Rc::new(init_fourier_table(&prover_u, &ntt_instance.ntt_table));
+
+    let ntt_instance = <NTTInstanceExt<FF, EF>>::from_base(&ntt_instance);
+    let proof = <NTTBareIOP<FF, EF>>::prove(&mut prover_trans, &f_u, &ntt_instance, &prover_u);
+    let subclaim = <NTTBareIOP<FF, EF>>::verify(&mut verifier_trans, &proof.0, &ntt_instance_info);
 
     // Without delegation, the verifier needs to compute F(u, v) on its own.
     let fourier_matrix = Rc::new(obtain_fourier_matrix_oracle(log_n as u32));
-    assert!(subclaim.verify_subclaim(&fourier_matrix, &points, &coeff, &u, &ntt_instance_info));
+    let points = <DenseMultilinearExtension<FF, EF>>::from_base(points.as_ref());
+    let coeff = <DenseMultilinearExtension<FF, EF>>::from_base(coeff.as_ref());
+    assert!(subclaim.verify_subclaim(
+        &fourier_matrix,
+        &points,
+        &coeff,
+        &verifier_u,
+        &ntt_instance_info
+    ));
 }
 
 #[test]
@@ -211,6 +231,7 @@ fn test_ntt_with_delegation() {
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
+
     let mut power = FF::one();
     for _ in 0..m {
         ntt_table.push(power);
@@ -219,24 +240,37 @@ fn test_ntt_with_delegation() {
     let ntt_table = Rc::new(ntt_table);
 
     let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
     let coeff = PolyFF::random(1 << log_n, &mut rng).data();
-    let points = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let points = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         log_n,
-        ntt_transform_normal_order(log_n as u32, &coeff),
+        ntt_transform_normal_order(log_n as u32, &coeff)
+            .iter()
+            .map(|x| FF::new(x.value()))
+            .collect(),
     ));
-    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        log_n, coeff,
+    let coeff = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
+        log_n,
+        coeff.iter().map(|x| FF::new(x.value())).collect(),
     ));
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
 
-    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = NTTIOP::prove(&ntt_instance, &u);
-    let subclaim = NTTIOP::verify(&proof, &ntt_instance_info, &u);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", log_n);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", log_n);
 
-    assert!(subclaim.verify_subcliam(&points, &coeff, &u, &ntt_instance_info));
+    let ntt_instance = <NTTInstanceExt<FF, EF>>::from_base(&ntt_instance);
+    let proof = <NTTIOP<FF, EF>>::prove(&mut prover_trans, &ntt_instance, &prover_u);
+    let subclaim =
+        <NTTIOP<FF, EF>>::verify(&mut verifier_trans, &proof, &ntt_instance_info, &verifier_u);
+
+    let points = <DenseMultilinearExtension<FF, EF>>::from_base(points.as_ref());
+    let coeff = <DenseMultilinearExtension<FF, EF>>::from_base(coeff.as_ref());
+    assert!(subclaim.verify_subcliam(&points, &coeff, &verifier_u, &ntt_instance_info));
 }
 
 #[test]
@@ -255,15 +289,21 @@ fn test_ntt_combined_with_delegation() {
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
     let mut coeff1 = PolyFF::random(1 << log_n, &mut rng);
-    let points1 = DenseMultilinearExtension::from_evaluations_vec(
+    let points1 = DenseMultilinearExtensionBase::from_evaluations_vec(
         log_n,
-        ntt_transform_normal_order(log_n as u32, coeff1.as_ref()),
+        ntt_transform_normal_order(log_n as u32, coeff1.as_ref())
+            .iter()
+            .map(|x| FF::new(x.value()))
+            .collect(),
     );
 
     let mut coeff2 = PolyFF::random(1 << log_n, &mut rng);
-    let points2 = DenseMultilinearExtension::from_evaluations_vec(
+    let points2 = DenseMultilinearExtensionBase::from_evaluations_vec(
         log_n,
-        ntt_transform_normal_order(log_n as u32, coeff2.as_ref()),
+        ntt_transform_normal_order(log_n as u32, coeff2.as_ref())
+            .iter()
+            .map(|x| FF::new(x.value()))
+            .collect(),
     );
 
     let r_1 = uniform.sample(&mut rng);
@@ -272,22 +312,34 @@ fn test_ntt_combined_with_delegation() {
     coeff2.mul_scalar_assign(r_2);
     let coeff = coeff1 + coeff2;
 
-    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let coeff = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         log_n,
-        coeff.data(),
+        coeff.data().iter().map(|x| FF::new(x.value())).collect(),
     ));
-    let mut points =
-        <DenseMultilinearExtension<FF>>::from_evaluations_vec(log_n, vec![FF::zero(); 1 << log_n]);
-    points += (r_1, &points1);
-    points += (r_2, &points2);
+    let mut points = <DenseMultilinearExtensionBase<FF>>::from_evaluations_vec(
+        log_n,
+        vec![FF::zero(); 1 << log_n],
+    );
+    points += (FF::new(r_1.value() as u32), &points1);
+    points += (FF::new(r_2.value() as u32), &points2);
     let points = Rc::new(points);
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
 
-    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = NTTIOP::prove(&ntt_instance, &u);
-    let subclaim = NTTIOP::verify(&proof, &ntt_instance_info, &u);
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", log_n);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", log_n);
 
-    assert!(subclaim.verify_subcliam(&points, &coeff, &u, &ntt_instance_info));
+    let ntt_instance = <NTTInstanceExt<FF, EF>>::from_base(&ntt_instance);
+    let proof = <NTTIOP<FF, EF>>::prove(&mut prover_trans, &ntt_instance, &prover_u);
+    let subclaim =
+        <NTTIOP<FF, EF>>::verify(&mut verifier_trans, &proof, &ntt_instance_info, &verifier_u);
+
+    let points = <DenseMultilinearExtension<FF, EF>>::from_base(points.as_ref());
+    let coeff = <DenseMultilinearExtension<FF, EF>>::from_base(coeff.as_ref());
+    assert!(subclaim.verify_subcliam(&points, &coeff, &verifier_u, &ntt_instance_info));
 }

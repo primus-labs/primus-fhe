@@ -1,6 +1,8 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
-    Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
+    utils::Transcript,
+    BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtensionBase, Field,
+    FieldUniformSampler,
 };
 use num_traits::{One, Zero};
 use rand::prelude::*;
@@ -10,15 +12,16 @@ use std::vec;
 use zkp::piop::{AdditionInZq, AdditionInZqInstance};
 
 #[derive(Field, DecomposableField, Prime)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
+#[modulus = 2013265921]
+pub struct Fp32(u64);
 
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
 // field type
-type FF = Fp32;
+type FF = BabyBear;
+type EF = BabyBearExetension;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -31,29 +34,26 @@ macro_rules! field_vec {
 
 #[test]
 fn test_trivial_addition_in_zq() {
-    let mut rng = thread_rng();
-    let sampler = <FieldUniformSampler<FF>>::new();
-
     let q = FF::new(9);
     let base_len: u32 = 1;
     let base: FF = FF::new(2);
     let num_vars = 2;
     let bits_len: u32 = 4;
     let abc = vec![
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             field_vec!(FF; 4, 6, 8, 2),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             field_vec!(FF; 7, 3, 0, 1),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             field_vec!(FF; 2, 0, 8, 3),
         )),
     ];
-    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let k = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         field_vec!(FF; 1, 1, 0, 0),
     ));
@@ -68,18 +68,33 @@ fn test_trivial_addition_in_zq() {
     let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
     let addition_info = abc_instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| sampler.sample(&mut rng)).collect();
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
 
-    let proof = AdditionInZq::prove(&abc_instance, &u);
-    let subclaim = AdditionInZq::verify(&proof, &addition_info.decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abd_bits_ref, &u, &addition_info));
+    let proof = <AdditionInZq<FF, EF>>::prove(&mut prover_trans, &abc_instance, &prover_u);
+    let subclaim = <AdditionInZq<FF, EF>>::verify(
+        &mut verifier_trans,
+        &proof,
+        &addition_info.decomposed_bits_info,
+    );
+    assert!(subclaim.verify_subclaim(
+        q,
+        &abc,
+        k.as_ref(),
+        &abd_bits_ref,
+        &verifier_u,
+        &addition_info
+    ));
 }
 
 #[test]
 fn test_random_addition_in_zq() {
     let mut rng = thread_rng();
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
-    let uniform_fp = <FieldUniformSampler<FF>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
     let base_len: u32 = 3;
@@ -108,22 +123,22 @@ fn test_random_addition_in_zq() {
     let (c, k): (Vec<_>, Vec<_>) = c_k.iter().cloned().unzip();
 
     let abc = vec![
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             // Convert to Fp
             a.iter().map(|x: &Fq| FF::new(x.value())).collect(),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             b.iter().map(|x: &Fq| FF::new(x.value())).collect(),
         )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             num_vars,
             c.iter().map(|x: &Fq| FF::new(x.value())).collect(),
         )),
     ];
 
-    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let k = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         num_vars,
         k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
     ));
@@ -138,9 +153,25 @@ fn test_random_addition_in_zq() {
     let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
     let addition_info = abc_instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform_fp.sample(&mut rng)).collect();
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verifier_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
 
-    let proof = AdditionInZq::prove(&abc_instance, &u);
-    let subclaim = AdditionInZq::verify(&proof, &addition_info.decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abc_bits_ref, &u, &addition_info));
+    let proof = <AdditionInZq<FF, EF>>::prove(&mut prover_trans, &abc_instance, &prover_u);
+    let subclaim = AdditionInZq::verify(
+        &mut verifier_trans,
+        &proof,
+        &addition_info.decomposed_bits_info,
+    );
+    assert!(subclaim.verify_subclaim(
+        q,
+        &abc,
+        k.as_ref(),
+        &abc_bits_ref,
+        &verifier_u,
+        &addition_info
+    ));
 }

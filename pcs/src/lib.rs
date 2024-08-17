@@ -8,7 +8,7 @@ pub mod multilinear;
 /// utils, mainly used to implement linear time encodable code now
 pub mod utils;
 
-use algebra::{utils::Transcript, Field, MultilinearExtension};
+use algebra::{utils::Transcript, Field, MultilinearExtensionBase};
 
 // type Point<F, P> = <P as MultilinearExtension<F>>::Point;
 
@@ -17,7 +17,7 @@ pub trait PolynomialCommitmentScheme<F: Field, S> {
     /// System parameters
     type Parameters;
     /// polynomial to commit
-    type Polynomial: MultilinearExtension<F>;
+    type Polynomial: MultilinearExtensionBase<F>;
     /// commitment
     type Commitment;
     /// Auxiliary state of the commitment, output by the `commit` phase.

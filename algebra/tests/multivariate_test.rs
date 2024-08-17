@@ -2,10 +2,11 @@ use std::vec;
 
 use algebra::{
     derive::{DecomposableField, Field, Prime},
-    Basis, DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
-    MultilinearExtension,
+    BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, DenseMultilinearExtensionBase,
+    Field, FieldUniformSampler, ListOfProductsOfPolynomials, MultilinearExtension,
+    MultilinearExtensionBase, UF,
 };
-use num_traits::{Pow, Zero};
+use num_traits::{One, Zero};
 use rand::thread_rng;
 use rand_distr::Distribution;
 use std::rc::Rc;
@@ -19,15 +20,21 @@ macro_rules! field_vec {
     }
 }
 
+fn uf_new(val: u32) -> UF<FF, EF> {
+    UF::BaseField(FF::new(val))
+}
+
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 132120577]
 pub struct Fp32(u32);
 
 // field type
-type FF = Fp32;
-type PolyFf = DenseMultilinearExtension<FF>;
+type FF = BabyBear;
+type EF = BabyBearExetension;
+type PolyFF = DenseMultilinearExtensionBase<FF>;
+type PolyEF = DenseMultilinearExtension<FF, EF>;
 
-fn evaluate_mle_data_array<F: Field>(data: &[F], point: &[F]) -> F {
+fn evaluate_mle_data_array(data: &[EF], point: &[EF]) -> EF {
     if data.len() != (1 << point.len()) {
         panic!("Data size mismatch with number of variables.")
     }
@@ -37,7 +44,7 @@ fn evaluate_mle_data_array<F: Field>(data: &[F], point: &[F]) -> F {
     for i in 1..nv + 1 {
         let r = point[i - 1];
         for b in 0..(1 << (nv - i)) {
-            a[b] = a[b << 1] * (F::one() - r) + a[(b << 1) + 1] * r;
+            a[b] = a[b << 1] * (EF::one() - r) + a[(b << 1) + 1] * r;
         }
     }
 
@@ -46,17 +53,17 @@ fn evaluate_mle_data_array<F: Field>(data: &[F], point: &[F]) -> F {
 
 #[test]
 fn evaluate_mle_at_a_point() {
-    let poly = PolyFf::from_evaluations_vec(2, field_vec! {FF; 1, 2, 3, 4});
+    let poly = PolyEF::from_evaluations_vec(2, field_vec! {EF; 1, 2, 3, 4});
 
-    let point = vec![FF::new(0), FF::new(1)];
-    assert_eq!(poly.evaluate(&point), FF::new(3));
+    let point = vec![EF::new(0), EF::new(1)];
+    assert_eq!(poly.evaluate(&point), EF::new(3));
 }
 
 #[test]
 fn evaluate_mle_at_a_random_point() {
     let mut rng = thread_rng();
-    let poly = PolyFf::random(2, &mut rng);
-    let uniform = <FieldUniformSampler<FF>>::new();
+    let poly = PolyEF::random(2, &mut rng);
+    let uniform = <FieldUniformSampler<EF>>::new();
     let point: Vec<_> = (0..2).map(|_| uniform.sample(&mut rng)).collect();
     assert_eq!(
         poly.evaluate(&point),
@@ -68,11 +75,12 @@ fn evaluate_mle_at_a_random_point() {
 fn mle_arithmetic() {
     const NV: usize = 10;
     let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
+    let uniform = <FieldUniformSampler<EF>>::new();
+    let uniform_ff = <FieldUniformSampler<FF>>::new();
     for _ in 0..20 {
         let point: Vec<_> = (0..NV).map(|_| uniform.sample(&mut rng)).collect();
-        let poly1 = PolyFf::random(NV, &mut rng);
-        let poly2 = PolyFf::random(NV, &mut rng);
+        let poly1 = PolyEF::random(NV, &mut rng);
+        let poly2 = PolyEF::random(NV, &mut rng);
         let v1 = poly1.evaluate(&point);
         let v2 = poly2.evaluate(&point);
         // test add
@@ -102,25 +110,33 @@ fn mle_arithmetic() {
         }
         // test additive identity
         {
-            assert_eq!(&poly1 + &PolyFf::zero(), poly1);
-            assert_eq!((&PolyFf::zero() + &poly1), poly1);
+            assert_eq!(&poly1 + &PolyEF::zero(), poly1);
+            assert_eq!((&PolyEF::zero() + &poly1), poly1);
         }
 
         // test decomposition of mle
         {
+            let poly_decomposed = PolyFF::random(NV, &mut rng);
             let base_len = 3;
             let base = FF::new(1 << base_len);
             let basis = <Basis<FF>>::new(base_len);
             let bits_len = basis.decompose_len();
-            let decomposed_polys = poly1.get_decomposed_mles(base_len, bits_len as u32);
-            let point: Vec<_> = (0..NV).map(|_| uniform.sample(&mut rng)).collect();
+            let decomposed_polys = poly_decomposed.get_decomposed_mles(base_len, bits_len as u32);
+            let point: Vec<_> = (0..NV).map(|_| uniform_ff.sample(&mut rng)).collect();
+
+            // base_pow = [1, B, ..., B^{l-1}]
+            let mut base_pow = vec![FF::one(); bits_len];
+            base_pow.iter_mut().fold(FF::one(), |acc, pow| {
+                *pow *= acc;
+                acc * base
+            });
             let evaluation = decomposed_polys
                 .iter()
-                .enumerate()
-                .fold(FF::zero(), |acc, (i, bit)| {
-                    acc + bit.evaluate(&point) * base.pow(i as u32)
+                .zip(base_pow.into_iter())
+                .fold(FF::zero(), |acc, (bit, base_pow)| {
+                    acc + bit.evaluate(&point) * base_pow
                 });
-            assert_eq!(poly1.evaluate(&point), evaluation);
+            assert_eq!(poly_decomposed.evaluate(&point), evaluation);
         }
     }
 }
@@ -133,18 +149,25 @@ fn trivial_decomposed_mles() {
     let num_vars = 2;
 
     let val = field_vec!(FF; 0b001101, 0b100011, 0b101100, 0b111110);
-    let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, val);
+    let poly = DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, val);
     let decomposed_polys = poly.get_decomposed_mles(base_len, bits_len);
 
     let uniform = <FieldUniformSampler<FF>>::new();
-    let point: Vec<_> = (0..num_vars)
+    let point: Vec<FF> = (0..num_vars)
         .map(|_| uniform.sample(&mut thread_rng()))
         .collect();
+
+    // base_pow = [1, B, ..., B^{l-1}]
+    let mut base_pow = vec![FF::one(); bits_len as usize];
+    base_pow.iter_mut().fold(FF::one(), |acc, pow| {
+        *pow *= acc;
+        acc * base
+    });
     let evaluation = decomposed_polys
         .iter()
-        .enumerate()
-        .fold(FF::zero(), |acc, (i, bit)| {
-            acc + bit.evaluate(&point) * base.pow(i as u32)
+        .zip(base_pow)
+        .fold(FF::zero(), |acc, (bit, base_pow)| {
+            acc + bit.evaluate(&point) * base_pow
         });
 
     assert_eq!(poly.evaluate(&point), evaluation);
@@ -154,32 +177,33 @@ fn trivial_decomposed_mles() {
 fn evaluate_lists_of_products_at_a_point() {
     let nv = 2;
     let mut poly = ListOfProductsOfPolynomials::new(nv);
-    let products = vec![field_vec!(FF; 1, 2, 3, 4), field_vec!(FF; 5, 4, 2, 9)];
-    let products: Vec<Rc<DenseMultilinearExtension<FF>>> = products
+    let products = vec![field_vec!(EF; 1, 2, 3, 4), field_vec!(EF; 5, 4, 2, 9)];
+    let products: Vec<Rc<DenseMultilinearExtension<FF, EF>>> = products
         .into_iter()
         .map(|x| Rc::new(DenseMultilinearExtension::from_evaluations_vec(nv, x)))
         .collect();
-    let coeff = FF::new(4);
+    let coeff = EF::new(4);
     poly.add_product(products, coeff);
 
-    let point = field_vec!(FF; 0, 1);
-    assert_eq!(poly.evaluate(&point), FF::new(24));
+    let point = field_vec!(EF; 0, 1);
+    assert_eq!(poly.evaluate(&point), EF::new(24));
 }
 
 #[test]
 fn evaluate_lists_of_products_with_op_at_a_point() {
     let nv = 2;
     let mut poly = ListOfProductsOfPolynomials::new(nv);
-    let products = vec![field_vec!(FF; 1, 2, 3, 4), field_vec!(FF; 1, 2, 3, 4)];
-    let products: Vec<Rc<DenseMultilinearExtension<FF>>> = products
+    let products = vec![field_vec!(EF; 1, 2, 3, 4), field_vec!(EF; 1, 2, 3, 4)];
+    let products: Vec<Rc<DenseMultilinearExtension<FF, EF>>> = products
         .into_iter()
         .map(|x| Rc::new(DenseMultilinearExtension::from_evaluations_vec(nv, x)))
         .collect();
-    let coeff = FF::new(4);
-    let op_coefficient = vec![(FF::new(2), FF::new(0)), (FF::new(1), FF::new(3))];
+    let coeff = EF::new(4);
+
+    let op_coefficient = vec![(uf_new(2), uf_new(0)), (uf_new(1), uf_new(3))];
     // coeff \cdot [2f \cdot (g + 3)]
     poly.add_product_with_linear_op(products, &op_coefficient, coeff);
     // 4 * [2*2 * (2+3)] = 80
-    let point = field_vec!(FF; 1, 0);
-    assert_eq!(poly.evaluate(&point), FF::new(80));
+    let point = field_vec!(EF; 1, 0);
+    assert_eq!(poly.evaluate(&point), EF::new(80));
 }

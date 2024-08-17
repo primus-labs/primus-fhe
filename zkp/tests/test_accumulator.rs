@@ -1,8 +1,10 @@
 use algebra::{
     derive::{DecomposableField, FheField, Field, Prime, NTT},
-    Basis, DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension,
+    utils::Transcript,
+    Basis, DenseMultilinearExtensionBase, Field, FieldUniformSampler, MultilinearExtensionBase,
 };
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
+use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use itertools::izip;
 use num_traits::One;
 use rand_distr::Distribution;
@@ -20,7 +22,8 @@ use zkp::{
 #[modulus = 132120577]
 pub struct Fp32(u32);
 // field type
-type FF = Fp32;
+type FF = DefaultFieldU32;
+type EF = DefaultExtendsionFieldU32x4;
 
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
@@ -31,8 +34,8 @@ where
     R: rand::Rng + rand::CryptoRng,
 {
     RlweCiphertext {
-        a: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
-        b: Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)),
+        a: Rc::new(<DenseMultilinearExtensionBase<F>>::random(num_vars, rng)),
+        b: Rc::new(<DenseMultilinearExtensionBase<F>>::random(num_vars, rng)),
     }
 }
 
@@ -46,10 +49,10 @@ where
 {
     RlweCiphertexts {
         a_bits: (0..bits_len)
-            .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+            .map(|_| Rc::new(<DenseMultilinearExtensionBase<F>>::random(num_vars, rng)))
             .collect(),
         b_bits: (0..bits_len)
-            .map(|_| Rc::new(<DenseMultilinearExtension<F>>::random(num_vars, rng)))
+            .map(|_| Rc::new(<DenseMultilinearExtensionBase<F>>::random(num_vars, rng)))
             .collect(),
     }
 }
@@ -111,20 +114,20 @@ fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &
 // * input_rgsw_ntt: RGSW(Zu) of the ntt form
 fn update_accumulator<F: Field + NTTField>(
     input_accumulator_ntt: &RlweCiphertext<F>,
-    input_d: Rc<DenseMultilinearExtension<F>>,
+    input_d: Rc<DenseMultilinearExtensionBase<F>>,
     input_rgsw_ntt: (RlweCiphertexts<F>, RlweCiphertexts<F>),
     basis_info: &DecomposedBitsInfo<F>,
     ntt_info: &NTTInstanceInfo<F>,
 ) -> AccumulatorWitness<F> {
     // 1. Perform ntt transform on (x^{-a_u} - 1)
-    let input_d_ntt = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let input_d_ntt = Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
         ntt_info.log_n,
         ntt_transform_normal_order(ntt_info.log_n as u32, &input_d.evaluations),
     ));
 
     // 2. Perform point-multiplication to compute (x^{-a_u} - 1) * ACC
     let input_rlwe_ntt = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        a: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             izip!(
                 &input_d_ntt.evaluations,
@@ -133,7 +136,7 @@ fn update_accumulator<F: Field + NTTField>(
             .map(|(d_i, a_i)| *d_i * *a_i)
             .collect(),
         )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        b: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             izip!(
                 &input_d_ntt.evaluations,
@@ -146,14 +149,14 @@ fn update_accumulator<F: Field + NTTField>(
 
     // 3. Compute the RLWE of coefficient form as the input of the multiplication between RLWE and RGSW
     let input_rlwe = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        a: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             ntt_inverse_transform_normal_order(
                 ntt_info.log_n as u32,
                 &input_rlwe_ntt.a.evaluations,
             ),
         )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        b: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             ntt_inverse_transform_normal_order(
                 ntt_info.log_n as u32,
@@ -179,7 +182,7 @@ fn update_accumulator<F: Field + NTTField>(
             .a_bits
             .iter()
             .map(|bit| {
-                Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                     ntt_info.log_n,
                     ntt_transform_normal_order(ntt_info.log_n as u32, &bit.evaluations),
                 ))
@@ -189,7 +192,7 @@ fn update_accumulator<F: Field + NTTField>(
             .b_bits
             .iter()
             .map(|bit| {
-                Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                     ntt_info.log_n,
                     ntt_transform_normal_order(ntt_info.log_n as u32, &bit.evaluations),
                 ))
@@ -227,11 +230,11 @@ fn update_accumulator<F: Field + NTTField>(
     }
 
     let output_rlwe_ntt = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        a: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             output_g_ntt,
         )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        b: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
             ntt_info.log_n,
             output_h_ntt,
         )),
@@ -283,7 +286,8 @@ fn test_trivial_accumulator() {
     let ntt_info = NTTInstanceInfo { log_n, ntt_table };
 
     let mut accumulator = random_rlwe_ciphertext(&mut rng, num_vars);
-    let mut accumulator_instance = <AccumulatorInstance<FF>>::new(num_vars, &ntt_info, &basis_info);
+    let mut accumulator_instance =
+        <AccumulatorInstance<FF, EF>>::new(num_vars, &ntt_info, &basis_info);
 
     // number of updations in ACC
     let num_updations = 10;
@@ -295,23 +299,36 @@ fn test_trivial_accumulator() {
     // number of ntt in each updation
     let num_ntt_iter = ((bits_len << 1) + 3) as usize;
     let num_ntt = num_updations * num_ntt_iter;
+
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut verifier_trans = Transcript::<FF>::new();
     // randomness used to combine all ntt instances
-    let randomness_ntt = (0..num_ntt)
-        .map(|_| uniform.sample(&mut rng))
-        .collect::<Vec<_>>();
+    let prover_randomness_ntt =
+        prover_trans.get_vec_ext_field_challenge(b"randomize ntt instances", num_ntt);
+    let verify_randomness_ntt =
+        verifier_trans.get_vec_ext_field_challenge(b"randomize ntt instances", num_ntt);
+
     let num_sumcheck = num_updations * 2;
     // randomness used to combine all sumcheck protocols
-    let randomness_sumcheck = (0..num_sumcheck)
-        .map(|_| uniform.sample(&mut rng))
-        .collect::<Vec<_>>();
-    let u = (0..num_vars)
-        .map(|_| uniform.sample(&mut rng))
-        .collect::<Vec<_>>();
-    let identity_func_at_u = Rc::new(gen_identity_evaluations(&u));
+    let prover_randomness_sumcheck = prover_trans.get_vec_ext_field_challenge(
+        b"randomness used to combine all sumcheck protocols",
+        num_sumcheck,
+    );
+    let verify_randomness_sumcheck = verifier_trans.get_vec_ext_field_challenge(
+        b"randomness used to combine all sumcheck protocols",
+        num_sumcheck,
+    );
+
+    let prover_u = prover_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+    let verify_u = verifier_trans
+        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
+
+    let identity_func_at_u = Rc::new(gen_identity_evaluations(&prover_u));
 
     // update accumulator for `num_updations` times
     for idx in 0..num_updations {
-        let input_d = Rc::new(DenseMultilinearExtension::from_evaluations_slice(
+        let input_d = Rc::new(DenseMultilinearExtensionBase::from_evaluations_slice(
             num_vars, &random_d,
         ));
         let rgsw_ntt = (
@@ -321,19 +338,19 @@ fn test_trivial_accumulator() {
         let witness = update_accumulator(&accumulator, input_d, rgsw_ntt, &basis_info, &ntt_info);
 
         accumulator_instance.add_witness(
-            &randomness_ntt[idx * num_ntt_iter..(idx + 1) * num_ntt_iter],
-            &randomness_sumcheck[idx * 2..(idx + 1) * 2],
+            &prover_randomness_ntt[idx * num_ntt_iter..(idx + 1) * num_ntt_iter],
+            &prover_randomness_sumcheck[idx * 2..(idx + 1) * 2],
             &identity_func_at_u,
             &witness,
         );
         accumulator = RlweCiphertext {
-            a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            a: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                 num_vars,
                 izip!(accumulator.a.iter(), witness.output_rlwe_ntt.a.iter())
                     .map(|(acc, x)| *acc + *x)
                     .collect(),
             )),
-            b: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            b: Rc::new(DenseMultilinearExtensionBase::from_evaluations_vec(
                 num_vars,
                 izip!(accumulator.b.iter(), witness.output_rlwe_ntt.b.iter())
                     .map(|(acc, x)| *acc + *x)
@@ -344,12 +361,13 @@ fn test_trivial_accumulator() {
     }
 
     let info = accumulator_instance.info();
-    let proof = <AccumulatorIOP<FF>>::prove(&accumulator_instance, &u);
-    let subclaim = <AccumulatorIOP<FF>>::verify(&proof, &u, &info);
+    let proof =
+        <AccumulatorIOP<FF, EF>>::prove(&mut prover_trans, &accumulator_instance, &prover_u);
+    let subclaim = <AccumulatorIOP<FF, EF>>::verify(&mut verifier_trans, &proof, &verify_u, &info);
     assert!(subclaim.verify_subclaim(
-        &u,
-        &randomness_ntt,
-        &randomness_sumcheck,
+        &verify_u,
+        &verify_randomness_ntt,
+        &verify_randomness_sumcheck,
         &accumulator_instance.ntt_instance.coeffs,
         &accumulator_instance.ntt_instance.points,
         &witnesses,

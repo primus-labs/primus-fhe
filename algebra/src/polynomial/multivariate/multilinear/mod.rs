@@ -4,13 +4,17 @@ use std::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
 
 use num_traits::Zero;
 
-use crate::Field;
+use crate::{AbstractExtensionField, Field};
 
 mod dense;
+mod dense_base;
 mod sparse;
+mod unified_field;
 
 pub use dense::DenseMultilinearExtension;
+pub use dense_base::DenseMultilinearExtensionBase;
 pub use sparse::SparsePolynomial;
+pub use unified_field::UF;
 
 /// This trait describes an interface for the multilinear extension
 /// of an array.
@@ -19,7 +23,7 @@ pub use sparse::SparsePolynomial;
 ///
 /// Index represents a point, which is a vector in {0,1}^`num_vars` in little
 /// endian form. For example, `0b1011` represents `P(1,1,0,1)`
-pub trait MultilinearExtension<F: Field>:
+pub trait MultilinearExtensionBase<F: Field>:
     Sized
     + Clone
     + Debug
@@ -54,4 +58,48 @@ pub trait MultilinearExtension<F: Field>:
     /// Return a list of evaluations over the domain, which is the boolean
     /// hypercube. The evaluations are in little-endian order.
     fn to_evaluations(&self) -> Vec<F>;
+}
+
+/// This trait describes an interface for the multilinear extension
+/// of an array.
+/// The latter is a multilinear polynomial represented in terms of its
+/// evaluations over the domain {0,1}^`num_vars` (i.e. the Boolean hypercube).
+///
+/// Index represents a point, which is a vector in {0,1}^`num_vars` in little
+/// endian form. For example, `0b1011` represents `P(1,1,0,1)`
+pub trait MultilinearExtension<F: Field, EF: AbstractExtensionField<F>>:
+    Sized
+    + Clone
+    + Debug
+    + Zero
+    + Index<usize>
+    + Add
+    + Neg
+    + Sub
+    + AddAssign
+    + SubAssign
+    + for<'a> AddAssign<&'a Self>
+    + for<'a> AddAssign<(EF, &'a Self)>
+    + for<'a> SubAssign<&'a Self>
+{
+    /// The type of evaluation points for this polynomial.
+    type Point: ?Sized + Debug;
+
+    /// Return the number of variables in `self`
+    fn num_vars(&self) -> usize;
+
+    /// Evaluates `self` at the given `point` in `Self::Point`.
+    fn evaluate(&self, point: &Self::Point) -> EF;
+
+    /// Outputs an `l`-variate multilinear extension where value of evaluations
+    /// are sampled at random.
+    fn random<R: rand::Rng + rand::CryptoRng>(num_vars: usize, rng: &mut R) -> Self;
+
+    /// Reduce the number of variables of `self` by fixing the
+    /// `partial_point.len()` variables at `partial_point`.
+    fn fix_variables(&self, partial_point: &[EF]) -> Self;
+
+    /// Return a list of evaluations over the domain, which is the boolean
+    /// hypercube. The evaluations are in little-endian order.
+    fn to_evaluations(&self) -> Vec<EF>;
 }

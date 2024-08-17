@@ -1,10 +1,9 @@
 //! Verifier for the multilinear sumcheck protocol
 // It is derived from https://github.com/arkworks-rs/sumcheck/blob/master/src/ml_sumcheck/protocol/verifier.rs.
 
-use std::vec;
+use std::{marker::PhantomData, vec};
 
-use algebra::{utils::Transcript, Field, FieldUniformSampler, PolynomialInfo};
-use rand::distributions::Distribution;
+use algebra::{utils::Transcript, AbstractExtensionField, Field, PolynomialInfo};
 use serde::Serialize;
 
 use crate::error::Error;
@@ -14,34 +13,40 @@ use super::{prover::ProverMsg, IPForMLSumcheck};
 
 #[derive(Clone, Serialize)]
 /// verifier message
-pub struct VerifierMsg<F: Field> {
+pub struct VerifierMsg<F: Field, EF: AbstractExtensionField<F>> {
     /// randomness sampled by verifier
-    pub randomness: F,
+    pub randomness: EF,
+    /// marker for F
+    _marker: PhantomData<F>,
 }
 
 /// Verifier State
-pub struct VerifierState<F: Field> {
+pub struct VerifierState<F: Field, EF: AbstractExtensionField<F>> {
     round: usize,
     nv: usize,
     max_multiplicands: usize,
     finished: bool,
     /// a list storing the univariate polynomial in evaluations sent by the prover at each round
-    polynomials_received: Vec<Rc<Vec<F>>>,
+    polynomials_received: Vec<Rc<Vec<EF>>>,
     /// a list storing the randomness sampled by the verifier at each round
-    randomness: Vec<F>,
+    randomness: Vec<EF>,
+    /// marker for F
+    _marker: PhantomData<F>,
 }
 
 /// Subclaim when verifier is convinced
-pub struct SubClaim<F: Field> {
+pub struct SubClaim<F: Field, EF: AbstractExtensionField<F>> {
     /// the multi-dimensional point that this multilinear extension is evaluated to
-    pub point: Vec<F>,
+    pub point: Vec<EF>,
     /// the expected evaluation
-    pub expected_evaluations: F,
+    pub expected_evaluations: EF,
+    /// marker for F
+    _marker: PhantomData<F>,
 }
 
-impl<F: Field> IPForMLSumcheck<F> {
+impl<F: Field, EF: AbstractExtensionField<F>> IPForMLSumcheck<F, EF> {
     /// initialize the verifier
-    pub fn verifier_init(index_info: &PolynomialInfo) -> VerifierState<F> {
+    pub fn verifier_init(index_info: &PolynomialInfo) -> VerifierState<F, EF> {
         VerifierState {
             round: 1,
             nv: index_info.num_variables,
@@ -49,6 +54,7 @@ impl<F: Field> IPForMLSumcheck<F> {
             finished: false,
             polynomials_received: Vec::with_capacity(index_info.num_variables),
             randomness: Vec::with_capacity(index_info.num_variables),
+            _marker: PhantomData,
         }
     }
 
@@ -58,10 +64,10 @@ impl<F: Field> IPForMLSumcheck<F> {
     /// and stores randomness and perform verifications altogether in `check_and_generate_subclaim` at
     /// the last step.
     pub fn verify_round(
-        prover_msg: ProverMsg<F>,
-        verifier_state: &mut VerifierState<F>,
+        prover_msg: ProverMsg<F, EF>,
+        verifier_state: &mut VerifierState<F, EF>,
         trans: &mut Transcript<F>,
-    ) -> Option<VerifierMsg<F>> {
+    ) -> Option<VerifierMsg<F, EF>> {
         if verifier_state.finished {
             panic!("incorrect verifier state: Verifier is already finished.")
         }
@@ -88,9 +94,9 @@ impl<F: Field> IPForMLSumcheck<F> {
 
     /// check the proof and generate the reduced subclaim
     pub fn check_and_generate_subclaim(
-        verifier_state: VerifierState<F>,
-        asserted_sum: F,
-    ) -> Result<SubClaim<F>, Error> {
+        verifier_state: VerifierState<F, EF>,
+        asserted_sum: EF,
+    ) -> Result<SubClaim<F, EF>, Error> {
         if !verifier_state.finished {
             panic!("Verifier has not finished.");
         }
@@ -117,14 +123,16 @@ impl<F: Field> IPForMLSumcheck<F> {
         Ok(SubClaim {
             point: verifier_state.randomness,
             expected_evaluations: expected,
+            _marker: PhantomData,
         })
     }
 
     /// Simulate a verifier message without doing verification
     #[inline]
-    pub fn sample_round(trans: &mut Transcript<F>) -> VerifierMsg<F> {
+    pub fn sample_round(trans: &mut Transcript<F>) -> VerifierMsg<F, EF> {
         VerifierMsg {
-            randomness: trans.get_challenge(b"random point in each round"),
+            randomness: trans.get_ext_field_challenge::<EF>(b"random point in each round"),
+            _marker: PhantomData,
         }
     }
 }
@@ -134,7 +142,10 @@ impl<F: Field> IPForMLSumcheck<F> {
 /// and evaluate this polynomial at `eval_at`.
 /// In other words, efficiently compute
 /// \sum_{i=0}^{len p_i - 1} p_i\[i\] * (\prod_{j!=i}(eval_at - j)/(i - j))
-pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
+pub(crate) fn interpolate_uni_poly<F: Field, EF: AbstractExtensionField<F>>(
+    p_i: &[EF],
+    eval_at: EF,
+) -> EF {
     let len = p_i.len();
 
     let mut evals = vec![];
@@ -143,13 +154,13 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     let mut prod = eval_at;
     evals.push(eval_at);
 
-    let mut check = F::zero();
+    let mut check = EF::zero();
     // We return early if 0 <= eval_at <  len, i.e. if the desired value has been passed
     for i in 1..len {
         if eval_at == check {
             return p_i[i - 1];
         }
-        check += F::one();
+        check += EF::one();
 
         let tmp = eval_at - check;
         evals.push(tmp);
@@ -160,7 +171,7 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     }
     // Now check = len - 1
 
-    let mut res = F::zero();
+    let mut res = EF::zero();
     // We want to compute the denominator \prod (j!=i) (i-j) for a given i in 0..len
     //
     // we start from the last step for i = len - 1, which is
@@ -193,11 +204,11 @@ pub(crate) fn interpolate_uni_poly<F: Field>(p_i: &[F], eval_at: F) -> F {
     // = \sum_{i=0}^{len p_i - 1} * (prod / evals[i]) / denom[i]
     // = \sum_{i=0}^{len p_i - 1} * prod / (evals[i] * denom[i]) where denom[i-1] = - denom[i] * (len-i) / i.
     // So we use denom_up / denom_down to update denom[i] in reverse.
-    let mut denom_up = field_factorial::<F>(len - 1);
-    let mut denom_down = F::one();
+    let mut denom_up = EF::from_base(field_factorial::<F>(len - 1));
+    let mut denom_down = EF::one();
 
     let mut i_as_field = check; // len-1
-    let mut len_minust_i_as_field = F::one();
+    let mut len_minust_i_as_field = EF::one();
     for i in (0..len).rev() {
         res += p_i[i] * prod * denom_down / (denom_up * evals[i]);
 
@@ -230,7 +241,7 @@ mod test {
     use crate::sumcheck::verifier::interpolate_uni_poly;
     use algebra::{
         derive::{Field, Prime},
-        Field, FieldUniformSampler, Polynomial,
+        BabyBear, BabyBearExetension, Field, FieldUniformSampler, Polynomial,
     };
     use num_traits::{One, Zero};
     use rand::SeedableRng;
@@ -242,8 +253,9 @@ mod test {
     pub struct Fp32(u32);
 
     // field type
-    type FF = Fp32;
-    type UniPolyFf = Polynomial<FF>;
+    type FF = BabyBear;
+    type EF = BabyBearExetension;
+    type UniPolyFf = Polynomial<EF>;
 
     macro_rules! field_vec {
         ($t:ty; $elem:expr; $n:expr)=>{
@@ -261,20 +273,20 @@ mod test {
         // Test a polynomial with 20 known points, i.e., with degree 19
         let poly = UniPolyFf::random(20 - 1, &mut prng);
 
-        let mut evals: Vec<FF> = Vec::with_capacity(20);
-        let mut point = FF::zero();
+        let mut evals: Vec<EF> = Vec::with_capacity(20);
+        let mut point = EF::zero();
         evals.push(poly.evaluate(point));
         for _i in 1..20 {
             point += FF::one();
             evals.push(poly.evaluate(point));
         }
-        let query = <FieldUniformSampler<FF>>::new().sample(&mut prng);
+        let query = <FieldUniformSampler<EF>>::new().sample(&mut prng);
 
         assert_eq!(poly.evaluate(query), interpolate_uni_poly(&evals, query));
 
         // Test interpolation when we ask for the value at an x-coordinate we are already passing,
         // i.e., in the range 0 <= x < len(values) - 1
-        let evals = field_vec!(FF; 0, 1, 4, 9);
-        assert_eq!(interpolate_uni_poly(&evals, FF::new(3)), FF::new(9));
+        let evals = field_vec!(EF; 0, 1, 4, 9);
+        assert_eq!(interpolate_uni_poly(&evals, EF::new(3)), EF::new(9));
     }
 }

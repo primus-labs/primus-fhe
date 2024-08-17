@@ -1,7 +1,8 @@
 use std::time::Instant;
 
 use algebra::{
-    utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtension, FieldUniformSampler,
+    utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtensionBase,
+    FieldUniformSampler,
 };
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
@@ -23,7 +24,7 @@ fn main() {
         .take(1 << num_vars)
         .collect();
 
-    let poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
+    let poly = DenseMultilinearExtensionBase::from_evaluations_vec(num_vars, evaluations);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0284, 1.9, BASE_FIELD_BITS, 10);
 
