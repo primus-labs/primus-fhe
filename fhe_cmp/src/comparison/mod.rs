@@ -3,35 +3,36 @@
 use algebra::{
     derive::{DecomposableField, FheField, Field, Prime, NTT},
     modulus::PowOf2Modulus,
+    transformation::MonomialNTT,
     Basis, Field, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
 };
 use fhe_core::{
     lwe_modulus_switch, BlindRotationType, ConstParameters, ModulusSwitchRoundMethod, Parameters,
     RLWEBlindRotationKey, RingSecretKeyType, SecretKeyType, StepsAfterBR,
 };
-use lattice::{LWE, RGSW, RLWE};
+use lattice::{LWE, NTTRGSW, RGSW, RLWE};
 use once_cell::sync::Lazy;
 use rand::prelude::*;
 
 ///default size
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
-pub struct Default(pub u64);
+pub struct DefaultField(pub u64);
 
 /// inner type
 pub type Inner = u64;
 /// ciphertext space
-pub const FP: Inner = Default::MODULUS_VALUE;
+pub const FP: Inner = DefaultField::MODULUS_VALUE;
 /// message space
 pub const FT: Inner = 16;
 ///encode of 1
-pub const DEELTA: Default = Default((FP as f64 / FT as f64) as Inner);
+pub const DEELTA: DefaultField = DefaultField((FP as f64 / FT as f64) as Inner);
 ///encode of 1/2
-pub const HALF_DEELTA: Default = Default((FP as f64 / (FT as f64 * 2.0)) as Inner);
+pub const HALF_DEELTA: DefaultField = DefaultField((FP as f64 / (FT as f64 * 2.0)) as Inner);
 
 /// Default 128-bits security Parameters
-pub static DEFAULT_PARAMERTERS: Lazy<Parameters<u64, Default>> = Lazy::new(|| {
-    Parameters::<u64, Default>::new(ConstParameters {
+pub static DEFAULT_PARAMERTERS: Lazy<Parameters<u64, DefaultField>> = Lazy::new(|| {
+    Parameters::<u64, DefaultField>::new(ConstParameters {
         lwe_dimension: 1024,
         lwe_modulus: 2048,
         t: 16,
@@ -60,7 +61,7 @@ pub fn initial<F, R>(
     half_delta: F,
     error_sampler: FieldDiscreteGaussianSampler,
     mut rng: R,
-) -> (Vec<RLWE<F>>, Vec<RGSW<F>>)
+) -> (Vec<RLWE<F>>, Vec<NTTRGSW<F>>)
 where
     R: Rng + CryptoRng,
     F: NTTField,
@@ -132,7 +133,7 @@ fn rgsw_values<F, R>(
     basis: Basis<F>,
     error_sampler: FieldDiscreteGaussianSampler,
     mut rng: R,
-) -> Vec<RGSW<F>>
+) -> Vec<NTTRGSW<F>>
 where
     R: Rng + CryptoRng,
     F: NTTField,
@@ -142,9 +143,16 @@ where
 
     let mut res = Vec::with_capacity(len);
     for &v in values {
-        let mut rgsw =
-            RGSW::generate_random_one_sample(&mut rng, basis, error_sampler, ntt_ring_secret_key);
-        rgsw_turn(&mut rgsw, v, ring_dimension);
+        let mut rgsw = NTTRGSW::generate_random_zero_sample(
+            ntt_ring_secret_key,
+            basis,
+            error_sampler,
+            &mut rng,
+        );
+        // rgsw_turn(&mut rgsw, v, ring_dimension);
+
+        ntt_rgsw_turn(&mut rgsw, v, ring_dimension, basis);
+
         res.push(rgsw);
     }
     res
@@ -230,6 +238,42 @@ pub fn rgsw_turn<F: NTTField>(ciphertext: &mut RGSW<F>, num: usize, ring_dimensi
             *elem = -*elem;
         }
     }
+}
+
+/// Performs the RGSW rotation operation.
+///
+/// # Arguments
+///
+/// * Input: RGSW ciphertext `ciphertext`, which encrypts `0`.
+/// * Input: usize number `num`.
+/// * Input: the size of RGSW vector `ring_dimension`.
+/// * Output:RGSW ciphertext `x^(-num)`.
+pub fn ntt_rgsw_turn<F: NTTField>(
+    ciphertext: &mut NTTRGSW<F>,
+    num: usize,
+    ring_dimension: usize,
+    basis: Basis<F>,
+) {
+    // X^{-num}
+    let neg_num = if num != 0 {
+        (ring_dimension << 1) - num
+    } else {
+        0
+    };
+    let mut poly = NTTPolynomial::new(vec![F::zero(); ring_dimension]);
+    let ntt_table = F::get_ntt_table(ring_dimension.trailing_zeros()).unwrap();
+    ntt_table.transform_coeff_one_monomial(neg_num, poly.as_mut_slice());
+    let mut poly_c = poly.clone();
+
+    ciphertext.c_neg_s_m_mut().iter_mut().for_each(|rlwe| {
+        *rlwe.a_mut() += &poly;
+        poly.mul_scalar_assign(F::lazy_new(basis.basis()));
+    });
+
+    ciphertext.c_m_mut().iter_mut().for_each(|rlwe| {
+        *rlwe.b_mut() += &poly_c;
+        poly_c.mul_scalar_assign(F::lazy_new(basis.basis()));
+    });
 }
 
 /// Complete the bootstrapping operation with LWE Ciphertext *`ciphertext`*, vector *`test_vector`* and BlindRotationKey `key`
@@ -321,11 +365,11 @@ pub fn homand<F: Field<Value = u64> + NTTField>(
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2, otherwise 0.
 pub fn greater_hcmp<F: NTTField>(
     cipher1: &RLWE<F>,
-    cipher2: &RGSW<F>,
+    cipher2: &NTTRGSW<F>,
     half_delta: F,
     poly_length: usize,
 ) -> LWE<F> {
-    let mul = cipher1.mul_rgsw(&cipher2);
+    let mul = cipher1.mul_ntt_rgsw(&cipher2);
     let vector = vec![F::neg_one(); poly_length];
     let test_plaintext = Polynomial::<F>::new(vector);
     let trlwe_mul_a = mul.a() * &test_plaintext;
@@ -349,7 +393,7 @@ pub fn greater_hcmp<F: NTTField>(
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=0.
 pub fn greater_arbhcmp<F: Field<Value = u64> + NTTField>(
     cipher1: &[RLWE<F>],
-    cipher2: &[RGSW<F>],
+    cipher2: &[NTTRGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
     delta: F,
     half_delta: F,
@@ -376,7 +420,9 @@ pub fn greater_arbhcmp<F: Field<Value = u64> + NTTField>(
         }
         *low_part_gt_res.b_mut() =
             low_part_gt_res.b() + low_part_gt_res.b() + low_part_gt_res.b() + low_part_gt_res.b();
-        let eq_res = cipher1_last.mul_rgsw(cipher2_last).extract_lwe_locally();
+        let eq_res = cipher1_last
+            .mul_ntt_rgsw(cipher2_last)
+            .extract_lwe_locally();
         let eq_res = eq_res.add_component_wise_ref(&eq_res);
         let mut gt_res = greater_hcmp(cipher1_last, cipher2_last, half_delta, poly_length);
         for elem in gt_res.a_mut().iter_mut() {
@@ -406,9 +452,9 @@ pub fn greater_arbhcmp<F: Field<Value = u64> + NTTField>(
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=0.
 pub fn equality_hcmp<F: Field<Value = u64> + NTTField>(
     cipher1: &RLWE<F>,
-    cipher2: &RGSW<F>,
+    cipher2: &NTTRGSW<F>,
 ) -> LWE<F> {
-    let mul = cipher1.mul_rgsw(&cipher2);
+    let mul = cipher1.mul_ntt_rgsw(&cipher2);
     let mut res = RLWE::extract_lwe(&mul);
     for elem in res.a_mut().iter_mut() {
         *elem = *elem + *elem;
@@ -428,7 +474,7 @@ pub fn equality_hcmp<F: Field<Value = u64> + NTTField>(
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=0.
 pub fn equality_arbhcmp<F: Field<Value = u64> + NTTField>(
     cipher1: &[RLWE<F>],
-    cipher2: &[RGSW<F>],
+    cipher2: &[NTTRGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
     poly_length: usize,
 ) -> LWE<F> {
@@ -463,11 +509,11 @@ pub fn equality_arbhcmp<F: Field<Value = u64> + NTTField>(
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=0.
 pub fn less_hcmp<F: Field<Value = u64> + NTTField>(
     cipher1: &RLWE<F>,
-    cipher2: &RGSW<F>,
+    cipher2: &NTTRGSW<F>,
     half_delta: F,
     poly_length: usize,
 ) -> LWE<F> {
-    let mul = cipher1.mul_rgsw(&cipher2);
+    let mul = cipher1.mul_ntt_rgsw(&cipher2);
     let mut vector = vec![F::one(); poly_length];
     vector[0] = F::neg_one();
     let test_plaintext = Polynomial::<F>::new(vector).into_ntt_polynomial();
@@ -492,7 +538,7 @@ pub fn less_hcmp<F: Field<Value = u64> + NTTField>(
 /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=0.
 pub fn less_arbhcmp<F: Field<Value = u64> + NTTField>(
     cipher1: &[RLWE<F>],
-    cipher2: &[RGSW<F>],
+    cipher2: &[NTTRGSW<F>],
     gatebootstrappingkey: &RLWEBlindRotationKey<F>,
     delta: F,
     half_delta: F,
@@ -520,7 +566,9 @@ pub fn less_arbhcmp<F: Field<Value = u64> + NTTField>(
         *low_part_lt_res.b_mut() =
             low_part_lt_res.b() + low_part_lt_res.b() + low_part_lt_res.b() + low_part_lt_res.b();
 
-        let eq_res = cipher1_last.mul_rgsw(cipher2_last).extract_lwe_locally();
+        let eq_res = cipher1_last
+            .mul_ntt_rgsw(cipher2_last)
+            .extract_lwe_locally();
         let eq_res = eq_res.add_component_wise_ref(&eq_res);
 
         let mut lt_res = less_hcmp(cipher1_last, cipher2_last, half_delta, poly_length);
