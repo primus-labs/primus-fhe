@@ -1,5 +1,5 @@
-use algebra::{Basis, NTTField};
-use lattice::RLWE;
+use algebra::{Basis, NTTField, Polynomial};
+use lattice::{LWE, RLWE};
 
 use crate::{LWEModulusType, LWESecretKeyType, SecretKeyPack};
 
@@ -41,21 +41,15 @@ impl<F: NTTField> BlindRotationKey<F> {
     /// Performs the blind rotation operation.
     pub fn blind_rotate<C: LWEModulusType>(
         &self,
-        init_acc: RLWE<F>,
-        lwe_a: &[C],
-        rlwe_dimension: usize,
+        lut: Polynomial<F>,
+        lwe: &LWE<C>,
         blind_rotation_basis: Basis<F>,
     ) -> RLWE<F> {
         match self {
-            BlindRotationKey::Binary(bootstrapping_key) => {
-                bootstrapping_key.blind_rotate(init_acc, lwe_a, rlwe_dimension)
+            BlindRotationKey::Binary(bootstrapping_key) => bootstrapping_key.blind_rotate(lut, lwe),
+            BlindRotationKey::Ternary(bootstrapping_key) => {
+                bootstrapping_key.blind_rotate(lut, lwe, blind_rotation_basis)
             }
-            BlindRotationKey::Ternary(bootstrapping_key) => bootstrapping_key.blind_rotate(
-                init_acc,
-                lwe_a,
-                rlwe_dimension,
-                blind_rotation_basis,
-            ),
         }
     }
 

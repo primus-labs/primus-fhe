@@ -4,7 +4,6 @@ use fhe_core::{
     BlindRotationType, KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey, LWECiphertext,
     LWEModulusType, Parameters, ProcessType, RLWEBlindRotationKey, SecretKeyPack, Steps,
 };
-use lattice::RLWE;
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
@@ -49,10 +48,9 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and lookup table `lut`.
-    pub fn bootstrap(&self, mut c: LWECiphertext<C>, mut lut: Polynomial<Q>) -> LWECiphertext<C> {
+    pub fn bootstrap(&self, mut c: LWECiphertext<C>, lut: Polynomial<Q>) -> LWECiphertext<C> {
         let parameters = self.parameters();
         let pre = parameters.process_before_blind_rotation();
-        let rlwe_dimension = parameters.ring_dimension();
         let round_method = parameters.modulus_switch_round_method();
 
         match pre.process() {
@@ -72,26 +70,9 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
             ProcessType::Noop => (),
         }
 
-        // lut * X^{-b}
-        let r: usize = c
-            .b()
-            .neg_reduce(pre.twice_ring_dimension_modulus())
-            .as_into();
-        if r <= rlwe_dimension {
-            lut.as_mut_slice().rotate_right(r);
-            lut[..r].iter_mut().for_each(|v| *v = v.neg());
-        } else {
-            let r = r - rlwe_dimension;
-            lut.as_mut_slice().rotate_right(r);
-            lut[r..].iter_mut().for_each(|v| *v = v.neg());
-        }
-
-        let mut acc = self.blind_rotation_key.blind_rotate(
-            RLWE::new(Polynomial::zero(rlwe_dimension), lut),
-            c.a(),
-            rlwe_dimension,
-            parameters.blind_rotation_basis(),
-        );
+        let mut acc =
+            self.blind_rotation_key
+                .blind_rotate(lut, &c, parameters.blind_rotation_basis());
 
         acc.b_mut()[0] += Q::new(Q::MODULUS_VALUE >> 3);
 
@@ -103,7 +84,7 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
 
                 let ksk = match self.key_switching_key {
                     KeySwitchingKeyEnum::LWE(ref ksk) => ksk,
-                    _ => panic!(),
+                    _ => panic!("Unable to get the corresponding key switching key!"),
                 };
 
                 c = ksk.key_switch_for_lwe(cipher);
@@ -111,7 +92,7 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
             Steps::BrKsMs => {
                 let ksk = match self.key_switching_key {
                     KeySwitchingKeyEnum::RLWE(ref ksk) => ksk,
-                    _ => panic!(),
+                    _ => panic!("Unable to get the corresponding key switching key!"),
                 };
 
                 let key_switched = ksk.key_switch_for_rlwe(acc);

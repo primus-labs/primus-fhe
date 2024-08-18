@@ -1,9 +1,8 @@
 use std::ops::MulAssign;
 
 use algebra::{
-    ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
-    ntt_mul_inplace, transformation::AbstractNTT, FieldDiscreteGaussianSampler, NTTField,
-    NTTPolynomial, Polynomial,
+    ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, transformation::AbstractNTT,
+    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
 };
 use rand::{CryptoRng, Rng};
 
@@ -275,6 +274,22 @@ impl<F: NTTField> RLWE<F> {
         self.b -= rhs.b();
     }
 
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.a().add_inplace(rhs.a(), destination.a_mut());
+        self.b().add_inplace(rhs.b(), destination.b_mut());
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.a().sub_inplace(rhs.a(), destination.a_mut());
+        self.b().sub_inplace(rhs.b(), destination.b_mut());
+    }
+
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`],
     /// store the result into `destination` [`NTTRLWE<F>`].
     #[inline]
@@ -297,8 +312,8 @@ impl<F: NTTField> RLWE<F> {
         ntt_table.transform_slice(a.as_mut_slice());
         ntt_table.transform_slice(b.as_mut_slice());
 
-        ntt_mul_assign(a, ntt_polynomial);
-        ntt_mul_assign(b, ntt_polynomial);
+        *a *= ntt_polynomial;
+        *b *= ntt_polynomial;
     }
 
     /// Performs `self + gadget_rlwe * polynomial`.
@@ -798,6 +813,22 @@ impl<F: NTTField> NTTRLWE<F> {
         self.b -= rhs.b();
     }
 
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.a().add_inplace(rhs.a(), destination.a_mut());
+        self.b().add_inplace(rhs.b(), destination.b_mut());
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.a().sub_inplace(rhs.a(), destination.a_mut());
+        self.b().sub_inplace(rhs.b(), destination.b_mut());
+    }
+
     /// Performs a multiplication on the `self` [`NTTRLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`].
     #[inline]
     pub fn mul_ntt_polynomial_assign(&mut self, ntt_polynomial: &NTTPolynomial<F>) {
@@ -813,8 +844,8 @@ impl<F: NTTField> NTTRLWE<F> {
         ntt_polynomial: &NTTPolynomial<F>,
         destination: &mut NTTRLWE<F>,
     ) {
-        ntt_mul_inplace(self.a(), ntt_polynomial, destination.a_mut());
-        ntt_mul_inplace(self.b(), ntt_polynomial, destination.b_mut());
+        self.a().mul_inplace(ntt_polynomial, destination.a_mut());
+        self.b().mul_inplace(ntt_polynomial, destination.b_mut());
     }
 
     /// Performs `self = self + ntt_rlwe * ntt_polynomial`.

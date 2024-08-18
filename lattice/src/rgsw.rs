@@ -89,6 +89,24 @@ impl<F: NTTField> RGSW<F> {
         self.c_neg_s_m.basis()
     }
 
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.c_m().add_inplace(rhs.c_m(), destination.c_m_mut());
+        self.c_neg_s_m()
+            .add_inplace(rhs.c_neg_s_m(), destination.c_neg_s_m_mut());
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.c_m().sub_inplace(rhs.c_m(), destination.c_m_mut());
+        self.c_neg_s_m()
+            .sub_inplace(rhs.c_neg_s_m(), destination.c_neg_s_m_mut());
+    }
+
     /// Performs a multiplication on the `self` [`RGSW<F>`] with another `small_rgsw` [`RGSW<F>`],
     /// return a [`RGSW<F>`].
     ///
@@ -269,6 +287,24 @@ impl<F: NTTField> NTTRGSW<F> {
     #[inline]
     pub fn basis(&self) -> Basis<F> {
         self.c_neg_s_m.basis()
+    }
+
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.c_m().add_inplace(rhs.c_m(), destination.c_m_mut());
+        self.c_neg_s_m()
+            .add_inplace(rhs.c_neg_s_m(), destination.c_neg_s_m_mut());
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.c_m().sub_inplace(rhs.c_m(), destination.c_m_mut());
+        self.c_neg_s_m()
+            .sub_inplace(rhs.c_neg_s_m(), destination.c_neg_s_m_mut());
     }
 
     /// Perform `self = self * ntt_polynomial`.

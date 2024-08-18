@@ -79,6 +79,28 @@ impl<F: NTTField> GadgetRLWE<F> {
         self.data.iter_mut()
     }
 
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.add_inplace(b, c));
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.sub_inplace(b, c));
+    }
+
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`],
     /// return a [`RLWE<F>`].
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> RLWE<F> {
@@ -290,6 +312,28 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<'_, NTTRLWE<F>> {
         self.data.iter_mut()
+    }
+
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.add_inplace(b, c));
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.sub_inplace(b, c));
     }
 
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
