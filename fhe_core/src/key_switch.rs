@@ -30,7 +30,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
     pub fn generate<R, C>(
         secret_key_pack: &SecretKeyPack<C, F>,
         chi: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -76,8 +76,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
 
             let k = (0..len)
                 .map(|i| {
-                    let mut sample =
-                        <NTTRLWE<F>>::generate_random_zero_sample(&lwe_sk, chi, &mut rng);
+                    let mut sample = <NTTRLWE<F>>::generate_random_zero_sample(&lwe_sk, chi, rng);
 
                     *sample.b_mut() += &ring_sk;
 
@@ -103,7 +102,7 @@ impl<F: NTTField> KeySwitchingKey<F> {
                     let k = (0..len)
                         .map(|i| {
                             let mut sample =
-                                <NTTRLWE<F>>::generate_random_zero_sample(&lwe_sk, chi, &mut rng);
+                                <NTTRLWE<F>>::generate_random_zero_sample(&lwe_sk, chi, rng);
 
                             *sample.b_mut() += &ntt_z;
 

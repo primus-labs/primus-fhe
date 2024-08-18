@@ -72,7 +72,7 @@ impl<F: NTTField> BlindRotationKey<F> {
     pub fn generate<R, C>(
         secret_key_pack: &SecretKeyPack<C, F>,
         chi: FieldDiscreteGaussianSampler,
-        rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,

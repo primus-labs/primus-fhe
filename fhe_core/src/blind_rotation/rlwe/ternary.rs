@@ -85,7 +85,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         lwe_secret_key: &[C],
         chi: FieldDiscreteGaussianSampler,
         rlwe_secret_key: &NTTPolynomial<F>,
-        mut rng: Rng,
+        rng: &mut Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -100,13 +100,13 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                             rlwe_secret_key,
                             blind_rotation_basis,
                             chi,
-                            &mut rng,
+                            rng,
                         ),
                         <NTTRGSW<F>>::generate_random_zero_sample(
                             rlwe_secret_key,
                             blind_rotation_basis,
                             chi,
-                            &mut rng,
+                            rng,
                         ),
                     )
                 } else if s == C::ZERO {
@@ -115,13 +115,13 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                             rlwe_secret_key,
                             blind_rotation_basis,
                             chi,
-                            &mut rng,
+                            rng,
                         ),
                         <NTTRGSW<F>>::generate_random_zero_sample(
                             rlwe_secret_key,
                             blind_rotation_basis,
                             chi,
-                            &mut rng,
+                            rng,
                         ),
                     )
                 } else {
@@ -130,13 +130,13 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                             rlwe_secret_key,
                             blind_rotation_basis,
                             chi,
-                            &mut rng,
+                            rng,
                         ),
                         <NTTRGSW<F>>::generate_random_one_sample(
                             rlwe_secret_key,
                             blind_rotation_basis,
                             chi,
-                            &mut rng,
+                            rng,
                         ),
                     )
                 }

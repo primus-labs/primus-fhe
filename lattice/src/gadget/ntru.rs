@@ -231,15 +231,13 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
         inv_secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let data = (0..basis.decompose_len())
-            .map(|_| {
-                <NTTNTRU<F>>::generate_random_zero_sample(inv_secret_key, error_sampler, &mut rng)
-            })
+            .map(|_| <NTTNTRU<F>>::generate_random_zero_sample(inv_secret_key, error_sampler, rng))
             .collect();
         Self { data, basis }
     }
@@ -249,7 +247,7 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
         inv_secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -263,7 +261,7 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
                 inv_secret_key,
                 basis_power,
                 error_sampler,
-                &mut rng,
+                rng,
             );
             data.push(r);
             basis_power = F::lazy_new(basis_power.value() * basis_value);
@@ -273,7 +271,7 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
             inv_secret_key,
             basis_power,
             error_sampler,
-            &mut rng,
+            rng,
         );
         data.push(r);
 
