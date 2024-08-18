@@ -149,7 +149,7 @@ fn test_sort_array() {
 #[test]
 fn test_ntt_transform_normal_order() {
     let log_n = 10;
-    let coeff = PolyFF::random(1 << log_n, thread_rng()).data();
+    let coeff = PolyFF::random(1 << log_n, &mut thread_rng()).data();
     let points_naive = naive_ntt_transform_normal_order(log_n, &coeff);
     let points = ntt_transform_normal_order::<FF>(log_n, &coeff);
     assert_eq!(points, points_naive);
@@ -158,12 +158,12 @@ fn test_ntt_transform_normal_order() {
 #[test]
 fn test_ntt_inverse_transform_normal_order() {
     let log_n = 10;
-    let coeff = PolyFF::random(1 << log_n, thread_rng()).data();
+    let coeff = PolyFF::random(1 << log_n, &mut thread_rng()).data();
     let points = ntt_transform_normal_order(log_n, &coeff);
     let coeff_rec = ntt_inverse_transform_normal_order(log_n, &points);
     assert_eq!(coeff, coeff_rec);
 
-    let points = PolyFF::random(1 << log_n, thread_rng()).data();
+    let points = PolyFF::random(1 << log_n, &mut thread_rng()).data();
     let coeff = ntt_inverse_transform_normal_order(log_n, &points);
     let points_rec = ntt_transform_normal_order(log_n, &coeff);
     assert_eq!(points, points_rec);

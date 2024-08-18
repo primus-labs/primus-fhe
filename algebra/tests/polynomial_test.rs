@@ -26,7 +26,7 @@ const P: Inner = FF::MODULUS.value(); // ciphertext space
 fn test_transform() {
     FF::init_ntt_table(&[LOG_N as u32]).unwrap();
 
-    let a = PolyFF::random(N, thread_rng());
+    let a = PolyFF::random(N, &mut thread_rng());
     let b = a.clone().into_ntt_polynomial();
     let c = b.clone().into_native_polynomial();
     let d = c.clone().into_ntt_polynomial();

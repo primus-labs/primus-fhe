@@ -71,7 +71,7 @@ impl<C: LWEModulusType, F: NTTField> EvaluationKey<C, F> {
 
         match parameters.steps_after_blind_rotation() {
             StepsAfterBR::KsMs => {
-                let key_switched = self.key_switching_key.key_switch_for_rlwe(&acc);
+                let key_switched = self.key_switching_key.key_switch_for_rlwe(acc);
 
                 lwe_modulus_switch_inplace(
                     key_switched,
@@ -81,7 +81,7 @@ impl<C: LWEModulusType, F: NTTField> EvaluationKey<C, F> {
                 );
             }
             StepsAfterBR::Ms => {
-                let lwe = acc.extract_lwe_reverse_locally();
+                let lwe = acc.extract_lwe_locally();
 
                 lwe_modulus_switch_inplace(
                     lwe,

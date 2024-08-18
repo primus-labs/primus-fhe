@@ -70,7 +70,7 @@ impl<C: LWEModulusType, F: NTTField> EvaluationKey<C, F> {
             .step_by(twice_ntru_dimension_div_lwe_modulus)
             .for_each(|v| *v += half_delta);
 
-        let key_switched = self.key_switching_key.key_switch_for_ntru(&acc);
+        let key_switched = self.key_switching_key.key_switch_for_ntru(acc);
 
         let round_method = parameters.modulus_switch_round_method();
 

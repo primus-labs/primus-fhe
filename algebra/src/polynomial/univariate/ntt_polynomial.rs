@@ -172,7 +172,7 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Generate a random [`NTTPolynomial<F>`].
     #[inline]
-    pub fn random<R>(n: usize, rng: R) -> Self
+    pub fn random<R>(n: usize, rng: &mut R) -> Self
     where
         R: Rng + CryptoRng,
     {
@@ -186,7 +186,7 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Generate a random [`NTTPolynomial<F>`]  with a specified distribution `dis`.
     #[inline]
-    pub fn random_with_distribution<R, D>(n: usize, rng: R, distribution: D) -> Self
+    pub fn random_with_distribution<R, D>(n: usize, rng: &mut R, distribution: D) -> Self
     where
         R: Rng + CryptoRng,
         D: Distribution<F>,

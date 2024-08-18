@@ -341,6 +341,19 @@ impl<F: NTTField> RLWE<F> {
         LWE::<F>::new(a, b[0])
     }
 
+    /// Extract an LWE sample from RLWE.
+    #[inline]
+    pub fn extract_partial_lwe_locally(self, dimension: usize) -> LWE<F> {
+        let Self { a, b } = self;
+
+        let mut a = a.data();
+        a[1..].reverse();
+        a[1..].iter_mut().for_each(|v| *v = -*v);
+
+        a.truncate(dimension);
+        LWE::<F>::new(a, b[0])
+    }
+
     /// Perform `destination = self * (Y^r - 1)` for bootstrapping where `Y = X^(2N/q)`.
     pub fn mul_monic_monomial_sub_one_inplace<T: NumCast>(
         &self, // N
@@ -547,18 +560,18 @@ impl<F: NTTField> RLWE<F> {
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let rlwe_dimension = secret_key.coeff_count();
-        let a = <Polynomial<F>>::random(rlwe_dimension, &mut rng);
+        let a = <Polynomial<F>>::random(rlwe_dimension, rng);
 
         let mut a_ntt = a.clone().into_ntt_polynomial();
         a_ntt *= secret_key;
 
-        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler);
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, rng, error_sampler);
         e += a_ntt.into_native_polynomial();
 
         Self { a, b: e }
@@ -957,7 +970,7 @@ impl<F: NTTField> NTTRLWE<F> {
     pub fn sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(
         &mut self,
         gadget_rlwe: &NTTGadgetRLWE<F>,
-        polynomial: Polynomial<F>,
+        polynomial: &mut Polynomial<F>,
         decompose_space: &mut DecompositionSpace<F>,
     ) {
         let coeff_count = polynomial.coeff_count();
@@ -966,7 +979,7 @@ impl<F: NTTField> NTTRLWE<F> {
         let decompose_space = decompose_space.get_mut();
         let basis = gadget_rlwe.basis();
 
-        let mut polynomial = -polynomial;
+        polynomial.neg_assign();
 
         gadget_rlwe.iter().for_each(|g| {
             polynomial.decompose_lsb_bits_inplace(basis, decompose_space.as_mut_slice());
@@ -979,14 +992,14 @@ impl<F: NTTField> NTTRLWE<F> {
     pub fn generate_random_zero_sample<R>(
         secret_key: &NTTPolynomial<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let rlwe_dimension = secret_key.coeff_count();
-        let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
-        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler)
+        let a = <NTTPolynomial<F>>::random(rlwe_dimension, rng);
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, rng, error_sampler)
             .into_ntt_polynomial();
         ntt_add_mul_assign(&mut e, &a, secret_key);
 
@@ -998,15 +1011,15 @@ impl<F: NTTField> NTTRLWE<F> {
         secret_key: &NTTPolynomial<F>,
         value: F,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let rlwe_dimension = secret_key.coeff_count();
-        let a = <NTTPolynomial<F>>::random(rlwe_dimension, &mut rng);
+        let a = <NTTPolynomial<F>>::random(rlwe_dimension, rng);
 
-        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, &mut rng, error_sampler);
+        let mut e = <Polynomial<F>>::random_with_gaussian(rlwe_dimension, rng, error_sampler);
         e[0] += value;
 
         let mut b = e.into_ntt_polynomial();

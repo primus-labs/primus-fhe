@@ -93,24 +93,19 @@ impl<C: LWEModulusType, F: NTTField> SecretKeyPack<C, F> {
                             parameters.ring_secret_key_type() == RingSecretKeyType::Binary
                                 || parameters.ring_secret_key_type() == RingSecretKeyType::Ternary
                         );
-                        // negative convertion
+                        // convertion
                         let convert = |v: &C| {
                             if *v == C::ZERO {
                                 F::zero()
                             } else if *v == C::ONE {
-                                F::neg_one()
-                            } else {
                                 F::one()
+                            } else {
+                                F::neg_one()
                             }
                         };
 
-                        // s = [s_0, -s_{n-1},..., -s_1]
-                        let mut s =
-                            <Polynomial<F>>::new(lwe_secret_key.iter().map(convert).collect());
-                        s[0] = -s[0];
-                        s[1..].reverse();
-
-                        s
+                        // s = [s_0, s_1,..., s_{n-1}]
+                        <Polynomial<F>>::new(lwe_secret_key.iter().map(convert).collect())
                     }
                 };
                 ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();

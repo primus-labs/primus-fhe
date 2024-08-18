@@ -488,16 +488,15 @@ impl<F: NTTField> NTTNTRU<F> {
     pub fn generate_random_zero_sample<R>(
         inv_secret_key: &NTTPolynomial<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let ntru_dimension = inv_secret_key.coeff_count();
 
-        let mut data =
-            <Polynomial<F>>::random_with_gaussian(ntru_dimension, &mut rng, error_sampler)
-                .into_ntt_polynomial();
+        let mut data = <Polynomial<F>>::random_with_gaussian(ntru_dimension, rng, error_sampler)
+            .into_ntt_polynomial();
         data *= inv_secret_key;
 
         Self { data }
@@ -508,16 +507,15 @@ impl<F: NTTField> NTTNTRU<F> {
         inv_secret_key: &NTTPolynomial<F>,
         value: F,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let ntru_dimension = inv_secret_key.coeff_count();
 
-        let mut data =
-            <Polynomial<F>>::random_with_gaussian(ntru_dimension, &mut rng, error_sampler)
-                .into_ntt_polynomial();
+        let mut data = <Polynomial<F>>::random_with_gaussian(ntru_dimension, rng, error_sampler)
+            .into_ntt_polynomial();
         data *= inv_secret_key;
         data.iter_mut().for_each(|v| *v += value);
 

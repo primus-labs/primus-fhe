@@ -129,7 +129,7 @@ impl<F: NTTField> RGSW<F> {
 impl<F: NTTField> RGSW<F> {
     /// Generate a `RGSW<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
-        mut rng: R,
+        rng: &mut R,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
         secret_key: &NTTPolynomial<F>,
@@ -142,20 +142,20 @@ impl<F: NTTField> RGSW<F> {
                 secret_key,
                 basis,
                 error_sampler,
-                &mut rng,
+                rng,
             ),
             c_m: <GadgetRLWE<F>>::generate_random_zero_sample(
                 secret_key,
                 basis,
                 error_sampler,
-                &mut rng,
+                rng,
             ),
         }
     }
 
     /// Generate a `RGSW<F>` sample which encrypts `1`.
     pub fn generate_random_one_sample<R>(
-        mut rng: R,
+        rng: &mut R,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
         secret_key: &NTTPolynomial<F>,
@@ -168,14 +168,9 @@ impl<F: NTTField> RGSW<F> {
                 secret_key,
                 basis,
                 error_sampler,
-                &mut rng,
+                rng,
             ),
-            c_m: <GadgetRLWE<F>>::generate_random_one_sample(
-                secret_key,
-                basis,
-                error_sampler,
-                &mut rng,
-            ),
+            c_m: <GadgetRLWE<F>>::generate_random_one_sample(secret_key, basis, error_sampler, rng),
         }
     }
 }
@@ -313,7 +308,7 @@ impl<F: NTTField> NTTRGSW<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -323,13 +318,13 @@ impl<F: NTTField> NTTRGSW<F> {
                 secret_key,
                 basis,
                 error_sampler,
-                &mut rng,
+                rng,
             ),
             c_m: <NTTGadgetRLWE<F>>::generate_random_zero_sample(
                 secret_key,
                 basis,
                 error_sampler,
-                &mut rng,
+                rng,
             ),
         }
     }
@@ -339,7 +334,7 @@ impl<F: NTTField> NTTRGSW<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -349,13 +344,13 @@ impl<F: NTTField> NTTRGSW<F> {
                 secret_key,
                 basis,
                 error_sampler,
-                &mut rng,
+                rng,
             ),
             c_m: <NTTGadgetRLWE<F>>::generate_random_one_sample(
                 secret_key,
                 basis,
                 error_sampler,
-                &mut rng,
+                rng,
             ),
         }
     }
