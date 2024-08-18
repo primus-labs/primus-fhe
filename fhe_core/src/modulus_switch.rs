@@ -1,4 +1,4 @@
-use algebra::{AsInto, DecomposableField, FheField};
+use algebra::{AsInto, DecomposableField};
 use lattice::LWE;
 
 use crate::{LWECiphertext, LWEModulusType};
@@ -15,7 +15,9 @@ pub enum ModulusSwitchRoundMethod {
 }
 
 /// Implementation of modulus switching.
-pub fn lwe_modulus_switch<C: LWEModulusType, F: FheField>(
+///
+/// This function performs on a `LWE<F>`, returns a `LWE<C>` with desired modulus `modulus_after`.
+pub fn lwe_modulus_switch<C: LWEModulusType, F: DecomposableField>(
     c: LWE<F>,
     modulus_after: C,
     round_method: ModulusSwitchRoundMethod,
@@ -56,6 +58,9 @@ pub fn lwe_modulus_switch<C: LWEModulusType, F: FheField>(
 }
 
 /// Implementation of modulus switching.
+///
+/// This function performs on a `LWE<F>`, puts the result `LWE<C>` with desired modulus `modulus_after`
+/// into `destination`.
 pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: DecomposableField>(
     c: LWE<F>,
     modulus_after: C,
@@ -101,6 +106,9 @@ pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: DecomposableField>(
 }
 
 /// Implementation of modulus switching.
+///
+/// This function performs on a `LWE<C>` with modulus `modulus_before`, puts the result `LWE<C>` with desired modulus `modulus_after`
+/// back to `c`.
 pub fn lwe_modulus_switch_assign_between_modulus<C: LWEModulusType>(
     c: &mut LWE<C>,
     modulus_before: C,
