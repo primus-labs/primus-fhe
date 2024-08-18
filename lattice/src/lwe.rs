@@ -301,7 +301,7 @@ impl<T: Copy> LWE<T> {
         modulus_value: T,
         modulus: M,
         error_sampler: DiscreteGaussian<T>,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         T: SampleUniform
@@ -317,9 +317,9 @@ impl<T: Copy> LWE<T> {
         let len = secret_key.len();
         let uniform = Uniform::new(T::ZERO, modulus_value);
 
-        let a: Vec<T> = uniform.sample_iter(&mut rng).take(len).collect();
+        let a: Vec<T> = uniform.sample_iter(&mut *rng).take(len).collect();
         let b = T::dot_product_reduce(&a, secret_key, modulus)
-            .add_reduce(error_sampler.sample(&mut rng), modulus);
+            .add_reduce(error_sampler.sample(rng), modulus);
         LWE { a, b }
     }
 }

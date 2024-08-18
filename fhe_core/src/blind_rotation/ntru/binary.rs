@@ -63,7 +63,7 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
         lwe_secret_key: &[C],
         chi: FieldDiscreteGaussianSampler,
         inv_secret_key: &NTTPolynomial<F>,
-        mut rng: Rng,
+        rng: &mut Rng,
     ) -> Self
     where
         Rng: rand::Rng + rand::CryptoRng,
@@ -77,14 +77,14 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
                         inv_secret_key,
                         bootstrapping_basis,
                         chi,
-                        &mut rng,
+                        rng,
                     )
                 } else {
                     <NTTGadgetNTRU<F>>::generate_random_one_sample(
                         inv_secret_key,
                         bootstrapping_basis,
                         chi,
-                        &mut rng,
+                        rng,
                     )
                 }
             })
