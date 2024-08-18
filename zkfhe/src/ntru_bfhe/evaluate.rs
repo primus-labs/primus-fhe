@@ -4,7 +4,6 @@ use fhe_core::{
     KeySwitchingKeyEnum, KeySwitchingRLWEKey, LWECiphertext, LWEModulusType, NTRUBlindRotationKey,
     Parameters, ProcessType, SecretKeyPack, Steps,
 };
-use lattice::NTRU;
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
@@ -47,10 +46,9 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext **c** and lookup table `lut`.
-    pub fn bootstrap(&self, mut c: LWECiphertext<C>, mut lut: Polynomial<Q>) -> LWECiphertext<C> {
+    pub fn bootstrap(&self, mut c: LWECiphertext<C>, lut: Polynomial<Q>) -> LWECiphertext<C> {
         let parameters = self.parameters();
         let pre = parameters.process_before_blind_rotation();
-        let ntru_dimension = parameters.ring_dimension();
         let round_method = parameters.modulus_switch_round_method();
 
         match pre.process() {
@@ -70,26 +68,9 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
             ProcessType::Noop => (),
         }
 
-        // lut * X^{-b}
-        let r: usize = c
-            .b()
-            .neg_reduce(pre.twice_ring_dimension_modulus())
-            .as_into();
-        if r <= ntru_dimension {
-            lut.as_mut_slice().rotate_right(r);
-            lut[..r].iter_mut().for_each(|v| *v = v.neg());
-        } else {
-            let r = r - ntru_dimension;
-            lut.as_mut_slice().rotate_right(r);
-            lut[r..].iter_mut().for_each(|v| *v = v.neg());
-        }
-
-        let mut acc = self.blind_rotation_key.blind_rotate(
-            NTRU::new(lut),
-            c.a(),
-            ntru_dimension,
-            parameters.blind_rotation_basis(),
-        );
+        let mut acc =
+            self.blind_rotation_key
+                .blind_rotate(lut, &c, parameters.blind_rotation_basis());
 
         let half_delta = Q::new(Q::MODULUS_VALUE >> 3);
 
