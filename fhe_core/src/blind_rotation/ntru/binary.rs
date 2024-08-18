@@ -58,7 +58,6 @@ impl<F: NTTField> BinaryBlindRotationKey<F> {
         ntru_inv_secret_key: &NTTPolynomial<F>,
         blind_rotation_basis: Basis<F>,
         chi: FieldDiscreteGaussianSampler,
-        inv_secret_key: &NTTPolynomial<F>,
         rng: &mut Rng,
     ) -> Self
     where
