@@ -1,5 +1,5 @@
 [package]
-name = "zkfhe"
+name = "fhe"
 version = "0.1.0"
 edition = "2021"
 
@@ -24,14 +24,6 @@ count_ntt = ["algebra/count_ntt"]
 
 [dev-dependencies]
 criterion = { workspace = true }
-
-[[bench]]
-name = "zk_bfhe"
-harness = false
-
-[[bench]]
-name = "zk_bnfhe"
-harness = false
 
 [package.metadata.docs.rs]
 all-features = true
