@@ -71,6 +71,12 @@ impl<F: Field> NTTPolynomial<F> {
         &mut self.data
     }
 
+    /// Get the coefficient counts of polynomial.
+    #[inline]
+    pub fn coeff_count(&self) -> usize {
+        self.data.len()
+    }
+
     /// Creates a [`NTTPolynomial<F>`] with all coefficients equal to zero.
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
@@ -113,24 +119,6 @@ impl<F: Field> NTTPolynomial<F> {
         self.data.as_mut_slice()
     }
 
-    /// Get the coefficient counts of polynomial.
-    #[inline]
-    pub fn coeff_count(&self) -> usize {
-        self.data.len()
-    }
-
-    /// Multiply `self` with the a scalar.
-    #[inline]
-    pub fn mul_scalar(&self, scalar: F) -> Self {
-        Self::new(self.iter().map(|&v| v * scalar).collect())
-    }
-
-    /// Multiply `self` with the a scalar inplace.
-    #[inline]
-    pub fn mul_scalar_assign(&mut self, scalar: F) {
-        self.iter_mut().for_each(|v| *v *= scalar)
-    }
-
     /// Returns an iterator that allows reading each value or coefficient of the polynomial.
     #[inline]
     pub fn iter(&self) -> Iter<F> {
@@ -164,6 +152,54 @@ impl<F: Field> NTTPolynomial<F> {
         self.data.resize_with(new_degree, f);
     }
 
+    /// Multiply `self` with the a scalar.
+    #[inline]
+    pub fn mul_scalar(&self, scalar: F) -> Self {
+        Self::new(self.iter().map(|&v| v * scalar).collect())
+    }
+
+    /// Multiply `self` with the a scalar inplace.
+    #[inline]
+    pub fn mul_scalar_assign(&mut self, scalar: F) {
+        self.iter_mut().for_each(|v| *v *= scalar)
+    }
+
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.iter()
+            .zip(rhs)
+            .zip(destination)
+            .for_each(|((&x, &y), z)| {
+                *z = x + y;
+            })
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.iter()
+            .zip(rhs)
+            .zip(destination)
+            .for_each(|((&x, &y), z)| {
+                *z = x - y;
+            })
+    }
+
+    /// Performs subtraction operation:`self * rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn mul_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.iter()
+            .zip(rhs)
+            .zip(destination)
+            .for_each(|((&x, &y), z)| {
+                *z = x * y;
+            })
+    }
+
     /// Performs the unary `-` operation.
     #[inline]
     pub fn neg_assign(&mut self) {
@@ -172,7 +208,7 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Generate a random [`NTTPolynomial<F>`].
     #[inline]
-    pub fn random<R>(n: usize, rng: R) -> Self
+    pub fn random<R>(n: usize, rng: &mut R) -> Self
     where
         R: Rng + CryptoRng,
     {
@@ -186,7 +222,7 @@ impl<F: Field> NTTPolynomial<F> {
 
     /// Generate a random [`NTTPolynomial<F>`]  with a specified distribution `dis`.
     #[inline]
-    pub fn random_with_distribution<R, D>(n: usize, rng: R, distribution: D) -> Self
+    pub fn random_with_distribution<R, D>(n: usize, rng: &mut R, distribution: D) -> Self
     where
         R: Rng + CryptoRng,
         D: Distribution<F>,
@@ -447,11 +483,8 @@ impl<F: Field> Mul<&NTTPolynomial<F>> for &NTTPolynomial<F> {
 impl<F: NTTField> MulAssign<Polynomial<F>> for NTTPolynomial<F> {
     #[inline]
     fn mul_assign(&mut self, rhs: Polynomial<F>) {
-        let coeff_count = self.coeff_count();
-        debug_assert_eq!(coeff_count, rhs.coeff_count());
-
-        let rhs = rhs.into_ntt_polynomial();
-        ntt_mul_assign(self, &rhs);
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        *self *= rhs.into_ntt_polynomial();
     }
 }
 
@@ -486,13 +519,8 @@ impl<F: NTTField> Mul<Polynomial<F>> for &NTTPolynomial<F> {
 
     #[inline]
     fn mul(self, rhs: Polynomial<F>) -> Self::Output {
-        let coeff_count = self.coeff_count();
-        debug_assert_eq!(coeff_count, rhs.coeff_count());
-        debug_assert!(coeff_count.is_power_of_two());
-
-        let log_n = coeff_count.trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
-        ntt_table.transform_inplace(rhs) * self
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        NTTPolynomial::from(rhs) * self
     }
 }
 
@@ -547,30 +575,10 @@ impl<F: Field> Inv for &NTTPolynomial<F> {
     }
 }
 
-/// Performs enrty-wise mul operation.
-#[inline]
-pub fn ntt_mul_assign<F: NTTField>(x: &mut NTTPolynomial<F>, y: &NTTPolynomial<F>) {
-    x.iter_mut().zip(y).for_each(|(a, b)| *a *= b);
-}
-
-/// Performs enrty-wise mul operation.
-#[inline]
-pub fn ntt_mul_inplace<F: NTTField>(
-    x: &NTTPolynomial<F>,
-    y: &NTTPolynomial<F>,
-    des: &mut NTTPolynomial<F>,
-) {
-    des.iter_mut()
-        .zip(x)
-        .zip(y)
-        .for_each(|((d, &a), &b)| *d = a * b);
-}
-
 /// Performs enrty-wise add_mul operation.
 ///
-/// Treats three iterators as [`NTTPolynomial<F>`]'s iterators,
-/// then multiply enrty-wise over last two iterators, and add back to the first
-/// iterator.
+/// Multiply enrty-wise over last two [NTTPolynomial<F>], and add back to the first
+/// [NTTPolynomial<F>].
 #[inline]
 pub fn ntt_add_mul_assign<F: NTTField>(
     x: &mut NTTPolynomial<F>,
@@ -585,9 +593,8 @@ pub fn ntt_add_mul_assign<F: NTTField>(
 
 /// Performs enrty-wise add_mul operation.
 ///
-/// Treats four iterators as [`NTTPolynomial<F>`]'s iterators,
-/// then multiply enrty-wise over last two iterators, and add the second
-/// iterator, store the result to first iterator.
+/// Multiply enrty-wise over middle two [NTTPolynomial<F>], and add the first
+/// [NTTPolynomial<F>], store the result to last [NTTPolynomial<F>].
 #[inline]
 pub fn ntt_add_mul_inplace<F: NTTField>(
     x: &NTTPolynomial<F>,
@@ -604,9 +611,8 @@ pub fn ntt_add_mul_inplace<F: NTTField>(
 
 /// Performs enrty-wise add_mul fast operation.
 ///
-/// Treats three iterators as [`NTTPolynomial<F>`]'s iterators,
-/// then multiply enrty-wise over last two iterators, and add back to the first
-/// iterator.
+/// Multiply enrty-wise over last two [NTTPolynomial<F>], and add back to the first
+/// [NTTPolynomial<F>].
 ///
 /// The result coefficients may be in [0, 2*modulus) for some case,
 /// and fall back to [0, modulus) for normal case.

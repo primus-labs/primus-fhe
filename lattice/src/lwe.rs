@@ -3,7 +3,7 @@ use std::ops::{Add, AddAssign, Sub, SubAssign};
 use algebra::{
     reduce::{
         AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, NegReduce,
-        SubReduce, SubReduceAssign,
+        NegReduceAssign, SubReduce, SubReduceAssign,
     },
     AsFrom,
 };
@@ -271,7 +271,7 @@ impl<T: Copy> LWE<T> {
     /// Performs an in-place scalar multiplication
     /// on the `self` [`LWE<T>`] with `scalar` `T`.
     #[inline]
-    pub fn scalar_mul_reduce_inplac<M>(&mut self, scalar: T, modulus: M)
+    pub fn scalar_mul_reduce_inplace<M>(&mut self, scalar: T, modulus: M)
     where
         T: MulReduceAssign<M>,
         M: Copy,
@@ -280,6 +280,23 @@ impl<T: Copy> LWE<T> {
             .iter_mut()
             .for_each(|v| v.mul_reduce_assign(scalar, modulus));
         self.b.mul_reduce_assign(scalar, modulus);
+    }
+
+    /// Performs an in-place scalar multiplication
+    /// on the `rhs` [`LWE<T>`] with `scalar` `T`,
+    /// then add to `self`.
+    #[inline]
+    pub fn add_assign_rhs_mul_scalar_reduce<M>(&mut self, rhs: &Self, scalar: T, modulus: M)
+    where
+        T: MulReduce<M, Output = T> + AddReduceAssign<M>,
+        M: Copy,
+    {
+        self.a
+            .iter_mut()
+            .zip(rhs.a())
+            .for_each(|(v, r)| v.add_reduce_assign(r.mul_reduce(scalar, modulus), modulus));
+        self.b
+            .add_reduce_assign(rhs.b.mul_reduce(scalar, modulus), modulus);
     }
 
     /// Performs an negation on the `self` [`LWE<T>`].
@@ -292,6 +309,17 @@ impl<T: Copy> LWE<T> {
         let a = self.a.iter().map(|&v| v.neg_reduce(modulus)).collect();
         Self::new(a, self.b.neg_reduce(modulus))
     }
+
+    /// Performs an negation on the `self` [`LWE<T>`].
+    #[inline]
+    pub fn neg_reduce_assign<M>(&mut self, modulus: M)
+    where
+        T: NegReduceAssign<M>,
+        M: Copy,
+    {
+        self.a.iter_mut().for_each(|v| v.neg_reduce_assign(modulus));
+        self.b.neg_reduce_assign(modulus)
+    }
 }
 
 impl<T: Copy> LWE<T> {
@@ -301,7 +329,7 @@ impl<T: Copy> LWE<T> {
         modulus_value: T,
         modulus: M,
         error_sampler: DiscreteGaussian<T>,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         T: SampleUniform
@@ -317,9 +345,9 @@ impl<T: Copy> LWE<T> {
         let len = secret_key.len();
         let uniform = Uniform::new(T::ZERO, modulus_value);
 
-        let a: Vec<T> = uniform.sample_iter(&mut rng).take(len).collect();
+        let a: Vec<T> = uniform.sample_iter(&mut *rng).take(len).collect();
         let b = T::dot_product_reduce(&a, secret_key, modulus)
-            .add_reduce(error_sampler.sample(&mut rng), modulus);
+            .add_reduce(error_sampler.sample(rng), modulus);
         LWE { a, b }
     }
 }

@@ -228,17 +228,17 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
 
     /// Generate a `NTTGadgetNTRU<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
-        inv_secret_key: &NTTPolynomial<F>,
+        ntru_inv_secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let data = (0..basis.decompose_len())
             .map(|_| {
-                <NTTNTRU<F>>::generate_random_zero_sample(inv_secret_key, error_sampler, &mut rng)
+                <NTTNTRU<F>>::generate_random_zero_sample(ntru_inv_secret_key, error_sampler, rng)
             })
             .collect();
         Self { data, basis }
@@ -246,36 +246,29 @@ impl<F: NTTField> NTTGadgetNTRU<F> {
 
     /// Generate a `NTTGadgetNTRU<F>` sample which encrypts `1`.
     pub fn generate_random_one_sample<R>(
-        inv_secret_key: &NTTPolynomial<F>,
+        ntru_inv_secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
-        let len = basis.decompose_len();
         let basis_value = basis.basis();
         let mut basis_power = F::one();
-        let mut data = Vec::with_capacity(len);
-        for _ in 0..(len - 1) {
-            let r = <NTTNTRU<F>>::generate_random_value_sample(
-                inv_secret_key,
-                basis_power,
-                error_sampler,
-                &mut rng,
-            );
-            data.push(r);
-            basis_power = F::lazy_new(basis_power.value() * basis_value);
-        }
 
-        let r = <NTTNTRU<F>>::generate_random_value_sample(
-            inv_secret_key,
-            basis_power,
-            error_sampler,
-            &mut rng,
-        );
-        data.push(r);
+        let data: Vec<NTTNTRU<F>> = (0..basis.decompose_len())
+            .map(|_| {
+                let r = <NTTNTRU<F>>::generate_random_value_sample(
+                    ntru_inv_secret_key,
+                    basis_power,
+                    error_sampler,
+                    rng,
+                );
+                basis_power = F::lazy_new(basis_power.value() * basis_value);
+                r
+            })
+            .collect();
 
         Self { data, basis }
     }

@@ -79,6 +79,28 @@ impl<F: NTTField> GadgetRLWE<F> {
         self.data.iter_mut()
     }
 
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.add_inplace(b, c));
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.sub_inplace(b, c));
+    }
+
     /// Perform multiplication between [`GadgetRLWE<F>`] and [`Polynomial<F>`],
     /// return a [`RLWE<F>`].
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> RLWE<F> {
@@ -135,13 +157,13 @@ impl<F: NTTField> GadgetRLWE<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let data = (0..basis.decompose_len())
-            .map(|_| <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng))
+            .map(|_| <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng))
             .collect();
         Self { data, basis }
     }
@@ -151,7 +173,7 @@ impl<F: NTTField> GadgetRLWE<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -161,7 +183,7 @@ impl<F: NTTField> GadgetRLWE<F> {
         let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
-            let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
+            let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng);
             r.b_mut_slice()[0] += basis_power;
             data.push(r);
             basis_power = F::lazy_new(basis_power.value() * basis_value);
@@ -175,7 +197,7 @@ impl<F: NTTField> GadgetRLWE<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -185,7 +207,7 @@ impl<F: NTTField> GadgetRLWE<F> {
         let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..len {
-            let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
+            let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng);
             r.a_mut_slice()[0] += basis_power;
             data.push(r);
             basis_power = F::lazy_new(basis_power.value() * basis_value);
@@ -292,6 +314,28 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         self.data.iter_mut()
     }
 
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.add_inplace(b, c));
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        debug_assert_eq!(self.basis.basis(), rhs.basis.basis());
+        self.iter()
+            .zip(rhs.iter())
+            .zip(destination.iter_mut())
+            .for_each(|((a, b), c)| a.sub_inplace(b, c));
+    }
+
     /// Perform multiplication between [`NTTGadgetRLWE<F>`] and [`Polynomial<F>`],
     /// return a [`NTTRLWE<F>`].
     pub fn mul_polynomial(&self, polynomial: &Polynomial<F>) -> NTTRLWE<F> {
@@ -395,13 +439,13 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
     {
         let data = (0..basis.decompose_len())
-            .map(|_| <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng))
+            .map(|_| <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng))
             .collect();
         Self { data, basis }
     }
@@ -411,7 +455,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -425,18 +469,14 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
                 secret_key,
                 basis_power,
                 error_sampler,
-                &mut rng,
+                rng,
             );
             data.push(r);
             basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
-        let r = <NTTRLWE<F>>::generate_random_value_sample(
-            secret_key,
-            basis_power,
-            error_sampler,
-            &mut rng,
-        );
+        let r =
+            <NTTRLWE<F>>::generate_random_value_sample(secret_key, basis_power, error_sampler, rng);
         data.push(r);
 
         Self { data, basis }
@@ -447,7 +487,7 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         secret_key: &NTTPolynomial<F>,
         basis: Basis<F>,
         error_sampler: FieldDiscreteGaussianSampler,
-        mut rng: R,
+        rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
@@ -457,14 +497,13 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
         let mut basis_power = F::one();
         let mut data = Vec::with_capacity(len);
         for _ in 0..(len - 1) {
-            let mut r =
-                <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
+            let mut r = <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng);
             r.a_mut_slice().iter_mut().for_each(|v| *v += basis_power);
             data.push(r);
             basis_power = F::lazy_new(basis_power.value() * basis_value);
         }
 
-        let mut r = <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, &mut rng);
+        let mut r = <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng);
         r.a_mut_slice().iter_mut().for_each(|v| *v += basis_power);
         data.push(r);
 

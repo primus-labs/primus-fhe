@@ -16,6 +16,11 @@ fn impl_fhe_field(input: Input) -> TokenStream {
     quote! {
         impl ::algebra::FheField for #name{
             #[inline]
+            fn lazy_new(value: Self::Value) -> Self {
+                Self(value)
+            }
+
+            #[inline]
             fn add_mul(self, a: Self, b: Self) -> Self {
                 use ::algebra::Widening;
                 use ::algebra::reduce::Reduce;

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-algebra_derive = { path = "../algebra_derive" }
+algebra_derive = { path = "../algebra_derive", default-features = false }
 
 thiserror = { workspace = true }
 num-traits = { workspace = true }
