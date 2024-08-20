@@ -7,8 +7,8 @@ use once_cell::sync::Lazy;
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
-///default size
-pub struct Default(pub u64);
+///FF size
+pub struct FF(pub u64);
 /// inner type
 pub type Inner = u64;
 /// ciphertext space
@@ -16,13 +16,13 @@ pub const FP: Inner = 132120577;
 /// message space
 pub const FT: Inner = 16;
 ///encode of 1
-pub const DELTA: Default = Default((FP as f64 / FT as f64) as Inner);
+pub const DELTA: FF = FF((FP as f64 / FT as f64) as Inner);
 ///encode of 1/2
-pub const HALF_DELTA: Default = Default((FP as f64 / (FT as f64 * 2.0)) as Inner);
+pub const HALF_DELTA: FF = FF((FP as f64 / (FT as f64 * 2.0)) as Inner);
 
-/// Default 128-bits security Parameters
-pub static DEFAULT_PARAMERTERS: Lazy<Parameters<u64, Default>> = Lazy::new(|| {
-    Parameters::<u64, Default>::new(ConstParameters {
+/// FF 128-bits security Parameters
+pub static DEFAULT_PARAMERTERS: Lazy<Parameters<u64, FF>> = Lazy::new(|| {
+    Parameters::<u64, FF>::new(ConstParameters {
         lwe_dimension: 1024,
         lwe_modulus: 2048,
         t: 16,
