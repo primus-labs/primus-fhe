@@ -1,9 +1,9 @@
 use algebra::{
-    modulus::PowOf2Modulus, Basis, Field, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
-    Polynomial, transformation::MonomialNTT,
+    modulus::PowOf2Modulus, transformation::MonomialNTT, Basis, Field,
+    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
 };
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
-use lattice::{LWE, RLWE, NTTRGSW};
+use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
 
 ///the structrue of Compare's input key
@@ -128,7 +128,9 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
             let (cipher1_last, _cipher1_others) = cipher1.split_last().unwrap();
             let (cipher2_last, _cipher2_others) = cipher2.split_last().unwrap();
             let low_part_gt_res = res;
-            let eq_res = cipher1_last.mul_ntt_rgsw(cipher2_last).extract_lwe_locally();
+            let eq_res = cipher1_last
+                .mul_ntt_rgsw(cipher2_last)
+                .extract_lwe_locally();
             let eq_res = eq_res.add_component_wise_ref(&eq_res);
             let mut gt_res = Self::greater_hcmp(cipher1_last, cipher2_last, poly_length);
             for elem in gt_res.a_mut().iter_mut() {
@@ -245,7 +247,9 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
             let (cipher1_last, _cipher1_others) = cipher1.split_last().unwrap();
             let (cipher2_last, _cipher2_others) = cipher2.split_last().unwrap();
             let low_part_gt_res = res;
-            let eq_res = cipher1_last.mul_ntt_rgsw(cipher2_last).extract_lwe_locally();
+            let eq_res = cipher1_last
+                .mul_ntt_rgsw(cipher2_last)
+                .extract_lwe_locally();
             let eq_res = eq_res.add_component_wise_ref(&eq_res);
             let mut gt_res = Self::less_hcmp(cipher1_last, cipher2_last, poly_length);
             for elem in gt_res.a_mut().iter_mut() {
