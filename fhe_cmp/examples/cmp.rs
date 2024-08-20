@@ -1,11 +1,11 @@
-use fhe_cmp::comparison::{self, decrypt, encrypt, Compare, DELTA, FF, HALF_DELTA};
+use fhe_cmp::{compare::{decrypt, encrypt, Compare}, parameters::{DELTA, FF, HALF_DELTA, DEFAULT_PARAMERTERS}};
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
 use std::time::Instant;
 fn main() {
     let mut rng = thread_rng();
-    let param = *comparison::DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMERTERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let poly_length = param.ring_dimension();
