@@ -88,8 +88,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// # Arguments
     ///
     /// * Input: RLWE ciphertext `cipher1`, with message `a`.
-    /// * Input: RGSW ciphertext `cipher2`, with message `b`.
-    /// * Input: the encryption of 1/2 'half_delta'.
+    /// * Input: NTTRGSW ciphertext `cipher2`, with message `b`.
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2, otherwise c=-1.
     pub fn greater_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, poly_length: usize) -> LWE<F> {
@@ -103,16 +102,16 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         res
     }
 
-    /// Performs the homomorphic comparison "greater" operation of two encoded numbers.
+    /// Performs the homomorphic comparison "greater" operation of two encoded numbers which have been transformed to vectors.
     ///
     /// # Arguments
     ///
-    /// * Input: RLWE ciphertext `cipher1`, with message `a`.
-    /// * Input: RGSW ciphertext `cipher2`, with message `b`.
-    /// * Input: BlindRotationKey `gatebootstrappingkey`.
+    /// * Input: BlindRotationKey `self`.
+    /// * Input: RLWE ciphertext vector `cipher1`, with message `a`.
+    /// * Input: NTTRGSW ciphertext vector `cipher2`, with message `b`.
     /// * Input: the encryption of 1 'delta'.
     /// * Input: the encryption of 1/2 'half_delta'.
-    /// * Input: the size of RLWE and RGSW vector `poly_length`.
+    /// * Input: the size of RLWE and NTTRGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=-1.
     pub fn greater_arbhcmp(
         &self,
@@ -157,7 +156,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// # Arguments
     ///
     /// * Input: RLWE ciphertext `cipher1`, with message `a`.
-    /// * Input: RGSW ciphertext `cipher2`, with message `b`.
+    /// * Input: NTTRGSW ciphertext `cipher2`, with message `b`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
     pub fn equality_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, delta: F) -> LWE<F> {
         let mul = cipher1.mul_ntt_rgsw(&cipher2);
@@ -174,10 +173,11 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     ///
     /// # Arguments
     ///
+    /// * Input: BlindRotationKey `self`.
     /// * Input: RLWE ciphertext vector `cipher1`, with message `a`.
-    /// * Input: RGSW ciphertext `cipher2`, with message `b`.
-    /// * Input: BlindRotationKey `gatebootstrappingkey`.
+    /// * Input: NTTRGSW ciphertext vector `cipher2`, with message `b`.
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
+    /// * Input: the encryption of 1 'delta'.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
     pub fn equality_arbhcmp(
         &self,
@@ -206,8 +206,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// # Arguments
     ///
     /// * Input: RLWE ciphertext `cipher1`, with message `a`.
-    /// * Input: RGSW ciphertext `cipher2`, with message `b`.
-    /// * Input: the encryption of 1/2 'half_delta'.
+    /// * Input: NTTRGSW ciphertext `cipher2`, with message `b`.
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=-1.
     pub fn less_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, poly_length: usize) -> LWE<F> {
@@ -226,9 +225,9 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     ///
     /// # Arguments
     ///
-    /// * Input: RLWE ciphertext `cipher1`, with message `a`.
-    /// * Input: RGSW ciphertext `cipher2`, with message `b`.
-    /// * Input: BlindRotationKey `gatebootstrappingkey`.
+    /// * Input: BlindRotationKey `self`.
+    /// * Input: RLWE ciphertext vector `cipher1`, with message `a`.
+    /// * Input: NTTRGSW ciphertext vector `cipher2`, with message `b`.
     /// * Input: the encryption of 1 'delta'.
     /// * Input: the encryption of 1/2 'half_delta'.
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
@@ -272,7 +271,18 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     }
 }
 
-/// Performs the initialization, turning 2 numbers to their corresponding ciphertext
+/// Performing the initialization, encrypting 2 numbers to their corresponding ciphertext
+///
+/// # Arguments
+///
+/// * Input: input number `num1`.
+/// * Input: input number `num2`.
+/// * Input: encryption key `ntt_ring_secret_key`.
+/// * Input: This basis used for decomposition of the field `basis`.
+/// * Input: The encryption of 1 `delta`.
+/// * Input: sampler used for generating random number `error_sampler`.
+/// * Input: method used for generating random number `rng`.
+/// * Output: RLWE vector as the encryption of num1, NTTRGSW vector as the encryption of the encryption of num2.
 pub fn encrypt<F, R>(
     mut num1: usize,
     mut num2: usize,
@@ -287,27 +297,21 @@ where
     F: NTTField,
 {
     let ring_dimension = ntt_ring_secret_key.coeff_count();
-
     let trailing_zeros = ring_dimension.trailing_zeros();
     let mask = ring_dimension - 1;
-
     let mut num1_vec = Vec::new();
     let mut num2_vec = Vec::new();
-
     while num1 != 0 {
         num1_vec.push(num1 & mask);
         num1 = num1 >> trailing_zeros;
     }
-
     while num2 != 0 {
         num2_vec.push(num2 & mask);
         num2 = num2 >> trailing_zeros;
     }
-
     let len = num1_vec.len().max(num2_vec.len()).max(1);
     num1_vec.resize(len, 0);
     num2_vec.resize(len, 0);
-
     let vec1 = rlwe_values(
         &num1_vec,
         ntt_ring_secret_key,
@@ -322,11 +326,10 @@ where
         error_sampler,
         &mut rng,
     );
-
     (vec1, vec2)
 }
 
-/// decrypt
+/// decryption for the ciphertext
 pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -> u64 {
     let a_mul_s = sk
         .iter()
@@ -341,12 +344,16 @@ pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
     (c.value() as f64 * 16 as f64 / 132120577 as f64).round() as u64 % 16
 }
 
-/// Performs the operation of turning a vector to the corresponding RGSW ciphertext.
+/// Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
 ///
 /// # Arguments
 ///
 /// * Input: vector `values`.
-/// * Output:corresponding RGSW ciphertext.
+/// * Input: encryption key `ntt_ring_secret_key`.
+/// * Input: This basis used for decomposition of the field `basis`.
+/// * Input: sampler used for generating random number `error_sampler`.
+/// * Input: method used for generating random number `rng`.
+/// * Output:corresponding NTTRGSW ciphertext X^values.
 fn rgsw_values<F, R>(
     values: &[usize],
     ntt_ring_secret_key: &NTTPolynomial<F>,
@@ -360,7 +367,6 @@ where
 {
     let ring_dimension = ntt_ring_secret_key.coeff_count();
     let len = values.len();
-
     let mut res = Vec::with_capacity(len);
     for &v in values {
         let mut rgsw = NTTRGSW::generate_random_zero_sample(
@@ -369,10 +375,7 @@ where
             error_sampler,
             &mut rng,
         );
-        // rgsw_turn(&mut rgsw, v, ring_dimension);
-
         ntt_rgsw_turn(&mut rgsw, v, ring_dimension, basis);
-
         res.push(rgsw);
     }
     res
@@ -383,7 +386,11 @@ where
 /// # Arguments
 ///
 /// * Input: vector `values`.
-/// * Output:corresponding RLWE ciphertext.
+/// * Input: encryption key `ntt_ring_secret_key`.
+/// * Input: The encryption of 1 `delta`.
+/// * Input: sampler used for generating random number `error_sampler`.
+/// * Input: method used for generating random number `rng`.
+/// * Output:corresponding RLWE ciphertext X^(-values).
 fn rlwe_values<F, R>(
     values: &[usize],
     ntt_ring_secret_key: &NTTPolynomial<F>,
@@ -426,13 +433,13 @@ pub fn rlwe_turn<F: NTTField>(ciphertext: &mut RLWE<F>, num: usize) {
     }
 }
 
-/// Performs the RGSW rotation operation.
+/// Performs the NTTRGSW rotation operation.
 ///
 /// # Arguments
 ///
-/// * Input: RGSW ciphertext `ciphertext`.
+/// * Input: NTTRGSW ciphertext `ciphertext`.
 /// * Input: usize number `num`.
-/// * Input: the size of RGSW vector `poly_length`.
+/// * Input: the size of NTTRGSW vector `poly_length`.
 /// * Output:RGSW ciphertext `ciphertext*x^(-num)`.
 pub fn ntt_rgsw_turn<F: NTTField>(
     ciphertext: &mut NTTRGSW<F>,
@@ -440,7 +447,6 @@ pub fn ntt_rgsw_turn<F: NTTField>(
     ring_dimension: usize,
     basis: Basis<F>,
 ) {
-    // X^{-num}
     let neg_num = if num != 0 {
         (ring_dimension << 1) - num
     } else {
@@ -450,12 +456,10 @@ pub fn ntt_rgsw_turn<F: NTTField>(
     let ntt_table = F::get_ntt_table(ring_dimension.trailing_zeros()).unwrap();
     ntt_table.transform_coeff_one_monomial(neg_num, poly.as_mut_slice());
     let mut poly_c = poly.clone();
-
     ciphertext.c_neg_s_m_mut().iter_mut().for_each(|rlwe| {
         *rlwe.a_mut() += &poly;
         poly.mul_scalar_assign(F::lazy_new(basis.basis()));
     });
-
     ciphertext.c_m_mut().iter_mut().for_each(|rlwe| {
         *rlwe.b_mut() += &poly_c;
         poly_c.mul_scalar_assign(F::lazy_new(basis.basis()));
