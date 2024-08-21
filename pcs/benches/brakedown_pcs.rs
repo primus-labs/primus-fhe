@@ -20,7 +20,7 @@ type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let num_vars = 20;
+    let num_vars = 24;
     let evaluations: Vec<FF> = rand::thread_rng()
         .sample_iter(FieldUniformSampler::new())
         .take(1 << num_vars)

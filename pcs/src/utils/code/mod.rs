@@ -40,4 +40,8 @@ pub trait LinearCodeSpec<F>: Sync + Send + Default {
     type Code: LinearCode<F>;
     /// Generate the instance of linear code
     fn code(&self, message_ln: usize, rng: &mut (impl Rng + CryptoRng)) -> Self::Code;
+    /// Distance of the linear code when avaible from linear code specification
+    fn distance(&self) -> Result<f64, String>;
+    /// Proximity gap of the linear code when avaible from linear code specification
+    fn proximity_gap(&self) -> Result<f64, String>;
 }
