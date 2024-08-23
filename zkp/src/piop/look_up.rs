@@ -17,12 +17,12 @@
 //!
 //! <==> \sum_{x \in H_f} \sum_{i \in [block_num]} h_i(x) = c_sum
 //!      \sum_{x \in H_t} h_t(x) = c_sum
-//!      \sum_{x \in H_f} \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r)) = 0
+//!      \sum_{x \in H_f} \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - r * \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r)) = 0
 //!      \sum_{x \in H_t} eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = 0
 //!      where u is a random challenge given from verifier (a vector of random element) and c_sum is some constant
 //!
 //! <==> \sum_{x \in H_f} \sum_{i \in [block_num]} h_i(x)
-//!                     + \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
+//!                     + \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - r * \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
 //!                     = c_sum
 //!      \sum_{x \in H_t} h_t(x)
 //!                     + eq(x, u) * (h_t(x) * (t(x) - r) - m(x))
@@ -168,6 +168,8 @@ impl<F: Field> LookupInstance<F> {
         let mut t_evaluations: Vec<_> = (0..range)
             .map(|i| F::new(F::Value::as_from(i as f64)))
             .collect();
+
+        // extend the lenght of t_evaluation to power of 2 by padding zero, which require a counting normalization of m
         t_evaluations.resize(1 << num_vars_t, F::zero());
         let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars_t,
@@ -224,6 +226,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
             m_evaluations[idx] += F::one();
         });
 
+        // hadle zero paddings by normalization of m
         if (1 << num_vars_t) > instance.range {
             let divided = m_evaluations[0]
                 / F::new(F::Value::as_from(
@@ -258,17 +261,6 @@ impl<F: Field + DecomposableField> Lookup<F> {
                 .cloned()
                 .collect::<Vec<F>>(),
         );
-
-        // let inversed_shifted_f_vec: Vec<Rc<DenseMultilinearExtension<F>>> =
-        //     inversed_shifted_f_evaluation_vec
-        //         .chunks_exact(1 << num_vars_f)
-        //         .map(|evaluations| {
-        //             Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-        //                 num_vars_f,
-        //                 evaluations,
-        //             ))
-        //         })
-        //         .collect();
 
         // construct h
         let h_vec: Vec<Rc<DenseMultilinearExtension<F>>> = inversed_shifted_f_evaluation_vec
@@ -313,7 +305,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
         // execute sumcheck for
         // \sum_{x \in H_f}
         //                  \sum_{i \in [block_num]} h_i(x)
-        //                + \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
+        //                + r * \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
         //                = c_sum
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_f);
         for ((i, h), u_coef) in h_vec.iter().enumerate().zip(u_l.iter()) {
