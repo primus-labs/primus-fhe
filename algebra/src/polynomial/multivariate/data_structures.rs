@@ -91,7 +91,6 @@ impl<F: Field, EF: AbstractExtensionField<F>> ListOfProductsOfPolynomials<F, EF>
         let product: Vec<Rc<DenseMultilinearExtension<F, EF>>> = product.into_iter().collect();
         self.max_multiplicands = self.max_multiplicands.max(product.len());
         assert_eq!(product.len(), op_coefficient.len());
-        assert_eq!(product.len(), op_coefficient.len());
         assert!(!product.is_empty());
         let mut indexed_product: Vec<usize> = Vec::with_capacity(op_coefficient.len());
         let mut linear_ops = Vec::with_capacity(op_coefficient.len());

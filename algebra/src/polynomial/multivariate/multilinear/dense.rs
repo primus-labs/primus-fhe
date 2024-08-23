@@ -12,7 +12,6 @@ use crate::{AbstractExtensionField, Field, FieldUniformSampler};
 
 use super::dense_base::DenseMultilinearExtensionBase;
 use super::MultilinearExtension;
-use std::rc::Rc;
 
 /// Stores a multilinear polynomial in dense evaluation form.
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -282,18 +281,6 @@ impl<'a, F: Field, EF: AbstractExtensionField<F>>
         self.iter_mut()
             .zip(rhs.iter())
             .for_each(|(x, y)| *x += f * *y);
-    }
-}
-
-// TODO delete this
-impl<'a, F: Field, EF: AbstractExtensionField<F>>
-    AddAssign<(EF, &'a Rc<DenseMultilinearExtension<F, EF>>)> for DenseMultilinearExtension<F, EF>
-{
-    #[inline]
-    fn add_assign(&mut self, (f, rhs): (EF, &'a Rc<DenseMultilinearExtension<F, EF>>)) {
-        self.iter_mut()
-            .zip(rhs.iter())
-            .for_each(|(x, y)| *x += f.mul(y));
     }
 }
 

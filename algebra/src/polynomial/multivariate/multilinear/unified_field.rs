@@ -11,11 +11,11 @@ pub enum UF<F: Field, EF: AbstractExtensionField<F>> {
 }
 
 impl<F: Field, EF: AbstractExtensionField<F>> UF<F, EF> {
-    /// return one
+    /// Return one
     pub fn one() -> UF<F, EF> {
         UF::BaseField(F::one())
     }
-    /// return zero
+    /// Return zero
     pub fn zero() -> UF<F, EF> {
         UF::BaseField(F::zero())
     }
@@ -76,46 +76,3 @@ impl<F: Field, EF: AbstractExtensionField<F>> Add<EF> for UF<F, EF> {
         }
     }
 }
-
-// impl<'a, 'b, F: Field, EF: AbstractExtensionField<F>> Add<&'b EF> for &'a UF<F, EF> {
-//     type Output = EF;
-//     fn add(self, rhs: &'b EF) -> Self::Output {
-
-//     }
-// }
-
-// impl<F: Field, EF: AbstractExtensionField<F>> Zero for UF<F, EF> {
-//     fn zero() -> Self {
-//         UF::BaseField(F::zero())
-//     }
-
-//     fn is_zero(&self) -> bool {
-//         match self {
-//             UF::BaseField(val) => val.is_zero(),
-//             UF::ExtensionField(val) => val.is_zero(),
-//         }
-//     }
-
-//     fn set_zero(&mut self) {
-//         *self = UF::BaseField(F::zero());
-//     }
-// }
-
-// impl<F: Field, EF: AbstractExtensionField<F>> One for UF<F, EF> {
-//     fn one() -> Self {
-//         UF::BaseField(F::one())
-//     }
-
-//     fn is_one(&self) -> bool
-//         where
-//             Self: PartialEq, {
-//         match self {
-//             UF::BaseField(val) => val.is_one(),
-//             UF::ExtensionField(val) => val.is_one(),
-//         }
-//     }
-
-//     fn set_one(&mut self) {
-//         *self = UF::BaseField(F::one());
-//     }
-// }
