@@ -211,6 +211,49 @@ impl<F: Field> DecomposedBits<F> {
         }
         self.instances.push(decomposed_bits.to_vec());
     }
+
+    #[inline]
+    /// Generate the oracle to be committed that is composed of all the small oracles used in IOP.
+    /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
+    /// When verifying the subclaim:
+    ///
+    /// * Prover
+    /// 1. first computes all the requested evaluations defined over these small oracles.
+    /// 2. then sends these opened evaluations to the verifier
+    /// 3. use random linear combination to reduce these evaluations to be proved into a single random point over the committed large oracle.
+    /// * Verifier
+    /// 1. verifier first checks the relation among these evaluations the way as in the old interface `verify_subclaim`
+    /// 2. verifier then checks the random linear combination between these evaluations of small oracles and the final single evaluation over the committed large oracle.
+    /// 3. verifier finally checks the evaluation of the committed large oracle (outside the implementation of IOP)
+    pub fn gen_oracle(
+        &self,
+        d_val: &[Rc<DenseMultilinearExtensionBase<F>>],
+    ) -> DenseMultilinearExtensionBase<F> {
+        assert_eq!(d_val.len(), self.instances.len());
+        let num_oracles = self.instances.len() * (self.bits_len as usize + 1);
+        let num_vars_added = num_oracles.next_power_of_two().ilog2() as usize;
+        let num_vars = self.num_vars + num_vars_added;
+        let num_zeros_padded = ((1 << num_vars_added) - num_oracles) * (1 << self.num_vars);
+    
+        let evals = self
+            .instances
+            .iter()
+            .flatten()
+            .flat_map(|bit| bit.iter())
+            .chain(
+                // combined with the d_val
+                d_val.iter()
+                    .flat_map(|d| d.iter())
+            )
+            .map(|x| *x)
+            .chain(
+                // padded with zeros
+                (0..num_zeros_padded).map(|_| F::zero())
+            )
+            .collect::<Vec<F>>();
+
+        <DenseMultilinearExtensionBase<F>>::from_evaluations_vec(num_vars, evals)
+    }
 }
 
 impl<F: DecomposableField> DecomposedBits<F> {
@@ -226,7 +269,100 @@ impl<F: DecomposableField> DecomposedBits<F> {
 }
 
 impl<F: Field, EF: AbstractExtensionField<F>> BitDecompositionSubClaim<F, EF> {
-    /// verify the subclaim
+    /// prover needs to compute the evaluations given the MLEs
+    pub fn prove_subclaim(
+        &self,
+        d_val: &[Rc<DenseMultilinearExtensionBase<F>>],
+        d_bits: &[&Vec<Rc<DenseMultilinearExtensionBase<F>>>],
+        decomposed_bits_info: &DecomposedBitsInfo<F>,
+    ) -> Vec<EF> {
+        assert_eq!(d_val.len(), decomposed_bits_info.num_instances);
+        assert_eq!(d_bits.len(), decomposed_bits_info.num_instances);
+
+        d_bits
+            .iter()
+            .flat_map(|bits| bits.iter())
+            .chain(d_val.iter())
+            .map(|mle| mle.evaluate_ext(&self.point))
+            .collect::<Vec<EF>>()
+    }
+
+    /// verifier first checks the relation of these given evals
+    ///
+    /// # Argument
+    ///
+    /// * `evals`: This vector consists of evaluations of all relevant MLEs. You can find the specific arrangement in `prove_subclaim`.
+    pub fn verify_subclaim_pcs(
+        &self,
+        evals: &[EF],
+        u: &[EF],
+        info: &DecomposedBitsInfo<F>,
+        oracle_eval: EF,
+        trans: &mut Transcript<F>,
+    ) -> bool {
+        assert_eq!(
+            evals.len(),
+            info.num_instances + info.num_instances * info.bits_len as usize
+        );
+        let d_val_at_point = &evals[evals.len() - info.num_instances..];
+        let d_bits_at_point = &evals[..evals.len() - info.num_instances];
+
+        // base_pow = [1, B, ..., B^{l-1}]
+        let mut base_pow = vec![F::one(); info.bits_len as usize];
+        base_pow.iter_mut().fold(F::one(), |acc, pow| {
+            *pow *= acc;
+            acc * info.base
+        });
+
+        // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
+        if !d_bits_at_point
+            .chunks_exact(info.bits_len as usize)
+            .zip(d_val_at_point)
+            .all(|(bits, val)| {
+                *val == bits
+                    .iter()
+                    .zip(base_pow.iter())
+                    .fold(EF::zero(), |acc, (bit, pow)| acc + *bit * *pow)
+            })
+        {
+            return false;
+        }
+
+        // check 2: expected value returned in sumcheck
+        // each instance contributes value: eq(u, x) \cdot \sum_{i = 0}^{l-1} r_i \cdot [\prod_{k=0}^B (d_i(x) - k)] =? expected_evaluation
+        let mut evaluation = EF::zero();
+        let mut r = self.randomness.iter();
+        d_bits_at_point
+            .chunks_exact(info.bits_len as usize)
+            .for_each(|bits| {
+                bits.iter().for_each(|bit| {
+                    let mut prod = *r.next().unwrap();
+                    let mut minus_k = F::zero();
+                    for _ in 0..(1 << info.base_len) {
+                        prod *= *bit + minus_k;
+                        minus_k -= F::one();
+                    }
+                    evaluation += prod;
+                })
+            });
+        
+        if !(self.expected_evaluation == evaluation * eval_identity_function(u, &self.point)) {
+            return  false;
+        }
+
+        // Verify the relationship between the evaluations of these small oracles and the requested evaluation of the committed oracle
+        let num_oracles = info.num_instances * (info.bits_len as usize + 1);
+        let num_vars_added = num_oracles.next_power_of_two().ilog2() as usize;
+        let randomness_oracles = trans.get_vec_ext_field_challenge::<EF>(b"random linear combination for evaluations of oracles", num_vars_added);
+        let eq_at_r = gen_identity_evaluations(&randomness_oracles);
+        let randomized_eval = evals.iter().zip(eq_at_r.iter())
+            .fold(EF::zero(), |acc, (eval, coeff)| {
+                acc + *eval * *coeff
+            });
+        randomized_eval == oracle_eval
+    }
+
+    /// verify the subclaim given the MLEs
     ///
     /// # Argument
     ///   
