@@ -8,7 +8,7 @@ members = [
     "fhe",
     "pcs",
     "zkfhe",
-    "zkp",
+    "zkp", "fhe_cmp",
 ]
 
 resolver = "2"
