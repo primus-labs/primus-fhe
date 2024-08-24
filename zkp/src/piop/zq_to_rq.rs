@@ -190,7 +190,7 @@ impl<F: Field + DecomposableField> TransformZqtoRQInstance<F> {
                 base_len,
                 bits_len,
                 num_vars,
-                instances: r_bits,
+                d_bits: r_bits,
             },
         }
     }

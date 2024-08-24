@@ -115,10 +115,10 @@ fn test_round_naive_iop() {
         (v_lambda[0], v_lambda[1]),
         &instance.input,
         &instance.output,
-        &instance.output_bits.instances[0],
+        &instance.output_bits.d_bits[0],
         &instance.offset,
-        &instance.offset_aux_bits.instances[0],
-        &instance.offset_aux_bits.instances[1],
+        &instance.offset_aux_bits.d_bits[0],
+        &instance.offset_aux_bits.d_bits[1],
         &instance.option,
         &info
     ))
@@ -200,10 +200,10 @@ fn test_round_random_iop() {
         (v_lambda[0], v_lambda[1]),
         &instance.input,
         &instance.output,
-        &instance.output_bits.instances[0],
+        &instance.output_bits.d_bits[0],
         &instance.offset,
-        &instance.offset_aux_bits.instances[0],
-        &instance.offset_aux_bits.instances[1],
+        &instance.offset_aux_bits.d_bits[0],
+        &instance.offset_aux_bits.d_bits[1],
         &instance.option,
         &info
     ))
