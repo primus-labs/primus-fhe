@@ -1,5 +1,4 @@
-use algebra::{
-    modulus::PowOf2Modulus, transformation::MonomialNTT, Basis, Field,
+use algebra::{transformation::MonomialNTT, Basis, Field,
     FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
 };
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
@@ -24,41 +23,21 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     }
 
     /// Complete the bootstrapping operation with BlindRotationKey *`self`*, LWE Ciphertext *`ciphertext`* and vector *`test_vector`*
-    pub fn gatebootstrapping(&self, ciphertext: LWE<F>, mut test_vector: Vec<F>) -> LWE<F> {
+    pub fn gatebootstrapping(&self, ciphertext: LWE<F>, test_vector: Vec<F>) -> LWE<F> {
         let poly_len = test_vector.len();
         let mod_after: u64 = poly_len as u64 * 2;
         let switch = lwe_modulus_switch(ciphertext, mod_after, ModulusSwitchRoundMethod::Round);
-        let lwe_modulus = PowOf2Modulus::<u64>::new(mod_after);
-        let a = switch.a();
+        let a = switch.a().to_vec();
         let b = switch.b();
+        let new_lwe = LWE::new(a,b);
         let binary_key = match self.key() {
             RLWEBlindRotationKey::Binary(binary_key) => binary_key,
             RLWEBlindRotationKey::Ternary(_) => panic!(),
         };
-        let b = b as usize;
-        if b <= poly_len {
-            test_vector.rotate_right(b);
-            for elem in &mut test_vector[..b] {
-                *elem = -*elem;
-            }
-        } else {
-            let len = b - poly_len;
-            test_vector.rotate_right(len);
-            for elem in &mut test_vector[len..] {
-                *elem = -*elem;
-            }
-        }
-        let acc = RLWE::new(
-            Polynomial::<F>::zero(poly_len),
-            Polynomial::<F>::new(test_vector),
-        );
-        let twice_rlwe_dimension_div_lwe_modulus: usize = 1;
+        let test_vec = Polynomial::new(test_vector);
         let temp = binary_key.blind_rotate(
-            acc,
-            a,
-            poly_len,
-            twice_rlwe_dimension_div_lwe_modulus,
-            lwe_modulus,
+            test_vec,
+            &new_lwe,
         );
         RLWE::extract_lwe(&temp)
     }
@@ -77,7 +56,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let mut temp = ca.add_component_wise_ref(cb);
         *temp.b_mut() = temp.b() - delta;
         let mut test = vec![F::zero(); poly_length];
-        let mu = -delta;
+        let mu = delta;
         test.iter_mut().for_each(|v| *v = mu);
         let r = self.gatebootstrapping(temp, test);
         r
@@ -144,7 +123,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
                 .add_component_wise(&gt_res);
             *new_lwe.b_mut() = new_lwe.b() + half_delta;
             let mut test = vec![F::zero(); poly_length];
-            let mu = -delta;
+            let mu = delta;
             test.iter_mut().for_each(|v| *v = mu);
             res = self.gatebootstrapping(new_lwe, test);
         }
@@ -243,7 +222,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let len = cipher1.len();
         assert_eq!(len, cipher2.len());
         assert!(len > 0);
-        let hcmp = Self::greater_hcmp(&cipher1[0], &cipher2[0], poly_length);
+        let hcmp = Self::less_hcmp(&cipher1[0], &cipher2[0], poly_length);
         let mut res = hcmp;
         for _ in 1..len {
             let (cipher1_last, _cipher1_others) = cipher1.split_last().unwrap();
@@ -263,7 +242,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
                 .add_component_wise(&gt_res);
             *new_lwe.b_mut() = new_lwe.b() + half_delta;
             let mut test = vec![F::zero(); poly_length];
-            let mu = -delta;
+            let mu = delta;
             test.iter_mut().for_each(|v| *v = mu);
             res = self.gatebootstrapping(new_lwe, test)
         }
