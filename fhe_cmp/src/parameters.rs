@@ -1,7 +1,7 @@
 use algebra::derive::{DecomposableField, FheField, Field, Prime, NTT};
 use fhe_core::{
-    BlindRotationType, ConstParameters, LWESecretKeyType,
-    ModulusSwitchRoundMethod, Parameters, RingSecretKeyType, Steps,
+    BlindRotationType, ConstParameters, LWESecretKeyType, ModulusSwitchRoundMethod, Parameters,
+    RingSecretKeyType, Steps,
 };
 use once_cell::sync::Lazy;
 
