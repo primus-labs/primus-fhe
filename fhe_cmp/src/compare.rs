@@ -192,8 +192,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let trlwe_mul_a = mul.a() * &test_plaintext;
         let trlwe_mul_b = mul.b() * test_plaintext;
         let trlwe_mul = RLWE::new(trlwe_mul_a, trlwe_mul_b);
-        let res = RLWE::extract_lwe(&trlwe_mul);
-        res
+        RLWE::extract_lwe(&trlwe_mul)
     }
 
     /// Performs the homomorphic comparison "less" operation of two encoded numbers.
@@ -278,11 +277,11 @@ where
     let mut num2_vec = Vec::new();
     while num1 != 0 {
         num1_vec.push(num1 & mask);
-        num1 = num1 >> trailing_zeros;
+        num1 >>= trailing_zeros;
     }
     while num2 != 0 {
         num2_vec.push(num2 & mask);
-        num2 = num2 >> trailing_zeros;
+        num2 >>= trailing_zeros;
     }
     let len = num1_vec.len().max(num2_vec.len()).max(1);
     num1_vec.resize(len, 0);
@@ -310,13 +309,12 @@ pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -
         .iter()
         .zip(ciphertext.a())
         .fold(F::zero(), |acc, (&s, &a)| acc + s * a);
-    let outcome = decode(ciphertext.b() - a_mul_s);
-    outcome
+    decode(ciphertext.b() - a_mul_s)
 }
 
 /// Peforms the operation turning a value to its real number
 pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
-    (c.value() as f64 * 16 as f64 / 132120577 as f64).round() as u64 % 16
+    (c.value() as f64 * 16_f64 as f64 / 132120577_f64 as f64).round() as u64 % 16
 }
 
 /// Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
