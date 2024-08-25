@@ -1,5 +1,6 @@
-use algebra::{transformation::MonomialNTT, Basis, Field,
-    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
+use algebra::{
+    transformation::MonomialNTT, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
+    NTTPolynomial, Polynomial,
 };
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
 use lattice::{LWE, NTTRGSW, RLWE};
@@ -29,16 +30,13 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let switch = lwe_modulus_switch(ciphertext, mod_after, ModulusSwitchRoundMethod::Round);
         let a = switch.a().to_vec();
         let b = switch.b();
-        let new_lwe = LWE::new(a,b);
+        let new_lwe = LWE::new(a, b);
         let binary_key = match self.key() {
             RLWEBlindRotationKey::Binary(binary_key) => binary_key,
             RLWEBlindRotationKey::Ternary(_) => panic!(),
         };
         let test_vec = Polynomial::new(test_vector);
-        let temp = binary_key.blind_rotate(
-            test_vec,
-            &new_lwe,
-        );
+        let temp = binary_key.blind_rotate(test_vec, &new_lwe);
         RLWE::extract_lwe(&temp)
     }
 
