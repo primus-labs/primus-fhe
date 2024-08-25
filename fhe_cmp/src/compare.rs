@@ -56,8 +56,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let mut test = vec![F::zero(); poly_length];
         let mu = delta;
         test.iter_mut().for_each(|v| *v = mu);
-        let r = self.gatebootstrapping(temp, test);
-        r
+        self.gatebootstrapping(temp, test)
     }
 
     /// Performs the greater homomorphic comparison "greater" operation of two elements of the vector.
@@ -69,14 +68,13 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2, otherwise c=-1.
     pub fn greater_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, poly_length: usize) -> LWE<F> {
-        let mul = cipher1.mul_ntt_rgsw(&cipher2);
+        let mul = cipher1.mul_ntt_rgsw(cipher2);
         let vector = vec![F::neg_one(); poly_length];
         let test_plaintext = Polynomial::<F>::new(vector);
         let trlwe_mul_a = mul.a() * &test_plaintext;
         let trlwe_mul_b = mul.b() * test_plaintext;
         let trlwe_mul = RLWE::new(trlwe_mul_a, trlwe_mul_b);
-        let res = RLWE::extract_lwe(&trlwe_mul);
-        res
+        RLWE::extract_lwe(&trlwe_mul)
     }
 
     /// Performs the homomorphic comparison "greater" operation of two encoded numbers which have been transformed to vectors.
@@ -136,7 +134,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: NTTRGSW ciphertext `cipher2`, with message `b`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
     pub fn equality_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, delta: F) -> LWE<F> {
-        let mul = cipher1.mul_ntt_rgsw(&cipher2);
+        let mul = cipher1.mul_ntt_rgsw(cipher2);
         let mut res = RLWE::extract_lwe(&mul);
         for elem in res.a_mut().iter_mut() {
             *elem = *elem + *elem;
@@ -187,7 +185,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=-1.
     pub fn less_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, poly_length: usize) -> LWE<F> {
-        let mul = cipher1.mul_ntt_rgsw(&cipher2);
+        let mul = cipher1.mul_ntt_rgsw(cipher2);
         let mut vector = vec![F::one(); poly_length];
         vector[0] = F::neg_one();
         let test_plaintext = Polynomial::<F>::new(vector);
