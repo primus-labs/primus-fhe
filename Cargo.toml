@@ -9,7 +9,7 @@ members = [
     "fhe",
     "pcs",
     "zkfhe",
-    "zkp", 
+    "zkp"
 ]
 
 resolver = "2"
