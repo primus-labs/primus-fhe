@@ -314,7 +314,7 @@ pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -
 
 /// Peforms the operation turning a value to its real number
 pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
-    (c.value() as f64 * 16_f64 as f64 / 132120577_f64 as f64).round() as u64 % 16
+    (c.value() as f64 * 16_f64 / 132120577_f64).round() as u64 % 16
 }
 
 /// Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
