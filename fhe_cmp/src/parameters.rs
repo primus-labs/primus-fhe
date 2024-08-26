@@ -1,3 +1,5 @@
+//! Define the parameters.
+
 use algebra::derive::{DecomposableField, FheField, Field, Prime, NTT};
 use fhe_core::{
     BlindRotationType, ConstParameters, LWESecretKeyType, ModulusSwitchRoundMethod, Parameters,

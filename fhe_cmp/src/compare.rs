@@ -1,3 +1,5 @@
+//! The implementation.
+
 use algebra::{
     transformation::MonomialNTT, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
     NTTPolynomial, Polynomial,
