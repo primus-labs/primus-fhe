@@ -9,9 +9,9 @@ pub struct KeyGen;
 impl KeyGen {
     /// Generate key pair
     #[inline]
-    pub fn generate_secret_key<C: LWEModulusType, F: NTTField>(
-        params: Parameters<C, F>,
-    ) -> SecretKeyPack<C, F> {
+    pub fn generate_secret_key<C: LWEModulusType, Q: NTTField>(
+        params: Parameters<C, Q>,
+    ) -> SecretKeyPack<C, Q> {
         SecretKeyPack::new(params)
     }
 }

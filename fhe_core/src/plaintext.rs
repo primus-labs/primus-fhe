@@ -7,9 +7,9 @@ use algebra::{
     modulus::PowOf2Modulus,
     reduce::{
         AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, NegReduce,
-        SubReduce,
+        NegReduceAssign, SubReduce,
     },
-    AsFrom, AsInto,
+    AsFrom, AsInto, Bits,
 };
 use num_traits::{ConstOne, ConstZero, PrimInt};
 use rand::distributions::uniform::SampleUniform;
@@ -142,6 +142,7 @@ pub trait LWEModulusType:
     + Display
     + ConstOne
     + ConstZero
+    + Bits
     + Shl<u32, Output = Self>
     + Shr<u32, Output = Self>
     + AsFrom<u32>
@@ -159,6 +160,7 @@ pub trait LWEModulusType:
     + AddReduceAssign<PowOf2Modulus<Self>>
     + MulReduceAssign<PowOf2Modulus<Self>>
     + NegReduce<PowOf2Modulus<Self>, Output = Self>
+    + NegReduceAssign<PowOf2Modulus<Self>>
     + DotProductReduce<PowOf2Modulus<Self>, Output = Self>
 {
     /// 2

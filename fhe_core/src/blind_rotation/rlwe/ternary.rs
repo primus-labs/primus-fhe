@@ -1,10 +1,9 @@
 use algebra::{
-    modulus::PowOf2Modulus, transformation::MonomialNTT, AsInto, Basis,
-    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
+    transformation::MonomialNTT, AsInto, Basis, FieldDiscreteGaussianSampler, NTTField,
+    NTTPolynomial, Polynomial,
 };
 use lattice::{
-    DecompositionSpace, NTTPolynomialSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace,
-    NTTRGSW, RLWE,
+    DecompositionSpace, NTTRGSWSpace, NTTRLWESpace, PolynomialSpace, RLWESpace, LWE, NTTRGSW, RLWE,
 };
 
 use crate::LWEModulusType;
@@ -21,59 +20,75 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         Self { key }
     }
 
-    /// Performs the bootstrapping operation
-    pub fn blind_rotate<C: LWEModulusType>(
+    /// Performs the blind rotation operation.
+    pub fn blind_rotate<C>(
         &self,
-        init_acc: RLWE<F>,
-        lwe_a: &[C],
-        rlwe_dimension: usize,
-        twice_rlwe_dimension_div_lwe_modulus: usize,
-        lwe_modulus: PowOf2Modulus<C>,
+        mut lut: Polynomial<F>,
+        lwe: &LWE<C>,
         blind_rotation_basis: Basis<F>,
-    ) -> RLWE<F> {
+    ) -> RLWE<F>
+    where
+        C: LWEModulusType,
+    {
+        let rlwe_dimension = lut.coeff_count();
+
         let decompose_space = &mut DecompositionSpace::new(rlwe_dimension);
-        let ntt_polynomial = &mut NTTPolynomialSpace::new(rlwe_dimension);
         let polynomial_space = &mut PolynomialSpace::new(rlwe_dimension);
-        let median = &mut NTTRLWESpace::new(rlwe_dimension);
+        let ntt_rlwe_space = &mut NTTRLWESpace::new(rlwe_dimension);
         let external_product = &mut RLWESpace::new(rlwe_dimension);
         let evaluation_key = &mut NTTRGSWSpace::new(rlwe_dimension, blind_rotation_basis);
 
         let ntt_table = F::get_ntt_table(rlwe_dimension.trailing_zeros()).unwrap();
 
+        // lut * X^{-b}
+        if !lwe.b().is_zero() {
+            let neg_b = (rlwe_dimension << 1) - AsInto::<usize>::as_into(lwe.b());
+            if neg_b <= rlwe_dimension {
+                lut.as_mut_slice().rotate_right(neg_b);
+                lut[..neg_b].iter_mut().for_each(|v| *v = v.neg());
+            } else {
+                let r = neg_b - rlwe_dimension;
+                lut.as_mut_slice().rotate_right(r);
+                lut[r..].iter_mut().for_each(|v| *v = v.neg());
+            }
+        }
+
+        let acc = RLWE::new(Polynomial::zero(rlwe_dimension), lut);
+
         self.key
             .iter()
-            .zip(lwe_a)
-            .fold(init_acc, |mut acc, (s_i, &a_i)| {
-                let degree = AsInto::<usize>::as_into(a_i) * twice_rlwe_dimension_div_lwe_modulus;
+            .zip(lwe.a())
+            .fold(acc, |mut acc, (s_i, &a_i)| {
+                if !a_i.is_zero() {
+                    let a_i: usize = a_i.as_into();
 
-                // ntt_polynomial = -Y^{a_i}
-                ntt_table.transform_coeff_neg_one_monomial(degree, ntt_polynomial.as_mut_slice());
+                    let neg_a_i: usize = (rlwe_dimension << 1) - a_i;
 
-                // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i}
-                s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
-                    &s_i.1,
-                    ntt_polynomial,
-                    evaluation_key,
-                );
+                    // decompose_space = -X^{-a_i}
+                    ntt_table
+                        .transform_coeff_neg_one_monomial(neg_a_i, decompose_space.as_mut_slice());
 
-                // external_product = (Y^{-a_i} - 1) * ACC
-                acc.mul_monic_monomial_sub_one_inplace(
-                    rlwe_dimension,
-                    twice_rlwe_dimension_div_lwe_modulus,
-                    a_i.neg_reduce(lwe_modulus),
-                    external_product,
-                );
+                    // evaluation_key = RGSW(s_i_0) - RGSW(s_i_1)*X^{-a_i}
+                    s_i.0.add_ntt_rgsw_mul_ntt_polynomial_inplace(
+                        &s_i.1,
+                        decompose_space,
+                        evaluation_key,
+                    );
 
-                // external_product = (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                external_product.mul_assign_ntt_rgsw(
-                    evaluation_key,
-                    decompose_space,
-                    polynomial_space,
-                    median,
-                );
+                    // external_product = (X^{a_i} - 1) * ACC
+                    acc.mul_monic_monomial_sub_one_inplace(rlwe_dimension, a_i, external_product);
 
-                // ACC = ACC + (Y^{-a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*Y^{a_i})
-                acc.add_assign_element_wise(external_product);
+                    // external_product = (X^{a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*X^{-a_i})
+                    external_product.mul_assign_ntt_rgsw(
+                        evaluation_key,
+                        decompose_space,
+                        polynomial_space,
+                        ntt_rlwe_space,
+                    );
+
+                    // ACC = ACC + (X^{a_i} - 1) * ACC * (RGSW(s_i_0) - RGSW(s_i_1)*X^{-a_i})
+                    acc.add_assign_element_wise(external_product);
+                }
 
                 acc
             })
@@ -81,10 +96,10 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
 
     /// Generates the [`TernaryBlindRotationKey<F>`].
     pub(crate) fn generate<Rng, C>(
-        blind_rotation_basis: Basis<F>,
         lwe_secret_key: &[C],
-        chi: FieldDiscreteGaussianSampler,
         rlwe_secret_key: &NTTPolynomial<F>,
+        blind_rotation_basis: Basis<F>,
+        chi: FieldDiscreteGaussianSampler,
         rng: &mut Rng,
     ) -> Self
     where
@@ -94,7 +109,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
         let key = lwe_secret_key
             .iter()
             .map(|&s| {
-                if s == C::ONE {
+                if s.is_one() {
                     (
                         <NTTRGSW<F>>::generate_random_one_sample(
                             rlwe_secret_key,
@@ -109,7 +124,7 @@ impl<F: NTTField> TernaryBlindRotationKey<F> {
                             rng,
                         ),
                     )
-                } else if s == C::ZERO {
+                } else if s.is_zero() {
                     (
                         <NTTRGSW<F>>::generate_random_zero_sample(
                             rlwe_secret_key,

@@ -30,8 +30,7 @@ pub use polynomial::multivariate::{
     MultilinearExtension, MultilinearExtensionBase, PolynomialInfo, SparsePolynomial, UF,
 };
 pub use polynomial::univariate::{
-    ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, ntt_mul_assign,
-    ntt_mul_inplace, NTTPolynomial, Polynomial,
+    ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, NTTPolynomial, Polynomial,
 };
 pub use primitive::{div_ceil, AsFrom, AsInto, Bits, Widening, WrappingOps};
 pub use random::{

@@ -162,7 +162,7 @@ impl ExpanderCodeSpec {
             .iter()
             .map(|a| {
                 let n_prime = ceil(a.num_col as f64 * self.r);
-                let m_prime = ceil(a.num_row as f64 * self.r) - a.num_col - n_prime;
+                let m_prime = ceil(a.num_row as f64 * self.r) - a.num_row - n_prime;
                 SparseMatrixDimension::new(
                     n_prime,
                     m_prime,
@@ -196,8 +196,17 @@ impl ExpanderCodeSpec {
 
 impl<F: Field> LinearCodeSpec<F> for ExpanderCodeSpec {
     type Code = ExpanderCode<F>;
+
     fn code(&self, message_len: usize, rng: &mut (impl Rng + CryptoRng)) -> Self::Code {
         ExpanderCode::<F>::new(self.clone(), message_len, rng)
+    }
+
+    fn distance(&self) -> Result<f64, String> {
+        Ok(self.distance())
+    }
+
+    fn proximity_gap(&self) -> Result<f64, String> {
+        Ok(self.proximity_gap())
     }
 }
 

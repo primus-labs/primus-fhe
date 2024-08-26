@@ -19,7 +19,7 @@ fn main() {
     // set parameter
     let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
 
-    let noise_max = (params.lwe_modulus().value() as f64 / 16.0) as C;
+    let noise_max = (params.lwe_cipher_modulus_value() as f64 / 16.0) as C;
 
     let check_noise = |noise: C, op: &str| {
         assert!(

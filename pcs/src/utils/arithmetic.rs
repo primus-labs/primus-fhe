@@ -168,17 +168,14 @@ pub fn div_ceil(dividend: usize, divisor: usize) -> usize {
 pub fn lagrange_basis<F: Field, EF: AbstractExtensionField<F>>(points: &[EF]) -> Vec<EF> {
     let mut basis = vec![EF::one()];
     points.iter().for_each(|point| {
-        basis.extend(
-            basis
-                .iter()
-                .map(|x| *x * (EF::one() - point))
-                .collect::<Vec<EF>>(),
-        );
+        basis.extend(basis.iter().map(|x| *x * point).collect::<Vec<EF>>());
         let prev_len = basis.len() >> 1;
-        basis.iter_mut().take(prev_len).for_each(|x| *x *= point);
+        basis
+            .iter_mut()
+            .take(prev_len)
+            .for_each(|x| *x *= EF::one() - point);
     });
     assert!(basis.len() == 1 << points.len());
 
-    basis.reverse();
     basis
 }

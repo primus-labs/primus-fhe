@@ -77,6 +77,12 @@ impl<F: Field> Polynomial<F> {
         &mut self.data
     }
 
+    /// Get the coefficient counts of polynomial.
+    #[inline]
+    pub fn coeff_count(&self) -> usize {
+        self.data.len()
+    }
+
     /// Creates a [`Polynomial<F>`] with all coefficients equal to zero.
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
@@ -119,24 +125,6 @@ impl<F: Field> Polynomial<F> {
         self.data.as_mut_slice()
     }
 
-    /// Multiply `self` with the a scalar.
-    #[inline]
-    pub fn mul_scalar(&self, scalar: F) -> Self {
-        Self::new(self.iter().map(|&v| v * scalar).collect())
-    }
-
-    /// Multiply `self` with the a scalar inplace.
-    #[inline]
-    pub fn mul_scalar_assign(&mut self, scalar: F) {
-        self.iter_mut().for_each(|v| *v *= scalar)
-    }
-
-    /// Get the coefficient counts of polynomial.
-    #[inline]
-    pub fn coeff_count(&self) -> usize {
-        self.data.len()
-    }
-
     /// Returns an iterator that allows reading each value or coefficient of the polynomial.
     #[inline]
     pub fn iter(&self) -> Iter<F> {
@@ -168,6 +156,42 @@ impl<F: Field> Polynomial<F> {
         FN: FnMut() -> F,
     {
         self.data.resize_with(new_degree, f);
+    }
+
+    /// Multiply `self` with the a scalar.
+    #[inline]
+    pub fn mul_scalar(&self, scalar: F) -> Self {
+        Self::new(self.iter().map(|&v| v * scalar).collect())
+    }
+
+    /// Multiply `self` with the a scalar inplace.
+    #[inline]
+    pub fn mul_scalar_assign(&mut self, scalar: F) {
+        self.iter_mut().for_each(|v| *v *= scalar)
+    }
+
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.iter()
+            .zip(rhs)
+            .zip(destination)
+            .for_each(|((&x, &y), z)| {
+                *z = x + y;
+            })
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.iter()
+            .zip(rhs)
+            .zip(destination)
+            .for_each(|((&x, &y), z)| {
+                *z = x - y;
+            })
     }
 
     /// Performs the unary `-` operation.

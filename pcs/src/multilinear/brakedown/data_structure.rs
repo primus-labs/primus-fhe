@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
 use algebra::{utils::Prg, AbstractExtensionField, Field};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{
@@ -13,20 +12,19 @@ use crate::utils::{
 use bincode::Result;
 
 use crate::multilinear::brakedown::BRAKEDOWN_SECURITY_BIT;
-use rayon::prelude::*;
 
 /// Define the structure of Brakedown parameters.
 #[derive(Serialize, Deserialize)]
-pub struct BrakedownParams<F: Field, C: LinearCode<F>> {
+pub struct BrakedownParams<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> {
     security_bit: usize,
     num_vars: usize,
     num_rows: usize,
     num_cols: usize,
     code: C,
-    _marker: PhantomData<F>,
+    _marker: PhantomData<(F, EF)>,
 }
 
-impl<F: Field, C: LinearCode<F>> BrakedownParams<F, C> {
+impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<F, EF, C> {
     /// Create a new instance.
     ///
     /// # Arguments
@@ -41,37 +39,34 @@ impl<F: Field, C: LinearCode<F>> BrakedownParams<F, C> {
         let estimated_queries = |distance: f64, gap: f64| {
             ceil(-(BRAKEDOWN_SECURITY_BIT as f64) / (1.0 - distance * gap).log2())
         };
+        let num_queries = estimated_queries(
+            code_spec.distance().unwrap(),
+            code_spec.proximity_gap().unwrap(),
+        );
 
         // Estimated proof size.
-        let estimated_proof_size = |codeword_len: usize, l: usize, msg_len: usize| {
-            codeword_len + l * (1 << num_vars) / msg_len
+        let estimated_proof_size =
+            |msg_len: usize| msg_len * EF::D + num_queries * (1 << num_vars) / msg_len;
+
+        // estimated proof size := num_cols + num_queries * num_rows = D * num_cols + (num_queries * (2 ^ num_vars)) / num_cols
+        // since message is on extension field
+        // optimal num_cols is the closest power of 2 to ((2 ^ num_vars) * num_queries / D) ^ (1/2)
+
+        let sqrt = (((1 << num_vars) * num_queries / EF::D) as f64).sqrt();
+        let lower = 1 << sqrt.log2().floor() as u32;
+        let upper = 1 << sqrt.log2().ceil() as u32;
+
+        let mut num_cols = if estimated_proof_size(lower) < estimated_proof_size(upper) {
+            lower
+        } else {
+            upper
         };
-
-        let mut proof_size = vec![0usize; num_vars - 4];
-        let msg_lens: Vec<usize> = (4..num_vars).collect();
-
-        msg_lens
-            .par_iter()
-            .zip(proof_size.par_iter_mut())
-            .for_each(|(msg_len, size)| {
-                let mut rng = Prg::new();
-                let msg_len = 1 << msg_len;
-                let code = code_spec.code(msg_len, &mut rng);
-                *size = estimated_proof_size(
-                    code.codeword_len(),
-                    estimated_queries(code.distance(), code.proximity_gap()),
-                    msg_len,
-                );
-            });
-
-        let index = proof_size
-            .iter()
-            .position_min()
-            .expect("can not find smallest proof size");
-
-        let num_cols = 1 << msg_lens[index];
+        if num_cols > (1 << num_vars) {
+            num_cols = 1 << num_vars;
+        }
 
         let num_rows = (1 << num_vars) / num_cols;
+
         let code = code_spec.code(num_cols, &mut Prg::new());
 
         Self {
@@ -115,7 +110,12 @@ impl<F: Field, C: LinearCode<F>> BrakedownParams<F, C> {
     }
 }
 
-impl<F: Field, C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>> BrakedownParams<F, C> {
+impl<
+        F: Field,
+        EF: AbstractExtensionField<F>,
+        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
+    > BrakedownParams<F, EF, C>
+{
     /// Convert into bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         bincode::serialize(&self)
