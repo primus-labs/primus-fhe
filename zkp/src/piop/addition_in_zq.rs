@@ -18,9 +18,9 @@ use std::rc::Rc;
 use super::bit_decomposition::{
     BitDecompositionProof, BitDecompositionSubClaim, DecomposedBits, DecomposedBitsInfo,
 };
-use crate::piop::BitDecomposition;
 use crate::sumcheck::prover::ProverMsg;
 use crate::utils::eval_identity_function;
+use crate::{piop::BitDecomposition, sumcheck::verifier::SubClaim};
 
 use crate::sumcheck::MLSumcheck;
 use crate::utils::gen_identity_evaluations;
@@ -103,6 +103,64 @@ impl<F: Field> AdditionInZqInstanceInfo<F> {
         // 1 is for the `k` oracle
         self.decomposed_bits_info.num_oracles() + 1
     }
+
+    /// Return the number of random coefficient sampled to randomize sumcheck protocols
+    #[inline]
+    pub fn num_randomness(&self) -> usize {
+        self.decomposed_bits_info.num_coins() + 1
+    }
+
+    /// Compute the evaluation over the random point of the polynomial proved in the sumcheck protocol
+    #[inline]
+    pub fn subclaim_real_eval<EF: AbstractExtensionField<F>>(
+        &self,
+        evals: &[EF],
+        u: &[EF],
+        r: &[EF],
+        subclaim: &SubClaim<F, EF>,
+    ) -> EF {
+        let num_oracles = self.decomposed_bits_info.num_oracles();
+        let num_r = self.decomposed_bits_info.num_coins();
+
+        let k_eval = evals[evals.len() - 1];
+        let k_r = r[r.len() - 1];
+        // the evaluation is divided by two parts, each corresponding one sumcheck protocol
+        self.decomposed_bits_info.compute_subclaim_eval(
+            &evals[..num_oracles],
+            u,
+            &r[..num_r],
+            subclaim,
+        ) + k_r * eval_identity_function(u, &subclaim.point) * k_eval * (EF::one() - k_eval)
+    }
+
+    /// Verify the subclaim using the evalustions sent by the prover instead of the whole MLEs.
+    /// This interface is the corresponding version of the `verify_subclaim`, which takes many MLEs as input.
+    ///
+    /// # Argument
+    ///
+    /// * `evals`: vector consisting of all the evaluations of relevant MLEs. The arrangement is consistent to the vector returned in `subclaim_real_eval`.
+    #[inline]
+    pub fn verify_subclaim<EF: AbstractExtensionField<F>>(
+        &self,
+        evals: &[EF],
+        u: &[EF],
+        randomness: &[EF],
+        subclaim: &SubClaim<F, EF>,
+    ) -> bool {
+        // check 1:  a(r) + b(r) = c(r) + k(r) * q
+        // arrangement of evals: (abc_bits) || k
+        // arrangement of evals regarding abc_bits part: all values || all decomposed bits
+        let a_eval = evals[0];
+        let b_eval = evals[1];
+        let c_eval = evals[2];
+        let k_eval = evals[evals.len() - 1];
+        if a_eval + b_eval != c_eval + k_eval * self.q {
+            return false;
+        }
+
+        // check 2: check the evaluation of the polynomial proved in the sumcheck protocol
+        self.subclaim_real_eval(evals, u, randomness, subclaim) == subclaim.expected_evaluations
+    }
 }
 
 impl<F: Field> fmt::Display for AdditionInZqInstanceInfo<F> {
@@ -110,10 +168,9 @@ impl<F: Field> fmt::Display for AdditionInZqInstanceInfo<F> {
         writeln!(
             f,
             "An instance of Addition In Zq: #vars = {}, q = {}",
-            self.decomposed_bits_info.num_vars,
-            self.q,
+            self.decomposed_bits_info.num_vars, self.q,
         )?;
-        write!(f, "Containing ")?;
+        write!(f, "- containing ")?;
         self.decomposed_bits_info.fmt(f)
     }
 }
@@ -208,19 +265,18 @@ impl<F: DecomposableField> AdditionInZqInstance<F> {
     }
 
     /// Pack all the involved small polynomials into a single vector of evaluations without padding zeros.
-    pub fn pack_all_mles(
-        &self,
-    ) -> Vec<F> {
+    #[inline]
+    pub fn pack_all_mles(&self) -> Vec<F> {
         assert_eq!(self.abc.len(), 3);
         assert_eq!(self.abc_bits.d_bits.len(), 3);
-        // arragement: arrangement of decomposed bits (abc_bits) || k ||
+        // arragement: arrangement of decomposed bits (abc_bits) || k
         let mut evals = self.abc_bits.pack_all_mles(&self.abc);
         evals.extend(self.k.iter());
         evals
     }
 
-    #[inline]
     /// Generate the oracle to be committed that is composed of all the small oracles used in IOP.
+    #[inline]
     pub fn generate_oracle(&self) -> DenseMultilinearExtensionBase<F> {
         // Oracles: abc, k, and abc_bits
         let num_oracles = self.num_oracles();
@@ -230,71 +286,21 @@ impl<F: DecomposableField> AdditionInZqInstance<F> {
 
         // arragement: arrangement of decomposed bits (abc_bits) || k || padded zeros
         let mut evals = self.pack_all_mles();
-        evals.append(
-            &mut vec![F::zero(); num_zeros_padded]
-        );
+        evals.append(&mut vec![F::zero(); num_zeros_padded]);
         <DenseMultilinearExtensionBase<F>>::from_evaluations_vec(num_vars, evals)
+    }
+
+    /// Prover needs to compute the evaluations of all the smaller MLEs at the random point reduced from sumcheck protocol.
+    #[inline]
+    pub fn compute_evals<EF: AbstractExtensionField<F>>(&self, point: &[EF]) -> Vec<EF> {
+        // arragement: arrangement of decomposed bits (abc_bits) || k
+        let mut evals = self.abc_bits.compute_evals(&self.abc, point);
+        evals.push(self.k.evaluate_ext(point));
+        evals
     }
 }
 
 impl<F: Field, EF: AbstractExtensionField<F>> AdditionInZqSubclaim<F, EF> {
-    /// Prover needs to compute the evaluations of all the smaller MLEs at the random point reduced from sumcheck protocol.
-    #[inline]
-    pub fn compute_evals(
-        &self,
-        abc: &[Rc<DenseMultilinearExtensionBase<F>>],
-        k: &DenseMultilinearExtensionBase<F>,
-        abc_bits: &[&Vec<Rc<DenseMultilinearExtensionBase<F>>>],
-        info: &AdditionInZqInstanceInfo<F>,
-    ) -> Vec<EF> {
-        // arragement: arrangement of decomposed bits (abc_bits) || k
-        let mut evals =
-            self.rangecheck_subclaim
-                .compute_evals(abc, abc_bits, &info.decomposed_bits_info);
-        evals.push(k.evaluate_ext(&self.sumcheck_point));
-        evals
-    }
-
-    /// Verify the subclaim using the evalustions sent by the prover instead of the whole MLEs.
-    /// This interface is the corresponding version of the `verify_subclaim`, which takes many MLEs as input.
-    ///
-    /// # Argument
-    ///
-    /// * `evals`: vector consisting of all the evaluations of relevant MLEs. The arrangement is consistent to the vector returned in `compute_evals`.
-    #[inline]
-    pub fn verify_subclaim_pcs(
-        &self,
-        q: F,
-        evals: &[EF],
-        u: &[EF],
-        info: &AdditionInZqInstanceInfo<F>,
-    ) -> bool {
-        let num_oracles = info.num_oracles();
-        assert_eq!(num_oracles as usize, evals.len());
-        // check 1: subclaim for rangecheck, i.e. a, b, c \in [Zq]
-        if !self.rangecheck_subclaim.verify_subclaim_pcs(
-            &evals[..evals.len() - 1],
-            u,
-            &info.decomposed_bits_info,
-        ) {
-            return false;
-        }
-
-        let k_eval = evals[evals.len() - 1];
-        if eval_identity_function(u, &self.sumcheck_point) * k_eval * (EF::one() - k_eval)
-            != self.sumcheck_expected_evaluations
-        {
-            return false;
-        }
-
-        // arrangement of decomposed bits (evals[..evals.len()-1]): all values||all decomposed bits
-        let a_eval = evals[0];
-        let b_eval = evals[1];
-        let c_eval = evals[2];
-        // check 3: a(u) + b(u) = c(u) + k(u) * q
-        a_eval + b_eval == c_eval + k_eval * q
-    }
-
     /// verify the sumcliam
     /// * abc stores the inputs and the output to be added in Zq
     /// * k stores the introduced witness s.t. a + b = c + k\cdot q
@@ -336,6 +342,50 @@ impl<F: Field, EF: AbstractExtensionField<F>> AdditionInZqSubclaim<F, EF> {
 }
 
 impl<F: Field + Packable, EF: ExtensionField<F>> AdditionInZq<F, EF> {
+    /// Update the polynomial to be proved in the sumcheck protocol
+    #[inline]
+    pub fn random_poly(
+        poly: &mut ListOfProductsOfPolynomials<F, EF>,
+        trans: &mut Transcript<F>,
+        instance: &AdditionInZqInstance<F>,
+        random_u: &[EF],
+    ) -> EF {
+        let sum_added =
+            <BitDecomposition<F, EF>>::random_poly(poly, trans, &instance.abc_bits, random_u);
+
+        // Convert the MLE over Field in the original instance to a new instance containing the corresponding MLE over Extension Field
+        let instance_ext = <AdditionInZqInstanceExt<F, EF>>::from_base(instance);
+
+        // Combine a sumcheck for \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l using random linear combination
+        let random =
+            trans.get_ext_field_challenge::<EF>(b"combine a sumcheck protocol in addition in zq");
+        poly.add_product_with_linear_op(
+            [
+                Rc::new(gen_identity_evaluations(random_u)),
+                Rc::clone(&instance_ext.k),
+                Rc::clone(&instance_ext.k),
+            ],
+            &[
+                (<UF<F, EF>>::one(), <UF<F, EF>>::zero()),
+                (<UF<F, EF>>::one(), <UF<F, EF>>::zero()),
+                (UF::BaseField(-F::one()), <UF<F, EF>>::one()),
+            ],
+            random,
+        );
+        sum_added
+    }
+
+    /// Return the random coefficients of each product in the polynomial to be proved in the sumcheck protocol.
+    /// These random coefficients are used to randomize newly added sub-sumcheck protocols.
+    #[inline]
+    pub fn random_coin(trans: &mut Transcript<F>, info: &AdditionInZqInstanceInfo<F>) -> Vec<EF> {
+        let mut random = <BitDecomposition<F, EF>>::random_coin(trans, &info.decomposed_bits_info);
+        let random_extra =
+            trans.get_ext_field_challenge::<EF>(b"combine a sumcheck protocol in addition in zq");
+        random.push(random_extra);
+        random
+    }
+
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.

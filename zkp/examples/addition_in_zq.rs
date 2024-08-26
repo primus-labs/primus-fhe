@@ -1,33 +1,32 @@
-use std::time::Instant;
 use algebra::utils::Transcript;
 use algebra::{
     derive::{DecomposableField, Field},
-    Field, FieldUniformSampler, DecomposableField,
+    DecomposableField, Field, FieldUniformSampler,
 };
-use algebra::{BabyBear, BabyBearExetension, Basis, DenseMultilinearExtensionBase};
+use algebra::{
+    AbstractExtensionField, Basis, DenseMultilinearExtensionBase, ListOfProductsOfPolynomials,
+};
 use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
+use num_traits::{One, Zero};
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{ExpanderCode, ExpanderCodeSpec},
     PolynomialCommitmentScheme,
 };
-use num_traits::{One, Zero};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
-use zkp::utils::verify_oracle_relation;
 use std::rc::Rc;
+use std::time::Instant;
 use std::vec;
-use zkp::piop::{addition_in_zq, AdditionInZq, AdditionInZqInstance};
+use zkp::piop::{AdditionInZq, AdditionInZqInstance};
+use zkp::sumcheck::MLSumcheck;
+use zkp::utils::{print_pcs_statistic, print_statistic, verify_oracle_relation};
 
 type FF = DefaultFieldU32;
 type EF = DefaultExtendsionFieldU32x4;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
-
-#[derive(Field, DecomposableField)]
-#[modulus = 1024]
-pub struct Fq(u32);
 
 // # Parameters
 // n = 1024: denotes the dimension of LWE
@@ -35,15 +34,22 @@ pub struct Fq(u32);
 // B = 2^3: denotes the basis used in the bit decomposition
 // q = 1024: denotes the modulus in LWE
 // Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
-fn main()
-{
+const LOG_DIM_RLWE: usize = 10;
+const LOG_B: u32 = 3;
+
+#[derive(Field, DecomposableField)]
+#[modulus = 1024]
+pub struct Fq(u32);
+
+fn generate_instance(
+    num_vars: usize,
+    base_len: u32,
+    base: FF,
+    bits_len: u32,
+) -> AdditionInZqInstance<FF> {
     let mut rng = thread_rng();
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
-    let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
-    let base_len: u32 = 3;
-    let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
 
     // Addition in Zq
     let a: Vec<_> = (0..(1 << num_vars))
@@ -87,95 +93,150 @@ fn main()
         k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
     ));
 
-    // decompose bits of every element in a, b, c
-    let abc_bits: Vec<_> = abc
-        .iter()
-        .map(|x| x.get_decomposed_mles(base_len, bits_len))
-        .collect();
-    let abc_bits_ref: Vec<_> = abc_bits.iter().collect();
+    AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len)
+}
 
-    let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
-    let addition_info = abc_instance.info();
-    let num_oracles = addition_info.num_oracles();
+fn main() {
+    let base_len: u32 = LOG_B;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let num_vars = LOG_DIM_RLWE;
+
+    // Generate 1 instance to be proved, containing N = 2^num_vars addition equality to be proved
+    let instance = generate_instance(num_vars, base_len, base, bits_len);
+    let instance_info = instance.info();
+    let num_oracles = instance_info.num_oracles();
     let num_vars_added = num_oracles.next_power_of_two().ilog2() as usize;
 
-    println!("Prove {addition_info}");
-    println!("");
+    println!("Prove {instance_info}\n");
     // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
-    let poly = abc_instance.generate_oracle();
+    let poly = instance.generate_oracle();
 
     // 1. Use PCS to commit the above polynomial.
     let start = Instant::now();
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::setup(num_vars + num_vars_added, Some(code_spec));
+    let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::setup(
+        num_vars + num_vars_added,
+        Some(code_spec),
+    );
     let setup_time = start.elapsed().as_millis();
-    
+
     let start = Instant::now();
-    let (comm, state) = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::commit(&pp, &poly);
+    let (comm, state) =
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::commit(&pp, &poly);
     let commit_time = start.elapsed().as_millis();
 
     // 2. Prover generates the proof
-    let start = Instant::now();
+    let prover_start = Instant::now();
     let mut prover_trans = Transcript::<FF>::new();
-    let prover_u = prover_trans
-        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
-    let proof = <AdditionInZq<FF, EF>>::prove(&mut prover_trans, &abc_instance, &prover_u);
-    let mut prover_time = start.elapsed().as_millis();
+
+    // 2.1 Generate the random point to instantiate the sumcheck protocol
+    let prover_u = prover_trans.get_vec_ext_field_challenge(
+        b"random point used to instantiate sumcheck protocol",
+        num_vars,
+    );
+
+    // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
+    // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
+    let mut poly_sumcheck = <ListOfProductsOfPolynomials<FF, EF>>::new(num_vars);
+    let mut claimed_sum = EF::from_base(FF::new(0));
+    claimed_sum += <AdditionInZq<FF, EF>>::random_poly(
+        &mut poly_sumcheck,
+        &mut prover_trans,
+        &instance,
+        &prover_u,
+    );
+
+    // 2.3 Generate proof of sumcheck protocol
+    let (sumcheck_proof, sumcheck_state) =
+        <MLSumcheck<FF, EF>>::prove(&mut prover_trans, &poly_sumcheck)
+            .expect("Proof generated in Addition In Zq");
+
+    // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
+    let evals = instance.compute_evals(&sumcheck_state.randomness);
+
+    // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
+    let mut requested_point = sumcheck_state.randomness.clone();
+    requested_point.extend(&prover_trans.get_vec_ext_field_challenge(
+        b"random linear combination for evaluations of oracles",
+        num_vars_added,
+    ));
+    let large_oracle_eval = poly.evaluate_ext(&requested_point);
+
+    // 2.6 Generate the evaluation proof of the requested point
+    let start = Instant::now();
+    let eval_proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::open(
+        &pp,
+        &comm,
+        &state,
+        &requested_point,
+        &mut prover_trans,
+    );
+    let open_time = start.elapsed().as_millis();
+    let prover_time = prover_start.elapsed().as_millis();
 
     // 3. Verifier checks the proof
-    let start = Instant::now();
+    let verifier_start = Instant::now();
     let mut verifier_trans = Transcript::<FF>::new();
-    let verifier_u = verifier_trans
-        .get_vec_ext_field_challenge(b"random point to instantiate sumcheck protocol", num_vars);
-    let subclaim = AdditionInZq::verify(
-        &mut verifier_trans,
-        &proof,
-        &addition_info.decomposed_bits_info,
+
+    // 3.1 Generate the random point to instantiate the sumcheck protocol
+    let verifier_u = verifier_trans.get_vec_ext_field_challenge(
+        b"random point used to instantiate sumcheck protocol",
+        num_vars,
     );
-    let mut verifier_time = start.elapsed().as_millis();
 
-    // 4. Prover needs to compute all the requested evaluations over the random point returned from the sumcheck protocol.
-    //    These evaluations will be reduced a new requested point over the committed polynomial.
-    //    The requested point is composed of newly generated randomness to combine small oracles and the old random point reduced from the sumcheck protocol
-    let start = Instant::now();
-    let small_oracle_evals = subclaim.compute_evals(&abc, k.as_ref(), &abc_bits_ref, &addition_info);
-    let mut requested_point = subclaim.sumcheck_point.clone();
-    requested_point.extend(&prover_trans.get_vec_ext_field_challenge(b"random linear combination for evaluations of oracles", num_vars_added));
-    prover_time += start.elapsed().as_millis();
+    // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
+    let randomness = <AdditionInZq<FF, EF>>::random_coin(&mut verifier_trans, &instance_info);
 
-    // 5. Prover then open the requested point of the committed polynomial
-    let start = Instant::now();
-    let large_oracle_eval = poly.evaluate_ext(&requested_point);
-    let eval_proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::open(
-        &pp, &comm, &state, &requested_point, &mut prover_trans);
-    let open_time = start.elapsed().as_millis();
+    // 3.3 Check the proof of the sumcheck protocol
+    let subclaim = <MLSumcheck<FF, EF>>::verify(
+        &mut verifier_trans,
+        &poly_sumcheck.info(),
+        claimed_sum,
+        &sumcheck_proof,
+    )
+    .expect("Verify the proof generated in Addition in Zq");
 
-    // 6. Verify checks the subclaim returned in IOP
-    //    Verifier first checks the relation of these evals evaluated from smaller oracles,
-    //    and then check the relation between the committed oracle and these smaller oracles.
-    let start = Instant::now();
-    let check_iop = subclaim.verify_subclaim_pcs(q, &small_oracle_evals, &verifier_u, &addition_info)
-        && verify_oracle_relation(&small_oracle_evals, large_oracle_eval, &mut verifier_trans);
-    assert!(check_iop);
-    verifier_time += start.elapsed().as_millis();
-    
-    // 7. Verify finally checks the evaluation proof of the requested point.
+    // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP,
+    //     and also check the relation between these small oracles and the committed oracle
+    let check_subclaim = instance_info.verify_subclaim(&evals, &verifier_u, &randomness, &subclaim)
+        && verify_oracle_relation(&evals, large_oracle_eval, &mut verifier_trans);
+    // 3.5 Check the evaluation of a random point over the committed oracle
     let start = Instant::now();
     let check_pcs = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::verify(
-        &pp, &comm, &requested_point, large_oracle_eval, &eval_proof, &mut verifier_trans);
-    let verifier_time_pcs = start.elapsed().as_millis();
-    assert!(check_pcs);
-    
-    println!("==statistic==");
-    println!("The committed polynomial is of {} variables,", poly.num_vars);
-    println!("which consists of {} smaller oracles used in IOP, each of which is of {} variables", num_oracles, num_vars);
-    println!("[pcs] setup time: {:?} ms", setup_time);
-    println!("[pcs] commit time: {:?} ms", commit_time);
-    println!("[pcs] open time: {:?} ms", open_time);
-    println!("[pcs] verify time: {:?} ms", verifier_time_pcs);
-    println!("[pcs] proof size: {:?} Bytes", bincode::serialize(&eval_proof).unwrap().len());
-    println!("");
-    println!("[iop] prove time: {:?} ms", prover_time);
-    println!("[iop] verifier time: {:?} ms", verifier_time);
-    println!("[iop] proof size: {:?} Bytes", bincode::serialize(&proof).unwrap().len());
+        &pp,
+        &comm,
+        &requested_point,
+        large_oracle_eval,
+        &eval_proof,
+        &mut verifier_trans,
+    );
+    let pcs_verifier_time = start.elapsed().as_millis();
+    assert!(check_subclaim && check_pcs);
+    let verifier_time = verifier_start.elapsed().as_millis();
+
+    // Print statistic
+    print_statistic(
+        "Total",
+        prover_time,
+        verifier_time,
+        bincode::serialize(&eval_proof).unwrap().len()
+            + bincode::serialize(&sumcheck_proof).unwrap().len(),
+    );
+    print_pcs_statistic(
+        poly.num_vars,
+        num_oracles,
+        num_vars,
+        setup_time,
+        commit_time,
+        open_time,
+        pcs_verifier_time,
+        bincode::serialize(&eval_proof).unwrap().len(),
+    );
+    print_statistic(
+        "IOP(Sumcheck)",
+        prover_time - open_time,
+        verifier_time - pcs_verifier_time,
+        bincode::serialize(&sumcheck_proof).unwrap().len(),
+    );
 }

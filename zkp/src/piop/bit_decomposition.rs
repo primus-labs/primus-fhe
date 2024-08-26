@@ -32,7 +32,7 @@ use std::rc::Rc;
 use crate::sumcheck::prover::ProverMsg;
 
 use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::{MLSumcheck, SumcheckProof};
+use crate::sumcheck::MLSumcheck;
 use crate::utils::{eval_identity_function, gen_identity_evaluations};
 use algebra::{ListOfProductsOfPolynomials, PolynomialInfo};
 
@@ -82,14 +82,14 @@ pub struct DecomposedBits<F: Field> {
 /// Store the corresponding MLE of DecomposedBits where the evaluations are over the extension field.
 pub struct DecomposedBitsExt<F: Field, EF: AbstractExtensionField<F>> {
     /// batched plain deomposed bits, each of which corresponds to one bit decomposisiton instance
-    pub instances: Vec<Vec<Rc<DenseMultilinearExtension<F, EF>>>>,
+    pub d_bits: Vec<Vec<Rc<DenseMultilinearExtension<F, EF>>>>,
 }
 
 impl<F: Field, EF: AbstractExtensionField<F>> DecomposedBitsExt<F, EF> {
     /// Construct an instance over the extension field from the original instance defined over the basic field
     pub fn from_base(input_base: &DecomposedBits<F>) -> Self {
         DecomposedBitsExt {
-            instances: input_base
+            d_bits: input_base
                 .d_bits
                 .iter()
                 .map(|instance| {
@@ -106,6 +106,49 @@ impl<F: Field, EF: AbstractExtensionField<F>> DecomposedBitsExt<F, EF> {
     /// Batch all the sumcheck protocol, each corresponding to range-check one single bit.
     /// * randomness: randomness used to linearly combine bits_len * num_instances sumcheck protocols
     /// * u is the common random challenge from the verifier, used to instantiate every sum.
+    pub fn poly_randomized_sumcheck(
+        &self,
+        poly: &mut ListOfProductsOfPolynomials<F, EF>,
+        instance_base: &DecomposedBits<F>,
+        randomness: &[EF],
+        u: &[EF],
+    ) {
+        assert_eq!(
+            randomness.len(),
+            self.d_bits.len() * instance_base.bits_len as usize
+        );
+        assert_eq!(u.len(), instance_base.num_vars);
+
+        let identity_func_at_u = Rc::new(gen_identity_evaluations(u));
+        let base = 1 << instance_base.base_len;
+
+        let mut r_iter = randomness.iter();
+
+        for instance in &self.d_bits {
+            // For every bit, the reduced sum is $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
+            // and the added product is r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] with the corresponding randomness
+            for bit in instance {
+                let mut product: Vec<_> = Vec::with_capacity(base + 1);
+                let mut op_coefficient = Vec::with_capacity(base + 1);
+                product.push(Rc::clone(&identity_func_at_u));
+                op_coefficient.push((UF::one(), UF::zero()));
+
+                let mut minus_k = F::zero();
+                for _ in 0..base {
+                    product.push(Rc::clone(bit));
+                    op_coefficient.push((UF::one(), UF::BaseField(minus_k)));
+                    minus_k -= F::one();
+                }
+                poly.add_product_with_linear_op(product, &op_coefficient, *r_iter.next().unwrap());
+            }
+        }
+    }
+
+    // TODO TO DELETE
+    #[inline]
+    /// Batch all the sumcheck protocol, each corresponding to range-check one single bit.
+    /// * randomness: randomness used to linearly combine bits_len * num_instances sumcheck protocols
+    /// * u is the common random challenge from the verifier, used to instantiate every sum.
     pub fn randomized_sumcheck(
         &self,
         instance_base: &DecomposedBits<F>,
@@ -114,7 +157,7 @@ impl<F: Field, EF: AbstractExtensionField<F>> DecomposedBitsExt<F, EF> {
     ) -> ListOfProductsOfPolynomials<F, EF> {
         assert_eq!(
             randomness.len(),
-            self.instances.len() * instance_base.bits_len as usize
+            self.d_bits.len() * instance_base.bits_len as usize
         );
         assert_eq!(u.len(), instance_base.num_vars);
 
@@ -124,7 +167,7 @@ impl<F: Field, EF: AbstractExtensionField<F>> DecomposedBitsExt<F, EF> {
 
         let mut r_iter = randomness.iter();
 
-        for instance in &self.instances {
+        for instance in &self.d_bits {
             // For every bit, the reduced sum is $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
             // and the added product is r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] with the corresponding randomness
             for bit in instance {
@@ -183,20 +226,58 @@ impl<F: Field> DecomposedBitsInfo<F> {
         self.num_instances * (self.bits_len as usize + 1)
     }
 
+    /// Return the number of random coefficient sampled to randomize sumcheck protocols
+    #[inline]
+    pub fn num_coins(&self) -> usize {
+        self.num_instances * self.bits_len as usize
+    }
+
+    /// Compute the evaluation over the random point of the polynomial proved in the sumcheck protocol
+    #[inline]
+    pub fn compute_subclaim_eval<EF: AbstractExtensionField<F>>(
+        &self,
+        evals: &[EF],
+        u: &[EF],
+        coins: &[EF],
+        subclaim: &SubClaim<F, EF>,
+    ) -> EF {
+        let d_bits_at_point = &evals[self.num_instances..];
+
+        // expected value returned in sumcheck
+        // each instance contributes value: eq(u, x) \cdot \sum_{i = 0}^{l-1} r_i \cdot [\prod_{k=0}^B (d_i(x) - k)] =? expected_evaluation
+        let mut evaluation = EF::zero();
+        let mut r = coins.iter();
+        d_bits_at_point
+            .chunks_exact(self.bits_len as usize)
+            .for_each(|bits| {
+                bits.iter().for_each(|bit| {
+                    let mut prod = *r.next().unwrap();
+                    let mut minus_k = F::zero();
+                    for _ in 0..(1 << self.base_len) {
+                        prod *= *bit + minus_k;
+                        minus_k -= F::one();
+                    }
+                    evaluation += prod;
+                })
+            });
+
+        evaluation * eval_identity_function(u, &subclaim.point)
+    }
+
     /// Verify the subclaim using the evalustions sent by the prover instead of the whole MLEs.
-    /// 
+    ///
     /// # Argument
     ///
     /// * `evals`: vector consisting of all the evaluations of relevant MLEs. The arrangement is consistent to the vector returned in `compute_evals`.
-    /// * `u`: random point used to instantiate all the sub-sumcheck protocols
-    /// * `randomness`: random elements used to randomize sub-sumcheck protocols with linear combination
+    /// * `random_u`: random point used to instantiate all the sub-sumcheck protocols
+    /// * `coins`: random elements used to randomize sub-sumcheck protocols with linear combination
     /// * `subclaim`: subclaim returned from the randomized sumcheck protocol
     #[inline]
     pub fn verify_subclaim<EF: AbstractExtensionField<F>>(
         &self,
         evals: &[EF],
-        u: &[EF],
-        randomness: &[EF],
+        random_u: &[EF],
+        coins: &[EF],
         subclaim: &SubClaim<F, EF>,
     ) -> bool {
         assert_eq!(evals.len(), self.num_oracles());
@@ -227,23 +308,8 @@ impl<F: Field> DecomposedBitsInfo<F> {
 
         // check 2: expected value returned in sumcheck
         // each instance contributes value: eq(u, x) \cdot \sum_{i = 0}^{l-1} r_i \cdot [\prod_{k=0}^B (d_i(x) - k)] =? expected_evaluation
-        let mut evaluation = EF::zero();
-        let mut r = randomness.iter();
-        d_bits_at_point
-            .chunks_exact(self.bits_len as usize)
-            .for_each(|bits| {
-                bits.iter().for_each(|bit| {
-                    let mut prod = *r.next().unwrap();
-                    let mut minus_k = F::zero();
-                    for _ in 0..(1 << self.base_len) {
-                        prod *= *bit + minus_k;
-                        minus_k -= F::one();
-                    }
-                    evaluation += prod;
-                })
-            });
-
-        subclaim.expected_evaluations == evaluation * eval_identity_function(u, &subclaim.point)
+        subclaim.expected_evaluations
+            == self.compute_subclaim_eval(evals, random_u, coins, subclaim)
     }
 }
 
@@ -306,10 +372,7 @@ impl<F: Field> DecomposedBits<F> {
     }
 
     /// Pack all the involved small polynomials into a single vector of evaluations without padding zeros.
-    pub fn pack_all_mles(
-        &self,
-        d_val: &[Rc<DenseMultilinearExtensionBase<F>>],
-    ) -> Vec<F> {
+    pub fn pack_all_mles(&self, d_val: &[Rc<DenseMultilinearExtensionBase<F>>]) -> Vec<F> {
         assert_eq!(d_val.len(), self.d_bits.len());
 
         // arrangement: all values||all decomposed bits
@@ -318,25 +381,15 @@ impl<F: Field> DecomposedBits<F> {
             .flat_map(|d| d.iter())
             // concatenated with decomposed bits
             .chain(self.d_bits.iter().flatten().flat_map(|bit| bit.iter()))
-            .map(|x| *x)
+            .copied()
             .collect::<Vec<F>>()
     }
-    
+
     /// Generate the oracle to be committed that is composed of all the small oracles used in IOP.
     /// The evaluations of this oracle is generated by the evaluations of all mles and the padded zeros.
     /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
-    /// When verifying the subclaim:
-    ///
-    /// * Prover
-    /// 1. first computes all the requested evaluations defined over these small oracles.
-    /// 2. then sends these opened evaluations to the verifier
-    /// 3. use random linear combination to reduce the proof of these evaluations into a single random point over the committed large oracle.
-    /// * Verifier
-    /// 1. verifier first checks the relation among these evaluations the same as in the old interface `verify_subclaim`
-    /// 2. verifier then checks the random linear combination between these evaluations of small oracles and the final single evaluation over the committed large oracle.
-    /// 3. verifier finally checks the evaluation proof of the committed large oracle (outside the implementation of IOP)
     #[inline]
-     pub fn generate_oracle(
+    pub fn generate_oracle(
         &self,
         d_val: &[Rc<DenseMultilinearExtensionBase<F>>],
     ) -> DenseMultilinearExtensionBase<F> {
@@ -348,14 +401,11 @@ impl<F: Field> DecomposedBits<F> {
 
         // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_all_mles(d_val);
-        evals.append(
-            &mut vec![F::zero(); num_zeros_padded]
-        );
+        evals.append(&mut vec![F::zero(); num_zeros_padded]);
         <DenseMultilinearExtensionBase<F>>::from_evaluations_vec(num_vars, evals)
     }
 
     /// Prover needs to compute the evaluations of all the smaller MLEs at the random point reduced from sumcheck protocol.
-    ///
     #[inline]
     pub fn compute_evals<EF: AbstractExtensionField<F>>(
         &self,
@@ -368,7 +418,7 @@ impl<F: Field> DecomposedBits<F> {
         d_val
             .iter()
             .chain(self.d_bits.iter().flat_map(|bits| bits.iter()))
-            .map(|mle| mle.evaluate_ext(&point))
+            .map(|mle| mle.evaluate_ext(point))
             .collect::<Vec<EF>>()
     }
 }
@@ -386,93 +436,6 @@ impl<F: DecomposableField> DecomposedBits<F> {
 }
 
 impl<F: Field, EF: AbstractExtensionField<F>> BitDecompositionSubClaim<F, EF> {
-    /// Prover needs to compute the evaluations of all the smaller MLEs at the random point reduced from sumcheck protocol.
-    ///
-    /// To be honest, this interface is not appropriate to be implemented for BitDecompositionSubClaim,
-    /// but we do not store the random point in all the Proof data structures.
-    /// Ideally, this interface should be implemented for BitDecompositionProof in the view of Prover,
-    /// and BitDecompositionProof should consists of the random point, so are all IOPs.
-    #[inline]
-    pub fn compute_evals(
-        &self,
-        d_val: &[Rc<DenseMultilinearExtensionBase<F>>],
-        d_bits: &[&Vec<Rc<DenseMultilinearExtensionBase<F>>>],
-        decomposed_bits_info: &DecomposedBitsInfo<F>,
-    ) -> Vec<EF> {
-        assert_eq!(d_val.len(), decomposed_bits_info.num_instances);
-        assert_eq!(d_bits.len(), decomposed_bits_info.num_instances);
-
-        // arrangement: all values||all decomposed bits
-        d_val
-            .iter()
-            .chain(d_bits.iter().flat_map(|bits| bits.iter()))
-            .map(|mle| mle.evaluate_ext(&self.point))
-            .collect::<Vec<EF>>()
-    }
-
-    /// Verify the subclaim using the evalustions sent by the prover instead of the whole MLEs.
-    /// This interface is the corresponding version of the `verify_subclaim`, which takes many MLEs as input.
-    ///
-    /// # Argument
-    ///
-    /// * `evals`: vector consisting of all the evaluations of relevant MLEs. The arrangement is consistent to the vector returned in `compute_evals`.
-    #[inline]
-    pub fn verify_subclaim_pcs(
-        &self,
-        evals: &[EF],
-        u: &[EF],
-        info: &DecomposedBitsInfo<F>,
-    ) -> bool {
-        assert_eq!(
-            evals.len(),
-            info.num_instances + info.num_instances * info.bits_len as usize
-        );
-        // arrangement: all values||all decomposed bits
-        let d_val_at_point = &evals[..info.num_instances];
-        let d_bits_at_point = &evals[info.num_instances..];
-
-        // base_pow = [1, B, ..., B^{l-1}]
-        let mut base_pow = vec![F::one(); info.bits_len as usize];
-        base_pow.iter_mut().fold(F::one(), |acc, pow| {
-            *pow *= acc;
-            acc * info.base
-        });
-
-        // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
-        if !d_bits_at_point
-            .chunks_exact(info.bits_len as usize)
-            .zip(d_val_at_point)
-            .all(|(bits, val)| {
-                *val == bits
-                    .iter()
-                    .zip(base_pow.iter())
-                    .fold(EF::zero(), |acc, (bit, pow)| acc + *bit * *pow)
-            })
-        {
-            return false;
-        }
-
-        // check 2: expected value returned in sumcheck
-        // each instance contributes value: eq(u, x) \cdot \sum_{i = 0}^{l-1} r_i \cdot [\prod_{k=0}^B (d_i(x) - k)] =? expected_evaluation
-        let mut evaluation = EF::zero();
-        let mut r = self.randomness.iter();
-        d_bits_at_point
-            .chunks_exact(info.bits_len as usize)
-            .for_each(|bits| {
-                bits.iter().for_each(|bit| {
-                    let mut prod = *r.next().unwrap();
-                    let mut minus_k = F::zero();
-                    for _ in 0..(1 << info.base_len) {
-                        prod *= *bit + minus_k;
-                        minus_k -= F::one();
-                    }
-                    evaluation += prod;
-                })
-            });
-
-        self.expected_evaluation == evaluation * eval_identity_function(u, &self.point)
-    }
-
     /// verify the subclaim given the MLEs
     ///
     /// # Argument
@@ -545,35 +508,61 @@ impl<F: Field, EF: AbstractExtensionField<F>> BitDecompositionSubClaim<F, EF> {
 }
 
 impl<F: Field, EF: AbstractExtensionField<F>> BitDecomposition<F, EF> {
-    /// Generate the polynomial to be proved in the sumcheck protocol
-    pub fn poly_proved(
+    /// Update the polynomial to be proved in the sumcheck protocol
+    #[inline]
+    pub fn random_poly(
+        poly: &mut ListOfProductsOfPolynomials<F, EF>,
         trans: &mut Transcript<F>,
-        decomposed_bits_base: &DecomposedBits<F>,
-        u: &[EF],
-    ) -> (ListOfProductsOfPolynomials<F, EF>, EF) {
-        let num_bits =
-            decomposed_bits_base.d_bits.len() * decomposed_bits_base.bits_len as usize;
-        trans.append_message(b"decomposed bits", &decomposed_bits_base.info());
+        instance: &DecomposedBits<F>,
+        random_u: &[EF],
+    ) -> EF {
+        let num_bits = instance.d_bits.len() * instance.bits_len as usize;
 
         // batch `len_bits` sumcheck protocols into one with random linear combination
         let randomness = trans
             .get_vec_ext_field_challenge(b"randomness to combine sumcheck protocols", num_bits);
 
         // Convert to a new instance defined over extension field
-        let decomposed_bits = <DecomposedBitsExt<F, EF>>::from_base(decomposed_bits_base);
-        (decomposed_bits.randomized_sumcheck(decomposed_bits_base, &randomness, u), EF::zero())
+        let decomposed_bits = <DecomposedBitsExt<F, EF>>::from_base(instance);
+
+        let identity_func_at_u = Rc::new(gen_identity_evaluations(random_u));
+        let base = 1 << instance.base_len;
+
+        let mut r_iter = randomness.iter();
+
+        for bits in &decomposed_bits.d_bits {
+            // For every bit, the reduced sum is $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
+            // and the added product is r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] with the corresponding randomness
+            for bit in bits {
+                let mut product: Vec<_> = Vec::with_capacity(base + 1);
+                let mut op_coefficient = Vec::with_capacity(base + 1);
+                product.push(Rc::clone(&identity_func_at_u));
+                op_coefficient.push((UF::one(), UF::zero()));
+
+                let mut minus_k = F::zero();
+                for _ in 0..base {
+                    product.push(Rc::clone(bit));
+                    op_coefficient.push((UF::one(), UF::BaseField(minus_k)));
+                    minus_k -= F::one();
+                }
+                poly.add_product_with_linear_op(product, &op_coefficient, *r_iter.next().unwrap());
+            }
+        }
+
+        EF::zero()
     }
 
-    /// Return the random elements used to randomize sumcheck protocols
-    pub fn random_verified(
-        trans: &mut Transcript<F>,
-        decomposed_bits_info: &DecomposedBitsInfo<F>,
-    ) -> Vec<EF> {
-        let num_bits = decomposed_bits_info.num_instances * decomposed_bits_info.bits_len as usize;
-        trans.append_message(b"decomposed bits", decomposed_bits_info);
+    /// Return the random coefficients of each product in the polynomial to be proved in the sumcheck protocol.
+    /// These random coefficients are used to randomize newly added sub-sumcheck protocols.
+    #[inline]
+    pub fn random_coin(trans: &mut Transcript<F>, info: &DecomposedBitsInfo<F>) -> Vec<EF> {
+        let num_bits = info.num_instances * info.bits_len as usize;
+
         // batch `len_bits` sumcheck protocols into one with random linear combination
-        trans
-            .get_vec_ext_field_challenge::<EF>(b"randomness to combine sumcheck protocols", num_bits)
+        trans.get_vec_ext_field_challenge::<EF>(
+            b"randomness to combine sumcheck protocols",
+            num_bits,
+        )
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
@@ -582,8 +571,7 @@ impl<F: Field, EF: AbstractExtensionField<F>> BitDecomposition<F, EF> {
         decomposed_bits_base: &DecomposedBits<F>,
         u: &[EF],
     ) -> BitDecompositionProof<F, EF> {
-        let num_bits =
-            decomposed_bits_base.d_bits.len() * decomposed_bits_base.bits_len as usize;
+        let num_bits = decomposed_bits_base.d_bits.len() * decomposed_bits_base.bits_len as usize;
         trans.append_message(b"decomposed bits", &decomposed_bits_base.info());
 
         // batch `len_bits` sumcheck protocols into one with random linear combination

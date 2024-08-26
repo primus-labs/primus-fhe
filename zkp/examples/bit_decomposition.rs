@@ -1,5 +1,8 @@
 use algebra::utils::Transcript;
-use algebra::{BabyBear, BabyBearExetension, Basis, DenseMultilinearExtensionBase};
+use algebra::{
+    AbstractExtensionField, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtensionBase,
+    ListOfProductsOfPolynomials,
+};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
@@ -27,11 +30,8 @@ const BASE_FIELD_BITS: usize = 31;
 // q = 1024: denotes the modulus in LWE
 // Q = BabyBear: denotes the ciphertext modulus in RLWE
 const DIM_LWE: usize = 1024;
-const DIM_RLWE: usize = 1024;
 const LOG_DIM_RLWE: usize = 10;
-const B: usize = 1 << 3;
 const LOG_B: u32 = 3;
-const MODULUS_LWE: usize = 1024;
 
 fn generate_instance<F: DecomposableField>(
     num_instances: usize,
@@ -70,7 +70,7 @@ fn main() {
     let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
     let num_vars = LOG_DIM_RLWE;
 
-    // Generate 2 * n = 2048 instances to be proved, each instance consists of N = 2^num_vars values to be decomposed.
+    // Generate 2 * n = 2048 instances to be proved, each instance consisting of N = 2^num_vars values to be decomposed.
     let (d, decomposed_bits) =
         generate_instance::<FF>(2 * DIM_LWE, num_vars, base_len, base, bits_len);
 
@@ -79,7 +79,7 @@ fn main() {
     let num_oracles = decomposed_bits.num_oracles();
     let num_vars_added = num_oracles.next_power_of_two().ilog2() as usize;
 
-    println!("Prove {decomposed_bits_info}");
+    println!("Prove {decomposed_bits_info}\n");
     // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
     let poly = decomposed_bits.generate_oracle(&d);
 
@@ -108,8 +108,14 @@ fn main() {
     );
 
     // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-    let (poly_sumcheck, claimed_sum) =
-        <BitDecomposition<FF, EF>>::poly_proved(&mut prover_trans, &decomposed_bits, &prover_u);
+    let mut poly_sumcheck = <ListOfProductsOfPolynomials<FF, EF>>::new(num_vars);
+    let mut claimed_sum = EF::from_base(FF::new(0));
+    claimed_sum += <BitDecomposition<FF, EF>>::random_poly(
+        &mut poly_sumcheck,
+        &mut prover_trans,
+        &decomposed_bits,
+        &prover_u,
+    );
 
     // 2.3 Generate proof of sumcheck protocol
     let (sumcheck_proof, sumcheck_state) =
@@ -142,14 +148,17 @@ fn main() {
     // 3. Verifier checks the proof
     let verifier_start = Instant::now();
     let mut verifier_trans = Transcript::<FF>::new();
+
     // 3.1 Generate the random point to instantiate the sumcheck protocol
     let verifier_u = verifier_trans.get_vec_ext_field_challenge(
         b"random point used to instantiate sumcheck protocol",
         num_vars,
     );
+
     // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
     let randomness =
-        <BitDecomposition<FF, EF>>::random_verified(&mut verifier_trans, &decomposed_bits_info);
+        <BitDecomposition<FF, EF>>::random_coin(&mut verifier_trans, &decomposed_bits_info);
+
     // 3.3 Check the proof of the sumcheck protocol
     let subclaim = <MLSumcheck<FF, EF>>::verify(
         &mut verifier_trans,
@@ -158,6 +167,7 @@ fn main() {
         &sumcheck_proof,
     )
     .expect("Verify the proof generated in Bit Decompositon");
+
     // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP,
     //     and also check the relation between these small oracles and the committed oracle
     let check_subcliam =

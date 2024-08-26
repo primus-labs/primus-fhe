@@ -226,6 +226,28 @@ impl<F: Field, EF: AbstractExtensionField<F>> NTTBareSubclaim<F, EF> {
 }
 
 impl<F: Field, EF: AbstractExtensionField<F>> NTTBareIOP<F, EF> {
+    /// Generate the polynomial to be proved in the sumcheck protocol
+    #[inline]
+    pub fn random_poly(
+        poly: &mut ListOfProductsOfPolynomials<F, EF>,
+        instance: &NTTInstanceExt<F, EF>,
+        u: &[EF],
+    ) -> EF {
+        let f_u = init_fourier_table(u, &instance.ntt_table);
+        poly.add_product([Rc::new(f_u), Rc::new(instance.coeffs.clone())], EF::one());
+
+        instance.points.evaluate(u)
+    }
+
+    /// Return the random coins used to randomize all ntt instances to be proved
+    #[inline]
+    pub fn random_coin_ntt(trans: &mut Transcript<F>, info: &NTTInstanceInfo<F>) -> Vec<EF> {
+        trans.get_vec_ext_field_challenge::<EF>(
+            b"Generate random coefficients to randomize all ntt instances",
+            info.num_ntt,
+        )
+    }
+
     /// prove
     pub fn prove(
         trans: &mut Transcript<F>,
@@ -239,11 +261,7 @@ impl<F: Field, EF: AbstractExtensionField<F>> NTTBareIOP<F, EF> {
         let mut poly = <ListOfProductsOfPolynomials<F, EF>>::new(log_n);
 
         poly.add_product(
-            [
-                Rc::clone(f_u),
-                // Convert the original MLE over Field to a new MLE over Extension Field
-                Rc::new(ntt_instance.coeffs.clone()),
-            ],
+            [Rc::clone(f_u), Rc::new(ntt_instance.coeffs.clone())],
             EF::one(),
         );
 

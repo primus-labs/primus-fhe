@@ -1,7 +1,5 @@
 //! This module defines some useful utils that may invoked by piop.
-use algebra::{utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials};
-
-use crate::sumcheck::verifier;
+use algebra::{utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field};
 
 /// Generate MLE of the ideneity function eq(u,x) for x \in \{0, 1\}^dim
 pub fn gen_identity_evaluations<F: Field, EF: AbstractExtensionField<F>>(
@@ -33,7 +31,7 @@ pub fn eval_identity_function<F: Field, EF: AbstractExtensionField<F>>(u: &[EF],
 }
 
 /// Verify the relationship between the evaluations of these small oracles and the requested evaluation of the committed oracle
-/// 
+///
 /// # Arguments:
 /// * `evals`: vector consisting of all the evaluations of relevant MLEs. The arrangement is consistent to the vector returned in `compute_evals`.
 /// * `oracle_eval`: the requested point reduced over the committed polynomial, which is the random linear combination of the smaller oracles used in IOP.
@@ -58,6 +56,15 @@ pub fn verify_oracle_relation<F: Field, EF: AbstractExtensionField<F>>(
     randomized_eval == oracle_eval
 }
 
+// #[inline]
+// pub fn verify_oracle_partial_relation<F: Field, EF: AbstractExtensionField<F>>(
+//     start: usize,
+//     evals: &[EF],
+//     oracle_eval: EF,
+//     trans: &mut Transcript<F>,
+// ) -> bool {
+
+// }
 /// Print statistic
 pub fn print_statistic(
     label: &'static str,
@@ -65,14 +72,15 @@ pub fn print_statistic(
     verifier_time: u128,
     proof_size: usize,
 ) {
-    println!("");
-    println!("=={label} Statistic==");
+    println!("\n=={label} Statistic==");
     println!("Prove Time: {:?} ms", prover_time);
     println!("Verifier Time: {:?} ms", verifier_time);
     println!("Proof Size: {:?} Bytes", proof_size);
 }
 
 /// Print statistic of PCS
+#[inline]
+#[allow(clippy::too_many_arguments)]
 pub fn print_pcs_statistic(
     committed_poly_num_vars: usize,
     num_oracles: usize,
@@ -83,10 +91,15 @@ pub fn print_pcs_statistic(
     verifier_time: u128,
     proof_size: usize,
 ) {
-    println!("");
-    println!("==PCS Statistic==");
-    println!("The committed polynomial is of {} variables,", committed_poly_num_vars);
-    println!("which consists of {} smaller oracles used in IOP, each of which is of {} variables.", num_oracles, oracle_num_vars);
+    println!("\n==PCS Statistic==");
+    println!(
+        "The committed polynomial is of {} variables,",
+        committed_poly_num_vars
+    );
+    println!(
+        "which consists of {} smaller oracles used in IOP, each of which is of {} variables.",
+        num_oracles, oracle_num_vars
+    );
     println!("Setup Time: {:?} ms", setup_time);
     println!("Commit Time: {:?} ms", commit_time);
     println!("Open Time: {:?} ms", open_time);

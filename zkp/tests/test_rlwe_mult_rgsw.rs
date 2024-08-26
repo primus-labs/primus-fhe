@@ -215,7 +215,12 @@ fn test_trivial_rlwe_mult_rgsw() {
         power *= root;
     }
     let ntt_table = Rc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo { log_n, ntt_table };
+    let num_ntt_instance = (basis_info.bits_len << 1) + 2;
+    let ntt_info = NTTInstanceInfo {
+        num_ntt: num_ntt_instance as usize,
+        log_n,
+        ntt_table,
+    };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
     let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
@@ -249,8 +254,6 @@ fn test_trivial_rlwe_mult_rgsw() {
             log_n, &coeffs,
         )),
     };
-
-    let num_ntt_instance = (basis_info.bits_len << 1) + 2;
 
     let mut prover_trans = Transcript::<FF>::new();
     let mut verifier_trans = Transcript::<FF>::new();

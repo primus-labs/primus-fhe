@@ -283,7 +283,11 @@ fn test_trivial_accumulator() {
         power *= root;
     }
     let ntt_table = Rc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo { log_n, ntt_table };
+    let ntt_info = NTTInstanceInfo {
+        num_ntt: 1,
+        log_n,
+        ntt_table,
+    };
 
     let mut accumulator = random_rlwe_ciphertext(&mut rng, num_vars);
     let mut accumulator_instance =
