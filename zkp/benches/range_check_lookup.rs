@@ -1,11 +1,11 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
-    DenseMultilinearExtension, Field, FieldUniformSampler,
+    DenseMultilinearExtension, Field,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
-use rand_distr::Distribution;
-use std::cmp::max;
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 use std::rc::Rc;
 use std::time::Duration;
 use std::vec;
@@ -29,20 +29,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let lookup_num = block_num * block_size;
     let range = 59;
 
-    // Generate random values
-    // randomness here is not secure!
     let mut rng = thread_rng();
-    let sampler = FieldUniformSampler::<FF>::new();
-    let mut r = sampler.sample(&mut rng);
-    while FF::new(0) <= r && r < FF::new(range) {
-        r = sampler.sample(&mut rng);
-    }
-    let mut u: Vec<_> = (0..max(block_num, num_vars_f))
-        .map(|_| sampler.sample(&mut rng))
-        .collect();
-    u.push(r);
-    let randomness = u;
-
     let f_vec: Vec<Rc<DenseMultilinearExtension<Fp32>>> = (0..lookup_num)
         .map(|_| {
             let f_evaluations: Vec<FF> = (0..(1 << num_vars_f))
@@ -65,7 +52,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             1 << num_vars_f,
             range
         ),
-        |b| b.iter(|| Lookup::prove(&instance, &randomness)),
+        |b| {
+            let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
+            let mut fs_rng_prover = ChaCha12Rng::from_seed(seed);
+            b.iter(|| Lookup::prove(&mut fs_rng_prover, &instance))
+        },
     );
 
     c.bench_function(
@@ -76,10 +67,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             range
         ),
         |b| {
-            let (proof, oracle) = Lookup::prove(&instance, &randomness);
+            let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
+            let mut fs_rng_prover = ChaCha12Rng::from_seed(seed);
+            let (proof, oracle) = Lookup::prove(&mut fs_rng_prover, &instance);
             b.iter(|| {
-                let subclaim = Lookup::verify(&proof, &info);
-                subclaim.verify_subclaim(f_vec.clone(), oracle.clone(), &randomness, &info);
+                let mut fs_rng_verifier = ChaCha12Rng::from_seed(seed);
+                let subclaim = Lookup::verify(&mut fs_rng_verifier, &proof, &info);
+                subclaim.verify_subclaim(f_vec.clone(), oracle.clone(), &info);
             })
         },
     );
