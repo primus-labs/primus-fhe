@@ -67,8 +67,12 @@ fn test_trivial_range_check() {
         num_vars_f,
         field_vec!(FF; 4, 6, 5, 2, 4, 0, 1, 6, 3, 2, 1, 0, 6, 1, 1, 6),
     ));
+    let f4 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars_f,
+        field_vec!(FF; 4, 1, 5, 2, 4, 0, 1, 6, 3, 2, 1, 0, 6, 1, 1, 6),
+    ));
 
-    let f_vec = vec![f0, f1, f2, f3];
+    let f_vec = vec![f0, f1, f2, f3, f4];
 
     // construct instance
 
@@ -92,7 +96,8 @@ fn test_random_range_check() {
     let num_vars_f = 8;
     let block_size = 4;
     let block_num = 8;
-    let lookup_num = block_num * block_size;
+    let residual_size = 3;
+    let lookup_num = block_num * block_size + residual_size;
     let range = 59;
 
     // construct randomness

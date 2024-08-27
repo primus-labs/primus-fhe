@@ -107,6 +107,8 @@ pub struct LookupInstanceInfo {
     pub block_size: usize,
     /// block num
     pub l: usize,
+    /// residual lenght
+    pub residual_size: usize,
 }
 
 impl<F: Field> LookupInstance<F> {
@@ -119,6 +121,7 @@ impl<F: Field> LookupInstance<F> {
             range: self.range,
             block_size: self.block_size,
             l: self.f_vec.len() / self.block_size,
+            residual_size: self.f_vec.len() % self.block_size,
         }
     }
 }
@@ -210,13 +213,14 @@ impl<F: Field + DecomposableField> Lookup<F> {
         let num_vars_t = instance.num_vars_t;
         let block_size = instance.block_size;
         let block_num = instance.f_vec.len() / instance.block_size;
-        assert_eq!(block_size * block_num, instance.f_vec.len());
+        let residual_len = instance.f_vec.len() % instance.block_size;
+        // assert_eq!(block_size * block_num, instance.f_vec.len());
 
         // prepare randomness
-        let u = &randomness[..randomness.len() - 1];
+        let u = &randomness[..randomness.len()];
         let u_f = &u[0..instance.num_vars_f];
         let u_t = &u[0..instance.num_vars_t];
-        let u_l = &u[0..block_num];
+        let u_l = &u[0..block_num + 1];
         let r = randomness[randomness.len() - 1];
 
         // construct m
@@ -262,13 +266,16 @@ impl<F: Field + DecomposableField> Lookup<F> {
                 .collect::<Vec<F>>(),
         );
 
+        let chunks = inversed_shifted_f_evaluation_vec.chunks_exact(block_size * (1 << num_vars_f));
+
+        let residual = chunks.remainder();
+
         // construct h
-        let h_vec: Vec<Rc<DenseMultilinearExtension<F>>> = inversed_shifted_f_evaluation_vec
-            .chunks_exact(block_size * (1 << num_vars_f))
+        let mut h_vec: Vec<Rc<DenseMultilinearExtension<F>>> = chunks
             .map(|block| {
                 Rc::new(DenseMultilinearExtension::from_evaluations_vec(
                     num_vars_f,
-                    block.chunks(1 << num_vars_f).fold(
+                    block.chunks_exact(1 << num_vars_f).fold(
                         vec![F::zero(); 1 << num_vars_f],
                         |mut acc, f| {
                             f.iter().enumerate().for_each(|(i, &val)| {
@@ -280,6 +287,21 @@ impl<F: Field + DecomposableField> Lookup<F> {
                 ))
             })
             .collect();
+
+        let h_residual = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars_f,
+            residual.chunks_exact(1 << num_vars_f).fold(
+                vec![F::zero(); 1 << num_vars_f],
+                |mut acc, f| {
+                    f.iter().enumerate().for_each(|(i, &val)| {
+                        acc[i] += val;
+                    });
+                    acc
+                },
+            ),
+        ));
+
+        h_vec.push(h_residual);
 
         let h_t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars_t,
@@ -313,9 +335,15 @@ impl<F: Field + DecomposableField> Lookup<F> {
             let op_coef = vec![(F::one(), F::zero())];
             poly.add_product_with_linear_op(product, &op_coef, F::one());
 
-            let block = &shifted_f_vec[i * block_size..(i + 1) * block_size];
+            let this_block_size = if i == h_vec.len() - 1 {
+                residual_len
+            } else {
+                block_size
+            };
+
+            let block = &shifted_f_vec[i * block_size..i * block_size + this_block_size];
             let id_u = Rc::new(gen_identity_evaluations(u_f));
-            let mut id_op_coef = vec![(F::one(), F::zero()); block_size + 2];
+            let mut id_op_coef = vec![(F::one(), F::zero()); this_block_size + 2];
 
             let mut product = block.to_vec();
             product.extend(vec![id_u.clone(), h.clone()]);
@@ -324,7 +352,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
             id_op_coef.pop();
             id_op_coef.pop();
 
-            for j in 0..block_size {
+            for j in 0..this_block_size {
                 let mut product = block.to_vec();
                 product[j] = id_u.clone();
                 poly.add_product_with_linear_op(product, &id_op_coef, -*u_coef);
@@ -439,10 +467,10 @@ impl<F: Field> LookupSubclaim<F> {
         randomness: &[F],
         info: &LookupInstanceInfo,
     ) -> bool {
-        let u = &randomness[..randomness.len() - 1];
+        let u = &randomness[..randomness.len()];
         let u_f = &u[0..info.num_vars_f];
         let u_t = &u[0..info.num_vars_t];
-        let u_l = &u[0..info.l];
+        let u_l = &u[0..info.l + 1];
         let r = randomness[randomness.len() - 1];
 
         let block_size = info.block_size;
@@ -462,11 +490,11 @@ impl<F: Field> LookupSubclaim<F> {
 
         let mut eval = F::zero();
         let point = &self.sumcheck_points[0];
-        for ((h, f_block), r_k) in h_vec
-            .iter()
-            .zip(f_vec.chunks_exact(block_size))
-            .zip(u_l.iter())
-        {
+
+        let chunks = f_vec.chunks_exact(block_size);
+        let residual = Some(chunks.remainder()).into_iter();
+
+        for ((h, f_block), r_k) in h_vec.iter().zip(chunks.chain(residual)).zip(u_l.iter()) {
             let h_eval = h.evaluate(point);
 
             let eq_eval = eval_identity_function(u_f, point);
