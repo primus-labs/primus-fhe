@@ -1,9 +1,10 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
-    DenseMultilinearExtension, Field, FieldUniformSampler,
+    DenseMultilinearExtension, Field,
 };
 use rand::prelude::*;
-use rand_distr::Distribution;
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{Lookup, LookupInstance};
@@ -33,21 +34,8 @@ fn test_trivial_range_check() {
     // prepare parameters
 
     let num_vars_f = 4;
-    let num_vars_t = 3;
     let block_size = 2;
     let range = 7;
-
-    // construct randomness
-
-    let mut rng = thread_rng();
-    let sampler = <FieldUniformSampler<FF>>::new();
-    let mut r = sampler.sample(&mut rng);
-    while FF::new(0) <= r && r < FF::new(1 << num_vars_t) {
-        r = sampler.sample(&mut rng);
-    }
-    let mut u: Vec<_> = (0..num_vars_f).map(|_| sampler.sample(&mut rng)).collect();
-    u.push(r);
-    let randomness = u;
 
     // construct a trivial example
 
@@ -79,14 +67,19 @@ fn test_trivial_range_check() {
     let instance = LookupInstance::from_slice(&f_vec, range, block_size);
     let info = instance.info();
 
+    // prepare fiat-shamir randomness
+    let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
+    let mut fs_rng_prover = ChaCha12Rng::from_seed(seed);
+    let mut fs_rng_verifier = ChaCha12Rng::from_seed(seed);
+
     // prove
 
-    let (proof, oracle) = Lookup::prove(&instance, &randomness);
+    let (proof, oracle) = Lookup::prove(&mut fs_rng_prover, &instance);
 
     // verify
 
-    let subclaim = Lookup::verify(&proof, &info);
-    assert!(subclaim.verify_subclaim(f_vec, oracle, &randomness, &info));
+    let subclaim = Lookup::verify(&mut fs_rng_verifier, &proof, &info);
+    assert!(subclaim.verify_subclaim(f_vec, oracle, &info));
 }
 
 #[test]
@@ -100,20 +93,9 @@ fn test_random_range_check() {
     let lookup_num = block_num * block_size + residual_size;
     let range = 59;
 
-    // construct randomness
-
-    let mut rng = thread_rng();
-    let sampler = <FieldUniformSampler<FF>>::new();
-    let mut r = sampler.sample(&mut rng);
-    while FF::new(0) <= r && r < FF::new(range) {
-        r = sampler.sample(&mut rng);
-    }
-    let mut u: Vec<_> = (0..num_vars_f).map(|_| sampler.sample(&mut rng)).collect();
-    u.push(r);
-    let randomness = u;
-
     // construct a random example
 
+    let mut rng = thread_rng();
     let f_vec: Vec<Rc<DenseMultilinearExtension<Fp32>>> = (0..lookup_num)
         .map(|_| {
             let f_evaluations: Vec<FF> = (0..(1 << num_vars_f))
@@ -131,12 +113,18 @@ fn test_random_range_check() {
     let instance = LookupInstance::from_slice(&f_vec, range as usize, block_size);
     let info = instance.info();
 
+    // prepare fiat-shamir randomness
+
+    let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
+    let mut fs_rng_prover = ChaCha12Rng::from_seed(seed);
+    let mut fs_rng_verifier = ChaCha12Rng::from_seed(seed);
+
     // prove
 
-    let (proof, oracle) = Lookup::prove(&instance, &randomness);
+    let (proof, oracle) = Lookup::prove(&mut fs_rng_prover, &instance);
 
     // verify
 
-    let subclaim = Lookup::verify(&proof, &info);
-    assert!(subclaim.verify_subclaim(f_vec, oracle, &randomness, &info));
+    let subclaim = Lookup::verify(&mut fs_rng_verifier, &proof, &info);
+    assert!(subclaim.verify_subclaim(f_vec, oracle, &info));
 }

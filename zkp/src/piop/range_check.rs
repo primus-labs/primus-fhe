@@ -38,11 +38,11 @@ use crate::utils::eval_identity_function;
 use crate::sumcheck::MLSumcheck;
 use crate::utils::gen_identity_evaluations;
 use algebra::{
-    AsFrom, DecomposableField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
-    MultilinearExtension, PolynomialInfo,
+    AsFrom, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
+    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
+use rand::RngCore;
+use rand_distr::Distribution;
 
 /// SNARKs for range check in [T] := [0, T-1]
 pub struct Lookup<F: Field>(PhantomData<F>);
@@ -66,13 +66,19 @@ pub struct LookupOracle<F: Field> {
     /// f_inverse
     pub h_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// t_inverse
-    pub t_inverse: Rc<DenseMultilinearExtension<F>>,
+    pub h_t: Rc<DenseMultilinearExtension<F>>,
     /// m
     pub m: Rc<DenseMultilinearExtension<F>>,
 }
 
 /// subclaim returned to verifier
 pub struct LookupSubclaim<F: Field> {
+    /// random value
+    pub random_value: F,
+    /// random point
+    pub random_point: Vec<F>,
+    /// random combine
+    pub random_combine: Vec<F>,
     /// subcliams
     pub sumcheck_points: Vec<Vec<F>>,
     /// expected value returned in the last round of the sumcheck
@@ -106,7 +112,7 @@ pub struct LookupInstanceInfo {
     /// chunk
     pub block_size: usize,
     /// block num
-    pub l: usize,
+    pub block_num: usize,
     /// residual lenght
     pub residual_size: usize,
 }
@@ -120,7 +126,7 @@ impl<F: Field> LookupInstance<F> {
             num_vars_t: self.num_vars_t,
             range: self.range,
             block_size: self.block_size,
-            l: self.f_vec.len() / self.block_size,
+            block_num: self.f_vec.len() / self.block_size,
             residual_size: self.f_vec.len() % self.block_size,
         }
     }
@@ -192,36 +198,33 @@ impl<F: Field> LookupInstance<F> {
 
 impl<F: Field + DecomposableField> Lookup<F> {
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
-    pub fn prove(
-        instance: &LookupInstance<F>,
-        randomness: &[F],
-    ) -> (LookupProof<F>, LookupOracle<F>) {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, instance, randomness)
-    }
-
-    /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
-    pub fn prove_as_subprotocol(
+    pub fn prove(
         fs_rng: &mut impl RngCore,
         instance: &LookupInstance<F>,
-        randomness: &[F],
     ) -> (LookupProof<F>, LookupOracle<F>) {
         let num_vars_f = instance.num_vars_f;
         let num_vars_t = instance.num_vars_t;
         let block_size = instance.block_size;
         let block_num = instance.f_vec.len() / instance.block_size;
-        let residual_len = instance.f_vec.len() % instance.block_size;
+        let residual_size = instance.f_vec.len() % instance.block_size;
         // assert_eq!(block_size * block_num, instance.f_vec.len());
 
         // prepare randomness
-        let u = &randomness[..randomness.len()];
-        let u_f = &u[0..instance.num_vars_f];
-        let u_t = &u[0..instance.num_vars_t];
-        let u_l = &u[0..block_num + 1];
-        let r = randomness[randomness.len() - 1];
+        let sampler = <FieldUniformSampler<F>>::new();
+        let random_value = sampler.sample(fs_rng);
+        let random_point: Vec<_> = (0..num_vars_f).map(|_| sampler.sample(fs_rng)).collect();
+        let random_combine: Vec<_> = (0..block_num + if residual_size == 0 { 0 } else { 1 } + 1)
+            .map(|_| sampler.sample(fs_rng))
+            .collect();
+
+        // let u = &randomness[..randomness.len()];
+        let u_f = &random_point[0..instance.num_vars_f];
+        let u_t = &random_point[0..instance.num_vars_t];
+        let r_h = random_combine[random_combine.len() - 1];
+        // let u_l = &u[0..block_num + 1];
+        // let r = randomness[randomness.len() - 1];
 
         // construct m
         let mut m_evaluations = vec![F::zero(); 1 << num_vars_t];
@@ -250,7 +253,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
             .f_vec
             .iter()
             .map(|f| {
-                let evaluations = f.evaluations.iter().map(|x| *x - r).collect();
+                let evaluations = f.evaluations.iter().map(|x| *x - random_value).collect();
                 Rc::new(DenseMultilinearExtension::from_evaluations_vec(
                     num_vars_f,
                     evaluations,
@@ -310,7 +313,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
                     .t
                     .evaluations
                     .iter()
-                    .map(|x| *x - r)
+                    .map(|x| *x - random_value)
                     .collect::<Vec<F>>(),
             )
             .iter()
@@ -320,23 +323,23 @@ impl<F: Field + DecomposableField> Lookup<F> {
         ));
 
         // compute c_sum = sum of f_inverse at H_F
-        let c_sum = h_t.evaluations.iter().fold(F::zero(), |sum, x| sum + x);
+        let c_sum = r_h * h_t.evaluations.iter().fold(F::zero(), |sum, x| sum + x);
 
         let mut sumcheck_msg = Vec::new();
 
         // execute sumcheck for
         // \sum_{x \in H_f}
-        //                  \sum_{i \in [block_num]} h_i(x)
-        //                + r * \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
+        //                  r * \sum_{i \in [block_num]} h_i(x)
+        //                + \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
         //                = c_sum
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_f);
-        for ((i, h), u_coef) in h_vec.iter().enumerate().zip(u_l.iter()) {
+        for ((i, h), u_coef) in h_vec.iter().enumerate().zip(random_combine.iter()) {
             let product = vec![h.clone()];
             let op_coef = vec![(F::one(), F::zero())];
-            poly.add_product_with_linear_op(product, &op_coef, F::one());
+            poly.add_product_with_linear_op(product, &op_coef, r_h);
 
             let this_block_size = if i == h_vec.len() - 1 {
-                residual_len
+                residual_size
             } else {
                 block_size
             };
@@ -363,16 +366,20 @@ impl<F: Field + DecomposableField> Lookup<F> {
             .expect("sumcheck for rangecheck failed");
         sumcheck_msg.push(sumcheck_proof.0);
 
-        // execute sumcheck for \sum_{x \in H_t} h_t(x)  + eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = c_sum
+        // execute sumcheck for \sum_{x \in H_t} r * h_t(x) + eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = c_sum
         let mut poly = <ListOfProductsOfPolynomials<F>>::new(instance.num_vars_t);
         let id_ut = Rc::new(gen_identity_evaluations(u_t));
 
-        let product = vec![Rc::clone(&h_t)];
+        let product = vec![h_t.clone()];
         let op_coef = vec![(F::one(), F::zero())];
-        poly.add_product_with_linear_op(product, &op_coef, F::one());
+        poly.add_product_with_linear_op(product, &op_coef, r_h);
 
         let product = vec![id_ut.clone(), h_t.clone(), instance.t.clone()];
-        let op_coef = vec![(F::one(), F::zero()), (F::one(), F::zero()), (F::one(), -r)];
+        let op_coef = vec![
+            (F::one(), F::zero()),
+            (F::one(), F::zero()),
+            (F::one(), -random_value),
+        ];
         poly.add_product_with_linear_op(product, &op_coef, F::one());
 
         let product = vec![id_ut.clone(), m.clone()];
@@ -388,41 +395,36 @@ impl<F: Field + DecomposableField> Lookup<F> {
                 sumcheck_msg,
                 c_sum,
             },
-            LookupOracle {
-                h_vec,
-                t_inverse: h_t,
-                m,
-            },
+            LookupOracle { h_vec, h_t, m },
         )
-    }
-
-    /// Verify range check given the proof
-    pub fn verify(proof: &LookupProof<F>, info: &LookupInstanceInfo) -> LookupSubclaim<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::verifier_as_subprotocol(&mut fs_rng, proof, info)
     }
 
     /// Verify addition in Zq given the proof and the verification key for bit decomposistion
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
-    pub fn verifier_as_subprotocol(
+    pub fn verify(
         fs_rng: &mut impl RngCore,
         proof: &LookupProof<F>,
         info: &LookupInstanceInfo,
     ) -> LookupSubclaim<F> {
-        // TODO sample randomness via Fiat-Shamir RNG
-
-        let block_size = info.block_size;
+        let sampler = <FieldUniformSampler<F>>::new();
+        let random_value = sampler.sample(fs_rng);
+        let random_point: Vec<_> = (0..info.num_vars_f)
+            .map(|_| sampler.sample(fs_rng))
+            .collect();
+        let random_combine: Vec<_> =
+            (0..info.block_num + if info.residual_size == 0 { 0 } else { 1 } + 1)
+                .map(|_| sampler.sample(fs_rng))
+                .collect();
 
         // execute sumcheck for
         // \sum_{x \in H_f}
-        // \sum_{i \in [block_num]}  h_i(x)
+        // \sum_{i \in [block_num]}  r * h_i(x)
         //                         + \ eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r)
         //                         - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
         //                         = c_sum
         let poly_info = PolynomialInfo {
-            max_multiplicands: block_size + 2,
+            max_multiplicands: info.block_size + 2,
             num_variables: info.num_vars_f,
         };
         let first_subclaim = MLSumcheck::verify_as_subprotocol(
@@ -433,7 +435,7 @@ impl<F: Field + DecomposableField> Lookup<F> {
         )
         .expect("sumcheck protocol in range check failed");
 
-        // execute sumcheck for \sum_{x \in H_t} h_t(x)  + eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = c_sum
+        // execute sumcheck for \sum_{x \in H_t} r * h_t(x)  + eq(x, u) * (h_t(x) * (t(x) - r) - m(x)) = c_sum
         let poly_info = PolynomialInfo {
             max_multiplicands: 3,
             num_variables: info.num_vars_t,
@@ -447,6 +449,9 @@ impl<F: Field + DecomposableField> Lookup<F> {
         .expect("sumcheck protocol in range check failed");
 
         LookupSubclaim {
+            random_value,
+            random_point,
+            random_combine,
             sumcheck_points: vec![first_subclaim.point, second_subclaim.point],
             sumcheck_expected_evaluations: vec![
                 first_subclaim.expected_evaluations,
@@ -464,18 +469,15 @@ impl<F: Field> LookupSubclaim<F> {
         &self,
         f_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
         oracle: LookupOracle<F>,
-        randomness: &[F],
         info: &LookupInstanceInfo,
     ) -> bool {
-        let u = &randomness[..randomness.len()];
-        let u_f = &u[0..info.num_vars_f];
-        let u_t = &u[0..info.num_vars_t];
-        let u_l = &u[0..info.l + 1];
-        let r = randomness[randomness.len() - 1];
+        let u_f = &self.random_point[0..info.num_vars_f];
+        let u_t = &self.random_point[0..info.num_vars_t];
+        let r_h = self.random_combine[self.random_combine.len() - 1];
 
         let block_size = info.block_size;
         let h_vec = oracle.h_vec;
-        let t_inverse = oracle.t_inverse;
+        let h_t = oracle.h_t;
         let m = oracle.m;
 
         let num_vars_t = info.range.checked_next_power_of_two().unwrap_or(0).ilog(2) as usize;
@@ -494,12 +496,18 @@ impl<F: Field> LookupSubclaim<F> {
         let chunks = f_vec.chunks_exact(block_size);
         let residual = Some(chunks.remainder()).into_iter();
 
-        for ((h, f_block), r_k) in h_vec.iter().zip(chunks.chain(residual)).zip(u_l.iter()) {
+        for ((h, f_block), r_k) in h_vec
+            .iter()
+            .zip(chunks.chain(residual))
+            .zip(self.random_combine.iter())
+        {
             let h_eval = h.evaluate(point);
-
             let eq_eval = eval_identity_function(u_f, point);
 
-            let phi_eval_block: Vec<F> = f_block.iter().map(|f| f.evaluate(point) - r).collect();
+            let phi_eval_block: Vec<F> = f_block
+                .iter()
+                .map(|f| f.evaluate(point) - self.random_value)
+                .collect();
 
             let sum_of_products: F = (0..phi_eval_block.len())
                 .map(|i| {
@@ -514,20 +522,20 @@ impl<F: Field> LookupSubclaim<F> {
 
             let product = phi_eval_block.iter().fold(F::one(), |acc, x| acc * x);
 
-            eval += h_eval + eq_eval * r_k * (h_eval * product - sum_of_products);
+            eval += h_eval * r_h + eq_eval * r_k * (h_eval * product - sum_of_products);
         }
 
         if eval != self.sumcheck_expected_evaluations[0] {
             return false;
         }
 
-        // 4. execute sumcheck for \sum_{x\in H_T} eq(x, u) (t_inverse(x) (r - t(x)) - m(x)) = 0
-        let eval_t_inverse = t_inverse.evaluate(&self.sumcheck_points[1]);
-        let eval_t = t.evaluate(&self.sumcheck_points[1]);
-        let eval_eq = eval_identity_function(u_t, &self.sumcheck_points[1]);
-        let eval_m = m.evaluate(&self.sumcheck_points[1]);
-        if t_inverse.evaluate(&self.sumcheck_points[1])
-            + eval_eq * (eval_t_inverse * (eval_t - r) - eval_m)
+        // 4. execute sumcheck for \sum_{x\in H_T} r * h_t(x) + eq(x, u) (h_t(x) (r - t(x)) - m(x)) = 0
+        let h_t_eval = h_t.evaluate(&self.sumcheck_points[1]);
+        let t_eval = t.evaluate(&self.sumcheck_points[1]);
+        let eq_eval = eval_identity_function(u_t, &self.sumcheck_points[1]);
+        let m_eval = m.evaluate(&self.sumcheck_points[1]);
+        if r_h * h_t.evaluate(&self.sumcheck_points[1])
+            + eq_eval * (h_t_eval * (t_eval - self.random_value) - m_eval)
             != self.sumcheck_expected_evaluations[1]
         {
             return false;
