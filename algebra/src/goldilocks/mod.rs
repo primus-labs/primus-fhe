@@ -1,4 +1,5 @@
 mod extension;
+mod goldilocks_ntt;
 
 pub use extension::GoldilocksExtension;
 use serde::{Deserialize, Serialize};
