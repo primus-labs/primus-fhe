@@ -9,6 +9,7 @@ pub struct HomCmpScheme<C: LWEModulusType, F: NTTField> {
     key: RLWEBlindRotationKey<F>,
     params: Parameters<C, F>,
     delta: F,
+    half_delta: F,
 }
 
 impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
@@ -19,7 +20,17 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
                 .round()
                 .as_into(),
         );
-        Self { key, params, delta }
+        let half_delta = F::lazy_new(
+            (F::MODULUS_VALUE.as_into() / (params.lwe_plain_modulus() as f64 * 2.0))
+                .round()
+                .as_into(),
+        );
+        Self {
+            key,
+            params,
+            delta,
+            half_delta,
+        }
     }
 
     /// Return a reference to the key.
@@ -78,6 +89,23 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
         RLWE::new(c_a, c_b).extract_lwe()
     }
 
+    /// Performs the less_than homomorphic operation of two ciphertexts.
+    ///
+    /// # Arguments.
+    ///
+    /// * `c_rlwe` - The RLWE ciphertext with message `a`.
+    /// * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
+    /// * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
+    pub fn lt_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
+        let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
+        let mut test_poly = vec![F::one(); self.params.ring_dimension()];
+        test_poly[0] = F::neg_one();
+        let test_poly = Polynomial::new(test_poly);
+        let c_a = c.a() * &test_poly;
+        let c_b = c.b() * &test_poly;
+        RLWE::new(c_a, c_b).extract_lwe()
+    }
+
     /// Performs the equal homomorphic operation of two ciphertexts.
     ///
     /// # Arguments.
@@ -93,7 +121,17 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
         }
         *c.b_mut() = *c.b_mut() + *c.b_mut();
         *c.b_mut() -= self.delta;
-
         c
+    }
+
+    /// Performs the greater_than homomorphic operation of the two vectors of ciphertexts, where each vector of ciphertexts encrypt the bit chuncks of the message.
+    ///
+    /// # Arguments.
+    ///
+    /// `c_rlwe` - The vector of RLWE ciphertexts encrypting the bit chuncks of `a`.
+    /// `c_rgsw` - The vector of RGSW ciphertexts encrypting the bit chuncks of `b`.
+    /// Output - An LWE ciphertext LWE(c), where c = 1 if a > b, c = -1 otherwise.
+    pub fn gt_arb_hcmp(&self, c_rlwe: &[RLWE<F>], c_rgsw: &[NTTRGSW<F>]) -> LWE<F> {
+        todo!()
     }
 }
