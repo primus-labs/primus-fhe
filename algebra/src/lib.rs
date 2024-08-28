@@ -2,13 +2,16 @@
 #![deny(missing_docs)]
 
 //! Define arithmetic operations.
-
+#[cfg(feature = "concrete-ntt")]
 mod baby_bear;
+
+#[cfg(feature = "concrete-ntt")]
+mod goldilocks;
+
 mod decompose_basis;
 mod error;
 mod extension;
 mod field;
-mod goldilocks;
 mod polynomial;
 mod primitive;
 mod random;
@@ -19,12 +22,16 @@ pub mod reduce;
 pub mod transformation;
 pub mod utils;
 
+#[cfg(feature = "concrete-ntt")]
 pub use baby_bear::{BabyBear, BabyBearExetension};
+
+#[cfg(feature = "concrete-ntt")]
+pub use goldilocks::{Goldilocks, GoldilocksExtension};
+
 pub use decompose_basis::Basis;
 pub use error::AlgebraError;
 pub use extension::*;
 pub use field::{DecomposableField, FheField, Field, NTTField, PrimeField};
-pub use goldilocks::{Goldilocks, GoldilocksExtension};
 pub use polynomial::multivariate::{
     DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
     SparsePolynomial,
