@@ -17,7 +17,7 @@ impl From<usize> for Goldilocks {
         if value < modulus {
             Self(value as u64)
         } else {
-            Self((value % modulus) as u64)
+            Self((value - modulus) as u64)
         }
     }
 }
