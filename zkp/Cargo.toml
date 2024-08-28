@@ -17,6 +17,7 @@ once_cell = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true }
 
+[dev-dependencies]
 criterion = { workspace = true }
 
 [[bench]]
