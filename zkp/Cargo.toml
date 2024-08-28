@@ -17,6 +17,7 @@ rand_chacha = "0.3.1"
 serde = {workspace = true}
 itertools = "0.12.1"
 
+[dev-dependencies]
 criterion = { workspace = true }
 
 [[bench]]
