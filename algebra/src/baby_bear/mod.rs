@@ -1,6 +1,8 @@
+mod babybear_ntt;
 mod extension;
 
 pub use extension::BabyBearExetension;
+
 use serde::{Deserialize, Serialize};
 
 use std::{
