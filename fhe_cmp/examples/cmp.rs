@@ -5,7 +5,7 @@ use fhe_cmp::{
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
-use std::time::Instant;
+use std::{cmp::Ordering, time::Instant};
 fn main() {
     let mut rng = thread_rng();
     let param = *DEFAULT_PARAMERTERS;
@@ -15,11 +15,11 @@ fn main() {
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
     let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
-    for i in 0..20 {
+    for i in 0..50 {
         let start = Instant::now();
         println!("{i}");
-        let x = rng.gen_range(0..1000000000);
-        let y = rng.gen_range(0..1000000000);
+        let x = rng.gen_range(0..100000);
+        let y = rng.gen_range(0..100000);
         let (value1, value2) = encrypt(
             x,
             y,
@@ -33,34 +33,32 @@ fn main() {
         let lt_value = decrypt(rlwe_sk, lt);
         let eq_value = decrypt(rlwe_sk, eq);
         let gt_value = decrypt(rlwe_sk, gt);
-        /*println!("
-        x:{},
-        y:{},
-        less:{}
-        equal:{}
-        greater:{}",x,y,lt_value,eq_value,gt_value);*/
-        if x < y {
-            if lt_value != 1
-                || eq_value != param.lwe_plain_modulus() - 1
-                || gt_value != param.lwe_plain_modulus() - 1
+
+        match (x.cmp(&y), lt_value, eq_value, gt_value) {
+            (Ordering::Less, lv, ev, gv)
+                if lv != 1
+                    || ev != param.lwe_plain_modulus() - 1
+                    || gv != param.lwe_plain_modulus() - 1 =>
             {
-                println!("          error1!:{lt_value}:{eq_value}:{gt_value}");
+                println!("          error1!:{lv}:{ev}:{gv}");
             }
-        } else if x == y {
-            if lt_value != param.lwe_plain_modulus() - 1
-                || eq_value != 1
-                || gt_value != param.lwe_plain_modulus() - 1
+            (Ordering::Equal, lv, ev, gv)
+                if lv != param.lwe_plain_modulus() - 1
+                    || ev != 1
+                    || gv != param.lwe_plain_modulus() - 1 =>
             {
-                println!("          error2!:{lt_value}:{eq_value}:{gt_value}");
+                println!("          error2!:{lv}:{ev}:{gv}");
             }
-        } else {
-            if lt_value != param.lwe_plain_modulus() - 1
-                || eq_value != param.lwe_plain_modulus() - 1
-                || gt_value != 1
+            (Ordering::Greater, lv, ev, gv)
+                if lv != param.lwe_plain_modulus() - 1
+                    || ev != param.lwe_plain_modulus() - 1
+                    || gv != 1 =>
             {
-                println!("          error3!:{lt_value}:{eq_value}:{gt_value}");
+                println!("          error3!:{lv}:{ev}:{gv}");
             }
+            _ => {} // No error, do nothing
         }
+
         let time = start.elapsed();
         println!("Time: {}ms", time.as_millis());
     }
@@ -78,9 +76,9 @@ fn join_bit_opearions(
     rayon::scope(|s| {
         s.spawn(|_| {
             ct_lt = Some(HomCmpScheme::less_arbhcmp(
-                &rotationkey,
-                &value1,
-                &value2,
+                rotationkey,
+                value1,
+                value2,
                 DELTA,
                 HALF_DELTA,
                 ring_dimension,
@@ -88,18 +86,18 @@ fn join_bit_opearions(
         });
         s.spawn(|_| {
             ct_eq = Some(HomCmpScheme::equality_arbhcmp(
-                &rotationkey,
-                &value1,
-                &value2,
+                rotationkey,
+                value1,
+                value2,
                 ring_dimension,
                 DELTA,
             ))
         });
         s.spawn(|_| {
             ct_gt = Some(HomCmpScheme::greater_arbhcmp(
-                &rotationkey,
-                &value1,
-                &value2,
+                rotationkey,
+                value1,
+                value2,
                 DELTA,
                 HALF_DELTA,
                 ring_dimension,
