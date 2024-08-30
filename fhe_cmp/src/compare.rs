@@ -109,8 +109,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
         let mut test = vec![F::zero(); poly_length];
         let mu = delta;
         test.iter_mut().for_each(|v| *v = mu);
-        let r = self.fbs(temp, &test);
-        r
+        self.fbs(temp, &test)
     }
 
     /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
@@ -426,13 +425,12 @@ pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -
         .iter()
         .zip(ciphertext.a())
         .fold(F::zero(), |acc, (&s, &a)| acc + s * a);
-    let outcome = decode(ciphertext.b() - a_mul_s);
-    outcome
+    decode(ciphertext.b() - a_mul_s)
 }
 
 /// Peforms the operation turning a value to its real number
 pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
-    (c.value() as f64 * 8 as f64 / 132120577 as f64).round() as u64 % 8
+    (c.value() as f64 * 8_f64 / 132120577_f64).round() as u64 % 8
 }
 
 /// Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
