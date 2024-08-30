@@ -134,7 +134,7 @@ jobs:
           tool: cargo-hack
 
       - name: cargo check
-        run: cargo hack check ${{ env.RUST_MIN_VER_PKGS }} --each-feature --optional-deps
+        run: cargo hack check ${{ env.RUST_MIN_VER_PKGS }} --each-feature --skip nightly --optional-deps
 
   doc:
     name: cargo doc
