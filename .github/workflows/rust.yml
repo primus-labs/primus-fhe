@@ -1,103 +1,168 @@
-name: Rust
+env:
+  # We aim to always test with the latest stable Rust toolchain, however we pin to a specific
+  # version like 1.70. Note that we only specify MAJOR.MINOR and not PATCH so that bugfixes still
+  # come automatically. If the version specified here is no longer the latest stable version,
+  # then please feel free to submit a PR that adjusts it along with the potential clippy fixes.
+  RUST_STABLE_VER: "1.80" # In quotes because otherwise (e.g.) 1.70 would be interpreted as 1.7
+  # The purpose of checking with the minimum supported Rust toolchain is to detect its staleness.
+  # If the compilation fails, then the version specified here needs to be bumped up to reality.
+  # Be sure to also update the rust-version property in the workspace Cargo.toml file,
+  # plus all the README.md files of the affected packages.
+  RUST_MIN_VER: "1.79"
+  # List of packages that will be checked with the minimum supported Rust version.
+  # This should be limited to packages that are intended for publishing.
+  RUST_MIN_VER_PKGS: "-p algebra -p lattice -p fhe_core -p zkfhe"
+
+name: CI
 
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
   pull_request:
-    branches: ["main"]
+  merge_group:
+  # We run on push, even though the commit is the same as when we ran in merge_group. 
+  # This allows the cache to be primed.
+  # See https://github.com/orgs/community/discussions/66430
+  push:
+    branches:
+      - main
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  compatibility_check:
-    name: Check with compatibility requirement
+  fmt:
+    name: formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable 6 months ago
-          components: rustfmt, clippy
-      # - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all --check
-      - run: cargo check --workspace --all-targets --no-default-features --features="count_ntt"
-      - run: cargo check --workspace --all-targets --no-default-features --features="concrete-ntt"
-      - run: cargo clippy --no-deps --all-targets --no-default-features --features="count_ntt" -- -D warnings
-      - run: cargo clippy --no-deps --all-targets --no-default-features --features="concrete-ntt" -- -D warnings
 
-  # check:
-  #   name: Basic check
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: dtolnay/rust-toolchain@stable
-  #       with:
-  #         components: rustfmt, clippy
-  #     # - uses: Swatinem/rust-cache@v2
-  #     - run: cargo fmt --all --check
-  #     - run: cargo check --workspace --all-targets --no-default-features --features="count_ntt"
-  #     - run: cargo clippy --no-deps --all-targets --no-default-features --features="count_ntt" -- -D warnings
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+          components: rustfmt
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+  clippy-stable:
+    name: cargo clippy
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+          components: clippy
+
+      - name: install cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+
+      - name: cargo clippy
+        run: cargo hack clippy --workspace --each-feature --skip nightly --optional-deps -- -D warnings
+
+      - name: cargo clippy (auxiliary)
+        run: cargo hack clippy --workspace --each-feature --skip nightly --optional-deps --tests --benches --examples -- -D warnings
+
+  test-stable:
+    name: cargo test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+        # We intentionally do not use lfs: true here, instead using the caching method to save LFS bandwidth.
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: cargo test
+        run: cargo nextest run --workspace --no-default-features
+
+      - name: cargo test
+        run: cargo nextest run --workspace
+
+      - name: cargo test doc
+        run: cargo test --doc --workspace --all-features
+
+  check-msrv:
+    name: cargo check (msrv)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+
+      - name: install msrv toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_MIN_VER }}
+
+      - name: install cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+
+      - name: cargo check
+        run: cargo hack check ${{ env.RUST_MIN_VER_PKGS }} --each-feature --optional-deps
 
   doc:
-    name: Document
+    name: cargo doc
+    # NOTE: We don't have any platform specific docs in this workspace, so we only run on Ubuntu.
+    #       If we get per-platform docs (win/macos/linux/wasm32/..) then doc jobs should match that.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      # - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --doc --features="count_ntt concrete-ntt"
-      - run: cargo doc --no-deps --workspace --lib --document-private-items --no-default-features --features="count_ntt concrete-ntt"
 
-  test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        # os: [ubuntu-latest]
-    name: Test
-    runs-on: ${{ matrix.os }}
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name != 'merge_group' }}
+
+      - name: install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      # We test documentation using nightly to match docs.rs. This prevents potential breakages
+      - name: cargo doc
+        run: cargo doc --workspace --all-features --no-deps --document-private-items -Zunstable-options -Zrustdoc-scrape-examples
+
+  # If this fails, consider changing your text or adding something to .typos.toml
+  typos:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable 6 months ago
-      # - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --lib --bins --tests --examples --no-default-features --features="count_ntt"
-      - run: cargo test --workspace --lib --bins --tests --examples --no-default-features --features="concrete-ntt"
 
-  build:
-    strategy:
-      matrix:
-        platform:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            command: build
-
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            command: build
-
-          # - os: macos-latest
-          #   target: x86_64-apple-darwin
-          #   command: build
-
-          # - os: ubuntu-latest
-          #   target: aarch64-unknown-linux-gnu
-          #   command: build
-
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            command: build
-    name: Build
-    runs-on: ${{ matrix.platform.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v0
-        with:
-          command: ${{ matrix.platform.command }}
-          target: ${{ matrix.platform.target }}
-          # args: "--locked --release"
-          # strip: true
-      - uses: Swatinem/rust-cache@v2
+      - name: check typos
+        uses: crate-ci/typos@v1.23.2
