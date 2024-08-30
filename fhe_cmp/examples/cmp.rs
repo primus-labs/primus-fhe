@@ -1,4 +1,7 @@
-use fhe_cmp::{compare::{decrypt, encrypt, HomCmpScheme}, parameters::{DEFAULT_PARAMERTERS, DELTA, FF, HALF_DELTA}};
+use fhe_cmp::{
+    compare::{decrypt, encrypt, HomCmpScheme},
+    parameters::{DEFAULT_PARAMERTERS, DELTA, FF, HALF_DELTA},
+};
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
@@ -37,15 +40,24 @@ fn main() {
         equal:{}
         greater:{}",x,y,lt_value,eq_value,gt_value);*/
         if x < y {
-            if lt_value != 1 || eq_value != param.lwe_plain_modulus() - 1 || gt_value != param.lwe_plain_modulus() - 1 {
+            if lt_value != 1
+                || eq_value != param.lwe_plain_modulus() - 1
+                || gt_value != param.lwe_plain_modulus() - 1
+            {
                 println!("          error1!:{lt_value}:{eq_value}:{gt_value}");
             }
         } else if x == y {
-            if lt_value != param.lwe_plain_modulus() - 1 || eq_value != 1 || gt_value != param.lwe_plain_modulus() - 1 {
+            if lt_value != param.lwe_plain_modulus() - 1
+                || eq_value != 1
+                || gt_value != param.lwe_plain_modulus() - 1
+            {
                 println!("          error2!:{lt_value}:{eq_value}:{gt_value}");
             }
         } else {
-            if lt_value != param.lwe_plain_modulus() - 1 || eq_value != param.lwe_plain_modulus() - 1 || gt_value != 1 {
+            if lt_value != param.lwe_plain_modulus() - 1
+                || eq_value != param.lwe_plain_modulus() - 1
+                || gt_value != 1
+            {
                 println!("          error3!:{lt_value}:{eq_value}:{gt_value}");
             }
         }
