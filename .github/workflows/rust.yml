@@ -12,6 +12,7 @@ env:
   # List of packages that will be checked with the minimum supported Rust version.
   # This should be limited to packages that are intended for publishing.
   RUST_MIN_VER_PKGS: "-p algebra -p lattice -p fhe_core -p zkfhe"
+  CARGO_TERM_COLOR: always
 
 name: CI
 
@@ -25,9 +26,6 @@ on:
   push:
     branches:
       - main
-
-env:
-  CARGO_TERM_COLOR: always
 
 jobs:
   fmt:
