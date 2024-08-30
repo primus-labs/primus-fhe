@@ -70,9 +70,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
             2 * self.params.ring_dimension() as u32,
             self.params.modulus_switch_round_method(),
         );
-
         let test_vector = Polynomial::from_slice(test_vector);
-
         self.key
             .blind_rotate(
                 test_vector,
@@ -393,11 +391,11 @@ where
     let mut num2_vec = Vec::new();
     while num1 != 0 {
         num1_vec.push(num1 & mask);
-        num1 = num1 >> trailing_zeros;
+        num1 >>= trailing_zeros;
     }
     while num2 != 0 {
         num2_vec.push(num2 & mask);
-        num2 = num2 >> trailing_zeros;
+        num2 >>= trailing_zeros;
     }
     let len = num1_vec.len().max(num2_vec.len()).max(1);
     num1_vec.resize(len, 0);
