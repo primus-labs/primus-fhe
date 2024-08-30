@@ -1,7 +1,8 @@
-use algebra::{AsInto, transformation::MonomialNTT, Basis, Field,
-    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
+use algebra::{
+    transformation::MonomialNTT, AsInto, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
+    NTTPolynomial, Polynomial,
 };
-use fhe_core::{lwe_modulus_switch, Parameters, LWEModulusType, RLWEBlindRotationKey};
+use fhe_core::{lwe_modulus_switch, LWEModulusType, Parameters, RLWEBlindRotationKey};
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
 
@@ -94,14 +95,14 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
     /// homand takes two input ca and cb, only when ca = cb = delta will the output be delta otherwise will be -delta
     /// test_vector for gatebootstrapping = delta + delta*X + ... + delta*X^{n-1}
     /// posible cases:
-    /// ca = delta cb = delta      temp = 2 * delta - delta = delta > 0 
+    /// ca = delta cb = delta      temp = 2 * delta - delta = delta > 0
     /// ca = delta cb = -delta     temp = 0 - delta = -delta < 0
     /// ca = -delta cb = delta     temp = 0 - delta = -delta < 0
     /// ca = -delta cb = -delta    temp = -2 * delta - delta = -3  * delta < 0
     /// other cases don't exist
     /// If temp > 0, expect_compare_res = true, and the test_vector left shift, the function outputs delta
     /// If temp < 0, expect_compare_res = false,  and the test_vector right shift, the function outputs -delta
-        
+
     pub fn homand(&self, ca: &LWE<F>, cb: &LWE<F>, poly_length: usize, delta: F) -> LWE<F> {
         let mut temp = ca.add_component_wise_ref(cb);
         *temp.b_mut() = temp.b() - delta;
@@ -154,17 +155,18 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
         //for the other multi digits in the two vector
         let mut res = hcmp;
         for i in 1..len {
-            // Evaluate lower digits comparison 
+            // Evaluate lower digits comparison
             // low_part_gt_res = ciphers1[0: cipher_size - 1] > ciphers2[0: cipher_size - 1]
             // low_part_gt_res = delta (true) or -delta (false)
             let low_part_gt_res = res;
-            // Evaluate the highest digit comparison 
+            // Evaluate the highest digit comparison
             // eq_res = ciphers1[cipher_size - 1] == ciphers2[cipher_size - 1]
             // eq_res = delta (true) or 0 (false)
             let eq_res = cipher1[i]
                 .mul_ntt_rgsw(&cipher2[i])
-                .extract_lwe_locally().clone();
-            // Evaluate the highest digit comparison 
+                .extract_lwe_locally()
+                .clone();
+            // Evaluate the highest digit comparison
             // high_res = ciphers1[cipher_size - 1] > ciphers2[cipher_size - 1]
             // high_res = delta (true)  or -delta (false)
             let mut gt_res = self.gt_hcmp(&cipher1[i], &cipher2[i]);
@@ -184,7 +186,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
                 equal_res = delta, high_res =  delta, low_res = -delta --> Does not exist
                 equal_res = delta, high_res =  delta, low_res =  delta --> Does not exist
 
-            Based on the above, 
+            Based on the above,
             if new_lwe < 0, expect_compare_res = false
             if new_lwe > 0, expect_compare_res = true
             */
@@ -200,7 +202,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
             Start gate boostrapping, test_vector = delta + delta*X + ... + delta*X^{n-1}
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
             If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
-            */ 
+            */
             let mut test = vec![F::zero(); poly_length];
             let mu = delta;
             test.iter_mut().for_each(|v| *v = mu);
@@ -303,17 +305,18 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
         let hcmp = self.lt_hcmp(&cipher1[0], &cipher2[0]);
         let mut res = hcmp;
         for i in 1..len {
-            // Evaluate lower digits comparison 
+            // Evaluate lower digits comparison
             // low_part_gt_res = ciphers1[0: cipher_size - 1] < ciphers2[0: cipher_size - 1]
             // low_part_gt_res = delta (true) or -delta (false)
             let low_part_gt_res = res;
-            // Evaluate the highest digit comparison 
+            // Evaluate the highest digit comparison
             // equal_res = ciphers1[cipher_size - 1] == ciphers2[cipher_size - 1]
             // equal_res = delta (true) or 0 (false)
             let eq_res = cipher1[i]
                 .mul_ntt_rgsw(&cipher2[i])
-                .extract_lwe_locally().clone();
-            // Evaluate the highest digit comparison 
+                .extract_lwe_locally()
+                .clone();
+            // Evaluate the highest digit comparison
             // high_res = ciphers1[cipher_size - 1] < ciphers2[cipher_size - 1]
             // high_res = delta or -delta
             let mut gt_res = self.lt_hcmp(&cipher1[i], &cipher2[i]);
@@ -332,8 +335,8 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
                 equal_res = delta, high_res = -delta, low_res =  delta --> new_lwe =  1delta/2, expect_compare_res = true
                 equal_res = delta, high_res =  delta, low_res = -delta --> Does not exist
                 equal_res = delta, high_res =  delta, low_res =  delta --> Does not exist
-        
-            Based on the above, 
+
+            Based on the above,
             if new_lwe > 0, expect_compare_res = true
             if new_lwe < 0, expect_compare_res = false
             */
@@ -352,7 +355,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
             Start gate boostrapping, test_vector = delta + deltaX + ... + deltaX^{n-1}
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
             If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
-            */ 
+            */
             res = self.fbs(new_lwe, &test)
         }
         res
