@@ -1,6 +1,5 @@
-use algebra::{
-    transformation::MonomialNTT, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
-    NTTPolynomial, Polynomial,
+use algebra::{transformation::MonomialNTT, Basis, Field,
+    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
 };
 use fhe_core::{lwe_modulus_switch, ModulusSwitchRoundMethod, RLWEBlindRotationKey};
 use lattice::{LWE, NTTRGSW, RLWE};
@@ -30,13 +29,16 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let switch = lwe_modulus_switch(ciphertext, mod_after, ModulusSwitchRoundMethod::Round);
         let a = switch.a().to_vec();
         let b = switch.b();
-        let new_lwe = LWE::new(a, b);
+        let new_lwe = LWE::new(a,b);
         let binary_key = match self.key() {
             RLWEBlindRotationKey::Binary(binary_key) => binary_key,
             RLWEBlindRotationKey::Ternary(_) => panic!(),
         };
         let test_vec = Polynomial::new(test_vector);
-        let temp = binary_key.blind_rotate(test_vec, &new_lwe);
+        let temp = binary_key.blind_rotate(
+            test_vec,
+            &new_lwe,
+        );
         RLWE::extract_lwe(&temp)
     }
 
@@ -48,15 +50,27 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: LWE ciphertext `ca`, with message `a`.
     /// * Input: LWE ciphertext `cb`, with message `b`.
     /// * Input: the size of test vector `poly_length`.
-    /// * Input: encryption of 1 `delta`.
+    /// * Input:  delta - plain_modulus / 8.
     /// * Output: LWE ciphertext with message `a & b`.
+    /// homand takes two input ca and cb, only when ca = cb = delta will the output be delta otherwise will be -delta
+    /// test_vector for gatebootstrapping = delta + delta*X + ... + delta*X^{n-1}
+    /// posible cases:
+    /// ca = delta cb = delta      temp = 2 * delta - delta = delta > 0 
+    /// ca = delta cb = -delta     temp = 0 - delta = -delta < 0
+    /// ca = -delta cb = delta     temp = 0 - delta = -delta < 0
+    /// ca = -delta cb = -delta    temp = -2 * delta - delta = -3  * delta < 0
+    /// other cases don't exist
+    /// If temp > 0, expect_compare_res = true, and the test_vector left shift, the function outputs delta
+    /// If temp < 0, expect_compare_res = false,  and the test_vector right shift, the function outputs -delta
+        
     pub fn homand(&self, ca: &LWE<F>, cb: &LWE<F>, poly_length: usize, delta: F) -> LWE<F> {
         let mut temp = ca.add_component_wise_ref(cb);
         *temp.b_mut() = temp.b() - delta;
         let mut test = vec![F::zero(); poly_length];
         let mu = delta;
         test.iter_mut().for_each(|v| *v = mu);
-        self.gatebootstrapping(temp, test)
+        let r = self.gatebootstrapping(temp, test);
+        r
     }
 
     /// Performs the greater homomorphic comparison "greater" operation of two elements of the vector.
@@ -68,13 +82,14 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2, otherwise c=-1.
     pub fn greater_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, poly_length: usize) -> LWE<F> {
-        let mul = cipher1.mul_ntt_rgsw(cipher2);
+        let mul = cipher1.mul_ntt_rgsw(&cipher2);
         let vector = vec![F::neg_one(); poly_length];
         let test_plaintext = Polynomial::<F>::new(vector);
         let trlwe_mul_a = mul.a() * &test_plaintext;
         let trlwe_mul_b = mul.b() * test_plaintext;
         let trlwe_mul = RLWE::new(trlwe_mul_a, trlwe_mul_b);
-        RLWE::extract_lwe(&trlwe_mul)
+        let res = RLWE::extract_lwe(&trlwe_mul);
+        res
     }
 
     /// Performs the homomorphic comparison "greater" operation of two encoded numbers which have been transformed to vectors.
@@ -84,8 +99,8 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: BlindRotationKey `self`.
     /// * Input: RLWE ciphertext vector `cipher1`, with message `a`.
     /// * Input: NTTRGSW ciphertext vector `cipher2`, with message `b`.
-    /// * Input: the encryption of 1 'delta'.
-    /// * Input: the encryption of 1/2 'half_delta'.
+    /// * Input: delta = plain_modulus / 8. (plain_modulus stands for ring_modulus)
+    /// * Input: half_delta = plain_modulus / 16. (plain_modulus stands for ring_modulus)
     /// * Input: the size of RLWE and NTTRGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=-1.
     pub fn greater_arbhcmp(
@@ -99,17 +114,45 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let len = cipher1.len();
         assert_eq!(len, cipher2.len());
         assert!(len > 0);
+        //for the first digit in two vectors
         let hcmp = Self::greater_hcmp(&cipher1[0], &cipher2[0], poly_length);
+        //for the other multi digits in the two vector
         let mut res = hcmp;
-        for _ in 1..len {
-            let (cipher1_last, _cipher1_others) = cipher1.split_last().unwrap();
-            let (cipher2_last, _cipher2_others) = cipher2.split_last().unwrap();
+        for i in 1..len {
+            // Evaluate lower digits comparison 
+            // low_part_gt_res = ciphers1[0: cipher_size - 1] > ciphers2[0: cipher_size - 1]
+            // low_part_gt_res = delta (true) or -delta (false)
             let low_part_gt_res = res;
-            let eq_res = cipher1_last
-                .mul_ntt_rgsw(cipher2_last)
-                .extract_lwe_locally();
-            let eq_res = eq_res.add_component_wise_ref(&eq_res);
-            let mut gt_res = Self::greater_hcmp(cipher1_last, cipher2_last, poly_length);
+            // Evaluate the highest digit comparison 
+            // eq_res = ciphers1[cipher_size - 1] == ciphers2[cipher_size - 1]
+            // eq_res = delta (true) or 0 (false)
+            let eq_res = cipher1[i]
+                .mul_ntt_rgsw(&cipher2[i])
+                .extract_lwe_locally().clone();
+            // Evaluate the highest digit comparison 
+            // high_res = ciphers1[cipher_size - 1] > ciphers2[cipher_size - 1]
+            // high_res = delta (true)  or -delta (false)
+            let mut gt_res = Self::greater_hcmp(&cipher1[i], &cipher2[i], poly_length);
+            /*
+            Start GateMUX, this is an optimized-version of GateMUX, not general version of GateMUX in the paper.
+            Evaluate a linear transformation of the low_res, equal_res, high_res
+            new_lwe = equal_res + 2 * high_res + low_res + delta/2
+            Mux function: equal_res ? high_res : low_res
+
+            Eight case:
+                equal_res = 0, high_res = -delta, low_res = -delta --> new_lwe = -5delta/2, expect_compare_res = false
+                equal_res = 0, high_res = -delta, low_res =  delta --> new_lwe = -1delta/2, expect_compare_res = false
+                equal_res = 0, high_res =  delta, low_res = -delta --> new_lwe =  3delta/2, expect_compare_res = true
+                equal_res = 0, high_res =  delta, low_res =  delta --> new_lwe =  7delta/2, expect_compare_res = true
+                equal_res = delta, high_res = -delta, low_res = -delta --> new_lwe = -3delta/2, expect_compare_res = false
+                equal_res = delta, high_res = -delta, low_res =  delta --> new_lwe =  1delta/2, expect_compare_res = true
+                equal_res = delta, high_res =  delta, low_res = -delta --> Does not exist
+                equal_res = delta, high_res =  delta, low_res =  delta --> Does not exist
+
+            Based on the above, 
+            if new_lwe < 0, expect_compare_res = false
+            if new_lwe > 0, expect_compare_res = true
+            */
             for elem in gt_res.a_mut().iter_mut() {
                 *elem = *elem + *elem;
             }
@@ -118,6 +161,11 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
                 .add_component_wise(&low_part_gt_res)
                 .add_component_wise(&gt_res);
             *new_lwe.b_mut() = new_lwe.b() + half_delta;
+            /*
+            Start gate boostrapping, test_vector = delta + delta*X + ... + delta*X^{n-1}
+            If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
+            If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
+            */ 
             let mut test = vec![F::zero(); poly_length];
             let mu = delta;
             test.iter_mut().for_each(|v| *v = mu);
@@ -134,7 +182,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: NTTRGSW ciphertext `cipher2`, with message `b`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
     pub fn equality_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, delta: F) -> LWE<F> {
-        let mul = cipher1.mul_ntt_rgsw(cipher2);
+        let mul = cipher1.mul_ntt_rgsw(&cipher2);
         let mut res = RLWE::extract_lwe(&mul);
         for elem in res.a_mut().iter_mut() {
             *elem = *elem + *elem;
@@ -152,7 +200,7 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: RLWE ciphertext vector `cipher1`, with message `a`.
     /// * Input: NTTRGSW ciphertext vector `cipher2`, with message `b`.
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
-    /// * Input: the encryption of 1 'delta'.
+    /// * Input: delta = plain_modulus / 8. (plain_modulus stands for ring_modulus)
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
     pub fn equality_arbhcmp(
         &self,
@@ -164,13 +212,14 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let len = cipher1.len();
         assert_eq!(len, cipher2.len());
         assert!(len > 0);
+        // the comparison result of the first digit
         let hcmp = Self::equality_hcmp(&cipher1[0], &cipher2[0], delta);
+        // the comparison result of the other digit
         let mut res = hcmp;
-        for _ in 1..len {
-            let (cipher1_last, _cipher1_others) = cipher1.split_last().unwrap();
-            let (cipher2_last, _cipher2_others) = cipher2.split_last().unwrap();
+        for i in 1..len {
+            //only when low_res = delta and gt_res = delta, the res will be delta, otherwise res will be -delta
             let low_res = res;
-            let gt_res = Self::equality_hcmp(cipher1_last, cipher2_last, delta);
+            let gt_res = Self::equality_hcmp(&cipher1[i], &cipher2[i], delta);
             res = self.homand(&low_res, &gt_res, poly_length, delta);
         }
         res
@@ -185,14 +234,15 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=-1.
     pub fn less_hcmp(cipher1: &RLWE<F>, cipher2: &NTTRGSW<F>, poly_length: usize) -> LWE<F> {
-        let mul = cipher1.mul_ntt_rgsw(cipher2);
+        let mul = cipher1.mul_ntt_rgsw(&cipher2);
         let mut vector = vec![F::one(); poly_length];
         vector[0] = F::neg_one();
         let test_plaintext = Polynomial::<F>::new(vector);
         let trlwe_mul_a = mul.a() * &test_plaintext;
         let trlwe_mul_b = mul.b() * test_plaintext;
         let trlwe_mul = RLWE::new(trlwe_mul_a, trlwe_mul_b);
-        RLWE::extract_lwe(&trlwe_mul)
+        let res = RLWE::extract_lwe(&trlwe_mul);
+        res
     }
 
     /// Performs the homomorphic comparison "less" operation of two encoded numbers.
@@ -202,8 +252,8 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
     /// * Input: BlindRotationKey `self`.
     /// * Input: RLWE ciphertext vector `cipher1`, with message `a`.
     /// * Input: NTTRGSW ciphertext vector `cipher2`, with message `b`.
-    /// * Input: the encryption of 1 'delta'.
-    /// * Input: the encryption of 1/2 'half_delta'.
+    /// * Input: delta = plain_modulus / 8.
+    /// * Input: half_delta = plain_modulus / 16.
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=-1.
     pub fn less_arbhcmp(
@@ -217,17 +267,44 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
         let len = cipher1.len();
         assert_eq!(len, cipher2.len());
         assert!(len > 0);
+        // Vector contains only one element
         let hcmp = Self::less_hcmp(&cipher1[0], &cipher2[0], poly_length);
         let mut res = hcmp;
-        for _ in 1..len {
-            let (cipher1_last, _cipher1_others) = cipher1.split_last().unwrap();
-            let (cipher2_last, _cipher2_others) = cipher2.split_last().unwrap();
+        for i in 1..len {
+            // Evaluate lower digits comparison 
+            // low_part_gt_res = ciphers1[0: cipher_size - 1] < ciphers2[0: cipher_size - 1]
+            // low_part_gt_res = delta (true) or -delta (false)
             let low_part_gt_res = res;
-            let eq_res = cipher1_last
-                .mul_ntt_rgsw(cipher2_last)
-                .extract_lwe_locally();
-            let eq_res = eq_res.add_component_wise_ref(&eq_res);
-            let mut gt_res = Self::less_hcmp(cipher1_last, cipher2_last, poly_length);
+            // Evaluate the highest digit comparison 
+            // equal_res = ciphers1[cipher_size - 1] == ciphers2[cipher_size - 1]
+            // equal_res = delta (true) or 0 (false)
+            let eq_res = cipher1[i]
+                .mul_ntt_rgsw(&cipher2[i])
+                .extract_lwe_locally().clone();
+            // Evaluate the highest digit comparison 
+            // high_res = ciphers1[cipher_size - 1] < ciphers2[cipher_size - 1]
+            // high_res = delta or -delta
+            let mut gt_res = Self::less_hcmp(&cipher1[i], &cipher2[i], poly_length);
+            /*
+            Start GateMUX, this is an optimized-version of GateMUX, not general version of GateMUX in the paper.
+            Evaluate a linear transformation of the low_res, equal_res, high_res
+            new_lwe = equal_res + 2 * high_res + low_res + delta/2
+            Mux function: equal_res ? high_res : low_res
+
+            Eight case:
+                equal_res = 0, high_res = -delta, low_res = -delta --> new_lwe = -5delta/2, expect_compare_res = false
+                equal_res = 0, high_res = -delta, low_res =  delta --> new_lwe = -1delta/2, expect_compare_res = false
+                equal_res = 0, high_res =  delta, low_res = -delta --> new_lwe =  3delta/2, expect_compare_res = true
+                equal_res = 0, high_res =  delta, low_res =  delta --> new_lwe =  7delta/2, expect_compare_res = true
+                equal_res = delta, high_res = -delta, low_res = -delta --> new_lwe = -3delta/2, expect_compare_res = false
+                equal_res = delta, high_res = -delta, low_res =  delta --> new_lwe =  1delta/2, expect_compare_res = true
+                equal_res = delta, high_res =  delta, low_res = -delta --> Does not exist
+                equal_res = delta, high_res =  delta, low_res =  delta --> Does not exist
+        
+            Based on the above, 
+            if new_lwe > 0, expect_compare_res = true
+            if new_lwe < 0, expect_compare_res = false
+            */
             for elem in gt_res.a_mut().iter_mut() {
                 *elem = *elem + *elem;
             }
@@ -239,6 +316,11 @@ impl<F: Field<Value = u64> + NTTField> Compare<F> {
             let mut test = vec![F::zero(); poly_length];
             let mu = delta;
             test.iter_mut().for_each(|v| *v = mu);
+            /*
+            Start gate boostrapping, test_vector = delta + deltaX + ... + deltaX^{n-1}
+            If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
+            If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
+            */ 
             res = self.gatebootstrapping(new_lwe, test)
         }
         res
@@ -277,11 +359,11 @@ where
     let mut num2_vec = Vec::new();
     while num1 != 0 {
         num1_vec.push(num1 & mask);
-        num1 >>= trailing_zeros;
+        num1 = num1 >> trailing_zeros;
     }
     while num2 != 0 {
         num2_vec.push(num2 & mask);
-        num2 >>= trailing_zeros;
+        num2 = num2 >> trailing_zeros;
     }
     let len = num1_vec.len().max(num2_vec.len()).max(1);
     num1_vec.resize(len, 0);
@@ -309,12 +391,13 @@ pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -
         .iter()
         .zip(ciphertext.a())
         .fold(F::zero(), |acc, (&s, &a)| acc + s * a);
-    decode(ciphertext.b() - a_mul_s)
+    let outcome = decode(ciphertext.b() - a_mul_s);
+    outcome
 }
 
 /// Peforms the operation turning a value to its real number
 pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
-    (c.value() as f64 * 16_f64 / 132120577_f64).round() as u64 % 16
+    (c.value() as f64 * 8 as f64 / 132120577 as f64).round() as u64 % 8
 }
 
 /// Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
