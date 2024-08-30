@@ -1,7 +1,7 @@
 use algebra::derive::{DecomposableField, FheField, Field, Prime, NTT};
 use fhe_core::{
-    BlindRotationType, ConstParameters, LWESecretKeyType, ModulusSwitchRoundMethod, Parameters,
-    RingSecretKeyType, Steps,
+    BlindRotationType, ConstParameters, LWESecretKeyType,
+    ModulusSwitchRoundMethod, Parameters, RingSecretKeyType, Steps,
 };
 use once_cell::sync::Lazy;
 
@@ -14,7 +14,7 @@ pub type Inner = u64;
 /// ciphertext space
 pub const FP: Inner = 132120577;
 /// message space
-pub const FT: Inner = 16;
+pub const FT: Inner = 8;
 ///encode of 1
 pub const DELTA: FF = FF((FP as f64 / FT as f64) as Inner);
 ///encode of 1/2
@@ -25,7 +25,7 @@ pub static DEFAULT_PARAMERTERS: Lazy<Parameters<u64, FF>> = Lazy::new(|| {
     Parameters::<u64, FF>::new(ConstParameters {
         lwe_dimension: 1024,
         lwe_cipher_modulus: 2048,
-        lwe_plain_modulus: 16,
+        lwe_plain_modulus: 8,
         lwe_noise_standard_deviation: 3.20,
         lwe_secret_key_type: LWESecretKeyType::Binary,
         blind_rotation_type: BlindRotationType::RLWE,
