@@ -106,9 +106,6 @@ jobs:
       - name: cargo test
         run: cargo nextest run --workspace
 
-      - name: cargo test doc
-        run: cargo test --doc --workspace --all-features
-
   check-msrv:
     name: cargo check (msrv)
     runs-on: ${{ matrix.os }}
@@ -151,6 +148,9 @@ jobs:
 
       - name: install nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
+      
+      - name: cargo test doc
+        run: cargo test --doc --workspace --all-features
 
       # We test documentation using nightly to match docs.rs. This prevents potential breakages
       - name: cargo doc
