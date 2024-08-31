@@ -72,7 +72,7 @@ fn sort_array_with_reversed_bits<F: Clone + Copy>(input: &[F], log_n: u32) -> Ve
     output
 }
 
-/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal oder
+/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal order
 /// In other words, the orders of input and output are both normal order.
 /// ```plain
 /// normal order:        0  1  2  3  4  5  6  7
@@ -86,7 +86,7 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
     sort_array_with_reversed_bits(&ntt_form, log_n)
 }
 
-/// Invoke the existing api to perform ntt inverse transform and convert the bit-reversed order to normal oder
+/// Invoke the existing api to perform ntt inverse transform and convert the bit-reversed order to normal order
 /// In other words, the orders of input and output are both normal order.
 fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &[F]) -> Vec<F> {
     assert_eq!(points.len(), (1 << log_n) as usize);
@@ -98,7 +98,7 @@ fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &
         .data()
 }
 
-/// Construct the fourier matrix and then compute the matrix-vector product with the coefficents.
+/// Construct the fourier matrix and then compute the matrix-vector product with the coefficients.
 /// The output is in the normal order: f(w), f(w^3), f(w^5), ..., f(w^{2n-1})
 fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
     assert_eq!(coeff.len(), (1 << log_n) as usize);

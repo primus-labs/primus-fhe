@@ -2,7 +2,7 @@ use algebra::NTTField;
 use fhe_core::{utils::*, LWECiphertext, LWEModulusType};
 use rand::Rng;
 use zkfhe::{
-    bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMERTERS},
+    bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMETERS},
     Decryptor, Encryptor, KeyGen,
 };
 
@@ -14,7 +14,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
+    let params = *DEFAULT_TERNARY_128_BITS_PARAMETERS;
 
     let noise_max = (params.lwe_cipher_modulus_value() as f64 / 16.0) as C;
 
@@ -53,9 +53,9 @@ fn main() {
         // perform all other homomorphic bit operations
         let start = std::time::Instant::now();
         let (ct_and, ct_nand, ct_or, ct_nor, ct_xor, ct_xnor, ct_majority, ct_mux) =
-            join_bit_opearions(&eval, &x, &y, &z);
+            join_bit_operations(&eval, &x, &y, &z);
         let duration = start.elapsed();
-        println!("Time elapsed in join_bit_opearions() is: {:?}", duration);
+        println!("Time elapsed in join_bit_operations() is: {:?}", duration);
 
         // majority
         let (ma, noise) = dec.decrypt_with_noise(&ct_majority);
@@ -111,7 +111,7 @@ fn main() {
 }
 
 #[allow(clippy::type_complexity)]
-fn join_bit_opearions<T: LWEModulusType, F: NTTField>(
+fn join_bit_operations<T: LWEModulusType, F: NTTField>(
     eval: &Evaluator<T, F>,
     x: &LWECiphertext<T>,
     y: &LWECiphertext<T>,

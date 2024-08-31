@@ -25,7 +25,7 @@ pub struct ProverState<F: Field> {
     /// Stores the list of products that is meant to be added together.
     /// Each multiplicand is represented by the index in flattened_ml_extensions
     pub list_of_products: Vec<(F, Vec<usize>)>,
-    /// Stores the linear operations, each of which is successively (in the same order) perfomed over the each MLE of each product stored in the above `products`
+    /// Stores the linear operations, each of which is successively (in the same order) performed over the each MLE of each product stored in the above `products`
     /// so each (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
     pub linear_ops: Vec<Vec<(F, F)>>,
     /// Stores a list of multilinear extensions in which `self.list_of_products` point to

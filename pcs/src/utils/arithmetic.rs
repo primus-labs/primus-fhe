@@ -82,7 +82,7 @@ impl<F: Field> SparseMatrix<F> {
     ///
     /// # Arguments
     ///
-    /// * `vecotr` - The vector that are multiplied by the sparce matrix.
+    /// * `vector` - The vector that are multiplied by the sparce matrix.
     /// * `target` - The vector that are added to the multiplication, and stores the result.
     #[inline]
     pub fn add_multiplied_vector(&self, vector: &[F], target: &mut [F]) {
@@ -103,7 +103,7 @@ impl<F: Field> SparseMatrix<F> {
     ///
     /// # Arguments
     ///
-    /// * `vecotr` - The vector in the extension field that are multiplied by the sparce matrix.
+    /// * `vector` - The vector in the extension field that are multiplied by the sparce matrix.
     /// * `target` - The vector in the extension field that are added to the multiplication, and stores the result.
     #[inline]
     pub fn add_multiplied_vector_ext<EF: AbstractExtensionField<F>>(

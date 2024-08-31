@@ -4,7 +4,7 @@
 //! Barrett reduction computes `r ≡ x mod m` given `x` and `m`
 //! and return `r` where `r < m`.
 //!
-//! Fisrt, we need decide the radix `b`, which is chosen to be close to
+//! First, we need decide the radix `b`, which is chosen to be close to
 //! the word-size of the processor. Here, `b` = 2^64.
 //!
 //! The algorithm then precomputes a quantity ratio `µ = ⌊b^(2k)/m⌋`,

@@ -94,7 +94,7 @@ pub fn naive_init_fourier_table<F: Field>(
 }
 
 /// Generate MLE for the Fourier function F(u, x) for x \in \{0, 1\}^dim where u is the random point.
-/// Dynamic programming implementaion for initializing F(u, x) in NTT (derived from zkCNN: https://eprint.iacr.org/2021/673)
+/// Dynamic programming implementation for initializing F(u, x) in NTT (derived from zkCNN: https://eprint.iacr.org/2021/673)
 /// `N` is the dimension of the vector used to represent the polynomial in NTT.
 ///
 /// In NTT, the Fourier matrix is different since we choose these points: ω^1, ω^3, ..., ω^{2N-1}

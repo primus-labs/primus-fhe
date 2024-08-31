@@ -147,7 +147,7 @@ pub trait DecomposableField: Field {
 /// A trait defined for specific fields used and optimized for FHE.
 pub trait FheField: DecomposableField {
     /// Creates a new instance.
-    /// Can be overloaded with optimized implemetation.
+    /// Can be overloaded with optimized implementation.
     #[inline]
     fn lazy_new(value: Self::Value) -> Self {
         Self::new(value)

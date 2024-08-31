@@ -5,7 +5,7 @@ use algebra::transformation::count;
 use fhe_core::utils::nand;
 use rand::Rng;
 use zkfhe::{
-    bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMERTERS},
+    bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMETERS},
     Decryptor, Encryptor, KeyGen,
 };
 
@@ -17,7 +17,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let params = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
+    let params = *DEFAULT_TERNARY_128_BITS_PARAMETERS;
 
     let noise_max = (params.lwe_cipher_modulus_value() as f64 / 16.0) as C;
 

@@ -28,7 +28,7 @@ pub struct ListOfProductsOfPolynomials<F: Field> {
     pub num_variables: usize,
     /// list of reference to products (as usize) of multilinear extension
     pub products: Vec<(F, Vec<usize>)>,
-    /// Stores the linear operations, each of which is successively (in the same order) perfomed over the each MLE of each product stored in the above `products`
+    /// Stores the linear operations, each of which is successively (in the same order) performed over the each MLE of each product stored in the above `products`
     /// so each (a: F, b: F) can used to wrap a linear operation over the original MLE f, i.e. a \cdot f + b
     pub linear_ops: Vec<Vec<(F, F)>>,
     /// Stores multilinear extensions in which product multiplicand can refer to.
@@ -90,7 +90,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
         let mut indexed_product: Vec<usize> = Vec::with_capacity(op_coefficient.len());
         let mut linear_ops = Vec::with_capacity(op_coefficient.len());
 
-        // (a, b) is the linear operation perfomed on the original MLE pointed by m
+        // (a, b) is the linear operation performed on the original MLE pointed by m
         for (m, (a, b)) in product.iter().zip(op_coefficient) {
             assert_eq!(
                 m.num_vars, self.num_variables,

@@ -5,13 +5,13 @@ pub trait Reduce<Modulus>: Sized {
     /// Output type.
     type Output;
 
-    /// Caculates `self (mod modulus)`.
+    /// Calculates `self (mod modulus)`.
     fn reduce(self, modulus: Modulus) -> Self::Output;
 }
 
 /// The modulo assignment operation.
 pub trait ReduceAssign<Modulus>: Sized {
-    /// Caculates `self (mod modulus)`.
+    /// Calculates `self (mod modulus)`.
     fn reduce_assign(&mut self, modulus: Modulus);
 }
 
@@ -113,7 +113,7 @@ pub trait MulReduceAssign<Modulus, Rhs = Self> {
 
 /// The modular exponentiation.
 pub trait PowReduce<Modulus, Exponent> {
-    /// Calcualtes `self^exp (mod modulus)`.
+    /// Calculates `self^exp (mod modulus)`.
     fn pow_reduce(self, exp: Exponent, modulus: Modulus) -> Self;
 }
 
@@ -165,7 +165,7 @@ pub trait DotProductReduce<Modulus>: Sized {
     /// Output type.
     type Output;
 
-    /// Calcualte `a • b mod modulus`
+    /// Calculate `a • b mod modulus`
     ///
     /// For two same length slice `a = (a0, a1, ..., an)` and `b = (b0, b1, ..., bn)`.
     ///

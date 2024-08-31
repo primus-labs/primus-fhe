@@ -6,7 +6,7 @@ use fhe_core::{
 use once_cell::sync::Lazy;
 
 /// Default 128-bits security Parameters
-pub static DEFAULT_TERNARY_128_BITS_NTRU_PARAMERTERS: Lazy<Parameters<u16, DefaultFieldU32>> =
+pub static DEFAULT_TERNARY_128_BITS_NTRU_PARAMETERS: Lazy<Parameters<u16, DefaultFieldU32>> =
     Lazy::new(|| {
         Parameters::<u16, DefaultFieldU32>::new(ConstParameters {
             lwe_dimension: 590,

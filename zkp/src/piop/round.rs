@@ -62,7 +62,7 @@ pub struct RoundInstance<F: Field> {
     pub input: Rc<DenseMultilinearExtension<F>>,
     /// output denoted by b \in F_q
     pub output: Rc<DenseMultilinearExtension<F>>,
-    /// decomposed bits of ouput used for range check
+    /// decomposed bits of output used for range check
     pub output_bits: DecomposedBits<F>,
 
     /// offset denoted by c = a - b * k \in [1, k] such that c - 1 \in [0, k)

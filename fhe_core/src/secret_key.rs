@@ -120,7 +120,7 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
                                 || params.ring_secret_key_type() == RingSecretKeyType::Ternary
                         );
                         assert_eq!(params.lwe_dimension(), params.ring_dimension());
-                        // convertion
+                        // conversion
                         let convert = |v: &C| {
                             if v.is_zero() {
                                 Q::zero()

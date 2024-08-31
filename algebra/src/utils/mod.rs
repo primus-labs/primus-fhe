@@ -1,4 +1,4 @@
-//! Implemention of some number theory operation.
+//! Implementation of some number theory operation.
 
 mod aes;
 mod block;
