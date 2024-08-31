@@ -140,8 +140,11 @@ impl<F: Field> IntermediateMLEs<F> {
 /// Hence, the final equation is F(u, x) = \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) * ω^{2^i * x_i}
 ///
 /// * In order to comprehend this implementation, it is strongly recommended to read the pure version `naive_init_fourier_table` and `init_fourier_table` in the `ntt_bare.rs`.
+///
 /// `naive_init_fourier_table` shows the original formula of this algorithm.
+///
 /// `init_fourier_table` shows the dynamic programming version of this algorithm.
+///
 /// `init_fourier_table_overall` (this function) stores many intermediate evaluations for the ease of the delegation of F(u, v)
 ///
 /// # Arguments
@@ -228,11 +231,14 @@ pub fn naive_w_power_times_x_table<F: Field>(
 }
 
 /// Evaluate the mle w^{2^exp * x} for a random point r \in F^{x_dim}
-/// This formula is also derived from the techniques in zkCNN: https://eprint.iacr.org/2021/673.
+/// This formula is also derived from the techniques in [zkCNN](https://eprint.iacr.org/2021/673).
+///
 /// w^{2^exp * r} = \sum_x eq(x, r) *  w^{2^exp * x}
 ///               = \prod_i (1 - r_i + r_i * w^{2^ {(exp + i) % log_m})
+///
 /// * Note that the above equation only holds for exp <= logM - x_dim;
 /// * otherwise, the exponent 2^exp * x involves a modular addition, disabling the decomposition.
+///
 /// (Although I am not clearly making it out, the experiment result shows the above argument.)
 ///
 /// # Arguments:

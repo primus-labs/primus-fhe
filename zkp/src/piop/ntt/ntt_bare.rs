@@ -69,7 +69,9 @@ pub struct NTTBareSubclaim<F: Field> {
 /// # Arguments
 /// * u: the random point
 /// * ntt_table: It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
+///
 /// In order to delegate the computation F(u, v) to prover, we decompose the ω^X term into the grand product.
+///
 /// Hence, the final equation is = \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) * ω^{2^i * x_i}
 pub fn naive_init_fourier_table<F: Field>(
     u: &[F],
