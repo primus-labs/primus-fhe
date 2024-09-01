@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::Rng;
 use zkfhe::{
-    bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMERTERS},
+    bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMETERS},
     Encryptor, KeyGen,
 };
 
@@ -12,7 +12,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     // set parameter
-    let default_parameters = *DEFAULT_TERNARY_128_BITS_PARAMERTERS;
+    let default_parameters = *DEFAULT_TERNARY_128_BITS_PARAMETERS;
 
     // generate keys
     let sk = KeyGen::generate_secret_key(default_parameters);

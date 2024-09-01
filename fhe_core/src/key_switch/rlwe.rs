@@ -42,7 +42,7 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
 
         let key_switching_basis = Basis::<Q>::new(parameters.key_switching_basis_bits());
 
-        // convertion
+        // conversion
         let convert = |v: &C| {
             if *v == C::ZERO {
                 Q::zero()

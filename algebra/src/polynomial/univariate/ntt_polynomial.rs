@@ -575,9 +575,9 @@ impl<F: Field> Inv for &NTTPolynomial<F> {
     }
 }
 
-/// Performs enrty-wise add_mul operation.
+/// Performs entry-wise add_mul operation.
 ///
-/// Multiply enrty-wise over last two [NTTPolynomial<F>], and add back to the first
+/// Multiply entry-wise over last two [NTTPolynomial<F>], and add back to the first
 /// [NTTPolynomial<F>].
 #[inline]
 pub fn ntt_add_mul_assign<F: NTTField>(
@@ -591,9 +591,9 @@ pub fn ntt_add_mul_assign<F: NTTField>(
         .for_each(|((a, &b), &c)| a.add_mul_assign(b, c));
 }
 
-/// Performs enrty-wise add_mul operation.
+/// Performs entry-wise add_mul operation.
 ///
-/// Multiply enrty-wise over middle two [NTTPolynomial<F>], and add the first
+/// Multiply entry-wise over middle two [NTTPolynomial<F>], and add the first
 /// [NTTPolynomial<F>], store the result to last [NTTPolynomial<F>].
 #[inline]
 pub fn ntt_add_mul_inplace<F: NTTField>(
@@ -609,9 +609,9 @@ pub fn ntt_add_mul_inplace<F: NTTField>(
         .for_each(|(((d, &a), &b), &c)| *d = a.add_mul(b, c));
 }
 
-/// Performs enrty-wise add_mul fast operation.
+/// Performs entry-wise add_mul fast operation.
 ///
-/// Multiply enrty-wise over last two [NTTPolynomial<F>], and add back to the first
+/// Multiply entry-wise over last two [NTTPolynomial<F>], and add back to the first
 /// [NTTPolynomial<F>].
 ///
 /// The result coefficients may be in [0, 2*modulus) for some case,

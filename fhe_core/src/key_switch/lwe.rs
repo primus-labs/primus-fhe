@@ -43,7 +43,7 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
             lattice::Basis::<C>::new(params.key_switching_basis_bits(), lwe_cipher_modulus_value);
 
         let neg_one = lwe_cipher_modulus_value - C::ONE;
-        // convertion
+        // conversion
         let convert = |v: &Q| {
             if v.is_zero() {
                 C::ZERO

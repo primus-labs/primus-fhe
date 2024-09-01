@@ -55,7 +55,7 @@ impl<H: Hash + Send + Sync> MerkleTree<H> {
     }
 
     /// Instantiate a merkle tree by committing the leaves
-    /// In this case, we assume all the input leafs as the hashed values.
+    /// In this case, we assume all the input leaves as the hashed values.
     ///
     /// # Arguments.
     ///

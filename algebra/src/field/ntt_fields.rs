@@ -46,7 +46,7 @@ pub trait NTTField: PrimeField + FheField + From<usize> {
 
     /// Try to get the minimal primitive `degree`-th root of unity reduce `p`.
     ///
-    /// For ease of introduction we use `n` for `degreee` and `p` for prime number.
+    /// For ease of introduction we use `n` for `degree` and `p` for prime number.
     ///
     /// Let `n` be a power of 2 and `p` a prime with `p ≡ 1 (mod 2n)`.
     ///

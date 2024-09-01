@@ -79,7 +79,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::LazyReduce<BarrettModulus<Self>> for $SelfT {
             type Output = Self;
 
-            /// Caculates `self (mod 2*modulus)`.
+            /// Calculates `self (mod 2*modulus)`.
             ///
             /// ## Procedure
             ///
@@ -133,7 +133,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::Reduce<BarrettModulus<Self>> for $SelfT {
             type Output = Self;
 
-            /// Caculates `self (mod 2*modulus)`.
+            /// Calculates `self (mod 2*modulus)`.
             ///
             /// ## Procedure
             ///
@@ -173,7 +173,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::LazyReduce<BarrettModulus<$SelfT>> for [$SelfT; 2] {
             type Output = $SelfT;
 
-            /// Caculates `self (mod 2*modulus)`.
+            /// Calculates `self (mod 2*modulus)`.
             ///
             /// ## Procedure
             ///
@@ -237,7 +237,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::Reduce<BarrettModulus<$SelfT>> for [$SelfT; 2] {
             type Output = $SelfT;
 
-            /// Caculates `self (mod modulus)`.
+            /// Calculates `self (mod modulus)`.
             ///
             /// ## Procedure
             ///
@@ -277,7 +277,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::LazyReduce<BarrettModulus<$SelfT>> for ($SelfT, $SelfT) {
             type Output = $SelfT;
 
-            /// Caculates `self (mod 2*modulus)`.
+            /// Calculates `self (mod 2*modulus)`.
             ///
             /// ## Procedure
             ///
@@ -341,7 +341,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::Reduce<BarrettModulus<$SelfT>> for ($SelfT, $SelfT) {
             type Output = $SelfT;
 
-            /// Caculates `self (mod modulus)`.
+            /// Calculates `self (mod modulus)`.
             ///
             /// ## Procedure
             ///
@@ -381,7 +381,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::LazyReduce<BarrettModulus<$SelfT>> for &[$SelfT] {
             type Output = $SelfT;
 
-            /// Caculates `self (mod 2*modulus)` when value's length > 0.
+            /// Calculates `self (mod 2*modulus)` when value's length > 0.
             fn lazy_reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
                 match self {
                     &[] => unreachable!(),
@@ -402,7 +402,7 @@ macro_rules! impl_barrett_modulus {
         impl $crate::reduce::Reduce<BarrettModulus<$SelfT>> for &[$SelfT] {
             type Output = $SelfT;
 
-            /// Caculates `self (mod modulus)` when value's length > 0.
+            /// Calculates `self (mod modulus)` when value's length > 0.
             fn reduce(self, modulus: BarrettModulus<$SelfT>) -> Self::Output {
                 match self {
                     &[] => unreachable!(),
@@ -421,7 +421,7 @@ macro_rules! impl_barrett_modulus {
         }
 
         impl $crate::reduce::LazyReduceAssign<BarrettModulus<Self>> for $SelfT {
-            /// Caculates `self (mod 2*modulus)`.
+            /// Calculates `self (mod 2*modulus)`.
             ///
             /// ## Procedure
             ///
@@ -453,7 +453,7 @@ macro_rules! impl_barrett_modulus {
         }
 
         impl $crate::reduce::ReduceAssign<BarrettModulus<Self>> for $SelfT {
-            /// Caculates `self (mod modulus)`.
+            /// Calculates `self (mod modulus)`.
             ///
             /// ## Procedure
             ///

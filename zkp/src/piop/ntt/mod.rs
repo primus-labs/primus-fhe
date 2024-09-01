@@ -128,7 +128,7 @@ impl<F: Field> IntermediateMLEs<F> {
 }
 
 /// Generate MLE for the Fourier function F(u, x) for x \in \{0, 1\}^dim where u is the random point.
-/// Dynamic programming implementaion for initializing F(u, x) in NTT (derived from zkCNN: https://eprint.iacr.org/2021/673)
+/// Dynamic programming implementation for initializing F(u, x) in NTT (derived from zkCNN: https://eprint.iacr.org/2021/673)
 /// `N` is the dimension of the vector used to represent the polynomial in NTT.
 ///
 /// In NTT, the Fourier matrix is different since we choose these points: ω^1, ω^3, ..., ω^{2N-1}
@@ -140,8 +140,11 @@ impl<F: Field> IntermediateMLEs<F> {
 /// Hence, the final equation is F(u, x) = \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) * ω^{2^i * x_i}
 ///
 /// * In order to comprehend this implementation, it is strongly recommended to read the pure version `naive_init_fourier_table` and `init_fourier_table` in the `ntt_bare.rs`.
+///
 /// `naive_init_fourier_table` shows the original formula of this algorithm.
+///
 /// `init_fourier_table` shows the dynamic programming version of this algorithm.
+///
 /// `init_fourier_table_overall` (this function) stores many intermediate evaluations for the ease of the delegation of F(u, v)
 ///
 /// # Arguments
@@ -228,12 +231,15 @@ pub fn naive_w_power_times_x_table<F: Field>(
 }
 
 /// Evaluate the mle w^{2^exp * x} for a random point r \in F^{x_dim}
-/// This formula is also derived from the techniques in zkCNN: https://eprint.iacr.org/2021/673.
+/// This formula is also derived from the techniques in [zkCNN](https://eprint.iacr.org/2021/673).
+///
 /// w^{2^exp * r} = \sum_x eq(x, r) *  w^{2^exp * x}
 ///               = \prod_i (1 - r_i + r_i * w^{2^ {(exp + i) % log_m})
+///
 /// * Note that the above equation only holds for exp <= logM - x_dim;
 /// * otherwise, the exponent 2^exp * x involves a modular addition, disabling the decomposition.
-/// (Although I am not clearly making it out, the experiement result shows the above argument.)
+///
+/// (Although I am not clearly making it out, the experiment result shows the above argument.)
 ///
 /// # Arguments:
 ///
@@ -272,7 +278,7 @@ impl<F: Field> NTTInstance<F> {
         }
     }
 
-    /// Constuct a new instance from vector
+    /// Construct a new instance from vector
     #[inline]
     pub fn from_vec(
         log_n: usize,
@@ -288,7 +294,7 @@ impl<F: Field> NTTInstance<F> {
         }
     }
 
-    /// Constuct a new instance from slice
+    /// Construct a new instance from slice
     #[inline]
     pub fn from_slice(
         log_n: usize,
@@ -304,7 +310,7 @@ impl<F: Field> NTTInstance<F> {
         }
     }
 
-    /// Constuct a new instance from given info
+    /// Construct a new instance from given info
     #[inline]
     pub fn from_info(info: &NTTInstanceInfo<F>) -> Self {
         Self {

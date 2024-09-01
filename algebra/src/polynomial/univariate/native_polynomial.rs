@@ -694,7 +694,7 @@ impl<F: NTTField> Inv for &Polynomial<F> {
     }
 }
 
-/// Performs enrty-wise fast mul operation.
+/// Performs entry-wise fast mul operation.
 ///
 /// The result coefficients may be in [0, 2*modulus) for some case,
 /// and fall back to [0, modulus) for normal case.

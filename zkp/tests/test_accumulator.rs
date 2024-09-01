@@ -81,7 +81,7 @@ fn sort_array_with_reversed_bits<F: Clone + Copy>(input: &[F], log_n: u32) -> Ve
     output
 }
 
-/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal oder
+/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal order
 /// ```plain
 /// normal order:        0  1  2  3  4  5  6  7
 ///

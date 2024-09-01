@@ -3,7 +3,7 @@ pub trait LazyReduce<Modulus>: Sized {
     /// Output type.
     type Output;
 
-    /// Caculates `self (mod 2*modulus)`.
+    /// Calculates `self (mod 2*modulus)`.
     ///
     /// If `Modulus` doesn't support this special case,
     /// just fall back to `Reduce` trait.
@@ -12,7 +12,7 @@ pub trait LazyReduce<Modulus>: Sized {
 
 /// The lazy modulo assignment operation.
 pub trait LazyReduceAssign<Modulus>: Sized {
-    /// Caculates `self (mod 2*modulus)`.
+    /// Calculates `self (mod 2*modulus)`.
     ///
     /// If `Modulus` doesn't support this special case,
     /// just fall back to `ReduceAssign` trait.

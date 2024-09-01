@@ -1,3 +1,5 @@
+#[cfg(test)]
+#[cfg(feature = "concrete-ntt")]
 mod tests {
     use algebra::{
         AbstractExtensionField, BabyBear, BabyBearExetension, FieldUniformSampler, Goldilocks,

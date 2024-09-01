@@ -203,7 +203,7 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         match steps {
             Steps::BrMsKs => {
                 if blind_rotation_type == BlindRotationType::NTRU {
-                    // This method is not supportting `NTRU` now.
+                    // This method is not supporting `NTRU` now.
                     return Err(FHECoreError::StepsParametersNotCompatible);
                 }
                 if !(ring_secret_key_type == RingSecretKeyType::Binary
