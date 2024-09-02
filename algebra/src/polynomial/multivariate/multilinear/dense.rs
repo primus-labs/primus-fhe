@@ -10,6 +10,7 @@ use rand_distr::Distribution;
 use crate::{AbstractExtensionField, DecomposableField, Field, FieldUniformSampler};
 
 use super::MultilinearExtension;
+use rayon::prelude::*;
 use std::rc::Rc;
 
 /// Stores a multilinear polynomial in dense evaluation form.
@@ -100,13 +101,15 @@ impl<F: Field> DenseMultilinearExtension<F> {
             // fix a single variable to evaluate (1 << (nv - i)) evaluations from the last round
             // with complexity of 2^(1 << (nv - i)) field multiplications
             let r = ext_point[i - 1];
-            for b in 0..(1 << (nv - i)) {
+            let mut tmp = vec![EF::zero(); 1 << (nv - i)];
+            tmp.par_iter_mut().enumerate().for_each(|(b, t)| {
                 let left = poly[b << 1];
                 let right = poly[(b << 1) + 1];
-                poly[b] = r * (right - left) + left;
-            }
+                *t = left + r * (right - left);
+            });
+            poly = tmp;
         }
-        poly.truncate(1 << (nv - dim));
+        // poly.truncate(1 << (nv - dim));
         poly[0]
     }
 }
@@ -187,13 +190,15 @@ impl<F: Field> MultilinearExtension<F> for DenseMultilinearExtension<F> {
             // fix a single variable to evaluate (1 << (nv - i)) evaluations from the last round
             // with complexity of 2^(1 << (nv - i)) field multiplications
             let r = partial_point[i - 1];
-            for b in 0..(1 << (nv - i)) {
+            let mut tmp = vec![F::zero(); 1 << (nv - i)];
+            tmp.par_iter_mut().enumerate().for_each(|(b, t)| {
                 let left = poly[b << 1];
                 let right = poly[(b << 1) + 1];
-                poly[b] = left + r * (right - left);
-            }
+                *t = left + r * (right - left);
+            });
+            poly = tmp;
         }
-        poly.truncate(1 << (nv - dim));
+        // poly.truncate(1 << (nv - dim));
         Self::from_evaluations_vec(nv - dim, poly)
     }
 

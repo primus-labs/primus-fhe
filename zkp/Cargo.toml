@@ -16,3 +16,4 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true }
+rayon = { workspace = true }

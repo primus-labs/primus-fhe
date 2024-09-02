@@ -6,6 +6,7 @@ use std::vec;
 
 use algebra::Field;
 use algebra::{DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension};
+use rayon::prelude::*;
 
 use super::verifier::VerifierMsg;
 use super::IPForMLSumcheck;
@@ -92,7 +93,7 @@ impl<F: Field> IPForMLSumcheck<F> {
             let r = prover_state.randomness[i - 1];
             prover_state
                 .flattened_ml_extensions
-                .iter_mut()
+                .par_iter_mut()
                 .for_each(|mulplicand| {
                     *mulplicand = mulplicand.fix_variables(&[r]);
                 });
@@ -111,42 +112,71 @@ impl<F: Field> IPForMLSumcheck<F> {
         // the degree of univariate polynomial sent by prover at this round
         let degree = prover_state.max_multiplicands;
 
-        let zeros = (vec![F::zero(); degree + 1], vec![F::zero(); degree + 1]);
+        let zero = vec![F::zero(); degree + 1];
         // In effect, this fold is essentially doing simply:
         // for b in 0..1 << (nv - i)
         // The goal is to evaluate degree + 1 points for each b, all of which has been fixed with the same (i-1) variables.
         // Note that the function proved in the sumcheck is a sum of products.
-        let fold_result = (0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
-            // This loop is evaluating each product over the specific degree + 1 points.
-            for ((coefficient, products), linear_ops) in prover_state
+        let fold_result = (0..1 << (nv - i)).fold(zero, |mut products_sum, b| {
+            prover_state
                 .list_of_products
-                .iter()
-                .zip(prover_state.linear_ops.iter())
-            {
-                product.fill(*coefficient);
-                // This loop is evaluating each MLE to update the product via performing the accumulated multiplication.
-                for (&jth_product, &(op_a, op_b)) in products.iter().zip(linear_ops.iter()) {
-                    // (a, b) is a wrapped linear operation over original MLE
-                    let table = &prover_state.flattened_ml_extensions[jth_product];
-                    let mut start = (table[b << 1] * op_a) + op_b;
-                    let step = (table[(b << 1) + 1] * op_a) + op_b - start;
-                    // Evaluate each point P(t) for t = 0..degree + 1 via the accumulated addition instead of the multiplication by t.
-                    // [t|b] = [0|b] + t * ([1|b] - [0|b]) represented by little-endian
-                    for p in product.iter_mut() {
-                        *p *= start;
-                        start += step;
+                .par_iter()
+                .zip(prover_state.linear_ops.par_iter())
+                .for_each(|((coefficient, products), linear_ops)| {
+                    let mut product = vec![*coefficient; degree + 1];
+                    // product.fill(*coefficient);
+                    // This loop is evaluating each MLE to update the product via performing the accumulated multiplication.
+                    for (&jth_product, &(op_a, op_b)) in products.iter().zip(linear_ops.iter()) {
+                        // (a, b) is a wrapped linear operation over original MLE
+                        let table = &prover_state.flattened_ml_extensions[jth_product];
+                        let op = table[b << 1] * op_a;
+                        let mut start = op + op_b;
+                        // let step = (table[(b << 1) + 1] * op_a) + op_b - start;
+                        let step = (table[(b << 1) + 1] * op_a) - op;
+                        // Evaluate each point P(t) for t = 0..degree + 1 via the accumulated addition instead of the multiplication by t.
+                        // [t|b] = [0|b] + t * ([1|b] - [0|b]) represented by little-endian
+                        for p in product.iter_mut() {
+                            *p *= start;
+                            start += step;
+                        }
                     }
-                }
-                for t in 0..degree + 1 {
-                    products_sum[t] += product[t];
-                }
-            }
-            (products_sum, product)
+                    for t in 0..degree + 1 {
+                        products_sum[t] += product[t];
+                    }
+                });
+
+            // // This loop is evaluating each product over the specific degree + 1 points.
+            // for ((coefficient, products), linear_ops) in prover_state
+            //     .list_of_products
+            //     .iter()
+            //     .zip(prover_state.linear_ops.iter())
+            // {
+            //     let mut product = vec![*coefficient; degree + 1];
+            //     // product.fill(*coefficient);
+            //     // This loop is evaluating each MLE to update the product via performing the accumulated multiplication.
+            //     for (&jth_product, &(op_a, op_b)) in products.iter().zip(linear_ops.iter()) {
+            //         // (a, b) is a wrapped linear operation over original MLE
+            //         let table = &prover_state.flattened_ml_extensions[jth_product];
+            //         let op = table[b << 1] * op_a;
+            //         let mut start = op + op_b;
+            //         // let step = (table[(b << 1) + 1] * op_a) + op_b - start;
+            //         let step = (table[(b << 1) + 1] * op_a) - op;
+            //         // Evaluate each point P(t) for t = 0..degree + 1 via the accumulated addition instead of the multiplication by t.
+            //         // [t|b] = [0|b] + t * ([1|b] - [0|b]) represented by little-endian
+            //         for p in product.iter_mut() {
+            //             *p *= start;
+            //             start += step;
+            //         }
+            //     }
+            //     for t in 0..degree + 1 {
+            //         products_sum[t] += product[t];
+            //     }
+            // }
+            products_sum
         });
-        let products_sum = fold_result.0;
 
         ProverMsg {
-            evaluations: Rc::new(products_sum),
+            evaluations: Rc::new(fold_result),
         }
     }
 }
