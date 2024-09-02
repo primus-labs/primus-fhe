@@ -552,3 +552,47 @@ pub fn ntt_rgsw_turn<F: NTTField>(
         poly_c.mul_scalar_assign(F::lazy_new(basis.basis()));
     });
 }
+
+///generate LWE ciphertext which encrypts 1
+pub fn lwe_generate<F, R>(
+    secret_key: &[F],
+    rlwe_dimension: usize,
+    error_sampler: FieldDiscreteGaussianSampler,
+    mut rng: R,
+    delta: F,
+) -> LWE<F>
+where
+    R: Rng + CryptoRng,
+    F: NTTField,
+{
+    let a = Polynomial::random(rlwe_dimension, &mut rng);
+    let a_mul_s = secret_key
+        .iter()
+        .zip(a.clone())
+        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
+    let mut e_a = error_sampler.sample(&mut rng);
+    e_a += a_mul_s + delta;
+    LWE::new(a.data(), e_a)
+}
+
+///generate LWE ciphertext which encrypts -1
+pub fn lwe_generate_neg<F, R>(
+    secret_key: &[F],
+    rlwe_dimension: usize,
+    error_sampler: FieldDiscreteGaussianSampler,
+    mut rng: R,
+    delta: F,
+) -> LWE<F>
+where
+    R: Rng + CryptoRng,
+    F: NTTField,
+{
+    let a = Polynomial::random(rlwe_dimension, &mut rng);
+    let a_mul_s = secret_key
+        .iter()
+        .zip(a.clone())
+        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
+    let mut e_a = error_sampler.sample(&mut rng);
+    e_a += a_mul_s - delta;
+    LWE::new(a.data(), e_a)
+}

@@ -1,25 +1,23 @@
 use fhe_cmp::{
-    compare::{decrypt, encrypt, HomCmpScheme},
-    parameters::{DEFAULT_PARAMERTERS, DELTA, FF, HALF_DELTA},
+    compare::{decrypt, encrypt, lwe_generate, lwe_generate_neg, HomCmpScheme},
+    parameters::{DEFAULT_PARAMERTERS, DELTA, HALF_DELTA},
 };
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
-use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
-use std::{cmp::Ordering, time::Instant};
+use std::cmp::Ordering;
 fn main() {
     let mut rng = thread_rng();
     let param = *DEFAULT_PARAMERTERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
-    let poly_length = param.ring_dimension();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
     let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
-    
-    //test hcmp
-    println!("test hcmp");
-    let x = rng.gen_range(0..1024);
-    let y = rng.gen_range(0..1024);
+    let x = rng.gen_range(1025..100000);
+    let y = rng.gen_range(1025..100000);
+    let x_hcmp = rng.gen_range(0..1024);
+    let y_hcmp = rng.gen_range(0..1024);
+    let poly_length = param.ring_dimension();
     let (value1, value2) = encrypt(
         x,
         y,
@@ -29,73 +27,85 @@ fn main() {
         sampler,
         &mut rng,
     );
-    let gt_cipher = rotationkey.gt_hcmp(&value1[0], &value2[0]);
-    let eq_cipher = rotationkey.eq_hcmp(&value1[0], &value2[0]);
-    let lt_cipher = rotationkey.lt_hcmp(&value1[0], &value2[0]);
+    let (value1_hcmp, value2_hcmp) = encrypt(
+        x_hcmp,
+        y_hcmp,
+        sk.ntt_ring_secret_key(),
+        basis,
+        DELTA,
+        sampler,
+        &mut rng,
+    );
+
+    //test hcmp
+    println!("test hcmp");
+    let gt_cipher = rotationkey.gt_hcmp(&value1_hcmp[0], &value2_hcmp[0]);
+    let eq_cipher = rotationkey.eq_hcmp(&value1_hcmp[0], &value2_hcmp[0]);
+    let lt_cipher = rotationkey.lt_hcmp(&value1_hcmp[0], &value2_hcmp[0]);
     let gt_value = decrypt(rlwe_sk, gt_cipher);
     let eq_value = decrypt(rlwe_sk, eq_cipher);
     let lt_value = decrypt(rlwe_sk, lt_cipher);
-    match x.cmp(&y) {
-        Ordering::Less =>
-        {
+    match x_hcmp.cmp(&y_hcmp) {
+        Ordering::Greater => {
             assert_eq!(gt_value, 1);
             assert_eq!(eq_value, param.lwe_plain_modulus() - 1);
             assert_eq!(lt_value, param.lwe_plain_modulus() - 1);
         }
-        Ordering::Equal =>
-        {
+        Ordering::Equal => {
             assert_eq!(gt_value, param.lwe_plain_modulus() - 1);
             assert_eq!(eq_value, 1);
             assert_eq!(lt_value, param.lwe_plain_modulus() - 1);
         }
-        Ordering::Greater =>
-        {
+        Ordering::Less => {
             assert_eq!(gt_value, param.lwe_plain_modulus() - 1);
             assert_eq!(gt_value, param.lwe_plain_modulus() - 1);
             assert_eq!(lt_value, 1);
         }
-        _ => {} // No error, do nothing
     }
+    println!("finish hcmp test");
 
     //test arbhcmp
     println!("test arbhcmp");
-    let x = rng.gen_range(0..1024);
-    let y = rng.gen_range(0..1024);
-    let (value1, value2) = encrypt(
-        x,
-        y,
-        sk.ntt_ring_secret_key(),
-        basis,
-        DELTA,
-        sampler,
-        &mut rng,
-    );
-    let gt_cipher = rotationkey.gt_hcmp(&value1[0], &value2[0]);
-    let eq_cipher = rotationkey.eq_hcmp(&value1[0], &value2[0]);
-    let lt_cipher = rotationkey.lt_hcmp(&value1[0], &value2[0]);
+    let gt_cipher = rotationkey.greater_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
+    let eq_cipher = rotationkey.equality_arbhcmp(&value1, &value2, poly_length, DELTA);
+    let lt_cipher = rotationkey.less_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
     let gt_value = decrypt(rlwe_sk, gt_cipher);
     let eq_value = decrypt(rlwe_sk, eq_cipher);
     let lt_value = decrypt(rlwe_sk, lt_cipher);
     match x.cmp(&y) {
-        Ordering::Less =>
-        {
+        Ordering::Greater => {
             assert_eq!(gt_value, 1);
             assert_eq!(eq_value, param.lwe_plain_modulus() - 1);
             assert_eq!(lt_value, param.lwe_plain_modulus() - 1);
         }
-        Ordering::Equal =>
-        {
+        Ordering::Equal => {
             assert_eq!(gt_value, param.lwe_plain_modulus() - 1);
             assert_eq!(eq_value, 1);
             assert_eq!(lt_value, param.lwe_plain_modulus() - 1);
         }
-        Ordering::Greater =>
-        {
+        Ordering::Less => {
             assert_eq!(gt_value, param.lwe_plain_modulus() - 1);
             assert_eq!(gt_value, param.lwe_plain_modulus() - 1);
             assert_eq!(lt_value, 1);
         }
-        _ => {} // No error, do nothing
     }
+    println!("finish arbhcmp test");
 
+    //test homand only when 2 delta comes out delta
+    println!("test homand");
+    let lwe_delta = lwe_generate(rlwe_sk, param.ring_dimension(), sampler, &mut rng, DELTA);
+    let lwe_delta_neg = lwe_generate_neg(rlwe_sk, param.ring_dimension(), sampler, &mut rng, DELTA);
+    let homand_cipher1 = rotationkey.homand(&lwe_delta, &lwe_delta, poly_length, DELTA);
+    let homand_cipher2 = rotationkey.homand(&lwe_delta, &lwe_delta_neg, poly_length, DELTA);
+    let homand_cipher3 = rotationkey.homand(&lwe_delta_neg, &lwe_delta, poly_length, DELTA);
+    let homand_cipher4 = rotationkey.homand(&lwe_delta_neg, &lwe_delta_neg, poly_length, DELTA);
+    let output1 = decrypt(rlwe_sk, homand_cipher1);
+    let output2 = decrypt(rlwe_sk, homand_cipher2);
+    let output3 = decrypt(rlwe_sk, homand_cipher3);
+    let output4 = decrypt(rlwe_sk, homand_cipher4);
+    assert_eq!(output1, 1);
+    assert_eq!(output2, param.lwe_plain_modulus() - 1);
+    assert_eq!(output3, param.lwe_plain_modulus() - 1);
+    assert_eq!(output4, param.lwe_plain_modulus() - 1);
+    println!("fininsh homand test");
 }
