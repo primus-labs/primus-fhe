@@ -1,6 +1,6 @@
 use algebra::{
     derive::*, modulus::PowOf2Modulus, Basis, BinomialExtensionField, BinomiallyExtendable, Field,
-    FieldDiscreteGaussianSampler, HasTwoAdicBionmialExtension, NTTField, Packable,
+    FieldDiscreteGaussianSampler, HasTwoAdicBionmialExtension, NTTField,
 };
 use lattice::DiscreteGaussian;
 
@@ -525,8 +525,6 @@ impl HasTwoAdicBionmialExtension<4> for DefaultFieldU32 {
         std::unimplemented!()
     }
 }
-
-impl Packable for DefaultFieldU32 {}
 
 /// Default extension field of default 32-bit field.
 pub type DefaultExtendsionFieldU32x4 = BinomialExtensionField<DefaultFieldU32, 4>;

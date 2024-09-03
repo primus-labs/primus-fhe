@@ -17,10 +17,10 @@ use serde::{
 
 use crate::{
     field_to_array, powers, AbstractExtensionField, ExtensionField, Field, FieldUniformSampler,
-    HasFrobenius, HasTwoAdicBionmialExtension, PackedField, TwoAdicField,
+    HasFrobenius, HasTwoAdicBionmialExtension, Packable, TwoAdicField,
 };
 
-use super::{BinomiallyExtendable, Packable};
+use super::BinomiallyExtendable;
 
 /// Binomial extension field
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
@@ -48,15 +48,13 @@ impl<F: Field, const D: usize> From<F> for BinomialExtensionField<F, D> {
 
 impl<F: BinomiallyExtendable<D>, const D: usize> Packable for BinomialExtensionField<F, D> {}
 
-impl<F: BinomiallyExtendable<D> + PackedField<Scalar = F> + Packable, const D: usize>
-    ExtensionField<F> for BinomialExtensionField<F, D>
-{
-    type ExtensionPacking = BinomialExtensionField<F, D>;
-}
-
-impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> HasFrobenius<F>
+impl<F: BinomiallyExtendable<D>, const D: usize> ExtensionField<F>
     for BinomialExtensionField<F, D>
 {
+    type ExtensionPacking = BinomialExtensionField<F::Packing, D>;
+}
+
+impl<F: BinomiallyExtendable<D>, const D: usize> HasFrobenius<F> for BinomialExtensionField<F, D> {
     /// FrobeniusField automorphisms: x -> x^n, where n is the order of BaseField.
     fn frobenius(&self) -> Self {
         self.repeated_frobenius(1)
@@ -115,7 +113,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> HasFrobenius
     }
 }
 
-impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> AbstractExtensionField<F>
+impl<F: BinomiallyExtendable<D>, const D: usize> AbstractExtensionField<F>
     for BinomialExtensionField<F, D>
 {
     const D: usize = D;
@@ -147,9 +145,8 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> AbstractExte
     }
 }
 
-impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
-    for BinomialExtensionField<F, D>
-{
+impl<F: BinomiallyExtendable<D>, const D: usize> Field for BinomialExtensionField<F, D> {
+    type Packing = Self;
     type Value = F::Value;
     type Order = u128;
 

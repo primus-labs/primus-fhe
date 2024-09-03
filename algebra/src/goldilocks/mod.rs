@@ -12,13 +12,10 @@ use std::{
 use num_traits::{Inv, One, Pow, Zero};
 
 use crate::{
-    div_ceil,
-    modulus::{self, to_canonical_u64, GoldilocksModulus},
-    reduce::{
+    div_ceil, field::Packable, modulus::{self, to_canonical_u64, GoldilocksModulus}, reduce::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
-    },
-    DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
+    }, DecomposableField, FheField, Field, PrimeField, TwoAdicField
 };
 
 /// Implementation of Goldilocks field
@@ -38,6 +35,7 @@ impl Goldilocks {
 }
 
 impl Field for Goldilocks {
+    type Packing = Self;
     type Value = u64;
     type Order = u64;
 

@@ -121,6 +121,12 @@ pub(crate) fn impl_one(name: &Ident) -> TokenStream {
     }
 }
 
+pub(crate) fn impl_packable(name: &Ident) -> TokenStream {
+    quote! {
+        impl ::algebra::field::packed::Packable for #name {}
+    }
+}
+
 pub(crate) fn impl_ser(name: &Ident, field_ty: &Type) -> TokenStream {
     let serializer_fn = match field_ty {
         Type::Path(type_path) if type_path.path.is_ident("u8") => quote! { serialize_u8 },

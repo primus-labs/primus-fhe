@@ -1,3 +1,4 @@
+//! Packed values, derived from Plonky3.
 use core::slice;
 use std::{
     mem,

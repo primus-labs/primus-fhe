@@ -1,12 +1,12 @@
+//! This module is derived from Plonky3.
+
 mod binomial_extension;
 mod helper;
-mod packed;
 
 pub use binomial_extension::*;
 pub use helper::*;
-pub use packed::*;
 
-use crate::Field;
+use crate::{field::packed::PackedValue, Field};
 use core::iter;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
@@ -80,11 +80,9 @@ pub trait AbstractExtensionField<Base: Field>:
 }
 
 /// Extension field trait
-pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
-    Field + AbstractExtensionField<Base>
-{
+pub trait ExtensionField<Base: Field>: Field + AbstractExtensionField<Base> {
     /// ExtensionPacking type
-    type ExtensionPacking: AbstractExtensionField<Base> + 'static + Copy + Send + Sync;
+    type ExtensionPacking: AbstractExtensionField<Base::Packing> + 'static + Copy + Send + Sync;
 
     /// Check is in base field or not
     fn is_in_basefield(&self) -> bool {
@@ -103,14 +101,15 @@ pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
     /// Power packed
     // fn ext_powers_packed(&self) -> impl Iterator<Item = Self::ExtensionPacking> {
     fn ext_powers_packed(&self) -> Vec<Self::ExtensionPacking> {
-        let powers: Vec<_> = powers(self).take(Base::WIDTH + 1).collect();
+        let powers: Vec<_> = powers(self).take(Base::Packing::WIDTH + 1).collect();
         // Transpose first WIDTH powers
         let current = Self::ExtensionPacking::from_base_fn(|i| {
-            Base::from_fn(|j| powers[j].as_base_slice()[i])
+            Base::Packing::from_fn(|j| powers[j].as_base_slice()[i])
         });
         // Broadcast self^WIDTH
-        let multiplier =
-            Self::ExtensionPacking::from_base_fn(|i| powers[Base::WIDTH].as_base_slice()[i]);
+        let multiplier = Self::ExtensionPacking::from_base_fn(|i| {
+            Base::Packing::from(powers[Base::Packing::WIDTH].as_base_slice()[i])
+        });
 
         core::iter::successors(Some(current), move |&current| Some(current * multiplier)).collect()
     }
@@ -133,7 +132,7 @@ pub trait BinomiallyExtendable<const D: usize>: Field {
 }
 
 ///  Has Frobenius trait
-pub trait HasFrobenius<F: Field + Packable>: ExtensionField<F> {
+pub trait HasFrobenius<F: Field>: ExtensionField<F> {
     /// frobenius
     fn frobenius(&self) -> Self;
 

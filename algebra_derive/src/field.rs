@@ -4,7 +4,7 @@ use syn::{DeriveInput, Result, Type};
 
 use crate::{
     ast::Input,
-    basic::{basic, display, impl_deser, impl_one, impl_ser, impl_zero},
+    basic::{basic, display, impl_deser, impl_one, impl_packable, impl_ser, impl_zero},
     ops::*,
 };
 
@@ -34,6 +34,8 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
     let impl_zero = impl_zero(name);
 
     let impl_one = impl_one(name);
+
+    let impl_packable = impl_packable(name);
 
     let impl_modulus_config =
         impl_modulus_config(name, field_ty, input.attrs.modulus_type, &modulus);
@@ -65,6 +67,8 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 
         #impl_one
 
+        #impl_packable
+
         #impl_display
 
         #impl_modulus_config
@@ -91,6 +95,8 @@ fn impl_field_with_ops(input: Input) -> Result<TokenStream> {
 fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream) -> TokenStream {
     quote! {
         impl ::algebra::Field for #name {
+            type Packing = Self;
+
             type Value = #field_ty;
 
             type Order = #field_ty;

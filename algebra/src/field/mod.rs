@@ -12,7 +12,10 @@ use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
 mod ntt_fields;
 mod prime_fields;
 
+pub mod packed;
+
 pub use ntt_fields::NTTField;
+pub use packed::*;
 pub use prime_fields::PrimeField;
 
 /// A trait defining the algebraic structure of a mathematical field.
@@ -35,6 +38,7 @@ pub use prime_fields::PrimeField;
 /// and computational number theory.
 pub trait Field:
     Sized
+    + Packable
     + Copy
     + Send
     + Sync
@@ -68,6 +72,9 @@ pub trait Field:
     + Inv<Output = Self>
     + Pow<Self::Order, Output = Self>
 {
+    /// The packing type.
+    type Packing: PackedField<Scalar = Self>;
+
     /// The inner type of this field.
     type Value: Debug
         + Send
