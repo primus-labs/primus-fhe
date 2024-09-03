@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 algebra = { path = "../algebra" }
+pcs = { path = "../pcs" }
 
 thiserror = { workspace = true }
 rand = { workspace = true }
@@ -16,3 +17,12 @@ num-traits = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true }
+
+[target.'cfg(all(unix, any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }
+
+[target.'cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "gnu"))'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }
+
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))'.dependencies]
+sha2 = { workspace = true }

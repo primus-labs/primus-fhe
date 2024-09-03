@@ -1,25 +1,26 @@
 use algebra::{BabyBear, BabyBearExetension, Basis};
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
     DenseMultilinearExtension, Field, FieldUniformSampler,
 };
+use itertools::izip;
 // use protocol::bit_decomposition::{BitDecomposition, DecomposedBits};
 use rand::prelude::*;
-use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
-use zkp::sumcheck::MLSumcheck;
-use std::os::macos::raw::stat;
+use sha2::Sha256;
 use std::rc::Rc;
+use std::time::Instant;
 use std::vec;
 use zkp::piop::{BitDecomposition, DecomposedBits};
+use pcs::{
+    multilinear::brakedown::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+    PolynomialCommitmentScheme,
+};
 
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
-// field type
 type FF = BabyBear;
 type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -65,68 +66,186 @@ fn test_single_trivial_bit_decomposition_base_2() {
     assert!(check);
 }
 
+#[test]
+fn test_batch_trivial_bit_decomposition_base_2() {
+    let base_len: u32 = 1;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = 2;
+    let num_vars = 2;
+
+    let d = vec![
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 0, 1, 2, 3),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 0, 1, 2, 3),
+        )),
+    ];
+    let d_bits = vec![
+        vec![
+            // 0th bit
+            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                num_vars,
+                field_vec!(FF; 0, 1, 0, 1),
+            )),
+            // 1st bit
+            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                num_vars,
+                field_vec!(FF; 0, 0, 1, 1),
+            )),
+        ],
+        vec![
+            // 0th bit
+            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                num_vars,
+                field_vec!(FF; 0, 1, 0, 1),
+            )),
+            // 1st bit
+            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                num_vars,
+                field_vec!(FF; 0, 0, 1, 1),
+            )),
+        ],
+    ];
+
+    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    for (d_val, d_bits) in izip!(d, d_bits) {
+        instance.add_decomposed_bits_instance(&d_val, &d_bits);
+    }
+
+    let info = instance.info();
+
+    let (proof, state, poly_info) = BitDecomposition::prove(&instance);
+    let evals = instance.evaluate(&state.randomness);
+    
+    let check = BitDecomposition::verify(&proof, &poly_info, &evals, &info);
+    assert!(check);
+}
+
+#[test]
+fn test_single_bit_decomposition() {
+    let base_len: u32 = 4;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let num_vars = 10;
+
+    let mut rng = thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        (0..(1 << num_vars))
+            .map(|_| uniform.sample(&mut rng))
+            .collect(),
+    ));
+
+    let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
+
+    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    instance.add_decomposed_bits_instance(&d, &d_bits_prover);
+
+    let info = instance.info();
+
+    let (proof, state, poly_info) = BitDecomposition::prove(&instance);
+    let evals = instance.evaluate(&state.randomness);
+    
+    let check = BitDecomposition::verify(&proof, &poly_info, &evals, &info);
+    assert!(check);
+}
+
+
+#[test]
+fn test_batch_bit_decomposition() {
+    let base_len: u32 = 4;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let num_vars = 10;
+
+    let mut rng = thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let d = vec![
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            (0..(1 << num_vars))
+                .map(|_| uniform.sample(&mut rng))
+                .collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            (0..(1 << num_vars))
+                .map(|_| uniform.sample(&mut rng))
+                .collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            (0..(1 << num_vars))
+                .map(|_| uniform.sample(&mut rng))
+                .collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            (0..(1 << num_vars))
+                .map(|_| uniform.sample(&mut rng))
+                .collect(),
+        )),
+    ];
+
+    let d_bits: Vec<_> = d
+        .iter()
+        .map(|x| x.get_decomposed_mles(base_len, bits_len))
+        .collect();
+
+    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    for (val, bits) in izip!(d, d_bits) {
+        instance.add_decomposed_bits_instance(&val, &bits);
+    }
+
+    let info = instance.info();
+
+    let (proof, state, poly_info) = BitDecomposition::prove(&instance);
+    let evals = instance.evaluate(&state.randomness);
+    
+    let check = BitDecomposition::verify(&proof, &poly_info, &evals, &info);
+    assert!(check);
+}
+
+#[test]
+fn test_single_bit_decomposition_extension_field() {
+
+    let base_len: u32 = 4;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let num_vars = 10;
+
+    let mut rng = thread_rng();
+    let w = EF::random(&mut rng);
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        (0..(1 << num_vars))
+            .map(|_| uniform.sample(&mut rng))
+            .collect(),
+    ));
+
+    let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
+
+    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    instance.add_decomposed_bits_instance(&d, &d_bits_prover);
+
+    let instance_ef = instance.to_ef::<EF>();
+    let info = instance_ef.info();
+
+    let (proof, state, poly_info) = BitDecomposition::<EF>::prove(&instance_ef);
+    let evals = instance.evaluate_ext(&state.randomness);
+    
+    let check = BitDecomposition::<EF>::verify(&proof, &poly_info, &evals, &info);
+    assert!(check);
+}
+
 // #[test]
-// fn test_batch_trivial_bit_decomposition_base_2() {
-//     let base_len: u32 = 1;
-//     let base: FF = FF::new(1 << base_len);
-//     let bits_len: u32 = 2;
-//     let num_vars = 2;
-
-//     let mut rng = thread_rng();
-//     let uniform = <FieldUniformSampler<FF>>::new();
-//     let d = vec![
-//         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//             num_vars,
-//             field_vec!(FF; 0, 1, 2, 3),
-//         )),
-//         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//             num_vars,
-//             field_vec!(FF; 0, 1, 2, 3),
-//         )),
-//     ];
-//     let d_bits = vec![
-//         vec![
-//             // 0th bit
-//             Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//                 num_vars,
-//                 field_vec!(FF; 0, 1, 0, 1),
-//             )),
-//             // 1st bit
-//             Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//                 num_vars,
-//                 field_vec!(FF; 0, 0, 1, 1),
-//             )),
-//         ],
-//         vec![
-//             // 0th bit
-//             Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//                 num_vars,
-//                 field_vec!(FF; 0, 1, 0, 1),
-//             )),
-//             // 1st bit
-//             Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//                 num_vars,
-//                 field_vec!(FF; 0, 0, 1, 1),
-//             )),
-//         ],
-//     ];
-//     let d_bits_ref: Vec<_> = d_bits.iter().collect();
-
-//     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
-//     for d_instance in &d_bits {
-//         decomposed_bits.add_decomposed_bits_instance(d_instance);
-//     }
-
-//     let decomposed_bits_info = decomposed_bits.info();
-
-//     let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-//     let proof = BitDecomposition::prove(&decomposed_bits, &u);
-//     let subclaim = BitDecomposition::verify(&proof, &decomposed_bits_info);
-//     assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
-// }
-
-// #[test]
-// fn test_single_bit_decomposition() {
+// fn test_snarks()
+// {
 //     let base_len: u32 = 4;
 //     let base: FF = FF::new(1 << base_len);
 //     let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
@@ -142,71 +261,26 @@ fn test_single_trivial_bit_decomposition_base_2() {
 //     ));
 
 //     let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
-//     let d_verifier = vec![d];
-//     let d_bits_verifier = vec![&d_bits_prover];
 
-//     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
-//     decomposed_bits.add_decomposed_bits_instance(&d_bits_prover);
+//     let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+//     instance.add_decomposed_bits_instance(&d, &d_bits_prover);
+//     let instance_info = instance.info();
 
-//     let decomposed_bits_info = decomposed_bits.info();
+//     println!("Prove {instance_info}\n");
+//     // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
+//     let poly = instance.generate_oracle();
 
-//     let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-//     let proof = BitDecomposition::prove(&decomposed_bits, &u);
-//     let subclaim = BitDecomposition::verify(&proof, &decomposed_bits_info);
-//     assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &u, &decomposed_bits_info));
-// }
+//     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+//     // 1. Use PCS to commit the above polynomial.
+//     let start = Instant::now();
+//     let pp = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::setup(
+//         poly.num_vars,
+//         Some(code_spec),
+//     );
+//     let setup_time = start.elapsed().as_millis();
 
-// #[test]
-// fn test_batch_bit_decomposition() {
-//     let base_len: u32 = 4;
-//     let base: FF = FF::new(1 << base_len);
-//     let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
-//     let num_vars = 10;
-
-//     let mut rng = thread_rng();
-//     let uniform = <FieldUniformSampler<FF>>::new();
-//     let d = vec![
-//         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//             num_vars,
-//             (0..(1 << num_vars))
-//                 .map(|_| uniform.sample(&mut rng))
-//                 .collect(),
-//         )),
-//         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//             num_vars,
-//             (0..(1 << num_vars))
-//                 .map(|_| uniform.sample(&mut rng))
-//                 .collect(),
-//         )),
-//         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//             num_vars,
-//             (0..(1 << num_vars))
-//                 .map(|_| uniform.sample(&mut rng))
-//                 .collect(),
-//         )),
-//         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//             num_vars,
-//             (0..(1 << num_vars))
-//                 .map(|_| uniform.sample(&mut rng))
-//                 .collect(),
-//         )),
-//     ];
-
-//     let d_bits: Vec<_> = d
-//         .iter()
-//         .map(|x| x.get_decomposed_mles(base_len, bits_len))
-//         .collect();
-//     let d_bits_ref: Vec<_> = d_bits.iter().collect();
-
-//     let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
-//     for d_instance in d_bits.iter() {
-//         decomposed_bits.add_decomposed_bits_instance(d_instance);
-//     }
-
-//     let decomposed_bits_info = decomposed_bits.info();
-
-//     let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-//     let proof = BitDecomposition::prove(&decomposed_bits, &u);
-//     let subclaim = BitDecomposition::verify(&proof, &decomposed_bits_info);
-//     assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
+//     let start = Instant::now();
+//     let (comm, state) =
+//         BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::commit(&pp, &poly);
+//     let commit_time = start.elapsed().as_millis();
 // }

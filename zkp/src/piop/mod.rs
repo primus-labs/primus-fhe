@@ -2,7 +2,7 @@
 // pub mod accumulator;
 // pub mod addition_in_zq;
 pub mod bit_decomposition;
-pub mod ntt;
+// pub mod ntt;
 // pub mod rlwe_mul_rgsw;
 // pub mod round;
 // pub mod zq_to_rq;

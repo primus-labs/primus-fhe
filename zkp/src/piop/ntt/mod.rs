@@ -38,6 +38,7 @@ use crate::utils::{eval_identity_function, gen_identity_evaluations};
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use algebra::utils::Transcript;
 use algebra::{
     DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
     PolynomialInfo,
@@ -46,6 +47,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
 use ntt_bare::{NTTBareIOP, NTTBareProof, NTTBareSubclaim};
+use serde::Serialize;
 
 pub mod ntt_bare;
 /// SNARKs for NTT, i.e. $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
@@ -374,12 +376,11 @@ impl<F: Field> NTTSubclaim<F> {
     }
 }
 
-impl<F: Field> NTTIOP<F> {
+impl<F: Field + Serialize> NTTIOP<F> {
     /// prove
     pub fn prove(ntt_instance: &NTTInstance<F>, u: &[F]) -> NTTProof<F> {
-        let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        let mut fs_rng = ChaCha12Rng::from_seed(seed);
-        Self::prove_as_subprotocol(&mut fs_rng, ntt_instance, u)
+        let mut trans = Transcript::new();
+        Self::prove_as_subprotocol(&mut trans, ntt_instance, u)
     }
 
     /// The delegation of F(u, v) consists of logN - 1 rounds, each of which is a sumcheck protocol.
@@ -402,7 +403,7 @@ impl<F: Field> NTTIOP<F> {
     /// * f: MLE \tilde{A}_{F}^{(k-1)}(z) for z\in \{0,1\}^k
     /// * w: MLE \tilde{ω}^{(k)}_{i+1}(z, b) for z\in \{0,1\}^k  and b\in \{0, 1\}, which will be divided into two smaller MLEs \tilde{ω}^{(k)}_{i+1}(z, 0) and \tilde{ω}^{(k)}_{i+1}(z, 1)
     pub fn delegation_prover_round(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         round: usize,
         point: &[F],
         u_i: F,
@@ -446,13 +447,13 @@ impl<F: Field> NTTIOP<F> {
         ops_right.push((u_i, F::one() - u_i));
         poly.add_product_with_linear_op(product_right, &ops_right, w_coeff);
 
-        MLSumcheck::prove_as_subprotocol(fs_rng, &poly)
+        MLSumcheck::prove_as_subprotocol(trans, &poly)
             .expect("ntt proof of delegation failed in round {round}")
     }
 
     /// prove NTT with delegation
     pub fn prove_as_subprotocol(
-        fs_rng: &mut impl RngCore,
+        trans: &mut Transcript<F>,
         ntt_instance: &NTTInstance<F>,
         u: &[F],
     ) -> NTTProof<F> {
@@ -464,7 +465,7 @@ impl<F: Field> NTTIOP<F> {
         // 1. prove a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) } for a random point u
         let f_u = &f_mles[log_n - 1];
         let (ntt_bare_proof, state) =
-            NTTBareIOP::prove_as_subprotocol(fs_rng, f_u, ntt_instance, u);
+            NTTBareIOP::prove_as_subprotocol(trans, f_u, ntt_instance, u);
 
         // the above sumcheck is reduced to prove F(u, v) where v is the requested point
         let mut requested_point = state.randomness;
@@ -484,7 +485,7 @@ impl<F: Field> NTTIOP<F> {
             let w_coeff = ntt_instance.ntt_table[1 << k];
             let f = &f_mles[k - 1];
             let (proof_round, state_round) = Self::delegation_prover_round(
-                fs_rng,
+                trans,
                 k,
                 &requested_point,
                 u[i],
@@ -588,7 +589,7 @@ impl<F: Field> NTTIOP<F> {
         // TODO sample randomness via Fiat-Shamir RNG
         // 1. verify a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) } for a random point u
         let ntt_bare_subclaim =
-            NTTBareIOP::verify_as_subprotocol(fs_rng, &proof.ntt_bare_proof, ntt_instance_info);
+            NTTBareIOP::verify_as_subprotocol(trans, &proof.ntt_bare_proof, ntt_instance_info);
 
         // 2. verify the computation of F(u, v) in log_n - 1 rounds
         let mut requested_point = ntt_bare_subclaim.point.clone();
