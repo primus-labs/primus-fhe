@@ -1,7 +1,5 @@
 use algebra::{
-    derive::{Field, Prime},
-    DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
-    MultilinearExtension,
+    derive::{Field, Prime}, BabyBearExetension, DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials, MultilinearExtension
 };
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
@@ -10,12 +8,9 @@ use std::rc::Rc;
 use zkp::sumcheck::IPForMLSumcheck;
 use zkp::sumcheck::MLSumcheck;
 
-#[derive(Field, Prime)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
 
 // field type
-type FF = Fp32;
+type FF = BabyBearExetension;
 
 fn random_product<F: Field, R: RngCore>(
     nv: usize,

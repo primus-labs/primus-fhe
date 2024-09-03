@@ -447,7 +447,7 @@ impl<F: Field> RlweMultRgswIOP<F> {
         };
 
         RlweMultRgswSubclaim {
-            bit_decomposition_subclaim: BitDecomposition::verifier_as_subprotocol(
+            bit_decomposition_subclaim: BitDecomposition::verify_as_subprotocol(
                 fs_rng,
                 &proof.bit_decomposition_proof,
                 &info.decomposed_bits_info,

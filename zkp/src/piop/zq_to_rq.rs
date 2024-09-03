@@ -150,7 +150,7 @@ impl<F: Field + DecomposableField> TransformZqtoRQInstance<F> {
         });
 
         // Rangecheck is defaultly designed for batching version, so we should construct a vector of one element r_bits
-        let r_bits = vec![r.get_decomposed_mles(base_len, bits_len)];
+        let r_bits = r.get_decomposed_mles(base_len, bits_len);
 
         Self {
             q,
@@ -167,7 +167,8 @@ impl<F: Field + DecomposableField> TransformZqtoRQInstance<F> {
                 base_len,
                 bits_len,
                 num_vars,
-                instances: r_bits,
+                d_val: vec![Rc::clone(r)],
+                d_bits: r_bits,
             },
         }
     }
@@ -317,7 +318,7 @@ impl<F: Field> TransformZqtoRQ<F> {
         //TODO sample randomness via Fiat-Shamir RNG
 
         // 1. rangecheck
-        let rangecheck_subclaim = BitDecomposition::verifier_as_subprotocol(
+        let rangecheck_subclaim = BitDecomposition::verify_as_subprotocol(
             fs_rng,
             &proof.rangecheck_msg,
             decomposed_bits_info,

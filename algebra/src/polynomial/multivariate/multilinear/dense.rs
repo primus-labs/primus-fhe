@@ -109,6 +109,15 @@ impl<F: Field> DenseMultilinearExtension<F> {
         poly.truncate(1 << (nv - dim));
         poly[0]
     }
+
+    /// Convert to EF version
+    #[inline]
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> DenseMultilinearExtension<EF> {
+        DenseMultilinearExtension::<EF> {
+            num_vars: self.num_vars,
+            evaluations: self.evaluations.iter().map(|x| EF::from_base(*x)).collect(),
+        }
+    }
 }
 
 impl<F: DecomposableField> DenseMultilinearExtension<F> {

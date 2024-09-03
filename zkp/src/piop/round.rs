@@ -418,12 +418,12 @@ impl<F: Field> RoundIOP<F> {
             num_variables: num_vars,
         };
         RoundIOPSubclaim {
-            bit_decomp_output_subclaim: BitDecomposition::verifier_as_subprotocol(
+            bit_decomp_output_subclaim: BitDecomposition::verify_as_subprotocol(
                 fs_rng,
                 &proof.bit_decomp_proof_output,
                 &info.output_bits_info,
             ),
-            bit_decomp_offset_subclaim: BitDecomposition::verifier_as_subprotocol(
+            bit_decomp_offset_subclaim: BitDecomposition::verify_as_subprotocol(
                 fs_rng,
                 &proof.bit_decomp_proof_offset,
                 &info.offset_bits_info,

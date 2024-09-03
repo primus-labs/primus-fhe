@@ -24,8 +24,8 @@ use crate::utils::eval_identity_function;
 use crate::sumcheck::MLSumcheck;
 use crate::utils::gen_identity_evaluations;
 use algebra::{
-    DecomposableField, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
-    MultilinearExtension, PolynomialInfo,
+    AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
+    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -58,7 +58,7 @@ pub struct AdditionInZqInstance<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// inputs a, b, and c
-    pub abc: Vec<Rc<DenseMultilinearExtension<F>>>,
+    // pub abc: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// introduced witness k
     pub k: Rc<DenseMultilinearExtension<F>>,
     /// introduced witness to check the range of a, b, c
@@ -104,18 +104,20 @@ impl<F: DecomposableField> AdditionInZqInstance<F> {
         let abc_bits = abc
             .iter()
             .map(|x| x.get_decomposed_mles(base_len, bits_len))
-            .collect();
+            .flatten()
+            .collect::<Vec<_>>();
         Self {
             q,
             num_vars,
-            abc,
+            // abc,
             k: Rc::clone(k),
             abc_bits: DecomposedBits {
                 base,
                 base_len,
                 bits_len,
                 num_vars,
-                instances: abc_bits,
+                d_val: abc,
+                d_bits: abc_bits,
             },
         }
     }
@@ -138,19 +140,21 @@ impl<F: DecomposableField> AdditionInZqInstance<F> {
 
         let abc_bits = abc
             .iter()
-            .map(|x| x.get_decomposed_mles(base_len, bits_len))
+            .flat_map(|x| x.get_decomposed_mles(base_len, bits_len))
             .collect();
+
         Self {
             q,
             num_vars,
-            abc: abc.to_owned(),
+            // abc: abc.to_owned(),
             k: Rc::clone(k),
             abc_bits: DecomposedBits {
                 base,
                 base_len,
                 bits_len,
                 num_vars,
-                instances: abc_bits,
+                d_val: abc.to_owned(),
+                d_bits: abc_bits,
             },
         }
     }
@@ -198,7 +202,10 @@ impl<F: Field> AdditionInZqSubclaim<F> {
 
 impl<F: Field> AdditionInZq<F> {
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
-    pub fn prove(addition_instance: &AdditionInZqInstance<F>, u: &[F]) -> AdditionInZqProof<F> {
+    pub fn prove<EF: AbstractExtensionField<F>>(
+        addition_instance: &AdditionInZqInstance<F>,
+        u: &[EF],
+    ) -> AdditionInZqProof<F> {
         let seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
         let mut fs_rng = ChaCha12Rng::from_seed(seed);
         Self::prove_as_subprotocol(&mut fs_rng, addition_instance, u)
@@ -207,8 +214,9 @@ impl<F: Field> AdditionInZq<F> {
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
-    pub fn prove_as_subprotocol(
+    pub fn prove_as_subprotocol<EF: AbstractExtensionField<F>>(
         fs_rng: &mut impl RngCore,
+        poly: &mut ListOfProductsOfPolynomials<EF>,
         addition_instance: &AdditionInZqInstance<F>,
         u: &[F],
     ) -> AdditionInZqProof<F> {
@@ -260,7 +268,7 @@ impl<F: Field> AdditionInZq<F> {
         decomposed_bits_info: &DecomposedBitsInfo<F>,
     ) -> AdditionInZqSubclaim<F> {
         // TODO sample randomness via Fiat-Shamir RNG
-        let rangecheck_subclaim = BitDecomposition::verifier_as_subprotocol(
+        let rangecheck_subclaim = BitDecomposition::verify_as_subprotocol(
             fs_rng,
             &proof.rangecheck_msg,
             decomposed_bits_info,
