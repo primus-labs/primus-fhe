@@ -2,6 +2,7 @@ use algebra::{
     derive::{DecomposableField, Field, Prime},
     DenseMultilinearExtension, Field,
 };
+use num_traits::Zero;
 use rand::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
@@ -33,38 +34,45 @@ macro_rules! field_vec {
 fn test_trivial_range_check() {
     // prepare parameters
 
-    let num_vars_f = 4;
+    let num_vars = 4;
     let block_size = 2;
-    let range = 7;
+    let range: usize = 6;
 
     // construct a trivial example
 
     let f0 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars_f,
-        field_vec!(FF; 1, 6, 3, 2, 3, 0, 1, 6, 3, 2, 1, 0, 4, 1, 1, 6),
+        num_vars,
+        field_vec!(FF; 1, 4, 3, 2, 3, 0, 1, 1, 3, 2, 1, 0, 4, 1, 1, 0),
     ));
     let f1 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars_f,
-        field_vec!(FF; 4, 6, 5, 3, 4, 0, 1, 6, 3, 2, 1, 0, 4, 1, 1, 6),
+        num_vars,
+        field_vec!(FF; 4, 2, 5, 3, 4, 0, 1, 4, 3, 2, 1, 0, 4, 1, 1, 3),
     ));
     let f2 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars_f,
-        field_vec!(FF; 4, 6, 1, 2, 3, 0, 1, 1, 3, 2, 1, 0, 4, 1, 1, 6),
+        num_vars,
+        field_vec!(FF; 4, 5, 1, 2, 3, 0, 1, 1, 3, 2, 1, 0, 4, 1, 1, 1),
     ));
     let f3 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars_f,
-        field_vec!(FF; 4, 6, 5, 2, 4, 0, 1, 6, 3, 2, 1, 0, 6, 1, 1, 6),
+        num_vars,
+        field_vec!(FF; 4, 5, 5, 2, 4, 0, 1, 2, 3, 2, 1, 0, 3, 1, 1, 1),
     ));
     let f4 = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars_f,
-        field_vec!(FF; 4, 1, 5, 2, 4, 0, 1, 6, 3, 2, 1, 0, 6, 1, 1, 6),
+        num_vars,
+        field_vec!(FF; 4, 1, 5, 2, 4, 0, 1, 3, 3, 2, 1, 0, 5, 1, 1, 2),
     ));
 
     let f_vec = vec![f0, f1, f2, f3, f4];
 
+    let mut t_evaluations: Vec<_> = (0..range).map(|i| FF::new(i as u32)).collect();
+    t_evaluations.resize(1 << num_vars, FF::zero());
+    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        t_evaluations,
+    ));
+
     // construct instance
 
-    let instance = LookupInstance::from_slice(&f_vec, range, block_size);
+    let instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
     let info = instance.info();
 
     // prepare fiat-shamir randomness
@@ -79,38 +87,41 @@ fn test_trivial_range_check() {
     // verify
 
     let subclaim = Lookup::verify(&mut fs_rng_verifier, &proof, &info);
-    assert!(subclaim.verify_subclaim(f_vec, oracle, &info));
+    assert!(subclaim.verify_subclaim(f_vec, t.clone(), oracle, &info));
 }
 
 #[test]
 fn test_random_range_check() {
     // prepare parameters
 
-    let num_vars_f = 8;
+    let num_vars = 8;
     let block_size = 4;
-    let block_num = 8;
-    let residual_size = 3;
+    let block_num = 5;
+    let residual_size = 1;
     let lookup_num = block_num * block_size + residual_size;
     let range = 59;
-
-    // construct a random example
 
     let mut rng = thread_rng();
     let f_vec: Vec<Rc<DenseMultilinearExtension<Fp32>>> = (0..lookup_num)
         .map(|_| {
-            let f_evaluations: Vec<FF> = (0..(1 << num_vars_f))
+            let f_evaluations: Vec<FF> = (0..(1 << num_vars))
                 .map(|_| FF::new(rng.gen_range(0..range)))
                 .collect();
             Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-                num_vars_f,
+                num_vars,
                 f_evaluations,
             ))
         })
         .collect();
 
-    // construct instance
+    let mut t_evaluations: Vec<_> = (0..range as usize).map(|i| FF::new(i as u32)).collect();
+    t_evaluations.resize(1 << num_vars, FF::zero());
+    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        t_evaluations,
+    ));
 
-    let instance = LookupInstance::from_slice(&f_vec, range as usize, block_size);
+    let instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
     let info = instance.info();
 
     // prepare fiat-shamir randomness
@@ -126,5 +137,6 @@ fn test_random_range_check() {
     // verify
 
     let subclaim = Lookup::verify(&mut fs_rng_verifier, &proof, &info);
-    assert!(subclaim.verify_subclaim(f_vec, oracle, &info));
+    let result = subclaim.verify_subclaim(f_vec, t.clone(), oracle, &info);
+    assert!(result);
 }
