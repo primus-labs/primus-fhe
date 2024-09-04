@@ -24,9 +24,9 @@ pub struct Fq(u32);
 type FF = Fp32;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let lookup_num = 100;
+    let lookup_num = 20;
 
-    let num_vars = 16;
+    let num_vars = 8;
 
     let base_len: u32 = 3;
     let base: FF = FF::new(1 << base_len);

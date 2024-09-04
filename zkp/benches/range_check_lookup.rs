@@ -3,6 +3,7 @@ use algebra::{
     DenseMultilinearExtension, Field,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
+use num_traits::Zero;
 use rand::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
@@ -23,33 +24,40 @@ pub struct Fq(u32);
 type FF = Fp32;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let num_vars_f = 16;
+    let num_vars = 8;
     let block_size = 2;
-    let block_num = 50;
+    let block_num = 20;
     let lookup_num = block_num * block_size;
     let range = 59;
 
     let mut rng = thread_rng();
     let f_vec: Vec<Rc<DenseMultilinearExtension<Fp32>>> = (0..lookup_num)
         .map(|_| {
-            let f_evaluations: Vec<FF> = (0..(1 << num_vars_f))
+            let f_evaluations: Vec<FF> = (0..(1 << num_vars))
                 .map(|_| FF::new(rng.gen_range(0..range)))
                 .collect();
             Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-                num_vars_f,
+                num_vars,
                 f_evaluations,
             ))
         })
         .collect();
 
-    let instance = LookupInstance::from_slice(&f_vec, range as usize, block_size);
+    let mut t_evaluations: Vec<_> = (0..range).map(|i| FF::new(i as u32)).collect();
+    t_evaluations.resize(1 << num_vars, FF::zero());
+    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        t_evaluations,
+    ));
+
+    let instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
     let info = instance.info();
 
     c.bench_function(
         &format!(
             "rang check proving time of lookup num {}, lookup size {}, range size {}",
             lookup_num,
-            1 << num_vars_f,
+            1 << num_vars,
             range
         ),
         |b| {
@@ -63,7 +71,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         &format!(
             "rang check verifying time of lookup num {}, lookup size {}, range size {}",
             lookup_num,
-            1 << num_vars_f,
+            1 << num_vars,
             range
         ),
         |b| {
@@ -73,7 +81,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 let mut fs_rng_verifier = ChaCha12Rng::from_seed(seed);
                 let subclaim = Lookup::verify(&mut fs_rng_verifier, &proof, &info);
-                subclaim.verify_subclaim(f_vec.clone(), oracle.clone(), &info);
+                subclaim.verify_subclaim(f_vec.clone(), t.clone(), oracle.clone(), &info);
             })
         },
     );
