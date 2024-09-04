@@ -5,8 +5,9 @@ mod packed;
 pub use binomial_extension::*;
 pub use helper::*;
 pub use packed::*;
+use rand::{CryptoRng, Rng, RngCore};
 
-use crate::Field;
+use crate::{Field, FieldUniformSampler};
 use core::iter;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
@@ -130,6 +131,7 @@ pub trait BinomiallyExtendable<const D: usize>: Field {
 
     /// ext generator
     fn ext_generator() -> [Self; D];
+
 }
 
 ///  Has Frobenius trait

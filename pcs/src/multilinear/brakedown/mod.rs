@@ -227,7 +227,7 @@ where
     EF: AbstractExtensionField<F>,
 {
     /// Generate random queries.
-    fn random_queries(pp: &BrakedownParams<F, EF, C>, trans: &mut Transcript<F>) -> Vec<usize> {
+    fn random_queries(pp: &BrakedownParams<F, EF, C>, trans: &mut Transcript<EF>) -> Vec<usize> {
         let num_queries = pp.num_query();
         let codeword_len = pp.code().codeword_len();
 
@@ -244,7 +244,7 @@ where
     }
 }
 
-impl<F, H, C, S, EF> PolynomialCommitmentScheme<F, S> for BrakedownPCS<F, H, C, S, EF>
+impl<F, H, C, S, EF> PolynomialCommitmentScheme<F, EF, S> for BrakedownPCS<F, H, C, S, EF>
 where
     F: Field + Serialize,
     H: Hash + Sync + Send,
@@ -322,7 +322,7 @@ where
         commitment: &Self::Commitment,
         state: &Self::CommitmentState,
         points: &[Self::Point],
-        trans: &mut Transcript<F>,
+        trans: &mut Transcript<EF>,
     ) -> Self::Proof {
         assert_eq!(points.len(), pp.num_vars());
         // Hash the commitment to transcript.
@@ -356,7 +356,7 @@ where
         points: &[Self::Point],
         eval: Self::Point,
         proof: &Self::Proof,
-        trans: &mut Transcript<F>,
+        trans: &mut Transcript<EF>,
     ) -> bool {
         assert_eq!(points.len(), pp.num_vars());
 
