@@ -19,23 +19,22 @@
 //! then the resulting purported sum is:
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
-use algebra::{
-    AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
-    utils::Transcript,
-};
 use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
 use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
 };
+use algebra::{
+    utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
+    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+};
+use core::fmt;
+use itertools::izip;
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{LinearCode, LinearCodeSpec},
     utils::hash::Hash,
     PolynomialCommitmentScheme,
 };
-use core::fmt;
-use itertools::izip;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -43,7 +42,7 @@ use std::time::Instant;
 
 /// IOP for bit decomposition
 pub struct BitDecomposition<F: Field>(PhantomData<F>);
-/// SNARKs for bit decomposition
+/// SNARKs for bit decomposition compied with PCS
 pub struct BitDecompositionSnarks<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,

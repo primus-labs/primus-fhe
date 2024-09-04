@@ -4,7 +4,6 @@ use algebra::{
 };
 use algebra::{DenseMultilinearExtension, Field, FieldUniformSampler};
 use itertools::izip;
-// use protocol::bit_decomposition::{BitDecomposition, DecomposedBits};
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{ExpanderCode, ExpanderCodeSpec},

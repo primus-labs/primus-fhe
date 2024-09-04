@@ -1,20 +1,30 @@
 use algebra::{
-    derive::{DecomposableField, Field, Prime}, BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler
+    derive::{DecomposableField, Field, Prime},
+    BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field,
+    FieldUniformSampler,
 };
 use num_traits::{One, Zero};
+use pcs::{
+    multilinear::brakedown::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+    PolynomialCommitmentScheme,
+};
 use rand::prelude::*;
 use rand_distr::Distribution;
+use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{AdditionInZq, AdditionInZqInstance, DecomposedBitsInfo};
-
+use zkp::piop::{
+    addition_in_zq::AdditionInZqSnarks, AdditionInZq, AdditionInZqInstance, DecomposedBitsInfo,
+};
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
-// field type
 type FF = BabyBear;
 type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -52,7 +62,11 @@ fn test_trivial_addition_in_zq() {
     ));
 
     let bits_info = DecomposedBitsInfo::<FF> {
-        base, base_len, bits_len, num_vars, num_instances: 3
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 3,
     };
     let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
 
@@ -119,7 +133,11 @@ fn test_random_addition_in_zq() {
     ));
 
     let bits_info = DecomposedBitsInfo::<FF> {
-        base, base_len, bits_len, num_vars, num_instances: 3
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 3,
     };
     let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
 
@@ -186,10 +204,14 @@ fn test_random_addition_in_zq_extension_field() {
     ));
 
     let bits_info = DecomposedBitsInfo::<FF> {
-        base, base_len, bits_len, num_vars, num_instances: 3
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 3,
     };
     let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
-    
+
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
 
@@ -199,4 +221,71 @@ fn test_random_addition_in_zq_extension_field() {
     let check = AdditionInZq::<EF>::verify(&proof, &poly_info, &evals, &info);
 
     assert!(check);
+}
+
+#[test]
+fn test_snarks() {
+    let mut rng = thread_rng();
+    let uniform_fq = <FieldUniformSampler<Fq>>::new();
+    let num_vars = 10;
+    let q = FF::new(Fq::MODULUS_VALUE);
+    let base_len: u32 = 3;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
+
+    // Addition in Zq
+    let a: Vec<_> = (0..(1 << num_vars))
+        .map(|_| uniform_fq.sample(&mut rng))
+        .collect();
+    let b: Vec<_> = (0..(1 << num_vars))
+        .map(|_| uniform_fq.sample(&mut rng))
+        .collect();
+    let c_k: Vec<_> = a
+        .iter()
+        .zip(b.iter())
+        .map(|(x, y)| {
+            if x.value() + y.value() >= Fq::MODULUS_VALUE {
+                (*x + *y, Fq::one())
+            } else {
+                (*x + *y, Fq::zero())
+            }
+        })
+        .collect();
+
+    let (c, k): (Vec<_>, Vec<_>) = c_k.iter().cloned().unzip();
+
+    let abc = vec![
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            // Convert to Fp
+            a.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            b.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            c.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+    ];
+
+    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+    ));
+
+    let bits_info = DecomposedBitsInfo::<FF> {
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 3,
+    };
+    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+    <AdditionInZqSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec,
+    );
 }
