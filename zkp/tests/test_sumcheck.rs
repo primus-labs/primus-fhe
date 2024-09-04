@@ -1,5 +1,8 @@
 use algebra::{
-    derive::{Field, Prime}, utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials, MultilinearExtension
+    derive::{Field, Prime},
+    utils::Transcript,
+    BabyBear, BabyBearExetension, DenseMultilinearExtension, Field, FieldUniformSampler,
+    ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
@@ -8,7 +11,6 @@ use serde::Serialize;
 use std::rc::Rc;
 use zkp::sumcheck::IPForMLSumcheck;
 use zkp::sumcheck::MLSumcheck;
-
 
 // field type
 type FF = BabyBearExetension;
@@ -65,7 +67,11 @@ fn random_list_of_products<F: Field, R: RngCore>(
     (poly, sum)
 }
 
-fn test_protocol<F: Field + Serialize>(nv: usize, num_multiplicands_range: (usize, usize), num_products: usize) {
+fn test_protocol<F: Field + Serialize>(
+    nv: usize,
+    num_multiplicands_range: (usize, usize),
+    num_products: usize,
+) {
     let mut rng = thread_rng();
     let (poly, asserted_sum) =
         random_list_of_products::<F, _>(nv, num_multiplicands_range, num_products, &mut rng);
@@ -77,7 +83,8 @@ fn test_protocol<F: Field + Serialize>(nv: usize, num_multiplicands_range: (usiz
     let mut verifier_trans = Transcript::<F>::new();
     for _ in 0..poly.num_variables {
         let prover_message = IPForMLSumcheck::prove_round(&mut prover_state, &verifier_msg);
-        verifier_msg = IPForMLSumcheck::verify_round(prover_message, &mut verifier_state, &mut verifier_trans);
+        verifier_msg =
+            IPForMLSumcheck::verify_round(prover_message, &mut verifier_state, &mut verifier_trans);
     }
     let subclaim = IPForMLSumcheck::check_and_generate_subclaim(verifier_state, asserted_sum)
         .expect("fail to generate subclaim");

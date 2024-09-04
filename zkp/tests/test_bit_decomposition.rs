@@ -304,8 +304,10 @@ fn test_snarks() {
     // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
     let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
     let claimed_sum = ef_zero;
+    // randomness to combine sumcheck protocols
+    let randomness = <BitDecomposition<EF>>::sample_coins(&mut prover_trans, &instance_ef);
     BitDecomposition::prove_as_subprotocol(
-        &mut prover_trans,
+        &randomness,
         &mut sumcheck_poly,
         &instance_ef,
         &prover_u,
@@ -330,7 +332,7 @@ fn test_snarks() {
         instance.log_num_oracles(),
     ));
     let oracle_eval = committed_poly.evaluate_ext(&requested_point);
-    
+
     // 2.6 Generate the evaluation proof of the requested point
     let eval_proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::open(
         &pp,
@@ -352,8 +354,10 @@ fn test_snarks() {
     );
 
     // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-    let randomness =
-        <BitDecomposition<EF>>::verify_sample_coins(&mut verifier_trans, &instance_info);
+    let randomness = verifier_trans.get_vec_challenge(
+        b"randomness to combine sumcheck protocols",
+        <BitDecomposition<EF>>::num_coins(&instance_info),
+    );
 
     // 3.3 Check the proof of the sumcheck protocol
     let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
@@ -387,7 +391,7 @@ fn test_snarks() {
     assert!(check_oracle);
 
     // 3.5 Check the evaluation of a random point over the committed oracle
-    
+
     let check_pcs = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::verify(
         &pp,
         &comm,
@@ -398,9 +402,8 @@ fn test_snarks() {
     );
     assert!(check_pcs);
     let pcs_verifier_time = start.elapsed().as_millis();
-    pcs_proof_size += bincode::serialize(&eval_proof).unwrap().len() + bincode::serialize(&flatten_evals).unwrap().len();
-
-    
+    pcs_proof_size += bincode::serialize(&eval_proof).unwrap().len()
+        + bincode::serialize(&flatten_evals).unwrap().len();
 
     print_statistic(
         iop_prover_time + pcs_open_time,
@@ -421,8 +424,7 @@ fn test_snarks() {
 }
 
 #[test]
-fn test_snarks_interface()
-{
+fn test_snarks_interface() {
     let base_len: u32 = 4;
     let base: FF = FF::new(1 << base_len);
     let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
@@ -441,7 +443,9 @@ fn test_snarks_interface()
 
     let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
     instance.add_decomposed_bits_instance(&d, &d_bits_prover);
-    
+
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <BitDecompositionSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(&instance, &code_spec);
+    <BitDecompositionSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec,
+    );
 }

@@ -28,7 +28,6 @@ pub fn eval_identity_function<F: Field>(u: &[F], v: &[F]) -> F {
     evaluation
 }
 
-
 /// Verify the relationship between the evaluations of these small oracles and the requested evaluation of the committed oracle
 ///
 /// # Arguments:
@@ -36,11 +35,7 @@ pub fn eval_identity_function<F: Field>(u: &[F], v: &[F]) -> F {
 /// * `oracle_eval`: the requested point reduced over the committed polynomial, which is the random linear combination of the smaller oracles used in IOP.
 /// * `trans`: the transcript maintained by verifier
 #[inline]
-pub fn verify_oracle_relation<F: Field>(
-    evals: &[F],
-    oracle_eval: F,
-    random_point: &[F],
-) -> bool {
+pub fn verify_oracle_relation<F: Field>(evals: &[F], oracle_eval: F, random_point: &[F]) -> bool {
     let eq_at_r = gen_identity_evaluations(&random_point);
     let randomized_eval = evals
         .iter()
@@ -50,7 +45,7 @@ pub fn verify_oracle_relation<F: Field>(
 }
 
 /// Print statistic
-/// 
+///
 /// # Arguments
 /// `total_prover_time` - open time in PCS + prover time in IOP
 /// `total_verifier_time` - verifier time in PCS + verifier time in IOP

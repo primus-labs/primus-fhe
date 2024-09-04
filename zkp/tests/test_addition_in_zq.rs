@@ -1,24 +1,20 @@
 use algebra::{
-    derive::{DecomposableField, Field, Prime},
-    Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
+    derive::{DecomposableField, Field, Prime}, BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler
 };
 use num_traits::{One, Zero};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{AdditionInZq, AdditionInZqInstance};
-
-#[derive(Field, DecomposableField, Prime)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
+use zkp::piop::{AdditionInZq, AdditionInZqInstance, DecomposedBitsInfo};
 
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
 // field type
-type FF = Fp32;
+type FF = BabyBear;
+type EF = BabyBearExetension;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -31,9 +27,6 @@ macro_rules! field_vec {
 
 #[test]
 fn test_trivial_addition_in_zq() {
-    let mut rng = thread_rng();
-    let sampler = <FieldUniformSampler<FF>>::new();
-
     let q = FF::new(9);
     let base_len: u32 = 1;
     let base: FF = FF::new(2);
@@ -58,28 +51,25 @@ fn test_trivial_addition_in_zq() {
         field_vec!(FF; 1, 1, 0, 0),
     ));
 
-    // decompose bits of every element in a, b, c
-    let abc_bits: Vec<_> = abc
-        .iter()
-        .map(|x| x.get_decomposed_mles(base_len, bits_len))
-        .collect();
-    let abc_bits_ref: Vec<_> = abc_bits.iter().collect();
+    let bits_info = DecomposedBitsInfo::<FF> {
+        base, base_len, bits_len, num_vars, num_instances: 3
+    };
+    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
 
-    let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
-    let addition_info = abc_instance.info();
+    let info = instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| sampler.sample(&mut rng)).collect();
+    let (proof, state, poly_info) = AdditionInZq::<FF>::prove(&instance);
+    let evals = instance.evaluate(&state.randomness);
 
-    let proof = AdditionInZq::prove(&abc_instance, &u);
-    let subclaim = AdditionInZq::verify(&proof, &addition_info.decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abc_bits_ref, &u, &addition_info));
+    let check = AdditionInZq::<FF>::verify(&proof, &poly_info, &evals, &info);
+
+    assert!(check);
 }
 
 #[test]
 fn test_random_addition_in_zq() {
     let mut rng = thread_rng();
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
-    let uniform_fp = <FieldUniformSampler<FF>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
     let base_len: u32 = 3;
@@ -128,19 +118,85 @@ fn test_random_addition_in_zq() {
         k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
     ));
 
-    // decompose bits of every element in a, b, c
-    let abc_bits: Vec<_> = abc
-        .iter()
-        .map(|x| x.get_decomposed_mles(base_len, bits_len))
+    let bits_info = DecomposedBitsInfo::<FF> {
+        base, base_len, bits_len, num_vars, num_instances: 3
+    };
+    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
+
+    let info = instance.info();
+
+    let (proof, state, poly_info) = AdditionInZq::<FF>::prove(&instance);
+    let evals = instance.evaluate(&state.randomness);
+
+    let check = AdditionInZq::<FF>::verify(&proof, &poly_info, &evals, &info);
+
+    assert!(check);
+}
+
+#[test]
+fn test_random_addition_in_zq_extension_field() {
+    let mut rng = thread_rng();
+    let uniform_fq = <FieldUniformSampler<Fq>>::new();
+    let num_vars = 10;
+    let q = FF::new(Fq::MODULUS_VALUE);
+    let base_len: u32 = 3;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
+
+    // Addition in Zq
+    let a: Vec<_> = (0..(1 << num_vars))
+        .map(|_| uniform_fq.sample(&mut rng))
         .collect();
-    let abc_bits_ref: Vec<_> = abc_bits.iter().collect();
+    let b: Vec<_> = (0..(1 << num_vars))
+        .map(|_| uniform_fq.sample(&mut rng))
+        .collect();
+    let c_k: Vec<_> = a
+        .iter()
+        .zip(b.iter())
+        .map(|(x, y)| {
+            if x.value() + y.value() >= Fq::MODULUS_VALUE {
+                (*x + *y, Fq::one())
+            } else {
+                (*x + *y, Fq::zero())
+            }
+        })
+        .collect();
 
-    let abc_instance = AdditionInZqInstance::from_slice(&abc, &k, q, base, base_len, bits_len);
-    let addition_info = abc_instance.info();
+    let (c, k): (Vec<_>, Vec<_>) = c_k.iter().cloned().unzip();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform_fp.sample(&mut rng)).collect();
+    let abc = vec![
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            // Convert to Fp
+            a.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            b.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            c.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+    ];
 
-    let proof = AdditionInZq::prove(&abc_instance, &u);
-    let subclaim = AdditionInZq::verify(&proof, &addition_info.decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(q, &abc, k.as_ref(), &abc_bits_ref, &u, &addition_info));
+    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+    ));
+
+    let bits_info = DecomposedBitsInfo::<FF> {
+        base, base_len, bits_len, num_vars, num_instances: 3
+    };
+    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
+    
+    let instance_ef = instance.to_ef::<EF>();
+    let info = instance_ef.info();
+
+    let (proof, state, poly_info) = AdditionInZq::<EF>::prove(&instance_ef);
+    let evals = instance.evaluate_ext(&state.randomness);
+
+    let check = AdditionInZq::<EF>::verify(&proof, &poly_info, &evals, &info);
+
+    assert!(check);
 }

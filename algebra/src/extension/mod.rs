@@ -131,7 +131,6 @@ pub trait BinomiallyExtendable<const D: usize>: Field {
 
     /// ext generator
     fn ext_generator() -> [Self; D];
-
 }
 
 ///  Has Frobenius trait

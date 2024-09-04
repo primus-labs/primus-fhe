@@ -19,24 +19,23 @@
 //! then the resulting purported sum is:
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
-use crate::sumcheck::prover::ProverState;
-use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::{MLSumcheck, Proof};
-use crate::utils::{eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation};
-use algebra::utils::Transcript;
 use algebra::{
     AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    MultilinearExtension,
+    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+    utils::Transcript,
 };
-use algebra::{FieldUniformSampler, ListOfProductsOfPolynomials, PolynomialInfo};
-use core::fmt;
-use itertools::izip;
+use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
+use crate::utils::{
+    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
+};
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{LinearCode, LinearCodeSpec},
     utils::hash::Hash,
     PolynomialCommitmentScheme,
 };
+use core::fmt;
+use itertools::izip;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -212,7 +211,7 @@ impl<F: Field> DecomposedBits<F> {
         }
     }
 
-    /// Evaluate at a random point defined over Extension Field
+    /// Evaluate at a random point defined over Field
     #[inline]
     pub fn evaluate(&self, point: &[F]) -> DecomposedBitsEval<F> {
         DecomposedBitsEval::<F> {
@@ -281,7 +280,7 @@ impl<F: Field> DecomposedBitsEval<F> {
 
 impl<F: Field + Serialize> BitDecomposition<F> {
     /// sample coins before proving sumcheck protocol
-    pub fn prove_sample_coins(trans: &mut Transcript<F>, instance: &DecomposedBits<F>) -> Vec<F> {
+    pub fn sample_coins(trans: &mut Transcript<F>, instance: &DecomposedBits<F>) -> Vec<F> {
         // batch `len_bits` sumcheck protocols into one with random linear combination
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
@@ -289,12 +288,9 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         )
     }
 
-    /// sample coins before verifying sumcheck protocol
-    pub fn verify_sample_coins(trans: &mut Transcript<F>, info: &DecomposedBitsInfo<F>) -> Vec<F> {
-        trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            info.bits_len as usize * info.num_instances,
-        )
+    /// return the number of coins used in this IOP
+    pub fn num_coins(info: &DecomposedBitsInfo<F>) -> usize {
+        info.bits_len as usize * info.num_instances
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
@@ -306,7 +302,9 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         );
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
-        Self::prove_as_subprotocol(&mut trans, &mut poly, &instance, &u);
+        // randomness to combine sumcheck protocols
+        let randomness = Self::sample_coins(&mut trans, &instance);
+        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
@@ -317,14 +315,11 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
     /// verifier challenges.
     pub fn prove_as_subprotocol(
-        trans: &mut Transcript<F>,
+        randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &DecomposedBits<F>,
         u: &[F],
     ) {
-        // batch `len_bits` sumcheck protocols into one with random linear combination
-        let randomness = Self::prove_sample_coins(trans, instance);
-
         let base = 1 << instance.base_len;
         let identity_func_at_u: Rc<DenseMultilinearExtension<F>> =
             Rc::new(gen_identity_evaluations(u));
@@ -343,7 +338,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
                 op_coefficient.push((F::one(), minus_k));
                 minus_k -= F::one();
             }
-            poly.add_product_with_linear_op(product, &op_coefficient, r);
+            poly.add_product_with_linear_op(product, &op_coefficient, *r);
         }
     }
 
@@ -362,7 +357,10 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         );
 
         // randomness to combine sumcheck protocols
-        let randomness = Self::verify_sample_coins(&mut trans, info);
+        let randomness = trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            Self::num_coins(info),
+        );
 
         let mut subclaim =
             MLSumcheck::verify_as_subprotocol(&mut trans, &poly_info, F::zero(), &proof)
@@ -375,9 +373,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         subclaim.expected_evaluations == F::zero()
     }
 
-    /// Verify bit decomposition given the basic information of decomposed bits as verifier key.
-    /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-    /// verifier challenges.
+    /// Verify bit decomposition
     pub fn verify_as_subprotocol(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
@@ -473,8 +469,9 @@ where
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let claimed_sum = EF::zero();
+        let randomness = BitDecomposition::sample_coins(&mut prover_trans, &instance_ef);
         BitDecomposition::prove_as_subprotocol(
-            &mut prover_trans,
+            &randomness,
             &mut sumcheck_poly,
             &instance_ef,
             &prover_u,
@@ -521,8 +518,10 @@ where
         );
 
         // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-        let randomness =
-            <BitDecomposition<EF>>::verify_sample_coins(&mut verifier_trans, &instance_info);
+        let randomness = verifier_trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            <BitDecomposition<EF>>::num_coins(&instance_info),
+        );
 
         // 3.3 Check the proof of the sumcheck protocol
         let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
