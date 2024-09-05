@@ -96,6 +96,10 @@ pub(crate) fn impl_zero(name: &Ident) -> TokenStream {
                 self.0 = 0;
             }
         }
+
+        impl ::num_traits::ConstZero for #name {
+            const ZERO: Self = Self(0);
+        }
     }
 }
 
@@ -117,6 +121,10 @@ pub(crate) fn impl_one(name: &Ident) -> TokenStream {
             {
                 self.0 == 1
             }
+        }
+
+        impl ::num_traits::ConstOne for #name {
+            const ONE: Self = Self(1);
         }
     }
 }

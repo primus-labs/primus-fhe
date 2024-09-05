@@ -10,34 +10,34 @@ use crate::Field;
 use core::iter;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
-/// Abstract Extension Field
+/// Abstract Extension Field.
 pub trait AbstractExtensionField<Base: Field>:
     Field
     + From<Base>
     + Add<Base, Output = Self>
-    + AddAssign<Base>
     + Sub<Base, Output = Self>
-    + SubAssign<Base>
     + Mul<Base, Output = Self>
+    + AddAssign<Base>
+    + SubAssign<Base>
     + MulAssign<Base>
 {
     /// Extension degree
     const D: usize;
 
-    /// Convert from base field
+    /// Converts from base field.
     fn from_base(b: Base) -> Self;
 
     /// Suppose this field extension is represented by the quotient
-    /// ring B[X]/(f(X)) where B is `Base` and f is an irreducible
+    /// ring `B[X]/f(X)` where `B` is `Base` and `f` is an irreducible
     /// polynomial of degree `D`. This function takes a slice `bs` of
-    /// length at most D, and constructs the field element
-    /// \sum_i bs[i] * X^i.
+    /// length at most `D`, and constructs the field element
+    /// `∑ᵢ bs[i] * Xⁱ`.
     ///
     /// NB: The value produced by this function fundamentally depends
     /// on the choice of irreducible polynomial f. Care must be taken
     /// to ensure portability if these values might ever be passed to
     /// (or rederived within) another compilation environment where a
-    /// different f might have been used.
+    /// different `f` might have been used.
     fn from_base_slice(bs: &[Base]) -> Self;
 
     /// Similar to `core:array::from_fn`, with the same caveats as
@@ -45,32 +45,32 @@ pub trait AbstractExtensionField<Base: Field>:
     fn from_base_fn<F: FnMut(usize) -> Base>(f: F) -> Self;
 
     /// Suppose this field extension is represented by the quotient
-    /// ring B[X]/(f(X)) where B is `Base` and f is an irreducible
+    /// ring `B[X]/f(X)` where `B` is `Base` and `f` is an irreducible
     /// polynomial of degree `D`. This function takes a field element
-    /// \sum_i bs[i] * X^i and returns the coefficients as a slice
-    /// `bs` of length at most D containing, from lowest degree to
+    /// `∑ᵢ bs[i] * Xⁱ` and returns the coefficients as a slice
+    /// `bs` of length at most `D` containing, from lowest degree to
     /// highest.
     ///
     /// NB: The value produced by this function fundamentally depends
-    /// on the choice of irreducible polynomial f. Care must be taken
+    /// on the choice of irreducible polynomial `f`. Care must be taken
     /// to ensure portability if these values might ever be passed to
     /// (or rederived within) another compilation environment where a
-    /// different f might have been used.
+    /// different `f` might have been used.
     fn as_base_slice(&self) -> &[Base];
 
     /// Suppose this field extension is represented by the quotient
-    /// ring B[X]/(f(X)) where B is `Base` and f is an irreducible
+    /// ring `B[X]/f(X)` where `B` is `Base` and `f` is an irreducible
     /// polynomial of degree `D`. This function returns the field
     /// element `X^exponent` if `exponent < D` and panics otherwise.
-    /// (The fact that f is not known at the point that this function
+    /// (The fact that `f` is not known at the point that this function
     /// is defined prevents implementing exponentiation of higher
     /// powers since the reduction cannot be performed.)
     ///
     /// NB: The value produced by this function fundamentally depends
-    /// on the choice of irreducible polynomial f. Care must be taken
+    /// on the choice of irreducible polynomial `f`. Care must be taken
     /// to ensure portability if these values might ever be passed to
     /// (or rederived within) another compilation environment where a
-    /// different f might have been used.
+    /// different `f` might have been used.
     fn monomial(exponent: usize) -> Self {
         assert!(exponent < Self::D, "requested monomial of too high degree");
         let mut vec = vec![Base::zero(); Self::D];
@@ -81,17 +81,17 @@ pub trait AbstractExtensionField<Base: Field>:
 
 /// Extension field trait
 pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
-    Field + AbstractExtensionField<Base>
+    AbstractExtensionField<Base>
 {
     /// ExtensionPacking type
-    type ExtensionPacking: AbstractExtensionField<Base> + 'static + Copy + Send + Sync;
+    type ExtensionPacking: AbstractExtensionField<Base>;
 
-    /// Check is in base field or not
+    /// Check is in base field or not.
     fn is_in_basefield(&self) -> bool {
         self.as_base_slice()[1..].iter().all(Base::is_zero)
     }
 
-    /// Convert into base field
+    /// Convert into base field.
     fn as_base(&self) -> Option<Base> {
         if self.is_in_basefield() {
             Some(self.as_base_slice()[0])
@@ -103,7 +103,7 @@ pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
     /// Power packed
     // fn ext_powers_packed(&self) -> impl Iterator<Item = Self::ExtensionPacking> {
     fn ext_powers_packed(&self) -> Vec<Self::ExtensionPacking> {
-        let powers: Vec<_> = powers(self).take(Base::WIDTH + 1).collect();
+        let powers: Vec<_> = powers(*self).take(Base::WIDTH + 1).collect();
         // Transpose first WIDTH powers
         let current = Self::ExtensionPacking::from_base_fn(|i| {
             Base::from_fn(|j| powers[j].as_base_slice()[i])
@@ -117,15 +117,17 @@ pub trait ExtensionField<Base: Field + PackedField<Scalar = Base>>:
 }
 
 /// Binomial extension field trait.
-/// A extension field with a irreducible polynomial X^d-W
+/// A extension field with a irreducible polynomial `X^d-W`
 /// such that the extension is `F[X]/(X^d-W)`.
 pub trait BinomiallyExtendable<const D: usize>: Field {
     /// W
     fn w() -> Self;
 
-    /// DTH_ROOT = W^((n - 1)/D).
-    /// n is the order of base field.
-    /// Only works when exists k such that n = kD + 1.
+    /// `DTH_ROOT = W^((n - 1)/D)`.
+    ///
+    /// `n` is the order of base field.
+    ///
+    /// Only works when exists `k` such that `n = kD + 1`.
     fn dth_root() -> Self;
 
     /// ext generator

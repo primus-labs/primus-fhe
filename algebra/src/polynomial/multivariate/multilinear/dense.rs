@@ -7,7 +7,9 @@ use std::slice::{Iter, IterMut};
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::{AbstractExtensionField, DecomposableField, Field, FieldUniformSampler};
+use crate::{
+    AbstractExtensionField, Bits, ConstBounded, DecomposableField, Field, FieldUniformSampler,
+};
 
 use super::MultilinearExtension;
 use std::rc::Rc;
@@ -125,7 +127,8 @@ impl<F: DecomposableField> DenseMultilinearExtension<F> {
         bits_len: u32,
     ) -> Vec<Rc<DenseMultilinearExtension<F>>> {
         let mut val = self.evaluations.clone();
-        let mask = F::mask(base_len);
+
+        let mask = <F::Value as ConstBounded>::MAX >> (<F::Value as Bits>::BITS - base_len);
 
         let mut bits = Vec::with_capacity(bits_len as usize);
 

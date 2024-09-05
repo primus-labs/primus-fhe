@@ -2,7 +2,6 @@ use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, thread_r
 
 use crate::modulus::BarrettModulus;
 use crate::reduce::{PowReduce, Reduce};
-use crate::Widening;
 
 /// The trait defines some function for prime number
 pub trait Prime {
@@ -91,7 +90,7 @@ macro_rules! impl_prime_check {
                     }
 
                     for _ in 1..r {
-                        x = x.widen_mul(x).reduce(self);
+                        x = $crate::WideningMul::widening_mul(x, x).reduce(self);
                         if x == value_sub_one {
                             break 'next_round;
                         }

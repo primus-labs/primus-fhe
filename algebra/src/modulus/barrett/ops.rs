@@ -85,7 +85,7 @@ where
 
     #[inline]
     fn mul_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
-        self.widen_mul(rhs).reduce(modulus)
+        self.widening_mul(rhs).reduce(modulus)
     }
 }
 
@@ -96,7 +96,7 @@ where
 {
     #[inline]
     fn mul_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
-        *self = self.widen_mul(rhs).reduce(modulus);
+        *self = self.widening_mul(rhs).reduce(modulus);
     }
 }
 
@@ -127,7 +127,7 @@ where
         }
 
         let mut intermediate: Self = power;
-        for _ in 1..(E::N_BITS - exp.leading_zeros()) {
+        for _ in 1..(E::BITS - exp.leading_zeros()) {
             exp >>= 1;
             power = power.mul_reduce(power, modulus);
             if !(exp & E::one()).is_zero() {
@@ -189,7 +189,7 @@ where
 
     #[inline]
     fn lazy_mul_reduce(self, rhs: Self, modulus: BarrettModulus<T>) -> Self::Output {
-        self.widen_mul(rhs).lazy_reduce(modulus)
+        self.widening_mul(rhs).lazy_reduce(modulus)
     }
 }
 
@@ -200,7 +200,7 @@ where
 {
     #[inline]
     fn lazy_mul_reduce_assign(&mut self, rhs: Self, modulus: BarrettModulus<T>) {
-        *self = self.widen_mul(rhs).lazy_reduce(modulus);
+        *self = self.widening_mul(rhs).lazy_reduce(modulus);
     }
 }
 

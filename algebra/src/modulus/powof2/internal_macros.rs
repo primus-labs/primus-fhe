@@ -118,7 +118,7 @@ macro_rules! impl_powof2_modulus {
                 }
 
                 let mut intermediate: Self = power;
-                for _ in 1..(<E as $crate::Bits>::N_BITS - exp.leading_zeros()) {
+                for _ in 1..(<E as $crate::Bits>::BITS - exp.leading_zeros()) {
                     exp >>= 1;
                     power = power.mul_reduce(power, modulus);
                     if !(exp & E::one()).is_zero() {

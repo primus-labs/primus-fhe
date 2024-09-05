@@ -1,5 +1,5 @@
 use algebra::Bits;
-use num_traits::PrimInt;
+use num_traits::{ConstOne, PrimInt};
 
 /// This basis struct is used for decomposition of the primitive type.
 #[derive(Debug, Clone, Copy)]
@@ -13,24 +13,24 @@ pub struct Basis<T: PrimInt + Bits> {
     bits: usize,
 }
 
-impl<T: PrimInt + Bits> Basis<T> {
+impl<T: PrimInt + Bits + ConstOne> Basis<T> {
     /// Creates a new [`Basis<T>`].
     ///
     /// # Panics
     ///
     /// Panics if .
     pub fn new(bits: u32, modulus: T) -> Self {
-        let mut modulus_bits = T::N_BITS - modulus.leading_zeros();
+        let mut modulus_bits = T::BITS - modulus.leading_zeros();
         if modulus.count_ones() == 1 {
             modulus_bits -= 1;
         }
-        if bits > modulus_bits || bits == T::N_BITS {
+        if bits > modulus_bits || bits == T::BITS {
             panic!("bits");
         }
         let decompose_len = modulus_bits.div_ceil(bits) as usize;
         let bits = bits as usize;
-        let basis = T::one() << bits;
-        let mask = basis - T::one();
+        let basis = T::ONE << bits;
+        let mask = basis - T::ONE;
 
         Self {
             basis,
@@ -72,7 +72,7 @@ impl<T: PrimInt + Bits> Basis<T> {
 /// # Attention
 ///
 /// **`self`** will be modified *after* performing this decomposition.
-pub fn decompose_lsb_bits_inplace<T: PrimInt + Bits>(
+pub fn decompose_lsb_bits_inplace<T: PrimInt + Bits + ConstOne>(
     data: &mut [T],
     basis: Basis<T>,
     destination: &mut [T],

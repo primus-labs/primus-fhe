@@ -495,12 +495,11 @@ macro_rules! impl_barrett_modulus {
             ) -> Self::Output {
                 /// `c += a * b`
                 fn multiply_add(c: &mut [$SelfT; 2], a: $SelfT, b: $SelfT) {
-                    let (lw, hw) = a.widen_mul(b);
+                    let (lw, hw) = $crate::WideningMul::widening_mul(a, b);
                     let carry;
                     (c[0], carry) = c[0].overflowing_add(lw);
-                    (c[1], _) = c[1].carry_add(hw, carry);
+                    (c[1], _) = $crate::CarryingAdd::carrying_add(c[1], hw, carry);
                 }
-                use $crate::Widening;
                 use $crate::reduce::{AddReduce, Reduce};
                 let a = a.as_ref();
                 let b = b.as_ref();

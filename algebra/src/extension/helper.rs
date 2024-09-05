@@ -23,14 +23,14 @@ impl<F: Field> Iterator for Powers<F> {
 }
 
 #[inline]
-pub(crate) fn powers<F: Field>(base: &F) -> Powers<F> {
+pub(crate) fn powers<F: Field>(base: F) -> Powers<F> {
     shifted_powers(base, F::one())
 }
 
 #[inline]
-pub(crate) fn shifted_powers<F: Field>(base: &F, start: F) -> Powers<F> {
+pub(crate) fn shifted_powers<F: Field>(base: F, start: F) -> Powers<F> {
     Powers {
-        base: *base,
+        base,
         current: start,
     }
 }

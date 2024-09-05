@@ -10,16 +10,15 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use num_traits::{Inv, One, Pow, Zero};
+use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 
 use crate::{
-    div_ceil,
     modulus::{self, from_monty, to_monty, BabyBearModulus, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO},
     reduce::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
     },
-    DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
+    ConstBounded, DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of BabyBear field.
@@ -47,20 +46,6 @@ impl DecomposableField for BabyBear {
     #[inline]
     fn value(self) -> Self::Value {
         from_monty(self.0)
-    }
-
-    #[inline]
-    fn mask(bits: u32) -> Self::Value {
-        u32::MAX >> (u32::BITS - bits)
-    }
-
-    #[inline]
-    fn decompose_len(basis: Self::Value) -> usize {
-        debug_assert!(basis.is_power_of_two() && basis > 1);
-        div_ceil(
-            32 - Self::MODULUS_VALUE.leading_zeros(),
-            basis.trailing_zeros(),
-        ) as usize
     }
 
     #[inline]
@@ -290,6 +275,10 @@ impl Zero for BabyBear {
     }
 }
 
+impl ConstZero for BabyBear {
+    const ZERO: Self = Self(MONTY_ZERO);
+}
+
 impl One for BabyBear {
     #[inline]
     fn is_one(&self) -> bool
@@ -308,6 +297,16 @@ impl One for BabyBear {
     fn one() -> Self {
         Self(MONTY_ONE)
     }
+}
+
+impl ConstOne for BabyBear {
+    const ONE: Self = Self(MONTY_ONE);
+}
+
+impl ConstBounded for BabyBear {
+    const MIN: Self = Self(MONTY_ZERO);
+
+    const MAX: Self = Self(MONTY_NEG_ONE);
 }
 
 impl PrimeField for BabyBear {

@@ -6,7 +6,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use num_traits::{Inv, One, Pow, Zero};
+use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 use rand::{CryptoRng, Rng};
 use rand_distr::{Distribution, Standard};
 use serde::{
@@ -83,7 +83,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> HasFrobenius
         }
 
         let mut res = [F::zero(); D];
-        for (i, z) in powers(&z0).take(D).enumerate() {
+        for (i, z) in powers(z0).take(D).enumerate() {
             res[i] = arr[i] * z;
         }
 
@@ -503,18 +503,14 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Zero
     }
 }
 
-impl<F: Field + BinomiallyExtendable<D>, const D: usize> Pow<u128>
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> ConstZero
     for BinomialExtensionField<F, D>
 {
-    type Output = Self;
-
-    #[inline]
-    // *****WARNING******
-    // Need to re-implement
-    fn pow(self, _rhs: u128) -> Self::Output {
-        std::unimplemented!()
-    }
+    const ZERO: Self = Self {
+        value: [F::ZERO; D],
+    };
 }
+
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> One
     for BinomialExtensionField<F, D>
 {
@@ -536,6 +532,29 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> One
     #[inline]
     fn set_one(&mut self) {
         *self = Self::one();
+    }
+}
+
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> ConstOne
+    for BinomialExtensionField<F, D>
+{
+    const ONE: Self = {
+        let mut value = [F::ZERO; D];
+        value[0] = F::ONE;
+        Self { value }
+    };
+}
+
+impl<F: Field + BinomiallyExtendable<D>, const D: usize> Pow<u128>
+    for BinomialExtensionField<F, D>
+{
+    type Output = Self;
+
+    #[inline]
+    // *****WARNING******
+    // Need to re-implement
+    fn pow(self, _rhs: u128) -> Self::Output {
+        std::unimplemented!()
     }
 }
 

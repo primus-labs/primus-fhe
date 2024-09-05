@@ -3,11 +3,11 @@
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use num_traits::{Inv, One, Pow, PrimInt, Zero};
+use num_traits::{ConstOne, ConstZero, Inv, Pow};
 use rand::{CryptoRng, Rng};
 
 use crate::random::UniformBase;
-use crate::{AsFrom, AsInto, Basis, Widening, WrappingOps};
+use crate::{AsFrom, AsInto, Basis, Primitive, WideningMul, WrappingNeg};
 
 mod ntt_fields;
 mod prime_fields;
@@ -38,7 +38,6 @@ pub trait Field:
     + Copy
     + Send
     + Sync
-    + 'static
     + Debug
     + Display
     + Default
@@ -46,8 +45,8 @@ pub trait Field:
     + PartialEq
     + Ord
     + PartialOrd
-    + Zero
-    + One
+    + ConstZero
+    + ConstOne
     + Add<Self, Output = Self>
     + Sub<Self, Output = Self>
     + Mul<Self, Output = Self>
@@ -69,16 +68,7 @@ pub trait Field:
     + Pow<Self::Order, Output = Self>
 {
     /// The inner type of this field.
-    type Value: Debug
-        + Send
-        + Sync
-        + PrimInt
-        + Widening
-        + WrappingOps
-        + Into<u64>
-        + AsInto<f64>
-        + AsFrom<f64>
-        + UniformBase;
+    type Value: Primitive;
 
     /// The type of the field's order.
     type Order: Copy;
@@ -98,7 +88,7 @@ pub trait Field:
         let thresh = range.wrapping_neg() % range;
 
         let hi = loop {
-            let (lo, hi) = <Self::Value as UniformBase>::gen_sample(rng).widen_mul(range);
+            let (lo, hi) = <Self::Value as UniformBase>::gen_sample(rng).widening_mul(range);
             if lo >= thresh {
                 break hi;
             }
@@ -112,12 +102,6 @@ pub trait Field:
 pub trait DecomposableField: Field {
     /// Gets inner value.
     fn value(self) -> Self::Value;
-
-    /// mask, return a number with `bits` 1s.
-    fn mask(bits: u32) -> Self::Value;
-
-    /// Get the length of decompose vector.
-    fn decompose_len(basis: Self::Value) -> usize;
 
     /// Decompose `self` according to `basis`,
     /// return the decomposed vector.

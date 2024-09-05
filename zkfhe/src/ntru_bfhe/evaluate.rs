@@ -72,7 +72,7 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
             self.blind_rotation_key
                 .blind_rotate(lut, &c, parameters.blind_rotation_basis());
 
-        let half_delta = Q::new(Q::MODULUS_VALUE >> 3);
+        let half_delta = Q::new(Q::MODULUS_VALUE >> 3u32);
 
         acc.data_mut()
             .iter_mut()
@@ -310,7 +310,7 @@ where
     F: NTTField,
 {
     let q = F::MODULUS_VALUE;
-    let q_div_8 = F::new(q >> 3);
+    let q_div_8 = F::new(q >> 3u32);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_nand_and_majority_lut(
@@ -330,7 +330,7 @@ where
     F: NTTField,
 {
     let q = F::MODULUS_VALUE;
-    let q_div_8 = F::new(q >> 3);
+    let q_div_8 = F::new(q >> 3u32);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_nand_and_majority_lut(
@@ -377,7 +377,7 @@ where
     F: NTTField,
 {
     let q = F::MODULUS_VALUE;
-    let q_div_8 = F::new(q >> 3);
+    let q_div_8 = F::new(q >> 3u32);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_or_nor_lut(
@@ -397,7 +397,7 @@ where
     F: NTTField,
 {
     let q = F::MODULUS_VALUE;
-    let q_div_8 = F::new(q >> 3);
+    let q_div_8 = F::new(q >> 3u32);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_or_nor_lut(
@@ -417,7 +417,7 @@ where
     F: NTTField,
 {
     let q = F::MODULUS_VALUE;
-    let q_div_8 = F::new(q >> 3);
+    let q_div_8 = F::new(q >> 3u32);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_xor_xnor_lut(
@@ -437,7 +437,7 @@ where
     F: NTTField,
 {
     let q = F::MODULUS_VALUE;
-    let q_div_8 = F::new(q >> 3);
+    let q_div_8 = F::new(q >> 3u32);
     let neg_q_div_8 = F::new(q - q_div_8.value());
 
     init_xor_xnor_lut(

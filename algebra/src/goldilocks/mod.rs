@@ -9,16 +9,15 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use num_traits::{Inv, One, Pow, Zero};
+use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 
 use crate::{
-    div_ceil,
     modulus::{self, to_canonical_u64, GoldilocksModulus},
     reduce::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
     },
-    DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
+    ConstBounded, DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of Goldilocks field
@@ -58,20 +57,6 @@ impl DecomposableField for Goldilocks {
     #[inline]
     fn value(self) -> Self::Value {
         to_canonical_u64(self.0)
-    }
-
-    #[inline]
-    fn mask(bits: u32) -> Self::Value {
-        u64::MAX >> (u64::BITS - bits)
-    }
-
-    #[inline]
-    fn decompose_len(basis: Self::Value) -> usize {
-        debug_assert!(basis.is_power_of_two() && basis > 1);
-        div_ceil(
-            64 - Self::MODULUS_VALUE.leading_zeros(),
-            basis.trailing_zeros(),
-        ) as usize
     }
 
     #[inline]
@@ -320,6 +305,10 @@ impl Zero for Goldilocks {
     }
 }
 
+impl ConstZero for Goldilocks {
+    const ZERO: Self = Self(0);
+}
+
 impl One for Goldilocks {
     #[inline]
     fn is_one(&self) -> bool
@@ -338,6 +327,16 @@ impl One for Goldilocks {
     fn one() -> Self {
         Self(1)
     }
+}
+
+impl ConstOne for Goldilocks {
+    const ONE: Self = Self(1);
+}
+
+impl ConstBounded for Goldilocks {
+    const MIN: Self = Self(0);
+
+    const MAX: Self = Self(modulus::GOLDILOCKS_P - 1);
 }
 
 impl PrimeField for Goldilocks {
