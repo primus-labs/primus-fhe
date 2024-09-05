@@ -387,10 +387,10 @@ fn guard<F: FheField>(a: F) -> F {
 fn ntt_normalize_assign<F: FheField>(a: &mut F) {
     let mut r = a.value();
     if r >= (F::MODULUS_VALUE << 1u32) {
-        r = r - (F::MODULUS_VALUE << 1u32);
+        r -= F::MODULUS_VALUE << 1u32;
     }
     if r >= F::MODULUS_VALUE {
-        r = r - F::MODULUS_VALUE;
+        r -= F::MODULUS_VALUE;
     }
     *a = F::lazy_new(r);
 }

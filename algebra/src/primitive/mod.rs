@@ -21,7 +21,7 @@ pub use wrapping::*;
 
 use crate::random::UniformBase;
 
-///
+/// Define the primitive value type in `Field`.
 pub trait Primitive:
     Debug
     + Display
