@@ -244,43 +244,6 @@ impl<F: Field> AdditionInZqInstanceEval<F> {
 }
 
 impl<F: DecomposableField> AdditionInZqInstance<F> {
-    /// Construct a new instance from vector
-    // #[inline]
-    // pub fn from_vec(
-    //     abc: Vec<Rc<DenseMultilinearExtension<F>>>,
-    //     k: &Rc<DenseMultilinearExtension<F>>,
-    //     q: F,
-    //     base: F,
-    //     base_len: u32,
-    //     bits_len: u32,
-    // ) -> Self {
-    //     let num_vars = k.num_vars;
-    //     assert_eq!(abc.len(), 3);
-    //     for x in &abc {
-    //         assert_eq!(x.num_vars, num_vars);
-    //     }
-
-    //     let abc_bits = abc
-    //         .iter()
-    //         .map(|x| x.get_decomposed_mles(base_len, bits_len))
-    //         .flatten()
-    //         .collect::<Vec<_>>();
-    //     Self {
-    //         q,
-    //         num_vars,
-    //         abc,
-    //         k: Rc::clone(k),
-    //         abc_bits: DecomposedBits {
-    //             base,
-    //             base_len,
-    //             bits_len,
-    //             num_vars,
-    //             d_val: abc,
-    //             d_bits: abc_bits,
-    //         },
-    //     }
-    // }
-
     /// Construct a new instance from slice
     #[inline]
     pub fn from_slice(

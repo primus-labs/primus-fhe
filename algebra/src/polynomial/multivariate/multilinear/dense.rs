@@ -319,17 +319,6 @@ impl<'a, F: Field> AddAssign<(F, &'a DenseMultilinearExtension<F>)>
     }
 }
 
-impl<'a, F: Field> AddAssign<(F, &'a Rc<DenseMultilinearExtension<F>>)>
-    for DenseMultilinearExtension<F>
-{
-    #[inline]
-    fn add_assign(&mut self, (f, rhs): (F, &'a Rc<DenseMultilinearExtension<F>>)) {
-        self.iter_mut()
-            .zip(rhs.iter())
-            .for_each(|(x, y)| *x += f.mul(y));
-    }
-}
-
 impl<F: Field> Neg for DenseMultilinearExtension<F> {
     type Output = DenseMultilinearExtension<F>;
 
