@@ -8,12 +8,14 @@ use num_traits::{ConstOne, ConstZero, NumAssign, PrimInt};
 mod bits;
 mod bounded;
 mod cast;
+mod neg_one;
 mod widening;
 mod wrapping;
 
 pub use bits::Bits;
 pub use bounded::ConstBounded;
 pub use cast::*;
+pub use neg_one::{ConstNegOne, NegOne};
 pub use widening::*;
 pub use wrapping::*;
 

@@ -7,7 +7,7 @@ use num_traits::{ConstOne, ConstZero, Inv, Pow};
 use rand::{CryptoRng, Rng};
 
 use crate::random::UniformBase;
-use crate::{AsFrom, AsInto, Basis, Primitive, WideningMul, WrappingNeg};
+use crate::{AsFrom, AsInto, Basis, ConstNegOne, Primitive, WideningMul, WrappingNeg};
 
 mod ntt_fields;
 mod prime_fields;
@@ -47,6 +47,7 @@ pub trait Field:
     + PartialOrd
     + ConstZero
     + ConstOne
+    + ConstNegOne
     + Add<Self, Output = Self>
     + Sub<Self, Output = Self>
     + Mul<Self, Output = Self>
@@ -75,9 +76,6 @@ pub trait Field:
 
     /// q
     const MODULUS_VALUE: Self::Value;
-
-    /// -1
-    fn neg_one() -> Self;
 
     /// convert values into field element
     fn new(value: Self::Value) -> Self;

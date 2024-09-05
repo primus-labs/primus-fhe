@@ -2,7 +2,7 @@ use crate::{
     extension::TwoAdicField, field::Field, modulus::to_monty, BabyBear, BinomialExtensionField,
     BinomiallyExtendable, HasTwoAdicBionmialExtension,
 };
-use num_traits::{One, Zero};
+use num_traits::{ConstOne, ConstZero};
 
 impl BinomiallyExtendable<4> for BabyBear {
     // Verifiable in Sage with
@@ -17,7 +17,7 @@ impl BinomiallyExtendable<4> for BabyBear {
     }
 
     fn ext_generator() -> [Self; 4] {
-        [Self::new(8), Self::one(), Self::zero(), Self::zero()]
+        [Self::new(8), Self::ONE, Self::ZERO, Self::ZERO]
     }
 }
 
@@ -29,22 +29,22 @@ impl HasTwoAdicBionmialExtension<4> for BabyBear {
 
         match bits {
             29 => [
-                Self::zero(),
-                Self::zero(),
-                Self::zero(),
+                Self::ZERO,
+                Self::ZERO,
+                Self::ZERO,
                 Self(to_monty(124907976)),
             ],
             28 => [
-                Self::zero(),
-                Self::zero(),
+                Self::ZERO,
+                Self::ZERO,
                 Self(to_monty(1996171314)),
-                Self::zero(),
+                Self::ZERO,
             ],
             _ => [
                 Self::two_adic_generator(bits),
-                Self::zero(),
-                Self::zero(),
-                Self::zero(),
+                Self::ZERO,
+                Self::ZERO,
+                Self::ZERO,
             ],
         }
     }

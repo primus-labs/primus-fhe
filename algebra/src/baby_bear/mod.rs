@@ -13,12 +13,14 @@ use std::{
 use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 
 use crate::{
-    modulus::{self, from_monty, to_monty, BabyBearModulus, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO},
+    modulus::{
+        from_monty, to_monty, BabyBearModulus, BABY_BEAR_P, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO,
+    },
     reduce::{
         AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, ExpReduce, InvReduce, MulReduce,
         MulReduceAssign, NegReduce, SubReduce, SubReduceAssign,
     },
-    ConstBounded, DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
+    ConstNegOne, DecomposableField, FheField, Field, NegOne, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of BabyBear field.
@@ -29,12 +31,7 @@ impl Field for BabyBear {
     type Value = u32;
     type Order = u32;
 
-    const MODULUS_VALUE: Self::Value = modulus::BABY_BEAR_P;
-
-    #[inline]
-    fn neg_one() -> Self {
-        Self(MONTY_NEG_ONE)
-    }
+    const MODULUS_VALUE: Self::Value = BABY_BEAR_P;
 
     #[inline]
     fn new(value: Self::Value) -> Self {
@@ -260,18 +257,18 @@ impl Pow<u32> for BabyBear {
 
 impl Zero for BabyBear {
     #[inline]
-    fn is_zero(&self) -> bool {
-        *self == Self(MONTY_ZERO)
+    fn zero() -> Self {
+        Self(MONTY_ZERO)
     }
 
     #[inline]
     fn set_zero(&mut self) {
-        *self = Self(MONTY_ZERO);
+        self.0 = MONTY_ZERO;
     }
 
     #[inline]
-    fn zero() -> Self {
-        Self(MONTY_ZERO)
+    fn is_zero(&self) -> bool {
+        *self == Self(MONTY_ZERO)
     }
 }
 
@@ -281,21 +278,21 @@ impl ConstZero for BabyBear {
 
 impl One for BabyBear {
     #[inline]
+    fn one() -> Self {
+        Self(MONTY_ONE)
+    }
+
+    #[inline]
+    fn set_one(&mut self) {
+        self.0 = MONTY_ONE;
+    }
+
+    #[inline]
     fn is_one(&self) -> bool
     where
         Self: PartialEq,
     {
         *self == Self(MONTY_ONE)
-    }
-
-    #[inline]
-    fn set_one(&mut self) {
-        *self = Self(MONTY_ONE);
-    }
-
-    #[inline]
-    fn one() -> Self {
-        Self(MONTY_ONE)
     }
 }
 
@@ -303,10 +300,26 @@ impl ConstOne for BabyBear {
     const ONE: Self = Self(MONTY_ONE);
 }
 
-impl ConstBounded for BabyBear {
-    const MIN: Self = Self(MONTY_ZERO);
+impl NegOne for BabyBear {
+    #[inline(always)]
+    fn neg_one() -> Self {
+        Self(MONTY_NEG_ONE)
+    }
 
-    const MAX: Self = Self(MONTY_NEG_ONE);
+    fn set_neg_one(&mut self) {
+        self.0 = MONTY_NEG_ONE;
+    }
+
+    fn is_neg_one(&self) -> bool
+    where
+        Self: PartialEq,
+    {
+        *self == Self(MONTY_NEG_ONE)
+    }
+}
+
+impl ConstNegOne for BabyBear {
+    const NEG_ONE: Self = Self(MONTY_NEG_ONE);
 }
 
 impl PrimeField for BabyBear {

@@ -129,6 +129,32 @@ pub(crate) fn impl_one(name: &Ident) -> TokenStream {
     }
 }
 
+pub(crate) fn impl_neg_one(name: &Ident, modulus: &TokenStream) -> TokenStream {
+    quote! {
+        impl ::algebra::NegOne for #name {
+            #[inline]
+            fn neg_one() -> Self {
+                Self(#modulus - 1)
+            }
+
+            #[inline]
+            fn set_neg_one(&mut self) {
+                self.0 = #modulus - 1;
+            }
+
+            #[inline]
+            fn is_neg_one(&self) -> bool
+            {
+                self.0 == #modulus - 1
+            }
+        }
+
+        impl ::algebra::ConstNegOne for #name {
+            const NEG_ONE: Self = Self(#modulus - 1);
+        }
+    }
+}
+
 pub(crate) fn impl_ser(name: &Ident, field_ty: &Type) -> TokenStream {
     let serializer_fn = match field_ty {
         Type::Path(type_path) if type_path.path.is_ident("u8") => quote! { serialize_u8 },
