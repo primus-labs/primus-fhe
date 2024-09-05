@@ -15,8 +15,8 @@ use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 use crate::{
     modulus::{self, from_monty, to_monty, BabyBearModulus, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO},
     reduce::{
-        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
-        MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
+        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, ExpReduce, InvReduce, MulReduce,
+        MulReduceAssign, NegReduce, SubReduce, SubReduceAssign,
     },
     ConstBounded, DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
 };
@@ -254,7 +254,7 @@ impl Pow<u32> for BabyBear {
     type Output = Self;
     #[inline]
     fn pow(self, rhs: u32) -> Self::Output {
-        Self(self.0.pow_reduce(rhs, BabyBearModulus))
+        Self(self.0.exp_reduce(rhs, BabyBearModulus))
     }
 }
 

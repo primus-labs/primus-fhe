@@ -2,7 +2,7 @@
 //!
 //! This is derived from the [Plonky3](https://github.com/Plonky3/Plonky3/tree/main/baby-bear).
 
-use crate::reduce::{MulReduce, PowReduce};
+use crate::reduce::{ExpPowOf2Reduce, MulReduce};
 
 mod ops;
 
@@ -118,8 +118,8 @@ const fn monty_reduce(x: u64) -> u32 {
 
 /// Squares the base N number of times and multiplies the result by the tail value.
 #[inline(always)]
-fn exp<const N: usize>(base: u32) -> u32 {
-    base.pow_reduce(1u16 << N, BabyBearModulus)
+fn exp<const N: u32>(base: u32) -> u32 {
+    base.exp_power_of_2_reduce(N, BabyBearModulus)
 }
 
 #[inline(always)]
@@ -222,9 +222,9 @@ mod tests {
             ((a_n as W * from_monty(b_inv) as W) % PW) as S
         );
 
-        assert_eq!(a_m.pow_reduce(0, BabyBearModulus), 1);
-        assert_eq!(a_m.pow_reduce(1, BabyBearModulus), a_m);
-        assert_eq!(a_m.pow_reduce(b_m, BabyBearModulus), pow(a_m, b_m));
+        assert_eq!(a_m.exp_reduce(0, BabyBearModulus), 1);
+        assert_eq!(a_m.exp_reduce(1, BabyBearModulus), a_m);
+        assert_eq!(a_m.exp_reduce(b_m, BabyBearModulus), pow(a_m, b_m));
 
         let mut a_n: Vec<u32> = dis.sample_iter(&mut rng).take(5).collect();
         let mut b_n: Vec<u32> = dis.sample_iter(&mut rng).take(5).collect();

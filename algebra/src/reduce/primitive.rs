@@ -211,9 +211,9 @@ macro_rules! impl_non_reduce_ops_for_primitive {
             }
         }
 
-        impl $crate::reduce::PowReduce<(), u32> for $t {
+        impl $crate::reduce::ExpReduce<(), u32> for $t {
             #[inline]
-            fn pow_reduce(self, exp: u32, _modulus: ()) -> Self {
+            fn exp_reduce(self, exp: u32, _modulus: ()) -> Self {
                 self.wrapping_pow(exp)
             }
         }

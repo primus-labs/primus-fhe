@@ -14,8 +14,8 @@ use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 use crate::{
     modulus::{self, to_canonical_u64, GoldilocksModulus},
     reduce::{
-        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
-        MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
+        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, ExpReduce, InvReduce, MulReduce,
+        MulReduceAssign, NegReduce, SubReduce, SubReduceAssign,
     },
     ConstBounded, DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
 };
@@ -284,7 +284,7 @@ impl Pow<u64> for Goldilocks {
     type Output = Self;
     #[inline]
     fn pow(self, rhs: u64) -> Self::Output {
-        Self(self.0.pow_reduce(rhs, GoldilocksModulus))
+        Self(self.0.exp_reduce(rhs, GoldilocksModulus))
     }
 }
 

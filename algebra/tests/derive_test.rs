@@ -61,7 +61,7 @@ fn test_fp() {
     // div
     let a = rng.sample(distr);
     let b = rng.sample(distr);
-    let b_inv = b.pow_reduce(p - 2, BarrettModulus::<T>::new(p));
+    let b_inv = b.exp_reduce(p - 2, BarrettModulus::<T>::new(p));
     let c = ((a as W * b_inv as W) % p as W) as T;
     assert_eq!(FF::new(a) / FF::new(b), FF::new(c));
 
@@ -80,7 +80,7 @@ fn test_fp() {
 
     // inv
     let a = rng.sample(distr);
-    let a_inv = a.pow_reduce(p - 2, BarrettModulus::<T>::new(p));
+    let a_inv = a.exp_reduce(p - 2, BarrettModulus::<T>::new(p));
     assert_eq!(FF::new(a).inv(), FF::new(a_inv));
     assert_eq!(FF::new(a) * FF::new(a_inv), FF::one());
 
@@ -190,7 +190,7 @@ fn baby_bear_test() {
     // div
     let a = rng.sample(distr);
     let b = rng.sample(distr);
-    let b_inv = from_monty((to_monty(b)).pow_reduce(p - 2, BabyBearModulus));
+    let b_inv = from_monty((to_monty(b)).exp_reduce(p - 2, BabyBearModulus));
     let c = ((a as W * b_inv as W) % (p as W)) as T;
     assert_eq!(BabyBear::new(a) / BabyBear::new(b), BabyBear::new(c));
 
@@ -209,7 +209,7 @@ fn baby_bear_test() {
 
     // inv
     let a = rng.sample(distr);
-    let a_inv = from_monty((to_monty(a)).pow_reduce(p - 2, BabyBearModulus));
+    let a_inv = from_monty((to_monty(a)).exp_reduce(p - 2, BabyBearModulus));
     assert_eq!(BabyBear::new(a).inv(), BabyBear::new(a_inv));
     assert_eq!(BabyBear::new(a) * BabyBear::new(a_inv), BabyBear::one());
 
@@ -316,7 +316,7 @@ fn goldilocks_test() {
     // div
     let a = rng.sample(distr);
     let b = rng.sample(distr);
-    let b_inv = to_canonical_u64(b.pow_reduce(p - 2, GoldilocksModulus));
+    let b_inv = to_canonical_u64(b.exp_reduce(p - 2, GoldilocksModulus));
     let c = ((a as u128 * b_inv as u128) % (p as u128)) as u64;
     assert_eq!(Goldilocks::new(a) / Goldilocks::new(b), Goldilocks::new(c));
 
@@ -335,7 +335,7 @@ fn goldilocks_test() {
 
     // inv
     let a = rng.sample(distr);
-    let a_inv = to_canonical_u64(a.pow_reduce(p - 2, GoldilocksModulus));
+    let a_inv = to_canonical_u64(a.exp_reduce(p - 2, GoldilocksModulus));
     assert_eq!(Goldilocks::new(a).inv(), Goldilocks::new(a_inv));
     assert_eq!(
         Goldilocks::new(a) * Goldilocks::new(a_inv),

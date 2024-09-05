@@ -79,11 +79,11 @@ impl MulReduceAssign<BabyBearModulus> for u32 {
     }
 }
 
-impl<E> PowReduce<BabyBearModulus, E> for u32
+impl<E> ExpReduce<BabyBearModulus, E> for u32
 where
     E: PrimInt + ShrAssign<u32> + Bits,
 {
-    fn pow_reduce(self, mut exp: E, _: BabyBearModulus) -> Self {
+    fn exp_reduce(self, mut exp: E, _: BabyBearModulus) -> Self {
         if exp.is_zero() {
             return 1;
         }
@@ -113,6 +113,19 @@ where
             }
         }
         intermediate
+    }
+}
+
+impl ExpPowOf2Reduce<BabyBearModulus> for u32 {
+    #[inline]
+    fn exp_power_of_2_reduce(self, exp_log: u32, _modulus: BabyBearModulus) -> Self {
+        let mut power: Self = self;
+
+        for _ in 0..exp_log {
+            power = power.mul_reduce(power, BabyBearModulus);
+        }
+
+        power
     }
 }
 

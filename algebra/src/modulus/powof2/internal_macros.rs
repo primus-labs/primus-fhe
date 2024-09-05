@@ -91,11 +91,11 @@ macro_rules! impl_powof2_modulus {
             }
         }
 
-        impl<E> $crate::reduce::PowReduce<PowOf2Modulus<Self>, E> for $SelfT
+        impl<E> $crate::reduce::ExpReduce<PowOf2Modulus<Self>, E> for $SelfT
         where
             E: ::num_traits::PrimInt + ::std::ops::ShrAssign<u32> + $crate::Bits,
         {
-            fn pow_reduce(self, mut exp: E, modulus: PowOf2Modulus<Self>) -> Self {
+            fn exp_reduce(self, mut exp: E, modulus: PowOf2Modulus<Self>) -> Self {
                 use $crate::reduce::MulReduce;
                 if exp.is_zero() {
                     return 1;
@@ -126,6 +126,20 @@ macro_rules! impl_powof2_modulus {
                     }
                 }
                 intermediate
+            }
+        }
+
+        impl $crate::reduce::ExpPowOf2Reduce<PowOf2Modulus<Self>> for $SelfT {
+            #[inline]
+            fn exp_power_of_2_reduce(self, exp_log: u32, modulus: PowOf2Modulus<Self>) -> Self {
+                use $crate::reduce::MulReduce;
+                let mut power: Self = self;
+
+                for _ in 0..exp_log {
+                    power = power.mul_reduce(power, modulus);
+                }
+
+                power
             }
         }
 

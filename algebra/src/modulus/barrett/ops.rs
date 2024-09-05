@@ -4,9 +4,9 @@ use num_traits::{One, PrimInt};
 
 use crate::modulus::BarrettModulus;
 use crate::reduce::{
-    AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, InvReduceAssign,
-    LazyMulReduce, LazyMulReduceAssign, LazyReduce, MulReduce, MulReduceAssign, NegReduce,
-    NegReduceAssign, PowReduce, Reduce, SubReduce, SubReduceAssign,
+    AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, ExpPowOf2Reduce, ExpReduce, InvReduce,
+    InvReduceAssign, LazyMulReduce, LazyMulReduceAssign, LazyReduce, MulReduce, MulReduceAssign,
+    NegReduce, NegReduceAssign, Reduce, SubReduce, SubReduceAssign,
 };
 use crate::{Bits, Widening};
 
@@ -100,12 +100,12 @@ where
     }
 }
 
-impl<T, E> PowReduce<BarrettModulus<T>, E> for T
+impl<T, E> ExpReduce<BarrettModulus<T>, E> for T
 where
     T: Copy + One + PartialOrd + MulReduce<BarrettModulus<T>, Output = T>,
     E: PrimInt + ShrAssign<u32> + Bits,
 {
-    fn pow_reduce(self, mut exp: E, modulus: BarrettModulus<T>) -> Self {
+    fn exp_reduce(self, mut exp: E, modulus: BarrettModulus<T>) -> Self {
         if exp.is_zero() {
             return Self::one();
         }
@@ -135,6 +135,22 @@ where
             }
         }
         intermediate
+    }
+}
+
+impl<T> ExpPowOf2Reduce<BarrettModulus<T>> for T
+where
+    T: Copy + One + PartialOrd + MulReduce<BarrettModulus<T>, Output = T>,
+{
+    #[inline]
+    fn exp_power_of_2_reduce(self, exp_log: u32, modulus: BarrettModulus<T>) -> Self {
+        let mut power: Self = self;
+
+        for _ in 0..exp_log {
+            power = power.mul_reduce(power, modulus);
+        }
+
+        power
     }
 }
 
@@ -228,7 +244,7 @@ mod tests {
             let base = rng.sample(distr);
             let exp = random();
 
-            assert_eq!(simple_pow(base, exp, P), base.pow_reduce(exp, modulus));
+            assert_eq!(simple_pow(base, exp, P), base.exp_reduce(exp, modulus));
         }
     }
 
