@@ -20,6 +20,7 @@
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
 use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
+use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
 };
@@ -36,7 +37,6 @@ use pcs::{
     PolynomialCommitmentScheme,
 };
 use serde::{Deserialize, Serialize};
-use sha2::digest::typenum::Sum;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
@@ -294,7 +294,9 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
-    pub fn prove(instance: &DecomposedBits<F>) -> (Proof<F>, ProverState<F>, PolynomialInfo) {
+    pub fn prove(instance: &DecomposedBits<F>) -> SumcheckKit<F>
+// (Proof<F>, ProverState<F>, PolynomialInfo)
+    {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -308,7 +310,15 @@ impl<F: Field + Serialize> BitDecomposition<F> {
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
-        (proof, state, poly.info())
+
+        SumcheckKit {
+            proof,
+            randomness: state.randomness,
+            claimed_sum: F::zero(),
+            info: poly.info(),
+            u,
+        }
+        // (proof, state, poly.info())
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
@@ -344,8 +354,9 @@ impl<F: Field + Serialize> BitDecomposition<F> {
 
     /// Verify bit decomposition given the basic information of decomposed bits as verifier key.
     pub fn verify(
-        proof: &Proof<F>,
-        poly_info: &PolynomialInfo,
+        wrapper: &ProofWrapper<F>,
+        // proof: &Proof<F>,
+        // poly_info: &PolynomialInfo,
         evals: &DecomposedBitsEval<F>,
         info: &DecomposedBitsInfo<F>,
     ) -> bool {
@@ -363,7 +374,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         );
 
         let mut subclaim =
-            MLSumcheck::verify_as_subprotocol(&mut trans, &poly_info, F::zero(), &proof)
+            MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
                 .expect("fail to verify the sumcheck protocol");
 
         if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, &u) {

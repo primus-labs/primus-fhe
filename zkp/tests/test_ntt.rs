@@ -1,13 +1,22 @@
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT}, BabyBear, BabyBearExetension, DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension, NTTPolynomial
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
+    utils::Transcript,
+    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
+    FieldUniformSampler, MultilinearExtension, NTTPolynomial,
 };
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use num_traits::{One, Zero};
+use pcs::{
+    multilinear::brakedown::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+    PolynomialCommitmentScheme,
+};
 use rand::prelude::*;
 use rand_distr::Distribution;
+use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::ntt::ntt_bare::init_fourier_table;
+use zkp::piop::ntt::{ntt_bare::init_fourier_table, NTTInstances, NTTSnarks};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
@@ -20,8 +29,10 @@ pub struct Fq(u32);
 
 // field type
 type FF = BabyBear;
-type PolyFF = Polynomial<FF>;
 type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
+type PolyFF = Polynomial<FF>;
 
 fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtension<FF> {
     let m = 1 << (log_n + 1);
@@ -130,6 +141,26 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
     ntt_form
 }
 
+fn generate_single_instance<R: Rng + CryptoRng>(
+    instances: &mut NTTInstances<FF>,
+    log_n: usize,
+    rng: &mut R,
+) {
+    let coeff = PolyFF::random(1 << log_n, rng).data();
+    let point = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n,
+        ntt_transform_normal_order(log_n as u32, &coeff)
+            .iter()
+            .map(|x| FF::new(x.value()))
+            .collect(),
+    ));
+    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n,
+        coeff.iter().map(|x| FF::new(x.value())).collect(),
+    ));
+    instances.add_ntt(&coeff, &point);
+}
+
 #[test]
 fn test_reverse_bits() {
     assert_eq!(2, reverse_bits(4, 4));
@@ -194,17 +225,13 @@ fn test_ntt_bare_without_delegation() {
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
 
-    let (proof, state, poly_info, mut claimed_sum, evals_at_u) = NTTBareIOP::prove(&ntt_instance);
-    let evals_at_r = ntt_instance.coeffs.evaluate(&state.randomness);
+    let kit = NTTBareIOP::prove(&ntt_instance);
+    let evals_at_u = ntt_instance.points.evaluate(&kit.u);
+    let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
 
-    let check = NTTBareIOP::verify(
-        &proof,
-        &poly_info,
-        &mut claimed_sum,
-        evals_at_r,
-        evals_at_u,
-        &ntt_instance_info,
-    );
+    let mut wrapper = kit.extract();
+
+    let check = NTTBareIOP::verify(&mut wrapper, evals_at_r, evals_at_u, &ntt_instance_info);
     assert!(check);
 }
 
@@ -236,17 +263,13 @@ fn test_ntt_bare_without_delegation_extension_field() {
     let instance_ef = ntt_instance.to_ef::<EF>();
     let ntt_instance_info = instance_ef.info();
 
-    let (proof, state, poly_info, mut claimed_sum, evals_at_u) = NTTBareIOP::prove(&instance_ef);
-    let evals_at_r = ntt_instance.coeffs.evaluate_ext(&state.randomness);
+    let kit = NTTBareIOP::<EF>::prove(&instance_ef);
+    let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
+    let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
 
-    let check = NTTBareIOP::verify(
-        &proof,
-        &poly_info,
-        &mut claimed_sum,
-        evals_at_r,
-        evals_at_u,
-        &ntt_instance_info,
-    );
+    let mut wrapper = kit.extract();
+
+    let check = NTTBareIOP::<EF>::verify(&mut wrapper, evals_at_r, evals_at_u, &ntt_instance_info);
     assert!(check);
 }
 
@@ -276,15 +299,21 @@ fn test_ntt_with_delegation() {
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
 
-    let (proof, state, poly_info, mut claimed_sum, recursive_proof, evals_at_u) =
-        NTTIOP::prove(&ntt_instance);
-    let evals_at_r = ntt_instance.coeffs.evaluate(&state.randomness);
+    let (kit, recursive_proof) = NTTIOP::prove(&ntt_instance);
+    let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
+    let evals_at_u = ntt_instance.points.evaluate(&kit.u);
 
-    let check = NTTIOP::verify(&proof, &poly_info, &mut claimed_sum, evals_at_r, evals_at_u, &ntt_instance_info, &recursive_proof);
+    let mut wrapper = kit.extract();
+
+    let check = NTTIOP::verify(
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+        &recursive_proof,
+    );
     assert!(check);
 }
-
-
 
 #[test]
 fn test_ntt_with_delegation_extension_field() {
@@ -314,63 +343,48 @@ fn test_ntt_with_delegation_extension_field() {
     let instance_ef = ntt_instance.to_ef::<EF>();
     let ntt_instance_info = instance_ef.info();
 
-    let (proof, state, poly_info, mut claimed_sum, recursive_proof, evals_at_u) =
-        NTTIOP::prove(&instance_ef);
-    let evals_at_r = ntt_instance.coeffs.evaluate_ext(&state.randomness);
+    let (kit, recursive_proof) = NTTIOP::prove(&instance_ef);
+    let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
+    let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
 
-    let check = NTTIOP::verify(&proof, &poly_info, &mut claimed_sum, evals_at_r, evals_at_u, &ntt_instance_info, &recursive_proof);
+    let mut wrapper = kit.extract();
+    let check = NTTIOP::verify(
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+        &recursive_proof,
+    );
     assert!(check);
 }
 
-// #[test]
-// fn test_ntt_combined_with_delegation() {
-//     let log_n: usize = 5;
-//     let m = 1 << (log_n + 1);
-//     let mut ntt_table = Vec::with_capacity(m as usize);
-//     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-//     let mut power = FF::one();
-//     for _ in 0..m {
-//         ntt_table.push(power);
-//         power *= root;
-//     }
-//     let ntt_table = Rc::new(ntt_table);
+#[test]
+fn test_snarks() {
+    let num_vars = 10;
+    let num_ntt = 5;
+    let log_n: usize = num_vars;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
 
-//     let mut rng = thread_rng();
-//     let uniform = <FieldUniformSampler<FF>>::new();
-//     let mut coeff1 = PolyFF::random(1 << log_n, &mut rng);
-//     let points1 = DenseMultilinearExtension::from_evaluations_vec(
-//         log_n,
-//         ntt_transform_normal_order(log_n as u32, coeff1.as_ref()),
-//     );
+    let mut power = FF::one();
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+    let ntt_table = Rc::new(ntt_table);
 
-//     let mut coeff2 = PolyFF::random(1 << log_n, &mut rng);
-//     let points2 = DenseMultilinearExtension::from_evaluations_vec(
-//         log_n,
-//         ntt_transform_normal_order(log_n as u32, coeff2.as_ref()),
-//     );
+    let mut rng = thread_rng();
 
-//     let r_1 = uniform.sample(&mut rng);
-//     let r_2 = uniform.sample(&mut rng);
-//     coeff1.mul_scalar_assign(r_1);
-//     coeff2.mul_scalar_assign(r_2);
-//     let coeff = coeff1 + coeff2;
+    let mut ntt_instances = <NTTInstances<FF>>::new(num_vars, &ntt_table);
+    for _ in 0..num_ntt {
+        generate_single_instance(&mut ntt_instances, log_n, &mut rng);
+    }
 
-//     let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-//         log_n,
-//         coeff.data(),
-//     ));
-//     let mut points =
-//         <DenseMultilinearExtension<FF>>::from_evaluations_vec(log_n, vec![FF::zero(); 1 << log_n]);
-//     points += (r_1, &points1);
-//     points += (r_2, &points2);
-//     let points = Rc::new(points);
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
-//     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
-//     let ntt_instance_info = ntt_instance.info();
-
-//     let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-//     let proof = NTTIOP::prove(&ntt_instance, &u);
-//     let subclaim = NTTIOP::verify(&proof, &ntt_instance_info, &u);
-
-//     assert!(subclaim.verify_subcliam(&points, &coeff, &u, &ntt_instance_info));
-// }
+    <NTTSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &ntt_instances,
+        &code_spec,
+    );
+}

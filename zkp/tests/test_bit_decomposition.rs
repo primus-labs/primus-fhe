@@ -61,10 +61,11 @@ fn test_single_trivial_bit_decomposition_base_2() {
     prover_key.add_decomposed_bits_instance(&d, &d_bits);
     let info = prover_key.info();
 
-    let (proof, state, poly_info) = BitDecomposition::prove(&prover_key);
-    let evals = prover_key.evaluate(&state.randomness);
+    let kit = BitDecomposition::prove(&prover_key);
+    let evals = prover_key.evaluate(&kit.randomness);
 
-    let check = BitDecomposition::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = kit.extract();
+    let check = BitDecomposition::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -119,10 +120,11 @@ fn test_batch_trivial_bit_decomposition_base_2() {
 
     let info = instance.info();
 
-    let (proof, state, poly_info) = BitDecomposition::prove(&instance);
-    let evals = instance.evaluate(&state.randomness);
+    let kit = BitDecomposition::prove(&instance);
+    let evals = instance.evaluate(&kit.randomness);
 
-    let check = BitDecomposition::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = kit.extract();
+    let check = BitDecomposition::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -149,10 +151,11 @@ fn test_single_bit_decomposition() {
 
     let info = instance.info();
 
-    let (proof, state, poly_info) = BitDecomposition::prove(&instance);
-    let evals = instance.evaluate(&state.randomness);
+    let sumcheck_kit = BitDecomposition::prove(&instance);
+    let evals = instance.evaluate(&sumcheck_kit.randomness);
 
-    let check = BitDecomposition::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = sumcheck_kit.extract();
+    let check = BitDecomposition::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -204,10 +207,11 @@ fn test_batch_bit_decomposition() {
 
     let info = instance.info();
 
-    let (proof, state, poly_info) = BitDecomposition::prove(&instance);
-    let evals = instance.evaluate(&state.randomness);
+    let sumcheck_kit = BitDecomposition::prove(&instance);
+    let evals = instance.evaluate(&sumcheck_kit.randomness);
 
-    let check = BitDecomposition::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = sumcheck_kit.extract();
+    let check = BitDecomposition::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -235,10 +239,11 @@ fn test_single_bit_decomposition_extension_field() {
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
 
-    let (proof, state, poly_info) = BitDecomposition::<EF>::prove(&instance_ef);
-    let evals = instance.evaluate_ext(&state.randomness);
+    let kit = BitDecomposition::<EF>::prove(&instance_ef);
+    let evals = instance.evaluate_ext(&kit.randomness);
 
-    let check = BitDecomposition::<EF>::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = kit.extract();
+    let check = BitDecomposition::<EF>::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 

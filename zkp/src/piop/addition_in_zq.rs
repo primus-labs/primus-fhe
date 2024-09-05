@@ -11,6 +11,7 @@
 //!     and then, it can be proved with the sumcheck protocol where the maximum variable-degree is 3.
 //! 3. a(x) + b(x) = c(x) + k(x)\cdot q => can be reduced to the evaluation of a random point since the LHS and RHS are both MLE
 use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
+use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
 };
@@ -292,7 +293,9 @@ impl<F: Field + Serialize> AdditionInZq<F> {
     }
 
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
-    pub fn prove(instance: &AdditionInZqInstance<F>) -> (Proof<F>, ProverState<F>, PolynomialInfo) {
+    pub fn prove(instance: &AdditionInZqInstance<F>) -> SumcheckKit<F>
+// (Proof<F>, ProverState<F>, PolynomialInfo)
+    {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -305,7 +308,14 @@ impl<F: Field + Serialize> AdditionInZq<F> {
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
-        (proof, state, poly.info())
+        // (proof, state, poly.info())
+        SumcheckKit {
+            proof,
+            info: poly.info(),
+            claimed_sum: F::zero(),
+            randomness: state.randomness,
+            u,
+        }
     }
 
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
@@ -340,8 +350,9 @@ impl<F: Field + Serialize> AdditionInZq<F> {
 
     /// Verify addition in Zq
     pub fn verify(
-        proof: &Proof<F>,
-        poly_info: &PolynomialInfo,
+        wrapper: ProofWrapper<F>,
+        // proof: &Proof<F>,
+        // poly_info: &PolynomialInfo,
         evals: &AdditionInZqInstanceEval<F>,
         info: &AdditionInZqInstanceInfo<F>,
     ) -> bool {
@@ -359,7 +370,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         );
 
         let mut subclaim =
-            MLSumcheck::verify_as_subprotocol(&mut trans, &poly_info, F::zero(), &proof)
+            MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
                 .expect("fail to verify the sumcheck protocol");
 
         if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, &u) {
@@ -466,6 +477,7 @@ where
         // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let start = Instant::now();
         let evals = instance.evaluate_ext(&sumcheck_state.randomness);
+
         // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut requested_point = sumcheck_state.randomness.clone();
         requested_point.extend(&prover_trans.get_vec_challenge(
@@ -532,7 +544,6 @@ where
         assert!(check_oracle);
 
         // 3.5 Check the evaluation of a random point over the committed oracle
-
         let check_pcs = BrakedownPCS::<F, H, C, S, EF>::verify(
             &pp,
             &comm,
@@ -562,6 +573,6 @@ where
             pcs_open_time,
             pcs_verifier_time,
             pcs_proof_size,
-        )
+        );
     }
 }
