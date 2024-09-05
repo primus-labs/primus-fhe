@@ -119,7 +119,7 @@ pub trait ExpReduce<Modulus, Exponent> {
 
 /// The modular exponentiation.
 pub trait ExpPowOf2Reduce<Modulus> {
-    /// Calcualtes `self^(2^exp_log) (mod modulus)`.
+    /// Calculates `self^(2^exp_log) (mod modulus)`.
     fn exp_power_of_2_reduce(self, exp_log: u32, modulus: Modulus) -> Self;
 }
 
