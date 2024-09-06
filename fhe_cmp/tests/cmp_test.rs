@@ -1,7 +1,7 @@
 use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use fhe_cmp::{
-    compare::{decrypt, encrypt, HomCmpScheme},
-    parameters::{DEFAULT_PARAMERTERS, DELTA, HALF_DELTA},
+    compare::{decrypt, encrypt, HomeCmpScheme},
+    parameters::{DEFAULT_PARAMETERS, DELTA, HALF_DELTA},
 };
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::LWE;
@@ -10,12 +10,12 @@ use rand::prelude::*;
 #[test]
 fn test_gt_hcmp() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let x_hcmp_1 = rng.gen_range(1..1024);
     let y_hcmp_1 = rng.gen_range(0..x_hcmp_1);
     let x_hcmp_2 = rng.gen_range(1..1024);
@@ -63,12 +63,12 @@ fn test_gt_hcmp() {
 #[test]
 fn test_eq_hcmp() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let x_hcmp_1 = rng.gen_range(1..1024);
     let y_hcmp_1 = rng.gen_range(0..x_hcmp_1);
     let x_hcmp_2 = rng.gen_range(1..1024);
@@ -116,12 +116,12 @@ fn test_eq_hcmp() {
 #[test]
 fn test_lt_hcmp() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let x_hcmp_1 = rng.gen_range(1..1024);
     let y_hcmp_1 = rng.gen_range(0..x_hcmp_1);
     let x_hcmp_2 = rng.gen_range(1..1024);
@@ -169,11 +169,11 @@ fn test_lt_hcmp() {
 #[test]
 fn test_homand() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let poly_length = param.ring_dimension();
     let lwe_delta = lwe_generate(rlwe_sk, param.ring_dimension(), sampler, &mut rng, DELTA);
     let lwe_delta_neg = lwe_generate_neg(rlwe_sk, param.ring_dimension(), sampler, &mut rng, DELTA);
@@ -194,12 +194,12 @@ fn test_homand() {
 #[test]
 fn test_gt_arbhcmp() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let x_arbhcmp_1 = rng.gen();
     let y_arbhcmp_1 = rng.gen_range(0..x_arbhcmp_1);
     let x_arbhcmp_2 = rng.gen();
@@ -265,12 +265,12 @@ fn test_gt_arbhcmp() {
 #[test]
 fn test_eq_arbhcmp() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let x_arbhcmp_1 = rng.gen();
     let y_arbhcmp_1 = rng.gen_range(0..x_arbhcmp_1);
     let x_arbhcmp_2 = rng.gen();
@@ -333,12 +333,12 @@ fn test_eq_arbhcmp() {
 #[test]
 fn test_lt_arbhcmp() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let x_arbhcmp_1 = rng.gen();
     let y_arbhcmp_1 = rng.gen_range(0..x_arbhcmp_1);
     let x_arbhcmp_2 = rng.gen();

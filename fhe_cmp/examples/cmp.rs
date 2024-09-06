@@ -1,6 +1,6 @@
 use fhe_cmp::{
-    compare::{decrypt, encrypt, HomCmpScheme},
-    parameters::{DEFAULT_PARAMERTERS, DELTA, FF, HALF_DELTA},
+    compare::{decrypt, encrypt, HomeCmpScheme},
+    parameters::{DEFAULT_PARAMETERS, DELTA, FF, HALF_DELTA},
 };
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
@@ -8,13 +8,13 @@ use rand::prelude::*;
 use std::{cmp::Ordering, time::Instant};
 fn main() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let poly_length = param.ring_dimension();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     for i in 0..50 {
         let start = Instant::now();
         println!("{i}");
@@ -29,7 +29,7 @@ fn main() {
             sampler,
             &mut rng,
         );
-        let (lt, eq, gt) = join_bit_opearions(&value1, &value2, &rotationkey, poly_length);
+        let (lt, eq, gt) = join_bit_operations(&value1, &value2, &rotationkey, poly_length);
         let lt_value = decrypt(rlwe_sk, lt);
         let eq_value = decrypt(rlwe_sk, eq);
         let gt_value = decrypt(rlwe_sk, gt);
@@ -64,10 +64,10 @@ fn main() {
     }
 }
 
-fn join_bit_opearions(
+fn join_bit_operations(
     value1: &[RLWE<FF>],
     value2: &[NTTRGSW<FF>],
-    rotationkey: &HomCmpScheme<u64, FF>,
+    rotationkey: &HomeCmpScheme<u64, FF>,
     ring_dimension: usize,
 ) -> (LWE<FF>, LWE<FF>, LWE<FF>) {
     let mut ct_lt: Option<LWE<FF>> = None;
@@ -75,7 +75,7 @@ fn join_bit_opearions(
     let mut ct_gt: Option<LWE<FF>> = None;
     rayon::scope(|s| {
         s.spawn(|_| {
-            ct_lt = Some(HomCmpScheme::lt_arbhcmp(
+            ct_lt = Some(HomeCmpScheme::lt_arbhcmp(
                 rotationkey,
                 value1,
                 value2,
@@ -85,7 +85,7 @@ fn join_bit_opearions(
             ))
         });
         s.spawn(|_| {
-            ct_eq = Some(HomCmpScheme::eq_arbhcmp(
+            ct_eq = Some(HomeCmpScheme::eq_arbhcmp(
                 rotationkey,
                 value1,
                 value2,
@@ -94,7 +94,7 @@ fn join_bit_opearions(
             ))
         });
         s.spawn(|_| {
-            ct_gt = Some(HomCmpScheme::gt_arbhcmp(
+            ct_gt = Some(HomeCmpScheme::gt_arbhcmp(
                 rotationkey,
                 value1,
                 value2,

@@ -21,7 +21,7 @@ pub const DELTA: FF = FF((FP as f64 / FT as f64) as Inner);
 pub const HALF_DELTA: FF = FF((FP as f64 / (FT as f64 * 2.0)) as Inner);
 
 /// FF security default field
-pub static DEFAULT_PARAMERTERS: Lazy<Parameters<u64, FF>> = Lazy::new(|| {
+pub static DEFAULT_PARAMETERS: Lazy<Parameters<u64, FF>> = Lazy::new(|| {
     Parameters::<u64, FF>::new(ConstParameters {
         lwe_dimension: 1024,
         lwe_cipher_modulus: 2048,
