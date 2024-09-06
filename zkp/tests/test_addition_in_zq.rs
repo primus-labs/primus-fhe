@@ -72,10 +72,11 @@ fn test_trivial_addition_in_zq() {
 
     let info = instance.info();
 
-    let (proof, state, poly_info) = AdditionInZq::<FF>::prove(&instance);
-    let evals = instance.evaluate(&state.randomness);
+    let kit = AdditionInZq::<FF>::prove(&instance);
+    let evals = instance.evaluate(&kit.randomness);
 
-    let check = AdditionInZq::<FF>::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = kit.extract();
+    let check = AdditionInZq::<FF>::verify(&wrapper, &evals, &info);
 
     assert!(check);
 }
@@ -143,10 +144,11 @@ fn test_random_addition_in_zq() {
 
     let info = instance.info();
 
-    let (proof, state, poly_info) = AdditionInZq::<FF>::prove(&instance);
-    let evals = instance.evaluate(&state.randomness);
+    let kit = AdditionInZq::<FF>::prove(&instance);
+    let evals = instance.evaluate(&kit.randomness);
 
-    let check = AdditionInZq::<FF>::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = kit.extract();
+    let check = AdditionInZq::<FF>::verify(&wrapper, &evals, &info);
 
     assert!(check);
 }
@@ -215,10 +217,11 @@ fn test_random_addition_in_zq_extension_field() {
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
 
-    let (proof, state, poly_info) = AdditionInZq::<EF>::prove(&instance_ef);
-    let evals = instance.evaluate_ext(&state.randomness);
+    let kit = AdditionInZq::<EF>::prove(&instance_ef);
+    let evals = instance.evaluate_ext(&kit.randomness);
 
-    let check = AdditionInZq::<EF>::verify(&proof, &poly_info, &evals, &info);
+    let wrapper = kit.extract();
+    let check = AdditionInZq::<EF>::verify(&wrapper, &evals, &info);
 
     assert!(check);
 }

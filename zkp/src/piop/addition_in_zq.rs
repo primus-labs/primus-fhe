@@ -10,7 +10,7 @@
 //!     where u is the common random challenge from the verifier, used to instantiate the sum,
 //!     and then, it can be proved with the sumcheck protocol where the maximum variable-degree is 3.
 //! 3. a(x) + b(x) = c(x) + k(x)\cdot q => can be reduced to the evaluation of a random point since the LHS and RHS are both MLE
-use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
+use crate::sumcheck::{verifier::SubClaim, MLSumcheck, Proof};
 use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
@@ -143,13 +143,7 @@ impl<F: Field> AdditionInZqInstance<F> {
                 .iter()
                 .map(|bit| Rc::new(bit.to_ef()))
                 .collect(),
-            bits_info: DecomposedBitsInfo::<EF> {
-                base: EF::from_base(self.bits_info.base),
-                base_len: self.bits_info.base_len,
-                bits_len: self.bits_info.bits_len,
-                num_vars: self.bits_info.num_vars,
-                num_instances: self.bits_info.num_instances,
-            },
+            bits_info: self.bits_info.to_ef::<EF>(),
         }
     }
 
@@ -294,7 +288,6 @@ impl<F: Field + Serialize> AdditionInZq<F> {
 
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
     pub fn prove(instance: &AdditionInZqInstance<F>) -> SumcheckKit<F>
-// (Proof<F>, ProverState<F>, PolynomialInfo)
     {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
@@ -350,9 +343,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
 
     /// Verify addition in Zq
     pub fn verify(
-        wrapper: ProofWrapper<F>,
-        // proof: &Proof<F>,
-        // poly_info: &PolynomialInfo,
+        wrapper: &ProofWrapper<F>,
         evals: &AdditionInZqInstanceEval<F>,
         info: &AdditionInZqInstanceInfo<F>,
     ) -> bool {

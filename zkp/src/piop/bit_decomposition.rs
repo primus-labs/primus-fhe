@@ -106,6 +106,19 @@ impl<F: Field> fmt::Display for DecomposedBitsInfo<F> {
     }
 }
 
+impl<F: Field> DecomposedBitsInfo<F> {
+    /// Construct a EF version
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> DecomposedBitsInfo<EF> {
+        DecomposedBitsInfo::<EF> {
+            base: EF::from_base(self.base),
+            base_len: self.base_len,
+            bits_len: self.bits_len,
+            num_vars: self.num_vars,
+            num_instances: self.num_instances,
+        }
+    }
+}
+
 impl<F: Field> DecomposedBits<F> {
     #[inline]
     /// Extract the information of decomposed bits for verification
