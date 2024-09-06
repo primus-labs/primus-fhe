@@ -135,7 +135,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
     /// * Input: half_delta = plain_modulus / 16. (plain_modulus stands for ring_modulus)
     /// * Input: the size of RLWE and NTTRGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=-1.
-    pub fn greater_arbhcmp(
+    pub fn gt_arbhcmp(
         &self,
         cipher1: &[RLWE<F>],
         cipher2: &[NTTRGSW<F>],
@@ -235,7 +235,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Input: delta = plain_modulus / 8. (plain_modulus stands for ring_modulus)
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
-    pub fn equality_arbhcmp(
+    pub fn eq_arbhcmp(
         &self,
         cipher1: &[RLWE<F>],
         cipher2: &[NTTRGSW<F>],
@@ -286,7 +286,7 @@ impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
     /// * Input: half_delta = plain_modulus / 16.
     /// * Input: the size of RLWE and RGSW vector `poly_length`.
     /// * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=-1.
-    pub fn less_arbhcmp(
+    pub fn lt_arbhcmp(
         &self,
         cipher1: &[RLWE<F>],
         cipher2: &[NTTRGSW<F>],
@@ -551,4 +551,3 @@ pub fn ntt_rgsw_turn<F: NTTField>(
         poly_c.mul_scalar_assign(F::lazy_new(basis.basis()));
     });
 }
-

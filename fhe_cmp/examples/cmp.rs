@@ -75,7 +75,7 @@ fn join_bit_opearions(
     let mut ct_gt: Option<LWE<FF>> = None;
     rayon::scope(|s| {
         s.spawn(|_| {
-            ct_lt = Some(HomCmpScheme::less_arbhcmp(
+            ct_lt = Some(HomCmpScheme::lt_arbhcmp(
                 rotationkey,
                 value1,
                 value2,
@@ -85,7 +85,7 @@ fn join_bit_opearions(
             ))
         });
         s.spawn(|_| {
-            ct_eq = Some(HomCmpScheme::equality_arbhcmp(
+            ct_eq = Some(HomCmpScheme::eq_arbhcmp(
                 rotationkey,
                 value1,
                 value2,
@@ -94,7 +94,7 @@ fn join_bit_opearions(
             ))
         });
         s.spawn(|_| {
-            ct_gt = Some(HomCmpScheme::greater_arbhcmp(
+            ct_gt = Some(HomCmpScheme::gt_arbhcmp(
                 rotationkey,
                 value1,
                 value2,
