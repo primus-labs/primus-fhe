@@ -1,7 +1,7 @@
 use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use fhe_cmp::{
-    compare::{decrypt, encrypt, HomCmpScheme},
-    parameters::{DEFAULT_PARAMERTERS, DELTA, HALF_DELTA},
+    compare::{decrypt, encrypt, HomeCmpScheme},
+    parameters::{DEFAULT_PARAMETERS, DELTA, HALF_DELTA},
 };
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::LWE;
@@ -9,12 +9,12 @@ use rand::prelude::*;
 use std::cmp::Ordering;
 fn main() {
     let mut rng = thread_rng();
-    let param = *DEFAULT_PARAMERTERS;
+    let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
     let x = rng.gen_range(1025..100000);
     let y = rng.gen_range(1025..100000);
     let x_hcmp = rng.gen_range(0..1024);
@@ -109,7 +109,7 @@ fn main() {
     assert_eq!(output2, param.lwe_plain_modulus() - 1);
     assert_eq!(output3, param.lwe_plain_modulus() - 1);
     assert_eq!(output4, param.lwe_plain_modulus() - 1);
-    println!("fininsh homand test");
+    println!("finish homand test");
 }
 
 ///generate LWE ciphertext which encrypts 1
