@@ -21,13 +21,14 @@ use super::{DecomposedBits, DecomposedBitsInfo};
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::sumcheck::Proof;
-use crate::utils::eval_identity_function;
+use crate::utils::{eval_identity_function, print_statistic, verify_oracle_relation};
 use crate::utils::gen_identity_evaluations;
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
 use core::fmt;
+use std::time::Instant;
 use itertools::izip;
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
@@ -35,7 +36,7 @@ use pcs::{
     utils::hash::Hash,
     PolynomialCommitmentScheme,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::vec;
@@ -43,7 +44,7 @@ use std::vec;
 /// Round IOP
 pub struct RoundIOP<F: Field>(PhantomData<F>);
 /// SNARKs for Round compiled with PCS
-// pub struct RoundSnarks<F: Field>(PhantomData<F>, PhantomData<EF>);
+pub struct RoundSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
 
 /// Round Instance used as prover keys
 pub struct RoundInstance<F: Field> {
@@ -108,7 +109,7 @@ pub struct RoundInstanceInfo<F: Field> {
     pub offset_bits_info: DecomposedBitsInfo<F>,
 }
 
-impl<F: Field> fmt::Display for RoundInstance<F> {
+impl<F: Field> fmt::Display for RoundInstanceInfo<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
@@ -117,6 +118,7 @@ impl<F: Field> fmt::Display for RoundInstance<F> {
         )?;
         write!(f, "- containing ")?;
         self.output_bits_info.fmt(f)?;
+        write!(f, "\n- containing ")?;
         self.offset_bits_info.fmt(f)
     }
 }
@@ -642,3 +644,165 @@ impl<F: Field + Serialize> RoundIOP<F> {
 }
 
 
+impl<F, EF> RoundSnarks<F, EF>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+{
+    /// Complied with PCS to get SNARKs
+    pub fn snarks<H, C, S>(instance: &RoundInstance<F>, code_spec: &S)
+    where
+        H: Hash + Sync + Send,
+        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
+        S: LinearCodeSpec<F, Code = C> + Clone,
+    {
+        let instance_info = instance.info();
+        println!("Prove {instance_info}\n");
+        // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
+        let committed_poly = instance.generate_oracle();
+        // 1. Use PCS to commit the above polynomial.
+        let start = Instant::now();
+        let pp =
+            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
+        let setup_time = start.elapsed().as_millis();
+
+        let start = Instant::now();
+        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
+        let commit_time = start.elapsed().as_millis();
+
+        // 2. Prover generates the proof
+        let prover_start = Instant::now();
+        let mut iop_proof_size = 0;
+        let mut prover_trans = Transcript::<EF>::new();
+        // Convert the original instance into an instance defined over EF
+        let instance_ef = instance.to_ef::<EF>();
+        let instance_info = instance_ef.info();
+
+        // 2.1 Generate the random point to instantiate the sumcheck protocol
+        let prover_u = prover_trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+
+        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
+        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
+        let claimed_sum = EF::zero();
+        let randomness = RoundIOP::sample_coins(&mut prover_trans, &instance_ef);
+        RoundIOP::prove_as_subprotocol(
+            &randomness,
+            &mut sumcheck_poly,
+            &instance_ef,
+            &prover_u,
+        );
+
+        let poly_info = sumcheck_poly.info();
+
+        // 2.3 Generate proof of sumcheck protocol
+        let (sumcheck_proof, sumcheck_state) =
+            <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
+                .expect("Proof generated in Addition In Zq");
+        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
+        let iop_prover_time = prover_start.elapsed().as_millis();
+
+        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
+        let start = Instant::now();
+        let evals = instance.evaluate_ext(&sumcheck_state.randomness);
+
+        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut requested_point = sumcheck_state.randomness.clone();
+        requested_point.extend(&prover_trans.get_vec_challenge(
+            b"random linear combination for evaluations of oracles",
+            instance.log_num_oracles(),
+        ));
+        let oracle_eval = committed_poly.evaluate_ext(&requested_point);
+
+        // 2.6 Generate the evaluation proof of the requested point
+        let eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
+            &pp,
+            &comm,
+            &comm_state,
+            &requested_point,
+            &mut prover_trans,
+        );
+        let pcs_open_time = start.elapsed().as_millis();
+
+        // 3. Verifier checks the proof
+        let verifier_start = Instant::now();
+        let mut verifier_trans = Transcript::<EF>::new();
+
+        // 3.1 Generate the random point to instantiate the sumcheck protocol
+        let verifier_u = verifier_trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+
+        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
+        let randomness = verifier_trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            <RoundIOP<EF>>::num_coins(&instance_info),
+        );
+
+        // 3.3 Check the proof of the sumcheck protocol
+        let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
+            &mut verifier_trans,
+            &poly_info,
+            claimed_sum,
+            &sumcheck_proof,
+        )
+        .expect("Verify the proof generated in Bit Decompositon");
+
+        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
+        let check_subcliam = RoundIOP::<EF>::verify_as_subprotocol(
+            &randomness,
+            &mut subclaim,
+            &evals,
+            &instance_info,
+            &verifier_u,
+        );
+        assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
+        let iop_verifier_time = verifier_start.elapsed().as_millis();
+
+        // 3.5 and also check the relation between these small oracles and the committed oracle
+        let start = Instant::now();
+        let mut pcs_proof_size = 0;
+        let flatten_evals = evals.flatten();
+        let oracle_randomness = verifier_trans.get_vec_challenge(
+            b"random linear combination for evaluations of oracles",
+            evals.log_num_oracles(),
+        );
+        let check_oracle = verify_oracle_relation(&flatten_evals, oracle_eval, &oracle_randomness);
+        assert!(check_oracle);
+
+        // 3.5 Check the evaluation of a random point over the committed oracle
+        let check_pcs = BrakedownPCS::<F, H, C, S, EF>::verify(
+            &pp,
+            &comm,
+            &requested_point,
+            oracle_eval,
+            &eval_proof,
+            &mut verifier_trans,
+        );
+        assert!(check_pcs);
+        let pcs_verifier_time = start.elapsed().as_millis();
+        pcs_proof_size += bincode::serialize(&eval_proof).unwrap().len()
+            + bincode::serialize(&flatten_evals).unwrap().len();
+
+        // 4. print statistic
+        print_statistic(
+            iop_prover_time + pcs_open_time,
+            iop_verifier_time + pcs_verifier_time,
+            iop_proof_size + pcs_proof_size,
+            iop_prover_time,
+            iop_verifier_time,
+            iop_proof_size,
+            committed_poly.num_vars,
+            instance.num_oracles(),
+            instance.num_vars,
+            setup_time,
+            commit_time,
+            pcs_open_time,
+            pcs_verifier_time,
+            pcs_proof_size,
+        );
+    }
+}
