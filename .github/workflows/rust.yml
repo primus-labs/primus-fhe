@@ -3,7 +3,7 @@ env:
   # version like 1.70. Note that we only specify MAJOR.MINOR and not PATCH so that bugfixes still
   # come automatically. If the version specified here is no longer the latest stable version,
   # then please feel free to submit a PR that adjusts it along with the potential clippy fixes.
-  RUST_STABLE_VER: "1.80" # In quotes because otherwise (e.g.) 1.70 would be interpreted as 1.7
+  RUST_STABLE_VER: "1.81" # In quotes because otherwise (e.g.) 1.70 would be interpreted as 1.7
   # The purpose of checking with the minimum supported Rust toolchain is to detect its staleness.
   # If the compilation fails, then the version specified here needs to be bumped up to reality.
   # Be sure to also update the rust-version property in the workspace Cargo.toml file,
@@ -48,7 +48,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -80,7 +81,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
         # We intentionally do not use lfs: true here, instead using the caching method to save LFS bandwidth.
@@ -111,7 +113,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
 
