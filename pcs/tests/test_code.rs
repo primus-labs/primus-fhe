@@ -81,6 +81,7 @@ fn code_distance_test() {
         .for_each(|x| *x = rng.sample(field_distr));
 
     let mut target_1 = target_0.clone();
+    
     let check_times = 30;
     for _ in 0..check_times {
         target_1[0] += FF32::one();
@@ -95,3 +96,4 @@ fn code_distance_test() {
         assert!(num_real >= num_expected);
     }
 }
+
