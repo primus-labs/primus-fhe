@@ -1,8 +1,10 @@
+use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use fhe_cmp::{
-    compare::{decrypt, encrypt, lwe_generate, lwe_generate_neg, HomCmpScheme},
+    compare::{decrypt, encrypt, HomCmpScheme},
     parameters::{DEFAULT_PARAMERTERS, DELTA, HALF_DELTA},
 };
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
+use lattice::LWE;
 use rand::prelude::*;
 use std::cmp::Ordering;
 fn main() {
@@ -66,9 +68,9 @@ fn main() {
 
     //test arbhcmp
     println!("test arbhcmp");
-    let gt_cipher = rotationkey.greater_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
-    let eq_cipher = rotationkey.equality_arbhcmp(&value1, &value2, poly_length, DELTA);
-    let lt_cipher = rotationkey.less_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
+    let gt_cipher = rotationkey.gt_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
+    let eq_cipher = rotationkey.eq_arbhcmp(&value1, &value2, poly_length, DELTA);
+    let lt_cipher = rotationkey.lt_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
     let gt_value = decrypt(rlwe_sk, gt_cipher);
     let eq_value = decrypt(rlwe_sk, eq_cipher);
     let lt_value = decrypt(rlwe_sk, lt_cipher);
@@ -108,4 +110,48 @@ fn main() {
     assert_eq!(output3, param.lwe_plain_modulus() - 1);
     assert_eq!(output4, param.lwe_plain_modulus() - 1);
     println!("fininsh homand test");
+}
+
+///generate LWE ciphertext which encrypts 1
+pub fn lwe_generate<F, R>(
+    secret_key: &[F],
+    rlwe_dimension: usize,
+    error_sampler: FieldDiscreteGaussianSampler,
+    mut rng: R,
+    delta: F,
+) -> LWE<F>
+where
+    R: Rng + CryptoRng,
+    F: NTTField,
+{
+    let a = Polynomial::random(rlwe_dimension, &mut rng);
+    let a_mul_s = secret_key
+        .iter()
+        .zip(a.clone())
+        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
+    let mut e_a = error_sampler.sample(&mut rng);
+    e_a += a_mul_s + delta;
+    LWE::new(a.data(), e_a)
+}
+
+///generate LWE ciphertext which encrypts -1
+pub fn lwe_generate_neg<F, R>(
+    secret_key: &[F],
+    rlwe_dimension: usize,
+    error_sampler: FieldDiscreteGaussianSampler,
+    mut rng: R,
+    delta: F,
+) -> LWE<F>
+where
+    R: Rng + CryptoRng,
+    F: NTTField,
+{
+    let a = Polynomial::random(rlwe_dimension, &mut rng);
+    let a_mul_s = secret_key
+        .iter()
+        .zip(a.clone())
+        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
+    let mut e_a = error_sampler.sample(&mut rng);
+    e_a += a_mul_s - delta;
+    LWE::new(a.data(), e_a)
 }
