@@ -81,8 +81,8 @@ fn code_distance_test() {
         .for_each(|x| *x = rng.sample(field_distr));
 
     let mut target_1 = target_0.clone();
-    
-    let check_times = 30;
+
+    let check_times = 31;
     for _ in 0..check_times {
         target_1[0] += FF32::one();
         brakedown_code.encode(&mut target_0);
@@ -96,4 +96,3 @@ fn code_distance_test() {
         assert!(num_real >= num_expected);
     }
 }
-
