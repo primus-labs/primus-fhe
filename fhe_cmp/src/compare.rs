@@ -6,7 +6,7 @@ use fhe_core::{lwe_modulus_switch, LWEModulusType, Parameters, RLWEBlindRotation
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
 
-///the structrue of HomCompare's input
+/// The struct of homomorphic comparision scheme.
 pub struct HomCmpScheme<C: LWEModulusType, F: NTTField> {
     key: RLWEBlindRotationKey<F>,
     params: Parameters<C, F>,
@@ -14,7 +14,6 @@ pub struct HomCmpScheme<C: LWEModulusType, F: NTTField> {
     half_delta: F,
 }
 
-///the implementation of Compare, including comparison of greater, equality and less
 impl<C: LWEModulusType, F: NTTField> HomCmpScheme<C, F> {
     /// Create a new instance.
     pub fn new(key: RLWEBlindRotationKey<F>, params: Parameters<C, F>) -> Self {
@@ -553,46 +552,3 @@ pub fn ntt_rgsw_turn<F: NTTField>(
     });
 }
 
-///generate LWE ciphertext which encrypts 1
-pub fn lwe_generate<F, R>(
-    secret_key: &[F],
-    rlwe_dimension: usize,
-    error_sampler: FieldDiscreteGaussianSampler,
-    mut rng: R,
-    delta: F,
-) -> LWE<F>
-where
-    R: Rng + CryptoRng,
-    F: NTTField,
-{
-    let a = Polynomial::random(rlwe_dimension, &mut rng);
-    let a_mul_s = secret_key
-        .iter()
-        .zip(a.clone())
-        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
-    let mut e_a = error_sampler.sample(&mut rng);
-    e_a += a_mul_s + delta;
-    LWE::new(a.data(), e_a)
-}
-
-///generate LWE ciphertext which encrypts -1
-pub fn lwe_generate_neg<F, R>(
-    secret_key: &[F],
-    rlwe_dimension: usize,
-    error_sampler: FieldDiscreteGaussianSampler,
-    mut rng: R,
-    delta: F,
-) -> LWE<F>
-where
-    R: Rng + CryptoRng,
-    F: NTTField,
-{
-    let a = Polynomial::random(rlwe_dimension, &mut rng);
-    let a_mul_s = secret_key
-        .iter()
-        .zip(a.clone())
-        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
-    let mut e_a = error_sampler.sample(&mut rng);
-    e_a += a_mul_s - delta;
-    LWE::new(a.data(), e_a)
-}
