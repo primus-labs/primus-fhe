@@ -14,16 +14,7 @@ rand_distr = { workspace = true }
 rand_chacha = { workspace = true }
 num-traits = { workspace = true }
 once_cell = { workspace = true }
-serde = { workspace = true }
-itertools = { workspace = true }
-
-[dev-dependencies]
-criterion = { workspace = true }
-
-[[bench]]
-name = "range_check_lookup"
-harness = false
-
-[[bench]]
-name = "range_check_bit_decomposition"
-harness = false
+rand_distr = { workspace = true }
+rand_chacha = "0.3.1"
+serde = {workspace = true}
+itertools = "0.12.1"

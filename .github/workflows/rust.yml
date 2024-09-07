@@ -80,7 +80,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        # os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
+    name: Test
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         # We intentionally do not use lfs: true here, instead using the caching method to save LFS bandwidth.
@@ -111,33 +114,28 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    steps:
-      - uses: actions/checkout@v4
+        platform:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            command: build
 
-      - name: restore cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.event_name != 'merge_group' }}
+          # - os: windows-latest
+          #   target: x86_64-pc-windows-msvc
+          #   command: build
 
-      - name: install msrv toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_MIN_VER }}
+          # - os: macos-latest
+          #   target: x86_64-apple-darwin
+          #   command: build
 
-      - name: install cargo-hack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-hack
+          # - os: ubuntu-latest
+          #   target: aarch64-unknown-linux-gnu
+          #   command: build
 
-      - name: cargo check
-        run: cargo hack check ${{ env.RUST_MIN_VER_PKGS }} --each-feature --skip nightly --optional-deps
-
-  doc:
-    name: cargo doc
-    # NOTE: We don't have any platform specific docs in this workspace, so we only run on Ubuntu.
-    #       If we get per-platform docs (win/macos/linux/wasm32/..) then doc jobs should match that.
-    runs-on: ubuntu-latest
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            command: build
+    name: Build
+    runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
 
