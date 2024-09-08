@@ -51,10 +51,10 @@ fn test_round() {
 #[test]
 fn test_round_naive_iop() {
     let k = FF::new(FK);
-    let k_bits_len: u32 = LOG_FK;
+    let k_bits_len = LOG_FK as usize;
     let delta: FF = FF::new(DELTA);
 
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 2;
 
@@ -108,10 +108,10 @@ fn test_round_random_iop() {
     let uniform = <FieldUniformSampler<FF>>::new();
 
     let k = FF::new(FK);
-    let k_bits_len: u32 = LOG_FK;
+    let k_bits_len = LOG_FK as usize;
     let delta: FF = FF::new(DELTA);
 
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 10;
 
@@ -167,10 +167,10 @@ fn test_round_random_iop_extension_field() {
     let uniform = <FieldUniformSampler<FF>>::new();
 
     let k = FF::new(FK);
-    let k_bits_len: u32 = LOG_FK;
+    let k_bits_len = LOG_FK as usize;
     let delta: FF = FF::new(DELTA);
 
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 10;
 
@@ -230,7 +230,7 @@ fn test_snarks()
     let k = FF::new(FK);
     let delta: FF = FF::new(DELTA);
 
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 10;
 
@@ -247,7 +247,7 @@ fn test_snarks()
     let output_bits_info = DecomposedBitsInfo {
         base,
         base_len,
-        bits_len: LOG_FT,
+        bits_len: LOG_FT as usize,
         num_vars,
         num_instances: 1,
     };
@@ -255,7 +255,7 @@ fn test_snarks()
     let offset_bits_info = DecomposedBitsInfo {
         base,
         base_len,
-        bits_len: LOG_FK,
+        bits_len: LOG_FK as usize,
         num_vars,
         num_instances: 2,
     };

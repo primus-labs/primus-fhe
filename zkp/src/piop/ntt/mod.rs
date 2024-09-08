@@ -124,6 +124,17 @@ impl<F: Field> fmt::Display for NTTInstanceInfo<F> {
     }
 }
 
+impl<F: Field> NTTInstanceInfo<F> {
+    /// Convert to EF version
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> NTTInstanceInfo<EF> {
+        NTTInstanceInfo {
+            num_ntt: self.num_ntt,
+            num_vars: self.num_vars,
+            ntt_table: Rc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
+        }
+    }
+}
+
 /// store the intermediate mles generated in each iteration in the `init_fourier_table_overall` algorithm
 pub struct IntermediateMLEs<F: Field> {
     f_mles: Vec<Rc<DenseMultilinearExtension<F>>>,
@@ -420,7 +431,7 @@ impl<F: Field> NTTInstances<F> {
 
     /// Construct a random ntt instances from all the ntt instances to be proved, with randomness defined over Field
     #[inline]
-    pub fn to_basic(&self, randomness: &[F]) -> NTTInstance<F> {
+    pub fn extract_ntt_instance(&self, randomness: &[F]) -> NTTInstance<F> {
         assert_eq!(randomness.len(), self.num_ntt);
         let mut random_coeffs = <DenseMultilinearExtension<F>>::from_evaluations_vec(
             self.num_vars,
@@ -444,7 +455,7 @@ impl<F: Field> NTTInstances<F> {
 
     /// Construct a random ntt instances from all the ntt instances to be proved, with randomness defined over Extension Field
     #[inline]
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self, randomness: &[EF]) -> NTTInstance<EF> {
+    pub fn extract_ntt_instance_to_ef<EF: AbstractExtensionField<F>>(&self, randomness: &[EF]) -> NTTInstance<EF> {
         assert_eq!(randomness.len(), self.num_ntt);
         let mut random_coeffs = <DenseMultilinearExtension<EF>>::from_evaluations_vec(
             self.num_vars,
@@ -475,6 +486,19 @@ impl<F: Field> NTTInstances<F> {
 }
 
 impl<F: Field + Serialize> NTTIOP<F> {
+    /// sample the random coins before proving sumcheck protocol
+    pub fn sample_coins(trans: &mut Transcript<F>, num_ntt: usize) -> Vec<F> {
+        trans.get_vec_challenge(
+            b"randomness used to obtain the virtual random ntt instance",
+            num_ntt,
+        )
+    }
+
+    /// return the number of coins used in this IOP
+    pub fn num_coins(info: &NTTInstanceInfo<F>) -> usize {
+        info.num_ntt
+    }
+
     /// Prove NTT instance with delegation
     pub fn prove(instance: &NTTInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
         let mut trans = Transcript::new();
@@ -852,7 +876,7 @@ where
             b"randomness used to obtain the virtual random ntt instance",
             instance.num_ntt,
         );
-        let instance_ef = instance.to_ef::<EF>(&prover_r);
+        let instance_ef = instance.extract_ntt_instance_to_ef::<EF>(&prover_r);
         let instance_ef_info = instance_ef.info();
 
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol

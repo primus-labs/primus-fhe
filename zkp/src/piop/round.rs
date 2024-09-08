@@ -430,10 +430,11 @@ impl<F: Field + Serialize> RoundIOP<F> {
             b"random point used to instantiate sumcheck protocol",
             instance.num_vars,
         );
+        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let randomness = Self::sample_coins(&mut trans, &instance);
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &u);
+        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
@@ -452,7 +453,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &RoundInstance<F>,
-        u: &[F],
+        eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let (output_bits_instance, offset_bits_instance) = instance.extract_decomposed_bits();
         let output_bits_r_num = <BitDecomposition<F>>::num_coins(&instance.output_bits_info);
@@ -463,16 +464,15 @@ impl<F: Field + Serialize> RoundIOP<F> {
             &randomness[..output_bits_r_num],
             poly,
             &output_bits_instance,
-            u,
+            eq_at_u,
         );
         BitDecomposition::prove_as_subprotocol(
             &randomness[output_bits_r_num..output_bits_r_num + offset_bits_r_num],
             poly,
             &offset_bits_instance,
-            u,
+            eq_at_u,
         );
 
-        let identity_func_at_u = Rc::new(gen_identity_evaluations(u));
         let lambda_1 = randomness[randomness.len() - 4];
         let lambda_2 = randomness[randomness.len() - 3];
         let r_1 = randomness[randomness.len() - 2];
@@ -480,7 +480,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // 2. add sumcheck1 for \sum_{x} eq(u, x) * w(x) * (1-w(x)) = 0, i.e. w(x)\in\{0,1\}^l with random coefficient r_1
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(&eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.option),
             ],
@@ -499,7 +499,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * w(x) * (a(x) * \lambda_1)
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(&eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.input),
             ],
@@ -513,7 +513,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * w(x) * (b(x) * \lambda_2)
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(&eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.output),
             ],
@@ -527,7 +527,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * (1 - w(x)) * a(x)
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(&eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.input),
             ],
@@ -541,7 +541,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * (1 - w(x)) * (-k * b(x))
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(&eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.output),
             ],
@@ -555,7 +555,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * (1 - w(x)) * (-c(x))
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&identity_func_at_u),
+                Rc::clone(&eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.offset),
             ],
@@ -590,8 +590,9 @@ impl<F: Field + Serialize> RoundIOP<F> {
         let mut subclaim =
             MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
                 .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
 
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, &u) {
+        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
             return false;
         }
 
@@ -604,7 +605,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         subclaim: &mut SubClaim<F>,
         evals: &RoundInstanceEval<F>,
         info: &RoundInstanceInfo<F>,
-        u: &[F],
+        eq_at_u_r: F,
     ) -> bool {
         let (output_bits_evals, offset_bits_evals) = evals.extract_decomposed_bits();
         let output_bits_r_num = <BitDecomposition<F>>::num_coins(&info.output_bits_info);
@@ -615,14 +616,14 @@ impl<F: Field + Serialize> RoundIOP<F> {
             subclaim,
             &output_bits_evals,
             &info.output_bits_info,
-            u,
+            eq_at_u_r,
         );
         let check_offset_bits = <BitDecomposition<F>>::verify_as_subprotocol(
             &randomness[output_bits_r_num..output_bits_r_num + offset_bits_r_num],
             subclaim,
             &offset_bits_evals,
             &info.offset_bits_info,
-            u,
+            eq_at_u_r,
         );
         if !(check_output_bits && check_offset_bits) {
             return false;
@@ -631,12 +632,11 @@ impl<F: Field + Serialize> RoundIOP<F> {
         let lambda_2 = randomness[randomness.len() - 3];
         let r_1 = randomness[randomness.len() - 2];
         let r_2 = randomness[randomness.len() - 1];
-        let eq_eval = eval_identity_function(u, &subclaim.point);
 
         // check 2: check the subclaim returned from the sumcheck protocol
-        subclaim.expected_evaluations -= r_1 * eq_eval * evals.option * (F::one() - evals.option);
+        subclaim.expected_evaluations -= r_1 * eq_at_u_r * evals.option * (F::one() - evals.option);
         subclaim.expected_evaluations -= r_2
-            * eq_eval
+            * eq_at_u_r
             * (evals.option * (evals.input * lambda_1 + evals.output * lambda_2)
                 + (F::one() - evals.option) * (evals.input - evals.output * info.k - evals.offset));
         true
@@ -683,6 +683,7 @@ where
             b"random point used to instantiate sumcheck protocol",
             instance.num_vars,
         );
+        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
 
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
@@ -692,7 +693,7 @@ where
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
-            &prover_u,
+            &eq_at_u,
         );
 
         let poly_info = sumcheck_poly.info();
@@ -750,6 +751,7 @@ where
             &sumcheck_proof,
         )
         .expect("Verify the proof generated in Bit Decompositon");
+        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
         let check_subcliam = RoundIOP::<EF>::verify_as_subprotocol(
@@ -757,7 +759,7 @@ where
             &mut subclaim,
             &evals,
             &instance_info,
-            &verifier_u,
+            eq_at_u_r,
         );
         assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
         let iop_verifier_time = verifier_start.elapsed().as_millis();

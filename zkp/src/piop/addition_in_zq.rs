@@ -79,6 +79,18 @@ pub struct AdditionInZqInstanceInfo<F: Field> {
     pub bits_info: DecomposedBitsInfo<F>,
 }
 
+impl<F: Field> fmt::Display for AdditionInZqInstanceInfo<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "An instance of Addition In Zq: #vars = {}, q = {}",
+            self.num_vars, self.q,
+        )?;
+        write!(f, "- containing ")?;
+        self.bits_info.fmt(f)
+    }
+}
+
 impl<F: Field> AdditionInZqInstance<F> {
     /// Extract the information of addition in Zq for verification
     #[inline]
@@ -93,7 +105,6 @@ impl<F: Field> AdditionInZqInstance<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
-        // number of value oracle + number of decomposed bits oracle
         assert_eq!(self.abc.len(), 3);
         assert_eq!(self.abc_bits.len(), 3 * self.bits_info.bits_len as usize);
         self.abc.len() + 1 + self.abc_bits.len()
@@ -192,18 +203,6 @@ impl<F: Field> AdditionInZqInstance<F> {
     }
 }
 
-impl<F: Field> fmt::Display for AdditionInZqInstanceInfo<F> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "An instance of Addition In Zq: #vars = {}, q = {}",
-            self.num_vars, self.q,
-        )?;
-        write!(f, "- containing ")?;
-        self.bits_info.fmt(f)
-    }
-}
-
 impl<F: Field> AdditionInZqInstanceEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
@@ -274,7 +273,6 @@ impl<F: Field + Serialize> AdditionInZq<F> {
     /// sample coins before proving sumcheck protocol
     pub fn sample_coins(trans: &mut Transcript<F>, instance: &AdditionInZqInstance<F>) -> Vec<F> {
         let bits_instance = instance.extract_decomposed_bits();
-        // batch `len_bits` sumcheck protocols into one with random linear combination
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
             <BitDecomposition<F>>::num_coins(&bits_instance.info()) + 1,
@@ -297,7 +295,8 @@ impl<F: Field + Serialize> AdditionInZq<F> {
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let randomness = Self::sample_coins(&mut trans, &instance);
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &u);
+        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
+        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
@@ -316,19 +315,19 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &AdditionInZqInstance<F>,
-        u: &[F],
+        eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let bits_instance = instance.extract_decomposed_bits();
         let bits_info = bits_instance.info();
         let bits_r_num = <BitDecomposition<F>>::num_coins(&bits_info);
         // 1. add products of poly used to prove decomposition
-        BitDecomposition::prove_as_subprotocol(&randomness[..bits_r_num], poly, &bits_instance, u);
+        BitDecomposition::prove_as_subprotocol(&randomness[..bits_r_num], poly, &bits_instance, eq_at_u);
 
         // 2. sumcheck for \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l
         let coin = randomness[randomness.len() - 1];
         poly.add_product_with_linear_op(
             [
-                Rc::new(gen_identity_evaluations(u)),
+                Rc::clone(eq_at_u),
                 Rc::clone(&instance.k),
                 Rc::clone(&instance.k),
             ],
@@ -363,8 +362,9 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         let mut subclaim =
             MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
                 .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
 
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, &u) {
+        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
             return false;
         }
 
@@ -377,7 +377,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         subclaim: &mut SubClaim<F>,
         evals: &AdditionInZqInstanceEval<F>,
         info: &AdditionInZqInstanceInfo<F>,
-        u: &[F],
+        eq_at_u_r: F,
     ) -> bool {
         // check 1: Verify the range check part in the sumcheck polynomial
         let bits_evals = evals.extract_decomposed_bits();
@@ -387,7 +387,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
             subclaim,
             &bits_evals,
             &info.bits_info,
-            u,
+            eq_at_u_r,
         );
         if !check_decomposed_bits {
             return false;
@@ -400,7 +400,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         // check 3: Verify the newly added part in the sumcheck polynomial
         let coin = randomness[randomness.len() - 1];
         subclaim.expected_evaluations -=
-            coin * eval_identity_function(u, &subclaim.point) * evals.k * (F::one() - evals.k);
+            coin * eq_at_u_r * evals.k * (F::one() - evals.k);
         true
     }
 }
@@ -444,6 +444,7 @@ where
             b"random point used to instantiate sumcheck protocol",
             instance.num_vars,
         );
+        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
 
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
@@ -453,7 +454,7 @@ where
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
-            &prover_u,
+            &eq_at_u,
         );
 
         let poly_info = sumcheck_poly.info();
@@ -511,6 +512,7 @@ where
             &sumcheck_proof,
         )
         .expect("Verify the proof generated in Bit Decompositon");
+        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
         let check_subcliam = AdditionInZq::<EF>::verify_as_subprotocol(
@@ -518,7 +520,7 @@ where
             &mut subclaim,
             &evals,
             &instance_info,
-            &verifier_u,
+            eq_at_u_r,
         );
         assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
         let iop_verifier_time = verifier_start.elapsed().as_millis();

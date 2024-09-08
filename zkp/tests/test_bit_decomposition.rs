@@ -17,7 +17,7 @@ use std::time::Instant;
 use std::vec;
 use zkp::piop::{BitDecomposition, BitDecompositionSnarks, DecomposedBits};
 use zkp::sumcheck::MLSumcheck;
-use zkp::utils::{print_statistic, verify_oracle_relation};
+use zkp::utils::{eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -35,9 +35,9 @@ macro_rules! field_vec {
 
 #[test]
 fn test_single_trivial_bit_decomposition_base_2() {
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = 2;
+    let bits_len = 2;
     let num_vars = 2;
 
     let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
@@ -71,9 +71,9 @@ fn test_single_trivial_bit_decomposition_base_2() {
 
 #[test]
 fn test_batch_trivial_bit_decomposition_base_2() {
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = 2;
+    let bits_len = 2;
     let num_vars = 2;
 
     let d = vec![
@@ -130,9 +130,9 @@ fn test_batch_trivial_bit_decomposition_base_2() {
 
 #[test]
 fn test_single_bit_decomposition() {
-    let base_len: u32 = 4;
+    let base_len = 4 as usize;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
 
     let mut rng = thread_rng();
@@ -161,9 +161,9 @@ fn test_single_bit_decomposition() {
 
 #[test]
 fn test_batch_bit_decomposition() {
-    let base_len: u32 = 4;
+    let base_len = 4;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
 
     let mut rng = thread_rng();
@@ -217,9 +217,9 @@ fn test_batch_bit_decomposition() {
 
 #[test]
 fn test_single_bit_decomposition_extension_field() {
-    let base_len: u32 = 4;
+    let base_len = 4;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
 
     let mut rng = thread_rng();
@@ -249,9 +249,9 @@ fn test_single_bit_decomposition_extension_field() {
 
 #[test]
 fn test_snarks() {
-    let base_len: u32 = 4;
+    let base_len = 4;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
 
     let mut rng = thread_rng();
@@ -304,6 +304,7 @@ fn test_snarks() {
         b"random point used to instantiate sumcheck protocol",
         instance.num_vars,
     );
+    let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
 
     // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
     let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
@@ -314,7 +315,7 @@ fn test_snarks() {
         &randomness,
         &mut sumcheck_poly,
         &instance_ef,
-        &prover_u,
+        &eq_at_u,
     );
     let poly_info = sumcheck_poly.info();
 
@@ -371,6 +372,7 @@ fn test_snarks() {
         &sumcheck_proof,
     )
     .expect("Verify the proof generated in Bit Decompositon");
+    let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
     // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
     let check_subcliam = BitDecomposition::<EF>::verify_as_subprotocol(
@@ -378,7 +380,7 @@ fn test_snarks() {
         &mut subclaim,
         &evals,
         &instance_info,
-        &verifier_u,
+        eq_at_u_r,
     );
     assert!(check_subcliam && subclaim.expected_evaluations == ef_zero);
     let iop_verifier_time = verifier_start.elapsed().as_millis();
@@ -429,9 +431,9 @@ fn test_snarks() {
 
 #[test]
 fn test_snarks_interface() {
-    let base_len: u32 = 4;
+    let base_len = 4;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
 
     let mut rng = thread_rng();

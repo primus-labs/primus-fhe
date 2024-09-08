@@ -38,10 +38,10 @@ macro_rules! field_vec {
 #[test]
 fn test_trivial_addition_in_zq() {
     let q = FF::new(9);
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(2);
     let num_vars = 2;
-    let bits_len: u32 = 4;
+    let bits_len = 4;
     let abc = vec![
         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
@@ -87,9 +87,9 @@ fn test_random_addition_in_zq() {
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
-    let base_len: u32 = 3;
+    let base_len = 3;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<Fq>>::new(base_len as u32).decompose_len();
 
     // Addition in Zq
     let a: Vec<_> = (0..(1 << num_vars))
@@ -159,9 +159,9 @@ fn test_random_addition_in_zq_extension_field() {
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
-    let base_len: u32 = 3;
+    let base_len = 3;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<Fq>>::new(base_len as u32).decompose_len();
 
     // Addition in Zq
     let a: Vec<_> = (0..(1 << num_vars))
@@ -232,9 +232,9 @@ fn test_snarks() {
     let uniform_fq = <FieldUniformSampler<Fq>>::new();
     let num_vars = 10;
     let q = FF::new(Fq::MODULUS_VALUE);
-    let base_len: u32 = 3;
+    let base_len = 3;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<Fq>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<Fq>>::new(base_len as u32).decompose_len();
 
     // Addition in Zq
     let a: Vec<_> = (0..(1 << num_vars))

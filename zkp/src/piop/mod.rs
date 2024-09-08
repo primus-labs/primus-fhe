@@ -3,7 +3,7 @@
 pub mod addition_in_zq;
 pub mod bit_decomposition;
 pub mod ntt;
-// pub mod rlwe_mul_rgsw;
+pub mod rlwe_mul_rgsw;
 pub mod round;
 // pub mod zq_to_rq;
 
@@ -14,5 +14,5 @@ pub use bit_decomposition::{
 };
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
-// pub use rlwe_mul_rgsw::{RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance};
+pub use rlwe_mul_rgsw::{RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance};
 pub use round::{RoundIOP, RoundInstance};

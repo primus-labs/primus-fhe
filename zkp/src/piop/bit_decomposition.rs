@@ -58,9 +58,9 @@ pub struct DecomposedBits<F: Field> {
     /// base
     pub base: F,
     /// the length of base, i.e. log_2(base)
-    pub base_len: u32,
+    pub base_len: usize,
     /// the length of decomposed bits
-    pub bits_len: u32,
+    pub bits_len: usize,
     /// number of variables of every polynomial
     pub num_vars: usize,
     /// batched values to be decomposed into bits
@@ -87,9 +87,9 @@ pub struct DecomposedBitsInfo<F: Field> {
     /// base
     pub base: F,
     /// the length of base, i.e. log_2(base)
-    pub base_len: u32,
+    pub base_len: usize,
     /// the length of decomposed bits (denoted by l)
-    pub bits_len: u32,
+    pub bits_len: usize,
     /// number of variables of every polynomial
     pub num_vars: usize,
     /// number of instances
@@ -134,7 +134,7 @@ impl<F: Field> DecomposedBits<F> {
 
     /// Initiate the polynomial used for sumcheck protocol
     #[inline]
-    pub fn new(base: F, base_len: u32, bits_len: u32, num_vars: usize) -> Self {
+    pub fn new(base: F, base_len: usize, bits_len: usize, num_vars: usize) -> Self {
         DecomposedBits {
             base,
             base_len,
@@ -308,7 +308,6 @@ impl<F: Field + Serialize> BitDecomposition<F> {
 
     /// Prove bit decomposition given the decomposed bits as prover key.
     pub fn prove(instance: &DecomposedBits<F>) -> SumcheckKit<F>
-// (Proof<F>, ProverState<F>, PolynomialInfo)
     {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
@@ -319,7 +318,8 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         // randomness to combine sumcheck protocols
         let randomness = Self::sample_coins(&mut trans, &instance);
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &u);
+        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
+        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
@@ -331,7 +331,6 @@ impl<F: Field + Serialize> BitDecomposition<F> {
             info: poly.info(),
             u,
         }
-        // (proof, state, poly.info())
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
@@ -341,18 +340,16 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &DecomposedBits<F>,
-        u: &[F],
+        eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let base = 1 << instance.base_len;
-        let identity_func_at_u: Rc<DenseMultilinearExtension<F>> =
-            Rc::new(gen_identity_evaluations(u));
 
         // For every bit, the reduced sum is $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
         // and the added product is r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] with the corresponding randomness
         for (r, bit) in izip!(randomness, instance.d_bits.iter()) {
             let mut product: Vec<_> = Vec::with_capacity(base + 1);
             let mut op_coefficient: Vec<_> = Vec::with_capacity(base + 1);
-            product.push(Rc::clone(&identity_func_at_u));
+            product.push(Rc::clone(&eq_at_u));
             op_coefficient.push((F::one(), F::zero()));
 
             let mut minus_k = F::zero();
@@ -368,8 +365,6 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     /// Verify bit decomposition given the basic information of decomposed bits as verifier key.
     pub fn verify(
         wrapper: &ProofWrapper<F>,
-        // proof: &Proof<F>,
-        // poly_info: &PolynomialInfo,
         evals: &DecomposedBitsEval<F>,
         info: &DecomposedBitsInfo<F>,
     ) -> bool {
@@ -390,7 +385,8 @@ impl<F: Field + Serialize> BitDecomposition<F> {
             MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
                 .expect("fail to verify the sumcheck protocol");
 
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, &u) {
+        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
+        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
             return false;
         }
 
@@ -403,7 +399,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         subclaim: &mut SubClaim<F>,
         evals: &DecomposedBitsEval<F>,
         info: &DecomposedBitsInfo<F>,
-        u: &[F],
+        eq_at_u_r: F,
     ) -> bool {
         assert_eq!(evals.d_val.len(), info.num_instances);
         assert_eq!(
@@ -444,7 +440,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
             }
             real_eval += prod;
         }
-        subclaim.expected_evaluations -= real_eval * eval_identity_function(u, &subclaim.point);
+        subclaim.expected_evaluations -= real_eval * eq_at_u_r;
 
         true
     }
@@ -489,6 +485,7 @@ where
             b"random point used to instantiate sumcheck protocol",
             instance.num_vars,
         );
+        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
 
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
@@ -498,7 +495,7 @@ where
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
-            &prover_u,
+            &eq_at_u,
         );
 
         let poly_info = sumcheck_poly.info();
@@ -555,6 +552,7 @@ where
             &sumcheck_proof,
         )
         .expect("Verify the proof generated in Bit Decompositon");
+        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
         let check_subcliam = BitDecomposition::<EF>::verify_as_subprotocol(
@@ -562,7 +560,7 @@ where
             &mut subclaim,
             &evals,
             &instance_info,
-            &verifier_u,
+            eq_at_u_r,
         );
         assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
         let iop_verifier_time = verifier_start.elapsed().as_millis();

@@ -54,10 +54,10 @@ fn generate_instance(
     num_vars: usize,
 ) -> RoundInstance<FF> {
     let k = FF::new(FK);
-    let k_bits_len: u32 = LOG_FK;
+    let k_bits_len = LOG_FK as usize;
     let delta: FF = FF::new(DELTA);
 
-    let base_len: u32 = BASE_LEN;
+    let base_len = BASE_LEN as usize;
     let base: FF = FF::new(1 << base_len);
 
     let mut rng = thread_rng();

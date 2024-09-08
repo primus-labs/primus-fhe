@@ -130,11 +130,11 @@ impl<F: DecomposableField> DenseMultilinearExtension<F> {
     #[inline]
     pub fn get_decomposed_mles(
         &self,
-        base_len: u32,
-        bits_len: u32,
+        base_len: usize,
+        bits_len: usize,
     ) -> Vec<Rc<DenseMultilinearExtension<F>>> {
         let mut val = self.evaluations.clone();
-        let mask = F::mask(base_len);
+        let mask = F::mask(base_len as u32);
 
         let mut bits = Vec::with_capacity(bits_len as usize);
 
@@ -142,7 +142,7 @@ impl<F: DecomposableField> DenseMultilinearExtension<F> {
         for _ in 0..bits_len {
             let mut bit = vec![F::zero(); self.evaluations.len()];
             bit.iter_mut().zip(val.iter_mut()).for_each(|(b_i, v_i)| {
-                v_i.decompose_lsb_bits_at(b_i, mask, base_len);
+                v_i.decompose_lsb_bits_at(b_i, mask, base_len as u32);
             });
             bits.push(Rc::new(DenseMultilinearExtension::from_evaluations_vec(
                 self.num_vars,

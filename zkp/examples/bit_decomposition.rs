@@ -33,9 +33,9 @@ const LOG_B: u32 = 2;
 fn generate_instance<F: DecomposableField>(
     num_instances: usize,
     num_vars: usize,
-    base_len: u32,
+    base_len: usize,
     base: F,
-    bits_len: u32,
+    bits_len: usize,
 ) -> DecomposedBits<F> {
     let mut rng = thread_rng();
     let uniform = <FieldUniformSampler<F>>::new();
@@ -62,9 +62,9 @@ fn generate_instance<F: DecomposableField>(
     decomposed_bits
 }
 fn main() {
-    let base_len: u32 = LOG_B;
+    let base_len = LOG_B as usize;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = LOG_DIM_RLWE;
 
     // Generate 2 * n = 2048 instances to be proved, each instance consisting of N = 2^num_vars values to be decomposed.
