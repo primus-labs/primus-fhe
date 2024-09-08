@@ -19,16 +19,15 @@
 use super::bit_decomposition::{BitDecomposition, DecomposedBitsEval};
 use super::{DecomposedBits, DecomposedBitsInfo};
 use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::sumcheck::Proof;
-use crate::utils::{eval_identity_function, print_statistic, verify_oracle_relation};
+use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::gen_identity_evaluations;
+use crate::utils::{eval_identity_function, print_statistic, verify_oracle_relation};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
 use core::fmt;
-use std::time::Instant;
 use itertools::izip;
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
@@ -39,6 +38,7 @@ use pcs::{
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::time::Instant;
 use std::vec;
 
 /// Round IOP
@@ -423,8 +423,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
     }
 
     /// Prove round
-    pub fn prove(instance: &RoundInstance<F>) -> SumcheckKit<F>
-    {
+    pub fn prove(instance: &RoundInstance<F>) -> SumcheckKit<F> {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -643,7 +642,6 @@ impl<F: Field + Serialize> RoundIOP<F> {
     }
 }
 
-
 impl<F, EF> RoundSnarks<F, EF>
 where
     F: Field + Serialize,
@@ -689,12 +687,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let claimed_sum = EF::zero();
         let randomness = RoundIOP::sample_coins(&mut prover_trans, &instance_ef);
-        RoundIOP::prove_as_subprotocol(
-            &randomness,
-            &mut sumcheck_poly,
-            &instance_ef,
-            &eq_at_u,
-        );
+        RoundIOP::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
 
         let poly_info = sumcheck_poly.info();
 

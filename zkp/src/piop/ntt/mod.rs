@@ -455,7 +455,10 @@ impl<F: Field> NTTInstances<F> {
 
     /// Construct a random ntt instances from all the ntt instances to be proved, with randomness defined over Extension Field
     #[inline]
-    pub fn extract_ntt_instance_to_ef<EF: AbstractExtensionField<F>>(&self, randomness: &[EF]) -> NTTInstance<EF> {
+    pub fn extract_ntt_instance_to_ef<EF: AbstractExtensionField<F>>(
+        &self,
+        randomness: &[EF],
+    ) -> NTTInstance<EF> {
         assert_eq!(randomness.len(), self.num_ntt);
         let mut random_coeffs = <DenseMultilinearExtension<EF>>::from_evaluations_vec(
             self.num_vars,

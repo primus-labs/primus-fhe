@@ -285,8 +285,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
     }
 
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
-    pub fn prove(instance: &AdditionInZqInstance<F>) -> SumcheckKit<F>
-    {
+    pub fn prove(instance: &AdditionInZqInstance<F>) -> SumcheckKit<F> {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -321,7 +320,12 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         let bits_info = bits_instance.info();
         let bits_r_num = <BitDecomposition<F>>::num_coins(&bits_info);
         // 1. add products of poly used to prove decomposition
-        BitDecomposition::prove_as_subprotocol(&randomness[..bits_r_num], poly, &bits_instance, eq_at_u);
+        BitDecomposition::prove_as_subprotocol(
+            &randomness[..bits_r_num],
+            poly,
+            &bits_instance,
+            eq_at_u,
+        );
 
         // 2. sumcheck for \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l
         let coin = randomness[randomness.len() - 1];
@@ -399,8 +403,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
 
         // check 3: Verify the newly added part in the sumcheck polynomial
         let coin = randomness[randomness.len() - 1];
-        subclaim.expected_evaluations -=
-            coin * eq_at_u_r * evals.k * (F::one() - evals.k);
+        subclaim.expected_evaluations -= coin * eq_at_u_r * evals.k * (F::one() - evals.k);
         true
     }
 }
@@ -450,12 +453,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let claimed_sum = EF::zero();
         let randomness = AdditionInZq::sample_coins(&mut prover_trans, &instance_ef);
-        AdditionInZq::prove_as_subprotocol(
-            &randomness,
-            &mut sumcheck_poly,
-            &instance_ef,
-            &eq_at_u,
-        );
+        AdditionInZq::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
 
         let poly_info = sumcheck_poly.info();
 

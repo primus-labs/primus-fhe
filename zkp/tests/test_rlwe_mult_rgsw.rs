@@ -1,5 +1,6 @@
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT}, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
+    BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
 use itertools::izip;
@@ -10,7 +11,8 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
-    rlwe_mul_rgsw::RlweMultRgswSnarks, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance
+    rlwe_mul_rgsw::RlweMultRgswSnarks, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
+    RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
 };
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
@@ -273,7 +275,13 @@ fn test_random_rlwe_mult_rgsw() {
     let evals_at_u = instance.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = RlweMultRgswIOP::<FF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info, &recursive_proof);
+    let check = RlweMultRgswIOP::<FF>::verify(
+        &mut wrapper,
+        &evals_at_r,
+        &evals_at_u,
+        &info,
+        &recursive_proof,
+    );
 
     assert!(check);
 }
@@ -363,15 +371,19 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
     let evals_at_u = instance.evaluate_ext(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = RlweMultRgswIOP::<EF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info, &recursive_proof);
+    let check = RlweMultRgswIOP::<EF>::verify(
+        &mut wrapper,
+        &evals_at_r,
+        &evals_at_u,
+        &info,
+        &recursive_proof,
+    );
 
     assert!(check);
 }
 
-
 #[test]
-fn test_snarks()
-{
+fn test_snarks() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
 
@@ -449,8 +461,6 @@ fn test_snarks()
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <RlweMultRgswSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance,
-        &code_spec,
+        &instance, &code_spec,
     );
-
 }

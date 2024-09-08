@@ -307,8 +307,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
-    pub fn prove(instance: &DecomposedBits<F>) -> SumcheckKit<F>
-    {
+    pub fn prove(instance: &DecomposedBits<F>) -> SumcheckKit<F> {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",

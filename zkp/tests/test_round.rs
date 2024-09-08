@@ -3,16 +3,16 @@ use algebra::{
     BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler,
 };
-use rand_distr::Distribution;
-use sha2::Sha256;
-use std::rc::Rc;
-use std::vec;
-use zkp::piop::{round::RoundSnarks, DecomposedBitsInfo, RoundIOP, RoundInstance};
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{ExpanderCode, ExpanderCodeSpec},
     PolynomialCommitmentScheme,
 };
+use rand_distr::Distribution;
+use sha2::Sha256;
+use std::rc::Rc;
+use std::vec;
+use zkp::piop::{round::RoundSnarks, DecomposedBitsInfo, RoundIOP, RoundInstance};
 
 type FF = BabyBear; // field type
 type EF = BabyBearExetension;
@@ -222,8 +222,7 @@ fn test_round_random_iop_extension_field() {
 }
 
 #[test]
-fn test_snarks()
-{
+fn test_snarks() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
 

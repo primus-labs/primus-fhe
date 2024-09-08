@@ -1,6 +1,7 @@
 use algebra::utils::Transcript;
 use algebra::{
-    AbstractExtensionField, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, ListOfProductsOfPolynomials
+    AbstractExtensionField, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension,
+    ListOfProductsOfPolynomials,
 };
 use algebra::{DecomposableField, Field, FieldUniformSampler};
 use itertools::izip;

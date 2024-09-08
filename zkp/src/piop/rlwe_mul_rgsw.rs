@@ -24,6 +24,11 @@
 //!
 //! Hence, there are 2k + 2 NTT instances in this single multiplication instance. We can randomize all these 2k+2 NTT instances to obtain a single NTT instance,
 //! and use our NTT IOP to prove this randomized NTT instance.
+use super::bit_decomposition::BitDecomposition;
+use super::bit_decomposition::DecomposedBitsEval;
+use super::ntt::NTTRecursiveProof;
+use super::NTTBareIOP;
+use super::{DecomposedBits, DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::Proof;
@@ -32,34 +37,31 @@ use crate::sumcheck::SumcheckKit;
 use crate::utils::print_statistic;
 use crate::utils::verify_oracle_relation;
 use crate::utils::{eval_identity_function, gen_identity_evaluations};
-use core::fmt;
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::time::Instant;
-use std::vec;
 use algebra::{
-    DenseMultilinearExtension, Field, AbstractExtensionField, ListOfProductsOfPolynomials,
-    MultilinearExtension, PolynomialInfo,
-    utils::Transcript,
+    utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
+    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
+use core::fmt;
 use itertools::izip;
-use serde::{Serialize, Deserialize};
-use super::bit_decomposition::BitDecomposition;
-use super::bit_decomposition::DecomposedBitsEval;
-use super::ntt::NTTRecursiveProof;
-use super::NTTBareIOP;
-use super::{DecomposedBits, DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{LinearCode, LinearCodeSpec},
     utils::hash::Hash,
     PolynomialCommitmentScheme,
 };
+use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
+use std::rc::Rc;
+use std::time::Instant;
+use std::vec;
 /// IOP for RLWE * RGSW
 pub struct RlweMultRgswIOP<F: Field>(PhantomData<F>);
 
 /// SNARKs for RLWE * RGSW
-pub struct RlweMultRgswSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
+pub struct RlweMultRgswSnarks<F: Field, EF: AbstractExtensionField<F>>(
+    PhantomData<F>,
+    PhantomData<EF>,
+);
 /// RLWE ciphertext (a, b) where a and b represents two polynomials in some defined polynomial ring.
 /// Note that it can represent either a coefficient-form or a NTT-form.
 #[derive(Clone)]
@@ -861,7 +863,8 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = RlweMultRgswIOP::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
+        let randomness_ntt =
+            <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
         RlweMultRgswIOP::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -970,7 +973,7 @@ where
             eq_at_u_r,
         );
         assert!(check_subclaim);
-        
+
         // 3.? Check the NTT part
         let f_delegation = recursive_proof.delegation_claimed_sums[0];
         // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
@@ -1016,7 +1019,6 @@ where
             &subclaim,
         );
         assert!(check_recursive);
-        
 
         // 3.5 and also check the relation between these small oracles and the committed oracle
         let start = Instant::now();
@@ -1027,8 +1029,10 @@ where
             b"random linear combination for evaluations of oracles",
             evals_at_r.log_num_oracles(),
         );
-        let check_oracle_at_r = verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
-        let check_oracle_at_u = verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
+        let check_oracle_at_r =
+            verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
+        let check_oracle_at_u =
+            verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
         assert!(check_oracle_at_r && check_oracle_at_u);
         let iop_verifier_time = verifier_start.elapsed().as_millis();
 
@@ -1051,8 +1055,10 @@ where
         );
         assert!(check_pcs_at_r && check_pcs_at_u);
         let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len() + bincode::serialize(&eval_proof_at_u).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_r).unwrap().len() + bincode::serialize(&flatten_evals_at_u).unwrap().len();
+        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len()
+            + bincode::serialize(&eval_proof_at_u).unwrap().len()
+            + bincode::serialize(&flatten_evals_at_r).unwrap().len()
+            + bincode::serialize(&flatten_evals_at_u).unwrap().len();
 
         // 4. print statistic
         print_statistic(

@@ -17,7 +17,9 @@ use std::time::Instant;
 use std::vec;
 use zkp::piop::{BitDecomposition, BitDecompositionSnarks, DecomposedBits};
 use zkp::sumcheck::MLSumcheck;
-use zkp::utils::{eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation};
+use zkp::utils::{
+    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
+};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -311,12 +313,7 @@ fn test_snarks() {
     let claimed_sum = ef_zero;
     // randomness to combine sumcheck protocols
     let randomness = <BitDecomposition<EF>>::sample_coins(&mut prover_trans, &instance_ef);
-    BitDecomposition::prove_as_subprotocol(
-        &randomness,
-        &mut sumcheck_poly,
-        &instance_ef,
-        &eq_at_u,
-    );
+    BitDecomposition::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
     let poly_info = sumcheck_poly.info();
 
     // 2.3 Generate proof of sumcheck protocol

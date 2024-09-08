@@ -4,7 +4,8 @@ use algebra::{
     DecomposableField, Field, FieldUniformSampler,
 };
 use algebra::{
-    AbstractExtensionField, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, ListOfProductsOfPolynomials
+    AbstractExtensionField, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension,
+    ListOfProductsOfPolynomials,
 };
 use num_traits::{One, Zero};
 use pcs::{
@@ -15,10 +16,10 @@ use pcs::{
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
-use zkp::piop::round::RoundSnarks;
 use std::rc::Rc;
 use std::time::Instant;
 use std::vec;
+use zkp::piop::round::RoundSnarks;
 use zkp::piop::{AdditionInZq, AdditionInZqInstance, DecomposedBitsInfo, RoundInstance};
 use zkp::sumcheck::MLSumcheck;
 use zkp::utils::{print_statistic, verify_oracle_relation};
@@ -50,9 +51,7 @@ fn decode(c: FF) -> u32 {
     (c.value() as f64 * FT as f64 / FP as f64).floor() as u32 % FT
 }
 
-fn generate_instance(
-    num_vars: usize,
-) -> RoundInstance<FF> {
+fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
     let k = FF::new(FK);
     let k_bits_len = LOG_FK as usize;
     let delta: FF = FF::new(DELTA);
@@ -98,8 +97,7 @@ fn generate_instance(
     );
     instance
 }
-fn main()
-{
+fn main() {
     // Generate 1 instance to be proved, containing N = 2^num_vars round relation to be proved
     let num_vars = LOG_DIM_RLWE;
     let instance = generate_instance(num_vars);
