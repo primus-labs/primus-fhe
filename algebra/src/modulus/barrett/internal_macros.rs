@@ -121,8 +121,9 @@ macro_rules! impl_barrett_modulus {
                 //   +--------+
                 //   |   q3   |
                 //   +--------+
-                let tmp = (self as $WideT * ratio[0] as $WideT) >> Self::BITS; // tmp1
-                let tmp = ((self as $WideT * ratio[1] as $WideT + tmp) >> Self::BITS) as $SelfT; // q3
+                use $crate::{CarryingMul, WideningMul};
+                let tmp = self.widening_mul_hw(ratio[0]); // tmp1
+                let tmp = self.carrying_mul_hw(ratio[1], tmp); // q3
 
                 // Step 2.
                 self.wrapping_sub(tmp.wrapping_mul(modulus.value())) // r = r1 -r2
@@ -218,19 +219,24 @@ macro_rules! impl_barrett_modulus {
                 //   |        d         |                        <-- value[1] * ratio[1]
                 //   +------------------+
                 //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                //   +------------------+
-                //   |        q3        |
-                //   +------------------+
-                let a = ratio[0] as $WideT * self[0] as $WideT;
-                let b_plus_a_left = ratio[1] as $WideT * self[0] as $WideT + (a >> <$SelfT>::BITS);
+                //             +--------+
+                //             |   q3   |
+                //             +--------+
+                use $crate::{CarryingMul, WideningMul};
 
-                let c = ratio[0] as $WideT * self[1] as $WideT;
-                let d = ratio[1].wrapping_mul(self[1]);
+                let ah = self[0].widening_mul_hw(ratio[0]);
 
-                let tmp = d.wrapping_add(((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT);
+                let b = CarryingMul::carrying_mul(self[0], ratio[1], ah);
+                let c = WideningMul::widening_mul(self[1], ratio[0]);
+
+                let d = self[1].wrapping_mul(ratio[1]);
+
+                let bch = b.1 + c.1 + b.0.overflowing_add(c.0).1 as $SelfT;
+
+                let q = d.wrapping_add(bch);
 
                 // Step 2.
-                self[0].wrapping_sub(tmp.wrapping_mul(modulus.value()))
+                self[0].wrapping_sub(q.wrapping_mul(modulus.value()))
             }
         }
 
@@ -322,19 +328,24 @@ macro_rules! impl_barrett_modulus {
                 //   |        d         |                        <-- value.1 * ratio[1]
                 //   +------------------+
                 //   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                //   +------------------+
-                //   |        q3        |
-                //   +------------------+
-                let a = ratio[0] as $WideT * self.0 as $WideT;
-                let b_plus_a_left = ratio[1] as $WideT * self.0 as $WideT + (a >> <$SelfT>::BITS);
+                //             +--------+
+                //             |   q3   |
+                //             +--------+
+                use $crate::{CarryingMul, WideningMul};
 
-                let c = ratio[0] as $WideT * self.1 as $WideT;
-                let d = ratio[1].wrapping_mul(self.1);
+                let ah = self.0.widening_mul_hw(ratio[0]);
 
-                let tmp = d.wrapping_add(((b_plus_a_left + c) >> <$SelfT>::BITS) as $SelfT);
+                let b = CarryingMul::carrying_mul(self.0, ratio[1], ah);
+                let c = WideningMul::widening_mul(self.1, ratio[0]);
+
+                let d = self.1.wrapping_mul(ratio[1]);
+
+                let bch = b.1 + c.1 + b.0.overflowing_add(c.0).1 as $SelfT;
+
+                let q = d.wrapping_add(bch);
 
                 // Step 2.
-                self.0.wrapping_sub(tmp.wrapping_mul(modulus.value()))
+                self.0.wrapping_sub(q.wrapping_mul(modulus.value()))
             }
         }
 
