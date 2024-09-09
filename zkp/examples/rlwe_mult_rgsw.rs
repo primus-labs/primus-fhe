@@ -160,16 +160,16 @@ fn generate_instance<F: Field + NTTField>(
         )),
     };
 
-    RlweMultRgswInstance::from_slice(
+    RlweMultRgswInstance::new(
         num_vars,
         bits_info,
         ntt_info,
-        &input_rlwe,
-        &bits_rlwe,
-        &bits_rlwe_ntt,
-        &bits_rgsw_c_ntt,
-        &bits_rgsw_f_ntt,
-        &output_rlwe_ntt,
+        input_rlwe,
+        bits_rlwe,
+        bits_rlwe_ntt,
+        bits_rgsw_c_ntt,
+        bits_rgsw_f_ntt,
+        output_rlwe_ntt,
     )
 }
 

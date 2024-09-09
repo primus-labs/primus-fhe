@@ -34,6 +34,7 @@ use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::Proof;
 use crate::sumcheck::ProofWrapper;
 use crate::sumcheck::SumcheckKit;
+use crate::utils::add_assign_ef;
 use crate::utils::print_statistic;
 use crate::utils::verify_oracle_relation;
 use crate::utils::{eval_identity_function, gen_identity_evaluations};
@@ -125,8 +126,10 @@ pub struct RlweMultRgswEval<F: Field> {
     pub output_rlwe_ntt: RlweEval<F>,
 }
 
-type RlweEval<F> = (F, F);
-type RlwesEval<F> = (Vec<F>, Vec<F>);
+/// Evaluation of RlweCiphertext at the same random point
+pub type RlweEval<F> = (F, F);
+/// Evaluation of RlweCiphertexts at the same random point
+pub type RlwesEval<F> = (Vec<F>, Vec<F>);
 
 /// store the information used to verify
 #[derive(Clone)]
@@ -144,12 +147,33 @@ impl<F: Field> fmt::Display for RlweMultRgswInfo<F> {
         writeln!(f, "An instance of RLWE * RGSW: #vars = {}", self.num_vars)?;
         write!(f, "- containing ")?;
         self.bits_info.fmt(f)?;
-        write!(f, "\n - containing")?;
+        write!(f, "\n- containing")?;
         self.ntt_info.fmt(f)
     }
 }
 
+impl<F: Field> RlweMultRgswInfo<F> {
+    /// Convert to EF version
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweMultRgswInfo<EF> {
+        RlweMultRgswInfo::<EF> {
+            num_vars: self.num_vars,
+            ntt_info: self.ntt_info.to_ef::<EF>(),
+            bits_info: self.bits_info.to_ef::<EF>(),
+        }
+    }
+}
+
 impl<F: Field> RlweCiphertext<F> {
+    /// Pack mles
+    #[inline]
+    pub fn pack_all_mles(&self) -> Vec<F> {
+        self.a
+            .iter()
+            .chain(self.b.iter())
+            .copied()
+            .collect::<Vec<F>>()
+    }
+
     /// Convert to EF version
     #[inline]
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertext<EF> {
@@ -260,16 +284,16 @@ impl<F: Field> RlweMultRgswInstance<F> {
     /// Construct the instance from reference
     #[allow(clippy::too_many_arguments)]
     #[inline]
-    pub fn from_slice(
+    pub fn new(
         num_vars: usize,
         bits_info: &DecomposedBitsInfo<F>,
         ntt_info: &NTTInstanceInfo<F>,
-        input_rlwe: &RlweCiphertext<F>,
-        bits_rlwe: &RlweCiphertexts<F>,
-        bits_rlwe_ntt: &RlweCiphertexts<F>,
-        bits_rgsw_c_ntt: &RlweCiphertexts<F>,
-        bits_rgsw_f_ntt: &RlweCiphertexts<F>,
-        output_rlwe_ntt: &RlweCiphertext<F>,
+        input_rlwe: RlweCiphertext<F>,
+        bits_rlwe: RlweCiphertexts<F>,
+        bits_rlwe_ntt: RlweCiphertexts<F>,
+        bits_rgsw_c_ntt: RlweCiphertexts<F>,
+        bits_rgsw_f_ntt: RlweCiphertexts<F>,
+        output_rlwe_ntt: RlweCiphertext<F>,
         // output_rlwe: &RlweCiphertext<F>,
     ) -> Self {
         // update num_ntt of ntt_info
@@ -291,28 +315,6 @@ impl<F: Field> RlweMultRgswInstance<F> {
             bits_len: bits_info.bits_len,
             num_instances: 2,
         };
-
-        // randomize 2k + 1 ntt instances into a single one ntt instance
-        // let mut ntt_instance = NTTInstance::from_info(ntt_info);
-        // let mut r_iter = randomness_ntt.iter();
-
-        // // k ntt instances for a_i =NTT equal= a_i'
-        // for (coeffs, points) in izip!(&bits_rlwe.a_bits, &bits_rlwe_ntt.a_bits) {
-        //     let r = *r_iter.next().unwrap();
-        //     ntt_instance.add_ntt(r, coeffs, points);
-        // }
-        // // k ntt instances for b_i =NTT equal= b_i'
-        // for (coeffs, points) in izip!(&bits_rlwe.b_bits, &bits_rlwe_ntt.b_bits) {
-        //     let r = *r_iter.next().unwrap();
-        //     ntt_instance.add_ntt(r, coeffs, points);
-        // }
-        // // 1 ntt instances for g =NTT equal= g'
-        // let r = *r_iter.next().unwrap();
-        // ntt_instance.add_ntt(r, &output_rlwe.a, &output_rlwe_ntt.a);
-
-        // // 1 ntt instances for h =NTT equal= h'
-        // let r = *r_iter.next().unwrap();
-        // ntt_instance.add_ntt(r, &output_rlwe.b, &output_rlwe_ntt.b);
 
         RlweMultRgswInstance {
             num_vars,
@@ -342,15 +344,9 @@ impl<F: Field> RlweMultRgswInstance<F> {
 
     /// Pack all the involved small polynomials into a single vector of evaluations without padding zeros.
     pub fn pack_all_mles(&self) -> Vec<F> {
-        let mut res = self
-            .input_rlwe
-            .a
-            .iter()
-            .chain(self.input_rlwe.b.iter())
-            .chain(self.output_rlwe_ntt.a.iter())
-            .chain(self.output_rlwe_ntt.b.iter())
-            .copied()
-            .collect::<Vec<F>>();
+        let mut res = Vec::new();
+        res.append(&mut self.input_rlwe.pack_all_mles());
+        res.append(&mut self.output_rlwe_ntt.pack_all_mles());
         res.append(&mut self.bits_rlwe.pack_all_mles());
         res.append(&mut self.bits_rlwe_ntt.pack_all_mles());
         res.append(&mut self.bits_rgsw_c_ntt.pack_all_mles());
@@ -417,10 +413,16 @@ impl<F: Field> RlweMultRgswInstance<F> {
         }
     }
 
+    /// return the number of ntt instances contained
+    #[inline]
+    pub fn num_ntt_contained(&self) -> usize {
+        self.ntt_info.num_ntt
+    }
+
     /// Extract all NTT instances into a single random NTT instance to be proved
     #[inline]
     pub fn extract_ntt_instance(&self, randomness: &[F]) -> NTTInstance<F> {
-        assert_eq!(randomness.len(), self.ntt_info.num_ntt);
+        assert_eq!(randomness.len(), self.num_ntt_contained());
         let mut random_coeffs = <DenseMultilinearExtension<F>>::from_evaluations_vec(
             self.num_vars,
             vec![F::zero(); 1 << self.num_vars],
@@ -429,34 +431,38 @@ impl<F: Field> RlweMultRgswInstance<F> {
             self.num_vars,
             vec![F::zero(); 1 << self.num_vars],
         );
-        let mid = randomness.len() >> 1;
-        let (r_1, r_2) = randomness.split_at(mid);
 
-        for (r, coeff, point) in izip!(r_1, &self.bits_rlwe.a_bits, &self.bits_rlwe_ntt.a_bits) {
-            random_coeffs
-                .iter_mut()
-                .zip(coeff.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-            random_points
-                .iter_mut()
-                .zip(point.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-        }
-        for (r, coeff, point) in izip!(r_2, &self.bits_rlwe.b_bits, &self.bits_rlwe_ntt.b_bits) {
-            random_coeffs
-                .iter_mut()
-                .zip(coeff.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-            random_points
-                .iter_mut()
-                .zip(point.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-        }
+        self.update_ntt_instance(&mut random_coeffs, &mut random_points, randomness);
+
         NTTInstance::<F> {
             num_vars: self.num_vars,
             ntt_table: self.ntt_info.ntt_table.clone(),
             coeffs: Rc::new(random_coeffs),
             points: Rc::new(random_points),
+        }
+    }
+
+    /// Update the NTT instance to be proved
+    #[inline]
+    pub fn update_ntt_instance(
+        &self,
+        r_coeffs: &mut DenseMultilinearExtension<F>,
+        r_points: &mut DenseMultilinearExtension<F>,
+        randomness: &[F],
+    ) {
+        for (r, coeff, point) in izip!(
+            randomness,
+            self.bits_rlwe
+                .a_bits
+                .iter()
+                .chain(self.bits_rlwe.b_bits.iter()),
+            self.bits_rlwe_ntt
+                .a_bits
+                .iter()
+                .chain(self.bits_rlwe_ntt.b_bits.iter())
+        ) {
+            *r_coeffs += (*r, coeff.as_ref());
+            *r_points += (*r, point.as_ref());
         }
     }
 
@@ -466,7 +472,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
         &self,
         randomness: &[EF],
     ) -> NTTInstance<EF> {
-        assert_eq!(randomness.len(), self.ntt_info.num_ntt);
+        assert_eq!(randomness.len(), self.num_ntt_contained());
         let mut random_coeffs = <DenseMultilinearExtension<EF>>::from_evaluations_vec(
             self.num_vars,
             vec![EF::zero(); 1 << self.num_vars],
@@ -475,31 +481,9 @@ impl<F: Field> RlweMultRgswInstance<F> {
             self.num_vars,
             vec![EF::zero(); 1 << self.num_vars],
         );
-        let mid = randomness.len() >> 1;
-        let (r_1, r_2) = randomness.split_at(mid);
 
-        for (r, coeff, point) in izip!(r_1, &self.bits_rlwe.a_bits, &self.bits_rlwe_ntt.a_bits) {
-            // multiplication between EF (r) and F (y)
-            random_coeffs
-                .iter_mut()
-                .zip(coeff.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-            random_points
-                .iter_mut()
-                .zip(point.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-        }
-        for (r, coeff, point) in izip!(r_2, &self.bits_rlwe.b_bits, &self.bits_rlwe_ntt.b_bits) {
-            // multiplication between EF (r) and F (y)
-            random_coeffs
-                .iter_mut()
-                .zip(coeff.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-            random_points
-                .iter_mut()
-                .zip(point.iter())
-                .for_each(|(x, y)| *x += *r * *y);
-        }
+        self.update_ntt_instance_to_ef::<EF>(&mut random_coeffs, &mut random_points, randomness);
+
         NTTInstance::<EF> {
             num_vars: self.num_vars,
             ntt_table: Rc::new(
@@ -514,16 +498,51 @@ impl<F: Field> RlweMultRgswInstance<F> {
         }
     }
 
+    /// Update NTT instance to be proved
+    #[inline]
+    pub fn update_ntt_instance_to_ef<EF: AbstractExtensionField<F>>(
+        &self,
+        r_coeffs: &mut DenseMultilinearExtension<EF>,
+        r_points: &mut DenseMultilinearExtension<EF>,
+        randomness: &[EF],
+    ) {
+        for (r, coeff, point) in izip!(
+            randomness,
+            self.bits_rlwe
+                .a_bits
+                .iter()
+                .chain(self.bits_rlwe.b_bits.iter()),
+            self.bits_rlwe_ntt
+                .a_bits
+                .iter()
+                .chain(self.bits_rlwe_ntt.b_bits.iter())
+        ) {
+            // multiplication between EF (r) and F (y)
+            add_assign_ef::<F, EF>(r_coeffs, r, coeff);
+            add_assign_ef::<F, EF>(r_points, r, point);
+        }
+    }
+
     /// Extract DecomposedBits instance
+    #[inline]
     pub fn extract_decomposed_bits(&self) -> DecomposedBits<F> {
-        DecomposedBits {
+        let mut res = DecomposedBits {
             base: self.bits_info.base,
             base_len: self.bits_info.base_len,
             bits_len: self.bits_info.bits_len,
             num_vars: self.num_vars,
-            d_val: vec![self.input_rlwe.a.clone(), self.input_rlwe.b.clone()],
-            d_bits: vec![self.bits_rlwe.a_bits.clone(), self.bits_rlwe.b_bits.clone()].concat(),
-        }
+            d_val: Vec::with_capacity(2),
+            d_bits: Vec::with_capacity(2 * self.bits_info.bits_len),
+        };
+        self.update_decomposed_bits(&mut res);
+        res
+    }
+
+    /// Update DecomposedBits Instance
+    #[inline]
+    pub fn update_decomposed_bits(&self, decomposed_bits: &mut DecomposedBits<F>) {
+        decomposed_bits.add_decomposed_bits_instance(&self.input_rlwe.a, &self.bits_rlwe.a_bits);
+        decomposed_bits.add_decomposed_bits_instance(&self.input_rlwe.b, &self.bits_rlwe.b_bits);
     }
 }
 
@@ -564,10 +583,51 @@ impl<F: Field> RlweMultRgswEval<F> {
     /// Extract DecomposedBits Instance
     #[inline]
     pub fn extract_decomposed_bits(&self) -> DecomposedBitsEval<F> {
-        DecomposedBitsEval {
-            d_val: vec![self.input_rlwe.0, self.input_rlwe.1],
-            d_bits: vec![self.bits_rlwe.0.clone(), self.bits_rlwe.1.clone()].concat(),
-        }
+        let mut res = DecomposedBitsEval {
+            d_val: Vec::with_capacity(2),
+            d_bits: Vec::new(),
+        };
+        self.update_decomposed_bits(&mut res);
+        res
+    }
+
+    /// Update DecomposedBits with added bits in this instance
+    #[inline]
+    pub fn update_decomposed_bits(&self, bits_evals: &mut DecomposedBitsEval<F>) {
+        bits_evals.d_val.push(self.input_rlwe.0);
+        bits_evals.d_val.push(self.input_rlwe.1);
+        bits_evals.d_bits.extend(&self.bits_rlwe.0);
+        bits_evals.d_bits.extend(&self.bits_rlwe.1);
+    }
+
+    /// Extract the NTT-Coefficient evaluation
+    #[inline]
+    pub fn update_ntt_instance_coeff(&self, r_coeff: &mut F, randomness: &[F]) {
+        assert_eq!(
+            randomness.len(),
+            self.bits_rlwe.0.len() + self.bits_rlwe.1.len()
+        );
+        *r_coeff += self.bits_rlwe
+            .0
+            .iter()
+            .chain(self.bits_rlwe.1.iter())
+            .zip(randomness)
+            .fold(F::zero(), |acc, (coeff, r)| acc + *r * *coeff);
+    }
+
+    /// Extract the NTT-Coefficient evaluation
+    #[inline]
+    pub fn update_ntt_instance_point(&self, r_point: &mut F, randomness: &[F]) {
+        assert_eq!(
+            randomness.len(),
+            self.bits_rlwe_ntt.0.len() + self.bits_rlwe_ntt.1.len()
+        );
+        *r_point += self.bits_rlwe_ntt
+            .0
+            .iter()
+            .chain(self.bits_rlwe_ntt.1.iter())
+            .zip(randomness)
+            .fold(F::zero(), |acc, (coeff, r)| acc + *r * *coeff);
     }
 }
 
@@ -594,7 +654,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         let randomness = Self::sample_coins(&mut trans, &instance);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.ntt_info.num_ntt);
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
@@ -726,27 +786,11 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
 
         let f_delegation = recursive_proof.delegation_claimed_sums[0];
         // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
-        let ntt_coeff_evals_at_r = randomness_ntt
-            .iter()
-            .zip(
-                evals_at_r
-                    .bits_rlwe
-                    .0
-                    .iter()
-                    .chain(evals_at_r.bits_rlwe.1.iter()),
-            )
-            .fold(F::zero(), |acc, (r, coeff)| acc + *r * *coeff);
+        let mut ntt_coeff_evals_at_r = F::zero();
+        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
         // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
-        let ntt_point_evals_at_u = randomness_ntt
-            .iter()
-            .zip(
-                evals_at_u
-                    .bits_rlwe_ntt
-                    .0
-                    .iter()
-                    .chain(evals_at_u.bits_rlwe_ntt.1.iter()),
-            )
-            .fold(F::zero(), |acc, (r, coeff)| acc + *r * *coeff);
+        let mut ntt_point_evals_at_u = F::zero();
+        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
 
         if !<NTTBareIOP<F>>::verify_as_subprotocol(
             F::one(),
@@ -977,26 +1021,11 @@ where
         // 3.? Check the NTT part
         let f_delegation = recursive_proof.delegation_claimed_sums[0];
         // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
-        let ntt_coeff_evals_at_r = randomness_ntt
-            .iter()
-            .zip(
-                evals_at_r
-                    .bits_rlwe
-                    .0
-                    .iter()
-                    .chain(evals_at_r.bits_rlwe.1.iter()),
-            )
-            .fold(EF::zero(), |acc, (r, coeff)| acc + *r * *coeff);
-        let ntt_point_evals_at_u = randomness_ntt
-            .iter()
-            .zip(
-                evals_at_u
-                    .bits_rlwe_ntt
-                    .0
-                    .iter()
-                    .chain(evals_at_u.bits_rlwe_ntt.1.iter()),
-            )
-            .fold(EF::zero(), |acc, (r, coeff)| acc + *r * *coeff);
+        let mut ntt_coeff_evals_at_r = EF::zero();
+        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
+        // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
+        let mut ntt_point_evals_at_u = EF::zero();
+        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
 
         // check the sumcheck part of NTT
         let check_ntt_bare = <NTTBareIOP<EF>>::verify_as_subprotocol(

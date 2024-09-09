@@ -1,5 +1,5 @@
 //! This module defines some useful utils that may invoked by piop.
-use algebra::{DenseMultilinearExtension, Field};
+use algebra::{AbstractExtensionField, DenseMultilinearExtension, Field};
 
 /// Generate MLE of the ideneity function eq(u,x) for x \in \{0, 1\}^dim
 pub fn gen_identity_evaluations<F: Field>(u: &[F]) -> DenseMultilinearExtension<F> {
@@ -26,6 +26,19 @@ pub fn eval_identity_function<F: Field>(u: &[F], v: &[F]) -> F {
         evaluation *= *u_i * *v_i + (F::one() - *u_i) * (F::one() - *v_i);
     }
     evaluation
+}
+
+/// AddAssign<(EF, &'a DenseMultilinearExtension<F>)> for DenseMultilinearExtension<EF>
+/// output += r * input
+pub fn add_assign_ef<F: Field, EF: AbstractExtensionField<F>>(
+    output: &mut DenseMultilinearExtension<EF>,
+    r: &EF,
+    input: &DenseMultilinearExtension<F>,
+) {
+    output
+        .iter_mut()
+        .zip(input.iter())
+        .for_each(|(x, y)| *x += *r * *y);
 }
 
 /// Verify the relationship between the evaluations of these small oracles and the requested evaluation of the committed oracle
@@ -85,7 +98,7 @@ pub fn print_statistic(
     println!("Verifier Time: {:?} ms", iop_verifier_time);
     println!("Proof Size: {:?} Bytes", iop_proof_size);
 
-    println!("\n==IOP Statistic==");
+    println!("\n==PCS Statistic==");
     println!(
         "The committed polynomial is of {} variables,",
         committed_poly_num_vars

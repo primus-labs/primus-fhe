@@ -19,10 +19,6 @@ use std::vec;
 use zkp::piop::ntt::{ntt_bare::init_fourier_table, NTTInstances, NTTSnarks};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
 
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
 #[derive(Field, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);

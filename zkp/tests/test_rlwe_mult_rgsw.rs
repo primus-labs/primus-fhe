@@ -15,10 +15,6 @@ use zkp::piop::{
     RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
 };
 
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
 // field type
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -177,16 +173,16 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
         )),
     };
 
-    RlweMultRgswInstance::from_slice(
+    RlweMultRgswInstance::new(
         num_vars,
         bits_info,
         ntt_info,
-        &input_rlwe,
-        &bits_rlwe,
-        &bits_rlwe_ntt,
-        &bits_rgsw_c_ntt,
-        &bits_rgsw_f_ntt,
-        &output_rlwe_ntt,
+        input_rlwe,
+        bits_rlwe,
+        bits_rlwe_ntt,
+        bits_rgsw_c_ntt,
+        bits_rgsw_f_ntt,
+        output_rlwe_ntt,
         // &output_rlwe,
     )
 }

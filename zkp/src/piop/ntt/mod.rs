@@ -875,10 +875,7 @@ where
         );
 
         // 2.? [one more step] Prover generate the random ntt instance from all instances to be proved
-        let prover_r = prover_trans.get_vec_challenge(
-            b"randomness used to obtain the virtual random ntt instance",
-            instance.num_ntt,
-        );
+        let prover_r = <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.num_ntt);
         let instance_ef = instance.extract_ntt_instance_to_ef::<EF>(&prover_r);
         let instance_ef_info = instance_ef.info();
 
