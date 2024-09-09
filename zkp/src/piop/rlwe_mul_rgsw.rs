@@ -34,10 +34,7 @@ use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::Proof;
 use crate::sumcheck::ProofWrapper;
 use crate::sumcheck::SumcheckKit;
-use crate::utils::add_assign_ef;
-use crate::utils::print_statistic;
-use crate::utils::verify_oracle_relation;
-use crate::utils::{eval_identity_function, gen_identity_evaluations};
+use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation, print_statistic, add_assign_ef};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,

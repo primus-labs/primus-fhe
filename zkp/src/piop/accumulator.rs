@@ -22,11 +22,14 @@ use algebra::{
     PolynomialInfo,
 };
 use itertools::izip;
-use itertools::Update;
-use rand::random;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha12Rng;
-use serde::Serialize;
+use itertools::Itertools;
+use pcs::{
+    multilinear::brakedown::BrakedownPCS,
+    utils::code::{LinearCode, LinearCodeSpec},
+    utils::hash::Hash,
+    PolynomialCommitmentScheme,
+};
+use serde::{Deserialize, Serialize};
 
 use super::bit_decomposition::BitDecomposition;
 use super::bit_decomposition::DecomposedBitsEval;
@@ -136,7 +139,6 @@ pub struct AccumulatorInstanceInfo<F: Field> {
     /// info for RLWE * RGSW
     pub mult_info: RlweMultRgswInfo<F>,
     /// info for decomposed bits
-    /// TODO delete
     pub bits_info: DecomposedBitsInfo<F>,
     /// info for NTT
     pub ntt_info: NTTInstanceInfo<F>,
@@ -380,7 +382,6 @@ impl<F: Field> AccumulatorInstance<F> {
         let num_vars = self.num_vars + num_vars_added;
         let num_zeros_padded = ((1 << num_vars_added) - self.num_oracles()) * (1 << self.num_vars);
 
-        // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_all_mles();
         evals.append(&mut vec![F::zero(); num_zeros_padded]);
         <DenseMultilinearExtension<F>>::from_evaluations_vec(num_vars, evals)
@@ -831,6 +832,8 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
     ) -> bool {
         let r_each_num = RlweMultRgswIOP::num_coins(&info.mult_info) + 2;
         assert_eq!(randomness.len(), info.num_updations * r_each_num);
+
+        // check the sumcheck part
         for (updation, r) in izip!(&evals.updations, randomness.chunks_exact(r_each_num)) {
             let (r, r_mult) = r.split_at(2);
             subclaim.expected_evaluations -= eq_at_u_r
@@ -843,6 +846,16 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
                 &info.mult_info,
                 eq_at_u_r,
             ) {
+                return false;
+            }
+        }
+
+        // check the equality relations among the accmulator updations
+        for (this, next) in evals.updations.iter().tuple_windows(){
+            let this_acc = &this.acc_ntt;
+            let this_mult = &this.rlwe_mult_rgsw.output_rlwe_ntt;
+            let next_acc = &next.acc_ntt;
+            if !(this_acc.0 + this_mult.0 == next_acc.0 && this_acc.1 + this_mult.1 == next_acc.1){
                 return false;
             }
         }
