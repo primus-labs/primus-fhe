@@ -1,7 +1,7 @@
 use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use fhe_cmp::{
-    compare::{decrypt, encrypt, HomeCmpScheme},
-    parameters::{DEFAULT_PARAMETERS, DELTA, HALF_DELTA},
+    compare::{decrypt, Encryptor, HomeCmpScheme},
+    parameters::{DEFAULT_PARAMETERS, DELTA},
 };
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::LWE;
@@ -11,33 +11,16 @@ fn main() {
     let mut rng = thread_rng();
     let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
-    let basis = param.blind_rotation_basis();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
     let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
-    let x = rng.gen_range(1025..100000);
-    let y = rng.gen_range(1025..100000);
+    let enc_elements = Encryptor::new(param, sk.ntt_ring_secret_key().clone(), sampler);
+    let x = rng.gen();
+    let y = rng.gen();
     let x_hcmp = rng.gen_range(0..1024);
     let y_hcmp = rng.gen_range(0..1024);
-    let poly_length = param.ring_dimension();
-    let (value1, value2) = encrypt(
-        x,
-        y,
-        sk.ntt_ring_secret_key(),
-        basis,
-        DELTA,
-        sampler,
-        &mut rng,
-    );
-    let (value1_hcmp, value2_hcmp) = encrypt(
-        x_hcmp,
-        y_hcmp,
-        sk.ntt_ring_secret_key(),
-        basis,
-        DELTA,
-        sampler,
-        &mut rng,
-    );
+    let (value1, value2) = enc_elements.encrypt(x, y, &mut rng);
+    let (value1_hcmp, value2_hcmp) = enc_elements.encrypt(x_hcmp, y_hcmp, &mut rng);
 
     //test hcmp
     println!("test hcmp");
@@ -68,9 +51,9 @@ fn main() {
 
     //test arbhcmp
     println!("test arbhcmp");
-    let gt_cipher = rotationkey.gt_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
-    let eq_cipher = rotationkey.eq_arbhcmp(&value1, &value2, poly_length, DELTA);
-    let lt_cipher = rotationkey.lt_arbhcmp(&value1, &value2, DELTA, HALF_DELTA, poly_length);
+    let gt_cipher = rotationkey.gt_arbhcmp(&value1, &value2);
+    let eq_cipher = rotationkey.eq_arbhcmp(&value1, &value2);
+    let lt_cipher = rotationkey.lt_arbhcmp(&value1, &value2);
     let gt_value = decrypt(rlwe_sk, gt_cipher);
     let eq_value = decrypt(rlwe_sk, eq_cipher);
     let lt_value = decrypt(rlwe_sk, lt_cipher);
@@ -97,10 +80,10 @@ fn main() {
     println!("test homand");
     let lwe_delta = lwe_generate(rlwe_sk, param.ring_dimension(), sampler, &mut rng, DELTA);
     let lwe_delta_neg = lwe_generate_neg(rlwe_sk, param.ring_dimension(), sampler, &mut rng, DELTA);
-    let homand_cipher1 = rotationkey.homand(&lwe_delta, &lwe_delta, poly_length, DELTA);
-    let homand_cipher2 = rotationkey.homand(&lwe_delta, &lwe_delta_neg, poly_length, DELTA);
-    let homand_cipher3 = rotationkey.homand(&lwe_delta_neg, &lwe_delta, poly_length, DELTA);
-    let homand_cipher4 = rotationkey.homand(&lwe_delta_neg, &lwe_delta_neg, poly_length, DELTA);
+    let homand_cipher1 = rotationkey.homand(&lwe_delta, &lwe_delta);
+    let homand_cipher2 = rotationkey.homand(&lwe_delta, &lwe_delta_neg);
+    let homand_cipher3 = rotationkey.homand(&lwe_delta_neg, &lwe_delta);
+    let homand_cipher4 = rotationkey.homand(&lwe_delta_neg, &lwe_delta_neg);
     let output1 = decrypt(rlwe_sk, homand_cipher1);
     let output2 = decrypt(rlwe_sk, homand_cipher2);
     let output3 = decrypt(rlwe_sk, homand_cipher3);

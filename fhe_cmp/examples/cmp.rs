@@ -1,6 +1,6 @@
 use fhe_cmp::{
-    compare::{decrypt, encrypt, HomeCmpScheme},
-    parameters::{DEFAULT_PARAMETERS, DELTA, FF, HALF_DELTA},
+    compare::{decrypt, Encryptor, HomeCmpScheme},
+    parameters::{DEFAULT_PARAMETERS, FF},
 };
 use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
@@ -10,26 +10,17 @@ fn main() {
     let mut rng = thread_rng();
     let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
-    let basis = param.blind_rotation_basis();
-    let poly_length = param.ring_dimension();
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
     let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+    let enc_elements = Encryptor::new(param, sk.ntt_ring_secret_key().clone(), sampler);
     for i in 0..50 {
         let start = Instant::now();
         println!("{i}");
         let x = rng.gen_range(0..100000);
         let y = rng.gen_range(0..100000);
-        let (value1, value2) = encrypt(
-            x,
-            y,
-            sk.ntt_ring_secret_key(),
-            basis,
-            DELTA,
-            sampler,
-            &mut rng,
-        );
-        let (lt, eq, gt) = join_bit_operations(&value1, &value2, &rotationkey, poly_length);
+        let (value1, value2) = enc_elements.encrypt(x, y, &mut rng);
+        let (lt, eq, gt) = join_bit_operations(&value1, &value2, &rotationkey);
         let lt_value = decrypt(rlwe_sk, lt);
         let eq_value = decrypt(rlwe_sk, eq);
         let gt_value = decrypt(rlwe_sk, gt);
@@ -68,41 +59,14 @@ fn join_bit_operations(
     value1: &[RLWE<FF>],
     value2: &[NTTRGSW<FF>],
     rotationkey: &HomeCmpScheme<u64, FF>,
-    ring_dimension: usize,
 ) -> (LWE<FF>, LWE<FF>, LWE<FF>) {
     let mut ct_lt: Option<LWE<FF>> = None;
     let mut ct_eq: Option<LWE<FF>> = None;
     let mut ct_gt: Option<LWE<FF>> = None;
     rayon::scope(|s| {
-        s.spawn(|_| {
-            ct_lt = Some(HomeCmpScheme::lt_arbhcmp(
-                rotationkey,
-                value1,
-                value2,
-                DELTA,
-                HALF_DELTA,
-                ring_dimension,
-            ))
-        });
-        s.spawn(|_| {
-            ct_eq = Some(HomeCmpScheme::eq_arbhcmp(
-                rotationkey,
-                value1,
-                value2,
-                ring_dimension,
-                DELTA,
-            ))
-        });
-        s.spawn(|_| {
-            ct_gt = Some(HomeCmpScheme::gt_arbhcmp(
-                rotationkey,
-                value1,
-                value2,
-                DELTA,
-                HALF_DELTA,
-                ring_dimension,
-            ))
-        });
+        s.spawn(|_| ct_lt = Some(rotationkey.lt_arbhcmp(value1, value2)));
+        s.spawn(|_| ct_eq = Some(rotationkey.eq_arbhcmp(value1, value2)));
+        s.spawn(|_| ct_gt = Some(rotationkey.gt_arbhcmp(value1, value2)));
     });
     (ct_lt.unwrap(), ct_eq.unwrap(), ct_gt.unwrap())
 }

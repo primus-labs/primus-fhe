@@ -1,5 +1,5 @@
 use algebra::{
-    transformation::MonomialNTT, AsInto, Basis, Field, FieldDiscreteGaussianSampler, NTTField,
+    transformation::MonomialNTT, AsInto, Field, FieldDiscreteGaussianSampler, NTTField,
     NTTPolynomial, Polynomial,
 };
 use fhe_core::{lwe_modulus_switch, LWEModulusType, Parameters, RLWEBlindRotationKey};
@@ -12,6 +12,13 @@ pub struct HomeCmpScheme<C: LWEModulusType, F: NTTField> {
     params: Parameters<C, F>,
     delta: F,
     half_delta: F,
+}
+
+pub struct Encryptor<C: LWEModulusType, F: NTTField> {
+    params: Parameters<C, F>,
+    ntt_ring_secret_key: NTTPolynomial<F>,
+    error_sampler: FieldDiscreteGaussianSampler,
+    delta: F,
 }
 
 impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
@@ -100,11 +107,12 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
     ///      If temp > 0, expect_compare_res = true, and the test_vector left shift, the function outputs delta
     ///      If temp < 0, expect_compare_res = false,  and the test_vector right shift, the function outputs -delta
 
-    pub fn homand(&self, ca: &LWE<F>, cb: &LWE<F>, poly_length: usize, delta: F) -> LWE<F> {
+    pub fn homand(&self, ca: &LWE<F>, cb: &LWE<F>) -> LWE<F> {
         let mut temp = ca.add_component_wise_ref(cb);
-        *temp.b_mut() = temp.b() - delta;
+        let poly_length = self.params.ring_dimension();
+        *temp.b_mut() = temp.b() - self.delta;
         let mut test = vec![F::zero(); poly_length];
-        let mu = delta;
+        let mu = self.delta;
         test.iter_mut().for_each(|v| *v = mu);
         self.fbs(temp, &test)
     }
@@ -135,15 +143,9 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
     ///    * Input: half_delta = plain_modulus / 16. (plain_modulus stands for ring_modulus)
     ///    * Input: the size of RLWE and NTTRGSW vector `poly_length`.
     ///    * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1>cipher2,otherwise c=-1.
-    pub fn gt_arbhcmp(
-        &self,
-        cipher1: &[RLWE<F>],
-        cipher2: &[NTTRGSW<F>],
-        delta: F,
-        half_delta: F,
-        poly_length: usize,
-    ) -> LWE<F> {
+    pub fn gt_arbhcmp(&self, cipher1: &[RLWE<F>], cipher2: &[NTTRGSW<F>]) -> LWE<F> {
         let len = cipher1.len();
+        let poly_length = self.params.ring_dimension();
         assert_eq!(len, cipher2.len());
         assert!(len > 0);
         //for the first digit in two vectors
@@ -193,14 +195,14 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
             let mut new_lwe = eq_res
                 .add_component_wise(&low_part_gt_res)
                 .add_component_wise(&gt_res);
-            *new_lwe.b_mut() = new_lwe.b() + half_delta;
+            *new_lwe.b_mut() = new_lwe.b() + self.half_delta;
             /*
             Start gate bootstrapping, test_vector = delta + delta*X + ... + delta*X^{n-1}
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
             If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
             */
             let mut test = vec![F::zero(); poly_length];
-            let mu = delta;
+            let mu = self.delta;
             test.iter_mut().for_each(|v| *v = mu);
             res = self.fbs(new_lwe, &test);
         }
@@ -235,13 +237,7 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
     ///    * Input: the size of RLWE and RGSW vector `poly_length`.
     ///    * Input: delta = plain_modulus / 8. (plain_modulus stands for ring_modulus)
     ///    * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1=cipher2,otherwise c=-1.
-    pub fn eq_arbhcmp(
-        &self,
-        cipher1: &[RLWE<F>],
-        cipher2: &[NTTRGSW<F>],
-        poly_length: usize,
-        delta: F,
-    ) -> LWE<F> {
+    pub fn eq_arbhcmp(&self, cipher1: &[RLWE<F>], cipher2: &[NTTRGSW<F>]) -> LWE<F> {
         let len = cipher1.len();
         assert_eq!(len, cipher2.len());
         assert!(len > 0);
@@ -253,7 +249,7 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
             //only when low_res = delta and gt_res = delta, the res will be delta, otherwise res will be -delta
             let low_res = res;
             let gt_res = self.eq_hcmp(&cipher1[i], &cipher2[i]);
-            res = self.homand(&low_res, &gt_res, poly_length, delta);
+            res = self.homand(&low_res, &gt_res);
         }
         res
     }
@@ -286,15 +282,9 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
     ///    * Input: half_delta = plain_modulus / 16.
     ///    * Input: the size of RLWE and RGSW vector `poly_length`.
     ///    * Output: LWE ciphertext output=LWE(c) where c=1 if cipher1<cipher2,otherwise c=-1.
-    pub fn lt_arbhcmp(
-        &self,
-        cipher1: &[RLWE<F>],
-        cipher2: &[NTTRGSW<F>],
-        delta: F,
-        half_delta: F,
-        poly_length: usize,
-    ) -> LWE<F> {
+    pub fn lt_arbhcmp(&self, cipher1: &[RLWE<F>], cipher2: &[NTTRGSW<F>]) -> LWE<F> {
         let len = cipher1.len();
+        let poly_length = self.params.ring_dimension();
         assert_eq!(len, cipher2.len());
         assert!(len > 0);
         // Vector contains only one element
@@ -343,9 +333,9 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
             let mut new_lwe = eq_res
                 .add_component_wise(&low_part_gt_res)
                 .add_component_wise(&gt_res);
-            *new_lwe.b_mut() = new_lwe.b() + half_delta;
+            *new_lwe.b_mut() = new_lwe.b() + self.half_delta;
             let mut test = vec![F::zero(); poly_length];
-            let mu = delta;
+            let mu = self.delta;
             test.iter_mut().for_each(|v| *v = mu);
             /*
             Start gate bootstrapping, test_vector = delta + deltaX + ... + deltaX^{n-1}
@@ -358,62 +348,187 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
     }
 }
 
-///    Performing the initialization, encrypting 2 numbers to their corresponding ciphertext
-///   
-///    # Arguments
-///   
-///    * Input: input number `num1`.
-///    * Input: input number `num2`.
-///    * Input: encryption key `ntt_ring_secret_key`.
-///    * Input: This basis used for decomposition of the field `basis`.
-///    * Input: The encryption of 1 `delta`.
-///    * Input: sampler used for generating random number `error_sampler`.
-///    * Input: method used for generating random number `rng`.
-///    * Output: RLWE vector as the encryption of num1, NTTRGSW vector as the encryption of the encryption of num2.
-pub fn encrypt<F, R>(
-    mut num1: usize,
-    mut num2: usize,
-    ntt_ring_secret_key: &NTTPolynomial<F>,
-    basis: Basis<F>,
-    delta: F,
-    error_sampler: FieldDiscreteGaussianSampler,
-    mut rng: R,
-) -> (Vec<RLWE<F>>, Vec<NTTRGSW<F>>)
-where
-    R: Rng + CryptoRng,
-    F: NTTField,
-{
-    let ring_dimension = ntt_ring_secret_key.coeff_count();
-    let trailing_zeros = ring_dimension.trailing_zeros();
-    let mask = ring_dimension - 1;
-    let mut num1_vec = Vec::new();
-    let mut num2_vec = Vec::new();
-    while num1 != 0 {
-        num1_vec.push(num1 & mask);
-        num1 >>= trailing_zeros;
+impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
+    ///new Encryptor struct
+    pub fn new(
+        params: Parameters<C, F>,
+        ntt_ring_secret_key: NTTPolynomial<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+    ) -> Self {
+        let delta = F::lazy_new(
+            (F::MODULUS_VALUE.as_into() / params.lwe_plain_modulus() as f64)
+                .round()
+                .as_into(),
+        );
+        Self {
+            params,
+            ntt_ring_secret_key,
+            error_sampler,
+            delta,
+        }
     }
-    while num2 != 0 {
-        num2_vec.push(num2 & mask);
-        num2 >>= trailing_zeros;
+
+    ///return params
+    pub fn params(&self) -> &Parameters<C, F> {
+        &self.params
     }
-    let len = num1_vec.len().max(num2_vec.len()).max(1);
-    num1_vec.resize(len, 0);
-    num2_vec.resize(len, 0);
-    let vec1 = rlwe_values(
-        &num1_vec,
-        ntt_ring_secret_key,
-        delta,
-        error_sampler,
-        &mut rng,
-    );
-    let vec2 = rgsw_values(
-        &num2_vec,
-        ntt_ring_secret_key,
-        basis,
-        error_sampler,
-        &mut rng,
-    );
-    (vec1, vec2)
+
+    ///return ntt_ring_secret_key
+    pub fn ntt_ring_secret_key(&self) -> &NTTPolynomial<F> {
+        &self.ntt_ring_secret_key
+    }
+
+    ///return error_sampler
+    pub fn error_sampler(&self) -> FieldDiscreteGaussianSampler {
+        self.error_sampler
+    }
+
+    ///return delta
+    pub fn delta(&self) -> F {
+        self.delta
+    }
+
+    ///    Performing the initialization, encrypting 2 numbers to their corresponding ciphertext
+    ///   
+    ///    # Arguments
+    ///   
+    ///    * Input: input number `num1`.
+    ///    * Input: input number `num2`.
+    ///    * Input: encryption key `ntt_ring_secret_key`.
+    ///    * Input: This basis used for decomposition of the field `basis`.
+    ///    * Input: The encryption of 1 `delta`.
+    ///    * Input: sampler used for generating random number `error_sampler`.
+    ///    * Input: method used for generating random number `rng`.
+    ///    * Output: RLWE vector as the encryption of num1, NTTRGSW vector as the encryption of the encryption of num2.
+    pub fn encrypt<R: CryptoRng + Rng>(
+        &self,
+        mut num1: usize,
+        mut num2: usize,
+        mut rng: R,
+    ) -> (Vec<RLWE<F>>, Vec<NTTRGSW<F>>) {
+        let key = &self.ntt_ring_secret_key;
+        let ring_dimension = key.coeff_count();
+        let trailing_zeros = ring_dimension.trailing_zeros();
+        let mask = ring_dimension - 1;
+        let mut num1_vec = Vec::new();
+        let mut num2_vec = Vec::new();
+        while num1 != 0 {
+            num1_vec.push(num1 & mask);
+            num1 >>= trailing_zeros;
+        }
+        while num2 != 0 {
+            num2_vec.push(num2 & mask);
+            num2 >>= trailing_zeros;
+        }
+        let len = num1_vec.len().max(num2_vec.len()).max(1);
+        num1_vec.resize(len, 0);
+        num2_vec.resize(len, 0);
+        let vec1 = self.rlwe_values(&num1_vec, &mut rng);
+        let vec2 = self.rgsw_values(&num2_vec, &mut rng);
+        (vec1, vec2)
+    }
+
+    ///    Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
+    ///   
+    ///    # Arguments
+    ///   
+    ///    * Input: vector `values`.
+    ///    * Input: encryption key `ntt_ring_secret_key`.
+    ///    * Input: This basis used for decomposition of the field `basis`.
+    ///    * Input: sampler used for generating random number `error_sampler`.
+    ///    * Input: method used for generating random number `rng`.
+    ///    * Output:corresponding NTTRGSW ciphertext X^values.
+    fn rgsw_values<R: CryptoRng + Rng>(&self, values: &[usize], mut rng: R) -> Vec<NTTRGSW<F>> {
+        let len = values.len();
+        let mut res = Vec::with_capacity(len);
+        let basis = self.params.blind_rotation_basis();
+        for &v in values {
+            let mut rgsw = NTTRGSW::generate_random_zero_sample(
+                &self.ntt_ring_secret_key,
+                basis,
+                self.error_sampler,
+                &mut rng,
+            );
+            self.ntt_rgsw_turn(&mut rgsw, v);
+            res.push(rgsw);
+        }
+        res
+    }
+
+    ///    Performs the operation of turning a vector to the corresponding RLWE ciphertext.
+    ///   
+    ///    # Arguments
+    ///   
+    ///    * Input: vector `values`.
+    ///    * Input: encryption key `ntt_ring_secret_key`.
+    ///    * Input: The encryption of 1 `delta`.
+    ///    * Input: sampler used for generating random number `error_sampler`.
+    ///    * Input: method used for generating random number `rng`.
+    ///    * Output:corresponding RLWE ciphertext X^(-values).
+    fn rlwe_values<R: CryptoRng + Rng>(&self, values: &[usize], mut rng: R) -> Vec<RLWE<F>> {
+        let len = values.len();
+        let mut res = Vec::with_capacity(len);
+        for &v in values {
+            let mut rlwe = RLWE::generate_random_zero_sample(
+                &self.ntt_ring_secret_key,
+                self.error_sampler,
+                &mut rng,
+            );
+            rlwe.b_mut()[0] += self.delta;
+            Self::rlwe_turn(&mut rlwe, v);
+            res.push(rlwe)
+        }
+        res
+    }
+
+    ///    Performs the RLWE rotation operation.
+    ///   
+    ///    # Arguments
+    ///   
+    ///    * Input: RLWE ciphertext `ciphertext`.
+    ///    * Input: usize number `num`.
+    ///    * Output:RLWE ciphertext `ciphertext*x^num`.
+    pub fn rlwe_turn(ciphertext: &mut RLWE<F>, num: usize) {
+        let (a, b) = ciphertext.a_b_mut_slices();
+        a.rotate_right(num);
+        b.rotate_right(num);
+        for elem in &mut a[..num] {
+            *elem = -*elem;
+        }
+        for elem in &mut b[..num] {
+            *elem = -*elem;
+        }
+    }
+
+    ///    Performs the NTTRGSW rotation operation.
+    ///   
+    ///    # Arguments
+    ///   
+    ///    * Input: NTTRGSW ciphertext `ciphertext`.
+    ///    * Input: usize number `num`.
+    ///    * Input: the size of NTTRGSW vector `poly_length`.
+    ///    * Output:RGSW ciphertext `ciphertext*x^(-num)`.
+    pub fn ntt_rgsw_turn(&self, ciphertext: &mut NTTRGSW<F>, num: usize) {
+        let ring_dimension = self.params.ring_dimension();
+        let basis = self.params.blind_rotation_basis();
+        let neg_num = if num != 0 {
+            (ring_dimension << 1) - num
+        } else {
+            0
+        };
+        let mut poly = NTTPolynomial::new(vec![F::zero(); ring_dimension]);
+        let ntt_table = F::get_ntt_table(ring_dimension.trailing_zeros()).unwrap();
+        ntt_table.transform_coeff_one_monomial(neg_num, poly.as_mut_slice());
+        let mut poly_c = poly.clone();
+        ciphertext.c_neg_s_m_mut().iter_mut().for_each(|rlwe| {
+            *rlwe.a_mut() += &poly;
+            poly.mul_scalar_assign(F::lazy_new(basis.basis()));
+        });
+        ciphertext.c_m_mut().iter_mut().for_each(|rlwe| {
+            *rlwe.b_mut() += &poly_c;
+            poly_c.mul_scalar_assign(F::lazy_new(basis.basis()));
+        });
+    }
 }
 
 ///    decryption for the ciphertext
@@ -428,126 +543,4 @@ pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -
 ///    Performs the operation turning a value to its real number
 pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
     (c.value() as f64 * 8_f64 / 132120577_f64).round() as u64 % 8
-}
-
-///    Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
-///   
-///    # Arguments
-///   
-///    * Input: vector `values`.
-///    * Input: encryption key `ntt_ring_secret_key`.
-///    * Input: This basis used for decomposition of the field `basis`.
-///    * Input: sampler used for generating random number `error_sampler`.
-///    * Input: method used for generating random number `rng`.
-///    * Output:corresponding NTTRGSW ciphertext X^values.
-fn rgsw_values<F, R>(
-    values: &[usize],
-    ntt_ring_secret_key: &NTTPolynomial<F>,
-    basis: Basis<F>,
-    error_sampler: FieldDiscreteGaussianSampler,
-    mut rng: R,
-) -> Vec<NTTRGSW<F>>
-where
-    R: Rng + CryptoRng,
-    F: NTTField,
-{
-    let ring_dimension = ntt_ring_secret_key.coeff_count();
-    let len = values.len();
-    let mut res = Vec::with_capacity(len);
-    for &v in values {
-        let mut rgsw = NTTRGSW::generate_random_zero_sample(
-            ntt_ring_secret_key,
-            basis,
-            error_sampler,
-            &mut rng,
-        );
-        ntt_rgsw_turn(&mut rgsw, v, ring_dimension, basis);
-        res.push(rgsw);
-    }
-    res
-}
-
-///    Performs the operation of turning a vector to the corresponding RLWE ciphertext.
-///   
-///    # Arguments
-///   
-///    * Input: vector `values`.
-///    * Input: encryption key `ntt_ring_secret_key`.
-///    * Input: The encryption of 1 `delta`.
-///    * Input: sampler used for generating random number `error_sampler`.
-///    * Input: method used for generating random number `rng`.
-///    * Output:corresponding RLWE ciphertext X^(-values).
-fn rlwe_values<F, R>(
-    values: &[usize],
-    ntt_ring_secret_key: &NTTPolynomial<F>,
-    delta: F,
-    error_sampler: FieldDiscreteGaussianSampler,
-    mut rng: R,
-) -> Vec<RLWE<F>>
-where
-    R: Rng + CryptoRng,
-    F: NTTField,
-{
-    let len = values.len();
-    let mut res = Vec::with_capacity(len);
-    for &v in values {
-        let mut rlwe =
-            RLWE::generate_random_zero_sample(ntt_ring_secret_key, error_sampler, &mut rng);
-        rlwe.b_mut()[0] += delta;
-        rlwe_turn(&mut rlwe, v);
-        res.push(rlwe)
-    }
-    res
-}
-
-///    Performs the RLWE rotation operation.
-///   
-///    # Arguments
-///   
-///    * Input: RLWE ciphertext `ciphertext`.
-///    * Input: usize number `num`.
-///    * Output:RLWE ciphertext `ciphertext*x^num`.
-pub fn rlwe_turn<F: NTTField>(ciphertext: &mut RLWE<F>, num: usize) {
-    let (a, b) = ciphertext.a_b_mut_slices();
-    a.rotate_right(num);
-    b.rotate_right(num);
-    for elem in &mut a[..num] {
-        *elem = -*elem;
-    }
-    for elem in &mut b[..num] {
-        *elem = -*elem;
-    }
-}
-
-///    Performs the NTTRGSW rotation operation.
-///   
-///    # Arguments
-///   
-///    * Input: NTTRGSW ciphertext `ciphertext`.
-///    * Input: usize number `num`.
-///    * Input: the size of NTTRGSW vector `poly_length`.
-///    * Output:RGSW ciphertext `ciphertext*x^(-num)`.
-pub fn ntt_rgsw_turn<F: NTTField>(
-    ciphertext: &mut NTTRGSW<F>,
-    num: usize,
-    ring_dimension: usize,
-    basis: Basis<F>,
-) {
-    let neg_num = if num != 0 {
-        (ring_dimension << 1) - num
-    } else {
-        0
-    };
-    let mut poly = NTTPolynomial::new(vec![F::zero(); ring_dimension]);
-    let ntt_table = F::get_ntt_table(ring_dimension.trailing_zeros()).unwrap();
-    ntt_table.transform_coeff_one_monomial(neg_num, poly.as_mut_slice());
-    let mut poly_c = poly.clone();
-    ciphertext.c_neg_s_m_mut().iter_mut().for_each(|rlwe| {
-        *rlwe.a_mut() += &poly;
-        poly.mul_scalar_assign(F::lazy_new(basis.basis()));
-    });
-    ciphertext.c_m_mut().iter_mut().for_each(|rlwe| {
-        *rlwe.b_mut() += &poly_c;
-        poly_c.mul_scalar_assign(F::lazy_new(basis.basis()));
-    });
 }
