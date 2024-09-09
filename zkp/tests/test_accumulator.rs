@@ -1,11 +1,13 @@
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT}, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension
+    derive::{DecomposableField, FheField, Field, Prime, NTT},
+    BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
+    MultilinearExtension,
 };
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
-use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use core::num;
 use itertools::izip;
 use num_traits::One;
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::{random, thread_rng};
 use rand_distr::Distribution;
 use sha2::{digest::typenum::bit, Sha256};
@@ -13,7 +15,9 @@ use std::rc::Rc;
 use std::vec;
 use zkp::{
     piop::{
-        accumulator::AccumulatorSnarks, rlwe_mul_rgsw, AccumulatorIOP, AccumulatorInstance, AccumulatorWitness, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance
+        accumulator::AccumulatorSnarks, rlwe_mul_rgsw, AccumulatorIOP, AccumulatorInstance,
+        AccumulatorWitness, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts,
+        RlweMultRgswInstance,
     },
     utils::gen_identity_evaluations,
 };
@@ -112,7 +116,7 @@ fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &
 fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
-    bits_rgsw_c_ntt: RlweCiphertexts<F>, 
+    bits_rgsw_c_ntt: RlweCiphertexts<F>,
     bits_rgsw_f_ntt: RlweCiphertexts<F>,
     bits_info: &DecomposedBitsInfo<F>,
     ntt_info: &NTTInstanceInfo<F>,
@@ -258,7 +262,14 @@ fn update_accumulator<F: Field + NTTField>(
         )),
     };
 
-    let rlwe_mult_rgsw = generate_rlwe_mult_rgsw_instance(num_vars, input_rlwe, bits_rgsw_c_ntt, bits_rgsw_f_ntt, bits_info, ntt_info);
+    let rlwe_mult_rgsw = generate_rlwe_mult_rgsw_instance(
+        num_vars,
+        input_rlwe,
+        bits_rgsw_c_ntt,
+        bits_rgsw_f_ntt,
+        bits_info,
+        ntt_info,
+    );
 
     AccumulatorWitness {
         acc_ntt: acc_ntt.clone(),
@@ -294,8 +305,15 @@ fn generate_instance<F: Field + NTTField>(
         let bits_rgsw_c_ntt = random_rlwe_ciphertexts(bits_info.bits_len, &mut rng, num_vars);
         let bits_rgsw_f_ntt = random_rlwe_ciphertexts(bits_info.bits_len, &mut rng, num_vars);
         // perform ACC * d * RGSW
-        let updation =
-            update_accumulator(num_vars, acc_ntt.clone(), d, bits_rgsw_c_ntt, bits_rgsw_f_ntt, bits_info, ntt_info);
+        let updation = update_accumulator(
+            num_vars,
+            acc_ntt.clone(),
+            d,
+            bits_rgsw_c_ntt,
+            bits_rgsw_f_ntt,
+            bits_info,
+            ntt_info,
+        );
         // perform ACC + ACC * d * RGSW
         acc_ntt = RlweCiphertext {
             a: Rc::new(acc_ntt.a.as_ref() + updation.rlwe_mult_rgsw.output_rlwe_ntt.a.as_ref()),
@@ -326,7 +344,6 @@ fn generate_instance<F: Field + NTTField>(
         ntt_info,
     )
 }
-
 
 #[test]
 fn test_random_accumulator() {
@@ -363,7 +380,7 @@ fn test_random_accumulator() {
     let num_updations = 10;
     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
     let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
-    
+
     let info = instance.info();
 
     let (kit, recursive_proof) = AccumulatorIOP::<FF>::prove(&instance);
@@ -424,7 +441,6 @@ fn test_random_accumulator_extension_field() {
 
     let (kit, recursive_proof) = AccumulatorIOP::<EF>::prove(&instance_ef);
 
-
     let evals_at_r = instance.evaluate_ext(&kit.randomness);
     let evals_at_u = instance.evaluate_ext(&kit.u);
 
@@ -441,8 +457,7 @@ fn test_random_accumulator_extension_field() {
 }
 
 #[test]
-fn test_snarks()
-{
+fn test_snarks() {
     // information used to decompose bits
     let base_len: usize = 2;
     let base: FF = FF::new(1 << base_len);

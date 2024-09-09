@@ -35,7 +35,6 @@ pub use field::{DecomposableField, FheField, Field, NTTField, PrimeField};
 pub use polynomial::multivariate::{
     DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
     SparsePolynomial,
-    
 };
 pub use polynomial::univariate::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, NTTPolynomial, Polynomial,

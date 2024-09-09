@@ -173,8 +173,7 @@ fn generate_instance<F: Field + NTTField>(
     )
 }
 
-fn main()
-{
+fn main() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
 

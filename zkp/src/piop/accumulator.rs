@@ -39,13 +39,19 @@ use super::RlweMultRgswIOP;
 use super::RlweMultRgswInstance;
 use super::{DecomposedBits, DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
 use super::{RlweCiphertext, RlweCiphertexts};
-use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation, print_statistic, add_assign_ef};
+use crate::utils::{
+    add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
+    verify_oracle_relation,
+};
 
 /// IOP for Accumulator
 pub struct AccumulatorIOP<F: Field>(PhantomData<F>);
 
 /// SNARKs for Accumulator compiled with PCS
-pub struct AccumulatorSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
+pub struct AccumulatorSnarks<F: Field, EF: AbstractExtensionField<F>>(
+    PhantomData<F>,
+    PhantomData<EF>,
+);
 /// accumulator witness when performing ACC = ACC + (X^{-a_u} + 1) * ACC * RGSW(Z_u)
 pub struct AccumulatorWitness<F: Field> {
     /// * Witness when performing input_rlwe_ntt := (X^{-a_u} + 1) * ACC
@@ -848,11 +854,11 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         }
 
         // check the equality relations among the accmulator updations
-        for (this, next) in evals.updations.iter().tuple_windows(){
+        for (this, next) in evals.updations.iter().tuple_windows() {
             let this_acc = &this.acc_ntt;
             let this_mult = &this.rlwe_mult_rgsw.output_rlwe_ntt;
             let next_acc = &next.acc_ntt;
-            if !(this_acc.0 + this_mult.0 == next_acc.0 && this_acc.1 + this_mult.1 == next_acc.1){
+            if !(this_acc.0 + this_mult.0 == next_acc.0 && this_acc.1 + this_mult.1 == next_acc.1) {
                 return false;
             }
         }

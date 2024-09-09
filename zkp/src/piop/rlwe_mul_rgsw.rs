@@ -33,7 +33,10 @@ use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::ProofWrapper;
 use crate::sumcheck::SumcheckKit;
-use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation, print_statistic, add_assign_ef};
+use crate::utils::{
+    add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
+    verify_oracle_relation,
+};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, MultilinearExtension,
@@ -603,7 +606,8 @@ impl<F: Field> RlweMultRgswEval<F> {
             randomness.len(),
             self.bits_rlwe.0.len() + self.bits_rlwe.1.len()
         );
-        *r_coeff += self.bits_rlwe
+        *r_coeff += self
+            .bits_rlwe
             .0
             .iter()
             .chain(self.bits_rlwe.1.iter())
@@ -618,7 +622,8 @@ impl<F: Field> RlweMultRgswEval<F> {
             randomness.len(),
             self.bits_rlwe_ntt.0.len() + self.bits_rlwe_ntt.1.len()
         );
-        *r_point += self.bits_rlwe_ntt
+        *r_point += self
+            .bits_rlwe_ntt
             .0
             .iter()
             .chain(self.bits_rlwe_ntt.1.iter())
