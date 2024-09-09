@@ -31,13 +31,12 @@ use super::NTTBareIOP;
 use super::{DecomposedBits, DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::MLSumcheck;
-use crate::sumcheck::Proof;
 use crate::sumcheck::ProofWrapper;
 use crate::sumcheck::SumcheckKit;
 use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation, print_statistic, add_assign_ef};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+    ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
 use itertools::izip;
