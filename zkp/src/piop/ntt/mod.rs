@@ -36,7 +36,7 @@ use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
 };
 use algebra::{
-    utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
+    utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
 };
 use core::fmt;
@@ -49,8 +49,6 @@ use pcs::{
 };
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
-use std::os::macos::raw::stat;
-use std::os::unix::fs::FileExt;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -517,7 +515,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
             randomness,
             &mut poly,
             &mut claimed_sum,
-            &instance,
+            instance,
             &u,
         );
 
@@ -581,7 +579,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
             return false;
         }
 
-        <NTTIOP<F>>::verify_recursive(&mut trans, &recursive_proof, info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, info, &u, &subclaim)
     }
     /// The delegation of F(u, v) consists of logN - 1 rounds, each of which is a sumcheck protocol.
     ///
@@ -656,7 +654,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// * `ntt_bare_state`: stores the prover state after proving the NTT bare
     pub fn prove_recursive(
         trans: &mut Transcript<F>,
-        ntt_bare_randomness: &Vec<F>,
+        ntt_bare_randomness: &[F],
         info: &NTTInstanceInfo<F>,
         u: &[F],
     ) -> NTTRecursiveProof<F> {
@@ -669,7 +667,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
         // the above sumcheck is reduced to prove F(u, v) where v is the requested point
         // Note that the delegated value F(u, v) is stored in proof.delegation_claimed_sums[0].
-        let mut requested_point = ntt_bare_randomness.clone();
+        let mut requested_point = ntt_bare_randomness.to_owned();
         let mut reduced_claim = f_mles[log_n - 1].evaluate(&requested_point);
 
         // 2. prove the computation of F(u, v) in log_n - 1 rounds

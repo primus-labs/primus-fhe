@@ -1,8 +1,7 @@
+use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
     BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
-use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
 use itertools::izip;
 use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
@@ -59,16 +58,6 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
     let poly = <Polynomial<F>>::from_slice(coeff);
     let ntt_form: Vec<_> = F::get_ntt_table(log_n).unwrap().transform(&poly).data();
     sort_array_with_reversed_bits(&ntt_form, log_n)
-}
-
-fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &[F]) -> Vec<F> {
-    assert_eq!(points.len(), (1 << log_n) as usize);
-    let reversed_points = sort_array_with_reversed_bits(points, log_n);
-    let ntt_poly = <NTTPolynomial<F>>::from_slice(&reversed_points);
-    F::get_ntt_table(log_n)
-        .unwrap()
-        .inverse_transform(&ntt_poly)
-        .data()
 }
 
 /// This function DOES NOT implement the real functionality of multiplication between RLWE ciphertext and RGSW ciphertext
@@ -223,7 +212,7 @@ fn test_random_rlwe_mult_rgsw() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -237,7 +226,7 @@ fn test_random_rlwe_mult_rgsw() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
@@ -318,7 +307,7 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -332,7 +321,7 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
@@ -414,7 +403,7 @@ fn test_snarks() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -428,7 +417,7 @@ fn test_snarks() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),

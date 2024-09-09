@@ -136,7 +136,7 @@ impl<F: DecomposableField> DenseMultilinearExtension<F> {
         let mut val = self.evaluations.clone();
         let mask = F::mask(base_len as u32);
 
-        let mut bits = Vec::with_capacity(bits_len as usize);
+        let mut bits = Vec::with_capacity(bits_len);
 
         // extract `base_len` bits as one "bit" at a time
         for _ in 0..bits_len {

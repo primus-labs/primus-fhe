@@ -19,14 +19,14 @@
 //! then the resulting purported sum is:
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
-use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
+use crate::sumcheck::{verifier::SubClaim, MLSumcheck};
 use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+    ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
 use itertools::izip;
@@ -166,7 +166,7 @@ impl<F: Field> DecomposedBits<F> {
         d_val: &Rc<DenseMultilinearExtension<F>>,
         decomposed_bits: &[Rc<DenseMultilinearExtension<F>>],
     ) {
-        assert_eq!(decomposed_bits.len(), self.bits_len as usize);
+        assert_eq!(decomposed_bits.len(), self.bits_len);
         for bit in decomposed_bits {
             assert_eq!(bit.num_vars, self.num_vars);
         }
@@ -176,7 +176,7 @@ impl<F: Field> DecomposedBits<F> {
 
     /// Pack all the involved small polynomials into a single vector of evaluations without padding zeros.
     pub fn pack_all_mles(&self) -> Vec<F> {
-        assert_eq!(self.d_val.len() * self.bits_len as usize, self.d_bits.len());
+        assert_eq!(self.d_val.len() * self.bits_len, self.d_bits.len());
 
         // arrangement: all values||all decomposed bits
         self.d_val
@@ -303,7 +303,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
 
     /// return the number of coins used in this IOP
     pub fn num_coins(info: &DecomposedBitsInfo<F>) -> usize {
-        info.bits_len as usize * info.num_instances
+        info.bits_len * info.num_instances
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
@@ -316,9 +316,9 @@ impl<F: Field + Serialize> BitDecomposition<F> {
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         // randomness to combine sumcheck protocols
-        let randomness = Self::sample_coins(&mut trans, &instance);
+        let randomness = Self::sample_coins(&mut trans, instance);
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
+        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
@@ -348,7 +348,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         for (r, bit) in izip!(randomness, instance.d_bits.iter()) {
             let mut product: Vec<_> = Vec::with_capacity(base + 1);
             let mut op_coefficient: Vec<_> = Vec::with_capacity(base + 1);
-            product.push(Rc::clone(&eq_at_u));
+            product.push(Rc::clone(eq_at_u));
             op_coefficient.push((F::one(), F::zero()));
 
             let mut minus_k = F::zero();
@@ -401,12 +401,9 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         eq_at_u_r: F,
     ) -> bool {
         assert_eq!(evals.d_val.len(), info.num_instances);
-        assert_eq!(
-            evals.d_bits.len(),
-            info.num_instances * info.bits_len as usize
-        );
+        assert_eq!(evals.d_bits.len(), info.num_instances * info.bits_len);
         // base_pow = [1, B, ..., B^{l-1}]
-        let mut base_pow = vec![F::one(); info.bits_len as usize];
+        let mut base_pow = vec![F::one(); info.bits_len];
         base_pow.iter_mut().fold(F::one(), |acc, pow| {
             *pow *= acc;
             acc * info.base
@@ -416,7 +413,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         if !evals
             .d_val
             .iter()
-            .zip(evals.d_bits.chunks_exact(info.bits_len as usize))
+            .zip(evals.d_bits.chunks_exact(info.bits_len))
             .all(|(val, bits)| {
                 *val == bits
                     .iter()

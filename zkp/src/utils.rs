@@ -49,7 +49,7 @@ pub fn add_assign_ef<F: Field, EF: AbstractExtensionField<F>>(
 /// * `trans`: the transcript maintained by verifier
 #[inline]
 pub fn verify_oracle_relation<F: Field>(evals: &[F], oracle_eval: F, random_point: &[F]) -> bool {
-    let eq_at_r = gen_identity_evaluations(&random_point);
+    let eq_at_r = gen_identity_evaluations(random_point);
     let randomized_eval = evals
         .iter()
         .zip(eq_at_r.iter())
@@ -69,6 +69,7 @@ pub fn verify_oracle_relation<F: Field>(evals: &[F], oracle_eval: F, random_poin
 /// `commit_time` - commit time in PCS
 /// `open_time` - open time in PCS
 /// `verifier_time` - verifier
+#[allow(clippy::too_many_arguments)]
 pub fn print_statistic(
     // Total
     total_prover_time: u128,

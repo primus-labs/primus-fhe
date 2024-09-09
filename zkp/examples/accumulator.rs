@@ -5,16 +5,25 @@ use algebra::{
 use itertools::izip;
 use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
-use rand::thread_rng;
+use rand::prelude::*;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
-    accumulator::AccumulatorSnarks, AccumulatorIOP, AccumulatorInstance, AccumulatorWitness,
-    DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
+    accumulator::AccumulatorSnarks, AccumulatorInstance, AccumulatorWitness, DecomposedBitsInfo,
+    NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
 };
 
-// field type
+// # Parameters
+// n = 1024: denotes the dimension of LWE
+// N = 1024: denotes the dimension of ring in RLWE
+// B = 2^3: denotes the basis used in the bit decomposition
+// q = 1024: denotes the modulus in LWE
+// Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
+const DIM_LWE: usize = 1024;
+const LOG_DIM_RLWE: usize = 10;
+const LOG_B: usize = 3;
+
 type FF = BabyBear;
 type EF = BabyBearExetension;
 type Hash = Sha256;
@@ -330,13 +339,12 @@ fn generate_instance<F: Field + NTTField>(
     )
 }
 
-#[test]
-fn test_random_accumulator() {
+fn main() {
     // information used to decompose bits
-    let base_len: usize = 2;
+    let base_len: usize = LOG_B;
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = 10;
+    let num_vars = LOG_DIM_RLWE;
     let bits_info = DecomposedBitsInfo {
         base,
         base_len,
@@ -362,118 +370,7 @@ fn test_random_accumulator() {
         num_ntt: 0,
     };
 
-    let num_updations = 10;
-    let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
-
-    let info = instance.info();
-
-    let (kit, recursive_proof) = AccumulatorIOP::<FF>::prove(&instance);
-
-    let evals_at_r = instance.evaluate(&kit.randomness);
-    let evals_at_u = instance.evaluate(&kit.u);
-
-    let mut wrapper = kit.extract();
-    let check = AccumulatorIOP::<FF>::verify(
-        &mut wrapper,
-        &evals_at_r,
-        &evals_at_u,
-        &info,
-        &recursive_proof,
-    );
-
-    assert!(check);
-}
-
-#[test]
-fn test_random_accumulator_extension_field() {
-    // information used to decompose bits
-    let base_len: usize = 2;
-    let base: FF = FF::new(1 << base_len);
-    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
-        base,
-        base_len,
-        bits_len,
-        num_vars,
-        num_instances: 0,
-    };
-
-    // information used to perform NTT
-    let log_n = num_vars;
-    let m = 1 << (log_n + 1);
-    let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::one();
-    for _ in 0..m {
-        ntt_table.push(power);
-        power *= root;
-    }
-    let ntt_table = Rc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
-        num_vars,
-        ntt_table,
-        num_ntt: 0,
-    };
-
-    let num_updations = 10;
-    let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
-    let instance_ef = instance.to_ef::<EF>();
-
-    let info = instance_ef.info();
-
-    let (kit, recursive_proof) = AccumulatorIOP::<EF>::prove(&instance_ef);
-
-    let evals_at_r = instance.evaluate_ext(&kit.randomness);
-    let evals_at_u = instance.evaluate_ext(&kit.u);
-
-    let mut wrapper = kit.extract();
-    let check = AccumulatorIOP::<EF>::verify(
-        &mut wrapper,
-        &evals_at_r,
-        &evals_at_u,
-        &info,
-        &recursive_proof,
-    );
-
-    assert!(check);
-}
-
-#[test]
-fn test_snarks() {
-    // information used to decompose bits
-    let base_len: usize = 2;
-    let base: FF = FF::new(1 << base_len);
-    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
-        base,
-        base_len,
-        bits_len,
-        num_vars,
-        num_instances: 0,
-    };
-
-    // information used to perform NTT
-    let log_n = num_vars;
-    let m = 1 << (log_n + 1);
-    let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::one();
-    for _ in 0..m {
-        ntt_table.push(power);
-        power *= root;
-    }
-    let ntt_table = Rc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
-        num_vars,
-        ntt_table,
-        num_ntt: 0,
-    };
-
-    let num_updations = 10;
+    let num_updations = DIM_LWE;
     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
     let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
 

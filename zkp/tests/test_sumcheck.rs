@@ -1,11 +1,8 @@
 use algebra::{
-    derive::{Field, Prime},
-    utils::Transcript,
-    BabyBear, BabyBearExetension, DenseMultilinearExtension, Field, FieldUniformSampler,
+    utils::Transcript, BabyBear, DenseMultilinearExtension, Field, FieldUniformSampler,
     ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use rand::prelude::*;
-use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
 use serde::Serialize;
 use std::rc::Rc;
@@ -13,7 +10,7 @@ use zkp::sumcheck::IPForMLSumcheck;
 use zkp::sumcheck::MLSumcheck;
 
 // field type
-type FF = BabyBearExetension;
+type FF = BabyBear;
 
 fn random_product<F: Field, R: RngCore>(
     nv: usize,

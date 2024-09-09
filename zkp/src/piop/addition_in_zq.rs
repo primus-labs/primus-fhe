@@ -10,17 +10,16 @@
 //!     where u is the common random challenge from the verifier, used to instantiate the sum,
 //!     and then, it can be proved with the sumcheck protocol where the maximum variable-degree is 3.
 //! 3. a(x) + b(x) = c(x) + k(x)\cdot q => can be reduced to the evaluation of a random point since the LHS and RHS are both MLE
-use crate::sumcheck::{verifier::SubClaim, MLSumcheck, Proof};
+use crate::sumcheck::{verifier::SubClaim, MLSumcheck};
 use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+    ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
-use itertools::izip;
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{LinearCode, LinearCodeSpec},
@@ -106,7 +105,7 @@ impl<F: Field> AdditionInZqInstance<F> {
     #[inline]
     pub fn num_oracles(&self) -> usize {
         assert_eq!(self.abc.len(), 3);
-        assert_eq!(self.abc_bits.len(), 3 * self.bits_info.bits_len as usize);
+        assert_eq!(self.abc_bits.len(), 3 * self.bits_info.bits_len);
         self.abc.len() + 1 + self.abc_bits.len()
     }
 
@@ -293,9 +292,9 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         );
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
-        let randomness = Self::sample_coins(&mut trans, &instance);
+        let randomness = Self::sample_coins(&mut trans, instance);
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
+        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
@@ -387,7 +386,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         let bits_evals = evals.extract_decomposed_bits();
         let bits_randomness = &randomness[..<BitDecomposition<F>>::num_coins(&info.bits_info)];
         let check_decomposed_bits = <BitDecomposition<F>>::verify_as_subprotocol(
-            &bits_randomness,
+            bits_randomness,
             subclaim,
             &bits_evals,
             &info.bits_info,

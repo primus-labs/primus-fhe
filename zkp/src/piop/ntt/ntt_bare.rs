@@ -16,30 +16,17 @@
 //! The LHS and RHS of the above equation are both MLE for y, so it can be reduced to check at a random point due to Schwartz-Zippel Lemma.
 //! The remaining thing is to prove $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$ with the sumcheck protocol
 //! where u is the random challenge from the verifier.
-use crate::sumcheck::{prover::ProverState, verifier::SubClaim};
-use crate::sumcheck::{MLSumcheck, Proof, ProofWrapper, SumcheckKit};
-use crate::utils::{
-    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
-};
+use crate::sumcheck::verifier::SubClaim;
+use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use algebra::{
-    utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+    utils::Transcript, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
+    MultilinearExtension,
 };
-use core::fmt;
-use itertools::izip;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{LinearCode, LinearCodeSpec},
-    utils::hash::Hash,
-    PolynomialCommitmentScheme,
-};
-use rand::random;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::time::Instant;
 
-use super::{NTTInstance, NTTInstanceInfo, NTTInstances};
+use super::{NTTInstance, NTTInstanceInfo};
 
 /// IOP for NTT, i.e. $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
 pub struct NTTBareIOP<F: Field>(PhantomData<F>);
@@ -150,7 +137,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let randomness = F::one();
         let mut claimed_sum = F::zero();
-        Self::prove_as_subprotocol(randomness, &mut poly, &mut claimed_sum, &instance, &u);
+        Self::prove_as_subprotocol(randomness, &mut poly, &mut claimed_sum, instance, &u);
         // let evals_u = instance.points.evaluate(&u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)

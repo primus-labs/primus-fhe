@@ -1,23 +1,16 @@
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
-use algebra::{
-    utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension,
-};
 use algebra::{BabyBear, BabyBearExetension, Basis, FieldUniformSampler};
+use algebra::{DenseMultilinearExtension, Field};
 use itertools::izip;
-use num_traits::{One, Zero};
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{ExpanderCode, ExpanderCodeSpec},
-    PolynomialCommitmentScheme,
-};
+use num_traits::One;
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
+use std::rc::Rc;
 use std::vec;
-use std::{rc::Rc, time::Instant};
 use zkp::piop::{
     rlwe_mul_rgsw::RlweMultRgswSnarks, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
-    RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
+    RlweCiphertexts, RlweMultRgswInstance,
 };
 
 type FF = BabyBear;
@@ -25,15 +18,12 @@ type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
 
-type PolyFF = Polynomial<FF>;
-
 // # Parameters
 // n = 1024: denotes the dimension of LWE
 // N = 1024: denotes the dimension of ring in RLWE
 // B = 2^3: denotes the basis used in the bit decomposition
 // q = 1024: denotes the modulus in LWE
 // Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
-const DIM_LWE: usize = 1024;
 const LOG_DIM_RLWE: usize = 10;
 const LOG_B: usize = 2;
 
@@ -208,7 +198,7 @@ fn main() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -222,7 +212,7 @@ fn main() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len as usize);
+    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),

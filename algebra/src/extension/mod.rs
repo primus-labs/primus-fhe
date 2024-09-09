@@ -5,9 +5,8 @@ mod packed;
 pub use binomial_extension::*;
 pub use helper::*;
 pub use packed::*;
-use rand::{CryptoRng, Rng, RngCore};
 
-use crate::{Field, FieldUniformSampler};
+use crate::Field;
 use core::iter;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 

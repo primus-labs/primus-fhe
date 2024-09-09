@@ -1,20 +1,12 @@
-use algebra::utils::Transcript;
-use algebra::{
-    AbstractExtensionField, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension,
-    ListOfProductsOfPolynomials,
-};
+use algebra::{BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
 use itertools::izip;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{ExpanderCode, ExpanderCodeSpec},
-    PolynomialCommitmentScheme,
-};
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::{BitDecomposition, BitDecompositionSnarks, DecomposedBits};
+use zkp::piop::{BitDecompositionSnarks, DecomposedBits};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;

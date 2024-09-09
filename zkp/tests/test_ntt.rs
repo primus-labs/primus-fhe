@@ -1,27 +1,17 @@
-use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
-    utils::Transcript,
-    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
-    FieldUniformSampler, MultilinearExtension, NTTPolynomial,
-};
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
-use num_traits::{One, Zero};
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{ExpanderCode, ExpanderCodeSpec},
-    PolynomialCommitmentScheme,
+use algebra::{
+    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
+    MultilinearExtension, NTTPolynomial,
 };
+use num_traits::{One, Zero};
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
-use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::ntt::{ntt_bare::init_fourier_table, NTTInstances, NTTSnarks};
+use zkp::piop::ntt::ntt_bare::init_fourier_table;
+use zkp::piop::ntt::{NTTInstances, NTTSnarks};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
-
-#[derive(Field, Prime)]
-#[modulus = 59]
-pub struct Fq(u32);
 
 // field type
 type FF = BabyBear;
@@ -224,6 +214,12 @@ fn test_ntt_bare_without_delegation() {
     let kit = NTTBareIOP::prove(&ntt_instance);
     let evals_at_u = ntt_instance.points.evaluate(&kit.u);
     let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
+
+    let f_u = init_fourier_table(&kit.u, &ntt_instance.ntt_table);
+    let f_delegation = f_u.evaluate(&kit.randomness);
+    let f_oracle = obtain_fourier_matrix_oracle(log_n as u32);
+    let point = [kit.u.clone(), kit.randomness.clone()].concat();
+    assert_eq!(f_oracle.evaluate(&point), f_delegation);
 
     let mut wrapper = kit.extract();
 

@@ -4,11 +4,7 @@ use algebra::{
     FieldUniformSampler,
 };
 use num_traits::{One, Zero};
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{ExpanderCode, ExpanderCodeSpec},
-    PolynomialCommitmentScheme,
-};
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;

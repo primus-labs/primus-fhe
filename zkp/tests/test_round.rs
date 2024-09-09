@@ -1,13 +1,8 @@
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
     BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler,
 };
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{ExpanderCode, ExpanderCodeSpec},
-    PolynomialCommitmentScheme,
-};
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;

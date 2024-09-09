@@ -49,7 +49,7 @@ impl<F: Field> SumcheckKit<F> {
     pub fn extract(&self) -> ProofWrapper<F> {
         ProofWrapper::<F> {
             claimed_sum: self.claimed_sum,
-            info: self.info.clone(),
+            info: self.info,
             proof: self.proof.clone(),
         }
     }

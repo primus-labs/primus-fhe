@@ -3,9 +3,7 @@
 
 use std::vec;
 
-use algebra::{utils::Transcript, Field, FieldUniformSampler, PolynomialInfo};
-use rand::distributions::Distribution;
-use serde::Serialize;
+use algebra::{utils::Transcript, Field, PolynomialInfo};
 
 use crate::error::Error;
 use std::rc::Rc;

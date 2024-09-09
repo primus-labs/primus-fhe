@@ -1,10 +1,9 @@
 use std::marker::PhantomData;
 
 use rand::SeedableRng;
-use rand_distr::Distribution;
 use serde::Serialize;
 
-use crate::{AbstractExtensionField, Field, FieldUniformSampler};
+use crate::Field;
 
 use super::{Block, Prg};
 
@@ -54,7 +53,7 @@ impl<F: Field> Transcript<F> {
         let mut seed = [0u8; 16];
         self.transcript.challenge_bytes(label, &mut seed);
         let mut prg = Prg::from_seed(Block::from(seed));
-        (0..num).into_iter().map(|_| F::random(&mut prg)).collect()
+        (0..num).map(|_| F::random(&mut prg)).collect()
     }
 }
 

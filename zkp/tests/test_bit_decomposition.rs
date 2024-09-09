@@ -132,7 +132,7 @@ fn test_batch_trivial_bit_decomposition_base_2() {
 
 #[test]
 fn test_single_bit_decomposition() {
-    let base_len = 4 as usize;
+    let base_len = 4;
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;

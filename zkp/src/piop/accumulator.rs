@@ -10,12 +10,23 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
 
+use super::ntt::NTTRecursiveProof;
+use super::rlwe_mul_rgsw::RlweEval;
+use super::rlwe_mul_rgsw::RlweMultRgswEval;
+use super::rlwe_mul_rgsw::RlweMultRgswInfo;
+use super::NTTBareIOP;
+use super::RlweCiphertext;
+use super::RlweMultRgswIOP;
+use super::RlweMultRgswInstance;
+use super::{DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
+use crate::utils::{
+    add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
+    verify_oracle_relation,
+};
 use algebra::utils::Transcript;
 use algebra::AbstractExtensionField;
-use algebra::DecomposableField;
 use algebra::{
     DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
-    PolynomialInfo,
 };
 use itertools::izip;
 use itertools::Itertools;
@@ -26,23 +37,6 @@ use pcs::{
     PolynomialCommitmentScheme,
 };
 use serde::{Deserialize, Serialize};
-
-use super::bit_decomposition::BitDecomposition;
-use super::bit_decomposition::DecomposedBitsEval;
-use super::ntt::NTTRecursiveProof;
-use super::rlwe_mul_rgsw;
-use super::rlwe_mul_rgsw::RlweEval;
-use super::rlwe_mul_rgsw::RlweMultRgswEval;
-use super::rlwe_mul_rgsw::RlweMultRgswInfo;
-use super::NTTBareIOP;
-use super::RlweMultRgswIOP;
-use super::RlweMultRgswInstance;
-use super::{DecomposedBits, DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
-use super::{RlweCiphertext, RlweCiphertexts};
-use crate::utils::{
-    add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
-    verify_oracle_relation,
-};
 
 /// IOP for Accumulator
 pub struct AccumulatorIOP<F: Field>(PhantomData<F>);
@@ -152,7 +146,7 @@ impl<F: Field> fmt::Display for AccumulatorInstanceInfo<F> {
         writeln!(f, "An instance of Accumulator: #vars = {}", self.num_vars)?;
         write!(f, "- containing ")?;
         self.bits_info.fmt(f)?;
-        write!(f, "\n - containing")?;
+        write!(f, "\n- containing")?;
         self.ntt_info.fmt(f)
     }
 }
@@ -293,6 +287,7 @@ impl<F: Field> AccumulatorWitness<F> {
 
 impl<F: Field> AccumulatorInstance<F> {
     /// construct an accumulator instance based on ntt info and bit-decomposition info
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn new(
         num_vars: usize,
@@ -349,7 +344,7 @@ impl<F: Field> AccumulatorInstance<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
-        4 + self.num_updations * self.updations[0].num_oracles()
+        6 + self.num_updations * self.updations[0].num_oracles()
     }
 
     /// Return the log of the number of small polynomials used in IOP
@@ -508,12 +503,17 @@ impl<F: Field> AccumulatorInstance<F> {
         // output_ntt ==NTT== output
         add_assign_ef(&mut random_coeffs, &r_used[2], self.output.a.as_ref());
         add_assign_ef(&mut random_points, &r_used[2], self.output_ntt.a.as_ref());
-        add_assign_ef(&mut random_points, &r_used[3], self.output.b.as_ref());
+        add_assign_ef(&mut random_coeffs, &r_used[3], self.output.b.as_ref());
         add_assign_ef(&mut random_points, &r_used[3], self.output_ntt.b.as_ref());
 
+        let r_each_num = self.updations[0].num_ntt_contained();
         // ntts in each accumulator
-        for updation in &self.updations {
-            updation.update_ntt_instance_to_ef::<EF>(&mut random_coeffs, &mut random_points, r);
+        for (updation, r_each) in izip!(&self.updations, r.chunks_exact(r_each_num)) {
+            updation.update_ntt_instance_to_ef::<EF>(
+                &mut random_coeffs,
+                &mut random_points,
+                r_each,
+            );
         }
 
         NTTInstance::<EF> {
@@ -535,7 +535,7 @@ impl<F: Field> AccumulatorWitnessEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
-        4 + self.rlwe_mult_rgsw.num_oracles()
+        6 + self.rlwe_mult_rgsw.num_oracles()
     }
 
     /// Return the log of the number of small polynomials used in IOP
@@ -669,13 +669,13 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             instance.num_vars,
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        let randomness = Self::sample_coins(&mut trans, &instance);
+        let randomness = Self::sample_coins(&mut trans, instance);
         let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
         // add sumcheck products (without NTT) into poly
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
+        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
 
         // add sumcheck_products of NTT into poly
         let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
@@ -769,7 +769,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursive(&mut trans, &recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
     }
     /// Prover Accumulator
     #[inline]
@@ -935,7 +935,7 @@ where
         // 2.3 Generate proof of sumcheck protocol
         let (sumcheck_proof, sumcheck_state) =
             <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Addition In Zq");
+                .expect("Proof generated in Accumulator");
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
@@ -1009,7 +1009,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the proof generated in ACC");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP

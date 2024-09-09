@@ -1,28 +1,12 @@
-use algebra::utils::Transcript;
-use algebra::{
-    derive::{DecomposableField, Field},
-    DecomposableField, Field, FieldUniformSampler,
-};
-use algebra::{
-    AbstractExtensionField, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension,
-    ListOfProductsOfPolynomials,
-};
-use num_traits::{One, Zero};
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{ExpanderCode, ExpanderCodeSpec},
-    PolynomialCommitmentScheme,
-};
+use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension};
+use algebra::{DecomposableField, Field, FieldUniformSampler};
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use std::time::Instant;
-use std::vec;
 use zkp::piop::round::RoundSnarks;
-use zkp::piop::{AdditionInZq, AdditionInZqInstance, DecomposedBitsInfo, RoundInstance};
-use zkp::sumcheck::MLSumcheck;
-use zkp::utils::{print_statistic, verify_oracle_relation};
+use zkp::piop::{DecomposedBitsInfo, RoundInstance};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -36,12 +20,10 @@ const BASE_FIELD_BITS: usize = 31;
 // q = 1024: denotes the modulus in LWE
 // Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
 const LOG_DIM_RLWE: usize = 10;
-const LOG_B: u32 = 3;
 
 const FP: u32 = FF::MODULUS_VALUE; // ciphertext space
 const FT: u32 = 4; // message space
 const BASE_LEN: u32 = 1;
-const LOG_FT: u32 = FT.next_power_of_two().ilog2();
 const FK: u32 = (FP - 1) / FT;
 const LOG_FK: u32 = FK.next_power_of_two().ilog2();
 const DELTA: u32 = (1 << LOG_FK) - FK;
@@ -87,15 +69,14 @@ fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
         num_instances: 2,
     };
 
-    let instance = <RoundInstance<FF>>::new(
+    <RoundInstance<FF>>::new(
         k,
         delta,
         input,
         output,
         &output_bits_info,
         &offset_bits_info,
-    );
-    instance
+    )
 }
 fn main() {
     // Generate 1 instance to be proved, containing N = 2^num_vars round relation to be proved

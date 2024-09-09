@@ -210,8 +210,18 @@ impl<F: Field> RlweCiphertexts<F> {
         self.b_bits.push(Rc::new(b));
     }
 
+    /// Is empty
+    pub fn is_empty(&self) -> bool {
+        if self.a_bits.is_empty() || self.b_bits.is_empty() {
+            return true;
+        }
+        false
+    }
     /// return the len
     pub fn len(&self) -> usize {
+        if self.is_empty() {
+            return 0;
+        }
         assert_eq!(self.a_bits.len(), self.b_bits.len());
         self.a_bits.len()
     }
@@ -297,7 +307,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
     ) -> Self {
         // update num_ntt of ntt_info
         let ntt_info = NTTInstanceInfo {
-            num_ntt: (bits_info.bits_len << 1) as usize,
+            num_ntt: bits_info.bits_len << 1,
             num_vars,
             ntt_table: ntt_info.ntt_table.clone(),
         };
@@ -654,13 +664,13 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
             instance.num_vars,
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        let randomness = Self::sample_coins(&mut trans, &instance);
+        let randomness = Self::sample_coins(&mut trans, instance);
         let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
         // add sumcheck products (without NTT) into poly
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
+        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
 
         // add sumcheck products of NTT into poly
         let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
@@ -807,7 +817,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursive(&mut trans, &recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
     }
 
     /// Verify RLWE * RGSW with leaving NTT part outside of the interface

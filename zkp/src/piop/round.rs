@@ -19,13 +19,12 @@
 use super::bit_decomposition::{BitDecomposition, DecomposedBitsEval};
 use super::{DecomposedBits, DecomposedBitsInfo};
 use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::Proof;
 use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::gen_identity_evaluations;
 use crate::utils::{eval_identity_function, print_statistic, verify_oracle_relation};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+    ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
 use itertools::izip;
@@ -432,8 +431,8 @@ impl<F: Field + Serialize> RoundIOP<F> {
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
-        let randomness = Self::sample_coins(&mut trans, &instance);
-        Self::prove_as_subprotocol(&randomness, &mut poly, &instance, &eq_at_u);
+        let randomness = Self::sample_coins(&mut trans, instance);
+        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
@@ -479,7 +478,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // 2. add sumcheck1 for \sum_{x} eq(u, x) * w(x) * (1-w(x)) = 0, i.e. w(x)\in\{0,1\}^l with random coefficient r_1
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&eq_at_u),
+                Rc::clone(eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.option),
             ],
@@ -498,7 +497,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * w(x) * (a(x) * \lambda_1)
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&eq_at_u),
+                Rc::clone(eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.input),
             ],
@@ -512,7 +511,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * w(x) * (b(x) * \lambda_2)
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&eq_at_u),
+                Rc::clone(eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.output),
             ],
@@ -526,7 +525,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * (1 - w(x)) * a(x)
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&eq_at_u),
+                Rc::clone(eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.input),
             ],
@@ -540,7 +539,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * (1 - w(x)) * (-k * b(x))
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&eq_at_u),
+                Rc::clone(eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.output),
             ],
@@ -554,7 +553,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // product: eq(u, x) * (1 - w(x)) * (-c(x))
         poly.add_product_with_linear_op(
             [
-                Rc::clone(&eq_at_u),
+                Rc::clone(eq_at_u),
                 Rc::clone(&instance.option),
                 Rc::clone(&instance.offset),
             ],

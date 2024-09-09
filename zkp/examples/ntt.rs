@@ -1,24 +1,13 @@
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
-use algebra::{
-    utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension,
-};
 use algebra::{BabyBear, BabyBearExetension};
-use num_traits::{One, Zero};
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{ExpanderCode, ExpanderCodeSpec},
-    PolynomialCommitmentScheme,
-};
+use algebra::{DecomposableField, DenseMultilinearExtension, Field};
+use num_traits::One;
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
-use std::vec;
-use std::{rc::Rc, time::Instant};
+use std::rc::Rc;
+use zkp::piop::ntt::NTTInstances;
 use zkp::piop::ntt::NTTSnarks;
-use zkp::piop::{NTTBareIOP, NTTIOP};
-use zkp::sumcheck::verifier;
-use zkp::utils::print_statistic;
-use zkp::{piop::ntt::NTTInstances, sumcheck::MLSumcheck};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
