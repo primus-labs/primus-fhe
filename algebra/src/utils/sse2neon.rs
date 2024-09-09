@@ -85,9 +85,9 @@ macro_rules! _mm_aeskeygenassist_si128 {
         vreinterpretq_u8_u32(vld1q_u32(
             [
                 x1,
-                ((x1 >> 8) | (x1 << 24)) ^ $rcon,
+                (x1.rotate_right(8) | (x1 << 24)) ^ $rcon,
                 x3,
-                ((x3 >> 8) | (x3 << 24)) ^ $rcon,
+                (x3.rotate_right(8) | (x3 << 24)) ^ $rcon,
             ]
             .as_ptr(),
         ))
