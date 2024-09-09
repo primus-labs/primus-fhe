@@ -43,7 +43,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
         .collect();
 
-    let mut t_evaluations: Vec<_> = (0..range).map(|i| FF::new(i as u32)).collect();
+    let mut t_evaluations: Vec<_> = (0..range).map(FF::new).collect();
     t_evaluations.resize(1 << num_vars, FF::zero());
     let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars,

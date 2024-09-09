@@ -76,23 +76,28 @@ fn code_distance_test() {
     let codeword_len = brakedown_code.codeword_len;
 
     let mut target_0 = vec![FF32::zero(); codeword_len];
-    target_0[..message_len]
-        .iter_mut()
-        .for_each(|x| *x = rng.sample(field_distr));
 
-    let mut target_1 = target_0.clone();
+        target_0[..message_len]
+            .iter_mut()
+            .for_each(|x| *x = rng.sample(field_distr));
 
-    let check_times = 31;
-    for _ in 0..check_times {
-        target_1[0] += FF32::one();
-        brakedown_code.encode(&mut target_0);
-        brakedown_code.encode(&mut target_1);
-        let num_real: usize = target_0
-            .iter()
-            .zip(target_1.iter())
-            .map(|(x_0, x_1)| (x_0 != x_1) as usize)
-            .sum();
-        let num_expected = (brakedown_code.distance() * codeword_len as f64) as usize;
-        assert!(num_real >= num_expected);
-    }
+        let mut target_1 = target_0.clone();
+
+        let check_times = 31;
+        for _ in 0..check_times {
+            target_1[0] += FF32::one();
+            brakedown_code.encode(&mut target_0);
+            brakedown_code.encode(&mut target_1);
+            let num_real: usize = target_0
+                .iter()
+                .zip(target_1.iter())
+                .map(|(x_0, x_1)| (x_0 != x_1) as usize)
+                .sum();
+            let num_expected = (brakedown_code.distance() * codeword_len as f64) as usize;
+            if num_real < num_expected {
+                println!("num real {:?} num expected {:?}", num_real, num_expected);
+
+            };
+            assert!(num_real >= num_expected);
+        }
 }
