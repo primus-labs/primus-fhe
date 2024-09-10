@@ -13,3 +13,6 @@ rayon = { workspace = true }
 once_cell = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
