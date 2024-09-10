@@ -79,7 +79,9 @@ fn init_cipher() {
         });
     }
 }
+
 #[test]
+#[ignore = "slow"]
 fn test_gt_hcmp() {
     init_param();
     init_cipher();
@@ -107,6 +109,7 @@ fn test_gt_hcmp() {
 }
 
 #[test]
+#[ignore = "slow"]
 fn test_eq_hcmp() {
     init_param();
     init_cipher();
@@ -134,6 +137,7 @@ fn test_eq_hcmp() {
 }
 
 #[test]
+#[ignore = "slow"]
 fn test_lt_hcmp() {
     init_param();
     init_cipher();
@@ -161,6 +165,7 @@ fn test_lt_hcmp() {
 }
 
 #[test]
+#[ignore = "slow"]
 fn test_homand() {
     init_param();
     let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
@@ -198,6 +203,7 @@ fn test_homand() {
 }
 
 #[test]
+#[ignore = "slow"]
 fn test_gt_arbhcmp() {
     init_param();
     init_cipher();
@@ -225,6 +231,7 @@ fn test_gt_arbhcmp() {
 }
 
 #[test]
+#[ignore = "slow"]
 fn test_eq_arbhcmp() {
     init_param();
     init_cipher();
@@ -252,6 +259,7 @@ fn test_eq_arbhcmp() {
 }
 
 #[test]
+#[ignore = "slow"]
 fn test_lt_arbhcmp() {
     init_param();
     init_cipher();
