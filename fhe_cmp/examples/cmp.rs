@@ -18,18 +18,15 @@ fn main() {
     println!("Start Time: {}ms", time.as_millis());
     for i in 0..10 {
         println!("{i}");
-        let x = rng.gen_range(0..10000);
-        let y = rng.gen_range(0..10000);
+        let x = rng.gen_range(0..1000000);
+        let y = rng.gen_range(0..1000000);
         let value1 = enc_elements.rlwe_encrypt(x, &mut rng);
         let value2 = enc_elements.rgsw_encrypt(y, &mut rng);
         let (value1, value2) = enc_elements.align(value1, value2, &mut rng);
         let (lt, eq, gt) = join_bit_operations(&value1, &value2, &rotationkey);
-        let start = Instant::now();
         let lt_value = decrypt(rlwe_sk, lt);
         let eq_value = decrypt(rlwe_sk, eq);
         let gt_value = decrypt(rlwe_sk, gt);
-        let time = start.elapsed();
-        println!("Time: {}ms", time.as_millis());
         match (x.cmp(&y), lt_value, eq_value, gt_value) {
             (Ordering::Less, lv, ev, gv)
                 if lv != 1
