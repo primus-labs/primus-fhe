@@ -2,13 +2,14 @@ use algebra::{
     transformation::MonomialNTT, AsInto, Field, FieldDiscreteGaussianSampler, NTTField,
     NTTPolynomial, Polynomial,
 };
-use fhe_core::{lwe_modulus_switch, LWEModulusType, Parameters, RLWEBlindRotationKey};
+use fhe_core::{lwe_modulus_switch, LWEModulusType, Parameters, RLWEBlindRotationKey, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
 
+
 ///    The struct of homomorphic comparison scheme.
 pub struct HomeCmpScheme<C: LWEModulusType, F: NTTField> {
-    key: RLWEBlindRotationKey<F>,
+    rlwe_key: RLWEBlindRotationKey<F>,
     params: Parameters<C, F>,
     delta: F,
     half_delta: F,
@@ -23,7 +24,9 @@ pub struct Encryptor<C: LWEModulusType, F: NTTField> {
 
 impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
     ///    Create a new instance.
-    pub fn new(key: RLWEBlindRotationKey<F>, params: Parameters<C, F>) -> Self {
+    pub fn new(key: &SecretKeyPack<C, F>) -> Self {
+        let params = *key.parameters();
+        let rlwe_key = RLWEBlindRotationKey::generate(key);
         let delta = F::lazy_new(
             (F::MODULUS_VALUE.as_into() / params.lwe_plain_modulus() as f64)
                 .round()
@@ -35,7 +38,7 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
                 .as_into(),
         );
         Self {
-            key,
+            rlwe_key,
             params,
             delta,
             half_delta,
@@ -44,7 +47,7 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
 
     ///    Return a reference to the key.
     pub fn key(&self) -> &RLWEBlindRotationKey<F> {
-        &self.key
+        &self.rlwe_key
     }
 
     ///    Return a reference to the parameters.
@@ -68,7 +71,7 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
     ///   
     ///    * `ctxt` - The LWE ciphertext.
     ///    * `test_vector` - The chosen test_vector.
-    pub fn fbs(&self, ctxt: LWE<F>, test_vector: &[F]) -> LWE<F> {
+    fn fbs(&self, ctxt: LWE<F>, test_vector: &[F]) -> LWE<F> {
         assert_eq!(self.params.ring_dimension(), test_vector.len());
 
         let switched_lwe = lwe_modulus_switch(
@@ -77,7 +80,7 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
             self.params.modulus_switch_round_method(),
         );
         let test_vector = Polynomial::from_slice(test_vector);
-        self.key
+        self.rlwe_key
             .blind_rotate(
                 test_vector,
                 &switched_lwe,
@@ -351,10 +354,11 @@ impl<C: LWEModulusType, F: NTTField> HomeCmpScheme<C, F> {
 impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
     ///new Encryptor struct
     pub fn new(
-        params: Parameters<C, F>,
-        ntt_ring_secret_key: NTTPolynomial<F>,
-        error_sampler: FieldDiscreteGaussianSampler,
+        secret_key: &SecretKeyPack<C, F>
     ) -> Self {
+        let ntt_ring_secret_key = secret_key.ntt_ring_secret_key().clone();
+        let params = *secret_key.parameters();
+        let error_sampler = params.ring_noise_distribution();
         let delta = F::lazy_new(
             (F::MODULUS_VALUE.as_into() / params.lwe_plain_modulus() as f64)
                 .round()
@@ -400,32 +404,52 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
     ///    * Input: sampler used for generating random number `error_sampler`.
     ///    * Input: method used for generating random number `rng`.
     ///    * Output: RLWE vector as the encryption of num1, NTTRGSW vector as the encryption of the encryption of num2.
-    pub fn encrypt<R: CryptoRng + Rng>(
+    pub fn rlwe_encrypt<R: CryptoRng + Rng>(
         &self,
-        mut num1: usize,
-        mut num2: usize,
+        mut num: usize,
         mut rng: R,
-    ) -> (Vec<RLWE<F>>, Vec<NTTRGSW<F>>) {
+    ) -> Vec<RLWE<F>> {
         let key = &self.ntt_ring_secret_key;
         let ring_dimension = key.coeff_count();
         let trailing_zeros = ring_dimension.trailing_zeros();
         let mask = ring_dimension - 1;
-        let mut num1_vec = Vec::new();
-        let mut num2_vec = Vec::new();
-        while num1 != 0 {
-            num1_vec.push(num1 & mask);
-            num1 >>= trailing_zeros;
+        let mut num_vec = Vec::new();
+        while num != 0 {
+            num_vec.push(num & mask);
+            num >>= trailing_zeros;
         }
-        while num2 != 0 {
-            num2_vec.push(num2 & mask);
-            num2 >>= trailing_zeros;
+        let vec_rlwe = self.rlwe_values(&num_vec, &mut rng);
+        vec_rlwe
+    }
+
+    ///    Performing the initialization, encrypting 2 numbers to their corresponding ciphertext
+    ///   
+    ///    # Arguments
+    ///   
+    ///    * Input: input number `num1`.
+    ///    * Input: input number `num2`.
+    ///    * Input: encryption key `ntt_ring_secret_key`.
+    ///    * Input: This basis used for decomposition of the field `basis`.
+    ///    * Input: The encryption of 1 `delta`.
+    ///    * Input: sampler used for generating random number `error_sampler`.
+    ///    * Input: method used for generating random number `rng`.
+    ///    * Output: RLWE vector as the encryption of num1, NTTRGSW vector as the encryption of the encryption of num2.
+    pub fn rgsw_encrypt<R: CryptoRng + Rng>(
+        &self,
+        mut num: usize,
+        mut rng: R,
+    ) -> Vec<NTTRGSW<F>> {
+        let key = &self.ntt_ring_secret_key;
+        let ring_dimension = key.coeff_count();
+        let trailing_zeros = ring_dimension.trailing_zeros();
+        let mask = ring_dimension - 1;
+        let mut num_vec = Vec::new();
+        while num != 0 {
+            num_vec.push(num & mask);
+            num >>= trailing_zeros;
         }
-        let len = num1_vec.len().max(num2_vec.len()).max(1);
-        num1_vec.resize(len, 0);
-        num2_vec.resize(len, 0);
-        let vec1 = self.rlwe_values(&num1_vec, &mut rng);
-        let vec2 = self.rgsw_values(&num2_vec, &mut rng);
-        (vec1, vec2)
+        let vec2_rgsw = self.rgsw_values(&num_vec, &mut rng);
+        vec2_rgsw
     }
 
     ///    Performs the operation of turning a vector to the corresponding NTTRGSW ciphertext.
@@ -481,6 +505,43 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         res
     }
 
+    /// align
+    pub fn align<R: CryptoRng + Rng>(&self, mut cipher1: Vec<RLWE<F>>, mut cipher2: Vec<NTTRGSW<F>>, mut rng: R) -> (Vec<RLWE<F>>, Vec<NTTRGSW<F>>){
+        let len1 = cipher1.len();
+        let len2 = cipher2.len();
+        match len1.cmp(&len2) {
+            std::cmp::Ordering::Greater => {
+                let differ = len1 - len2;
+                for _ in 0..differ {
+                    let mut rgsw = NTTRGSW::generate_random_zero_sample(
+                        &self.ntt_ring_secret_key,
+                        self.params.blind_rotation_basis(),
+                        self.error_sampler,
+                        &mut rng,
+                    );
+                    self.ntt_rgsw_turn(&mut rgsw, 0);
+                    cipher2.push(rgsw);
+                }
+            },
+            std::cmp::Ordering::Equal => (),
+            std::cmp::Ordering::Less => {
+                let differ = len2 - len1;
+                for _ in 0..differ {
+                    let mut rlwe = RLWE::generate_random_zero_sample(
+                        &self.ntt_ring_secret_key,
+                        self.error_sampler,
+                        &mut rng,
+                    );
+                    rlwe.b_mut()[0] += self.delta;
+                    Self::rlwe_turn(&mut rlwe, 0);
+                    cipher1.push(rlwe);
+                }
+                
+            },
+        }
+        (cipher1, cipher2)
+    }
+
     ///    Performs the RLWE rotation operation.
     ///   
     ///    # Arguments
@@ -488,7 +549,7 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
     ///    * Input: RLWE ciphertext `ciphertext`.
     ///    * Input: usize number `num`.
     ///    * Output:RLWE ciphertext `ciphertext*x^num`.
-    pub fn rlwe_turn(ciphertext: &mut RLWE<F>, num: usize) {
+    fn rlwe_turn(ciphertext: &mut RLWE<F>, num: usize) {
         let (a, b) = ciphertext.a_b_mut_slices();
         a.rotate_right(num);
         b.rotate_right(num);
@@ -508,7 +569,7 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
     ///    * Input: usize number `num`.
     ///    * Input: the size of NTTRGSW vector `poly_length`.
     ///    * Output:RGSW ciphertext `ciphertext*x^(-num)`.
-    pub fn ntt_rgsw_turn(&self, ciphertext: &mut NTTRGSW<F>, num: usize) {
+    fn ntt_rgsw_turn(&self, ciphertext: &mut NTTRGSW<F>, num: usize) {
         let ring_dimension = self.params.ring_dimension();
         let basis = self.params.blind_rotation_basis();
         let neg_num = if num != 0 {

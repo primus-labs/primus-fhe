@@ -3,7 +3,7 @@ use fhe_cmp::{
     compare::{Encryptor, HomeCmpScheme},
     parameters::DEFAULT_PARAMETERS,
 };
-use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
+use fhe_core::SecretKeyPack;
 use rand::prelude::*;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
@@ -14,15 +14,15 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // generate keys
     let sk = SecretKeyPack::new(param);
     println!("Secret Key Generation done!\n");
-
-    let sampler = param.ring_noise_distribution();
-    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
-    let enc_elements = Encryptor::new(param, sk.ntt_ring_secret_key().clone(), sampler);
+    
+    let rotationkey = HomeCmpScheme::new(&sk);
+    let enc_elements = Encryptor::new(&sk);
     println!("Evaluation Key Generation done!\n");
 
     let x = rng.gen();
     let y = rng.gen();
-    let (value1, value2) = enc_elements.encrypt(x, y, &mut rng);
+    let value1 = enc_elements.rlwe_encrypt(x, &mut rng);
+    let value2 = enc_elements.rgsw_encrypt(y, &mut rng);
 
     c.bench_function("less comparison", |b| {
         b.iter(|| rotationkey.lt_arbhcmp(&value1, &value2))

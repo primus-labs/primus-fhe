@@ -3,7 +3,7 @@ use fhe_cmp::{
     compare::{decrypt, Encryptor, HomeCmpScheme},
     parameters::{DEFAULT_PARAMETERS, DELTA, FF},
 };
-use fhe_core::{Parameters, RLWEBlindRotationKey, SecretKeyPack};
+use fhe_core::{Parameters, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
 use once_cell::sync::OnceCell;
 use rand::prelude::*;
@@ -11,9 +11,9 @@ static mut INSTANCE_PARAM: OnceCell<InitializationDataParam> = OnceCell::new();
 static mut INSTANCE_CIPHER: OnceCell<InitializationDataCipher> = OnceCell::new();
 
 struct InitializationDataParam {
-    param: Parameters<u64, FF>,
     sk: SecretKeyPack<u64, FF>,
-    rotationkey: HomeCmpScheme<u64, FF>,
+    rotationkey:HomeCmpScheme<u64, FF>,
+    param: Parameters<u64, FF>,
 }
 
 struct InitializationDataCipher {
@@ -32,11 +32,11 @@ fn init_param() {
         INSTANCE_PARAM.get_or_init(|| {
             let param = *DEFAULT_PARAMETERS;
             let sk = SecretKeyPack::new(param);
-            let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
+            let rotationkey = HomeCmpScheme::new(&sk);
             InitializationDataParam {
-                param,
                 sk,
                 rotationkey,
+                param,
             }
         });
     }
@@ -47,25 +47,30 @@ fn init_cipher() {
         INSTANCE_CIPHER.get_or_init(|| {
             init_param();
             let param_data = INSTANCE_PARAM.get().unwrap();
-            let sampler = param_data.param.ring_noise_distribution();
             let mut rng = thread_rng();
             let hcmp_great = 10;
             let hcmp_small = 5;
             let arbhcmp_great = 1030;
             let arbhcmp_small = 1025;
             let enc_elements = Encryptor::new(
-                param_data.param,
-                param_data.sk.ntt_ring_secret_key().clone(),
-                sampler,
+                &param_data.sk,
             );
-            let (value1_arbhcmp_great, value2_arbhcmp_small) =
-                enc_elements.encrypt(arbhcmp_great, arbhcmp_small, &mut rng);
-            let (value1_arbhcmp_small, value2_arbhcmp_great) =
-                enc_elements.encrypt(arbhcmp_small, arbhcmp_great, &mut rng);
-            let (value1_hcmp_great, value2_hcmp_small) =
-                enc_elements.encrypt(hcmp_great, hcmp_small, &mut rng);
-            let (value1_hcmp_small, value2_hcmp_great) =
-                enc_elements.encrypt(hcmp_small, hcmp_great, &mut rng);
+        let value1_hcmp_great =
+            enc_elements.rlwe_encrypt(hcmp_great, &mut rng);
+        let value1_hcmp_small =
+            enc_elements.rlwe_encrypt(hcmp_small, &mut rng);
+        let value2_hcmp_great =
+            enc_elements.rgsw_encrypt(hcmp_great, &mut rng);
+        let value2_hcmp_small =
+            enc_elements.rgsw_encrypt(hcmp_small, &mut rng);
+            let value1_arbhcmp_great =
+                enc_elements.rlwe_encrypt(arbhcmp_great, &mut rng);
+            let value1_arbhcmp_small =
+                enc_elements.rlwe_encrypt(arbhcmp_small, &mut rng);
+            let value2_arbhcmp_great =
+                enc_elements.rgsw_encrypt(arbhcmp_great, &mut rng);
+            let value2_arbhcmp_small =
+                enc_elements.rgsw_encrypt(arbhcmp_small, &mut rng);
             InitializationDataCipher {
                 rlwe_hcmpcipher_great: value1_hcmp_great,
                 rgsw_hcmpcipher_great: value2_hcmp_great,

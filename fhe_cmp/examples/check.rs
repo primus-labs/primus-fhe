@@ -3,7 +3,7 @@ use fhe_cmp::{
     compare::{decrypt, Encryptor, HomeCmpScheme},
     parameters::{DEFAULT_PARAMETERS, DELTA},
 };
-use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
+use fhe_core::SecretKeyPack;
 use lattice::LWE;
 use rand::prelude::*;
 use std::cmp::Ordering;
@@ -13,14 +13,18 @@ fn main() {
     let sk = SecretKeyPack::new(param);
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
-    let enc_elements = Encryptor::new(param, sk.ntt_ring_secret_key().clone(), sampler);
+    let rotationkey = HomeCmpScheme::new(&sk);
+    let enc_elements = Encryptor::new(&sk);
     let x = rng.gen();
     let y = rng.gen();
     let x_hcmp = rng.gen_range(0..1024);
     let y_hcmp = rng.gen_range(0..1024);
-    let (value1, value2) = enc_elements.encrypt(x, y, &mut rng);
-    let (value1_hcmp, value2_hcmp) = enc_elements.encrypt(x_hcmp, y_hcmp, &mut rng);
+    let value1 = enc_elements.rlwe_encrypt(x, &mut rng);
+    let value2 = enc_elements.rgsw_encrypt(y, &mut rng);
+    let (value1, value2) = enc_elements.align(value1, value2, &mut rng);
+    let value1_hcmp = enc_elements.rlwe_encrypt(x_hcmp, &mut rng);
+    let value2_hcmp = enc_elements.rgsw_encrypt(y, &mut rng);
+    let (value1_hcmp, value2_hcmp) = enc_elements.align(value1_hcmp, value2_hcmp, &mut rng);
 
     //test hcmp
     println!("test hcmp");

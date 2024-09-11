@@ -2,29 +2,34 @@ use fhe_cmp::{
     compare::{decrypt, Encryptor, HomeCmpScheme},
     parameters::{DEFAULT_PARAMETERS, FF},
 };
-use fhe_core::{RLWEBlindRotationKey, SecretKeyPack};
+use fhe_core::SecretKeyPack;
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
 use std::{cmp::Ordering, time::Instant};
 fn main() {
+    let start = Instant::now();
     let mut rng = thread_rng();
     let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
-    let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomeCmpScheme::new(RLWEBlindRotationKey::generate(&sk), param);
-    let enc_elements = Encryptor::new(param, sk.ntt_ring_secret_key().clone(), sampler);
-    for i in 0..50 {
-        let start = Instant::now();
+    let rotationkey = HomeCmpScheme::new(&sk);
+    let enc_elements = Encryptor::new(&sk);
+    let time = start.elapsed();
+    println!("Start Time: {}ms", time.as_millis());
+    for i in 0..10 {
         println!("{i}");
-        let x = rng.gen_range(0..100000);
-        let y = rng.gen_range(0..100000);
-        let (value1, value2) = enc_elements.encrypt(x, y, &mut rng);
+        let x = rng.gen_range(0..10000);
+        let y = rng.gen_range(0..10000);
+        let value1 = enc_elements.rlwe_encrypt(x, &mut rng);
+        let value2 = enc_elements.rgsw_encrypt(y, &mut rng);
+        let (value1, value2) = enc_elements.align(value1, value2, &mut rng);
         let (lt, eq, gt) = join_bit_operations(&value1, &value2, &rotationkey);
+        let start = Instant::now();
         let lt_value = decrypt(rlwe_sk, lt);
         let eq_value = decrypt(rlwe_sk, eq);
         let gt_value = decrypt(rlwe_sk, gt);
-
+        let time = start.elapsed();
+        println!("Time: {}ms", time.as_millis());
         match (x.cmp(&y), lt_value, eq_value, gt_value) {
             (Ordering::Less, lv, ev, gv)
                 if lv != 1
