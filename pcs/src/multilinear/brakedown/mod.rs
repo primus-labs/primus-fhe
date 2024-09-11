@@ -48,7 +48,7 @@ where
     EF: AbstractExtensionField<F>,
 {
     /// Prover answers the challenge by computing the product of the challenge vector
-    /// and the committed matrix.
+    /// and the commited matirx.
     /// The computation of the product can be viewed as a linear combination of rows
     /// of the matrix with challenge vector as the coefficients.
     fn answer_challenge(
@@ -227,12 +227,12 @@ where
     EF: AbstractExtensionField<F>,
 {
     /// Generate random queries.
-    fn random_queries(pp: &BrakedownParams<F, EF, C>, trans: &mut Transcript<F>) -> Vec<usize> {
+    fn random_queries(pp: &BrakedownParams<F, EF, C>, trans: &mut Transcript<EF>) -> Vec<usize> {
         let num_queries = pp.num_query();
         let codeword_len = pp.code().codeword_len();
 
         let mut seed = [0u8; 16];
-        trans.get_challenge_bytes(&mut seed);
+        trans.get_challenge_bytes(b"Generate random queries", &mut seed);
         let mut prg = Prg::from_seed(Block::from(seed));
 
         // Generate a random set of queries.
@@ -244,7 +244,7 @@ where
     }
 }
 
-impl<F, H, C, S, EF> PolynomialCommitmentScheme<F, S> for BrakedownPCS<F, H, C, S, EF>
+impl<F, H, C, S, EF> PolynomialCommitmentScheme<F, EF, S> for BrakedownPCS<F, H, C, S, EF>
 where
     F: Field + Serialize,
     H: Hash + Sync + Send,
@@ -322,11 +322,12 @@ where
         commitment: &Self::Commitment,
         state: &Self::CommitmentState,
         points: &[Self::Point],
-        trans: &mut Transcript<F>,
+        trans: &mut Transcript<EF>,
     ) -> Self::Proof {
         assert_eq!(points.len(), pp.num_vars());
         // Hash the commitment to transcript.
-        trans.append_message(&commitment.to_bytes().unwrap());
+        trans.append_message(b"commitment", &commitment);
+        // trans.append_message(&commitment.to_bytes().unwrap());
 
         // Compute the tensor from the random point, see [DP23](https://eprint.iacr.org/2023/630.pdf).
         let tensor = Self::tensor_from_points(pp, points);
@@ -334,7 +335,7 @@ where
         let rlc_msgs = Self::answer_challenge(pp, &tensor, state);
 
         // Hash rlc to transcript.
-        trans.append_ext_field_elements(&rlc_msgs);
+        trans.append_message(b"rlc", &rlc_msgs);
 
         // Sample random queries.
         let queries = Self::random_queries(pp, trans);
@@ -355,12 +356,12 @@ where
         points: &[Self::Point],
         eval: Self::Point,
         proof: &Self::Proof,
-        trans: &mut Transcript<F>,
+        trans: &mut Transcript<EF>,
     ) -> bool {
         assert_eq!(points.len(), pp.num_vars());
 
         // Hash the commitment to transcript.
-        trans.append_message(&commitment.to_bytes().unwrap());
+        trans.append_message(b"commitment", &commitment);
 
         let (tensor, residual) = Self::tensor_decompose(pp, points);
 
@@ -371,7 +372,7 @@ where
         pp.code().encode_ext(&mut encoded_msg);
 
         // Hash rlc to transcript.
-        trans.append_ext_field_elements(&proof.rlc_msgs);
+        trans.append_message(b"rlc", &proof.rlc_msgs);
 
         // Sample random queries.
         let queries = Self::random_queries(pp, trans);

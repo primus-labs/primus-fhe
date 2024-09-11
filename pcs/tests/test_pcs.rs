@@ -32,7 +32,7 @@ fn pcs_test() {
         Some(code_spec),
     );
 
-    let mut trans = Transcript::<FF>::new();
+    let mut trans = Transcript::<EF>::new();
 
     let (comm, state) =
         BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::commit(&pp, &poly);
@@ -50,7 +50,7 @@ fn pcs_test() {
 
     let eval = poly.evaluate_ext(&point);
 
-    let mut trans = Transcript::<FF>::new();
+    let mut trans = Transcript::<EF>::new();
 
     let proof = BrakedownOpenProof::<FF, Hash, EF>::from_bytes(&buffer).unwrap();
 

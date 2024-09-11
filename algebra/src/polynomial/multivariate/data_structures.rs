@@ -2,6 +2,8 @@
 
 use std::{collections::HashMap, rc::Rc};
 
+use serde::Serialize;
+
 use crate::Field;
 
 use super::{DenseMultilinearExtension, MultilinearExtension};
@@ -48,7 +50,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize)]
 /// Stores the number of variables and max number of multiplicands of the added polynomial used by the prover.
 /// This data structures will be used as the verifier key.
 pub struct PolynomialInfo {

@@ -1,24 +1,31 @@
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
-use algebra::{
-    BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
-};
+use algebra::{BabyBear, BabyBearExetension, Basis, FieldUniformSampler};
+use algebra::{DenseMultilinearExtension, Field};
 use itertools::izip;
 use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
-use rand_distr::Distribution;
+use rand::prelude::*;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
     rlwe_mul_rgsw::RlweMultRgswSnarks, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
-    RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
+    RlweCiphertexts, RlweMultRgswInstance,
 };
 
-// field type
 type FF = BabyBear;
 type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
+
+// # Parameters
+// n = 1024: denotes the dimension of LWE
+// N = 1024: denotes the dimension of ring in RLWE
+// B = 2^3: denotes the basis used in the bit decomposition
+// q = 1024: denotes the modulus in LWE
+// Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
+const LOG_DIM_RLWE: usize = 10;
+const LOG_B: usize = 2;
 
 /// Given an `index` of `len` bits, output a new index where the bits are reversed.
 fn reverse_bits(index: usize, len: u32) -> usize {
@@ -47,7 +54,8 @@ fn sort_array_with_reversed_bits<F: Clone + Copy>(input: &[F], log_n: u32) -> Ve
     output
 }
 
-/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal order
+/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal oder
+/// In other words, the orders of input and output are both normal order.
 /// ```plain
 /// normal order:        0  1  2  3  4  5  6  7
 ///
@@ -60,15 +68,7 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
     sort_array_with_reversed_bits(&ntt_form, log_n)
 }
 
-/// This function DOES NOT implement the real functionality of multiplication between RLWE ciphertext and RGSW ciphertext
-/// It is only used to generate the consistent instance for test.
-///
-/// # Arguments:
-/// * input_rlwe: RLWE ciphertext of the coefficient form
-/// * input_rgsw: RGSW ciphertext of the ntt form
-/// * bits_info: information used to decompose bits
-/// * ntt_info: information used to perform NTT
-fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
+fn generate_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
     input_rgsw: (RlweCiphertexts<F>, RlweCiphertexts<F>),
@@ -139,18 +139,6 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
         });
     }
 
-    // 4. Compute the output of coefficient form
-    // let output_rlwe = RlweCiphertext {
-    //     a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-    //         ntt_info.log_n,
-    //         ntt_inverse_transform_normal_order(ntt_info.log_n as u32, &output_g_ntt),
-    //     )),
-    //     b: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-    //         ntt_info.log_n,
-    //         ntt_inverse_transform_normal_order(ntt_info.log_n as u32, &output_h_ntt),
-    //     )),
-    // };
-
     let output_rlwe_ntt = RlweCiphertext {
         a: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
@@ -172,20 +160,18 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
         bits_rgsw_c_ntt,
         bits_rgsw_f_ntt,
         output_rlwe_ntt,
-        // &output_rlwe,
     )
 }
 
-#[test]
-fn test_random_rlwe_mult_rgsw() {
+fn main() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
 
     // information used to decompose bits
-    let base_len: usize = 2;
+    let base_len = LOG_B;
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = 10;
+    let num_vars = LOG_DIM_RLWE;
     let bits_info = DecomposedBitsInfo {
         base,
         base_len,
@@ -245,198 +231,7 @@ fn test_random_rlwe_mult_rgsw() {
     };
 
     // generate all the witness required
-    let instance = generate_rlwe_mult_rgsw_instance(
-        num_vars,
-        input_rlwe,
-        (bits_rgsw_c_ntt, bits_rgsw_f_ntt),
-        &bits_info,
-        &ntt_info,
-    );
-
-    let info = instance.info();
-
-    let (kit, recursive_proof) = RlweMultRgswIOP::<FF>::prove(&instance);
-    let evals_at_r = instance.evaluate(&kit.randomness);
-    let evals_at_u = instance.evaluate(&kit.u);
-
-    let mut wrapper = kit.extract();
-    let check = RlweMultRgswIOP::<FF>::verify(
-        &mut wrapper,
-        &evals_at_r,
-        &evals_at_u,
-        &info,
-        &recursive_proof,
-    );
-
-    assert!(check);
-}
-
-#[test]
-fn test_random_rlwe_mult_rgsw_extension_field() {
-    let mut rng = rand::thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
-
-    // information used to decompose bits
-    let base_len: usize = 2;
-    let base: FF = FF::new(1 << base_len);
-    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
-        base,
-        base_len,
-        bits_len,
-        num_vars,
-        num_instances: 0,
-    };
-
-    // information used to perform NTT
-    let log_n = num_vars;
-    let m = 1 << (log_n + 1);
-    let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::one();
-    for _ in 0..m {
-        ntt_table.push(power);
-        power *= root;
-    }
-    let ntt_table = Rc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
-        num_vars,
-        ntt_table,
-        num_ntt: 0,
-    };
-
-    // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
-    let points: Vec<_> = (0..1 << num_vars)
-        .map(|_| uniform.sample(&mut rng))
-        .collect();
-    let coeffs: Vec<_> = (0..1 << num_vars)
-        .map(|_| uniform.sample(&mut rng))
-        .collect();
-    for _ in 0..bits_len {
-        bits_rgsw_c_ntt.add_rlwe(
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-        );
-    }
-
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
-    for _ in 0..bits_len {
-        bits_rgsw_f_ntt.add_rlwe(
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-        );
-    }
-
-    // generate the random RLWE ciphertext
-    let input_rlwe = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-            log_n, &coeffs,
-        )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-            log_n, &coeffs,
-        )),
-    };
-
-    // generate all the witness required
-    let instance = generate_rlwe_mult_rgsw_instance(
-        num_vars,
-        input_rlwe,
-        (bits_rgsw_c_ntt, bits_rgsw_f_ntt),
-        &bits_info,
-        &ntt_info,
-    );
-
-    let instance_ef = instance.to_ef::<EF>();
-    let info = instance_ef.info();
-
-    let (kit, recursive_proof) = RlweMultRgswIOP::<EF>::prove(&instance_ef);
-    let evals_at_r = instance.evaluate_ext(&kit.randomness);
-    let evals_at_u = instance.evaluate_ext(&kit.u);
-
-    let mut wrapper = kit.extract();
-    let check = RlweMultRgswIOP::<EF>::verify(
-        &mut wrapper,
-        &evals_at_r,
-        &evals_at_u,
-        &info,
-        &recursive_proof,
-    );
-
-    assert!(check);
-}
-
-#[test]
-fn test_snarks() {
-    let mut rng = rand::thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
-
-    // information used to decompose bits
-    let base_len: usize = 2;
-    let base: FF = FF::new(1 << base_len);
-    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
-        base,
-        base_len,
-        bits_len,
-        num_vars,
-        num_instances: 0,
-    };
-
-    // information used to perform NTT
-    let log_n = num_vars;
-    let m = 1 << (log_n + 1);
-    let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::one();
-    for _ in 0..m {
-        ntt_table.push(power);
-        power *= root;
-    }
-    let ntt_table = Rc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
-        num_vars,
-        ntt_table,
-        num_ntt: 0,
-    };
-
-    // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
-    let points: Vec<_> = (0..1 << num_vars)
-        .map(|_| uniform.sample(&mut rng))
-        .collect();
-    let coeffs: Vec<_> = (0..1 << num_vars)
-        .map(|_| uniform.sample(&mut rng))
-        .collect();
-    for _ in 0..bits_len {
-        bits_rgsw_c_ntt.add_rlwe(
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-        );
-    }
-
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
-    for _ in 0..bits_len {
-        bits_rgsw_f_ntt.add_rlwe(
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
-        );
-    }
-
-    // generate the random RLWE ciphertext
-    let input_rlwe = RlweCiphertext {
-        a: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-            log_n, &coeffs,
-        )),
-        b: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-            log_n, &coeffs,
-        )),
-    };
-
-    // generate all the witness required
-    let instance = generate_rlwe_mult_rgsw_instance(
+    let instance = generate_instance(
         num_vars,
         input_rlwe,
         (bits_rgsw_c_ntt, bits_rgsw_f_ntt),

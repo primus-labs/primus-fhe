@@ -1,20 +1,24 @@
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
-    DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
+    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
+    FieldUniformSampler,
 };
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand_distr::Distribution;
+use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{DecomposedBitsInfo, RoundIOP, RoundInstance};
+use zkp::piop::{round::RoundSnarks, DecomposedBitsInfo, RoundIOP, RoundInstance};
 
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
-type FF = Fp32; // field type
-const FP: u32 = 132120577; // ciphertext space
+type FF = BabyBear; // field type
+type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
+const FP: u32 = FF::MODULUS_VALUE; // ciphertext space
 const FT: u32 = 4; // message space
+const LOG_FT: u32 = FT.next_power_of_two().ilog2();
 const FK: u32 = (FP - 1) / FT;
+const LOG_FK: u32 = FK.next_power_of_two().ilog2();
+const DELTA: u32 = (1 << LOG_FK) - FK;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -41,12 +45,11 @@ fn test_round() {
 
 #[test]
 fn test_round_naive_iop() {
-    // k = (132120577 - 1) / FT = 33030144 = 2^25 - 2^19
     let k = FF::new(FK);
-    let k_bits_len: u32 = 25;
-    let delta: FF = FF::new(1 << 19);
+    let k_bits_len = LOG_FK as usize;
+    let delta: FF = FF::new(DELTA);
 
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 2;
 
@@ -85,27 +88,13 @@ fn test_round_naive_iop() {
 
     let info = instance.info();
 
-    let mut rng = rand::thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let lambda_1 = uniform.sample(&mut rng);
-    let lambda_2 = uniform.sample(&mut rng);
+    let kit = RoundIOP::<FF>::prove(&instance);
+    let evals = instance.evaluate(&kit.randomness);
 
-    let proof = RoundIOP::prove(&instance, &u, (lambda_1, lambda_2));
-    let subclaim = RoundIOP::verify(&proof, &instance.info());
+    let wrapper = kit.extract();
+    let check = RoundIOP::<FF>::verify(&wrapper, &evals, &info);
 
-    assert!(subclaim.verify_subclaim(
-        &u,
-        (lambda_1, lambda_2),
-        &instance.input,
-        &instance.output,
-        &instance.output_bits.instances[0],
-        &instance.offset,
-        &instance.offset_aux_bits.instances[0],
-        &instance.offset_aux_bits.instances[1],
-        &instance.option,
-        &info
-    ))
+    assert!(check);
 }
 
 #[test]
@@ -113,12 +102,11 @@ fn test_round_random_iop() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
 
-    // k = (132120577 - 1) / FT = 33030144 = 2^25 - 2^19
     let k = FF::new(FK);
-    let k_bits_len: u32 = 25;
-    let delta: FF = FF::new(1 << 19);
+    let k_bits_len = LOG_FK as usize;
+    let delta: FF = FF::new(DELTA);
 
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
     let num_vars = 10;
 
@@ -159,23 +147,124 @@ fn test_round_random_iop() {
 
     let info = instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let lambda_1 = uniform.sample(&mut rng);
-    let lambda_2 = uniform.sample(&mut rng);
+    let kit = RoundIOP::<FF>::prove(&instance);
+    let evals = instance.evaluate(&kit.randomness);
 
-    let proof = RoundIOP::prove(&instance, &u, (lambda_1, lambda_2));
-    let subclaim = RoundIOP::verify(&proof, &instance.info());
+    let wrapper = kit.extract();
+    let check = RoundIOP::<FF>::verify(&wrapper, &evals, &info);
 
-    assert!(subclaim.verify_subclaim(
-        &u,
-        (lambda_1, lambda_2),
-        &instance.input,
-        &instance.output,
-        &instance.output_bits.instances[0],
-        &instance.offset,
-        &instance.offset_aux_bits.instances[0],
-        &instance.offset_aux_bits.instances[1],
-        &instance.option,
-        &info
-    ))
+    assert!(check);
+}
+
+#[test]
+fn test_round_random_iop_extension_field() {
+    let mut rng = rand::thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+
+    let k = FF::new(FK);
+    let k_bits_len = LOG_FK as usize;
+    let delta: FF = FF::new(DELTA);
+
+    let base_len = 1;
+    let base: FF = FF::new(1 << base_len);
+    let num_vars = 10;
+
+    let input = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        (0..1 << num_vars)
+            .map(|_| uniform.sample(&mut rng))
+            .collect(),
+    ));
+    let output = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        input.iter().map(|x| FF::new(decode(*x))).collect(),
+    ));
+    let output_bits_info = DecomposedBitsInfo {
+        base,
+        base_len,
+        bits_len: 2,
+        num_vars,
+        num_instances: 1,
+    };
+
+    let offset_bits_info = DecomposedBitsInfo {
+        base,
+        base_len,
+        bits_len: k_bits_len,
+        num_vars,
+        num_instances: 2,
+    };
+
+    let instance = <RoundInstance<FF>>::new(
+        k,
+        delta,
+        input,
+        output,
+        &output_bits_info,
+        &offset_bits_info,
+    );
+
+    let instance_ef = instance.to_ef::<EF>();
+    let info = instance_ef.info();
+
+    let kit = RoundIOP::<EF>::prove(&instance_ef);
+    let evals = instance.evaluate_ext(&kit.randomness);
+
+    let wrapper = kit.extract();
+    let check = RoundIOP::<EF>::verify(&wrapper, &evals, &info);
+
+    assert!(check);
+}
+
+#[test]
+fn test_snarks() {
+    let mut rng = rand::thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+
+    let k = FF::new(FK);
+    let delta: FF = FF::new(DELTA);
+
+    let base_len = 1;
+    let base: FF = FF::new(1 << base_len);
+    let num_vars = 10;
+
+    let input = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        (0..1 << num_vars)
+            .map(|_| uniform.sample(&mut rng))
+            .collect(),
+    ));
+    let output = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        input.iter().map(|x| FF::new(decode(*x))).collect(),
+    ));
+    let output_bits_info = DecomposedBitsInfo {
+        base,
+        base_len,
+        bits_len: LOG_FT as usize,
+        num_vars,
+        num_instances: 1,
+    };
+
+    let offset_bits_info = DecomposedBitsInfo {
+        base,
+        base_len,
+        bits_len: LOG_FK as usize,
+        num_vars,
+        num_instances: 2,
+    };
+
+    let instance = <RoundInstance<FF>>::new(
+        k,
+        delta,
+        input,
+        output,
+        &output_bits_info,
+        &offset_bits_info,
+    );
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+    <RoundSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec,
+    );
 }
