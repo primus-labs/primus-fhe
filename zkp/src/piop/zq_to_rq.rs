@@ -729,8 +729,10 @@ where
             b"random linear combination for evaluations of oracles",
             evals_at_u.log_num_oracles(),
         );
-        let check_oracle_at_u = verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
-        let check_oracle_at_r = verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
+        let check_oracle_at_u =
+            verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
+        let check_oracle_at_r =
+            verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
         assert!(check_oracle_at_u && check_oracle_at_r);
 
         // 3.5 Check the evaluation of a random point over the committed oracle
@@ -752,8 +754,10 @@ where
         );
         assert!(check_pcs_at_r && check_pcs_at_u);
         let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len() + bincode::serialize(&eval_proof_at_u).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_r).unwrap().len() + bincode::serialize(&flatten_evals_at_u).unwrap().len();
+        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len()
+            + bincode::serialize(&eval_proof_at_u).unwrap().len()
+            + bincode::serialize(&flatten_evals_at_r).unwrap().len()
+            + bincode::serialize(&flatten_evals_at_u).unwrap().len();
 
         // 4. print statistic
         print_statistic(

@@ -307,8 +307,7 @@ fn test_random_zq_to_rq_extension_field() {
 }
 
 #[test]
-fn test_snarks()
-{
+fn test_snarks() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<Fq>>::new();
 
