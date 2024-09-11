@@ -162,11 +162,10 @@ fn test_snark() {
         t_evaluations,
     ));
 
-    let mut instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
+    let instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <LookupSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &mut instance,
-        &code_spec,
+        &instance, &code_spec,
     );
 }
