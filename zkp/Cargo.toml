@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 algebra = { path = "../algebra" }
+pcs = { path = "../pcs" }
 
 thiserror = { workspace = true }
 rand = { workspace = true }
