@@ -85,7 +85,6 @@ impl<F: Field> DenseMultilinearExtension<F> {
     where
         EF: AbstractExtensionField<F>,
     {
-        assert_eq!(ext_point.len(), self.num_vars, "The point size is invalid.");
         let mut poly: Vec<_> = self
             .evaluations
             .iter()
@@ -108,6 +107,18 @@ impl<F: Field> DenseMultilinearExtension<F> {
         }
         poly.truncate(1 << (nv - dim));
         poly[0]
+    }
+
+    /// Evaluate a point in the extension field.
+    #[inline]
+    pub fn evaluate_ext_opt<EF>(&self, eq_at_r: &DenseMultilinearExtension<EF>) -> EF
+    where
+        EF: AbstractExtensionField<F>,
+    {
+        eq_at_r
+            .iter()
+            .zip(self.iter())
+            .fold(EF::zero(), |acc, (c, val)| acc + *c * *val)
     }
 
     /// Convert to EF version

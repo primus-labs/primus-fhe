@@ -1,5 +1,8 @@
 //! This module defines some useful utils that may invoked by piop.
-use algebra::{AbstractExtensionField, DenseMultilinearExtension, Field};
+use std::rc::Rc;
+
+use algebra::{AbstractExtensionField, DenseMultilinearExtension, Field, SparsePolynomial};
+use itertools::izip;
 
 /// Generate MLE of the ideneity function eq(u,x) for x \in \{0, 1\}^dim
 pub fn gen_identity_evaluations<F: Field>(u: &[F]) -> DenseMultilinearExtension<F> {
@@ -26,6 +29,48 @@ pub fn eval_identity_function<F: Field>(u: &[F], v: &[F]) -> F {
         evaluation *= *u_i * *v_i + (F::one() - *u_i) * (F::one() - *v_i);
     }
     evaluation
+}
+
+/// Evaluate M(u, y) for y \in \{0, 1\}^dim where M is a sparse matrix.
+/// To be more specific, each row of the matrix consists of only constant entries.
+/// M(u, y) = \sum_{x,y}\in {0,1} eq(u, x) * M(x, y) = \sum_{x, y}\in Non-zero Set eq(u, x) * M(x, y)
+pub fn gen_sparse_at_u<F: Field>(
+    sparse_matrix: &[Rc<SparsePolynomial<F>>],
+    u: &[F],
+) -> DenseMultilinearExtension<F> {
+    assert_eq!(sparse_matrix.len(), 1 << u.len());
+    let eq_at_u = gen_identity_evaluations(u);
+
+    assert!(sparse_matrix.len() > 0);
+    let num_vars = sparse_matrix[0].num_vars;
+    let mut evals = vec![F::zero(); 1 << num_vars];
+    for (eq_u, row) in izip!(eq_at_u.iter(), sparse_matrix.iter()) {
+        for (idx, val) in row.iter() {
+            evals[*idx] += *eq_u * *val;
+        }
+    }
+    DenseMultilinearExtension::from_evaluations_vec(num_vars, evals)
+}
+
+/// Evaluate M(u, y) for y \in \{0, 1\}^dim where M is a sparse matrix.
+/// To be more specific, each row of the matrix consists of only constant entries.
+
+pub fn gen_sparse_at_u_to_ef<F: Field, EF: AbstractExtensionField<F>>(
+    sparse_matrix: &[Rc<SparsePolynomial<F>>],
+    u: &[EF],
+) -> DenseMultilinearExtension<EF> {
+    assert_eq!(sparse_matrix.len(), 1 << u.len());
+    let eq_at_u = gen_identity_evaluations(u);
+
+    assert!(sparse_matrix.len() > 0);
+    let num_vars = sparse_matrix[0].num_vars;
+    let mut evals = vec![EF::zero(); 1 << num_vars];
+    for (eq_u, row) in izip!(eq_at_u.iter(), sparse_matrix.iter()) {
+        for (idx, val) in row.iter() {
+            evals[*idx] += *eq_u * *val;
+        }
+    }
+    DenseMultilinearExtension::from_evaluations_vec(num_vars, evals)
 }
 
 /// AddAssign<(EF, &'a DenseMultilinearExtension<F>)> for DenseMultilinearExtension<EF>

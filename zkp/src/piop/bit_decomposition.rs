@@ -252,6 +252,26 @@ impl<F: Field> DecomposedBits<F> {
                 .collect(),
         }
     }
+
+    /// Evaluate at a random point defined over Extension Field
+    #[inline]
+    pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
+        &self,
+        eq_at_r: &DenseMultilinearExtension<EF>,
+    ) -> DecomposedBitsEval<EF> {
+        DecomposedBitsEval::<EF> {
+            d_val: self
+                .d_val
+                .iter()
+                .map(|val| val.evaluate_ext_opt(eq_at_r))
+                .collect(),
+            d_bits: self
+                .d_bits
+                .iter()
+                .map(|bit| bit.evaluate_ext_opt(eq_at_r))
+                .collect(),
+        }
+    }
 }
 
 impl<F: DecomposableField> DecomposedBits<F> {
@@ -505,7 +525,9 @@ where
 
         // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let start = Instant::now();
-        let evals = instance.evaluate_ext(&sumcheck_state.randomness);
+        let eq_at_r = gen_identity_evaluations(&sumcheck_state.randomness);
+        // let evals = instance.evaluate_ext(&sumcheck_state.randomness);
+        let evals = instance.evaluate_ext_opt(&eq_at_r);
         // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut requested_point = sumcheck_state.randomness.clone();
         requested_point.extend(&prover_trans.get_vec_challenge(

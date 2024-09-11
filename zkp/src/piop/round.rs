@@ -16,12 +16,12 @@
 //! 3. w(x)(1 - w(x)) = 0 where w indicates the option in the following constraint
 //! 4. w(x)(a(x)\cdot \lambda_1+b(x)\cdot \lambda_2)+(1-w(x))(a(x)-b(x)\cdot k-c(x))=0
 //!     where \lambda_1 and \lambda_2 are chosen by the verifier
-use super::bit_decomposition::{BitDecomposition, DecomposedBitsEval};
-use super::{DecomposedBits, DecomposedBitsInfo};
+use super::{BitDecomposition, DecomposedBits, DecomposedBitsEval, DecomposedBitsInfo};
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
-use crate::utils::gen_identity_evaluations;
-use crate::utils::{eval_identity_function, print_statistic, verify_oracle_relation};
+use crate::utils::{
+    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
+};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, MultilinearExtension,
@@ -286,6 +286,7 @@ impl<F: DecomposableField> RoundInstance<F> {
     /// Compute the witness required in proof and construct the instance
     #[inline]
     pub fn new(
+        num_vars: usize,
         k: F,
         delta: F,
         input: Rc<DenseMultilinearExtension<F>>,
@@ -293,7 +294,6 @@ impl<F: DecomposableField> RoundInstance<F> {
         output_bits_info: &DecomposedBitsInfo<F>,
         offset_bits_info: &DecomposedBitsInfo<F>,
     ) -> Self {
-        let num_vars = input.num_vars;
         assert_eq!(num_vars, output.num_vars);
         assert_eq!(num_vars, output_bits_info.num_vars);
         assert_eq!(num_vars, offset_bits_info.num_vars);
@@ -436,7 +436,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
 
         let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
             .expect("fail to prove the sumcheck protocol");
-        // (proof, state, poly.info())
+
         SumcheckKit {
             proof,
             info: poly.info(),
@@ -585,16 +585,20 @@ impl<F: Field + Serialize> RoundIOP<F> {
             Self::num_coins(info),
         );
 
-        let mut subclaim =
-            MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
-                .expect("fail to verify the sumcheck protocol");
+        let mut subclaim = MLSumcheck::verify_as_subprotocol(
+            &mut trans,
+            &wrapper.info,
+            wrapper.claimed_sum,
+            &wrapper.proof,
+        )
+        .expect("fail to verify the sumcheck protocol");
         let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
 
         if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
             return false;
         }
 
-        subclaim.expected_evaluations == F::zero()
+        subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()
     }
 
     /// Verify round

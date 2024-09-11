@@ -78,6 +78,7 @@ fn test_round_naive_iop() {
     };
 
     let instance = <RoundInstance<FF>>::new(
+        num_vars,
         k,
         delta,
         input,
@@ -137,6 +138,7 @@ fn test_round_random_iop() {
     };
 
     let instance = <RoundInstance<FF>>::new(
+        num_vars,
         k,
         delta,
         input,
@@ -196,6 +198,7 @@ fn test_round_random_iop_extension_field() {
     };
 
     let instance = <RoundInstance<FF>>::new(
+        num_vars,
         k,
         delta,
         input,
@@ -255,6 +258,7 @@ fn test_snarks() {
     };
 
     let instance = <RoundInstance<FF>>::new(
+        num_vars,
         k,
         delta,
         input,

@@ -907,15 +907,19 @@ where
         let iop_prover_time = prover_start.elapsed().as_millis();
 
         // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
+        let eq_at_r = gen_identity_evaluations(&sumcheck_state.randomness);
+        let eq_at_u = gen_identity_evaluations(&prover_u);
         let coeff_evals_at_r = instance
             .coeffs
             .iter()
-            .map(|x| x.evaluate_ext(&sumcheck_state.randomness))
+            // .map(|x| x.evaluate_ext(&sumcheck_state.randomness))
+            .map(|x| x.evaluate_ext_opt(&eq_at_r))
             .collect::<Vec<_>>();
         let point_evals_at_u = instance
             .points
             .iter()
-            .map(|x| x.evaluate_ext(&prover_u))
+            // .map(|x| x.evaluate_ext(&prover_u))
+            .map(|x| x.evaluate_ext_opt(&eq_at_u))
             .collect::<Vec<_>>();
 
         // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial

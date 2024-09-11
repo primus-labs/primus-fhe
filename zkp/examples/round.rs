@@ -1,5 +1,6 @@
 use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
+use core::num;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;
@@ -70,6 +71,7 @@ fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
     };
 
     <RoundInstance<FF>>::new(
+        num_vars,
         k,
         delta,
         input,

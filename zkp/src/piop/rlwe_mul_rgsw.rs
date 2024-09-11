@@ -193,6 +193,18 @@ impl<F: Field> RlweCiphertext<F> {
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(&self, point: &[EF]) -> RlweEval<EF> {
         (self.a.evaluate_ext(point), self.b.evaluate_ext(point))
     }
+
+    /// Evaluate at the same random point defined over EF
+    #[inline]
+    pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
+        &self,
+        point: &DenseMultilinearExtension<EF>,
+    ) -> RlweEval<EF> {
+        (
+            self.a.evaluate_ext_opt(point),
+            self.b.evaluate_ext_opt(point),
+        )
+    }
 }
 
 impl<F: Field> RlweCiphertexts<F> {
@@ -274,6 +286,24 @@ impl<F: Field> RlweCiphertexts<F> {
             self.b_bits
                 .iter()
                 .map(|bit| bit.evaluate_ext(point))
+                .collect(),
+        )
+    }
+
+    /// Evaluate at the same random point defined over EF
+    #[inline]
+    pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
+        &self,
+        point: &DenseMultilinearExtension<EF>,
+    ) -> RlwesEval<EF> {
+        (
+            self.a_bits
+                .iter()
+                .map(|bit| bit.evaluate_ext_opt(point))
+                .collect(),
+            self.b_bits
+                .iter()
+                .map(|bit| bit.evaluate_ext_opt(point))
                 .collect(),
         )
     }
@@ -419,6 +449,23 @@ impl<F: Field> RlweMultRgswInstance<F> {
             bits_rgsw_c_ntt: self.bits_rgsw_c_ntt.evaluate_ext(point),
             bits_rgsw_f_ntt: self.bits_rgsw_f_ntt.evaluate_ext(point),
             output_rlwe_ntt: self.output_rlwe_ntt.evaluate_ext(point),
+        }
+    }
+
+    /// evaluate given the equality function
+    #[inline]
+    pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
+        &self,
+        point: &DenseMultilinearExtension<EF>,
+    ) -> RlweMultRgswEval<EF> {
+        RlweMultRgswEval::<EF> {
+            bits_len: self.bits_info.bits_len,
+            input_rlwe: self.input_rlwe.evaluate_ext_opt(point),
+            bits_rlwe: self.bits_rlwe.evaluate_ext_opt(point),
+            bits_rlwe_ntt: self.bits_rlwe_ntt.evaluate_ext_opt(point),
+            bits_rgsw_c_ntt: self.bits_rgsw_c_ntt.evaluate_ext_opt(point),
+            bits_rgsw_f_ntt: self.bits_rgsw_f_ntt.evaluate_ext_opt(point),
+            output_rlwe_ntt: self.output_rlwe_ntt.evaluate_ext_opt(point),
         }
     }
 
@@ -957,8 +1004,11 @@ where
 
         // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let start = Instant::now();
-        let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
-        let evals_at_u = instance.evaluate_ext(&prover_u);
+        // let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
+        // let evals_at_u = instance.evaluate_ext(&prover_u);
+        let eq_at_r = gen_identity_evaluations(&sumcheck_state.randomness);
+        let evals_at_r = instance.evaluate_ext_opt(&eq_at_r);
+        let evals_at_u = instance.evaluate_ext_opt(eq_at_u.as_ref());
 
         // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut requested_point_at_r = sumcheck_state.randomness.clone();
