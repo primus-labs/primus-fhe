@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Implementation of BabyBear field.
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Ord, Clone, Copy, Serialize, Deserialize)]
 pub struct BabyBear(u32);
 
 impl Field for BabyBear {
@@ -40,6 +40,16 @@ impl Field for BabyBear {
     #[inline]
     fn new(value: Self::Value) -> Self {
         Self(to_monty(value))
+    }
+}
+
+impl PartialOrd for BabyBear {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.value().cmp(&other.value()))
+    }
+
+    fn lt(&self, other: &Self) -> bool {
+        self.value() < other.value()
     }
 }
 
