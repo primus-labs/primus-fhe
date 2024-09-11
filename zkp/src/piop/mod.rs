@@ -13,7 +13,7 @@ pub use addition_in_zq::{AdditionInZq, AdditionInZqInstance};
 pub use bit_decomposition::{
     BitDecomposition, BitDecompositionSnarks, DecomposedBits, DecomposedBitsInfo,
 };
-pub use look_up::{Lookup, LookupInstance};
+pub use look_up::{Lookup, LookupInstance, LookupSnarks};
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
 pub use rlwe_mul_rgsw::{RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance};
