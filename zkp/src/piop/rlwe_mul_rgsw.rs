@@ -27,8 +27,10 @@
 use super::bit_decomposition::BitDecomposition;
 use super::bit_decomposition::DecomposedBitsEval;
 use super::ntt::NTTRecursiveProof;
+use super::LookupInstance;
 use super::NTTBareIOP;
 use super::{DecomposedBits, DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
+use crate::piop::Lookup;
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::MLSumcheck;
 use crate::sumcheck::ProofWrapper;
@@ -59,6 +61,15 @@ pub struct RlweMultRgswIOP<F: Field>(PhantomData<F>);
 
 /// SNARKs for RLWE * RGSW
 pub struct RlweMultRgswSnarks<F: Field, EF: AbstractExtensionField<F>>(
+    PhantomData<F>,
+    PhantomData<EF>,
+);
+
+/// IOP for RLWE * RGSW
+pub struct RlweMultRgswIOPPure<F: Field>(PhantomData<F>);
+
+/// SNARKs for RLWE * RGSW
+pub struct RlweMultRgswSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
 );
@@ -600,6 +611,13 @@ impl<F: Field> RlweMultRgswInstance<F> {
         decomposed_bits.add_decomposed_bits_instance(&self.input_rlwe.a, &self.bits_rlwe.a_bits);
         decomposed_bits.add_decomposed_bits_instance(&self.input_rlwe.b, &self.bits_rlwe.b_bits);
     }
+
+    /// Extract lookup instance
+    #[inline]
+    pub fn extract_lookup_instance(&self, block_size: usize) -> LookupInstance<F> {
+        self.extract_decomposed_bits()
+            .extract_lookup_instance(block_size)
+    }
 }
 
 impl<F: Field> RlweMultRgswEval<F> {
@@ -1098,6 +1116,532 @@ where
             f_delegation,
         );
         assert!(check_ntt_bare);
+        assert_eq!(subclaim.expected_evaluations, EF::zero());
+        assert_eq!(claimed_sum, EF::zero());
+        // check the recursive part of NTT
+        let check_recursive = <NTTIOP<EF>>::verify_recursive(
+            &mut verifier_trans,
+            &recursive_proof,
+            &ntt_instance_info,
+            &verifier_u,
+            &subclaim,
+        );
+        assert!(check_recursive);
+
+        // 3.5 and also check the relation between these small oracles and the committed oracle
+        let start = Instant::now();
+        let mut pcs_proof_size = 0;
+        let flatten_evals_at_r = evals_at_r.flatten();
+        let flatten_evals_at_u = evals_at_u.flatten();
+        let oracle_randomness = verifier_trans.get_vec_challenge(
+            b"random linear combination for evaluations of oracles",
+            evals_at_r.log_num_oracles(),
+        );
+        let check_oracle_at_r =
+            verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
+        let check_oracle_at_u =
+            verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
+        assert!(check_oracle_at_r && check_oracle_at_u);
+        let iop_verifier_time = verifier_start.elapsed().as_millis();
+
+        // 3.5 Check the evaluation of a random point over the committed oracle
+        let check_pcs_at_r = BrakedownPCS::<F, H, C, S, EF>::verify(
+            &pp,
+            &comm,
+            &requested_point_at_r,
+            oracle_eval_at_r,
+            &eval_proof_at_r,
+            &mut verifier_trans,
+        );
+        let check_pcs_at_u = BrakedownPCS::<F, H, C, S, EF>::verify(
+            &pp,
+            &comm,
+            &requested_point_at_u,
+            oracle_eval_at_u,
+            &eval_proof_at_u,
+            &mut verifier_trans,
+        );
+        assert!(check_pcs_at_r && check_pcs_at_u);
+        let pcs_verifier_time = start.elapsed().as_millis();
+        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len()
+            + bincode::serialize(&eval_proof_at_u).unwrap().len()
+            + bincode::serialize(&flatten_evals_at_r).unwrap().len()
+            + bincode::serialize(&flatten_evals_at_u).unwrap().len();
+
+        // 4. print statistic
+        print_statistic(
+            iop_prover_time + pcs_open_time,
+            iop_verifier_time + pcs_verifier_time,
+            iop_proof_size + pcs_proof_size,
+            iop_prover_time,
+            iop_verifier_time,
+            iop_proof_size,
+            committed_poly.num_vars,
+            instance.num_oracles(),
+            instance.num_vars,
+            setup_time,
+            commit_time,
+            pcs_open_time,
+            pcs_verifier_time,
+            pcs_proof_size,
+        );
+    }
+}
+
+impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
+    /// sample coins before proving sumcheck protocol
+    pub fn sample_coins(trans: &mut Transcript<F>) -> Vec<F> {
+        trans.get_vec_challenge(b"randomness to combine sumcheck protocols", 2)
+    }
+
+    /// return the number of coins used in sumcheck protocol
+    pub fn num_coins() -> usize {
+        2
+    }
+
+    /// Prove RLWE * RGSW
+    pub fn prove(instance: &RlweMultRgswInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
+        let mut trans = Transcript::<F>::new();
+        let u = trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
+        let randomness = Self::sample_coins(&mut trans);
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
+
+        let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
+        let mut claimed_sum = F::zero();
+        // add sumcheck products (without NTT) into poly
+        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
+
+        // add sumcheck products of NTT into poly
+        let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
+        <NTTBareIOP<F>>::prove_as_subprotocol(
+            F::one(),
+            &mut poly,
+            &mut claimed_sum,
+            &ntt_instance,
+            &u,
+        );
+
+        // prove all sumcheck protocol into a large random sumcheck
+        let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
+            .expect("fail to prove the sumcheck protocol");
+
+        // prove F(u, v) in a recursive manner
+        let recursive_proof =
+            <NTTIOP<F>>::prove_recursive(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+
+        (
+            SumcheckKit {
+                proof,
+                claimed_sum,
+                info: poly.info(),
+                u,
+                randomness: state.randomness,
+            },
+            recursive_proof,
+        )
+    }
+
+    /// Prove RLWE * RGSW with leaving the NTT part outside this interface
+    #[inline]
+    pub fn prove_as_subprotocol(
+        randomness: &[F],
+        poly: &mut ListOfProductsOfPolynomials<F>,
+        instance: &RlweMultRgswInstance<F>,
+        eq_at_u: &Rc<DenseMultilinearExtension<F>>,
+    ) {
+        // let bits_instance = instance.extract_decomposed_bits();
+        // let bits_r_num = <BitDecomposition<F>>::num_coins(&instance.bits_info);
+        // let (r_bits, r) = randomness.split_at(bits_r_num);
+        // BitDecomposition::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
+
+        let r = randomness;
+        assert_eq!(r.len(), 2);
+
+        // Integrate the second part of Sumcheck
+        // Sumcheck for proving g'(x) = \sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) for x \in \{0, 1\}^\log n.
+        // Prover claims the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
+        // where u is randomly sampled by the verifier.
+        for (a, b, c, f) in izip!(
+            &instance.bits_rlwe_ntt.a_bits,
+            &instance.bits_rlwe_ntt.b_bits,
+            &instance.bits_rgsw_c_ntt.a_bits,
+            &instance.bits_rgsw_f_ntt.a_bits
+        ) {
+            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(eq_at_u)];
+            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(eq_at_u)];
+            poly.add_product(prod1, r[0]);
+            poly.add_product(prod2, r[0]);
+        }
+        poly.add_product(
+            [Rc::clone(&instance.output_rlwe_ntt.a), Rc::clone(eq_at_u)],
+            -r[0],
+        );
+
+        // Sumcheck protocol for proving: h' = \sum_{i = 0}^{k-1} a_i' \cdot c_i' + b_i' \cdot f_i'
+        for (a, b, c, f) in izip!(
+            &instance.bits_rlwe_ntt.a_bits,
+            &instance.bits_rlwe_ntt.b_bits,
+            &instance.bits_rgsw_c_ntt.b_bits,
+            &instance.bits_rgsw_f_ntt.b_bits
+        ) {
+            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(eq_at_u)];
+            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(eq_at_u)];
+            poly.add_product(prod1, r[1]);
+            poly.add_product(prod2, r[1]);
+        }
+        poly.add_product(
+            [Rc::clone(&instance.output_rlwe_ntt.b), Rc::clone(eq_at_u)],
+            -r[1],
+        );
+    }
+
+    /// Verify RLWE * RGSW
+    #[inline]
+    pub fn verify(
+        wrapper: &mut ProofWrapper<F>,
+        evals_at_r: &RlweMultRgswEval<F>,
+        evals_at_u: &RlweMultRgswEval<F>,
+        info: &RlweMultRgswInfo<F>,
+        recursive_proof: &NTTRecursiveProof<F>,
+    ) -> bool {
+        let mut trans = Transcript::new();
+
+        let u = trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            info.num_vars,
+        );
+
+        // randomness to combine sumcheck protocols
+        let randomness = trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            Self::num_coins(),
+        );
+        let randomness_ntt = trans.get_vec_challenge(
+            b"randomness used to obtain the virtual random ntt instance",
+            <NTTIOP<F>>::num_coins(&info.ntt_info),
+        );
+
+        let mut subclaim = MLSumcheck::verify_as_subprotocol(
+            &mut trans,
+            &wrapper.info,
+            wrapper.claimed_sum,
+            &wrapper.proof,
+        )
+        .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
+
+        // check the sumcheck evaluation (without NTT)
+        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
+            return false;
+        }
+
+        let f_delegation = recursive_proof.delegation_claimed_sums[0];
+        // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
+        let mut ntt_coeff_evals_at_r = F::zero();
+        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
+        // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
+        let mut ntt_point_evals_at_u = F::zero();
+        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
+
+        if !<NTTBareIOP<F>>::verify_as_subprotocol(
+            F::one(),
+            &mut subclaim,
+            &mut wrapper.claimed_sum,
+            ntt_coeff_evals_at_r,
+            ntt_point_evals_at_u,
+            f_delegation,
+        ) {
+            return false;
+        }
+
+        if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
+            return false;
+        }
+        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+    }
+
+    /// Verify RLWE * RGSW with leaving NTT part outside of the interface
+    #[inline]
+    pub fn verify_as_subprotocol(
+        randomness: &[F],
+        subclaim: &mut SubClaim<F>,
+        evals: &RlweMultRgswEval<F>,
+        info: &RlweMultRgswInfo<F>,
+        eq_at_u_r: F,
+    ) -> bool {
+        // 1. check the bit decomposition part
+        let bits_eval = evals.extract_decomposed_bits();
+        // let bits_r_num = <BitDecomposition<F>>::num_coins(&info.bits_info);
+        // let (r_ntt, r) = randomness.split_at(bits_r_num);
+        let check_decomposed_bits =
+            <BitDecomposition<F>>::verify_as_subprotocol_pure(&bits_eval, &info.bits_info);
+        if !check_decomposed_bits {
+            return false;
+        }
+
+        let r = randomness;
+        // 2. check the rest sumcheck protocols
+        // The first part is to evaluate at a random point g' = \sum_{i = 0}^{k-1} a_i' \cdot c_i + b_i' \cdot f_i
+        // It is the reduction claim of prover asserting the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
+        let mut sum1 = F::zero();
+        let mut sum2 = F::zero();
+        for (a, b, c, f) in izip!(
+            &evals.bits_rlwe_ntt.0,
+            &evals.bits_rlwe_ntt.1,
+            &evals.bits_rgsw_c_ntt.0,
+            &evals.bits_rgsw_f_ntt.0
+        ) {
+            sum1 += *a * *c + *b * *f;
+        }
+
+        for (a, b, c, f) in izip!(
+            &evals.bits_rlwe_ntt.0,
+            &evals.bits_rlwe_ntt.1,
+            &evals.bits_rgsw_c_ntt.1,
+            &evals.bits_rgsw_f_ntt.1
+        ) {
+            sum2 += *a * *c + *b * *f;
+        }
+
+        subclaim.expected_evaluations -= eq_at_u_r
+            * (r[0] * (sum1 - evals.output_rlwe_ntt.0) + r[1] * (sum2 - evals.output_rlwe_ntt.1));
+        true
+    }
+}
+
+impl<F, EF> RlweMultRgswSnarksOpt<F, EF>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+{
+    /// Complied with PCS to get SNARKs
+    pub fn snarks<H, C, S>(instance: &RlweMultRgswInstance<F>, code_spec: &S, block_size: usize)
+    where
+        H: Hash + Sync + Send,
+        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
+        S: LinearCodeSpec<F, Code = C> + Clone,
+    {
+        let instance_info = instance.info();
+        println!("Prove {instance_info}\n");
+        // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
+        let committed_poly = instance.generate_oracle();
+        // 1. Use PCS to commit the above polynomial.
+        let start = Instant::now();
+        let pp =
+            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
+        let setup_time = start.elapsed().as_millis();
+
+        let start = Instant::now();
+        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
+        let commit_time = start.elapsed().as_millis();
+
+        // 2. Prover generates the proof
+        let prover_start = Instant::now();
+        let mut iop_proof_size = 0;
+        let mut prover_trans = Transcript::<EF>::new();
+        // Convert the original instance into an instance defined over EF
+        let instance_ef = instance.to_ef::<EF>();
+        let instance_info = instance_ef.info();
+
+        // --- Lookup Part ---
+        let mut lookup_instance = instance_ef.extract_lookup_instance(block_size);
+        let lookup_info = lookup_instance.info();
+        println!("- containing {lookup_info}\n");
+        // random value to initiate lookup
+        let random_value =
+            prover_trans.get_challenge(b"random point used to generate the second oracle");
+        lookup_instance.generate_h_vec(random_value);
+        // --------------------
+
+        // 2.1 Generate the random point to instantiate the sumcheck protocol
+        let prover_u = prover_trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
+
+        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
+        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
+        let mut claimed_sum = EF::zero();
+        let randomness = RlweMultRgswIOPPure::sample_coins(&mut prover_trans);
+        let randomness_ntt =
+            <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
+        RlweMultRgswIOPPure::<EF>::prove_as_subprotocol(
+            &randomness,
+            &mut sumcheck_poly,
+            &instance_ef,
+            &eq_at_u,
+        );
+
+        // 2.? Prover extract the random ntt instance from all ntt instances
+        let ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&randomness_ntt);
+        <NTTBareIOP<EF>>::prove_as_subprotocol(
+            EF::one(),
+            &mut sumcheck_poly,
+            &mut claimed_sum,
+            &ntt_instance,
+            &prover_u,
+        );
+        let ntt_instance_info = ntt_instance.info();
+
+        // --- Lookup Part ---
+        // combine lookup sumcheck
+        let mut lookup_randomness = Lookup::sample_coins(&mut prover_trans, &lookup_instance);
+        lookup_randomness.push(random_value);
+        Lookup::prove_as_subprotocol(
+            &lookup_randomness,
+            &mut sumcheck_poly,
+            &lookup_instance,
+            &eq_at_u,
+        );
+        // --------------------
+        
+        let poly_info = sumcheck_poly.info();
+        // 2.3 Generate proof of sumcheck protocol
+        let (sumcheck_proof, sumcheck_state) =
+            <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
+                .expect("Proof generated in Addition In Zq");
+        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
+
+        // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
+        let recursive_proof = <NTTIOP<EF>>::prove_recursive(
+            &mut prover_trans,
+            &sumcheck_state.randomness,
+            &ntt_instance_info,
+            &prover_u,
+        );
+        iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
+        let iop_prover_time = prover_start.elapsed().as_millis();
+
+        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
+        let start = Instant::now();
+        // let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
+        // let evals_at_u = instance.evaluate_ext(&prover_u);
+        let eq_at_r = gen_identity_evaluations(&sumcheck_state.randomness);
+        let evals_at_r = instance.evaluate_ext_opt(&eq_at_r);
+        let evals_at_u = instance.evaluate_ext_opt(eq_at_u.as_ref());
+
+        // --- Lookup Part ---
+        let lookup_evals = lookup_instance.evaluate(&sumcheck_state.randomness);
+        // -------------------
+
+        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut requested_point_at_r = sumcheck_state.randomness.clone();
+        let mut requested_point_at_u = prover_u.clone();
+        let oracle_randomness = prover_trans.get_vec_challenge(
+            b"random linear combination for evaluations of oracles",
+            instance.log_num_oracles(),
+        );
+        requested_point_at_r.extend(&oracle_randomness);
+        requested_point_at_u.extend(&oracle_randomness);
+        let oracle_eval_at_r = committed_poly.evaluate_ext(&requested_point_at_r);
+        let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
+
+        // 2.6 Generate the evaluation proof of the requested point
+        let eval_proof_at_r = BrakedownPCS::<F, H, C, S, EF>::open(
+            &pp,
+            &comm,
+            &comm_state,
+            &requested_point_at_r,
+            &mut prover_trans,
+        );
+        let eval_proof_at_u = BrakedownPCS::<F, H, C, S, EF>::open(
+            &pp,
+            &comm,
+            &comm_state,
+            &requested_point_at_u,
+            &mut prover_trans,
+        );
+        let pcs_open_time = start.elapsed().as_millis();
+
+        // 3. Verifier checks the proof
+        let verifier_start = Instant::now();
+        let mut verifier_trans = Transcript::<EF>::new();
+
+        // --- Lookup Part ---
+        let random_value =
+            verifier_trans.get_challenge(b"random point used to generate the second oracle");
+        // -------------------
+
+        // 3.1 Generate the random point to instantiate the sumcheck protocol
+        let verifier_u = verifier_trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+
+        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
+        let randomness = verifier_trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            <RlweMultRgswIOPPure<EF>>::num_coins(),
+        );
+        let randomness_ntt = verifier_trans.get_vec_challenge(
+            b"randomness used to obtain the virtual random ntt instance",
+            <NTTIOP<EF>>::num_coins(&instance_info.ntt_info),
+        );
+
+        // --- Lookup Part ---
+        let mut lookup_randomness = verifier_trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            <Lookup<EF>>::num_coins(&lookup_info),
+        );
+        lookup_randomness.push(random_value);
+        // -------------------
+
+        // 3.3 Check the proof of the sumcheck protocol
+        let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
+            &mut verifier_trans,
+            &poly_info,
+            claimed_sum,
+            &sumcheck_proof,
+        )
+        .expect("Verify the proof generated in Bit Decompositon");
+        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
+
+        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
+        let check_subclaim = RlweMultRgswIOPPure::<EF>::verify_as_subprotocol(
+            &randomness,
+            &mut subclaim,
+            &evals_at_r,
+            &instance_info,
+            eq_at_u_r,
+        );
+        assert!(check_subclaim);
+
+        // 3.? Check the NTT part
+        let f_delegation = recursive_proof.delegation_claimed_sums[0];
+        // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
+        let mut ntt_coeff_evals_at_r = EF::zero();
+        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
+        // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
+        let mut ntt_point_evals_at_u = EF::zero();
+        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
+
+        // check the sumcheck part of NTT
+        let check_ntt_bare = <NTTBareIOP<EF>>::verify_as_subprotocol(
+            EF::one(),
+            &mut subclaim,
+            &mut claimed_sum,
+            ntt_coeff_evals_at_r,
+            ntt_point_evals_at_u,
+            f_delegation,
+        );
+        assert!(check_ntt_bare);
+
+        // --- Lookup Part ---
+        let check_lookup = Lookup::<EF>::verify_as_subprotocol(
+            &lookup_randomness,
+            &mut subclaim,
+            &lookup_evals,
+            &lookup_info,
+            eq_at_u_r,
+        );
+        assert!(check_lookup);
+        // -------------------
+
         assert_eq!(subclaim.expected_evaluations, EF::zero());
         assert_eq!(claimed_sum, EF::zero());
         // check the recursive part of NTT

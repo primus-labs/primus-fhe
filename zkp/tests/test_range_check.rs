@@ -9,9 +9,10 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{Lookup, LookupInstance, LookupSnarks};
+use fhe_core::{DefaultFieldU32, DefaultExtendsionFieldU32x4};
 
-type FF = BabyBear;
-type EF = BabyBearExetension;
+type FF = DefaultFieldU32;
+type EF = DefaultExtendsionFieldU32x4;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
 

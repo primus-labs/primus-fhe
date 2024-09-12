@@ -45,9 +45,7 @@ use pcs::{
     utils::hash::Hash,
     PolynomialCommitmentScheme,
 };
-use rand::random;
 use serde::{Deserialize, Serialize};
-use sha2::digest::typenum::{bit, Bit};
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;

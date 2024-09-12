@@ -6,6 +6,7 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
+use zkp::piop::RlweMultRgswSnarksOpt;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
@@ -25,7 +26,7 @@ const BASE_FIELD_BITS: usize = 31;
 // q = 1024: denotes the modulus in LWE
 // Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
 const LOG_DIM_RLWE: usize = 10;
-const LOG_B: usize = 2;
+const LOG_B: usize = 6;
 
 /// Given an `index` of `len` bits, output a new index where the bits are reversed.
 fn reverse_bits(index: usize, len: u32) -> usize {
@@ -240,7 +241,10 @@ fn main() {
     );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <RlweMultRgswSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
+    // <RlweMultRgswSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+    //     &instance, &code_spec,
+    // );
+    <RlweMultRgswSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec, 2
     );
 }

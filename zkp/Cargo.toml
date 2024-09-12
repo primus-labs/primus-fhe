@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 algebra = { path = "../algebra" }
 pcs = { path = "../pcs" }
+fhe_core = { path = "../fhe_core" }
 
 thiserror = { workspace = true }
 rand = { workspace = true }

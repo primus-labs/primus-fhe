@@ -7,6 +7,7 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand_distr::Distribution;
 use sha2::Sha256;
+use zkp::piop::RlweMultRgswSnarksOpt;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
@@ -447,5 +448,88 @@ fn test_snarks() {
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <RlweMultRgswSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec,
+    );
+}
+
+#[test]
+fn test_snarks_with_lookup() {
+    let mut rng = rand::thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+
+    // information used to decompose bits
+    let base_len: usize = 2;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
+    let num_vars = 10;
+    let bits_info = DecomposedBitsInfo {
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 0,
+    };
+
+    // information used to perform NTT
+    let log_n = num_vars;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
+    let mut power = FF::one();
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+    let ntt_table = Rc::new(ntt_table);
+    let ntt_info = NTTInstanceInfo {
+        num_vars,
+        ntt_table,
+        num_ntt: 0,
+    };
+
+    // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
+    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let points: Vec<_> = (0..1 << num_vars)
+        .map(|_| uniform.sample(&mut rng))
+        .collect();
+    let coeffs: Vec<_> = (0..1 << num_vars)
+        .map(|_| uniform.sample(&mut rng))
+        .collect();
+    for _ in 0..bits_len {
+        bits_rgsw_c_ntt.add_rlwe(
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+        );
+    }
+
+    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    for _ in 0..bits_len {
+        bits_rgsw_f_ntt.add_rlwe(
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+        );
+    }
+
+    // generate the random RLWE ciphertext
+    let input_rlwe = RlweCiphertext {
+        a: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
+            log_n, &coeffs,
+        )),
+        b: Rc::new(DenseMultilinearExtension::from_evaluations_slice(
+            log_n, &coeffs,
+        )),
+    };
+
+    // generate all the witness required
+    let instance = generate_rlwe_mult_rgsw_instance(
+        num_vars,
+        input_rlwe,
+        (bits_rgsw_c_ntt, bits_rgsw_f_ntt),
+        &bits_info,
+        &ntt_info,
+    );
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+    <RlweMultRgswSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec, 2
     );
 }

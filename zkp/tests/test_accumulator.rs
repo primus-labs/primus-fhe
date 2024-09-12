@@ -7,6 +7,7 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::thread_rng;
 use sha2::Sha256;
+use zkp::piop::accumulator::AccumulatorSnarksOpt;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
@@ -480,5 +481,47 @@ fn test_snarks() {
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <AccumulatorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec,
+    );
+}
+
+#[test]
+fn test_snarks_with_lookup() {
+    // information used to decompose bits
+    let base_len: usize = 5;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
+    let num_vars = 10;
+    let bits_info = DecomposedBitsInfo {
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 0,
+    };
+
+    // information used to perform NTT
+    let log_n = num_vars;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
+    let mut power = FF::one();
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+    let ntt_table = Rc::new(ntt_table);
+    let ntt_info = NTTInstanceInfo {
+        num_vars,
+        ntt_table,
+        num_ntt: 0,
+    };
+
+    let num_updations = 10;
+    let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
+    let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+    <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec, 2
     );
 }

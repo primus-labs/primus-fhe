@@ -41,9 +41,11 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
 
+use super::LookupInstance;
+
 /// IOP for bit decomposition
 pub struct BitDecomposition<F: Field>(PhantomData<F>);
-/// SNARKs for bit decomposition compied with PCS
+/// SNARKs for bit decomposition compiled with PCS
 pub struct BitDecompositionSnarks<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
@@ -272,6 +274,22 @@ impl<F: Field> DecomposedBits<F> {
                 .collect(),
         }
     }
+
+    /// Extract the lookup instance
+    #[inline]
+    pub fn extract_lookup_instance(&self, block_size: usize) -> LookupInstance<F> {
+        let mut table = vec![F::zero(); 1 << self.num_vars];
+        let mut acc = F::zero();
+        for t in table.iter_mut().take(1 << self.base_len) {
+            *t = acc;
+            acc += F::one();
+        }
+        let table = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            self.num_vars,
+            table,
+        ));
+        LookupInstance::from_slice(&self.d_bits, table, block_size)
+    }
 }
 
 impl<F: DecomposableField> DecomposedBits<F> {
@@ -412,13 +430,10 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         subclaim.expected_evaluations == F::zero()
     }
 
-    /// Verify bit decomposition
-    pub fn verify_as_subprotocol(
-        randomness: &[F],
-        subclaim: &mut SubClaim<F>,
+    /// Verify bit decomposition relation without verifying each bit < base
+    pub fn verify_as_subprotocol_pure(
         evals: &DecomposedBitsEval<F>,
         info: &DecomposedBitsInfo<F>,
-        eq_at_u_r: F,
     ) -> bool {
         assert_eq!(evals.d_val.len(), info.num_instances);
         assert_eq!(evals.d_bits.len(), info.num_instances * info.bits_len);
@@ -430,7 +445,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         });
 
         // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
-        if !evals
+        evals
             .d_val
             .iter()
             .zip(evals.d_bits.chunks_exact(info.bits_len))
@@ -440,7 +455,18 @@ impl<F: Field + Serialize> BitDecomposition<F> {
                     .zip(base_pow.iter())
                     .fold(F::zero(), |acc, (bit, pow)| acc + *bit * *pow)
             })
-        {
+    }
+
+    /// Verify bit decomposition
+    pub fn verify_as_subprotocol(
+        randomness: &[F],
+        subclaim: &mut SubClaim<F>,
+        evals: &DecomposedBitsEval<F>,
+        info: &DecomposedBitsInfo<F>,
+        eq_at_u_r: F,
+    ) -> bool {
+        // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
+        if !Self::verify_as_subprotocol_pure(evals, info){
             return false;
         }
 

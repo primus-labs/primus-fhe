@@ -7,6 +7,7 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
+use zkp::piop::AccumulatorSnarksOpt;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
@@ -23,6 +24,7 @@ use zkp::piop::{
 const DIM_LWE: usize = 1024;
 const LOG_DIM_RLWE: usize = 10;
 const LOG_B: usize = 3;
+const BLOCK_SIZE: usize = 2;
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -375,7 +377,10 @@ fn main() {
     let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <AccumulatorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
+    // <AccumulatorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+    //     &instance, &code_spec,
+    // );
+    <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec, BLOCK_SIZE
     );
 }

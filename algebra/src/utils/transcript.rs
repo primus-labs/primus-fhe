@@ -11,7 +11,6 @@ use super::{Block, Prg};
 /// to sample uniform field elements.
 pub struct Transcript<F: Field> {
     transcript: merlin::Transcript,
-    // sampler: FieldUniformSampler<F>,
     _marker: PhantomData<F>,
 }
 
@@ -21,7 +20,6 @@ impl<F: Field> Transcript<F> {
     pub fn new() -> Self {
         Self {
             transcript: merlin::Transcript::new(b""),
-            // sampler: FieldUniformSampler::new(),
             _marker: PhantomData,
         }
     }

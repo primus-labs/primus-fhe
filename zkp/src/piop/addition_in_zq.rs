@@ -10,6 +10,7 @@
 //!     where u is the common random challenge from the verifier, used to instantiate the sum,
 //!     and then, it can be proved with the sumcheck protocol where the maximum variable-degree is 3.
 //! 3. a(x) + b(x) = c(x) + k(x)\cdot q => can be reduced to the evaluation of a random point since the LHS and RHS are both MLE
+use crate::piop::Lookup;
 use crate::sumcheck::{verifier::SubClaim, MLSumcheck};
 use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
@@ -20,6 +21,7 @@ use algebra::{
     ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
+use std::os::unix::fs::FileExt;
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{LinearCode, LinearCodeSpec},
@@ -32,12 +34,20 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use super::bit_decomposition::DecomposedBitsEval;
-use super::{BitDecomposition, DecomposedBits, DecomposedBitsInfo};
+use super::{BitDecomposition, DecomposedBits, DecomposedBitsInfo, LookupInstance};
 
 /// IOP for addition in Zq, i.e. a + b = c (mod q)
 pub struct AdditionInZq<F: Field>(PhantomData<F>);
 /// SNARKs for addition in Zq compied with PCS
 pub struct AdditionInZqSnarks<F: Field, EF: AbstractExtensionField<F>>(
+    PhantomData<F>,
+    PhantomData<EF>,
+);
+
+/// IOP for addition in Zq, i.e. a + b = c (mod q)
+pub struct AdditionInZqPure<F: Field>(PhantomData<F>);
+/// SNARKs for addition in Zq compied with PCS
+pub struct AdditionInZqSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
 );
@@ -199,6 +209,12 @@ impl<F: Field> AdditionInZqInstance<F> {
             d_val: self.abc.to_owned(),
             d_bits: self.abc_bits.to_owned(),
         }
+    }
+
+    /// Extract lookup instance
+    #[inline]
+    pub fn extract_lookup_instance(&self, block_size: usize) -> LookupInstance<F> {
+        self.extract_decomposed_bits().extract_lookup_instance(block_size)
     }
 }
 
@@ -520,6 +536,324 @@ where
             eq_at_u_r,
         );
         assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
+        let iop_verifier_time = verifier_start.elapsed().as_millis();
+
+        // 3.5 and also check the relation between these small oracles and the committed oracle
+        let start = Instant::now();
+        let mut pcs_proof_size = 0;
+        let flatten_evals = evals.flatten();
+        let oracle_randomness = verifier_trans.get_vec_challenge(
+            b"random linear combination for evaluations of oracles",
+            evals.log_num_oracles(),
+        );
+        let check_oracle = verify_oracle_relation(&flatten_evals, oracle_eval, &oracle_randomness);
+        assert!(check_oracle);
+
+        // 3.5 Check the evaluation of a random point over the committed oracle
+        let check_pcs = BrakedownPCS::<F, H, C, S, EF>::verify(
+            &pp,
+            &comm,
+            &requested_point,
+            oracle_eval,
+            &eval_proof,
+            &mut verifier_trans,
+        );
+        assert!(check_pcs);
+        let pcs_verifier_time = start.elapsed().as_millis();
+        pcs_proof_size += bincode::serialize(&eval_proof).unwrap().len()
+            + bincode::serialize(&flatten_evals).unwrap().len();
+
+        // 4. print statistic
+        print_statistic(
+            iop_prover_time + pcs_open_time,
+            iop_verifier_time + pcs_verifier_time,
+            iop_proof_size + pcs_proof_size,
+            iop_prover_time,
+            iop_verifier_time,
+            iop_proof_size,
+            committed_poly.num_vars,
+            instance.num_oracles(),
+            instance.num_vars,
+            setup_time,
+            commit_time,
+            pcs_open_time,
+            pcs_verifier_time,
+            pcs_proof_size,
+        );
+    }
+}
+
+/// Replace naive rangecheck with lookup
+impl<F: Field + Serialize> AdditionInZqPure<F> {
+    /// sample coins before proving sumcheck protocol
+    pub fn sample_coins(trans: &mut Transcript<F>) -> Vec<F> {
+        trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            1,
+        )
+    }
+
+    /// return the number of coins used in this IOP
+    pub fn num_coins() -> usize {
+        1
+    }
+
+    /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
+    pub fn prove(instance: &AdditionInZqInstance<F>) -> SumcheckKit<F> {
+        let mut trans = Transcript::<F>::new();
+        let u = trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+
+        let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
+        let randomness = Self::sample_coins(&mut trans);
+        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
+        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
+
+        let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
+            .expect("fail to prove the sumcheck protocol");
+        // (proof, state, poly.info())
+        SumcheckKit {
+            proof,
+            info: poly.info(),
+            claimed_sum: F::zero(),
+            randomness: state.randomness,
+            u,
+        }
+    }
+
+    /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
+    pub fn prove_as_subprotocol(
+        randomness: &[F],
+        poly: &mut ListOfProductsOfPolynomials<F>,
+        instance: &AdditionInZqInstance<F>,
+        eq_at_u: &Rc<DenseMultilinearExtension<F>>,
+    ) {
+        // sumcheck for \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l
+        let coin = randomness[randomness.len() - 1];
+        poly.add_product_with_linear_op(
+            [
+                Rc::clone(eq_at_u),
+                Rc::clone(&instance.k),
+                Rc::clone(&instance.k),
+            ],
+            &[
+                (F::one(), F::zero()),
+                (F::one(), F::zero()),
+                (-F::one(), F::one()),
+            ],
+            coin,
+        );
+    }
+
+    /// Verify addition in Zq
+    pub fn verify(
+        wrapper: &ProofWrapper<F>,
+        evals: &AdditionInZqInstanceEval<F>,
+        info: &AdditionInZqInstanceInfo<F>,
+    ) -> bool {
+        let mut trans = Transcript::new();
+
+        let u = trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            info.num_vars,
+        );
+
+        // randomness to combine sumcheck protocols
+        let randomness = trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            Self::num_coins(),
+        );
+
+        let mut subclaim =
+            MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
+                .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
+
+        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
+            return false;
+        }
+
+        subclaim.expected_evaluations == F::zero()
+    }
+
+    /// Verify addition in Zq
+    pub fn verify_as_subprotocol(
+        randomness: &[F],
+        subclaim: &mut SubClaim<F>,
+        evals: &AdditionInZqInstanceEval<F>,
+        info: &AdditionInZqInstanceInfo<F>,
+        eq_at_u_r: F,
+    ) -> bool {
+        // check 1: Verify the range check part in the sumcheck polynomial
+        let bits_evals = evals.extract_decomposed_bits();
+        let check_decomposed_bits = <BitDecomposition<F>>::verify_as_subprotocol_pure(
+            &bits_evals,
+            &info.bits_info,
+        );
+        if !check_decomposed_bits {
+            return false;
+        }
+        
+        // check 2: a(u) + b(u) = c(u) + k(u) * q
+        if evals.abc[0] + evals.abc[1] != evals.abc[2] + evals.k * info.q {
+            return false;
+        }
+
+        // check 3: Verify the newly added part in the sumcheck polynomial
+        let coin = randomness[randomness.len() - 1];
+        subclaim.expected_evaluations -= coin * eq_at_u_r * evals.k * (F::one() - evals.k);
+        true
+    }
+}
+
+// Replcae naive rangecheck with lookup
+impl<F, EF> AdditionInZqSnarksOpt<F, EF>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+{
+    /// Complied with PCS to get SNARKs
+    pub fn snarks<H, C, S>(instance: &AdditionInZqInstance<F>, code_spec: &S, block_size: usize)
+    where
+        H: Hash + Sync + Send,
+        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
+        S: LinearCodeSpec<F, Code = C> + Clone,
+    {
+        let instance_info = instance.info();
+        println!("Prove {instance_info}\n");
+        // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
+        let committed_poly = instance.generate_oracle();
+        // 1. Use PCS to commit the above polynomial.
+        let start = Instant::now();
+        let pp =
+            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
+        let setup_time = start.elapsed().as_millis();
+
+        let start = Instant::now();
+        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
+        let commit_time = start.elapsed().as_millis();
+
+        // 2. Prover generates the proof
+        let prover_start = Instant::now();
+        let mut iop_proof_size = 0;
+        let mut prover_trans = Transcript::<EF>::new();
+        // Convert the original instance into an instance defined over EF
+        let instance_ef = instance.to_ef::<EF>();
+        let instance_info = instance_ef.info();
+
+        let mut lookup_instance = instance_ef.extract_lookup_instance(block_size);
+        let lookup_info = lookup_instance.info();
+        println!("- containing {lookup_info}\n");
+        // random value to initiate lookup
+        let random_value =
+            prover_trans.get_challenge(b"random point used to generate the second oracle");
+        lookup_instance.generate_h_vec(random_value);
+
+        // 2.1 Generate the random point to instantiate the sumcheck protocol
+        let prover_u = prover_trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
+
+        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
+        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
+        let claimed_sum = EF::zero();
+        let randomness = AdditionInZqPure::sample_coins(&mut prover_trans);
+        AdditionInZqPure::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
+
+        // combine lookup sumcheck
+        let mut lookup_randomness = Lookup::sample_coins(&mut prover_trans, &lookup_instance);
+        lookup_randomness.push(random_value);
+        Lookup::prove_as_subprotocol(&lookup_randomness, &mut sumcheck_poly, &lookup_instance, &eq_at_u);
+
+        let poly_info = sumcheck_poly.info();
+
+        // 2.3 Generate proof of sumcheck protocol
+        let (sumcheck_proof, sumcheck_state) =
+            <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
+                .expect("Proof generated in Addition In Zq");
+        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
+        let iop_prover_time = prover_start.elapsed().as_millis();
+
+        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
+        let start = Instant::now();
+        let evals = instance.evaluate_ext(&sumcheck_state.randomness);
+        let lookup_evals = lookup_instance.evaluate(&sumcheck_state.randomness);
+
+        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut requested_point = sumcheck_state.randomness.clone();
+        requested_point.extend(&prover_trans.get_vec_challenge(
+            b"random linear combination for evaluations of oracles",
+            instance.log_num_oracles(),
+        ));
+        let oracle_eval = committed_poly.evaluate_ext(&requested_point);
+
+        // 2.6 Generate the evaluation proof of the requested point
+        let eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
+            &pp,
+            &comm,
+            &comm_state,
+            &requested_point,
+            &mut prover_trans,
+        );
+        let pcs_open_time = start.elapsed().as_millis();
+
+        // 3. Verifier checks the proof
+        let verifier_start = Instant::now();
+        let mut verifier_trans = Transcript::<EF>::new();
+
+        let random_value =
+            verifier_trans.get_challenge(b"random point used to generate the second oracle");
+
+        // 3.1 Generate the random point to instantiate the sumcheck protocol
+        let verifier_u = verifier_trans.get_vec_challenge(
+            b"random point used to instantiate sumcheck protocol",
+            instance.num_vars,
+        );
+
+        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
+        let randomness = verifier_trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            <AdditionInZqPure<EF>>::num_coins(),
+        );
+
+        let mut lookup_randomness = verifier_trans.get_vec_challenge(
+            b"randomness to combine sumcheck protocols",
+            <Lookup<EF>>::num_coins(&lookup_info),
+        );
+        lookup_randomness.push(random_value);
+
+        // 3.3 Check the proof of the sumcheck protocol
+        let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
+            &mut verifier_trans,
+            &poly_info,
+            claimed_sum,
+            &sumcheck_proof,
+        )
+        .expect("Verify the proof generated in Bit Decompositon");
+        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
+
+        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
+        let check_subcliam = AdditionInZqPure::<EF>::verify_as_subprotocol(
+            &randomness,
+            &mut subclaim,
+            &evals,
+            &instance_info,
+            eq_at_u_r,
+        );
+        assert!(check_subcliam);
+        let check_lookup = Lookup::<EF>::verify_as_subprotocol(
+            &lookup_randomness,
+            &mut subclaim,
+            &lookup_evals,
+            &lookup_info,
+            eq_at_u_r,
+        );
+        assert!(check_lookup);
+        assert!(subclaim.expected_evaluations == EF::zero());
         let iop_verifier_time = verifier_start.elapsed().as_millis();
 
         // 3.5 and also check the relation between these small oracles and the committed oracle

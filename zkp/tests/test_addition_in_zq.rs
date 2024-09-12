@@ -3,6 +3,7 @@ use algebra::{
     BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler,
 };
+use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
@@ -11,14 +12,14 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
-    addition_in_zq::AdditionInZqSnarks, AdditionInZq, AdditionInZqInstance, DecomposedBitsInfo,
+    AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks, AdditionInZqSnarksOpt, DecomposedBitsInfo, Lookup
 };
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
-type FF = BabyBear;
-type EF = BabyBearExetension;
+type FF = DefaultFieldU32;
+type EF = DefaultExtendsionFieldU32x4;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
 
@@ -286,5 +287,100 @@ fn test_snarks() {
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <AdditionInZqSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec,
+    );
+}
+
+#[test]
+fn test_trivial_addition_in_zq_with_lookup() {
+    let q = FF::new(9);
+    let base_len = 1;
+    let base: FF = FF::new(2);
+    let num_vars = 2;
+    let bits_len = 4;
+    let abc = vec![
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 4, 6, 8, 2),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 7, 3, 0, 1),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 2, 0, 8, 3),
+        )),
+    ];
+    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        field_vec!(FF; 1, 1, 0, 0),
+    ));
+
+    let bits_info = DecomposedBitsInfo::<FF> {
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 3,
+    };
+    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
+    let mut lookup_instance = instance.extract_lookup_instance(1);
+
+    let info = instance.info();
+    let lookup_info = lookup_instance.info();
+
+    let kit = AdditionInZqPure::<FF>::prove(&instance);
+    let lookup_kit = Lookup::<FF>::prove(&mut lookup_instance);
+
+    let evals = instance.evaluate(&kit.randomness);
+    let lookup_evals = lookup_instance.evaluate(&lookup_kit.randomness);
+
+    let wrapper = kit.extract();
+    let lookup_wrapper = lookup_kit.extract();
+
+    let check = AdditionInZqPure::<FF>::verify(&wrapper, &evals, &info);
+    let lookup_check = Lookup::<FF>::verify(&lookup_wrapper, &lookup_evals, &lookup_info);
+
+    assert!(check && lookup_check);
+}
+
+#[test]
+fn test_trivial_addition_in_zq_with_lookup_snarks() {
+    let q = FF::new(9);
+    let base_len = 1;
+    let base: FF = FF::new(2);
+    let num_vars = 2;
+    let bits_len = 4;
+    let abc = vec![
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 4, 6, 8, 2),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 7, 3, 0, 1),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            field_vec!(FF; 2, 0, 8, 3),
+        )),
+    ];
+    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        field_vec!(FF; 1, 1, 0, 0),
+    ));
+
+    let bits_info = DecomposedBitsInfo::<FF> {
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 3,
+    };
+    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
+    
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+    <AdditionInZqSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+        &instance, &code_spec, 1
     );
 }
