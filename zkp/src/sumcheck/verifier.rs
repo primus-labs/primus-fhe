@@ -30,6 +30,7 @@ pub struct VerifierState<F: Field> {
 }
 
 /// Subclaim when verifier is convinced
+#[derive(Default)]
 pub struct SubClaim<F: Field> {
     /// the multi-dimensional point that this multilinear extension is evaluated to
     pub point: Vec<F>,
