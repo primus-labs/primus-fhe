@@ -7,7 +7,7 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{round::RoundSnarks, DecomposedBitsInfo, RoundIOP, RoundInstance};
+use zkp::piop::{floor::RoundSnarks, DecomposedBitsInfo, RoundIOP, RoundInstance};
 
 type FF = BabyBear; // field type
 type EF = BabyBearExetension;

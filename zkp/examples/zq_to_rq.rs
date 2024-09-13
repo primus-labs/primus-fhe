@@ -8,7 +8,7 @@ use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::round::RoundSnarks;
+use zkp::piop::floor::RoundSnarks;
 use zkp::piop::{DecomposedBitsInfo, RoundInstance, ZqToRQInstance};
 use num_traits::{One, Zero};
 
