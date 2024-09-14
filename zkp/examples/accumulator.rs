@@ -7,9 +7,9 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
-use zkp::piop::AccumulatorSnarksOpt;
 use std::rc::Rc;
 use std::vec;
+use zkp::piop::AccumulatorSnarksOpt;
 use zkp::piop::{
     accumulator::AccumulatorSnarks, AccumulatorInstance, AccumulatorWitness, DecomposedBitsInfo,
     NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
@@ -212,17 +212,17 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
 fn update_accumulator<F: Field + NTTField>(
     num_vars: usize,
     acc_ntt: RlweCiphertext<F>,
-    d: Rc<DenseMultilinearExtension<F>>,
+    d: DenseMultilinearExtension<F>,
     bits_rgsw_c_ntt: RlweCiphertexts<F>,
     bits_rgsw_f_ntt: RlweCiphertexts<F>,
     bits_info: &DecomposedBitsInfo<F>,
     ntt_info: &NTTInstanceInfo<F>,
 ) -> AccumulatorWitness<F> {
     // 1. Perform ntt transform on (x^{-a_u} - 1)
-    let d_ntt = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+    let d_ntt = DenseMultilinearExtension::from_evaluations_vec(
         ntt_info.num_vars,
         ntt_transform_normal_order(ntt_info.num_vars as u32, &d.evaluations),
-    ));
+    );
 
     // 2. Perform point-multiplication to compute (x^{-a_u} - 1) * ACC
     let input_rlwe_ntt = RlweCiphertext {
@@ -297,7 +297,7 @@ fn generate_instance<F: Field + NTTField>(
         )),
     };
     for _ in 0..num_updations {
-        let d = Rc::new(DenseMultilinearExtension::random(num_vars, &mut rng));
+        let d = DenseMultilinearExtension::random(num_vars, &mut rng);
         let bits_rgsw_c_ntt = random_rlwe_ciphertexts(bits_info.bits_len, &mut rng, num_vars);
         let bits_rgsw_f_ntt = random_rlwe_ciphertexts(bits_info.bits_len, &mut rng, num_vars);
         // perform ACC * d * RGSW
@@ -381,6 +381,6 @@ fn main() {
     //     &instance, &code_spec,
     // );
     <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, BLOCK_SIZE
+        &instance, &code_spec, BLOCK_SIZE,
     );
 }

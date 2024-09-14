@@ -148,13 +148,13 @@ impl<F: Field> IPForMLSumcheck<F> {
                         let op = table[b << 1] * op_a;
                         let mut start = op + op_b;
                         let step = (table[(b << 1) + 1] * op_a) - op;
+                        // Evaluate each point P(t) for t = 0..degree + 1 via the accumulated addition instead of the multiplication by t.
+                        // [t|b] = [0|b] + t * ([1|b] - [0|b]) represented by little-endian
                         for p in product.iter_mut() {
                             *p *= start;
                             start += step;
                         }
                     }
-                    // Evaluate each point P(t) for t = 0..degree + 1 via the accumulated addition instead of the multiplication by t.
-                    // [t|b] = [0|b] + t * ([1|b] - [0|b]) represented by little-endian
                     for t in 0..degree + 1 {
                         products_sum[t] += product[t];
                     }

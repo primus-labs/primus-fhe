@@ -6,10 +6,11 @@ use std::slice::{Iter, IterMut};
 
 use num_traits::Zero;
 use rand_distr::Distribution;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::{AbstractExtensionField, DecomposableField, Field, FieldUniformSampler};
 
-use super::MultilinearExtension;
+use super::{MultilinearExtension, PAR_NUM_VAR_THERSHOLD};
 use std::rc::Rc;
 
 /// Stores a multilinear polynomial in dense evaluation form.
@@ -95,17 +96,29 @@ impl<F: Field> DenseMultilinearExtension<F> {
         // evaluate nv variable of partial point from left to right
         // with dim rounds and \sum_{i=1}^{dim} 2^(nv - i)
         // (If dim = nv, then the complexity is 2^{nv}.)
-        for i in 1..dim + 1 {
-            // fix a single variable to evaluate (1 << (nv - i)) evaluations from the last round
-            // with complexity of 2^(1 << (nv - i)) field multiplications
-            let r = ext_point[i - 1];
-            for b in 0..(1 << (nv - i)) {
-                let left = poly[b << 1];
-                let right = poly[(b << 1) + 1];
-                poly[b] = r * (right - left) + left;
+        if dim <= PAR_NUM_VAR_THERSHOLD {
+            for i in 1..dim + 1 {
+                // fix a single variable to evaluate (1 << (nv - i)) evaluations from the last round
+                // with complexity of 2^(1 << (nv - i)) field multiplications
+                let r = ext_point[i - 1];
+                for b in 0..(1 << (nv - i)) {
+                    let left = poly[b << 1];
+                    let right = poly[(b << 1) + 1];
+                    poly[b] = r * (right - left) + left;
+                }
+            }
+        } else {
+            for i in 1..dim + 1 {
+                let r = ext_point[i - 1];
+                let mut tmp = vec![EF::zero(); 1 << (nv - i)];
+                tmp.par_iter_mut().enumerate().for_each(|(b, t)| {
+                    let left = poly[b << 1];
+                    let right = poly[(b << 1) + 1];
+                    *t = left + r * (right - left);
+                });
+                poly = tmp;
             }
         }
-        poly.truncate(1 << (nv - dim));
         poly[0]
     }
 
