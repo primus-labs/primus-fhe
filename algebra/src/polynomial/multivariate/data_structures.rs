@@ -2,6 +2,7 @@
 
 use std::{collections::HashMap, rc::Rc};
 
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::Serialize;
 
 use crate::Field;
@@ -133,14 +134,22 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
 
     /// Evaluate the polynomial at point `point`
     pub fn evaluate(&self, point: &[F]) -> F {
-        self.products
+        let mle_buff: Vec<_> = self
+            .flattened_ml_extensions
             .iter()
-            .zip(self.linear_ops.iter())
-            .fold(F::zero(), |result, ((c, p), ops)| {
-                result
-                    + p.iter().zip(ops.iter()).fold(*c, |acc, (&i, &(a, b))| {
-                        acc * (self.flattened_ml_extensions[i].evaluate(point) * a + b)
+            .map(|m| m.as_ref().clone())
+            .collect();
+        self.products
+            .par_iter()
+            .zip(self.linear_ops.par_iter())
+            .fold(
+                || F::zero(),
+                |res, ((c, p), ops)| {
+                    res + p.iter().zip(ops.iter()).fold(*c, |acc, (&i, &(a, b))| {
+                        acc * (mle_buff[i].evaluate(point) * a + b)
                     })
-            })
+                },
+            )
+            .reduce(|| F::zero(), |acc, v| acc + v)
     }
 }

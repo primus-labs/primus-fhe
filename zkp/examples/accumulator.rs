@@ -23,8 +23,8 @@ use zkp::piop::{
 // Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
 const DIM_LWE: usize = 1024;
 const LOG_DIM_RLWE: usize = 10;
-const LOG_B: usize = 3;
-const BLOCK_SIZE: usize = 2;
+const LOG_B: usize = 7;
+const BLOCK_SIZE: usize = 1;
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
