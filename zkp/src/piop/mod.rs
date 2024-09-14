@@ -7,7 +7,7 @@ pub mod ntt;
 pub mod rlwe_mul_rgsw;
 pub mod floor;
 pub mod zq_to_rq;
-// pub mod bit_decomposition_opt;
+pub mod round;
 
 pub use accumulator::{AccumulatorIOP, AccumulatorInstance, AccumulatorWitness, AccumulatorSnarksOpt};
 pub use addition_in_zq::{AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarksOpt, AdditionInZqSnarks};
@@ -19,5 +19,6 @@ pub use look_up::{Lookup, LookupInstance, LookupSnarks};
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
 pub use rlwe_mul_rgsw::{RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance, RlweMultRgswIOPPure, RlweMultRgswSnarksOpt};
-pub use floor::{RoundIOP, RoundInstance};
+pub use floor::{FloorIOP, FloorInstance, FloorSnarks};
+pub use round::{RoundIOP, RoundInstance, RoundSnarks};
 pub use zq_to_rq::{ZqToRQIOP, ZqToRQInstance};

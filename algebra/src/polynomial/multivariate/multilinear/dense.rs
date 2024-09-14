@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Index, Neg, Sub, SubAssign};
 use std::slice::{Iter, IterMut};
+use std::vec;
 
 use num_traits::Zero;
 use rand_distr::Distribution;
@@ -22,6 +23,11 @@ pub struct DenseMultilinearExtension<F: Field> {
 }
 
 impl<F: Field> DenseMultilinearExtension<F> {
+    /// Construct an empty instance
+    #[inline]
+    pub fn new(num_vars: usize) -> Self {
+        Self::from_evaluations_vec(num_vars, vec![F::zero(); 1 << num_vars])
+    }
     /// Construct a new polynomial from a list of evaluations where the index
     /// represents a point in {0,1}^`num_vars` in little endian form. For
     /// example, `0b1011` represents `P(1,1,0,1)`
