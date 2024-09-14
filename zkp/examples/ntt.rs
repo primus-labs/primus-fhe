@@ -6,6 +6,7 @@ use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
 use std::rc::Rc;
+use std::sync::Arc;
 use zkp::piop::ntt::NTTInstances;
 use zkp::piop::ntt::NTTSnarks;
 
@@ -101,7 +102,7 @@ fn main() {
         ntt_table.push(power);
         power *= root;
     }
-    let ntt_table = Rc::new(ntt_table);
+    let ntt_table = Arc::new(ntt_table);
 
     let mut rng = thread_rng();
 

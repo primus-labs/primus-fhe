@@ -56,4 +56,4 @@ pub trait MultilinearExtension<F: Field>:
     fn to_evaluations(&self) -> Vec<F>;
 }
 
-const PAR_NUM_VAR_THERSHOLD:usize = 20;
+const PAR_NUM_VAR_THERSHOLD: usize = 20;

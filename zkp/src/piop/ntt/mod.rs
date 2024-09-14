@@ -50,6 +50,7 @@ use pcs::{
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use ntt_bare::NTTBareIOP;
@@ -66,7 +67,7 @@ pub struct NTTInstance<F: Field> {
     /// the degree of the polynomial is N - 1
     pub num_vars: usize,
     /// stores {ω^0, ω^1, ..., ω^{2N-1}}
-    pub ntt_table: Rc<Vec<F>>,
+    pub ntt_table: Arc<Vec<F>>,
     /// coefficient representation of the polynomial
     pub coeffs: Rc<DenseMultilinearExtension<F>>,
     /// point-evaluation representation of the polynomial
@@ -93,7 +94,7 @@ pub struct NTTInstances<F: Field> {
     /// the degree of the polynomial is N - 1
     pub num_vars: usize,
     /// stores {ω^0, ω^1, ..., ω^{2N-1}}
-    pub ntt_table: Rc<Vec<F>>,
+    pub ntt_table: Arc<Vec<F>>,
     /// store the coefficient representaions
     pub coeffs: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// store the point-evaluation representation
@@ -101,7 +102,7 @@ pub struct NTTInstances<F: Field> {
 }
 
 /// Stores the corresponding NTT table for the verifier
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NTTInstanceInfo<F: Field> {
     /// number of instances randomized into this NTT instance
     pub num_ntt: usize,
@@ -109,7 +110,7 @@ pub struct NTTInstanceInfo<F: Field> {
     /// the degree of the polynomial is N - 1
     pub num_vars: usize,
     /// stores {ω^0, ω^1, ..., ω^{2N-1}}
-    pub ntt_table: Rc<Vec<F>>,
+    pub ntt_table: Arc<Vec<F>>,
 }
 
 impl<F: Field> fmt::Display for NTTInstanceInfo<F> {
@@ -128,7 +129,7 @@ impl<F: Field> NTTInstanceInfo<F> {
         NTTInstanceInfo {
             num_ntt: self.num_ntt,
             num_vars: self.num_vars,
-            ntt_table: Rc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
+            ntt_table: Arc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
         }
     }
 }
@@ -309,7 +310,7 @@ impl<F: Field> NTTInstance<F> {
         NTTInstanceInfo {
             num_ntt: 1,
             num_vars: self.num_vars,
-            ntt_table: Rc::clone(&self.ntt_table),
+            ntt_table: Arc::clone(&self.ntt_table),
         }
     }
 
@@ -317,7 +318,7 @@ impl<F: Field> NTTInstance<F> {
     #[inline]
     pub fn from_slice(
         log_n: usize,
-        ntt_table: &Rc<Vec<F>>,
+        ntt_table: &Arc<Vec<F>>,
         coeffs: &Rc<DenseMultilinearExtension<F>>,
         points: &Rc<DenseMultilinearExtension<F>>,
     ) -> Self {
@@ -334,7 +335,7 @@ impl<F: Field> NTTInstance<F> {
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> NTTInstance<EF> {
         NTTInstance::<EF> {
             num_vars: self.num_vars,
-            ntt_table: Rc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
+            ntt_table: Arc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
             coeffs: Rc::new(self.coeffs.to_ef::<EF>()),
             points: Rc::new(self.points.to_ef::<EF>()),
         }
@@ -344,11 +345,11 @@ impl<F: Field> NTTInstance<F> {
 impl<F: Field> NTTInstances<F> {
     /// Construct an empty container
     #[inline]
-    pub fn new(num_vars: usize, ntt_table: &Rc<Vec<F>>) -> Self {
+    pub fn new(num_vars: usize, ntt_table: &Arc<Vec<F>>) -> Self {
         Self {
             num_ntt: 0,
             num_vars,
-            ntt_table: Rc::clone(ntt_table),
+            ntt_table: Arc::clone(ntt_table),
             coeffs: Vec::new(),
             points: Vec::new(),
         }
@@ -360,7 +361,7 @@ impl<F: Field> NTTInstances<F> {
         NTTInstanceInfo {
             num_ntt: self.num_ntt,
             num_vars: self.num_vars,
-            ntt_table: Rc::clone(&self.ntt_table),
+            ntt_table: Arc::clone(&self.ntt_table),
         }
     }
 
@@ -445,7 +446,7 @@ impl<F: Field> NTTInstances<F> {
         }
         NTTInstance::<F> {
             num_vars: self.num_vars,
-            ntt_table: Rc::clone(&self.ntt_table),
+            ntt_table: Arc::clone(&self.ntt_table),
             coeffs: Rc::new(random_coeffs),
             points: Rc::new(random_points),
         }
@@ -479,7 +480,7 @@ impl<F: Field> NTTInstances<F> {
         }
         NTTInstance::<EF> {
             num_vars: self.num_vars,
-            ntt_table: Rc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
+            ntt_table: Arc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
             coeffs: Rc::new(random_coeffs),
             points: Rc::new(random_points),
         }

@@ -9,6 +9,7 @@ use crate::sumcheck::SumcheckKit;
 use core::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::ntt::NTTRecursiveProof;
@@ -62,6 +63,7 @@ pub struct AccumulatorSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<EF>,
 );
 /// accumulator witness when performing ACC = ACC + (X^{-a_u} + 1) * ACC * RGSW(Z_u)
+#[derive(Debug, Clone)]
 pub struct AccumulatorWitness<F: Field> {
     /// * Witness when performing input_rlwe_ntt := (X^{-a_u} + 1) * ACC
     ///
@@ -245,10 +247,10 @@ impl<F: Field> AccumulatorWitness<F> {
         *r_coeffs += (r_used[0], &self.d);
         *r_points += (r_used[0], &self.d_ntt);
         // input_rlwe ==NTT== input_rlwe_ntt
-        *r_coeffs += (r_used[1], self.rlwe_mult_rgsw.input_rlwe.a.as_ref());
-        *r_points += (r_used[1], self.input_rlwe_ntt.a.as_ref());
-        *r_coeffs += (r_used[2], self.rlwe_mult_rgsw.input_rlwe.b.as_ref());
-        *r_points += (r_used[2], self.input_rlwe_ntt.b.as_ref());
+        *r_coeffs += (r_used[1], &self.rlwe_mult_rgsw.input_rlwe.a);
+        *r_points += (r_used[1], &self.input_rlwe_ntt.a);
+        *r_coeffs += (r_used[2], &self.rlwe_mult_rgsw.input_rlwe.b);
+        *r_points += (r_used[2], &self.input_rlwe_ntt.b);
 
         self.rlwe_mult_rgsw
             .update_ntt_instance(r_coeffs, r_points, r);
@@ -269,18 +271,10 @@ impl<F: Field> AccumulatorWitness<F> {
         add_assign_ef(r_points, &r_used[0], &self.d_ntt);
 
         // input_rlwe ==NTT== input_rlwe_ntt
-        add_assign_ef(
-            r_coeffs,
-            &r_used[1],
-            self.rlwe_mult_rgsw.input_rlwe.a.as_ref(),
-        );
-        add_assign_ef(r_points, &r_used[1], self.input_rlwe_ntt.a.as_ref());
-        add_assign_ef(
-            r_coeffs,
-            &r_used[2],
-            self.rlwe_mult_rgsw.input_rlwe.b.as_ref(),
-        );
-        add_assign_ef(r_points, &r_used[2], self.input_rlwe_ntt.b.as_ref());
+        add_assign_ef(r_coeffs, &r_used[1], &self.rlwe_mult_rgsw.input_rlwe.a);
+        add_assign_ef(r_points, &r_used[1], &self.input_rlwe_ntt.a);
+        add_assign_ef(r_coeffs, &r_used[2], &self.rlwe_mult_rgsw.input_rlwe.b);
+        add_assign_ef(r_points, &r_used[2], &self.input_rlwe_ntt.b);
 
         self.rlwe_mult_rgsw
             .update_ntt_instance_to_ef::<EF>(r_coeffs, r_points, r);
@@ -304,7 +298,7 @@ impl<F: Field> AccumulatorInstance<F> {
         let ntt_info = NTTInstanceInfo::<F> {
             num_ntt: 4 + num_updations * updations[0].num_ntt_contained(),
             num_vars,
-            ntt_table: Rc::clone(&ntt_info.ntt_table),
+            ntt_table: Arc::clone(&ntt_info.ntt_table),
         };
 
         let bits_info = DecomposedBitsInfo::<F> {
@@ -431,7 +425,7 @@ impl<F: Field> AccumulatorInstance<F> {
             output: self.output.evaluate_ext(point),
             updations: self
                 .updations
-                .iter()
+                .par_iter()
                 .map(|updation| updation.evaluate_ext(point))
                 .collect(),
         }
@@ -453,16 +447,16 @@ impl<F: Field> AccumulatorInstance<F> {
         let (r_used, r) = randomness.split_at(4);
         // input ==NTT== input_ntt
         let input_ntt = &self.updations[0].acc_ntt;
-        random_coeffs += (r_used[0], self.input.a.as_ref());
-        random_points += (r_used[0], input_ntt.a.as_ref());
-        random_coeffs += (r_used[1], self.input.b.as_ref());
-        random_points += (r_used[1], input_ntt.b.as_ref());
+        random_coeffs += (r_used[0], &self.input.a);
+        random_points += (r_used[0], &input_ntt.a);
+        random_coeffs += (r_used[1], &self.input.b);
+        random_points += (r_used[1], &input_ntt.b);
 
         // output_ntt ==NTT== output
-        random_coeffs += (r_used[2], self.output.a.as_ref());
-        random_points += (r_used[2], self.output_ntt.a.as_ref());
-        random_coeffs += (r_used[3], self.output.b.as_ref());
-        random_points += (r_used[3], self.output_ntt.b.as_ref());
+        random_coeffs += (r_used[2], &self.output.a);
+        random_points += (r_used[2], &self.output_ntt.a);
+        random_coeffs += (r_used[3], &self.output.b);
+        random_points += (r_used[3], &self.output_ntt.b);
 
         let r_each_num = self.updations[0].num_ntt_contained();
         // ntts in each accumulator
@@ -497,16 +491,16 @@ impl<F: Field> AccumulatorInstance<F> {
         let (r_used, r) = randomness.split_at(4);
         // input ==NTT== input_ntt
         let input_ntt = &self.updations[0].acc_ntt;
-        add_assign_ef(&mut random_coeffs, &r_used[0], self.input.a.as_ref());
-        add_assign_ef(&mut random_points, &r_used[0], input_ntt.a.as_ref());
-        add_assign_ef(&mut random_coeffs, &r_used[1], self.input.b.as_ref());
-        add_assign_ef(&mut random_points, &r_used[1], input_ntt.b.as_ref());
+        add_assign_ef(&mut random_coeffs, &r_used[0], &self.input.a);
+        add_assign_ef(&mut random_points, &r_used[0], &input_ntt.a);
+        add_assign_ef(&mut random_coeffs, &r_used[1], &self.input.b);
+        add_assign_ef(&mut random_points, &r_used[1], &input_ntt.b);
 
         // output_ntt ==NTT== output
-        add_assign_ef(&mut random_coeffs, &r_used[2], self.output.a.as_ref());
-        add_assign_ef(&mut random_points, &r_used[2], self.output_ntt.a.as_ref());
-        add_assign_ef(&mut random_coeffs, &r_used[3], self.output.b.as_ref());
-        add_assign_ef(&mut random_points, &r_used[3], self.output_ntt.b.as_ref());
+        add_assign_ef(&mut random_coeffs, &r_used[2], &self.output.a);
+        add_assign_ef(&mut random_points, &r_used[2], &self.output_ntt.a);
+        add_assign_ef(&mut random_coeffs, &r_used[3], &self.output.b);
+        add_assign_ef(&mut random_points, &r_used[3], &self.output_ntt.b);
 
         let r_each_num = self.updations[0].num_ntt_contained();
         // ntts in each accumulator
@@ -520,7 +514,7 @@ impl<F: Field> AccumulatorInstance<F> {
 
         NTTInstance::<EF> {
             num_vars: self.num_vars,
-            ntt_table: Rc::new(
+            ntt_table: Arc::new(
                 self.ntt_info
                     .ntt_table
                     .iter()
@@ -817,26 +811,32 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             poly.add_product(
                 [
                     Rc::new(updation.d_ntt.clone()),
-                    updation.acc_ntt.a.clone(),
+                    Rc::new(updation.acc_ntt.a.clone()),
                     eq_at_u.clone(),
                 ],
                 r[0],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.a), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.a.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[0],
             );
             // sum_x eq(u, x) * (ACC.b(x) * d(x) - RLWE.b(x)) = 0
             poly.add_product(
                 [
                     Rc::new(updation.d_ntt.clone()),
-                    updation.acc_ntt.b.clone(),
+                    Rc::new(updation.acc_ntt.b.clone()),
                     eq_at_u.clone(),
                 ],
                 r[1],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.b), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.b.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[1],
             );
 
@@ -1284,26 +1284,32 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
             poly.add_product(
                 [
                     Rc::new(updation.d_ntt.clone()),
-                    updation.acc_ntt.a.clone(),
+                    Rc::new(updation.acc_ntt.a.clone()),
                     eq_at_u.clone(),
                 ],
                 r[0],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.a), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.a.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[0],
             );
             // sum_x eq(u, x) * (ACC.b(x) * d(x) - RLWE.b(x)) = 0
             poly.add_product(
                 [
                     Rc::new(updation.d_ntt.clone()),
-                    updation.acc_ntt.b.clone(),
+                    Rc::new(updation.acc_ntt.b.clone()),
                     eq_at_u.clone(),
                 ],
                 r[1],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.b), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.b.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[1],
             );
 
@@ -1493,13 +1499,13 @@ where
         let start = Instant::now();
         let start1 = Instant::now();
 
-        let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
-        let evals_at_u = instance.evaluate_ext(&prover_u);
+        // let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
+        // let evals_at_u = instance.evaluate_ext(&prover_u);
 
-        // let (evals_at_r, evals_at_u) = rayon::join(
-        //     || instance.evaluate_ext(&sumcheck_state.randomness),
-        //     || instance.evaluate_ext(&prover_u),
-        // );
+        let (evals_at_r, evals_at_u) = rayon::join(
+            || instance.evaluate_ext(&sumcheck_state.randomness),
+            || instance.evaluate_ext(&prover_u),
+        );
         println!("acc evaluate: {:?} ms", start1.elapsed().as_millis());
         // --- Lookup Part ---
         let start1 = Instant::now();
@@ -1525,8 +1531,7 @@ where
         requested_point_at_u.extend(&oracle_randomness);
         let oracle_eval_at_r = committed_poly.evaluate_ext(&requested_point_at_r);
         let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
-        println!("r len: {}", requested_point_at_r.len());
-        println!("u len: {}", requested_point_at_u.len());
+
         // let (oracle_eval_at_r, oracle_eval_at_u) = rayon::join(
         //     || committed_poly.evaluate_ext(&requested_point_at_r),
         //     || committed_poly.evaluate_ext(&requested_point_at_u),

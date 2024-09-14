@@ -21,7 +21,6 @@ use algebra::{
     ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
-use std::os::unix::fs::FileExt;
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{LinearCode, LinearCodeSpec},
@@ -30,6 +29,7 @@ use pcs::{
 };
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
+use std::os::unix::fs::FileExt;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -214,7 +214,8 @@ impl<F: Field> AdditionInZqInstance<F> {
     /// Extract lookup instance
     #[inline]
     pub fn extract_lookup_instance(&self, block_size: usize) -> LookupInstance<F> {
-        self.extract_decomposed_bits().extract_lookup_instance(block_size)
+        self.extract_decomposed_bits()
+            .extract_lookup_instance(block_size)
     }
 }
 
@@ -587,10 +588,7 @@ where
 impl<F: Field + Serialize> AdditionInZqPure<F> {
     /// sample coins before proving sumcheck protocol
     pub fn sample_coins(trans: &mut Transcript<F>) -> Vec<F> {
-        trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            1,
-        )
+        trans.get_vec_challenge(b"randomness to combine sumcheck protocols", 1)
     }
 
     /// return the number of coins used in this IOP
@@ -688,14 +686,12 @@ impl<F: Field + Serialize> AdditionInZqPure<F> {
     ) -> bool {
         // check 1: Verify the range check part in the sumcheck polynomial
         let bits_evals = evals.extract_decomposed_bits();
-        let check_decomposed_bits = <BitDecomposition<F>>::verify_as_subprotocol_pure(
-            &bits_evals,
-            &info.bits_info,
-        );
+        let check_decomposed_bits =
+            <BitDecomposition<F>>::verify_as_subprotocol_pure(&bits_evals, &info.bits_info);
         if !check_decomposed_bits {
             return false;
         }
-        
+
         // check 2: a(u) + b(u) = c(u) + k(u) * q
         if evals.abc[0] + evals.abc[1] != evals.abc[2] + evals.k * info.q {
             return false;
@@ -762,12 +758,22 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let claimed_sum = EF::zero();
         let randomness = AdditionInZqPure::sample_coins(&mut prover_trans);
-        AdditionInZqPure::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
+        AdditionInZqPure::prove_as_subprotocol(
+            &randomness,
+            &mut sumcheck_poly,
+            &instance_ef,
+            &eq_at_u,
+        );
 
         // combine lookup sumcheck
         let mut lookup_randomness = Lookup::sample_coins(&mut prover_trans, &lookup_instance);
         lookup_randomness.push(random_value);
-        Lookup::prove_as_subprotocol(&lookup_randomness, &mut sumcheck_poly, &lookup_instance, &eq_at_u);
+        Lookup::prove_as_subprotocol(
+            &lookup_randomness,
+            &mut sumcheck_poly,
+            &lookup_instance,
+            &eq_at_u,
+        );
 
         let poly_info = sumcheck_poly.info();
 

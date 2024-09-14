@@ -2,6 +2,7 @@ use algebra::{
     derive::{DecomposableField, Field, Prime},
     BabyBear, BabyBearExetension, DenseMultilinearExtension, Field,
 };
+use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use num_traits::Zero;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
@@ -9,7 +10,6 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{Lookup, LookupInstance, LookupSnarks};
-use fhe_core::{DefaultFieldU32, DefaultExtendsionFieldU32x4};
 
 type FF = DefaultFieldU32;
 type EF = DefaultExtendsionFieldU32x4;

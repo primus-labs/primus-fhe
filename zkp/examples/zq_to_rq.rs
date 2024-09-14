@@ -1,16 +1,16 @@
+use algebra::derive::{DecomposableField, Field};
 use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension, SparsePolynomial};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
-use algebra::derive::{Field, DecomposableField};
-use zkp::piop::zq_to_rq::ZqToRQSnarks;
 use core::num;
+use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use zkp::piop::round::RoundSnarks;
+use zkp::piop::zq_to_rq::ZqToRQSnarks;
 use zkp::piop::{DecomposedBitsInfo, RoundInstance, ZqToRQInstance};
-use num_traits::{One, Zero};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -56,8 +56,7 @@ fn transform(
     )
 }
 
-fn main()
-{
+fn main() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<Fq>>::new();
 

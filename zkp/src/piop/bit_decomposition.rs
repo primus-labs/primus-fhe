@@ -84,7 +84,7 @@ pub struct DecomposedBitsEval<F: Field> {
 /// * It is required to decompose over a power-of-2 base.
 ///
 /// These parameters are used as the verifier key.
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DecomposedBitsInfo<F: Field> {
     /// base
     pub base: F,
@@ -466,7 +466,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         eq_at_u_r: F,
     ) -> bool {
         // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
-        if !Self::verify_as_subprotocol_pure(evals, info){
+        if !Self::verify_as_subprotocol_pure(evals, info) {
             return false;
         }
 

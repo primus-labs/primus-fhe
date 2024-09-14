@@ -12,7 +12,8 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
-    AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks, AdditionInZqSnarksOpt, DecomposedBitsInfo, Lookup
+    AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks,
+    AdditionInZqSnarksOpt, DecomposedBitsInfo, Lookup,
 };
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
@@ -378,9 +379,9 @@ fn test_trivial_addition_in_zq_with_lookup_snarks() {
         num_instances: 3,
     };
     let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
-    
+
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <AdditionInZqSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, 1
+        &instance, &code_spec, 1,
     );
 }
