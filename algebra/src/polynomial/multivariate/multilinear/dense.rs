@@ -8,7 +8,7 @@ use std::vec;
 use num_traits::Zero;
 use rand_distr::Distribution;
 
-use crate::{AbstractExtensionField, DecomposableField, Field, FieldUniformSampler};
+use crate::{AbstractExtensionField, DecomposableField, Field, FieldUniformSampler, Polynomial};
 
 use super::MultilinearExtension;
 use std::rc::Rc;
@@ -28,6 +28,16 @@ impl<F: Field> DenseMultilinearExtension<F> {
     pub fn new(num_vars: usize) -> Self {
         Self::from_evaluations_vec(num_vars, vec![F::zero(); 1 << num_vars])
     }
+
+    /// Construct from Polynomial structure
+    /// Note that the data passed via this interface must be in normal order.
+    #[inline]
+    pub fn from_polynomial(log_n: usize, poly: Polynomial<F>) -> DenseMultilinearExtension<F> {
+        DenseMultilinearExtension::from_evaluations_vec(log_n, poly.data())
+    }
+
+    
+
     /// Construct a new polynomial from a list of evaluations where the index
     /// represents a point in {0,1}^`num_vars` in little endian form. For
     /// example, `0b1011` represents `P(1,1,0,1)`
