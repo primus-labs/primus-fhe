@@ -8,6 +8,7 @@ pub mod rlwe_mul_rgsw;
 pub mod floor;
 pub mod zq_to_rq;
 pub mod round;
+pub mod ntt_revision;
 
 pub use accumulator::{AccumulatorIOP, AccumulatorInstance, AccumulatorWitness, AccumulatorSnarksOpt};
 pub use addition_in_zq::{AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarksOpt, AdditionInZqSnarks};
