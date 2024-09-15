@@ -84,7 +84,7 @@ pub struct LookupInstance<F: Field> {
     pub num_vars: usize,
     /// block num
     pub block_num: usize,
-    /// block_size 
+    /// block_size
     pub block_size: usize,
     /// residual size
     pub residual_size: usize,
@@ -132,65 +132,26 @@ impl<F: Field> LookupInstance<F> {
         }
     }
 
-    /// append
+    /// Construct a new instance from slice
     #[inline]
-    pub fn append_f(&mut self, bits: &[Rc<DenseMultilinearExtension<F>>]){
-        self.batch_f.extend(bits.to_owned());
-    }
-
-    /// finish
-    #[inline]
-    pub fn finish_instance(&mut self) {
-        let num_vars = self.num_vars;
-        let column_num = self.batch_f.len() + 1;
-
-        let m_evaluations: Vec<F> = self.table
-            .iter()
-            .map(|t_item| {
-                let m_f_vec = self.batch_f.iter().fold(F::zero(), |acc, f| {
-                    let m_f: usize = f
-                        .evaluations
-                        .iter()
-                        .filter(|&f_item| f_item == t_item)
-                        .count();
-                    let m_f: F = F::new(F::Value::as_from(m_f as f64));
-                    acc + m_f
-                });
-
-                let m_t = self.table
-                    .evaluations
-                    .iter()
-                    .filter(|&t_item2| t_item2 == t_item)
-                    .count();
-                let m_t: F = F::new(F::Value::as_from(m_t as f64));
-
-                m_f_vec / m_t
-            })
-            .collect();
-
-        let m = Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-            num_vars,
-            &m_evaluations,
-        ));
-
-        // compute the remaining values
-        self.freq = m;
-        self.block_num = column_num / self.block_size;
-        self.residual_size = column_num % self.block_size;
-
-    }
-
-    /// new with randomness
-    #[inline]
-    pub fn new_with_r(
+    pub fn from_slice_pure(
+        num_vars: usize,
         f_vec: &[Rc<DenseMultilinearExtension<F>>],
         t: Rc<DenseMultilinearExtension<F>>,
+        m: Rc<DenseMultilinearExtension<F>>,
         block_size: usize,
-        randomness: F,
     ) -> Self {
-        let mut instance = Self::from_slice(f_vec, t, block_size);
-        instance.generate_h_vec(randomness);
-        instance
+        let column_num = f_vec.len() + 1;
+        Self {
+            num_vars,
+            block_num: column_num / block_size,
+            block_size,
+            residual_size: column_num % block_size,
+            batch_f: f_vec.to_vec(),
+            table: t,
+            blocks: Default::default(),
+            freq: m,
+        }
     }
 
     /// Construct a new instance from slice
@@ -577,7 +538,12 @@ impl<F: Field + Serialize> Lookup<F> {
             .collect();
 
         // construct poly
-        for ((i, h), u_coef) in instance.blocks.iter().enumerate().zip(random_combine.iter()) {
+        for ((i, h), u_coef) in instance
+            .blocks
+            .iter()
+            .enumerate()
+            .zip(random_combine.iter())
+        {
             let product = vec![h.clone()];
             let op_coef = vec![(F::one(), F::zero())];
             poly.add_product_with_linear_op(product, &op_coef, F::one());
@@ -760,7 +726,12 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let claimed_sum = EF::zero();
         let prover_randomness = Lookup::sample_coins(&mut prover_trans, &instance_ef);
-        Lookup::prove_as_subprotocol(&prover_randomness, &mut sumcheck_poly, &mut instance_ef, &eq_at_u);
+        Lookup::prove_as_subprotocol(
+            &prover_randomness,
+            &mut sumcheck_poly,
+            &mut instance_ef,
+            &eq_at_u,
+        );
 
         let poly_info = sumcheck_poly.info();
 
@@ -1066,7 +1037,7 @@ where
 
         // 4. print statistic
         print_statistic(
-            iop_prover_time + first_pcs_open_time ,
+            iop_prover_time + first_pcs_open_time,
             iop_verifier_time + pcs_verifier_time,
             iop_proof_size + first_pcs_proof_size,
             iop_prover_time,
@@ -1075,9 +1046,9 @@ where
             first_committed_poly.num_vars,
             instance.num_first_oracles(),
             instance.num_vars,
-            first_setup_time ,
-            first_commit_time ,
-            first_pcs_open_time ,
+            first_setup_time,
+            first_commit_time,
+            first_pcs_open_time,
             pcs_verifier_time,
             first_pcs_proof_size,
         )

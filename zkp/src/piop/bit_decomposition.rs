@@ -22,7 +22,7 @@
 use crate::sumcheck::{verifier::SubClaim, MLSumcheck};
 use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
-    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
+    cmp_frequency, eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
@@ -290,6 +290,24 @@ impl<F: Field> DecomposedBits<F> {
         ));
         LookupInstance::from_slice(&self.d_bits, table, block_size)
     }
+
+    /// Extract the lookup instance with frequency computed outside the from_slice
+    #[inline]
+    pub fn extract_lookup_instance_opt(&self, block_size: usize) -> LookupInstance<F> {
+        let mut table = vec![F::zero(); 1 << self.num_vars];
+        let mut acc = F::zero();
+        for t in table.iter_mut().take(1 << self.base_len) {
+            *t = acc;
+            acc += F::one();
+        }
+        let table = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            self.num_vars,
+            table,
+        ));
+        let m = Rc::new(cmp_frequency(&self.d_bits, &table));
+        LookupInstance::from_slice_pure(self.num_vars, &self.d_bits, table, m, block_size)
+    }
+
 }
 
 impl<F: DecomposableField> DecomposedBits<F> {
