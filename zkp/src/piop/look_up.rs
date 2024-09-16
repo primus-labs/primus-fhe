@@ -35,7 +35,7 @@ use crate::utils::{
     verify_oracle_relation,
 };
 use algebra::{
-    utils::Transcript, AbstractExtensionField, AsFrom, DenseMultilinearExtension, Field,
+    utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
@@ -128,6 +128,7 @@ impl<F: Field> LookupInstance<F> {
     pub fn from_slice(
         f_vec: &[Rc<DenseMultilinearExtension<F>>],
         t: Rc<DenseMultilinearExtension<F>>,
+        m: Rc<DenseMultilinearExtension<F>>,
         block_size: usize,
     ) -> Self {
         let num_vars = f_vec[0].num_vars;
@@ -135,36 +136,7 @@ impl<F: Field> LookupInstance<F> {
 
         f_vec.iter().for_each(|x| assert_eq!(x.num_vars, num_vars));
         assert_eq!(t.num_vars, num_vars);
-
-        let m_evaluations: Vec<F> = t
-            .evaluations
-            .iter()
-            .map(|t_item| {
-                let m_f_vec = f_vec.iter().fold(F::zero(), |acc, f| {
-                    let m_f: usize = f
-                        .evaluations
-                        .iter()
-                        .filter(|&f_item| f_item == t_item)
-                        .count();
-                    let m_f: F = F::new(F::Value::as_from(m_f as f64));
-                    acc + m_f
-                });
-
-                let m_t = t
-                    .evaluations
-                    .iter()
-                    .filter(|&t_item2| t_item2 == t_item)
-                    .count();
-                let m_t: F = F::new(F::Value::as_from(m_t as f64));
-
-                m_f_vec / m_t
-            })
-            .collect();
-
-        let m = Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-            num_vars,
-            &m_evaluations,
-        ));
+        assert_eq!(m.num_vars, num_vars);
 
         Self {
             num_vars,
@@ -859,128 +831,3 @@ where
         )
     }
 }
-
-//     /// Verify addition in Zq given the proof and the verification key for bit decomposistion
-//     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-//     /// verifier challenges.
-//     pub fn verify0(
-//         fs_rng: &mut impl RngCore,
-//         proof: &LookupProof<F>,
-//         info: &LookupInstanceInfo,
-//     ) -> LookupSubclaim<F> {
-//         let sampler = <FieldUniformSampler<F>>::new();
-//         let random_value = sampler.sample(fs_rng);
-//         let random_point: Vec<_> = (0..info.num_vars).map(|_| sampler.sample(fs_rng)).collect();
-//         let random_combine: Vec<_> =
-//             (0..info.block_num + if info.residual_size == 0 { 0 } else { 1 } + 1)
-//                 .map(|_| sampler.sample(fs_rng))
-//                 .collect();
-
-//         // execute sumcheck for
-//         // \sum_{x \in H_f}
-//         // \sum_{i \in [block_num]}  r * h_i(x)
-//         //                         + \ eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r)
-//         //                         - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
-//         //                         = c_sum
-//         let poly_info = PolynomialInfo {
-//             max_multiplicands: info.block_size + 2,
-//             num_variables: info.num_vars,
-//         };
-//         let first_subclaim = MLSumcheck::verify_as_subprotocol(
-//             fs_rng,
-//             &poly_info,
-//             F::zero(), //proof.c_sum,
-//             &proof.sumcheck_msg[0],
-//         )
-//         .expect("sumcheck protocol in range check failed");
-
-//         LookupSubclaim {
-//             random_value,
-//             random_point,
-//             random_combine,
-//             sumcheck_points: vec![first_subclaim.point], //, second_subclaim.point],
-//             sumcheck_expected_evaluations: vec![
-//                 first_subclaim.expected_evaluations,
-//                 //second_subclaim.expected_evaluations,
-//             ],
-//         }
-//     }
-// }
-
-// impl<F: Field> LookupSubclaim<F> {
-//     /// verify the sumcliam
-//     #[inline]
-//     #[allow(clippy::too_many_arguments)]
-//     pub fn verify_subclaim(
-//         &self,
-//         f_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
-//         t: Rc<DenseMultilinearExtension<F>>,
-//         oracle: LookupOracle<F>,
-//         info: &LookupInstanceInfo,
-//     ) -> bool {
-//         let u_f = &self.random_point;
-
-//         let block_size = info.block_size;
-
-//         let h_vec = oracle.h_vec;
-//         //let h_t = oracle.h_t;
-//         let m = oracle.m;
-//         let mut ft_vec = f_vec.clone();
-//         ft_vec.push(t);
-
-//         let mut eval = F::zero();
-//         let point = &self.sumcheck_points[0];
-
-//         let m_eval = m.evaluate(point);
-
-//         let chunks = ft_vec.chunks_exact(block_size);
-//         let residual = Some(chunks.remainder()).into_iter();
-//         //if residual_size != 0 {chunks = chunks.chain(residual);}
-
-//         for (i, ((h, f_block), r_k)) in h_vec
-//             .iter()
-//             .zip(chunks.chain(residual))
-//             .zip(self.random_combine.iter())
-//             .enumerate()
-//         {
-//             let is_last_block = i == (h_vec.len() - 1);
-//             let h_eval = h.evaluate(point);
-//             let eq_eval = eval_identity_function(u_f, point);
-
-//             let shifted_f_eval_block: Vec<F> = f_block
-//                 .iter()
-//                 .map(|f| f.evaluate(point) - self.random_value)
-//                 .collect();
-//             let sum_of_products: F = (0..shifted_f_eval_block.len())
-//                 .map(|idx: usize| {
-//                     shifted_f_eval_block
-//                         .iter()
-//                         .enumerate()
-//                         .fold(F::one(), |acc, (i, x)| {
-//                             let mut mult = F::one();
-//                             if i != idx {
-//                                 mult *= x;
-//                             }
-//                             if is_last_block
-//                                 && (idx == shifted_f_eval_block.len() - 1)
-//                                 && (i == shifted_f_eval_block.len() - 1)
-//                             {
-//                                 mult *= -m_eval;
-//                             }
-//                             acc * mult
-//                         })
-//                 })
-//                 .fold(F::zero(), |acc, x| acc + x);
-
-//             let product = shifted_f_eval_block.iter().fold(F::one(), |acc, x| acc * x);
-
-//             eval += h_eval + eq_eval * r_k * (h_eval * product - sum_of_products);
-//         }
-
-//         if eval != self.sumcheck_expected_evaluations[0] {
-//             return false;
-//         }
-
-//         true
-//     }
-// }

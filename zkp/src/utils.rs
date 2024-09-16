@@ -1,5 +1,8 @@
 //! This module defines some useful utils that may invoked by piop.
-use algebra::{AbstractExtensionField, DenseMultilinearExtension, Field};
+use algebra::{
+    AbstractExtensionField, AsFrom, DecomposableField, DenseMultilinearExtension, Field,
+};
+use std::rc::Rc;
 
 /// Generate MLE of the ideneity function eq(u,x) for x \in \{0, 1\}^dim
 pub fn gen_identity_evaluations<F: Field>(u: &[F]) -> DenseMultilinearExtension<F> {
@@ -209,6 +212,64 @@ pub fn batch_inverse<F: Field>(x: &[F]) -> Vec<F> {
     }
 
     buf
+}
+
+/// compute_rangecheck_m
+pub fn compute_general_m<F: Field>(
+    f_vec: &[Rc<DenseMultilinearExtension<F>>],
+    t: Rc<DenseMultilinearExtension<F>>,
+) -> Rc<DenseMultilinearExtension<F>> {
+    let num_vars = f_vec[0].num_vars;
+    let m_evaluations: Vec<F> = t
+        .evaluations
+        .iter()
+        .map(|t_item| {
+            let m_f_vec = f_vec.iter().fold(F::zero(), |acc, f| {
+                let m_f: usize = f
+                    .evaluations
+                    .iter()
+                    .filter(|&f_item| f_item == t_item)
+                    .count();
+                let m_f: F = F::new(F::Value::as_from(m_f as f64));
+                acc + m_f
+            });
+
+            let m_t = t
+                .evaluations
+                .iter()
+                .filter(|&t_item2| t_item2 == t_item)
+                .count();
+            let m_t: F = F::new(F::Value::as_from(m_t as f64));
+
+            m_f_vec / m_t
+        })
+        .collect();
+
+    Rc::new(DenseMultilinearExtension::from_evaluations_slice(
+        num_vars,
+        &m_evaluations,
+    ))
+}
+
+/// computer rangecheck m
+pub fn compute_rangecheck_m<F: Field + DecomposableField>(
+    f_vec: &[Rc<DenseMultilinearExtension<F>>],
+    range: usize,
+) -> Rc<DenseMultilinearExtension<F>> {
+    let num_vars = f_vec[0].num_vars;
+    let num_padding_zero = (1 << num_vars) - range;
+    let mut m_usize = vec![0; range];
+    f_vec.iter().for_each(|f| {
+        f.iter()
+            .for_each(|x| m_usize[(*x).value().into() as usize] += 1)
+    });
+    let mut m: Vec<F> = m_usize
+        .iter()
+        .map(|x| F::new(F::Value::as_from(*x as f64)))
+        .collect();
+    m[0] /= F::new(F::Value::as_from((1 + num_padding_zero) as f64));
+    m.resize(1 << num_vars, m[0]);
+    Rc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars, m))
 }
 
 #[cfg(test)]

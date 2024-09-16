@@ -8,7 +8,10 @@ use rand::prelude::*;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{Lookup, LookupInstance, LookupSnarks};
+use zkp::{
+    piop::{Lookup, LookupInstance, LookupSnarks},
+    utils::compute_rangecheck_m,
+};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -74,9 +77,9 @@ fn test_trivial_range_check() {
         t_evaluations,
     ));
 
-    // construct instance
+    let m = compute_rangecheck_m(&f_vec, range);
 
-    let mut instance = LookupInstance::<FF>::from_slice(&f_vec, t.clone(), block_size);
+    let mut instance = LookupInstance::<FF>::from_slice(&f_vec, t.clone(), m, block_size);
     let info = instance.info();
 
     let kit = Lookup::<FF>::prove(&mut instance);
@@ -119,7 +122,9 @@ fn test_random_range_check() {
         t_evaluations,
     ));
 
-    let mut instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
+    let m = compute_rangecheck_m(&f_vec, range as usize);
+
+    let mut instance = LookupInstance::<FF>::from_slice(&f_vec, t.clone(), m, block_size);
     let info = instance.info();
 
     let kit = Lookup::<FF>::prove(&mut instance);
@@ -162,7 +167,9 @@ fn test_snark() {
         t_evaluations,
     ));
 
-    let instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
+    let m = compute_rangecheck_m(&f_vec, range as usize);
+
+    let instance = LookupInstance::<FF>::from_slice(&f_vec, t.clone(), m, block_size);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <LookupSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
