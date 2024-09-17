@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fhe_cmp::{
-    compare::{Encryptor, HomeCmpScheme},
+    compare::{Encryptor, HomomorphicCmpScheme},
     parameters::DEFAULT_PARAMETERS,
 };
 use fhe_core::SecretKeyPack;
@@ -14,8 +14,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // generate keys
     let sk = SecretKeyPack::new(param);
     println!("Secret Key Generation done!\n");
-    
-    let rotationkey = HomeCmpScheme::new(&sk);
+
+    let rotationkey = HomomorphicCmpScheme::new(&sk);
     let enc_elements = Encryptor::new(&sk);
     println!("Evaluation Key Generation done!\n");
 

@@ -1,6 +1,6 @@
 use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use fhe_cmp::{
-    compare::{decrypt, Encryptor, HomeCmpScheme},
+    compare::{decrypt, Encryptor, HomomorphicCmpScheme},
     parameters::{DEFAULT_PARAMETERS, DELTA},
 };
 use fhe_core::SecretKeyPack;
@@ -13,7 +13,7 @@ fn main() {
     let sk = SecretKeyPack::new(param);
     let sampler = param.ring_noise_distribution();
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomeCmpScheme::new(&sk);
+    let rotationkey = HomomorphicCmpScheme::new(&sk);
     let enc_elements = Encryptor::new(&sk);
     let x = rng.gen();
     let y = rng.gen();

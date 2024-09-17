@@ -1,6 +1,6 @@
 use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use fhe_cmp::{
-    compare::{decrypt, Encryptor, HomeCmpScheme},
+    compare::{decrypt, Encryptor, HomomorphicCmpScheme},
     parameters::{DEFAULT_PARAMETERS, DELTA, FF},
 };
 use fhe_core::{Parameters, SecretKeyPack};
@@ -12,7 +12,7 @@ static mut INSTANCE_CIPHER: OnceCell<InitializationDataCipher> = OnceCell::new()
 
 struct InitializationDataParam {
     sk: SecretKeyPack<u64, FF>,
-    rotationkey:HomeCmpScheme<u64, FF>,
+    rotationkey: HomomorphicCmpScheme<u64, FF>,
     param: Parameters<u64, FF>,
 }
 
@@ -32,7 +32,7 @@ fn init_param() {
         INSTANCE_PARAM.get_or_init(|| {
             let param = *DEFAULT_PARAMETERS;
             let sk = SecretKeyPack::new(param);
-            let rotationkey = HomeCmpScheme::new(&sk);
+            let rotationkey = HomomorphicCmpScheme::new(&sk);
             InitializationDataParam {
                 sk,
                 rotationkey,
@@ -52,25 +52,15 @@ fn init_cipher() {
             let hcmp_small = 5;
             let arbhcmp_great = 1030;
             let arbhcmp_small = 1025;
-            let enc_elements = Encryptor::new(
-                &param_data.sk,
-            );
-        let value1_hcmp_great =
-            enc_elements.rlwe_encrypt(hcmp_great, &mut rng);
-        let value1_hcmp_small =
-            enc_elements.rlwe_encrypt(hcmp_small, &mut rng);
-        let value2_hcmp_great =
-            enc_elements.rgsw_encrypt(hcmp_great, &mut rng);
-        let value2_hcmp_small =
-            enc_elements.rgsw_encrypt(hcmp_small, &mut rng);
-            let value1_arbhcmp_great =
-                enc_elements.rlwe_encrypt(arbhcmp_great, &mut rng);
-            let value1_arbhcmp_small =
-                enc_elements.rlwe_encrypt(arbhcmp_small, &mut rng);
-            let value2_arbhcmp_great =
-                enc_elements.rgsw_encrypt(arbhcmp_great, &mut rng);
-            let value2_arbhcmp_small =
-                enc_elements.rgsw_encrypt(arbhcmp_small, &mut rng);
+            let enc_elements = Encryptor::new(&param_data.sk);
+            let value1_hcmp_great = enc_elements.rlwe_encrypt(hcmp_great, &mut rng);
+            let value1_hcmp_small = enc_elements.rlwe_encrypt(hcmp_small, &mut rng);
+            let value2_hcmp_great = enc_elements.rgsw_encrypt(hcmp_great, &mut rng);
+            let value2_hcmp_small = enc_elements.rgsw_encrypt(hcmp_small, &mut rng);
+            let value1_arbhcmp_great = enc_elements.rlwe_encrypt(arbhcmp_great, &mut rng);
+            let value1_arbhcmp_small = enc_elements.rlwe_encrypt(arbhcmp_small, &mut rng);
+            let value2_arbhcmp_great = enc_elements.rgsw_encrypt(arbhcmp_great, &mut rng);
+            let value2_arbhcmp_small = enc_elements.rgsw_encrypt(arbhcmp_small, &mut rng);
             InitializationDataCipher {
                 rlwe_hcmpcipher_great: value1_hcmp_great,
                 rgsw_hcmpcipher_great: value2_hcmp_great,

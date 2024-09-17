@@ -1,5 +1,5 @@
 use fhe_cmp::{
-    compare::{decrypt, Encryptor, HomeCmpScheme},
+    compare::{decrypt, Encryptor, HomomorphicCmpScheme},
     parameters::{DEFAULT_PARAMETERS, FF},
 };
 use fhe_core::SecretKeyPack;
@@ -12,7 +12,7 @@ fn main() {
     let param = *DEFAULT_PARAMETERS;
     let sk = SecretKeyPack::new(param);
     let rlwe_sk = sk.ring_secret_key().as_slice();
-    let rotationkey = HomeCmpScheme::new(&sk);
+    let rotationkey = HomomorphicCmpScheme::new(&sk);
     let enc_elements = Encryptor::new(&sk);
     let time = start.elapsed();
     println!("Start Time: {}ms", time.as_millis());
@@ -60,7 +60,7 @@ fn main() {
 fn join_bit_operations(
     value1: &[RLWE<FF>],
     value2: &[NTTRGSW<FF>],
-    rotationkey: &HomeCmpScheme<u64, FF>,
+    rotationkey: &HomomorphicCmpScheme<u64, FF>,
 ) -> (LWE<FF>, LWE<FF>, LWE<FF>) {
     let mut ct_lt: Option<LWE<FF>> = None;
     let mut ct_eq: Option<LWE<FF>> = None;
