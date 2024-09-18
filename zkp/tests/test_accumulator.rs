@@ -7,7 +7,6 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::thread_rng;
 use sha2::Sha256;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 use zkp::piop::accumulator::AccumulatorSnarksOpt;

@@ -29,7 +29,6 @@ use pcs::{
 };
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
-use std::os::unix::fs::FileExt;
 use std::rc::Rc;
 use std::time::Instant;
 

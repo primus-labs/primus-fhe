@@ -288,7 +288,15 @@ impl<F: Field> DecomposedBits<F> {
             self.num_vars,
             table,
         ));
-        LookupInstance::from_slice(&self.d_bits, table, block_size)
+        LookupInstance::from_slice(
+            &self
+                .d_bits
+                .iter()
+                .map(|d| d.as_ref().clone())
+                .collect::<Vec<_>>(),
+            table.as_ref().clone(),
+            block_size,
+        )
     }
 }
 

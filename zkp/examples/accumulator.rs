@@ -7,12 +7,11 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 use zkp::piop::AccumulatorSnarksOpt;
 use zkp::piop::{
-    accumulator::AccumulatorSnarks, AccumulatorInstance, AccumulatorWitness, DecomposedBitsInfo,
+    AccumulatorInstance, AccumulatorWitness, DecomposedBitsInfo,
     NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
 };
 

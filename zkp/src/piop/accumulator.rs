@@ -1400,18 +1400,14 @@ where
         let instance_info = instance_ef.info();
 
         // --- Lookup Part ---
-        let start3 = Instant::now();
         let mut lookup_instance = instance_ef.extract_lookup_instance(block_size);
-        println!("extract lookup:{:?} ms", start3.elapsed().as_millis());
         let lookup_info = lookup_instance.info();
         println!("- containing {lookup_info}\n");
         // random value to initiate lookup
         let random_value =
             prover_trans.get_challenge(b"random point used to generate the second oracle");
-        let start3 = Instant::now();
 
         lookup_instance.generate_h_vec(random_value);
-        println!("generate h_vec:{:?} ms", start3.elapsed().as_millis());
 
         // --------------------
 
@@ -1428,21 +1424,14 @@ where
         let randomness = AccumulatorIOPPure::sample_coins(&mut prover_trans, &instance_ef);
         let randomness_ntt =
             <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
-        let start2 = Instant::now();
         AccumulatorIOPPure::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
             &eq_at_u,
         );
-        println!("accIOPPure: {:?} ms", start2.elapsed().as_millis());
         // 2.? Prover extract the random ntt instance from all ntt instances
-        let start3 = Instant::now();
-
         let ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&randomness_ntt);
-        println!("extract ntt :{:?} ms", start3.elapsed().as_millis());
-
-        let start2 = Instant::now();
 
         <NTTBareIOP<EF>>::prove_as_subprotocol(
             EF::one(),
@@ -1451,7 +1440,6 @@ where
             &ntt_instance,
             &prover_u,
         );
-        println!("NTTBareIOP: {:?} ms", start2.elapsed().as_millis());
 
         let ntt_instance_info = ntt_instance.info();
 
@@ -1459,7 +1447,6 @@ where
         // combine lookup sumcheck
         let mut lookup_randomness = Lookup::sample_coins(&mut prover_trans, &lookup_instance);
         lookup_randomness.push(random_value);
-        let start2 = Instant::now();
 
         Lookup::prove_as_subprotocol(
             &lookup_randomness,
@@ -1467,22 +1454,18 @@ where
             &lookup_instance,
             &eq_at_u,
         );
-        println!("Lookup IOP: {:?} ms", start2.elapsed().as_millis());
 
         // --------------------
 
         let poly_info = sumcheck_poly.info();
         // 2.3 Generate proof of sumcheck protocol
-        let start2 = Instant::now();
         let (sumcheck_proof, sumcheck_state) =
             <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
                 .expect("Proof generated in Addition In Zq");
-        println!("MLSumcheck IOP: {:?} ms", start2.elapsed().as_millis());
 
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let start2 = Instant::now();
 
         let recursive_proof = <NTTIOP<EF>>::prove_recursive(
             &mut prover_trans,
@@ -1490,14 +1473,12 @@ where
             &ntt_instance_info,
             &prover_u,
         );
-        println!("NTT IOP: {:?} ms", start2.elapsed().as_millis());
 
         iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
         let iop_prover_time = prover_start.elapsed().as_millis();
 
         // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let start = Instant::now();
-        let start1 = Instant::now();
 
         // let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
         // let evals_at_u = instance.evaluate_ext(&prover_u);
@@ -1506,17 +1487,9 @@ where
             || instance.evaluate_ext(&sumcheck_state.randomness),
             || instance.evaluate_ext(&prover_u),
         );
-        println!("acc evaluate: {:?} ms", start1.elapsed().as_millis());
         // --- Lookup Part ---
-        let start1 = Instant::now();
         let lookup_evals = lookup_instance.evaluate(&sumcheck_state.randomness);
         // -------------------
-        println!(" lookup ext: {:?} ms", start1.elapsed().as_millis());
-        println!(
-            "sumcheck state randomness len: {}",
-            sumcheck_state.randomness.len()
-        );
-        println!("prover_u len: {}", prover_u.len());
 
         // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut requested_point_at_r = sumcheck_state.randomness.clone();
@@ -1525,22 +1498,13 @@ where
             b"random linear combination for evaluations of oracles",
             instance.log_num_oracles(),
         );
-        let start1 = Instant::now();
 
         requested_point_at_r.extend(&oracle_randomness);
         requested_point_at_u.extend(&oracle_randomness);
         let oracle_eval_at_r = committed_poly.evaluate_ext(&requested_point_at_r);
         let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
 
-        // let (oracle_eval_at_r, oracle_eval_at_u) = rayon::join(
-        //     || committed_poly.evaluate_ext(&requested_point_at_r),
-        //     || committed_poly.evaluate_ext(&requested_point_at_u),
-        // );
-        println!(" evaluate ext: {:?} ms", start1.elapsed().as_millis());
-
         // 2.6 Generate the evaluation proof of the requested point
-
-        let start1 = Instant::now();
 
         let eval_proof_at_r = BrakedownPCS::<F, H, C, S, EF>::open(
             &pp,
@@ -1549,8 +1513,6 @@ where
             &requested_point_at_r,
             &mut prover_trans,
         );
-        println!(" open 1: {:?} ms", start1.elapsed().as_millis());
-        let start1 = Instant::now();
 
         let eval_proof_at_u = BrakedownPCS::<F, H, C, S, EF>::open(
             &pp,
@@ -1559,7 +1521,6 @@ where
             &requested_point_at_u,
             &mut prover_trans,
         );
-        println!(" open 2: {:?} ms", start1.elapsed().as_millis());
 
         let pcs_open_time = start.elapsed().as_millis();
 

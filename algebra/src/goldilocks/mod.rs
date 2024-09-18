@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// Implementation of Goldilocks field
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Hash, Serialize, Deserialize)]
 pub struct Goldilocks(u64);
 
 impl Goldilocks {

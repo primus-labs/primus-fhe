@@ -6,12 +6,10 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 use zkp::piop::RlweMultRgswSnarksOpt;
-use zkp::piop::{
-    rlwe_mul_rgsw::RlweMultRgswSnarks, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
+use zkp::piop::{DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
     RlweCiphertexts, RlweMultRgswInstance,
 };
 

@@ -3,7 +3,6 @@ use algebra::{
     BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler, SparsePolynomial,
 };
-use core::num;
 use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand_distr::Distribution;
@@ -26,10 +25,6 @@ type FF = BabyBear;
 type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
-
-const DIM_LWE: usize = 1024;
-const DIM_RLWE: usize = 1024;
-const LOG_DIM_RLWE: usize = 10;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{

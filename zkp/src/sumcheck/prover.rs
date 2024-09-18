@@ -7,8 +7,7 @@ use std::vec;
 use algebra::Field;
 use algebra::{DenseMultilinearExtension, ListOfProductsOfPolynomials, MultilinearExtension};
 use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
-    IntoParallelRefMutIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use serde::ser::SerializeSeq;
 use serde::Serialize;

@@ -1,7 +1,6 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
-    BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field,
-    FieldUniformSampler,
+    Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use num_traits::{One, Zero};
