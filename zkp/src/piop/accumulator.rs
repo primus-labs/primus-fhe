@@ -47,8 +47,7 @@ pub struct AccumulatorSubclaim<F: Field> {
 /// accumulator witness when performing ACC = ACC + (X^{-a_u} + 1) * ACC * RGSW(Z_u)
 pub struct AccumulatorWitness<F: Field> {
     /// * Witness when performing input_rlwe_ntt := (X^{-a_u} + 1) * ACC
-    ///
-    /// accumulator of ntt form
+    ///   accumulator of ntt form
     pub accumulator_ntt: RlweCiphertext<F>,
     /// scalar d = (X^{-a_u} + 1) of coefficient form
     pub d: Rc<DenseMultilinearExtension<F>>,
@@ -57,10 +56,8 @@ pub struct AccumulatorWitness<F: Field> {
     /// result d * ACC of ntt form
     pub input_rlwe_ntt: RlweCiphertext<F>,
     /// * Witness when performing output_rlwe_ntt := input_rlwe * RGSW(Z_u) where input_rlwe = (X^{-a_u} + 1) * ACC
-    ///
-    /// result d * ACC of coefficient form
-    ///
-    /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
+    ///   result d * ACC of coefficient form
+    ///   rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
     pub input_rlwe: RlweCiphertext<F>,
     /// bits_rlwe = (a_bits, b_bits): a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
     pub bits_rlwe: RlweCiphertexts<F>,
