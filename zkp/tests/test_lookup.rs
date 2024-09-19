@@ -9,18 +9,11 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{Lookup, LookupInstance, LookupSnarks};
-use fhe_core::{DefaultFieldU32, DefaultExtendsionFieldU32x4};
 
-type FF = DefaultFieldU32;
-type EF = DefaultExtendsionFieldU32x4;
+type FF = BabyBear;
+type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
-
-// #[derive(Field, DecomposableField, Prime)]
-// #[modulus = 132120577]
-// pub struct Fp32(u32);
-// // field type
-// type FF = Fp32;
 
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]

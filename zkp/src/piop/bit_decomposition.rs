@@ -22,7 +22,8 @@
 use crate::sumcheck::{verifier::SubClaim, MLSumcheck};
 use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
-    cmp_frequency, eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation
+    cmp_frequency, eval_identity_function, gen_identity_evaluations, print_statistic,
+    verify_oracle_relation,
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
@@ -307,7 +308,6 @@ impl<F: Field> DecomposedBits<F> {
         let m = Rc::new(cmp_frequency(&self.d_bits, &table));
         LookupInstance::from_slice_pure(self.num_vars, &self.d_bits, table, m, block_size)
     }
-
 }
 
 impl<F: DecomposableField> DecomposedBits<F> {
@@ -484,7 +484,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         eq_at_u_r: F,
     ) -> bool {
         // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
-        if !Self::verify_as_subprotocol_pure(evals, info){
+        if !Self::verify_as_subprotocol_pure(evals, info) {
             return false;
         }
 
@@ -613,7 +613,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in Bit Decompositon");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP

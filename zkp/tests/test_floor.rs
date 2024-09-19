@@ -2,7 +2,6 @@ use algebra::{
     BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler,
 };
-use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand_distr::Distribution;
 use sha2::Sha256;
@@ -10,10 +9,8 @@ use std::rc::Rc;
 use std::vec;
 use zkp::piop::{floor::FloorSnarks, DecomposedBitsInfo, FloorIOP, FloorInstance};
 
-// type FF = BabyBear; // field type
-// type EF = BabyBearExetension;
-type FF = DefaultFieldU32;
-type EF = DefaultExtendsionFieldU32x4;
+type FF = BabyBear; // field type
+type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
 const FP: u32 = FF::MODULUS_VALUE; // ciphertext space

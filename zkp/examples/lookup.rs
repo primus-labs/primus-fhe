@@ -1,24 +1,17 @@
-use algebra::{
-    derive::{DecomposableField, Field, Prime},
-    BabyBear, BabyBearExetension, DenseMultilinearExtension, Field,
-};
+use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension, Field};
 use num_traits::Zero;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
 use std::rc::Rc;
-use std::vec;
-use zkp::piop::{Lookup, LookupInstance, LookupSnarks};
-use fhe_core::{DefaultFieldU32, DefaultExtendsionFieldU32x4};
+use zkp::piop::{LookupInstance, LookupSnarks};
 
-type FF = DefaultFieldU32;
-type EF = DefaultExtendsionFieldU32x4;
+type FF = BabyBear;
+type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
 
-
-fn main()
-{
+fn main() {
     let num_vars = 10;
     let block_size = 2;
     let lookup_num = 2;

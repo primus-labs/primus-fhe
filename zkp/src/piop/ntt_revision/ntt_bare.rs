@@ -103,7 +103,7 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
     // Note that the last term ω^{2^i * x_i} is indeed multiplied in the normal order, from x_0 to x_{log{n-1}}
     // since we actually iterate from the LSB to MSB  when updating the table from size 1, 2, 4, 8, ..., n in dynamic programming.
     // !modify here
-    for i in 0..log_n {
+    for (i, u_i) in u.iter().enumerate() {
         // i starts from log_n - 1 and ends to 0
         // let k = log_n - 1 - i;
         let last_table_size = 1 << i;
@@ -116,13 +116,13 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
             let bit = j >> i;
             if bit == 1 {
                 evaluations[j] = evaluations[j % last_table_size]
-                    * (F::one() - u[i] + u[i] * ntt_table[idx])
+                    * (F::one() - *u_i + *u_i * ntt_table[idx])
                     * ntt_table[last_table_size];
             }
             // If bit = 0, we do not need to multiply because ω^{2^k * 0} = 1
             else {
                 evaluations[j] =
-                    evaluations[j % last_table_size] * (F::one() - u[i] + u[i] * ntt_table[idx]);
+                    evaluations[j % last_table_size] * (F::one() - u_i + *u_i * ntt_table[idx]);
             }
         }
     }
@@ -252,8 +252,7 @@ mod test {
     pub struct Fp32(u32);
     // field type
     type FF = Fp32;
-    
-    
+
     /// Given an `index` of `len` bits, output a new index where the bits are reversed.
     fn reverse_bits(index: usize, len: usize) -> usize {
         let mut tmp = index;
@@ -290,22 +289,13 @@ mod test {
             power *= root;
         }
 
-        // ! change this
-        // for i in 0..1 << dim {
-        //     for j in 0..1 << dim {
-        //         let idx_power = (2 * i + 1) * j % m;
-        //         let idx_fourier = i + (j << dim);
-        //         fourier_matrix[idx_fourier as usize] = ntt_table[idx_power as usize];
-        //     }
-        // }
-
         // In mix endian, the index for F[i, j] is i + (j << dim)} where
         // F[x_0, x_1, ..., x_{\logN-1} || y_0, y_1, ..., y_{\logN-1}]
         // i = \sum_k 2^k * x_k and j = \sum_k 2^k * y_k
         // rev_i = \sum_k 2^{\logN-1-k} x_k and j = \sum_k 2^k * y_k
         for i in 0..1 << dim {
             for j in 0..1 << dim {
-                // ! modify here
+                // ! Modified Formula
                 let rev_i = reverse_bits(i, dim);
                 let idx_power = ((2 * rev_i + 1) * j) as u32 % m;
                 let idx_fourier = i + (j << dim);
@@ -360,7 +350,7 @@ mod test {
         // rev_i = \sum_k 2^{\logN-1-k} x_k and j = \sum_k 2^k * y_k
         for i in 0..1 << dim {
             for j in 0..1 << dim {
-                // ! modify here
+                // ! Modified Formula
                 let rev_i = reverse_bits(i, dim);
                 let idx_power = ((2 * rev_i + 1) * j) as u32 % m;
                 let idx_fourier = i + (j << dim);

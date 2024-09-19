@@ -1,16 +1,13 @@
+use algebra::derive::{DecomposableField, Field};
 use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension, SparsePolynomial};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
-use algebra::derive::{Field, DecomposableField};
-use zkp::piop::zq_to_rq::ZqToRQSnarks;
-use core::num;
+use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
-use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::floor::FloorSnarks;
-use zkp::piop::{DecomposedBitsInfo, FloorInstance, ZqToRQInstance};
-use num_traits::{One, Zero};
+use zkp::piop::zq_to_rq::ZqToRQSnarks;
+use zkp::piop::{DecomposedBitsInfo, ZqToRQInstance};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -24,7 +21,6 @@ const BASE_FIELD_BITS: usize = 31;
 // q = 1024: denotes the modulus in LWE
 // Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
 const LOG_DIM_RLWE: usize = 10;
-const DIM_LWE: usize = 1024;
 const LOG_B: usize = 2;
 
 #[derive(Field, DecomposableField)]
@@ -56,8 +52,7 @@ fn transform(
     )
 }
 
-fn main()
-{
+fn main() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<Fq>>::new();
 
@@ -76,9 +71,9 @@ fn main()
     let mut outputs = Vec::with_capacity(1 << num_vars);
     let mut sparse_outputs = Vec::with_capacity(1 << num_vars);
     for x in input.iter() {
-        let (output, sparse_ouput) = transform(num_vars, *x, q, dim_rlwe);
+        let (output, sparse_output) = transform(num_vars, *x, q, dim_rlwe);
         outputs.push(Rc::new(output));
-        sparse_outputs.push(Rc::new(sparse_ouput));
+        sparse_outputs.push(Rc::new(sparse_output));
     }
 
     let bits_info = DecomposedBitsInfo {

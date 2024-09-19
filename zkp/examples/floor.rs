@@ -1,6 +1,5 @@
 use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
-use core::num;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;

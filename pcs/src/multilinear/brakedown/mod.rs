@@ -48,7 +48,7 @@ where
     EF: AbstractExtensionField<F>,
 {
     /// Prover answers the challenge by computing the product of the challenge vector
-    /// and the commited matirx.
+    /// and the committed matrix.
     /// The computation of the product can be viewed as a linear combination of rows
     /// of the matrix with challenge vector as the coefficients.
     fn answer_challenge(

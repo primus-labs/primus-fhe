@@ -678,7 +678,7 @@ impl<F: Field + Serialize> Lookup<F> {
     }
 }
 
-/// SNARKs for lookup compied with PCS
+/// SNARKs for lookup compiled with PCS
 pub struct LookupSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
 
 impl<F, EF> LookupSnarks<F, EF>
@@ -712,7 +712,7 @@ where
         let mut iop_proof_size = 0;
         let mut prover_trans = Transcript::<EF>::new();
         // Convert the original instance into an instance defined over EF
-        let mut instance_ef = instance.to_ef::<EF>();
+        let instance_ef = instance.to_ef::<EF>();
         let instance_info = instance_ef.info();
 
         // 2.1 Generate the random point to instantiate the sumcheck protocol
@@ -729,7 +729,7 @@ where
         Lookup::prove_as_subprotocol(
             &prover_randomness,
             &mut sumcheck_poly,
-            &mut instance_ef,
+            &instance_ef,
             &eq_at_u,
         );
 
@@ -1054,128 +1054,3 @@ where
         )
     }
 }
-
-//     /// Verify addition in Zq given the proof and the verification key for bit decomposistion
-//     /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-//     /// verifier challenges.
-//     pub fn verify0(
-//         fs_rng: &mut impl RngCore,
-//         proof: &LookupProof<F>,
-//         info: &LookupInstanceInfo,
-//     ) -> LookupSubclaim<F> {
-//         let sampler = <FieldUniformSampler<F>>::new();
-//         let random_value = sampler.sample(fs_rng);
-//         let random_point: Vec<_> = (0..info.num_vars).map(|_| sampler.sample(fs_rng)).collect();
-//         let random_combine: Vec<_> =
-//             (0..info.block_num + if info.residual_size == 0 { 0 } else { 1 } + 1)
-//                 .map(|_| sampler.sample(fs_rng))
-//                 .collect();
-
-//         // execute sumcheck for
-//         // \sum_{x \in H_f}
-//         // \sum_{i \in [block_num]}  r * h_i(x)
-//         //                         + \ eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r)
-//         //                         - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
-//         //                         = c_sum
-//         let poly_info = PolynomialInfo {
-//             max_multiplicands: info.block_size + 2,
-//             num_variables: info.num_vars,
-//         };
-//         let first_subclaim = MLSumcheck::verify_as_subprotocol(
-//             fs_rng,
-//             &poly_info,
-//             F::zero(), //proof.c_sum,
-//             &proof.sumcheck_msg[0],
-//         )
-//         .expect("sumcheck protocol in range check failed");
-
-//         LookupSubclaim {
-//             random_value,
-//             random_point,
-//             random_combine,
-//             sumcheck_points: vec![first_subclaim.point], //, second_subclaim.point],
-//             sumcheck_expected_evaluations: vec![
-//                 first_subclaim.expected_evaluations,
-//                 //second_subclaim.expected_evaluations,
-//             ],
-//         }
-//     }
-// }
-
-// impl<F: Field> LookupSubclaim<F> {
-//     /// verify the sumcliam
-//     #[inline]
-//     #[allow(clippy::too_many_arguments)]
-//     pub fn verify_subclaim(
-//         &self,
-//         f_vec: Vec<Rc<DenseMultilinearExtension<F>>>,
-//         t: Rc<DenseMultilinearExtension<F>>,
-//         oracle: LookupOracle<F>,
-//         info: &LookupInstanceInfo,
-//     ) -> bool {
-//         let u_f = &self.random_point;
-
-//         let block_size = info.block_size;
-
-//         let h_vec = oracle.h_vec;
-//         //let h_t = oracle.h_t;
-//         let m = oracle.m;
-//         let mut ft_vec = f_vec.clone();
-//         ft_vec.push(t);
-
-//         let mut eval = F::zero();
-//         let point = &self.sumcheck_points[0];
-
-//         let m_eval = m.evaluate(point);
-
-//         let chunks = ft_vec.chunks_exact(block_size);
-//         let residual = Some(chunks.remainder()).into_iter();
-//         //if residual_size != 0 {chunks = chunks.chain(residual);}
-
-//         for (i, ((h, f_block), r_k)) in h_vec
-//             .iter()
-//             .zip(chunks.chain(residual))
-//             .zip(self.random_combine.iter())
-//             .enumerate()
-//         {
-//             let is_last_block = i == (h_vec.len() - 1);
-//             let h_eval = h.evaluate(point);
-//             let eq_eval = eval_identity_function(u_f, point);
-
-//             let shifted_f_eval_block: Vec<F> = f_block
-//                 .iter()
-//                 .map(|f| f.evaluate(point) - self.random_value)
-//                 .collect();
-//             let sum_of_products: F = (0..shifted_f_eval_block.len())
-//                 .map(|idx: usize| {
-//                     shifted_f_eval_block
-//                         .iter()
-//                         .enumerate()
-//                         .fold(F::one(), |acc, (i, x)| {
-//                             let mut mult = F::one();
-//                             if i != idx {
-//                                 mult *= x;
-//                             }
-//                             if is_last_block
-//                                 && (idx == shifted_f_eval_block.len() - 1)
-//                                 && (i == shifted_f_eval_block.len() - 1)
-//                             {
-//                                 mult *= -m_eval;
-//                             }
-//                             acc * mult
-//                         })
-//                 })
-//                 .fold(F::zero(), |acc, x| acc + x);
-
-//             let product = shifted_f_eval_block.iter().fold(F::one(), |acc, x| acc * x);
-
-//             eval += h_eval + eq_eval * r_k * (h_eval * product - sum_of_products);
-//         }
-
-//         if eval != self.sumcheck_expected_evaluations[0] {
-//             return false;
-//         }
-
-//         true
-//     }
-// }

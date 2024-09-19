@@ -3,7 +3,6 @@ use algebra::{
     BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler,
 };
-use fhe_core::{DefaultExtendsionFieldU32x4, DefaultFieldU32};
 use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
@@ -12,14 +11,15 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
-    AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks, AdditionInZqSnarksOpt, DecomposedBitsInfo, Lookup
+    AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks,
+    AdditionInZqSnarksOpt, DecomposedBitsInfo, Lookup,
 };
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
 pub struct Fq(u32);
 
-type FF = DefaultFieldU32;
-type EF = DefaultExtendsionFieldU32x4;
+type FF = BabyBear;
+type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
 
@@ -378,9 +378,9 @@ fn test_trivial_addition_in_zq_with_lookup_snarks() {
         num_instances: 3,
     };
     let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
-    
+
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <AdditionInZqSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, 1
+        &instance, &code_spec, 1,
     );
 }

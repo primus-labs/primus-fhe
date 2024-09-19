@@ -7,9 +7,9 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::thread_rng;
 use sha2::Sha256;
-use zkp::piop::accumulator::AccumulatorSnarksOpt;
 use std::rc::Rc;
 use std::vec;
+use zkp::piop::accumulator::AccumulatorSnarksOpt;
 use zkp::piop::{
     accumulator::AccumulatorSnarks, AccumulatorIOP, AccumulatorInstance, AccumulatorWitness,
     DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
@@ -522,6 +522,6 @@ fn test_snarks_with_lookup() {
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, 2
+        &instance, &code_spec, 2,
     );
 }

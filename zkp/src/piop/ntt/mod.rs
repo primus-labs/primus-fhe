@@ -94,7 +94,7 @@ pub struct NTTInstances<F: Field> {
     pub num_vars: usize,
     /// stores {ω^0, ω^1, ..., ω^{2N-1}}
     pub ntt_table: Rc<Vec<F>>,
-    /// store the coefficient representaions
+    /// store the coefficient representations
     pub coeffs: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// store the point-evaluation representation
     pub points: Vec<Rc<DenseMultilinearExtension<F>>>,
@@ -763,7 +763,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// Compared to the `prove` functionality, we remove the phase to prove NTT bare.
-    /// Also, after detaching the verfication of NTT bare, verifier can directly check the recursive proofs.
+    /// Also, after detaching the verification of NTT bare, verifier can directly check the recursive proofs.
     pub fn verify_recursive(
         trans: &mut Transcript<F>,
         proof: &NTTRecursiveProof<F>,

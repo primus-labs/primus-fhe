@@ -6,12 +6,11 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
-use zkp::piop::RlweMultRgswSnarksOpt;
 use std::rc::Rc;
 use std::vec;
+use zkp::piop::RlweMultRgswSnarksOpt;
 use zkp::piop::{
-    rlwe_mul_rgsw::RlweMultRgswSnarks, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
-    RlweCiphertexts, RlweMultRgswInstance,
+    DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
 };
 
 type FF = BabyBear;
@@ -55,7 +54,7 @@ fn sort_array_with_reversed_bits<F: Clone + Copy>(input: &[F], log_n: u32) -> Ve
     output
 }
 
-/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal oder
+/// Invoke the existing api to perform ntt transform and convert the bit-reversed order to normal order
 /// In other words, the orders of input and output are both normal order.
 /// ```plain
 /// normal order:        0  1  2  3  4  5  6  7
@@ -245,6 +244,6 @@ fn main() {
     //     &instance, &code_spec,
     // );
     <RlweMultRgswSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, 2
+        &instance, &code_spec, 2,
     );
 }

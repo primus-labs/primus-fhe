@@ -1,9 +1,9 @@
 //! This module defines some useful utils that may invoked by piop.
 use std::rc::Rc;
 
+use algebra::AsFrom;
 use algebra::{AbstractExtensionField, DenseMultilinearExtension, Field, SparsePolynomial};
 use itertools::izip;
-use algebra::AsFrom;
 
 /// Generate MLE of the ideneity function eq(u,x) for x \in \{0, 1\}^dim
 pub fn gen_identity_evaluations<F: Field>(u: &[F]) -> DenseMultilinearExtension<F> {
@@ -42,7 +42,7 @@ pub fn gen_sparse_at_u<F: Field>(
     assert_eq!(sparse_matrix.len(), 1 << u.len());
     let eq_at_u = gen_identity_evaluations(u);
 
-    assert!(sparse_matrix.len() > 0);
+    assert!(!sparse_matrix.is_empty());
     let num_vars = sparse_matrix[0].num_vars;
     let mut evals = vec![F::zero(); 1 << num_vars];
     for (eq_u, row) in izip!(eq_at_u.iter(), sparse_matrix.iter()) {
@@ -63,7 +63,7 @@ pub fn gen_sparse_at_u_to_ef<F: Field, EF: AbstractExtensionField<F>>(
     assert_eq!(sparse_matrix.len(), 1 << u.len());
     let eq_at_u = gen_identity_evaluations(u);
 
-    assert!(sparse_matrix.len() > 0);
+    assert!(!sparse_matrix.is_empty());
     let num_vars = sparse_matrix[0].num_vars;
     let mut evals = vec![EF::zero(); 1 << num_vars];
     for (eq_u, row) in izip!(eq_at_u.iter(), sparse_matrix.iter()) {

@@ -53,7 +53,7 @@ use std::vec;
 /// IOP for transformation from Zq to RQ i.e. R/QR
 pub struct ZqToRQIOP<F: Field>(PhantomData<F>);
 
-/// Snarks for transformation from Zq to RQ i.e. R/QR compied with PCS
+/// Snarks for transformation from Zq to RQ i.e. R/QR compiled with PCS
 pub struct ZqToRQSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
 
 /// Zq to RQ Instance.
@@ -307,7 +307,7 @@ impl<F: DecomposableField> ZqToRQInstance<F> {
             base: bits_info.base,
             base_len: bits_info.base_len,
             bits_len: bits_info.bits_len,
-            num_vars: num_vars,
+            num_vars,
             num_instances: 1,
         };
 
@@ -424,7 +424,7 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
         SumcheckKit {
             proof,
             info: poly.info(),
-            claimed_sum: claimed_sum,
+            claimed_sum,
             randomness: state.randomness,
             u,
         }
@@ -529,6 +529,8 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
     }
 
     /// Verify the transformation from Zq to RQ
+    #[allow(clippy::too_many_arguments)]
+    #[inline]
     pub fn verify_as_subprotocol(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
@@ -701,7 +703,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in Zq to RQ");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP

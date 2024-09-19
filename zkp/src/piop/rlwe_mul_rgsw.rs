@@ -1084,7 +1084,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in RLWE * RGSW");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
@@ -1499,7 +1499,7 @@ where
             &eq_at_u,
         );
         // --------------------
-        
+
         let poly_info = sumcheck_poly.info();
         // 2.3 Generate proof of sumcheck protocol
         let (sumcheck_proof, sumcheck_state) =
@@ -1598,7 +1598,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in RLWE * RGSW");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP

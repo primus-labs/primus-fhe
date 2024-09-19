@@ -94,7 +94,7 @@ pub struct NTTInstances<F: Field> {
     pub num_vars: usize,
     /// stores {ω^0, ω^1, ..., ω^{2N-1}}
     pub ntt_table: Rc<Vec<F>>,
-    /// store the coefficient representaions
+    /// store the coefficient representations
     pub coeffs: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// store the point-evaluation representation
     pub points: Vec<Rc<DenseMultilinearExtension<F>>>,
@@ -204,8 +204,8 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
     //
     // Note that the last term ω^{2^i * x_i} is indeed multiplied in the normal order, from x_0 to x_{log{n-1}}
     // since we actually iterate from the LSB to MSB  when updating the table from size 1, 2, 4, 8, ..., n in dynamic programming.
-    // ! modify here
-    for i in 0..log_n {
+    // ! Modified Formula
+    for (i, u_i) in u.iter().enumerate() {
         // i starts from log_n - 1 and ends to 0
         let this_round_dim = i + 1;
         let last_round_dim = this_round_dim - 1;
@@ -215,20 +215,20 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
         let mut evaluations_w_term = vec![F::zero(); this_round_table_size];
         for x in (0..this_round_table_size).rev() {
             // idx is to indicate the power ω^{2^{i + 1} * X} in ntt_table
-            // ! modify here
+            // ! Modified Formula
             let idx = (1 << (log_n - i)) * x % m;
             // the bit index in this iteration is last_round_dim = this_round_dim - 1
             // If x >= last_round_table_size, meaning the bit = 1, we need to multiply by ω^{2^last_round_dim * 1}
             if x >= last_round_table_size {
                 evaluations[x] = evaluations[x % last_round_table_size]
-                    * (F::one() - u[i] + u[i] * ntt_table[idx])
+                    * (F::one() - *u_i + *u_i * ntt_table[idx])
                     * ntt_table[1 << last_round_dim];
             }
             // the bit index in this iteration is last_round_dim = this_round_dim - 1
             // If x < last_round_table_size, meaning the bit = 0, we do not need to multiply because ω^{2^last_round_dim * 0} = 1
             else {
                 evaluations[x] = evaluations[x % last_round_table_size]
-                    * (F::one() - u[i] + u[i] * ntt_table[idx]);
+                    * (F::one() - *u_i + *u_i * ntt_table[idx]);
             }
             evaluations_w_term[x] = ntt_table[idx];
         }
@@ -242,7 +242,9 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
     intermediate_mles
 }
 
-/// Naive implementation for computing the MLE: w^{2^exp \cdot x} for x \in \{0, 1\}^x_dim in a naive method
+/// Naive implementation for computing the MLE:
+/// compute w_{i+1} (x)= w^{ M / {2^{i+1}}  * X} = w^{ N / 2^i * X}
+/// for x \in \{0, 1\}^x_dim in a naive method
 ///
 /// # Arguments:
 ///
@@ -250,7 +252,6 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
 /// * log_m: log of M
 /// * x_dim: dimension of x or the num of variables of the outputted mle
 /// * sub: the exponent of the function defined above (i+1) = x_dim
-/// ! compute w_{i+1} (x)= w^{ M / {2^{i+1}}  * X} = w^{ N / 2^i * X} 
 pub fn naive_w_power_times_x_table<F: Field>(
     ntt_table: &[F],
     log_m: usize,
@@ -263,22 +264,17 @@ pub fn naive_w_power_times_x_table<F: Field>(
 
     let mut evaluations: Vec<_> = (0..(1 << x_dim)).map(|_| F::one()).collect();
     for x in 0..(1 << x_dim) {
-        // !modigy
+        // ! Modified Formula
         evaluations[x] = ntt_table[(1 << (log_m - sub)) * x % m];
     }
     DenseMultilinearExtension::from_evaluations_vec(x_dim, evaluations)
 }
 
-/// Evaluate the mle w^{2^exp * x} for a random point r \in F^{x_dim}
+/// Evaluate the mle w_{i+1} (x) for a random point r \in F^{x_dim} where w_{i+1} denotes the 2^{i+1}-th root of unity
 /// This formula is also derived from the techniques in [zkCNN](https://eprint.iacr.org/2021/673).
 ///
-/// w^{2^exp * r} = \sum_x eq(x, r) *  w^{2^exp * x}
-///               = \prod_i (1 - r_i + r_i * w^{2^ {(exp + i) % log_m})
-///
-/// * Note that the above equation only holds for exp <= logM - x_dim;
-/// * otherwise, the exponent 2^exp * x involves a modular addition, disabling the decomposition.
-///
-/// (Although I am not clearly making it out, the experiment result shows the above argument.)
+/// w_{i+1} (x)= w^{ M / {2^{i+1}} * X} = w^{ N / 2^i * X} for a random point r
+///               = \prod_i (1 - r_i + r_i * w_{i+1}^2^i)
 ///
 /// # Arguments:
 ///
@@ -287,7 +283,6 @@ pub fn naive_w_power_times_x_table<F: Field>(
 /// * x_dim: dimension of x or the num of variables of the outputted mle
 /// * sub: the subscript of the function defined above (i+1) = x_dim
 /// * r: random point in F^{x_dim}
-/// ! compute w_{i+1} (x)= w^{ M / {2^{i+1}} * X} = w^{ N / 2^i} 
 pub fn eval_w_power_times_x<F: Field>(
     ntt_table: &[F],
     log_m: usize,
@@ -297,12 +292,11 @@ pub fn eval_w_power_times_x<F: Field>(
 ) -> F {
     assert_eq!(ntt_table.len(), 1 << log_m);
     assert_eq!(x_dim, r.len());
-    // !modify
+    // ! Modified Formula
     assert_eq!(sub, x_dim);
     let mut prod = F::one();
 
     for (i, &r_i) in r.iter().enumerate() {
-        // let log_exp = (sub + i) % log_m;
         let log_exp = (log_m - sub + i) % log_m;
         prod *= F::one() - r_i + r_i * ntt_table[1 << log_exp];
     }
@@ -684,7 +678,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         let mut delegation_sumcheck_msgs = Vec::with_capacity(log_n - 1);
         // store the claimed sum of the sumcheck protocol in each round
         let mut delegation_claimed_sums = Vec::with_capacity(log_n - 1);
-        // ! modify here
+        // ! Modified Formula
         for k in (1..log_n).rev() {
             // start form log_n - 1;
             // let i = log_n - 1 - k;
@@ -696,7 +690,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
                 trans,
                 k,
                 &requested_point,
-                // !modify here
+                // ! Modified Formula
                 u[k],
                 w_coeff,
                 f,
@@ -757,7 +751,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         // compute $\ω^{(k)}_{i+1}(x,b ) = \ω^{2^{i+1}\cdot j}$ for $j = X+2^{i+1}\cdot b$ at point (r, 0) and (r, 1)
         // exp: i + 1 = n - k
         // let exp = log_n - round;
-        // !modify here
+        // ! Modified Formula
         let sub = round + 1;
         // w_left = \tilde{ω}^{(k)}_{i+1}(r, 0) and w_right = \tilde{ω}^{(k)}_{i+1}(r, 0)
         let w_left = eval_w_power_times_x(ntt_table, log_n + 1, round + 1, sub, &r_left);
@@ -775,7 +769,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// Compared to the `prove` functionality, we remove the phase to prove NTT bare.
-    /// Also, after detaching the verfication of NTT bare, verifier can directly check the recursive proofs.
+    /// Also, after detaching the verification of NTT bare, verifier can directly check the recursive proofs.
     pub fn verify_recursive(
         trans: &mut Transcript<F>,
         proof: &NTTRecursiveProof<F>,
@@ -820,7 +814,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
             if !Self::delegation_verify_round(
                 k,
                 &requested_point,
-                // !modify here
+                // ! Modified Formula
                 u[k],
                 &subclaim,
                 reduced_claim,
@@ -837,7 +831,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         assert_eq!(final_point.len(), 1);
 
         // check the final claim returned from the last round of delegation
-        // !modify here
+        // ! Modified Formula
         let idx = 1 << (info.num_vars);
         let eval = eval_identity_function(&final_point, &[F::zero()])
             + eval_identity_function(&final_point, &[F::one()])
@@ -1107,6 +1101,19 @@ mod test {
     // field type
     type FF = Fp32;
 
+    /// Given an `index` of `len` bits, output a new index where the bits are reversed.
+    fn reverse_bits(index: usize, len: usize) -> usize {
+        let mut tmp = index;
+        let mut reverse_index = 0;
+        let mut pow = 1 << (len - 1);
+        for _ in 0..len {
+            reverse_index += pow * (1 & tmp);
+            pow >>= 1;
+            tmp >>= 1;
+        }
+        reverse_index
+    }
+
     #[test]
     fn test_init_fourier_table_overall() {
         let sampler = <FieldUniformSampler<FF>>::new();
@@ -1133,10 +1140,15 @@ mod test {
             power *= root;
         }
 
-        // In little endian, the index for F[i, j] is i + (j << dim)
+        // In mix endian, the index for F[i, j] is i + (j << dim)} where
+        // F[x_0, x_1, ..., x_{\logN-1} || y_0, y_1, ..., y_{\logN-1}]
+        // i = \sum_k 2^k * x_k and j = \sum_k 2^k * y_k
+        // rev_i = \sum_k 2^{\logN-1-k} x_k and j = \sum_k 2^k * y_k
         for i in 0..1 << dim {
             for j in 0..1 << dim {
-                let idx_power = (2 * i + 1) * j % m;
+                // ! Modified Formula
+                let rev_i = reverse_bits(i, dim);
+                let idx_power = ((2 * rev_i + 1) * j) as u32 % m;
                 let idx_fourier = i + (j << dim);
                 fourier_matrix[idx_fourier as usize] = ntt_table[idx_power as usize];
             }

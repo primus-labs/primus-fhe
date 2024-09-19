@@ -7,12 +7,12 @@ use num_traits::One;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
-use zkp::piop::AccumulatorSnarksOpt;
 use std::rc::Rc;
 use std::vec;
+use zkp::piop::AccumulatorSnarksOpt;
 use zkp::piop::{
-    accumulator::AccumulatorSnarks, AccumulatorInstance, AccumulatorWitness, DecomposedBitsInfo,
-    NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
+    AccumulatorInstance, AccumulatorWitness, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
+    RlweCiphertexts, RlweMultRgswInstance,
 };
 
 // # Parameters
@@ -381,6 +381,6 @@ fn main() {
     //     &instance, &code_spec,
     // );
     <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, BLOCK_SIZE
+        &instance, &code_spec, BLOCK_SIZE,
     );
 }

@@ -26,7 +26,7 @@ pub struct SumcheckKit<F: Field> {
     pub claimed_sum: F,
     /// poly info of the polynomial proved in the sumcheck
     pub info: PolynomialInfo,
-    /// random point used to instatiate the sumcheck protocol
+    /// random point used to instantiate the sumcheck protocol
     pub u: Vec<F>,
     /// sumcheck proof
     pub proof: Proof<F>,

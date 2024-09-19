@@ -641,7 +641,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
             * eq_at_u_r
             * (evals.option * (evals.input * lambda_1 + evals.output * lambda_2)
                 + (F::one() - evals.option) * (evals.input - evals.output * info.k - evals.offset));
-        
+
         // check 3: a - b * k = c
         true
     }
@@ -748,7 +748,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in Floor");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP

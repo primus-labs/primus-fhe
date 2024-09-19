@@ -3,7 +3,6 @@ use algebra::{
     BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler, SparsePolynomial,
 };
-use core::num;
 use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand_distr::Distribution;
@@ -26,10 +25,6 @@ type FF = BabyBear;
 type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
-
-const DIM_LWE: usize = 1024;
-const DIM_RLWE: usize = 1024;
-const LOG_DIM_RLWE: usize = 10;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -214,9 +209,9 @@ fn test_random_zq_to_rq() {
     let mut outputs = Vec::with_capacity(1 << num_vars);
     let mut sparse_outputs = Vec::with_capacity(1 << num_vars);
     for x in input.iter() {
-        let (output, sparse_ouput) = transform(num_vars, *x, q, dim_rlwe);
+        let (output, sparse_output) = transform(num_vars, *x, q, dim_rlwe);
         outputs.push(Rc::new(output));
-        sparse_outputs.push(Rc::new(sparse_ouput));
+        sparse_outputs.push(Rc::new(sparse_output));
     }
 
     let bits_info = DecomposedBitsInfo {
@@ -269,9 +264,9 @@ fn test_random_zq_to_rq_extension_field() {
     let mut outputs = Vec::with_capacity(1 << num_vars);
     let mut sparse_outputs = Vec::with_capacity(1 << num_vars);
     for x in input.iter() {
-        let (output, sparse_ouput) = transform(num_vars, *x, q, dim_rlwe);
+        let (output, sparse_output) = transform(num_vars, *x, q, dim_rlwe);
         outputs.push(Rc::new(output));
-        sparse_outputs.push(Rc::new(sparse_ouput));
+        sparse_outputs.push(Rc::new(sparse_output));
     }
 
     let bits_info = DecomposedBitsInfo {
@@ -326,9 +321,9 @@ fn test_snarks() {
     let mut outputs = Vec::with_capacity(1 << num_vars);
     let mut sparse_outputs = Vec::with_capacity(1 << num_vars);
     for x in input.iter() {
-        let (output, sparse_ouput) = transform(num_vars, *x, q, dim_rlwe);
+        let (output, sparse_output) = transform(num_vars, *x, q, dim_rlwe);
         outputs.push(Rc::new(output));
-        sparse_outputs.push(Rc::new(sparse_ouput));
+        sparse_outputs.push(Rc::new(sparse_output));
     }
 
     let bits_info = DecomposedBitsInfo {

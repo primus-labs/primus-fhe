@@ -1,5 +1,5 @@
 use algebra::derive::{DecomposableField, Field};
-use algebra::{AsFrom, AsInto};
+use algebra::AsFrom;
 use algebra::{BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
 use itertools::izip;
@@ -21,7 +21,6 @@ const BASE_FIELD_BITS: usize = 31;
 // B = 2^3: denotes the basis used in the bit decomposition
 // q = 1024: denotes the modulus in LWE
 // Q = BabyBear: denotes the ciphertext modulus in RLWE
-const DIM_LWE: usize = 1024;
 const LOG_DIM_RLWE: usize = 10;
 const LOG_B: u32 = 1;
 

@@ -420,7 +420,7 @@ impl<F: Field> AccumulatorInstance<F> {
         }
     }
 
-    /// Evaluate at the same random point defiend over EF
+    /// Evaluate at the same random point defined over EF
     #[inline]
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(&self, point: &[EF]) -> AccumulatorEval<EF> {
         AccumulatorEval::<EF> {
@@ -549,9 +549,9 @@ impl<F: Field> AccumulatorInstance<F> {
 
     /// Extract lookup instance
     #[inline]
-    pub fn extract_lookup_instance(&self, block_size: usize) -> LookupInstance<F>
-    {
-        self.extract_decomposed_bits().extract_lookup_instance(block_size)
+    pub fn extract_lookup_instance(&self, block_size: usize) -> LookupInstance<F> {
+        self.extract_decomposed_bits()
+            .extract_lookup_instance(block_size)
     }
 }
 
@@ -635,7 +635,7 @@ impl<F: Field> AccumulatorEval<F> {
         res
     }
 
-    /// Update the coefficeint evaluation of the random NTT instance
+    /// Update the coefficient evaluation of the random NTT instance
     #[inline]
     pub fn update_ntt_instance_coeff(&self, r_coeff: &mut F, randomness: &[F]) {
         let (r_used, r) = randomness.split_at(4);
@@ -806,7 +806,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         let r_each_num = RlweMultRgswIOP::num_coins(&instance.mult_info) + 2;
         assert_eq!(randomness.len(), instance.num_updations * r_each_num);
 
-        // in other updations, acc_ntt = acc_ntt (in last updation) + ouput_ntt of RLWE * RGSW
+        // in other updations, acc_ntt = acc_ntt (in last updation) + output_ntt of RLWE * RGSW
         for (updation, r) in izip!(&instance.updations, randomness.chunks_exact(r_each_num)) {
             let (r, r_mult) = r.split_at(2);
             // When proving ACC = ACC + (x^a_u - 1) * ACC * RGSW
@@ -1273,7 +1273,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         let r_each_num = RlweMultRgswIOPPure::<F>::num_coins() + 2;
         assert_eq!(randomness.len(), instance.num_updations * r_each_num);
 
-        // in other updations, acc_ntt = acc_ntt (in last updation) + ouput_ntt of RLWE * RGSW
+        // in other updations, acc_ntt = acc_ntt (in last updation) + output_ntt of RLWE * RGSW
         for (updation, r) in izip!(&instance.updations, randomness.chunks_exact(r_each_num)) {
             let (r, r_mult) = r.split_at(2);
             // When proving ACC = ACC + (x^a_u - 1) * ACC * RGSW
@@ -1443,7 +1443,7 @@ where
             &eq_at_u,
         );
         // --------------------
-        
+
         let poly_info = sumcheck_poly.info();
         // 2.3 Generate proof of sumcheck protocol
         let (sumcheck_proof, sumcheck_state) =
@@ -1539,7 +1539,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in Accumulator");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP

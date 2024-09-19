@@ -21,7 +21,6 @@ use algebra::{
     ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use core::fmt;
-use std::os::unix::fs::FileExt;
 use pcs::{
     multilinear::brakedown::BrakedownPCS,
     utils::code::{LinearCode, LinearCodeSpec},
@@ -38,7 +37,7 @@ use super::{BitDecomposition, DecomposedBits, DecomposedBitsInfo, LookupInstance
 
 /// IOP for addition in Zq, i.e. a + b = c (mod q)
 pub struct AdditionInZq<F: Field>(PhantomData<F>);
-/// SNARKs for addition in Zq compied with PCS
+/// SNARKs for addition in Zq compiled with PCS
 pub struct AdditionInZqSnarks<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
@@ -46,7 +45,7 @@ pub struct AdditionInZqSnarks<F: Field, EF: AbstractExtensionField<F>>(
 
 /// IOP for addition in Zq, i.e. a + b = c (mod q)
 pub struct AdditionInZqPure<F: Field>(PhantomData<F>);
-/// SNARKs for addition in Zq compied with PCS
+/// SNARKs for addition in Zq compiled with PCS
 pub struct AdditionInZqSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
@@ -68,7 +67,7 @@ pub struct AdditionInZqInstance<F: Field> {
     pub bits_info: DecomposedBitsInfo<F>,
 }
 
-/// Evaluations of all MLEs involed in the instance at a random point
+/// Evaluations of all MLEs involved in the instance at a random point
 pub struct AdditionInZqInstanceEval<F: Field> {
     /// inputs a, b, and c
     pub abc: Vec<F>,
@@ -214,7 +213,8 @@ impl<F: Field> AdditionInZqInstance<F> {
     /// Extract lookup instance
     #[inline]
     pub fn extract_lookup_instance(&self, block_size: usize) -> LookupInstance<F> {
-        self.extract_decomposed_bits().extract_lookup_instance(block_size)
+        self.extract_decomposed_bits()
+            .extract_lookup_instance(block_size)
     }
 }
 
@@ -524,7 +524,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in Addition in Zq");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
@@ -587,10 +587,7 @@ where
 impl<F: Field + Serialize> AdditionInZqPure<F> {
     /// sample coins before proving sumcheck protocol
     pub fn sample_coins(trans: &mut Transcript<F>) -> Vec<F> {
-        trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            1,
-        )
+        trans.get_vec_challenge(b"randomness to combine sumcheck protocols", 1)
     }
 
     /// return the number of coins used in this IOP
@@ -688,14 +685,12 @@ impl<F: Field + Serialize> AdditionInZqPure<F> {
     ) -> bool {
         // check 1: Verify the range check part in the sumcheck polynomial
         let bits_evals = evals.extract_decomposed_bits();
-        let check_decomposed_bits = <BitDecomposition<F>>::verify_as_subprotocol_pure(
-            &bits_evals,
-            &info.bits_info,
-        );
+        let check_decomposed_bits =
+            <BitDecomposition<F>>::verify_as_subprotocol_pure(&bits_evals, &info.bits_info);
         if !check_decomposed_bits {
             return false;
         }
-        
+
         // check 2: a(u) + b(u) = c(u) + k(u) * q
         if evals.abc[0] + evals.abc[1] != evals.abc[2] + evals.k * info.q {
             return false;
@@ -762,12 +757,22 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let claimed_sum = EF::zero();
         let randomness = AdditionInZqPure::sample_coins(&mut prover_trans);
-        AdditionInZqPure::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
+        AdditionInZqPure::prove_as_subprotocol(
+            &randomness,
+            &mut sumcheck_poly,
+            &instance_ef,
+            &eq_at_u,
+        );
 
         // combine lookup sumcheck
         let mut lookup_randomness = Lookup::sample_coins(&mut prover_trans, &lookup_instance);
         lookup_randomness.push(random_value);
-        Lookup::prove_as_subprotocol(&lookup_randomness, &mut sumcheck_poly, &lookup_instance, &eq_at_u);
+        Lookup::prove_as_subprotocol(
+            &lookup_randomness,
+            &mut sumcheck_poly,
+            &lookup_instance,
+            &eq_at_u,
+        );
 
         let poly_info = sumcheck_poly.info();
 
@@ -833,7 +838,7 @@ where
             claimed_sum,
             &sumcheck_proof,
         )
-        .expect("Verify the proof generated in Bit Decompositon");
+        .expect("Verify the sumcheck proof generated in Addition in Zq");
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP

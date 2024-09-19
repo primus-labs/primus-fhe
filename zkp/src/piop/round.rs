@@ -308,6 +308,7 @@ impl<F: Field> RoundInstance<F> {
 
 impl<F: DecomposableField> RoundInstance<F> {
     /// Compute the witness required in proof and construct the instance
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn new(
         num_vars: usize,
@@ -710,12 +711,16 @@ impl<F: Field + Serialize> RoundIOP<F> {
 
         let f_two = F::one() + F::one();
         // check 2: check the subclaim returned from the sumcheck protocol
-        subclaim.expected_evaluations -= r_0 * eq_at_u_r * evals.output_mod * (F::one() - evals.output_mod);
+        subclaim.expected_evaluations -=
+            r_0 * eq_at_u_r * evals.output_mod * (F::one() - evals.output_mod);
         subclaim.expected_evaluations -= r_1 * eq_at_u_r * evals.option * (F::one() - evals.option);
         subclaim.expected_evaluations -= r_2
             * eq_at_u_r
             * (evals.option * ((evals.input - info.k) * lambda_1 + evals.output * lambda_2)
-                + (F::one() - evals.option) * (evals.input - (f_two * evals.output_aux - F::one()) * info.k - evals.offset));
+                + (F::one() - evals.option)
+                    * (evals.input
+                        - (f_two * evals.output_aux - F::one()) * info.k
+                        - evals.offset));
 
         // check 3: b' = b + e * q
         evals.output_aux == evals.output + evals.output_mod * info.q
