@@ -50,7 +50,7 @@ fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtension<FF> {
             let rev_i = reverse_bits(i, log_n);
             let idx_power = ((2 * rev_i + 1) * j) as u32 % m;
             let idx_fourier = i + (j << log_n);
-            fourier_matrix[idx_fourier as usize] = ntt_table[idx_power as usize];
+            fourier_matrix[idx_fourier] = ntt_table[idx_power as usize];
         }
     }
     DenseMultilinearExtension::from_evaluations_vec((log_n << 1) as usize, fourier_matrix)

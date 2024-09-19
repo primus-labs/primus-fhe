@@ -36,7 +36,7 @@ fn decode(c: FF) -> u32 {
 
 #[test]
 fn test_floor() {
-    let decode_4 = |c: FF| (c.value() as f64 * 4 as f64 / FP as f64).floor() as u32 % FT;
+    let decode_4 = |c: FF| (c.value() as f64 * 4_f64 / FP as f64).floor() as u32 % FT;
     assert_eq!(decode_4(FF::new(0)), 0);
     assert_eq!(decode_4(FF::new(FP / 4)), 0);
     assert_eq!(decode_4(FF::new(FP / 4 + 1)), 1);
@@ -252,7 +252,7 @@ fn test_snarks() {
     let output_bits_info = DecomposedBitsInfo {
         base,
         base_len,
-        bits_len: LOG_FT as usize,
+        bits_len: LOG_FT,
         num_vars,
         num_instances: 1,
     };

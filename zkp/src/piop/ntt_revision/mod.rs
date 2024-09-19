@@ -1150,7 +1150,7 @@ mod test {
                 let rev_i = reverse_bits(i, dim);
                 let idx_power = ((2 * rev_i + 1) * j) as u32 % m;
                 let idx_fourier = i + (j << dim);
-                fourier_matrix[idx_fourier as usize] = ntt_table[idx_power as usize];
+                fourier_matrix[idx_fourier] = ntt_table[idx_power as usize];
             }
         }
 
