@@ -139,15 +139,15 @@ fn test_lt_hcmp() {
     let data = unsafe { INSTANCE_CIPHER.get().unwrap() };
     let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
     let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
-    let lt_cipher_1 = param_data.rotationkey.eq_hcmp(
+    let lt_cipher_1 = param_data.rotationkey.lt_hcmp(
         &data.rlwe_hcmpcipher_great[0],
         &data.rgsw_hcmpcipher_small[0],
     );
-    let lt_cipher_2 = param_data.rotationkey.eq_hcmp(
+    let lt_cipher_2 = param_data.rotationkey.lt_hcmp(
         &data.rlwe_hcmpcipher_great[0],
         &data.rgsw_hcmpcipher_great[0],
     );
-    let lt_cipher_3 = param_data.rotationkey.eq_hcmp(
+    let lt_cipher_3 = param_data.rotationkey.lt_hcmp(
         &data.rlwe_hcmpcipher_small[0],
         &data.rgsw_hcmpcipher_great[0],
     );
@@ -167,26 +167,23 @@ fn test_homand() {
     let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
     let sampler = param_data.param.ring_noise_distribution();
     let mut rng = thread_rng();
-    let lwe_delta = lwe_generate(
-        rlwe_sk,
-        param_data.param.ring_dimension(),
-        sampler,
-        &mut rng,
-        DELTA,
-    );
-    let lwe_delta_neg = lwe_generate_neg(
-        rlwe_sk,
-        param_data.param.ring_dimension(),
-        sampler,
-        &mut rng,
-        DELTA,
-    );
-    let homand_cipher1 = param_data.rotationkey.homand(&lwe_delta, &lwe_delta);
-    let homand_cipher2 = param_data.rotationkey.homand(&lwe_delta, &lwe_delta_neg);
-    let homand_cipher3 = param_data.rotationkey.homand(&lwe_delta_neg, &lwe_delta);
+
+    let lwe_delta_0 = lwe_generate(rlwe_sk, sampler, &mut rng, DELTA);
+    let lwe_delta_1 = lwe_generate(rlwe_sk, sampler, &mut rng, DELTA);
+    let lwe_delta_neg_0 = lwe_generate_neg(rlwe_sk, sampler, &mut rng, DELTA);
+    let lwe_delta_neg_1 = lwe_generate_neg(rlwe_sk, sampler, &mut rng, DELTA);
+
+    let homand_cipher1 = param_data.rotationkey.homand(&lwe_delta_0, &lwe_delta_1);
+    let homand_cipher2 = param_data
+        .rotationkey
+        .homand(&lwe_delta_0, &lwe_delta_neg_0);
+    let homand_cipher3 = param_data
+        .rotationkey
+        .homand(&lwe_delta_neg_0, &lwe_delta_neg_1);
     let homand_cipher4 = param_data
         .rotationkey
-        .homand(&lwe_delta_neg, &lwe_delta_neg);
+        .homand(&lwe_delta_neg_0, &lwe_delta_neg_0);
+
     let output1 = decrypt(rlwe_sk, homand_cipher1);
     let output2 = decrypt(rlwe_sk, homand_cipher2);
     let output3 = decrypt(rlwe_sk, homand_cipher3);
@@ -283,7 +280,6 @@ fn test_lt_arbhcmp() {
 
 fn lwe_generate<F, R>(
     secret_key: &[F],
-    rlwe_dimension: usize,
     error_sampler: FieldDiscreteGaussianSampler,
     mut rng: R,
     delta: F,
@@ -292,19 +288,19 @@ where
     R: Rng + CryptoRng,
     F: NTTField,
 {
+    let rlwe_dimension = secret_key.len();
     let a = Polynomial::random(rlwe_dimension, &mut rng);
-    let a_mul_s = secret_key
+    let a_mul_s = a
         .iter()
-        .zip(a.clone())
-        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
-    let mut e_a = error_sampler.sample(&mut rng);
-    e_a += a_mul_s + delta;
-    LWE::new(a.data(), e_a)
+        .zip(secret_key)
+        .fold(F::zero(), |acc, (&s, &a)| acc.add_mul(s, a));
+    let e: F = error_sampler.sample(&mut rng);
+    let b = a_mul_s + delta + e;
+    LWE::new(a.data(), b)
 }
 
 fn lwe_generate_neg<F, R>(
     secret_key: &[F],
-    rlwe_dimension: usize,
     error_sampler: FieldDiscreteGaussianSampler,
     mut rng: R,
     delta: F,
@@ -313,12 +309,13 @@ where
     R: Rng + CryptoRng,
     F: NTTField,
 {
+    let rlwe_dimension = secret_key.len();
     let a = Polynomial::random(rlwe_dimension, &mut rng);
-    let a_mul_s = secret_key
+    let a_mul_s = a
         .iter()
-        .zip(a.clone())
-        .fold(F::zero(), |acc, (&s, a)| acc + s * a);
-    let mut e_a = error_sampler.sample(&mut rng);
-    e_a += a_mul_s - delta;
-    LWE::new(a.data(), e_a)
+        .zip(secret_key)
+        .fold(F::zero(), |acc, (&s, &a)| acc.add_mul(s, a));
+    let e: F = error_sampler.sample(&mut rng);
+    let b = a_mul_s - delta + e;
+    LWE::new(a.data(), b)
 }

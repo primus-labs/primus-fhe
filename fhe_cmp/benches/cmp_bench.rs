@@ -15,7 +15,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let sk = SecretKeyPack::new(param);
     println!("Secret Key Generation done!\n");
 
-    let rotationkey = HomomorphicCmpScheme::new(&sk);
+    let rotation_key = HomomorphicCmpScheme::new(&sk);
     let enc_elements = Encryptor::new(&sk);
     println!("Evaluation Key Generation done!\n");
 
@@ -25,14 +25,15 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let value2 = enc_elements.rgsw_encrypt(y, &mut rng);
 
     c.bench_function("less comparison", |b| {
-        b.iter(|| rotationkey.lt_arbhcmp(&value1, &value2))
+        b.iter(|| rotation_key.lt_arbhcmp(&value1, &value2))
     });
     c.bench_function("equality comparison", |b| {
-        b.iter(|| rotationkey.eq_arbhcmp(black_box(&value1), black_box(&value2)))
+        b.iter(|| rotation_key.eq_arbhcmp(black_box(&value1), black_box(&value2)))
     });
     c.bench_function("greater comparison", |b| {
-        b.iter(|| rotationkey.gt_arbhcmp(black_box(&value1), black_box(&value2)))
+        b.iter(|| rotation_key.gt_arbhcmp(black_box(&value1), black_box(&value2)))
     });
 }
+
 criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);

@@ -8,27 +8,27 @@ use fhe_core::{
 use lattice::{LWE, NTTRGSW, RLWE};
 use rand::prelude::*;
 
-///    The struct of homomorphic comparison scheme.
+/// The struct of homomorphic comparison scheme.
 pub struct HomomorphicCmpScheme<C: LWEModulusType, F: NTTField> {
-    rlwe_key: RLWEBlindRotationKey<F>,
     params: Parameters<C, F>,
     delta: F,
     half_delta: F,
+    blind_rotation_key: RLWEBlindRotationKey<F>,
 }
 
-///    The struct of correlated homomorphic encryption scheme.
+/// The struct of correlated homomorphic encryption scheme.
 pub struct Encryptor<C: LWEModulusType, F: NTTField> {
     params: Parameters<C, F>,
-    ntt_ring_secret_key: NTTPolynomial<F>,
-    error_sampler: FieldDiscreteGaussianSampler,
     delta: F,
+    error_sampler: FieldDiscreteGaussianSampler,
+    ntt_ring_secret_key: NTTPolynomial<F>,
 }
 
 impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
-    ///    Create a new instance.
+    /// Create a new instance.
     pub fn new(key: &SecretKeyPack<C, F>) -> Self {
         let params = *key.parameters();
-        let rlwe_key = RLWEBlindRotationKey::generate(key);
+        let blind_rotation_key = RLWEBlindRotationKey::generate(key);
         let delta = F::lazy_new(
             (F::MODULUS_VALUE.as_into() / params.lwe_plain_modulus() as f64)
                 .round()
@@ -40,81 +40,80 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
                 .as_into(),
         );
         Self {
-            rlwe_key,
             params,
             delta,
             half_delta,
+            blind_rotation_key,
         }
     }
 
-    ///    Return a reference to the key.
-    pub fn key(&self) -> &RLWEBlindRotationKey<F> {
-        &self.rlwe_key
+    /// Return a reference to the key.
+    pub fn blind_rotation_key(&self) -> &RLWEBlindRotationKey<F> {
+        &self.blind_rotation_key
     }
 
-    ///    Return a reference to the parameters.
+    /// Return a reference to the parameters.
     pub fn params(&self) -> &Parameters<C, F> {
         &self.params
     }
 
-    ///    Return delta.
+    /// Return delta.
     pub fn delta(&self) -> F {
         self.delta
     }
 
-    ///    Return half_delta.
+    /// Return half_delta.
     pub fn half_delta(&self) -> F {
         self.half_delta
     }
 
-    ///    Functional bootstrapping according to the test vector.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `ctxt` - The LWE ciphertext.
-    ///    * `test_vector` - The chosen test_vector.
-    fn fbs(&self, ctxt: LWE<F>, test_vector: &[F]) -> LWE<F> {
-        assert_eq!(self.params.ring_dimension(), test_vector.len());
+    /// Functional bootstrapping according to the test vector.
+    ///
+    /// # Arguments.
+    ///
+    /// * `ctxt` - The LWE ciphertext.
+    /// * `test_vector` - The chosen test_vector.
+    fn fbs(&self, ctxt: LWE<F>, test_vector: Polynomial<F>) -> LWE<F> {
+        assert_eq!(self.params.ring_dimension(), test_vector.coeff_count());
 
         let switched_lwe = lwe_modulus_switch(
             ctxt,
             2 * self.params.ring_dimension() as u32,
             self.params.modulus_switch_round_method(),
         );
-        let test_vector = Polynomial::from_slice(test_vector);
-        self.rlwe_key
+
+        self.blind_rotation_key
             .blind_rotate(
                 test_vector,
                 &switched_lwe,
                 self.params.blind_rotation_basis(),
             )
-            .extract_lwe()
+            .extract_lwe_locally()
     }
 
-    ///    Homomorphic and operation in comparison.
-    ///   
-    ///    # Arguments
-    ///   
-    ///    * `ca` - The LWE ciphertext `ca`, with message `a`.
-    ///    * `cb` - The LWE ciphertext `cb`, with message `b`.
-    ///    * Output - An LWE ciphertext LWE(c), only returns delta when both the values of a and b are delta, else -delta.
+    /// Homomorphic and operation in comparison.
+    ///
+    /// # Arguments
+    ///
+    /// * `ca` - The LWE ciphertext `ca`, with message `a`.
+    /// * `cb` - The LWE ciphertext `cb`, with message `b`.
+    /// * Output - An LWE ciphertext LWE(c), only returns delta when both the values of a and b are delta, else -delta.
     pub fn homand(&self, ca: &LWE<F>, cb: &LWE<F>) -> LWE<F> {
         let mut temp = ca.add_component_wise_ref(cb);
-        let poly_length = self.params.ring_dimension();
-        *temp.b_mut() = temp.b() - self.delta;
-        let mut test = vec![F::zero(); poly_length];
-        let mu = self.delta;
-        test.iter_mut().for_each(|v| *v = mu);
-        self.fbs(temp, &test)
+        *temp.b_mut() -= self.delta;
+
+        let test = vec![self.delta; self.params.ring_dimension()];
+
+        self.fbs(temp, Polynomial::new(test))
     }
 
-    ///    Performs the greater_than homomorphic comparison operation of two ciphertexts.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `c_rlwe` - The RLWE ciphertext with message `a`.
-    ///    * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
-    ///    * Output - An LWE ciphertext LWE(c), where c = 1 if  a > b; c = -1 otherwise.
+    /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
+    ///
+    /// # Arguments.
+    ///
+    /// * `c_rlwe` - The RLWE ciphertext with message `a`.
+    /// * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
+    /// * Output - An LWE ciphertext LWE(c), where c = 1 if  a > b; c = -1 otherwise.
     pub fn gt_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
         let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
         let test_poly = Polynomial::new(vec![F::neg_one(); self.params.ring_dimension()]);
@@ -123,13 +122,13 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
         RLWE::new(c_a, c_b).extract_lwe()
     }
 
-    ///    Performs the greater_than homomorphic comparison operation of two ciphertexts.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `c_rlwe` - The RLWE ciphertext vector with message `a`.
-    ///    * `c_rgsw` - The NTTRGSW ciphertext vector with message `b`.
-    ///    * Output - An LWE ciphertext LWE(c), where c = 1 if  a > b; c = -1 otherwise.
+    /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
+    ///
+    /// # Arguments.
+    ///
+    /// * `c_rlwe` - The RLWE ciphertext vector with message `a`.
+    /// * `c_rgsw` - The NTTRGSW ciphertext vector with message `b`.
+    /// * Output - An LWE ciphertext LWE(c), where c = 1 if  a > b; c = -1 otherwise.
     pub fn gt_arbhcmp(&self, c_rlwe: &[RLWE<F>], c_rgsw: &[NTTRGSW<F>]) -> LWE<F> {
         let len = c_rlwe.len();
         let poly_length = self.params.ring_dimension();
@@ -191,60 +190,59 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             let mut test = vec![F::zero(); poly_length];
             let mu = self.delta;
             test.iter_mut().for_each(|v| *v = mu);
-            res = self.fbs(new_lwe, &test);
+            res = self.fbs(new_lwe, Polynomial::new(test));
         }
         res
     }
 
-    ///    Performs the equal homomorphic operation of two ciphertexts.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `c_rlwe` - The RLWE ciphertext with message `a`.
-    ///    * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
-    ///    * Output - An LWE ciphertext LWE(c), where c = 1 if  a == b; c = -1 otherwise.
+    /// Performs the equal homomorphic operation of two ciphertexts.
+    ///
+    /// # Arguments.
+    ///
+    /// * `c_rlwe` - The RLWE ciphertext with message `a`.
+    /// * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
+    /// * Output - An LWE ciphertext LWE(c), where c = 1 if  a == b; c = -1 otherwise.
     pub fn eq_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
-        let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
-        let mut c = c.extract_lwe();
+        let mut c = c_rlwe.mul_ntt_rgsw(c_rgsw).extract_lwe_locally();
         for elem in c.a_mut().iter_mut() {
             *elem = *elem + *elem;
         }
-        *c.b_mut() = *c.b_mut() + *c.b_mut();
-        *c.b_mut() -= self.delta;
+        *c.b_mut() = c.b() + c.b() - self.delta;
         c
     }
 
-    ///    Performs the equal homomorphic operation of two ciphertexts.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `c_rlwe` - The RLWE ciphertext vector with message `a`.
-    ///    * `c_rgsw` - The NTTRGSW ciphertext vector with message `b`.
-    ///    * Output - An LWE ciphertext LWE(c), where c = 1 if  a == b; c = -1 otherwise.
+    /// Performs the equal homomorphic operation of two ciphertexts.
+    ///
+    /// # Arguments.
+    ///
+    /// * `c_rlwe` - The RLWE ciphertext vector with message `a`.
+    /// * `c_rgsw` - The NTTRGSW ciphertext vector with message `b`.
+    /// * Output - An LWE ciphertext LWE(c), where c = 1 if  a == b; c = -1 otherwise.
     pub fn eq_arbhcmp(&self, c_rlwe: &[RLWE<F>], c_rgsw: &[NTTRGSW<F>]) -> LWE<F> {
         let len = c_rlwe.len();
         assert_eq!(len, c_rgsw.len());
         assert!(len > 0);
+
         // the comparison result of the first digit
         let hcmp = self.eq_hcmp(&c_rlwe[0], &c_rgsw[0]);
+
         // the comparison result of the other digit
-        let mut res = hcmp;
-        for i in 1..len {
-            //only when low_res = delta and gt_res = delta, the res will be delta, otherwise res will be -delta
-            let low_res = res;
-            let gt_res = self.eq_hcmp(&c_rlwe[i], &c_rgsw[i]);
-            res = self.homand(&low_res, &gt_res);
-        }
-        res
+        c_rlwe[1..]
+            .iter()
+            .zip(&c_rgsw[1..])
+            .fold(hcmp, |low_res, (r, g)| {
+                let gt_res = self.eq_hcmp(r, g);
+                self.homand(&low_res, &gt_res)
+            })
     }
 
-    ///    Performs the less_than homomorphic operation of two ciphertexts.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `c_rlwe` - The RLWE ciphertext with message `a`.
-    ///    * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
-    ///    * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
+    /// Performs the less_than homomorphic operation of two ciphertexts.
+    ///
+    /// # Arguments.
+    ///
+    /// * `c_rlwe` - The RLWE ciphertext with message `a`.
+    /// * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
+    /// * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
     pub fn lt_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
         let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
         let mut test_poly = vec![F::one(); self.params.ring_dimension()];
@@ -252,16 +250,16 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
         let test_poly = Polynomial::new(test_poly);
         let c_a = c.a() * &test_poly;
         let c_b = c.b() * &test_poly;
-        RLWE::new(c_a, c_b).extract_lwe()
+        RLWE::new(c_a, c_b).extract_lwe_locally()
     }
 
-    ///    Performs the less_than homomorphic operation of two ciphertexts.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `c_rlwe` - The RLWE ciphertext vector with message `a`.
-    ///    * `c_rgsw` - The NTTRGSW ciphertext vector with message `b`.
-    ///    * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
+    /// Performs the less_than homomorphic operation of two ciphertexts.
+    ///
+    /// # Arguments.
+    ///
+    /// * `c_rlwe` - The RLWE ciphertext vector with message `a`.
+    /// * `c_rgsw` - The NTTRGSW ciphertext vector with message `b`.
+    /// * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
     pub fn lt_arbhcmp(&self, c_rlwe: &[RLWE<F>], c_rgsw: &[NTTRGSW<F>]) -> LWE<F> {
         let len = c_rlwe.len();
         let poly_length = self.params.ring_dimension();
@@ -322,14 +320,14 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
             If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
             */
-            res = self.fbs(new_lwe, &test)
+            res = self.fbs(new_lwe, Polynomial::new(test))
         }
         res
     }
 }
 
 impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
-    ///    Create a new encryptor instance.
+    /// Create a new encryptor instance.
     pub fn new(secret_key: &SecretKeyPack<C, F>) -> Self {
         let ntt_ring_secret_key = secret_key.ntt_ring_secret_key().clone();
         let params = *secret_key.parameters();
@@ -347,33 +345,33 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         }
     }
 
-    ///    Return a reference to the parameter.
+    /// Return a reference to the parameter.
     pub fn params(&self) -> &Parameters<C, F> {
         &self.params
     }
 
-    ///    Return a reference to the ring secret key.
+    /// Return a reference to the ring secret key.
     pub fn ntt_ring_secret_key(&self) -> &NTTPolynomial<F> {
         &self.ntt_ring_secret_key
     }
 
-    ///    Return error sampler
+    /// Return error sampler
     pub fn error_sampler(&self) -> FieldDiscreteGaussianSampler {
         self.error_sampler
     }
 
-    ///    Return delta
+    /// Return delta
     pub fn delta(&self) -> F {
         self.delta
     }
 
-    ///    Performs the encryption to rlwe ciphertext of a number.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `num` - The number to be encrypted with message `a`.
-    ///    * `rng` - The random value used for encryption.
-    ///    * Output - An RLWE ciphertext vector RLWE(a).
+    /// Performs the encryption to rlwe ciphertext of a number.
+    ///
+    /// # Arguments.
+    ///
+    /// * `num` - The number to be encrypted with message `a`.
+    /// * `rng` - The random value used for encryption.
+    /// * Output - An RLWE ciphertext vector RLWE(a).
     pub fn rlwe_encrypt<R: CryptoRng + Rng>(&self, mut num: usize, mut rng: R) -> Vec<RLWE<F>> {
         let key = &self.ntt_ring_secret_key;
         let ring_dimension = key.coeff_count();
@@ -387,13 +385,13 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         self.rlwe_values(&num_vec, &mut rng)
     }
 
-    ///    Performs the encryption to nttrgsw ciphertext vector of a number.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `num` - The number to be encrypted with message `a`.
-    ///    * `rng` - The random value used for encryption.
-    ///    * Output - An NTTRGSW ciphertext vector NTTRGSW(a).
+    /// Performs the encryption to nttrgsw ciphertext vector of a number.
+    ///
+    /// # Arguments.
+    ///
+    /// * `num` - The number to be encrypted with message `a`.
+    /// * `rng` - The random value used for encryption.
+    /// * Output - An NTTRGSW ciphertext vector NTTRGSW(a).
     pub fn rgsw_encrypt<R: CryptoRng + Rng>(&self, mut num: usize, mut rng: R) -> Vec<NTTRGSW<F>> {
         let key = &self.ntt_ring_secret_key;
         let ring_dimension = key.coeff_count();
@@ -407,13 +405,13 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         self.rgsw_values(&num_vec, &mut rng)
     }
 
-    ///    Performs the generation of ciphertext to nttrgsw ciphertext vector of a number that has been devided into a vector.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `values` - The vector to be encrypted with message `a`.
-    ///    * `rng` - The random value used for encryption.
-    ///    * Output - An NTTRGSW ciphertext vector NTTRGSW(a).
+    /// Performs the generation of ciphertext to nttrgsw ciphertext vector of a number that has been devided into a vector.
+    ///
+    /// # Arguments.
+    ///
+    /// * `values` - The vector to be encrypted with message `a`.
+    /// * `rng` - The random value used for encryption.
+    /// * Output - An NTTRGSW ciphertext vector NTTRGSW(a).
     fn rgsw_values<R: CryptoRng + Rng>(&self, values: &[usize], mut rng: R) -> Vec<NTTRGSW<F>> {
         let len = values.len();
         let mut res = Vec::with_capacity(len);
@@ -431,13 +429,13 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         res
     }
 
-    ///    Performs the generation of ciphertext to rlwe ciphertext vector of a number that has been devided into a vector.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `values` - The vector to be encrypted with message `a`.
-    ///    * `rng` - The random value used for encryption.
-    ///    * Output - An RLWE ciphertext vector RLWE(a).
+    /// Performs the generation of ciphertext to rlwe ciphertext vector of a number that has been devided into a vector.
+    ///
+    /// # Arguments.
+    ///
+    /// * `values` - The vector to be encrypted with message `a`.
+    /// * `rng` - The random value used for encryption.
+    /// * Output - An RLWE ciphertext vector RLWE(a).
     fn rlwe_values<R: CryptoRng + Rng>(&self, values: &[usize], mut rng: R) -> Vec<RLWE<F>> {
         let len = values.len();
         let mut res = Vec::with_capacity(len);
@@ -454,13 +452,13 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         res
     }
 
-    ///    Performs the alignment of the rlwe ciphertext vector and the nttrgsw ciphertext vector
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `cipher1` - The RLWE ciphertext vector.
-    ///    * `cipher2` - The NTTRGSW ciphertext vector.
-    ///    * Output - The two ciphertexts which have the same number of elements in vectors.
+    /// Performs the alignment of the rlwe ciphertext vector and the nttrgsw ciphertext vector
+    ///
+    /// # Arguments.
+    ///
+    /// * `cipher1` - The RLWE ciphertext vector.
+    /// * `cipher2` - The NTTRGSW ciphertext vector.
+    /// * Output - The two ciphertexts which have the same number of elements in vectors.
     pub fn align<R: CryptoRng + Rng>(
         &self,
         mut cipher1: Vec<RLWE<F>>,
@@ -501,13 +499,13 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         (cipher1, cipher2)
     }
 
-    ///    Performs the rotation of rlwe ciphertext.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `ciphertext` - The rlwe ciphertext to be turned with message `a`.
-    ///    * `num` - The times that the ciphertext will be rotated.
-    ///    * Output - An RLWE ciphertext RLWE(a^num).
+    /// Performs the rotation of rlwe ciphertext.
+    ///
+    /// # Arguments.
+    ///
+    /// * `ciphertext` - The rlwe ciphertext to be turned with message `a`.
+    /// * `num` - The times that the ciphertext will be rotated.
+    /// * Output - An RLWE ciphertext RLWE(a^num).
     fn rlwe_turn(ciphertext: &mut RLWE<F>, num: usize) {
         let (a, b) = ciphertext.a_b_mut_slices();
         a.rotate_right(num);
@@ -520,46 +518,54 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         }
     }
 
-    ///    Performs the rotation of nttrgsw ciphertext.
-    ///   
-    ///    # Arguments.
-    ///   
-    ///    * `ciphertext` - The nttrgsw ciphertext to be turned with message `a`.
-    ///    * `num` - The times that the ciphertext will be rotated.
-    ///    * Output - An NTTRGSW ciphertext NTTRGSW(a^-num).
+    /// Performs the rotation of nttrgsw ciphertext.
+    ///
+    /// # Arguments.
+    ///
+    /// * `ciphertext` - The nttrgsw ciphertext to be turned with message `a`.
+    /// * `num` - The times that the ciphertext will be rotated.
+    /// * Output - An NTTRGSW ciphertext NTTRGSW(a^-num).
     fn ntt_rgsw_turn(&self, ciphertext: &mut NTTRGSW<F>, num: usize) {
         let ring_dimension = self.params.ring_dimension();
         let basis = self.params.blind_rotation_basis();
+
         let neg_num = if num != 0 {
             (ring_dimension << 1) - num
         } else {
             0
         };
+
         let mut poly = NTTPolynomial::new(vec![F::zero(); ring_dimension]);
         let ntt_table = F::get_ntt_table(ring_dimension.trailing_zeros()).unwrap();
         ntt_table.transform_coeff_one_monomial(neg_num, poly.as_mut_slice());
+
+        let scalar = F::lazy_new(basis.basis());
+        // TODO: Reduce this clone
         let mut poly_c = poly.clone();
+
         ciphertext.c_neg_s_m_mut().iter_mut().for_each(|rlwe| {
             *rlwe.a_mut() += &poly;
-            poly.mul_scalar_assign(F::lazy_new(basis.basis()));
+            poly.mul_scalar_assign(scalar);
         });
         ciphertext.c_m_mut().iter_mut().for_each(|rlwe| {
             *rlwe.b_mut() += &poly_c;
-            poly_c.mul_scalar_assign(F::lazy_new(basis.basis()));
+            poly_c.mul_scalar_assign(scalar);
         });
     }
 }
 
-///    Performs the decryption operation.
+/// Performs the decryption operation.
 pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -> u64 {
-    let a_mul_s = sk
+    let a_mul_s = ciphertext
+        .a()
         .iter()
-        .zip(ciphertext.a())
-        .fold(F::zero(), |acc, (&s, &a)| acc + s * a);
+        .zip(sk)
+        .fold(F::zero(), |acc, (&s, &a)| acc.add_mul(s, a));
     decode(ciphertext.b() - a_mul_s)
 }
 
-///    Performs the operation turning an encoded value to its real number.
+/// Performs the operation turning an encoded value to its real number.
 pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
+    // TODO: Do not use constant value
     (c.value() as f64 * 8_f64 / 132120577_f64).round() as u64 % 8
 }

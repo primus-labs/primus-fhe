@@ -7,8 +7,8 @@ use once_cell::sync::Lazy;
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
-///FF size
 pub struct FF(pub u64);
+
 /// inner type
 pub type Inner = u64;
 /// ciphertext space
@@ -33,7 +33,7 @@ pub static DEFAULT_PARAMETERS: Lazy<Parameters<u64, FF>> = Lazy::new(|| {
         ring_modulus: 132120577,
         ring_noise_standard_deviation: 3.20 * ((1 << 1) as f64),
         ring_secret_key_type: RingSecretKeyType::Binary,
-        blind_rotation_basis_bits: 1,
+        blind_rotation_basis_bits: 3,
         key_switching_basis_bits: 1,
         key_switching_standard_deviation: 3.2 * ((1 << 1) as f64),
         modulus_switching_round_method: ModulusSwitchRoundMethod::Round,

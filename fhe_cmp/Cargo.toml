@@ -16,3 +16,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+
+[[bench]]
+name = "cmp_bench"
+harness = false
