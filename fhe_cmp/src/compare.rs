@@ -116,10 +116,15 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     /// * Output - An LWE ciphertext LWE(c), where c = 1 if  a > b; c = -1 otherwise.
     pub fn gt_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
         let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
-        let test_poly = Polynomial::new(vec![F::neg_one(); self.params.ring_dimension()]);
-        let c_a = c.a() * &test_poly;
-        let c_b = c.b() * &test_poly;
-        RLWE::new(c_a, c_b).extract_lwe()
+
+        let test_poly =
+            Polynomial::new(vec![F::neg_one(); self.params.ring_dimension()]).into_ntt_polynomial();
+
+        let (a, b) = c.given_a_b();
+        let c_a = a * &test_poly;
+        let c_b = b * &test_poly;
+
+        RLWE::new(c_a, c_b).extract_lwe_locally()
     }
 
     /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
@@ -131,7 +136,6 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     /// * Output - An LWE ciphertext LWE(c), where c = 1 if  a > b; c = -1 otherwise.
     pub fn gt_arbhcmp(&self, c_rlwe: &[RLWE<F>], c_rgsw: &[NTTRGSW<F>]) -> LWE<F> {
         let len = c_rlwe.len();
-        let poly_length = self.params.ring_dimension();
         assert_eq!(len, c_rgsw.len());
         assert!(len > 0);
         //for the first digit in two vectors
@@ -143,17 +147,17 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             // low_part_gt_res = ciphers1[0: cipher_size - 1] > ciphers2[0: cipher_size - 1]
             // low_part_gt_res = delta (true) or -delta (false)
             let low_part_gt_res = res;
+
             // Evaluate the highest digit comparison
             // eq_res = ciphers1[cipher_size - 1] == ciphers2[cipher_size - 1]
             // eq_res = delta (true) or 0 (false)
-            let eq_res = c_rlwe[i]
-                .mul_ntt_rgsw(&c_rgsw[i])
-                .extract_lwe_locally()
-                .clone();
+            let eq_res = c_rlwe[i].mul_ntt_rgsw(&c_rgsw[i]).extract_lwe_locally();
+
             // Evaluate the highest digit comparison
             // high_res = ciphers1[cipher_size - 1] > ciphers2[cipher_size - 1]
             // high_res = delta (true)  or -delta (false)
-            let mut gt_res = self.gt_hcmp(&c_rlwe[i], &c_rgsw[i]);
+            let gt_res = self.gt_hcmp(&c_rlwe[i], &c_rgsw[i]);
+
             /*
             Start GateMUX, this is an optimized-version of GateMUX, not general version of GateMUX in the paper.
             Evaluate a linear transformation of the low_res, equal_res, high_res
@@ -174,22 +178,17 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             if new_lwe < 0, expect_compare_res = false
             if new_lwe > 0, expect_compare_res = true
             */
-            for elem in gt_res.a_mut().iter_mut() {
-                *elem = *elem + *elem;
-            }
-            *gt_res.b_mut() = gt_res.b() + gt_res.b();
             let mut new_lwe = eq_res
-                .add_component_wise(&low_part_gt_res)
-                .add_component_wise(&gt_res);
-            *new_lwe.b_mut() = new_lwe.b() + self.half_delta;
+                .add_component_wise(&gt_res)
+                .add_component_wise(&gt_res)
+                .add_component_wise(&low_part_gt_res);
+            *new_lwe.b_mut() += self.half_delta;
             /*
             Start gate bootstrapping, test_vector = delta + delta*X + ... + delta*X^{n-1}
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
             If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
             */
-            let mut test = vec![F::zero(); poly_length];
-            let mu = self.delta;
-            test.iter_mut().for_each(|v| *v = mu);
+            let test = vec![self.delta; self.params.ring_dimension()];
             res = self.fbs(new_lwe, Polynomial::new(test));
         }
         res
@@ -245,11 +244,16 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     /// * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
     pub fn lt_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
         let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
+
         let mut test_poly = vec![F::one(); self.params.ring_dimension()];
         test_poly[0] = F::neg_one();
-        let test_poly = Polynomial::new(test_poly);
-        let c_a = c.a() * &test_poly;
-        let c_b = c.b() * &test_poly;
+        let test_poly = Polynomial::new(test_poly).into_ntt_polynomial();
+
+        let (a, b) = c.given_a_b();
+
+        let c_a = a * &test_poly;
+        let c_b = b * &test_poly;
+
         RLWE::new(c_a, c_b).extract_lwe_locally()
     }
 
@@ -262,9 +266,9 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     /// * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
     pub fn lt_arbhcmp(&self, c_rlwe: &[RLWE<F>], c_rgsw: &[NTTRGSW<F>]) -> LWE<F> {
         let len = c_rlwe.len();
-        let poly_length = self.params.ring_dimension();
         assert_eq!(len, c_rgsw.len());
         assert!(len > 0);
+
         // Vector contains only one element
         let hcmp = self.lt_hcmp(&c_rlwe[0], &c_rgsw[0]);
         let mut res = hcmp;
@@ -273,17 +277,17 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             // low_part_gt_res = ciphers1[0: cipher_size - 1] < ciphers2[0: cipher_size - 1]
             // low_part_gt_res = delta (true) or -delta (false)
             let low_part_gt_res = res;
+
             // Evaluate the highest digit comparison
             // equal_res = ciphers1[cipher_size - 1] == ciphers2[cipher_size - 1]
             // equal_res = delta (true) or 0 (false)
-            let eq_res = c_rlwe[i]
-                .mul_ntt_rgsw(&c_rgsw[i])
-                .extract_lwe_locally()
-                .clone();
+            let eq_res = c_rlwe[i].mul_ntt_rgsw(&c_rgsw[i]).extract_lwe_locally();
+
             // Evaluate the highest digit comparison
             // high_res = ciphers1[cipher_size - 1] < ciphers2[cipher_size - 1]
             // high_res = delta or -delta
-            let mut gt_res = self.lt_hcmp(&c_rlwe[i], &c_rgsw[i]);
+            let gt_res = self.lt_hcmp(&c_rlwe[i], &c_rgsw[i]);
+
             /*
             Start GateMUX, this is an optimized-version of GateMUX, not general version of GateMUX in the paper.
             Evaluate a linear transformation of the low_res, equal_res, high_res
@@ -304,17 +308,12 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             if new_lwe > 0, expect_compare_res = true
             if new_lwe < 0, expect_compare_res = false
             */
-            for elem in gt_res.a_mut().iter_mut() {
-                *elem = *elem + *elem;
-            }
-            *gt_res.b_mut() = gt_res.b() + gt_res.b();
             let mut new_lwe = eq_res
-                .add_component_wise(&low_part_gt_res)
-                .add_component_wise(&gt_res);
-            *new_lwe.b_mut() = new_lwe.b() + self.half_delta;
-            let mut test = vec![F::zero(); poly_length];
-            let mu = self.delta;
-            test.iter_mut().for_each(|v| *v = mu);
+                .add_component_wise(&gt_res)
+                .add_component_wise(&gt_res)
+                .add_component_wise(&low_part_gt_res);
+            *new_lwe.b_mut() += self.half_delta;
+            let test = vec![self.delta; self.params.ring_dimension()];
             /*
             Start gate bootstrapping, test_vector = delta + deltaX + ... + deltaX^{n-1}
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta

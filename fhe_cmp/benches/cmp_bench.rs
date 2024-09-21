@@ -12,25 +12,44 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // set parameter
     let param = *DEFAULT_PARAMETERS;
     // generate keys
-    let sk = SecretKeyPack::new(param);
+    let skp = SecretKeyPack::new(param);
     println!("Secret Key Generation done!\n");
 
-    let rotation_key = HomomorphicCmpScheme::new(&sk);
-    let enc_elements = Encryptor::new(&sk);
+    let rotation_key = HomomorphicCmpScheme::new(&skp);
+    let encryptor = Encryptor::new(&skp);
     println!("Evaluation Key Generation done!\n");
 
-    let x = rng.gen();
-    let y = rng.gen();
-    let value1 = enc_elements.rlwe_encrypt(x, &mut rng);
-    let value2 = enc_elements.rgsw_encrypt(y, &mut rng);
+    let n = param.ring_dimension();
+    let n2 = n.checked_mul(n).unwrap();
+    let n3 = n2.checked_mul(n).unwrap();
 
-    c.bench_function("less comparison", |b| {
-        b.iter(|| rotation_key.lt_arbhcmp(&value1, &value2))
+    let x = rng.gen_range(0..n);
+    let y = rng.gen_range(0..n);
+    let value1 = encryptor.rlwe_encrypt(x, &mut rng);
+    let value2 = encryptor.rgsw_encrypt(y, &mut rng);
+
+    c.bench_function("less comparison: 1 chunks", |b| {
+        b.iter(|| rotation_key.lt_arbhcmp(black_box(&value1), black_box(&value2)))
     });
-    c.bench_function("equality comparison", |b| {
+    c.bench_function("equality comparison: 1 chunks", |b| {
         b.iter(|| rotation_key.eq_arbhcmp(black_box(&value1), black_box(&value2)))
     });
-    c.bench_function("greater comparison", |b| {
+    c.bench_function("greater comparison: 1 chunks", |b| {
+        b.iter(|| rotation_key.gt_arbhcmp(black_box(&value1), black_box(&value2)))
+    });
+
+    let x = rng.gen_range(n2..n3);
+    let y = rng.gen_range(n2..n3);
+    let value1 = encryptor.rlwe_encrypt(x, &mut rng);
+    let value2 = encryptor.rgsw_encrypt(y, &mut rng);
+
+    c.bench_function("less comparison: 3 chunks", |b| {
+        b.iter(|| rotation_key.lt_arbhcmp(black_box(&value1), black_box(&value2)))
+    });
+    c.bench_function("equality comparison: 3 chunks", |b| {
+        b.iter(|| rotation_key.eq_arbhcmp(black_box(&value1), black_box(&value2)))
+    });
+    c.bench_function("greater comparison: 3 chunks", |b| {
         b.iter(|| rotation_key.gt_arbhcmp(black_box(&value1), black_box(&value2)))
     });
 }
