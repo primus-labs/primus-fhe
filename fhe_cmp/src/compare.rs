@@ -559,6 +559,5 @@ pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -
 
 /// Performs the operation turning an encoded value to its real number.
 pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
-    // TODO: Do not use constant value
-    (c.value() as f64 * 8_f64 / 132120577_f64).round() as u64 % 8
+    (c.value() as f64 * 8_f64 / F::MODULUS_VALUE as f64).round() as u64 % 8
 }
