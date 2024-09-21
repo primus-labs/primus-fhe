@@ -404,7 +404,7 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         self.rgsw_values(&num_vec, &mut rng)
     }
 
-    /// Performs the generation of ciphertext to nttrgsw ciphertext vector of a number that has been devided into a vector.
+    /// Performs the generation of ciphertext to nttrgsw ciphertext vector of a number that has been divided into a vector.
     ///
     /// # Arguments.
     ///
@@ -428,7 +428,7 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
         res
     }
 
-    /// Performs the generation of ciphertext to rlwe ciphertext vector of a number that has been devided into a vector.
+    /// Performs the generation of ciphertext to rlwe ciphertext vector of a number that has been divided into a vector.
     ///
     /// # Arguments.
     ///

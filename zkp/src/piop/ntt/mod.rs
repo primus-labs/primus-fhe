@@ -235,7 +235,7 @@ pub fn naive_w_power_times_x_table<F: Field>(
 ///
 /// * Note that the above equation only holds for exp <= logM - x_dim;
 /// * otherwise, the exponent 2^exp * x involves a modular addition, disabling the decomposition.
-///   (Although I am not clearly making it out, the experiement result shows the above argument.)
+///   (Although I am not clearly making it out, the experiment result shows the above argument.)
 ///
 /// # Arguments:
 ///
