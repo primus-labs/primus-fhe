@@ -9,17 +9,6 @@ use once_cell::sync::Lazy;
 #[modulus = 132120577]
 pub struct FF(pub u64);
 
-/// inner type
-pub type Inner = u64;
-/// ciphertext space
-pub const FP: Inner = 132120577;
-/// message space
-pub const FT: Inner = 8;
-///encode of 1
-pub const DELTA: FF = FF((FP as f64 / FT as f64) as Inner);
-///encode of 1/2
-pub const HALF_DELTA: FF = FF((FP as f64 / (FT as f64 * 2.0)) as Inner);
-
 /// FF security default field
 pub static DEFAULT_PARAMETERS: Lazy<Parameters<u64, FF>> = Lazy::new(|| {
     Parameters::<u64, FF>::new(ConstParameters {

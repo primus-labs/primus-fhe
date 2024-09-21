@@ -1,17 +1,15 @@
 use algebra::{FieldDiscreteGaussianSampler, NTTField, Polynomial};
 use fhe_cmp::{
     compare::{decrypt, Encryptor, HomomorphicCmpScheme},
-    parameters::{DEFAULT_PARAMETERS, DELTA, FF},
+    parameters::{DEFAULT_PARAMETERS, FF},
 };
 use fhe_core::{Parameters, SecretKeyPack};
 use lattice::{LWE, NTTRGSW, RLWE};
 use once_cell::sync::OnceCell;
 use rand::prelude::*;
-static mut INSTANCE_PARAM: OnceCell<InitializationDataParam> = OnceCell::new();
-static mut INSTANCE_CIPHER: OnceCell<InitializationDataCipher> = OnceCell::new();
 
 struct InitializationDataParam {
-    sk: SecretKeyPack<u64, FF>,
+    skp: SecretKeyPack<u64, FF>,
     rotationkey: HomomorphicCmpScheme<u64, FF>,
     param: Parameters<u64, FF>,
 }
@@ -27,74 +25,81 @@ struct InitializationDataCipher {
     rgsw_arbhcmpcipher_small: Vec<NTTRGSW<FF>>,
 }
 
-fn init_param() {
+fn get_params() -> &'static InitializationDataParam {
+    static mut INSTANCE_PARAM: OnceCell<InitializationDataParam> = OnceCell::new();
+
     unsafe {
         INSTANCE_PARAM.get_or_init(|| {
             let param = *DEFAULT_PARAMETERS;
-            let sk = SecretKeyPack::new(param);
-            let rotationkey = HomomorphicCmpScheme::new(&sk);
+            let skp = SecretKeyPack::new(param);
+            let rotationkey = HomomorphicCmpScheme::new(&skp);
             InitializationDataParam {
-                sk,
+                skp,
                 rotationkey,
                 param,
             }
-        });
+        })
     }
 }
 
-fn init_cipher() {
-    unsafe {
-        INSTANCE_CIPHER.get_or_init(|| {
-            init_param();
-            let param_data = INSTANCE_PARAM.get().unwrap();
-            let mut rng = thread_rng();
-            let hcmp_great = 10;
-            let hcmp_small = 5;
-            let arbhcmp_great = 1030;
-            let arbhcmp_small = 1025;
-            let enc_elements = Encryptor::new(&param_data.sk);
-            let value1_hcmp_great = enc_elements.rlwe_encrypt(hcmp_great, &mut rng);
-            let value1_hcmp_small = enc_elements.rlwe_encrypt(hcmp_small, &mut rng);
-            let value2_hcmp_great = enc_elements.rgsw_encrypt(hcmp_great, &mut rng);
-            let value2_hcmp_small = enc_elements.rgsw_encrypt(hcmp_small, &mut rng);
-            let value1_arbhcmp_great = enc_elements.rlwe_encrypt(arbhcmp_great, &mut rng);
-            let value1_arbhcmp_small = enc_elements.rlwe_encrypt(arbhcmp_small, &mut rng);
-            let value2_arbhcmp_great = enc_elements.rgsw_encrypt(arbhcmp_great, &mut rng);
-            let value2_arbhcmp_small = enc_elements.rgsw_encrypt(arbhcmp_small, &mut rng);
-            InitializationDataCipher {
-                rlwe_hcmpcipher_great: value1_hcmp_great,
-                rgsw_hcmpcipher_great: value2_hcmp_great,
-                rlwe_hcmpcipher_small: value1_hcmp_small,
-                rgsw_hcmpcipher_small: value2_hcmp_small,
-                rlwe_arbhcmpcipher_great: value1_arbhcmp_great,
-                rgsw_arbhcmpcipher_great: value2_arbhcmp_great,
-                rlwe_arbhcmpcipher_small: value1_arbhcmp_small,
-                rgsw_arbhcmpcipher_small: value2_arbhcmp_small,
-            }
-        });
-    }
+fn get_ciphers() -> &'static InitializationDataCipher {
+    static INSTANCE_CIPHER: OnceCell<InitializationDataCipher> = OnceCell::new();
+
+    INSTANCE_CIPHER.get_or_init(|| {
+        let param_data = get_params();
+
+        let n = param_data.param.ring_dimension();
+
+        let mut rng = thread_rng();
+
+        let hcmp_great = rng.gen_range(1..n);
+        let hcmp_small = rng.gen_range(0..hcmp_great);
+        let arbhcmp_great = rng.gen_range(1..(n * n));
+        let arbhcmp_small = rng.gen_range(0..arbhcmp_great);
+
+        let encryptor = Encryptor::new(&param_data.skp);
+
+        let value1_hcmp_great = encryptor.rlwe_encrypt(hcmp_great, &mut rng);
+        let value1_hcmp_small = encryptor.rlwe_encrypt(hcmp_small, &mut rng);
+        let value2_hcmp_great = encryptor.rgsw_encrypt(hcmp_great, &mut rng);
+        let value2_hcmp_small = encryptor.rgsw_encrypt(hcmp_small, &mut rng);
+        let value1_arbhcmp_great = encryptor.rlwe_encrypt(arbhcmp_great, &mut rng);
+        let value1_arbhcmp_small = encryptor.rlwe_encrypt(arbhcmp_small, &mut rng);
+        let value2_arbhcmp_great = encryptor.rgsw_encrypt(arbhcmp_great, &mut rng);
+        let value2_arbhcmp_small = encryptor.rgsw_encrypt(arbhcmp_small, &mut rng);
+        InitializationDataCipher {
+            rlwe_hcmpcipher_great: value1_hcmp_great,
+            rgsw_hcmpcipher_great: value2_hcmp_great,
+            rlwe_hcmpcipher_small: value1_hcmp_small,
+            rgsw_hcmpcipher_small: value2_hcmp_small,
+            rlwe_arbhcmpcipher_great: value1_arbhcmp_great,
+            rgsw_arbhcmpcipher_great: value2_arbhcmp_great,
+            rlwe_arbhcmpcipher_small: value1_arbhcmp_small,
+            rgsw_arbhcmpcipher_small: value2_arbhcmp_small,
+        }
+    })
 }
 
 #[test]
 #[ignore = "slow"]
 fn test_gt_hcmp() {
-    init_param();
-    init_cipher();
-    let data = unsafe { INSTANCE_CIPHER.get().unwrap() };
-    let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
-    let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
+    let param_data = get_params();
+    let ciphers = get_ciphers();
+
     let gt_cipher_1 = param_data.rotationkey.gt_hcmp(
-        &data.rlwe_hcmpcipher_great[0],
-        &data.rgsw_hcmpcipher_small[0],
+        &ciphers.rlwe_hcmpcipher_great[0],
+        &ciphers.rgsw_hcmpcipher_small[0],
     );
     let gt_cipher_2 = param_data.rotationkey.gt_hcmp(
-        &data.rlwe_hcmpcipher_great[0],
-        &data.rgsw_hcmpcipher_great[0],
+        &ciphers.rlwe_hcmpcipher_great[0],
+        &ciphers.rgsw_hcmpcipher_great[0],
     );
     let gt_cipher_3 = param_data.rotationkey.gt_hcmp(
-        &data.rlwe_hcmpcipher_small[0],
-        &data.rgsw_hcmpcipher_great[0],
+        &ciphers.rlwe_hcmpcipher_small[0],
+        &ciphers.rgsw_hcmpcipher_great[0],
     );
+
+    let rlwe_sk = param_data.skp.ring_secret_key().as_slice();
     let gt_value_1 = decrypt(rlwe_sk, gt_cipher_1);
     let gt_value_2 = decrypt(rlwe_sk, gt_cipher_2);
     let gt_value_3 = decrypt(rlwe_sk, gt_cipher_3);
@@ -106,23 +111,23 @@ fn test_gt_hcmp() {
 #[test]
 #[ignore = "slow"]
 fn test_eq_hcmp() {
-    init_param();
-    init_cipher();
-    let data = unsafe { INSTANCE_CIPHER.get().unwrap() };
-    let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
-    let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
+    let param_data = get_params();
+    let ciphers = get_ciphers();
+
     let eq_cipher_1 = param_data.rotationkey.eq_hcmp(
-        &data.rlwe_hcmpcipher_great[0],
-        &data.rgsw_hcmpcipher_small[0],
+        &ciphers.rlwe_hcmpcipher_great[0],
+        &ciphers.rgsw_hcmpcipher_small[0],
     );
     let eq_cipher_2 = param_data.rotationkey.eq_hcmp(
-        &data.rlwe_hcmpcipher_great[0],
-        &data.rgsw_hcmpcipher_great[0],
+        &ciphers.rlwe_hcmpcipher_great[0],
+        &ciphers.rgsw_hcmpcipher_great[0],
     );
     let eq_cipher_3 = param_data.rotationkey.eq_hcmp(
-        &data.rlwe_hcmpcipher_small[0],
-        &data.rgsw_hcmpcipher_great[0],
+        &ciphers.rlwe_hcmpcipher_small[0],
+        &ciphers.rgsw_hcmpcipher_great[0],
     );
+
+    let rlwe_sk = param_data.skp.ring_secret_key().as_slice();
     let eq_value_1 = decrypt(rlwe_sk, eq_cipher_1);
     let eq_value_2 = decrypt(rlwe_sk, eq_cipher_2);
     let eq_value_3 = decrypt(rlwe_sk, eq_cipher_3);
@@ -134,23 +139,23 @@ fn test_eq_hcmp() {
 #[test]
 #[ignore = "slow"]
 fn test_lt_hcmp() {
-    init_param();
-    init_cipher();
-    let data = unsafe { INSTANCE_CIPHER.get().unwrap() };
-    let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
-    let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
+    let param_data = get_params();
+    let ciphers = get_ciphers();
+
     let lt_cipher_1 = param_data.rotationkey.lt_hcmp(
-        &data.rlwe_hcmpcipher_great[0],
-        &data.rgsw_hcmpcipher_small[0],
+        &ciphers.rlwe_hcmpcipher_great[0],
+        &ciphers.rgsw_hcmpcipher_small[0],
     );
     let lt_cipher_2 = param_data.rotationkey.lt_hcmp(
-        &data.rlwe_hcmpcipher_great[0],
-        &data.rgsw_hcmpcipher_great[0],
+        &ciphers.rlwe_hcmpcipher_great[0],
+        &ciphers.rgsw_hcmpcipher_great[0],
     );
     let lt_cipher_3 = param_data.rotationkey.lt_hcmp(
-        &data.rlwe_hcmpcipher_small[0],
-        &data.rgsw_hcmpcipher_great[0],
+        &ciphers.rlwe_hcmpcipher_small[0],
+        &ciphers.rgsw_hcmpcipher_great[0],
     );
+
+    let rlwe_sk = param_data.skp.ring_secret_key().as_slice();
     let lt_value_1 = decrypt(rlwe_sk, lt_cipher_1);
     let lt_value_2 = decrypt(rlwe_sk, lt_cipher_2);
     let lt_value_3 = decrypt(rlwe_sk, lt_cipher_3);
@@ -162,27 +167,28 @@ fn test_lt_hcmp() {
 #[test]
 #[ignore = "slow"]
 fn test_homand() {
-    init_param();
-    let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
-    let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
+    let param_data = get_params();
+
+    let delta = param_data.rotationkey.delta();
+    let rlwe_sk = param_data.skp.ring_secret_key().as_slice();
     let sampler = param_data.param.ring_noise_distribution();
     let mut rng = thread_rng();
 
-    let lwe_delta_0 = lwe_generate(rlwe_sk, sampler, &mut rng, DELTA);
-    let lwe_delta_1 = lwe_generate(rlwe_sk, sampler, &mut rng, DELTA);
-    let lwe_delta_neg_0 = lwe_generate_neg(rlwe_sk, sampler, &mut rng, DELTA);
-    let lwe_delta_neg_1 = lwe_generate_neg(rlwe_sk, sampler, &mut rng, DELTA);
+    let lwe_delta_0 = lwe_generate(rlwe_sk, sampler, &mut rng, delta);
+    let lwe_delta_1 = lwe_generate(rlwe_sk, sampler, &mut rng, delta);
+    let lwe_delta_neg_0 = lwe_generate_neg(rlwe_sk, sampler, &mut rng, delta);
+    let lwe_delta_neg_1 = lwe_generate_neg(rlwe_sk, sampler, &mut rng, delta);
 
     let homand_cipher1 = param_data.rotationkey.homand(&lwe_delta_0, &lwe_delta_1);
     let homand_cipher2 = param_data
         .rotationkey
-        .homand(&lwe_delta_0, &lwe_delta_neg_0);
+        .homand(&lwe_delta_0, &lwe_delta_neg_1);
     let homand_cipher3 = param_data
         .rotationkey
-        .homand(&lwe_delta_neg_0, &lwe_delta_neg_1);
+        .homand(&lwe_delta_neg_0, &lwe_delta_1);
     let homand_cipher4 = param_data
         .rotationkey
-        .homand(&lwe_delta_neg_0, &lwe_delta_neg_0);
+        .homand(&lwe_delta_neg_0, &lwe_delta_neg_1);
 
     let output1 = decrypt(rlwe_sk, homand_cipher1);
     let output2 = decrypt(rlwe_sk, homand_cipher2);
@@ -197,23 +203,23 @@ fn test_homand() {
 #[test]
 #[ignore = "slow"]
 fn test_gt_arbhcmp() {
-    init_param();
-    init_cipher();
-    let data = unsafe { INSTANCE_CIPHER.get().unwrap() };
-    let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
-    let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
+    let param_data = get_params();
+    let ciphers = get_ciphers();
+
     let gt_cipher_1 = param_data.rotationkey.gt_arbhcmp(
-        &data.rlwe_arbhcmpcipher_great,
-        &data.rgsw_arbhcmpcipher_small,
+        &ciphers.rlwe_arbhcmpcipher_great,
+        &ciphers.rgsw_arbhcmpcipher_small,
     );
     let gt_cipher_2 = param_data.rotationkey.gt_arbhcmp(
-        &data.rlwe_arbhcmpcipher_great,
-        &data.rgsw_arbhcmpcipher_great,
+        &ciphers.rlwe_arbhcmpcipher_great,
+        &ciphers.rgsw_arbhcmpcipher_great,
     );
     let gt_cipher_3 = param_data.rotationkey.gt_arbhcmp(
-        &data.rlwe_arbhcmpcipher_small,
-        &data.rgsw_arbhcmpcipher_great,
+        &ciphers.rlwe_arbhcmpcipher_small,
+        &ciphers.rgsw_arbhcmpcipher_great,
     );
+
+    let rlwe_sk = param_data.skp.ring_secret_key().as_slice();
     let gt_value_1 = decrypt(rlwe_sk, gt_cipher_1);
     let gt_value_2 = decrypt(rlwe_sk, gt_cipher_2);
     let gt_value_3 = decrypt(rlwe_sk, gt_cipher_3);
@@ -225,23 +231,23 @@ fn test_gt_arbhcmp() {
 #[test]
 #[ignore = "slow"]
 fn test_eq_arbhcmp() {
-    init_param();
-    init_cipher();
-    let data = unsafe { INSTANCE_CIPHER.get().unwrap() };
-    let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
-    let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
+    let param_data = get_params();
+    let ciphers = get_ciphers();
+
     let eq_cipher_1 = param_data.rotationkey.eq_arbhcmp(
-        &data.rlwe_arbhcmpcipher_great,
-        &data.rgsw_arbhcmpcipher_small,
+        &ciphers.rlwe_arbhcmpcipher_great,
+        &ciphers.rgsw_arbhcmpcipher_small,
     );
     let eq_cipher_2 = param_data.rotationkey.eq_arbhcmp(
-        &data.rlwe_arbhcmpcipher_great,
-        &data.rgsw_arbhcmpcipher_great,
+        &ciphers.rlwe_arbhcmpcipher_great,
+        &ciphers.rgsw_arbhcmpcipher_great,
     );
     let eq_cipher_3 = param_data.rotationkey.eq_arbhcmp(
-        &data.rlwe_arbhcmpcipher_small,
-        &data.rgsw_arbhcmpcipher_great,
+        &ciphers.rlwe_arbhcmpcipher_small,
+        &ciphers.rgsw_arbhcmpcipher_great,
     );
+
+    let rlwe_sk = param_data.skp.ring_secret_key().as_slice();
     let eq_value_1 = decrypt(rlwe_sk, eq_cipher_1);
     let eq_value_2 = decrypt(rlwe_sk, eq_cipher_2);
     let eq_value_3 = decrypt(rlwe_sk, eq_cipher_3);
@@ -253,23 +259,23 @@ fn test_eq_arbhcmp() {
 #[test]
 #[ignore = "slow"]
 fn test_lt_arbhcmp() {
-    init_param();
-    init_cipher();
-    let data = unsafe { INSTANCE_CIPHER.get().unwrap() };
-    let param_data = unsafe { INSTANCE_PARAM.get().unwrap() };
-    let rlwe_sk = param_data.sk.ring_secret_key().as_slice();
+    let param_data = get_params();
+    let ciphers = get_ciphers();
+
     let lt_cipher_1 = param_data.rotationkey.lt_arbhcmp(
-        &data.rlwe_arbhcmpcipher_great,
-        &data.rgsw_arbhcmpcipher_small,
+        &ciphers.rlwe_arbhcmpcipher_great,
+        &ciphers.rgsw_arbhcmpcipher_small,
     );
     let lt_cipher_2 = param_data.rotationkey.lt_arbhcmp(
-        &data.rlwe_arbhcmpcipher_great,
-        &data.rgsw_arbhcmpcipher_great,
+        &ciphers.rlwe_arbhcmpcipher_great,
+        &ciphers.rgsw_arbhcmpcipher_great,
     );
     let lt_cipher_3 = param_data.rotationkey.lt_arbhcmp(
-        &data.rlwe_arbhcmpcipher_small,
-        &data.rgsw_arbhcmpcipher_great,
+        &ciphers.rlwe_arbhcmpcipher_small,
+        &ciphers.rgsw_arbhcmpcipher_great,
     );
+
+    let rlwe_sk = param_data.skp.ring_secret_key().as_slice();
     let lt_value_1 = decrypt(rlwe_sk, lt_cipher_1);
     let lt_value_2 = decrypt(rlwe_sk, lt_cipher_2);
     let lt_value_3 = decrypt(rlwe_sk, lt_cipher_3);

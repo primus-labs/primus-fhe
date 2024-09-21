@@ -461,42 +461,36 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
     /// * Output - The two ciphertexts which have the same number of elements in vectors.
     pub fn align<R: CryptoRng + Rng>(
         &self,
-        mut cipher1: Vec<RLWE<F>>,
-        mut cipher2: Vec<NTTRGSW<F>>,
+        cipher1: &mut Vec<RLWE<F>>,
+        cipher2: &mut Vec<NTTRGSW<F>>,
         mut rng: R,
-    ) -> (Vec<RLWE<F>>, Vec<NTTRGSW<F>>) {
+    ) {
         let len1 = cipher1.len();
         let len2 = cipher2.len();
         match len1.cmp(&len2) {
             std::cmp::Ordering::Greater => {
-                let differ = len1 - len2;
-                for _ in 0..differ {
-                    let mut rgsw = NTTRGSW::generate_random_zero_sample(
+                cipher2.resize_with(len1, || {
+                    NTTRGSW::generate_random_one_sample(
                         &self.ntt_ring_secret_key,
                         self.params.blind_rotation_basis(),
                         self.error_sampler,
                         &mut rng,
-                    );
-                    self.ntt_rgsw_turn(&mut rgsw, 0);
-                    cipher2.push(rgsw);
-                }
+                    )
+                });
             }
             std::cmp::Ordering::Equal => (),
             std::cmp::Ordering::Less => {
-                let differ = len2 - len1;
-                for _ in 0..differ {
+                cipher1.resize_with(len2, || {
                     let mut rlwe = RLWE::generate_random_zero_sample(
                         &self.ntt_ring_secret_key,
                         self.error_sampler,
                         &mut rng,
                     );
                     rlwe.b_mut()[0] += self.delta;
-                    Self::rlwe_turn(&mut rlwe, 0);
-                    cipher1.push(rlwe);
-                }
+                    rlwe
+                });
             }
         }
-        (cipher1, cipher2)
     }
 
     /// Performs the rotation of rlwe ciphertext.
