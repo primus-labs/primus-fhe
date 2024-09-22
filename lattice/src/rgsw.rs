@@ -283,6 +283,12 @@ impl<F: NTTField> NTTRGSW<F> {
         &mut self.c_m
     }
 
+    /// Returns two mutable references to the `c_m` and `c_neg_s_m` of this [`NTTRGSW<F>`].
+    #[inline]
+    pub fn two_parts_mut(&mut self) -> (&mut NTTGadgetRLWE<F>, &mut NTTGadgetRLWE<F>) {
+        (&mut self.c_m, &mut self.c_neg_s_m)
+    }
+
     /// Returns a reference to the basis of this [`NTTRGSW<F>`].
     #[inline]
     pub fn basis(&self) -> Basis<F> {

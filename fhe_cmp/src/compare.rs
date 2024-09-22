@@ -498,7 +498,7 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
     ///
     /// * `ciphertext` - The rlwe ciphertext to be turned with message `a`.
     /// * `num` - The times that the ciphertext will be rotated.
-    /// * Output - An RLWE ciphertext RLWE(a^num).
+    /// * Output - An RLWE ciphertext RLWE(a * X^num).
     fn rlwe_turn(ciphertext: &mut RLWE<F>, num: usize) {
         let (a, b) = ciphertext.a_b_mut_slices();
         a.rotate_right(num);
@@ -517,7 +517,7 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
     ///
     /// * `ciphertext` - The nttrgsw ciphertext to be turned with message `a`.
     /// * `num` - The times that the ciphertext will be rotated.
-    /// * Output - An NTTRGSW ciphertext NTTRGSW(a^-num).
+    /// * Output - An NTTRGSW ciphertext NTTRGSW(a * X^-num).
     fn ntt_rgsw_turn(&self, ciphertext: &mut NTTRGSW<F>, num: usize) {
         let ring_dimension = self.params.ring_dimension();
         let basis = self.params.blind_rotation_basis();
@@ -528,22 +528,22 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
             0
         };
 
-        let mut poly = NTTPolynomial::new(vec![F::zero(); ring_dimension]);
+        let mut poly = NTTPolynomial::zero(ring_dimension);
         let ntt_table = F::get_ntt_table(ring_dimension.trailing_zeros()).unwrap();
         ntt_table.transform_coeff_one_monomial(neg_num, poly.as_mut_slice());
 
         let scalar = F::lazy_new(basis.basis());
-        // TODO: Reduce this clone
-        let mut poly_c = poly.clone();
 
-        ciphertext.c_neg_s_m_mut().iter_mut().for_each(|rlwe| {
-            *rlwe.a_mut() += &poly;
-            poly.mul_scalar_assign(scalar);
-        });
-        ciphertext.c_m_mut().iter_mut().for_each(|rlwe| {
-            *rlwe.b_mut() += &poly_c;
-            poly_c.mul_scalar_assign(scalar);
-        });
+        let (c_m_mut, c_neg_s_m_mut) = ciphertext.two_parts_mut();
+
+        c_neg_s_m_mut
+            .iter_mut()
+            .zip(c_m_mut.iter_mut())
+            .for_each(|(neg_s_m, m)| {
+                *neg_s_m.a_mut() += &poly;
+                *m.b_mut() += &poly;
+                poly.mul_scalar_assign(scalar);
+            });
     }
 }
 
