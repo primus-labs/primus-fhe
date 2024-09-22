@@ -104,8 +104,8 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
 
         let ring_dimension = self.params.ring_dimension();
         let x = ring_dimension >> 3;
-        let y = x + ring_dimension >> 2;
-        let z = x + ring_dimension >> 1;
+        let y = x + (ring_dimension >> 2);
+        let z = x + (ring_dimension >> 1);
         let u = ring_dimension - x;
 
         let mut test = Polynomial::zero(ring_dimension);
@@ -127,8 +127,8 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
 
         let ring_dimension = self.params.ring_dimension();
         let x = ring_dimension >> 3;
-        let y = x + ring_dimension >> 2;
-        let z = x + ring_dimension >> 1;
+        let y = x + (ring_dimension >> 2);
+        let z = x + (ring_dimension >> 1);
 
         let mut test = Polynomial::zero(ring_dimension);
         test[y..z].iter_mut().for_each(|v| *v = self.delta);
