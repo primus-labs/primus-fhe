@@ -115,6 +115,27 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
         self.fbs(temp, test)
     }
 
+    /// Homomorphic and operation in comparison.
+    ///
+    /// # Arguments
+    ///
+    /// * `ca` - The LWE ciphertext `ca`, with message `a` equals to `delta` or `0`.
+    /// * `cb` - The LWE ciphertext `cb`, with message `b` equals to `delta` or `0`.
+    /// * Output - An LWE ciphertext LWE(c), only returns delta when both the values of `a` and `b` are `delta`, else `0`.
+    pub fn homand2(&self, ca: &LWE<F>, cb: &LWE<F>) -> LWE<F> {
+        let temp = ca.add_component_wise_ref(cb);
+
+        let ring_dimension = self.params.ring_dimension();
+        let x = ring_dimension >> 3;
+        let y = x + ring_dimension >> 2;
+        let z = x + ring_dimension >> 1;
+
+        let mut test = Polynomial::zero(ring_dimension);
+        test[y..z].iter_mut().for_each(|v| *v = self.delta);
+
+        self.fbs(temp, test)
+    }
+
     /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
     ///
     /// # Arguments.
@@ -187,11 +208,11 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             if new_lwe < 0, expect_compare_res = false
             if new_lwe > 0, expect_compare_res = true
             */
-            let mut new_lwe = eq_res
+            let new_lwe = eq_res
                 .add_component_wise(&gt_res)
                 .add_component_wise(&gt_res)
                 .add_component_wise(&low_part_gt_res);
-            *new_lwe.b_mut() += self.half_delta;
+            // *new_lwe.b_mut() += self.half_delta;
             /*
             Start gate bootstrapping, test_vector = delta + delta*X + ... + delta*X^{n-1}
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
@@ -232,16 +253,21 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
         assert!(len > 0);
 
         // the comparison result of the first digit
-        let hcmp = self.eq_hcmp(&c_rlwe[0], &c_rgsw[0]);
+        let hcmp = c_rlwe[0].mul_ntt_rgsw(&c_rgsw[0]).extract_lwe_locally();
 
         // the comparison result of the other digit
-        c_rlwe[1..]
+        let mut c = c_rlwe[1..]
             .iter()
             .zip(&c_rgsw[1..])
             .fold(hcmp, |low_res, (r, g)| {
-                let gt_res = self.eq_hcmp(r, g);
-                self.homand(&low_res, &gt_res)
-            })
+                let gt_res = r.mul_ntt_rgsw(g).extract_lwe_locally();
+                self.homand2(&low_res, &gt_res)
+            });
+        for elem in c.a_mut().iter_mut() {
+            *elem = *elem + *elem;
+        }
+        *c.b_mut() = c.b() + c.b() - self.delta;
+        c
     }
 
     /// Performs the less_than homomorphic operation of two ciphertexts.
@@ -317,11 +343,11 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             if new_lwe > 0, expect_compare_res = true
             if new_lwe < 0, expect_compare_res = false
             */
-            let mut new_lwe = eq_res
+            let new_lwe = eq_res
                 .add_component_wise(&gt_res)
                 .add_component_wise(&gt_res)
                 .add_component_wise(&low_part_gt_res);
-            *new_lwe.b_mut() += self.half_delta;
+            // *new_lwe.b_mut() += self.half_delta;
             let test = vec![self.delta; self.params.ring_dimension()];
             /*
             Start gate bootstrapping, test_vector = delta + deltaX + ... + deltaX^{n-1}

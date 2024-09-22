@@ -52,10 +52,10 @@ fn get_ciphers() -> &'static InitializationDataCipher {
 
         let mut rng = thread_rng();
 
-        let hcmp_great = rng.gen_range(1..n);
-        let hcmp_small = rng.gen_range(0..hcmp_great);
-        let arbhcmp_great = rng.gen_range(1..(n * n * n * n));
-        let arbhcmp_small = rng.gen_range(0..arbhcmp_great);
+        let hcmp_great = rng.gen_range(2..n);
+        let hcmp_small = rng.gen_range(1..hcmp_great);
+        let arbhcmp_great = rng.gen_range(2..(n * n * n * n));
+        let arbhcmp_small = rng.gen_range(1..arbhcmp_great);
 
         let encryptor = Encryptor::new(&param_data.skp);
 
