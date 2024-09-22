@@ -7,11 +7,11 @@ use once_cell::sync::Lazy;
 
 #[derive(Field, Prime, DecomposableField, FheField, NTT)]
 #[modulus = 132120577]
-pub struct FF(pub u64);
+pub struct FF(u32);
 
 /// FF security default field
-pub static DEFAULT_PARAMETERS: Lazy<Parameters<u64, FF>> = Lazy::new(|| {
-    Parameters::<u64, FF>::new(ConstParameters {
+pub static DEFAULT_PARAMETERS: Lazy<Parameters<u32, FF>> = Lazy::new(|| {
+    Parameters::<u32, FF>::new(ConstParameters {
         lwe_dimension: 1024,
         lwe_cipher_modulus: 2048,
         lwe_plain_modulus: 8,

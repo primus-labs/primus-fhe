@@ -8,10 +8,12 @@ use lattice::{LWE, NTTRGSW, RLWE};
 use once_cell::sync::OnceCell;
 use rand::prelude::*;
 
+type I = u32;
+
 struct InitializationDataParam {
-    skp: SecretKeyPack<u64, FF>,
-    rotationkey: HomomorphicCmpScheme<u64, FF>,
-    param: Parameters<u64, FF>,
+    skp: SecretKeyPack<I, FF>,
+    rotationkey: HomomorphicCmpScheme<I, FF>,
+    param: Parameters<I, FF>,
 }
 
 struct InitializationDataCipher {

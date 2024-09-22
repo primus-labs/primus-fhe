@@ -59,7 +59,7 @@ fn main() {
 fn join_bit_operations(
     value1: &[RLWE<FF>],
     value2: &[NTTRGSW<FF>],
-    rotationkey: &HomomorphicCmpScheme<u64, FF>,
+    rotationkey: &HomomorphicCmpScheme<u32, FF>,
 ) -> (LWE<FF>, LWE<FF>, LWE<FF>) {
     let mut ct_lt: Option<LWE<FF>> = None;
     let mut ct_eq: Option<LWE<FF>> = None;

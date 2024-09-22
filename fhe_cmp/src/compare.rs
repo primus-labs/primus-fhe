@@ -1,6 +1,6 @@
 use algebra::{
-    transformation::MonomialNTT, AsInto, Field, FieldDiscreteGaussianSampler, NTTField,
-    NTTPolynomial, Polynomial,
+    transformation::MonomialNTT, AsInto, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial,
+    Polynomial,
 };
 use fhe_core::{
     lwe_modulus_switch, LWEModulusType, Parameters, RLWEBlindRotationKey, SecretKeyPack,
@@ -73,7 +73,7 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     ///
     /// * `ctxt` - The LWE ciphertext.
     /// * `test_vector` - The chosen test_vector.
-    fn fbs(&self, ctxt: LWE<F>, test_vector: Polynomial<F>) -> LWE<F> {
+    fn fbs(&self, ctxt: &LWE<F>, test_vector: Polynomial<F>) -> LWE<F> {
         assert_eq!(self.params.ring_dimension(), test_vector.coeff_count());
 
         let switched_lwe = lwe_modulus_switch(
@@ -112,7 +112,7 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
         test[x..y].iter_mut().for_each(|v| *v = self.delta);
         test[z..u].iter_mut().for_each(|v| *v = self.delta);
 
-        self.fbs(temp, test)
+        self.fbs(&temp, test)
     }
 
     /// Homomorphic and operation in comparison.
@@ -122,8 +122,8 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     /// * `ca` - The LWE ciphertext `ca`, with message `a` equals to `delta` or `0`.
     /// * `cb` - The LWE ciphertext `cb`, with message `b` equals to `delta` or `0`.
     /// * Output - An LWE ciphertext LWE(c), only returns delta when both the values of `a` and `b` are `delta`, else `0`.
-    pub fn homand2(&self, ca: &LWE<F>, cb: &LWE<F>) -> LWE<F> {
-        let temp = ca.add_component_wise_ref(cb);
+    pub fn homand2(&self, ca: LWE<F>, cb: &LWE<F>) -> LWE<F> {
+        let temp = ca.add_component_wise(cb);
 
         let ring_dimension = self.params.ring_dimension();
         let x = ring_dimension >> 3;
@@ -133,7 +133,7 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
         let mut test = Polynomial::zero(ring_dimension);
         test[y..z].iter_mut().for_each(|v| *v = self.delta);
 
-        self.fbs(temp, test)
+        self.fbs(&temp, test)
     }
 
     /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
@@ -219,7 +219,7 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
             */
             let test = vec![self.delta; self.params.ring_dimension()];
-            res = self.fbs(new_lwe, Polynomial::new(test));
+            res = self.fbs(&new_lwe, Polynomial::new(test));
         }
         res
     }
@@ -261,7 +261,7 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             .zip(&c_rgsw[1..])
             .fold(hcmp, |low_res, (r, g)| {
                 let gt_res = r.mul_ntt_rgsw(g).extract_lwe_locally();
-                self.homand2(&low_res, &gt_res)
+                self.homand2(low_res, &gt_res)
             });
         for elem in c.a_mut().iter_mut() {
             *elem = *elem + *elem;
@@ -354,7 +354,7 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
             If new_lwe < 0, expect_compare_res = false, and the test_vector right shift, the function outputs -delta
             If new_lwe > 0, expect_compare_res = true,  and the test_vector left  shift, the function outputs  delta
             */
-            res = self.fbs(new_lwe, Polynomial::new(test))
+            res = self.fbs(&new_lwe, Polynomial::new(test))
         }
         res
     }
@@ -583,7 +583,7 @@ impl<C: LWEModulusType, F: NTTField> Encryptor<C, F> {
 }
 
 /// Performs the decryption operation.
-pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -> u64 {
+pub fn decrypt<F: NTTField>(sk: &[F], ciphertext: LWE<F>) -> u64 {
     let a_mul_s = ciphertext
         .a()
         .iter()
@@ -593,6 +593,9 @@ pub fn decrypt<F: Field<Value = u64> + NTTField>(sk: &[F], ciphertext: LWE<F>) -
 }
 
 /// Performs the operation turning an encoded value to its real number.
-pub fn decode<F: Field<Value = u64> + NTTField>(c: F) -> u64 {
-    (c.value() as f64 * 8_f64 / F::MODULUS_VALUE as f64).round() as u64 % 8
+pub fn decode<F: NTTField, C: LWEModulusType>(c: F) -> C {
+    ((AsInto::<f64>::as_into(c.value()) * 8_f64 / AsInto::<f64>::as_into(F::MODULUS_VALUE)).round()
+        as u64
+        % 8)
+    .as_into()
 }
