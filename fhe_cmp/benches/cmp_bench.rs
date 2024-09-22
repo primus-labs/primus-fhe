@@ -28,6 +28,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let value1 = encryptor.rlwe_encrypt(x, &mut rng);
     let value2 = encryptor.rgsw_encrypt(y, &mut rng);
 
+    assert_eq!(value1.len(), 1);
+    assert_eq!(value2.len(), 1);
+
     c.bench_function("less comparison: 1 chunks", |b| {
         b.iter(|| rotation_key.lt_arbhcmp(black_box(&value1), black_box(&value2)))
     });
@@ -42,6 +45,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let y = rng.gen_range(n2..n3);
     let value1 = encryptor.rlwe_encrypt(x, &mut rng);
     let value2 = encryptor.rgsw_encrypt(y, &mut rng);
+
+    assert_eq!(value1.len(), 3);
+    assert_eq!(value2.len(), 3);
 
     c.bench_function("less comparison: 3 chunks", |b| {
         b.iter(|| rotation_key.lt_arbhcmp(black_box(&value1), black_box(&value2)))

@@ -102,9 +102,17 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
         let mut temp = ca.add_component_wise_ref(cb);
         *temp.b_mut() -= self.delta;
 
-        let test = vec![self.delta; self.params.ring_dimension()];
+        let ring_dimension = self.params.ring_dimension();
+        let x = ring_dimension >> 3;
+        let y = x + ring_dimension >> 2;
+        let z = x + ring_dimension >> 1;
+        let u = ring_dimension - x;
 
-        self.fbs(temp, Polynomial::new(test))
+        let mut test = Polynomial::zero(ring_dimension);
+        test[x..y].iter_mut().for_each(|v| *v = self.delta);
+        test[z..u].iter_mut().for_each(|v| *v = self.delta);
+
+        self.fbs(temp, test)
     }
 
     /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
@@ -115,16 +123,17 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     /// * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
     /// * Output - An LWE ciphertext LWE(c), where c = 1 if  a > b; c = -1 otherwise.
     pub fn gt_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
-        let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
-
         let test_poly =
             Polynomial::new(vec![F::neg_one(); self.params.ring_dimension()]).into_ntt_polynomial();
 
-        let (a, b) = c.given_a_b();
+        let c_rlwe_clone = c_rlwe.clone();
+        let (a, b) = c_rlwe_clone.given_a_b();
         let c_a = a * &test_poly;
         let c_b = b * &test_poly;
 
-        RLWE::new(c_a, c_b).extract_lwe_locally()
+        RLWE::new(c_a, c_b)
+            .mul_ntt_rgsw(c_rgsw)
+            .extract_lwe_locally()
     }
 
     /// Performs the greater_than homomorphic comparison operation of two ciphertexts.
@@ -243,18 +252,18 @@ impl<C: LWEModulusType, F: NTTField> HomomorphicCmpScheme<C, F> {
     /// * `c_rgsw` - The NTTRGSW ciphertext with message `b`.
     /// * Output - An LWE ciphertext LWE(c) where c = 1 if a < b; c = -1 otherwise.
     pub fn lt_hcmp(&self, c_rlwe: &RLWE<F>, c_rgsw: &NTTRGSW<F>) -> LWE<F> {
-        let c = c_rlwe.mul_ntt_rgsw(c_rgsw);
-
         let mut test_poly = vec![F::one(); self.params.ring_dimension()];
         test_poly[0] = F::neg_one();
         let test_poly = Polynomial::new(test_poly).into_ntt_polynomial();
 
-        let (a, b) = c.given_a_b();
+        let (a, b) = c_rlwe.clone().given_a_b();
 
         let c_a = a * &test_poly;
         let c_b = b * &test_poly;
 
-        RLWE::new(c_a, c_b).extract_lwe_locally()
+        RLWE::new(c_a, c_b)
+            .mul_ntt_rgsw(c_rgsw)
+            .extract_lwe_locally()
     }
 
     /// Performs the less_than homomorphic operation of two ciphertexts.
