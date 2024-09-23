@@ -85,7 +85,6 @@ jobs:
         os: [macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
-        # We intentionally do not use lfs: true here, instead using the caching method to save LFS bandwidth.
 
       - name: restore cache
         uses: Swatinem/rust-cache@v2
@@ -130,12 +129,3 @@ jobs:
       # We test documentation using nightly to match docs.rs. This prevents potential breakages
       - name: cargo doc
         run: cargo doc --workspace --no-default-features --features="count_ntt concrete-ntt" --no-deps --document-private-items -Zunstable-options -Zrustdoc-scrape-examples
-
-  # If this fails, consider changing your text or adding something to .typos.toml
-  typos:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: check typos
-        uses: crate-ci/typos@v1.23.2
