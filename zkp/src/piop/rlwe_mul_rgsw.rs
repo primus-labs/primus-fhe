@@ -54,6 +54,7 @@ use pcs::{
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 use std::vec;
 /// IOP for RLWE * RGSW
@@ -75,26 +76,27 @@ pub struct RlweMultRgswSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
 );
 /// RLWE ciphertext (a, b) where a and b represents two polynomials in some defined polynomial ring.
 /// Note that it can represent either a coefficient-form or a NTT-form.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RlweCiphertext<F: Field> {
     /// the first part of the ciphertext, chosen at random in the FHE scheme.
-    pub a: Rc<DenseMultilinearExtension<F>>,
+    pub a: DenseMultilinearExtension<F>,
     /// the second part of the ciphertext, computed with the plaintext in the FHE scheme.
-    pub b: Rc<DenseMultilinearExtension<F>>,
+    pub b: DenseMultilinearExtension<F>,
 }
 
 /// RLWE' ciphertexts represented by two vectors, containing k RLWE ciphertext.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RlweCiphertexts<F: Field> {
     /// store the first part of each RLWE ciphertext.
-    pub a_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
+    pub a_bits: Vec<DenseMultilinearExtension<F>>,
     /// store the second part of each RLWE ciphertext.
-    pub b_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
+    pub b_bits: Vec<DenseMultilinearExtension<F>>,
 }
 
 /// Stores the multiplication instance between RLWE ciphertext and RGSW ciphertext with the corresponding NTT table
 /// Given (a, b) \in RLWE where a and b are two polynomials represented by N coefficients,
 /// and (c, f) \in RGSW = RLWE' \times RLWE' = (RLWE, ..., RLWE) \times (RLWE, ..., RLWE) where c = ((c0, c0'), ..., (ck-1, ck-1')) and f = ((f0, f0'), ..., (fk-1, fk-1'))
+#[derive(Debug, Clone)]
 pub struct RlweMultRgswInstance<F: Field> {
     /// number of variables
     pub num_vars: usize,
@@ -188,8 +190,8 @@ impl<F: Field> RlweCiphertext<F> {
     #[inline]
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertext<EF> {
         RlweCiphertext::<EF> {
-            a: Rc::new(self.a.to_ef::<EF>()),
-            b: Rc::new(self.b.to_ef::<EF>()),
+            a: self.a.to_ef::<EF>(),
+            b: self.b.to_ef::<EF>(),
         }
     }
 
@@ -229,8 +231,8 @@ impl<F: Field> RlweCiphertexts<F> {
 
     /// Add a RLWE ciphertext
     pub fn add_rlwe(&mut self, a: DenseMultilinearExtension<F>, b: DenseMultilinearExtension<F>) {
-        self.a_bits.push(Rc::new(a));
-        self.b_bits.push(Rc::new(b));
+        self.a_bits.push(a);
+        self.b_bits.push(b);
     }
 
     /// Is empty
@@ -264,16 +266,8 @@ impl<F: Field> RlweCiphertexts<F> {
     #[inline]
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertexts<EF> {
         RlweCiphertexts::<EF> {
-            a_bits: self
-                .a_bits
-                .iter()
-                .map(|bit| Rc::new(bit.to_ef::<EF>()))
-                .collect(),
-            b_bits: self
-                .b_bits
-                .iter()
-                .map(|bit| Rc::new(bit.to_ef::<EF>()))
-                .collect(),
+            a_bits: self.a_bits.iter().map(|bit| bit.to_ef::<EF>()).collect(),
+            b_bits: self.b_bits.iter().map(|bit| bit.to_ef::<EF>()).collect(),
         }
     }
 
@@ -528,8 +522,8 @@ impl<F: Field> RlweMultRgswInstance<F> {
                 .iter()
                 .chain(self.bits_rlwe_ntt.b_bits.iter())
         ) {
-            *r_coeffs += (*r, coeff.as_ref());
-            *r_points += (*r, point.as_ref());
+            *r_coeffs += (*r, coeff);
+            *r_points += (*r, point);
         }
     }
 
@@ -553,7 +547,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
 
         NTTInstance::<EF> {
             num_vars: self.num_vars,
-            ntt_table: Rc::new(
+            ntt_table: Arc::new(
                 self.ntt_info
                     .ntt_table
                     .iter()
@@ -608,8 +602,24 @@ impl<F: Field> RlweMultRgswInstance<F> {
     /// Update DecomposedBits Instance
     #[inline]
     pub fn update_decomposed_bits(&self, decomposed_bits: &mut DecomposedBits<F>) {
-        decomposed_bits.add_decomposed_bits_instance(&self.input_rlwe.a, &self.bits_rlwe.a_bits);
-        decomposed_bits.add_decomposed_bits_instance(&self.input_rlwe.b, &self.bits_rlwe.b_bits);
+        decomposed_bits.add_decomposed_bits_instance(
+            &Rc::new(self.input_rlwe.a.clone()),
+            &self
+                .bits_rlwe
+                .a_bits
+                .iter()
+                .map(|bits| Rc::new(bits.clone()))
+                .collect::<Vec<_>>(),
+        );
+        decomposed_bits.add_decomposed_bits_instance(
+            &Rc::new(self.input_rlwe.b.clone()),
+            &self
+                .bits_rlwe
+                .b_bits
+                .iter()
+                .map(|bits| Rc::new(bits.clone()))
+                .collect::<Vec<_>>(),
+        );
     }
 
     /// Extract lookup instance
@@ -792,13 +802,16 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
             &instance.bits_rgsw_c_ntt.a_bits,
             &instance.bits_rgsw_f_ntt.a_bits
         ) {
-            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(eq_at_u)];
-            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(eq_at_u)];
+            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), eq_at_u.clone()];
+            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), eq_at_u.clone()];
             poly.add_product(prod1, r[0]);
             poly.add_product(prod2, r[0]);
         }
         poly.add_product(
-            [Rc::clone(&instance.output_rlwe_ntt.a), Rc::clone(eq_at_u)],
+            [
+                Rc::new(instance.output_rlwe_ntt.a.clone()),
+                Rc::clone(eq_at_u),
+            ],
             -r[0],
         );
 
@@ -809,13 +822,16 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
             &instance.bits_rgsw_c_ntt.b_bits,
             &instance.bits_rgsw_f_ntt.b_bits
         ) {
-            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(eq_at_u)];
-            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(eq_at_u)];
+            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
+            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
             poly.add_product(prod1, r[1]);
             poly.add_product(prod2, r[1]);
         }
         poly.add_product(
-            [Rc::clone(&instance.output_rlwe_ntt.b), Rc::clone(eq_at_u)],
+            [
+                Rc::new(instance.output_rlwe_ntt.b.clone()),
+                Rc::clone(eq_at_u),
+            ],
             -r[1],
         );
     }
@@ -1271,13 +1287,16 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
             &instance.bits_rgsw_c_ntt.a_bits,
             &instance.bits_rgsw_f_ntt.a_bits
         ) {
-            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(eq_at_u)];
-            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(eq_at_u)];
+            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
+            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
             poly.add_product(prod1, r[0]);
             poly.add_product(prod2, r[0]);
         }
         poly.add_product(
-            [Rc::clone(&instance.output_rlwe_ntt.a), Rc::clone(eq_at_u)],
+            [
+                Rc::new(instance.output_rlwe_ntt.a.clone()),
+                Rc::clone(eq_at_u),
+            ],
             -r[0],
         );
 
@@ -1288,13 +1307,16 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
             &instance.bits_rgsw_c_ntt.b_bits,
             &instance.bits_rgsw_f_ntt.b_bits
         ) {
-            let prod1 = [Rc::clone(a), Rc::clone(c), Rc::clone(eq_at_u)];
-            let prod2 = [Rc::clone(b), Rc::clone(f), Rc::clone(eq_at_u)];
+            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
+            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
             poly.add_product(prod1, r[1]);
             poly.add_product(prod2, r[1]);
         }
         poly.add_product(
-            [Rc::clone(&instance.output_rlwe_ntt.b), Rc::clone(eq_at_u)],
+            [
+                Rc::new(instance.output_rlwe_ntt.b.clone()),
+                Rc::clone(eq_at_u),
+            ],
             -r[1],
         );
     }

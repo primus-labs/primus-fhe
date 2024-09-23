@@ -9,6 +9,7 @@ use crate::sumcheck::SumcheckKit;
 use core::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::ntt::NTTRecursiveProof;
@@ -40,6 +41,8 @@ use pcs::{
     utils::hash::Hash,
     PolynomialCommitmentScheme,
 };
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use serde::{Deserialize, Serialize};
 
 /// IOP for Accumulator
@@ -60,15 +63,16 @@ pub struct AccumulatorSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<EF>,
 );
 /// accumulator witness when performing ACC = ACC + (X^{-a_u} + 1) * ACC * RGSW(Z_u)
+#[derive(Debug, Clone)]
 pub struct AccumulatorWitness<F: Field> {
     /// * Witness when performing input_rlwe_ntt := (X^{-a_u} + 1) * ACC
     ///
     /// ACC of ntt form
     pub acc_ntt: RlweCiphertext<F>,
     /// scalar d = (X^{-a_u} + 1) of coefficient form
-    pub d: Rc<DenseMultilinearExtension<F>>,
+    pub d: DenseMultilinearExtension<F>,
     /// scalar d = (X^{-a_u} + 1) of ntt form
-    pub d_ntt: Rc<DenseMultilinearExtension<F>>,
+    pub d_ntt: DenseMultilinearExtension<F>,
     /// result d * ACC of ntt form
     pub input_rlwe_ntt: RlweCiphertext<F>,
     /// * Witness when performing output_rlwe_ntt := input_rlwe * RGSW(Z_u) where input_rlwe = (X^{-a_u} + 1) * ACC
@@ -196,8 +200,8 @@ impl<F: Field> AccumulatorWitness<F> {
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> AccumulatorWitness<EF> {
         AccumulatorWitness::<EF> {
             acc_ntt: self.acc_ntt.to_ef::<EF>(),
-            d: Rc::new(self.d.to_ef::<EF>()),
-            d_ntt: Rc::new(self.d_ntt.to_ef::<EF>()),
+            d: self.d.to_ef::<EF>(),
+            d_ntt: self.d_ntt.to_ef::<EF>(),
             input_rlwe_ntt: self.input_rlwe_ntt.to_ef::<EF>(),
             rlwe_mult_rgsw: self.rlwe_mult_rgsw.to_ef::<EF>(),
         }
@@ -240,13 +244,13 @@ impl<F: Field> AccumulatorWitness<F> {
         assert_eq!(randomness.len(), self.num_ntt_contained());
         // d ==NTT== d_ntt
         let (r_used, r) = randomness.split_at(3);
-        *r_coeffs += (r_used[0], self.d.as_ref());
-        *r_points += (r_used[0], self.d_ntt.as_ref());
+        *r_coeffs += (r_used[0], &self.d);
+        *r_points += (r_used[0], &self.d_ntt);
         // input_rlwe ==NTT== input_rlwe_ntt
-        *r_coeffs += (r_used[1], self.rlwe_mult_rgsw.input_rlwe.a.as_ref());
-        *r_points += (r_used[1], self.input_rlwe_ntt.a.as_ref());
-        *r_coeffs += (r_used[2], self.rlwe_mult_rgsw.input_rlwe.b.as_ref());
-        *r_points += (r_used[2], self.input_rlwe_ntt.b.as_ref());
+        *r_coeffs += (r_used[1], &self.rlwe_mult_rgsw.input_rlwe.a);
+        *r_points += (r_used[1], &self.input_rlwe_ntt.a);
+        *r_coeffs += (r_used[2], &self.rlwe_mult_rgsw.input_rlwe.b);
+        *r_points += (r_used[2], &self.input_rlwe_ntt.b);
 
         self.rlwe_mult_rgsw
             .update_ntt_instance(r_coeffs, r_points, r);
@@ -263,22 +267,14 @@ impl<F: Field> AccumulatorWitness<F> {
         assert_eq!(randomness.len(), self.num_ntt_contained());
         // d ==NTT== d_ntt
         let (r_used, r) = randomness.split_at(3);
-        add_assign_ef(r_coeffs, &r_used[0], self.d.as_ref());
-        add_assign_ef(r_points, &r_used[0], self.d_ntt.as_ref());
+        add_assign_ef(r_coeffs, &r_used[0], &self.d);
+        add_assign_ef(r_points, &r_used[0], &self.d_ntt);
 
         // input_rlwe ==NTT== input_rlwe_ntt
-        add_assign_ef(
-            r_coeffs,
-            &r_used[1],
-            self.rlwe_mult_rgsw.input_rlwe.a.as_ref(),
-        );
-        add_assign_ef(r_points, &r_used[1], self.input_rlwe_ntt.a.as_ref());
-        add_assign_ef(
-            r_coeffs,
-            &r_used[2],
-            self.rlwe_mult_rgsw.input_rlwe.b.as_ref(),
-        );
-        add_assign_ef(r_points, &r_used[2], self.input_rlwe_ntt.b.as_ref());
+        add_assign_ef(r_coeffs, &r_used[1], &self.rlwe_mult_rgsw.input_rlwe.a);
+        add_assign_ef(r_points, &r_used[1], &self.input_rlwe_ntt.a);
+        add_assign_ef(r_coeffs, &r_used[2], &self.rlwe_mult_rgsw.input_rlwe.b);
+        add_assign_ef(r_points, &r_used[2], &self.input_rlwe_ntt.b);
 
         self.rlwe_mult_rgsw
             .update_ntt_instance_to_ef::<EF>(r_coeffs, r_points, r);
@@ -302,7 +298,7 @@ impl<F: Field> AccumulatorInstance<F> {
         let ntt_info = NTTInstanceInfo::<F> {
             num_ntt: 4 + num_updations * updations[0].num_ntt_contained(),
             num_vars,
-            ntt_table: Rc::clone(&ntt_info.ntt_table),
+            ntt_table: Arc::clone(&ntt_info.ntt_table),
         };
 
         let bits_info = DecomposedBitsInfo::<F> {
@@ -429,7 +425,7 @@ impl<F: Field> AccumulatorInstance<F> {
             output: self.output.evaluate_ext(point),
             updations: self
                 .updations
-                .iter()
+                .par_iter()
                 .map(|updation| updation.evaluate_ext(point))
                 .collect(),
         }
@@ -451,16 +447,16 @@ impl<F: Field> AccumulatorInstance<F> {
         let (r_used, r) = randomness.split_at(4);
         // input ==NTT== input_ntt
         let input_ntt = &self.updations[0].acc_ntt;
-        random_coeffs += (r_used[0], self.input.a.as_ref());
-        random_points += (r_used[0], input_ntt.a.as_ref());
-        random_coeffs += (r_used[1], self.input.b.as_ref());
-        random_points += (r_used[1], input_ntt.b.as_ref());
+        random_coeffs += (r_used[0], &self.input.a);
+        random_points += (r_used[0], &input_ntt.a);
+        random_coeffs += (r_used[1], &self.input.b);
+        random_points += (r_used[1], &input_ntt.b);
 
         // output_ntt ==NTT== output
-        random_coeffs += (r_used[2], self.output.a.as_ref());
-        random_points += (r_used[2], self.output_ntt.a.as_ref());
-        random_coeffs += (r_used[3], self.output.b.as_ref());
-        random_points += (r_used[3], self.output_ntt.b.as_ref());
+        random_coeffs += (r_used[2], &self.output.a);
+        random_points += (r_used[2], &self.output_ntt.a);
+        random_coeffs += (r_used[3], &self.output.b);
+        random_points += (r_used[3], &self.output_ntt.b);
 
         let r_each_num = self.updations[0].num_ntt_contained();
         // ntts in each accumulator
@@ -495,16 +491,16 @@ impl<F: Field> AccumulatorInstance<F> {
         let (r_used, r) = randomness.split_at(4);
         // input ==NTT== input_ntt
         let input_ntt = &self.updations[0].acc_ntt;
-        add_assign_ef(&mut random_coeffs, &r_used[0], self.input.a.as_ref());
-        add_assign_ef(&mut random_points, &r_used[0], input_ntt.a.as_ref());
-        add_assign_ef(&mut random_coeffs, &r_used[1], self.input.b.as_ref());
-        add_assign_ef(&mut random_points, &r_used[1], input_ntt.b.as_ref());
+        add_assign_ef(&mut random_coeffs, &r_used[0], &self.input.a);
+        add_assign_ef(&mut random_points, &r_used[0], &input_ntt.a);
+        add_assign_ef(&mut random_coeffs, &r_used[1], &self.input.b);
+        add_assign_ef(&mut random_points, &r_used[1], &input_ntt.b);
 
         // output_ntt ==NTT== output
-        add_assign_ef(&mut random_coeffs, &r_used[2], self.output.a.as_ref());
-        add_assign_ef(&mut random_points, &r_used[2], self.output_ntt.a.as_ref());
-        add_assign_ef(&mut random_coeffs, &r_used[3], self.output.b.as_ref());
-        add_assign_ef(&mut random_points, &r_used[3], self.output_ntt.b.as_ref());
+        add_assign_ef(&mut random_coeffs, &r_used[2], &self.output.a);
+        add_assign_ef(&mut random_points, &r_used[2], &self.output_ntt.a);
+        add_assign_ef(&mut random_coeffs, &r_used[3], &self.output.b);
+        add_assign_ef(&mut random_points, &r_used[3], &self.output_ntt.b);
 
         let r_each_num = self.updations[0].num_ntt_contained();
         // ntts in each accumulator
@@ -518,7 +514,7 @@ impl<F: Field> AccumulatorInstance<F> {
 
         NTTInstance::<EF> {
             num_vars: self.num_vars,
-            ntt_table: Rc::new(
+            ntt_table: Arc::new(
                 self.ntt_info
                     .ntt_table
                     .iter()
@@ -814,27 +810,33 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             // sum_x eq(u, x) * (ACC.a(x) * d(x) - a(x)) = 0
             poly.add_product(
                 [
-                    Rc::clone(&updation.d_ntt),
-                    Rc::clone(&updation.acc_ntt.a),
-                    Rc::clone(eq_at_u),
+                    Rc::new(updation.d_ntt.clone()),
+                    Rc::new(updation.acc_ntt.a.clone()),
+                    eq_at_u.clone(),
                 ],
                 r[0],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.a), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.a.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[0],
             );
             // sum_x eq(u, x) * (ACC.b(x) * d(x) - RLWE.b(x)) = 0
             poly.add_product(
                 [
-                    Rc::clone(&updation.d_ntt),
-                    Rc::clone(&updation.acc_ntt.b),
-                    Rc::clone(eq_at_u),
+                    Rc::new(updation.d_ntt.clone()),
+                    Rc::new(updation.acc_ntt.b.clone()),
+                    eq_at_u.clone(),
                 ],
                 r[1],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.b), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.b.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[1],
             );
 
@@ -1281,27 +1283,33 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
             // sum_x eq(u, x) * (ACC.a(x) * d(x) - a(x)) = 0
             poly.add_product(
                 [
-                    Rc::clone(&updation.d_ntt),
-                    Rc::clone(&updation.acc_ntt.a),
-                    Rc::clone(eq_at_u),
+                    Rc::new(updation.d_ntt.clone()),
+                    Rc::new(updation.acc_ntt.a.clone()),
+                    eq_at_u.clone(),
                 ],
                 r[0],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.a), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.a.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[0],
             );
             // sum_x eq(u, x) * (ACC.b(x) * d(x) - RLWE.b(x)) = 0
             poly.add_product(
                 [
-                    Rc::clone(&updation.d_ntt),
-                    Rc::clone(&updation.acc_ntt.b),
-                    Rc::clone(eq_at_u),
+                    Rc::new(updation.d_ntt.clone()),
+                    Rc::new(updation.acc_ntt.b.clone()),
+                    eq_at_u.clone(),
                 ],
                 r[1],
             );
             poly.add_product(
-                [Rc::clone(&updation.input_rlwe_ntt.b), Rc::clone(eq_at_u)],
+                [
+                    Rc::new(updation.input_rlwe_ntt.b.clone()),
+                    Rc::clone(eq_at_u),
+                ],
                 -r[1],
             );
 
@@ -1398,7 +1406,9 @@ where
         // random value to initiate lookup
         let random_value =
             prover_trans.get_challenge(b"random point used to generate the second oracle");
+
         lookup_instance.generate_h_vec(random_value);
+
         // --------------------
 
         // 2.1 Generate the random point to instantiate the sumcheck protocol
@@ -1420,9 +1430,9 @@ where
             &instance_ef,
             &eq_at_u,
         );
-
         // 2.? Prover extract the random ntt instance from all ntt instances
         let ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&randomness_ntt);
+
         <NTTBareIOP<EF>>::prove_as_subprotocol(
             EF::one(),
             &mut sumcheck_poly,
@@ -1430,18 +1440,21 @@ where
             &ntt_instance,
             &prover_u,
         );
+
         let ntt_instance_info = ntt_instance.info();
 
         // --- Lookup Part ---
         // combine lookup sumcheck
         let mut lookup_randomness = Lookup::sample_coins(&mut prover_trans, &lookup_instance);
         lookup_randomness.push(random_value);
+
         Lookup::prove_as_subprotocol(
             &lookup_randomness,
             &mut sumcheck_poly,
             &lookup_instance,
             &eq_at_u,
         );
+
         // --------------------
 
         let poly_info = sumcheck_poly.info();
@@ -1449,23 +1462,31 @@ where
         let (sumcheck_proof, sumcheck_state) =
             <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
                 .expect("Proof generated in Addition In Zq");
+
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
+
         let recursive_proof = <NTTIOP<EF>>::prove_recursive(
             &mut prover_trans,
             &sumcheck_state.randomness,
             &ntt_instance_info,
             &prover_u,
         );
+
         iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
         let iop_prover_time = prover_start.elapsed().as_millis();
 
         // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let start = Instant::now();
-        let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
-        let evals_at_u = instance.evaluate_ext(&prover_u);
 
+        // let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
+        // let evals_at_u = instance.evaluate_ext(&prover_u);
+
+        let (evals_at_r, evals_at_u) = rayon::join(
+            || instance.evaluate_ext(&sumcheck_state.randomness),
+            || instance.evaluate_ext(&prover_u),
+        );
         // --- Lookup Part ---
         let lookup_evals = lookup_instance.evaluate(&sumcheck_state.randomness);
         // -------------------
@@ -1477,12 +1498,14 @@ where
             b"random linear combination for evaluations of oracles",
             instance.log_num_oracles(),
         );
+
         requested_point_at_r.extend(&oracle_randomness);
         requested_point_at_u.extend(&oracle_randomness);
         let oracle_eval_at_r = committed_poly.evaluate_ext(&requested_point_at_r);
         let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
 
         // 2.6 Generate the evaluation proof of the requested point
+
         let eval_proof_at_r = BrakedownPCS::<F, H, C, S, EF>::open(
             &pp,
             &comm,
@@ -1490,6 +1513,7 @@ where
             &requested_point_at_r,
             &mut prover_trans,
         );
+
         let eval_proof_at_u = BrakedownPCS::<F, H, C, S, EF>::open(
             &pp,
             &comm,
@@ -1497,6 +1521,7 @@ where
             &requested_point_at_u,
             &mut prover_trans,
         );
+
         let pcs_open_time = start.elapsed().as_millis();
 
         // 3. Verifier checks the proof

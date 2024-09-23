@@ -19,6 +19,7 @@ once_cell = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true }
 bincode = { workspace = true }
+rayon = { workspace = true }
 
 [target.'cfg(all(unix, any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))'.dependencies]
 sha2 = { workspace = true, features = ["asm"] }

@@ -55,3 +55,5 @@ pub trait MultilinearExtension<F: Field>:
     /// hypercube. The evaluations are in little-endian order.
     fn to_evaluations(&self) -> Vec<F>;
 }
+
+const PAR_NUM_VAR_THERSHOLD: usize = 20;

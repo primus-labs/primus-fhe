@@ -46,6 +46,7 @@ use pcs::{
     PolynomialCommitmentScheme,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
@@ -89,13 +90,13 @@ pub struct LookupInstance<F: Field> {
     /// residual size
     pub residual_size: usize,
     /// inputs f
-    pub batch_f: Vec<Rc<DenseMultilinearExtension<F>>>,
+    pub batch_f: Vec<DenseMultilinearExtension<F>>,
     /// inputs table
-    pub table: Rc<DenseMultilinearExtension<F>>,
+    pub table: DenseMultilinearExtension<F>,
     /// intermediate oracle h
-    pub blocks: Vec<Rc<DenseMultilinearExtension<F>>>,
+    pub blocks: Vec<DenseMultilinearExtension<F>>,
     /// intermediate oracle m
-    pub freq: Rc<DenseMultilinearExtension<F>>,
+    pub freq: DenseMultilinearExtension<F>,
 }
 
 impl<F: Field> LookupInstance<F> {
@@ -114,11 +115,7 @@ impl<F: Field> LookupInstance<F> {
 
     /// Construct an empty instance
     #[inline]
-    pub fn new(
-        num_vars: usize,
-        table: &Rc<DenseMultilinearExtension<F>>,
-        block_size: usize,
-    ) -> Self {
+    pub fn new(num_vars: usize, table: DenseMultilinearExtension<F>, block_size: usize) -> Self {
         assert_eq!(table.num_vars, num_vars);
         Self {
             num_vars,
@@ -126,7 +123,7 @@ impl<F: Field> LookupInstance<F> {
             block_size,
             residual_size: 0,
             batch_f: Vec::new(),
-            table: table.clone(),
+            table,
             blocks: Vec::new(),
             freq: Default::default(),
         }
@@ -136,9 +133,9 @@ impl<F: Field> LookupInstance<F> {
     #[inline]
     pub fn from_slice_pure(
         num_vars: usize,
-        f_vec: &[Rc<DenseMultilinearExtension<F>>],
-        t: Rc<DenseMultilinearExtension<F>>,
-        m: Rc<DenseMultilinearExtension<F>>,
+        f_vec: &[DenseMultilinearExtension<F>],
+        t: DenseMultilinearExtension<F>,
+        m: DenseMultilinearExtension<F>,
         block_size: usize,
     ) -> Self {
         let column_num = f_vec.len() + 1;
@@ -157,46 +154,46 @@ impl<F: Field> LookupInstance<F> {
     /// Construct a new instance from slice
     #[inline]
     pub fn from_slice(
-        f_vec: &[Rc<DenseMultilinearExtension<F>>],
-        t: Rc<DenseMultilinearExtension<F>>,
+        f_vec: &[DenseMultilinearExtension<F>],
+        t: DenseMultilinearExtension<F>,
         block_size: usize,
     ) -> Self {
         let num_vars = f_vec[0].num_vars;
         let column_num = f_vec.len() + 1;
 
-        f_vec.iter().for_each(|x| assert_eq!(x.num_vars, num_vars));
-        assert_eq!(t.num_vars, num_vars);
+        let mut m_table = HashMap::new();
+        let mut table = HashMap::new();
+
+        t.evaluations.iter().for_each(|&t| {
+            m_table
+                .entry(t)
+                .and_modify(|counter| *counter += 1usize)
+                .or_insert(1);
+            table.insert(t, 0usize);
+        });
+
+        f_vec.iter().for_each(|f| {
+            assert_eq!(f.num_vars, num_vars);
+            f.evaluations.iter().for_each(|&x| {
+                table.entry(x).and_modify(|counter| *counter += 1);
+            })
+        });
 
         let m_evaluations: Vec<F> = t
             .evaluations
             .iter()
-            .map(|t_item| {
-                let m_f_vec = f_vec.iter().fold(F::zero(), |acc, f| {
-                    let m_f: usize = f
-                        .evaluations
-                        .iter()
-                        .filter(|&f_item| f_item == t_item)
-                        .count();
-                    let m_f: F = F::new(F::Value::as_from(m_f as f64));
-                    acc + m_f
-                });
+            .map(|t| {
+                let m_f = table[t];
+                let m_t = m_table[t];
 
-                let m_t = t
-                    .evaluations
-                    .iter()
-                    .filter(|&t_item2| t_item2 == t_item)
-                    .count();
-                let m_t: F = F::new(F::Value::as_from(m_t as f64));
+                let m_f = F::new(F::Value::as_from(m_f as f64));
+                let m_t = F::new(F::Value::as_from(m_t as f64));
 
-                m_f_vec / m_t
+                m_f / m_t
             })
             .collect();
 
-        let m = Rc::new(DenseMultilinearExtension::from_evaluations_slice(
-            num_vars,
-            &m_evaluations,
-        ));
-
+        let m = DenseMultilinearExtension::from_evaluations_slice(num_vars, &m_evaluations);
         Self {
             num_vars,
             block_num: column_num / block_size,
@@ -216,10 +213,10 @@ impl<F: Field> LookupInstance<F> {
             block_num: self.block_num,
             block_size: self.block_size,
             residual_size: self.residual_size,
-            batch_f: self.batch_f.iter().map(|x| Rc::new(x.to_ef())).collect(),
-            table: Rc::new(self.table.to_ef()),
+            batch_f: self.batch_f.iter().map(|x| x.to_ef()).collect(),
+            table: self.table.to_ef(),
             blocks: Default::default(),
-            freq: Rc::new(self.freq.to_ef()),
+            freq: self.freq.to_ef(),
         }
     }
 
@@ -306,17 +303,13 @@ impl<F: Field> LookupInstance<F> {
         ft_vec.push(self.table.clone());
 
         // construct shifted columns: (f(x) - r)
-        let shifted_ft_vec: Vec<Rc<DenseMultilinearExtension<F>>> = ft_vec
+        let shifted_ft_vec: Vec<DenseMultilinearExtension<F>> = ft_vec
             .iter()
             .map(|f| {
                 let evaluations = f.evaluations.iter().map(|x| *x - random_value).collect();
-                Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-                    num_vars,
-                    evaluations,
-                ))
+                DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations)
             })
             .collect();
-
         // construct inversed shifted columns: 1 / (f(x) - r)
         let mut inversed_shifted_ft_evaluation_vec = batch_inverse(
             &shifted_ft_vec
@@ -327,7 +320,6 @@ impl<F: Field> LookupInstance<F> {
         );
 
         let total_size = inversed_shifted_ft_evaluation_vec.len();
-
         inversed_shifted_ft_evaluation_vec[(total_size - (1 << num_vars))..]
             .iter_mut()
             .zip(self.freq.evaluations.iter())
@@ -341,9 +333,9 @@ impl<F: Field> LookupInstance<F> {
         let residual = chunks.remainder();
 
         // construct blocked columns
-        let mut h_vec: Vec<Rc<DenseMultilinearExtension<F>>> = chunks
+        let mut h_vec: Vec<DenseMultilinearExtension<F>> = chunks
             .map(|block| {
-                Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+                DenseMultilinearExtension::from_evaluations_vec(
                     num_vars,
                     block.chunks_exact(1 << num_vars).fold(
                         vec![F::zero(); 1 << num_vars],
@@ -357,11 +349,11 @@ impl<F: Field> LookupInstance<F> {
                             h_evaluations
                         },
                     ),
-                ))
+                )
             })
             .collect();
 
-        let h_residual = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        let h_residual = DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
             residual.chunks_exact(1 << num_vars).fold(
                 vec![F::zero(); 1 << num_vars],
@@ -372,7 +364,7 @@ impl<F: Field> LookupInstance<F> {
                     acc
                 },
             ),
-        ));
+        );
 
         if self.residual_size != 0 {
             h_vec.push(h_residual)
@@ -384,12 +376,18 @@ impl<F: Field> LookupInstance<F> {
     /// Evaluate at a random point defined over Field
     #[inline]
     pub fn evaluate(&self, point: &[F]) -> LookupInstanceEval<F> {
-        LookupInstanceEval::<F> {
-            f_vec: self.batch_f.iter().map(|x| x.evaluate(point)).collect(),
-            t: self.table.evaluate(point),
-            h_vec: self.blocks.iter().map(|x| x.evaluate(point)).collect(),
-            m: self.freq.evaluate(point),
-        }
+        let mut f_vec = vec![];
+        let mut h_vec = vec![];
+        let mut t = F::zero();
+        let mut m = F::zero();
+        rayon::scope(|s| {
+            s.spawn(|_| f_vec = self.batch_f.iter().map(|x| x.evaluate(point)).collect());
+            s.spawn(|_| h_vec = self.blocks.iter().map(|x| x.evaluate(point)).collect());
+            s.spawn(|_| t = self.table.evaluate(point));
+            s.spawn(|_| m = self.freq.evaluate(point));
+        });
+
+        LookupInstanceEval::<F> { f_vec, t, h_vec, m }
     }
 
     /// Evaluate at a random point defined over Extension Field
@@ -538,13 +536,8 @@ impl<F: Field + Serialize> Lookup<F> {
             .collect();
 
         // construct poly
-        for ((i, h), u_coef) in instance
-            .blocks
-            .iter()
-            .enumerate()
-            .zip(random_combine.iter())
-        {
-            let product = vec![h.clone()];
+        for ((i, h), u_coef) in instance.blocks.iter().enumerate().zip(random_combine.iter()) {
+            let product = vec![Rc::new(h.clone())];
             let op_coef = vec![(F::one(), F::zero())];
             poly.add_product_with_linear_op(product, &op_coef, F::one());
 
@@ -562,7 +555,7 @@ impl<F: Field + Serialize> Lookup<F> {
             let mut id_op_coef = vec![(F::one(), F::zero()); this_block_size + 2];
 
             let mut product = block.to_vec();
-            product.extend(vec![eq_at_u.clone(), h.clone()]);
+            product.extend(vec![eq_at_u.clone(), Rc::new(h.clone())]);
             poly.add_product_with_linear_op(product, &id_op_coef, *u_coef);
 
             id_op_coef.pop();
@@ -573,7 +566,7 @@ impl<F: Field + Serialize> Lookup<F> {
                 product[j] = eq_at_u.clone();
                 if is_last_block && (j == this_block_size - 1) {
                     id_op_coef.push((-F::one(), F::zero()));
-                    product.push(instance.freq.clone());
+                    product.push(Rc::new(instance.freq.clone()));
                 }
 
                 poly.add_product_with_linear_op(product, &id_op_coef, -*u_coef);

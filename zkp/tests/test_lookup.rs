@@ -1,6 +1,5 @@
 use algebra::{
-    derive::{DecomposableField, Field, Prime},
-    BabyBear, BabyBearExetension, DenseMultilinearExtension, Field,
+    derive::{DecomposableField, Field, Prime}, BabyBear, BabyBearExetension, DenseMultilinearExtension, Field
 };
 use num_traits::Zero;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
@@ -70,7 +69,11 @@ fn test_trivial_range_check() {
 
     // construct instance
 
-    let mut instance = LookupInstance::<FF>::from_slice(&f_vec, t.clone(), block_size);
+    let mut instance = LookupInstance::<FF>::from_slice(
+        &f_vec.iter().map(|d| d.as_ref().clone()).collect::<Vec<_>>(),
+        t.as_ref().clone(),
+        block_size,
+    );
     let info = instance.info();
 
     let kit = Lookup::<FF>::prove(&mut instance);
@@ -113,7 +116,11 @@ fn test_random_range_check() {
         t_evaluations,
     ));
 
-    let mut instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
+    let mut instance = LookupInstance::from_slice(
+        &f_vec.iter().map(|d| d.as_ref().clone()).collect::<Vec<_>>(),
+        t.as_ref().clone(),
+        block_size,
+    );
     let info = instance.info();
 
     let kit = Lookup::<FF>::prove(&mut instance);
@@ -156,7 +163,11 @@ fn test_snark() {
         t_evaluations,
     ));
 
-    let instance = LookupInstance::from_slice(&f_vec, t.clone(), block_size);
+    let instance = LookupInstance::from_slice(
+        &f_vec.iter().map(|d| d.as_ref().clone()).collect::<Vec<_>>(),
+        t.as_ref().clone(),
+        block_size,
+    );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <LookupSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(

@@ -163,8 +163,8 @@ pub fn print_statistic(
 
 /// compute the frequency MLE denoted by m
 pub fn cmp_frequency<F: Field>(
-    f_vec: &[Rc<DenseMultilinearExtension<F>>],
-    t: &Rc<DenseMultilinearExtension<F>>,
+    f_vec: &[DenseMultilinearExtension<F>],
+    t: &DenseMultilinearExtension<F>,
 ) -> DenseMultilinearExtension<F> {
     let num_vars = f_vec[0].num_vars;
 

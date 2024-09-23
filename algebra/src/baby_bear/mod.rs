@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Implementation of BabyBear field.
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
 pub struct BabyBear(u32);
 
 impl Field for BabyBear {

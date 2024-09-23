@@ -85,7 +85,7 @@ pub struct DecomposedBitsEval<F: Field> {
 /// * It is required to decompose over a power-of-2 base.
 ///
 /// These parameters are used as the verifier key.
-#[derive(Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DecomposedBitsInfo<F: Field> {
     /// base
     pub base: F,
@@ -289,7 +289,15 @@ impl<F: Field> DecomposedBits<F> {
             self.num_vars,
             table,
         ));
-        LookupInstance::from_slice(&self.d_bits, table, block_size)
+        LookupInstance::from_slice(
+            &self
+                .d_bits
+                .iter()
+                .map(|d| d.as_ref().clone())
+                .collect::<Vec<_>>(),
+            table.as_ref().clone(),
+            block_size,
+        )
     }
 
     /// Extract the lookup instance with frequency computed outside the from_slice
@@ -301,12 +309,11 @@ impl<F: Field> DecomposedBits<F> {
             *t = acc;
             acc += F::one();
         }
-        let table = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-            self.num_vars,
-            table,
-        ));
-        let m = Rc::new(cmp_frequency(&self.d_bits, &table));
-        LookupInstance::from_slice_pure(self.num_vars, &self.d_bits, table, m, block_size)
+        let table = DenseMultilinearExtension::from_evaluations_vec(self.num_vars, table);
+
+        let d_bits: Vec<_> = self.d_bits.iter().map(|x| x.as_ref().clone()).collect();
+        let m = cmp_frequency(&d_bits, &table);
+        LookupInstance::from_slice_pure(self.num_vars, &d_bits, table, m, block_size)
     }
 }
 
