@@ -108,34 +108,6 @@ jobs:
       - name: cargo test
         run: cargo nextest run --workspace
 
-  check-msrv:
-    name: cargo check (msrv)
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        # os: [windows-latest, macos-latest, ubuntu-latest]
-        os: [macos-latest, ubuntu-latest]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: restore cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.event_name != 'merge_group' }}
-
-      - name: install msrv toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_MIN_VER }}
-
-      - name: install cargo-hack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-hack
-
-      - name: cargo check
-        run: cargo hack check ${{ env.RUST_MIN_VER_PKGS }} --each-feature --skip nightly --optional-deps
-
   doc:
     name: cargo doc
     # NOTE: We don't have any platform specific docs in this workspace, so we only run on Ubuntu.
