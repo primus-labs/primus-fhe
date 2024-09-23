@@ -59,7 +59,7 @@ fn test_trivial_range_check() {
         field_vec!(FF; 4, 1, 5, 2, 4, 0, 1, 3, 3, 2, 1, 0, 5, 1, 1, 2),
     ));
 
-    let f_vec = vec![f0, f1, f2, f3, f4];
+    let f_vec = [f0, f1, f2, f3, f4];
 
     let mut t_evaluations: Vec<_> = (0..range).map(|i| FF::new(i as u32)).collect();
     t_evaluations.resize(1 << num_vars, FF::zero());

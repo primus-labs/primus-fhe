@@ -95,7 +95,7 @@ pub struct NTTInstances<F: Field> {
     pub num_vars: usize,
     /// stores {ω^0, ω^1, ..., ω^{2N-1}}
     pub ntt_table: Arc<Vec<F>>,
-    /// store the coefficient representaions
+    /// store the coefficient representations
     pub coeffs: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// store the point-evaluation representation
     pub points: Vec<Rc<DenseMultilinearExtension<F>>>,
