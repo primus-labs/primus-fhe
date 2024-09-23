@@ -536,7 +536,12 @@ impl<F: Field + Serialize> Lookup<F> {
             .collect();
 
         // construct poly
-        for ((i, h), u_coef) in instance.blocks.iter().enumerate().zip(random_combine.iter()) {
+        for ((i, h), u_coef) in instance
+            .blocks
+            .iter()
+            .enumerate()
+            .zip(random_combine.iter())
+        {
             let product = vec![Rc::new(h.clone())];
             let op_coef = vec![(F::one(), F::zero())];
             poly.add_product_with_linear_op(product, &op_coef, F::one());

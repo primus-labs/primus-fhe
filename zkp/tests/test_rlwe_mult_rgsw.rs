@@ -514,6 +514,6 @@ fn test_snarks_with_lookup() {
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <RlweMultRgswSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, 2
+        &instance, &code_spec, 2,
     );
 }

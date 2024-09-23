@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use std::{
     fmt::Display,
+    hash::Hash,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
@@ -22,7 +23,7 @@ use crate::{
 };
 
 /// Implementation of Goldilocks field
-#[derive(Debug, Default, Clone, Copy, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct Goldilocks(u64);
 
 impl Goldilocks {
@@ -279,6 +280,12 @@ impl Ord for Goldilocks {
     }
 }
 
+impl Hash for Goldilocks {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_canonical_u64().hash(state);
+    }
+}
 impl Neg for Goldilocks {
     type Output = Self;
     #[inline]

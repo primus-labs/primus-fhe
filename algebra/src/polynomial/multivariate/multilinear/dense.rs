@@ -14,7 +14,7 @@ use crate::{
     Polynomial,
 };
 
-use super::{MultilinearExtension, PAR_NUM_VAR_THERSHOLD};
+use super::{MultilinearExtension, PAR_NUM_VAR_THRESHOLD};
 use std::rc::Rc;
 
 /// Stores a multilinear polynomial in dense evaluation form.
@@ -123,7 +123,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
         // evaluate nv variable of partial point from left to right
         // with dim rounds and \sum_{i=1}^{dim} 2^(nv - i)
         // (If dim = nv, then the complexity is 2^{nv}.)
-        if dim <= PAR_NUM_VAR_THERSHOLD {
+        if dim <= PAR_NUM_VAR_THRESHOLD {
             for i in 1..dim + 1 {
                 // fix a single variable to evaluate (1 << (nv - i)) evaluations from the last round
                 // with complexity of 2^(1 << (nv - i)) field multiplications

@@ -9,8 +9,8 @@ use sha2::Sha256;
 use std::sync::Arc;
 use std::vec;
 use zkp::piop::RlweMultRgswSnarksOpt;
-use zkp::piop::{DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
-    RlweCiphertexts, RlweMultRgswInstance,
+use zkp::piop::{
+    DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
 };
 
 type FF = BabyBear;
@@ -240,6 +240,6 @@ fn main() {
     //     &instance, &code_spec,
     // );
     <RlweMultRgswSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, 2
+        &instance, &code_spec, 2,
     );
 }

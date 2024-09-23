@@ -1,5 +1,7 @@
 use algebra::{
-    derive::{DecomposableField, Field, Prime}, BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field, FieldUniformSampler
+    derive::{DecomposableField, Field, Prime},
+    BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field,
+    FieldUniformSampler,
 };
 use num_traits::{One, Zero};
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
