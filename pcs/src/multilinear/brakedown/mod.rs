@@ -448,8 +448,6 @@ where
         proofs: &[Self::Proof],
         trans: &mut Transcript<EF>,
     ) -> bool {
-        // assert_eq!(points.len(), pp.num_vars());
-
         // Hash the commitment to transcript.
         trans.append_message(b"commitment", &commitment);
 
@@ -464,6 +462,7 @@ where
         let queries_vec: Vec<Vec<usize>> = proofs
             .iter()
             .map(|proof| {
+                assert_eq!(proof.rlc_msgs.len(), pp.code().message_len());
                 trans.append_message(b"rlc", &proof.rlc_msgs);
                 Self::random_queries(pp, trans)
             })
