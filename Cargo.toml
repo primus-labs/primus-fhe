@@ -3,12 +3,13 @@
 members = [
     "algebra",
     "algebra_derive",
+    "fhe_cmp",
     "fhe_core",
     "lattice",
     "fhe",
     "pcs",
     "zkfhe",
-    "zkp",
+    "zkp"
 ]
 
 resolver = "2"

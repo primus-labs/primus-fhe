@@ -196,6 +196,12 @@ impl<F: NTTField> RLWE<F> {
         (self.a.as_mut_slice(), self.b.as_mut_slice())
     }
 
+    /// Drop `self`, return `a` and `b` of this [`RLWE<F>`].
+    #[inline]
+    pub fn given_a_b(self) -> (Polynomial<F>, Polynomial<F>) {
+        (self.a, self.b)
+    }
+
     /// Gets the dimension of this [`RLWE<F>`].
     #[inline]
     pub fn dimension(&self) -> usize {

@@ -80,7 +80,7 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
             Steps::BrMsKs => {
                 let acc = acc.extract_lwe_locally();
                 let cipher =
-                    lwe_modulus_switch(acc, parameters.lwe_cipher_modulus_value(), round_method);
+                    lwe_modulus_switch(&acc, parameters.lwe_cipher_modulus_value(), round_method);
 
                 let ksk = match self.key_switching_key {
                     KeySwitchingKeyEnum::LWE(ref ksk) => ksk,

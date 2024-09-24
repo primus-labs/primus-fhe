@@ -18,7 +18,7 @@ pub enum ModulusSwitchRoundMethod {
 ///
 /// This function performs on a `LWE<F>`, returns a `LWE<C>` with desired modulus `modulus_after`.
 pub fn lwe_modulus_switch<C: LWEModulusType, F: DecomposableField>(
-    c: LWE<F>,
+    c: &LWE<F>,
     modulus_after: C,
     round_method: ModulusSwitchRoundMethod,
 ) -> LWECiphertext<C> {
