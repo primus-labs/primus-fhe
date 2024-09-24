@@ -9,13 +9,13 @@ use crate::Field;
 /// A trait to constrain types that can be packed into a packed value.
 ///
 /// The `Packable` trait allows us to specify implementations for potentially conflicting types.
-pub trait Packable: 'static + Default + Copy + Send + Sync + PartialEq + Eq {}
+pub trait Packable: Default + Copy + Send + Sync + PartialEq + Eq {}
 
 /// # Safety
 /// - `WIDTH` is assumed to be a power of 2.
 /// - If `P` implements `PackedField` then `P` must be castable to/from `[P::Value; P::WIDTH]`
 ///   without UB.
-pub unsafe trait PackedValue: 'static + Copy + From<Self::Value> + Send + Sync {
+pub unsafe trait PackedValue: Copy + From<Self::Value> + Send + Sync {
     /// Value type
     type Value: Packable;
 
@@ -26,7 +26,7 @@ pub unsafe trait PackedValue: 'static + Copy + From<Self::Value> + Send + Sync {
     fn from_slice(slice: &[Self::Value]) -> &Self;
 
     /// Convert from slice mut
-    fn from_slice_mut(slice: &mut [Self::Value]) -> &mut Self;
+    fn from_mut_slice(slice: &mut [Self::Value]) -> &mut Self;
 
     /// Similar to `core:array::from_fn`.
     fn from_fn<F>(f: F) -> Self
@@ -36,8 +36,8 @@ pub unsafe trait PackedValue: 'static + Copy + From<Self::Value> + Send + Sync {
     /// as slice
     fn as_slice(&self) -> &[Self::Value];
 
-    /// as slice mut
-    fn as_slice_mut(&mut self) -> &mut [Self::Value];
+    /// as mut slice
+    fn as_mut_slice(&mut self) -> &mut [Self::Value];
 
     /// pack slice
     fn pack_slice(buf: &[Self::Value]) -> &[Self] {
@@ -97,18 +97,16 @@ pub unsafe trait PackedField: Field
     + PackedValue<Value = Self::Scalar>
     + From<Self::Scalar>
     + Add<Self::Scalar, Output = Self>
-    + AddAssign<Self::Scalar>
     + Sub<Self::Scalar, Output = Self>
-    + SubAssign<Self::Scalar>
     + Mul<Self::Scalar, Output = Self>
+    + AddAssign<Self::Scalar>
+    + SubAssign<Self::Scalar>
     + MulAssign<Self::Scalar>
     // TODO: Implement packed / packed division
     + Div<Self::Scalar, Output = Self>
 {
     /// Scalar type
-    type Scalar: Field + Add<Self, Output = Self> + Mul<Self, Output = Self> + Sub<Self, Output = Self>;
-
-
+    type Scalar: Field;
 
     /// Take interpret two vectors as chunks of `block_len` elements. Unpack and interleave those
     /// chunks. This is best seen with an example. If we have:
@@ -141,7 +139,7 @@ pub unsafe trait PackedField: Field
     /// We can also think about this as stacking the vectors, dividing them into 2x2 matrices, and
     /// transposing those matrices.
     ///
-    /// When `block_len = WIDTH`, this operation is a no-op. `block_len` must divide `WIDTH`. Since
+    /// When `block_len == WIDTH`, this operation is a no-op. `block_len` must divide `WIDTH`. Since
     /// `WIDTH` is specified to be a power of 2, `block_len` must also be a power of 2. It cannot be
     /// 0 and it cannot exceed `WIDTH`.
     fn interleave(&self, other: Self, block_len: usize) -> (Self, Self);
@@ -156,7 +154,7 @@ unsafe impl<T: Packable> PackedValue for T {
         &slice[0]
     }
 
-    fn from_slice_mut(slice: &mut [Self::Value]) -> &mut Self {
+    fn from_mut_slice(slice: &mut [Self::Value]) -> &mut Self {
         &mut slice[0]
     }
 
@@ -171,7 +169,7 @@ unsafe impl<T: Packable> PackedValue for T {
         slice::from_ref(self)
     }
 
-    fn as_slice_mut(&mut self) -> &mut [Self::Value] {
+    fn as_mut_slice(&mut self) -> &mut [Self::Value] {
         slice::from_mut(self)
     }
 }

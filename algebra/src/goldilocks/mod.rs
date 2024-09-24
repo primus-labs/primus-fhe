@@ -9,16 +9,15 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use num_traits::{Inv, One, Pow, Zero};
+use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 
 use crate::{
-    div_ceil,
-    modulus::{self, to_canonical_u64, GoldilocksModulus},
+    modulus::{to_canonical_u64, GoldilocksModulus, GOLDILOCKS_P},
     reduce::{
-        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
-        MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
+        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, ExpReduce, InvReduce, MulReduce,
+        MulReduceAssign, NegReduce, SubReduce, SubReduceAssign,
     },
-    DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
+    ConstNegOne, DecomposableField, FheField, Field, NegOne, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of Goldilocks field
@@ -30,8 +29,8 @@ impl Goldilocks {
     fn as_canonical_u64(&self) -> u64 {
         let mut c = self.0;
         // We only need one condition subtraction, since 2 * ORDER would not fit in a u64.
-        if c >= modulus::GOLDILOCKS_P {
-            c -= modulus::GOLDILOCKS_P;
+        if c >= GOLDILOCKS_P {
+            c -= GOLDILOCKS_P;
         }
         c
     }
@@ -41,12 +40,7 @@ impl Field for Goldilocks {
     type Value = u64;
     type Order = u64;
 
-    const MODULUS_VALUE: Self::Value = modulus::GOLDILOCKS_P;
-
-    #[inline]
-    fn neg_one() -> Self {
-        Self(modulus::GOLDILOCKS_P - 1)
-    }
+    const MODULUS_VALUE: Self::Value = GOLDILOCKS_P;
 
     #[inline]
     fn new(value: Self::Value) -> Self {
@@ -58,20 +52,6 @@ impl DecomposableField for Goldilocks {
     #[inline]
     fn value(self) -> Self::Value {
         to_canonical_u64(self.0)
-    }
-
-    #[inline]
-    fn mask(bits: u32) -> Self::Value {
-        u64::MAX >> (u64::BITS - bits)
-    }
-
-    #[inline]
-    fn decompose_len(basis: Self::Value) -> usize {
-        debug_assert!(basis.is_power_of_two() && basis > 1);
-        div_ceil(
-            64 - Self::MODULUS_VALUE.leading_zeros(),
-            basis.trailing_zeros(),
-        ) as usize
     }
 
     #[inline]
@@ -299,28 +279,42 @@ impl Pow<u64> for Goldilocks {
     type Output = Self;
     #[inline]
     fn pow(self, rhs: u64) -> Self::Output {
-        Self(self.0.pow_reduce(rhs, GoldilocksModulus))
+        Self(self.0.exp_reduce(rhs, GoldilocksModulus))
     }
 }
 
 impl Zero for Goldilocks {
     #[inline]
-    fn is_zero(&self) -> bool {
-        self.0 == 0
+    fn zero() -> Self {
+        Self(0)
     }
 
     #[inline]
     fn set_zero(&mut self) {
-        *self = Self(0);
+        self.0 = 0;
     }
 
     #[inline]
-    fn zero() -> Self {
-        Self(0)
+    fn is_zero(&self) -> bool {
+        self.0 == 0
     }
 }
 
+impl ConstZero for Goldilocks {
+    const ZERO: Self = Self(0);
+}
+
 impl One for Goldilocks {
+    #[inline]
+    fn one() -> Self {
+        Self(1)
+    }
+
+    #[inline]
+    fn set_one(&mut self) {
+        self.0 = 1;
+    }
+
     #[inline]
     fn is_one(&self) -> bool
     where
@@ -328,16 +322,31 @@ impl One for Goldilocks {
     {
         *self == Self(1)
     }
+}
 
-    #[inline]
-    fn set_one(&mut self) {
-        *self = Self(1);
+impl ConstOne for Goldilocks {
+    const ONE: Self = Self(1);
+}
+
+impl NegOne for Goldilocks {
+    fn neg_one() -> Self {
+        Self(GOLDILOCKS_P - 1)
     }
 
-    #[inline]
-    fn one() -> Self {
-        Self(1)
+    fn set_neg_one(&mut self) {
+        self.0 = GOLDILOCKS_P - 1;
     }
+
+    fn is_neg_one(&self) -> bool
+    where
+        Self: PartialEq,
+    {
+        *self == Self::neg_one()
+    }
+}
+
+impl ConstNegOne for Goldilocks {
+    const NEG_ONE: Self = Self(GOLDILOCKS_P - 1);
 }
 
 impl PrimeField for Goldilocks {

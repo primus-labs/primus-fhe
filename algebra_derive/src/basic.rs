@@ -96,6 +96,10 @@ pub(crate) fn impl_zero(name: &Ident) -> TokenStream {
                 self.0 = 0;
             }
         }
+
+        impl ::num_traits::ConstZero for #name {
+            const ZERO: Self = Self(0);
+        }
     }
 }
 
@@ -117,6 +121,36 @@ pub(crate) fn impl_one(name: &Ident) -> TokenStream {
             {
                 self.0 == 1
             }
+        }
+
+        impl ::num_traits::ConstOne for #name {
+            const ONE: Self = Self(1);
+        }
+    }
+}
+
+pub(crate) fn impl_neg_one(name: &Ident, modulus: &TokenStream) -> TokenStream {
+    quote! {
+        impl ::algebra::NegOne for #name {
+            #[inline]
+            fn neg_one() -> Self {
+                Self(#modulus - 1)
+            }
+
+            #[inline]
+            fn set_neg_one(&mut self) {
+                self.0 = #modulus - 1;
+            }
+
+            #[inline]
+            fn is_neg_one(&self) -> bool
+            {
+                self.0 == #modulus - 1
+            }
+        }
+
+        impl ::algebra::ConstNegOne for #name {
+            const NEG_ONE: Self = Self(#modulus - 1);
         }
     }
 }

@@ -19,7 +19,7 @@ impl<T: Copy> PowOf2Modulus<T> {
     /// Returns the mask of this [`PowOf2Modulus<T>`],
     /// which is equal to modulus value sub one.
     #[inline]
-    pub const fn mask(&self) -> T {
+    pub const fn mask(self) -> T {
         self.mask
     }
 }

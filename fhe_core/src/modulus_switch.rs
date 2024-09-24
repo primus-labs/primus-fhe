@@ -36,17 +36,19 @@ pub fn lwe_modulus_switch<C: LWEModulusType, F: DecomposableField>(
     let switch: Box<dyn Fn(F) -> C> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
             reduce(C::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round(),
+                (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64)
+                    .round(),
             ))
         }),
         ModulusSwitchRoundMethod::Floor => Box::new(|v: F| {
             reduce(C::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor(),
+                (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64)
+                    .floor(),
             ))
         }),
         ModulusSwitchRoundMethod::Ceil => Box::new(|v: F| {
             reduce(C::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil(),
+                (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64).ceil(),
             ))
         }),
     };
@@ -81,17 +83,19 @@ pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: DecomposableField>(
     let switch: Box<dyn Fn(F) -> C> = match round_method {
         ModulusSwitchRoundMethod::Round => Box::new(|v: F| {
             reduce(C::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).round(),
+                (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64)
+                    .round(),
             ))
         }),
         ModulusSwitchRoundMethod::Floor => Box::new(|v: F| {
             reduce(C::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).floor(),
+                (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64)
+                    .floor(),
             ))
         }),
         ModulusSwitchRoundMethod::Ceil => Box::new(|v: F| {
             reduce(C::as_from(
-                (v.value().as_into() * modulus_after_f64 / modulus_before_f64).ceil(),
+                (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64).ceil(),
             ))
         }),
     };

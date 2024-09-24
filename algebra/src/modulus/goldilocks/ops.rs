@@ -106,11 +106,11 @@ impl MulReduceAssign<GoldilocksModulus> for u64 {
     }
 }
 
-impl<E> PowReduce<GoldilocksModulus, E> for u64
+impl<E> ExpReduce<GoldilocksModulus, E> for u64
 where
     E: PrimInt + ShrAssign<u32> + Bits,
 {
-    fn pow_reduce(self, mut exp: E, _: GoldilocksModulus) -> Self {
+    fn exp_reduce(self, mut exp: E, _: GoldilocksModulus) -> Self {
         if exp.is_zero() {
             return 1;
         }
@@ -132,7 +132,7 @@ where
         }
 
         let mut intermediate: Self = power;
-        for _ in 1..(E::N_BITS - exp.leading_zeros()) {
+        for _ in 1..(E::BITS - exp.leading_zeros()) {
             exp >>= 1;
             power = power.mul_reduce(power, GoldilocksModulus);
             if !(exp & E::one()).is_zero() {
@@ -140,6 +140,19 @@ where
             }
         }
         intermediate
+    }
+}
+
+impl ExpPowOf2Reduce<GoldilocksModulus> for u64 {
+    #[inline]
+    fn exp_power_of_2_reduce(self, exp_log: u32, _modulus: GoldilocksModulus) -> Self {
+        let mut power: Self = self;
+
+        for _ in 0..exp_log {
+            power = power.mul_reduce(power, GoldilocksModulus);
+        }
+
+        power
     }
 }
 

@@ -5,7 +5,7 @@ use std::ops::Rem;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
-use crate::{AlgebraError, AsFrom, AsInto, Field, Widening, WrappingOps};
+use crate::{AlgebraError, AsFrom, AsInto, Field, Widening, WideningMul, WrappingNeg, WrappingOps};
 
 /// A trait to impl uniform for `Field`.
 pub trait UniformBase: Copy {
@@ -72,7 +72,7 @@ impl<F: Field> Distribution<F> for FieldUniformSampler<F> {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> F {
         let hi = loop {
-            let (lo, hi) = <F::Value as UniformBase>::gen_sample(rng).widen_mul(self.range);
+            let (lo, hi) = <F::Value as UniformBase>::gen_sample(rng).widening_mul(self.range);
             if lo >= self.thresh {
                 break hi;
             }

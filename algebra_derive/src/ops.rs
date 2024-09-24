@@ -163,8 +163,8 @@ pub(crate) fn pow_reduce_ops(name: &Ident) -> TokenStream {
 
             #[inline]
             fn pow(self, rhs: <Self as ::algebra::Field>::Order) -> Self::Output {
-                use ::algebra::reduce::PowReduce;
-                Self(self.0.pow_reduce(rhs, <Self as ::algebra::ModulusConfig>::MODULUS))
+                use ::algebra::reduce::ExpReduce;
+                Self(self.0.exp_reduce(rhs, <Self as ::algebra::ModulusConfig>::MODULUS))
             }
         }
     }

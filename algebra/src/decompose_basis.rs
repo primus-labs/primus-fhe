@@ -1,6 +1,8 @@
 //! The basis for decomposition of the [`Field`].
 
-use crate::{DecomposableField, Field};
+use num_traits::{ConstOne, One};
+
+use crate::{Bits, ConstBounded, DecomposableField, Field};
 
 /// This basis struct is used for decomposition of the [`Field`].
 ///
@@ -27,9 +29,18 @@ impl<F: DecomposableField> Default for Basis<F> {
 impl<F: DecomposableField> Basis<F> {
     /// Creates a new [`Basis<F>`] with the given basis' bits number.
     pub fn new(bits: u32) -> Self {
-        let mask = F::mask(bits);
-        let basis = mask + F::one().value();
-        let decompose_len = F::decompose_len(basis);
+        let mut modulus_bits =
+            <F::Value as Bits>::BITS - num_traits::PrimInt::leading_zeros(F::MODULUS_VALUE);
+
+        assert!(modulus_bits >= bits);
+
+        if num_traits::PrimInt::count_ones(F::MODULUS_VALUE).is_one() {
+            modulus_bits -= 1;
+        }
+
+        let mask = <F::Value as ConstBounded>::MAX >> (<F::Value as Bits>::BITS - bits);
+        let basis = <F::Value as ConstOne>::ONE << bits;
+        let decompose_len = modulus_bits.div_ceil(bits) as usize;
 
         Self {
             basis,

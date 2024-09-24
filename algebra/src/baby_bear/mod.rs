@@ -10,16 +10,17 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use num_traits::{Inv, One, Pow, Zero};
+use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 
 use crate::{
-    div_ceil,
-    modulus::{self, from_monty, to_monty, BabyBearModulus, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO},
-    reduce::{
-        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, InvReduce, MulReduce,
-        MulReduceAssign, NegReduce, PowReduce, SubReduce, SubReduceAssign,
+    modulus::{
+        from_monty, to_monty, BabyBearModulus, BABY_BEAR_P, MONTY_NEG_ONE, MONTY_ONE, MONTY_ZERO,
     },
-    DecomposableField, FheField, Field, Packable, PrimeField, TwoAdicField,
+    reduce::{
+        AddReduce, AddReduceAssign, DivReduce, DivReduceAssign, ExpReduce, InvReduce, MulReduce,
+        MulReduceAssign, NegReduce, SubReduce, SubReduceAssign,
+    },
+    ConstNegOne, DecomposableField, FheField, Field, NegOne, Packable, PrimeField, TwoAdicField,
 };
 
 /// Implementation of BabyBear field.
@@ -30,12 +31,7 @@ impl Field for BabyBear {
     type Value = u32;
     type Order = u32;
 
-    const MODULUS_VALUE: Self::Value = modulus::BABY_BEAR_P;
-
-    #[inline]
-    fn neg_one() -> Self {
-        Self(MONTY_NEG_ONE)
-    }
+    const MODULUS_VALUE: Self::Value = BABY_BEAR_P;
 
     #[inline]
     fn new(value: Self::Value) -> Self {
@@ -47,20 +43,6 @@ impl DecomposableField for BabyBear {
     #[inline]
     fn value(self) -> Self::Value {
         from_monty(self.0)
-    }
-
-    #[inline]
-    fn mask(bits: u32) -> Self::Value {
-        u32::MAX >> (u32::BITS - bits)
-    }
-
-    #[inline]
-    fn decompose_len(basis: Self::Value) -> usize {
-        debug_assert!(basis.is_power_of_two() && basis > 1);
-        div_ceil(
-            32 - Self::MODULUS_VALUE.leading_zeros(),
-            basis.trailing_zeros(),
-        ) as usize
     }
 
     #[inline]
@@ -269,28 +251,42 @@ impl Pow<u32> for BabyBear {
     type Output = Self;
     #[inline]
     fn pow(self, rhs: u32) -> Self::Output {
-        Self(self.0.pow_reduce(rhs, BabyBearModulus))
+        Self(self.0.exp_reduce(rhs, BabyBearModulus))
     }
 }
 
 impl Zero for BabyBear {
     #[inline]
-    fn is_zero(&self) -> bool {
-        *self == Self(MONTY_ZERO)
+    fn zero() -> Self {
+        Self(MONTY_ZERO)
     }
 
     #[inline]
     fn set_zero(&mut self) {
-        *self = Self(MONTY_ZERO);
+        self.0 = MONTY_ZERO;
     }
 
     #[inline]
-    fn zero() -> Self {
-        Self(MONTY_ZERO)
+    fn is_zero(&self) -> bool {
+        *self == Self(MONTY_ZERO)
     }
 }
 
+impl ConstZero for BabyBear {
+    const ZERO: Self = Self(MONTY_ZERO);
+}
+
 impl One for BabyBear {
+    #[inline]
+    fn one() -> Self {
+        Self(MONTY_ONE)
+    }
+
+    #[inline]
+    fn set_one(&mut self) {
+        self.0 = MONTY_ONE;
+    }
+
     #[inline]
     fn is_one(&self) -> bool
     where
@@ -298,16 +294,32 @@ impl One for BabyBear {
     {
         *self == Self(MONTY_ONE)
     }
+}
 
-    #[inline]
-    fn set_one(&mut self) {
-        *self = Self(MONTY_ONE);
+impl ConstOne for BabyBear {
+    const ONE: Self = Self(MONTY_ONE);
+}
+
+impl NegOne for BabyBear {
+    #[inline(always)]
+    fn neg_one() -> Self {
+        Self(MONTY_NEG_ONE)
     }
 
-    #[inline]
-    fn one() -> Self {
-        Self(MONTY_ONE)
+    fn set_neg_one(&mut self) {
+        self.0 = MONTY_NEG_ONE;
     }
+
+    fn is_neg_one(&self) -> bool
+    where
+        Self: PartialEq,
+    {
+        *self == Self(MONTY_NEG_ONE)
+    }
+}
+
+impl ConstNegOne for BabyBear {
+    const NEG_ONE: Self = Self(MONTY_NEG_ONE);
 }
 
 impl PrimeField for BabyBear {

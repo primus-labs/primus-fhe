@@ -22,9 +22,8 @@ fn impl_fhe_field(input: Input) -> TokenStream {
 
             #[inline]
             fn add_mul(self, a: Self, b: Self) -> Self {
-                use ::algebra::Widening;
                 use ::algebra::reduce::Reduce;
-                Self(a.0.carry_mul(b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
+                Self(::algebra::CarryingMul::carrying_mul(a.0, b.0, self.0).reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
             }
 
             #[inline]
@@ -37,7 +36,7 @@ fn impl_fhe_field(input: Input) -> TokenStream {
             fn add_mul_fast(self, a: Self, b: Self) -> Self {
                 use ::algebra::Widening;
                 use ::algebra::reduce::LazyReduce;
-                Self(a.0.carry_mul(b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
+                Self(::algebra::CarryingMul::carrying_mul(a.0, b.0, self.0).lazy_reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
             }
         }
     }

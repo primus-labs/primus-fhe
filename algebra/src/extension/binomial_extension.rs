@@ -6,7 +6,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use num_traits::{Inv, One, Pow, Zero};
+use num_traits::{ConstOne, ConstZero, Inv, One, Pow, Zero};
 use rand::{CryptoRng, Rng};
 use rand_distr::{Distribution, Standard};
 use serde::{
@@ -16,8 +16,9 @@ use serde::{
 };
 
 use crate::{
-    field_to_array, powers, AbstractExtensionField, ExtensionField, Field, FieldUniformSampler,
-    HasFrobenius, HasTwoAdicBionmialExtension, PackedField, TwoAdicField,
+    field_to_array, powers, AbstractExtensionField, ConstNegOne, ExtensionField, Field,
+    FieldUniformSampler, HasFrobenius, HasTwoAdicBionmialExtension, NegOne, PackedField,
+    TwoAdicField,
 };
 
 use super::{BinomiallyExtendable, Packable};
@@ -32,7 +33,7 @@ impl<F: Field, const D: usize> Default for BinomialExtensionField<F, D> {
     #[inline]
     fn default() -> Self {
         Self {
-            value: array::from_fn(|_| F::zero()),
+            value: [F::ZERO; D],
         }
     }
 }
@@ -83,7 +84,7 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> HasFrobenius
         }
 
         let mut res = [F::zero(); D];
-        for (i, z) in powers(&z0).take(D).enumerate() {
+        for (i, z) in powers(z0).take(D).enumerate() {
             res[i] = arr[i] * z;
         }
 
@@ -152,13 +153,6 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
 {
     type Value = F::Value;
     type Order = u128;
-
-    #[inline]
-    fn neg_one() -> Self {
-        Self {
-            value: field_to_array::<F, D>(F::neg_one()),
-        }
-    }
 
     #[inline]
     fn new(value: Self::Value) -> Self {
@@ -486,21 +480,90 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Zero
     for BinomialExtensionField<F, D>
 {
     #[inline]
-    fn is_zero(&self) -> bool {
-        *self == Self::zero()
+    fn zero() -> Self {
+        Self {
+            value: [F::ZERO; D],
+        }
     }
 
     #[inline]
     fn set_zero(&mut self) {
-        *self = Self::zero();
+        self.value = [F::ZERO; D];
     }
 
     #[inline]
-    fn zero() -> Self {
+    fn is_zero(&self) -> bool {
+        self.value == [F::ZERO; D]
+    }
+}
+
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> ConstZero
+    for BinomialExtensionField<F, D>
+{
+    const ZERO: Self = Self {
+        value: [F::ZERO; D],
+    };
+}
+
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> One
+    for BinomialExtensionField<F, D>
+{
+    #[inline]
+    fn one() -> Self {
         Self {
-            value: field_to_array(F::zero()),
+            value: field_to_array(F::ONE),
         }
     }
+
+    #[inline]
+    fn set_one(&mut self) {
+        *self = Self::one();
+    }
+
+    #[inline]
+    fn is_one(&self) -> bool
+    where
+        Self: PartialEq,
+    {
+        *self == Self::one()
+    }
+}
+
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> ConstOne
+    for BinomialExtensionField<F, D>
+{
+    const ONE: Self = Self {
+        value: field_to_array(F::ONE),
+    };
+}
+
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> NegOne
+    for BinomialExtensionField<F, D>
+{
+    fn neg_one() -> Self {
+        Self {
+            value: field_to_array(F::neg_one()),
+        }
+    }
+
+    fn set_neg_one(&mut self) {
+        *self = NegOne::neg_one();
+    }
+
+    fn is_neg_one(&self) -> bool
+    where
+        Self: PartialEq,
+    {
+        *self == Self::neg_one()
+    }
+}
+
+impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> ConstNegOne
+    for BinomialExtensionField<F, D>
+{
+    const NEG_ONE: Self = Self {
+        value: field_to_array(F::NEG_ONE),
+    };
 }
 
 impl<F: Field + BinomiallyExtendable<D>, const D: usize> Pow<u128>
@@ -513,29 +576,6 @@ impl<F: Field + BinomiallyExtendable<D>, const D: usize> Pow<u128>
     // Need to re-implement
     fn pow(self, _rhs: u128) -> Self::Output {
         std::unimplemented!()
-    }
-}
-impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> One
-    for BinomialExtensionField<F, D>
-{
-    #[inline]
-    fn is_one(&self) -> bool
-    where
-        Self: PartialEq,
-    {
-        *self == Self::one()
-    }
-
-    #[inline]
-    fn one() -> Self {
-        Self {
-            value: field_to_array(F::one()),
-        }
-    }
-
-    #[inline]
-    fn set_one(&mut self) {
-        *self = Self::one();
     }
 }
 

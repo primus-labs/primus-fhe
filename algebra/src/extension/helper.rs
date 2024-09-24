@@ -1,5 +1,3 @@
-use std::array;
-
 use crate::Field;
 
 /// An iterator over the powers of a certain base element `b`: `b^0, b^1, b^2, ...`.
@@ -23,14 +21,14 @@ impl<F: Field> Iterator for Powers<F> {
 }
 
 #[inline]
-pub(crate) fn powers<F: Field>(base: &F) -> Powers<F> {
-    shifted_powers(base, F::one())
+pub(crate) fn powers<F: Field>(base: F) -> Powers<F> {
+    shifted_powers(base, F::ONE)
 }
 
 #[inline]
-pub(crate) fn shifted_powers<F: Field>(base: &F, start: F) -> Powers<F> {
+pub(crate) fn shifted_powers<F: Field>(base: F, start: F) -> Powers<F> {
     Powers {
-        base: *base,
+        base,
         current: start,
     }
 }
@@ -38,8 +36,8 @@ pub(crate) fn shifted_powers<F: Field>(base: &F, start: F) -> Powers<F> {
 /// Extend a field `F` element `x` to an array of length `D`
 /// by filling zeros.
 #[inline]
-pub fn field_to_array<F: Field, const D: usize>(x: F) -> [F; D] {
-    let mut arr = array::from_fn(|_| F::zero());
+pub const fn field_to_array<F: Field, const D: usize>(x: F) -> [F; D] {
+    let mut arr = [F::ZERO; D];
     arr[0] = x;
     arr
 }
@@ -47,7 +45,7 @@ pub fn field_to_array<F: Field, const D: usize>(x: F) -> [F; D] {
 /// Naive polynomial multiplication.
 pub fn naive_poly_mul<F: Field>(a: &[F], b: &[F]) -> Vec<F> {
     // Grade school algorithm
-    let mut product = vec![F::zero(); a.len() + b.len() - 1];
+    let mut product = vec![F::ZERO; a.len() + b.len() - 1];
     for (i, c1) in a.iter().enumerate() {
         for (j, c2) in b.iter().enumerate() {
             product[i + j] += *c1 * (*c2);

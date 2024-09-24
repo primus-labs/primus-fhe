@@ -2,7 +2,7 @@
 //!
 //! This is derived from the [plonky2](https://github.com/0xPolygonZero/plonky2/blob/main/field/src/goldilocks_field.rs).
 
-use crate::reduce::{MulReduce, PowReduce};
+use crate::reduce::{ExpPowOf2Reduce, MulReduce};
 
 mod ops;
 
@@ -154,8 +154,8 @@ const fn split(x: u128) -> (u64, u64) {
 
 /// Squares the base N number of times and multiplies the result by the tail value.
 #[inline(always)]
-fn exp_acc<const N: usize>(base: u64, tail: u64) -> u64 {
-    base.pow_reduce(1u64 << N, GoldilocksModulus)
+fn exp_acc<const N: u32>(base: u64, tail: u64) -> u64 {
+    base.exp_power_of_2_reduce(N, GoldilocksModulus)
         .mul_reduce(tail, GoldilocksModulus)
 }
 
@@ -246,10 +246,10 @@ mod tests {
             to_canonical_u64(a.mul_reduce(b_inv, GoldilocksModulus))
         );
 
-        assert_eq!(to_canonical_u64(a.pow_reduce(0, GoldilocksModulus)), 1);
-        assert_eq!(to_canonical_u64(a.pow_reduce(1, GoldilocksModulus)), a);
+        assert_eq!(to_canonical_u64(a.exp_reduce(0, GoldilocksModulus)), 1);
+        assert_eq!(to_canonical_u64(a.exp_reduce(1, GoldilocksModulus)), a);
         assert_eq!(
-            to_canonical_u64(a.pow_reduce(b, GoldilocksModulus)),
+            to_canonical_u64(a.exp_reduce(b, GoldilocksModulus)),
             pow(a, b)
         );
         let a: Vec<u64> = dis.sample_iter(&mut rng).take(5).collect();

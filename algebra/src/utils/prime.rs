@@ -1,8 +1,7 @@
 use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, thread_rng, SeedableRng};
 
 use crate::modulus::BarrettModulus;
-use crate::reduce::{PowReduce, Reduce};
-use crate::Widening;
+use crate::reduce::{ExpReduce, Reduce};
 
 /// The trait defines some function for prime number
 pub trait Prime {
@@ -85,13 +84,13 @@ macro_rules! impl_prime_check {
                     } else {
                         2
                     };
-                    let mut x: $SelfT = a.pow_reduce(q, self);
+                    let mut x: $SelfT = a.exp_reduce(q, self);
                     if x == 1 || x == value_sub_one {
                         continue;
                     }
 
                     for _ in 1..r {
-                        x = x.widen_mul(x).reduce(self);
+                        x = $crate::WideningMul::widening_mul(x, x).reduce(self);
                         if x == value_sub_one {
                             break 'next_round;
                         }

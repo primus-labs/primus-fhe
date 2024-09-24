@@ -3,7 +3,7 @@
 mod lazy_ops;
 mod ops;
 
-mod primitive;
+mod macros;
 
 pub use lazy_ops::*;
 pub use ops::*;

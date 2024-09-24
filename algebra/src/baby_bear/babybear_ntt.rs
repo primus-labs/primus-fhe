@@ -6,7 +6,7 @@ use std::{
 use num_traits::{pow, Zero};
 use rand::{distributions, thread_rng};
 
-use crate::{transformation::prime32::ConcreteTable, Field, NTTField};
+use crate::{transformation::prime32::ConcreteTable, Field, NTTField, NegOne};
 
 use super::BabyBear;
 

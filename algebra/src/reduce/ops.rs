@@ -112,9 +112,15 @@ pub trait MulReduceAssign<Modulus, Rhs = Self> {
 }
 
 /// The modular exponentiation.
-pub trait PowReduce<Modulus, Exponent> {
+pub trait ExpReduce<Modulus, Exponent> {
     /// Calculates `self^exp (mod modulus)`.
-    fn pow_reduce(self, exp: Exponent, modulus: Modulus) -> Self;
+    fn exp_reduce(self, exp: Exponent, modulus: Modulus) -> Self;
+}
+
+/// The modular exponentiation.
+pub trait ExpPowOf2Reduce<Modulus> {
+    /// Calculates `self^(2^exp_log) (mod modulus)`.
+    fn exp_power_of_2_reduce(self, exp_log: u32, modulus: Modulus) -> Self;
 }
 
 /// Calculate the inverse element for a field.
