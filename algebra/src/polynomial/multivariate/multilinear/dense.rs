@@ -113,6 +113,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
     where
         EF: AbstractExtensionField<F>,
     {
+        assert_eq!(ext_point.len(), self.num_vars, "The point size is invalid.");
         let mut poly: Vec<_> = self
             .evaluations
             .iter()
