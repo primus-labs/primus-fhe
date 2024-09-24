@@ -1407,8 +1407,9 @@ where
         let random_value =
             prover_trans.get_challenge(b"random point used to generate the second oracle");
 
+        let start = Instant::now();
         lookup_instance.generate_h_vec(random_value);
-
+        println!("batch inverse: {:?} ms", start.elapsed().as_millis());
         // --------------------
 
         // 2.1 Generate the random point to instantiate the sumcheck protocol
@@ -1505,22 +1506,16 @@ where
         let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
 
         // 2.6 Generate the evaluation proof of the requested point
-
-        let eval_proof_at_r = BrakedownPCS::<F, H, C, S, EF>::open(
+        let mut opens = BrakedownPCS::<F, H, C, S, EF>::batch_open(
             &pp,
             &comm,
             &comm_state,
-            &requested_point_at_r,
+            &[requested_point_at_r.clone(), requested_point_at_u.clone()],
             &mut prover_trans,
         );
 
-        let eval_proof_at_u = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
-            &requested_point_at_u,
-            &mut prover_trans,
-        );
+        let eval_proof_at_r = std::mem::take(&mut opens[0]);
+        let eval_proof_at_u = std::mem::take(&mut opens[1]);
 
         let pcs_open_time = start.elapsed().as_millis();
 
@@ -1636,24 +1631,17 @@ where
         assert!(check_oracle_at_r && check_oracle_at_u);
         let iop_verifier_time = verifier_start.elapsed().as_millis();
 
-        // 3.5 Check the evaluation of a random point over the committed oracle
-        let check_pcs_at_r = BrakedownPCS::<F, H, C, S, EF>::verify(
+        let check_pcs_at_r_and_u = BrakedownPCS::<F, H, C, S, EF>::batch_verify(
             &pp,
             &comm,
-            &requested_point_at_r,
-            oracle_eval_at_r,
-            &eval_proof_at_r,
+            &[requested_point_at_r, requested_point_at_u],
+            &[oracle_eval_at_r, oracle_eval_at_u],
+            &[eval_proof_at_r.clone(), eval_proof_at_u.clone()],
             &mut verifier_trans,
         );
-        let check_pcs_at_u = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point_at_u,
-            oracle_eval_at_u,
-            &eval_proof_at_u,
-            &mut verifier_trans,
-        );
-        assert!(check_pcs_at_r && check_pcs_at_u);
+
+        assert!(check_pcs_at_r_and_u);
+
         let pcs_verifier_time = start.elapsed().as_millis();
         pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len()
             + bincode::serialize(&eval_proof_at_u).unwrap().len()

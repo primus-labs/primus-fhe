@@ -10,7 +10,7 @@ use algebra::{
     utils::{Block, Prg, Transcript},
     AbstractExtensionField, DenseMultilinearExtension, Field,
 };
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use rand::SeedableRng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -350,6 +350,52 @@ where
         }
     }
 
+    fn batch_open(
+        pp: &Self::Parameters,
+        commitment: &Self::Commitment,
+        state: &Self::CommitmentState,
+        batch_points: &[Vec<Self::Point>],
+        trans: &mut Transcript<EF>,
+    ) -> Vec<Self::Proof> {
+        // Hash the commitment to transcript.
+        trans.append_message(b"commitment", &commitment);
+
+        // Compute the tensor from the random point, see [DP23](https://eprint.iacr.org/2023/630.pdf).
+        let tensors: Vec<Vec<EF>> = batch_points
+            .iter()
+            .map(|points| {
+                assert_eq!(points.len(), pp.num_vars());
+                Self::tensor_from_points(pp, points)
+            })
+            .collect();
+
+        let rlc_msgss: Vec<Vec<EF>> = tensors
+            .par_iter()
+            .map(|tensor| Self::answer_challenge(pp, tensor, state))
+            .collect();
+
+        let queries_vec: Vec<Vec<usize>> = rlc_msgss
+            .iter()
+            .map(|rlc_msg| {
+                trans.append_message(b"rlc", rlc_msg);
+                Self::random_queries(pp, trans)
+            })
+            .collect();
+
+        queries_vec
+            .par_iter()
+            .zip(rlc_msgss.par_iter())
+            .map(|(queries, rlc_msgs)| {
+                let (merkle_paths, opening_columns) = Self::answer_queries(pp, queries, state);
+                BrakedownOpenProof {
+                    rlc_msgs: rlc_msgs.clone(),
+                    merkle_paths,
+                    opening_columns,
+                }
+            })
+            .collect()
+    }
+
     fn verify(
         pp: &Self::Parameters,
         commitment: &Self::Commitment,
@@ -392,5 +438,54 @@ where
         check &= eval == Self::residual_product(&proof.rlc_msgs, &residual);
 
         check
+    }
+
+    fn batch_verify(
+        pp: &Self::Parameters,
+        commitment: &Self::Commitment,
+        batch_points: &[Vec<Self::Point>],
+        evals: &[Self::Point],
+        proofs: &[Self::Proof],
+        trans: &mut Transcript<EF>,
+    ) -> bool {
+        // assert_eq!(points.len(), pp.num_vars());
+
+        // Hash the commitment to transcript.
+        trans.append_message(b"commitment", &commitment);
+
+        let tensors_and_residuals: Vec<(Vec<EF>, Vec<EF>)> = batch_points
+            .par_iter()
+            .map(|points| {
+                assert_eq!(points.len(), pp.num_vars());
+                Self::tensor_decompose(pp, points)
+            })
+            .collect();
+
+        let queries_vec: Vec<Vec<usize>> = proofs
+            .iter()
+            .map(|proof| {
+                trans.append_message(b"rlc", &proof.rlc_msgs);
+                Self::random_queries(pp, trans)
+            })
+            .collect();
+
+        izip!(proofs, &queries_vec, &tensors_and_residuals, evals)
+            .par_bridge()
+            .all(|(proof, queries, (tensor, residual), eval)| {
+                assert_eq!(proof.rlc_msgs.len(), pp.code().message_len());
+                let mut encoded_msg = vec![EF::zero(); pp.code().codeword_len()];
+                encoded_msg[..proof.rlc_msgs.len()].copy_from_slice(&proof.rlc_msgs);
+                pp.code().encode_ext(&mut encoded_msg);
+
+                Self::check_query_answers(
+                    pp,
+                    &tensor,
+                    &queries,
+                    &encoded_msg,
+                    &proof.merkle_paths,
+                    &proof.opening_columns,
+                    commitment,
+                ) & (*eval == Self::residual_product(&proof.rlc_msgs, &residual))
+            })
     }
 }

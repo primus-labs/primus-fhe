@@ -131,7 +131,7 @@ impl<
 pub type BrakedownPolyCommitment<H> = MerkleRoot<H>;
 
 /// Opening proof of Brakedown.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub struct BrakedownOpenProof<F, H, EF>
 where
     F: Field,

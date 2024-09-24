@@ -45,6 +45,15 @@ pub trait PolynomialCommitmentScheme<F: Field, EF: AbstractExtensionField<F>, S>
         trans: &mut Transcript<EF>,
     ) -> Self::Proof;
 
+    /// Tha batch opening phase.
+    fn batch_open(
+        pp: &Self::Parameters,
+        commitment: &Self::Commitment,
+        state: &Self::CommitmentState,
+        batch_points: &[Vec<Self::Point>],
+        trans: &mut Transcript<EF>,
+    ) -> Vec<Self::Proof>;
+
     /// The Verification phase.
     fn verify(
         pp: &Self::Parameters,
@@ -52,6 +61,16 @@ pub trait PolynomialCommitmentScheme<F: Field, EF: AbstractExtensionField<F>, S>
         points: &[Self::Point],
         eval: Self::Point,
         proof: &Self::Proof,
+        trans: &mut Transcript<EF>,
+    ) -> bool;
+
+    /// The batch verification phase.
+    fn batch_verify(
+        pp: &Self::Parameters,
+        commitment: &Self::Commitment,
+        batch_points: &[Vec<Self::Point>],
+        evals: &[Self::Point],
+        proofs: &[Self::Proof],
         trans: &mut Transcript<EF>,
     ) -> bool;
 }

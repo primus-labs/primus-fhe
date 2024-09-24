@@ -45,6 +45,7 @@ use pcs::{
     utils::hash::Hash,
     PolynomialCommitmentScheme,
 };
+use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -303,21 +304,22 @@ impl<F: Field> LookupInstance<F> {
         ft_vec.push(self.table.clone());
 
         // construct shifted columns: (f(x) - r)
-        let shifted_ft_vec: Vec<DenseMultilinearExtension<F>> = ft_vec
+        let shifted_ft_vec: Vec<F> = ft_vec
             .iter()
-            .map(|f| {
-                let evaluations = f.evaluations.iter().map(|x| *x - random_value).collect();
-                DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations)
-            })
+            .flat_map(|f| f.iter())
+            .map(|&x| x - random_value)
             .collect();
+
+        let num_threads = rayon::current_num_threads();
+        // let chunk_size = (shifted_ft_vec.len() + num_threads - 1) / num_threads;
+        let chunk_size = shifted_ft_vec.len() / num_threads;
+
         // construct inversed shifted columns: 1 / (f(x) - r)
-        let mut inversed_shifted_ft_evaluation_vec = batch_inverse(
-            &shifted_ft_vec
-                .iter()
-                .flat_map(|f| f.iter())
-                .cloned()
-                .collect::<Vec<F>>(),
-        );
+        let mut inversed_shifted_ft_evaluation_vec: Vec<F> = shifted_ft_vec
+            .par_chunks(chunk_size)
+            .map(|x| batch_inverse(x))
+            .flatten()
+            .collect();
 
         let total_size = inversed_shifted_ft_evaluation_vec.len();
         inversed_shifted_ft_evaluation_vec[(total_size - (1 << num_vars))..]
