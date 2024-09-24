@@ -81,7 +81,7 @@ fn test_protocol<F: Field + Serialize>(
     for _ in 0..poly.num_variables {
         let prover_message = IPForMLSumcheck::prove_round(&mut prover_state, &verifier_msg);
         verifier_msg =
-            IPForMLSumcheck::verify_round(prover_message, &mut verifier_state, &mut verifier_trans);
+            IPForMLSumcheck::verify_round(&prover_message, &mut verifier_state, &mut verifier_trans);
     }
     let subclaim = IPForMLSumcheck::check_and_generate_subclaim(verifier_state, asserted_sum)
         .expect("fail to generate subclaim");

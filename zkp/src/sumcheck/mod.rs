@@ -128,7 +128,7 @@ impl<F: Field + Serialize> MLSumcheck<F> {
             let prover_msg = proof.get(i).expect("proof is incomplete");
             trans.append_message(b"sumcheck msg", prover_msg);
 
-            IPForMLSumcheck::verify_round((*prover_msg).clone(), &mut verifier_state, trans);
+            IPForMLSumcheck::verify_round(prover_msg, &mut verifier_state, trans);
         }
 
         IPForMLSumcheck::check_and_generate_subclaim(verifier_state, claimed_sum)

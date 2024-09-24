@@ -57,7 +57,7 @@ impl<F: Field> IPForMLSumcheck<F> {
     /// and stores randomness and perform verifications altogether in `check_and_generate_subclaim` at
     /// the last step.
     pub fn verify_round(
-        prover_msg: ProverMsg<F>,
+        prover_msg: &ProverMsg<F>,
         verifier_state: &mut VerifierState<F>,
         trans: &mut Transcript<F>,
     ) -> Option<VerifierMsg<F>> {
@@ -71,7 +71,7 @@ impl<F: Field> IPForMLSumcheck<F> {
         verifier_state.randomness.push(msg.randomness);
         verifier_state
             .polynomials_received
-            .push(prover_msg.evaluations);
+            .push(prover_msg.evaluations.clone());
 
         // Now, verifier should set `expected` to P(r).
         // This operation is also moved to `check_and_generate_subclaim`,
