@@ -370,7 +370,7 @@ impl<F: Field> LookupInstance<F> {
         &self,
         point: &[EF],
     ) -> LookupInstanceEval<EF> {
-        // TODO: Paralell
+        // TODO: Parallel
         LookupInstanceEval::<EF> {
             f_vec: self.batch_f.iter().map(|x| x.evaluate_ext(point)).collect(),
             t: self.table.evaluate_ext(point),
