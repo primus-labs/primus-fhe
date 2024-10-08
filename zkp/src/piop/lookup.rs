@@ -1,4 +1,4 @@
-//! PIOP for range check
+//! PIOP for lookups
 //! The prover wants to convince that lookups f are all in range
 //!
 //! <==> \forall x \in H_f, \forall i \in [lookup_num], f_i(x) \in [range]
@@ -52,10 +52,10 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
 
-/// SNARKs for range check in [T] := [0, T-1]
+/// SNARKs for lookup tables.
 pub struct Lookup<F: Field>(PhantomData<F>);
 
-/// Stores the parameters used for range check in [T] and the public info for verifier.
+/// Stores the parameters used for lookup and the public info for verifier.
 #[derive(Clone, Serialize)]
 pub struct LookupInstanceInfo {
     /// number of variables for lookups
@@ -64,8 +64,6 @@ pub struct LookupInstanceInfo {
     pub num_batch: usize,
     /// block size
     pub block_size: usize,
-    /// residual size
-    pub residual_size: usize,
     /// number of blocks
     pub block_num: usize,
 }
@@ -80,7 +78,7 @@ impl fmt::Display for LookupInstanceInfo {
     }
 }
 
-/// Stores the parameters used for range check in [T] and the inputs and witness for prover.
+/// Stores the parameters used for lookup and the inputs and witness for prover.
 pub struct LookupInstance<F: Field> {
     /// number of variables for lookups i.e. the size of log(|F|)
     pub num_vars: usize,
@@ -88,8 +86,6 @@ pub struct LookupInstance<F: Field> {
     pub block_num: usize,
     /// block_size
     pub block_size: usize,
-    /// residual size
-    pub residual_size: usize,
     /// inputs f
     pub batch_f: Vec<DenseMultilinearExtension<F>>,
     /// inputs table
@@ -101,16 +97,14 @@ pub struct LookupInstance<F: Field> {
 }
 
 impl<F: Field> LookupInstance<F> {
-    /// Extract the information of range check for verification
+    /// Extract the information of lookup for verification
     #[inline]
     pub fn info(&self) -> LookupInstanceInfo {
-        let column_num = self.batch_f.len() + 1;
         LookupInstanceInfo {
             num_vars: self.num_vars,
             num_batch: self.batch_f.len(),
             block_size: self.block_size,
-            block_num: column_num / self.block_size,
-            residual_size: column_num % self.block_size,
+            block_num: self.block_num,
         }
     }
 
@@ -122,7 +116,6 @@ impl<F: Field> LookupInstance<F> {
             num_vars,
             block_num: 0,
             block_size,
-            residual_size: 0,
             batch_f: Vec::new(),
             table,
             blocks: Vec::new(),
@@ -130,7 +123,7 @@ impl<F: Field> LookupInstance<F> {
         }
     }
 
-    /// Construct a new instance from slice
+    /// Construct a new instance from slice with prepared m.
     #[inline]
     pub fn from_slice_pure(
         num_vars: usize,
@@ -139,12 +132,12 @@ impl<F: Field> LookupInstance<F> {
         m: DenseMultilinearExtension<F>,
         block_size: usize,
     ) -> Self {
+        assert!(block_size > 0);
         let column_num = f_vec.len() + 1;
         Self {
             num_vars,
-            block_num: column_num / block_size,
+            block_num: (column_num + block_size - 1) / block_size,
             block_size,
-            residual_size: column_num % block_size,
             batch_f: f_vec.to_vec(),
             table: t,
             blocks: Default::default(),
@@ -159,6 +152,7 @@ impl<F: Field> LookupInstance<F> {
         t: DenseMultilinearExtension<F>,
         block_size: usize,
     ) -> Self {
+        assert!(block_size > 0);
         let num_vars = f_vec[0].num_vars;
         let column_num = f_vec.len() + 1;
 
@@ -197,9 +191,8 @@ impl<F: Field> LookupInstance<F> {
         let m = DenseMultilinearExtension::from_evaluations_slice(num_vars, &m_evaluations);
         Self {
             num_vars,
-            block_num: column_num / block_size,
+            block_num: (column_num + block_size - 1) / block_size,
             block_size,
-            residual_size: column_num % block_size,
             batch_f: f_vec.to_vec(),
             table: t,
             blocks: Default::default(),
@@ -207,13 +200,12 @@ impl<F: Field> LookupInstance<F> {
         }
     }
 
-    /// Construct a EF version
+    /// Construct an EF version
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> LookupInstance<EF> {
         LookupInstance::<EF> {
             num_vars: self.num_vars,
             block_num: self.block_num,
             block_size: self.block_size,
-            residual_size: self.residual_size,
             batch_f: self.batch_f.iter().map(|x| x.to_ef()).collect(),
             table: self.table.to_ef(),
             blocks: Default::default(),
@@ -236,7 +228,7 @@ impl<F: Field> LookupInstance<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_second_oracles(&self) -> usize {
-        self.block_num + if self.residual_size != 0 { 1 } else { 0 }
+        self.block_num
     }
 
     /// Return the log of the number of small polynomials used in IOP
@@ -278,11 +270,11 @@ impl<F: Field> LookupInstance<F> {
 
         // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_first_mles();
-        evals.append(&mut vec![F::zero(); num_zeros_padded]);
+        evals.extend_from_slice(&vec![F::zero(); num_zeros_padded]);
         <DenseMultilinearExtension<F>>::from_evaluations_vec(num_vars, evals)
     }
 
-    /// generate second oracle
+    /// Generate second oracle
     pub fn generate_second_oracle(&mut self) -> DenseMultilinearExtension<F> {
         let num_vars_added = self.log_num_second_oracles();
         let num_vars = self.num_vars + num_vars_added;
@@ -291,11 +283,11 @@ impl<F: Field> LookupInstance<F> {
 
         // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_second_mles();
-        evals.append(&mut vec![F::zero(); num_zeros_padded]);
+        evals.extend_from_slice(&vec![F::zero(); num_zeros_padded]);
         <DenseMultilinearExtension<F>>::from_evaluations_vec(num_vars, evals)
     }
 
-    /// generate_h_vec
+    /// Generate the h vector.
     pub fn generate_h_vec(&mut self, random_value: F) {
         let num_vars = self.num_vars;
 
@@ -329,13 +321,10 @@ impl<F: Field> LookupInstance<F> {
                 *inverse_shifted_t *= -(*m);
             });
 
-        let chunks =
-            inversed_shifted_ft_evaluation_vec.chunks_exact(self.block_size * (1 << num_vars));
-
-        let residual = chunks.remainder();
+        let chunks = inversed_shifted_ft_evaluation_vec.chunks(self.block_size * (1 << num_vars));
 
         // construct blocked columns
-        let mut h_vec: Vec<DenseMultilinearExtension<F>> = chunks
+        let h_vec: Vec<DenseMultilinearExtension<F>> = chunks
             .map(|block| {
                 DenseMultilinearExtension::from_evaluations_vec(
                     num_vars,
@@ -355,27 +344,10 @@ impl<F: Field> LookupInstance<F> {
             })
             .collect();
 
-        let h_residual = DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            residual.chunks_exact(1 << num_vars).fold(
-                vec![F::zero(); 1 << num_vars],
-                |mut acc, f| {
-                    f.iter().enumerate().for_each(|(i, &val)| {
-                        acc[i] += val;
-                    });
-                    acc
-                },
-            ),
-        );
-
-        if self.residual_size != 0 {
-            h_vec.push(h_residual)
-        };
-
         self.blocks = h_vec;
     }
 
-    /// Evaluate at a random point defined over Field
+    /// Evaluate at a random point defined over base field
     #[inline]
     pub fn evaluate(&self, point: &[F]) -> LookupInstanceEval<F> {
         let mut f_vec = vec![];
@@ -392,12 +364,13 @@ impl<F: Field> LookupInstance<F> {
         LookupInstanceEval::<F> { f_vec, t, h_vec, m }
     }
 
-    /// Evaluate at a random point defined over Extension Field
+    /// Evaluate at a random point defined over extension field
     #[inline]
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(
         &self,
         point: &[EF],
     ) -> LookupInstanceEval<EF> {
+        // TODO: Paralell
         LookupInstanceEval::<EF> {
             f_vec: self.batch_f.iter().map(|x| x.evaluate_ext(point)).collect(),
             t: self.table.evaluate_ext(point),
@@ -409,11 +382,11 @@ impl<F: Field> LookupInstance<F> {
 
 /// Evaluations at a random point
 pub struct LookupInstanceEval<F: Field> {
-    /// f_vec
+    /// f vector
     pub f_vec: Vec<F>,
-    /// t
+    /// taget 
     pub t: F,
-    /// h_vec
+    /// h vector
     pub h_vec: Vec<F>,
     /// m
     pub m: F,
@@ -455,26 +428,25 @@ impl<F: Field> LookupInstanceEval<F> {
     }
 }
 
-// execute sumcheck for
-// \sum_{x \in H_f}
-//                  r * \sum_{i \in [block_num]} h_i(x)
-//                + \sum_{i \in [block_num]} eq(x, u) * (h(x) * \prod_{j \in [block_size]}(f_j(x) - r) - \sum_{i \in [block_size]} \prod_{j \in [block_size], j != i} (f_j(x) - r))
-//                = c_sum
+// Execute sumcheck for lookup.
 impl<F: Field + Serialize> Lookup<F> {
-    /// random combine
+    /// Sample coins for random combination.
+    #[inline]
     pub fn sample_coins(trans: &mut Transcript<F>, instance: &LookupInstance<F>) -> Vec<F> {
+        // TODO: should hash all the instance.
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            instance.block_num + if instance.residual_size != 0 { 1 } else { 0 },
+            instance.block_num,
         )
     }
 
-    /// return the number of coins used in this IOP
+    /// Return the number of coins used in this IOP
+    #[inline]
     pub fn num_coins(info: &LookupInstanceInfo) -> usize {
-        info.block_num + if info.residual_size != 0 { 1 } else { 0 }
+        info.block_num
     }
 
-    /// verifier challenges.
+    /// Prove the lookup statement.
     pub fn prove(instance: &mut LookupInstance<F>) -> SumcheckKit<F> {
         let mut trans = Transcript::<F>::new();
 
@@ -508,9 +480,7 @@ impl<F: Field + Serialize> Lookup<F> {
         }
     }
 
-    /// Prove bit decomposition given the decomposed bits as prover key.
-    /// This function does the same thing as `prove`, but it uses a `Fiat-Shamir RNG` as the transcript/to generate the
-    /// verifier challenges.
+    /// Handle the list of products of polynomial.
     pub fn prove_as_subprotocol(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
@@ -537,7 +507,7 @@ impl<F: Field + Serialize> Lookup<F> {
             })
             .collect();
 
-        // construct poly
+        // construct the product of polynomials.
         for ((i, h), u_coef) in instance
             .blocks
             .iter()
@@ -550,8 +520,10 @@ impl<F: Field + Serialize> Lookup<F> {
 
             let is_last_block = i == instance.blocks.len() - 1;
 
-            let this_block_size = if is_last_block && (instance.residual_size != 0) {
-                instance.residual_size
+            let residual_size = (instance.batch_f.len() + 1) % instance.block_size;
+
+            let this_block_size = if is_last_block && (residual_size != 0) {
+                residual_size
             } else {
                 instance.block_size
             };
@@ -581,7 +553,7 @@ impl<F: Field + Serialize> Lookup<F> {
         }
     }
 
-    /// verify
+    /// Verify the lookup statement
     pub fn verify(
         wrapper: &ProofWrapper<F>,
         evals: &LookupInstanceEval<F>,
@@ -615,7 +587,7 @@ impl<F: Field + Serialize> Lookup<F> {
         subclaim.expected_evaluations == F::zero()
     }
 
-    /// Verify addition in Zq
+    /// Verify lookup
     pub fn verify_as_subprotocol(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,

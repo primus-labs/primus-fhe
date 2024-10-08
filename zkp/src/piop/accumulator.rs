@@ -1506,6 +1506,8 @@ where
         let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
 
         // 2.6 Generate the evaluation proof of the requested point
+
+
         let mut opens = BrakedownPCS::<F, H, C, S, EF>::batch_open(
             &pp,
             &comm,

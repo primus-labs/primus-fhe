@@ -3,7 +3,7 @@ pub mod accumulator;
 pub mod addition_in_zq;
 pub mod bit_decomposition;
 pub mod floor;
-pub mod look_up;
+pub mod lookup;
 pub mod ntt;
 pub mod ntt_revision;
 pub mod rlwe_mul_rgsw;
@@ -21,7 +21,7 @@ pub use bit_decomposition::{
     DecomposedBitsInfo,
 };
 pub use floor::{FloorIOP, FloorInstance, FloorSnarks};
-pub use look_up::{Lookup, LookupInstance, LookupSnarks};
+pub use lookup::{Lookup, LookupInstance, LookupSnarks};
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
 pub use rlwe_mul_rgsw::{
