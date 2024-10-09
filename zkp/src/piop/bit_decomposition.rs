@@ -355,7 +355,7 @@ impl<F: Field> DecomposedBitsEval<F> {
 }
 
 impl<F: Field + Serialize> BitDecomposition<F> {
-    /// sample coins before proving sumcheck protocol
+    /// Sample coins before proving sumcheck protocol
     pub fn sample_coins(trans: &mut Transcript<F>, instance: &DecomposedBits<F>) -> Vec<F> {
         // batch `len_bits` sumcheck protocols into one with random linear combination
         trans.get_vec_challenge(
