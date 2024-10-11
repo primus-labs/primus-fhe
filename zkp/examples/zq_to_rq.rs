@@ -7,7 +7,7 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use zkp::piop::zq_to_rq::ZqToRQSnarks;
-use zkp::piop::{DecomposedBitsInfo, ZqToRQInstance};
+use zkp::piop::{BitDecompositionInstanceInfo, ZqToRQInstance};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -76,7 +76,7 @@ fn main() {
         sparse_outputs.push(Rc::new(sparse_output));
     }
 
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: num_vars,

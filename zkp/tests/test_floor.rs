@@ -7,7 +7,7 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{floor::FloorSnarks, DecomposedBitsInfo, FloorIOP, FloorInstance};
+use zkp::piop::{floor::FloorSnarks, BitDecompositionInstanceInfo, FloorIOP, FloorInstance};
 
 type FF = BabyBear; // field type
 type EF = BabyBearExetension;
@@ -69,7 +69,7 @@ fn test_floor_naive_iop() {
         num_vars,
         field_vec!(FF; 0, 0, 1, 2),
     ));
-    let output_bits_info = DecomposedBitsInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -77,7 +77,7 @@ fn test_floor_naive_iop() {
         num_instances: 1,
     };
 
-    let offset_bits_info = DecomposedBitsInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -129,7 +129,7 @@ fn test_floor_random_iop() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let output_bits_info = DecomposedBitsInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -137,7 +137,7 @@ fn test_floor_random_iop() {
         num_instances: 1,
     };
 
-    let offset_bits_info = DecomposedBitsInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -189,7 +189,7 @@ fn test_floor_random_iop_extension_field() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let output_bits_info = DecomposedBitsInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -197,7 +197,7 @@ fn test_floor_random_iop_extension_field() {
         num_instances: 1,
     };
 
-    let offset_bits_info = DecomposedBitsInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -249,7 +249,7 @@ fn test_snarks() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let output_bits_info = DecomposedBitsInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -257,7 +257,7 @@ fn test_snarks() {
         num_instances: 1,
     };
 
-    let offset_bits_info = DecomposedBitsInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FK as usize,

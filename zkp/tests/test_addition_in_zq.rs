@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
     AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks,
-    AdditionInZqSnarksOpt, DecomposedBitsInfo, LookupIOP,
+    AdditionInZqSnarksOpt, BitDecompositionInstanceInfo, LookupIOP,
 };
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
@@ -59,7 +59,7 @@ fn test_trivial_addition_in_zq() {
         field_vec!(FF; 1, 1, 0, 0),
     ));
 
-    let bits_info = DecomposedBitsInfo::<FF> {
+    let bits_info = BitDecompositionInstanceInfo::<FF> {
         base,
         base_len,
         bits_len,
@@ -131,7 +131,7 @@ fn test_random_addition_in_zq() {
         k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
     ));
 
-    let bits_info = DecomposedBitsInfo::<FF> {
+    let bits_info = BitDecompositionInstanceInfo::<FF> {
         base,
         base_len,
         bits_len,
@@ -203,7 +203,7 @@ fn test_random_addition_in_zq_extension_field() {
         k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
     ));
 
-    let bits_info = DecomposedBitsInfo::<FF> {
+    let bits_info = BitDecompositionInstanceInfo::<FF> {
         base,
         base_len,
         bits_len,
@@ -276,7 +276,7 @@ fn test_snarks() {
         k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
     ));
 
-    let bits_info = DecomposedBitsInfo::<FF> {
+    let bits_info = BitDecompositionInstanceInfo::<FF> {
         base,
         base_len,
         bits_len,
@@ -317,7 +317,7 @@ fn test_trivial_addition_in_zq_with_lookup() {
         field_vec!(FF; 1, 1, 0, 0),
     ));
 
-    let bits_info = DecomposedBitsInfo::<FF> {
+    let bits_info = BitDecompositionInstanceInfo::<FF> {
         base,
         base_len,
         bits_len,
@@ -388,7 +388,7 @@ fn test_trivial_addition_in_zq_with_lookup_snarks() {
         field_vec!(FF; 1, 1, 0, 0),
     ));
 
-    let bits_info = DecomposedBitsInfo::<FF> {
+    let bits_info = BitDecompositionInstanceInfo::<FF> {
         base,
         base_len,
         bits_len,

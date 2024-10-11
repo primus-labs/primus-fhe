@@ -19,8 +19,7 @@
 //! then the resulting purported sum is:
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
-use crate::sumcheck::{verifier::SubClaim, MLSumcheck};
-use crate::sumcheck::{ProofWrapper, SumcheckKit};
+use crate::sumcheck::{verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{
     cmp_frequency, eval_identity_function, gen_identity_evaluations, print_statistic,
     verify_oracle_relation,
@@ -44,8 +43,6 @@ use std::time::Instant;
 
 use super::LookupInstance;
 
-/// IOP for bit decomposition
-pub struct BitDecomposition<F: Field>(PhantomData<F>);
 /// SNARKs for bit decomposition compiled with PCS
 pub struct BitDecompositionSnarks<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
@@ -57,7 +54,7 @@ pub struct BitDecompositionSnarks<F: Field, EF: AbstractExtensionField<F>>(
 ///
 /// It is required to decompose over a power-of-2 base.
 /// The resulting decomposed bits are used as the prover key.
-pub struct DecomposedBits<F: Field> {
+pub struct BitDecompositionInstance<F: Field> {
     /// base
     pub base: F,
     /// the length of base, i.e. log_2(base)
@@ -73,7 +70,7 @@ pub struct DecomposedBits<F: Field> {
 }
 
 /// Evaluations at a random point
-pub struct DecomposedBitsEval<F: Field> {
+pub struct BitDecompositionEval<F: Field> {
     /// batched values to be decomposed into bits
     pub d_val: Vec<F>,
     /// batched plain deomposed bits, each of which corresponds to one bit decomposisiton instance
@@ -86,7 +83,7 @@ pub struct DecomposedBitsEval<F: Field> {
 ///
 /// These parameters are used as the verifier key.
 #[derive(Debug, Clone, Serialize)]
-pub struct DecomposedBitsInfo<F: Field> {
+pub struct BitDecompositionInstanceInfo<F: Field> {
     /// base
     pub base: F,
     /// the length of base, i.e. log_2(base)
@@ -99,7 +96,7 @@ pub struct DecomposedBitsInfo<F: Field> {
     pub num_instances: usize,
 }
 
-impl<F: Field> fmt::Display for DecomposedBitsInfo<F> {
+impl<F: Field> fmt::Display for BitDecompositionInstanceInfo<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -109,10 +106,10 @@ impl<F: Field> fmt::Display for DecomposedBitsInfo<F> {
     }
 }
 
-impl<F: Field> DecomposedBitsInfo<F> {
+impl<F: Field> BitDecompositionInstanceInfo<F> {
     /// Construct a EF version
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> DecomposedBitsInfo<EF> {
-        DecomposedBitsInfo::<EF> {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> BitDecompositionInstanceInfo<EF> {
+        BitDecompositionInstanceInfo::<EF> {
             base: EF::from_base(self.base),
             base_len: self.base_len,
             bits_len: self.bits_len,
@@ -122,11 +119,11 @@ impl<F: Field> DecomposedBitsInfo<F> {
     }
 }
 
-impl<F: Field> DecomposedBits<F> {
+impl<F: Field> BitDecompositionInstance<F> {
     #[inline]
     /// Extract the information of decomposed bits for verification
-    pub fn info(&self) -> DecomposedBitsInfo<F> {
-        DecomposedBitsInfo {
+    pub fn info(&self) -> BitDecompositionInstanceInfo<F> {
+        BitDecompositionInstanceInfo {
             base: self.base,
             base_len: self.base_len,
             bits_len: self.bits_len,
@@ -138,7 +135,7 @@ impl<F: Field> DecomposedBits<F> {
     /// Initiate the polynomial used for sumcheck protocol
     #[inline]
     pub fn new(base: F, base_len: usize, bits_len: usize, num_vars: usize) -> Self {
-        DecomposedBits {
+        BitDecompositionInstance {
             base,
             base_len,
             bits_len,
@@ -208,8 +205,8 @@ impl<F: Field> DecomposedBits<F> {
 
     /// Construct a EF version
     #[inline]
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> DecomposedBits<EF> {
-        DecomposedBits::<EF> {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> BitDecompositionInstance<EF> {
+        BitDecompositionInstance::<EF> {
             num_vars: self.num_vars,
             base: EF::from_base(self.base),
             base_len: self.base_len,
@@ -229,8 +226,8 @@ impl<F: Field> DecomposedBits<F> {
 
     /// Evaluate at a random point defined over Field
     #[inline]
-    pub fn evaluate(&self, point: &[F]) -> DecomposedBitsEval<F> {
-        DecomposedBitsEval::<F> {
+    pub fn evaluate(&self, point: &[F]) -> BitDecompositionEval<F> {
+        BitDecompositionEval::<F> {
             d_val: self.d_val.iter().map(|val| val.evaluate(point)).collect(),
             d_bits: self.d_bits.iter().map(|bit| bit.evaluate(point)).collect(),
         }
@@ -241,8 +238,8 @@ impl<F: Field> DecomposedBits<F> {
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(
         &self,
         point: &[EF],
-    ) -> DecomposedBitsEval<EF> {
-        DecomposedBitsEval::<EF> {
+    ) -> BitDecompositionEval<EF> {
+        BitDecompositionEval::<EF> {
             d_val: self
                 .d_val
                 .iter()
@@ -261,8 +258,8 @@ impl<F: Field> DecomposedBits<F> {
     pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
         &self,
         eq_at_r: &DenseMultilinearExtension<EF>,
-    ) -> DecomposedBitsEval<EF> {
-        DecomposedBitsEval::<EF> {
+    ) -> BitDecompositionEval<EF> {
+        BitDecompositionEval::<EF> {
             d_val: self
                 .d_val
                 .iter()
@@ -317,7 +314,7 @@ impl<F: Field> DecomposedBits<F> {
     }
 }
 
-impl<F: DecomposableField> DecomposedBits<F> {
+impl<F: DecomposableField> BitDecompositionInstance<F> {
     /// Use the base defined in this instance to perform decomposition over the input value.
     /// Then add the result into this instance, meaning to add l sumcheck protocols.
     /// * decomposed_bits: store each bit
@@ -329,7 +326,7 @@ impl<F: DecomposableField> DecomposedBits<F> {
     }
 }
 
-impl<F: Field> DecomposedBitsEval<F> {
+impl<F: Field> BitDecompositionEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
@@ -354,9 +351,15 @@ impl<F: Field> DecomposedBitsEval<F> {
     }
 }
 
-impl<F: Field + Serialize> BitDecomposition<F> {
+/// IOP for bit decomposition
+pub struct BitDecompositionIOP<F: Field>(PhantomData<F>);
+
+impl<F: Field + Serialize> BitDecompositionIOP<F> {
     /// Sample coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, instance: &DecomposedBits<F>) -> Vec<F> {
+    pub fn sample_coins(
+        trans: &mut Transcript<F>,
+        instance: &BitDecompositionInstance<F>,
+    ) -> Vec<F> {
         // batch `len_bits` sumcheck protocols into one with random linear combination
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
@@ -365,12 +368,12 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     }
 
     /// return the number of coins used in this IOP
-    pub fn num_coins(info: &DecomposedBitsInfo<F>) -> usize {
+    pub fn num_coins(info: &BitDecompositionInstanceInfo<F>) -> usize {
         info.bits_len * info.num_instances
     }
 
     /// Prove bit decomposition given the decomposed bits as prover key.
-    pub fn prove(instance: &DecomposedBits<F>) -> SumcheckKit<F> {
+    pub fn prove(instance: &BitDecompositionInstance<F>) -> SumcheckKit<F> {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -401,7 +404,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     pub fn prove_as_subprotocol(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
-        instance: &DecomposedBits<F>,
+        instance: &BitDecompositionInstance<F>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let base = 1 << instance.base_len;
@@ -427,8 +430,8 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     /// Verify bit decomposition given the basic information of decomposed bits as verifier key.
     pub fn verify(
         wrapper: &ProofWrapper<F>,
-        evals: &DecomposedBitsEval<F>,
-        info: &DecomposedBitsInfo<F>,
+        evals: &BitDecompositionEval<F>,
+        info: &BitDecompositionInstanceInfo<F>,
     ) -> bool {
         let mut trans = Transcript::new();
 
@@ -456,8 +459,8 @@ impl<F: Field + Serialize> BitDecomposition<F> {
 
     /// Verify bit decomposition relation without verifying each bit < base
     pub fn verify_as_subprotocol_pure(
-        evals: &DecomposedBitsEval<F>,
-        info: &DecomposedBitsInfo<F>,
+        evals: &BitDecompositionEval<F>,
+        info: &BitDecompositionInstanceInfo<F>,
     ) -> bool {
         assert_eq!(evals.d_val.len(), info.num_instances);
         assert_eq!(evals.d_bits.len(), info.num_instances * info.bits_len);
@@ -485,8 +488,8 @@ impl<F: Field + Serialize> BitDecomposition<F> {
     pub fn verify_as_subprotocol(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
-        evals: &DecomposedBitsEval<F>,
-        info: &DecomposedBitsInfo<F>,
+        evals: &BitDecompositionEval<F>,
+        info: &BitDecompositionInstanceInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
         // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
@@ -518,7 +521,7 @@ where
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &DecomposedBits<F>, code_spec: &S)
+    pub fn snarks<H, C, S>(instance: &BitDecompositionInstance<F>, code_spec: &S)
     where
         H: Hash + Sync + Send,
         C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
@@ -556,8 +559,8 @@ where
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let claimed_sum = EF::zero();
-        let randomness = BitDecomposition::sample_coins(&mut prover_trans, &instance_ef);
-        BitDecomposition::prove_as_subprotocol(
+        let randomness = BitDecompositionIOP::sample_coins(&mut prover_trans, &instance_ef);
+        BitDecompositionIOP::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
@@ -609,7 +612,7 @@ where
         // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
         let randomness = verifier_trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecomposition<EF>>::num_coins(&instance_info),
+            <BitDecompositionIOP<EF>>::num_coins(&instance_info),
         );
 
         // 3.3 Check the proof of the sumcheck protocol
@@ -623,7 +626,7 @@ where
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subcliam = BitDecomposition::<EF>::verify_as_subprotocol(
+        let check_subcliam = BitDecompositionIOP::<EF>::verify_as_subprotocol(
             &randomness,
             &mut subclaim,
             &evals,

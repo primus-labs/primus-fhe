@@ -15,7 +15,7 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::time::Instant;
 use std::vec;
-use zkp::piop::{BitDecomposition, BitDecompositionSnarks, DecomposedBits};
+use zkp::piop::{BitDecompositionIOP, BitDecompositionInstance, BitDecompositionSnarks};
 use zkp::sumcheck::MLSumcheck;
 use zkp::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
@@ -59,15 +59,15 @@ fn test_single_trivial_bit_decomposition_base_2() {
         )),
     ];
 
-    let mut prover_key = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut prover_key = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     prover_key.add_decomposed_bits_instance(&d, &d_bits);
     let info = prover_key.info();
 
-    let kit = BitDecomposition::prove(&prover_key);
+    let kit = BitDecompositionIOP::prove(&prover_key);
     let evals = prover_key.evaluate(&kit.randomness);
 
-    let wrapper = kit.extract();
-    let check = BitDecomposition::verify(&wrapper, &evals, &info);
+    let wrapper: zkp::sumcheck::ProofWrapper<BabyBear> = kit.extract();
+    let check = BitDecompositionIOP::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -115,18 +115,18 @@ fn test_batch_trivial_bit_decomposition_base_2() {
         ],
     ];
 
-    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     for (d_val, d_bits) in izip!(d, d_bits) {
         instance.add_decomposed_bits_instance(&d_val, &d_bits);
     }
 
     let info = instance.info();
 
-    let kit = BitDecomposition::prove(&instance);
+    let kit = BitDecompositionIOP::prove(&instance);
     let evals = instance.evaluate(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = BitDecomposition::verify(&wrapper, &evals, &info);
+    let check = BitDecompositionIOP::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -148,16 +148,16 @@ fn test_single_bit_decomposition() {
 
     let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
 
-    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     instance.add_decomposed_bits_instance(&d, &d_bits_prover);
 
     let info = instance.info();
 
-    let sumcheck_kit = BitDecomposition::prove(&instance);
+    let sumcheck_kit = BitDecompositionIOP::prove(&instance);
     let evals = instance.evaluate(&sumcheck_kit.randomness);
 
     let wrapper = sumcheck_kit.extract();
-    let check = BitDecomposition::verify(&wrapper, &evals, &info);
+    let check = BitDecompositionIOP::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -202,18 +202,18 @@ fn test_batch_bit_decomposition() {
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
 
-    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     for (val, bits) in izip!(d, d_bits) {
         instance.add_decomposed_bits_instance(&val, &bits);
     }
 
     let info = instance.info();
 
-    let sumcheck_kit = BitDecomposition::prove(&instance);
+    let sumcheck_kit = BitDecompositionIOP::prove(&instance);
     let evals = instance.evaluate(&sumcheck_kit.randomness);
 
     let wrapper = sumcheck_kit.extract();
-    let check = BitDecomposition::verify(&wrapper, &evals, &info);
+    let check = BitDecompositionIOP::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -235,17 +235,17 @@ fn test_single_bit_decomposition_extension_field() {
 
     let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
 
-    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     instance.add_decomposed_bits_instance(&d, &d_bits_prover);
 
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
 
-    let kit = BitDecomposition::<EF>::prove(&instance_ef);
+    let kit = BitDecompositionIOP::<EF>::prove(&instance_ef);
     let evals = instance.evaluate_ext(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = BitDecomposition::<EF>::verify(&wrapper, &evals, &info);
+    let check = BitDecompositionIOP::<EF>::verify(&wrapper, &evals, &info);
     assert!(check);
 }
 
@@ -267,7 +267,7 @@ fn test_snarks() {
 
     let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
 
-    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     instance.add_decomposed_bits_instance(&d, &d_bits_prover);
     let instance_info = instance.info();
     let ef_zero = EF::from_base(FF::new(0));
@@ -312,8 +312,13 @@ fn test_snarks() {
     let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
     let claimed_sum = ef_zero;
     // randomness to combine sumcheck protocols
-    let randomness = <BitDecomposition<EF>>::sample_coins(&mut prover_trans, &instance_ef);
-    BitDecomposition::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
+    let randomness = <BitDecompositionIOP<EF>>::sample_coins(&mut prover_trans, &instance_ef);
+    BitDecompositionIOP::prove_as_subprotocol(
+        &randomness,
+        &mut sumcheck_poly,
+        &instance_ef,
+        &eq_at_u,
+    );
     let poly_info = sumcheck_poly.info();
 
     // 2.3 Generate proof of sumcheck protocol
@@ -358,7 +363,7 @@ fn test_snarks() {
     // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
     let randomness = verifier_trans.get_vec_challenge(
         b"randomness to combine sumcheck protocols",
-        <BitDecomposition<EF>>::num_coins(&instance_info),
+        <BitDecompositionIOP<EF>>::num_coins(&instance_info),
     );
 
     // 3.3 Check the proof of the sumcheck protocol
@@ -372,7 +377,7 @@ fn test_snarks() {
     let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
     // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-    let check_subcliam = BitDecomposition::<EF>::verify_as_subprotocol(
+    let check_subcliam = BitDecompositionIOP::<EF>::verify_as_subprotocol(
         &randomness,
         &mut subclaim,
         &evals,
@@ -444,7 +449,7 @@ fn test_snarks_interface() {
 
     let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
 
-    let mut instance = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     instance.add_decomposed_bits_instance(&d, &d_bits_prover);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);

@@ -16,14 +16,14 @@ use super::ntt::NTTRecursiveProof;
 use super::rlwe_mul_rgsw::RlweEval;
 use super::rlwe_mul_rgsw::RlweMultRgswEval;
 use super::rlwe_mul_rgsw::RlweMultRgswInfo;
-use super::DecomposedBits;
+use super::BitDecompositionInstance;
 use super::LookupInstance;
 use super::NTTBareIOP;
 use super::RlweCiphertext;
 use super::RlweMultRgswIOP;
 use super::RlweMultRgswIOPPure;
 use super::RlweMultRgswInstance;
-use super::{DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
+use super::{BitDecompositionInstanceInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
 use crate::utils::{
     add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
     verify_oracle_relation,
@@ -112,7 +112,7 @@ pub struct AccumulatorInstance<F: Field> {
     /// info for RLWE * RGSW
     pub mult_info: RlweMultRgswInfo<F>,
     /// info for decomposed bits
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
     pub ntt_info: NTTInstanceInfo<F>,
 }
@@ -138,7 +138,7 @@ pub struct AccumulatorInstanceInfo<F: Field> {
     /// info for RLWE * RGSW
     pub mult_info: RlweMultRgswInfo<F>,
     /// info for decomposed bits
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
     pub ntt_info: NTTInstanceInfo<F>,
 }
@@ -290,7 +290,7 @@ impl<F: Field> AccumulatorInstance<F> {
         updations: Vec<AccumulatorWitness<F>>,
         output_ntt: RlweCiphertext<F>,
         output: RlweCiphertext<F>,
-        bits_info: &DecomposedBitsInfo<F>,
+        bits_info: &BitDecompositionInstanceInfo<F>,
         ntt_info: &NTTInstanceInfo<F>,
     ) -> Self {
         let ntt_info = NTTInstanceInfo::<F> {
@@ -299,7 +299,7 @@ impl<F: Field> AccumulatorInstance<F> {
             ntt_table: Arc::clone(&ntt_info.ntt_table),
         };
 
-        let bits_info = DecomposedBitsInfo::<F> {
+        let bits_info = BitDecompositionInstanceInfo::<F> {
             num_vars,
             base: bits_info.base,
             base_len: bits_info.base_len,
@@ -526,8 +526,8 @@ impl<F: Field> AccumulatorInstance<F> {
 
     /// Extract all decomposed bits
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> DecomposedBits<F> {
-        let mut res = DecomposedBits {
+    pub fn extract_decomposed_bits(&self) -> BitDecompositionInstance<F> {
+        let mut res = BitDecompositionInstance {
             base: self.bits_info.base,
             base_len: self.bits_info.base_len,
             bits_len: self.bits_info.bits_len,

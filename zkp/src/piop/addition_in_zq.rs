@@ -32,8 +32,10 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
 
-use super::bit_decomposition::DecomposedBitsEval;
-use super::{BitDecomposition, DecomposedBits, DecomposedBitsInfo, LookupInstance};
+use super::{
+    BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
+    BitDecompositionInstanceInfo, LookupInstance,
+};
 
 /// IOP for addition in Zq, i.e. a + b = c (mod q)
 pub struct AdditionInZq<F: Field>(PhantomData<F>);
@@ -64,7 +66,7 @@ pub struct AdditionInZqInstance<F: Field> {
     /// introduced witness to check the range of a, b, c
     pub abc_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// info for decomposed bits
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
 /// Evaluations of all MLEs involved in the instance at a random point
@@ -84,7 +86,7 @@ pub struct AdditionInZqInstanceInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// Decomposition info for range check (i.e. bit decomposition)
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
 impl<F: Field> fmt::Display for AdditionInZqInstanceInfo<F> {
@@ -199,8 +201,8 @@ impl<F: Field> AdditionInZqInstance<F> {
 
     /// Extract DecomposedBits instance
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> DecomposedBits<F> {
-        DecomposedBits {
+    pub fn extract_decomposed_bits(&self) -> BitDecompositionInstance<F> {
+        BitDecompositionInstance {
             base: self.bits_info.base,
             base_len: self.bits_info.base_len,
             bits_len: self.bits_info.bits_len,
@@ -244,8 +246,8 @@ impl<F: Field> AdditionInZqInstanceEval<F> {
 
     /// Extract DecomposedBitsEval instance
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> DecomposedBitsEval<F> {
-        DecomposedBitsEval {
+    pub fn extract_decomposed_bits(&self) -> BitDecompositionEval<F> {
+        BitDecompositionEval {
             d_val: self.abc.to_owned(),
             d_bits: self.abc_bits.to_owned(),
         }
@@ -259,7 +261,7 @@ impl<F: DecomposableField> AdditionInZqInstance<F> {
         abc: &[Rc<DenseMultilinearExtension<F>>],
         k: &Rc<DenseMultilinearExtension<F>>,
         q: F,
-        bits_info: &DecomposedBitsInfo<F>,
+        bits_info: &BitDecompositionInstanceInfo<F>,
     ) -> Self {
         let num_vars = k.num_vars;
         assert_eq!(abc.len(), 3);
@@ -290,13 +292,13 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         let bits_instance = instance.extract_decomposed_bits();
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecomposition<F>>::num_coins(&bits_instance.info()) + 1,
+            <BitDecompositionIOP<F>>::num_coins(&bits_instance.info()) + 1,
         )
     }
 
     /// return the number of coins used in this IOP
     pub fn num_coins(info: &AdditionInZqInstanceInfo<F>) -> usize {
-        <BitDecomposition<F>>::num_coins(&info.bits_info) + 1
+        <BitDecompositionIOP<F>>::num_coins(&info.bits_info) + 1
     }
 
     /// Prove addition in Zq given a, b, c, k, and the decomposed bits for a, b, and c.
@@ -333,9 +335,9 @@ impl<F: Field + Serialize> AdditionInZq<F> {
     ) {
         let bits_instance = instance.extract_decomposed_bits();
         let bits_info = bits_instance.info();
-        let bits_r_num = <BitDecomposition<F>>::num_coins(&bits_info);
+        let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&bits_info);
         // 1. add products of poly used to prove decomposition
-        BitDecomposition::prove_as_subprotocol(
+        BitDecompositionIOP::prove_as_subprotocol(
             &randomness[..bits_r_num],
             poly,
             &bits_instance,
@@ -399,8 +401,8 @@ impl<F: Field + Serialize> AdditionInZq<F> {
     ) -> bool {
         // check 1: Verify the range check part in the sumcheck polynomial
         let bits_evals = evals.extract_decomposed_bits();
-        let bits_randomness = &randomness[..<BitDecomposition<F>>::num_coins(&info.bits_info)];
-        let check_decomposed_bits = <BitDecomposition<F>>::verify_as_subprotocol(
+        let bits_randomness = &randomness[..<BitDecompositionIOP<F>>::num_coins(&info.bits_info)];
+        let check_decomposed_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
             bits_randomness,
             subclaim,
             &bits_evals,
@@ -684,7 +686,7 @@ impl<F: Field + Serialize> AdditionInZqPure<F> {
         // check 1: Verify the range check part in the sumcheck polynomial
         let bits_evals = evals.extract_decomposed_bits();
         let check_decomposed_bits =
-            <BitDecomposition<F>>::verify_as_subprotocol_pure(&bits_evals, &info.bits_info);
+            <BitDecompositionIOP<F>>::verify_as_subprotocol_pure(&bits_evals, &info.bits_info);
         if !check_decomposed_bits {
             return false;
         }

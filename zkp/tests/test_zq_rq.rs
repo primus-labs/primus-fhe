@@ -9,7 +9,7 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{zq_to_rq::ZqToRQSnarks, DecomposedBitsInfo, ZqToRQIOP, ZqToRQInstance};
+use zkp::piop::{zq_to_rq::ZqToRQSnarks, BitDecompositionInstanceInfo, ZqToRQIOP, ZqToRQInstance};
 
 #[derive(Field, DecomposableField)]
 #[modulus = 8]
@@ -135,7 +135,7 @@ fn test_trivial_zq_to_rq() {
         )),
     ];
 
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len,
@@ -214,7 +214,7 @@ fn test_random_zq_to_rq() {
         sparse_outputs.push(Rc::new(sparse_output));
     }
 
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: num_vars,
@@ -269,7 +269,7 @@ fn test_random_zq_to_rq_extension_field() {
         sparse_outputs.push(Rc::new(sparse_output));
     }
 
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: num_vars,
@@ -326,7 +326,7 @@ fn test_snarks() {
         sparse_outputs.push(Rc::new(sparse_output));
     }
 
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: num_vars,

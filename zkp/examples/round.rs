@@ -5,7 +5,7 @@ use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::{DecomposedBitsInfo, RoundInstance, RoundSnarks};
+use zkp::piop::{BitDecompositionInstanceInfo, RoundInstance, RoundSnarks};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -54,7 +54,7 @@ fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = DecomposedBitsInfo {
+    let mut output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -62,7 +62,7 @@ fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
         num_instances: 0,
     };
 
-    let mut offset_bits_info = DecomposedBitsInfo {
+    let mut offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,

@@ -25,7 +25,10 @@
 //!    \sum_{y \in {0,1}^logN} c_u(y)t(y) = s(u)
 //!     where u is the common random challenge from the verifier, used to instantiate the sum
 //!     and c'(y) is computed from c_u(y) = c(u,y)
-use super::{BitDecomposition, DecomposedBits, DecomposedBitsEval, DecomposedBitsInfo};
+use super::{
+    BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
+    BitDecompositionInstanceInfo,
+};
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{
@@ -84,7 +87,7 @@ pub struct ZqToRQInstance<F: Field> {
     /// table [1, ..., N]
     pub table: Rc<DenseMultilinearExtension<F>>,
     /// info for decomposed bits
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
 /// Information of ZqToRQInstance
@@ -98,7 +101,7 @@ pub struct ZqToRQInstanceInfo<F: Field> {
     /// table [1, ..., N]
     pub table: Rc<DenseMultilinearExtension<F>>,
     /// info for decomposed bits
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
 impl<F: Field> fmt::Display for ZqToRQInstanceInfo<F> {
@@ -259,8 +262,8 @@ impl<F: Field> ZqToRQInstance<F> {
 
     /// Extract DecomposedBits instance
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> DecomposedBits<F> {
-        DecomposedBits {
+    pub fn extract_decomposed_bits(&self) -> BitDecompositionInstance<F> {
+        BitDecompositionInstance {
             base: self.bits_info.base,
             base_len: self.bits_info.base_len,
             bits_len: self.bits_info.bits_len,
@@ -281,7 +284,7 @@ impl<F: DecomposableField> ZqToRQInstance<F> {
         input: &Rc<DenseMultilinearExtension<F>>,
         outputs: &[Rc<DenseMultilinearExtension<F>>],
         sparse_outputs: &[Rc<SparsePolynomial<F>>],
-        bits_info: &DecomposedBitsInfo<F>,
+        bits_info: &BitDecompositionInstanceInfo<F>,
     ) -> Self {
         assert_eq!(outputs.len(), 1 << num_vars);
         // factor = 2N/q
@@ -303,7 +306,7 @@ impl<F: DecomposableField> ZqToRQInstance<F> {
             num_vars, reminder,
         ));
         let reminder_bits = reminder.get_decomposed_mles(bits_info.base_len, bits_info.bits_len);
-        let bits_info = DecomposedBitsInfo {
+        let bits_info = BitDecompositionInstanceInfo {
             base: bits_info.base,
             base_len: bits_info.base_len,
             bits_len: bits_info.bits_len,
@@ -374,8 +377,8 @@ impl<F: Field> ZqToRQInstanceEval<F> {
 
     /// Extract DecomposedBitsEval
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> DecomposedBitsEval<F> {
-        DecomposedBitsEval {
+    pub fn extract_decomposed_bits(&self) -> BitDecompositionEval<F> {
+        BitDecompositionEval {
             d_val: vec![self.reminder],
             d_bits: self.reminder_bits.to_owned(),
         }
@@ -387,13 +390,13 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
     pub fn sample_coins(trans: &mut Transcript<F>, instance: &ZqToRQInstance<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecomposition<F>>::num_coins(&instance.bits_info) + 3,
+            <BitDecompositionIOP<F>>::num_coins(&instance.bits_info) + 3,
         )
     }
 
     /// return the number of coins used in this IOP
     pub fn num_coins(info: &ZqToRQInstanceInfo<F>) -> usize {
-        <BitDecomposition<F>>::num_coins(&info.bits_info) + 3
+        <BitDecompositionIOP<F>>::num_coins(&info.bits_info) + 3
     }
 
     /// Prove round
@@ -441,11 +444,11 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
         u: &[F],
     ) {
         let bits_instance = instance.extract_decomposed_bits();
-        let bits_r_num = <BitDecomposition<F>>::num_coins(&instance.bits_info);
+        let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.bits_info);
         assert_eq!(randomness.len(), bits_r_num + 3);
         let (r_bits, r) = randomness.split_at(bits_r_num);
         // 1. add products used to prove decomposition
-        BitDecomposition::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
+        BitDecompositionIOP::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
 
         // 2. add sumcheck \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l with random coefficient r[0]
         poly.add_product_with_linear_op(
@@ -542,11 +545,11 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
         u: &[F],
     ) -> bool {
         let bits_eval = evals_at_r.extract_decomposed_bits();
-        let bits_r_num = <BitDecomposition<F>>::num_coins(&info.bits_info);
+        let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.bits_info);
         assert_eq!(randomness.len(), bits_r_num + 3);
         let (bits_r, r) = randomness.split_at(bits_r_num);
         // check 1: check the decomposed bits
-        let check_bits = <BitDecomposition<F>>::verify_as_subprotocol(
+        let check_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
             bits_r,
             subclaim,
             &bits_eval,

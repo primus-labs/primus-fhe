@@ -6,7 +6,7 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use zkp::piop::floor::FloorSnarks;
-use zkp::piop::{DecomposedBitsInfo, FloorInstance};
+use zkp::piop::{BitDecompositionInstanceInfo, FloorInstance};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -54,7 +54,7 @@ fn generate_instance(num_vars: usize) -> FloorInstance<FF> {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let output_bits_info = DecomposedBitsInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -62,7 +62,7 @@ fn generate_instance(num_vars: usize) -> FloorInstance<FF> {
         num_instances: 1,
     };
 
-    let offset_bits_info = DecomposedBitsInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,

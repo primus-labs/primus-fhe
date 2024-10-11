@@ -7,7 +7,7 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{DecomposedBitsInfo, RoundIOP, RoundInstance, RoundSnarks};
+use zkp::piop::{BitDecompositionInstanceInfo, RoundIOP, RoundInstance, RoundSnarks};
 
 type FF = BabyBear; // field type
 type EF = BabyBearExetension;
@@ -70,7 +70,7 @@ fn test_round_naive_iop() {
         num_vars,
         field_vec!(FF; 0, 1, 1, 2),
     ));
-    let mut output_bits_info = DecomposedBitsInfo {
+    let mut output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -78,7 +78,7 @@ fn test_round_naive_iop() {
         num_instances: 0,
     };
 
-    let mut offset_bits_info = DecomposedBitsInfo {
+    let mut offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -132,7 +132,7 @@ fn test_round_random_iop() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = DecomposedBitsInfo {
+    let mut output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -140,7 +140,7 @@ fn test_round_random_iop() {
         num_instances: 0,
     };
 
-    let mut offset_bits_info = DecomposedBitsInfo {
+    let mut offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -194,7 +194,7 @@ fn test_round_random_iop_extension_field() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = DecomposedBitsInfo {
+    let mut output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -202,7 +202,7 @@ fn test_round_random_iop_extension_field() {
         num_instances: 0,
     };
 
-    let mut offset_bits_info = DecomposedBitsInfo {
+    let mut offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -257,7 +257,7 @@ fn test_snarks() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = DecomposedBitsInfo {
+    let mut output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -265,7 +265,7 @@ fn test_snarks() {
         num_instances: 0,
     };
 
-    let mut offset_bits_info = DecomposedBitsInfo {
+    let mut offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,

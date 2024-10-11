@@ -1,5 +1,8 @@
 //! Round IOP
-use super::{BitDecomposition, DecomposedBits, DecomposedBitsEval, DecomposedBitsInfo};
+use super::{
+    BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
+    BitDecompositionInstanceInfo,
+};
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{
@@ -53,7 +56,7 @@ pub struct RoundInstance<F: Field> {
     /// decomposed bits of output and auxiliary output used for range check
     pub output_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// decomposition info for outputs in [q]
-    pub output_bits_info: DecomposedBitsInfo<F>,
+    pub output_bits_info: BitDecompositionInstanceInfo<F>,
 
     /// offset denoted by c = a - b * k \in [1, 2k] such that c - 1 \in [0, k)
     pub offset: Rc<DenseMultilinearExtension<F>>,
@@ -62,7 +65,7 @@ pub struct RoundInstance<F: Field> {
     /// decomposed bits of c - 1 + delta \in [0, 2^2k_len) used for range check
     pub offset_aux_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// decomposition info for offset
-    pub offset_bits_info: DecomposedBitsInfo<F>,
+    pub offset_bits_info: BitDecompositionInstanceInfo<F>,
     /// option denoted by w \in {0, 1}
     pub option: Rc<DenseMultilinearExtension<F>>,
 }
@@ -105,9 +108,9 @@ pub struct RoundInstanceInfo<F: Field> {
     /// delta = 2^{2k_len} - k
     pub delta: F,
     /// decomposition info for outputs
-    pub output_bits_info: DecomposedBitsInfo<F>,
+    pub output_bits_info: BitDecompositionInstanceInfo<F>,
     /// decomposition info for offset
-    pub offset_bits_info: DecomposedBitsInfo<F>,
+    pub offset_bits_info: BitDecompositionInstanceInfo<F>,
 }
 
 impl<F: Field> fmt::Display for RoundInstanceInfo<F> {
@@ -268,7 +271,9 @@ impl<F: Field> RoundInstance<F> {
 
     /// Extract DecomposedBits instance
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> (DecomposedBits<F>, DecomposedBits<F>) {
+    pub fn extract_decomposed_bits(
+        &self,
+    ) -> (BitDecompositionInstance<F>, BitDecompositionInstance<F>) {
         // c - 1
         let c_minus_one = DenseMultilinearExtension::from_evaluations_vec(
             self.num_vars,
@@ -286,7 +291,7 @@ impl<F: Field> RoundInstance<F> {
             self.output_aux.iter().map(|x| *x - F::one()).collect(),
         );
         (
-            DecomposedBits {
+            BitDecompositionInstance {
                 base: self.output_bits_info.base,
                 base_len: self.output_bits_info.base_len,
                 bits_len: self.output_bits_info.bits_len,
@@ -294,7 +299,7 @@ impl<F: Field> RoundInstance<F> {
                 d_val: vec![Rc::clone(&self.output), Rc::new(b_plus_minus_one)],
                 d_bits: self.output_bits.to_owned(),
             },
-            DecomposedBits {
+            BitDecompositionInstance {
                 base: self.offset_bits_info.base,
                 base_len: self.offset_bits_info.base_len,
                 bits_len: self.offset_bits_info.bits_len,
@@ -317,8 +322,8 @@ impl<F: DecomposableField> RoundInstance<F> {
         delta: F,
         input: Rc<DenseMultilinearExtension<F>>,
         output: Rc<DenseMultilinearExtension<F>>,
-        output_bits_info: &mut DecomposedBitsInfo<F>,
-        offset_bits_info: &mut DecomposedBitsInfo<F>,
+        output_bits_info: &mut BitDecompositionInstanceInfo<F>,
+        offset_bits_info: &mut BitDecompositionInstanceInfo<F>,
     ) -> Self {
         assert_eq!(num_vars, output.num_vars);
         assert_eq!(num_vars, output_bits_info.num_vars);
@@ -444,13 +449,13 @@ impl<F: Field> RoundInstanceEval<F> {
 
     /// Extract DecomposedBitsEval instance
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> (DecomposedBitsEval<F>, DecomposedBitsEval<F>) {
+    pub fn extract_decomposed_bits(&self) -> (BitDecompositionEval<F>, BitDecompositionEval<F>) {
         (
-            DecomposedBitsEval {
+            BitDecompositionEval {
                 d_val: self.output_all.to_owned(),
                 d_bits: self.output_bits.to_owned(),
             },
-            DecomposedBitsEval {
+            BitDecompositionEval {
                 d_val: self.offset_aux.to_owned(),
                 d_bits: self.offset_aux_bits.to_owned(),
             },
@@ -463,16 +468,16 @@ impl<F: Field + Serialize> RoundIOP<F> {
     pub fn sample_coins(trans: &mut Transcript<F>, instance: &RoundInstance<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecomposition<F>>::num_coins(&instance.output_bits_info)
-                + <BitDecomposition<F>>::num_coins(&instance.offset_bits_info)
+            <BitDecompositionIOP<F>>::num_coins(&instance.output_bits_info)
+                + <BitDecompositionIOP<F>>::num_coins(&instance.offset_bits_info)
                 + 5,
         )
     }
 
     /// return the number of coins used in this IOP
     pub fn num_coins(info: &RoundInstanceInfo<F>) -> usize {
-        <BitDecomposition<F>>::num_coins(&info.output_bits_info)
-            + <BitDecomposition<F>>::num_coins(&info.offset_bits_info)
+        <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info)
+            + <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info)
             + 5
     }
 
@@ -509,17 +514,17 @@ impl<F: Field + Serialize> RoundIOP<F> {
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let (output_bits_instance, offset_bits_instance) = instance.extract_decomposed_bits();
-        let output_bits_r_num = <BitDecomposition<F>>::num_coins(&instance.output_bits_info);
-        let offset_bits_r_num = <BitDecomposition<F>>::num_coins(&instance.offset_bits_info);
+        let output_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.output_bits_info);
+        let offset_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.offset_bits_info);
         assert_eq!(randomness.len(), output_bits_r_num + offset_bits_r_num + 5);
         // 1. add products used to prove decomposition
-        BitDecomposition::prove_as_subprotocol(
+        BitDecompositionIOP::prove_as_subprotocol(
             &randomness[..output_bits_r_num],
             poly,
             &output_bits_instance,
             eq_at_u,
         );
-        BitDecomposition::prove_as_subprotocol(
+        BitDecompositionIOP::prove_as_subprotocol(
             &randomness[output_bits_r_num..output_bits_r_num + offset_bits_r_num],
             poly,
             &offset_bits_instance,
@@ -683,17 +688,17 @@ impl<F: Field + Serialize> RoundIOP<F> {
         eq_at_u_r: F,
     ) -> bool {
         let (output_bits_evals, offset_bits_evals) = evals.extract_decomposed_bits();
-        let output_bits_r_num = <BitDecomposition<F>>::num_coins(&info.output_bits_info);
-        let offset_bits_r_num = <BitDecomposition<F>>::num_coins(&info.offset_bits_info);
+        let output_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info);
+        let offset_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info);
         assert_eq!(randomness.len(), output_bits_r_num + offset_bits_r_num + 5);
-        let check_output_bits = <BitDecomposition<F>>::verify_as_subprotocol(
+        let check_output_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
             &randomness[..output_bits_r_num],
             subclaim,
             &output_bits_evals,
             &info.output_bits_info,
             eq_at_u_r,
         );
-        let check_offset_bits = <BitDecomposition<F>>::verify_as_subprotocol(
+        let check_offset_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
             &randomness[output_bits_r_num..output_bits_r_num + offset_bits_r_num],
             subclaim,
             &offset_bits_evals,

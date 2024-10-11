@@ -10,7 +10,8 @@ use std::sync::Arc;
 use std::vec;
 use zkp::piop::RlweMultRgswSnarksOpt;
 use zkp::piop::{
-    DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
+    BitDecompositionInstanceInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts,
+    RlweMultRgswInstance,
 };
 
 type FF = BabyBear;
@@ -72,7 +73,7 @@ fn generate_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
     input_rgsw: (RlweCiphertexts<F>, RlweCiphertexts<F>),
-    bits_info: &DecomposedBitsInfo<F>,
+    bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &NTTInstanceInfo<F>,
 ) -> RlweMultRgswInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
@@ -172,7 +173,7 @@ fn main() {
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = LOG_DIM_RLWE;
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len,

@@ -8,7 +8,7 @@ use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::{BitDecompositionSnarks, DecomposedBits};
+use zkp::piop::{BitDecompositionInstance, BitDecompositionSnarks};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -30,7 +30,7 @@ fn generate_instance<Fq: Field + DecomposableField, F: DecomposableField>(
     base_len: usize,
     base: F,
     bits_len: usize,
-) -> DecomposedBits<F> {
+) -> BitDecompositionInstance<F> {
     let mut rng = thread_rng();
     // sample d in the range of Fq
     let uniform = <FieldUniformSampler<Fq>>::new();
@@ -54,7 +54,7 @@ fn generate_instance<Fq: Field + DecomposableField, F: DecomposableField>(
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
 
-    let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
+    let mut decomposed_bits = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
     for (val, bits) in izip!(&d, &d_bits) {
         decomposed_bits.add_decomposed_bits_instance(val, bits);
     }

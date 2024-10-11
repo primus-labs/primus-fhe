@@ -24,12 +24,13 @@
 //!
 //! Hence, there are 2k + 2 NTT instances in this single multiplication instance. We can randomize all these 2k+2 NTT instances to obtain a single NTT instance,
 //! and use our NTT IOP to prove this randomized NTT instance.
-use super::bit_decomposition::BitDecomposition;
-use super::bit_decomposition::DecomposedBitsEval;
 use super::ntt::NTTRecursiveProof;
 use super::LookupInstance;
 use super::NTTBareIOP;
-use super::{DecomposedBits, DecomposedBitsInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
+use super::{
+    BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
+    BitDecompositionInstanceInfo, NTTInstance, NTTInstanceInfo, NTTIOP,
+};
 use crate::piop::LookupIOP;
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::MLSumcheck;
@@ -101,7 +102,7 @@ pub struct RlweMultRgswInstance<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// info of decomposed bits
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info of ntt instance
     pub ntt_info: NTTInstanceInfo<F>,
     /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
@@ -151,7 +152,7 @@ pub struct RlweMultRgswInfo<F: Field> {
     /// information of ntt instance
     pub ntt_info: NTTInstanceInfo<F>,
     /// information of bit decomposition
-    pub bits_info: DecomposedBitsInfo<F>,
+    pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
 impl<F: Field> fmt::Display for RlweMultRgswInfo<F> {
@@ -330,7 +331,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
     #[inline]
     pub fn new(
         num_vars: usize,
-        bits_info: &DecomposedBitsInfo<F>,
+        bits_info: &BitDecompositionInstanceInfo<F>,
         ntt_info: &NTTInstanceInfo<F>,
         input_rlwe: RlweCiphertext<F>,
         bits_rlwe: RlweCiphertexts<F>,
@@ -352,7 +353,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
         assert_eq!(bits_rgsw_c_ntt.len(), bits_info.bits_len);
         assert_eq!(bits_rgsw_f_ntt.len(), bits_info.bits_len);
         // update num_instance of bits_info
-        let bits_info = DecomposedBitsInfo {
+        let bits_info = BitDecompositionInstanceInfo {
             num_vars,
             base: bits_info.base,
             base_len: bits_info.base_len,
@@ -586,8 +587,8 @@ impl<F: Field> RlweMultRgswInstance<F> {
 
     /// Extract DecomposedBits instance
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> DecomposedBits<F> {
-        let mut res = DecomposedBits {
+    pub fn extract_decomposed_bits(&self) -> BitDecompositionInstance<F> {
+        let mut res = BitDecompositionInstance {
             base: self.bits_info.base,
             base_len: self.bits_info.base_len,
             bits_len: self.bits_info.bits_len,
@@ -601,7 +602,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
 
     /// Update DecomposedBits Instance
     #[inline]
-    pub fn update_decomposed_bits(&self, decomposed_bits: &mut DecomposedBits<F>) {
+    pub fn update_decomposed_bits(&self, decomposed_bits: &mut BitDecompositionInstance<F>) {
         decomposed_bits.add_decomposed_bits_instance(
             &Rc::new(self.input_rlwe.a.clone()),
             &self
@@ -666,8 +667,8 @@ impl<F: Field> RlweMultRgswEval<F> {
 
     /// Extract DecomposedBits Instance
     #[inline]
-    pub fn extract_decomposed_bits(&self) -> DecomposedBitsEval<F> {
-        let mut res = DecomposedBitsEval {
+    pub fn extract_decomposed_bits(&self) -> BitDecompositionEval<F> {
+        let mut res = BitDecompositionEval {
             d_val: Vec::with_capacity(2),
             d_bits: Vec::new(),
         };
@@ -677,7 +678,7 @@ impl<F: Field> RlweMultRgswEval<F> {
 
     /// Update DecomposedBits with added bits in this instance
     #[inline]
-    pub fn update_decomposed_bits(&self, bits_evals: &mut DecomposedBitsEval<F>) {
+    pub fn update_decomposed_bits(&self, bits_evals: &mut BitDecompositionEval<F>) {
         bits_evals.d_val.push(self.input_rlwe.0);
         bits_evals.d_val.push(self.input_rlwe.1);
         bits_evals.d_bits.extend(&self.bits_rlwe.0);
@@ -722,13 +723,13 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
     pub fn sample_coins(trans: &mut Transcript<F>, instance: &RlweMultRgswInstance<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecomposition<F>>::num_coins(&instance.bits_info) + 2,
+            <BitDecompositionIOP<F>>::num_coins(&instance.bits_info) + 2,
         )
     }
 
     /// return the number of coins used in sumcheck protocol
     pub fn num_coins(info: &RlweMultRgswInfo<F>) -> usize {
-        <BitDecomposition<F>>::num_coins(&info.bits_info) + 2
+        <BitDecompositionIOP<F>>::num_coins(&info.bits_info) + 2
     }
 
     /// Prove RLWE * RGSW
@@ -786,9 +787,9 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let bits_instance = instance.extract_decomposed_bits();
-        let bits_r_num = <BitDecomposition<F>>::num_coins(&instance.bits_info);
+        let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.bits_info);
         let (r_bits, r) = randomness.split_at(bits_r_num);
-        BitDecomposition::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
+        BitDecompositionIOP::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
 
         assert_eq!(r.len(), 2);
 
@@ -912,9 +913,9 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
     ) -> bool {
         // 1. check the bit decomposition part
         let bits_eval = evals.extract_decomposed_bits();
-        let bits_r_num = <BitDecomposition<F>>::num_coins(&info.bits_info);
+        let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.bits_info);
         let (r_ntt, r) = randomness.split_at(bits_r_num);
-        let check_decomposed_bits = <BitDecomposition<F>>::verify_as_subprotocol(
+        let check_decomposed_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
             r_ntt,
             subclaim,
             &bits_eval,
@@ -1400,7 +1401,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         // let bits_r_num = <BitDecomposition<F>>::num_coins(&info.bits_info);
         // let (r_ntt, r) = randomness.split_at(bits_r_num);
         let check_decomposed_bits =
-            <BitDecomposition<F>>::verify_as_subprotocol_pure(&bits_eval, &info.bits_info);
+            <BitDecompositionIOP<F>>::verify_as_subprotocol_pure(&bits_eval, &info.bits_info);
         if !check_decomposed_bits {
             return false;
         }

@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::vec;
 use zkp::piop::RlweMultRgswSnarksOpt;
 use zkp::piop::{
-    rlwe_mul_rgsw::RlweMultRgswSnarks, DecomposedBitsInfo, NTTInstanceInfo, RlweCiphertext,
-    RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
+    rlwe_mul_rgsw::RlweMultRgswSnarks, BitDecompositionInstanceInfo, NTTInstanceInfo,
+    RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
 };
 
 // field type
@@ -73,7 +73,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
     input_rgsw: (RlweCiphertexts<F>, RlweCiphertexts<F>),
-    bits_info: &DecomposedBitsInfo<F>,
+    bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &NTTInstanceInfo<F>,
 ) -> RlweMultRgswInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
@@ -187,7 +187,7 @@ fn test_random_rlwe_mult_rgsw() {
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len,
@@ -278,7 +278,7 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len,
@@ -370,7 +370,7 @@ fn test_snarks() {
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len,
@@ -449,7 +449,7 @@ fn test_snarks_with_lookup() {
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
-    let bits_info = DecomposedBitsInfo {
+    let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len,
