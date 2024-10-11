@@ -37,7 +37,7 @@ use crate::utils::{
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension, PolynomialInfo,
+    ListOfProductsOfPolynomials, PolynomialInfo,
 };
 use core::fmt;
 use itertools::izip;
@@ -1086,7 +1086,7 @@ mod test {
     use crate::piop::ntt::{eval_w_power_times_x, naive_w_power_times_x_table};
     use algebra::{
         derive::{DecomposableField, FheField, Field, Prime, NTT},
-        DenseMultilinearExtension, FieldUniformSampler, MultilinearExtension, NTTField,
+        DenseMultilinearExtension, FieldUniformSampler, NTTField,
     };
     use num_traits::{One, Zero};
     use rand::thread_rng;

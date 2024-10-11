@@ -794,13 +794,13 @@ where
 
                 Self::check_query_answers(
                     pp,
-                    &tensor,
-                    &queries,
+                    tensor,
+                    queries,
                     &encoded_msg,
                     &proof.merkle_paths,
                     &proof.opening_columns,
                     commitment,
-                ) & (*eval == Self::residual_product(&proof.rlc_msgs, &residual))
+                ) & (*eval == Self::residual_product(&proof.rlc_msgs, residual))
             })
     }
 
@@ -842,13 +842,13 @@ where
 
                 Self::check_query_answers_ext(
                     pp,
-                    &tensor,
-                    &queries,
+                    tensor,
+                    queries,
                     &encoded_msg,
                     &proof.merkle_paths,
                     &proof.opening_columns,
                     commitment,
-                ) & (*eval == Self::residual_product(&proof.rlc_msgs, &residual))
+                ) & (*eval == Self::residual_product(&proof.rlc_msgs, residual))
             })
     }
 }

@@ -41,7 +41,7 @@ use crate::utils::{
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension,
+    ListOfProductsOfPolynomials,
 };
 use core::fmt;
 use itertools::izip;

@@ -18,10 +18,7 @@
 //! where u is the random challenge from the verifier.
 use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
-use algebra::{
-    utils::Transcript, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials,
-    MultilinearExtension,
-};
+use algebra::{utils::Transcript, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials};
 use serde::Serialize;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -230,7 +227,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
 mod test {
     use algebra::{
         derive::{DecomposableField, FheField, Field, Prime, NTT},
-        DenseMultilinearExtension, Field, FieldUniformSampler, MultilinearExtension, NTTField,
+        DenseMultilinearExtension, Field, FieldUniformSampler, NTTField,
     };
     use num_traits::{One, Zero};
     use rand::thread_rng;

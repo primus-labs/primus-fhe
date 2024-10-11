@@ -300,7 +300,7 @@ mod test {
     use crate::utils::{eval_identity_function, gen_identity_evaluations};
     use algebra::{
         derive::{Field, Prime},
-        FieldUniformSampler, MultilinearExtension,
+        FieldUniformSampler,
     };
     use rand::thread_rng;
     use rand_distr::Distribution;

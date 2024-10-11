@@ -7,7 +7,7 @@ use crate::utils::{
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension,
+    ListOfProductsOfPolynomials,
 };
 use core::fmt;
 use itertools::izip;

@@ -30,9 +30,7 @@ use crate::utils::{
 };
 use algebra::utils::Transcript;
 use algebra::AbstractExtensionField;
-use algebra::{
-    DenseMultilinearExtension, Field, ListOfProductsOfPolynomials, MultilinearExtension,
-};
+use algebra::{DenseMultilinearExtension, Field, ListOfProductsOfPolynomials};
 use itertools::izip;
 use itertools::Itertools;
 use pcs::{

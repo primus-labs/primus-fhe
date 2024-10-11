@@ -111,7 +111,7 @@ impl<F: Field> DenseMultilinearExtension<F> {
     #[inline]
     pub fn evaluate(&self, ext_point: &[F]) -> F {
         assert_eq!(ext_point.len(), self.num_vars, "The point size is invalid.");
-        let mut poly: Vec<_> = self.evaluations.iter().map(|&eval| eval).collect();
+        let mut poly: Vec<_> = self.evaluations.to_vec();
         let nv = self.num_vars;
         let dim = ext_point.len();
         // evaluate nv variable of partial point from left to right

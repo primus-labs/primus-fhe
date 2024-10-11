@@ -38,7 +38,7 @@ use crate::utils::{
 use algebra::PolynomialInfo;
 use algebra::{
     utils::Transcript, AbstractExtensionField, AsFrom, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials, MultilinearExtension,
+    ListOfProductsOfPolynomials,
 };
 use bincode::Result;
 use core::fmt;
@@ -781,10 +781,10 @@ where
 {
     fn default() -> Self {
         LookupProver {
-            _marker_f: PhantomData::<F>::default(),
-            _marker_ef: PhantomData::<EF>::default(),
-            _marker_s: PhantomData::<S>::default(),
-            _marker_pcs: PhantomData::<Pcs>::default(),
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
         }
     }
 }
@@ -887,10 +887,10 @@ where
 {
     fn default() -> Self {
         LookupVerifier {
-            _marker_f: PhantomData::<F>::default(),
-            _marker_ef: PhantomData::<EF>::default(),
-            _marker_s: PhantomData::<S>::default(),
-            _marker_pcs: PhantomData::<Pcs>::default(),
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
         }
     }
 }
