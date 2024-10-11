@@ -14,7 +14,7 @@ use bincode::Result;
 use crate::multilinear::brakedown::BRAKEDOWN_SECURITY_BIT;
 
 /// Define the structure of Brakedown parameters.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct BrakedownParams<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> {
     security_bit: usize,
     num_vars: usize,

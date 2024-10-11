@@ -8,6 +8,7 @@ use std::vec;
 use num_traits::Zero;
 use rand_distr::Distribution;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use serde::Serialize;
 
 use crate::{
     AbstractExtensionField, DecomposableField, Field, FieldUniformSampler, NTTPolynomial,
@@ -18,7 +19,7 @@ use super::{MultilinearExtension, PAR_NUM_VAR_THRESHOLD};
 use std::rc::Rc;
 
 /// Stores a multilinear polynomial in dense evaluation form.
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize)]
 pub struct DenseMultilinearExtension<F: Field> {
     /// The evaluation over {0,1}^`num_vars`
     pub evaluations: Vec<F>,

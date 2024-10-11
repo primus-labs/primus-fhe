@@ -144,8 +144,8 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
         Self::prove_as_subprotocol(randomness, &mut poly, &mut claimed_sum, instance, &u);
         // let evals_u = instance.points.evaluate(&u);
 
-        let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
-            .expect("fail to prove the sumcheck protocol");
+        let (proof, state) =
+            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
 
         SumcheckKit {
             proof,
@@ -187,7 +187,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
         // randomness to combine sumcheck protocols
         let randomness = F::one();
 
-        let mut subclaim = MLSumcheck::verify_as_subprotocol(
+        let mut subclaim = MLSumcheck::verify(
             &mut trans,
             &wrapper.info,
             wrapper.claimed_sum,

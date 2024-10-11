@@ -1,5 +1,6 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
+    utils::Transcript,
     BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler,
 };
@@ -12,7 +13,7 @@ use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
     AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks,
-    AdditionInZqSnarksOpt, DecomposedBitsInfo, Lookup,
+    AdditionInZqSnarksOpt, DecomposedBitsInfo, LookupIOP,
 };
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
@@ -330,7 +331,13 @@ fn test_trivial_addition_in_zq_with_lookup() {
     let lookup_info = lookup_instance.info();
 
     let kit = AdditionInZqPure::<FF>::prove(&instance);
-    let lookup_kit = Lookup::<FF>::prove(&mut lookup_instance);
+    let mut prover_trans = Transcript::<FF>::new();
+
+    let mut lookup = LookupIOP::default();
+
+    lookup.prover_generate_first_randomness(&mut prover_trans, &mut lookup_instance);
+    lookup.generate_second_randomness(&mut prover_trans, &lookup_info);
+    let lookup_kit = lookup.prove(&mut prover_trans, &mut lookup_instance);
 
     let evals = instance.evaluate(&kit.randomness);
     let lookup_evals = lookup_instance.evaluate(&lookup_kit.randomness);
@@ -339,7 +346,18 @@ fn test_trivial_addition_in_zq_with_lookup() {
     let lookup_wrapper = lookup_kit.extract();
 
     let check = AdditionInZqPure::<FF>::verify(&wrapper, &evals, &info);
-    let lookup_check = Lookup::<FF>::verify(&lookup_wrapper, &lookup_evals, &lookup_info);
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    let mut lookup = LookupIOP::default();
+
+    lookup.verifier_generate_first_randomness(&mut verifier_trans);
+    lookup.generate_second_randomness(&mut verifier_trans, &lookup_info);
+    let (lookup_check, _) = lookup.verify(
+        &mut verifier_trans,
+        &lookup_wrapper,
+        &lookup_evals,
+        &lookup_info,
+    );
 
     assert!(check && lookup_check);
 }

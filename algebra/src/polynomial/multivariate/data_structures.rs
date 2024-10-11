@@ -3,7 +3,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Field;
 
@@ -51,7 +51,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     }
 }
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 /// Stores the number of variables and max number of multiplicands of the added polynomial used by the prover.
 /// This data structures will be used as the verifier key.
 pub struct PolynomialInfo {

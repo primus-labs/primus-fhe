@@ -9,21 +9,22 @@ pub mod multilinear;
 pub mod utils;
 
 use algebra::{utils::Transcript, AbstractExtensionField, Field, MultilinearExtension};
+use serde::{Deserialize, Serialize};
 
 // type Point<F, P> = <P as MultilinearExtension<F>>::Point;
 
 /// Polymomial Commitment Scheme
 pub trait PolynomialCommitmentScheme<F: Field, EF: AbstractExtensionField<F>, S> {
     /// System parameters
-    type Parameters;
+    type Parameters: Default;
     /// polynomial to commit
     type Polynomial: MultilinearExtension<F>;
     /// commitment
-    type Commitment;
+    type Commitment: Serialize + for<'de> Deserialize<'de>;
     /// Auxiliary state of the commitment, output by the `commit` phase.
     type CommitmentState;
     /// Opening Proof
-    type Proof;
+    type Proof: Serialize + for<'de> Deserialize<'de>;
     /// Point
     type Point;
 

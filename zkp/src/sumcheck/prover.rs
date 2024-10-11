@@ -9,32 +9,30 @@ use algebra::{DenseMultilinearExtension, ListOfProductsOfPolynomials, Multilinea
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
-use serde::ser::SerializeSeq;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::verifier::VerifierMsg;
 use super::IPForMLSumcheck;
-use std::rc::Rc;
 
 /// Prover Message
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ProverMsg<F: Field> {
     /// evaluations on P(0), P(1), P(2), ...
-    pub(crate) evaluations: Rc<Vec<F>>,
+    pub(crate) evaluations: Vec<F>,
 }
 
-impl<F: Field + Serialize> Serialize for ProverMsg<F> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut seq = serializer.serialize_seq(Some(self.evaluations.len()))?;
-        for e in self.evaluations.iter() {
-            seq.serialize_element(e)?;
-        }
-        seq.end()
-    }
-}
+// impl<F: Field + Serialize> Serialize for ProverMsg<F> {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         let mut seq = serializer.serialize_seq(Some(self.evaluations.len()))?;
+//         for e in self.evaluations.iter() {
+//             seq.serialize_element(e)?;
+//         }
+//         seq.end()
+//     }
+// }
 /// Prover State
 pub struct ProverState<F: Field> {
     /// sampled randomness given by the verifier
@@ -164,8 +162,6 @@ impl<F: Field> IPForMLSumcheck<F> {
                 || vec![F::zero(); degree + 1],
                 |acc, a| acc.iter().zip(a.iter()).map(|(&acc, &a)| acc + a).collect(),
             );
-        ProverMsg {
-            evaluations: Rc::new(res),
-        }
+        ProverMsg { evaluations: res }
     }
 }

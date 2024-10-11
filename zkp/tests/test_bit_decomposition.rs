@@ -318,7 +318,7 @@ fn test_snarks() {
 
     // 2.3 Generate proof of sumcheck protocol
     let (sumcheck_proof, sumcheck_state) =
-        <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
+        <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
             .expect("Proof generated in Addition In Zq");
     iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
     let iop_prover_time = prover_start.elapsed().as_millis();
@@ -362,7 +362,7 @@ fn test_snarks() {
     );
 
     // 3.3 Check the proof of the sumcheck protocol
-    let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
+    let mut subclaim = <MLSumcheck<EF>>::verify(
         &mut verifier_trans,
         &poly_info,
         claimed_sum,

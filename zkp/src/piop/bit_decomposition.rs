@@ -383,8 +383,8 @@ impl<F: Field + Serialize> BitDecomposition<F> {
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
 
-        let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
-            .expect("fail to prove the sumcheck protocol");
+        let (proof, state) =
+            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
 
         SumcheckKit {
             proof,
@@ -443,9 +443,8 @@ impl<F: Field + Serialize> BitDecomposition<F> {
             Self::num_coins(info),
         );
 
-        let mut subclaim =
-            MLSumcheck::verify_as_subprotocol(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
-                .expect("fail to verify the sumcheck protocol");
+        let mut subclaim = MLSumcheck::verify(&mut trans, &wrapper.info, F::zero(), &wrapper.proof)
+            .expect("fail to verify the sumcheck protocol");
 
         let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
         if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
@@ -515,7 +514,7 @@ impl<F: Field + Serialize> BitDecomposition<F> {
 
 impl<F, EF> BitDecompositionSnarks<F, EF>
 where
-    F: Field + Serialize,
+    F: Field + Serialize + for<'de> Deserialize<'de>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     /// Complied with PCS to get SNARKs
@@ -569,7 +568,7 @@ where
 
         // 2.3 Generate proof of sumcheck protocol
         let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
+            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
                 .expect("Proof generated in Addition In Zq");
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
         let iop_prover_time = prover_start.elapsed().as_millis();
@@ -614,7 +613,7 @@ where
         );
 
         // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
+        let mut subclaim = <MLSumcheck<EF>>::verify(
             &mut verifier_trans,
             &poly_info,
             claimed_sum,

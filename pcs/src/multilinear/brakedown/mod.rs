@@ -246,7 +246,7 @@ where
 
 impl<F, H, C, S, EF> PolynomialCommitmentScheme<F, EF, S> for BrakedownPCS<F, H, C, S, EF>
 where
-    F: Field + Serialize,
+    F: Field + Serialize + for<'de> Deserialize<'de>,
     H: Hash + Sync + Send,
     C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
     S: LinearCodeSpec<F, Code = C>,

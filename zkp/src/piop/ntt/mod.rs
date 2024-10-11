@@ -520,8 +520,8 @@ impl<F: Field + Serialize> NTTIOP<F> {
             &u,
         );
 
-        let (proof, state) = MLSumcheck::prove_as_subprotocol(&mut trans, &poly)
-            .expect("fail to prove the sumcheck protocol");
+        let (proof, state) =
+            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // prove F(u, v) in a recursive manner
         let recursive_proof =
@@ -556,7 +556,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
         let randomness = F::one();
 
-        let mut subclaim = MLSumcheck::verify_as_subprotocol(
+        let mut subclaim = MLSumcheck::verify(
             &mut trans,
             &wrapper.info,
             wrapper.claimed_sum,
@@ -646,8 +646,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
             w_coeff,
         );
 
-        MLSumcheck::prove_as_subprotocol(trans, &poly)
-            .expect("ntt proof of delegation failed in round {round}")
+        MLSumcheck::prove(trans, &poly).expect("ntt proof of delegation failed in round {round}")
     }
 
     /// Compared to the `prove` functionality, we just remove the phase to prove NTT bare.
@@ -789,7 +788,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
                 max_multiplicands: 3,
                 num_variables: k,
             };
-            let subclaim = MLSumcheck::verify_as_subprotocol(
+            let subclaim = MLSumcheck::verify(
                 trans,
                 &poly_info,
                 proof.delegation_claimed_sums[cnt],
@@ -837,7 +836,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
 impl<F, EF> NTTSnarks<F, EF>
 where
-    F: Field + Serialize,
+    F: Field + Serialize + for<'de> Deserialize<'de>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     /// Generate and check snarks
@@ -893,7 +892,7 @@ where
 
         // 2.3 Generate proof of sumcheck protocol
         let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove_as_subprotocol(&mut prover_trans, &sumcheck_poly)
+            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
                 .expect("Proof generated in Addition In Zq");
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
@@ -975,7 +974,7 @@ where
         );
 
         // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify_as_subprotocol(
+        let mut subclaim = <MLSumcheck<EF>>::verify(
             &mut verifier_trans,
             &poly_info,
             claimed_sum,
