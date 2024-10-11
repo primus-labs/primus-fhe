@@ -337,7 +337,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         let bits_info = bits_instance.info();
         let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&bits_info);
         // 1. add products of poly used to prove decomposition
-        BitDecompositionIOP::prove_as_subprotocol(
+        BitDecompositionIOP::prepare_products_of_polynomial(
             &randomness[..bits_r_num],
             poly,
             &bits_instance,
@@ -402,7 +402,7 @@ impl<F: Field + Serialize> AdditionInZq<F> {
         // check 1: Verify the range check part in the sumcheck polynomial
         let bits_evals = evals.extract_decomposed_bits();
         let bits_randomness = &randomness[..<BitDecompositionIOP<F>>::num_coins(&info.bits_info)];
-        let check_decomposed_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
+        let check_decomposed_bits = <BitDecompositionIOP<F>>::verify_subclaim(
             bits_randomness,
             subclaim,
             &bits_evals,
@@ -686,7 +686,7 @@ impl<F: Field + Serialize> AdditionInZqPure<F> {
         // check 1: Verify the range check part in the sumcheck polynomial
         let bits_evals = evals.extract_decomposed_bits();
         let check_decomposed_bits =
-            <BitDecompositionIOP<F>>::verify_as_subprotocol_pure(&bits_evals, &info.bits_info);
+            <BitDecompositionIOP<F>>::verify_subclaim_pure(&bits_evals, &info.bits_info);
         if !check_decomposed_bits {
             return false;
         }

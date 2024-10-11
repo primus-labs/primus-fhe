@@ -18,7 +18,7 @@ pub use addition_in_zq::{
 };
 pub use bit_decomposition::{
     BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
-    BitDecompositionInstanceInfo, BitDecompositionSnarks,
+    BitDecompositionInstanceInfo,
 };
 pub use floor::{FloorIOP, FloorInstance, FloorSnarks};
 pub use lookup::{LookupIOP, LookupInstance};

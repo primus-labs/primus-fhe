@@ -1,7 +1,6 @@
 //! This module defines some useful utils that may invoked by piop.
 use std::rc::Rc;
 
-use algebra::AsFrom;
 use algebra::{AbstractExtensionField, DenseMultilinearExtension, Field, SparsePolynomial};
 use itertools::izip;
 
@@ -159,44 +158,6 @@ pub fn print_statistic(
     println!("Open Time: {:?} ms", pcs_open_time);
     println!("Verify Time: {:?} ms", pcs_verifier_time);
     println!("Proof Size: {:?} Bytes\n", pcs_proof_size);
-}
-
-/// compute the frequency MLE denoted by m
-pub fn cmp_frequency<F: Field>(
-    f_vec: &[DenseMultilinearExtension<F>],
-    t: &DenseMultilinearExtension<F>,
-) -> DenseMultilinearExtension<F> {
-    let num_vars = f_vec[0].num_vars;
-
-    f_vec.iter().for_each(|x| assert_eq!(x.num_vars, num_vars));
-    assert_eq!(t.num_vars, num_vars);
-
-    let m_evaluations: Vec<F> = t
-        .evaluations
-        .iter()
-        .map(|t_item| {
-            let m_f_vec = f_vec.iter().fold(0, |acc, f| {
-                let m_f: usize = f
-                    .evaluations
-                    .iter()
-                    .filter(|&f_item| f_item == t_item)
-                    .count();
-                // let m_f: F = F::new(F::Value::as_from(m_f as f64));
-                acc + m_f
-            });
-
-            let m_t = t
-                .evaluations
-                .iter()
-                .filter(|&t_item2| t_item2 == t_item)
-                .count();
-            // let m_t: F = F::new(F::Value::as_from(m_t as f64));
-
-            F::new(F::Value::as_from(m_f_vec as f64 / m_t as f64))
-        })
-        .collect();
-
-    DenseMultilinearExtension::from_evaluations_slice(num_vars, &m_evaluations)
 }
 
 // credit@Plonky3

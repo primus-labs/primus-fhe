@@ -1,14 +1,20 @@
 use algebra::derive::{DecomposableField, Field};
+use algebra::utils::Transcript;
 use algebra::AsFrom;
 use algebra::{BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
 use itertools::izip;
+use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::{BitDecompositionInstance, BitDecompositionSnarks};
+use std::time::Instant;
+use zkp::piop::bit_decomposition::{
+    BitDecompositionParams, BitDecompositionProof, BitDecompositionProver, BitDecompositionVerifier,
+};
+use zkp::piop::BitDecompositionInstance;
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -79,12 +85,56 @@ fn main() {
     let bits_len = <Basis<Fq>>::new(base_len as u32).decompose_len();
     let num_vars = LOG_DIM_RLWE;
 
-    let decomposed_bits = generate_instance::<Fq, FF>(2, num_vars, base_len, base, bits_len);
+    let instance = generate_instance::<Fq, FF>(2, num_vars, base_len, base, bits_len);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
-    <BitDecompositionSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &decomposed_bits,
-        &code_spec,
+    // Parameters.
+    let mut params = BitDecompositionParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&instance, code_spec);
+
+    // Prover.
+    let bd_prover = BitDecompositionProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let start = Instant::now();
+    let proof = bd_prover.prove(&mut prover_trans, &params, &instance);
+    println!(
+        "bit decomposition proving time: {:?} ms",
+        start.elapsed().as_millis()
     );
+
+    let proof_bytes = proof.to_bytes().unwrap();
+    println!(
+        "bit decomposition proof size: {:?} bytes",
+        proof_bytes.len()
+    );
+
+    // Verifier.
+    let bd_verifier = BitDecompositionVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = BitDecompositionProof::from_bytes(&proof_bytes).unwrap();
+    let start = Instant::now();
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &proof);
+    println!(
+        "bit decomposition verifying time: {:?} ms",
+        start.elapsed().as_millis()
+    );
+    assert!(res);
 }

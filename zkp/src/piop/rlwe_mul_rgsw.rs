@@ -789,7 +789,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         let bits_instance = instance.extract_decomposed_bits();
         let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.bits_info);
         let (r_bits, r) = randomness.split_at(bits_r_num);
-        BitDecompositionIOP::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
+        BitDecompositionIOP::prepare_products_of_polynomial(r_bits, poly, &bits_instance, eq_at_u);
 
         assert_eq!(r.len(), 2);
 
@@ -915,7 +915,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         let bits_eval = evals.extract_decomposed_bits();
         let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.bits_info);
         let (r_ntt, r) = randomness.split_at(bits_r_num);
-        let check_decomposed_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
+        let check_decomposed_bits = <BitDecompositionIOP<F>>::verify_subclaim(
             r_ntt,
             subclaim,
             &bits_eval,
@@ -1401,7 +1401,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         // let bits_r_num = <BitDecomposition<F>>::num_coins(&info.bits_info);
         // let (r_ntt, r) = randomness.split_at(bits_r_num);
         let check_decomposed_bits =
-            <BitDecompositionIOP<F>>::verify_as_subprotocol_pure(&bits_eval, &info.bits_info);
+            <BitDecompositionIOP<F>>::verify_subclaim_pure(&bits_eval, &info.bits_info);
         if !check_decomposed_bits {
             return false;
         }

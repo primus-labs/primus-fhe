@@ -210,6 +210,7 @@ fn test_lookup_snark() {
     let proof = lookup_prover.prove(&mut prover_trans, &params, &instance);
 
     let proof_bytes = proof.to_bytes().unwrap();
+
     // Verifier.
     let lookup_verifier = LookupVerifier::<
         FF,

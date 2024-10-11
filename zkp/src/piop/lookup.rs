@@ -231,6 +231,7 @@ impl<F: Field> LookupInstance<F> {
     }
 
     /// Pack all the involved small polynomials into a single vector of evaluations without padding zeros.
+    #[inline]
     pub fn pack_first_mles(&self) -> Vec<F> {
         // arrangement: f | t | m
         self.batch_f
@@ -243,6 +244,7 @@ impl<F: Field> LookupInstance<F> {
     }
 
     /// Pack all the involved small polynomials into a single vector of evaluations without padding zeros.
+    #[inline]
     pub fn pack_second_mles(&self) -> Vec<F> {
         // arrangement: h
         self.blocks
@@ -253,11 +255,13 @@ impl<F: Field> LookupInstance<F> {
     }
 
     /// Generate the number of variables in the first committed polynomial.
+    #[inline]
     pub fn generate_first_num_var(&self) -> usize {
         self.num_vars + self.log_num_first_oracles()
     }
 
     /// Generate the number of variables in the second committed polynomial.
+    #[inline]
     pub fn generate_second_num_var(&self) -> usize {
         self.num_vars + self.log_num_second_oracles()
     }
@@ -490,11 +494,7 @@ impl<F: Field + Serialize> LookupIOP<F> {
     }
 
     /// Lookup IOP prover.
-    pub fn prove(
-        &self,
-        trans: &mut Transcript<F>,
-        instance: &mut LookupInstance<F>,
-    ) -> SumcheckKit<F> {
+    pub fn prove(&self, trans: &mut Transcript<F>, instance: &LookupInstance<F>) -> SumcheckKit<F> {
         let eq_at_u = Rc::new(gen_identity_evaluations(&self.u));
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
@@ -677,7 +677,7 @@ pub struct LookupProof<
 > {
     /// Instance info
     pub instance_info: LookupInstanceInfo,
-    /// polynomial info
+    /// Polynomial info
     pub poly_info: PolynomialInfo,
     /// The first polynomial commitment.
     pub first_comm: Pcs::Commitment,
@@ -835,7 +835,7 @@ where
 
         // Generate proof of sumcheck protocol
         lookup_iop.generate_second_randomness(trans, &instance_info);
-        let kit = lookup_iop.prove(trans, &mut instance_ef);
+        let kit = lookup_iop.prove(trans, &instance_ef);
 
         // Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut first_requested_point = kit.randomness.clone();

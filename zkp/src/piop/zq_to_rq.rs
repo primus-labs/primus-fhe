@@ -448,7 +448,7 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
         assert_eq!(randomness.len(), bits_r_num + 3);
         let (r_bits, r) = randomness.split_at(bits_r_num);
         // 1. add products used to prove decomposition
-        BitDecompositionIOP::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
+        BitDecompositionIOP::prepare_products_of_polynomial(r_bits, poly, &bits_instance, eq_at_u);
 
         // 2. add sumcheck \sum_{x} eq(u, x) * k(x) * (1-k(x)) = 0, i.e. k(x)\in\{0,1\}^l with random coefficient r[0]
         poly.add_product_with_linear_op(
@@ -549,7 +549,7 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
         assert_eq!(randomness.len(), bits_r_num + 3);
         let (bits_r, r) = randomness.split_at(bits_r_num);
         // check 1: check the decomposed bits
-        let check_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
+        let check_bits = <BitDecompositionIOP<F>>::verify_subclaim(
             bits_r,
             subclaim,
             &bits_eval,

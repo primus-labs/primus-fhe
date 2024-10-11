@@ -463,13 +463,13 @@ impl<F: Field + Serialize> FloorIOP<F> {
         let offset_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.offset_bits_info);
         assert_eq!(randomness.len(), output_bits_r_num + offset_bits_r_num + 4);
         // 1. add products used to prove decomposition
-        BitDecompositionIOP::prove_as_subprotocol(
+        BitDecompositionIOP::prepare_products_of_polynomial(
             &randomness[..output_bits_r_num],
             poly,
             &output_bits_instance,
             eq_at_u,
         );
-        BitDecompositionIOP::prove_as_subprotocol(
+        BitDecompositionIOP::prepare_products_of_polynomial(
             &randomness[output_bits_r_num..output_bits_r_num + offset_bits_r_num],
             poly,
             &offset_bits_instance,
@@ -618,14 +618,14 @@ impl<F: Field + Serialize> FloorIOP<F> {
         let output_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info);
         let offset_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info);
         assert_eq!(randomness.len(), output_bits_r_num + offset_bits_r_num + 4);
-        let check_output_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
+        let check_output_bits = <BitDecompositionIOP<F>>::verify_subclaim(
             &randomness[..output_bits_r_num],
             subclaim,
             &output_bits_evals,
             &info.output_bits_info,
             eq_at_u_r,
         );
-        let check_offset_bits = <BitDecompositionIOP<F>>::verify_as_subprotocol(
+        let check_offset_bits = <BitDecompositionIOP<F>>::verify_subclaim(
             &randomness[output_bits_r_num..output_bits_r_num + offset_bits_r_num],
             subclaim,
             &offset_bits_evals,
