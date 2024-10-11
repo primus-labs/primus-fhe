@@ -128,58 +128,58 @@ impl<F: Field> LookupInstance<F> {
     #[inline]
     pub fn from_slice_pure(
         num_vars: usize,
-        f_vec: &[DenseMultilinearExtension<F>],
-        t: DenseMultilinearExtension<F>,
-        m: DenseMultilinearExtension<F>,
+        batch_f: &[DenseMultilinearExtension<F>],
+        table: DenseMultilinearExtension<F>,
+        freq: DenseMultilinearExtension<F>,
         block_size: usize,
     ) -> Self {
         assert!(block_size > 0);
-        let column_num = f_vec.len() + 1;
+        let column_num = batch_f.len() + 1;
         Self {
             num_vars,
             block_num: (column_num + block_size - 1) / block_size,
             block_size,
-            batch_f: f_vec.to_vec(),
-            table: t,
+            batch_f: batch_f.to_vec(),
+            table,
             blocks: Default::default(),
-            freq: m,
+            freq,
         }
     }
 
     /// Construct a new instance from slice
     #[inline]
     pub fn from_slice(
-        f_vec: &[DenseMultilinearExtension<F>],
-        t: DenseMultilinearExtension<F>,
+        batch_f: &[DenseMultilinearExtension<F>],
+        table: DenseMultilinearExtension<F>,
         block_size: usize,
     ) -> Self {
         assert!(block_size > 0);
-        let num_vars = f_vec[0].num_vars;
-        let column_num = f_vec.len() + 1;
+        let num_vars = batch_f[0].num_vars;
+        let column_num = batch_f.len() + 1;
 
         let mut m_table = HashMap::new();
-        let mut table = HashMap::new();
+        let mut hash_table = HashMap::new();
 
-        t.evaluations.iter().for_each(|&t| {
+        table.evaluations.iter().for_each(|&t| {
             m_table
                 .entry(t)
                 .and_modify(|counter| *counter += 1usize)
                 .or_insert(1);
-            table.insert(t, 0usize);
+            hash_table.insert(t, 0usize);
         });
 
-        f_vec.iter().for_each(|f| {
+        batch_f.iter().for_each(|f| {
             assert_eq!(f.num_vars, num_vars);
             f.evaluations.iter().for_each(|&x| {
-                table.entry(x).and_modify(|counter| *counter += 1);
+                hash_table.entry(x).and_modify(|counter| *counter += 1);
             })
         });
 
-        let m_evaluations: Vec<F> = t
+        let m_evaluations: Vec<F> = table
             .evaluations
             .iter()
             .map(|t| {
-                let m_f = table[t];
+                let m_f = hash_table[t];
                 let m_t = m_table[t];
 
                 let m_f = F::new(F::Value::as_from(m_f as f64));
@@ -189,13 +189,14 @@ impl<F: Field> LookupInstance<F> {
             })
             .collect();
 
-        let m = DenseMultilinearExtension::from_evaluations_slice(num_vars, &m_evaluations);
+        let m: DenseMultilinearExtension<F> =
+            DenseMultilinearExtension::from_evaluations_slice(num_vars, &m_evaluations);
         Self {
             num_vars,
             block_num: (column_num + block_size - 1) / block_size,
             block_size,
-            batch_f: f_vec.to_vec(),
-            table: t,
+            batch_f: batch_f.to_vec(),
+            table,
             blocks: Default::default(),
             freq: m,
         }
@@ -355,18 +356,23 @@ impl<F: Field> LookupInstance<F> {
     /// Evaluate at a random point defined over base field
     #[inline]
     pub fn evaluate(&self, point: &[F]) -> LookupInstanceEval<F> {
-        let mut f_vec = vec![];
+        let mut batch_f = vec![];
         let mut h_vec = vec![];
-        let mut t = F::zero();
-        let mut m = F::zero();
+        let mut table = F::zero();
+        let mut freq = F::zero();
         rayon::scope(|s| {
-            s.spawn(|_| f_vec = self.batch_f.iter().map(|x| x.evaluate(point)).collect());
+            s.spawn(|_| batch_f = self.batch_f.iter().map(|x| x.evaluate(point)).collect());
             s.spawn(|_| h_vec = self.blocks.iter().map(|x| x.evaluate(point)).collect());
-            s.spawn(|_| t = self.table.evaluate(point));
-            s.spawn(|_| m = self.freq.evaluate(point));
+            s.spawn(|_| table = self.table.evaluate(point));
+            s.spawn(|_| freq = self.freq.evaluate(point));
         });
 
-        LookupInstanceEval::<F> { f_vec, t, h_vec, m }
+        LookupInstanceEval::<F> {
+            batch_f,
+            table,
+            h_vec,
+            freq,
+        }
     }
 
     /// Evaluate at a random point defined over extension field
@@ -377,10 +383,10 @@ impl<F: Field> LookupInstance<F> {
     ) -> LookupInstanceEval<EF> {
         // TODO: Parallel
         LookupInstanceEval::<EF> {
-            f_vec: self.batch_f.iter().map(|x| x.evaluate_ext(point)).collect(),
-            t: self.table.evaluate_ext(point),
+            batch_f: self.batch_f.iter().map(|x| x.evaluate_ext(point)).collect(),
+            table: self.table.evaluate_ext(point),
             h_vec: self.blocks.iter().map(|x| x.evaluate_ext(point)).collect(),
-            m: self.freq.evaluate_ext(point),
+            freq: self.freq.evaluate_ext(point),
         }
     }
 }
@@ -389,20 +395,20 @@ impl<F: Field> LookupInstance<F> {
 #[derive(Serialize, Deserialize)]
 pub struct LookupInstanceEval<F: Field> {
     /// f vector
-    pub f_vec: Vec<F>,
+    pub batch_f: Vec<F>,
     /// taget
-    pub t: F,
+    pub table: F,
     /// h vector
     pub h_vec: Vec<F>,
     /// m
-    pub m: F,
+    pub freq: F,
 }
 
 impl<F: Field> LookupInstanceEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_first_oracles(&self) -> usize {
-        self.f_vec.len() + 2
+        self.batch_f.len() + 2
     }
 
     /// Return the log of the number of small polynomials used in IOP
@@ -427,9 +433,9 @@ impl<F: Field> LookupInstanceEval<F> {
     #[inline]
     pub fn first_flatten(&self) -> Vec<F> {
         let mut res: Vec<F> = Vec::new();
-        res.extend(self.f_vec.iter().copied());
-        res.push(self.t);
-        res.push(self.m);
+        res.extend(self.batch_f.iter().copied());
+        res.push(self.table);
+        res.push(self.freq);
         res
     }
 }
@@ -621,10 +627,10 @@ impl<F: Field + Serialize> LookupIOP<F> {
         let random_combine = &randomness[0..randomness.len() - 1];
         let random_value = randomness[randomness.len() - 1];
 
-        let mut ft_vec = evals.f_vec.clone();
-        ft_vec.push(evals.t);
+        let mut ft_vec = evals.batch_f.clone();
+        ft_vec.push(evals.table);
         let h_vec = &evals.h_vec;
-        let m_eval = evals.m;
+        let m_eval = evals.freq;
 
         let chunks = ft_vec.chunks_exact(info.block_size);
         let residual = Some(chunks.remainder()).into_iter();
@@ -823,9 +829,6 @@ where
         lookup_iop.generate_second_randomness(trans, &instance_info);
         let kit = lookup_iop.prove(trans, &mut instance_ef);
 
-        // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let evals = instance_ef.evaluate(&kit.randomness);
-
         // Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut first_requested_point = kit.randomness.clone();
 
@@ -835,6 +838,9 @@ where
         );
 
         first_requested_point.extend(&oracle_randomness);
+
+        // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
+        let evals = instance_ef.evaluate(&kit.randomness);
 
         let first_oracle_eval = first_committed_poly.evaluate_ext(&first_requested_point);
 

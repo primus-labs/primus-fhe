@@ -107,6 +107,41 @@ impl<F: Field> DenseMultilinearExtension<F> {
         );
         (left, right)
     }
+    /// Evaluate a point in the field.
+    #[inline]
+    pub fn evaluate(&self, ext_point: &[F]) -> F {
+        assert_eq!(ext_point.len(), self.num_vars, "The point size is invalid.");
+        let mut poly: Vec<_> = self.evaluations.iter().map(|&eval| eval).collect();
+        let nv = self.num_vars;
+        let dim = ext_point.len();
+        // evaluate nv variable of partial point from left to right
+        // with dim rounds and \sum_{i=1}^{dim} 2^(nv - i)
+        // (If dim = nv, then the complexity is 2^{nv}.)
+        if dim <= PAR_NUM_VAR_THRESHOLD {
+            for i in 1..dim + 1 {
+                // fix a single variable to evaluate (1 << (nv - i)) evaluations from the last round
+                // with complexity of 2^(1 << (nv - i)) field multiplications
+                let r = ext_point[i - 1];
+                for b in 0..(1 << (nv - i)) {
+                    let left = poly[b << 1];
+                    let right = poly[(b << 1) + 1];
+                    poly[b] = r * (right - left) + left;
+                }
+            }
+        } else {
+            for i in 1..dim + 1 {
+                let r = ext_point[i - 1];
+                let mut tmp = vec![F::zero(); 1 << (nv - i)];
+                tmp.par_iter_mut().enumerate().for_each(|(b, t)| {
+                    let left = poly[b << 1];
+                    let right = poly[(b << 1) + 1];
+                    *t = left + r * (right - left);
+                });
+                poly = tmp;
+            }
+        }
+        poly[0]
+    }
 
     /// Evaluate a point in the extension field.
     #[inline]

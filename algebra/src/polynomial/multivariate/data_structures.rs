@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Field;
 
-use super::{DenseMultilinearExtension, MultilinearExtension};
+use super::DenseMultilinearExtension;
 
 /// Stores a list of products of `DenseMultilinearExtension` that is meant to be added together.
 ///

@@ -165,6 +165,39 @@ where
     }
 }
 
+/// Opening proof of Brakedown for extension field.
+#[derive(Default, Serialize, Deserialize, Clone)]
+pub struct BrakedownOpenProofGeneral<F, H>
+where
+    F: Field,
+    H: Hash,
+{
+    /// Random linear combination of messages.
+    pub rlc_msgs: Vec<F>,
+
+    /// The opening columns according to the queres.
+    pub opening_columns: Vec<F>,
+
+    /// Merkle paths.
+    pub merkle_paths: Vec<H::Output>,
+}
+
+impl<F, H> BrakedownOpenProofGeneral<F, H>
+where
+    F: Field + Serialize + for<'de> Deserialize<'de>,
+    H: Hash,
+{
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
 /// Commitment state of Brakedown
 #[derive(Debug, Default)]
 pub struct BrakedownCommitmentState<F: Field, H: Hash + Send + Sync> {
