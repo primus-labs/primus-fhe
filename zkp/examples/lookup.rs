@@ -1,9 +1,17 @@
-use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension, Field};
+use std::time::Instant;
+
+use algebra::{utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtension, Field};
 use num_traits::Zero;
-use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
+use pcs::{
+    multilinear::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+};
 use rand::prelude::*;
 use sha2::Sha256;
-use zkp::piop::{LookupInstance, LookupSnarks};
+use zkp::piop::{
+    lookup::{LookupParams, LookupProof, LookupProver, LookupVerifier},
+    LookupInstance,
+};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -33,7 +41,46 @@ fn main() {
     let instance = LookupInstance::from_slice(&f_vec, t, block_size);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <LookupSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
+
+    // Parameters.
+    let mut params = LookupParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&instance, code_spec);
+
+    // Prover.
+    let lookup_prover = LookupProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let start = Instant::now();
+    let proof = lookup_prover.prove(&mut prover_trans, &params, &instance);
+    println!("lookup proving time: {:?} ms", start.elapsed().as_millis());
+
+    let proof_bytes = proof.to_bytes().unwrap();
+    println!("lookup proof size: {:?} bytes", proof_bytes.len());
+    // Verifier.
+    let lookup_verifier = LookupVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = LookupProof::from_bytes(&proof_bytes).unwrap();
+    let start = Instant::now();
+    let res = lookup_verifier.verify(&mut verifier_trans, &params, &proof);
+    println!(
+        "lookup verifying time: {:?} ms",
+        start.elapsed().as_millis()
     );
+    assert!(res);
 }

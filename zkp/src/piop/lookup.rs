@@ -32,8 +32,7 @@
 use crate::sumcheck;
 use crate::sumcheck::{verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{
-    batch_inverse, eval_identity_function, gen_identity_evaluations, print_statistic,
-    verify_oracle_relation,
+    batch_inverse, eval_identity_function, gen_identity_evaluations, verify_oracle_relation,
 };
 use algebra::PolynomialInfo;
 use algebra::{
@@ -42,18 +41,10 @@ use algebra::{
 };
 use bincode::Result;
 use core::fmt;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{LinearCode, LinearCodeSpec},
-    utils::hash::Hash,
-    PolynomialCommitmentScheme,
-};
+use pcs::PolynomialCommitmentScheme;
 use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::time::Instant;
+use std::{collections::HashMap, marker::PhantomData, rc::Rc};
 
 /// Stores the parameters used for lookup and the public info for verifier.
 #[derive(Clone, Serialize, Deserialize)]
@@ -297,11 +288,11 @@ impl<F: Field> LookupInstance<F> {
     pub fn generate_h_vec(&mut self, random_value: F) {
         let num_vars = self.num_vars;
 
-        // integrate t into columns
+        // Integrate t into columns
         let mut ft_vec = self.batch_f.clone();
         ft_vec.push(self.table.clone());
 
-        // construct shifted columns: (f(x) - r)
+        // Construct shifted columns: (f(x) - r)
         let shifted_ft_vec: Vec<F> = ft_vec
             .iter()
             .flat_map(|f| f.iter())
@@ -312,7 +303,7 @@ impl<F: Field> LookupInstance<F> {
         // let chunk_size = (shifted_ft_vec.len() + num_threads - 1) / num_threads;
         let chunk_size = shifted_ft_vec.len() / num_threads;
 
-        // construct inversed shifted columns: 1 / (f(x) - r)
+        // Construct inversed shifted columns: 1 / (f(x) - r)
         let mut inversed_shifted_ft_evaluation_vec: Vec<F> = shifted_ft_vec
             .par_chunks(chunk_size)
             .map(|x| batch_inverse(x))
@@ -329,7 +320,7 @@ impl<F: Field> LookupInstance<F> {
 
         let chunks = inversed_shifted_ft_evaluation_vec.chunks(self.block_size * (1 << num_vars));
 
-        // construct blocked columns
+        // Construct blocked columns
         let h_vec: Vec<DenseMultilinearExtension<F>> = chunks
             .map(|block| {
                 DenseMultilinearExtension::from_evaluations_vec(
@@ -394,13 +385,13 @@ impl<F: Field> LookupInstance<F> {
 /// Evaluations at a random point
 #[derive(Serialize, Deserialize)]
 pub struct LookupInstanceEval<F: Field> {
-    /// f vector
+    /// The batched vector f
     pub batch_f: Vec<F>,
-    /// taget
+    /// The target table
     pub table: F,
-    /// h vector
+    /// The block vector h
     pub h_vec: Vec<F>,
-    /// m
+    /// The frequency vector m
     pub freq: F,
 }
 
@@ -429,7 +420,7 @@ impl<F: Field> LookupInstanceEval<F> {
         self.num_second_oracles().next_power_of_two().ilog2() as usize
     }
 
-    /// Flatten all evals into a vector with the same arrangement of the committed polynomial
+    /// Flatten the evals of the first polynomial into a vector with the same arrangement of the committed polynomial
     #[inline]
     pub fn first_flatten(&self) -> Vec<F> {
         let mut res: Vec<F> = Vec::new();
@@ -440,7 +431,7 @@ impl<F: Field> LookupInstanceEval<F> {
     }
 }
 
-/// SNARKs for lookup tables.
+/// Lookup IOP.
 #[derive(Default)]
 pub struct LookupIOP<F: Field> {
     /// The random value to generate r.
@@ -451,12 +442,10 @@ pub struct LookupIOP<F: Field> {
     pub u: Vec<F>,
 }
 
-// Execute sumcheck for lookup.
 impl<F: Field + Serialize> LookupIOP<F> {
     /// Sample coins for random combination.
     #[inline]
     pub fn sample_coins(trans: &mut Transcript<F>, instance_info: &LookupInstanceInfo) -> Vec<F> {
-        // TODO: should hash all the instance.
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
             instance_info.block_num,
@@ -500,7 +489,7 @@ impl<F: Field + Serialize> LookupIOP<F> {
         self.randomness.push(self.random_value);
     }
 
-    /// Prove the lookup statement.
+    /// Lookup IOP prover.
     pub fn prove(
         &self,
         trans: &mut Transcript<F>,
@@ -696,6 +685,12 @@ pub struct LookupProof<
     pub first_oracle_eval: EF,
     /// The opening proof of the first polynomial.
     pub first_eval_proof: Pcs::Proof,
+    /// The seconde polynomial commitment.
+    pub second_comm: Pcs::Commitment,
+    /// The evaluation of the second packed polynomial.
+    pub second_oracle_eval: EF,
+    /// The opening proof of the second polynomial.
+    pub second_eval_proof: Pcs::ProofEF,
     /// The sumcheck proof.
     pub sumcheck_proof: sumcheck::Proof<EF>,
     /// The evaluations.
@@ -791,11 +786,17 @@ where
 
 impl<F, EF, S, Pcs> LookupProver<F, EF, S, Pcs>
 where
-    F: Field + Serialize,
-    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+    F: Field,
+    EF: AbstractExtensionField<F> + Serialize,
     S: Clone,
-    Pcs:
-        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+    Pcs: PolynomialCommitmentScheme<
+        F,
+        EF,
+        S,
+        Polynomial = DenseMultilinearExtension<F>,
+        EFPolynomial = DenseMultilinearExtension<EF>,
+        Point = EF,
+    >,
 {
     /// The prover.
     pub fn prove(
@@ -823,7 +824,14 @@ where
 
         lookup_iop.prover_generate_first_randomness(trans, &mut instance_ef);
 
-        // TODO: Should commit polynomial h.
+        // Compute the packed second polynomials, i.e., h vector.
+        let second_committed_poly = instance_ef.generate_second_oracle();
+
+        // Commit the second polynomial.
+        let (second_comm, second_comm_state) =
+            Pcs::commit_ef(&params.pp_second, &second_committed_poly);
+
+        trans.append_message(b"second commitment", &second_comm);
 
         // Generate proof of sumcheck protocol
         lookup_iop.generate_second_randomness(trans, &instance_info);
@@ -831,18 +839,26 @@ where
 
         // Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut first_requested_point = kit.randomness.clone();
+        let mut second_requested_point = kit.randomness.clone();
 
-        let oracle_randomness = trans.get_vec_challenge(
-            b"random linear combinaiton for evaluations of oracles",
+        let first_oracle_randomness = trans.get_vec_challenge(
+            b"random linear combinaiton for evaluations of first oracles",
             instance.log_num_first_oracles(),
         );
+        first_requested_point.extend(&first_oracle_randomness);
 
-        first_requested_point.extend(&oracle_randomness);
+        let second_oracle_randomness = trans.get_vec_challenge(
+            b"random linear combination of evaluations of second oracles",
+            instance.log_num_second_oracles(),
+        );
+        second_requested_point.extend(&second_oracle_randomness);
 
         // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let evals = instance_ef.evaluate(&kit.randomness);
 
         let first_oracle_eval = first_committed_poly.evaluate_ext(&first_requested_point);
+
+        let second_oracle_eval = second_committed_poly.evaluate(&second_requested_point);
 
         // Generate the evaluation proof of the requested point.
         let first_eval_proof = Pcs::open(
@@ -853,13 +869,23 @@ where
             trans,
         );
 
-        // TODO: handle the second polynomial.
+        let second_eval_proof = Pcs::open_ef(
+            &params.pp_second,
+            &second_comm,
+            &second_comm_state,
+            &second_requested_point,
+            trans,
+        );
+
         LookupProof {
             instance_info,
             poly_info: kit.info,
             first_comm,
             first_oracle_eval,
             first_eval_proof,
+            second_comm,
+            second_oracle_eval,
+            second_eval_proof,
             sumcheck_proof: kit.proof,
             evals,
         }
@@ -897,8 +923,8 @@ where
 
 impl<F, EF, S, Pcs> LookupVerifier<F, EF, S, Pcs>
 where
-    F: Field + Serialize + for<'de> Deserialize<'de>,
-    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+    F: Field,
+    EF: AbstractExtensionField<F> + Serialize,
     S: Clone,
     Pcs:
         PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
@@ -919,7 +945,7 @@ where
 
         lookup_iop.verifier_generate_first_randomness(trans);
 
-        // TODO: hash the commitment of h.
+        trans.append_message(b"second commitment", &proof.second_comm);
 
         // Verify the proof of sumcheck protocol.
         lookup_iop.generate_second_randomness(trans, &proof.instance_info);
@@ -936,16 +962,31 @@ where
 
         // Check the relation between these small oracles and the committed oracle.
         let flatten_evals = proof.evals.first_flatten();
-        let oracle_randomness = trans.get_vec_challenge(
-            b"random linear combinaiton for evaluations of oracles",
+        let first_oracle_randomness = trans.get_vec_challenge(
+            b"random linear combinaiton for evaluations of first oracles",
             proof.evals.log_num_first_oracles(),
         );
 
-        res &= verify_oracle_relation(&flatten_evals, proof.first_oracle_eval, &oracle_randomness);
+        res &= verify_oracle_relation(
+            &flatten_evals,
+            proof.first_oracle_eval,
+            &first_oracle_randomness,
+        );
 
-        let mut first_requested_point = randomness;
-        first_requested_point.extend(&oracle_randomness);
-        // Check the evaluation of a random point over the committed oracle.
+        let second_oracle_randomnes = trans.get_vec_challenge(
+            b"random linear combination of evaluations of second oracles",
+            proof.evals.log_num_second_oracles(),
+        );
+
+        res &= verify_oracle_relation(
+            &proof.evals.h_vec,
+            proof.second_oracle_eval,
+            &second_oracle_randomnes,
+        );
+
+        let mut first_requested_point = randomness.clone();
+        first_requested_point.extend(&first_oracle_randomness);
+        // Check the evaluation of a random point over the first committed oracle.
         res &= Pcs::verify(
             &params.pp_first,
             &proof.first_comm,
@@ -954,228 +995,18 @@ where
             &proof.first_eval_proof,
             trans,
         );
+
+        let mut second_requested_point = randomness;
+        second_requested_point.extend(&second_oracle_randomnes);
+        // Check the evaluation of a random point over the second committed oracle.
+        res &= Pcs::verify_ef(
+            &params.pp_second,
+            &proof.second_comm,
+            &second_requested_point,
+            proof.second_oracle_eval,
+            &proof.second_eval_proof,
+            trans,
+        );
         res
-    }
-}
-/// SNARKs for lookup compiled with PCS
-pub struct LookupSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
-
-impl<F, EF> LookupSnarks<F, EF>
-where
-    F: Field + Serialize + for<'de> Deserialize<'de>,
-    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
-{
-    /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &LookupInstance<F>, code_spec: &S)
-    where
-        H: Hash + Sync + Send,
-        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
-        S: LinearCodeSpec<F, Code = C> + Clone,
-    {
-        let instance_info = instance.info();
-        println!("Prove {instance_info}\n");
-
-        let mut prover_trans = Transcript::<EF>::new();
-
-        // 1. First PCS
-
-        // Construct poly
-        let first_committed_poly = instance.generate_first_oracle();
-        // setup
-        let start = Instant::now();
-        let first_pp = BrakedownPCS::<F, H, C, S, EF>::setup(
-            first_committed_poly.num_vars,
-            Some(code_spec.clone()),
-        );
-        let first_setup_time = start.elapsed().as_millis();
-        // commit
-        let start = Instant::now();
-        let (first_comm, first_comm_state) =
-            BrakedownPCS::<F, H, C, S, EF>::commit(&first_pp, &first_committed_poly);
-        let first_commit_time = start.elapsed().as_millis();
-
-        // 2. Second PCS
-
-        // Convert the original instance into an instance defined over EF
-        let mut instance_ef = instance.to_ef::<EF>();
-        let instance_info = instance_ef.info();
-
-        // Construct poly
-        let random_value =
-            prover_trans.get_challenge(b"random point used to generate the second oracle");
-        instance_ef.generate_h_vec(random_value);
-        // let second_committed_poly = instance_ef.generate_second_oracle();
-        // Setup
-        // let start = Instant::now();
-        // let _second_pp = BrakedownPCS::<F, H, C, S, EF>::setup(
-        //     second_committed_poly.num_vars,
-        //     Some(code_spec.clone()),
-        // );
-        // let second_setup_time = start.elapsed().as_millis();
-        // Commit
-        // let start = Instant::now();
-        // let (second_comm, second_comm_state) =
-        //     BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &second_committed_poly);
-        // let second_commit_time = start.elapsed().as_millis();
-
-        // 3. Prover generates the proof
-        let prover_start = Instant::now();
-        let mut iop_proof_size = 0;
-
-        // 3.1 Generate the random point to instantiate the sumcheck protocol
-        let prover_u = prover_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
-
-        // 3.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
-        let claimed_sum = EF::zero();
-
-        let mut randomness = LookupIOP::sample_coins(&mut prover_trans, &instance_info);
-        randomness.push(random_value);
-
-        LookupIOP::prepare_products_of_polynomial(
-            &randomness,
-            &mut sumcheck_poly,
-            &instance_ef,
-            &eq_at_u,
-        );
-        let poly_info = sumcheck_poly.info();
-
-        // 3.3 Generate proof of sumcheck protocol
-        let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Lookup");
-
-        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
-        let iop_prover_time = prover_start.elapsed().as_millis();
-
-        // 3.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let start = Instant::now();
-        let evals = instance_ef.evaluate(&sumcheck_state.randomness);
-
-        // 3.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        let mut first_requested_point = sumcheck_state.randomness.clone();
-        first_requested_point.extend(&prover_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            instance.log_num_first_oracles(),
-        ));
-        let first_oracle_eval = first_committed_poly.evaluate_ext(&first_requested_point);
-
-        // 3.6 Generate the evaluation proof of the requested point
-        let first_eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
-            &first_pp,
-            &first_comm,
-            &first_comm_state,
-            &first_requested_point,
-            &mut prover_trans,
-        );
-        let first_pcs_open_time = start.elapsed().as_millis();
-
-        // 3.7 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        // let mut second_requested_point = sumcheck_state.randomness.clone();
-        // second_requested_point.extend(&prover_trans.get_vec_challenge(
-        //     b"random linear combination for evaluations of oracles",
-        //     instance.log_num_second_oracles(),
-        // ));
-        // let second_oracle_eval = second_committed_poly.evaluate(&second_requested_point);
-
-        // 3.8 Generate the evaluation proof of the requested point
-        // let second_eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
-        //     &pp,
-        //     &second_comm,
-        //     &second_comm_state,
-        //     &second_requested_point,
-        //     &mut prover_trans,
-        // );
-        // let second_pcs_open_time = start.elapsed().as_millis();
-
-        // 4. Verifier checks the proof
-        let verifier_start = Instant::now();
-        let mut verifier_trans = Transcript::<EF>::new();
-
-        let random_value =
-            verifier_trans.get_challenge(b"random point used to generate the second oracle");
-
-        // 4.1 Generate the random point to instantiate the sumcheck protocol
-        let verifier_u = verifier_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-
-        // 4.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-        let mut randomness = verifier_trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            <LookupIOP<EF>>::num_coins(&instance_info),
-        );
-        randomness.push(random_value);
-
-        // 4.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify(
-            &mut verifier_trans,
-            &poly_info,
-            claimed_sum,
-            &sumcheck_proof,
-        )
-        .expect("Verify the proof generated in Lookup");
-
-        // 4.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
-        let check_subcliam = LookupIOP::<EF>::verify_subclaim(
-            &randomness,
-            &mut subclaim,
-            &evals,
-            &instance_info,
-            eq_at_u_r,
-        );
-        assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
-        let iop_verifier_time = verifier_start.elapsed().as_millis();
-
-        // 4.5 Check the relation between these small oracles and the committed oracle
-        let start = Instant::now();
-        let mut first_pcs_proof_size = 0;
-        let flatten_evals = evals.first_flatten();
-        let oracle_randomness = verifier_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            evals.log_num_first_oracles(),
-        );
-        let check_oracle =
-            verify_oracle_relation(&flatten_evals, first_oracle_eval, &oracle_randomness);
-        assert!(check_oracle);
-
-        // 3.5 Check the evaluation of a random point over the committed oracle
-
-        let check_pcs = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &first_pp,
-            &first_comm,
-            &first_requested_point,
-            first_oracle_eval,
-            &first_eval_proof,
-            &mut verifier_trans,
-        );
-        assert!(check_pcs);
-        let pcs_verifier_time = start.elapsed().as_millis();
-        first_pcs_proof_size += bincode::serialize(&first_eval_proof).unwrap().len()
-            + bincode::serialize(&flatten_evals).unwrap().len();
-
-        // 4. print statistic
-        print_statistic(
-            iop_prover_time + first_pcs_open_time,
-            iop_verifier_time + pcs_verifier_time,
-            iop_proof_size + first_pcs_proof_size,
-            iop_prover_time,
-            iop_verifier_time,
-            iop_proof_size,
-            first_committed_poly.num_vars,
-            instance.num_first_oracles(),
-            instance.num_vars,
-            first_setup_time,
-            first_commit_time,
-            first_pcs_open_time,
-            pcs_verifier_time,
-            first_pcs_proof_size,
-        )
     }
 }

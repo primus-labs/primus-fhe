@@ -21,7 +21,7 @@ pub use bit_decomposition::{
     DecomposedBitsInfo,
 };
 pub use floor::{FloorIOP, FloorInstance, FloorSnarks};
-pub use lookup::{LookupIOP, LookupInstance, LookupSnarks};
+pub use lookup::{LookupIOP, LookupInstance};
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
 pub use rlwe_mul_rgsw::{

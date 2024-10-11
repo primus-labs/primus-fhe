@@ -14,7 +14,7 @@ use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
     lookup::{LookupParams, LookupProof, LookupProver, LookupVerifier},
-    LookupIOP, LookupInstance, LookupSnarks,
+    LookupIOP, LookupInstance,
 };
 
 type FF = BabyBear;
@@ -162,49 +162,6 @@ fn test_random_range_check() {
 }
 
 #[test]
-fn test_snark() {
-    // prepare parameters
-
-    let num_vars = 8;
-    let block_size = 4;
-    let block_num = 5;
-    let residual_size = 1;
-    let lookup_num = block_num * block_size + residual_size;
-    let range = 59;
-
-    let mut rng = thread_rng();
-    let f_vec: Vec<Rc<DenseMultilinearExtension<FF>>> = (0..lookup_num)
-        .map(|_| {
-            let f_evaluations: Vec<FF> = (0..(1 << num_vars))
-                .map(|_| FF::new(rng.gen_range(0..range)))
-                .collect();
-            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-                num_vars,
-                f_evaluations,
-            ))
-        })
-        .collect();
-
-    let mut t_evaluations: Vec<_> = (0..range as usize).map(|i| FF::new(i as u32)).collect();
-    t_evaluations.resize(1 << num_vars, FF::zero());
-    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars,
-        t_evaluations,
-    ));
-
-    let instance = LookupInstance::from_slice(
-        &f_vec.iter().map(|d| d.as_ref().clone()).collect::<Vec<_>>(),
-        t.as_ref().clone(),
-        block_size,
-    );
-
-    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <LookupSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
-    );
-}
-
-#[test]
 fn test_lookup_snark() {
     // prepare parameters
     let num_vars = 8;
@@ -215,30 +172,20 @@ fn test_lookup_snark() {
     let range = 59;
 
     let mut rng = thread_rng();
-    let f_vec: Vec<Rc<DenseMultilinearExtension<FF>>> = (0..lookup_num)
+    let f_vec: Vec<DenseMultilinearExtension<FF>> = (0..lookup_num)
         .map(|_| {
             let f_evaluations: Vec<FF> = (0..(1 << num_vars))
                 .map(|_| FF::new(rng.gen_range(0..range)))
                 .collect();
-            Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-                num_vars,
-                f_evaluations,
-            ))
+            DenseMultilinearExtension::from_evaluations_vec(num_vars, f_evaluations)
         })
         .collect();
 
     let mut t_evaluations: Vec<_> = (0..range as usize).map(|i| FF::new(i as u32)).collect();
     t_evaluations.resize(1 << num_vars, FF::zero());
-    let t = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars,
-        t_evaluations,
-    ));
+    let t = DenseMultilinearExtension::from_evaluations_vec(num_vars, t_evaluations);
 
-    let instance = LookupInstance::from_slice(
-        &f_vec.iter().map(|d| d.as_ref().clone()).collect::<Vec<_>>(),
-        t.as_ref().clone(),
-        block_size,
-    );
+    let instance = LookupInstance::from_slice(&f_vec, t, block_size);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
