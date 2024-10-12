@@ -62,6 +62,8 @@ fn test_single_trivial_bit_decomposition_base_2() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
     let kit = bd_iop.prove(&mut prover_trans, &prover_key);
 
     let evals = prover_key.evaluate(&kit.randomness);
@@ -72,6 +74,7 @@ fn test_single_trivial_bit_decomposition_base_2() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
 
     let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &prover_key.info());
 
@@ -133,6 +136,8 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
     let kit = bd_iop.prove(&mut prover_trans, &instance);
 
     let evals = instance.evaluate(&kit.randomness);
@@ -143,6 +148,7 @@ fn test_batch_trivial_bit_decomposition_base_2() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
 
     let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &instance.info());
 
@@ -175,6 +181,8 @@ fn test_single_bit_decomposition() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
     let kit = bd_iop.prove(&mut prover_trans, &instance);
 
     let evals = instance.evaluate(&kit.randomness);
@@ -185,6 +193,7 @@ fn test_single_bit_decomposition() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
 
     let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &instance.info());
 
@@ -243,6 +252,8 @@ fn test_batch_bit_decomposition() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
     let kit = bd_iop.prove(&mut prover_trans, &instance);
 
     let evals = instance.evaluate(&kit.randomness);
@@ -253,6 +264,7 @@ fn test_batch_bit_decomposition() {
     let mut bd_iop = BitDecompositionIOP::default();
 
     bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
 
     let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &instance.info());
 

@@ -21,18 +21,16 @@
 //! where r_i (for i = 0..l) are sampled from the verifier.
 use crate::sumcheck::{self, verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation};
-use algebra::PolynomialInfo;
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials,
+    ListOfProductsOfPolynomials, PolynomialInfo,
 };
 use bincode::Result;
 use core::fmt;
 use itertools::izip;
 use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::rc::Rc;
+use std::{marker::PhantomData, rc::Rc};
 
 use super::LookupInstance;
 
@@ -338,18 +336,20 @@ pub struct BitDecompositionIOP<F: Field> {
 
 impl<F: Field + Serialize> BitDecompositionIOP<F> {
     /// Sample coins before proving sumcheck protocol
+    #[inline]
     pub fn sample_coins(
         trans: &mut Transcript<F>,
         info: &BitDecompositionInstanceInfo<F>,
     ) -> Vec<F> {
         // Batch `len_bits` sumcheck protocols into one with random linear combination
         trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
+            b"BD IOP: randomness to combine sumcheck protocols",
             Self::num_coins(info),
         )
     }
 
     /// Return the number of coins used in this IOP
+    #[inline]
     pub fn num_coins(info: &BitDecompositionInstanceInfo<F>) -> usize {
         info.bits_len * info.num_instances
     }
@@ -362,11 +362,21 @@ impl<F: Field + Serialize> BitDecompositionIOP<F> {
         info: &BitDecompositionInstanceInfo<F>,
     ) {
         self.randomness = Self::sample_coins(trans, info);
+    }
+
+    /// Generate the randomness for the eq function.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &BitDecompositionInstanceInfo<F>,
+    ) {
         self.u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
+            b"BD IOP: random point used to instantiate sumcheck protocol",
             info.num_vars,
         );
     }
+
     /// BitDecomposition IOP prover.
     pub fn prove(
         &self,
@@ -629,7 +639,7 @@ where
         // Use PCS to commit the above polynomial.
         let (poly_comm, poly_comm_state) = Pcs::commit(&params.pp, &committed_poly);
 
-        trans.append_message(b"polynomial commitment", &poly_comm);
+        trans.append_message(b"BD IOP: polynomial commitment", &poly_comm);
 
         // Prover generates the proof.
         // Convert the orignal instance into an instance defined over EF.
@@ -638,12 +648,13 @@ where
         let mut bd_iop = BitDecompositionIOP::<EF>::default();
 
         bd_iop.generate_randomness(trans, &instance_ef_info);
+        bd_iop.generate_randomness_for_eq_function(trans, &instance_ef_info);
         let kit = bd_iop.prove(trans, &instance_ef);
 
         // Reduce the proof of the above evaluations to a single random point over the committed polynomial
         let mut requested_point = kit.randomness.clone();
         let oracle_randomness = trans.get_vec_challenge(
-            b"random linear combinaiton for evaluations of the oracles",
+            b"BD IOP: random linear combinaiton for evaluations of the oracles",
             instance.log_num_oracles(),
         );
         requested_point.extend(&oracle_randomness);
@@ -721,11 +732,12 @@ where
         let mut res = true;
 
         trans.append_message(b"bit decomposition instance", &proof.instance_info);
-        trans.append_message(b"polynomial commitment", &proof.poly_comm);
+        trans.append_message(b"BD IOP: polynomial commitment", &proof.poly_comm);
 
         let mut bd_iop = BitDecompositionIOP::<EF>::default();
 
         bd_iop.generate_randomness(trans, &proof.instance_info.to_ef());
+        bd_iop.generate_randomness_for_eq_function(trans, &proof.instance_info.to_ef());
 
         let proof_wrapper = ProofWrapper {
             claimed_sum: EF::zero(),
@@ -745,7 +757,7 @@ where
         // Check the relation between these small oracles and the committed oracle.
         let flatten_evals = proof.evals.flatten();
         let oracle_randomness = trans.get_vec_challenge(
-            b"random linear combinaiton for evaluations of the oracles",
+            b"BD IOP: random linear combinaiton for evaluations of the oracles",
             proof.evals.log_num_oracles(),
         );
         res &= verify_oracle_relation(&flatten_evals, proof.oracle_eval, &oracle_randomness);

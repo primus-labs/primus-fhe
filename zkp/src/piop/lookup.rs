@@ -29,15 +29,13 @@
 //!                     = c_sum
 //!      where u is a random challenge given from verifier (a vector of random element) and c_sum is some constant
 
-use crate::sumcheck;
-use crate::sumcheck::{verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
+use crate::sumcheck::{self, verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{
     batch_inverse, eval_identity_function, gen_identity_evaluations, verify_oracle_relation,
 };
-use algebra::PolynomialInfo;
 use algebra::{
     utils::Transcript, AbstractExtensionField, AsFrom, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials,
+    ListOfProductsOfPolynomials, PolynomialInfo,
 };
 use bincode::Result;
 use core::fmt;
