@@ -14,14 +14,19 @@ pub use accumulator::{
     AccumulatorIOP, AccumulatorInstance, AccumulatorSnarksOpt, AccumulatorWitness,
 };
 pub use addition_in_zq::{
-    AdditionInZqIOP, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks, AdditionInZqSnarksOpt,
+    AdditionInZqIOP, AdditionInZqInstance, AdditionInZqInstanceEval, AdditionInZqInstanceInfo,
+    AdditionInZqParams, AdditionInZqProof, AdditionInZqProver, AdditionInZqVerifier,
 };
 pub use bit_decomposition::{
     BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
-    BitDecompositionInstanceInfo,
+    BitDecompositionInstanceInfo, BitDecompositionParams, BitDecompositionProof,
+    BitDecompositionProver, BitDecompositionVerifier,
 };
 pub use floor::{FloorIOP, FloorInstance, FloorSnarks};
-pub use lookup::{LookupIOP, LookupInstance};
+pub use lookup::{
+    LookupIOP, LookupInstance, LookupInstanceEval, LookupInstanceInfo, LookupParams, LookupProof,
+    LookupProver, LookupVerifier,
+};
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
 pub use rlwe_mul_rgsw::{
