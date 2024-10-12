@@ -89,6 +89,7 @@ fn test_trivial_range_check() {
 
     lookup.prover_generate_first_randomness(&mut prover_trans, &mut instance);
     lookup.generate_second_randomness(&mut prover_trans, &info);
+    lookup.generate_randomness_for_eq_function(&mut prover_trans, &info);
     let kit = lookup.prove(&mut prover_trans, &mut instance);
     let evals = instance.evaluate(&kit.randomness);
 
@@ -99,6 +100,7 @@ fn test_trivial_range_check() {
 
     lookup.verifier_generate_first_randomness(&mut verifier_trans);
     lookup.generate_second_randomness(&mut verifier_trans, &info);
+    lookup.generate_randomness_for_eq_function(&mut verifier_trans, &info);
 
     let (check, _) = lookup.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
@@ -147,6 +149,7 @@ fn test_random_range_check() {
     let mut prover_trans = Transcript::<FF>::new();
     lookup.prover_generate_first_randomness(&mut prover_trans, &mut instance);
     lookup.generate_second_randomness(&mut prover_trans, &info);
+    lookup.generate_randomness_for_eq_function(&mut prover_trans, &info);
     let kit = lookup.prove(&mut prover_trans, &mut instance);
     let evals = instance.evaluate(&kit.randomness);
 
@@ -156,6 +159,8 @@ fn test_random_range_check() {
     let mut lookup = LookupIOP::default();
     lookup.verifier_generate_first_randomness(&mut verifier_trans);
     lookup.generate_second_randomness(&mut verifier_trans, &info);
+    lookup.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
     let (check, _) = lookup.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
     assert!(check);

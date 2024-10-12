@@ -961,7 +961,7 @@ where
         );
 
         let mut lookup_randomness = verifier_trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
+            b"Lookup IOP: randomness to combine sumcheck protocols",
             <LookupIOP<EF>>::num_coins(&lookup_info),
         );
         lookup_randomness.push(random_value);

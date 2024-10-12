@@ -298,6 +298,7 @@ fn test_trivial_addition_in_zq_with_lookup() {
 
     lookup.prover_generate_first_randomness(&mut prover_trans, &mut lookup_instance);
     lookup.generate_second_randomness(&mut prover_trans, &lookup_info);
+    lookup.generate_randomness_for_eq_function(&mut prover_trans, &lookup_info);
     let lookup_kit = lookup.prove(&mut prover_trans, &mut lookup_instance);
 
     let evals = instance.evaluate(&kit.randomness);
@@ -313,6 +314,7 @@ fn test_trivial_addition_in_zq_with_lookup() {
 
     lookup.verifier_generate_first_randomness(&mut verifier_trans);
     lookup.generate_second_randomness(&mut verifier_trans, &lookup_info);
+    lookup.generate_randomness_for_eq_function(&mut verifier_trans, &lookup_info);
     let (lookup_check, _) = lookup.verify(
         &mut verifier_trans,
         &lookup_wrapper,

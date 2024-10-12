@@ -451,7 +451,7 @@ impl<F: Field + Serialize> LookupIOP<F> {
     #[inline]
     pub fn sample_coins(trans: &mut Transcript<F>, instance_info: &LookupInstanceInfo) -> Vec<F> {
         trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
+            b"Lookup IOP: randomness to combine sumcheck protocols",
             instance_info.block_num,
         )
     }
@@ -463,34 +463,47 @@ impl<F: Field + Serialize> LookupIOP<F> {
     }
 
     /// The prover initiates the h vector and random value.
+    #[inline]
     pub fn prover_generate_first_randomness(
         &mut self,
         trans: &mut Transcript<F>,
         instance: &mut LookupInstance<F>,
     ) {
-        self.random_value = trans.get_challenge(b"random point used to generate the second oracle");
+        self.random_value =
+            trans.get_challenge(b"Lookup IOP: random point used to generate the second oracle");
 
         instance.generate_h_vec(self.random_value);
     }
 
     /// The verifier generate the first randomness.
+    #[inline]
     pub fn verifier_generate_first_randomness(&mut self, trans: &mut Transcript<F>) {
-        self.random_value = trans.get_challenge(b"random point used to generate the second oracle");
+        self.random_value =
+            trans.get_challenge(b"Lookup IOP: random point used to generate the second oracle");
     }
 
     /// Generate randomness for linear combination and identity function.
+    #[inline]
     pub fn generate_second_randomness(
         &mut self,
         trans: &mut Transcript<F>,
         instance_info: &LookupInstanceInfo,
     ) {
-        self.u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance_info.num_vars,
-        );
-
         self.randomness = Self::sample_coins(trans, instance_info);
         self.randomness.push(self.random_value);
+    }
+
+    /// Generate the randomness for eq function.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        instance_info: &LookupInstanceInfo,
+    ) {
+        self.u = trans.get_vec_challenge(
+            b"Lookup IOP: random point used to instantiate sumcheck protocol",
+            instance_info.num_vars,
+        );
     }
 
     /// Lookup IOP prover.
@@ -815,7 +828,7 @@ where
         // Use PCS to commit the above polynomial.
         let (first_comm, first_comm_state) = Pcs::commit(&params.pp_first, &first_committed_poly);
 
-        trans.append_message(b"first commitment", &first_comm);
+        trans.append_message(b"Lookup IOP: first commitment", &first_comm);
         // Prover generates the proof
         // Convert the original instance into an instance defined over EF
         let mut instance_ef = instance.to_ef::<EF>();
@@ -831,10 +844,11 @@ where
         let (second_comm, second_comm_state) =
             Pcs::commit_ef(&params.pp_second, &second_committed_poly);
 
-        trans.append_message(b"second commitment", &second_comm);
+        trans.append_message(b"Lookup IOP: second commitment", &second_comm);
 
         // Generate proof of sumcheck protocol
         lookup_iop.generate_second_randomness(trans, &instance_info);
+        lookup_iop.generate_randomness_for_eq_function(trans, &instance_info);
         let kit = lookup_iop.prove(trans, &instance_ef);
 
         // Reduce the proof of the above evaluations to a single random point over the committed polynomial
@@ -842,13 +856,13 @@ where
         let mut second_requested_point = kit.randomness.clone();
 
         let first_oracle_randomness = trans.get_vec_challenge(
-            b"random linear combinaiton for evaluations of first oracles",
+            b"Lookup IOP: random linear combinaiton for evaluations of first oracles",
             instance.log_num_first_oracles(),
         );
         first_requested_point.extend(&first_oracle_randomness);
 
         let second_oracle_randomness = trans.get_vec_challenge(
-            b"random linear combination of evaluations of second oracles",
+            b"Lookup IOP: random linear combination of evaluations of second oracles",
             instance.log_num_second_oracles(),
         );
         second_requested_point.extend(&second_oracle_randomness);
@@ -939,17 +953,17 @@ where
         let mut res = true;
 
         trans.append_message(b"lookup instance", &proof.instance_info);
-        trans.append_message(b"first commitment", &proof.first_comm);
+        trans.append_message(b"Lookup IOP: first commitment", &proof.first_comm);
 
         let mut lookup_iop = LookupIOP::<EF>::default();
 
         lookup_iop.verifier_generate_first_randomness(trans);
 
-        trans.append_message(b"second commitment", &proof.second_comm);
+        trans.append_message(b"Lookup IOP: second commitment", &proof.second_comm);
 
         // Verify the proof of sumcheck protocol.
         lookup_iop.generate_second_randomness(trans, &proof.instance_info);
-
+        lookup_iop.generate_randomness_for_eq_function(trans, &proof.instance_info);
         let proof_wrapper = ProofWrapper {
             claimed_sum: EF::zero(),
             info: proof.poly_info,
@@ -963,7 +977,7 @@ where
         // Check the relation between these small oracles and the committed oracle.
         let flatten_evals = proof.evals.first_flatten();
         let first_oracle_randomness = trans.get_vec_challenge(
-            b"random linear combinaiton for evaluations of first oracles",
+            b"Lookup IOP: random linear combinaiton for evaluations of first oracles",
             proof.evals.log_num_first_oracles(),
         );
 
@@ -974,7 +988,7 @@ where
         );
 
         let second_oracle_randomnes = trans.get_vec_challenge(
-            b"random linear combination of evaluations of second oracles",
+            b"Lookup IOP: random linear combination of evaluations of second oracles",
             proof.evals.log_num_second_oracles(),
         );
 
