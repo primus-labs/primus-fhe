@@ -5,15 +5,21 @@ use algebra::{
     FieldUniformSampler,
 };
 use num_traits::{One, Zero};
-use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
+use pcs::{
+    multilinear::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
 use zkp::piop::{
-    AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks,
-    AdditionInZqSnarksOpt, BitDecompositionInstanceInfo, LookupIOP,
+    addition_in_zq::{
+        AdditionInZqParams, AdditionInZqProof, AdditionInZqProver, AdditionInZqVerifier,
+    },
+    AdditionInZqIOP, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarksOpt,
+    BitDecompositionInstanceInfo, LookupIOP,
 };
 #[derive(Field, DecomposableField, Prime)]
 #[modulus = 59]
@@ -70,11 +76,18 @@ fn test_trivial_addition_in_zq() {
 
     let info = instance.info();
 
-    let kit = AdditionInZq::<FF>::prove(&instance);
+    let mut add_iop = AdditionInZqIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    add_iop.generate_randomness(&mut prover_trans, &info);
+
+    let kit = add_iop.prove(&mut prover_trans, &instance);
     let evals = instance.evaluate(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = AdditionInZq::<FF>::verify(&wrapper, &evals, &info);
+    let mut add_iop = AdditionInZqIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    add_iop.generate_randomness(&mut verifier_trans, &info);
+    let (check, _) = add_iop.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
     assert!(check);
 }
@@ -142,11 +155,18 @@ fn test_random_addition_in_zq() {
 
     let info = instance.info();
 
-    let kit = AdditionInZq::<FF>::prove(&instance);
+    let mut add_iop = AdditionInZqIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    add_iop.generate_randomness(&mut prover_trans, &info);
+
+    let kit = add_iop.prove(&mut prover_trans, &instance);
     let evals = instance.evaluate(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = AdditionInZq::<FF>::verify(&wrapper, &evals, &info);
+    let mut add_iop = AdditionInZqIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    add_iop.generate_randomness(&mut verifier_trans, &info);
+    let (check, _) = add_iop.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
     assert!(check);
 }
@@ -215,80 +235,21 @@ fn test_random_addition_in_zq_extension_field() {
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
 
-    let kit = AdditionInZq::<EF>::prove(&instance_ef);
-    let evals = instance.evaluate_ext(&kit.randomness);
+    let mut add_iop = AdditionInZqIOP::<EF>::default();
+
+    let mut prover_trans = Transcript::<EF>::new();
+    add_iop.generate_randomness(&mut prover_trans, &info);
+
+    let kit = add_iop.prove(&mut prover_trans, &instance.to_ef());
+    let evals = instance.to_ef().evaluate(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = AdditionInZq::<EF>::verify(&wrapper, &evals, &info);
+    let mut add_iop = AdditionInZqIOP::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+    add_iop.generate_randomness(&mut verifier_trans, &info);
+    let (check, _) = add_iop.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
     assert!(check);
-}
-
-#[test]
-fn test_snarks() {
-    let mut rng = thread_rng();
-    let uniform_fq = <FieldUniformSampler<Fq>>::new();
-    let num_vars = 10;
-    let q = FF::new(Fq::MODULUS_VALUE);
-    let base_len = 3;
-    let base: FF = FF::new(1 << base_len);
-    let bits_len = <Basis<Fq>>::new(base_len as u32).decompose_len();
-
-    // Addition in Zq
-    let a: Vec<_> = (0..(1 << num_vars))
-        .map(|_| uniform_fq.sample(&mut rng))
-        .collect();
-    let b: Vec<_> = (0..(1 << num_vars))
-        .map(|_| uniform_fq.sample(&mut rng))
-        .collect();
-    let c_k: Vec<_> = a
-        .iter()
-        .zip(b.iter())
-        .map(|(x, y)| {
-            if x.value() + y.value() >= Fq::MODULUS_VALUE {
-                (*x + *y, Fq::one())
-            } else {
-                (*x + *y, Fq::zero())
-            }
-        })
-        .collect();
-
-    let (c, k): (Vec<_>, Vec<_>) = c_k.iter().cloned().unzip();
-
-    let abc = vec![
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            // Convert to Fp
-            a.iter().map(|x: &Fq| FF::new(x.value())).collect(),
-        )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            b.iter().map(|x: &Fq| FF::new(x.value())).collect(),
-        )),
-        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            c.iter().map(|x: &Fq| FF::new(x.value())).collect(),
-        )),
-    ];
-
-    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        num_vars,
-        k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
-    ));
-
-    let bits_info = BitDecompositionInstanceInfo::<FF> {
-        base,
-        base_len,
-        bits_len,
-        num_vars,
-        num_instances: 3,
-    };
-    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
-
-    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <AdditionInZqSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
-    );
 }
 
 #[test]
@@ -401,4 +362,104 @@ fn test_trivial_addition_in_zq_with_lookup_snarks() {
     <AdditionInZqSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec, 1,
     );
+}
+
+#[test]
+fn test_addition_in_zq_snark() {
+    let mut rng = thread_rng();
+    let uniform_fq = <FieldUniformSampler<Fq>>::new();
+    let num_vars = 10;
+    let q = FF::new(Fq::MODULUS_VALUE);
+    let base_len = 3;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len = <Basis<Fq>>::new(base_len as u32).decompose_len();
+
+    // Addition in Zq
+    let a: Vec<_> = (0..(1 << num_vars))
+        .map(|_| uniform_fq.sample(&mut rng))
+        .collect();
+    let b: Vec<_> = (0..(1 << num_vars))
+        .map(|_| uniform_fq.sample(&mut rng))
+        .collect();
+    let c_k: Vec<_> = a
+        .iter()
+        .zip(b.iter())
+        .map(|(x, y)| {
+            if x.value() + y.value() >= Fq::MODULUS_VALUE {
+                (*x + *y, Fq::one())
+            } else {
+                (*x + *y, Fq::zero())
+            }
+        })
+        .collect();
+
+    let (c, k): (Vec<_>, Vec<_>) = c_k.iter().cloned().unzip();
+
+    let abc = vec![
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            // Convert to Fp
+            a.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            b.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            num_vars,
+            c.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+        )),
+    ];
+
+    let k = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        k.iter().map(|x: &Fq| FF::new(x.value())).collect(),
+    ));
+
+    let bits_info = BitDecompositionInstanceInfo::<FF> {
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 3,
+    };
+    let instance = AdditionInZqInstance::<FF>::from_slice(&abc, &k, q, &bits_info);
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+
+    // Parameters.
+    let mut params = AdditionInZqParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&instance, code_spec);
+
+    // Prover.
+    let bd_prover = AdditionInZqProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let proof = bd_prover.prove(&mut prover_trans, &params, &instance);
+
+    let proof_bytes = proof.to_bytes().unwrap();
+
+    // Verifier.
+    let bd_verifier = AdditionInZqVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+    let proof = AdditionInZqProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &proof);
+
+    assert!(res);
 }

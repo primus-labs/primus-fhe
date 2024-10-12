@@ -19,8 +19,7 @@
 //! then the resulting purported sum is:
 //! $\sum_{x \in \{0, 1\}^\log M} \sum_{i = 0}^{l-1} r_i \cdot eq(u, x) \cdot [\prod_{k=0}^B (d_i(x) - k)] = 0$
 //! where r_i (for i = 0..l) are sampled from the verifier.
-use crate::sumcheck;
-use crate::sumcheck::{verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
+use crate::sumcheck::{self, verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation};
 use algebra::PolynomialInfo;
 use algebra::{
@@ -96,7 +95,8 @@ impl<F: Field> fmt::Display for BitDecompositionInstanceInfo<F> {
 }
 
 impl<F: Field> BitDecompositionInstanceInfo<F> {
-    /// Construct a EF version
+    /// Construct an EF version.
+    #[inline]
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> BitDecompositionInstanceInfo<EF> {
         BitDecompositionInstanceInfo::<EF> {
             base: EF::from_base(self.base),
@@ -355,6 +355,7 @@ impl<F: Field + Serialize> BitDecompositionIOP<F> {
     }
 
     /// Generate the randomenss.
+    #[inline]
     pub fn generate_randomness(
         &mut self,
         trans: &mut Transcript<F>,
@@ -439,7 +440,7 @@ impl<F: Field + Serialize> BitDecompositionIOP<F> {
     }
 
     /// Verify bit decomposition relation without verifying each bit < base
-    pub fn verify_subclaim_pure(
+    pub fn verify_subclaim_without_range_check(
         evals: &BitDecompositionEval<F>,
         info: &BitDecompositionInstanceInfo<F>,
     ) -> bool {
@@ -474,7 +475,7 @@ impl<F: Field + Serialize> BitDecompositionIOP<F> {
         eq_at_u_r: F,
     ) -> bool {
         // check 1: d[point] = \sum_{i=0}^len B^i \cdot d_i[point] for every instance
-        if !Self::verify_subclaim_pure(evals, info) {
+        if !Self::verify_subclaim_without_range_check(evals, info) {
             return false;
         }
 
@@ -508,7 +509,7 @@ pub struct BitDecompositionProof<
     pub instance_info: BitDecompositionInstanceInfo<F>,
     /// Polynomial info
     pub poly_info: PolynomialInfo,
-    /// Polynomical commitment.
+    /// Polynomial commitment.
     pub poly_comm: Pcs::Commitment,
     /// The evaluation of the polynomial.
     pub oracle_eval: EF,

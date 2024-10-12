@@ -1401,7 +1401,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         // let bits_r_num = <BitDecomposition<F>>::num_coins(&info.bits_info);
         // let (r_ntt, r) = randomness.split_at(bits_r_num);
         let check_decomposed_bits =
-            <BitDecompositionIOP<F>>::verify_subclaim_pure(&bits_eval, &info.bits_info);
+            <BitDecompositionIOP<F>>::verify_subclaim_without_range_check(&bits_eval, &info.bits_info);
         if !check_decomposed_bits {
             return false;
         }

@@ -14,7 +14,7 @@ pub use accumulator::{
     AccumulatorIOP, AccumulatorInstance, AccumulatorSnarksOpt, AccumulatorWitness,
 };
 pub use addition_in_zq::{
-    AdditionInZq, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks, AdditionInZqSnarksOpt,
+    AdditionInZqIOP, AdditionInZqInstance, AdditionInZqPure, AdditionInZqSnarks, AdditionInZqSnarksOpt,
 };
 pub use bit_decomposition::{
     BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
