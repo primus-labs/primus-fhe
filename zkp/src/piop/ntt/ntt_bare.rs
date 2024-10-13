@@ -20,13 +20,9 @@ use crate::sumcheck::verifier::SubClaim;
 use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
 use algebra::{utils::Transcript, DenseMultilinearExtension, Field, ListOfProductsOfPolynomials};
 use serde::Serialize;
-use std::marker::PhantomData;
 use std::rc::Rc;
 
 use super::{NTTInstance, NTTInstanceInfo};
-
-/// IOP for NTT, i.e. $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
-pub struct NTTBareIOP<F: Field>(PhantomData<F>);
 
 /// Naive implementation for initializing F(u, x) in NTT, which helps readers to understand the following dynamic programming version (`init_fourier_table``).
 /// The formula is derived from zkCNN (https://eprint.iacr.org/2021/673)
@@ -122,35 +118,54 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
     DenseMultilinearExtension::from_evaluations_vec(log_n, evaluations)
 }
 
-impl<F: Field + Serialize> NTTBareIOP<F> {
-    /// Prove NTT instance without delegation
-    pub fn prove(instance: &NTTInstance<F>) -> SumcheckKit<F> {
-        let mut trans = Transcript::<F>::new();
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
+/// IOP for NTT, i.e. $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
+#[derive(Default)]
+pub struct NTTBareIOP<F: Field> {
+    /// The random value for identity function.
+    pub u: Vec<F>,
+}
 
+impl<F: Field + Serialize> NTTBareIOP<F> {
+    /// Generate the randomness for the eq function.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &NTTInstanceInfo<F>,
+    ) {
+        self.u = trans.get_vec_challenge(
+            b"NTTBare IOP: random point used to instantiate sumcheck protocol",
+            info.num_vars,
+        );
+    }
+
+    /// Prove NTT instance without delegation
+    pub fn prove(&self, trans: &mut Transcript<F>, instance: &NTTInstance<F>) -> SumcheckKit<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let randomness = F::one();
         let mut claimed_sum = F::zero();
-        Self::prove_as_subprotocol(randomness, &mut poly, &mut claimed_sum, instance, &u);
-        // let evals_u = instance.points.evaluate(&u);
+        Self::prepare_products_of_polynomial(
+            randomness,
+            &mut poly,
+            &mut claimed_sum,
+            instance,
+            &self.u,
+        );
 
         let (proof, state) =
-            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
+            MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
 
         SumcheckKit {
             proof,
             info: poly.info(),
             claimed_sum,
             randomness: state.randomness,
-            u,
+            u: self.u.clone(),
         }
     }
 
     /// Add the sumcheck proving NTT into the polynomial
-    pub fn prove_as_subprotocol(
+    pub fn prepare_products_of_polynomial(
         randomness: F,
         poly: &mut ListOfProductsOfPolynomials<F>,
         claimed_sum: &mut F,
@@ -164,24 +179,19 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
 
     /// Verify NTT instance without delegation
     pub fn verify(
+        &self,
+        trans: &mut Transcript<F>,
         wrapper: &mut ProofWrapper<F>,
         evals_at_r: F,
         evals_at_u: F,
         info: &NTTInstanceInfo<F>,
     ) -> bool {
-        let mut trans = Transcript::new();
-
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            info.num_vars,
-        );
-
-        let f_u = init_fourier_table(&u, &info.ntt_table);
+        let f_u = init_fourier_table(&self.u, &info.ntt_table);
         // randomness to combine sumcheck protocols
         let randomness = F::one();
 
         let mut subclaim = MLSumcheck::verify(
-            &mut trans,
+            trans,
             &wrapper.info,
             wrapper.claimed_sum,
             &wrapper.proof,
@@ -190,7 +200,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
 
         let f_delegation = f_u.evaluate(&subclaim.point);
 
-        if !Self::verify_as_subprotocol(
+        if !Self::verify_subclaim(
             randomness,
             &mut subclaim,
             &mut wrapper.claimed_sum,
@@ -205,7 +215,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
     }
 
     /// Verify the evaluation of the sumcheck proving NTT
-    pub fn verify_as_subprotocol(
+    pub fn verify_subclaim(
         randomness: F,
         subclaim: &mut SubClaim<F>,
         claimed_sum: &mut F,

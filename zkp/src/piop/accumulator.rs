@@ -697,7 +697,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
 
         // add sumcheck_products of NTT into poly
         let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
-        <NTTBareIOP<F>>::prove_as_subprotocol(
+        <NTTBareIOP<F>>::prepare_products_of_polynomial(
             F::one(),
             &mut poly,
             &mut claimed_sum,
@@ -773,7 +773,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         let mut ntt_point_evals_at_u = F::zero();
         evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
 
-        if !<NTTBareIOP<F>>::verify_as_subprotocol(
+        if !<NTTBareIOP<F>>::verify_subclaim(
             F::one(),
             &mut subclaim,
             &mut wrapper.claimed_sum,
@@ -946,7 +946,7 @@ where
 
         // 2.? Prover extract the random ntt instance from all ntt instances
         let ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&randomness_ntt);
-        <NTTBareIOP<EF>>::prove_as_subprotocol(
+        <NTTBareIOP<EF>>::prepare_products_of_polynomial(
             EF::one(),
             &mut sumcheck_poly,
             &mut claimed_sum,
@@ -1056,7 +1056,7 @@ where
         evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
 
         // check the sumcheck part of NTT
-        let check_ntt_bare = <NTTBareIOP<EF>>::verify_as_subprotocol(
+        let check_ntt_bare = <NTTBareIOP<EF>>::verify_subclaim(
             EF::one(),
             &mut subclaim,
             &mut claimed_sum,
@@ -1170,7 +1170,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
 
         // add sumcheck_products of NTT into poly
         let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
-        <NTTBareIOP<F>>::prove_as_subprotocol(
+        <NTTBareIOP<F>>::prepare_products_of_polynomial(
             F::one(),
             &mut poly,
             &mut claimed_sum,
@@ -1246,7 +1246,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         let mut ntt_point_evals_at_u = F::zero();
         evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
 
-        if !<NTTBareIOP<F>>::verify_as_subprotocol(
+        if !<NTTBareIOP<F>>::verify_subclaim(
             F::one(),
             &mut subclaim,
             &mut wrapper.claimed_sum,
@@ -1432,7 +1432,7 @@ where
         // 2.? Prover extract the random ntt instance from all ntt instances
         let ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&randomness_ntt);
 
-        <NTTBareIOP<EF>>::prove_as_subprotocol(
+        <NTTBareIOP<EF>>::prepare_products_of_polynomial(
             EF::one(),
             &mut sumcheck_poly,
             &mut claimed_sum,
@@ -1582,7 +1582,7 @@ where
         evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
 
         // check the sumcheck part of NTT
-        let check_ntt_bare = <NTTBareIOP<EF>>::verify_as_subprotocol(
+        let check_ntt_bare = <NTTBareIOP<EF>>::verify_subclaim(
             EF::one(),
             &mut subclaim,
             &mut claimed_sum,

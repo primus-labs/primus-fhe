@@ -89,7 +89,10 @@ fn main() {
     >::default();
     let start = Instant::now();
     params.setup(&instance, code_spec);
-    println!("addition in zq setup time: {:?} ms", start.elapsed().as_millis());
+    println!(
+        "addition in zq setup time: {:?} ms",
+        start.elapsed().as_millis()
+    );
 
     // Prover.
     let bd_prover = AdditionInZqProver::<
@@ -102,7 +105,10 @@ fn main() {
 
     let start = Instant::now();
     let proof = bd_prover.prove(&mut prover_trans, &params, &instance);
-    println!("addition in zq proving time: {:?} ms", start.elapsed().as_millis());
+    println!(
+        "addition in zq proving time: {:?} ms",
+        start.elapsed().as_millis()
+    );
 
     let proof_bytes = proof.to_bytes().unwrap();
     println!("addition in zq proof size: {:?} byts", proof_bytes.len());
@@ -119,6 +125,9 @@ fn main() {
 
     let start = Instant::now();
     let res = bd_verifier.verify(&mut verifier_trans, &params, &proof);
-    println!("addition in zq verifying time: {:?} ms", start.elapsed().as_millis());
+    println!(
+        "addition in zq verifying time: {:?} ms",
+        start.elapsed().as_millis()
+    );
     assert!(res);
 }

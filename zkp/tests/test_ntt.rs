@@ -1,3 +1,4 @@
+use algebra::utils::Transcript;
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use algebra::{
     BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
@@ -211,8 +212,10 @@ fn test_ntt_bare_without_delegation() {
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
-
-    let kit = NTTBareIOP::prove(&ntt_instance);
+    let mut ntt_iop = NTTBareIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness_for_eq_function(&mut prover_trans, &ntt_instance_info);
+    let kit = ntt_iop.prove(&mut prover_trans, &ntt_instance);
     let evals_at_u = ntt_instance.points.evaluate(&kit.u);
     let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
 
@@ -223,8 +226,17 @@ fn test_ntt_bare_without_delegation() {
     assert_eq!(f_oracle.evaluate(&point), f_delegation);
 
     let mut wrapper = kit.extract();
+    let mut ntt_iop = NTTBareIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness_for_eq_function(&mut verifier_trans, &ntt_instance_info);
 
-    let check = NTTBareIOP::verify(&mut wrapper, evals_at_r, evals_at_u, &ntt_instance_info);
+    let check = ntt_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+    );
     assert!(check);
 }
 
@@ -256,13 +268,26 @@ fn test_ntt_bare_without_delegation_extension_field() {
     let instance_ef = ntt_instance.to_ef::<EF>();
     let ntt_instance_info = instance_ef.info();
 
-    let kit = NTTBareIOP::<EF>::prove(&instance_ef);
+    let mut ntt_iop = NTTBareIOP::<EF>::default();
+    let mut prover_trans = Transcript::<EF>::new();
+    ntt_iop.generate_randomness_for_eq_function(&mut prover_trans, &ntt_instance_info);
+
+    let kit = ntt_iop.prove(&mut prover_trans, &instance_ef);
     let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
     let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
 
     let mut wrapper = kit.extract();
 
-    let check = NTTBareIOP::<EF>::verify(&mut wrapper, evals_at_r, evals_at_u, &ntt_instance_info);
+    let mut ntt_iop = NTTBareIOP::<EF>::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+    ntt_iop.generate_randomness_for_eq_function(&mut verifier_trans, &ntt_instance_info);
+    let check = ntt_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+    );
     assert!(check);
 }
 

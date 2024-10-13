@@ -508,7 +508,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let randomness = F::one();
         let mut claimed_sum = F::zero();
-        <NTTBareIOP<F>>::prove_as_subprotocol(
+        <NTTBareIOP<F>>::prepare_products_of_polynomial(
             randomness,
             &mut poly,
             &mut claimed_sum,
@@ -561,7 +561,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         .expect("fail to verify the sumcheck protocol");
 
         let f_delegation = recursive_proof.delegation_claimed_sums[0];
-        if !<NTTBareIOP<F>>::verify_as_subprotocol(
+        if !<NTTBareIOP<F>>::verify_subclaim(
             randomness,
             &mut subclaim,
             &mut wrapper.claimed_sum,
@@ -876,7 +876,7 @@ where
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = <ListOfProductsOfPolynomials<EF>>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
-        <NTTBareIOP<EF>>::prove_as_subprotocol(
+        <NTTBareIOP<EF>>::prepare_products_of_polynomial(
             EF::one(),
             &mut sumcheck_poly,
             &mut claimed_sum,
@@ -989,7 +989,7 @@ where
             .zip(point_evals_at_u.iter())
             .fold(EF::zero(), |acc, (r, eval)| acc + *r * *eval);
 
-        let check_subclaim = <NTTBareIOP<EF>>::verify_as_subprotocol(
+        let check_subclaim = <NTTBareIOP<EF>>::verify_subclaim(
             EF::one(),
             &mut subclaim,
             &mut claimed_sum,
