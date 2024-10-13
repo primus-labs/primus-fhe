@@ -7,7 +7,7 @@ use rand::prelude::*;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::sync::Arc;
-use zkp::piop::ntt::NTTInstances;
+use zkp::piop::ntt::BatchNTTInstance;
 use zkp::piop::ntt::NTTSnarks;
 
 type FF = BabyBear;
@@ -69,7 +69,7 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
 }
 
 fn generate_single_instance<R: Rng + CryptoRng>(
-    instances: &mut NTTInstances<FF>,
+    instances: &mut BatchNTTInstance<FF>,
     log_n: usize,
     rng: &mut R,
 ) {
@@ -106,7 +106,7 @@ fn main() {
 
     let mut rng = thread_rng();
 
-    let mut ntt_instances = <NTTInstances<FF>>::new(num_vars, &ntt_table);
+    let mut ntt_instances = <BatchNTTInstance<FF>>::new(num_vars, &ntt_table);
     for _ in 0..num_ntt {
         generate_single_instance(&mut ntt_instances, log_n, &mut rng);
     }

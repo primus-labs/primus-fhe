@@ -11,7 +11,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 use zkp::piop::ntt::ntt_bare::init_fourier_table;
-use zkp::piop::ntt::{NTTInstances, NTTSnarks};
+use zkp::piop::ntt::{BatchNTTInstance, NTTSnarks};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
 
 // field type
@@ -129,7 +129,7 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
 }
 
 fn generate_single_instance<R: Rng + CryptoRng>(
-    instances: &mut NTTInstances<FF>,
+    instances: &mut BatchNTTInstance<FF>,
     log_n: usize,
     rng: &mut R,
 ) {
@@ -369,7 +369,7 @@ fn test_snarks() {
 
     let mut rng = thread_rng();
 
-    let mut ntt_instances = <NTTInstances<FF>>::new(num_vars, &ntt_table);
+    let mut ntt_instances = <BatchNTTInstance<FF>>::new(num_vars, &ntt_table);
     for _ in 0..num_ntt {
         generate_single_instance(&mut ntt_instances, log_n, &mut rng);
     }

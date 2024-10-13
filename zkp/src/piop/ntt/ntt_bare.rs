@@ -52,7 +52,7 @@ pub fn naive_init_fourier_table<F: Field>(
     let mut evaluations = vec![F::one(); 1 << log_n];
 
     for (x, eval_at_x) in evaluations.iter_mut().enumerate() {
-        for (i, &u_i) in u.iter().enumerate().take(log_n) {
+        for (i, &u_i) in u.iter().enumerate() {
             let idx = (1 << (i + 1)) * x % m;
 
             let x_i = (x >> i) & 1;

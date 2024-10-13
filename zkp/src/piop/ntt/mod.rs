@@ -48,10 +48,7 @@ use pcs::{
     PolynomialCommitmentScheme,
 };
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::Instant;
+use std::{marker::PhantomData, rc::Rc, sync::Arc, time::Instant};
 
 use ntt_bare::NTTBareIOP;
 
@@ -87,7 +84,7 @@ pub struct NTTRecursiveProof<F: Field> {
 }
 
 /// Store all the NTT instances over Field to be proved, which will be randomized into a single random NTT instance over Extension Field.
-pub struct NTTInstances<F: Field> {
+pub struct BatchNTTInstance<F: Field> {
     /// number of ntt instances
     pub num_ntt: usize,
     /// number of variables, which equals to logN.
@@ -142,10 +139,10 @@ pub struct IntermediateMLEs<F: Field> {
 
 impl<F: Field> IntermediateMLEs<F> {
     /// Initiate the vector
-    pub fn new(n_rounds: u32) -> Self {
+    pub fn new(n_rounds: usize) -> Self {
         IntermediateMLEs {
-            f_mles: Vec::with_capacity(n_rounds as usize),
-            w_mles: Vec::with_capacity(n_rounds as usize),
+            f_mles: Vec::with_capacity(n_rounds),
+            w_mles: Vec::with_capacity(n_rounds),
         }
     }
 
@@ -183,8 +180,9 @@ impl<F: Field> IntermediateMLEs<F> {
 /// `init_fourier_table_overall` (this function) stores many intermediate evaluations for the ease of the delegation of F(u, v)
 ///
 /// # Arguments
-/// * u: the random point
-/// * ntt_table: It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
+///
+/// * `u` - The random point
+/// * `ntt_table` - The NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> IntermediateMLEs<F> {
     let log_n = u.len(); // N = 1 << dim
     let m = ntt_table.len(); // M = 2N = 2 * (1 << dim)
@@ -196,7 +194,7 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
     evaluations[0] = F::one();
 
     // stores all the intermediate evaluations of the table (i.e. F(u, x)) and the term ω^{2^{i + 1} * X} in each iteration
-    let mut intermediate_mles = <IntermediateMLEs<F>>::new(log_n as u32);
+    let mut intermediate_mles = <IntermediateMLEs<F>>::new(log_n);
 
     // * Compute \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) * ω^{2^i * x_i}
     // The reason why we update the table with u_i in reverse order is that
@@ -245,10 +243,10 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
 ///
 /// # Arguments:
 ///
-/// * ntt_table: NTT table for w (M-th root of unity) containing {1, w, w^1, ..., w^{M-1}}
-/// * log_m: log of M
-/// * x_dim: dimension of x or the num of variables of the outputted mle
-/// * exp: the exponent of the function defined above
+/// * `ntt_table` - The NTT table for w (M-th root of unity) containing {1, w, w^1, ..., w^{M-1}}
+/// * `log_m` - The log of M
+/// * `x_dim` - The dimension of x or the num of variables of the outputted mle
+/// * `exp` - The exponent of the function defined above
 pub fn naive_w_power_times_x_table<F: Field>(
     ntt_table: &[F],
     log_m: usize,
@@ -274,15 +272,13 @@ pub fn naive_w_power_times_x_table<F: Field>(
 /// * Note that the above equation only holds for exp <= logM - x_dim;
 /// * otherwise, the exponent 2^exp * x involves a modular addition, disabling the decomposition.
 ///
-/// (Although I am not clearly making it out, the experiment result shows the above argument.)
-///
 /// # Arguments:
 ///
-/// * ntt_table: NTT table for w (M-th root of unity) containing {1, w, w^1, ..., w^{M-1}}
-/// * log_m: log of M
-/// * x_dim: dimension of x or the num of variables of the outputted mle
-/// * exp: the exponent of the function defined above
-/// * r: random point in F^{x_dim}
+/// * `ntt_table` - The NTT table for w (M-th root of unity) containing {1, w, w^1, ..., w^{M-1}}
+/// * `log_m` - The log of M
+/// * `x_dim` - The dimension of x or the num of variables of the outputted mle
+/// * `exp` - The exponent of the function defined above
+/// * `r` - The random point in F^{x_dim}
 pub fn eval_w_power_times_x<F: Field>(
     ntt_table: &[F],
     log_m: usize,
@@ -342,7 +338,7 @@ impl<F: Field> NTTInstance<F> {
     }
 }
 
-impl<F: Field> NTTInstances<F> {
+impl<F: Field> BatchNTTInstance<F> {
     /// Construct an empty container
     #[inline]
     pub fn new(num_vars: usize, ntt_table: &Arc<Vec<F>>) -> Self {
@@ -840,7 +836,7 @@ where
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     /// Generate and check snarks
-    pub fn snarks<H, C, S>(instance: &NTTInstances<F>, code_spec: &S)
+    pub fn snarks<H, C, S>(instance: &BatchNTTInstance<F>, code_spec: &S)
     where
         H: Hash + Sync + Send,
         C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
