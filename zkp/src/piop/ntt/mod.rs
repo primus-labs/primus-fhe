@@ -50,6 +50,7 @@ use pcs::{
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, rc::Rc, sync::Arc, time::Instant};
 
+use bincode::Result;
 use ntt_bare::NTTBareIOP;
 
 pub mod ntt_bare;
@@ -844,14 +845,13 @@ impl<F: Field + Serialize> NTTIOP<F> {
 }
 
 /// NTT proof with PCS.
+#[derive(Serialize, Deserialize)]
 pub struct NTTProof<
     F: Field,
     EF: AbstractExtensionField<F>,
     S,
     Pcs: PolynomialCommitmentScheme<F, EF, S>,
 > {
-    /// Batch Instance info.
-    pub batch_instance_info: BatchNTTInstanceInfo<F>,
     /// Polynomial info.
     pub poly_info: PolynomialInfo,
     /// Polynomial commitment of coefficient.
@@ -874,6 +874,61 @@ pub struct NTTProof<
     pub sumcheck_proof: sumcheck::Proof<EF>,
     /// The recursive proof.
     pub recursive_proof: NTTRecursiveProof<EF>,
+}
+
+impl<F, EF, S, Pcs> NTTProof<F, EF, S, Pcs>
+where
+    F: Field + Serialize + for<'de> Deserialize<'de>,
+    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
+/// BitDecomposition parameter.
+pub struct NTTParams<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// The parameter for the polynomial commitment.
+    pub pp: Pcs::Parameters,
+}
+
+impl<F, EF, S, Pcs> Default for NTTParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        Self {
+            pp: Pcs::Parameters::default(),
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> NTTParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S: Clone,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    /// Setup for the PCS.
+    #[inline]
+    pub fn setup(&mut self, instance: &BatchNTTInstance<F>, code_spec: S) {
+        // self.pp = Pcs::setup(num_vars, code_spec)
+    }
 }
 
 impl<F, EF> NTTSnarks<F, EF>

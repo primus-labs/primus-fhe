@@ -124,7 +124,7 @@ fn main() {
     let proof = AdditionInZqProof::from_bytes(&proof_bytes).unwrap();
 
     let start = Instant::now();
-    let res = bd_verifier.verify(&mut verifier_trans, &params, &proof);
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
     println!(
         "addition in zq verifying time: {:?} ms",
         start.elapsed().as_millis()

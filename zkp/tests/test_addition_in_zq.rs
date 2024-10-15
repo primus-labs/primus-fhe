@@ -355,7 +355,7 @@ fn test_addition_in_zq_snark() {
     let mut verifier_trans = Transcript::<EF>::default();
     let proof = AdditionInZqProof::from_bytes(&proof_bytes).unwrap();
 
-    let res = bd_verifier.verify(&mut verifier_trans, &params, &proof);
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
 
     assert!(res);
 }

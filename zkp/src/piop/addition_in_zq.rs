@@ -438,8 +438,6 @@ pub struct AdditionInZqProof<
     S,
     Pcs: PolynomialCommitmentScheme<F, EF, S>,
 > {
-    /// Instance info.
-    pub instance_info: AdditionInZqInstanceInfo<F>,
     /// Polynomial info
     pub poly_info: PolynomialInfo,
     /// Polynomial commitment.
@@ -597,7 +595,6 @@ where
         );
 
         AdditionInZqProof {
-            instance_info,
             poly_info: kit.info,
             poly_comm,
             oracle_eval,
@@ -650,17 +647,18 @@ where
         &self,
         trans: &mut Transcript<EF>,
         params: &AdditionInZqParams<F, EF, S, Pcs>,
+        info: &AdditionInZqInstanceInfo<F>,
         proof: &AdditionInZqProof<F, EF, S, Pcs>,
     ) -> bool {
         let mut res = true;
 
-        trans.append_message(b"addition in Zq instance", &proof.instance_info);
+        trans.append_message(b"addition in Zq instance", info);
         trans.append_message(b"polynomial commitment", &proof.poly_comm);
 
         let mut add_iop = AdditionInZqIOP::<EF>::default();
 
-        add_iop.generate_randomness(trans, &proof.instance_info.to_ef());
-        add_iop.generate_randomness_for_eq_function(trans, &proof.instance_info.to_ef());
+        add_iop.generate_randomness(trans, &info.to_ef());
+        add_iop.generate_randomness_for_eq_function(trans, &info.to_ef());
 
         let proof_wrapper = ProofWrapper {
             claimed_sum: EF::zero(),
@@ -668,12 +666,7 @@ where
             proof: proof.sumcheck_proof.clone(),
         };
 
-        let (b, randomness) = add_iop.verify(
-            trans,
-            &proof_wrapper,
-            &proof.evals,
-            &proof.instance_info.to_ef(),
-        );
+        let (b, randomness) = add_iop.verify(trans, &proof_wrapper, &proof.evals, &info.to_ef());
 
         res &= b;
 

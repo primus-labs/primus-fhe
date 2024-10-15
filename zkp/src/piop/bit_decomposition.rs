@@ -515,8 +515,6 @@ pub struct BitDecompositionProof<
     S,
     Pcs: PolynomialCommitmentScheme<F, EF, S>,
 > {
-    /// Instance info.
-    pub instance_info: BitDecompositionInstanceInfo<F>,
     /// Polynomial info
     pub poly_info: PolynomialInfo,
     /// Polynomial commitment.
@@ -580,6 +578,7 @@ where
     Pcs: PolynomialCommitmentScheme<F, EF, S>,
 {
     /// Setup for the PCS.
+    #[inline]
     pub fn setup(&mut self, instance: &BitDecompositionInstance<F>, code_spec: S) {
         self.pp = Pcs::setup(instance.generate_num_var(), Some(code_spec.clone()));
     }
@@ -674,7 +673,6 @@ where
         );
 
         BitDecompositionProof {
-            instance_info,
             poly_info: kit.info,
             poly_comm,
             oracle_eval,
@@ -727,17 +725,18 @@ where
         &self,
         trans: &mut Transcript<EF>,
         params: &BitDecompositionParams<F, EF, S, Pcs>,
+        info: &BitDecompositionInstanceInfo<F>,
         proof: &BitDecompositionProof<F, EF, S, Pcs>,
     ) -> bool {
         let mut res = true;
 
-        trans.append_message(b"bit decomposition instance", &proof.instance_info);
+        trans.append_message(b"bit decomposition instance", info);
         trans.append_message(b"BD IOP: polynomial commitment", &proof.poly_comm);
 
         let mut bd_iop = BitDecompositionIOP::<EF>::default();
 
-        bd_iop.generate_randomness(trans, &proof.instance_info.to_ef());
-        bd_iop.generate_randomness_for_eq_function(trans, &proof.instance_info.to_ef());
+        bd_iop.generate_randomness(trans, &info.to_ef());
+        bd_iop.generate_randomness_for_eq_function(trans, &info.to_ef());
 
         let proof_wrapper = ProofWrapper {
             claimed_sum: EF::zero(),
@@ -745,12 +744,7 @@ where
             proof: proof.sumcheck_proof.clone(),
         };
 
-        let (b, randomness) = bd_iop.verify(
-            trans,
-            &proof_wrapper,
-            &proof.evals,
-            &proof.instance_info.to_ef(),
-        );
+        let (b, randomness) = bd_iop.verify(trans, &proof_wrapper, &proof.evals, &info.to_ef());
 
         res &= b;
 

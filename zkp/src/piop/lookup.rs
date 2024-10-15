@@ -686,8 +686,6 @@ pub struct LookupProof<
     S,
     Pcs: PolynomialCommitmentScheme<F, EF, S>,
 > {
-    /// Instance info
-    pub instance_info: LookupInstanceInfo,
     /// Polynomial info
     pub poly_info: PolynomialInfo,
     /// The first polynomial commitment.
@@ -890,7 +888,6 @@ where
         );
 
         LookupProof {
-            instance_info,
             poly_info: kit.info,
             first_comm,
             first_oracle_eval,
@@ -946,11 +943,12 @@ where
         &self,
         trans: &mut Transcript<EF>,
         params: &LookupParams<F, EF, S, Pcs>,
+        info: &LookupInstanceInfo,
         proof: &LookupProof<F, EF, S, Pcs>,
     ) -> bool {
         let mut res = true;
 
-        trans.append_message(b"lookup instance", &proof.instance_info);
+        trans.append_message(b"lookup instance", info);
         trans.append_message(b"Lookup IOP: first commitment", &proof.first_comm);
 
         let mut lookup_iop = LookupIOP::<EF>::default();
@@ -960,15 +958,14 @@ where
         trans.append_message(b"Lookup IOP: second commitment", &proof.second_comm);
 
         // Verify the proof of sumcheck protocol.
-        lookup_iop.generate_second_randomness(trans, &proof.instance_info);
-        lookup_iop.generate_randomness_for_eq_function(trans, &proof.instance_info);
+        lookup_iop.generate_second_randomness(trans, info);
+        lookup_iop.generate_randomness_for_eq_function(trans, &info);
         let proof_wrapper = ProofWrapper {
             claimed_sum: EF::zero(),
             info: proof.poly_info,
             proof: proof.sumcheck_proof.clone(),
         };
-        let (b, randomness) =
-            lookup_iop.verify(trans, &proof_wrapper, &proof.evals, &proof.instance_info);
+        let (b, randomness) = lookup_iop.verify(trans, &proof_wrapper, &proof.evals, info);
 
         res &= b;
 

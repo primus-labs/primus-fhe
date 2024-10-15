@@ -77,7 +77,7 @@ fn main() {
 
     let proof = LookupProof::from_bytes(&proof_bytes).unwrap();
     let start = Instant::now();
-    let res = lookup_verifier.verify(&mut verifier_trans, &params, &proof);
+    let res = lookup_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
     println!(
         "lookup verifying time: {:?} ms",
         start.elapsed().as_millis()

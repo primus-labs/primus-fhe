@@ -226,7 +226,7 @@ fn test_lookup_snark() {
     let mut verifier_trans = Transcript::<EF>::default();
 
     let proof = LookupProof::from_bytes(&proof_bytes).unwrap();
-    let res = lookup_verifier.verify(&mut verifier_trans, &params, &proof);
+    let res = lookup_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
 
     assert!(res);
 }

@@ -131,7 +131,7 @@ fn main() {
 
     let proof = BitDecompositionProof::from_bytes(&proof_bytes).unwrap();
     let start = Instant::now();
-    let res = bd_verifier.verify(&mut verifier_trans, &params, &proof);
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
     println!(
         "bit decomposition verifying time: {:?} ms",
         start.elapsed().as_millis()

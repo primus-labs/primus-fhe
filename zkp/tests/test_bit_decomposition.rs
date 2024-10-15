@@ -327,7 +327,7 @@ fn test_bit_decomposition_snark() {
 
     let proof = BitDecompositionProof::from_bytes(&proof_bytes).unwrap();
 
-    let res = bd_verifier.verify(&mut verifier_trans, &params, &proof);
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
 
     assert!(res);
 }
