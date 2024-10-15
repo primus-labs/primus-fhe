@@ -49,7 +49,7 @@ fn main() {
         ExpanderCodeSpec,
         BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
     >::default();
-    params.setup(&instance, code_spec);
+    params.setup(&instance.info(), code_spec);
 
     // Prover.
     let lookup_prover = LookupProver::<

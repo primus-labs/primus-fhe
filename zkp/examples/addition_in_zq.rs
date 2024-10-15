@@ -88,7 +88,7 @@ fn main() {
         BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
     >::default();
     let start = Instant::now();
-    params.setup(&instance, code_spec);
+    params.setup(&instance.info(), code_spec);
     println!(
         "addition in zq setup time: {:?} ms",
         start.elapsed().as_millis()

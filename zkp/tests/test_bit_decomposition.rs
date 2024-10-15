@@ -301,7 +301,7 @@ fn test_bit_decomposition_snark() {
         ExpanderCodeSpec,
         BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
     >::default();
-    params.setup(&instance, code_spec);
+    params.setup(&instance.info(), code_spec);
 
     // Prover.
     let bd_prover = BitDecompositionProver::<
