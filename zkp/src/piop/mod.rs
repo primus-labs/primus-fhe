@@ -28,7 +28,7 @@ pub use lookup::{
     LookupProver, LookupVerifier,
 };
 pub use ntt::ntt_bare::NTTBareIOP;
-pub use ntt::{NTTInstance, NTTInstanceInfo, NTTIOP};
+pub use ntt::{BatchNTTInstanceInfo, NTTInstance, NTTIOP};
 pub use rlwe_mul_rgsw::{
     RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswIOPPure, RlweMultRgswInstance,
     RlweMultRgswSnarksOpt,

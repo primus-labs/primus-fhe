@@ -85,7 +85,7 @@ fn generate_single_instance<R: Rng + CryptoRng>(
         log_n,
         coeff.iter().map(|x| FF::new(x.value())).collect(),
     ));
-    instances.add_ntt(&coeff, &point);
+    instances.add_ntt_instance(&coeff, &point);
 }
 
 fn main() {

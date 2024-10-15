@@ -23,7 +23,7 @@ use super::RlweCiphertext;
 use super::RlweMultRgswIOP;
 use super::RlweMultRgswIOPPure;
 use super::RlweMultRgswInstance;
-use super::{BitDecompositionInstanceInfo, NTTInstance, NTTInstanceInfo, NTTIOP};
+use super::{BatchNTTInstanceInfo, BitDecompositionInstanceInfo, NTTInstance, NTTIOP};
 use crate::utils::{
     add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
     verify_oracle_relation,
@@ -114,7 +114,7 @@ pub struct AccumulatorInstance<F: Field> {
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
-    pub ntt_info: NTTInstanceInfo<F>,
+    pub ntt_info: BatchNTTInstanceInfo<F>,
 }
 
 /// Evaluation of AccumulatorInstance at the same random point
@@ -140,7 +140,7 @@ pub struct AccumulatorInstanceInfo<F: Field> {
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
-    pub ntt_info: NTTInstanceInfo<F>,
+    pub ntt_info: BatchNTTInstanceInfo<F>,
 }
 
 impl<F: Field> fmt::Display for AccumulatorInstanceInfo<F> {
@@ -291,9 +291,9 @@ impl<F: Field> AccumulatorInstance<F> {
         output_ntt: RlweCiphertext<F>,
         output: RlweCiphertext<F>,
         bits_info: &BitDecompositionInstanceInfo<F>,
-        ntt_info: &NTTInstanceInfo<F>,
+        ntt_info: &BatchNTTInstanceInfo<F>,
     ) -> Self {
-        let ntt_info = NTTInstanceInfo::<F> {
+        let ntt_info = BatchNTTInstanceInfo::<F> {
             num_ntt: 4 + num_updations * updations[0].num_ntt_contained(),
             num_vars,
             ntt_table: Arc::clone(&ntt_info.ntt_table),
@@ -688,7 +688,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         let randomness = Self::sample_coins(&mut trans, instance);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info);
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
@@ -711,7 +711,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
 
         // prove F(u, v) in a recursive manner
         let recursive_proof =
-            <NTTIOP<F>>::prove_recursive(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
 
         (
             SumcheckKit {
@@ -787,7 +787,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
     }
     /// Prover Accumulator
     #[inline]
@@ -935,8 +935,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = AccumulatorIOP::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt =
-            <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
+        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info);
         AccumulatorIOP::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -963,7 +962,7 @@ where
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let recursive_proof = <NTTIOP<EF>>::prove_recursive(
+        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
             &mut prover_trans,
             &sumcheck_state.randomness,
             &ntt_instance_info,
@@ -1068,7 +1067,7 @@ where
         assert_eq!(subclaim.expected_evaluations, EF::zero());
         assert_eq!(claimed_sum, EF::zero());
         // check the recursive part of NTT
-        let check_recursive = <NTTIOP<EF>>::verify_recursive(
+        let check_recursive = <NTTIOP<EF>>::verify_recursion(
             &mut verifier_trans,
             &recursive_proof,
             &ntt_instance_info,
@@ -1161,7 +1160,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         let randomness = Self::sample_coins(&mut trans, instance);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info);
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
@@ -1184,7 +1183,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
 
         // prove F(u, v) in a recursive manner
         let recursive_proof =
-            <NTTIOP<F>>::prove_recursive(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
 
         (
             SumcheckKit {
@@ -1260,7 +1259,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
     }
     /// Prover Accumulator
     #[inline]
@@ -1421,8 +1420,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = AccumulatorIOPPure::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt =
-            <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
+        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info);
         AccumulatorIOPPure::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1467,7 +1465,7 @@ where
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
 
-        let recursive_proof = <NTTIOP<EF>>::prove_recursive(
+        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
             &mut prover_trans,
             &sumcheck_state.randomness,
             &ntt_instance_info,
@@ -1606,7 +1604,7 @@ where
         assert_eq!(subclaim.expected_evaluations, EF::zero());
         assert_eq!(claimed_sum, EF::zero());
         // check the recursive part of NTT
-        let check_recursive = <NTTIOP<EF>>::verify_recursive(
+        let check_recursive = <NTTIOP<EF>>::verify_recursion(
             &mut verifier_trans,
             &recursive_proof,
             &ntt_instance_info,

@@ -28,8 +28,8 @@ use super::ntt::NTTRecursiveProof;
 use super::LookupInstance;
 use super::NTTBareIOP;
 use super::{
-    BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
-    BitDecompositionInstanceInfo, NTTInstance, NTTInstanceInfo, NTTIOP,
+    BatchNTTInstanceInfo, BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
+    BitDecompositionInstanceInfo, NTTInstance, NTTIOP,
 };
 use crate::piop::LookupIOP;
 use crate::sumcheck::verifier::SubClaim;
@@ -104,7 +104,7 @@ pub struct RlweMultRgswInstance<F: Field> {
     /// info of decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info of ntt instance
-    pub ntt_info: NTTInstanceInfo<F>,
+    pub ntt_info: BatchNTTInstanceInfo<F>,
     /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
     pub input_rlwe: RlweCiphertext<F>,
     /// bits_rlwe = (a_bits, b_bits): a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
@@ -150,7 +150,7 @@ pub struct RlweMultRgswInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// information of ntt instance
-    pub ntt_info: NTTInstanceInfo<F>,
+    pub ntt_info: BatchNTTInstanceInfo<F>,
     /// information of bit decomposition
     pub bits_info: BitDecompositionInstanceInfo<F>,
 }
@@ -332,7 +332,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
     pub fn new(
         num_vars: usize,
         bits_info: &BitDecompositionInstanceInfo<F>,
-        ntt_info: &NTTInstanceInfo<F>,
+        ntt_info: &BatchNTTInstanceInfo<F>,
         input_rlwe: RlweCiphertext<F>,
         bits_rlwe: RlweCiphertexts<F>,
         bits_rlwe_ntt: RlweCiphertexts<F>,
@@ -342,7 +342,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
         // output_rlwe: &RlweCiphertext<F>,
     ) -> Self {
         // update num_ntt of ntt_info
-        let ntt_info = NTTInstanceInfo {
+        let ntt_info = BatchNTTInstanceInfo {
             num_ntt: bits_info.bits_len << 1,
             num_vars,
             ntt_table: ntt_info.ntt_table.clone(),
@@ -741,7 +741,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         let randomness = Self::sample_coins(&mut trans, instance);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info);
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
@@ -764,7 +764,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
 
         // prove F(u, v) in a recursive manner
         let recursive_proof =
-            <NTTIOP<F>>::prove_recursive(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
 
         (
             SumcheckKit {
@@ -899,7 +899,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
     }
 
     /// Verify RLWE * RGSW with leaving NTT part outside of the interface
@@ -1000,8 +1000,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = RlweMultRgswIOP::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt =
-            <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
+        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info);
         RlweMultRgswIOP::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1028,7 +1027,7 @@ where
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let recursive_proof = <NTTIOP<EF>>::prove_recursive(
+        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
             &mut prover_trans,
             &sumcheck_state.randomness,
             &ntt_instance_info,
@@ -1136,7 +1135,7 @@ where
         assert_eq!(subclaim.expected_evaluations, EF::zero());
         assert_eq!(claimed_sum, EF::zero());
         // check the recursive part of NTT
-        let check_recursive = <NTTIOP<EF>>::verify_recursive(
+        let check_recursive = <NTTIOP<EF>>::verify_recursion(
             &mut verifier_trans,
             &recursive_proof,
             &ntt_instance_info,
@@ -1225,7 +1224,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         let randomness = Self::sample_coins(&mut trans);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, instance.num_ntt_contained());
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info);
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
@@ -1248,7 +1247,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
 
         // prove F(u, v) in a recursive manner
         let recursive_proof =
-            <NTTIOP<F>>::prove_recursive(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
 
         (
             SumcheckKit {
@@ -1384,7 +1383,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
     }
 
     /// Verify RLWE * RGSW with leaving NTT part outside of the interface
@@ -1493,8 +1492,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = RlweMultRgswIOPPure::sample_coins(&mut prover_trans);
-        let randomness_ntt =
-            <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.ntt_info.num_ntt);
+        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info);
         RlweMultRgswIOPPure::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1534,7 +1532,7 @@ where
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let recursive_proof = <NTTIOP<EF>>::prove_recursive(
+        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
             &mut prover_trans,
             &sumcheck_state.randomness,
             &ntt_instance_info,
@@ -1671,7 +1669,7 @@ where
         assert_eq!(subclaim.expected_evaluations, EF::zero());
         assert_eq!(claimed_sum, EF::zero());
         // check the recursive part of NTT
-        let check_recursive = <NTTIOP<EF>>::verify_recursive(
+        let check_recursive = <NTTIOP<EF>>::verify_recursion(
             &mut verifier_trans,
             &recursive_proof,
             &ntt_instance_info,

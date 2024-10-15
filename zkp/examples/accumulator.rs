@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::vec;
 use zkp::piop::AccumulatorSnarksOpt;
 use zkp::piop::{
-    AccumulatorInstance, AccumulatorWitness, BitDecompositionInstanceInfo, NTTInstanceInfo,
+    AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
     RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
 };
 
@@ -115,7 +115,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     bits_rgsw_c_ntt: RlweCiphertexts<F>,
     bits_rgsw_f_ntt: RlweCiphertexts<F>,
     bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &NTTInstanceInfo<F>,
+    ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> RlweMultRgswInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
     let bits_rlwe = RlweCiphertexts {
@@ -216,7 +216,7 @@ fn update_accumulator<F: Field + NTTField>(
     bits_rgsw_c_ntt: RlweCiphertexts<F>,
     bits_rgsw_f_ntt: RlweCiphertexts<F>,
     bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &NTTInstanceInfo<F>,
+    ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> AccumulatorWitness<F> {
     // 1. Perform ntt transform on (x^{-a_u} - 1)
     let d_ntt = DenseMultilinearExtension::from_evaluations_vec(
@@ -281,7 +281,7 @@ fn generate_instance<F: Field + NTTField>(
     input: RlweCiphertext<F>,
     num_updations: usize,
     bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &NTTInstanceInfo<F>,
+    ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> AccumulatorInstance<F> {
     let mut rng = rand::thread_rng();
     let mut updations = Vec::with_capacity(num_updations);
@@ -366,7 +366,7 @@ fn main() {
         power *= root;
     }
     let ntt_table = Arc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
+    let ntt_info = BatchNTTInstanceInfo {
         num_vars,
         ntt_table,
         num_ntt: 0,

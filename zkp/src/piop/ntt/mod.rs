@@ -30,8 +30,8 @@
 //!         \tilde{\beta}((x, b),(z,0)) * \tilde{A}_{F}^{(k-1)}(z) ( (1-u_{i})+u_{i} * \tilde{ω}^{(k)}_{i+1}(z, 0)
 //!       + \tilde{\beta}((x, b),(z,1)) * \tilde{A}_{F}^{(k-1)}(z) ( (1-u_{i})+u_{i} * \tilde{ω}^{(k)}_{i+1}(z, 1) * ω^{2^k}
 
+use crate::sumcheck::{self, ProofWrapper, SumcheckKit};
 use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
-use crate::sumcheck::{ProofWrapper, SumcheckKit};
 use crate::utils::{
     eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
 };
@@ -53,8 +53,7 @@ use std::{marker::PhantomData, rc::Rc, sync::Arc, time::Instant};
 use ntt_bare::NTTBareIOP;
 
 pub mod ntt_bare;
-/// IOP for NTT, i.e. $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
-pub struct NTTIOP<F: Field>(PhantomData<F>);
+
 /// SNARKs for NTT compiled with PCS
 pub struct NTTSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
 
@@ -71,16 +70,43 @@ pub struct NTTInstance<F: Field> {
     pub points: Rc<DenseMultilinearExtension<F>>,
 }
 
-/// All the proofs generated only in the recursive phase to prove F(u, v), which does not contain the ntt_bare_proof.
-#[derive(Serialize)]
-pub struct NTTRecursiveProof<F: Field> {
-    /// sumcheck proof for $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
-    /// collective sumcheck proofs for delegation
-    pub delegation_sumcheck_msgs: Vec<Proof<F>>,
-    /// collective claimed sums for delegation
-    pub delegation_claimed_sums: Vec<F>,
-    /// final claim
-    pub final_claim: F,
+impl<F: Field> NTTInstance<F> {
+    /// Extract the information of the NTT Instance for verification
+    #[inline]
+    pub fn info(&self) -> BatchNTTInstanceInfo<F> {
+        BatchNTTInstanceInfo {
+            num_ntt: 1,
+            num_vars: self.num_vars,
+            ntt_table: Arc::clone(&self.ntt_table),
+        }
+    }
+
+    /// Construct a new instance from slice
+    #[inline]
+    pub fn from_slice(
+        log_n: usize,
+        ntt_table: &Arc<Vec<F>>,
+        coeffs: &Rc<DenseMultilinearExtension<F>>,
+        points: &Rc<DenseMultilinearExtension<F>>,
+    ) -> Self {
+        Self {
+            num_vars: log_n,
+            ntt_table: ntt_table.clone(),
+            coeffs: Rc::clone(coeffs),
+            points: Rc::clone(points),
+        }
+    }
+
+    /// Construct a ntt instance defined over Extension Field
+    #[inline]
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> NTTInstance<EF> {
+        NTTInstance::<EF> {
+            num_vars: self.num_vars,
+            ntt_table: Arc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
+            coeffs: Rc::new(self.coeffs.to_ef::<EF>()),
+            points: Rc::new(self.points.to_ef::<EF>()),
+        }
+    }
 }
 
 /// Store all the NTT instances over Field to be proved, which will be randomized into a single random NTT instance over Extension Field.
@@ -100,7 +126,7 @@ pub struct BatchNTTInstance<F: Field> {
 
 /// Stores the corresponding NTT table for the verifier
 #[derive(Clone, Debug)]
-pub struct NTTInstanceInfo<F: Field> {
+pub struct BatchNTTInstanceInfo<F: Field> {
     /// number of instances randomized into this NTT instance
     pub num_ntt: usize,
     /// log_n is the number of the variables
@@ -110,7 +136,7 @@ pub struct NTTInstanceInfo<F: Field> {
     pub ntt_table: Arc<Vec<F>>,
 }
 
-impl<F: Field> fmt::Display for NTTInstanceInfo<F> {
+impl<F: Field> fmt::Display for BatchNTTInstanceInfo<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -120,15 +146,27 @@ impl<F: Field> fmt::Display for NTTInstanceInfo<F> {
     }
 }
 
-impl<F: Field> NTTInstanceInfo<F> {
+impl<F: Field> BatchNTTInstanceInfo<F> {
     /// Convert to EF version
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> NTTInstanceInfo<EF> {
-        NTTInstanceInfo {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> BatchNTTInstanceInfo<EF> {
+        BatchNTTInstanceInfo {
             num_ntt: self.num_ntt,
             num_vars: self.num_vars,
             ntt_table: Arc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
         }
     }
+}
+
+/// All the proofs generated only in the recursive phase to prove F(u, v), which does not contain the ntt_bare_proof.
+#[derive(Serialize, Deserialize)]
+pub struct NTTRecursiveProof<F: Field> {
+    /// sumcheck proof for $$a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) }$$
+    /// collective sumcheck proofs for delegation
+    pub delegation_sumcheck_msgs: Vec<Proof<F>>,
+    /// collective claimed sums for delegation
+    pub delegation_claimed_sums: Vec<F>,
+    /// final claim
+    pub final_claim: F,
 }
 
 /// store the intermediate mles generated in each iteration in the `init_fourier_table_overall` algorithm
@@ -299,45 +337,6 @@ pub fn eval_w_power_times_x<F: Field>(
     prod
 }
 
-impl<F: Field> NTTInstance<F> {
-    /// Extract the information of the NTT Instance for verification
-    #[inline]
-    pub fn info(&self) -> NTTInstanceInfo<F> {
-        NTTInstanceInfo {
-            num_ntt: 1,
-            num_vars: self.num_vars,
-            ntt_table: Arc::clone(&self.ntt_table),
-        }
-    }
-
-    /// Construct a new instance from slice
-    #[inline]
-    pub fn from_slice(
-        log_n: usize,
-        ntt_table: &Arc<Vec<F>>,
-        coeffs: &Rc<DenseMultilinearExtension<F>>,
-        points: &Rc<DenseMultilinearExtension<F>>,
-    ) -> Self {
-        Self {
-            num_vars: log_n,
-            ntt_table: ntt_table.clone(),
-            coeffs: Rc::clone(coeffs),
-            points: Rc::clone(points),
-        }
-    }
-
-    /// Construct a ntt instance defined over Extension Field
-    #[inline]
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> NTTInstance<EF> {
-        NTTInstance::<EF> {
-            num_vars: self.num_vars,
-            ntt_table: Arc::new(self.ntt_table.iter().map(|x| EF::from_base(*x)).collect()),
-            coeffs: Rc::new(self.coeffs.to_ef::<EF>()),
-            points: Rc::new(self.points.to_ef::<EF>()),
-        }
-    }
-}
-
 impl<F: Field> BatchNTTInstance<F> {
     /// Construct an empty container
     #[inline]
@@ -353,8 +352,8 @@ impl<F: Field> BatchNTTInstance<F> {
 
     /// Extract the information of the NTT Instance for verification
     #[inline]
-    pub fn info(&self) -> NTTInstanceInfo<F> {
-        NTTInstanceInfo {
+    pub fn info(&self) -> BatchNTTInstanceInfo<F> {
+        BatchNTTInstanceInfo {
             num_ntt: self.num_ntt,
             num_vars: self.num_vars,
             ntt_table: Arc::clone(&self.ntt_table),
@@ -375,7 +374,7 @@ impl<F: Field> BatchNTTInstance<F> {
 
     /// Add a ntt instance into the container
     #[inline]
-    pub fn add_ntt(
+    pub fn add_ntt_instance(
         &mut self,
         coeff: &Rc<DenseMultilinearExtension<F>>,
         point: &Rc<DenseMultilinearExtension<F>>,
@@ -483,52 +482,72 @@ impl<F: Field> BatchNTTInstance<F> {
     }
 }
 
+/// IOP for NTT
+#[derive(Default)]
+pub struct NTTIOP<F: Field> {
+    /// The random value for initiating sumcheck.
+    pub u: Vec<F>,
+}
+
 impl<F: Field + Serialize> NTTIOP<F> {
     /// sample the random coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, num_ntt: usize) -> Vec<F> {
+    pub fn sample_coins(trans: &mut Transcript<F>, info: &BatchNTTInstanceInfo<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
-            num_ntt,
+            Self::num_coins(info),
         )
     }
 
     /// return the number of coins used in this IOP
-    pub fn num_coins(info: &NTTInstanceInfo<F>) -> usize {
+    pub fn num_coins(info: &BatchNTTInstanceInfo<F>) -> usize {
         info.num_ntt
     }
 
-    /// Prove NTT instance with delegation
-    pub fn prove(instance: &NTTInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
-        let mut trans = Transcript::new();
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
+    /// Generate the randomness.
+    #[inline]
+    pub fn generate_randomness(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &BatchNTTInstanceInfo<F>,
+    ) {
+        self.u = trans.get_vec_challenge(
+            b"NTT IOP: random point used to instantiate sumcheck protocol",
+            info.num_vars,
         );
+    }
 
+    /// Prove NTT instance with delegation
+    pub fn prove(
+        &self,
+        trans: &mut Transcript<F>,
+        instance: &NTTInstance<F>,
+    ) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
+
+        // Just prove one NTT instance.
         let randomness = F::one();
         let mut claimed_sum = F::zero();
-        <NTTBareIOP<F>>::prepare_products_of_polynomial(
+        NTTBareIOP::<F>::prepare_products_of_polynomial(
             randomness,
             &mut poly,
             &mut claimed_sum,
             instance,
-            &u,
+            &self.u,
         );
 
         let (proof, state) =
-            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
+            MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
 
-        // prove F(u, v) in a recursive manner
+        // Prove F(u, v) in a recursive manner
         let recursive_proof =
-            <NTTIOP<F>>::prove_recursive(&mut trans, &state.randomness, &instance.info(), &u);
+            Self::prove_recursion(trans, &state.randomness, &instance.info(), &self.u);
 
         (
             SumcheckKit {
                 proof,
                 claimed_sum,
                 info: poly.info(),
-                u,
+                u: self.u.clone(),
                 randomness: state.randomness,
             },
             recursive_proof,
@@ -537,36 +556,28 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
     /// Verify NTT instance with delegation
     pub fn verify(
+        &self,
+        trans: &mut Transcript<F>,
         wrapper: &mut ProofWrapper<F>,
-        evals_at_r: F,
-        evals_at_u: F,
-        info: &NTTInstanceInfo<F>,
+        coeff_evals_at_r: F,
+        point_evals_at_u: F,
+        info: &BatchNTTInstanceInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
     ) -> bool {
-        let mut trans = Transcript::new();
-
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            info.num_vars,
-        );
-
+        // Just verify one NTT instance.
         let randomness = F::one();
 
-        let mut subclaim = MLSumcheck::verify(
-            &mut trans,
-            &wrapper.info,
-            wrapper.claimed_sum,
-            &wrapper.proof,
-        )
-        .expect("fail to verify the sumcheck protocol");
+        let mut subclaim =
+            MLSumcheck::verify(trans, &wrapper.info, wrapper.claimed_sum, &wrapper.proof)
+                .expect("fail to verify the sumcheck protocol");
 
         let f_delegation = recursive_proof.delegation_claimed_sums[0];
-        if !<NTTBareIOP<F>>::verify_subclaim(
+        if !NTTBareIOP::<F>::verify_subclaim(
             randomness,
             &mut subclaim,
             &mut wrapper.claimed_sum,
-            evals_at_r,
-            evals_at_u,
+            coeff_evals_at_r,
+            point_evals_at_u,
             f_delegation,
         ) {
             return false;
@@ -576,7 +587,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
             return false;
         }
 
-        <NTTIOP<F>>::verify_recursive(&mut trans, recursive_proof, info, &u, &subclaim)
+        Self::verify_recursion(trans, recursive_proof, info, &self.u, &subclaim)
     }
     /// The delegation of F(u, v) consists of logN - 1 rounds, each of which is a sumcheck protocol.
     ///
@@ -591,13 +602,14 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// one has coefficient one, and the other has coefficient ω^{2^k}.
     ///
     /// # Arguments
-    /// * round: round number denoted by k, which is iterated in a reverse order as described in the algorithm
-    /// * point: the random point $(x, b)\in \mathbb{F}^{k+1}$ reduced from the last sumcheck, used to prove the sum in the round
-    /// * u_i: parameter in this round as described in the formula
-    /// * w_coeff: the coefficient ω^{2^k} of the second product
-    /// * f: MLE \tilde{A}_{F}^{(k-1)}(z) for z\in \{0,1\}^k
-    /// * w: MLE \tilde{ω}^{(k)}_{i+1}(z, b) for z\in \{0,1\}^k  and b\in \{0, 1\}, which will be divided into two smaller MLEs \tilde{ω}^{(k)}_{i+1}(z, 0) and \tilde{ω}^{(k)}_{i+1}(z, 1)
-    pub fn delegation_prover_round(
+    ///
+    /// * `round` - The round number.
+    /// * `point` - The random point (x, b) reduced from the last sumcheck.
+    /// * `u_i` - The parameter in this round.
+    /// * `w_coeff` - The coefficient ω^{2^k} of the second product.
+    /// * `f` - The MLE \tilde{A}_{F}^{(k-1)}(z) for z\in \{0,1\}^k
+    /// * `w` - The MLE \tilde{ω}^{(k)}_{i+1}(z, b) for z\in \{0,1\}^k  and b\in \{0, 1\}.
+    pub fn prove_recursion_round(
         trans: &mut Transcript<F>,
         round: usize,
         point: &[F],
@@ -648,10 +660,10 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// Compared to the `prove` functionality, we just remove the phase to prove NTT bare.
     ///
     /// * `ntt_bare_state`: stores the prover state after proving the NTT bare
-    pub fn prove_recursive(
+    pub fn prove_recursion(
         trans: &mut Transcript<F>,
         ntt_bare_randomness: &[F],
-        info: &NTTInstanceInfo<F>,
+        info: &BatchNTTInstanceInfo<F>,
         u: &[F],
     ) -> NTTRecursiveProof<F> {
         let log_n = info.num_vars;
@@ -679,7 +691,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
             let w_coeff = info.ntt_table[1 << k];
             let f = &f_mles[k - 1];
-            let (proof_round, state_round) = Self::delegation_prover_round(
+            let (proof_round, state_round) = Self::prove_recursion_round(
                 trans,
                 k,
                 &requested_point,
@@ -716,23 +728,24 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// If the equality holds, it is reduced to check the evaluation of \tilde{A}_{F}^{(k-1)}(z = r).
     ///
     /// # Arguments
-    /// * round: round number denoted by k, which is iterated in a reverse order as described in the algorithm
-    /// * x_b_point: the random point $(x, b)\in \mathbb{F}^{k+1}$ reduced from the last sumcheck
-    /// * u_i: parameter in this round as described in the formula
-    /// * subclaim: the subclaim returned from this round of the sumcheck, containing the random point r used for equality check
-    /// * reduced_claim: the given evaluation of \tilde{A}_{F}^{(k-1)}(z = r) so verify does not need to compute on his own
-    pub fn delegation_verify_round(
+    ///
+    /// * `round` - The round number.
+    /// * `x_b_point` - The random point (x, b) reduced from the last sumcheck.
+    /// * `u_i` - The parameter in this round.
+    /// * `subclaim` - The subclaim returned from this round of the sumcheck.
+    /// * `reduced_claim` - The given evaluation.
+    pub fn verify_recursion_round(
         round: usize,
         x_b_point: &[F],
         u_i: F,
         subclaim: &SubClaim<F>,
         reduced_claim: F,
-        ntt_instance_info: &NTTInstanceInfo<F>,
+        ntt_instance_info: &BatchNTTInstanceInfo<F>,
     ) -> bool {
         let log_n = ntt_instance_info.num_vars;
         let ntt_table = &ntt_instance_info.ntt_table;
 
-        // r_left = (r, 0) and r_right = (r, 0)
+        // r_left = (r, 0) and r_right = (r, 1)
         let mut r_left: Vec<_> = Vec::with_capacity(round + 1);
         let mut r_right: Vec<_> = Vec::with_capacity(round + 1);
         r_left.extend(&subclaim.point);
@@ -760,10 +773,10 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
     /// Compared to the `prove` functionality, we remove the phase to prove NTT bare.
     /// Also, after detaching the verification of NTT bare, verifier can directly check the recursive proofs.
-    pub fn verify_recursive(
+    pub fn verify_recursion(
         trans: &mut Transcript<F>,
         proof: &NTTRecursiveProof<F>,
-        info: &NTTInstanceInfo<F>,
+        info: &BatchNTTInstanceInfo<F>,
         u: &[F],
         subclaim: &SubClaim<F>,
     ) -> bool {
@@ -792,7 +805,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
             )
             .expect("ntt verification failed in round {cnt}");
 
-            // In the last round of the sumcheck protocol, the verify needs to check the equality of the evaluation of the polynomial to be summed at a random point z = r \in \{0,1\}}^k.
+            // In the last round of the sumcheck protocol, the verifier needs to check the equality of the evaluation of the polynomial to be summed at a random point z = r \in \{0,1\}}^k.
             // The verifier is given the evaluation of \tilde{A}_{F}^{(k-1)}(z = r) instead of computing on his own, so he can use it to check.
             // If the equality holds, it is reduced to check the evaluation of \tilde{A}_{F}^{(k-1)}(z = r).
             let reduced_claim = if cnt < log_n - 2 {
@@ -801,7 +814,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
                 proof.final_claim
             };
             // check the equality
-            if !Self::delegation_verify_round(
+            if !Self::verify_recursion_round(
                 k,
                 &requested_point,
                 u[i],
@@ -828,6 +841,39 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
         delegation_final_claim == eval
     }
+}
+
+/// NTT proof with PCS.
+pub struct NTTProof<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// Batch Instance info.
+    pub batch_instance_info: BatchNTTInstanceInfo<F>,
+    /// Polynomial info.
+    pub poly_info: PolynomialInfo,
+    /// Polynomial commitment of coefficient.
+    pub coeff_poly_comm: Pcs::Commitment,
+    /// The evaluation of the polynomial of coefficient.
+    pub coeff_oracle_eval: EF,
+    /// The opening proof of the polynomial of coefficient.
+    pub coeff_eval_proof: Pcs::Proof,
+    /// The coefficient eval.
+    pub coeff_eval: Vec<EF>,
+    /// Polynomial commitment of point.
+    pub point_poly_comm: Pcs::Commitment,
+    /// The evaluation of the polynomial of point.
+    pub point_oracle_eval: EF,
+    /// The opening proof of the polynomial of point.
+    pub point_eval_proof: Pcs::Proof,
+    /// The point eval.
+    pub point_eval: Vec<EF>,
+    /// The sumcheck proof.
+    pub sumcheck_proof: sumcheck::Proof<EF>,
+    /// The recursive proof.
+    pub recursive_proof: NTTRecursiveProof<EF>,
 }
 
 impl<F, EF> NTTSnarks<F, EF>
@@ -869,7 +915,7 @@ where
         );
 
         // 2.? [one more step] Prover generate the random ntt instance from all instances to be proved
-        let prover_r = <NTTIOP<EF>>::sample_coins(&mut prover_trans, instance_info.num_ntt);
+        let prover_r = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.to_ef());
         let instance_ef = instance.extract_ntt_instance_to_ef::<EF>(&prover_r);
         let instance_ef_info = instance_ef.info();
 
@@ -893,7 +939,7 @@ where
         iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
 
         // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let recursive_proof = <NTTIOP<EF>>::prove_recursive(
+        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
             &mut prover_trans,
             &sumcheck_state.randomness,
             &instance_ef_info,
@@ -1001,7 +1047,7 @@ where
         assert_eq!(subclaim.expected_evaluations, EF::zero());
         assert_eq!(claimed_sum, EF::zero());
         // Check the delegation of F(u, v) used in the above check
-        let check_recursive = <NTTIOP<EF>>::verify_recursive(
+        let check_recursive = <NTTIOP<EF>>::verify_recursion(
             &mut verifier_trans,
             &recursive_proof,
             &instance_ef_info,

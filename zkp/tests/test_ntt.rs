@@ -146,7 +146,7 @@ fn generate_single_instance<R: Rng + CryptoRng>(
         log_n,
         coeff.iter().map(|x| FF::new(x.value())).collect(),
     ));
-    instances.add_ntt(&coeff, &point);
+    instances.add_ntt_instance(&coeff, &point);
 }
 
 #[test]
@@ -214,7 +214,7 @@ fn test_ntt_bare_without_delegation() {
     let ntt_instance_info = ntt_instance.info();
     let mut ntt_iop = NTTBareIOP::default();
     let mut prover_trans = Transcript::<FF>::new();
-    ntt_iop.generate_randomness_for_eq_function(&mut prover_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
     let kit = ntt_iop.prove(&mut prover_trans, &ntt_instance);
     let evals_at_u = ntt_instance.points.evaluate(&kit.u);
     let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
@@ -228,7 +228,7 @@ fn test_ntt_bare_without_delegation() {
     let mut wrapper = kit.extract();
     let mut ntt_iop = NTTBareIOP::default();
     let mut verifier_trans = Transcript::<FF>::new();
-    ntt_iop.generate_randomness_for_eq_function(&mut verifier_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
 
     let check = ntt_iop.verify(
         &mut verifier_trans,
@@ -270,7 +270,7 @@ fn test_ntt_bare_without_delegation_extension_field() {
 
     let mut ntt_iop = NTTBareIOP::<EF>::default();
     let mut prover_trans = Transcript::<EF>::new();
-    ntt_iop.generate_randomness_for_eq_function(&mut prover_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
 
     let kit = ntt_iop.prove(&mut prover_trans, &instance_ef);
     let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
@@ -280,7 +280,7 @@ fn test_ntt_bare_without_delegation_extension_field() {
 
     let mut ntt_iop = NTTBareIOP::<EF>::default();
     let mut verifier_trans = Transcript::<EF>::default();
-    ntt_iop.generate_randomness_for_eq_function(&mut verifier_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
     let check = ntt_iop.verify(
         &mut verifier_trans,
         &mut wrapper,
@@ -316,14 +316,20 @@ fn test_ntt_with_delegation() {
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
+    let mut ntt_iop = NTTIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
 
-    let (kit, recursive_proof) = NTTIOP::prove(&ntt_instance);
+    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &ntt_instance);
     let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
     let evals_at_u = ntt_instance.points.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-
-    let check = NTTIOP::verify(
+    let mut ntt_iop = NTTIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
+    let check = ntt_iop.verify(
+        &mut verifier_trans,
         &mut wrapper,
         evals_at_r,
         evals_at_u,
@@ -361,12 +367,21 @@ fn test_ntt_with_delegation_extension_field() {
     let instance_ef = ntt_instance.to_ef::<EF>();
     let ntt_instance_info = instance_ef.info();
 
-    let (kit, recursive_proof) = NTTIOP::prove(&instance_ef);
+    let mut ntt_iop = NTTIOP::default();
+    let mut prover_trans = Transcript::<EF>::new();
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
+
+    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &instance_ef);
+
     let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
     let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = NTTIOP::verify(
+    let mut ntt_iop = NTTIOP::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
+    let check = ntt_iop.verify(
+        &mut verifier_trans,
         &mut wrapper,
         evals_at_r,
         evals_at_u,

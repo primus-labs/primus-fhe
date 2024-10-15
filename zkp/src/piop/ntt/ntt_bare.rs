@@ -22,7 +22,7 @@ use algebra::{utils::Transcript, DenseMultilinearExtension, Field, ListOfProduct
 use serde::Serialize;
 use std::rc::Rc;
 
-use super::{NTTInstance, NTTInstanceInfo};
+use super::{BatchNTTInstanceInfo, NTTInstance};
 
 /// Naive implementation for initializing F(u, x) in NTT, which helps readers to understand the following dynamic programming version (`init_fourier_table``).
 /// The formula is derived from zkCNN (https://eprint.iacr.org/2021/673)
@@ -126,12 +126,12 @@ pub struct NTTBareIOP<F: Field> {
 }
 
 impl<F: Field + Serialize> NTTBareIOP<F> {
-    /// Generate the randomness for the eq function.
+    /// Generate the randomness.
     #[inline]
-    pub fn generate_randomness_for_eq_function(
+    pub fn generate_randomness(
         &mut self,
         trans: &mut Transcript<F>,
-        info: &NTTInstanceInfo<F>,
+        info: &BatchNTTInstanceInfo<F>,
     ) {
         self.u = trans.get_vec_challenge(
             b"NTTBare IOP: random point used to instantiate sumcheck protocol",
@@ -140,6 +140,11 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
     }
 
     /// Prove NTT instance without delegation
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcript.
+    /// * `instance` - The NTT instance.
     pub fn prove(&self, trans: &mut Transcript<F>, instance: &NTTInstance<F>) -> SumcheckKit<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let randomness = F::one();
@@ -165,6 +170,14 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
     }
 
     /// Add the sumcheck proving NTT into the polynomial
+    ///
+    /// # Arguments.
+    ///
+    /// * `randomness` - The randomness used to randomnize the ntt instance.
+    /// * `poly` - The list of product of polynomials.
+    /// * `claimed_sum` - The claimed sum of the sumcheck.
+    /// * `instance` - The NTT instance.
+    /// * `u` - The randomness used to initiate the sumcheck protocol.
     pub fn prepare_products_of_polynomial(
         randomness: F,
         poly: &mut ListOfProductsOfPolynomials<F>,
@@ -178,25 +191,29 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
     }
 
     /// Verify NTT instance without delegation
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcript.
+    /// * `wrapper` - The proof warpper.
+    /// * `coeff_evals_at_r` - The coefficient poly evaluated at random point r.
+    /// * `point_evals_at_u` - The point poly evaluated at random point u.
+    /// * `info` - The info of NTT instance.
     pub fn verify(
         &self,
         trans: &mut Transcript<F>,
         wrapper: &mut ProofWrapper<F>,
-        evals_at_r: F,
-        evals_at_u: F,
-        info: &NTTInstanceInfo<F>,
+        coeff_evals_at_r: F,
+        point_evals_at_u: F,
+        info: &BatchNTTInstanceInfo<F>,
     ) -> bool {
         let f_u = init_fourier_table(&self.u, &info.ntt_table);
         // randomness to combine sumcheck protocols
         let randomness = F::one();
 
-        let mut subclaim = MLSumcheck::verify(
-            trans,
-            &wrapper.info,
-            wrapper.claimed_sum,
-            &wrapper.proof,
-        )
-        .expect("fail to verify the sumcheck protocol");
+        let mut subclaim =
+            MLSumcheck::verify(trans, &wrapper.info, wrapper.claimed_sum, &wrapper.proof)
+                .expect("fail to verify the sumcheck protocol");
 
         let f_delegation = f_u.evaluate(&subclaim.point);
 
@@ -204,8 +221,8 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
             randomness,
             &mut subclaim,
             &mut wrapper.claimed_sum,
-            evals_at_r,
-            evals_at_u,
+            coeff_evals_at_r,
+            point_evals_at_u,
             f_delegation,
         ) {
             return false;
@@ -214,17 +231,26 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
         subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()
     }
 
-    /// Verify the evaluation of the sumcheck proving NTT
+    /// Verify the subclaim of the sumcheck proving NTT
+    ///
+    /// # Arguments.
+    ///
+    /// * `randomness` - The randomness used to randomize the NTT instance.
+    /// * `subclaim` - The subclaim output by the sumcheck verifier.
+    /// * `claimed_sum` - The claimed value of the sumcheck.
+    /// * `coeff_evals_at_r` - The coefficient poly evaluated at random point r.
+    /// * `point_evals_at_u` - The point poly evaluated at random point u.
+    /// * `f_delegation` - The point F(u,r).
     pub fn verify_subclaim(
         randomness: F,
         subclaim: &mut SubClaim<F>,
         claimed_sum: &mut F,
-        evals_at_r: F,
-        evals_at_u: F,
+        coeff_evals_at_r: F,
+        point_evals_at_u: F,
         f_delegation: F,
     ) -> bool {
-        subclaim.expected_evaluations -= evals_at_r * f_delegation * randomness;
-        *claimed_sum -= evals_at_u * randomness;
+        subclaim.expected_evaluations -= coeff_evals_at_r * f_delegation * randomness;
+        *claimed_sum -= point_evals_at_u * randomness;
         true
     }
 }

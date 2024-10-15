@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::vec;
 use zkp::piop::RlweMultRgswSnarksOpt;
 use zkp::piop::{
-    rlwe_mul_rgsw::RlweMultRgswSnarks, BitDecompositionInstanceInfo, NTTInstanceInfo,
+    rlwe_mul_rgsw::RlweMultRgswSnarks, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
     RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
 };
 
@@ -74,7 +74,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     input_rlwe: RlweCiphertext<F>,
     input_rgsw: (RlweCiphertexts<F>, RlweCiphertexts<F>),
     bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &NTTInstanceInfo<F>,
+    ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> RlweMultRgswInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
     let bits_rlwe = RlweCiphertexts {
@@ -206,7 +206,7 @@ fn test_random_rlwe_mult_rgsw() {
         power *= root;
     }
     let ntt_table = Arc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
+    let ntt_info = BatchNTTInstanceInfo {
         num_vars,
         ntt_table,
         num_ntt: 0,
@@ -297,7 +297,7 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
         power *= root;
     }
     let ntt_table = Arc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
+    let ntt_info = BatchNTTInstanceInfo {
         num_vars,
         ntt_table,
         num_ntt: 0,
@@ -389,7 +389,7 @@ fn test_snarks() {
         power *= root;
     }
     let ntt_table = Arc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
+    let ntt_info = BatchNTTInstanceInfo {
         num_vars,
         ntt_table,
         num_ntt: 0,
@@ -468,7 +468,7 @@ fn test_snarks_with_lookup() {
         power *= root;
     }
     let ntt_table = Arc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
+    let ntt_info = BatchNTTInstanceInfo {
         num_vars,
         ntt_table,
         num_ntt: 0,

@@ -21,18 +21,6 @@ pub struct ProverMsg<F: Field> {
     pub(crate) evaluations: Vec<F>,
 }
 
-// impl<F: Field + Serialize> Serialize for ProverMsg<F> {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         let mut seq = serializer.serialize_seq(Some(self.evaluations.len()))?;
-//         for e in self.evaluations.iter() {
-//             seq.serialize_element(e)?;
-//         }
-//         seq.end()
-//     }
-// }
 /// Prover State
 pub struct ProverState<F: Field> {
     /// sampled randomness given by the verifier

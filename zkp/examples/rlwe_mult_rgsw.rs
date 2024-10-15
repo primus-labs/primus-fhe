@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::vec;
 use zkp::piop::RlweMultRgswSnarksOpt;
 use zkp::piop::{
-    BitDecompositionInstanceInfo, NTTInstanceInfo, RlweCiphertext, RlweCiphertexts,
+    BatchNTTInstanceInfo, BitDecompositionInstanceInfo, RlweCiphertext, RlweCiphertexts,
     RlweMultRgswInstance,
 };
 
@@ -74,7 +74,7 @@ fn generate_instance<F: Field + NTTField>(
     input_rlwe: RlweCiphertext<F>,
     input_rgsw: (RlweCiphertexts<F>, RlweCiphertexts<F>),
     bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &NTTInstanceInfo<F>,
+    ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> RlweMultRgswInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
     let bits_rlwe = RlweCiphertexts {
@@ -192,7 +192,7 @@ fn main() {
         power *= root;
     }
     let ntt_table = Arc::new(ntt_table);
-    let ntt_info = NTTInstanceInfo {
+    let ntt_info = BatchNTTInstanceInfo {
         num_vars,
         ntt_table,
         num_ntt: 0,
