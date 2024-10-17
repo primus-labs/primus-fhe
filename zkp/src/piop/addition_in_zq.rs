@@ -501,7 +501,7 @@ where
 {
     /// Setup for the PCS.
     pub fn setup(&mut self, info: &AdditionInZqInstanceInfo<F>, code_spec: S) {
-        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec.clone()));
+        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec));
     }
 }
 

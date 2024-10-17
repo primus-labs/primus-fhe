@@ -148,6 +148,24 @@ impl<F: Field> fmt::Display for BatchNTTInstanceInfo<F> {
 }
 
 impl<F: Field> BatchNTTInstanceInfo<F> {
+    /// Return the number of coefficient / point oracles
+    #[inline]
+    pub fn num_oracles(&self) -> usize {
+        self.num_ntt
+    }
+
+    /// Return the log of the number of small polynomials used in IOP
+    #[inline]
+    pub fn log_num_oracles(&self) -> usize {
+        self.num_oracles().next_power_of_two().ilog2() as usize
+    }
+
+    /// Generate the number of variables in the committed polynomial.
+    #[inline]
+    pub fn generate_num_var(&self) -> usize {
+        self.num_vars + self.log_num_oracles() + 1
+    }
+
     /// Convert to EF version
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> BatchNTTInstanceInfo<EF> {
         BatchNTTInstanceInfo {
@@ -361,18 +379,6 @@ impl<F: Field> BatchNTTInstance<F> {
         }
     }
 
-    /// Return the number of coefficient / point oracles
-    #[inline]
-    pub fn num_oracles(&self) -> usize {
-        self.num_ntt
-    }
-
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
-    }
-
     /// Add a ntt instance into the container
     #[inline]
     pub fn add_ntt_instance(
@@ -392,9 +398,10 @@ impl<F: Field> BatchNTTInstance<F> {
     /// We deliberately do like this for ease of requested evaluation on the committed polynomial.
     #[inline]
     pub fn pack_all_mles(&self) -> Vec<F> {
-        let num_vars_added_half = self.log_num_oracles();
+        let info = self.info();
+        let num_vars_added_half = info.log_num_oracles();
         let num_zeros_padded_half =
-            ((1 << num_vars_added_half) - self.num_oracles()) * (1 << self.num_vars);
+            ((1 << num_vars_added_half) - info.num_oracles()) * (1 << self.num_vars);
 
         // arrangement: all coeffs || padded zeros || all points || padded zeros
         // The advantage of this arrangement is that F(0, x) packs all evaluations of coeff-MLEs and F(1, x) packs all evaluations of point-MLEs
@@ -414,10 +421,7 @@ impl<F: Field> BatchNTTInstance<F> {
     /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
     #[inline]
     pub fn generate_oracle(&self) -> DenseMultilinearExtension<F> {
-        let num_oracles_half = self.num_ntt;
-        let num_vars_added_half = num_oracles_half.next_power_of_two().ilog2() as usize;
-        let num_vars = self.num_vars + num_vars_added_half + 1;
-
+        let num_vars = self.info().generate_num_var();
         // arrangement: all coeffs || padded zeros || all points || padded zeros
         // The advantage of this arrangement is that F(0, x) packs all evaluations of coeff-MLEs and F(1, x) packs all evaluations of point-MLEs
         let evals = self.pack_all_mles();
@@ -854,16 +858,14 @@ pub struct NTTProof<
 > {
     /// Polynomial info.
     pub poly_info: PolynomialInfo,
-    /// Polynomial commitment of coefficient.
-    pub coeff_poly_comm: Pcs::Commitment,
+    /// Polynomial commitment.
+    pub poly_comm: Pcs::Commitment,
     /// The evaluation of the polynomial of coefficient.
     pub coeff_oracle_eval: EF,
     /// The opening proof of the polynomial of coefficient.
     pub coeff_eval_proof: Pcs::Proof,
     /// The coefficient eval.
     pub coeff_eval: Vec<EF>,
-    /// Polynomial commitment of point.
-    pub point_poly_comm: Pcs::Commitment,
     /// The evaluation of the polynomial of point.
     pub point_oracle_eval: EF,
     /// The opening proof of the polynomial of point.
@@ -926,11 +928,69 @@ where
 {
     /// Setup for the PCS.
     #[inline]
-    pub fn setup(&mut self, instance: &BatchNTTInstance<F>, code_spec: S) {
-        // self.pp = Pcs::setup(num_vars, code_spec)
+    pub fn setup(&mut self, info: &BatchNTTInstanceInfo<F>, code_spec: S) {
+        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec))
     }
 }
 
+/// Prover for NTT IOT with PCS.
+pub struct NTTProver<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for NTTProver<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        NTTProver {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> NTTProver<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The prover.
+    pub fn prover(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &NTTParams<F, EF, S, Pcs>,
+        instance: &BatchNTTInstance<F>,
+    ) -> NTTProof<F, EF, S, Pcs> {
+        let instance_info = instance.info();
+
+        // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
+        let committed_poly = instance.generate_oracle();
+
+        // Use PCS to commit the above polynomial.
+        let (poly_comm, comm_state) = Pcs::commit(&params.pp, &committed_poly);
+
+        trans.append_message(b"NTT IOP: polynomial commitment", &poly_comm);
+
+        
+        todo!()
+    }
+}
 impl<F, EF> NTTSnarks<F, EF>
 where
     F: Field + Serialize + for<'de> Deserialize<'de>,
@@ -1024,7 +1084,7 @@ where
         let mut point_requested_point = prover_u.clone();
         let oracle_randomness = prover_trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
+            instance_info.log_num_oracles(),
         );
         coeff_requested_point.extend(&oracle_randomness);
         point_requested_point.extend(&oracle_randomness);
@@ -1114,7 +1174,7 @@ where
         // 3.5 and also check the relation between these small oracles and the committed oracle
         let oracle_randomness = verifier_trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
+            instance_info.log_num_oracles(),
         );
         let check_oracle_coeff =
             verify_oracle_relation(&coeff_evals_at_r, oracle_coeff_eval, &oracle_randomness);
@@ -1160,7 +1220,7 @@ where
             iop_verifier_time,
             iop_proof_size,
             committed_poly.num_vars,
-            instance.num_oracles(),
+            instance_info.num_oracles(),
             instance.num_vars,
             setup_time,
             commit_time,

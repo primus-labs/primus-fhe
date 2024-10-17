@@ -581,7 +581,7 @@ where
     /// Setup for the PCS.
     #[inline]
     pub fn setup(&mut self, info: &BitDecompositionInstanceInfo<F>, code_spec: S) {
-        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec.clone()));
+        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec));
     }
 }
 
