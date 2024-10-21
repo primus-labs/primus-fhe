@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
+use super::ntt::BitsOrder;
 use super::ntt::NTTRecursiveProof;
 use super::rlwe_mul_rgsw::RlweEval;
 use super::rlwe_mul_rgsw::RlweMultRgswEval;
@@ -703,6 +704,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             &mut claimed_sum,
             &ntt_instance,
             &u,
+            BitsOrder::Normal,
         );
 
         // prove all sumcheck protocol into a large random sumcheck
@@ -710,8 +712,13 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // prove F(u, v) in a recursive manner
-        let recursive_proof =
-            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+        let recursive_proof = <NTTIOP<F>>::prove_recursion(
+            &mut trans,
+            &state.randomness,
+            &ntt_instance.info(),
+            &u,
+            BitsOrder::Normal,
+        );
 
         (
             SumcheckKit {
@@ -787,7 +794,14 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(
+            &mut trans,
+            recursive_proof,
+            &info.ntt_info,
+            &u,
+            &subclaim,
+            BitsOrder::Normal,
+        )
     }
     /// Prover Accumulator
     #[inline]
@@ -935,7 +949,8 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = AccumulatorIOP::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
+        let randomness_ntt =
+            <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
         AccumulatorIOP::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -951,6 +966,7 @@ where
             &mut claimed_sum,
             &ntt_instance,
             &prover_u,
+            BitsOrder::Normal,
         );
         let poly_info = sumcheck_poly.info();
         let ntt_instance_info = ntt_instance.info();
@@ -967,6 +983,7 @@ where
             &sumcheck_state.randomness,
             &ntt_instance_info,
             &prover_u,
+            BitsOrder::Normal,
         );
         iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
         let iop_prover_time = prover_start.elapsed().as_millis();
@@ -1073,6 +1090,7 @@ where
             &ntt_instance_info,
             &verifier_u,
             &subclaim,
+            BitsOrder::Normal,
         );
         assert!(check_recursive);
 
@@ -1175,6 +1193,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
             &mut claimed_sum,
             &ntt_instance,
             &u,
+            BitsOrder::Normal,
         );
 
         // prove all sumcheck protocol into a large random sumcheck
@@ -1182,8 +1201,13 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
             MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // prove F(u, v) in a recursive manner
-        let recursive_proof =
-            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+        let recursive_proof = <NTTIOP<F>>::prove_recursion(
+            &mut trans,
+            &state.randomness,
+            &ntt_instance.info(),
+            &u,
+            BitsOrder::Normal,
+        );
 
         (
             SumcheckKit {
@@ -1259,7 +1283,14 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(
+            &mut trans,
+            recursive_proof,
+            &info.ntt_info,
+            &u,
+            &subclaim,
+            BitsOrder::Normal,
+        )
     }
     /// Prover Accumulator
     #[inline]
@@ -1420,7 +1451,8 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = AccumulatorIOPPure::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
+        let randomness_ntt =
+            <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
         AccumulatorIOPPure::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1436,6 +1468,7 @@ where
             &mut claimed_sum,
             &ntt_instance,
             &prover_u,
+            BitsOrder::Normal,
         );
 
         let ntt_instance_info = ntt_instance.info();
@@ -1470,6 +1503,7 @@ where
             &sumcheck_state.randomness,
             &ntt_instance_info,
             &prover_u,
+            BitsOrder::Normal,
         );
 
         iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
@@ -1610,6 +1644,7 @@ where
             &ntt_instance_info,
             &verifier_u,
             &subclaim,
+            BitsOrder::Normal,
         );
         assert!(check_recursive);
 

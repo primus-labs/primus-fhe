@@ -10,7 +10,7 @@ use sha2::Sha256;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
-use zkp::piop::ntt::{BatchNTTInstance, NTTParams};
+use zkp::piop::ntt::{BatchNTTInstance, BitsOrder, NTTParams};
 use zkp::piop::ntt::{NTTProof, NTTProver, NTTVerifier};
 
 type FF = BabyBear;
@@ -138,7 +138,12 @@ fn main() {
     let mut prover_trans = Transcript::<EF>::default();
 
     let start = Instant::now();
-    let proof = ntt_prover.prove(&mut prover_trans, &params, &ntt_instances);
+    let proof = ntt_prover.prove(
+        &mut prover_trans,
+        &params,
+        &ntt_instances,
+        BitsOrder::Normal,
+    );
     println!("ntt proving time: {:?} ms", start.elapsed().as_millis());
 
     let proof_bytes = proof.to_bytes().unwrap();
@@ -157,7 +162,13 @@ fn main() {
     let proof = NTTProof::from_bytes(&proof_bytes).unwrap();
 
     let start = Instant::now();
-    let res = ntt_verifier.verify(&mut verifier_trans, &params, &ntt_instances.info(), &proof);
+    let res = ntt_verifier.verify(
+        &mut verifier_trans,
+        &params,
+        &ntt_instances.info(),
+        &proof,
+        BitsOrder::Normal,
+    );
 
     println!("ntt verifying time: {:?} ms", start.elapsed().as_millis());
     assert!(res);

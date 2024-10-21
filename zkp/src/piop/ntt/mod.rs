@@ -38,10 +38,10 @@ use algebra::{
     ListOfProductsOfPolynomials, PolynomialInfo,
 };
 use core::fmt;
-use std::time::Instant;
 use itertools::izip;
 use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
 use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 use bincode::Result;
@@ -49,8 +49,14 @@ use ntt_bare::NTTBareIOP;
 
 pub mod ntt_bare;
 
-/// SNARKs for NTT compiled with PCS
-pub struct NTTSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
+/// Types of bit order.
+#[derive(Debug, Clone, Copy)]
+pub enum BitsOrder {
+    /// The normal order.
+    Normal,
+    /// The reverse order.
+    Reverse,
+}
 
 /// Stores the NTT instance with the corresponding NTT table
 pub struct NTTInstance<F: Field> {
@@ -252,7 +258,11 @@ impl<F: Field> IntermediateMLEs<F> {
 ///
 /// * `u` - The random point
 /// * `ntt_table` - The NTT table: ω^0, ω^1, ..., ω^{2N - 1}
-pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> IntermediateMLEs<F> {
+pub fn init_fourier_table_overall<F: Field>(
+    u: &[F],
+    ntt_table: &[F],
+    bits_order: BitsOrder,
+) -> IntermediateMLEs<F> {
     let log_n = u.len(); // N = 1 << dim
     let m = ntt_table.len(); // M = 2N = 2 * (1 << dim)
 
@@ -272,39 +282,77 @@ pub fn init_fourier_table_overall<F: Field>(u: &[F], ntt_table: &[F]) -> Interme
     //
     // Note that the last term ω^{2^i * x_i} is indeed multiplied in the normal order, from x_0 to x_{log{n-1}}
     // since we actually iterate from the LSB to MSB  when updating the table from size 1, 2, 4, 8, ..., n in dynamic programming.
-    for i in (0..log_n).rev() {
-        // i starts from log_n - 1 and ends to 0
-        let this_round_dim = log_n - i;
-        let last_round_dim = this_round_dim - 1;
-        let this_round_table_size = 1 << this_round_dim;
-        let last_round_table_size = 1 << last_round_dim;
 
-        let mut evaluations_w_term = vec![F::zero(); this_round_table_size];
-        for x in (0..this_round_table_size).rev() {
-            // idx is to indicate the power ω^{2^{i + 1} * X} in ntt_table
-            let idx = (1 << (i + 1)) * x % m;
-            // the bit index in this iteration is last_round_dim = this_round_dim - 1
-            // If x >= last_round_table_size, meaning the bit = 1, we need to multiply by ω^{2^last_round_dim * 1}
-            if x >= last_round_table_size {
-                evaluations[x] = evaluations[x % last_round_table_size]
-                    * (F::one() - u[i] + u[i] * ntt_table[idx])
-                    * ntt_table[1 << last_round_dim];
+    match bits_order {
+        BitsOrder::Normal => {
+            for i in (0..log_n).rev() {
+                // i starts from log_n - 1 and ends to 0
+                let this_round_dim = log_n - i;
+                let last_round_dim = this_round_dim - 1;
+                let this_round_table_size = 1 << this_round_dim;
+                let last_round_table_size = 1 << last_round_dim;
+
+                let mut evaluations_w_term = vec![F::zero(); this_round_table_size];
+                for x in (0..this_round_table_size).rev() {
+                    // idx is to indicate the power ω^{2^{i + 1} * X} in ntt_table
+                    let idx = (1 << (i + 1)) * x % m;
+                    // the bit index in this iteration is last_round_dim = this_round_dim - 1
+                    // If x >= last_round_table_size, meaning the bit = 1, we need to multiply by ω^{2^last_round_dim * 1}
+                    if x >= last_round_table_size {
+                        evaluations[x] = evaluations[x % last_round_table_size]
+                            * (F::one() - u[i] + u[i] * ntt_table[idx])
+                            * ntt_table[1 << last_round_dim];
+                    }
+                    // the bit index in this iteration is last_round_dim = this_round_dim - 1
+                    // If x < last_round_table_size, meaning the bit = 0, we do not need to multiply because ω^{2^last_round_dim * 0} = 1
+                    else {
+                        evaluations[x] = evaluations[x % last_round_table_size]
+                            * (F::one() - u[i] + u[i] * ntt_table[idx]);
+                    }
+                    evaluations_w_term[x] = ntt_table[idx];
+                }
+                intermediate_mles.add_round_mles(
+                    this_round_dim,
+                    &evaluations[..this_round_table_size],
+                    evaluations_w_term,
+                );
             }
-            // the bit index in this iteration is last_round_dim = this_round_dim - 1
-            // If x < last_round_table_size, meaning the bit = 0, we do not need to multiply because ω^{2^last_round_dim * 0} = 1
-            else {
-                evaluations[x] = evaluations[x % last_round_table_size]
-                    * (F::one() - u[i] + u[i] * ntt_table[idx]);
-            }
-            evaluations_w_term[x] = ntt_table[idx];
         }
-        intermediate_mles.add_round_mles(
-            this_round_dim,
-            &evaluations[..this_round_table_size],
-            evaluations_w_term,
-        );
-    }
 
+        BitsOrder::Reverse => {
+            for (i, u_i) in u.iter().enumerate() {
+                // i starts from log_n - 1 and ends to 0
+                let this_round_dim = i + 1;
+                let last_round_dim = this_round_dim - 1;
+                let this_round_table_size = 1 << this_round_dim;
+                let last_round_table_size = 1 << last_round_dim;
+
+                let mut evaluations_w_term = vec![F::zero(); this_round_table_size];
+                for x in (0..this_round_table_size).rev() {
+                    let idx = (1 << (log_n - i)) * x % m;
+                    // the bit index in this iteration is last_round_dim = this_round_dim - 1
+                    // If x >= last_round_table_size, meaning the bit = 1, we need to multiply by ω^{2^last_round_dim * 1}
+                    if x >= last_round_table_size {
+                        evaluations[x] = evaluations[x % last_round_table_size]
+                            * (F::one() - *u_i + *u_i * ntt_table[idx])
+                            * ntt_table[1 << last_round_dim];
+                    }
+                    // the bit index in this iteration is last_round_dim = this_round_dim - 1
+                    // If x < last_round_table_size, meaning the bit = 0, we do not need to multiply because ω^{2^last_round_dim * 0} = 1
+                    else {
+                        evaluations[x] = evaluations[x % last_round_table_size]
+                            * (F::one() - *u_i + *u_i * ntt_table[idx]);
+                    }
+                    evaluations_w_term[x] = ntt_table[idx];
+                }
+                intermediate_mles.add_round_mles(
+                    this_round_dim,
+                    &evaluations[..this_round_table_size],
+                    evaluations_w_term,
+                );
+            }
+        }
+    }
     intermediate_mles
 }
 
@@ -328,6 +376,25 @@ pub fn naive_w_power_times_x_table<F: Field>(
     let mut evaluations: Vec<_> = (0..(1 << x_dim)).map(|_| F::one()).collect();
     for x in 0..(1 << x_dim) {
         evaluations[x] = ntt_table[(1 << exp) * x % m];
+    }
+    DenseMultilinearExtension::from_evaluations_vec(x_dim, evaluations)
+}
+
+/// This is for the reverse order.
+pub fn naive_w_power_times_x_table_reverse_order<F: Field>(
+    ntt_table: &[F],
+    log_m: usize,
+    x_dim: usize,
+    sub: usize,
+) -> DenseMultilinearExtension<F> {
+    let m = 1 << log_m; // M = 2N = 2 * (1 << dim)
+    assert_eq!(ntt_table.len(), m);
+    assert_eq!(sub, x_dim);
+
+    let mut evaluations: Vec<_> = (0..(1 << x_dim)).map(|_| F::one()).collect();
+    for x in 0..(1 << x_dim) {
+        // ! Modified Formula
+        evaluations[x] = ntt_table[(1 << (log_m - sub)) * x % m];
     }
     DenseMultilinearExtension::from_evaluations_vec(x_dim, evaluations)
 }
@@ -362,6 +429,27 @@ pub fn eval_w_power_times_x<F: Field>(
 
     for (i, &r_i) in r.iter().enumerate() {
         let log_exp = (exp + i) % log_m;
+        prod *= F::one() - r_i + r_i * ntt_table[1 << log_exp];
+    }
+
+    prod
+}
+
+/// This is for the reverse order.
+pub fn eval_w_power_times_x_reverse_order<F: Field>(
+    ntt_table: &[F],
+    log_m: usize,
+    x_dim: usize,
+    sub: usize,
+    r: &[F],
+) -> F {
+    assert_eq!(ntt_table.len(), 1 << log_m);
+    assert_eq!(x_dim, r.len());
+    assert_eq!(sub, x_dim);
+    let mut prod = F::one();
+
+    for (i, &r_i) in r.iter().enumerate() {
+        let log_exp = (log_m - sub + i) % log_m;
         prod *= F::one() - r_i + r_i * ntt_table[1 << log_exp];
     }
 
@@ -542,6 +630,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         &self,
         trans: &mut Transcript<F>,
         instance: &NTTInstance<F>,
+        bits_order: BitsOrder,
     ) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
 
@@ -554,14 +643,20 @@ impl<F: Field + Serialize> NTTIOP<F> {
             &mut claimed_sum,
             instance,
             &self.u,
+            bits_order,
         );
 
         let (proof, state) =
             MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // Prove F(u, v) in a recursive manner
-        let recursive_proof =
-            Self::prove_recursion(trans, &state.randomness, &instance.info(), &self.u);
+        let recursive_proof = Self::prove_recursion(
+            trans,
+            &state.randomness,
+            &instance.info(),
+            &self.u,
+            bits_order,
+        );
 
         (
             SumcheckKit {
@@ -584,6 +679,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         point_evals_at_u: F,
         info: &BatchNTTInstanceInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
+        bits_order: BitsOrder,
     ) -> (bool, Vec<F>) {
         // Just verify one NTT instance.
         let randomness = F::one();
@@ -608,10 +704,10 @@ impl<F: Field + Serialize> NTTIOP<F> {
             return (false, vec![]);
         }
 
-        (
-            Self::verify_recursion(trans, recursive_proof, info, &self.u, &subclaim),
-            subclaim.point,
-        )
+        let b =
+            Self::verify_recursion(trans, recursive_proof, info, &self.u, &subclaim, bits_order);
+
+        (b, subclaim.point)
     }
     /// The delegation of F(u, v) consists of logN - 1 rounds, each of which is a sumcheck protocol.
     ///
@@ -689,10 +785,11 @@ impl<F: Field + Serialize> NTTIOP<F> {
         ntt_bare_randomness: &[F],
         info: &BatchNTTInstanceInfo<F>,
         u: &[F],
+        bits_order: BitsOrder,
     ) -> NTTRecursiveProof<F> {
         let log_n = info.num_vars;
 
-        let intermediate_mles = init_fourier_table_overall(u, &info.ntt_table);
+        let intermediate_mles = init_fourier_table_overall(u, &info.ntt_table, bits_order);
         let (f_mles, w_mles) = (intermediate_mles.f_mles, intermediate_mles.w_mles);
 
         // 1. (detached) prove a(u) = \sum_{x\in \{0, 1\}^{\log N} c(x)\cdot F(u, x) } for a random point u
@@ -709,26 +806,52 @@ impl<F: Field + Serialize> NTTIOP<F> {
         // store the claimed sum of the sumcheck protocol in each round
         let mut delegation_claimed_sums = Vec::with_capacity(log_n - 1);
         for k in (1..log_n).rev() {
-            // start form log_n - 1;
-            let i = log_n - 1 - k;
-            delegation_claimed_sums.push(reduced_claim);
+            match bits_order {
+                BitsOrder::Normal => {
+                    // start form log_n - 1;
+                    let i = log_n - 1 - k;
+                    delegation_claimed_sums.push(reduced_claim);
 
-            let w_coeff = info.ntt_table[1 << k];
-            let f = &f_mles[k - 1];
-            let (proof_round, state_round) = Self::prove_recursion_round(
-                trans,
-                k,
-                &requested_point,
-                u[i],
-                w_coeff,
-                f,
-                &w_mles[k],
-            );
-            delegation_sumcheck_msgs.push(proof_round);
+                    let w_coeff = info.ntt_table[1 << k];
+                    let f = &f_mles[k - 1];
+                    let (proof_round, state_round) = Self::prove_recursion_round(
+                        trans,
+                        k,
+                        &requested_point,
+                        u[i],
+                        w_coeff,
+                        f,
+                        &w_mles[k],
+                    );
+                    delegation_sumcheck_msgs.push(proof_round);
 
-            // the requested point returned from this round of sumcheck protocol, which initiates the claimed sum of the next round
-            requested_point = state_round.randomness;
-            reduced_claim = f.evaluate(&requested_point);
+                    // the requested point returned from this round of sumcheck protocol, which initiates the claimed sum of the next round
+                    requested_point = state_round.randomness;
+                    reduced_claim = f.evaluate(&requested_point);
+                }
+
+                BitsOrder::Reverse => {
+                    delegation_claimed_sums.push(reduced_claim);
+
+                    let w_coeff = info.ntt_table[1 << k];
+                    let f = &f_mles[k - 1];
+                    let (proof_round, state_round) = Self::prove_recursion_round(
+                        trans,
+                        k,
+                        &requested_point,
+                        u[k],
+                        w_coeff,
+                        f,
+                        &w_mles[k],
+                    );
+
+                    delegation_sumcheck_msgs.push(proof_round);
+
+                    // the requested point returned from this round of sumcheck protocol, which initiates the claimed sum of the next round
+                    requested_point = state_round.randomness;
+                    reduced_claim = f.evaluate(&requested_point);
+                }
+            }
         }
 
         NTTRecursiveProof {
@@ -765,6 +888,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         subclaim: &SubClaim<F>,
         reduced_claim: F,
         ntt_instance_info: &BatchNTTInstanceInfo<F>,
+        bits_order: BitsOrder,
     ) -> bool {
         let log_n = ntt_instance_info.num_vars;
         let ntt_table = &ntt_instance_info.ntt_table;
@@ -777,22 +901,55 @@ impl<F: Field + Serialize> NTTIOP<F> {
         r_left.push(F::zero());
         r_right.push(F::one());
 
-        // compute $\ω^{(k)}_{i+1}(x,b ) = \ω^{2^{i+1}\cdot j}$ for $j = X+2^{i+1}\cdot b$ at point (r, 0) and (r, 1)
-        // exp: i + 1 = n - k
-        let exp = log_n - round;
-        // w_left = \tilde{ω}^{(k)}_{i+1}(r, 0) and w_right = \tilde{ω}^{(k)}_{i+1}(r, 0)
-        let w_left = eval_w_power_times_x(ntt_table, log_n + 1, round + 1, exp, &r_left);
-        let w_right = eval_w_power_times_x(ntt_table, log_n + 1, round + 1, exp, &r_right);
+        match bits_order {
+            BitsOrder::Normal => {
+                // compute $\ω^{(k)}_{i+1}(x,b ) = \ω^{2^{i+1}\cdot j}$ for $j = X+2^{i+1}\cdot b$ at point (r, 0) and (r, 1)
+                // exp: i + 1 = n - k
+                let exp = log_n - round;
+                // w_left = \tilde{ω}^{(k)}_{i+1}(r, 0) and w_right = \tilde{ω}^{(k)}_{i+1}(r, 0)
+                let w_left = eval_w_power_times_x(ntt_table, log_n + 1, round + 1, exp, &r_left);
+                let w_right = eval_w_power_times_x(ntt_table, log_n + 1, round + 1, exp, &r_right);
 
-        let eval = eval_identity_function(x_b_point, &r_left)
-            * reduced_claim
-            * (F::one() - u_i + u_i * w_left)
-            + eval_identity_function(x_b_point, &r_right)
-                * reduced_claim
-                * (F::one() - u_i + u_i * w_right)
-                * ntt_table[1 << round];
+                let eval = eval_identity_function(x_b_point, &r_left)
+                    * reduced_claim
+                    * (F::one() - u_i + u_i * w_left)
+                    + eval_identity_function(x_b_point, &r_right)
+                        * reduced_claim
+                        * (F::one() - u_i + u_i * w_right)
+                        * ntt_table[1 << round];
 
-        eval == subclaim.expected_evaluations
+                eval == subclaim.expected_evaluations
+            }
+            BitsOrder::Reverse => {
+                // compute $\ω^{(k)}_{i+1}(x,b ) = \ω^{2^{i+1}\cdot j}$ for $j = X+2^{i+1}\cdot b$ at point (r, 0) and (r, 1)
+                let sub = round + 1;
+                // w_left = \tilde{ω}^{(k)}_{i+1}(r, 0) and w_right = \tilde{ω}^{(k)}_{i+1}(r, 0)
+                let w_left = eval_w_power_times_x_reverse_order(
+                    ntt_table,
+                    log_n + 1,
+                    round + 1,
+                    sub,
+                    &r_left,
+                );
+                let w_right = eval_w_power_times_x_reverse_order(
+                    ntt_table,
+                    log_n + 1,
+                    round + 1,
+                    sub,
+                    &r_right,
+                );
+
+                let eval = eval_identity_function(x_b_point, &r_left)
+                    * reduced_claim
+                    * (F::one() - u_i + u_i * w_left)
+                    + eval_identity_function(x_b_point, &r_right)
+                        * reduced_claim
+                        * (F::one() - u_i + u_i * w_right)
+                        * ntt_table[1 << round];
+
+                eval == subclaim.expected_evaluations
+            }
+        }
     }
 
     /// Compared to the `prove` functionality, we remove the phase to prove NTT bare.
@@ -803,6 +960,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         info: &BatchNTTInstanceInfo<F>,
         u: &[F],
         subclaim: &SubClaim<F>,
+        bits_order: BitsOrder,
     ) -> bool {
         let log_n = info.num_vars;
         assert_eq!(proof.delegation_sumcheck_msgs.len(), log_n - 1);
@@ -814,7 +972,10 @@ impl<F: Field + Serialize> NTTIOP<F> {
         // 2. verify the computation of F(u, v) in log_n - 1 rounds
         let mut requested_point = subclaim.point.clone();
         for (cnt, k) in (1..log_n).rev().enumerate() {
-            let i = log_n - 1 - k;
+            let i = match bits_order {
+                BitsOrder::Normal => log_n - 1 - k,
+                _ => 0,
+            };
 
             // verify the proof of the sumcheck protocol
             let poly_info = PolynomialInfo {
@@ -838,17 +999,36 @@ impl<F: Field + Serialize> NTTIOP<F> {
                 proof.final_claim
             };
             // check the equality
-            if !Self::verify_recursion_round(
-                k,
-                &requested_point,
-                u[i],
-                &subclaim,
-                reduced_claim,
-                info,
-            ) {
-                panic!("ntt verification failed in round {cnt}");
+            match bits_order {
+                BitsOrder::Normal => {
+                    if !Self::verify_recursion_round(
+                        k,
+                        &requested_point,
+                        u[i],
+                        &subclaim,
+                        reduced_claim,
+                        info,
+                        BitsOrder::Normal,
+                    ) {
+                        panic!("ntt verification failed in round {cnt}");
+                    }
+                    requested_point = subclaim.point;
+                }
+                BitsOrder::Reverse => {
+                    if !Self::verify_recursion_round(
+                        k,
+                        &requested_point,
+                        u[k],
+                        &subclaim,
+                        reduced_claim,
+                        info,
+                        BitsOrder::Reverse,
+                    ) {
+                        panic!("ntt verification failed in round {cnt}");
+                    }
+                    requested_point = subclaim.point;
+                }
             }
-            requested_point = subclaim.point;
         }
 
         let delegation_final_claim = proof.final_claim;
@@ -858,11 +1038,22 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
         // check the final claim returned from the last round of delegation
         let idx = 1 << (info.num_vars);
-        let eval = eval_identity_function(&final_point, &[F::zero()])
-            + eval_identity_function(&final_point, &[F::one()])
-                * (F::one() - u[info.num_vars - 1] + u[info.num_vars - 1] * info.ntt_table[idx])
-                * info.ntt_table[1];
-
+        let eval = match bits_order {
+            BitsOrder::Normal => {
+                eval_identity_function(&final_point, &[F::zero()])
+                    + eval_identity_function(&final_point, &[F::one()])
+                        * (F::one() - u[info.num_vars - 1]
+                            + u[info.num_vars - 1] * info.ntt_table[idx])
+                        * info.ntt_table[1]
+            }
+            BitsOrder::Reverse => {
+                eval_identity_function(&final_point, &[F::zero()])
+                    + eval_identity_function(&final_point, &[F::one()])
+                        * (F::one() - u[0] + u[0] * info.ntt_table[idx])
+                        * info.ntt_table[1]
+            }
+        };
+        
         delegation_final_claim == eval
     }
 }
@@ -995,6 +1186,7 @@ where
         trans: &mut Transcript<EF>,
         params: &NTTParams<F, EF, S, Pcs>,
         instance: &BatchNTTInstance<F>,
+        bits_order: BitsOrder,
     ) -> NTTProof<F, EF, S, Pcs> {
         let instance_info = instance.info();
 
@@ -1018,7 +1210,7 @@ where
 
         // Prove sumcheck protocol
         let start = Instant::now();
-        let (kit, recursive_proof) = iop.prove(trans, &target_ntt_instance);
+        let (kit, recursive_proof) = iop.prove(trans, &target_ntt_instance, bits_order);
         println!("iop prove time: {:?} ms", start.elapsed().as_millis());
 
         // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol.
@@ -1126,6 +1318,7 @@ where
         params: &NTTParams<F, EF, S, Pcs>,
         info: &BatchNTTInstanceInfo<F>,
         proof: &NTTProof<F, EF, S, Pcs>,
+        bits_order: BitsOrder,
     ) -> bool {
         let mut res = true;
 
@@ -1163,9 +1356,11 @@ where
             evals_at_u,
             &info.to_ef(),
             &proof.recursive_proof,
+            bits_order,
         );
 
         res &= b;
+        println!("iop verify: {:}", res);
 
         // Check the relation between these small oracles and the committed oracle.
         let oracle_randomness = trans.get_vec_challenge(
@@ -1215,7 +1410,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::piop::ntt::{eval_w_power_times_x, naive_w_power_times_x_table};
+    use crate::piop::ntt::{eval_w_power_times_x, naive_w_power_times_x_table, BitsOrder};
     use algebra::{
         derive::{DecomposableField, FheField, Field, Prime, NTT},
         DenseMultilinearExtension, FieldUniformSampler, NTTField,
@@ -1268,7 +1463,8 @@ mod test {
         }
 
         let fourier_mle = DenseMultilinearExtension::from_evaluations_vec(dim << 1, fourier_matrix);
-        let partial_fourier_mle = &init_fourier_table_overall(&u, &ntt_table).f_mles[dim - 1];
+        let partial_fourier_mle =
+            &init_fourier_table_overall(&u, &ntt_table, BitsOrder::Normal).f_mles[dim - 1];
 
         assert_eq!(fourier_mle.evaluate(&u_v), partial_fourier_mle.evaluate(&v));
     }

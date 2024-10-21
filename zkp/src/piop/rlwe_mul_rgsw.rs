@@ -24,6 +24,7 @@
 //!
 //! Hence, there are 2k + 2 NTT instances in this single multiplication instance. We can randomize all these 2k+2 NTT instances to obtain a single NTT instance,
 //! and use our NTT IOP to prove this randomized NTT instance.
+use super::ntt::BitsOrder;
 use super::ntt::NTTRecursiveProof;
 use super::LookupInstance;
 use super::NTTBareIOP;
@@ -756,6 +757,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
             &mut claimed_sum,
             &ntt_instance,
             &u,
+            BitsOrder::Normal,
         );
 
         // prove all sumcheck protocol into a large random sumcheck
@@ -763,8 +765,13 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
             MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // prove F(u, v) in a recursive manner
-        let recursive_proof =
-            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+        let recursive_proof = <NTTIOP<F>>::prove_recursion(
+            &mut trans,
+            &state.randomness,
+            &ntt_instance.info(),
+            &u,
+            BitsOrder::Normal,
+        );
 
         (
             SumcheckKit {
@@ -899,7 +906,14 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(
+            &mut trans,
+            recursive_proof,
+            &info.ntt_info,
+            &u,
+            &subclaim,
+            BitsOrder::Normal,
+        )
     }
 
     /// Verify RLWE * RGSW with leaving NTT part outside of the interface
@@ -1000,7 +1014,8 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = RlweMultRgswIOP::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
+        let randomness_ntt =
+            <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
         RlweMultRgswIOP::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1016,6 +1031,7 @@ where
             &mut claimed_sum,
             &ntt_instance,
             &prover_u,
+            BitsOrder::Normal,
         );
         let poly_info = sumcheck_poly.info();
         let ntt_instance_info = ntt_instance.info();
@@ -1032,6 +1048,7 @@ where
             &sumcheck_state.randomness,
             &ntt_instance_info,
             &prover_u,
+            BitsOrder::Normal,
         );
         iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
         let iop_prover_time = prover_start.elapsed().as_millis();
@@ -1141,6 +1158,7 @@ where
             &ntt_instance_info,
             &verifier_u,
             &subclaim,
+            BitsOrder::Normal,
         );
         assert!(check_recursive);
 
@@ -1239,6 +1257,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
             &mut claimed_sum,
             &ntt_instance,
             &u,
+            BitsOrder::Normal,
         );
 
         // prove all sumcheck protocol into a large random sumcheck
@@ -1246,8 +1265,13 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
             MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // prove F(u, v) in a recursive manner
-        let recursive_proof =
-            <NTTIOP<F>>::prove_recursion(&mut trans, &state.randomness, &ntt_instance.info(), &u);
+        let recursive_proof = <NTTIOP<F>>::prove_recursion(
+            &mut trans,
+            &state.randomness,
+            &ntt_instance.info(),
+            &u,
+            BitsOrder::Normal,
+        );
 
         (
             SumcheckKit {
@@ -1383,7 +1407,14 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
             return false;
         }
-        <NTTIOP<F>>::verify_recursion(&mut trans, recursive_proof, &info.ntt_info, &u, &subclaim)
+        <NTTIOP<F>>::verify_recursion(
+            &mut trans,
+            recursive_proof,
+            &info.ntt_info,
+            &u,
+            &subclaim,
+            BitsOrder::Normal,
+        )
     }
 
     /// Verify RLWE * RGSW with leaving NTT part outside of the interface
@@ -1492,7 +1523,8 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = RlweMultRgswIOPPure::sample_coins(&mut prover_trans);
-        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
+        let randomness_ntt =
+            <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
         RlweMultRgswIOPPure::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1508,6 +1540,7 @@ where
             &mut claimed_sum,
             &ntt_instance,
             &prover_u,
+            BitsOrder::Normal,
         );
         let ntt_instance_info = ntt_instance.info();
 
@@ -1537,6 +1570,7 @@ where
             &sumcheck_state.randomness,
             &ntt_instance_info,
             &prover_u,
+            BitsOrder::Normal,
         );
         iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
         let iop_prover_time = prover_start.elapsed().as_millis();
@@ -1675,6 +1709,7 @@ where
             &ntt_instance_info,
             &verifier_u,
             &subclaim,
+            BitsOrder::Normal,
         );
         assert!(check_recursive);
 

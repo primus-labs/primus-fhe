@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 use zkp::piop::ntt::ntt_bare::init_fourier_table;
-use zkp::piop::ntt::{BatchNTTInstance, NTTParams, NTTProof, NTTProver, NTTVerifier};
+use zkp::piop::ntt::{BatchNTTInstance, BitsOrder, NTTParams, NTTProof, NTTProver, NTTVerifier};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
 
 // field type
@@ -86,6 +86,14 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
     sort_array_with_reversed_bits(&ntt_form, log_n)
 }
 
+/// Invoke the existing api to perform ntt transform.
+/// The input is in normal order and the output is in the bit-reversed order
+fn ntt_transform_reverse_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> Vec<F> {
+    assert_eq!(coeff.len(), (1 << log_n) as usize);
+    let poly = <Polynomial<F>>::from_slice(coeff);
+    F::get_ntt_table(log_n).unwrap().transform(&poly).data()
+}
+
 /// Invoke the existing api to perform ntt inverse transform and convert the bit-reversed order to normal order
 /// In other words, the orders of input and output are both normal order.
 fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &[F]) -> Vec<F> {
@@ -134,15 +142,25 @@ fn generate_single_instance<R: Rng + CryptoRng>(
     instances: &mut BatchNTTInstance<FF>,
     log_n: usize,
     rng: &mut R,
+    bits_order: BitsOrder,
 ) {
     let coeff = PolyFF::random(1 << log_n, rng).data();
-    let point = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        log_n,
-        ntt_transform_normal_order(log_n as u32, &coeff)
-            .iter()
-            .map(|x| FF::new(x.value()))
-            .collect(),
-    ));
+    let point = match bits_order {
+        BitsOrder::Normal => Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            log_n,
+            ntt_transform_normal_order(log_n as u32, &coeff)
+                .iter()
+                .map(|x| FF::new(x.value()))
+                .collect(),
+        )),
+        BitsOrder::Reverse => Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            log_n,
+            ntt_transform_reverse_order(log_n as u32, &coeff)
+                .iter()
+                .map(|x| FF::new(x.value()))
+                .collect(),
+        )),
+    };
     let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         log_n,
         coeff.iter().map(|x| FF::new(x.value())).collect(),
@@ -216,7 +234,7 @@ fn test_ntt_bare_without_delegation() {
     let mut ntt_iop = NTTBareIOP::default();
     let mut prover_trans = Transcript::<FF>::new();
     ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
-    let kit = ntt_iop.prove(&mut prover_trans, &ntt_instance);
+    let kit = ntt_iop.prove(&mut prover_trans, &ntt_instance, BitsOrder::Normal);
     let evals_at_u = ntt_instance.points.evaluate(&kit.u);
     let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
 
@@ -237,6 +255,7 @@ fn test_ntt_bare_without_delegation() {
         evals_at_r,
         evals_at_u,
         &ntt_instance_info,
+        BitsOrder::Normal,
     );
     assert!(check);
 }
@@ -273,7 +292,7 @@ fn test_ntt_bare_without_delegation_extension_field() {
     let mut prover_trans = Transcript::<EF>::new();
     ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
 
-    let kit = ntt_iop.prove(&mut prover_trans, &instance_ef);
+    let kit = ntt_iop.prove(&mut prover_trans, &instance_ef, BitsOrder::Normal);
     let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
     let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
 
@@ -288,6 +307,7 @@ fn test_ntt_bare_without_delegation_extension_field() {
         evals_at_r,
         evals_at_u,
         &ntt_instance_info,
+        BitsOrder::Normal,
     );
     assert!(check);
 }
@@ -321,7 +341,7 @@ fn test_ntt_with_delegation() {
     let mut prover_trans = Transcript::<FF>::new();
     ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info.to_clean());
 
-    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &ntt_instance);
+    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &ntt_instance, BitsOrder::Normal);
     let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
     let evals_at_u = ntt_instance.points.evaluate(&kit.u);
 
@@ -336,6 +356,7 @@ fn test_ntt_with_delegation() {
         evals_at_u,
         &ntt_instance_info,
         &recursive_proof,
+        BitsOrder::Normal,
     );
     assert!(check);
 }
@@ -372,7 +393,7 @@ fn test_ntt_with_delegation_extension_field() {
     let mut prover_trans = Transcript::<EF>::new();
     ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info.to_clean());
 
-    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &instance_ef);
+    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &instance_ef, BitsOrder::Normal);
 
     let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
     let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
@@ -388,12 +409,12 @@ fn test_ntt_with_delegation_extension_field() {
         evals_at_u,
         &ntt_instance_info,
         &recursive_proof,
+        BitsOrder::Normal,
     );
     assert!(check);
 }
 
-#[test]
-fn test_ntt_snark() {
+fn ntt_snark(bits_order: BitsOrder) {
     let num_vars = 10;
     let num_ntt = 5;
     let log_n: usize = num_vars;
@@ -412,7 +433,7 @@ fn test_ntt_snark() {
 
     let mut ntt_instances = <BatchNTTInstance<FF>>::new(num_vars, &ntt_table);
     for _ in 0..num_ntt {
-        generate_single_instance(&mut ntt_instances, log_n, &mut rng);
+        generate_single_instance(&mut ntt_instances, log_n, &mut rng, bits_order);
     }
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
@@ -436,7 +457,12 @@ fn test_ntt_snark() {
 
     let mut prover_trans = Transcript::<EF>::default();
 
-    let proof = ntt_prover.prove(&mut prover_trans, &params, &ntt_instances);
+    let proof = ntt_prover.prove(
+        &mut prover_trans,
+        &params,
+        &ntt_instances,
+        bits_order,
+    );
 
     let proof_bytes = proof.to_bytes().unwrap();
 
@@ -452,7 +478,19 @@ fn test_ntt_snark() {
 
     let proof = NTTProof::from_bytes(&proof_bytes).unwrap();
 
-    let res = ntt_verifier.verify(&mut verifier_trans, &params, &ntt_instances.info(), &proof);
+    let res = ntt_verifier.verify(
+        &mut verifier_trans,
+        &params,
+        &ntt_instances.info(),
+        &proof,
+        bits_order,
+    );
 
     assert!(res);
+}
+
+#[test]
+fn test_ntt_snarks() {
+    ntt_snark(BitsOrder::Normal);
+    ntt_snark(BitsOrder::Reverse);
 }
