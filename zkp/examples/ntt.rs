@@ -1,14 +1,17 @@
+use algebra::utils::Transcript;
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use algebra::{BabyBear, BabyBearExetension};
 use algebra::{DecomposableField, DenseMultilinearExtension, Field};
 use num_traits::One;
+use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::sync::Arc;
-use zkp::piop::ntt::BatchNTTInstance;
-use zkp::piop::ntt::NTTSnarks;
+use std::time::Instant;
+use zkp::piop::ntt::{BatchNTTInstance, NTTParams};
+use zkp::piop::ntt::{NTTProof, NTTProver, NTTVerifier};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -113,8 +116,49 @@ fn main() {
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
-    <NTTSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &ntt_instances,
-        &code_spec,
-    );
+    // Parameters.
+    let mut params = NTTParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let start = Instant::now();
+    params.setup(&ntt_instances.info(), code_spec);
+    println!("ntt setup time: {:?} ms", start.elapsed().as_millis());
+
+    // Prover.
+    let ntt_prover = NTTProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let start = Instant::now();
+    let proof = ntt_prover.prove(&mut prover_trans, &params, &ntt_instances);
+    println!("ntt proving time: {:?} ms", start.elapsed().as_millis());
+
+    let proof_bytes = proof.to_bytes().unwrap();
+    println!("ntt proof size: {:?} byts", proof_bytes.len());
+
+    // Verifier.
+    let ntt_verifier = NTTVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let start = Instant::now();
+    let proof = NTTProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = ntt_verifier.verify(&mut verifier_trans, &params, &ntt_instances.info(), &proof);
+
+    println!("ntt verifying time: {:?} ms", start.elapsed().as_millis());
+    assert!(res);
 }

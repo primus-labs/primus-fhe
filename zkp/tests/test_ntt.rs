@@ -5,6 +5,7 @@ use algebra::{
     NTTPolynomial,
 };
 use num_traits::{One, Zero};
+use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
@@ -12,7 +13,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
 use zkp::piop::ntt::ntt_bare::init_fourier_table;
-use zkp::piop::ntt::{BatchNTTInstance, NTTSnarks};
+use zkp::piop::ntt::{BatchNTTInstance, NTTParams, NTTProof, NTTProver, NTTVerifier};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
 
 // field type
@@ -328,7 +329,7 @@ fn test_ntt_with_delegation() {
     let mut ntt_iop = NTTIOP::default();
     let mut verifier_trans = Transcript::<FF>::new();
     ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
-    let check = ntt_iop.verify(
+    let (check, _) = ntt_iop.verify(
         &mut verifier_trans,
         &mut wrapper,
         evals_at_r,
@@ -380,7 +381,7 @@ fn test_ntt_with_delegation_extension_field() {
     let mut ntt_iop = NTTIOP::default();
     let mut verifier_trans = Transcript::<EF>::new();
     ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
-    let check = ntt_iop.verify(
+    let (check, _) = ntt_iop.verify(
         &mut verifier_trans,
         &mut wrapper,
         evals_at_r,
@@ -392,7 +393,7 @@ fn test_ntt_with_delegation_extension_field() {
 }
 
 #[test]
-fn test_snarks() {
+fn test_ntt_snark() {
     let num_vars = 10;
     let num_ntt = 5;
     let log_n: usize = num_vars;
@@ -416,8 +417,42 @@ fn test_snarks() {
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
-    <NTTSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &ntt_instances,
-        &code_spec,
-    );
+    // Parameters.
+    let mut params = NTTParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&ntt_instances.info(), code_spec);
+
+    // Prover.
+    let ntt_prover = NTTProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let proof = ntt_prover.prove(&mut prover_trans, &params, &ntt_instances);
+
+    let proof_bytes = proof.to_bytes().unwrap();
+
+    // Verifier.
+    let ntt_verifier = NTTVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = NTTProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = ntt_verifier.verify(&mut verifier_trans, &params, &ntt_instances.info(), &proof);
+
+    assert!(res);
 }

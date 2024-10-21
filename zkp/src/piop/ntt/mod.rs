@@ -32,23 +32,16 @@
 
 use crate::sumcheck::{self, ProofWrapper, SumcheckKit};
 use crate::sumcheck::{prover::ProverState, verifier::SubClaim, MLSumcheck, Proof};
-use crate::utils::{
-    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
-};
+use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
     ListOfProductsOfPolynomials, PolynomialInfo,
 };
 use core::fmt;
 use itertools::izip;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{LinearCode, LinearCodeSpec},
-    utils::hash::Hash,
-    PolynomialCommitmentScheme,
-};
+use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, rc::Rc, sync::Arc, time::Instant};
+use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 use bincode::Result;
 use ntt_bare::NTTBareIOP;
@@ -137,6 +130,16 @@ pub struct BatchNTTInstanceInfo<F: Field> {
     pub ntt_table: Arc<Vec<F>>,
 }
 
+/// Stores the information to be hashed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BatchNTTInstanceInfoClean {
+    /// number of instances randomized into this NTT instance
+    pub num_ntt: usize,
+    /// log_n is the number of the variables
+    /// the degree of the polynomial is N - 1
+    pub num_vars: usize,
+}
+
 impl<F: Field> fmt::Display for BatchNTTInstanceInfo<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -148,6 +151,14 @@ impl<F: Field> fmt::Display for BatchNTTInstanceInfo<F> {
 }
 
 impl<F: Field> BatchNTTInstanceInfo<F> {
+    /// Return the clean info.
+    #[inline]
+    pub fn to_clean(&self) -> BatchNTTInstanceInfoClean {
+        BatchNTTInstanceInfoClean {
+            num_ntt: self.num_ntt,
+            num_vars: self.num_vars,
+        }
+    }
     /// Return the number of coefficient / point oracles
     #[inline]
     pub fn num_oracles(&self) -> usize {
@@ -490,6 +501,8 @@ impl<F: Field> BatchNTTInstance<F> {
 /// IOP for NTT
 #[derive(Default)]
 pub struct NTTIOP<F: Field> {
+    /// The randomness to combine all the NTT instances.
+    pub rlc_randomness: Vec<F>,
     /// The random value for initiating sumcheck.
     pub u: Vec<F>,
 }
@@ -519,6 +532,8 @@ impl<F: Field + Serialize> NTTIOP<F> {
             b"NTT IOP: random point used to instantiate sumcheck protocol",
             info.num_vars,
         );
+
+        self.rlc_randomness = Self::sample_coins(trans, info);
     }
 
     /// Prove NTT instance with delegation
@@ -568,7 +583,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         point_evals_at_u: F,
         info: &BatchNTTInstanceInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
-    ) -> bool {
+    ) -> (bool, Vec<F>) {
         // Just verify one NTT instance.
         let randomness = F::one();
 
@@ -585,14 +600,17 @@ impl<F: Field + Serialize> NTTIOP<F> {
             point_evals_at_u,
             f_delegation,
         ) {
-            return false;
+            return (false, vec![]);
         }
 
         if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
-            return false;
+            return (false, vec![]);
         }
 
-        Self::verify_recursion(trans, recursive_proof, info, &self.u, &subclaim)
+        (
+            Self::verify_recursion(trans, recursive_proof, info, &self.u, &subclaim),
+            subclaim.point,
+        )
     }
     /// The delegation of F(u, v) consists of logN - 1 rounds, each of which is a sumcheck protocol.
     ///
@@ -860,17 +878,17 @@ pub struct NTTProof<
     pub poly_info: PolynomialInfo,
     /// Polynomial commitment.
     pub poly_comm: Pcs::Commitment,
-    /// The evaluation of the polynomial of coefficient.
+    /// The evaluation of the polynomial of coefficient on a random point.
     pub coeff_oracle_eval: EF,
-    /// The opening proof of the polynomial of coefficient.
+    /// The opening proof of the above evaluation of the coefficient polynomial.
     pub coeff_eval_proof: Pcs::Proof,
-    /// The coefficient eval.
+    /// The coefficient evaluations of each NTT instance on the random point.
     pub coeff_eval: Vec<EF>,
     /// The evaluation of the polynomial of point.
     pub point_oracle_eval: EF,
-    /// The opening proof of the polynomial of point.
+    /// The opening proof of the above evaluation of the point polynomial.
     pub point_eval_proof: Pcs::Proof,
-    /// The point eval.
+    /// The point evaluations of each NTT instance on the random point.
     pub point_eval: Vec<EF>,
     /// The sumcheck proof.
     pub sumcheck_proof: sumcheck::Proof<EF>,
@@ -971,7 +989,7 @@ where
         PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
 {
     /// The prover.
-    pub fn prover(
+    pub fn prove(
         &self,
         trans: &mut Transcript<EF>,
         params: &NTTParams<F, EF, S, Pcs>,
@@ -979,6 +997,7 @@ where
     ) -> NTTProof<F, EF, S, Pcs> {
         let instance_info = instance.info();
 
+        trans.append_message(b"ntt instance", &instance_info.to_clean());
         // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
         let committed_poly = instance.generate_oracle();
 
@@ -987,103 +1006,36 @@ where
 
         trans.append_message(b"NTT IOP: polynomial commitment", &poly_comm);
 
-        
-        todo!()
-    }
-}
-impl<F, EF> NTTSnarks<F, EF>
-where
-    F: Field + Serialize + for<'de> Deserialize<'de>,
-    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
-{
-    /// Generate and check snarks
-    pub fn snarks<H, C, S>(instance: &BatchNTTInstance<F>, code_spec: &S)
-    where
-        H: Hash + Sync + Send,
-        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
-        S: LinearCodeSpec<F, Code = C> + Clone,
-    {
-        let instance_info = instance.info();
-        println!("Prove {instance_info}\n");
-        // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
-        let committed_poly = instance.generate_oracle();
+        // Generate the randomness for the sumcheck protocol.
+        let mut iop = NTTIOP::default();
+        iop.generate_randomness(trans, &instance_info.to_ef());
 
-        // 1. Use PCS to commit the above polynomial.
-        let start = Instant::now();
-        let pp =
-            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
-        let setup_time = start.elapsed().as_millis();
+        // Extract the target ntt instance, note that it is define over EF.
+        let target_ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&iop.rlc_randomness);
 
-        let start = Instant::now();
-        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
-        let commit_time = start.elapsed().as_millis();
+        // Prove sumcheck protocol
+        let (kit, recursive_proof) = iop.prove(trans, &target_ntt_instance);
 
-        // 2. Prover generates the proof
-        let prover_start = Instant::now();
-        let mut iop_proof_size = 0;
-        let mut prover_trans = Transcript::<EF>::new();
+        // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol.
+        let eq_at_r = gen_identity_evaluations(&kit.randomness);
+        let eq_at_u = gen_identity_evaluations(&iop.u);
 
-        // 2.1 Generate the random point to instantiate the sumcheck protocol
-        let prover_u = prover_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-
-        // 2.? [one more step] Prover generate the random ntt instance from all instances to be proved
-        let prover_r = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.to_ef());
-        let instance_ef = instance.extract_ntt_instance_to_ef::<EF>(&prover_r);
-        let instance_ef_info = instance_ef.info();
-
-        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-        let mut sumcheck_poly = <ListOfProductsOfPolynomials<EF>>::new(instance.num_vars);
-        let mut claimed_sum = EF::zero();
-        <NTTBareIOP<EF>>::prepare_products_of_polynomial(
-            EF::one(),
-            &mut sumcheck_poly,
-            &mut claimed_sum,
-            &instance_ef,
-            &prover_u,
-        );
-
-        let poly_info = sumcheck_poly.info();
-
-        // 2.3 Generate proof of sumcheck protocol
-        let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Addition In Zq");
-        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
-
-        // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
-            &mut prover_trans,
-            &sumcheck_state.randomness,
-            &instance_ef_info,
-            &prover_u,
-        );
-        iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
-        let iop_prover_time = prover_start.elapsed().as_millis();
-
-        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let eq_at_r = gen_identity_evaluations(&sumcheck_state.randomness);
-        let eq_at_u = gen_identity_evaluations(&prover_u);
         let coeff_evals_at_r = instance
             .coeffs
             .iter()
-            // .map(|x| x.evaluate_ext(&sumcheck_state.randomness))
             .map(|x| x.evaluate_ext_opt(&eq_at_r))
             .collect::<Vec<_>>();
         let point_evals_at_u = instance
             .points
             .iter()
-            // .map(|x| x.evaluate_ext(&prover_u))
             .map(|x| x.evaluate_ext_opt(&eq_at_u))
             .collect::<Vec<_>>();
 
-        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        let mut coeff_requested_point = sumcheck_state.randomness.clone();
-        let mut point_requested_point = prover_u.clone();
-        let oracle_randomness = prover_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
+        // Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut coeff_requested_point = kit.randomness.clone();
+        let mut point_requested_point = iop.u.clone();
+        let oracle_randomness = trans.get_vec_challenge(
+            b"NTT: random linear combination for evaluations of oracles",
             instance_info.log_num_oracles(),
         );
         coeff_requested_point.extend(&oracle_randomness);
@@ -1091,143 +1043,168 @@ where
         coeff_requested_point.push(EF::zero());
         point_requested_point.push(EF::one());
 
-        let oracle_coeff_eval = committed_poly.evaluate_ext(&coeff_requested_point);
-        let oracle_point_eval = committed_poly.evaluate_ext(&point_requested_point);
+        let coeff_oracle_eval = committed_poly.evaluate_ext(&coeff_requested_point);
+        let point_oracle_eval = committed_poly.evaluate_ext(&point_requested_point);
 
-        // 2.6 Generate the evaluation proof of the requested points
-        let start = Instant::now();
-        // requested point [sumcheck_r, oracle_r, 0]
-        let coeff_eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
+        let coeff_eval_proof = Pcs::open(
+            &params.pp,
+            &poly_comm,
             &comm_state,
             &coeff_requested_point,
-            &mut prover_trans,
+            trans,
         );
-        // requested point [prover_u, oracle_r, 1]
-        let point_eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
+
+        let point_eval_proof = Pcs::open(
+            &params.pp,
+            &poly_comm,
             &comm_state,
             &point_requested_point,
-            &mut prover_trans,
-        );
-        let pcs_open_time = start.elapsed().as_millis();
-
-        // 3. Verifier checks the proof
-        let verifier_start = Instant::now();
-        let mut verifier_trans = Transcript::<EF>::new();
-
-        // 3.1 Generate the random point to instantiate the sumcheck protocol
-        let verifier_u = verifier_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance_info.num_vars,
+            trans,
         );
 
-        // 3.2 Verifier sample random coins to combine all sumcheck protocols proving ntt instances
-        let verifier_r = verifier_trans.get_vec_challenge(
-            b"randomness used to obtain the virtual random ntt instance",
-            instance_info.num_ntt,
-        );
+        NTTProof {
+            poly_info: kit.info,
+            poly_comm,
+            coeff_oracle_eval,
+            coeff_eval_proof,
+            coeff_eval: coeff_evals_at_r,
+            point_oracle_eval,
+            point_eval_proof,
+            point_eval: point_evals_at_u,
+            sumcheck_proof: kit.proof,
+            recursive_proof,
+        }
+    }
+}
 
-        // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify(
-            &mut verifier_trans,
-            &poly_info,
-            claimed_sum,
-            &sumcheck_proof,
-        )
-        .expect("Verify the proof generated in NTT");
+/// Verifier for NTT IOP with PCS.
+pub struct NTTVerifier<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
 
-        // 3.4 Check the subclaim returned from the sumcheck protocol
-        let f_delegation = recursive_proof.delegation_claimed_sums[0];
-        let evals_at_r = verifier_r
+impl<F, EF, S, Pcs> Default for NTTVerifier<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        NTTVerifier {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> NTTVerifier<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The verifier.
+    pub fn verify(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &NTTParams<F, EF, S, Pcs>,
+        info: &BatchNTTInstanceInfo<F>,
+        proof: &NTTProof<F, EF, S, Pcs>,
+    ) -> bool {
+        let mut res = true;
+
+        trans.append_message(b"ntt instance", &info.to_clean());
+        trans.append_message(b"NTT IOP: polynomial commitment", &proof.poly_comm);
+
+        let mut iop = NTTIOP::default();
+
+        iop.generate_randomness(trans, &info.to_ef());
+
+        // Get evals_at_r and evals_at_u.
+        let evals_at_r = iop
+            .rlc_randomness
             .iter()
-            .zip(coeff_evals_at_r.iter())
-            .fold(EF::zero(), |acc, (r, eval)| acc + *r * *eval);
-        let evals_at_u = verifier_r
-            .iter()
-            .zip(point_evals_at_u.iter())
-            .fold(EF::zero(), |acc, (r, eval)| acc + *r * *eval);
+            .zip(proof.coeff_eval.iter())
+            .fold(EF::zero(), |acc, (r, eval)| acc + *r * eval);
 
-        let check_subclaim = <NTTBareIOP<EF>>::verify_subclaim(
-            EF::one(),
-            &mut subclaim,
-            &mut claimed_sum,
+        let evals_at_u = iop
+            .rlc_randomness
+            .iter()
+            .zip(proof.point_eval.iter())
+            .fold(EF::zero(), |acc, (r, eval)| acc + *r * eval);
+
+        // Check the subclaim returned from the sumcheck protocol.
+        let mut wrapper = ProofWrapper {
+            claimed_sum: evals_at_u,
+            info: proof.poly_info,
+            proof: proof.sumcheck_proof.clone(),
+        };
+
+        let (b, randomness) = iop.verify(
+            trans,
+            &mut wrapper,
             evals_at_r,
             evals_at_u,
-            f_delegation,
+            &info.to_ef(),
+            &proof.recursive_proof,
         );
-        assert!(check_subclaim);
-        assert_eq!(subclaim.expected_evaluations, EF::zero());
-        assert_eq!(claimed_sum, EF::zero());
-        // Check the delegation of F(u, v) used in the above check
-        let check_recursive = <NTTIOP<EF>>::verify_recursion(
-            &mut verifier_trans,
-            &recursive_proof,
-            &instance_ef_info,
-            &verifier_u,
-            &subclaim,
-        );
-        assert!(check_recursive);
 
-        // 3.5 and also check the relation between these small oracles and the committed oracle
-        let oracle_randomness = verifier_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            instance_info.log_num_oracles(),
-        );
-        let check_oracle_coeff =
-            verify_oracle_relation(&coeff_evals_at_r, oracle_coeff_eval, &oracle_randomness);
-        let check_oracle_point =
-            verify_oracle_relation(&point_evals_at_u, oracle_point_eval, &oracle_randomness);
-        assert!(check_oracle_coeff);
-        assert!(check_oracle_point);
-        let iop_verifier_time = verifier_start.elapsed().as_millis();
+        res &= b;
 
-        // 3.5 Check the evaluation of a random point over the committed oracle
-        let start = Instant::now();
-        let mut pcs_proof_size = 0;
-        let check_pcs_coeff = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &coeff_requested_point,
-            oracle_coeff_eval,
-            &coeff_eval_proof,
-            &mut verifier_trans,
+        // Check the relation between these small oracles and the committed oracle.
+        let oracle_randomness = trans.get_vec_challenge(
+            b"NTT: random linear combination for evaluations of oracles",
+            info.log_num_oracles(),
         );
-        let check_pcs_point = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &point_requested_point,
-            oracle_point_eval,
-            &point_eval_proof,
-            &mut verifier_trans,
+        res &= verify_oracle_relation(
+            &proof.coeff_eval,
+            proof.coeff_oracle_eval,
+            &oracle_randomness,
         );
-        assert!(check_pcs_coeff);
-        assert!(check_pcs_point);
-        let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&coeff_eval_proof).unwrap().len()
-            + bincode::serialize(&coeff_evals_at_r).unwrap().len()
-            + bincode::serialize(&point_eval_proof).unwrap().len()
-            + bincode::serialize(&point_evals_at_u).unwrap().len();
 
-        // 4. print statistic
-        print_statistic(
-            iop_prover_time + pcs_open_time,
-            iop_verifier_time + pcs_verifier_time,
-            iop_proof_size + pcs_proof_size,
-            iop_prover_time,
-            iop_verifier_time,
-            iop_proof_size,
-            committed_poly.num_vars,
-            instance_info.num_oracles(),
-            instance.num_vars,
-            setup_time,
-            commit_time,
-            pcs_open_time,
-            pcs_verifier_time,
-            pcs_proof_size,
-        )
+        res &= verify_oracle_relation(
+            &proof.point_eval,
+            proof.point_oracle_eval,
+            &oracle_randomness,
+        );
+
+        let mut coeff_requested_points = randomness;
+        coeff_requested_points.extend(&oracle_randomness);
+        coeff_requested_points.push(EF::zero());
+        let mut point_requested_points = iop.u.clone();
+        point_requested_points.extend(&oracle_randomness);
+        point_requested_points.push(EF::one());
+
+        res &= Pcs::verify(
+            &params.pp,
+            &proof.poly_comm,
+            &coeff_requested_points,
+            proof.coeff_oracle_eval,
+            &proof.coeff_eval_proof,
+            trans,
+        );
+
+        res &= Pcs::verify(
+            &params.pp,
+            &proof.poly_comm,
+            &point_requested_points,
+            proof.point_oracle_eval,
+            &proof.point_eval_proof,
+            trans,
+        );
+
+        res
     }
 }
 
