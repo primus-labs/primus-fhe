@@ -5,7 +5,6 @@ pub mod bit_decomposition;
 pub mod floor;
 pub mod lookup;
 pub mod ntt;
-pub mod ntt_revision;
 pub mod rlwe_mul_rgsw;
 pub mod round;
 pub mod zq_to_rq;

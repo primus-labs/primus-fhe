@@ -41,7 +41,6 @@ use core::fmt;
 use itertools::izip;
 use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
 use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 use bincode::Result;
@@ -258,6 +257,7 @@ impl<F: Field> IntermediateMLEs<F> {
 ///
 /// * `u` - The random point
 /// * `ntt_table` - The NTT table: ω^0, ω^1, ..., ω^{2N - 1}
+/// * `bits_order` - The indicator of bits order.
 pub fn init_fourier_table_overall<F: Field>(
     u: &[F],
     ntt_table: &[F],
@@ -393,7 +393,6 @@ pub fn naive_w_power_times_x_table_reverse_order<F: Field>(
 
     let mut evaluations: Vec<_> = (0..(1 << x_dim)).map(|_| F::one()).collect();
     for x in 0..(1 << x_dim) {
-        // ! Modified Formula
         evaluations[x] = ntt_table[(1 << (log_m - sub)) * x % m];
     }
     DenseMultilinearExtension::from_evaluations_vec(x_dim, evaluations)
@@ -479,7 +478,7 @@ impl<F: Field> BatchNTTInstance<F> {
         }
     }
 
-    /// Add a ntt instance into the container
+    /// Add an ntt instance into the container
     #[inline]
     pub fn add_ntt_instance(
         &mut self,
@@ -529,6 +528,10 @@ impl<F: Field> BatchNTTInstance<F> {
     }
 
     /// Construct a random ntt instances from all the ntt instances to be proved, with randomness defined over Field
+    ///
+    /// # Arguments.
+    ///
+    /// * `randomnss` - The randomness used for random linear combination.
     #[inline]
     pub fn extract_ntt_instance(&self, randomness: &[F]) -> NTTInstance<F> {
         assert_eq!(randomness.len(), self.num_ntt);
@@ -553,6 +556,9 @@ impl<F: Field> BatchNTTInstance<F> {
     }
 
     /// Construct a random ntt instances from all the ntt instances to be proved, with randomness defined over Extension Field
+    /// # Arguments.
+    ///
+    /// * `randomnss` - The randomness used for random linear combination.
     #[inline]
     pub fn extract_ntt_instance_to_ef<EF: AbstractExtensionField<F>>(
         &self,
@@ -598,6 +604,11 @@ pub struct NTTIOP<F: Field> {
 
 impl<F: Field + Serialize> NTTIOP<F> {
     /// sample the random coins before proving sumcheck protocol
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The batched ntt instance info without ntt table.
     pub fn sample_coins(trans: &mut Transcript<F>, info: &BatchNTTInstanceInfoClean) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
@@ -606,11 +617,20 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// return the number of coins used in this IOP
+    ///
+    /// # Arguments.
+    ///
+    /// * `info` - The batched ntt instance info without ntt table.
     pub fn num_coins(info: &BatchNTTInstanceInfoClean) -> usize {
         info.num_ntt
     }
 
     /// Generate the randomness.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The batched ntt instance info without ntt table.
     #[inline]
     pub fn generate_randomness(
         &mut self,
@@ -626,6 +646,12 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// Prove NTT instance with delegation
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `instance` - The (randomized) ntt instance.
+    /// * `bits_order` - The indicator of bits order.
     pub fn prove(
         &self,
         trans: &mut Transcript<F>,
@@ -671,6 +697,15 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// Verify NTT instance with delegation
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `wrapper` - The proof wrapper.
+    /// * `coeff_evals_at_r` - The (randomized) coefficient polynomial evaluated at r.
+    /// * `point_evals_at_u` - The (randomized) point polynomial evaluated at u.
+    /// * `info` - The batched ntt instances info.
+    /// * `recursive_proof` - The recursive sumcheck proof.
     pub fn verify(
         &self,
         trans: &mut Transcript<F>,
@@ -779,7 +814,13 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
     /// Compared to the `prove` functionality, we just remove the phase to prove NTT bare.
     ///
-    /// * `ntt_bare_state`: stores the prover state after proving the NTT bare
+    /// # Arguments.
+    /// 
+    /// * `trans` - The transcripts.
+    /// * `ntt_bare_randomness` - The randomness output by the NTT bare sumcheck protocol.
+    /// * `info` - The batched ntt instances info.
+    /// * `u` - The randomness to initiate the sumcheck protocol.
+    /// * `bits_order` - The indicator of bits order.
     pub fn prove_recursion(
         trans: &mut Transcript<F>,
         ntt_bare_randomness: &[F],
@@ -881,6 +922,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// * `u_i` - The parameter in this round.
     /// * `subclaim` - The subclaim returned from this round of the sumcheck.
     /// * `reduced_claim` - The given evaluation.
+    /// * `bits_order` - The indicator of bits order.
     pub fn verify_recursion_round(
         round: usize,
         x_b_point: &[F],
@@ -954,6 +996,15 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
     /// Compared to the `prove` functionality, we remove the phase to prove NTT bare.
     /// Also, after detaching the verification of NTT bare, verifier can directly check the recursive proofs.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `trans` - The transcripts.
+    /// * `proof` - The recursive sumcheck proofs.
+    /// * `info` - The batched ntt instances info.
+    /// * `u` - The randomness to initiate sumcheck protocol.
+    /// * `subclaim` - The subclaim output by the sumcheck protocol.
+    /// * `bits_order` - The indicator of bits order.
     pub fn verify_recursion(
         trans: &mut Transcript<F>,
         proof: &NTTRecursiveProof<F>,
@@ -1053,7 +1104,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
                         * info.ntt_table[1]
             }
         };
-        
+
         delegation_final_claim == eval
     }
 }
@@ -1195,9 +1246,7 @@ where
         let committed_poly = instance.generate_oracle();
 
         // Use PCS to commit the above polynomial.
-        let start = Instant::now();
         let (poly_comm, comm_state) = Pcs::commit(&params.pp, &committed_poly);
-        println!("commit time: {:?} ms", start.elapsed().as_millis());
 
         trans.append_message(b"NTT IOP: polynomial commitment", &poly_comm);
 
@@ -1209,9 +1258,7 @@ where
         let target_ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&iop.rlc_randomness);
 
         // Prove sumcheck protocol
-        let start = Instant::now();
         let (kit, recursive_proof) = iop.prove(trans, &target_ntt_instance, bits_order);
-        println!("iop prove time: {:?} ms", start.elapsed().as_millis());
 
         // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol.
         let eq_at_r = gen_identity_evaluations(&kit.randomness);
@@ -1360,7 +1407,6 @@ where
         );
 
         res &= b;
-        println!("iop verify: {:}", res);
 
         // Check the relation between these small oracles and the committed oracle.
         let oracle_randomness = trans.get_vec_challenge(

@@ -32,8 +32,9 @@ use super::{BatchNTTInstanceInfo, BitsOrder, NTTInstance};
 /// As a result, the equation (8) in zkCNN is = ω^X * \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) in this case.
 ///
 /// # Arguments
-/// * u: the random point
-/// * ntt_table: It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
+/// 
+/// * `u` - The random point
+/// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 ///
 /// In order to delegate the computation F(u, v) to prover, we decompose the ω^X term into the grand product.
 ///
@@ -61,6 +62,11 @@ pub fn naive_init_fourier_table<F: Field>(
 }
 
 /// This is for the reverse order.
+/// 
+/// # Arguments
+/// 
+/// * `u` - The random point
+/// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 pub fn naive_init_fourier_table_reverse_order<F: Field>(
     u: &[F],
     ntt_table: &[F],
@@ -97,8 +103,9 @@ pub fn naive_init_fourier_table_reverse_order<F: Field>(
 /// * (This function is the dynamic programming version of the above function.)
 ///
 /// # Arguments
-/// * u: the random point
-/// * ω: It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
+/// 
+/// * `u` - The random point
+/// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinearExtension<F> {
     let log_n = u.len(); // n = 1 << dim
     let m = ntt_table.len(); // m = 2n = 2 * (1 << dim)
@@ -142,6 +149,11 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
 }
 
 /// This is for the reverse order.
+/// 
+/// # Arguments
+/// 
+/// * `u` - The random point
+/// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 pub fn init_fourier_table_reverse_order<F: Field>(
     u: &[F],
     ntt_table: &[F],
@@ -186,6 +198,11 @@ pub struct NTTBareIOP<F: Field> {
 
 impl<F: Field + Serialize> NTTBareIOP<F> {
     /// Generate the randomness.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `trans` - The transcripts.
+    /// * `info` - The batched ntt instances info.
     #[inline]
     pub fn generate_randomness(
         &mut self,
@@ -204,6 +221,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
     ///
     /// * `trans` - The transcript.
     /// * `instance` - The NTT instance.
+    /// * `bits_order` - The indicator of bits order.
     pub fn prove(
         &self,
         trans: &mut Transcript<F>,
@@ -243,6 +261,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
     /// * `claimed_sum` - The claimed sum of the sumcheck.
     /// * `instance` - The NTT instance.
     /// * `u` - The randomness used to initiate the sumcheck protocol.
+    /// * `bits_order` - The indicator of bits order.
     pub fn prepare_products_of_polynomial(
         randomness: F,
         poly: &mut ListOfProductsOfPolynomials<F>,
@@ -268,6 +287,7 @@ impl<F: Field + Serialize> NTTBareIOP<F> {
     /// * `coeff_evals_at_r` - The coefficient poly evaluated at random point r.
     /// * `point_evals_at_u` - The point poly evaluated at random point u.
     /// * `info` - The info of NTT instance.
+    /// * `bits_order` - The indicator of bits order.
     pub fn verify(
         &self,
         trans: &mut Transcript<F>,
