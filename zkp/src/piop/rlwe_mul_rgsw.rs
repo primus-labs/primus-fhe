@@ -741,7 +741,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         let randomness = Self::sample_coins(&mut trans, instance);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info);
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info.to_clean());
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
@@ -860,7 +860,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         );
         let randomness_ntt = trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<F>>::num_coins(&info.ntt_info),
+            <NTTIOP<F>>::num_coins(&info.ntt_info.to_clean()),
         );
 
         let mut subclaim = MLSumcheck::verify(
@@ -1000,7 +1000,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = RlweMultRgswIOP::sample_coins(&mut prover_trans, &instance_ef);
-        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info);
+        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
         RlweMultRgswIOP::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1090,7 +1090,7 @@ where
         );
         let randomness_ntt = verifier_trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<EF>>::num_coins(&instance_info.ntt_info),
+            <NTTIOP<EF>>::num_coins(&instance_info.ntt_info.to_clean()),
         );
 
         // 3.3 Check the proof of the sumcheck protocol
@@ -1224,7 +1224,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
         let randomness = Self::sample_coins(&mut trans);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info);
+        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info.to_clean());
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
@@ -1344,7 +1344,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         );
         let randomness_ntt = trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<F>>::num_coins(&info.ntt_info),
+            <NTTIOP<F>>::num_coins(&info.ntt_info.to_clean()),
         );
 
         let mut subclaim = MLSumcheck::verify(
@@ -1492,7 +1492,7 @@ where
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
         let randomness = RlweMultRgswIOPPure::sample_coins(&mut prover_trans);
-        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info);
+        let randomness_ntt = <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
         RlweMultRgswIOPPure::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
@@ -1604,7 +1604,7 @@ where
         );
         let randomness_ntt = verifier_trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<EF>>::num_coins(&instance_info.ntt_info),
+            <NTTIOP<EF>>::num_coins(&instance_info.ntt_info.to_clean()),
         );
 
         // --- Lookup Part ---

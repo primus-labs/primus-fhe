@@ -154,9 +154,9 @@ fn main() {
 
     let mut verifier_trans = Transcript::<EF>::default();
 
-    let start = Instant::now();
     let proof = NTTProof::from_bytes(&proof_bytes).unwrap();
 
+    let start = Instant::now();
     let res = ntt_verifier.verify(&mut verifier_trans, &params, &ntt_instances.info(), &proof);
 
     println!("ntt verifying time: {:?} ms", start.elapsed().as_millis());

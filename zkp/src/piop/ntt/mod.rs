@@ -38,6 +38,7 @@ use algebra::{
     ListOfProductsOfPolynomials, PolynomialInfo,
 };
 use core::fmt;
+use std::time::Instant;
 use itertools::izip;
 use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
@@ -509,7 +510,7 @@ pub struct NTTIOP<F: Field> {
 
 impl<F: Field + Serialize> NTTIOP<F> {
     /// sample the random coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, info: &BatchNTTInstanceInfo<F>) -> Vec<F> {
+    pub fn sample_coins(trans: &mut Transcript<F>, info: &BatchNTTInstanceInfoClean) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
             Self::num_coins(info),
@@ -517,7 +518,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// return the number of coins used in this IOP
-    pub fn num_coins(info: &BatchNTTInstanceInfo<F>) -> usize {
+    pub fn num_coins(info: &BatchNTTInstanceInfoClean) -> usize {
         info.num_ntt
     }
 
@@ -526,7 +527,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     pub fn generate_randomness(
         &mut self,
         trans: &mut Transcript<F>,
-        info: &BatchNTTInstanceInfo<F>,
+        info: &BatchNTTInstanceInfoClean,
     ) {
         self.u = trans.get_vec_challenge(
             b"NTT IOP: random point used to instantiate sumcheck protocol",
@@ -1002,19 +1003,23 @@ where
         let committed_poly = instance.generate_oracle();
 
         // Use PCS to commit the above polynomial.
+        let start = Instant::now();
         let (poly_comm, comm_state) = Pcs::commit(&params.pp, &committed_poly);
+        println!("commit time: {:?} ms", start.elapsed().as_millis());
 
         trans.append_message(b"NTT IOP: polynomial commitment", &poly_comm);
 
         // Generate the randomness for the sumcheck protocol.
         let mut iop = NTTIOP::default();
-        iop.generate_randomness(trans, &instance_info.to_ef());
+        iop.generate_randomness(trans, &instance_info.to_clean());
 
         // Extract the target ntt instance, note that it is define over EF.
         let target_ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&iop.rlc_randomness);
 
         // Prove sumcheck protocol
+        let start = Instant::now();
         let (kit, recursive_proof) = iop.prove(trans, &target_ntt_instance);
+        println!("iop prove time: {:?} ms", start.elapsed().as_millis());
 
         // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol.
         let eq_at_r = gen_identity_evaluations(&kit.randomness);
@@ -1129,7 +1134,7 @@ where
 
         let mut iop = NTTIOP::default();
 
-        iop.generate_randomness(trans, &info.to_ef());
+        iop.generate_randomness(trans, &info.to_clean());
 
         // Get evals_at_r and evals_at_u.
         let evals_at_r = iop

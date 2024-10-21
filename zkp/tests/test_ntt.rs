@@ -319,7 +319,7 @@ fn test_ntt_with_delegation() {
     let ntt_instance_info = ntt_instance.info();
     let mut ntt_iop = NTTIOP::default();
     let mut prover_trans = Transcript::<FF>::new();
-    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info.to_clean());
 
     let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &ntt_instance);
     let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
@@ -328,7 +328,7 @@ fn test_ntt_with_delegation() {
     let mut wrapper = kit.extract();
     let mut ntt_iop = NTTIOP::default();
     let mut verifier_trans = Transcript::<FF>::new();
-    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info.to_clean());
     let (check, _) = ntt_iop.verify(
         &mut verifier_trans,
         &mut wrapper,
@@ -370,7 +370,7 @@ fn test_ntt_with_delegation_extension_field() {
 
     let mut ntt_iop = NTTIOP::default();
     let mut prover_trans = Transcript::<EF>::new();
-    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info.to_clean());
 
     let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &instance_ef);
 
@@ -380,7 +380,7 @@ fn test_ntt_with_delegation_extension_field() {
     let mut wrapper = kit.extract();
     let mut ntt_iop = NTTIOP::default();
     let mut verifier_trans = Transcript::<EF>::new();
-    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info.to_clean());
     let (check, _) = ntt_iop.verify(
         &mut verifier_trans,
         &mut wrapper,
