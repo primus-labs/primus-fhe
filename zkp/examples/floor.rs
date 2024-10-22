@@ -1,11 +1,14 @@
+use algebra::utils::Transcript;
 use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension};
 use algebra::{DecomposableField, Field, FieldUniformSampler};
+use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::floor::FloorSnarks;
+use std::time::Instant;
+use zkp::piop::floor::{FloorParams, FloorProof, FloorProver, FloorVerifier};
 use zkp::piop::{BitDecompositionInstanceInfo, FloorInstance};
 
 type FF = BabyBear;
@@ -86,7 +89,48 @@ fn main() {
     let instance = generate_instance(num_vars);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <FloorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
-    );
+
+    // Parameters.
+    let mut params = FloorParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let start = Instant::now();
+    params.setup(&instance.info(), code_spec);
+    println!("floor setup time: {:?} ms", start.elapsed().as_millis());
+
+    // Prover.
+    let floor_prover = FloorProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let start = Instant::now();
+    let proof = floor_prover.prove(&mut prover_trans, &params, &instance);
+    println!("floor proving time: {:?} ms", start.elapsed().as_millis());
+
+    let proof_bytes = proof.to_bytes().unwrap();
+    println!("floor proof size: {:?} byts", proof_bytes.len());
+
+    // Verifier.
+    let floor_verifier = FloorVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = FloorProof::from_bytes(&proof_bytes).unwrap();
+
+    let start = Instant::now();
+    let res = floor_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
+    println!("floor verifying time: {:?} ms", start.elapsed().as_millis());
+
+    assert!(res);
 }

@@ -603,7 +603,7 @@ pub struct NTTIOP<F: Field> {
 }
 
 impl<F: Field + Serialize> NTTIOP<F> {
-    /// sample the random coins before proving sumcheck protocol
+    /// Sample the random coins before proving sumcheck protocol
     ///
     /// # Arguments.
     ///
@@ -616,7 +616,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         )
     }
 
-    /// return the number of coins used in this IOP
+    /// Return the number of coins used in this IOP
     ///
     /// # Arguments.
     ///
@@ -815,7 +815,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// Compared to the `prove` functionality, we just remove the phase to prove NTT bare.
     ///
     /// # Arguments.
-    /// 
+    ///
     /// * `trans` - The transcripts.
     /// * `ntt_bare_randomness` - The randomness output by the NTT bare sumcheck protocol.
     /// * `info` - The batched ntt instances info.
@@ -996,9 +996,9 @@ impl<F: Field + Serialize> NTTIOP<F> {
 
     /// Compared to the `prove` functionality, we remove the phase to prove NTT bare.
     /// Also, after detaching the verification of NTT bare, verifier can directly check the recursive proofs.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `trans` - The transcripts.
     /// * `proof` - The recursive sumcheck proofs.
     /// * `info` - The batched ntt instances info.

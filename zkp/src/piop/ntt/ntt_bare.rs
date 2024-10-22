@@ -32,7 +32,7 @@ use super::{BatchNTTInstanceInfo, BitsOrder, NTTInstance};
 /// As a result, the equation (8) in zkCNN is = ω^X * \prod_{i=0}^{\log{N-1}} ((1 - u_i) + u_i * ω^{2^{i + 1} * X}) in this case.
 ///
 /// # Arguments
-/// 
+///
 /// * `u` - The random point
 /// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 ///
@@ -62,9 +62,9 @@ pub fn naive_init_fourier_table<F: Field>(
 }
 
 /// This is for the reverse order.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `u` - The random point
 /// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 pub fn naive_init_fourier_table_reverse_order<F: Field>(
@@ -103,7 +103,7 @@ pub fn naive_init_fourier_table_reverse_order<F: Field>(
 /// * (This function is the dynamic programming version of the above function.)
 ///
 /// # Arguments
-/// 
+///
 /// * `u` - The random point
 /// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinearExtension<F> {
@@ -149,9 +149,9 @@ pub fn init_fourier_table<F: Field>(u: &[F], ntt_table: &[F]) -> DenseMultilinea
 }
 
 /// This is for the reverse order.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `u` - The random point
 /// * `ntt_table` - It stores the NTT table: ω^0, ω^1, ..., ω^{2N - 1}
 pub fn init_fourier_table_reverse_order<F: Field>(
@@ -198,9 +198,9 @@ pub struct NTTBareIOP<F: Field> {
 
 impl<F: Field + Serialize> NTTBareIOP<F> {
     /// Generate the randomness.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `trans` - The transcripts.
     /// * `info` - The batched ntt instances info.
     #[inline]

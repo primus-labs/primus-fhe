@@ -21,7 +21,7 @@ pub use bit_decomposition::{
     BitDecompositionInstanceInfo, BitDecompositionParams, BitDecompositionProof,
     BitDecompositionProver, BitDecompositionVerifier,
 };
-pub use floor::{FloorIOP, FloorInstance, FloorSnarks};
+pub use floor::{FloorIOP, FloorInstance};
 pub use lookup::{
     LookupIOP, LookupInstance, LookupInstanceEval, LookupInstanceInfo, LookupParams, LookupProof,
     LookupProver, LookupVerifier,

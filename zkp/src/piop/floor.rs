@@ -20,35 +20,20 @@ use super::{
     BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
     BitDecompositionInstanceInfo,
 };
-use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
-use crate::utils::{
-    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
-};
+use crate::sumcheck::{self, verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
+use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials,
+    ListOfProductsOfPolynomials, PolynomialInfo,
 };
+use bincode::Result;
 use core::fmt;
 use itertools::izip;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{LinearCode, LinearCodeSpec},
-    utils::hash::Hash,
-    PolynomialCommitmentScheme,
-};
+use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::time::Instant;
-use std::vec;
+use std::{marker::PhantomData, rc::Rc};
 
-/// Round IOP
-pub struct FloorIOP<F: Field>(PhantomData<F>);
-/// SNARKs for Round compiled with PCS
-pub struct FloorSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
-
-/// Round Instance used as prover keys
+/// Floor Instance used as prover keys
 pub struct FloorInstance<F: Field> {
     /// number of variables
     pub num_vars: usize,
@@ -73,11 +58,12 @@ pub struct FloorInstance<F: Field> {
     pub offset_aux_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// decomposition info for offset
     pub offset_bits_info: BitDecompositionInstanceInfo<F>,
-    /// option denoted by w \in {0, 1}
-    pub option: Rc<DenseMultilinearExtension<F>>,
+    /// selector denoted by w \in {0, 1}
+    pub selector: Rc<DenseMultilinearExtension<F>>,
 }
 
 /// Evaluation at a random point
+#[derive(Serialize, Deserialize)]
 pub struct FloorInstanceEval<F: Field> {
     /// input denoted by a \in F_Q
     pub input: F,
@@ -93,11 +79,12 @@ pub struct FloorInstanceEval<F: Field> {
     /// decomposed bits of c - 1 \in [0, 2^k_bit_len) used for range check
     /// decomposed bits of c - 1 + delta \in [0, 2^k_bit_len) used for range check
     pub offset_aux_bits: Vec<F>,
-    /// option denoted by w \in {0, 1}
-    pub option: F,
+    /// selector denoted by w \in {0, 1}
+    pub selector: F,
 }
 
-/// Information about Round Instance used as verifier keys
+/// Information about Floor Instance used as verifier keys
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FloorInstanceInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
@@ -125,6 +112,38 @@ impl<F: Field> fmt::Display for FloorInstanceInfo<F> {
     }
 }
 
+impl<F: Field> FloorInstanceInfo<F> {
+    /// Return the number of small polynomials used in IOP
+    #[inline]
+    pub fn num_oracles(&self) -> usize {
+        4 + self.output_bits_info.bits_len + 2 * self.offset_bits_info.bits_len
+    }
+
+    /// Return the log of the number of small polynomials used in IOP
+    #[inline]
+    pub fn log_num_oracles(&self) -> usize {
+        self.num_oracles().next_power_of_two().ilog2() as usize
+    }
+
+    /// Generate the number of variables in the committed polynomial.
+    #[inline]
+    pub fn generate_num_var(&self) -> usize {
+        self.num_vars + self.log_num_oracles()
+    }
+
+    /// Construct an EF version.
+    #[inline]
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> FloorInstanceInfo<EF> {
+        FloorInstanceInfo::<EF> {
+            num_vars: self.num_vars,
+            k: EF::from_base(self.k),
+            delta: EF::from_base(self.delta),
+            output_bits_info: self.output_bits_info.to_ef(),
+            offset_bits_info: self.offset_bits_info.to_ef(),
+        }
+    }
+}
+
 impl<F: Field> FloorInstance<F> {
     /// Extract the information
     #[inline]
@@ -138,25 +157,13 @@ impl<F: Field> FloorInstance<F> {
         }
     }
 
-    /// Return the number of small polynomials used in IOP
-    #[inline]
-    pub fn num_oracles(&self) -> usize {
-        4 + self.output_bits.len() + self.offset_aux_bits.len()
-    }
-
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
-    }
-
     /// Pack all the involved small polynomials into a single vector of evaluations without padding
     pub fn pack_all_mles(&self) -> Vec<F> {
         self.input
             .iter()
             .chain(self.output.iter())
             .chain(self.offset.iter())
-            .chain(self.option.iter())
+            .chain(self.selector.iter())
             .chain(self.output_bits.iter().flat_map(|bit| bit.iter()))
             .chain(self.offset_aux_bits.iter().flat_map(|bit| bit.iter()))
             .copied()
@@ -167,9 +174,9 @@ impl<F: Field> FloorInstance<F> {
     /// The evaluations of this oracle is generated by the evaluations of all mles and the padded zeros.
     /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
     pub fn generate_oracle(&self) -> DenseMultilinearExtension<F> {
-        let num_vars_added = self.log_num_oracles();
-        let num_vars = self.num_vars + num_vars_added;
-        let num_zeros_padded = ((1 << num_vars_added) - self.num_oracles()) * (1 << self.num_vars);
+        let info = self.info();
+        let num_vars = info.generate_num_var();
+        let num_zeros_padded = (1 << num_vars) - info.num_oracles() * (1 << self.num_vars);
 
         // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_all_mles();
@@ -186,7 +193,7 @@ impl<F: Field> FloorInstance<F> {
             input: Rc::new(self.input.to_ef::<EF>()),
             output: Rc::new(self.output.to_ef::<EF>()),
             offset: Rc::new(self.offset.to_ef::<EF>()),
-            option: Rc::new(self.option.to_ef::<EF>()),
+            selector: Rc::new(self.selector.to_ef::<EF>()),
             output_bits: self
                 .output_bits
                 .iter()
@@ -210,7 +217,7 @@ impl<F: Field> FloorInstance<F> {
             input: self.input.evaluate(point),
             output: self.output.evaluate(point),
             offset,
-            option: self.option.evaluate(point),
+            selector: self.selector.evaluate(point),
             output_bits: self
                 .output_bits
                 .iter()
@@ -236,7 +243,7 @@ impl<F: Field> FloorInstance<F> {
             input: self.input.evaluate_ext(point),
             output: self.output.evaluate_ext(point),
             offset,
-            option: self.option.evaluate_ext(point),
+            selector: self.selector.evaluate_ext(point),
             output_bits: self
                 .output_bits
                 .iter()
@@ -289,6 +296,16 @@ impl<F: Field> FloorInstance<F> {
 
 impl<F: DecomposableField> FloorInstance<F> {
     /// Compute the witness required in proof and construct the instance
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `num_vars` - The number of variables.
+    /// * `k` - The value (Q-1)/q
+    /// * `delta` - The offset.
+    /// * `input` - The MLE of input.
+    /// * `output` - The MLE of output.
+    /// * `output_bits_info` - The bit decomposition info of output bits.
+    /// * `offset_bits_info` - The bit decomposition info of offset bits.
     #[inline]
     pub fn new(
         num_vars: usize,
@@ -309,7 +326,7 @@ impl<F: DecomposableField> FloorInstance<F> {
             output.get_decomposed_mles(output_bits_info.base_len, output_bits_info.bits_len);
 
         // set w = 1 iff a = 0 & b = 0
-        let option = Rc::new(DenseMultilinearExtension::<F>::from_evaluations_vec(
+        let selector = Rc::new(DenseMultilinearExtension::<F>::from_evaluations_vec(
             num_vars,
             input
                 .iter()
@@ -326,7 +343,7 @@ impl<F: DecomposableField> FloorInstance<F> {
         // if w = 1: c = 1 defaultly
         let offset = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
-            izip!(option.iter(), input.iter(), output.iter())
+            izip!(selector.iter(), input.iter(), output.iter())
                 .map(|(w, a, b)| match w.is_zero() {
                     true => *a - *b * k,
                     false => F::one(),
@@ -359,7 +376,7 @@ impl<F: DecomposableField> FloorInstance<F> {
             output_bits,
             offset,
             offset_aux_bits,
-            option,
+            selector,
             offset_bits_info: offset_bits_info.clone(),
             output_bits_info: output_bits_info.clone(),
         }
@@ -386,7 +403,7 @@ impl<F: Field> FloorInstanceEval<F> {
         res.push(self.input);
         res.push(self.output);
         res.push(self.offset);
-        res.push(self.option);
+        res.push(self.selector);
         res.extend(self.output_bits.iter());
         res.extend(self.offset_aux_bits.iter());
         res
@@ -408,60 +425,115 @@ impl<F: Field> FloorInstanceEval<F> {
     }
 }
 
+/// Floor IOP
+#[derive(Default)]
+pub struct FloorIOP<F: Field> {
+    /// The random vector for random linear combination.
+    pub randomness: Vec<F>,
+    /// The random value for identity function.
+    pub u: Vec<F>,
+}
+
 impl<F: Field + Serialize> FloorIOP<F> {
-    /// sample coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, instance: &FloorInstance<F>) -> Vec<F> {
+    /// Sample coins before proving sumcheck protocol
+    /// 
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The floor instance info.
+    pub fn sample_coins(trans: &mut Transcript<F>, info: &FloorInstanceInfo<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecompositionIOP<F>>::num_coins(&instance.output_bits_info)
-                + <BitDecompositionIOP<F>>::num_coins(&instance.offset_bits_info)
+            <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info)
+                + <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info)
                 + 4,
         )
     }
 
-    /// return the number of coins used in this IOP
+    /// Return the number of coins used in this IOP
+    /// 
+    /// # Arguments.
+    ///
+    /// * `info` - The floor instance info.
     pub fn num_coins(info: &FloorInstanceInfo<F>) -> usize {
         <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info)
             + <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info)
             + 4
     }
 
-    /// Prove round
-    pub fn prove(instance: &FloorInstance<F>) -> SumcheckKit<F> {
-        let mut trans = Transcript::<F>::new();
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
+    /// Generate the rlc randomenss.
+    /// 
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The floor instance info.
+    #[inline]
+    pub fn generate_randomness(&mut self, trans: &mut Transcript<F>, info: &FloorInstanceInfo<F>) {
+        self.randomness = Self::sample_coins(trans, info);
+    }
 
+    /// Generate the randomness for the eq function.
+    /// 
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The floor instance info.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &FloorInstanceInfo<F>,
+    ) {
+        self.u = trans.get_vec_challenge(
+            b"FLOOR IOP: random point used to instantiate sumcheck protocol",
+            info.num_vars,
+        );
+    }
+
+    /// Floor IOP prover.
+    /// 
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `instance` - The floor instance.
+    pub fn prove(&self, trans: &mut Transcript<F>, instance: &FloorInstance<F>) -> SumcheckKit<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
-        let randomness = Self::sample_coins(&mut trans, instance);
-        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
+
+        let eq_at_u = Rc::new(gen_identity_evaluations(&self.u));
+
+        Self::prepare_products_of_polynomial(&self.randomness, &mut poly, instance, &eq_at_u);
 
         let (proof, state) =
-            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
+            MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
 
         SumcheckKit {
             proof,
             info: poly.info(),
             claimed_sum: F::zero(),
             randomness: state.randomness,
-            u,
+            u: self.u.clone(),
         }
     }
 
-    /// Prove round
-    pub fn prove_as_subprotocol(
+    /// Add the sumcheck proving floor into the polynomial
+    /// 
+    /// # Arguments.
+    ///
+    /// * `randomness` - The randomness used to randomnize the ntt instance.
+    /// * `poly` - The list of product of polynomials.
+    /// * `instance` - The floor instance.
+    /// * `eq_at_u` - The evaluation of eq function on point u.
+    pub fn prepare_products_of_polynomial(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &FloorInstance<F>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let (output_bits_instance, offset_bits_instance) = instance.extract_decomposed_bits();
-        let output_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.output_bits_info);
-        let offset_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.offset_bits_info);
+        let output_bits_r_num = BitDecompositionIOP::<F>::num_coins(&instance.output_bits_info);
+        let offset_bits_r_num = BitDecompositionIOP::<F>::num_coins(&instance.offset_bits_info);
         assert_eq!(randomness.len(), output_bits_r_num + offset_bits_r_num + 4);
+
         // 1. add products used to prove decomposition
         BitDecompositionIOP::prepare_products_of_polynomial(
             &randomness[..output_bits_r_num],
@@ -480,12 +552,13 @@ impl<F: Field + Serialize> FloorIOP<F> {
         let lambda_2 = randomness[randomness.len() - 3];
         let r_1 = randomness[randomness.len() - 2];
         let r_2 = randomness[randomness.len() - 1];
+
         // 2. add sumcheck1 for \sum_{x} eq(u, x) * w(x) * (1-w(x)) = 0, i.e. w(x)\in\{0,1\}^l with random coefficient r_1
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
+                Rc::clone(&instance.selector),
             ],
             &[
                 (F::one(), F::zero()),
@@ -503,7 +576,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.input),
             ],
             &[
@@ -517,7 +590,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.output),
             ],
             &[
@@ -531,7 +604,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.input),
             ],
             &[
@@ -545,7 +618,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.output),
             ],
             &[
@@ -559,7 +632,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.offset),
             ],
             &[
@@ -571,43 +644,45 @@ impl<F: Field + Serialize> FloorIOP<F> {
         );
     }
 
-    /// Verify addition in Zq
+    /// Verify floor
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `trans` - The transcripts.
+    /// * `wrapper` - The proof wrapper.
+    /// * `evals` - The evaluations of floor instances.
+    /// * `info` - The floor instance info.
     pub fn verify(
+        &self,
+        trans: &mut Transcript<F>,
         wrapper: &ProofWrapper<F>,
         evals: &FloorInstanceEval<F>,
         info: &FloorInstanceInfo<F>,
-    ) -> bool {
-        let mut trans = Transcript::new();
+    ) -> (bool, Vec<F>) {
+        let mut subclaim =
+            MLSumcheck::verify(trans, &wrapper.info, wrapper.claimed_sum, &wrapper.proof)
+                .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&self.u, &subclaim.point);
 
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            info.num_vars,
-        );
-
-        // randomness to combine sumcheck protocols
-        let randomness = trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            Self::num_coins(info),
-        );
-
-        let mut subclaim = MLSumcheck::verify(
-            &mut trans,
-            &wrapper.info,
-            wrapper.claimed_sum,
-            &wrapper.proof,
-        )
-        .expect("fail to verify the sumcheck protocol");
-        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
-
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
-            return false;
+        if !Self::verify_subclaim(&self.randomness, &mut subclaim, evals, info, eq_at_u_r) {
+            return (false, vec![]);
         }
 
-        subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()
+        let res = subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero();
+
+        (res, subclaim.point)
     }
 
-    /// Verify round
-    pub fn verify_as_subprotocol(
+    /// Verify subclaim.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `randomness` - The randomness for rlc.
+    /// * `subclaim` - The subclaim returned from the sumcheck protocol.
+    /// * `evals` - The evaluations of floor instances.
+    /// * `info` - The floor instance info.
+    /// * `eq_at_u_r` - The value eq(u,r).
+    pub fn verify_subclaim(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
         evals: &FloorInstanceEval<F>,
@@ -615,17 +690,17 @@ impl<F: Field + Serialize> FloorIOP<F> {
         eq_at_u_r: F,
     ) -> bool {
         let (output_bits_evals, offset_bits_evals) = evals.extract_decomposed_bits();
-        let output_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info);
-        let offset_bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info);
+        let output_bits_r_num = BitDecompositionIOP::<F>::num_coins(&info.output_bits_info);
+        let offset_bits_r_num = BitDecompositionIOP::<F>::num_coins(&info.offset_bits_info);
         assert_eq!(randomness.len(), output_bits_r_num + offset_bits_r_num + 4);
-        let check_output_bits = <BitDecompositionIOP<F>>::verify_subclaim(
+        let check_output_bits = BitDecompositionIOP::<F>::verify_subclaim(
             &randomness[..output_bits_r_num],
             subclaim,
             &output_bits_evals,
             &info.output_bits_info,
             eq_at_u_r,
         );
-        let check_offset_bits = <BitDecompositionIOP<F>>::verify_subclaim(
+        let check_offset_bits = BitDecompositionIOP::<F>::verify_subclaim(
             &randomness[output_bits_r_num..output_bits_r_num + offset_bits_r_num],
             subclaim,
             &offset_bits_evals,
@@ -641,173 +716,294 @@ impl<F: Field + Serialize> FloorIOP<F> {
         let r_2 = randomness[randomness.len() - 1];
 
         // check 2: check the subclaim returned from the sumcheck protocol
-        subclaim.expected_evaluations -= r_1 * eq_at_u_r * evals.option * (F::one() - evals.option);
+        subclaim.expected_evaluations -=
+            r_1 * eq_at_u_r * evals.selector * (F::one() - evals.selector);
         subclaim.expected_evaluations -= r_2
             * eq_at_u_r
-            * (evals.option * (evals.input * lambda_1 + evals.output * lambda_2)
-                + (F::one() - evals.option) * (evals.input - evals.output * info.k - evals.offset));
+            * (evals.selector * (evals.input * lambda_1 + evals.output * lambda_2)
+                + (F::one() - evals.selector)
+                    * (evals.input - evals.output * info.k - evals.offset));
 
         // check 3: a - b * k = c
         true
     }
 }
 
-impl<F, EF> FloorSnarks<F, EF>
+/// Floor proof with PCS.
+#[derive(Serialize, Deserialize)]
+pub struct FloorProof<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// Polynomial info.
+    pub poly_info: PolynomialInfo,
+    /// Polynomial commitment.
+    pub poly_comm: Pcs::Commitment,
+    /// The evaluation of the polynomial on a random point.
+    pub oracle_eval: EF,
+    /// The opening proof of the evaluation.
+    pub eval_proof: Pcs::Proof,
+    /// The sumcheck proof.
+    pub sumcheck_proof: sumcheck::Proof<EF>,
+    /// The evaluations of small oracles.
+    pub evals: FloorInstanceEval<EF>,
+}
+
+impl<F, EF, S, Pcs> FloorProof<F, EF, S, Pcs>
 where
     F: Field + Serialize + for<'de> Deserialize<'de>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
 {
-    /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &FloorInstance<F>, code_spec: &S)
-    where
-        H: Hash + Sync + Send,
-        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
-        S: LinearCodeSpec<F, Code = C> + Clone,
-    {
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
+/// Floor parameter.
+pub struct FloorParams<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// The parameter for the polynomial commitment.
+    pub pp: Pcs::Parameters,
+}
+
+impl<F, EF, S, Pcs> Default for FloorParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        Self {
+            pp: Pcs::Parameters::default(),
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> FloorParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S: Clone,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    /// Setup for the PCS.
+    #[inline]
+    pub fn setup(&mut self, info: &FloorInstanceInfo<F>, code_spec: S) {
+        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec));
+    }
+}
+
+/// Prover for Floor with PCS.
+pub struct FloorProver<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for FloorProver<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        FloorProver {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> FloorProver<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The prover.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `trans` - The transcripts.
+    /// * `params` - The pcs params.
+    /// * `instance` - The floor instance.
+    pub fn prove(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &FloorParams<F, EF, S, Pcs>,
+        instance: &FloorInstance<F>,
+    ) -> FloorProof<F, EF, S, Pcs> {
         let instance_info = instance.info();
-        println!("Prove {instance_info}\n");
+        trans.append_message(b"floor instance", &instance_info);
+
         // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
         let committed_poly = instance.generate_oracle();
-        // 1. Use PCS to commit the above polynomial.
-        let start = Instant::now();
-        let pp =
-            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
-        let setup_time = start.elapsed().as_millis();
 
-        let start = Instant::now();
-        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
-        let commit_time = start.elapsed().as_millis();
+        // Use PCS to commit the above polynomial.
+        let (poly_comm, poly_comm_state) = Pcs::commit(&params.pp, &committed_poly);
 
-        // 2. Prover generates the proof
-        let prover_start = Instant::now();
-        let mut iop_proof_size = 0;
-        let mut prover_trans = Transcript::<EF>::new();
-        // Convert the original instance into an instance defined over EF
+        trans.append_message(b"Floor IOP: polynomial commitment", &poly_comm);
+
+        // Prover generates the proof.
+        // Convert the orignal instance into an instance defined over EF.
         let instance_ef = instance.to_ef::<EF>();
-        let instance_info = instance_ef.info();
+        let instance_ef_info = instance_ef.info();
+        let mut floor_iop = FloorIOP::<EF>::default();
 
-        // 2.1 Generate the random point to instantiate the sumcheck protocol
-        let prover_u = prover_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
+        floor_iop.generate_randomness(trans, &instance_ef_info);
+        floor_iop.generate_randomness_for_eq_function(trans, &instance_ef_info);
+
+        let kit = floor_iop.prove(trans, &instance_ef);
+
+        // Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut requested_point = kit.randomness.clone();
+        let oracle_randomness = trans.get_vec_challenge(
+            b"Floor IOP: random linear combination for evaluations of oracles",
+            instance_info.log_num_oracles(),
         );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
+        requested_point.extend(&oracle_randomness);
 
-        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
-        let claimed_sum = EF::zero();
-        let randomness = FloorIOP::sample_coins(&mut prover_trans, &instance_ef);
-        FloorIOP::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
-
-        let poly_info = sumcheck_poly.info();
-
-        // 2.3 Generate proof of sumcheck protocol
-        let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Addition In Zq");
-        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
-        let iop_prover_time = prover_start.elapsed().as_millis();
-
-        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let start = Instant::now();
-        let evals = instance.evaluate_ext(&sumcheck_state.randomness);
-
-        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        let mut requested_point = sumcheck_state.randomness.clone();
-        requested_point.extend(&prover_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
-        ));
+        // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let oracle_eval = committed_poly.evaluate_ext(&requested_point);
 
-        // 2.6 Generate the evaluation proof of the requested point
-        let eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
+        let evals = instance.evaluate_ext(&kit.randomness);
+
+        // Generate the evaluation proof of the requested point
+        let eval_proof = Pcs::open(
+            &params.pp,
+            &poly_comm,
+            &poly_comm_state,
             &requested_point,
-            &mut prover_trans,
-        );
-        let pcs_open_time = start.elapsed().as_millis();
-
-        // 3. Verifier checks the proof
-        let verifier_start = Instant::now();
-        let mut verifier_trans = Transcript::<EF>::new();
-
-        // 3.1 Generate the random point to instantiate the sumcheck protocol
-        let verifier_u = verifier_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
+            trans,
         );
 
-        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-        let randomness = verifier_trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            <FloorIOP<EF>>::num_coins(&instance_info),
-        );
-
-        // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify(
-            &mut verifier_trans,
-            &poly_info,
-            claimed_sum,
-            &sumcheck_proof,
-        )
-        .expect("Verify the sumcheck proof generated in Floor");
-        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
-
-        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subcliam = FloorIOP::<EF>::verify_as_subprotocol(
-            &randomness,
-            &mut subclaim,
-            &evals,
-            &instance_info,
-            eq_at_u_r,
-        );
-        assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
-        let iop_verifier_time = verifier_start.elapsed().as_millis();
-
-        // 3.5 and also check the relation between these small oracles and the committed oracle
-        let start = Instant::now();
-        let mut pcs_proof_size = 0;
-        let flatten_evals = evals.flatten();
-        let oracle_randomness = verifier_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            evals.log_num_oracles(),
-        );
-        let check_oracle = verify_oracle_relation(&flatten_evals, oracle_eval, &oracle_randomness);
-        assert!(check_oracle);
-
-        // 3.5 Check the evaluation of a random point over the committed oracle
-        let check_pcs = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point,
+        FloorProof {
+            poly_info: kit.info,
+            poly_comm,
             oracle_eval,
-            &eval_proof,
-            &mut verifier_trans,
-        );
-        assert!(check_pcs);
-        let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&eval_proof).unwrap().len()
-            + bincode::serialize(&flatten_evals).unwrap().len();
+            eval_proof,
+            sumcheck_proof: kit.proof,
+            evals,
+        }
+    }
+}
 
-        // 4. print statistic
-        print_statistic(
-            iop_prover_time + pcs_open_time,
-            iop_verifier_time + pcs_verifier_time,
-            iop_proof_size + pcs_proof_size,
-            iop_prover_time,
-            iop_verifier_time,
-            iop_proof_size,
-            committed_poly.num_vars,
-            instance.num_oracles(),
-            instance.num_vars,
-            setup_time,
-            commit_time,
-            pcs_open_time,
-            pcs_verifier_time,
-            pcs_proof_size,
+/// Verifier for Floor with PCS.
+pub struct FloorVerifier<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for FloorVerifier<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        FloorVerifier {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> FloorVerifier<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The verifier.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `trans` - The transcripts.
+    /// * `params` - The pcs params.
+    /// * `info` - The Floor instance info.
+    /// * `proof` - The Floor proof.
+    pub fn verify(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &FloorParams<F, EF, S, Pcs>,
+        info: &FloorInstanceInfo<F>,
+        proof: &FloorProof<F, EF, S, Pcs>,
+    ) -> bool {
+        let mut res = true;
+
+        trans.append_message(b"floor instance", info);
+        trans.append_message(b"Floor IOP: polynomial commitment", &proof.poly_comm);
+
+        let mut floor_iop = FloorIOP::<EF>::default();
+        let info_ef = info.to_ef();
+        floor_iop.generate_randomness(trans, &info_ef);
+        floor_iop.generate_randomness_for_eq_function(trans, &info_ef);
+
+        let proof_wrapper = ProofWrapper {
+            claimed_sum: EF::zero(),
+            info: proof.poly_info,
+            proof: proof.sumcheck_proof.clone(),
+        };
+
+        let (b, randomness) = floor_iop.verify(trans, &proof_wrapper, &proof.evals, &info.to_ef());
+
+        res &= b;
+
+        // Check the relation between these small oracles and the committed oracle.
+        let flatten_evals = proof.evals.flatten();
+        let oracle_randomness = trans.get_vec_challenge(
+            b"Floor IOP: random linear combination for evaluations of oracles",
+            proof.evals.log_num_oracles(),
         );
+
+        res &= verify_oracle_relation(&flatten_evals, proof.oracle_eval, &oracle_randomness);
+
+        // Check the evaluation of a random point over the committed oracle.
+        let mut requested_point = randomness.clone();
+        requested_point.extend(&oracle_randomness);
+        res &= Pcs::verify(
+            &params.pp,
+            &proof.poly_comm,
+            &requested_point,
+            proof.oracle_eval,
+            &proof.eval_proof,
+            trans,
+        );
+
+        res
     }
 }

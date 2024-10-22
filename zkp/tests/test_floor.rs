@@ -1,13 +1,19 @@
 use algebra::{
-    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
-    FieldUniformSampler,
+    utils::Transcript, BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension,
+    Field, FieldUniformSampler,
 };
-use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
+use pcs::{
+    multilinear::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+};
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{floor::FloorSnarks, BitDecompositionInstanceInfo, FloorIOP, FloorInstance};
+use zkp::piop::{
+    floor::{FloorParams, FloorProof, FloorProver, FloorVerifier},
+    BitDecompositionInstanceInfo, FloorIOP, FloorInstance,
+};
 
 type FF = BabyBear; // field type
 type EF = BabyBearExetension;
@@ -96,12 +102,22 @@ fn test_floor_naive_iop() {
     );
 
     let info = instance.info();
+    let mut floor_iop = FloorIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    floor_iop.generate_randomness(&mut prover_trans, &info);
+    floor_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
 
-    let kit = FloorIOP::<FF>::prove(&instance);
+    let kit = floor_iop.prove(&mut prover_trans, &instance);
     let evals = instance.evaluate(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = FloorIOP::<FF>::verify(&wrapper, &evals, &info);
+
+    let mut floor_iop = FloorIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    floor_iop.generate_randomness(&mut verifier_trans, &info);
+    floor_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = floor_iop.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
     assert!(check);
 }
@@ -156,12 +172,21 @@ fn test_floor_random_iop() {
     );
 
     let info = instance.info();
+    let mut floor_iop = FloorIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    floor_iop.generate_randomness(&mut prover_trans, &info);
+    floor_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
 
-    let kit = FloorIOP::<FF>::prove(&instance);
+    let kit = floor_iop.prove(&mut prover_trans, &instance);
     let evals = instance.evaluate(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = FloorIOP::<FF>::verify(&wrapper, &evals, &info);
+    let mut floor_iop = FloorIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    floor_iop.generate_randomness(&mut verifier_trans, &info);
+    floor_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = floor_iop.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
     assert!(check);
 }
@@ -217,18 +242,30 @@ fn test_floor_random_iop_extension_field() {
 
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
+    let mut floor_iop = FloorIOP::default();
+    let mut prover_trans = Transcript::<EF>::new();
 
-    let kit = FloorIOP::<EF>::prove(&instance_ef);
+    floor_iop.generate_randomness(&mut prover_trans, &info);
+    floor_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = floor_iop.prove(&mut prover_trans, &instance_ef);
     let evals = instance.evaluate_ext(&kit.randomness);
 
     let wrapper = kit.extract();
-    let check = FloorIOP::<EF>::verify(&wrapper, &evals, &info);
+
+    let mut floor_iop = FloorIOP::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+
+    floor_iop.generate_randomness(&mut verifier_trans, &info);
+    floor_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = floor_iop.verify(&mut verifier_trans, &wrapper, &evals, &info);
 
     assert!(check);
 }
 
 #[test]
-fn test_snarks() {
+fn test_floor_snark() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<FF>>::new();
 
@@ -276,7 +313,41 @@ fn test_snarks() {
     );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <FloorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
-    );
+
+    // Parameters.
+    let mut params = FloorParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&instance.info(), code_spec);
+
+    // Prover.
+    let floor_prover = FloorProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let proof = floor_prover.prove(&mut prover_trans, &params, &instance);
+
+    let proof_bytes = proof.to_bytes().unwrap();
+
+    // Verifier.
+    let floor_verifier = FloorVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = FloorProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = floor_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
+
+    assert!(res);
 }

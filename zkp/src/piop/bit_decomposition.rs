@@ -735,9 +735,10 @@ where
         trans.append_message(b"BD IOP: polynomial commitment", &proof.poly_comm);
 
         let mut bd_iop = BitDecompositionIOP::<EF>::default();
+        let info_ef = info.to_ef();
 
-        bd_iop.generate_randomness(trans, &info.to_ef());
-        bd_iop.generate_randomness_for_eq_function(trans, &info.to_ef());
+        bd_iop.generate_randomness(trans, &info_ef);
+        bd_iop.generate_randomness_for_eq_function(trans, &info_ef);
 
         let proof_wrapper = ProofWrapper {
             claimed_sum: EF::zero(),

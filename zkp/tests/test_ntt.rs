@@ -457,12 +457,7 @@ fn ntt_snark(bits_order: BitsOrder) {
 
     let mut prover_trans = Transcript::<EF>::default();
 
-    let proof = ntt_prover.prove(
-        &mut prover_trans,
-        &params,
-        &ntt_instances,
-        bits_order,
-    );
+    let proof = ntt_prover.prove(&mut prover_trans, &params, &ntt_instances, bits_order);
 
     let proof_bytes = proof.to_bytes().unwrap();
 
