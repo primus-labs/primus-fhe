@@ -706,6 +706,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// * `point_evals_at_u` - The (randomized) point polynomial evaluated at u.
     /// * `info` - The batched ntt instances info.
     /// * `recursive_proof` - The recursive sumcheck proof.
+    #[allow(clippy::too_many_arguments)]
     pub fn verify(
         &self,
         trans: &mut Transcript<F>,

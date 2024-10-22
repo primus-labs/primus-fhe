@@ -33,7 +33,7 @@ use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, rc::Rc};
 
-/// Floor Instance used as prover keys
+/// Floor Instance.
 pub struct FloorInstance<F: Field> {
     /// number of variables
     pub num_vars: usize,
@@ -49,7 +49,6 @@ pub struct FloorInstance<F: Field> {
     pub output_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// decomposition info for outputs
     pub output_bits_info: BitDecompositionInstanceInfo<F>,
-
     /// offset denoted by c = a - b * k \in [1, k] such that c - 1 \in [0, k)
     pub offset: Rc<DenseMultilinearExtension<F>>,
     /// offset_aux_bits contains two instances of bit decomposition
@@ -60,27 +59,6 @@ pub struct FloorInstance<F: Field> {
     pub offset_bits_info: BitDecompositionInstanceInfo<F>,
     /// selector denoted by w \in {0, 1}
     pub selector: Rc<DenseMultilinearExtension<F>>,
-}
-
-/// Evaluation at a random point
-#[derive(Serialize, Deserialize)]
-pub struct FloorInstanceEval<F: Field> {
-    /// input denoted by a \in F_Q
-    pub input: F,
-    /// output denoted by b \in F_q
-    pub output: F,
-    /// decomposed bits of output used for range check
-    pub output_bits: Vec<F>,
-    /// offset denoted by c = a - b * k \in [1, k] such that c - 1 \in [0, k)
-    pub offset: F,
-    /// offset_aux = offset - 1 and offset - 1 - delta
-    pub offset_aux: Vec<F>,
-    /// offset_aux_bits contains two instances of bit decomposition
-    /// decomposed bits of c - 1 \in [0, 2^k_bit_len) used for range check
-    /// decomposed bits of c - 1 + delta \in [0, 2^k_bit_len) used for range check
-    pub offset_aux_bits: Vec<F>,
-    /// selector denoted by w \in {0, 1}
-    pub selector: F,
 }
 
 /// Information about Floor Instance used as verifier keys
@@ -296,9 +274,9 @@ impl<F: Field> FloorInstance<F> {
 
 impl<F: DecomposableField> FloorInstance<F> {
     /// Compute the witness required in proof and construct the instance
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `num_vars` - The number of variables.
     /// * `k` - The value (Q-1)/q
     /// * `delta` - The offset.
@@ -383,6 +361,27 @@ impl<F: DecomposableField> FloorInstance<F> {
     }
 }
 
+/// Evaluation at a random point
+#[derive(Serialize, Deserialize)]
+pub struct FloorInstanceEval<F: Field> {
+    /// input denoted by a \in F_Q
+    pub input: F,
+    /// output denoted by b \in F_q
+    pub output: F,
+    /// decomposed bits of output used for range check
+    pub output_bits: Vec<F>,
+    /// offset denoted by c = a - b * k \in [1, k] such that c - 1 \in [0, k)
+    pub offset: F,
+    /// offset_aux = offset - 1 and offset - 1 - delta
+    pub offset_aux: Vec<F>,
+    /// offset_aux_bits contains two instances of bit decomposition
+    /// decomposed bits of c - 1 \in [0, 2^k_bit_len) used for range check
+    /// decomposed bits of c - 1 + delta \in [0, 2^k_bit_len) used for range check
+    pub offset_aux_bits: Vec<F>,
+    /// selector denoted by w \in {0, 1}
+    pub selector: F,
+}
+
 impl<F: Field> FloorInstanceEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
@@ -436,7 +435,7 @@ pub struct FloorIOP<F: Field> {
 
 impl<F: Field + Serialize> FloorIOP<F> {
     /// Sample coins before proving sumcheck protocol
-    /// 
+    ///
     /// # Arguments.
     ///
     /// * `trans` - The transcripts.
@@ -444,25 +443,25 @@ impl<F: Field + Serialize> FloorIOP<F> {
     pub fn sample_coins(trans: &mut Transcript<F>, info: &FloorInstanceInfo<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info)
-                + <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info)
+            BitDecompositionIOP::<F>::num_coins(&info.output_bits_info)
+                + BitDecompositionIOP::<F>::num_coins(&info.offset_bits_info)
                 + 4,
         )
     }
 
     /// Return the number of coins used in this IOP
-    /// 
+    ///
     /// # Arguments.
     ///
     /// * `info` - The floor instance info.
     pub fn num_coins(info: &FloorInstanceInfo<F>) -> usize {
-        <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info)
-            + <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info)
+        BitDecompositionIOP::<F>::num_coins(&info.output_bits_info)
+            + BitDecompositionIOP::<F>::num_coins(&info.offset_bits_info)
             + 4
     }
 
     /// Generate the rlc randomenss.
-    /// 
+    ///
     /// # Arguments.
     ///
     /// * `trans` - The transcripts.
@@ -473,7 +472,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
     }
 
     /// Generate the randomness for the eq function.
-    /// 
+    ///
     /// # Arguments.
     ///
     /// * `trans` - The transcripts.
@@ -491,7 +490,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
     }
 
     /// Floor IOP prover.
-    /// 
+    ///
     /// # Arguments.
     ///
     /// * `trans` - The transcripts.
@@ -516,7 +515,7 @@ impl<F: Field + Serialize> FloorIOP<F> {
     }
 
     /// Add the sumcheck proving floor into the polynomial
-    /// 
+    ///
     /// # Arguments.
     ///
     /// * `randomness` - The randomness used to randomnize the ntt instance.
@@ -645,9 +644,9 @@ impl<F: Field + Serialize> FloorIOP<F> {
     }
 
     /// Verify floor
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `trans` - The transcripts.
     /// * `wrapper` - The proof wrapper.
     /// * `evals` - The evaluations of floor instances.
@@ -674,9 +673,9 @@ impl<F: Field + Serialize> FloorIOP<F> {
     }
 
     /// Verify subclaim.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `randomness` - The randomness for rlc.
     /// * `subclaim` - The subclaim returned from the sumcheck protocol.
     /// * `evals` - The evaluations of floor instances.
@@ -844,9 +843,9 @@ where
         PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
 {
     /// The prover.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `trans` - The transcripts.
     /// * `params` - The pcs params.
     /// * `instance` - The floor instance.
@@ -949,9 +948,9 @@ where
         PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
 {
     /// The verifier.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `trans` - The transcripts.
     /// * `params` - The pcs params.
     /// * `info` - The Floor instance info.

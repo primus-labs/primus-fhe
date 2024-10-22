@@ -963,7 +963,7 @@ where
 
         // Verify the proof of sumcheck protocol.
         lookup_iop.generate_second_randomness(trans, info);
-        lookup_iop.generate_randomness_for_eq_function(trans, &info);
+        lookup_iop.generate_randomness_for_eq_function(trans, info);
         let proof_wrapper = ProofWrapper {
             claimed_sum: EF::zero(),
             info: proof.poly_info,

@@ -3,33 +3,18 @@ use super::{
     BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
     BitDecompositionInstanceInfo,
 };
-use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
-use crate::utils::{
-    eval_identity_function, gen_identity_evaluations, print_statistic, verify_oracle_relation,
-};
+use crate::sumcheck::{self, verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
+use crate::utils::{eval_identity_function, gen_identity_evaluations, verify_oracle_relation};
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials,
+    ListOfProductsOfPolynomials, PolynomialInfo,
 };
+use bincode::Result;
 use core::fmt;
 use itertools::izip;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{LinearCode, LinearCodeSpec},
-    utils::hash::Hash,
-    PolynomialCommitmentScheme,
-};
+use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::time::Instant;
-use std::vec;
-
-/// Round IOP
-pub struct RoundIOP<F: Field>(PhantomData<F>);
-/// SNARKs for Round compiled with PCS
-pub struct RoundSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
+use std::{marker::PhantomData, rc::Rc};
 
 /// Round Instance used as prover keys
 pub struct RoundInstance<F: Field> {
@@ -37,27 +22,23 @@ pub struct RoundInstance<F: Field> {
     pub num_vars: usize,
     /// modulus q
     pub q: F,
-    /// k = Q - 1 / 2q where q is the modulus of the output
+    /// k = (Q - 1) / 2q where q is the modulus of the output
     pub k: F,
-
-    /// Let 2k_len denotes the bit length of 2k
-    /// delta = 2^{2k_len} - k
+    /// delta = 2^{2*k_len} - k
     pub delta: F,
     /// input denoted by a \in F_Q
     pub input: Rc<DenseMultilinearExtension<F>>,
-
     /// We introduce b' and e such that b' = b + e * q
     /// output denoted by b \in F_q
     pub output: Rc<DenseMultilinearExtension<F>>,
     /// auxiliary output denoted by b' \in {1, ..., q} satisfying b = b' (mod q)
     pub output_aux: Rc<DenseMultilinearExtension<F>>,
-    /// witness for molular operation denoted by e \in {0, 1}
+    /// witness for molular operation denoted by e \in {0, 1}.
     pub output_mod: Rc<DenseMultilinearExtension<F>>,
     /// decomposed bits of output and auxiliary output used for range check
     pub output_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// decomposition info for outputs in [q]
     pub output_bits_info: BitDecompositionInstanceInfo<F>,
-
     /// offset denoted by c = a - b * k \in [1, 2k] such that c - 1 \in [0, k)
     pub offset: Rc<DenseMultilinearExtension<F>>,
     /// offset_aux_bits contains two instances of bit decomposition
@@ -66,37 +47,12 @@ pub struct RoundInstance<F: Field> {
     pub offset_aux_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// decomposition info for offset
     pub offset_bits_info: BitDecompositionInstanceInfo<F>,
-    /// option denoted by w \in {0, 1}
-    pub option: Rc<DenseMultilinearExtension<F>>,
-}
-
-/// Evaluation at a random point
-pub struct RoundInstanceEval<F: Field> {
-    /// input denoted by a \in F_Q
-    pub input: F,
-    /// output denoted by b \in F_q
-    pub output: F,
-    /// auxiliary output denoted by b' \in {1, ..., q} satisfying b = b' (mod q)
-    pub output_aux: F,
-    /// witness for molular operation denoted by e \in {0, 1}
-    pub output_mod: F,
-    /// output and output_aux - 1
-    pub output_all: Vec<F>,
-    /// decomposed bits of output and auxiliary output used for range check
-    pub output_bits: Vec<F>,
-    /// offset denoted by c = a - b * k \in [1, k] such that c - 1 \in [0, k)
-    pub offset: F,
-    /// offset_aux = offset - 1 and offset - 1 - delta
-    pub offset_aux: Vec<F>,
-    /// offset_aux_bits contains two instances of bit decomposition
-    /// decomposed bits of c - 1 \in [0, 2^k_bit_len) used for range check
-    /// decomposed bits of c - 1 + delta \in [0, 2^k_bit_len) used for range check
-    pub offset_aux_bits: Vec<F>,
-    /// option denoted by w \in {0, 1}
-    pub option: F,
+    /// selector denoted by w \in {0, 1}
+    pub selector: Rc<DenseMultilinearExtension<F>>,
 }
 
 /// Information about Round Instance used as verifier keys
+#[derive(Serialize, Deserialize)]
 pub struct RoundInstanceInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
@@ -127,6 +83,38 @@ impl<F: Field> fmt::Display for RoundInstanceInfo<F> {
     }
 }
 
+impl<F: Field> RoundInstanceInfo<F> {
+    /// Return the number of small polynomials used in IOP
+    #[inline]
+    pub fn num_oracles(&self) -> usize {
+        6 + 2 * self.output_bits_info.bits_len + 2 * self.offset_bits_info.bits_len
+    }
+
+    /// Return the log of the number of small polynomials used in IOP
+    #[inline]
+    pub fn log_num_oracles(&self) -> usize {
+        self.num_oracles().next_power_of_two().ilog2() as usize
+    }
+
+    /// Generate the number of variables in the committed polynomial.
+    #[inline]
+    pub fn generate_num_var(&self) -> usize {
+        self.num_vars + self.log_num_oracles()
+    }
+
+    /// Construct an EF version.
+    #[inline]
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RoundInstanceInfo<EF> {
+        RoundInstanceInfo::<EF> {
+            num_vars: self.num_vars,
+            q: EF::from_base(self.q),
+            k: EF::from_base(self.k),
+            delta: EF::from_base(self.delta),
+            output_bits_info: self.output_bits_info.to_ef(),
+            offset_bits_info: self.offset_bits_info.to_ef(),
+        }
+    }
+}
 impl<F: Field> RoundInstance<F> {
     /// Extract the information
     #[inline]
@@ -141,18 +129,6 @@ impl<F: Field> RoundInstance<F> {
         }
     }
 
-    /// Return the number of small polynomials used in IOP
-    #[inline]
-    pub fn num_oracles(&self) -> usize {
-        6 + self.output_bits.len() + self.offset_aux_bits.len()
-    }
-
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
-    }
-
     /// Pack all the involved small polynomials into a single vector of evaluations without padding
     pub fn pack_all_mles(&self) -> Vec<F> {
         self.input
@@ -161,7 +137,7 @@ impl<F: Field> RoundInstance<F> {
             .chain(self.output_aux.iter())
             .chain(self.output_mod.iter())
             .chain(self.offset.iter())
-            .chain(self.option.iter())
+            .chain(self.selector.iter())
             .chain(self.output_bits.iter().flat_map(|bit| bit.iter()))
             .chain(self.offset_aux_bits.iter().flat_map(|bit| bit.iter()))
             .copied()
@@ -172,9 +148,9 @@ impl<F: Field> RoundInstance<F> {
     /// The evaluations of this oracle is generated by the evaluations of all mles and the padded zeros.
     /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
     pub fn generate_oracle(&self) -> DenseMultilinearExtension<F> {
-        let num_vars_added = self.log_num_oracles();
-        let num_vars = self.num_vars + num_vars_added;
-        let num_zeros_padded = ((1 << num_vars_added) - self.num_oracles()) * (1 << self.num_vars);
+        let info = self.info();
+        let num_vars = info.generate_num_var();
+        let num_zeros_padded = (1 << num_vars) - info.num_oracles() * (1 << self.num_vars);
 
         // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_all_mles();
@@ -194,7 +170,7 @@ impl<F: Field> RoundInstance<F> {
             output_aux: Rc::new(self.output_aux.to_ef::<EF>()),
             output_mod: Rc::new(self.output_mod.to_ef::<EF>()),
             offset: Rc::new(self.offset.to_ef::<EF>()),
-            option: Rc::new(self.option.to_ef::<EF>()),
+            selector: Rc::new(self.selector.to_ef::<EF>()),
             output_bits: self
                 .output_bits
                 .iter()
@@ -223,7 +199,7 @@ impl<F: Field> RoundInstance<F> {
             output_mod: self.output_mod.evaluate(point),
             output_all: vec![output, output_aux - F::one()],
             offset,
-            option: self.option.evaluate(point),
+            selector: self.selector.evaluate(point),
             output_bits: self
                 .output_bits
                 .iter()
@@ -254,7 +230,7 @@ impl<F: Field> RoundInstance<F> {
             output_mod: self.output_mod.evaluate_ext(point),
             output_all: vec![output, output_aux - F::one()],
             offset,
-            option: self.option.evaluate_ext(point),
+            selector: self.selector.evaluate_ext(point),
             output_bits: self
                 .output_bits
                 .iter()
@@ -313,6 +289,16 @@ impl<F: Field> RoundInstance<F> {
 
 impl<F: DecomposableField> RoundInstance<F> {
     /// Compute the witness required in proof and construct the instance
+    ///
+    /// # Arguments.
+    ///
+    /// * `num_vars` - The number of variables.
+    /// * `q` - The modulus of the output.
+    /// * `k` - The value (Q-1)/2q.
+    /// * `delta` - The offset.
+    /// * `input` - The MLE of input.
+    /// * `output` - The MLS of output.
+    /// * `output_bits_info` -
     #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn new(
@@ -322,14 +308,15 @@ impl<F: DecomposableField> RoundInstance<F> {
         delta: F,
         input: Rc<DenseMultilinearExtension<F>>,
         output: Rc<DenseMultilinearExtension<F>>,
-        output_bits_info: &mut BitDecompositionInstanceInfo<F>,
-        offset_bits_info: &mut BitDecompositionInstanceInfo<F>,
+        output_bits_info: &BitDecompositionInstanceInfo<F>,
+        offset_bits_info: &BitDecompositionInstanceInfo<F>,
     ) -> Self {
         assert_eq!(num_vars, output.num_vars);
         assert_eq!(num_vars, output_bits_info.num_vars);
         assert_eq!(num_vars, offset_bits_info.num_vars);
+        assert_eq!(2, output_bits_info.num_instances);
+        assert_eq!(2, offset_bits_info.num_instances);
 
-        output_bits_info.num_instances = 2;
         let mut output_bits =
             output.get_decomposed_mles(output_bits_info.base_len, output_bits_info.bits_len);
 
@@ -344,7 +331,6 @@ impl<F: DecomposableField> RoundInstance<F> {
                 *mod_q = F::one();
             } else {
                 *b_prime = *b;
-                // mod_q is F::zero();
             }
         }
         let output_aux_minus_one = DenseMultilinearExtension::from_evaluations_vec(
@@ -357,7 +343,7 @@ impl<F: DecomposableField> RoundInstance<F> {
         );
 
         // set w = 1 iff a = k & b = 0
-        let option = Rc::new(DenseMultilinearExtension::<F>::from_evaluations_vec(
+        let selector = Rc::new(DenseMultilinearExtension::<F>::from_evaluations_vec(
             num_vars,
             input
                 .iter()
@@ -373,10 +359,9 @@ impl<F: DecomposableField> RoundInstance<F> {
         // if w = 0: c = a - b * k
         // if w = 1: c = 1 defaultly
         let f_two = F::one() + F::one();
-        offset_bits_info.num_instances = 2;
         let offset = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
-            izip!(option.iter(), input.iter(), output_aux.iter())
+            izip!(selector.iter(), input.iter(), output_aux.iter())
                 .map(|(w, a, b_prime)| match w.is_zero() {
                     true => *a - (f_two * b_prime - F::one()) * k,
                     false => F::one(),
@@ -412,11 +397,38 @@ impl<F: DecomposableField> RoundInstance<F> {
             output_bits,
             offset,
             offset_aux_bits,
-            option,
+            selector,
             offset_bits_info: offset_bits_info.clone(),
             output_bits_info: output_bits_info.clone(),
         }
     }
+}
+
+/// Evaluation at a random point
+#[derive(Serialize, Deserialize)]
+pub struct RoundInstanceEval<F: Field> {
+    /// input denoted by a \in F_Q
+    pub input: F,
+    /// output denoted by b \in F_q
+    pub output: F,
+    /// auxiliary output denoted by b' \in {1, ..., q} satisfying b = b' (mod q)
+    pub output_aux: F,
+    /// witness for molular operation denoted by e \in {0, 1}
+    pub output_mod: F,
+    /// output and output_aux - 1
+    pub output_all: Vec<F>,
+    /// decomposed bits of output and auxiliary output used for range check
+    pub output_bits: Vec<F>,
+    /// offset denoted by c = a - b * k \in [1, k] such that c - 1 \in [0, k)
+    pub offset: F,
+    /// offset_aux = offset - 1 and offset - 1 - delta
+    pub offset_aux: Vec<F>,
+    /// offset_aux_bits contains two instances of bit decomposition
+    /// decomposed bits of c - 1 \in [0, 2^k_bit_len) used for range check
+    /// decomposed bits of c - 1 + delta \in [0, 2^k_bit_len) used for range check
+    pub offset_aux_bits: Vec<F>,
+    /// selector denoted by w \in {0, 1}
+    pub selector: F,
 }
 
 impl<F: Field> RoundInstanceEval<F> {
@@ -441,7 +453,7 @@ impl<F: Field> RoundInstanceEval<F> {
         res.push(self.output_aux);
         res.push(self.output_mod);
         res.push(self.offset);
-        res.push(self.option);
+        res.push(self.selector);
         res.extend(self.output_bits.iter());
         res.extend(self.offset_aux_bits.iter());
         res
@@ -463,51 +475,106 @@ impl<F: Field> RoundInstanceEval<F> {
     }
 }
 
+/// Round IOP
+#[derive(Default)]
+pub struct RoundIOP<F: Field> {
+    /// The random vector for random linear combination.
+    pub randomness: Vec<F>,
+    /// The random value for identity function.
+    pub u: Vec<F>,
+}
+
 impl<F: Field + Serialize> RoundIOP<F> {
-    /// sample coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, instance: &RoundInstance<F>) -> Vec<F> {
+    /// Sample coins before proving sumcheck protocol
+    ///
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The round instance info.
+    pub fn sample_coins(trans: &mut Transcript<F>, info: &RoundInstanceInfo<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecompositionIOP<F>>::num_coins(&instance.output_bits_info)
-                + <BitDecompositionIOP<F>>::num_coins(&instance.offset_bits_info)
+            BitDecompositionIOP::<F>::num_coins(&info.output_bits_info)
+                + BitDecompositionIOP::<F>::num_coins(&info.offset_bits_info)
                 + 5,
         )
     }
 
-    /// return the number of coins used in this IOP
+    /// Return the number of coins used in this IOP
+    ///
+    /// # Arguments.
+    ///
+    /// * `info` - The round instance info.
     pub fn num_coins(info: &RoundInstanceInfo<F>) -> usize {
-        <BitDecompositionIOP<F>>::num_coins(&info.output_bits_info)
-            + <BitDecompositionIOP<F>>::num_coins(&info.offset_bits_info)
+        BitDecompositionIOP::<F>::num_coins(&info.output_bits_info)
+            + BitDecompositionIOP::<F>::num_coins(&info.offset_bits_info)
             + 5
     }
 
-    /// Prove round
-    pub fn prove(instance: &RoundInstance<F>) -> SumcheckKit<F> {
-        let mut trans = Transcript::<F>::new();
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
+    /// Generate the rlc randomenss.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The round instance info.
+    #[inline]
+    pub fn generate_randomness(&mut self, trans: &mut Transcript<F>, info: &RoundInstanceInfo<F>) {
+        self.randomness = Self::sample_coins(trans, info);
+    }
 
+    /// Generate the randomness for the eq function.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The round instance info.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &RoundInstanceInfo<F>,
+    ) {
+        self.u = trans.get_vec_challenge(
+            b"ROUND IOP: random point used to instantiate sumcheck protocol",
+            info.num_vars,
+        );
+    }
+
+    /// Round IOP prover.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `instance` - The round instance.
+    pub fn prove(&self, trans: &mut Transcript<F>, instance: &RoundInstance<F>) -> SumcheckKit<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
-        let randomness = Self::sample_coins(&mut trans, instance);
-        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
+
+        let eq_at_u = Rc::new(gen_identity_evaluations(&self.u));
+
+        Self::prepare_products_of_polynomial(&self.randomness, &mut poly, instance, &eq_at_u);
 
         let (proof, state) =
-            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
+            MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
 
         SumcheckKit {
             proof,
             info: poly.info(),
             claimed_sum: F::zero(),
             randomness: state.randomness,
-            u,
+            u: self.u.clone(),
         }
     }
 
-    /// Prove round
-    pub fn prove_as_subprotocol(
+    /// Add the sumcheck proving floor into the polynomial
+    ///
+    /// # Arguments.
+    ///
+    /// * `randomness` - The randomness used to randomnize the ntt instance.
+    /// * `poly` - The list of product of polynomials.
+    /// * `instance` - The round instance.
+    /// * `eq_at_u` - The evaluation of eq function on point u.
+    pub fn prepare_products_of_polynomial(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &RoundInstance<F>,
@@ -555,8 +622,8 @@ impl<F: Field + Serialize> RoundIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
+                Rc::clone(&instance.selector),
             ],
             &[
                 (F::one(), F::zero()),
@@ -566,8 +633,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
             r_1,
         );
 
-        // 3. add sumcheck2 for \sum_{x} eq(u, x) * [w(x) * ((a(x)-k) * \lambda_1 + b(x) * \lambda_2) +
-        //                                           (1 - w(x)) * (a(x) - (2b'(x)-1) * k - c(x))]=0
+        // 3. add sumcheck2 for \sum_{x} eq(u, x) * [w(x) * ((a(x)-k) * \lambda_1 + b(x) * \lambda_2) + (1 - w(x)) * (a(x) - (2b'(x)-1) * k - c(x))]=0
         // with random coefficient r_2 where \lambda_1 and \lambda_2 are chosen by the verifier
 
         // The following steps add five products composing the function in the above sumcheck protocol
@@ -575,7 +641,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.input),
             ],
             &[
@@ -589,7 +655,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.output),
             ],
             &[
@@ -603,7 +669,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.input),
             ],
             &[
@@ -618,7 +684,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.output_aux),
             ],
             &[
@@ -632,7 +698,7 @@ impl<F: Field + Serialize> RoundIOP<F> {
         poly.add_product_with_linear_op(
             [
                 Rc::clone(eq_at_u),
-                Rc::clone(&instance.option),
+                Rc::clone(&instance.selector),
                 Rc::clone(&instance.offset),
             ],
             &[
@@ -644,43 +710,45 @@ impl<F: Field + Serialize> RoundIOP<F> {
         );
     }
 
-    /// Verify addition in Zq
+    /// Verify round
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `wrapper` - The proof wrapper.
+    /// * `evals` - The evaluations of round instances.
+    /// * `info` - The round instance info.    
     pub fn verify(
+        &self,
+        trans: &mut Transcript<F>,
         wrapper: &ProofWrapper<F>,
         evals: &RoundInstanceEval<F>,
         info: &RoundInstanceInfo<F>,
-    ) -> bool {
-        let mut trans = Transcript::new();
+    ) -> (bool, Vec<F>) {
+        let mut subclaim =
+            MLSumcheck::verify(trans, &wrapper.info, wrapper.claimed_sum, &wrapper.proof)
+                .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&self.u, &subclaim.point);
 
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            info.num_vars,
-        );
-
-        // randomness to combine sumcheck protocols
-        let randomness = trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            Self::num_coins(info),
-        );
-
-        let mut subclaim = MLSumcheck::verify(
-            &mut trans,
-            &wrapper.info,
-            wrapper.claimed_sum,
-            &wrapper.proof,
-        )
-        .expect("fail to verify the sumcheck protocol");
-        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
-
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals, info, eq_at_u_r) {
-            return false;
+        if !Self::verify_subclaim(&self.randomness, &mut subclaim, evals, info, eq_at_u_r) {
+            return (false, vec![]);
         }
 
-        subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()
+        let res = subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero();
+
+        (res, subclaim.point)
     }
 
-    /// Verify round
-    pub fn verify_as_subprotocol(
+    /// Verify subclaim.
+    ///
+    /// # Arguments.
+    ///
+    /// * `randomness` - The randomness for rlc.
+    /// * `subclaim` - The subclaim returned from the sumcheck protocol.
+    /// * `evals` - The evaluations of round instances.
+    /// * `info` - The round instance info.
+    /// * `eq_at_u_r` - The value eq(u,r).    
+    pub fn verify_subclaim(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
         evals: &RoundInstanceEval<F>,
@@ -718,11 +786,12 @@ impl<F: Field + Serialize> RoundIOP<F> {
         // check 2: check the subclaim returned from the sumcheck protocol
         subclaim.expected_evaluations -=
             r_0 * eq_at_u_r * evals.output_mod * (F::one() - evals.output_mod);
-        subclaim.expected_evaluations -= r_1 * eq_at_u_r * evals.option * (F::one() - evals.option);
+        subclaim.expected_evaluations -=
+            r_1 * eq_at_u_r * evals.selector * (F::one() - evals.selector);
         subclaim.expected_evaluations -= r_2
             * eq_at_u_r
-            * (evals.option * ((evals.input - info.k) * lambda_1 + evals.output * lambda_2)
-                + (F::one() - evals.option)
+            * (evals.selector * ((evals.input - info.k) * lambda_1 + evals.output * lambda_2)
+                + (F::one() - evals.selector)
                     * (evals.input
                         - (f_two * evals.output_aux - F::one()) * info.k
                         - evals.offset));
@@ -732,162 +801,281 @@ impl<F: Field + Serialize> RoundIOP<F> {
     }
 }
 
-impl<F, EF> RoundSnarks<F, EF>
+/// Round proof with PCS.
+#[derive(Serialize, Deserialize)]
+pub struct RoundProof<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// Polynomial info.
+    pub poly_info: PolynomialInfo,
+    /// Polynomial commitment.
+    pub poly_comm: Pcs::Commitment,
+    /// The evaluation of the polynomial on a random point.
+    pub oracle_eval: EF,
+    /// The opening proof of the evaluation.
+    pub eval_proof: Pcs::Proof,
+    /// The sumcheck proof.
+    pub sumcheck_proof: sumcheck::Proof<EF>,
+    /// The evaluation of small oracles.
+    pub evals: RoundInstanceEval<EF>,
+}
+
+impl<F, EF, S, Pcs> RoundProof<F, EF, S, Pcs>
 where
     F: Field + Serialize + for<'de> Deserialize<'de>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
 {
-    /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &RoundInstance<F>, code_spec: &S)
-    where
-        H: Hash + Sync + Send,
-        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
-        S: LinearCodeSpec<F, Code = C> + Clone,
-    {
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
+/// Round parameter.
+pub struct RoundParams<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// The parameter for the polynomial commitment.
+    pub pp: Pcs::Parameters,
+}
+
+impl<F, EF, S, Pcs> Default for RoundParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        Self {
+            pp: Pcs::Parameters::default(),
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> RoundParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S: Clone,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    /// Setup for the PCS.
+    #[inline]
+    pub fn setup(&mut self, info: &RoundInstanceInfo<F>, code_spec: S) {
+        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec));
+    }
+}
+
+/// Prover for Round with PCS.
+pub struct RoundProver<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for RoundProver<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        RoundProver {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> RoundProver<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The prover.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `params` - The pcs params.
+    /// * `instance` - The round instance.
+    pub fn prove(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &RoundParams<F, EF, S, Pcs>,
+        instance: &RoundInstance<F>,
+    ) -> RoundProof<F, EF, S, Pcs> {
         let instance_info = instance.info();
-        println!("Prove {instance_info}\n");
+        trans.append_message(b"round instance", &instance_info);
+
         // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
         let committed_poly = instance.generate_oracle();
-        // 1. Use PCS to commit the above polynomial.
-        let start = Instant::now();
-        let pp =
-            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
-        let setup_time = start.elapsed().as_millis();
 
-        let start = Instant::now();
-        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
-        let commit_time = start.elapsed().as_millis();
+        // Use PCS to commit the above polynomial.
+        let (poly_comm, poly_comm_state) = Pcs::commit(&params.pp, &committed_poly);
 
-        // 2. Prover generates the proof
-        let prover_start = Instant::now();
-        let mut iop_proof_size = 0;
-        let mut prover_trans = Transcript::<EF>::new();
-        // Convert the original instance into an instance defined over EF
+        trans.append_message(b"Round IOP: polynomial commitment", &poly_comm);
+
+        // Prover generates the proof.
+        // Convert the orignal instance into an instance defined over EF.
         let instance_ef = instance.to_ef::<EF>();
-        let instance_info = instance_ef.info();
+        let instance_ef_info = instance_ef.info();
+        let mut round_iop = RoundIOP::<EF>::default();
 
-        // 2.1 Generate the random point to instantiate the sumcheck protocol
-        let prover_u = prover_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
+        round_iop.generate_randomness(trans, &instance_ef_info);
+        round_iop.generate_randomness_for_eq_function(trans, &instance_ef_info);
+
+        let kit = round_iop.prove(trans, &instance_ef);
+
+        // Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut requested_point = kit.randomness.clone();
+        let oracle_randomness = trans.get_vec_challenge(
+            b"Round IOP: random linear combination for evaluations of oracles",
+            instance_info.log_num_oracles(),
         );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
+        requested_point.extend(&oracle_randomness);
 
-        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
-        let claimed_sum = EF::zero();
-        let randomness = RoundIOP::sample_coins(&mut prover_trans, &instance_ef);
-        RoundIOP::prove_as_subprotocol(&randomness, &mut sumcheck_poly, &instance_ef, &eq_at_u);
-
-        let poly_info = sumcheck_poly.info();
-
-        // 2.3 Generate proof of sumcheck protocol
-        let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Addition In Zq");
-        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
-        let iop_prover_time = prover_start.elapsed().as_millis();
-
-        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let start = Instant::now();
-        let evals = instance.evaluate_ext(&sumcheck_state.randomness);
-
-        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        let mut requested_point = sumcheck_state.randomness.clone();
-        requested_point.extend(&prover_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
-        ));
+        // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
         let oracle_eval = committed_poly.evaluate_ext(&requested_point);
 
-        // 2.6 Generate the evaluation proof of the requested point
-        let eval_proof = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
+        let evals = instance.evaluate_ext(&kit.randomness);
+
+        // Generate the evaluation proof of the requested point
+        let eval_proof = Pcs::open(
+            &params.pp,
+            &poly_comm,
+            &poly_comm_state,
             &requested_point,
-            &mut prover_trans,
-        );
-        let pcs_open_time = start.elapsed().as_millis();
-
-        // 3. Verifier checks the proof
-        let verifier_start = Instant::now();
-        let mut verifier_trans = Transcript::<EF>::new();
-
-        // 3.1 Generate the random point to instantiate the sumcheck protocol
-        let verifier_u = verifier_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
+            trans,
         );
 
-        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-        let randomness = verifier_trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            <RoundIOP<EF>>::num_coins(&instance_info),
-        );
-
-        // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify(
-            &mut verifier_trans,
-            &poly_info,
-            claimed_sum,
-            &sumcheck_proof,
-        )
-        .expect("Verify the sumcheck proof generated in Round");
-        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
-
-        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subcliam = RoundIOP::<EF>::verify_as_subprotocol(
-            &randomness,
-            &mut subclaim,
-            &evals,
-            &instance_info,
-            eq_at_u_r,
-        );
-        assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
-        let iop_verifier_time = verifier_start.elapsed().as_millis();
-
-        // 3.5 and also check the relation between these small oracles and the committed oracle
-        let start = Instant::now();
-        let mut pcs_proof_size = 0;
-        let flatten_evals = evals.flatten();
-        let oracle_randomness = verifier_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            evals.log_num_oracles(),
-        );
-        let check_oracle = verify_oracle_relation(&flatten_evals, oracle_eval, &oracle_randomness);
-        assert!(check_oracle);
-
-        // 3.5 Check the evaluation of a random point over the committed oracle
-        let check_pcs = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point,
+        RoundProof {
+            poly_info: kit.info,
+            poly_comm,
             oracle_eval,
-            &eval_proof,
-            &mut verifier_trans,
-        );
-        assert!(check_pcs);
-        let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&eval_proof).unwrap().len()
-            + bincode::serialize(&flatten_evals).unwrap().len();
+            eval_proof,
+            sumcheck_proof: kit.proof,
+            evals,
+        }
+    }
+}
 
-        // 4. print statistic
-        print_statistic(
-            iop_prover_time + pcs_open_time,
-            iop_verifier_time + pcs_verifier_time,
-            iop_proof_size + pcs_proof_size,
-            iop_prover_time,
-            iop_verifier_time,
-            iop_proof_size,
-            committed_poly.num_vars,
-            instance.num_oracles(),
-            instance.num_vars,
-            setup_time,
-            commit_time,
-            pcs_open_time,
-            pcs_verifier_time,
-            pcs_proof_size,
+/// Verifier for Round with PCS.
+pub struct RoundVerifier<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for RoundVerifier<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        RoundVerifier {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> RoundVerifier<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The verifier.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `params` - The pcs params.
+    /// * `info` - The Round instance info.
+    /// * `proof` - The Round proof.
+    pub fn verify(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &RoundParams<F, EF, S, Pcs>,
+        info: &RoundInstanceInfo<F>,
+        proof: &RoundProof<F, EF, S, Pcs>,
+    ) -> bool {
+        let mut res = true;
+
+        trans.append_message(b"round instance", info);
+        trans.append_message(b"Round IOP: polynomial commitment", &proof.poly_comm);
+
+        let mut round_iop = RoundIOP::<EF>::default();
+        let info_ef = info.to_ef();
+        round_iop.generate_randomness(trans, &info_ef);
+        round_iop.generate_randomness_for_eq_function(trans, &info_ef);
+
+        let proof_wrapper = ProofWrapper {
+            claimed_sum: EF::zero(),
+            info: proof.poly_info,
+            proof: proof.sumcheck_proof.clone(),
+        };
+
+        let (b, randomness) = round_iop.verify(trans, &proof_wrapper, &proof.evals, &info.to_ef());
+
+        res &= b;
+
+        // Check the relation between these small oracles and the committed oracle.
+        let flatten_evals = proof.evals.flatten();
+        let oracle_randomness = trans.get_vec_challenge(
+            b"Round IOP: random linear combination for evaluations of oracles",
+            proof.evals.log_num_oracles(),
         );
+
+        res &= verify_oracle_relation(&flatten_evals, proof.oracle_eval, &oracle_randomness);
+
+        // Check the evaluation of a random point over the committed oracle.
+        let mut requested_point = randomness.clone();
+        requested_point.extend(&oracle_randomness);
+        res &= Pcs::verify(
+            &params.pp,
+            &proof.poly_comm,
+            &requested_point,
+            proof.oracle_eval,
+            &proof.eval_proof,
+            trans,
+        );
+
+        res
     }
 }

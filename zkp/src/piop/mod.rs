@@ -32,5 +32,5 @@ pub use rlwe_mul_rgsw::{
     RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswIOPPure, RlweMultRgswInstance,
     RlweMultRgswSnarksOpt,
 };
-pub use round::{RoundIOP, RoundInstance, RoundSnarks};
+pub use round::{RoundIOP, RoundInstance};
 pub use zq_to_rq::{ZqToRQIOP, ZqToRQInstance};
