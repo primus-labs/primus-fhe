@@ -54,14 +54,14 @@ use std::rc::Rc;
 use std::time::Instant;
 use std::vec;
 /// IOP for transformation from Zq to RQ i.e. R/QR
-pub struct ZqToRQIOP<F: Field>(PhantomData<F>);
+pub struct LiftIOP<F: Field>(PhantomData<F>);
 
 /// Snarks for transformation from Zq to RQ i.e. R/QR compiled with PCS
 pub struct ZqToRQSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
 
-/// Zq to RQ Instance.
+/// Instance of lifting Zq to RQ.
 /// In this instance, we require the outputs.len() == 1 << num_vars
-pub struct ZqToRQInstance<F: Field> {
+pub struct LiftInstance<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// modulus of Zq
@@ -90,8 +90,8 @@ pub struct ZqToRQInstance<F: Field> {
     pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
-/// Information of ZqToRQInstance
-pub struct ZqToRQInstanceInfo<F: Field> {
+/// Information of LiftInstance
+pub struct LiftInstanceInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// modulus of Zq
@@ -104,7 +104,7 @@ pub struct ZqToRQInstanceInfo<F: Field> {
     pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
-impl<F: Field> fmt::Display for ZqToRQInstanceInfo<F> {
+impl<F: Field> fmt::Display for LiftInstanceInfo<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
@@ -117,7 +117,7 @@ impl<F: Field> fmt::Display for ZqToRQInstanceInfo<F> {
 }
 
 /// Evaluations at the same random point
-pub struct ZqToRQInstanceEval<F: Field> {
+pub struct LiftInstanceEval<F: Field> {
     /// input a in Zq
     pub input: F,
     /// output C = (c_0, ..., c_{N-1})^T \in F^{N * N}
@@ -133,11 +133,11 @@ pub struct ZqToRQInstanceEval<F: Field> {
     pub prod: F,
 }
 
-impl<F: Field> ZqToRQInstance<F> {
+impl<F: Field> LiftInstance<F> {
     /// Extract the information
     #[inline]
-    pub fn info(&self) -> ZqToRQInstanceInfo<F> {
-        ZqToRQInstanceInfo {
+    pub fn info(&self) -> LiftInstanceInfo<F> {
+        LiftInstanceInfo {
             num_vars: self.num_vars,
             q: self.q,
             dim_rlwe: self.dim_rlwe,
@@ -186,8 +186,8 @@ impl<F: Field> ZqToRQInstance<F> {
     }
 
     /// Construct a EF version
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> ZqToRQInstance<EF> {
-        ZqToRQInstance::<EF> {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> LiftInstance<EF> {
+        LiftInstance::<EF> {
             num_vars: self.num_vars,
             q: EF::from_base(self.q),
             dim_rlwe: EF::from_base(self.dim_rlwe),
@@ -217,8 +217,8 @@ impl<F: Field> ZqToRQInstance<F> {
 
     /// Evaluate at the same random point
     #[inline]
-    pub fn evaluate(&self, point: &[F]) -> ZqToRQInstanceEval<F> {
-        ZqToRQInstanceEval {
+    pub fn evaluate(&self, point: &[F]) -> LiftInstanceEval<F> {
+        LiftInstanceEval {
             input: self.input.evaluate(point),
             outputs: self
                 .outputs
@@ -241,8 +241,8 @@ impl<F: Field> ZqToRQInstance<F> {
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(
         &self,
         point: &[EF],
-    ) -> ZqToRQInstanceEval<EF> {
-        ZqToRQInstanceEval {
+    ) -> LiftInstanceEval<EF> {
+        LiftInstanceEval {
             input: self.input.evaluate_ext(point),
             outputs: self
                 .outputs
@@ -274,7 +274,7 @@ impl<F: Field> ZqToRQInstance<F> {
     }
 }
 
-impl<F: DecomposableField> ZqToRQInstance<F> {
+impl<F: DecomposableField> LiftInstance<F> {
     /// Construct an instance
     #[inline]
     pub fn new(
@@ -330,7 +330,7 @@ impl<F: DecomposableField> ZqToRQInstance<F> {
             acc += F::one();
             *t = acc;
         }
-        ZqToRQInstance {
+        LiftInstance {
             num_vars,
             q,
             dim_rlwe,
@@ -349,7 +349,7 @@ impl<F: DecomposableField> ZqToRQInstance<F> {
     }
 }
 
-impl<F: Field> ZqToRQInstanceEval<F> {
+impl<F: Field> LiftInstanceEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
@@ -385,9 +385,9 @@ impl<F: Field> ZqToRQInstanceEval<F> {
     }
 }
 
-impl<F: Field + Serialize> ZqToRQIOP<F> {
+impl<F: Field + Serialize> LiftIOP<F> {
     /// sample coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, instance: &ZqToRQInstance<F>) -> Vec<F> {
+    pub fn sample_coins(trans: &mut Transcript<F>, instance: &LiftInstance<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
             <BitDecompositionIOP<F>>::num_coins(&instance.bits_info) + 3,
@@ -395,12 +395,12 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
     }
 
     /// return the number of coins used in this IOP
-    pub fn num_coins(info: &ZqToRQInstanceInfo<F>) -> usize {
+    pub fn num_coins(info: &LiftInstanceInfo<F>) -> usize {
         <BitDecompositionIOP<F>>::num_coins(&info.bits_info) + 3
     }
 
     /// Prove round
-    pub fn prove(instance: &ZqToRQInstance<F>) -> SumcheckKit<F> {
+    pub fn prove(instance: &LiftInstance<F>) -> SumcheckKit<F> {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -412,7 +412,7 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
         let randomness = Self::sample_coins(&mut trans, instance);
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
-        Self::prove_as_subprotocol(
+        Self::prepare_products_of_polynomial(
             &randomness,
             &mut poly,
             &mut claimed_sum,
@@ -434,11 +434,11 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
     }
 
     /// Add the sumchecks proving transformation from Zq to RQ
-    pub fn prove_as_subprotocol(
+    pub fn prepare_products_of_polynomial(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         claimed_sum: &mut F,
-        instance: &ZqToRQInstance<F>,
+        instance: &LiftInstance<F>,
         matrix_at_u: &Rc<DenseMultilinearExtension<F>>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
         u: &[F],
@@ -489,9 +489,9 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
     /// Verify the transformation from Zq to RQ
     pub fn verify(
         wrapper: &mut ProofWrapper<F>,
-        evals_at_r: &ZqToRQInstanceEval<F>,
-        evals_at_u: &ZqToRQInstanceEval<F>,
-        info: &ZqToRQInstanceInfo<F>,
+        evals_at_r: &LiftInstanceEval<F>,
+        evals_at_u: &LiftInstanceEval<F>,
+        info: &LiftInstanceInfo<F>,
     ) -> bool {
         let mut trans = Transcript::new();
 
@@ -515,7 +515,7 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
         .expect("fail to verify the sumcheck protocol");
         let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
 
-        if !Self::verify_as_subprotocol(
+        if !Self::verify_subclaim(
             &randomness,
             &mut subclaim,
             &mut wrapper.claimed_sum,
@@ -534,13 +534,13 @@ impl<F: Field + Serialize> ZqToRQIOP<F> {
     /// Verify the transformation from Zq to RQ
     #[allow(clippy::too_many_arguments)]
     #[inline]
-    pub fn verify_as_subprotocol(
+    pub fn verify_subclaim(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
         claimed_sum: &mut F,
-        evals_at_r: &ZqToRQInstanceEval<F>,
-        evals_at_u: &ZqToRQInstanceEval<F>,
-        info: &ZqToRQInstanceInfo<F>,
+        evals_at_r: &LiftInstanceEval<F>,
+        evals_at_u: &LiftInstanceEval<F>,
+        info: &LiftInstanceInfo<F>,
         eq_at_u_r: F,
         u: &[F],
     ) -> bool {
@@ -591,7 +591,7 @@ where
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &ZqToRQInstance<F>, code_spec: &S)
+    pub fn snarks<H, C, S>(instance: &LiftInstance<F>, code_spec: &S)
     where
         H: Hash + Sync + Send,
         C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
@@ -629,8 +629,8 @@ where
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
-        let randomness = ZqToRQIOP::sample_coins(&mut prover_trans, &instance_ef);
-        ZqToRQIOP::prove_as_subprotocol(
+        let randomness = LiftIOP::sample_coins(&mut prover_trans, &instance_ef);
+        LiftIOP::prepare_products_of_polynomial(
             &randomness,
             &mut sumcheck_poly,
             &mut claimed_sum,
@@ -696,7 +696,7 @@ where
         // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
         let randomness = verifier_trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <ZqToRQIOP<EF>>::num_coins(&instance_info),
+            <LiftIOP<EF>>::num_coins(&instance_info),
         );
 
         // 3.3 Check the proof of the sumcheck protocol
@@ -710,7 +710,7 @@ where
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subcliam = ZqToRQIOP::<EF>::verify_as_subprotocol(
+        let check_subcliam = LiftIOP::<EF>::verify_subclaim(
             &randomness,
             &mut subclaim,
             &mut claimed_sum,

@@ -7,7 +7,7 @@ pub mod lookup;
 pub mod ntt;
 pub mod rlwe_mul_rgsw;
 pub mod round;
-pub mod zq_to_rq;
+pub mod lift;
 
 pub use accumulator::{
     AccumulatorIOP, AccumulatorInstance, AccumulatorSnarksOpt, AccumulatorWitness,
@@ -33,4 +33,4 @@ pub use rlwe_mul_rgsw::{
     RlweMultRgswSnarksOpt,
 };
 pub use round::{RoundIOP, RoundInstance};
-pub use zq_to_rq::{ZqToRQIOP, ZqToRQInstance};
+pub use lift::{LiftIOP, LiftInstance};

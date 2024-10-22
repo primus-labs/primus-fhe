@@ -6,8 +6,8 @@ use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
-use zkp::piop::zq_to_rq::ZqToRQSnarks;
-use zkp::piop::{BitDecompositionInstanceInfo, ZqToRQInstance};
+use zkp::piop::lift::ZqToRQSnarks;
+use zkp::piop::{BitDecompositionInstanceInfo, LiftInstance};
 
 type FF = BabyBear;
 type EF = BabyBearExetension;
@@ -84,7 +84,7 @@ fn main() {
         num_instances: 0,
     };
 
-    let instance = ZqToRQInstance::new(
+    let instance = LiftInstance::new(
         num_vars,
         q,
         dim_rlwe,

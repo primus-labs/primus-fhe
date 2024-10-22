@@ -9,7 +9,7 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{zq_to_rq::ZqToRQSnarks, BitDecompositionInstanceInfo, ZqToRQIOP, ZqToRQInstance};
+use zkp::piop::{lift::ZqToRQSnarks, BitDecompositionInstanceInfo, LiftIOP, LiftInstance};
 
 #[derive(Field, DecomposableField)]
 #[modulus = 8]
@@ -142,7 +142,7 @@ fn test_trivial_zq_to_rq() {
         num_vars,
         num_instances: 0,
     };
-    let instance = ZqToRQInstance::new(
+    let instance = LiftInstance::new(
         num_vars,
         q,
         dim_rlwe,
@@ -154,12 +154,12 @@ fn test_trivial_zq_to_rq() {
 
     let info = instance.info();
 
-    let kit = ZqToRQIOP::<FF>::prove(&instance);
+    let kit = LiftIOP::<FF>::prove(&instance);
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = ZqToRQIOP::<FF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
+    let check = LiftIOP::<FF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
 
     assert!(check);
 }
@@ -222,7 +222,7 @@ fn test_random_zq_to_rq() {
         num_instances: 0,
     };
 
-    let instance = ZqToRQInstance::new(
+    let instance = LiftInstance::new(
         num_vars,
         q,
         dim_rlwe,
@@ -234,12 +234,12 @@ fn test_random_zq_to_rq() {
 
     let info = instance.info();
 
-    let kit = ZqToRQIOP::<FF>::prove(&instance);
+    let kit = LiftIOP::<FF>::prove(&instance);
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = ZqToRQIOP::<FF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
+    let check = LiftIOP::<FF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
 
     assert!(check);
 }
@@ -277,7 +277,7 @@ fn test_random_zq_to_rq_extension_field() {
         num_instances: 0,
     };
 
-    let instance = ZqToRQInstance::new(
+    let instance = LiftInstance::new(
         num_vars,
         q,
         dim_rlwe,
@@ -291,12 +291,12 @@ fn test_random_zq_to_rq_extension_field() {
 
     let info = instance_ef.info();
 
-    let kit = ZqToRQIOP::<EF>::prove(&instance_ef);
+    let kit = LiftIOP::<EF>::prove(&instance_ef);
     let evals_at_r = instance.evaluate_ext(&kit.randomness);
     let evals_at_u = instance.evaluate_ext(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = ZqToRQIOP::<EF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
+    let check = LiftIOP::<EF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
 
     assert!(check);
 }
@@ -334,7 +334,7 @@ fn test_snarks() {
         num_instances: 0,
     };
 
-    let instance = ZqToRQInstance::new(
+    let instance = LiftInstance::new(
         num_vars,
         q,
         dim_rlwe,
