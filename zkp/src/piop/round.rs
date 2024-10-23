@@ -494,10 +494,8 @@ impl<F: Field + Serialize> RoundIOP<F> {
     /// * `info` - The round instance info.
     pub fn sample_coins(trans: &mut Transcript<F>, info: &RoundInstanceInfo<F>) -> Vec<F> {
         trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            BitDecompositionIOP::<F>::num_coins(&info.output_bits_info)
-                + BitDecompositionIOP::<F>::num_coins(&info.offset_bits_info)
-                + 5,
+            b"Round IOP: randomness to combine sumcheck protocols",
+            Self::num_coins(info),
         )
     }
 
@@ -1051,7 +1049,7 @@ where
             proof: proof.sumcheck_proof.clone(),
         };
 
-        let (b, randomness) = round_iop.verify(trans, &proof_wrapper, &proof.evals, &info.to_ef());
+        let (b, randomness) = round_iop.verify(trans, &proof_wrapper, &proof.evals, &info_ef);
 
         res &= b;
 

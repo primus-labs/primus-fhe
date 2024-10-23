@@ -1,15 +1,22 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
+    utils::Transcript,
     BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
     FieldUniformSampler, SparsePolynomial,
 };
 use num_traits::{One, Zero};
-use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
+use pcs::{
+    multilinear::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+};
 use rand_distr::Distribution;
 use sha2::Sha256;
 use std::rc::Rc;
 use std::vec;
-use zkp::piop::{lift::ZqToRQSnarks, BitDecompositionInstanceInfo, LiftIOP, LiftInstance};
+use zkp::piop::{
+    lift::{LiftParams, LiftProof, LiftProver, LiftVerifier},
+    BitDecompositionInstanceInfo, LiftIOP, LiftInstance,
+};
 
 #[derive(Field, DecomposableField)]
 #[modulus = 8]
@@ -153,13 +160,31 @@ fn test_trivial_zq_to_rq() {
     );
 
     let info = instance.info();
+    let mut lift_iop = LiftIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
 
-    let kit = LiftIOP::<FF>::prove(&instance);
+    lift_iop.generate_randomness(&mut prover_trans, &info);
+    lift_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = lift_iop.prove(&mut prover_trans, &instance);
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = LiftIOP::<FF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
+
+    let mut lift_iop = LiftIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    lift_iop.generate_randomness(&mut verifier_trans, &info);
+    lift_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = lift_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        &evals_at_r,
+        &evals_at_u,
+        &info,
+    );
 
     assert!(check);
 }
@@ -234,12 +259,31 @@ fn test_random_zq_to_rq() {
 
     let info = instance.info();
 
-    let kit = LiftIOP::<FF>::prove(&instance);
+    let mut lift_iop = LiftIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+
+    lift_iop.generate_randomness(&mut prover_trans, &info);
+    lift_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = lift_iop.prove(&mut prover_trans, &instance);
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = LiftIOP::<FF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
+
+    let mut lift_iop = LiftIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    lift_iop.generate_randomness(&mut verifier_trans, &info);
+    lift_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = lift_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        &evals_at_r,
+        &evals_at_u,
+        &info,
+    );
 
     assert!(check);
 }
@@ -291,18 +335,37 @@ fn test_random_zq_to_rq_extension_field() {
 
     let info = instance_ef.info();
 
-    let kit = LiftIOP::<EF>::prove(&instance_ef);
+    let mut lift_iop = LiftIOP::default();
+    let mut prover_trans = Transcript::<EF>::new();
+
+    lift_iop.generate_randomness(&mut prover_trans, &info);
+    lift_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = lift_iop.prove(&mut prover_trans, &instance_ef);
+
     let evals_at_r = instance.evaluate_ext(&kit.randomness);
     let evals_at_u = instance.evaluate_ext(&kit.u);
 
+    let mut lift_iop = LiftIOP::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+
+    lift_iop.generate_randomness(&mut verifier_trans, &info);
+    lift_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
     let mut wrapper = kit.extract();
-    let check = LiftIOP::<EF>::verify(&mut wrapper, &evals_at_r, &evals_at_u, &info);
+    let (check, _) = lift_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        &evals_at_r,
+        &evals_at_u,
+        &info,
+    );
 
     assert!(check);
 }
 
 #[test]
-fn test_snarks() {
+fn test_lift_snark() {
     let mut rng = rand::thread_rng();
     let uniform = <FieldUniformSampler<Fq>>::new();
 
@@ -345,7 +408,41 @@ fn test_snarks() {
     );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <ZqToRQSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec,
-    );
+
+    // Parameters.
+    let mut params = LiftParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&instance.info(), code_spec);
+
+    // Prover.
+    let floor_prover = LiftProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let proof = floor_prover.prove(&mut prover_trans, &params, &instance);
+
+    let proof_bytes = proof.to_bytes().unwrap();
+
+    // Verifier.
+    let floor_verifier = LiftVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = LiftProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = floor_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
+
+    assert!(res);
 }

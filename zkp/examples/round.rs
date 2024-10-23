@@ -92,6 +92,9 @@ fn main() {
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
+    let info = instance.info();
+    println!("Prove {info}\n");
+
     // Parameters.
     let mut params = RoundParams::<
         FF,

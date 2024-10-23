@@ -80,6 +80,9 @@ fn main() {
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
+    let info = instance.info();
+    println!("Prove {info}\n");
+
     // Parameters.
     let mut params = AdditionInZqParams::<
         FF,
@@ -124,7 +127,7 @@ fn main() {
     let proof = AdditionInZqProof::from_bytes(&proof_bytes).unwrap();
 
     let start = Instant::now();
-    let res = bd_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &info, &proof);
     println!(
         "addition in zq verifying time: {:?} ms",
         start.elapsed().as_millis()

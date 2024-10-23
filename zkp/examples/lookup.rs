@@ -42,6 +42,9 @@ fn main() {
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
+    let info = instance.info();
+    println!("Prove {info}\n");
+
     // Parameters.
     let mut params = LookupParams::<
         FF,
@@ -49,7 +52,10 @@ fn main() {
         ExpanderCodeSpec,
         BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
     >::default();
+
+    let start = Instant::now();
     params.setup(&instance.info(), code_spec);
+    println!("lookup setup time: {:?} ms", start.elapsed().as_millis());
 
     // Prover.
     let lookup_prover = LookupProver::<

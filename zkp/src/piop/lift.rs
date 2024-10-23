@@ -11,7 +11,7 @@
 //!
 //! 1. (2n/q) * a(x) = k(x) * n + r(x) => reduced to the evaluation of a random point since the LHS and RHS are both MLE
 //!
-//! 2. r(x) \in [q] => the range check can be proved by the Bit Decomposition IOP
+//! 2. r(x) \in [N] => the range check can be proved by the Bit Decomposition IOP
 //!
 //! 3. k(x) \cdot (1 - k(x)) = 0  => can be reduced to prove the sum
 //!     $\sum_{x \in \{0, 1\}^\log M} eq(u, x) \cdot [k(x) \cdot (1 - k(x))] = 0$
@@ -29,35 +29,20 @@ use super::{
     BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
     BitDecompositionInstanceInfo,
 };
-use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::{MLSumcheck, ProofWrapper, SumcheckKit};
+use crate::sumcheck::{self, verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{
-    eval_identity_function, gen_identity_evaluations, gen_sparse_at_u, gen_sparse_at_u_to_ef,
-    print_statistic, verify_oracle_relation,
+    eval_identity_function, gen_identity_evaluations, gen_sparse_at_u, verify_oracle_relation,
 };
-use algebra::SparsePolynomial;
 use algebra::{
     utils::Transcript, AbstractExtensionField, DecomposableField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials,
+    ListOfProductsOfPolynomials, PolynomialInfo, SparsePolynomial,
 };
+use bincode::Result;
 use core::fmt;
 use itertools::izip;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{LinearCode, LinearCodeSpec},
-    utils::hash::Hash,
-    PolynomialCommitmentScheme,
-};
+use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::time::Instant;
-use std::vec;
-/// IOP for transformation from Zq to RQ i.e. R/QR
-pub struct LiftIOP<F: Field>(PhantomData<F>);
-
-/// Snarks for transformation from Zq to RQ i.e. R/QR compiled with PCS
-pub struct ZqToRQSnarks<F: Field, EF: AbstractExtensionField<F>>(PhantomData<F>, PhantomData<EF>);
+use std::{marker::PhantomData, rc::Rc};
 
 /// Instance of lifting Zq to RQ.
 /// In this instance, we require the outputs.len() == 1 << num_vars
@@ -74,8 +59,7 @@ pub struct LiftInstance<F: Field> {
     pub outputs: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// sparse representation of outputs
     pub sparse_outputs: Vec<Rc<SparsePolynomial<F>>>,
-
-    /// We introduce witness k and r such that (2N/q) * a = k * N + r
+    /// the relation (2N/q) * a = k * N + r
     /// introduced witness k
     pub k: Rc<DenseMultilinearExtension<F>>,
     /// introduced witness reminder r
@@ -84,22 +68,21 @@ pub struct LiftInstance<F: Field> {
     pub reminder_bits: Vec<Rc<DenseMultilinearExtension<F>>>,
     /// introduced witness prod denoted by s(x) = (r(x) + 1) * (1 - 2k(x))
     pub prod: Rc<DenseMultilinearExtension<F>>,
-    /// table [1, ..., N]
-    pub table: Rc<DenseMultilinearExtension<F>>,
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
 /// Information of LiftInstance
+#[derive(Serialize, Deserialize)]
 pub struct LiftInstanceInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
+    /// number of instances.
+    pub num_instances: usize,
     /// modulus of Zq
     pub q: F,
     /// dimension of RWLE denoted by N
     pub dim_rlwe: F,
-    /// table [1, ..., N]
-    pub table: Rc<DenseMultilinearExtension<F>>,
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
 }
@@ -116,21 +99,50 @@ impl<F: Field> fmt::Display for LiftInstanceInfo<F> {
     }
 }
 
-/// Evaluations at the same random point
-pub struct LiftInstanceEval<F: Field> {
-    /// input a in Zq
-    pub input: F,
-    /// output C = (c_0, ..., c_{N-1})^T \in F^{N * N}
-    pub outputs: Vec<F>,
-    /// We introduce witness k and r such that (2N/q) * a = k * N + r
-    /// introduced witness k
-    pub k: F,
-    /// introduced witness reminder r
-    pub reminder: F,
-    /// decomposed bits of introduced reminder
-    pub reminder_bits: Vec<F>,
-    /// introduced witness prod denoted by s(x) = (r(x) + 1) * (1 - 2k(x))
-    pub prod: F,
+impl<F: Field> LiftInstanceInfo<F> {
+    /// Return the number of small polynomials used in IOP
+    #[inline]
+    pub fn num_oracles(&self) -> usize {
+        4 + self.num_instances + self.bits_info.bits_len
+    }
+
+    /// Return the log of the number of small polynomials used in IOP
+    #[inline]
+    pub fn log_num_oracles(&self) -> usize {
+        self.num_oracles().next_power_of_two().ilog2() as usize
+    }
+
+    /// Generate the number of variables in the committed polynomial.
+    #[inline]
+    pub fn generate_num_var(&self) -> usize {
+        self.num_vars + self.log_num_oracles()
+    }
+
+    /// Construct an EF version.
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> LiftInstanceInfo<EF> {
+        LiftInstanceInfo::<EF> {
+            num_vars: self.num_vars,
+            num_instances: self.num_instances,
+            q: EF::from_base(self.q),
+            dim_rlwe: EF::from_base(self.dim_rlwe),
+            bits_info: self.bits_info.to_ef(),
+        }
+    }
+
+    /// Generate table [1,...N].
+    pub fn generate_table(&self) -> Rc<DenseMultilinearExtension<F>> {
+        let mut acc = F::zero();
+        let mut table = vec![F::zero(); 1 << self.num_vars];
+        for t in table.iter_mut() {
+            acc += F::one();
+            *t = acc;
+        }
+
+        Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            self.num_vars,
+            table,
+        ))
+    }
 }
 
 impl<F: Field> LiftInstance<F> {
@@ -139,23 +151,11 @@ impl<F: Field> LiftInstance<F> {
     pub fn info(&self) -> LiftInstanceInfo<F> {
         LiftInstanceInfo {
             num_vars: self.num_vars,
+            num_instances: self.outputs.len(),
             q: self.q,
             dim_rlwe: self.dim_rlwe,
             bits_info: self.bits_info.clone(),
-            table: self.table.clone(),
         }
-    }
-
-    /// Return the number of small polynomials used in IOP
-    #[inline]
-    pub fn num_oracles(&self) -> usize {
-        4 + self.outputs.len() + self.reminder_bits.len()
-    }
-
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
     }
 
     /// Pack all the involved small polynomials into a single vector
@@ -175,9 +175,9 @@ impl<F: Field> LiftInstance<F> {
     /// The evaluations of this oracle is generated by the evaluations of all mles and the padded zeros.
     /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
     pub fn generate_oracle(&self) -> DenseMultilinearExtension<F> {
-        let num_vars_added = self.log_num_oracles();
-        let num_vars = self.num_vars + num_vars_added;
-        let num_zeros_padded = ((1 << num_vars_added) - self.num_oracles()) * (1 << self.num_vars);
+        let info = self.info();
+        let num_vars = info.generate_num_var();
+        let num_zeros_padded = (1 << num_vars) - info.num_oracles() * (1 << self.num_vars);
 
         // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_all_mles();
@@ -211,7 +211,6 @@ impl<F: Field> LiftInstance<F> {
                 .collect(),
             prod: Rc::new(self.prod.to_ef::<EF>()),
             bits_info: self.bits_info.to_ef::<EF>(),
-            table: Rc::new(self.table.to_ef::<EF>()),
         }
     }
 
@@ -342,11 +341,26 @@ impl<F: DecomposableField> LiftInstance<F> {
             reminder_bits,
             prod,
             bits_info,
-            table: Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-                num_vars, table,
-            )),
         }
     }
+}
+
+/// Evaluations at the same random point
+#[derive(Serialize, Deserialize)]
+pub struct LiftInstanceEval<F: Field> {
+    /// input a in Zq
+    pub input: F,
+    /// output C = (c_0, ..., c_{N-1})^T \in F^{N * N}
+    pub outputs: Vec<F>,
+    /// We introduce witness k and r such that (2N/q) * a = k * N + r
+    /// introduced witness k
+    pub k: F,
+    /// introduced witness reminder r
+    pub reminder: F,
+    /// decomposed bits of introduced reminder
+    pub reminder_bits: Vec<F>,
+    /// introduced witness prod denoted by s(x) = (r(x) + 1) * (1 - 2k(x))
+    pub prod: F,
 }
 
 impl<F: Field> LiftInstanceEval<F> {
@@ -385,55 +399,113 @@ impl<F: Field> LiftInstanceEval<F> {
     }
 }
 
+/// IOP for transformation from Zq to RQ i.e. R/QR
+#[derive(Default)]
+pub struct LiftIOP<F: Field> {
+    /// The random vector for random linear combination.
+    pub randomness: Vec<F>,
+    /// The random value for identity function.
+    pub u: Vec<F>,
+}
+
 impl<F: Field + Serialize> LiftIOP<F> {
-    /// sample coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, instance: &LiftInstance<F>) -> Vec<F> {
+    /// Sample coins before proving sumcheck protocol
+    ///
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The lift instance info.    
+    pub fn sample_coins(trans: &mut Transcript<F>, info: &LiftInstanceInfo<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecompositionIOP<F>>::num_coins(&instance.bits_info) + 3,
+            Self::num_coins(info),
         )
     }
 
-    /// return the number of coins used in this IOP
+    /// Return the number of coins used in this IOP
+    ///
+    /// # Arguments.
+    ///
+    /// * `info` - The lift instance info.    
     pub fn num_coins(info: &LiftInstanceInfo<F>) -> usize {
-        <BitDecompositionIOP<F>>::num_coins(&info.bits_info) + 3
+        BitDecompositionIOP::<F>::num_coins(&info.bits_info) + 3
     }
 
-    /// Prove round
-    pub fn prove(instance: &LiftInstance<F>) -> SumcheckKit<F> {
-        let mut trans = Transcript::<F>::new();
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        let matrix_at_u = Rc::new(gen_sparse_at_u(&instance.sparse_outputs, &u));
+    /// Generate the rlc randomenss.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The lift instance info.
+    #[inline]
+    pub fn generate_randomness(&mut self, trans: &mut Transcript<F>, info: &LiftInstanceInfo<F>) {
+        self.randomness = Self::sample_coins(trans, info);
+    }
 
-        let randomness = Self::sample_coins(&mut trans, instance);
+    /// Generate the randomness for the eq function.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The lift instance info.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &LiftInstanceInfo<F>,
+    ) {
+        self.u = trans.get_vec_challenge(
+            b"LIFT IOP: random point used to instantiate sumcheck protocol",
+            info.num_vars,
+        );
+    }
+
+    /// Lift IOP prover.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `instance` - The lift instance.
+    pub fn prove(&self, trans: &mut Transcript<F>, instance: &LiftInstance<F>) -> SumcheckKit<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
+
+        let eq_at_u = Rc::new(gen_identity_evaluations(&self.u));
+        let matrix_at_u = Rc::new(gen_sparse_at_u(&instance.sparse_outputs, &self.u));
+
         let mut claimed_sum = F::zero();
         Self::prepare_products_of_polynomial(
-            &randomness,
+            &self.randomness,
             &mut poly,
             &mut claimed_sum,
             instance,
             &matrix_at_u,
             &eq_at_u,
-            &u,
+            &self.u,
         );
 
         let (proof, state) =
-            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
+            MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
         SumcheckKit {
             proof,
             info: poly.info(),
             claimed_sum,
             randomness: state.randomness,
-            u,
+            u: self.u.clone(),
         }
     }
 
-    /// Add the sumchecks proving transformation from Zq to RQ
+    /// Add the sumcheck proving lift into the polynomial
+    ///
+    /// # Arguments.
+    ///
+    /// * `randomness` - The randomness used to randomnize the ntt instance.
+    /// * `poly` - The list of product of polynomials.
+    /// * `claimed_sum` - The claimed sum.
+    /// * `instance` - The round instance.
+    /// * `matrix_at_u` - The evaluation of matrix on point u.
+    /// * `eq_at_u` - The evaluation of eq function on point u.
+    /// * `u` - The randomness for eq.
     pub fn prepare_products_of_polynomial(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
@@ -482,62 +554,74 @@ impl<F: Field + Serialize> LiftIOP<F> {
         poly.add_product([Rc::clone(eq_at_u), Rc::clone(&instance.prod)], -r[1]);
 
         // 4. add sumcheck \sum_y C(u, y)t(y) = s(u)
-        poly.add_product([Rc::clone(matrix_at_u), Rc::clone(&instance.table)], r[2]);
+        poly.add_product(
+            [
+                Rc::clone(matrix_at_u),
+                Rc::clone(&instance.info().generate_table()),
+            ],
+            r[2],
+        );
         *claimed_sum += instance.prod.evaluate(u) * r[2];
     }
 
-    /// Verify the transformation from Zq to RQ
+    /// Verify lift
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `wrapper` - The proof wrapper.
+    /// * `evals_at_r` - The evaluations at random point r.
+    /// * `evals_at_u` - The evaluations at random point u.
+    /// * `info` - The list instance info.     
     pub fn verify(
-        wrapper: &mut ProofWrapper<F>,
+        &self,
+        trans: &mut Transcript<F>,
+        wrapper: &ProofWrapper<F>,
         evals_at_r: &LiftInstanceEval<F>,
         evals_at_u: &LiftInstanceEval<F>,
         info: &LiftInstanceInfo<F>,
-    ) -> bool {
-        let mut trans = Transcript::new();
-
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            info.num_vars,
-        );
-
-        // randomness to combine sumcheck protocols
-        let randomness = trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            Self::num_coins(info),
-        );
-
-        let mut subclaim = MLSumcheck::verify(
-            &mut trans,
-            &wrapper.info,
-            wrapper.claimed_sum,
-            &wrapper.proof,
-        )
-        .expect("fail to verify the sumcheck protocol");
-        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
+    ) -> (bool, Vec<F>) {
+        let mut subclaim =
+            MLSumcheck::verify(trans, &wrapper.info, wrapper.claimed_sum, &wrapper.proof)
+                .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&self.u, &subclaim.point);
 
         if !Self::verify_subclaim(
-            &randomness,
+            &self.randomness,
             &mut subclaim,
-            &mut wrapper.claimed_sum,
+            wrapper.claimed_sum,
             evals_at_r,
             evals_at_u,
             info,
             eq_at_u_r,
-            &u,
+            &self.u,
         ) {
-            return false;
+            return (false, vec![]);
         }
 
-        subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()
+        let res = subclaim.expected_evaluations == F::zero();
+
+        (res, subclaim.point)
     }
 
-    /// Verify the transformation from Zq to RQ
+    /// Verify subclaim.
+    ///
+    /// # Arguments.
+    ///
+    /// * `randomness` - The randomness for rlc.
+    /// * `subclaim` - The subclaim returned from the sumcheck protocol.
+    /// * `claimed_sum` - The claimed sum.
+    /// * `evals_at_r` - The evaluations at random point r.
+    /// * `evals_at_u` - The evaluations at random point u.
+    /// * `info` - The round instance info.
+    /// * `eq_at_u_r` - The value eq(u,r).
+    /// * `u` - The randomness for eq function.
     #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn verify_subclaim(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
-        claimed_sum: &mut F,
+        claimed_sum: F,
         evals_at_r: &LiftInstanceEval<F>,
         evals_at_u: &LiftInstanceEval<F>,
         info: &LiftInstanceInfo<F>,
@@ -575,209 +659,346 @@ impl<F: Field + Serialize> LiftIOP<F> {
         // c_r = C(x, r)
         let c_r = DenseMultilinearExtension::from_evaluations_slice(num_vars, &evals_at_r.outputs);
         subclaim.expected_evaluations -=
-            c_r.evaluate(u) * info.table.evaluate(&subclaim.point) * r[2];
+            c_r.evaluate(u) * info.generate_table().evaluate(&subclaim.point) * r[2];
         // TODO optimize evals_at_u to a single F, s(u)
-        *claimed_sum -= evals_at_u.prod * r[2];
+        let mut res = claimed_sum == evals_at_u.prod * r[2];
 
         // check 5: (2N/q) * a = k * N + r
-        f_two * info.dim_rlwe / info.q * evals_at_r.input
-            == evals_at_r.k * info.dim_rlwe + evals_at_r.reminder
+        res &= f_two * info.dim_rlwe * evals_at_r.input
+            == (evals_at_r.k * info.dim_rlwe + evals_at_r.reminder) * info.q;
+
+        res
     }
 }
 
-impl<F, EF> ZqToRQSnarks<F, EF>
+/// Lift proof with PCS.
+#[derive(Serialize, Deserialize)]
+pub struct LiftProof<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// Polynomial info.
+    pub poly_info: PolynomialInfo,
+    /// Polynomial commitment.
+    pub poly_comm: Pcs::Commitment,
+    /// The evaluation of the polynomial on r.
+    pub oracle_eval_at_r: EF,
+    /// The opening proof of the above evaluation.
+    pub eval_proof_at_r: Pcs::Proof,
+    /// The evaluation of the polynomial on u.
+    pub oracle_eval_at_u: EF,
+    /// The opening proof of the above evaluation.
+    pub eval_proof_at_u: Pcs::Proof,
+    /// The sumcheck proof.
+    pub sumcheck_proof: sumcheck::Proof<EF>,
+    /// The evaluation of small oracles.
+    pub evals_at_r: LiftInstanceEval<EF>,
+    /// The evaluation of small oracles.
+    pub evals_at_u: LiftInstanceEval<EF>,
+    /// Claimed sum in sumcheck.
+    pub claimed_sum: EF,
+}
+
+impl<F, EF, S, Pcs> LiftProof<F, EF, S, Pcs>
 where
     F: Field + Serialize + for<'de> Deserialize<'de>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
 {
-    /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &LiftInstance<F>, code_spec: &S)
-    where
-        H: Hash + Sync + Send,
-        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
-        S: LinearCodeSpec<F, Code = C> + Clone,
-    {
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
+/// Lift parameter.
+pub struct LiftParams<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// The parameter for the polynomial commitment.
+    pub pp: Pcs::Parameters,
+}
+
+impl<F, EF, S, Pcs> Default for LiftParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        Self {
+            pp: Pcs::Parameters::default(),
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> LiftParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S: Clone,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    /// Setup for the PCS.
+    #[inline]
+    pub fn setup(&mut self, info: &LiftInstanceInfo<F>, code_spec: S) {
+        self.pp = Pcs::setup(info.generate_num_var(), Some(code_spec));
+    }
+}
+
+/// Prover for Lift with PCS.
+pub struct LiftProver<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for LiftProver<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        LiftProver {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> LiftProver<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The prover.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `params` - The pcs params.
+    /// * `instance` - The lift instance.
+    pub fn prove(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &LiftParams<F, EF, S, Pcs>,
+        instance: &LiftInstance<F>,
+    ) -> LiftProof<F, EF, S, Pcs> {
         let instance_info = instance.info();
-        println!("Prove {instance_info}\n");
+        trans.append_message(b"lift instance", &instance_info);
+
         // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
         let committed_poly = instance.generate_oracle();
-        // 1. Use PCS to commit the above polynomial.
-        let start = Instant::now();
-        let pp =
-            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
-        let setup_time = start.elapsed().as_millis();
 
-        let start = Instant::now();
-        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
-        let commit_time = start.elapsed().as_millis();
+        // Use PCS to commit the above polynomial.
+        let (poly_comm, poly_comm_state) = Pcs::commit(&params.pp, &committed_poly);
 
-        // 2. Prover generates the proof
-        let prover_start = Instant::now();
-        let mut iop_proof_size = 0;
-        let mut prover_trans = Transcript::<EF>::new();
-        // Convert the original instance into an instance defined over EF
+        trans.append_message(b"Lift IOP: polynomial commitment", &poly_comm);
+
+        // Prover generates the proof.
+        // Convert the orignal instance into an instance defined over EF.
         let instance_ef = instance.to_ef::<EF>();
-        let instance_info = instance_ef.info();
+        let instance_ef_info = instance_ef.info();
+        let mut lift_iop = LiftIOP::<EF>::default();
 
-        // 2.1 Generate the random point to instantiate the sumcheck protocol
-        let prover_u = prover_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
-        let matrix_at_u = Rc::new(gen_sparse_at_u_to_ef(&instance.sparse_outputs, &prover_u));
-        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
-        let mut claimed_sum = EF::zero();
-        let randomness = LiftIOP::sample_coins(&mut prover_trans, &instance_ef);
-        LiftIOP::prepare_products_of_polynomial(
-            &randomness,
-            &mut sumcheck_poly,
-            &mut claimed_sum,
-            &instance_ef,
-            &matrix_at_u,
-            &eq_at_u,
-            &prover_u,
+        lift_iop.generate_randomness(trans, &instance_ef_info);
+        lift_iop.generate_randomness_for_eq_function(trans, &instance_ef_info);
+
+        let kit = lift_iop.prove(trans, &instance_ef);
+
+        // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
+        let evals_at_r = instance.evaluate_ext(&kit.randomness);
+        let evals_at_u = instance.evaluate_ext(&lift_iop.u);
+
+        // Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut requested_point_at_r = kit.randomness.clone();
+        let mut requested_point_at_u = lift_iop.u.clone();
+        let oracle_randomness = trans.get_vec_challenge(
+            b"Lift IOP: random linear combination for evaluations of oracles",
+            instance_info.log_num_oracles(),
         );
 
-        let poly_info = sumcheck_poly.info();
-
-        // 2.3 Generate proof of sumcheck protocol
-        let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Addition In Zq");
-        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
-        let iop_prover_time = prover_start.elapsed().as_millis();
-
-        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let start = Instant::now();
-        let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
-        let evals_at_u = instance.evaluate_ext(&prover_u);
-
-        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        let mut requested_point_at_r = sumcheck_state.randomness.clone();
-        let mut requested_point_at_u = prover_u.clone();
-        let oracle_randomness = prover_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
-        );
         requested_point_at_r.extend(oracle_randomness.iter());
         requested_point_at_u.extend(oracle_randomness.iter());
         let oracle_eval_at_r = committed_poly.evaluate_ext(&requested_point_at_r);
         let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
 
-        // 2.6 Generate the evaluation proof of the requested point
-        let eval_proof_at_r = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
+        // Generate the evaluation proof of the requested point
+        let eval_proof_at_r = Pcs::open(
+            &params.pp,
+            &poly_comm,
+            &poly_comm_state,
             &requested_point_at_r,
-            &mut prover_trans,
+            trans,
         );
-        let eval_proof_at_u = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
+        let eval_proof_at_u = Pcs::open(
+            &params.pp,
+            &poly_comm,
+            &poly_comm_state,
             &requested_point_at_u,
-            &mut prover_trans,
-        );
-        let pcs_open_time = start.elapsed().as_millis();
-
-        // 3. Verifier checks the proof
-        let verifier_start = Instant::now();
-        let mut verifier_trans = Transcript::<EF>::new();
-
-        // 3.1 Generate the random point to instantiate the sumcheck protocol
-        let verifier_u = verifier_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
+            trans,
         );
 
-        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-        let randomness = verifier_trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            <LiftIOP<EF>>::num_coins(&instance_info),
-        );
-
-        // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify(
-            &mut verifier_trans,
-            &poly_info,
-            claimed_sum,
-            &sumcheck_proof,
-        )
-        .expect("Verify the sumcheck proof generated in Zq to RQ");
-        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
-
-        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subcliam = LiftIOP::<EF>::verify_subclaim(
-            &randomness,
-            &mut subclaim,
-            &mut claimed_sum,
-            &evals_at_r,
-            &evals_at_u,
-            &instance_info,
-            eq_at_u_r,
-            &verifier_u,
-        );
-        assert!(check_subcliam && subclaim.expected_evaluations == EF::zero());
-        let iop_verifier_time = verifier_start.elapsed().as_millis();
-
-        // 3.5 and also check the relation between these small oracles and the committed oracle
-        let start = Instant::now();
-        let mut pcs_proof_size = 0;
-        let flatten_evals_at_u = evals_at_u.flatten();
-        let flatten_evals_at_r = evals_at_r.flatten();
-        let oracle_randomness = verifier_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            evals_at_u.log_num_oracles(),
-        );
-        let check_oracle_at_u =
-            verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
-        let check_oracle_at_r =
-            verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
-        assert!(check_oracle_at_u && check_oracle_at_r);
-
-        // 3.5 Check the evaluation of a random point over the committed oracle
-        let check_pcs_at_r = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point_at_r,
+        LiftProof {
+            poly_info: kit.info,
+            poly_comm,
             oracle_eval_at_r,
-            &eval_proof_at_r,
-            &mut verifier_trans,
-        );
-        let check_pcs_at_u = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point_at_u,
+            eval_proof_at_r,
             oracle_eval_at_u,
-            &eval_proof_at_u,
-            &mut verifier_trans,
-        );
-        assert!(check_pcs_at_r && check_pcs_at_u);
-        let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len()
-            + bincode::serialize(&eval_proof_at_u).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_r).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_u).unwrap().len();
+            eval_proof_at_u,
+            sumcheck_proof: kit.proof,
+            evals_at_r,
+            evals_at_u,
+            claimed_sum: kit.claimed_sum,
+        }
+    }
+}
 
-        // 4. print statistic
-        print_statistic(
-            iop_prover_time + pcs_open_time,
-            iop_verifier_time + pcs_verifier_time,
-            iop_proof_size + pcs_proof_size,
-            iop_prover_time,
-            iop_verifier_time,
-            iop_proof_size,
-            committed_poly.num_vars,
-            instance.num_oracles(),
-            instance.num_vars,
-            setup_time,
-            commit_time,
-            pcs_open_time,
-            pcs_verifier_time,
-            pcs_proof_size,
+/// Verifier for Lift with PCS.
+pub struct LiftVerifier<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for LiftVerifier<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        LiftVerifier {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> LiftVerifier<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs:
+        PolynomialCommitmentScheme<F, EF, S, Polynomial = DenseMultilinearExtension<F>, Point = EF>,
+{
+    /// The verifier.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `params` - The pcs params.
+    /// * `info` - The lift instance info.
+    /// * `proof` - The lift proof.
+    pub fn verify(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &LiftParams<F, EF, S, Pcs>,
+        info: &LiftInstanceInfo<F>,
+        proof: &LiftProof<F, EF, S, Pcs>,
+    ) -> bool {
+        let mut res = true;
+        trans.append_message(b"lift instance", info);
+        trans.append_message(b"Lift IOP: polynomial commitment", &proof.poly_comm);
+
+        let mut lift_iop = LiftIOP::<EF>::default();
+        let info_ef = info.to_ef();
+
+        lift_iop.generate_randomness(trans, &info_ef);
+        lift_iop.generate_randomness_for_eq_function(trans, &info_ef);
+
+        let proof_wrapper = ProofWrapper {
+            claimed_sum: proof.claimed_sum,
+            info: proof.poly_info,
+            proof: proof.sumcheck_proof.clone(),
+        };
+
+        let (b, randomness) = lift_iop.verify(
+            trans,
+            &proof_wrapper,
+            &proof.evals_at_r,
+            &proof.evals_at_u,
+            &info_ef,
         );
+
+        res &= b;
+
+        // Check the relation between these small oracles and the committed oracle
+        let flatten_evals_at_u = proof.evals_at_u.flatten();
+        let flatten_evals_at_r = proof.evals_at_r.flatten();
+        let oracle_randomness = trans.get_vec_challenge(
+            b"Lift IOP: random linear combination for evaluations of oracles",
+            proof.evals_at_u.log_num_oracles(),
+        );
+
+        let mut requested_point_at_r = randomness;
+        let mut requested_point_at_u = lift_iop.u;
+
+        requested_point_at_r.extend(&oracle_randomness);
+        requested_point_at_u.extend(&oracle_randomness);
+
+        res &= verify_oracle_relation(
+            &flatten_evals_at_u,
+            proof.oracle_eval_at_u,
+            &oracle_randomness,
+        );
+
+        res &= verify_oracle_relation(
+            &flatten_evals_at_r,
+            proof.oracle_eval_at_r,
+            &oracle_randomness,
+        );
+
+        // Check the evaluation of a random point over the committed oracle.
+        res &= Pcs::verify(
+            &params.pp,
+            &proof.poly_comm,
+            &requested_point_at_r,
+            proof.oracle_eval_at_r,
+            &proof.eval_proof_at_r,
+            trans,
+        );
+
+        res &= Pcs::verify(
+            &params.pp,
+            &proof.poly_comm,
+            &requested_point_at_u,
+            proof.oracle_eval_at_u,
+            &proof.eval_proof_at_u,
+            trans,
+        );
+
+        res
     }
 }

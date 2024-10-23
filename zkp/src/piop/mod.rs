@@ -3,11 +3,11 @@ pub mod accumulator;
 pub mod addition_in_zq;
 pub mod bit_decomposition;
 pub mod floor;
+pub mod lift;
 pub mod lookup;
 pub mod ntt;
 pub mod rlwe_mul_rgsw;
 pub mod round;
-pub mod lift;
 
 pub use accumulator::{
     AccumulatorIOP, AccumulatorInstance, AccumulatorSnarksOpt, AccumulatorWitness,
@@ -22,6 +22,7 @@ pub use bit_decomposition::{
     BitDecompositionProver, BitDecompositionVerifier,
 };
 pub use floor::{FloorIOP, FloorInstance};
+pub use lift::{LiftIOP, LiftInstance};
 pub use lookup::{
     LookupIOP, LookupInstance, LookupInstanceEval, LookupInstanceInfo, LookupParams, LookupProof,
     LookupProver, LookupVerifier,
@@ -33,4 +34,3 @@ pub use rlwe_mul_rgsw::{
     RlweMultRgswSnarksOpt,
 };
 pub use round::{RoundIOP, RoundInstance};
-pub use lift::{LiftIOP, LiftInstance};
