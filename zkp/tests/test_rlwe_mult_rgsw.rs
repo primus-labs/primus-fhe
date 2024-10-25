@@ -9,10 +9,10 @@ use rand_distr::Distribution;
 use sha2::Sha256;
 use std::sync::Arc;
 use std::vec;
-use zkp::piop::RlweMultRgswSnarksOpt;
+use zkp::piop::ExternalProductSnarksOpt;
 use zkp::piop::{
-    rlwe_mul_rgsw::RlweMultRgswSnarks, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
-    RlweCiphertext, RlweCiphertextPrime, RlweMultRgswIOP, RlweMultRgswInstance,
+    external_product::ExternalProductSnarks, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
+    ExternalProductIOP, ExternalProductInstance, RlweCiphertext, RlweCiphertextPrime,
 };
 
 // field type
@@ -75,7 +75,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     input_rgsw: (RlweCiphertextPrime<F>, RlweCiphertextPrime<F>),
     bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &BatchNTTInstanceInfo<F>,
-) -> RlweMultRgswInstance<F> {
+) -> ExternalProductInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
     let bits_rlwe = RlweCiphertextPrime {
         a_vector: input_rlwe
@@ -163,7 +163,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
         b: DenseMultilinearExtension::from_evaluations_vec(num_vars, output_h_ntt),
     };
 
-    RlweMultRgswInstance::new(
+    ExternalProductInstance::new(
         num_vars,
         bits_info,
         ntt_info,
@@ -252,12 +252,12 @@ fn test_random_rlwe_mult_rgsw() {
 
     let info = instance.info();
 
-    let (kit, recursive_proof) = RlweMultRgswIOP::<FF>::prove(&instance);
+    let (kit, recursive_proof) = ExternalProductIOP::<FF>::prove(&instance);
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = RlweMultRgswIOP::<FF>::verify(
+    let check = ExternalProductIOP::<FF>::verify(
         &mut wrapper,
         &evals_at_r,
         &evals_at_u,
@@ -344,12 +344,12 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
 
-    let (kit, recursive_proof) = RlweMultRgswIOP::<EF>::prove(&instance_ef);
+    let (kit, recursive_proof) = ExternalProductIOP::<EF>::prove(&instance_ef);
     let evals_at_r = instance.evaluate_ext(&kit.randomness);
     let evals_at_u = instance.evaluate_ext(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = RlweMultRgswIOP::<EF>::verify(
+    let check = ExternalProductIOP::<EF>::verify(
         &mut wrapper,
         &evals_at_r,
         &evals_at_u,
@@ -434,7 +434,7 @@ fn test_snarks() {
     );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <RlweMultRgswSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+    <ExternalProductSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec,
     );
 }
@@ -513,7 +513,7 @@ fn test_snarks_with_lookup() {
     );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    <RlweMultRgswSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+    <ExternalProductSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec, 2,
     );
 }

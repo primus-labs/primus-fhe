@@ -8,10 +8,10 @@ use rand::prelude::*;
 use sha2::Sha256;
 use std::sync::Arc;
 use std::vec;
-use zkp::piop::RlweMultRgswSnarksOpt;
+use zkp::piop::ExternalProductSnarksOpt;
 use zkp::piop::{
-    BatchNTTInstanceInfo, BitDecompositionInstanceInfo, RlweCiphertext, RlweCiphertextPrime,
-    RlweMultRgswInstance,
+    BatchNTTInstanceInfo, BitDecompositionInstanceInfo, ExternalProductInstance, RlweCiphertext,
+    RlweCiphertextPrime,
 };
 
 type FF = BabyBear;
@@ -75,7 +75,7 @@ fn generate_instance<F: Field + NTTField>(
     input_rgsw: (RlweCiphertextPrime<F>, RlweCiphertextPrime<F>),
     bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &BatchNTTInstanceInfo<F>,
-) -> RlweMultRgswInstance<F> {
+) -> ExternalProductInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
     let bits_rlwe = RlweCiphertextPrime {
         a_vector: input_rlwe
@@ -151,7 +151,7 @@ fn generate_instance<F: Field + NTTField>(
         b: DenseMultilinearExtension::from_evaluations_vec(num_vars, output_h_ntt),
     };
 
-    RlweMultRgswInstance::new(
+    ExternalProductInstance::new(
         num_vars,
         bits_info,
         ntt_info,
@@ -240,7 +240,7 @@ fn main() {
     // <RlweMultRgswSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
     //     &instance, &code_spec,
     // );
-    <RlweMultRgswSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+    <ExternalProductSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec, 2,
     );
 }

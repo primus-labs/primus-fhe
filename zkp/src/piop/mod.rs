@@ -2,11 +2,11 @@
 pub mod accumulator;
 pub mod addition_in_zq;
 pub mod bit_decomposition;
+pub mod external_product;
 pub mod floor;
 pub mod lift;
 pub mod lookup;
 pub mod ntt;
-pub mod rlwe_mul_rgsw;
 pub mod round;
 
 pub use accumulator::{
@@ -21,6 +21,10 @@ pub use bit_decomposition::{
     BitDecompositionInstanceInfo, BitDecompositionParams, BitDecompositionProof,
     BitDecompositionProver, BitDecompositionVerifier,
 };
+pub use external_product::{
+    ExternalProductIOP, ExternalProductIOPPure, ExternalProductInstance, ExternalProductSnarksOpt,
+    RlweCiphertext, RlweCiphertextPrime,
+};
 pub use floor::{FloorIOP, FloorInstance};
 pub use lift::{LiftIOP, LiftInstance};
 pub use lookup::{
@@ -29,8 +33,4 @@ pub use lookup::{
 };
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{BatchNTTInstanceInfo, NTTInstance, NTTIOP};
-pub use rlwe_mul_rgsw::{
-    RlweCiphertext, RlweCiphertextPrime, RlweMultRgswIOP, RlweMultRgswIOPPure,
-    RlweMultRgswInstance, RlweMultRgswSnarksOpt,
-};
 pub use round::{RoundIOP, RoundInstance};

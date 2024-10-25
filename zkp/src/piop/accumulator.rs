@@ -12,18 +12,18 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
+use super::external_product::ExternalProductEval;
+use super::external_product::ExternalProductInfo;
+use super::external_product::RlweEval;
 use super::ntt::BitsOrder;
 use super::ntt::NTTRecursiveProof;
-use super::rlwe_mul_rgsw::RlweEval;
-use super::rlwe_mul_rgsw::RlweMultRgswEval;
-use super::rlwe_mul_rgsw::RlweMultRgswInfo;
 use super::BitDecompositionInstance;
+use super::ExternalProductIOP;
+use super::ExternalProductIOPPure;
+use super::ExternalProductInstance;
 use super::LookupInstance;
 use super::NTTBareIOP;
 use super::RlweCiphertext;
-use super::RlweMultRgswIOP;
-use super::RlweMultRgswIOPPure;
-use super::RlweMultRgswInstance;
 use super::{BatchNTTInstanceInfo, BitDecompositionInstanceInfo, NTTInstance, NTTIOP};
 use crate::utils::{
     add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
@@ -77,7 +77,7 @@ pub struct AccumulatorWitness<F: Field> {
     /// * Witness when performing output_rlwe_ntt := input_rlwe * RGSW(Z_u) where input_rlwe = (X^{-a_u} + 1) * ACC
     ///
     /// result of RLWE * RGSW
-    pub rlwe_mult_rgsw: RlweMultRgswInstance<F>,
+    pub rlwe_mult_rgsw: ExternalProductInstance<F>,
 }
 
 /// Evaluation of AccumulatorWitnessEval at the same random point
@@ -91,7 +91,7 @@ pub struct AccumulatorWitnessEval<F: Field> {
     /// result d * ACC = RLWE of ntt form
     pub input_rlwe_ntt: RlweEval<F>,
     /// result of RLWE * RGSW
-    pub rlwe_mult_rgsw: RlweMultRgswEval<F>,
+    pub rlwe_mult_rgsw: ExternalProductEval<F>,
 }
 
 /// Store the ntt instance, bit decomposition instance, and the sumcheck instance for an Accumulator updating `t` times
@@ -111,7 +111,7 @@ pub struct AccumulatorInstance<F: Field> {
     /// output of the Accumulator, represented in coefficient form
     pub output: RlweCiphertext<F>,
     /// info for RLWE * RGSW
-    pub mult_info: RlweMultRgswInfo<F>,
+    pub mult_info: ExternalProductInfo<F>,
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
@@ -137,7 +137,7 @@ pub struct AccumulatorInstanceInfo<F: Field> {
     /// number of updations in Accumulator denoted by t
     pub num_updations: usize,
     /// info for RLWE * RGSW
-    pub mult_info: RlweMultRgswInfo<F>,
+    pub mult_info: ExternalProductInfo<F>,
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
@@ -669,14 +669,15 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
             instance.num_updations
-                * (<RlweMultRgswIOP<F>>::num_coins(&instance.updations[0].rlwe_mult_rgsw.info())
-                    + 2),
+                * (<ExternalProductIOP<F>>::num_coins(
+                    &instance.updations[0].rlwe_mult_rgsw.info(),
+                ) + 2),
         )
     }
 
     /// Return the number of random coins used in this IOP
     pub fn num_coins(info: &AccumulatorInstanceInfo<F>) -> usize {
-        info.num_updations * (<RlweMultRgswIOP<F>>::num_coins(&info.mult_info) + 2)
+        info.num_updations * (<ExternalProductIOP<F>>::num_coins(&info.mult_info) + 2)
     }
 
     /// Prove accumulator updating `num_updations`` times
@@ -811,7 +812,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         instance: &AccumulatorInstance<F>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
-        let r_each_num = RlweMultRgswIOP::num_coins(&instance.mult_info) + 2;
+        let r_each_num = ExternalProductIOP::num_coins(&instance.mult_info) + 2;
         assert_eq!(randomness.len(), instance.num_updations * r_each_num);
 
         // in other updations, acc_ntt = acc_ntt (in last updation) + output_ntt of RLWE * RGSW
@@ -853,7 +854,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             );
 
             // step2: RLWE * RGSW
-            <RlweMultRgswIOP<F>>::prove_as_subprotocol(
+            <ExternalProductIOP<F>>::prove_as_subprotocol(
                 r_mult,
                 poly,
                 &updation.rlwe_mult_rgsw,
@@ -871,7 +872,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         info: &AccumulatorInstanceInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
-        let r_each_num = RlweMultRgswIOP::num_coins(&info.mult_info) + 2;
+        let r_each_num = ExternalProductIOP::num_coins(&info.mult_info) + 2;
         assert_eq!(randomness.len(), info.num_updations * r_each_num);
 
         // check the sumcheck part
@@ -880,7 +881,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             subclaim.expected_evaluations -= eq_at_u_r
                 * (r[0] * (updation.d_ntt * updation.acc_ntt.0 - updation.input_rlwe_ntt.0)
                     + r[1] * (updation.d_ntt * updation.acc_ntt.1 - updation.input_rlwe_ntt.1));
-            if !RlweMultRgswIOP::verify_as_subprotocol(
+            if !ExternalProductIOP::verify_as_subprotocol(
                 r_mult,
                 subclaim,
                 &updation.rlwe_mult_rgsw,
@@ -1159,13 +1160,13 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
     pub fn sample_coins(trans: &mut Transcript<F>, instance: &AccumulatorInstance<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            instance.num_updations * (<RlweMultRgswIOPPure<F>>::num_coins() + 2),
+            instance.num_updations * (<ExternalProductIOPPure<F>>::num_coins() + 2),
         )
     }
 
     /// Return the number of random coins used in this IOP
     pub fn num_coins(info: &AccumulatorInstanceInfo<F>) -> usize {
-        info.num_updations * (<RlweMultRgswIOPPure<F>>::num_coins() + 2)
+        info.num_updations * (<ExternalProductIOPPure<F>>::num_coins() + 2)
     }
 
     /// Prove accumulator updating `num_updations`` times
@@ -1300,7 +1301,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         instance: &AccumulatorInstance<F>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
-        let r_each_num = RlweMultRgswIOPPure::<F>::num_coins() + 2;
+        let r_each_num = ExternalProductIOPPure::<F>::num_coins() + 2;
         assert_eq!(randomness.len(), instance.num_updations * r_each_num);
 
         // in other updations, acc_ntt = acc_ntt (in last updation) + output_ntt of RLWE * RGSW
@@ -1342,7 +1343,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
             );
 
             // step2: RLWE * RGSW
-            <RlweMultRgswIOPPure<F>>::prove_as_subprotocol(
+            <ExternalProductIOPPure<F>>::prove_as_subprotocol(
                 r_mult,
                 poly,
                 &updation.rlwe_mult_rgsw,
@@ -1360,7 +1361,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         info: &AccumulatorInstanceInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
-        let r_each_num = RlweMultRgswIOPPure::<F>::num_coins() + 2;
+        let r_each_num = ExternalProductIOPPure::<F>::num_coins() + 2;
         assert_eq!(randomness.len(), info.num_updations * r_each_num);
 
         // check the sumcheck part
@@ -1369,7 +1370,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
             subclaim.expected_evaluations -= eq_at_u_r
                 * (r[0] * (updation.d_ntt * updation.acc_ntt.0 - updation.input_rlwe_ntt.0)
                     + r[1] * (updation.d_ntt * updation.acc_ntt.1 - updation.input_rlwe_ntt.1));
-            if !RlweMultRgswIOPPure::verify_as_subprotocol(
+            if !ExternalProductIOPPure::verify_as_subprotocol(
                 r_mult,
                 subclaim,
                 &updation.rlwe_mult_rgsw,

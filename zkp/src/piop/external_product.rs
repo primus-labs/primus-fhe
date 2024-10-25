@@ -60,19 +60,19 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::vec;
 /// IOP for RLWE * RGSW
-pub struct RlweMultRgswIOP<F: Field>(PhantomData<F>);
+pub struct ExternalProductIOP<F: Field>(PhantomData<F>);
 
 /// SNARKs for RLWE * RGSW
-pub struct RlweMultRgswSnarks<F: Field, EF: AbstractExtensionField<F>>(
+pub struct ExternalProductSnarks<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
 );
 
 /// IOP for RLWE * RGSW
-pub struct RlweMultRgswIOPPure<F: Field>(PhantomData<F>);
+pub struct ExternalProductIOPPure<F: Field>(PhantomData<F>);
 
 /// SNARKs for RLWE * RGSW
-pub struct RlweMultRgswSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
+pub struct ExternalProductSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
 );
@@ -99,7 +99,7 @@ pub struct RlweCiphertextPrime<F: Field> {
 /// Given (a, b) \in RLWE where a and b are two polynomials represented by N coefficients,
 /// and (c, f) \in RGSW = RLWE' \times RLWE' = (RLWE, ..., RLWE) \times (RLWE, ..., RLWE) where c = ((c0, c0'), ..., (ck-1, ck-1')) and f = ((f0, f0'), ..., (fk-1, fk-1'))
 #[derive(Debug, Clone)]
-pub struct RlweMultRgswInstance<F: Field> {
+pub struct ExternalProductInstance<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// info of decomposed bits
@@ -123,7 +123,7 @@ pub struct RlweMultRgswInstance<F: Field> {
 }
 
 /// Evaluation of RlweMultRgsw at the same random point
-pub struct RlweMultRgswEval<F: Field> {
+pub struct ExternalProductEval<F: Field> {
     /// length of bits when decomposing bits
     pub bits_len: usize,
     /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
@@ -147,7 +147,7 @@ pub type RlwesEval<F> = (Vec<F>, Vec<F>);
 
 /// store the information used to verify
 #[derive(Clone)]
-pub struct RlweMultRgswInfo<F: Field> {
+pub struct ExternalProductInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// information of ntt instance
@@ -156,7 +156,7 @@ pub struct RlweMultRgswInfo<F: Field> {
     pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
-impl<F: Field> fmt::Display for RlweMultRgswInfo<F> {
+impl<F: Field> fmt::Display for ExternalProductInfo<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "An instance of RLWE * RGSW: #vars = {}", self.num_vars)?;
         write!(f, "- containing ")?;
@@ -166,10 +166,10 @@ impl<F: Field> fmt::Display for RlweMultRgswInfo<F> {
     }
 }
 
-impl<F: Field> RlweMultRgswInfo<F> {
+impl<F: Field> ExternalProductInfo<F> {
     /// Convert to EF version
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweMultRgswInfo<EF> {
-        RlweMultRgswInfo::<EF> {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> ExternalProductInfo<EF> {
+        ExternalProductInfo::<EF> {
             num_vars: self.num_vars,
             ntt_info: self.ntt_info.to_ef::<EF>(),
             bits_info: self.bits_info.to_ef::<EF>(),
@@ -322,11 +322,11 @@ impl<F: Field> RlweCiphertextPrime<F> {
     }
 }
 
-impl<F: Field> RlweMultRgswInstance<F> {
+impl<F: Field> ExternalProductInstance<F> {
     /// Extract the information
     #[inline]
-    pub fn info(&self) -> RlweMultRgswInfo<F> {
-        RlweMultRgswInfo {
+    pub fn info(&self) -> ExternalProductInfo<F> {
+        ExternalProductInfo {
             num_vars: self.num_vars,
             ntt_info: self.ntt_info.clone(),
             bits_info: self.bits_info.clone(),
@@ -368,7 +368,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
             num_instances: 2,
         };
 
-        RlweMultRgswInstance {
+        ExternalProductInstance {
             num_vars,
             bits_info: bits_info.clone(),
             ntt_info: ntt_info.clone(),
@@ -420,8 +420,8 @@ impl<F: Field> RlweMultRgswInstance<F> {
     }
 
     /// Construct a EF version
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweMultRgswInstance<EF> {
-        RlweMultRgswInstance::<EF> {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> ExternalProductInstance<EF> {
+        ExternalProductInstance::<EF> {
             num_vars: self.num_vars,
             bits_info: self.bits_info.to_ef::<EF>(),
             ntt_info: self.ntt_info.to_ef::<EF>(),
@@ -436,8 +436,8 @@ impl<F: Field> RlweMultRgswInstance<F> {
 
     /// Evaluate at the same random point defined over F
     #[inline]
-    pub fn evaluate(&self, point: &[F]) -> RlweMultRgswEval<F> {
-        RlweMultRgswEval::<F> {
+    pub fn evaluate(&self, point: &[F]) -> ExternalProductEval<F> {
+        ExternalProductEval::<F> {
             bits_len: self.bits_info.bits_len,
             input_rlwe: self.input_rlwe.evaluate(point),
             bits_rlwe: self.bits_rlwe.evaluate(point),
@@ -453,8 +453,8 @@ impl<F: Field> RlweMultRgswInstance<F> {
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(
         &self,
         point: &[EF],
-    ) -> RlweMultRgswEval<EF> {
-        RlweMultRgswEval::<EF> {
+    ) -> ExternalProductEval<EF> {
+        ExternalProductEval::<EF> {
             bits_len: self.bits_info.bits_len,
             input_rlwe: self.input_rlwe.evaluate_ext(point),
             bits_rlwe: self.bits_rlwe.evaluate_ext(point),
@@ -470,8 +470,8 @@ impl<F: Field> RlweMultRgswInstance<F> {
     pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
         &self,
         point: &DenseMultilinearExtension<EF>,
-    ) -> RlweMultRgswEval<EF> {
-        RlweMultRgswEval::<EF> {
+    ) -> ExternalProductEval<EF> {
+        ExternalProductEval::<EF> {
             bits_len: self.bits_info.bits_len,
             input_rlwe: self.input_rlwe.evaluate_ext_opt(point),
             bits_rlwe: self.bits_rlwe.evaluate_ext_opt(point),
@@ -638,7 +638,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
     }
 }
 
-impl<F: Field> RlweMultRgswEval<F> {
+impl<F: Field> ExternalProductEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
@@ -725,9 +725,12 @@ impl<F: Field> RlweMultRgswEval<F> {
     }
 }
 
-impl<F: Field + Serialize> RlweMultRgswIOP<F> {
+impl<F: Field + Serialize> ExternalProductIOP<F> {
     /// sample coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>, instance: &RlweMultRgswInstance<F>) -> Vec<F> {
+    pub fn sample_coins(
+        trans: &mut Transcript<F>,
+        instance: &ExternalProductInstance<F>,
+    ) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
             <BitDecompositionIOP<F>>::num_coins(&instance.bits_info) + 2,
@@ -735,12 +738,12 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
     }
 
     /// return the number of coins used in sumcheck protocol
-    pub fn num_coins(info: &RlweMultRgswInfo<F>) -> usize {
+    pub fn num_coins(info: &ExternalProductInfo<F>) -> usize {
         <BitDecompositionIOP<F>>::num_coins(&info.bits_info) + 2
     }
 
     /// Prove RLWE * RGSW
-    pub fn prove(instance: &RlweMultRgswInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
+    pub fn prove(instance: &ExternalProductInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -796,7 +799,7 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
     pub fn prove_as_subprotocol(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
-        instance: &RlweMultRgswInstance<F>,
+        instance: &ExternalProductInstance<F>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let bits_instance = instance.extract_decomposed_bits();
@@ -854,9 +857,9 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
     #[inline]
     pub fn verify(
         wrapper: &mut ProofWrapper<F>,
-        evals_at_r: &RlweMultRgswEval<F>,
-        evals_at_u: &RlweMultRgswEval<F>,
-        info: &RlweMultRgswInfo<F>,
+        evals_at_r: &ExternalProductEval<F>,
+        evals_at_u: &ExternalProductEval<F>,
+        info: &ExternalProductInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
     ) -> bool {
         let mut trans = Transcript::new();
@@ -927,8 +930,8 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
     pub fn verify_as_subprotocol(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
-        evals: &RlweMultRgswEval<F>,
-        info: &RlweMultRgswInfo<F>,
+        evals: &ExternalProductEval<F>,
+        info: &ExternalProductInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
         // 1. check the bit decomposition part
@@ -975,13 +978,13 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
     }
 }
 
-impl<F, EF> RlweMultRgswSnarks<F, EF>
+impl<F, EF> ExternalProductSnarks<F, EF>
 where
     F: Field + Serialize + for<'de> Deserialize<'de>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &RlweMultRgswInstance<F>, code_spec: &S)
+    pub fn snarks<H, C, S>(instance: &ExternalProductInstance<F>, code_spec: &S)
     where
         H: Hash + Sync + Send,
         C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
@@ -1019,10 +1022,10 @@ where
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
-        let randomness = RlweMultRgswIOP::sample_coins(&mut prover_trans, &instance_ef);
+        let randomness = ExternalProductIOP::sample_coins(&mut prover_trans, &instance_ef);
         let randomness_ntt =
             <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
-        RlweMultRgswIOP::<EF>::prove_as_subprotocol(
+        ExternalProductIOP::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
@@ -1109,7 +1112,7 @@ where
         // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
         let randomness = verifier_trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <RlweMultRgswIOP<EF>>::num_coins(&instance_info),
+            <ExternalProductIOP<EF>>::num_coins(&instance_info),
         );
         let randomness_ntt = verifier_trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
@@ -1127,7 +1130,7 @@ where
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subclaim = RlweMultRgswIOP::<EF>::verify_as_subprotocol(
+        let check_subclaim = ExternalProductIOP::<EF>::verify_as_subprotocol(
             &randomness,
             &mut subclaim,
             &evals_at_r,
@@ -1228,7 +1231,7 @@ where
     }
 }
 
-impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
+impl<F: Field + Serialize> ExternalProductIOPPure<F> {
     /// sample coins before proving sumcheck protocol
     pub fn sample_coins(trans: &mut Transcript<F>) -> Vec<F> {
         trans.get_vec_challenge(b"randomness to combine sumcheck protocols", 2)
@@ -1240,7 +1243,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
     }
 
     /// Prove RLWE * RGSW
-    pub fn prove(instance: &RlweMultRgswInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
+    pub fn prove(instance: &ExternalProductInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
         let mut trans = Transcript::<F>::new();
         let u = trans.get_vec_challenge(
             b"random point used to instantiate sumcheck protocol",
@@ -1296,7 +1299,7 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
     pub fn prove_as_subprotocol(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
-        instance: &RlweMultRgswInstance<F>,
+        instance: &ExternalProductInstance<F>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         // let bits_instance = instance.extract_decomposed_bits();
@@ -1355,9 +1358,9 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
     #[inline]
     pub fn verify(
         wrapper: &mut ProofWrapper<F>,
-        evals_at_r: &RlweMultRgswEval<F>,
-        evals_at_u: &RlweMultRgswEval<F>,
-        info: &RlweMultRgswInfo<F>,
+        evals_at_r: &ExternalProductEval<F>,
+        evals_at_u: &ExternalProductEval<F>,
+        info: &ExternalProductInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
     ) -> bool {
         let mut trans = Transcript::new();
@@ -1428,8 +1431,8 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
     pub fn verify_as_subprotocol(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
-        evals: &RlweMultRgswEval<F>,
-        info: &RlweMultRgswInfo<F>,
+        evals: &ExternalProductEval<F>,
+        info: &ExternalProductInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
         // 1. check the bit decomposition part
@@ -1474,13 +1477,13 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
     }
 }
 
-impl<F, EF> RlweMultRgswSnarksOpt<F, EF>
+impl<F, EF> ExternalProductSnarksOpt<F, EF>
 where
     F: Field + Serialize + for<'de> Deserialize<'de>,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
 {
     /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &RlweMultRgswInstance<F>, code_spec: &S, block_size: usize)
+    pub fn snarks<H, C, S>(instance: &ExternalProductInstance<F>, code_spec: &S, block_size: usize)
     where
         H: Hash + Sync + Send,
         C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
@@ -1528,10 +1531,10 @@ where
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
-        let randomness = RlweMultRgswIOPPure::sample_coins(&mut prover_trans);
+        let randomness = ExternalProductIOPPure::sample_coins(&mut prover_trans);
         let randomness_ntt =
             <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
-        RlweMultRgswIOPPure::<EF>::prove_as_subprotocol(
+        ExternalProductIOPPure::<EF>::prove_as_subprotocol(
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
@@ -1640,7 +1643,7 @@ where
         // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
         let randomness = verifier_trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <RlweMultRgswIOPPure<EF>>::num_coins(),
+            <ExternalProductIOPPure<EF>>::num_coins(),
         );
         let randomness_ntt = verifier_trans.get_vec_challenge(
             b"randomness used to obtain the virtual random ntt instance",
@@ -1666,7 +1669,7 @@ where
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subclaim = RlweMultRgswIOPPure::<EF>::verify_as_subprotocol(
+        let check_subclaim = ExternalProductIOPPure::<EF>::verify_as_subprotocol(
             &randomness,
             &mut subclaim,
             &evals_at_r,

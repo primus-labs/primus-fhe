@@ -12,8 +12,8 @@ use std::vec;
 use zkp::piop::accumulator::AccumulatorSnarksOpt;
 use zkp::piop::{
     accumulator::AccumulatorSnarks, AccumulatorIOP, AccumulatorInstance, AccumulatorWitness,
-    BatchNTTInstanceInfo, BitDecompositionInstanceInfo, RlweCiphertext, RlweCiphertextPrime,
-    RlweMultRgswInstance,
+    BatchNTTInstanceInfo, BitDecompositionInstanceInfo, ExternalProductInstance, RlweCiphertext,
+    RlweCiphertextPrime,
 };
 
 // field type
@@ -107,7 +107,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
     bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &BatchNTTInstanceInfo<F>,
-) -> RlweMultRgswInstance<F> {
+) -> ExternalProductInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
     let bits_rlwe = RlweCiphertextPrime {
         a_vector: input_rlwe
@@ -182,7 +182,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
         b: DenseMultilinearExtension::from_evaluations_vec(num_vars, output_h_ntt),
     };
 
-    RlweMultRgswInstance::new(
+    ExternalProductInstance::new(
         num_vars,
         bits_info,
         ntt_info,
