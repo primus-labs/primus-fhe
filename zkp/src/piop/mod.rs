@@ -23,7 +23,7 @@ pub use bit_decomposition::{
 };
 pub use external_product::{
     ExternalProductIOP, ExternalProductIOPPure, ExternalProductInstance, ExternalProductSnarksOpt,
-    RlweCiphertext, RlweCiphertextPrime,
+    RlweCiphertext, RlweCiphertextVector,
 };
 pub use floor::{FloorIOP, FloorInstance};
 pub use lift::{LiftIOP, LiftInstance};

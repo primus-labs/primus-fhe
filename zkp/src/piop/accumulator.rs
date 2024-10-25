@@ -854,7 +854,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             );
 
             // step2: RLWE * RGSW
-            <ExternalProductIOP<F>>::prove_as_subprotocol(
+            <ExternalProductIOP<F>>::prepare_products_of_polynomial(
                 r_mult,
                 poly,
                 &updation.rlwe_mult_rgsw,
@@ -881,7 +881,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
             subclaim.expected_evaluations -= eq_at_u_r
                 * (r[0] * (updation.d_ntt * updation.acc_ntt.0 - updation.input_rlwe_ntt.0)
                     + r[1] * (updation.d_ntt * updation.acc_ntt.1 - updation.input_rlwe_ntt.1));
-            if !ExternalProductIOP::verify_as_subprotocol(
+            if !ExternalProductIOP::verify_subclaim(
                 r_mult,
                 subclaim,
                 &updation.rlwe_mult_rgsw,

@@ -13,7 +13,7 @@ use zkp::piop::accumulator::AccumulatorSnarksOpt;
 use zkp::piop::{
     accumulator::AccumulatorSnarks, AccumulatorIOP, AccumulatorInstance, AccumulatorWitness,
     BatchNTTInstanceInfo, BitDecompositionInstanceInfo, ExternalProductInstance, RlweCiphertext,
-    RlweCiphertextPrime,
+    RlweCiphertextVector,
 };
 
 // field type
@@ -36,11 +36,11 @@ fn random_rlwe_ciphertexts<F: Field, R>(
     bits_len: usize,
     rng: &mut R,
     num_vars: usize,
-) -> RlweCiphertextPrime<F>
+) -> RlweCiphertextVector<F>
 where
     R: rand::Rng + rand::CryptoRng,
 {
-    RlweCiphertextPrime {
+    RlweCiphertextVector {
         a_vector: (0..bits_len)
             .map(|_| <DenseMultilinearExtension<F>>::random(num_vars, rng))
             .collect(),
@@ -103,13 +103,13 @@ fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &
 fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
-    bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
-    bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
-    bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &BatchNTTInstanceInfo<F>,
+    bits_rgsw_c_ntt: RlweCiphertextVector<F>,
+    bits_rgsw_f_ntt: RlweCiphertextVector<F>,
+    bits_info: BitDecompositionInstanceInfo<F>,
+    ntt_info: BatchNTTInstanceInfo<F>,
 ) -> ExternalProductInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
-    let bits_rlwe = RlweCiphertextPrime {
+    let bits_rlwe = RlweCiphertextVector {
         a_vector: input_rlwe
             .a
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
@@ -125,7 +125,7 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     };
 
     // 2. Compute the ntt form of the decomposed bits
-    let bits_rlwe_ntt = RlweCiphertextPrime {
+    let bits_rlwe_ntt = RlweCiphertextVector {
         a_vector: bits_rlwe
             .a_vector
             .iter()
@@ -204,10 +204,10 @@ fn update_accumulator<F: Field + NTTField>(
     num_vars: usize,
     acc_ntt: RlweCiphertext<F>,
     d: DenseMultilinearExtension<F>,
-    bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
-    bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
-    bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &BatchNTTInstanceInfo<F>,
+    bits_rgsw_c_ntt: RlweCiphertextVector<F>,
+    bits_rgsw_f_ntt: RlweCiphertextVector<F>,
+    bits_info: BitDecompositionInstanceInfo<F>,
+    ntt_info: BatchNTTInstanceInfo<F>,
 ) -> AccumulatorWitness<F> {
     // 1. Perform ntt transform on (x^{-a_u} - 1)
     let d_ntt = DenseMultilinearExtension::from_evaluations_vec(
@@ -271,8 +271,8 @@ fn generate_instance<F: Field + NTTField>(
     num_vars: usize,
     input: RlweCiphertext<F>,
     num_updations: usize,
-    bits_info: &BitDecompositionInstanceInfo<F>,
-    ntt_info: &BatchNTTInstanceInfo<F>,
+    bits_info: BitDecompositionInstanceInfo<F>,
+    ntt_info: BatchNTTInstanceInfo<F>,
 ) -> AccumulatorInstance<F> {
     let mut rng = rand::thread_rng();
     let mut updations = Vec::with_capacity(num_updations);
@@ -289,8 +289,10 @@ fn generate_instance<F: Field + NTTField>(
     };
     for _ in 0..num_updations {
         let d = DenseMultilinearExtension::random(num_vars, &mut rng);
-        let bits_rgsw_c_ntt = random_rlwe_ciphertexts(bits_info.bits_len, &mut rng, num_vars);
-        let bits_rgsw_f_ntt = random_rlwe_ciphertexts(bits_info.bits_len, &mut rng, num_vars);
+        let bits_rgsw_c_ntt =
+            random_rlwe_ciphertexts(bits_info.clone().bits_len, &mut rng, num_vars);
+        let bits_rgsw_f_ntt =
+            random_rlwe_ciphertexts(bits_info.clone().bits_len, &mut rng, num_vars);
         // perform ACC * d * RGSW
         let updation = update_accumulator(
             num_vars,
@@ -298,8 +300,8 @@ fn generate_instance<F: Field + NTTField>(
             d,
             bits_rgsw_c_ntt,
             bits_rgsw_f_ntt,
-            bits_info,
-            ntt_info,
+            bits_info.clone(),
+            ntt_info.clone(),
         );
         // perform ACC + ACC * d * RGSW
         acc_ntt = RlweCiphertext {
@@ -327,8 +329,8 @@ fn generate_instance<F: Field + NTTField>(
         updations,
         output_ntt,
         output,
-        bits_info,
-        ntt_info,
+        &bits_info,
+        &ntt_info,
     )
 }
 
@@ -366,7 +368,7 @@ fn test_random_accumulator() {
 
     let num_updations = 10;
     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
+    let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
 
     let info = instance.info();
 
@@ -421,7 +423,7 @@ fn test_random_accumulator_extension_field() {
 
     let num_updations = 10;
     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
+    let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
     let instance_ef = instance.to_ef::<EF>();
 
     let info = instance_ef.info();
@@ -477,7 +479,7 @@ fn test_snarks() {
 
     let num_updations = 10;
     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
+    let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <AccumulatorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
@@ -519,7 +521,7 @@ fn test_snarks_with_lookup() {
 
     let num_updations = 10;
     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, &bits_info, &ntt_info);
+    let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
     <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(

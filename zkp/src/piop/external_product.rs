@@ -80,15 +80,15 @@ pub struct ExternalProductSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
 /// Note that it can represent either a coefficient-form or a NTT-form.
 #[derive(Debug, Clone)]
 pub struct RlweCiphertext<F: Field> {
-    /// the first part of the rlwe ciphertext.
+    /// The first part of the rlwe ciphertext.
     pub a: DenseMultilinearExtension<F>,
-    /// the second part of the rlwe ciphertext.
+    /// The second part of the rlwe ciphertext.
     pub b: DenseMultilinearExtension<F>,
 }
 
 /// RLWE' ciphertexts represented by two vectors, containing k RLWE ciphertext.
 #[derive(Debug, Clone)]
-pub struct RlweCiphertextPrime<F: Field> {
+pub struct RlweCiphertextVector<F: Field> {
     /// store the first part of each RLWE ciphertext.
     pub a_vector: Vec<DenseMultilinearExtension<F>>,
     /// store the second part of each RLWE ciphertext.
@@ -109,13 +109,13 @@ pub struct ExternalProductInstance<F: Field> {
     /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
     pub input_rlwe: RlweCiphertext<F>,
     /// bits_rlwe = (a_bits, b_bits): a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
-    pub bits_rlwe: RlweCiphertextPrime<F>,
+    pub bits_rlwe: RlweCiphertextVector<F>,
     /// bits_rlwe_ntt: ntt form of the above bit decomposition result
-    pub bits_rlwe_ntt: RlweCiphertextPrime<F>,
+    pub bits_rlwe_ntt: RlweCiphertextVector<F>,
     /// bits_rgsw_c_ntt: the ntt form of the first part (c) in the RGSW ciphertext
-    pub bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
+    pub bits_rgsw_c_ntt: RlweCiphertextVector<F>,
     /// bits_rgsw_f_ntt: the ntt form of the second part (f) in the RGSW ciphertext
-    pub bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
+    pub bits_rgsw_f_ntt: RlweCiphertextVector<F>,
     /// output_rlwe_ntt: store the output ciphertext (g', h') in the NTT-form
     pub output_rlwe_ntt: RlweCiphertext<F>,
     // output_rlwe: store the output ciphertext (g, h) in the coefficient-form
@@ -188,7 +188,7 @@ impl<F: Field> RlweCiphertext<F> {
             .collect::<Vec<F>>()
     }
 
-    /// Convert to EF version
+    /// Convert to an EF version
     #[inline]
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertext<EF> {
         RlweCiphertext::<EF> {
@@ -222,7 +222,7 @@ impl<F: Field> RlweCiphertext<F> {
     }
 }
 
-impl<F: Field> RlweCiphertextPrime<F> {
+impl<F: Field> RlweCiphertextVector<F> {
     /// Construct an empty rlweciphertexts
     pub fn new(bits_len: usize) -> Self {
         Self {
@@ -232,7 +232,11 @@ impl<F: Field> RlweCiphertextPrime<F> {
     }
 
     /// Add a RLWE ciphertext
-    pub fn add_rlwe(&mut self, a: DenseMultilinearExtension<F>, b: DenseMultilinearExtension<F>) {
+    pub fn add_rlwe_instance(
+        &mut self,
+        a: DenseMultilinearExtension<F>,
+        b: DenseMultilinearExtension<F>,
+    ) {
         self.a_vector.push(a);
         self.b_vector.push(b);
     }
@@ -266,8 +270,8 @@ impl<F: Field> RlweCiphertextPrime<F> {
 
     /// Convert to EF version
     #[inline]
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertextPrime<EF> {
-        RlweCiphertextPrime::<EF> {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertextVector<EF> {
+        RlweCiphertextVector::<EF> {
             a_vector: self.a_vector.iter().map(|bit| bit.to_ef::<EF>()).collect(),
             b_vector: self.b_vector.iter().map(|bit| bit.to_ef::<EF>()).collect(),
         }
@@ -338,13 +342,13 @@ impl<F: Field> ExternalProductInstance<F> {
     #[inline]
     pub fn new(
         num_vars: usize,
-        bits_info: &BitDecompositionInstanceInfo<F>,
-        ntt_info: &BatchNTTInstanceInfo<F>,
+        bits_info: BitDecompositionInstanceInfo<F>,
+        ntt_info: BatchNTTInstanceInfo<F>,
         input_rlwe: RlweCiphertext<F>,
-        bits_rlwe: RlweCiphertextPrime<F>,
-        bits_rlwe_ntt: RlweCiphertextPrime<F>,
-        bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
-        bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
+        bits_rlwe: RlweCiphertextVector<F>,
+        bits_rlwe_ntt: RlweCiphertextVector<F>,
+        bits_rgsw_c_ntt: RlweCiphertextVector<F>,
+        bits_rgsw_f_ntt: RlweCiphertextVector<F>,
         output_rlwe_ntt: RlweCiphertext<F>,
         // output_rlwe: &RlweCiphertext<F>,
     ) -> Self {
@@ -352,7 +356,7 @@ impl<F: Field> ExternalProductInstance<F> {
         let ntt_info = BatchNTTInstanceInfo {
             num_ntt: bits_info.bits_len << 1,
             num_vars,
-            ntt_table: ntt_info.ntt_table.clone(),
+            ntt_table: ntt_info.ntt_table,
         };
 
         assert_eq!(bits_rlwe.len(), bits_info.bits_len);
@@ -370,14 +374,14 @@ impl<F: Field> ExternalProductInstance<F> {
 
         ExternalProductInstance {
             num_vars,
-            bits_info: bits_info.clone(),
-            ntt_info: ntt_info.clone(),
-            input_rlwe: input_rlwe.clone(),
-            bits_rlwe: bits_rlwe.clone(),
-            bits_rlwe_ntt: bits_rlwe_ntt.clone(),
-            bits_rgsw_c_ntt: bits_rgsw_c_ntt.clone(),
-            bits_rgsw_f_ntt: bits_rgsw_f_ntt.clone(),
-            output_rlwe_ntt: output_rlwe_ntt.clone(),
+            bits_info,
+            ntt_info,
+            input_rlwe,
+            bits_rlwe,
+            bits_rlwe_ntt,
+            bits_rgsw_c_ntt,
+            bits_rgsw_f_ntt,
+            output_rlwe_ntt,
             // output_rlwe: output_rlwe.clone(),
         }
     }
@@ -756,11 +760,11 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
         // add sumcheck products (without NTT) into poly
-        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
+        Self::prepare_products_of_polynomial(&randomness, &mut poly, instance, &eq_at_u);
 
         // add sumcheck products of NTT into poly
         let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
-        <NTTBareIOP<F>>::prepare_products_of_polynomial(
+        NTTBareIOP::<F>::prepare_products_of_polynomial(
             F::one(),
             &mut poly,
             &mut claimed_sum,
@@ -796,7 +800,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
 
     /// Prove RLWE * RGSW with leaving the NTT part outside this interface
     #[inline]
-    pub fn prove_as_subprotocol(
+    pub fn prepare_products_of_polynomial(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &ExternalProductInstance<F>,
@@ -889,7 +893,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
 
         // check the sumcheck evaluation (without NTT)
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
+        if !Self::verify_subclaim(&randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
             return false;
         }
 
@@ -927,7 +931,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
 
     /// Verify RLWE * RGSW with leaving NTT part outside of the interface
     #[inline]
-    pub fn verify_as_subprotocol(
+    pub fn verify_subclaim(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
         evals: &ExternalProductEval<F>,
@@ -1025,7 +1029,7 @@ where
         let randomness = ExternalProductIOP::sample_coins(&mut prover_trans, &instance_ef);
         let randomness_ntt =
             <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
-        ExternalProductIOP::<EF>::prove_as_subprotocol(
+        ExternalProductIOP::<EF>::prepare_products_of_polynomial(
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
@@ -1130,7 +1134,7 @@ where
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subclaim = ExternalProductIOP::<EF>::verify_as_subprotocol(
+        let check_subclaim = ExternalProductIOP::<EF>::verify_subclaim(
             &randomness,
             &mut subclaim,
             &evals_at_r,
