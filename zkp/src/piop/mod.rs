@@ -30,7 +30,7 @@ pub use lookup::{
 pub use ntt::ntt_bare::NTTBareIOP;
 pub use ntt::{BatchNTTInstanceInfo, NTTInstance, NTTIOP};
 pub use rlwe_mul_rgsw::{
-    RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswIOPPure, RlweMultRgswInstance,
-    RlweMultRgswSnarksOpt,
+    RlweCiphertext, RlweCiphertextPrime, RlweMultRgswIOP, RlweMultRgswIOPPure,
+    RlweMultRgswInstance, RlweMultRgswSnarksOpt,
 };
 pub use round::{RoundIOP, RoundInstance};

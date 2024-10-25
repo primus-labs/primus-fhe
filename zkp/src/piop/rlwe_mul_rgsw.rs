@@ -80,19 +80,19 @@ pub struct RlweMultRgswSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
 /// Note that it can represent either a coefficient-form or a NTT-form.
 #[derive(Debug, Clone)]
 pub struct RlweCiphertext<F: Field> {
-    /// the first part of the ciphertext, chosen at random in the FHE scheme.
+    /// the first part of the rlwe ciphertext.
     pub a: DenseMultilinearExtension<F>,
-    /// the second part of the ciphertext, computed with the plaintext in the FHE scheme.
+    /// the second part of the rlwe ciphertext.
     pub b: DenseMultilinearExtension<F>,
 }
 
 /// RLWE' ciphertexts represented by two vectors, containing k RLWE ciphertext.
 #[derive(Debug, Clone)]
-pub struct RlweCiphertexts<F: Field> {
+pub struct RlweCiphertextPrime<F: Field> {
     /// store the first part of each RLWE ciphertext.
-    pub a_bits: Vec<DenseMultilinearExtension<F>>,
+    pub a_vector: Vec<DenseMultilinearExtension<F>>,
     /// store the second part of each RLWE ciphertext.
-    pub b_bits: Vec<DenseMultilinearExtension<F>>,
+    pub b_vector: Vec<DenseMultilinearExtension<F>>,
 }
 
 /// Stores the multiplication instance between RLWE ciphertext and RGSW ciphertext with the corresponding NTT table
@@ -109,13 +109,13 @@ pub struct RlweMultRgswInstance<F: Field> {
     /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
     pub input_rlwe: RlweCiphertext<F>,
     /// bits_rlwe = (a_bits, b_bits): a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
-    pub bits_rlwe: RlweCiphertexts<F>,
+    pub bits_rlwe: RlweCiphertextPrime<F>,
     /// bits_rlwe_ntt: ntt form of the above bit decomposition result
-    pub bits_rlwe_ntt: RlweCiphertexts<F>,
+    pub bits_rlwe_ntt: RlweCiphertextPrime<F>,
     /// bits_rgsw_c_ntt: the ntt form of the first part (c) in the RGSW ciphertext
-    pub bits_rgsw_c_ntt: RlweCiphertexts<F>,
+    pub bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
     /// bits_rgsw_f_ntt: the ntt form of the second part (f) in the RGSW ciphertext
-    pub bits_rgsw_f_ntt: RlweCiphertexts<F>,
+    pub bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
     /// output_rlwe_ntt: store the output ciphertext (g', h') in the NTT-form
     pub output_rlwe_ntt: RlweCiphertext<F>,
     // output_rlwe: store the output ciphertext (g, h) in the coefficient-form
@@ -222,24 +222,24 @@ impl<F: Field> RlweCiphertext<F> {
     }
 }
 
-impl<F: Field> RlweCiphertexts<F> {
+impl<F: Field> RlweCiphertextPrime<F> {
     /// Construct an empty rlweciphertexts
     pub fn new(bits_len: usize) -> Self {
         Self {
-            a_bits: Vec::with_capacity(bits_len),
-            b_bits: Vec::with_capacity(bits_len),
+            a_vector: Vec::with_capacity(bits_len),
+            b_vector: Vec::with_capacity(bits_len),
         }
     }
 
     /// Add a RLWE ciphertext
     pub fn add_rlwe(&mut self, a: DenseMultilinearExtension<F>, b: DenseMultilinearExtension<F>) {
-        self.a_bits.push(a);
-        self.b_bits.push(b);
+        self.a_vector.push(a);
+        self.b_vector.push(b);
     }
 
     /// Is empty
     pub fn is_empty(&self) -> bool {
-        if self.a_bits.is_empty() || self.b_bits.is_empty() {
+        if self.a_vector.is_empty() || self.b_vector.is_empty() {
             return true;
         }
         false
@@ -249,27 +249,27 @@ impl<F: Field> RlweCiphertexts<F> {
         if self.is_empty() {
             return 0;
         }
-        assert_eq!(self.a_bits.len(), self.b_bits.len());
-        self.a_bits.len()
+        assert_eq!(self.a_vector.len(), self.b_vector.len());
+        self.a_vector.len()
     }
 
     /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
     #[inline]
     pub fn pack_all_mles(&self) -> Vec<F> {
-        self.a_bits
+        self.a_vector
             .iter()
             .flat_map(|bit| bit.iter())
-            .chain(self.b_bits.iter().flat_map(|bit| bit.iter()))
+            .chain(self.b_vector.iter().flat_map(|bit| bit.iter()))
             .copied()
             .collect()
     }
 
     /// Convert to EF version
     #[inline]
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertexts<EF> {
-        RlweCiphertexts::<EF> {
-            a_bits: self.a_bits.iter().map(|bit| bit.to_ef::<EF>()).collect(),
-            b_bits: self.b_bits.iter().map(|bit| bit.to_ef::<EF>()).collect(),
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> RlweCiphertextPrime<EF> {
+        RlweCiphertextPrime::<EF> {
+            a_vector: self.a_vector.iter().map(|bit| bit.to_ef::<EF>()).collect(),
+            b_vector: self.b_vector.iter().map(|bit| bit.to_ef::<EF>()).collect(),
         }
     }
 
@@ -277,8 +277,14 @@ impl<F: Field> RlweCiphertexts<F> {
     #[inline]
     pub fn evaluate(&self, point: &[F]) -> RlwesEval<F> {
         (
-            self.a_bits.iter().map(|bit| bit.evaluate(point)).collect(),
-            self.b_bits.iter().map(|bit| bit.evaluate(point)).collect(),
+            self.a_vector
+                .iter()
+                .map(|bit| bit.evaluate(point))
+                .collect(),
+            self.b_vector
+                .iter()
+                .map(|bit| bit.evaluate(point))
+                .collect(),
         )
     }
 
@@ -286,11 +292,11 @@ impl<F: Field> RlweCiphertexts<F> {
     #[inline]
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(&self, point: &[EF]) -> RlwesEval<EF> {
         (
-            self.a_bits
+            self.a_vector
                 .iter()
                 .map(|bit| bit.evaluate_ext(point))
                 .collect(),
-            self.b_bits
+            self.b_vector
                 .iter()
                 .map(|bit| bit.evaluate_ext(point))
                 .collect(),
@@ -304,11 +310,11 @@ impl<F: Field> RlweCiphertexts<F> {
         point: &DenseMultilinearExtension<EF>,
     ) -> RlwesEval<EF> {
         (
-            self.a_bits
+            self.a_vector
                 .iter()
                 .map(|bit| bit.evaluate_ext_opt(point))
                 .collect(),
-            self.b_bits
+            self.b_vector
                 .iter()
                 .map(|bit| bit.evaluate_ext_opt(point))
                 .collect(),
@@ -335,10 +341,10 @@ impl<F: Field> RlweMultRgswInstance<F> {
         bits_info: &BitDecompositionInstanceInfo<F>,
         ntt_info: &BatchNTTInstanceInfo<F>,
         input_rlwe: RlweCiphertext<F>,
-        bits_rlwe: RlweCiphertexts<F>,
-        bits_rlwe_ntt: RlweCiphertexts<F>,
-        bits_rgsw_c_ntt: RlweCiphertexts<F>,
-        bits_rgsw_f_ntt: RlweCiphertexts<F>,
+        bits_rlwe: RlweCiphertextPrime<F>,
+        bits_rlwe_ntt: RlweCiphertextPrime<F>,
+        bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
+        bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
         output_rlwe_ntt: RlweCiphertext<F>,
         // output_rlwe: &RlweCiphertext<F>,
     ) -> Self {
@@ -516,13 +522,13 @@ impl<F: Field> RlweMultRgswInstance<F> {
         for (r, coeff, point) in izip!(
             randomness,
             self.bits_rlwe
-                .a_bits
+                .a_vector
                 .iter()
-                .chain(self.bits_rlwe.b_bits.iter()),
+                .chain(self.bits_rlwe.b_vector.iter()),
             self.bits_rlwe_ntt
-                .a_bits
+                .a_vector
                 .iter()
-                .chain(self.bits_rlwe_ntt.b_bits.iter())
+                .chain(self.bits_rlwe_ntt.b_vector.iter())
         ) {
             *r_coeffs += (*r, coeff);
             *r_points += (*r, point);
@@ -572,13 +578,13 @@ impl<F: Field> RlweMultRgswInstance<F> {
         for (r, coeff, point) in izip!(
             randomness,
             self.bits_rlwe
-                .a_bits
+                .a_vector
                 .iter()
-                .chain(self.bits_rlwe.b_bits.iter()),
+                .chain(self.bits_rlwe.b_vector.iter()),
             self.bits_rlwe_ntt
-                .a_bits
+                .a_vector
                 .iter()
-                .chain(self.bits_rlwe_ntt.b_bits.iter())
+                .chain(self.bits_rlwe_ntt.b_vector.iter())
         ) {
             // multiplication between EF (r) and F (y)
             add_assign_ef::<F, EF>(r_coeffs, r, coeff);
@@ -608,7 +614,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
             &Rc::new(self.input_rlwe.a.clone()),
             &self
                 .bits_rlwe
-                .a_bits
+                .a_vector
                 .iter()
                 .map(|bits| Rc::new(bits.clone()))
                 .collect::<Vec<_>>(),
@@ -617,7 +623,7 @@ impl<F: Field> RlweMultRgswInstance<F> {
             &Rc::new(self.input_rlwe.b.clone()),
             &self
                 .bits_rlwe
-                .b_bits
+                .b_vector
                 .iter()
                 .map(|bits| Rc::new(bits.clone()))
                 .collect::<Vec<_>>(),
@@ -805,10 +811,10 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
         // Prover claims the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
         // where u is randomly sampled by the verifier.
         for (a, b, c, f) in izip!(
-            &instance.bits_rlwe_ntt.a_bits,
-            &instance.bits_rlwe_ntt.b_bits,
-            &instance.bits_rgsw_c_ntt.a_bits,
-            &instance.bits_rgsw_f_ntt.a_bits
+            &instance.bits_rlwe_ntt.a_vector,
+            &instance.bits_rlwe_ntt.b_vector,
+            &instance.bits_rgsw_c_ntt.a_vector,
+            &instance.bits_rgsw_f_ntt.a_vector
         ) {
             let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), eq_at_u.clone()];
             let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), eq_at_u.clone()];
@@ -825,10 +831,10 @@ impl<F: Field + Serialize> RlweMultRgswIOP<F> {
 
         // Sumcheck protocol for proving: h' = \sum_{i = 0}^{k-1} a_i' \cdot c_i' + b_i' \cdot f_i'
         for (a, b, c, f) in izip!(
-            &instance.bits_rlwe_ntt.a_bits,
-            &instance.bits_rlwe_ntt.b_bits,
-            &instance.bits_rgsw_c_ntt.b_bits,
-            &instance.bits_rgsw_f_ntt.b_bits
+            &instance.bits_rlwe_ntt.a_vector,
+            &instance.bits_rlwe_ntt.b_vector,
+            &instance.bits_rgsw_c_ntt.b_vector,
+            &instance.bits_rgsw_f_ntt.b_vector
         ) {
             let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
             let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
@@ -1306,10 +1312,10 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
         // Prover claims the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
         // where u is randomly sampled by the verifier.
         for (a, b, c, f) in izip!(
-            &instance.bits_rlwe_ntt.a_bits,
-            &instance.bits_rlwe_ntt.b_bits,
-            &instance.bits_rgsw_c_ntt.a_bits,
-            &instance.bits_rgsw_f_ntt.a_bits
+            &instance.bits_rlwe_ntt.a_vector,
+            &instance.bits_rlwe_ntt.b_vector,
+            &instance.bits_rgsw_c_ntt.a_vector,
+            &instance.bits_rgsw_f_ntt.a_vector
         ) {
             let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
             let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
@@ -1326,10 +1332,10 @@ impl<F: Field + Serialize> RlweMultRgswIOPPure<F> {
 
         // Sumcheck protocol for proving: h' = \sum_{i = 0}^{k-1} a_i' \cdot c_i' + b_i' \cdot f_i'
         for (a, b, c, f) in izip!(
-            &instance.bits_rlwe_ntt.a_bits,
-            &instance.bits_rlwe_ntt.b_bits,
-            &instance.bits_rgsw_c_ntt.b_bits,
-            &instance.bits_rgsw_f_ntt.b_bits
+            &instance.bits_rlwe_ntt.a_vector,
+            &instance.bits_rlwe_ntt.b_vector,
+            &instance.bits_rgsw_c_ntt.b_vector,
+            &instance.bits_rgsw_f_ntt.b_vector
         ) {
             let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
             let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];

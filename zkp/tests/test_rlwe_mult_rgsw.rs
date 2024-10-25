@@ -12,7 +12,7 @@ use std::vec;
 use zkp::piop::RlweMultRgswSnarksOpt;
 use zkp::piop::{
     rlwe_mul_rgsw::RlweMultRgswSnarks, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
-    RlweCiphertext, RlweCiphertexts, RlweMultRgswIOP, RlweMultRgswInstance,
+    RlweCiphertext, RlweCiphertextPrime, RlweMultRgswIOP, RlweMultRgswInstance,
 };
 
 // field type
@@ -72,19 +72,19 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
 fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
-    input_rgsw: (RlweCiphertexts<F>, RlweCiphertexts<F>),
+    input_rgsw: (RlweCiphertextPrime<F>, RlweCiphertextPrime<F>),
     bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> RlweMultRgswInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
-    let bits_rlwe = RlweCiphertexts {
-        a_bits: input_rlwe
+    let bits_rlwe = RlweCiphertextPrime {
+        a_vector: input_rlwe
             .a
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
             .map(|d| d.as_ref().clone())
             .collect::<Vec<_>>(),
-        b_bits: input_rlwe
+        b_vector: input_rlwe
             .b
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
@@ -94,9 +94,9 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     let (bits_rgsw_c_ntt, bits_rgsw_f_ntt) = input_rgsw;
 
     // 2. Compute the ntt form of the decomposed bits
-    let bits_rlwe_ntt = RlweCiphertexts {
-        a_bits: bits_rlwe
-            .a_bits
+    let bits_rlwe_ntt = RlweCiphertextPrime {
+        a_vector: bits_rlwe
+            .a_vector
             .iter()
             .map(|bit| {
                 DenseMultilinearExtension::from_evaluations_vec(
@@ -105,8 +105,8 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
                 )
             })
             .collect(),
-        b_bits: bits_rlwe
-            .b_bits
+        b_vector: bits_rlwe
+            .b_vector
             .iter()
             .map(|bit| {
                 DenseMultilinearExtension::from_evaluations_vec(
@@ -117,17 +117,17 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
             .collect(),
     };
 
-    assert_eq!(bits_rlwe_ntt.a_bits.len(), bits_rlwe_ntt.b_bits.len());
-    assert_eq!(bits_rlwe_ntt.a_bits.len(), bits_rgsw_c_ntt.a_bits.len());
-    assert_eq!(bits_rlwe_ntt.a_bits.len(), bits_rgsw_f_ntt.a_bits.len());
+    assert_eq!(bits_rlwe_ntt.a_vector.len(), bits_rlwe_ntt.b_vector.len());
+    assert_eq!(bits_rlwe_ntt.a_vector.len(), bits_rgsw_c_ntt.a_vector.len());
+    assert_eq!(bits_rlwe_ntt.a_vector.len(), bits_rgsw_f_ntt.a_vector.len());
 
     // 3. Compute the output of ntt form with the RGSW ciphertext and the decomposed bits of ntt form
     let mut output_g_ntt = vec![F::zero(); 1 << num_vars];
     for (a, b, c, f) in izip!(
-        &bits_rlwe_ntt.a_bits,
-        &bits_rlwe_ntt.b_bits,
-        &bits_rgsw_c_ntt.a_bits,
-        &bits_rgsw_f_ntt.a_bits
+        &bits_rlwe_ntt.a_vector,
+        &bits_rlwe_ntt.b_vector,
+        &bits_rgsw_c_ntt.a_vector,
+        &bits_rgsw_f_ntt.a_vector
     ) {
         output_g_ntt.iter_mut().enumerate().for_each(|(i, g_i)| {
             *g_i += (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
@@ -136,10 +136,10 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
 
     let mut output_h_ntt = vec![F::zero(); 1 << num_vars];
     for (a, b, c, f) in izip!(
-        &bits_rlwe_ntt.a_bits,
-        &bits_rlwe_ntt.b_bits,
-        &bits_rgsw_c_ntt.b_bits,
-        &bits_rgsw_f_ntt.b_bits
+        &bits_rlwe_ntt.a_vector,
+        &bits_rlwe_ntt.b_vector,
+        &bits_rgsw_c_ntt.b_vector,
+        &bits_rgsw_f_ntt.b_vector
     ) {
         output_h_ntt.iter_mut().enumerate().for_each(|(i, h_i)| {
             *h_i += (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
@@ -213,7 +213,7 @@ fn test_random_rlwe_mult_rgsw() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_c_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -227,7 +227,7 @@ fn test_random_rlwe_mult_rgsw() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_f_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
@@ -304,7 +304,7 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_c_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -318,7 +318,7 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_f_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
@@ -396,7 +396,7 @@ fn test_snarks() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_c_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -410,7 +410,7 @@ fn test_snarks() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_f_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
@@ -475,7 +475,7 @@ fn test_snarks_with_lookup() {
     };
 
     // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
-    let mut bits_rgsw_c_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_c_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     let points: Vec<_> = (0..1 << num_vars)
         .map(|_| uniform.sample(&mut rng))
         .collect();
@@ -489,7 +489,7 @@ fn test_snarks_with_lookup() {
         );
     }
 
-    let mut bits_rgsw_f_ntt = <RlweCiphertexts<FF>>::new(bits_len);
+    let mut bits_rgsw_f_ntt = <RlweCiphertextPrime<FF>>::new(bits_len);
     for _ in 0..bits_len {
         bits_rgsw_f_ntt.add_rlwe(
             DenseMultilinearExtension::from_evaluations_slice(log_n, &points),

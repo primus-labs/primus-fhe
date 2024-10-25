@@ -12,7 +12,7 @@ use std::vec;
 use zkp::piop::AccumulatorSnarksOpt;
 use zkp::piop::{
     AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
-    RlweCiphertext, RlweCiphertexts, RlweMultRgswInstance,
+    RlweCiphertext, RlweCiphertextPrime, RlweMultRgswInstance,
 };
 
 // # Parameters
@@ -45,15 +45,15 @@ fn random_rlwe_ciphertexts<F: Field, R>(
     bits_len: usize,
     rng: &mut R,
     num_vars: usize,
-) -> RlweCiphertexts<F>
+) -> RlweCiphertextPrime<F>
 where
     R: rand::Rng + rand::CryptoRng,
 {
-    RlweCiphertexts {
-        a_bits: (0..bits_len)
+    RlweCiphertextPrime {
+        a_vector: (0..bits_len)
             .map(|_| <DenseMultilinearExtension<F>>::random(num_vars, rng))
             .collect(),
-        b_bits: (0..bits_len)
+        b_vector: (0..bits_len)
             .map(|_| <DenseMultilinearExtension<F>>::random(num_vars, rng))
             .collect(),
     }
@@ -112,20 +112,20 @@ fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &
 fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
-    bits_rgsw_c_ntt: RlweCiphertexts<F>,
-    bits_rgsw_f_ntt: RlweCiphertexts<F>,
+    bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
+    bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
     bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> RlweMultRgswInstance<F> {
     // 1. Decompose the input of RLWE ciphertex
-    let bits_rlwe = RlweCiphertexts {
-        a_bits: input_rlwe
+    let bits_rlwe = RlweCiphertextPrime {
+        a_vector: input_rlwe
             .a
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
             .map(|d| d.as_ref().clone())
             .collect::<Vec<_>>(),
-        b_bits: input_rlwe
+        b_vector: input_rlwe
             .b
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
@@ -134,9 +134,9 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     };
 
     // 2. Compute the ntt form of the decomposed bits
-    let bits_rlwe_ntt = RlweCiphertexts {
-        a_bits: bits_rlwe
-            .a_bits
+    let bits_rlwe_ntt = RlweCiphertextPrime {
+        a_vector: bits_rlwe
+            .a_vector
             .iter()
             .map(|bit| {
                 DenseMultilinearExtension::from_evaluations_vec(
@@ -145,8 +145,8 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
                 )
             })
             .collect(),
-        b_bits: bits_rlwe
-            .b_bits
+        b_vector: bits_rlwe
+            .b_vector
             .iter()
             .map(|bit| {
                 DenseMultilinearExtension::from_evaluations_vec(
@@ -157,17 +157,17 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
             .collect(),
     };
 
-    assert_eq!(bits_rlwe_ntt.a_bits.len(), bits_rlwe_ntt.b_bits.len());
-    assert_eq!(bits_rlwe_ntt.a_bits.len(), bits_rgsw_c_ntt.a_bits.len());
-    assert_eq!(bits_rlwe_ntt.a_bits.len(), bits_rgsw_f_ntt.a_bits.len());
+    assert_eq!(bits_rlwe_ntt.a_vector.len(), bits_rlwe_ntt.b_vector.len());
+    assert_eq!(bits_rlwe_ntt.a_vector.len(), bits_rgsw_c_ntt.a_vector.len());
+    assert_eq!(bits_rlwe_ntt.a_vector.len(), bits_rgsw_f_ntt.a_vector.len());
 
     // 3. Compute the output of ntt form with the RGSW ciphertext and the decomposed bits of ntt form
     let mut output_g_ntt = vec![F::zero(); 1 << num_vars];
     for (a, b, c, f) in izip!(
-        &bits_rlwe_ntt.a_bits,
-        &bits_rlwe_ntt.b_bits,
-        &bits_rgsw_c_ntt.a_bits,
-        &bits_rgsw_f_ntt.a_bits
+        &bits_rlwe_ntt.a_vector,
+        &bits_rlwe_ntt.b_vector,
+        &bits_rgsw_c_ntt.a_vector,
+        &bits_rgsw_f_ntt.a_vector
     ) {
         output_g_ntt.iter_mut().enumerate().for_each(|(i, g_i)| {
             *g_i += (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
@@ -176,10 +176,10 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
 
     let mut output_h_ntt = vec![F::zero(); 1 << num_vars];
     for (a, b, c, f) in izip!(
-        &bits_rlwe_ntt.a_bits,
-        &bits_rlwe_ntt.b_bits,
-        &bits_rgsw_c_ntt.b_bits,
-        &bits_rgsw_f_ntt.b_bits
+        &bits_rlwe_ntt.a_vector,
+        &bits_rlwe_ntt.b_vector,
+        &bits_rgsw_c_ntt.b_vector,
+        &bits_rgsw_f_ntt.b_vector
     ) {
         output_h_ntt.iter_mut().enumerate().for_each(|(i, h_i)| {
             *h_i += (a.evaluations[i] * c.evaluations[i]) + (b.evaluations[i] * f.evaluations[i]);
@@ -213,8 +213,8 @@ fn update_accumulator<F: Field + NTTField>(
     num_vars: usize,
     acc_ntt: RlweCiphertext<F>,
     d: DenseMultilinearExtension<F>,
-    bits_rgsw_c_ntt: RlweCiphertexts<F>,
-    bits_rgsw_f_ntt: RlweCiphertexts<F>,
+    bits_rgsw_c_ntt: RlweCiphertextPrime<F>,
+    bits_rgsw_f_ntt: RlweCiphertextPrime<F>,
     bits_info: &BitDecompositionInstanceInfo<F>,
     ntt_info: &BatchNTTInstanceInfo<F>,
 ) -> AccumulatorWitness<F> {
