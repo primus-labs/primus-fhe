@@ -59,8 +59,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use std::vec;
-/// IOP for RLWE * RGSW
-pub struct ExternalProductIOP<F: Field>(PhantomData<F>);
 
 /// SNARKs for RLWE * RGSW
 pub struct ExternalProductSnarks<F: Field, EF: AbstractExtensionField<F>>(
@@ -76,24 +74,6 @@ pub struct ExternalProductSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
 );
-/// RLWE ciphertext (a, b) where a and b represents two polynomials in some defined polynomial ring.
-/// Note that it can represent either a coefficient-form or a NTT-form.
-#[derive(Debug, Clone)]
-pub struct RlweCiphertext<F: Field> {
-    /// The first part of the rlwe ciphertext.
-    pub a: DenseMultilinearExtension<F>,
-    /// The second part of the rlwe ciphertext.
-    pub b: DenseMultilinearExtension<F>,
-}
-
-/// RLWE' ciphertexts represented by two vectors, containing k RLWE ciphertext.
-#[derive(Debug, Clone)]
-pub struct RlweCiphertextVector<F: Field> {
-    /// store the first part of each RLWE ciphertext.
-    pub a_vector: Vec<DenseMultilinearExtension<F>>,
-    /// store the second part of each RLWE ciphertext.
-    pub b_vector: Vec<DenseMultilinearExtension<F>>,
-}
 
 /// Stores the multiplication instance between RLWE ciphertext and RGSW ciphertext with the corresponding NTT table
 /// Given (a, b) \in RLWE where a and b are two polynomials represented by N coefficients,
@@ -106,17 +86,17 @@ pub struct ExternalProductInstance<F: Field> {
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info of ntt instance
     pub ntt_info: BatchNTTInstanceInfo<F>,
-    /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
+    /// Store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
     pub input_rlwe: RlweCiphertext<F>,
-    /// bits_rlwe = (a_bits, b_bits): a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
+    /// a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
     pub bits_rlwe: RlweCiphertextVector<F>,
-    /// bits_rlwe_ntt: ntt form of the above bit decomposition result
+    /// The ntt form of the above bit decomposition result
     pub bits_rlwe_ntt: RlweCiphertextVector<F>,
-    /// bits_rgsw_c_ntt: the ntt form of the first part (c) in the RGSW ciphertext
+    /// The ntt form of the first part (c) in the RGSW ciphertext
     pub bits_rgsw_c_ntt: RlweCiphertextVector<F>,
-    /// bits_rgsw_f_ntt: the ntt form of the second part (f) in the RGSW ciphertext
+    /// The ntt form of the second part (f) in the RGSW ciphertext
     pub bits_rgsw_f_ntt: RlweCiphertextVector<F>,
-    /// output_rlwe_ntt: store the output ciphertext (g', h') in the NTT-form
+    /// Store the output ciphertext (g', h') in the NTT-form
     pub output_rlwe_ntt: RlweCiphertext<F>,
     // output_rlwe: store the output ciphertext (g, h) in the coefficient-form
     // pub output_rlwe: RlweCiphertext<F>,
@@ -124,19 +104,19 @@ pub struct ExternalProductInstance<F: Field> {
 
 /// Evaluation of RlweMultRgsw at the same random point
 pub struct ExternalProductEval<F: Field> {
-    /// length of bits when decomposing bits
+    /// The Length of bits when decomposing bits
     pub bits_len: usize,
-    /// rlwe = (a, b): store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
+    /// Store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
     pub input_rlwe: RlweEval<F>,
-    /// bits_rlwe = (a_bits, b_bits): a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
+    /// a_bits (b_bits) corresponds to the bit decomposition result of a (b) in the input rlwe ciphertext
     pub bits_rlwe: RlwesEval<F>,
-    /// bits_rlwe_ntt: ntt form of the above bit decomposition result
+    /// The ntt form of the above bit decomposition result
     pub bits_rlwe_ntt: RlwesEval<F>,
-    /// bits_rgsw_c_ntt: the ntt form of the first part (c) in the RGSW ciphertext
+    /// The ntt form of the first part (c) in the RGSW ciphertext
     pub bits_rgsw_c_ntt: RlwesEval<F>,
-    /// bits_rgsw_f_ntt: the ntt form of the second part (f) in the RGSW ciphertext
+    /// The ntt form of the second part (f) in the RGSW ciphertext
     pub bits_rgsw_f_ntt: RlwesEval<F>,
-    /// output_rlwe_ntt: store the output ciphertext (g', h') in the NTT-form
+    /// Store the output ciphertext (g', h') in the NTT-form
     pub output_rlwe_ntt: RlweEval<F>,
 }
 
@@ -147,7 +127,7 @@ pub type RlwesEval<F> = (Vec<F>, Vec<F>);
 
 /// store the information used to verify
 #[derive(Clone)]
-pub struct ExternalProductInfo<F: Field> {
+pub struct ExternalProductInstanceInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
     /// information of ntt instance
@@ -156,7 +136,7 @@ pub struct ExternalProductInfo<F: Field> {
     pub bits_info: BitDecompositionInstanceInfo<F>,
 }
 
-impl<F: Field> fmt::Display for ExternalProductInfo<F> {
+impl<F: Field> fmt::Display for ExternalProductInstanceInfo<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "An instance of RLWE * RGSW: #vars = {}", self.num_vars)?;
         write!(f, "- containing ")?;
@@ -166,10 +146,28 @@ impl<F: Field> fmt::Display for ExternalProductInfo<F> {
     }
 }
 
-impl<F: Field> ExternalProductInfo<F> {
+impl<F: Field> ExternalProductInstanceInfo<F> {
+    /// Return the number of small polynomials used in IOP
+    #[inline]
+    pub fn num_oracles(&self) -> usize {
+        4 + 8 * self.bits_info.bits_len
+    }
+
+    /// Return the log of the number of small polynomials used in IOP
+    #[inline]
+    pub fn log_num_oracles(&self) -> usize {
+        self.num_oracles().next_power_of_two().ilog2() as usize
+    }
+
+    /// Generate the number of variables in the committed polynomial.
+    #[inline]
+    pub fn generate_num_var(&self) -> usize {
+        self.num_vars + self.log_num_oracles()
+    }
+
     /// Convert to EF version
-    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> ExternalProductInfo<EF> {
-        ExternalProductInfo::<EF> {
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> ExternalProductInstanceInfo<EF> {
+        ExternalProductInstanceInfo::<EF> {
             num_vars: self.num_vars,
             ntt_info: self.ntt_info.to_ef::<EF>(),
             bits_info: self.bits_info.to_ef::<EF>(),
@@ -177,6 +175,15 @@ impl<F: Field> ExternalProductInfo<F> {
     }
 }
 
+/// RLWE ciphertext (a, b) where a and b represent two polynomials in some defined polynomial ring.
+/// Note that it can represent either in coefficient or NTT form.
+#[derive(Debug, Clone)]
+pub struct RlweCiphertext<F: Field> {
+    /// The first part of the rlwe ciphertext.
+    pub a: DenseMultilinearExtension<F>,
+    /// The second part of the rlwe ciphertext.
+    pub b: DenseMultilinearExtension<F>,
+}
 impl<F: Field> RlweCiphertext<F> {
     /// Pack mles
     #[inline]
@@ -222,6 +229,14 @@ impl<F: Field> RlweCiphertext<F> {
     }
 }
 
+/// RLWE' ciphertexts represented by two vectors, containing k RLWE ciphertext.
+#[derive(Debug, Clone)]
+pub struct RlweCiphertextVector<F: Field> {
+    /// Store the first part of each RLWE ciphertext vector.
+    pub a_vector: Vec<DenseMultilinearExtension<F>>,
+    /// Store the second part of each RLWE ciphertext vector.
+    pub b_vector: Vec<DenseMultilinearExtension<F>>,
+}
 impl<F: Field> RlweCiphertextVector<F> {
     /// Construct an empty rlweciphertexts
     pub fn new(bits_len: usize) -> Self {
@@ -248,7 +263,8 @@ impl<F: Field> RlweCiphertextVector<F> {
         }
         false
     }
-    /// return the len
+
+    /// Return the len
     pub fn len(&self) -> usize {
         if self.is_empty() {
             return 0;
@@ -257,7 +273,7 @@ impl<F: Field> RlweCiphertextVector<F> {
         self.a_vector.len()
     }
 
-    /// Returns an iterator that iterates over the evaluations over {0,1}^`num_vars`
+    /// Returns a vector that iterates over the evaluations over {0,1}^`num_vars`
     #[inline]
     pub fn pack_all_mles(&self) -> Vec<F> {
         self.a_vector
@@ -329,8 +345,8 @@ impl<F: Field> RlweCiphertextVector<F> {
 impl<F: Field> ExternalProductInstance<F> {
     /// Extract the information
     #[inline]
-    pub fn info(&self) -> ExternalProductInfo<F> {
-        ExternalProductInfo {
+    pub fn info(&self) -> ExternalProductInstanceInfo<F> {
+        ExternalProductInstanceInfo {
             num_vars: self.num_vars,
             ntt_info: self.ntt_info.clone(),
             bits_info: self.bits_info.clone(),
@@ -386,19 +402,8 @@ impl<F: Field> ExternalProductInstance<F> {
         }
     }
 
-    /// Return the number of small polynomials used in IOP
-    #[inline]
-    pub fn num_oracles(&self) -> usize {
-        4 + 8 * self.bits_info.bits_len
-    }
-
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
-    }
-
     /// Pack all the involved small polynomials into a single vector of evaluations without padding zeros.
+    #[inline]
     pub fn pack_all_mles(&self) -> Vec<F> {
         let mut res = Vec::new();
         res.append(&mut self.input_rlwe.pack_all_mles());
@@ -409,13 +414,14 @@ impl<F: Field> ExternalProductInstance<F> {
         res.append(&mut self.bits_rgsw_f_ntt.pack_all_mles());
         res
     }
+
     /// Generate the oracle to be committed that is composed of all the small oracles used in IOP.
     /// The evaluations of this oracle is generated by the evaluations of all mles and the padded zeros.
-    /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
+    /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.xw
     pub fn generate_oracle(&self) -> DenseMultilinearExtension<F> {
-        let num_vars_added = self.log_num_oracles();
-        let num_vars = self.num_vars + num_vars_added;
-        let num_zeros_padded = ((1 << num_vars_added) - self.num_oracles()) * (1 << self.num_vars);
+        let info = self.info();
+        let num_vars = info.generate_num_var();
+        let num_zeros_padded = (1 << num_vars) - info.num_oracles() * (1 << self.num_vars);
 
         // arrangement: all values||all decomposed bits||padded zeros
         let mut evals = self.pack_all_mles();
@@ -469,7 +475,7 @@ impl<F: Field> ExternalProductInstance<F> {
         }
     }
 
-    /// evaluate given the equality function
+    /// Evaluate given the equality function
     #[inline]
     pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
         &self,
@@ -486,7 +492,7 @@ impl<F: Field> ExternalProductInstance<F> {
         }
     }
 
-    /// return the number of ntt instances contained
+    /// Return the number of ntt instances contained
     #[inline]
     pub fn num_ntt_contained(&self) -> usize {
         self.ntt_info.num_ntt
@@ -729,21 +735,85 @@ impl<F: Field> ExternalProductEval<F> {
     }
 }
 
+/// IOP for RLWE * RGSW
+#[derive(Default)]
+pub struct ExternalProductIOP<F: Field> {
+    /// The random vector for random linear combination.
+    pub randomness: Vec<F>,
+    /// The random vector for ntt.
+    pub randomness_ntt: Vec<F>,
+    /// The random value for identity function.
+    pub u: Vec<F>,
+}
+
 impl<F: Field + Serialize> ExternalProductIOP<F> {
-    /// sample coins before proving sumcheck protocol
+    /// Sample the random coins before proving sumcheck protocol
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The external product instance info.
     pub fn sample_coins(
         trans: &mut Transcript<F>,
-        instance: &ExternalProductInstance<F>,
+        info: &ExternalProductInstanceInfo<F>,
     ) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            <BitDecompositionIOP<F>>::num_coins(&instance.bits_info) + 2,
+            BitDecompositionIOP::<F>::num_coins(&info.bits_info) + 2,
         )
     }
 
-    /// return the number of coins used in sumcheck protocol
-    pub fn num_coins(info: &ExternalProductInfo<F>) -> usize {
-        <BitDecompositionIOP<F>>::num_coins(&info.bits_info) + 2
+    /// Return the number of coins used in this IOP
+    ///
+    /// # Arguments.
+    ///
+    /// * `info` - The external product instance info.
+    pub fn num_coins(info: &ExternalProductInstanceInfo<F>) -> usize {
+        BitDecompositionIOP::<F>::num_coins(&info.bits_info) + 2
+    }
+
+    /// Generate the randomness.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The external product instance info.
+    #[inline]
+    pub fn generate_randomness(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &ExternalProductInstanceInfo<F>,
+    ) {
+        self.randomness = Self::sample_coins(trans, info);
+        self.randomness_ntt = NTTIOP::<F>::sample_coins(trans, &info.ntt_info.to_clean());
+    }
+
+    /// Generate the randomness for the eq function.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `info` - The batched ntt instance info without ntt table.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &ExternalProductInstanceInfo<F>,
+    ) {
+        self.u = trans.get_vec_challenge(
+            b"EP IOP: random point used to instantiate sumcheck protocol",
+            info.num_vars,
+        );
+    }
+
+    /// Set the randomness for the eq function.
+    ///
+    /// # Arguments.
+    ///
+    /// * `u` - The vector to be set.
+    #[inline]
+    pub fn set_randomness_for_eq_function(&mut self, u: &[F]) {
+        self.u = u.to_vec();
     }
 
     /// Prove RLWE * RGSW
@@ -754,7 +824,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
             instance.num_vars,
         );
         let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        let randomness = Self::sample_coins(&mut trans, instance);
+        let randomness = Self::sample_coins(&mut trans, &instance.info());
         let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info.to_clean());
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
@@ -863,7 +933,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         wrapper: &mut ProofWrapper<F>,
         evals_at_r: &ExternalProductEval<F>,
         evals_at_u: &ExternalProductEval<F>,
-        info: &ExternalProductInfo<F>,
+        info: &ExternalProductInstanceInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
     ) -> bool {
         let mut trans = Transcript::new();
@@ -935,7 +1005,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
         evals: &ExternalProductEval<F>,
-        info: &ExternalProductInfo<F>,
+        info: &ExternalProductInstanceInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
         // 1. check the bit decomposition part
@@ -1026,7 +1096,7 @@ where
         // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
         let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
         let mut claimed_sum = EF::zero();
-        let randomness = ExternalProductIOP::sample_coins(&mut prover_trans, &instance_ef);
+        let randomness = ExternalProductIOP::sample_coins(&mut prover_trans, &instance_ef.info());
         let randomness_ntt =
             <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
         ExternalProductIOP::<EF>::prepare_products_of_polynomial(
@@ -1079,7 +1149,7 @@ where
         let mut requested_point_at_u = prover_u.clone();
         let oracle_randomness = prover_trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
+            instance.info().log_num_oracles(),
         );
         requested_point_at_r.extend(&oracle_randomness);
         requested_point_at_u.extend(&oracle_randomness);
@@ -1224,7 +1294,7 @@ where
             iop_verifier_time,
             iop_proof_size,
             committed_poly.num_vars,
-            instance.num_oracles(),
+            instance.info().num_oracles(),
             instance.num_vars,
             setup_time,
             commit_time,
@@ -1364,7 +1434,7 @@ impl<F: Field + Serialize> ExternalProductIOPPure<F> {
         wrapper: &mut ProofWrapper<F>,
         evals_at_r: &ExternalProductEval<F>,
         evals_at_u: &ExternalProductEval<F>,
-        info: &ExternalProductInfo<F>,
+        info: &ExternalProductInstanceInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
     ) -> bool {
         let mut trans = Transcript::new();
@@ -1436,7 +1506,7 @@ impl<F: Field + Serialize> ExternalProductIOPPure<F> {
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
         evals: &ExternalProductEval<F>,
-        info: &ExternalProductInfo<F>,
+        info: &ExternalProductInstanceInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
         // 1. check the bit decomposition part
@@ -1605,7 +1675,7 @@ where
         let mut requested_point_at_u = prover_u.clone();
         let oracle_randomness = prover_trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
+            instance.info().log_num_oracles(),
         );
         requested_point_at_r.extend(&oracle_randomness);
         requested_point_at_u.extend(&oracle_randomness);
@@ -1775,7 +1845,7 @@ where
             iop_verifier_time,
             iop_proof_size,
             committed_poly.num_vars,
-            instance.num_oracles(),
+            instance.info().num_oracles(),
             instance.num_vars,
             setup_time,
             commit_time,

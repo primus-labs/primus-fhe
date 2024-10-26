@@ -637,12 +637,35 @@ impl<F: Field + Serialize> NTTIOP<F> {
         trans: &mut Transcript<F>,
         info: &BatchNTTInstanceInfoClean,
     ) {
+        self.rlc_randomness = Self::sample_coins(trans, info);
+    }
+
+    /// Generate the randomness for the eq function.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `trans` - The transcripts.
+    /// * `info` - The batched ntt instance info without ntt table.
+    #[inline]
+    pub fn generate_randomness_for_eq_function(
+        &mut self,
+        trans: &mut Transcript<F>,
+        info: &BatchNTTInstanceInfoClean,
+    ) {
         self.u = trans.get_vec_challenge(
             b"NTT IOP: random point used to instantiate sumcheck protocol",
             info.num_vars,
         );
+    }
 
-        self.rlc_randomness = Self::sample_coins(trans, info);
+    /// Set the randomness for the eq function.
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `u` - The vector to be set.
+    #[inline]
+    pub fn set_randomness_for_eq_function(&mut self, u: &[F]) {
+        self.u = u.to_vec();
     }
 
     /// Prove NTT instance with delegation
@@ -1254,6 +1277,7 @@ where
         // Generate the randomness for the sumcheck protocol.
         let mut iop = NTTIOP::default();
         iop.generate_randomness(trans, &instance_info.to_clean());
+        iop.generate_randomness_for_eq_function(trans, &instance_info.to_clean());
 
         // Extract the target ntt instance, note that it is define over EF.
         let target_ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&iop.rlc_randomness);
@@ -1376,6 +1400,7 @@ where
         let mut iop = NTTIOP::default();
 
         iop.generate_randomness(trans, &info.to_clean());
+        iop.generate_randomness_for_eq_function(trans, &info.to_clean());
 
         // Get evals_at_r and evals_at_u.
         let evals_at_r = iop

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use super::external_product::ExternalProductEval;
-use super::external_product::ExternalProductInfo;
+use super::external_product::ExternalProductInstanceInfo;
 use super::external_product::RlweEval;
 use super::ntt::BitsOrder;
 use super::ntt::NTTRecursiveProof;
@@ -111,7 +111,7 @@ pub struct AccumulatorInstance<F: Field> {
     /// output of the Accumulator, represented in coefficient form
     pub output: RlweCiphertext<F>,
     /// info for RLWE * RGSW
-    pub mult_info: ExternalProductInfo<F>,
+    pub mult_info: ExternalProductInstanceInfo<F>,
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
@@ -137,7 +137,7 @@ pub struct AccumulatorInstanceInfo<F: Field> {
     /// number of updations in Accumulator denoted by t
     pub num_updations: usize,
     /// info for RLWE * RGSW
-    pub mult_info: ExternalProductInfo<F>,
+    pub mult_info: ExternalProductInstanceInfo<F>,
     /// info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
     /// info for NTT
@@ -164,7 +164,7 @@ impl<F: Field> AccumulatorWitness<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
-        6 + self.rlwe_mult_rgsw.num_oracles()
+        6 + self.rlwe_mult_rgsw.info().num_oracles()
     }
 
     /// Return the log of the number of small polynomials used in IOP
