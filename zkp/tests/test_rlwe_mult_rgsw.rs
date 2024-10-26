@@ -1,3 +1,4 @@
+use algebra::utils::Transcript;
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use algebra::{
     BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
@@ -251,18 +252,34 @@ fn test_random_rlwe_mult_rgsw() {
     );
 
     let info = instance.info();
+    let mut ep_iop = ExternalProductIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
 
-    let (kit, recursive_proof) = ExternalProductIOP::<FF>::prove(&instance);
+    ep_iop.generate_randomness(&mut prover_trans, &info);
+    ep_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+    let (kit, recursive_proof) = ep_iop.prove(
+        &mut prover_trans,
+        &instance,
+        zkp::piop::ntt::BitsOrder::Normal,
+    );
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = ExternalProductIOP::<FF>::verify(
+
+    let mut ep_iop = ExternalProductIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    ep_iop.generate_randomness(&mut verifier_trans, &info);
+    ep_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+    let check = ep_iop.verify(
+        &mut verifier_trans,
         &mut wrapper,
         &evals_at_r,
         &evals_at_u,
         &info,
         &recursive_proof,
+        zkp::piop::ntt::BitsOrder::Normal,
     );
 
     assert!(check);
@@ -343,18 +360,35 @@ fn test_random_rlwe_mult_rgsw_extension_field() {
 
     let instance_ef = instance.to_ef::<EF>();
     let info = instance_ef.info();
+    let mut ep_iop = ExternalProductIOP::default();
+    let mut prover_trans = Transcript::<EF>::new();
 
-    let (kit, recursive_proof) = ExternalProductIOP::<EF>::prove(&instance_ef);
+    ep_iop.generate_randomness(&mut prover_trans, &info);
+    ep_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let (kit, recursive_proof) = ep_iop.prove(
+        &mut prover_trans,
+        &instance_ef,
+        zkp::piop::ntt::BitsOrder::Normal,
+    );
     let evals_at_r = instance.evaluate_ext(&kit.randomness);
     let evals_at_u = instance.evaluate_ext(&kit.u);
 
     let mut wrapper = kit.extract();
-    let check = ExternalProductIOP::<EF>::verify(
+
+    let mut ep_iop = ExternalProductIOP::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+
+    ep_iop.generate_randomness(&mut verifier_trans, &info);
+    ep_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+    let check = ep_iop.verify(
+        &mut verifier_trans,
         &mut wrapper,
         &evals_at_r,
         &evals_at_u,
         &info,
         &recursive_proof,
+        zkp::piop::ntt::BitsOrder::Normal,
     );
 
     assert!(check);

@@ -641,9 +641,9 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// Generate the randomness for the eq function.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `trans` - The transcripts.
     /// * `info` - The batched ntt instance info without ntt table.
     #[inline]
@@ -659,9 +659,9 @@ impl<F: Field + Serialize> NTTIOP<F> {
     }
 
     /// Set the randomness for the eq function.
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `u` - The vector to be set.
     #[inline]
     pub fn set_randomness_for_eq_function(&mut self, u: &[F]) {
@@ -729,6 +729,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// * `point_evals_at_u` - The (randomized) point polynomial evaluated at u.
     /// * `info` - The batched ntt instances info.
     /// * `recursive_proof` - The recursive sumcheck proof.
+    /// * `bits_order` - The indicator of bits order.
     #[allow(clippy::too_many_arguments)]
     pub fn verify(
         &self,

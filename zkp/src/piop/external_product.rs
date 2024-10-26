@@ -816,43 +816,47 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         self.u = u.to_vec();
     }
 
-    /// Prove RLWE * RGSW
-    pub fn prove(instance: &ExternalProductInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
-        let mut trans = Transcript::<F>::new();
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        let randomness = Self::sample_coins(&mut trans, &instance.info());
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info.to_clean());
+    /// Prove external product instance
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `instance` - The external product instance.
+    /// * `bits_order` - The indicator of bits order.
+    pub fn prove(
+        &self,
+        trans: &mut Transcript<F>,
+        instance: &ExternalProductInstance<F>,
+        bits_order: BitsOrder,
+    ) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
+        let eq_at_u = Rc::new(gen_identity_evaluations(&self.u));
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
         // add sumcheck products (without NTT) into poly
-        Self::prepare_products_of_polynomial(&randomness, &mut poly, instance, &eq_at_u);
+        Self::prepare_products_of_polynomial(&self.randomness, &mut poly, instance, &eq_at_u);
 
         // add sumcheck products of NTT into poly
-        let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
+        let ntt_instance = instance.extract_ntt_instance(&self.randomness_ntt);
         NTTBareIOP::<F>::prepare_products_of_polynomial(
             F::one(),
             &mut poly,
             &mut claimed_sum,
             &ntt_instance,
-            &u,
-            BitsOrder::Normal,
+            &self.u,
+            bits_order,
         );
 
         // prove all sumcheck protocol into a large random sumcheck
         let (proof, state) =
-            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
+            MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // prove F(u, v) in a recursive manner
         let recursive_proof = <NTTIOP<F>>::prove_recursion(
-            &mut trans,
+            trans,
             &state.randomness,
             &ntt_instance.info(),
-            &u,
+            &self.u,
             BitsOrder::Normal,
         );
 
@@ -861,7 +865,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
                 proof,
                 claimed_sum,
                 info: poly.info(),
-                u,
+                u: self.u.clone(),
                 randomness: state.randomness,
             },
             recursive_proof,
@@ -877,7 +881,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
         let bits_instance = instance.extract_decomposed_bits();
-        let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&instance.bits_info);
+        let bits_r_num = BitDecompositionIOP::<F>::num_coins(&instance.bits_info);
         let (r_bits, r) = randomness.split_at(bits_r_num);
         BitDecompositionIOP::prepare_products_of_polynomial(r_bits, poly, &bits_instance, eq_at_u);
 
@@ -927,53 +931,46 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         );
     }
 
-    /// Verify RLWE * RGSW
+    /// Verify external product proof.
+    ///
+    /// # Arguments.
+    ///
+    /// * `trans` - The transcripts.
+    /// * `wrapper` - The proof wrapper.
+    /// * `evals_at_r` - The evaluation points at r.
+    /// * `evals_at_u` - The evaluation points at u.
+    /// * `info` - The external product info.
+    /// * `recursive_proof` - The recursive sumcheck proof.
+    /// * `bits_order` - The indicator of bits order.
+    #[allow(clippy::too_many_arguments)]
     #[inline]
     pub fn verify(
+        &self,
+        trans: &mut Transcript<F>,
         wrapper: &mut ProofWrapper<F>,
         evals_at_r: &ExternalProductEval<F>,
         evals_at_u: &ExternalProductEval<F>,
         info: &ExternalProductInstanceInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
+        bits_order: BitsOrder,
     ) -> bool {
-        let mut trans = Transcript::new();
-
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            info.num_vars,
-        );
-
-        // randomness to combine sumcheck protocols
-        let randomness = trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            Self::num_coins(info),
-        );
-        let randomness_ntt = trans.get_vec_challenge(
-            b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<F>>::num_coins(&info.ntt_info.to_clean()),
-        );
-
-        let mut subclaim = MLSumcheck::verify(
-            &mut trans,
-            &wrapper.info,
-            wrapper.claimed_sum,
-            &wrapper.proof,
-        )
-        .expect("fail to verify the sumcheck protocol");
-        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
+        let mut subclaim =
+            MLSumcheck::verify(trans, &wrapper.info, wrapper.claimed_sum, &wrapper.proof)
+                .expect("fail to verify the sumcheck protocol");
+        let eq_at_u_r = eval_identity_function(&self.u, &subclaim.point);
 
         // check the sumcheck evaluation (without NTT)
-        if !Self::verify_subclaim(&randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
+        if !Self::verify_subclaim(&self.randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
             return false;
         }
 
         let f_delegation = recursive_proof.delegation_claimed_sums[0];
         // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
         let mut ntt_coeff_evals_at_r = F::zero();
-        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
+        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &self.randomness_ntt);
         // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
         let mut ntt_point_evals_at_u = F::zero();
-        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
+        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &self.randomness_ntt);
 
         if !<NTTBareIOP<F>>::verify_subclaim(
             F::one(),
@@ -990,12 +987,12 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
             return false;
         }
         <NTTIOP<F>>::verify_recursion(
-            &mut trans,
+            trans,
             recursive_proof,
             &info.ntt_info,
-            &u,
+            &self.u,
             &subclaim,
-            BitsOrder::Normal,
+            bits_order,
         )
     }
 
