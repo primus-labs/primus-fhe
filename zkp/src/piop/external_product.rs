@@ -440,7 +440,8 @@ impl<F: Field> ExternalProductInstance<F> {
         <DenseMultilinearExtension<F>>::from_evaluations_vec(num_vars, evals)
     }
 
-    /// Construct a EF version
+    /// Construct an EF version
+    #[inline]
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> ExternalProductInstance<EF> {
         ExternalProductInstance::<EF> {
             num_vars: self.num_vars,

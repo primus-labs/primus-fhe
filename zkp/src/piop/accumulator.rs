@@ -14,7 +14,9 @@ use std::time::Instant;
 
 use super::external_product::ExternalProductInstanceEval;
 use super::external_product::ExternalProductInstanceInfo;
+use super::external_product::ExternalProductInstanceInfoClean;
 use super::external_product::RlweEval;
+use super::ntt::BatchNTTInstanceInfoClean;
 use super::ntt::BitsOrder;
 use super::ntt::NTTRecursiveProof;
 use super::BitDecompositionInstance;
@@ -60,87 +62,96 @@ pub struct AccumulatorSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
 );
-/// accumulator witness when performing ACC = ACC + (X^{-a_u} + 1) * ACC * RGSW(Z_u)
+/// The Accumulator witness when performing ACC = ACC + (X^{-a_u} - 1) * ACC * RGSW(Z_u)
 #[derive(Debug, Clone)]
 pub struct AccumulatorWitness<F: Field> {
-    /// * Witness when performing input_rlwe_ntt := (X^{-a_u} + 1) * ACC
-    ///
-    /// ACC of ntt form
+    /// The NTT form of ACC.
     pub acc_ntt: RlweCiphertext<F>,
-    /// scalar d = (X^{-a_u} + 1) of coefficient form
+    /// The coefficient form of scalar d = (X^{-a_u} - 1).
     pub d: DenseMultilinearExtension<F>,
-    /// scalar d = (X^{-a_u} + 1) of ntt form
+    /// The NTT form of scalar d = (X^{-a_u} - 1).
     pub d_ntt: DenseMultilinearExtension<F>,
-    /// result d * ACC of ntt form
+    /// The NTT form of d * ACC.
     pub input_rlwe_ntt: RlweCiphertext<F>,
-    /// * Witness when performing output_rlwe_ntt := input_rlwe * RGSW(Z_u) where input_rlwe = (X^{-a_u} + 1) * ACC
-    ///
-    /// result of RLWE * RGSW
+    /// The output of input_rlwe * RGSW(Z_u)
     pub rlwe_mult_rgsw: ExternalProductInstance<F>,
 }
 
 /// Evaluation of AccumulatorWitnessEval at the same random point
 pub struct AccumulatorWitnessEval<F: Field> {
-    /// ACC of ntt form
+    /// The evaluation of the NTT form of ACC.
     pub acc_ntt: RlweEval<F>,
-    /// scalar d = (X^{-a_u} + 1) of coefficient form
+    /// The evaluation of the coefficient form of scalar d.
     pub d: F,
-    /// scalar d = (X^{-a_u} + 1) of ntt form
+    /// The evaluation of the NTT form of scalar d.
     pub d_ntt: F,
-    /// result d * ACC = RLWE of ntt form
+    /// The evaluation of the NTT form of d * ACC.
     pub input_rlwe_ntt: RlweEval<F>,
-    /// result of RLWE * RGSW
+    /// The evaluation of the ExternalProduct.
     pub rlwe_mult_rgsw: ExternalProductInstanceEval<F>,
 }
 
 /// Store the ntt instance, bit decomposition instance, and the sumcheck instance for an Accumulator updating `t` times
 pub struct AccumulatorInstance<F: Field> {
-    /// number of variables
+    /// The number of variables.
     pub num_vars: usize,
-    /// number of updations in Accumulator denoted by t
+    /// The number of updations.
     pub num_updations: usize,
-    /// input of the Accumulator, represented in coefficient form
+    /// The input of the Accumulator, represented in coefficient form
     pub input: RlweCiphertext<F>,
-    /// input of the Accumulator, represented in NTT form
-    // pub input_ntt: RlweCiphertext<F>,
-    /// witnesses stored in updations
+    /// The witnesses stored in updations
     pub updations: Vec<AccumulatorWitness<F>>,
-    /// output of the Accumulator, represented in NTT form
+    /// The output of the Accumulator, represented in NTT form
     pub output_ntt: RlweCiphertext<F>,
-    /// output of the Accumulator, represented in coefficient form
+    /// The output of the Accumulator, represented in coefficient form
     pub output: RlweCiphertext<F>,
-    /// info for RLWE * RGSW
+    /// The info for RLWE * RGSW
     pub mult_info: ExternalProductInstanceInfo<F>,
-    /// info for decomposed bits
+    /// The info for decomposed bits
     pub bits_info: BitDecompositionInstanceInfo<F>,
-    /// info for NTT
+    /// The info for NTT
     pub ntt_info: BatchNTTInstanceInfo<F>,
 }
 
 /// Evaluation of AccumulatorInstance at the same random point
-pub struct AccumulatorEval<F: Field> {
-    /// input of the Accumulator, represented in coefficient form
+pub struct AccumulatorInstanceEval<F: Field> {
+    /// The evaluation of the input of the Accumulator in coefficient form.
     pub input: RlweEval<F>,
-    /// witnesses stored in updations
+    /// The evaluations of the witnesses stored in updations.
     pub updations: Vec<AccumulatorWitnessEval<F>>,
-    /// output of the Accumulator, represented in NTT form
+    /// The evaluation of the output of the Accumulator in NTT form.
     pub output_ntt: RlweEval<F>,
-    /// output of the Accumulator, represented in coefficient form
+    /// The evaluation of the output of the Accumulator in coefficient form.
     pub output: RlweEval<F>,
 }
 
 /// Store the Accumulator info used to verify
 pub struct AccumulatorInstanceInfo<F: Field> {
-    /// number of variables
+    /// The number of variables.
     pub num_vars: usize,
-    /// number of updations in Accumulator denoted by t
+    /// The number of updations.
     pub num_updations: usize,
-    /// info for RLWE * RGSW
+    /// The info for RLWE * RGSW.
     pub mult_info: ExternalProductInstanceInfo<F>,
-    /// info for decomposed bits
+    /// The info for decomposed bits.
     pub bits_info: BitDecompositionInstanceInfo<F>,
-    /// info for NTT
+    /// The info for NTT.
     pub ntt_info: BatchNTTInstanceInfo<F>,
+}
+
+/// Stores the information to be hashed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AccumulatorInstanceInfoClean<F: Field> {
+    /// The number of variables.
+    pub num_vars: usize,
+    /// The number of updations.
+    pub num_updations: usize,
+    /// The info for RLWE * RGSW.
+    pub mult_info: ExternalProductInstanceInfoClean<F>,
+    /// The info for decomposed bits.
+    pub bits_info: BitDecompositionInstanceInfo<F>,
+    /// The info for NTT.
+    pub ntt_info: BatchNTTInstanceInfoClean,
 }
 
 impl<F: Field> fmt::Display for AccumulatorInstanceInfo<F> {
@@ -153,23 +164,55 @@ impl<F: Field> fmt::Display for AccumulatorInstanceInfo<F> {
     }
 }
 
-impl<F: Field> AccumulatorWitness<F> {
-    /// Return the output_ntt
-    #[inline]
-    pub fn get_output(&self) -> RlweCiphertext<F> {
-        self.rlwe_mult_rgsw.output_rlwe_ntt.clone()
-    }
-
+impl<F: Field> AccumulatorInstanceInfo<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
-        6 + self.rlwe_mult_rgsw.info().num_oracles()
+        6 + self.num_updations * (6 + self.mult_info.num_oracles())
     }
 
     /// Return the log of the number of small polynomials used in IOP
     #[inline]
     pub fn log_num_oracles(&self) -> usize {
         self.num_oracles().next_power_of_two().ilog2() as usize
+    }
+
+    /// Generate the number of variables in the committed polynomial.
+    #[inline]
+    pub fn generate_num_var(&self) -> usize {
+        self.num_vars + self.log_num_oracles()
+    }
+
+    /// Construct an EF version.
+    #[inline]
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> AccumulatorInstanceInfo<EF> {
+        AccumulatorInstanceInfo {
+            num_vars: self.num_vars,
+            num_updations: self.num_updations,
+            mult_info: self.mult_info.to_ef(),
+            bits_info: self.bits_info.to_ef(),
+            ntt_info: self.ntt_info.to_ef(),
+        }
+    }
+
+    /// Convert to clean info.
+    #[inline]
+    pub fn to_clean(&self) -> AccumulatorInstanceInfoClean<F> {
+        AccumulatorInstanceInfoClean {
+            num_vars: self.num_vars,
+            num_updations: self.num_updations,
+            mult_info: self.mult_info.to_clean(),
+            bits_info: self.bits_info.clone(),
+            ntt_info: self.ntt_info.to_clean(),
+        }
+    }
+}
+
+impl<F: Field> AccumulatorWitness<F> {
+    /// Return the output_ntt
+    #[inline]
+    pub fn get_output(&self) -> RlweCiphertext<F> {
+        self.rlwe_mult_rgsw.output_rlwe_ntt.clone()
     }
 
     /// Return the number of ntt contained in this instance
@@ -228,6 +271,21 @@ impl<F: Field> AccumulatorWitness<F> {
             d_ntt: self.d_ntt.evaluate_ext(point),
             input_rlwe_ntt: self.input_rlwe_ntt.evaluate_ext(point),
             rlwe_mult_rgsw: self.rlwe_mult_rgsw.evaluate_ext(point),
+        }
+    }
+
+    /// Evaluate at the same random point defined over EF
+    #[inline]
+    pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
+        &self,
+        point: &DenseMultilinearExtension<EF>,
+    ) -> AccumulatorWitnessEval<EF> {
+        AccumulatorWitnessEval {
+            acc_ntt: self.acc_ntt.evaluate_ext_opt(point),
+            d: self.d.evaluate_ext_opt(point),
+            d_ntt: self.d_ntt.evaluate_ext_opt(point),
+            input_rlwe_ntt: self.input_rlwe_ntt.evaluate_ext_opt(point),
+            rlwe_mult_rgsw: self.rlwe_mult_rgsw.evaluate_ext_opt(point),
         }
     }
 
@@ -335,18 +393,6 @@ impl<F: Field> AccumulatorInstance<F> {
         }
     }
 
-    /// Return the number of small polynomials used in IOP
-    #[inline]
-    pub fn num_oracles(&self) -> usize {
-        6 + self.num_updations * self.updations[0].num_oracles()
-    }
-
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
-    }
-
     /// Return the number of NTT instances contained
     #[inline]
     pub fn num_ntt_contained(&self) -> usize {
@@ -370,9 +416,9 @@ impl<F: Field> AccumulatorInstance<F> {
     /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
     #[inline]
     pub fn generate_oracle(&self) -> DenseMultilinearExtension<F> {
-        let num_vars_added = self.log_num_oracles();
-        let num_vars = self.num_vars + num_vars_added;
-        let num_zeros_padded = ((1 << num_vars_added) - self.num_oracles()) * (1 << self.num_vars);
+        let info = self.info();
+        let num_vars = info.generate_num_var();
+        let num_zeros_padded = (1 << num_vars) - info.num_oracles() * (1 << self.num_vars);
 
         let mut evals = self.pack_all_mles();
         evals.append(&mut vec![F::zero(); num_zeros_padded]);
@@ -401,8 +447,8 @@ impl<F: Field> AccumulatorInstance<F> {
 
     /// Evaluate at the same random point
     #[inline]
-    pub fn evaluate(&self, point: &[F]) -> AccumulatorEval<F> {
-        AccumulatorEval::<F> {
+    pub fn evaluate(&self, point: &[F]) -> AccumulatorInstanceEval<F> {
+        AccumulatorInstanceEval::<F> {
             input: self.input.evaluate(point),
             output_ntt: self.output_ntt.evaluate(point),
             output: self.output.evaluate(point),
@@ -416,8 +462,11 @@ impl<F: Field> AccumulatorInstance<F> {
 
     /// Evaluate at the same random point defined over EF
     #[inline]
-    pub fn evaluate_ext<EF: AbstractExtensionField<F>>(&self, point: &[EF]) -> AccumulatorEval<EF> {
-        AccumulatorEval::<EF> {
+    pub fn evaluate_ext<EF: AbstractExtensionField<F>>(
+        &self,
+        point: &[EF],
+    ) -> AccumulatorInstanceEval<EF> {
+        AccumulatorInstanceEval::<EF> {
             input: self.input.evaluate_ext(point),
             output_ntt: self.output_ntt.evaluate_ext(point),
             output: self.output.evaluate_ext(point),
@@ -425,6 +474,24 @@ impl<F: Field> AccumulatorInstance<F> {
                 .updations
                 .par_iter()
                 .map(|updation| updation.evaluate_ext(point))
+                .collect(),
+        }
+    }
+
+    /// Evaluate at the same random point defined over EF
+    #[inline]
+    pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
+        &self,
+        point: &DenseMultilinearExtension<EF>,
+    ) -> AccumulatorInstanceEval<EF> {
+        AccumulatorInstanceEval::<EF> {
+            input: self.input.evaluate_ext_opt(point),
+            output_ntt: self.output_ntt.evaluate_ext_opt(point),
+            output: self.output.evaluate_ext_opt(point),
+            updations: self
+                .updations
+                .par_iter()
+                .map(|updation| updation.evaluate_ext_opt(point))
                 .collect(),
         }
     }
@@ -599,7 +666,7 @@ impl<F: Field> AccumulatorWitnessEval<F> {
     }
 }
 
-impl<F: Field> AccumulatorEval<F> {
+impl<F: Field> AccumulatorInstanceEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
@@ -1225,8 +1292,8 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
     #[inline]
     pub fn verify(
         wrapper: &mut ProofWrapper<F>,
-        evals_at_r: &AccumulatorEval<F>,
-        evals_at_u: &AccumulatorEval<F>,
+        evals_at_r: &AccumulatorInstanceEval<F>,
+        evals_at_u: &AccumulatorInstanceEval<F>,
         info: &AccumulatorInstanceInfo<F>,
         recursive_proof: &NTTRecursiveProof<F>,
     ) -> bool {
@@ -1356,7 +1423,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
     pub fn verify_as_subprotocol(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
-        evals: &AccumulatorEval<F>,
+        evals: &AccumulatorInstanceEval<F>,
         info: &AccumulatorInstanceInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
@@ -1528,7 +1595,7 @@ where
         let mut requested_point_at_u = prover_u.clone();
         let oracle_randomness = prover_trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
+            instance.info().log_num_oracles(),
         );
 
         requested_point_at_r.extend(&oracle_randomness);
@@ -1690,7 +1757,7 @@ where
             iop_verifier_time,
             iop_proof_size,
             committed_poly.num_vars,
-            instance.num_oracles(),
+            instance.info().num_oracles(),
             instance.num_vars,
             setup_time,
             commit_time,
