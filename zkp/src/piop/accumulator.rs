@@ -60,23 +60,26 @@ pub struct AccumulatorSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
     PhantomData<F>,
     PhantomData<EF>,
 );
-/// accumulator witness when performing ACC = ACC + (X^{-a_u} + 1) * ACC * RGSW(Z_u)
+/// The accumulator witness when performing ACC = ACC + (X^{-a_u} - 1) * ACC * RGSW(Z_u)
 #[derive(Debug, Clone)]
 pub struct AccumulatorWitness<F: Field> {
-    /// * Witness when performing input_rlwe_ntt := (X^{-a_u} + 1) * ACC
-    ///
     /// ACC of ntt form
     pub acc_ntt: RlweCiphertext<F>,
-    /// scalar d = (X^{-a_u} + 1) of coefficient form
+    /// scalar d = (X^{-a_u} - 1) of coefficient form
     pub d: DenseMultilinearExtension<F>,
-    /// scalar d = (X^{-a_u} + 1) of ntt form
+    /// scalar d = (X^{-a_u} - 1) of ntt form
     pub d_ntt: DenseMultilinearExtension<F>,
     /// result d * ACC of ntt form
     pub input_rlwe_ntt: RlweCiphertext<F>,
-    /// * Witness when performing output_rlwe_ntt := input_rlwe * RGSW(Z_u) where input_rlwe = (X^{-a_u} + 1) * ACC
-    ///
-    /// result of RLWE * RGSW
+    /// Witness when performing output_rlwe_ntt := input_rlwe * RGSW(Z_u).
     pub rlwe_mult_rgsw: ExternalProductInstance<F>,
+}
+
+/// The info of Accumulator witness.
+#[derive(Debug, Clone)]
+pub struct AccumulatorWitnessInfo<F: Field> {
+    /// The external product info.
+    pub ep_info: ExternalProductInstanceInfo<F>,
 }
 
 /// Evaluation of AccumulatorWitnessEval at the same random point
@@ -153,6 +156,26 @@ impl<F: Field> fmt::Display for AccumulatorInstanceInfo<F> {
     }
 }
 
+impl<F: Field> AccumulatorInstanceInfo<F> {
+    /// Return the number of small polynomials used in IOP
+    #[inline]
+    pub fn num_oracles(&self) -> usize {
+        6 + self.num_updations * self.mult_info.num_oracles()
+    }
+
+    /// Return the log of the number of small polynomials used in IOP
+    #[inline]
+    pub fn log_num_oracles(&self) -> usize {
+        self.num_oracles().next_power_of_two().ilog2() as usize
+    }
+
+    /// Generate the number of variables in the committed polynomial.
+    #[inline]
+    pub fn generate_num_var(&self) -> usize {
+        self.num_vars + self.log_num_oracles()
+    }
+}
+
 impl<F: Field> AccumulatorWitness<F> {
     /// Return the output_ntt
     #[inline]
@@ -166,11 +189,11 @@ impl<F: Field> AccumulatorWitness<F> {
         6 + self.rlwe_mult_rgsw.info().num_oracles()
     }
 
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
-    }
+    // /// Return the log of the number of small polynomials used in IOP
+    // #[inline]
+    // pub fn log_num_oracles(&self) -> usize {
+    //     self.num_oracles().next_power_of_two().ilog2() as usize
+    // }
 
     /// Return the number of ntt contained in this instance
     #[inline]
@@ -228,6 +251,21 @@ impl<F: Field> AccumulatorWitness<F> {
             d_ntt: self.d_ntt.evaluate_ext(point),
             input_rlwe_ntt: self.input_rlwe_ntt.evaluate_ext(point),
             rlwe_mult_rgsw: self.rlwe_mult_rgsw.evaluate_ext(point),
+        }
+    }
+
+    /// Evaluate at the same random point defined over EF
+    #[inline]
+    pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
+        &self,
+        point: &DenseMultilinearExtension<EF>,
+    ) -> AccumulatorWitnessEval<EF> {
+        AccumulatorWitnessEval {
+            acc_ntt: self.acc_ntt.evaluate_ext_opt(point),
+            d: self.d.evaluate_ext_opt(point),
+            d_ntt: self.d_ntt.evaluate_ext_opt(point),
+            input_rlwe_ntt: self.input_rlwe_ntt.evaluate_ext_opt(point),
+            rlwe_mult_rgsw: self.rlwe_mult_rgsw.evaluate_ext_opt(point),
         }
     }
 
@@ -335,18 +373,6 @@ impl<F: Field> AccumulatorInstance<F> {
         }
     }
 
-    /// Return the number of small polynomials used in IOP
-    #[inline]
-    pub fn num_oracles(&self) -> usize {
-        6 + self.num_updations * self.updations[0].num_oracles()
-    }
-
-    /// Return the log of the number of small polynomials used in IOP
-    #[inline]
-    pub fn log_num_oracles(&self) -> usize {
-        self.num_oracles().next_power_of_two().ilog2() as usize
-    }
-
     /// Return the number of NTT instances contained
     #[inline]
     pub fn num_ntt_contained(&self) -> usize {
@@ -370,9 +396,9 @@ impl<F: Field> AccumulatorInstance<F> {
     /// The arrangement of this oracle should be consistent to its usage in verifying the subclaim.
     #[inline]
     pub fn generate_oracle(&self) -> DenseMultilinearExtension<F> {
-        let num_vars_added = self.log_num_oracles();
-        let num_vars = self.num_vars + num_vars_added;
-        let num_zeros_padded = ((1 << num_vars_added) - self.num_oracles()) * (1 << self.num_vars);
+        let info = self.info();
+        let num_vars = info.generate_num_var();
+        let num_zeros_padded = (1 << num_vars) - info.num_oracles() * (1 << self.num_vars);
 
         let mut evals = self.pack_all_mles();
         evals.append(&mut vec![F::zero(); num_zeros_padded]);
@@ -1183,7 +1209,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
         // add sumcheck products (without NTT) into poly
-        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
+        Self::prepare_products_of_polynomial(&randomness, &mut poly, instance, &eq_at_u);
 
         // add sumcheck_products of NTT into poly
         let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
@@ -1257,7 +1283,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
         let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
 
         // check the sumcheck evaluation (without NTT)
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
+        if !Self::verify_subclaim(&randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
             return false;
         }
 
@@ -1294,7 +1320,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
     }
     /// Prover Accumulator
     #[inline]
-    pub fn prove_as_subprotocol(
+    pub fn prepare_products_of_polynomial(
         randomness: &[F],
         poly: &mut ListOfProductsOfPolynomials<F>,
         instance: &AccumulatorInstance<F>,
@@ -1353,7 +1379,7 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
 
     /// Verify the sumcheck part of accumulator updations (not including NTT part)
     #[inline]
-    pub fn verify_as_subprotocol(
+    pub fn verify_subclaim(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
         evals: &AccumulatorEval<F>,
@@ -1453,7 +1479,7 @@ where
         let randomness = AccumulatorIOPPure::sample_coins(&mut prover_trans, &instance_ef);
         let randomness_ntt =
             <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
-        AccumulatorIOPPure::<EF>::prove_as_subprotocol(
+        AccumulatorIOPPure::<EF>::prepare_products_of_polynomial(
             &randomness,
             &mut sumcheck_poly,
             &instance_ef,
@@ -1528,7 +1554,7 @@ where
         let mut requested_point_at_u = prover_u.clone();
         let oracle_randomness = prover_trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            instance.log_num_oracles(),
+            instance.info().log_num_oracles(),
         );
 
         requested_point_at_r.extend(&oracle_randomness);
@@ -1595,7 +1621,7 @@ where
         let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
 
         // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subclaim = AccumulatorIOPPure::<EF>::verify_as_subprotocol(
+        let check_subclaim = AccumulatorIOPPure::<EF>::verify_subclaim(
             &randomness,
             &mut subclaim,
             &evals_at_r,
@@ -1690,7 +1716,7 @@ where
             iop_verifier_time,
             iop_proof_size,
             committed_poly.num_vars,
-            instance.num_oracles(),
+            instance.info().num_oracles(),
             instance.num_vars,
             setup_time,
             commit_time,

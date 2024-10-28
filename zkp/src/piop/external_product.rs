@@ -96,7 +96,7 @@ pub type RlweEval<F> = (F, F);
 pub type RlwesEval<F> = (Vec<F>, Vec<F>);
 
 /// store the information used to verify
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ExternalProductInstanceInfo<F: Field> {
     /// number of variables
     pub num_vars: usize,
@@ -241,9 +241,9 @@ pub struct RlweCiphertextVector<F: Field> {
 }
 impl<F: Field> RlweCiphertextVector<F> {
     /// Construct an empty rlweciphertexts
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `bits_len` - the decomposition bits length.
     pub fn new(bits_len: usize) -> Self {
         Self {
@@ -253,9 +253,9 @@ impl<F: Field> RlweCiphertextVector<F> {
     }
 
     /// Add a RLWE ciphertext
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `a` - MLE of rlwe a.
     /// * `b` - MLE of rlwe b.
     pub fn add_rlwe_instance(
