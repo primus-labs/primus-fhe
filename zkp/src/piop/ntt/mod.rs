@@ -764,8 +764,14 @@ impl<F: Field + Serialize> NTTIOP<F> {
             return (false, vec![]);
         }
 
-        let b =
-            Self::verify_recursion(trans, recursive_proof, info, &self.u, &subclaim, bits_order);
+        let b = Self::verify_recursion(
+            trans,
+            recursive_proof,
+            info,
+            &self.u,
+            &subclaim.point,
+            bits_order,
+        );
 
         (b, subclaim.point)
     }
@@ -1028,14 +1034,14 @@ impl<F: Field + Serialize> NTTIOP<F> {
     /// * `proof` - The recursive sumcheck proofs.
     /// * `info` - The batched ntt instances info.
     /// * `u` - The randomness to initiate sumcheck protocol.
-    /// * `subclaim` - The subclaim output by the sumcheck protocol.
+    /// * `randomness` - The randomness output by the sumcheck protocol.
     /// * `bits_order` - The indicator of bits order.
     pub fn verify_recursion(
         trans: &mut Transcript<F>,
         proof: &NTTRecursiveProof<F>,
         info: &BatchNTTInstanceInfo<F>,
         u: &[F],
-        subclaim: &SubClaim<F>,
+        randomness: &[F],
         bits_order: BitsOrder,
     ) -> bool {
         let log_n = info.num_vars;
@@ -1046,7 +1052,7 @@ impl<F: Field + Serialize> NTTIOP<F> {
         // Note that the delegated value F(u, v) is stored in proof.delegation_claimed_sums[0].
 
         // 2. verify the computation of F(u, v) in log_n - 1 rounds
-        let mut requested_point = subclaim.point.clone();
+        let mut requested_point = randomness.to_vec();
         for (cnt, k) in (1..log_n).rev().enumerate() {
             let i = match bits_order {
                 BitsOrder::Normal => log_n - 1 - k,

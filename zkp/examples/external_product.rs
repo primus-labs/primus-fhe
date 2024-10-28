@@ -1,14 +1,20 @@
+use algebra::utils::Transcript;
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use algebra::{BabyBear, BabyBearExetension, Basis, FieldUniformSampler};
 use algebra::{DenseMultilinearExtension, Field};
 use itertools::izip;
 use num_traits::One;
+use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
 use sha2::Sha256;
 use std::sync::Arc;
+use std::time::Instant;
 use std::vec;
-use zkp::piop::ExternalProductSnarksOpt;
+use zkp::piop::external_product::{
+    ExternalProductParams, ExternalProductProof, ExternalProductProver, ExternalProductVerifier,
+};
+use zkp::piop::ntt::BitsOrder;
 use zkp::piop::{
     BatchNTTInstanceInfo, BitDecompositionInstanceInfo, ExternalProductInstance, RlweCiphertext,
     RlweCiphertextVector,
@@ -237,10 +243,69 @@ fn main() {
     );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    // <RlweMultRgswSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-    //     &instance, &code_spec,
-    // );
-    <ExternalProductSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, 2,
+
+    // Parameters.
+    let mut params = ExternalProductParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let block_size = 2;
+    let start = Instant::now();
+    params.setup(&instance.info(), block_size, code_spec);
+    println!(
+        "external product setup time: {:?} ms",
+        start.elapsed().as_millis()
     );
+
+    // Prover
+    let ep_prover = ExternalProductProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::new();
+
+    let start = Instant::now();
+    let proof = ep_prover.prove(
+        &mut prover_trans,
+        &params,
+        &instance,
+        block_size,
+        BitsOrder::Normal,
+    );
+    println!(
+        "external product proving time: {:?} ms",
+        start.elapsed().as_millis()
+    );
+
+    let proof_bytes = proof.to_bytes().unwrap();
+    println!("extenral product proof size: {:?} bytes", proof_bytes.len());
+    // Verifier.
+    let ep_verifier = ExternalProductVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+
+    let proof = ExternalProductProof::from_bytes(&proof_bytes).unwrap();
+
+    let start = Instant::now();
+    let res = ep_verifier.verify(
+        &mut verifier_trans,
+        &params,
+        &instance.info(),
+        block_size,
+        BitsOrder::Normal,
+        &proof,
+    );
+    println!(
+        "external product verifying time: {:?} ms",
+        start.elapsed().as_millis()
+    );
+    assert!(res);
 }

@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, rc::Rc};
 
 /// Stores the parameters used for lookup and the public info for verifier.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LookupInstanceInfo {
     /// number of variables for lookups
     pub num_vars: usize,
@@ -698,7 +698,7 @@ pub struct LookupProof<
     pub first_oracle_eval: EF,
     /// The opening proof of the first polynomial.
     pub first_eval_proof: Pcs::Proof,
-    /// The seconde polynomial commitment.
+    /// The second polynomial commitment.
     pub second_comm: Pcs::Commitment,
     /// The evaluation of the second packed polynomial.
     pub second_oracle_eval: EF,

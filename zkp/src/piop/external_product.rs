@@ -24,56 +24,27 @@
 //!
 //! Hence, there are 2k + 2 NTT instances in this single multiplication instance. We can randomize all these 2k+2 NTT instances to obtain a single NTT instance,
 //! and use our NTT IOP to prove this randomized NTT instance.
-use super::ntt::BitsOrder;
-use super::ntt::NTTRecursiveProof;
-use super::LookupInstance;
-use super::NTTBareIOP;
 use super::{
+    ntt::{BatchNTTInstanceInfoClean, BitsOrder, NTTRecursiveProof},
     BatchNTTInstanceInfo, BitDecompositionEval, BitDecompositionIOP, BitDecompositionInstance,
-    BitDecompositionInstanceInfo, NTTInstance, NTTIOP,
+    BitDecompositionInstanceInfo, LookupInstance, LookupInstanceEval, LookupInstanceInfo,
+    NTTBareIOP, NTTInstance, NTTIOP,
 };
 use crate::piop::LookupIOP;
-use crate::sumcheck::verifier::SubClaim;
-use crate::sumcheck::MLSumcheck;
-use crate::sumcheck::ProofWrapper;
-use crate::sumcheck::SumcheckKit;
+use crate::sumcheck::{self, verifier::SubClaim, MLSumcheck, ProofWrapper, SumcheckKit};
 use crate::utils::{
-    add_assign_ef, eval_identity_function, gen_identity_evaluations, print_statistic,
-    verify_oracle_relation,
+    add_assign_ef, eval_identity_function, gen_identity_evaluations, verify_oracle_relation,
 };
 use algebra::{
     utils::Transcript, AbstractExtensionField, DenseMultilinearExtension, Field,
-    ListOfProductsOfPolynomials,
+    ListOfProductsOfPolynomials, PolynomialInfo,
 };
+use bincode::Result;
 use core::fmt;
 use itertools::izip;
-use pcs::{
-    multilinear::brakedown::BrakedownPCS,
-    utils::code::{LinearCode, LinearCodeSpec},
-    utils::hash::Hash,
-    PolynomialCommitmentScheme,
-};
+use pcs::PolynomialCommitmentScheme;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::Instant;
-use std::vec;
-
-/// SNARKs for RLWE * RGSW
-pub struct ExternalProductSnarks<F: Field, EF: AbstractExtensionField<F>>(
-    PhantomData<F>,
-    PhantomData<EF>,
-);
-
-/// IOP for RLWE * RGSW
-pub struct ExternalProductIOPPure<F: Field>(PhantomData<F>);
-
-/// SNARKs for RLWE * RGSW
-pub struct ExternalProductSnarksOpt<F: Field, EF: AbstractExtensionField<F>>(
-    PhantomData<F>,
-    PhantomData<EF>,
-);
+use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 /// Stores the multiplication instance between RLWE ciphertext and RGSW ciphertext with the corresponding NTT table
 /// Given (a, b) \in RLWE where a and b are two polynomials represented by N coefficients,
@@ -98,12 +69,11 @@ pub struct ExternalProductInstance<F: Field> {
     pub bits_rgsw_f_ntt: RlweCiphertextVector<F>,
     /// Store the output ciphertext (g', h') in the NTT-form
     pub output_rlwe_ntt: RlweCiphertext<F>,
-    // output_rlwe: store the output ciphertext (g, h) in the coefficient-form
-    // pub output_rlwe: RlweCiphertext<F>,
 }
 
 /// Evaluation of RlweMultRgsw at the same random point
-pub struct ExternalProductEval<F: Field> {
+#[derive(Serialize, Deserialize)]
+pub struct ExternalProductInstanceEval<F: Field> {
     /// The Length of bits when decomposing bits
     pub bits_len: usize,
     /// Store the input ciphertext (a, b) where a and b are two polynomials represented by N coefficients.
@@ -166,6 +136,7 @@ impl<F: Field> ExternalProductInstanceInfo<F> {
     }
 
     /// Convert to EF version
+    #[inline]
     pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> ExternalProductInstanceInfo<EF> {
         ExternalProductInstanceInfo::<EF> {
             num_vars: self.num_vars,
@@ -173,8 +144,39 @@ impl<F: Field> ExternalProductInstanceInfo<F> {
             bits_info: self.bits_info.to_ef::<EF>(),
         }
     }
+
+    /// Convert to clean info.
+    #[inline]
+    pub fn to_clean(&self) -> ExternalProductInstanceInfoClean<F> {
+        ExternalProductInstanceInfoClean::<F> {
+            num_vars: self.num_vars,
+            ntt_info_clean: self.ntt_info.to_clean(),
+            bits_info: self.bits_info.clone(),
+        }
+    }
+
+    /// Extract lookup info.
+    #[inline]
+    pub fn extract_lookup_info(&self, block_size: usize) -> LookupInstanceInfo {
+        LookupInstanceInfo {
+            num_vars: self.num_vars,
+            num_batch: 2 * self.bits_info.bits_len,
+            block_size,
+            block_num: (2 * self.bits_info.bits_len + block_size) / block_size,
+        }
+    }
 }
 
+/// Stores the information to be hashed.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExternalProductInstanceInfoClean<F: Field> {
+    /// number of variables
+    pub num_vars: usize,
+    /// information of ntt instance
+    pub ntt_info_clean: BatchNTTInstanceInfoClean,
+    /// information of bit decomposition
+    pub bits_info: BitDecompositionInstanceInfo<F>,
+}
 /// RLWE ciphertext (a, b) where a and b represent two polynomials in some defined polynomial ring.
 /// Note that it can represent either in coefficient or NTT form.
 #[derive(Debug, Clone)]
@@ -239,6 +241,10 @@ pub struct RlweCiphertextVector<F: Field> {
 }
 impl<F: Field> RlweCiphertextVector<F> {
     /// Construct an empty rlweciphertexts
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `bits_len` - the decomposition bits length.
     pub fn new(bits_len: usize) -> Self {
         Self {
             a_vector: Vec::with_capacity(bits_len),
@@ -247,6 +253,11 @@ impl<F: Field> RlweCiphertextVector<F> {
     }
 
     /// Add a RLWE ciphertext
+    /// 
+    /// # Arguments.
+    /// 
+    /// * `a` - MLE of rlwe a.
+    /// * `b` - MLE of rlwe b.
     pub fn add_rlwe_instance(
         &mut self,
         a: DenseMultilinearExtension<F>,
@@ -446,8 +457,8 @@ impl<F: Field> ExternalProductInstance<F> {
 
     /// Evaluate at the same random point defined over F
     #[inline]
-    pub fn evaluate(&self, point: &[F]) -> ExternalProductEval<F> {
-        ExternalProductEval::<F> {
+    pub fn evaluate(&self, point: &[F]) -> ExternalProductInstanceEval<F> {
+        ExternalProductInstanceEval::<F> {
             bits_len: self.bits_info.bits_len,
             input_rlwe: self.input_rlwe.evaluate(point),
             bits_rlwe: self.bits_rlwe.evaluate(point),
@@ -463,8 +474,8 @@ impl<F: Field> ExternalProductInstance<F> {
     pub fn evaluate_ext<EF: AbstractExtensionField<F>>(
         &self,
         point: &[EF],
-    ) -> ExternalProductEval<EF> {
-        ExternalProductEval::<EF> {
+    ) -> ExternalProductInstanceEval<EF> {
+        ExternalProductInstanceEval::<EF> {
             bits_len: self.bits_info.bits_len,
             input_rlwe: self.input_rlwe.evaluate_ext(point),
             bits_rlwe: self.bits_rlwe.evaluate_ext(point),
@@ -480,8 +491,8 @@ impl<F: Field> ExternalProductInstance<F> {
     pub fn evaluate_ext_opt<EF: AbstractExtensionField<F>>(
         &self,
         point: &DenseMultilinearExtension<EF>,
-    ) -> ExternalProductEval<EF> {
-        ExternalProductEval::<EF> {
+    ) -> ExternalProductInstanceEval<EF> {
+        ExternalProductInstanceEval::<EF> {
             bits_len: self.bits_info.bits_len,
             input_rlwe: self.input_rlwe.evaluate_ext_opt(point),
             bits_rlwe: self.bits_rlwe.evaluate_ext_opt(point),
@@ -648,7 +659,7 @@ impl<F: Field> ExternalProductInstance<F> {
     }
 }
 
-impl<F: Field> ExternalProductEval<F> {
+impl<F: Field> ExternalProductInstanceEval<F> {
     /// Return the number of small polynomials used in IOP
     #[inline]
     pub fn num_oracles(&self) -> usize {
@@ -752,24 +763,18 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
     /// # Arguments.
     ///
     /// * `trans` - The transcripts.
-    /// * `info` - The external product instance info.
-    pub fn sample_coins(
-        trans: &mut Transcript<F>,
-        info: &ExternalProductInstanceInfo<F>,
-    ) -> Vec<F> {
+    #[inline]
+    pub fn sample_coins(trans: &mut Transcript<F>) -> Vec<F> {
         trans.get_vec_challenge(
             b"randomness to combine sumcheck protocols",
-            BitDecompositionIOP::<F>::num_coins(&info.bits_info) + 2,
+            Self::num_coins(),
         )
     }
 
-    /// Return the number of coins used in this IOP
-    ///
-    /// # Arguments.
-    ///
-    /// * `info` - The external product instance info.
-    pub fn num_coins(info: &ExternalProductInstanceInfo<F>) -> usize {
-        BitDecompositionIOP::<F>::num_coins(&info.bits_info) + 2
+    /// Return the number of coins used in sumcheck protocol
+    #[inline]
+    pub fn num_coins() -> usize {
+        2
     }
 
     /// Generate the randomness.
@@ -784,36 +789,12 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         trans: &mut Transcript<F>,
         info: &ExternalProductInstanceInfo<F>,
     ) {
-        self.randomness = Self::sample_coins(trans, info);
+        self.randomness = Self::sample_coins(trans);
         self.randomness_ntt = NTTIOP::<F>::sample_coins(trans, &info.ntt_info.to_clean());
-    }
-
-    /// Generate the randomness for the eq function.
-    ///
-    /// # Arguments.
-    ///
-    /// * `trans` - The transcripts.
-    /// * `info` - The batched ntt instance info without ntt table.
-    #[inline]
-    pub fn generate_randomness_for_eq_function(
-        &mut self,
-        trans: &mut Transcript<F>,
-        info: &ExternalProductInstanceInfo<F>,
-    ) {
         self.u = trans.get_vec_challenge(
             b"EP IOP: random point used to instantiate sumcheck protocol",
             info.num_vars,
         );
-    }
-
-    /// Set the randomness for the eq function.
-    ///
-    /// # Arguments.
-    ///
-    /// * `u` - The vector to be set.
-    #[inline]
-    pub fn set_randomness_for_eq_function(&mut self, u: &[F]) {
-        self.u = u.to_vec();
     }
 
     /// Prove external product instance
@@ -827,6 +808,8 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         &self,
         trans: &mut Transcript<F>,
         instance: &ExternalProductInstance<F>,
+        lookup_instance: &LookupInstance<F>,
+        lookup_iop: &LookupIOP<F>,
         bits_order: BitsOrder,
     ) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
         let eq_at_u = Rc::new(gen_identity_evaluations(&self.u));
@@ -847,17 +830,24 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
             bits_order,
         );
 
+        LookupIOP::<F>::prepare_products_of_polynomial(
+            &lookup_iop.randomness,
+            &mut poly,
+            &lookup_instance,
+            &eq_at_u,
+        );
+
         // prove all sumcheck protocol into a large random sumcheck
         let (proof, state) =
             MLSumcheck::prove(trans, &poly).expect("fail to prove the sumcheck protocol");
 
         // prove F(u, v) in a recursive manner
-        let recursive_proof = <NTTIOP<F>>::prove_recursion(
+        let recursive_proof = NTTIOP::<F>::prove_recursion(
             trans,
             &state.randomness,
             &ntt_instance.info(),
             &self.u,
-            BitsOrder::Normal,
+            bits_order,
         );
 
         (
@@ -880,11 +870,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         instance: &ExternalProductInstance<F>,
         eq_at_u: &Rc<DenseMultilinearExtension<F>>,
     ) {
-        let bits_instance = instance.extract_decomposed_bits();
-        let bits_r_num = BitDecompositionIOP::<F>::num_coins(&instance.bits_info);
-        let (r_bits, r) = randomness.split_at(bits_r_num);
-        BitDecompositionIOP::prepare_products_of_polynomial(r_bits, poly, &bits_instance, eq_at_u);
-
+        let r = randomness;
         assert_eq!(r.len(), 2);
 
         // Integrate the second part of Sumcheck
@@ -897,8 +883,8 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
             &instance.bits_rgsw_c_ntt.a_vector,
             &instance.bits_rgsw_f_ntt.a_vector
         ) {
-            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), eq_at_u.clone()];
-            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), eq_at_u.clone()];
+            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
+            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
             poly.add_product(prod1, r[0]);
             poly.add_product(prod2, r[0]);
         }
@@ -948,12 +934,15 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         &self,
         trans: &mut Transcript<F>,
         wrapper: &mut ProofWrapper<F>,
-        evals_at_r: &ExternalProductEval<F>,
-        evals_at_u: &ExternalProductEval<F>,
+        evals_at_r: &ExternalProductInstanceEval<F>,
+        evals_at_u: &ExternalProductInstanceEval<F>,
         info: &ExternalProductInstanceInfo<F>,
+        lookup_info: &LookupInstanceInfo,
         recursive_proof: &NTTRecursiveProof<F>,
+        lookup_evals: &LookupInstanceEval<F>,
+        lookup_iop: &LookupIOP<F>,
         bits_order: BitsOrder,
-    ) -> bool {
+    ) -> (bool, Vec<F>) {
         let mut subclaim =
             MLSumcheck::verify(trans, &wrapper.info, wrapper.claimed_sum, &wrapper.proof)
                 .expect("fail to verify the sumcheck protocol");
@@ -961,7 +950,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
 
         // check the sumcheck evaluation (without NTT)
         if !Self::verify_subclaim(&self.randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
-            return false;
+            return (false, vec![]);
         }
 
         let f_delegation = recursive_proof.delegation_claimed_sums[0];
@@ -972,7 +961,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         let mut ntt_point_evals_at_u = F::zero();
         evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &self.randomness_ntt);
 
-        if !<NTTBareIOP<F>>::verify_subclaim(
+        if !NTTBareIOP::<F>::verify_subclaim(
             F::one(),
             &mut subclaim,
             &mut wrapper.claimed_sum,
@@ -980,20 +969,31 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
             ntt_point_evals_at_u,
             f_delegation,
         ) {
-            return false;
+            return (false, vec![]);
         }
 
-        if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
-            return false;
+        if !LookupIOP::<F>::verify_subclaim(
+            &lookup_iop.randomness,
+            &mut subclaim,
+            lookup_evals,
+            lookup_info,
+            eq_at_u_r,
+        ) {
+            return (false, vec![]);
         }
-        <NTTIOP<F>>::verify_recursion(
+        if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
+            return (false, vec![]);
+        }
+        let res = NTTIOP::<F>::verify_recursion(
             trans,
             recursive_proof,
             &info.ntt_info,
             &self.u,
-            &subclaim,
+            &subclaim.point,
             bits_order,
-        )
+        );
+
+        (res, subclaim.point)
     }
 
     /// Verify RLWE * RGSW with leaving NTT part outside of the interface
@@ -1001,508 +1001,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
     pub fn verify_subclaim(
         randomness: &[F],
         subclaim: &mut SubClaim<F>,
-        evals: &ExternalProductEval<F>,
-        info: &ExternalProductInstanceInfo<F>,
-        eq_at_u_r: F,
-    ) -> bool {
-        // 1. check the bit decomposition part
-        let bits_eval = evals.extract_decomposed_bits();
-        let bits_r_num = <BitDecompositionIOP<F>>::num_coins(&info.bits_info);
-        let (r_ntt, r) = randomness.split_at(bits_r_num);
-        let check_decomposed_bits = <BitDecompositionIOP<F>>::verify_subclaim(
-            r_ntt,
-            subclaim,
-            &bits_eval,
-            &info.bits_info,
-            eq_at_u_r,
-        );
-        if !check_decomposed_bits {
-            return false;
-        }
-
-        // 2. check the rest sumcheck protocols
-        // The first part is to evaluate at a random point g' = \sum_{i = 0}^{k-1} a_i' \cdot c_i + b_i' \cdot f_i
-        // It is the reduction claim of prover asserting the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
-        let mut sum1 = F::zero();
-        let mut sum2 = F::zero();
-        for (a, b, c, f) in izip!(
-            &evals.bits_rlwe_ntt.0,
-            &evals.bits_rlwe_ntt.1,
-            &evals.bits_rgsw_c_ntt.0,
-            &evals.bits_rgsw_f_ntt.0
-        ) {
-            sum1 += *a * *c + *b * *f;
-        }
-
-        for (a, b, c, f) in izip!(
-            &evals.bits_rlwe_ntt.0,
-            &evals.bits_rlwe_ntt.1,
-            &evals.bits_rgsw_c_ntt.1,
-            &evals.bits_rgsw_f_ntt.1
-        ) {
-            sum2 += *a * *c + *b * *f;
-        }
-
-        subclaim.expected_evaluations -= eq_at_u_r
-            * (r[0] * (sum1 - evals.output_rlwe_ntt.0) + r[1] * (sum2 - evals.output_rlwe_ntt.1));
-        true
-    }
-}
-
-impl<F, EF> ExternalProductSnarks<F, EF>
-where
-    F: Field + Serialize + for<'de> Deserialize<'de>,
-    EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
-{
-    /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &ExternalProductInstance<F>, code_spec: &S)
-    where
-        H: Hash + Sync + Send,
-        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
-        S: LinearCodeSpec<F, Code = C> + Clone,
-    {
-        let instance_info = instance.info();
-        println!("Prove {instance_info}\n");
-        // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
-        let committed_poly = instance.generate_oracle();
-        // 1. Use PCS to commit the above polynomial.
-        let start = Instant::now();
-        let pp =
-            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
-        let setup_time = start.elapsed().as_millis();
-
-        let start = Instant::now();
-        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
-        let commit_time = start.elapsed().as_millis();
-
-        // 2. Prover generates the proof
-        let prover_start = Instant::now();
-        let mut iop_proof_size = 0;
-        let mut prover_trans = Transcript::<EF>::new();
-        // Convert the original instance into an instance defined over EF
-        let instance_ef = instance.to_ef::<EF>();
-        let instance_info = instance_ef.info();
-
-        // 2.1 Generate the random point to instantiate the sumcheck protocol
-        let prover_u = prover_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
-
-        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
-        let mut claimed_sum = EF::zero();
-        let randomness = ExternalProductIOP::sample_coins(&mut prover_trans, &instance_ef.info());
-        let randomness_ntt =
-            <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
-        ExternalProductIOP::<EF>::prepare_products_of_polynomial(
-            &randomness,
-            &mut sumcheck_poly,
-            &instance_ef,
-            &eq_at_u,
-        );
-
-        // 2.? Prover extract the random ntt instance from all ntt instances
-        let ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&randomness_ntt);
-        <NTTBareIOP<EF>>::prepare_products_of_polynomial(
-            EF::one(),
-            &mut sumcheck_poly,
-            &mut claimed_sum,
-            &ntt_instance,
-            &prover_u,
-            BitsOrder::Normal,
-        );
-        let poly_info = sumcheck_poly.info();
-        let ntt_instance_info = ntt_instance.info();
-
-        // 2.3 Generate proof of sumcheck protocol
-        let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Addition In Zq");
-        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
-
-        // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
-            &mut prover_trans,
-            &sumcheck_state.randomness,
-            &ntt_instance_info,
-            &prover_u,
-            BitsOrder::Normal,
-        );
-        iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
-        let iop_prover_time = prover_start.elapsed().as_millis();
-
-        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let start = Instant::now();
-        // let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
-        // let evals_at_u = instance.evaluate_ext(&prover_u);
-        let eq_at_r = gen_identity_evaluations(&sumcheck_state.randomness);
-        let evals_at_r = instance.evaluate_ext_opt(&eq_at_r);
-        let evals_at_u = instance.evaluate_ext_opt(eq_at_u.as_ref());
-
-        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        let mut requested_point_at_r = sumcheck_state.randomness.clone();
-        let mut requested_point_at_u = prover_u.clone();
-        let oracle_randomness = prover_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            instance.info().log_num_oracles(),
-        );
-        requested_point_at_r.extend(&oracle_randomness);
-        requested_point_at_u.extend(&oracle_randomness);
-        let oracle_eval_at_r = committed_poly.evaluate_ext(&requested_point_at_r);
-        let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
-
-        // 2.6 Generate the evaluation proof of the requested point
-        let eval_proof_at_r = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
-            &requested_point_at_r,
-            &mut prover_trans,
-        );
-        let eval_proof_at_u = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
-            &requested_point_at_u,
-            &mut prover_trans,
-        );
-        let pcs_open_time = start.elapsed().as_millis();
-
-        // 3. Verifier checks the proof
-        let verifier_start = Instant::now();
-        let mut verifier_trans = Transcript::<EF>::new();
-
-        // 3.1 Generate the random point to instantiate the sumcheck protocol
-        let verifier_u = verifier_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-
-        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-        let randomness = verifier_trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            <ExternalProductIOP<EF>>::num_coins(&instance_info),
-        );
-        let randomness_ntt = verifier_trans.get_vec_challenge(
-            b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<EF>>::num_coins(&instance_info.ntt_info.to_clean()),
-        );
-
-        // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify(
-            &mut verifier_trans,
-            &poly_info,
-            claimed_sum,
-            &sumcheck_proof,
-        )
-        .expect("Verify the sumcheck proof generated in RLWE * RGSW");
-        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
-
-        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subclaim = ExternalProductIOP::<EF>::verify_subclaim(
-            &randomness,
-            &mut subclaim,
-            &evals_at_r,
-            &instance_info,
-            eq_at_u_r,
-        );
-        assert!(check_subclaim);
-
-        // 3.? Check the NTT part
-        let f_delegation = recursive_proof.delegation_claimed_sums[0];
-        // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
-        let mut ntt_coeff_evals_at_r = EF::zero();
-        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
-        // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
-        let mut ntt_point_evals_at_u = EF::zero();
-        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
-
-        // check the sumcheck part of NTT
-        let check_ntt_bare = <NTTBareIOP<EF>>::verify_subclaim(
-            EF::one(),
-            &mut subclaim,
-            &mut claimed_sum,
-            ntt_coeff_evals_at_r,
-            ntt_point_evals_at_u,
-            f_delegation,
-        );
-        assert!(check_ntt_bare);
-        assert_eq!(subclaim.expected_evaluations, EF::zero());
-        assert_eq!(claimed_sum, EF::zero());
-        // check the recursive part of NTT
-        let check_recursive = <NTTIOP<EF>>::verify_recursion(
-            &mut verifier_trans,
-            &recursive_proof,
-            &ntt_instance_info,
-            &verifier_u,
-            &subclaim,
-            BitsOrder::Normal,
-        );
-        assert!(check_recursive);
-
-        // 3.5 and also check the relation between these small oracles and the committed oracle
-        let start = Instant::now();
-        let mut pcs_proof_size = 0;
-        let flatten_evals_at_r = evals_at_r.flatten();
-        let flatten_evals_at_u = evals_at_u.flatten();
-        let oracle_randomness = verifier_trans.get_vec_challenge(
-            b"random linear combination for evaluations of oracles",
-            evals_at_r.log_num_oracles(),
-        );
-        let check_oracle_at_r =
-            verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
-        let check_oracle_at_u =
-            verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
-        assert!(check_oracle_at_r && check_oracle_at_u);
-        let iop_verifier_time = verifier_start.elapsed().as_millis();
-
-        // 3.5 Check the evaluation of a random point over the committed oracle
-        let check_pcs_at_r = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point_at_r,
-            oracle_eval_at_r,
-            &eval_proof_at_r,
-            &mut verifier_trans,
-        );
-        let check_pcs_at_u = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point_at_u,
-            oracle_eval_at_u,
-            &eval_proof_at_u,
-            &mut verifier_trans,
-        );
-        assert!(check_pcs_at_r && check_pcs_at_u);
-        let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len()
-            + bincode::serialize(&eval_proof_at_u).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_r).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_u).unwrap().len();
-
-        // 4. print statistic
-        print_statistic(
-            iop_prover_time + pcs_open_time,
-            iop_verifier_time + pcs_verifier_time,
-            iop_proof_size + pcs_proof_size,
-            iop_prover_time,
-            iop_verifier_time,
-            iop_proof_size,
-            committed_poly.num_vars,
-            instance.info().num_oracles(),
-            instance.num_vars,
-            setup_time,
-            commit_time,
-            pcs_open_time,
-            pcs_verifier_time,
-            pcs_proof_size,
-        );
-    }
-}
-
-impl<F: Field + Serialize> ExternalProductIOPPure<F> {
-    /// sample coins before proving sumcheck protocol
-    pub fn sample_coins(trans: &mut Transcript<F>) -> Vec<F> {
-        trans.get_vec_challenge(b"randomness to combine sumcheck protocols", 2)
-    }
-
-    /// return the number of coins used in sumcheck protocol
-    pub fn num_coins() -> usize {
-        2
-    }
-
-    /// Prove RLWE * RGSW
-    pub fn prove(instance: &ExternalProductInstance<F>) -> (SumcheckKit<F>, NTTRecursiveProof<F>) {
-        let mut trans = Transcript::<F>::new();
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&u));
-        let randomness = Self::sample_coins(&mut trans);
-        let randomness_ntt = <NTTIOP<F>>::sample_coins(&mut trans, &instance.ntt_info.to_clean());
-
-        let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
-        let mut claimed_sum = F::zero();
-        // add sumcheck products (without NTT) into poly
-        Self::prove_as_subprotocol(&randomness, &mut poly, instance, &eq_at_u);
-
-        // add sumcheck products of NTT into poly
-        let ntt_instance = instance.extract_ntt_instance(&randomness_ntt);
-        <NTTBareIOP<F>>::prepare_products_of_polynomial(
-            F::one(),
-            &mut poly,
-            &mut claimed_sum,
-            &ntt_instance,
-            &u,
-            BitsOrder::Normal,
-        );
-
-        // prove all sumcheck protocol into a large random sumcheck
-        let (proof, state) =
-            MLSumcheck::prove(&mut trans, &poly).expect("fail to prove the sumcheck protocol");
-
-        // prove F(u, v) in a recursive manner
-        let recursive_proof = <NTTIOP<F>>::prove_recursion(
-            &mut trans,
-            &state.randomness,
-            &ntt_instance.info(),
-            &u,
-            BitsOrder::Normal,
-        );
-
-        (
-            SumcheckKit {
-                proof,
-                claimed_sum,
-                info: poly.info(),
-                u,
-                randomness: state.randomness,
-            },
-            recursive_proof,
-        )
-    }
-
-    /// Prove RLWE * RGSW with leaving the NTT part outside this interface
-    #[inline]
-    pub fn prove_as_subprotocol(
-        randomness: &[F],
-        poly: &mut ListOfProductsOfPolynomials<F>,
-        instance: &ExternalProductInstance<F>,
-        eq_at_u: &Rc<DenseMultilinearExtension<F>>,
-    ) {
-        // let bits_instance = instance.extract_decomposed_bits();
-        // let bits_r_num = <BitDecomposition<F>>::num_coins(&instance.bits_info);
-        // let (r_bits, r) = randomness.split_at(bits_r_num);
-        // BitDecomposition::prove_as_subprotocol(r_bits, poly, &bits_instance, eq_at_u);
-
-        let r = randomness;
-        assert_eq!(r.len(), 2);
-
-        // Integrate the second part of Sumcheck
-        // Sumcheck for proving g'(x) = \sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) for x \in \{0, 1\}^\log n.
-        // Prover claims the sum \sum_{x} eq(u, x) (\sum_{i = 0}^{k-1} a_i'(x) \cdot c_i(x) + b_i'(x) \cdot f_i(x) - g'(x)) = 0
-        // where u is randomly sampled by the verifier.
-        for (a, b, c, f) in izip!(
-            &instance.bits_rlwe_ntt.a_vector,
-            &instance.bits_rlwe_ntt.b_vector,
-            &instance.bits_rgsw_c_ntt.a_vector,
-            &instance.bits_rgsw_f_ntt.a_vector
-        ) {
-            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
-            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
-            poly.add_product(prod1, r[0]);
-            poly.add_product(prod2, r[0]);
-        }
-        poly.add_product(
-            [
-                Rc::new(instance.output_rlwe_ntt.a.clone()),
-                Rc::clone(eq_at_u),
-            ],
-            -r[0],
-        );
-
-        // Sumcheck protocol for proving: h' = \sum_{i = 0}^{k-1} a_i' \cdot c_i' + b_i' \cdot f_i'
-        for (a, b, c, f) in izip!(
-            &instance.bits_rlwe_ntt.a_vector,
-            &instance.bits_rlwe_ntt.b_vector,
-            &instance.bits_rgsw_c_ntt.b_vector,
-            &instance.bits_rgsw_f_ntt.b_vector
-        ) {
-            let prod1 = [Rc::new(a.clone()), Rc::new(c.clone()), Rc::clone(eq_at_u)];
-            let prod2 = [Rc::new(b.clone()), Rc::new(f.clone()), Rc::clone(eq_at_u)];
-            poly.add_product(prod1, r[1]);
-            poly.add_product(prod2, r[1]);
-        }
-        poly.add_product(
-            [
-                Rc::new(instance.output_rlwe_ntt.b.clone()),
-                Rc::clone(eq_at_u),
-            ],
-            -r[1],
-        );
-    }
-
-    /// Verify RLWE * RGSW
-    #[inline]
-    pub fn verify(
-        wrapper: &mut ProofWrapper<F>,
-        evals_at_r: &ExternalProductEval<F>,
-        evals_at_u: &ExternalProductEval<F>,
-        info: &ExternalProductInstanceInfo<F>,
-        recursive_proof: &NTTRecursiveProof<F>,
-    ) -> bool {
-        let mut trans = Transcript::new();
-
-        let u = trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            info.num_vars,
-        );
-
-        // randomness to combine sumcheck protocols
-        let randomness = trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            Self::num_coins(),
-        );
-        let randomness_ntt = trans.get_vec_challenge(
-            b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<F>>::num_coins(&info.ntt_info.to_clean()),
-        );
-
-        let mut subclaim = MLSumcheck::verify(
-            &mut trans,
-            &wrapper.info,
-            wrapper.claimed_sum,
-            &wrapper.proof,
-        )
-        .expect("fail to verify the sumcheck protocol");
-        let eq_at_u_r = eval_identity_function(&u, &subclaim.point);
-
-        // check the sumcheck evaluation (without NTT)
-        if !Self::verify_as_subprotocol(&randomness, &mut subclaim, evals_at_r, info, eq_at_u_r) {
-            return false;
-        }
-
-        let f_delegation = recursive_proof.delegation_claimed_sums[0];
-        // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
-        let mut ntt_coeff_evals_at_r = F::zero();
-        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
-        // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
-        let mut ntt_point_evals_at_u = F::zero();
-        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
-
-        if !<NTTBareIOP<F>>::verify_subclaim(
-            F::one(),
-            &mut subclaim,
-            &mut wrapper.claimed_sum,
-            ntt_coeff_evals_at_r,
-            ntt_point_evals_at_u,
-            f_delegation,
-        ) {
-            return false;
-        }
-
-        if !(subclaim.expected_evaluations == F::zero() && wrapper.claimed_sum == F::zero()) {
-            return false;
-        }
-        <NTTIOP<F>>::verify_recursion(
-            &mut trans,
-            recursive_proof,
-            &info.ntt_info,
-            &u,
-            &subclaim,
-            BitsOrder::Normal,
-        )
-    }
-
-    /// Verify RLWE * RGSW with leaving NTT part outside of the interface
-    #[inline]
-    pub fn verify_as_subprotocol(
-        randomness: &[F],
-        subclaim: &mut SubClaim<F>,
-        evals: &ExternalProductEval<F>,
+        evals: &ExternalProductInstanceEval<F>,
         info: &ExternalProductInstanceInfo<F>,
         eq_at_u_r: F,
     ) -> bool {
@@ -1548,307 +1047,445 @@ impl<F: Field + Serialize> ExternalProductIOPPure<F> {
     }
 }
 
-impl<F, EF> ExternalProductSnarksOpt<F, EF>
+/// External product proof with PCS.
+#[derive(Serialize, Deserialize)]
+pub struct ExternalProductProof<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// Polynomial info.
+    pub poly_info: PolynomialInfo,
+    /// The first polynomial commitment.
+    pub first_comm: Pcs::Commitment,
+    /// The evaluation of the first packed polynomial.
+    pub first_oracle_eval_at_r: EF,
+    /// The opening of the first polynomial.
+    pub first_eval_proof_at_r: Pcs::Proof,
+    /// The evaluation of the first packed polynomial.
+    pub first_oracle_eval_at_u: EF,
+    /// The opening of the first polynomial.
+    pub first_eval_proof_at_u: Pcs::Proof,
+    /// The second polynomial commitment.
+    pub second_comm: Pcs::Commitment,
+    /// The evaluation of the second packed polynomial.
+    pub second_oracle_eval: EF,
+    /// The opening proof of the second polynomial.
+    pub second_eval_proof: Pcs::ProofEF,
+    /// The sumcheck proof.
+    pub sumcheck_proof: sumcheck::Proof<EF>,
+    /// NTT recursive proof.
+    pub recursive_proof: NTTRecursiveProof<EF>,
+    /// The external product evaluations.
+    pub ep_evals_at_r: ExternalProductInstanceEval<EF>,
+    /// The external product evaluations.
+    pub ep_evals_at_u: ExternalProductInstanceEval<EF>,
+    /// The lookup evaluations.
+    pub lookup_evals: LookupInstanceEval<EF>,
+    /// The claimed sum from sumcheck.
+    pub claimed_sum: EF,
+}
+impl<F, EF, S, Pcs> ExternalProductProof<F, EF, S, Pcs>
 where
-    F: Field + Serialize + for<'de> Deserialize<'de>,
+    F: Field,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
 {
-    /// Complied with PCS to get SNARKs
-    pub fn snarks<H, C, S>(instance: &ExternalProductInstance<F>, code_spec: &S, block_size: usize)
-    where
-        H: Hash + Sync + Send,
-        C: LinearCode<F> + Serialize + for<'de> Deserialize<'de>,
-        S: LinearCodeSpec<F, Code = C> + Clone,
-    {
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
+/// External product parameters.
+pub struct ExternalProductParams<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    /// The parameters for the first polynomial.
+    pub pp_first: Pcs::Parameters,
+    /// The parameters for the second polynomial.
+    pub pp_second: Pcs::Parameters,
+}
+
+impl<F, EF, S, Pcs> Default for ExternalProductParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        Self {
+            pp_first: Pcs::Parameters::default(),
+            pp_second: Pcs::Parameters::default(),
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> ExternalProductParams<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S: Clone,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    /// Setup for the PCS.
+    pub fn setup(
+        &mut self,
+        info: &ExternalProductInstanceInfo<F>,
+        block_size: usize,
+        code_spec: S,
+    ) {
+        self.pp_first = Pcs::setup(info.generate_num_var(), Some(code_spec.clone()));
+
+        let lookup_info = info.extract_lookup_info(block_size);
+        self.pp_second = Pcs::setup(lookup_info.generate_second_num_var(), Some(code_spec));
+    }
+}
+
+/// Prover for external product with PCS.
+pub struct ExternalProductProver<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
+
+impl<F, EF, S, Pcs> Default for ExternalProductProver<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        ExternalProductProver {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
+
+impl<F, EF, S, Pcs> ExternalProductProver<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs: PolynomialCommitmentScheme<
+        F,
+        EF,
+        S,
+        Polynomial = DenseMultilinearExtension<F>,
+        EFPolynomial = DenseMultilinearExtension<EF>,
+        Point = EF,
+    >,
+{
+    /// The prover.
+    pub fn prove(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &ExternalProductParams<F, EF, S, Pcs>,
+        instance: &ExternalProductInstance<F>,
+        block_size: usize,
+        bits_order: BitsOrder,
+    ) -> ExternalProductProof<F, EF, S, Pcs> {
         let instance_info = instance.info();
-        println!("Prove {instance_info}\n");
+        // It is better to hash the shared public instance information, including the table.
+        trans.append_message(b"extenral product instance", &instance_info.to_clean());
+
         // This is the actual polynomial to be committed for prover, which consists of all the required small polynomials in the IOP and padded zero polynomials.
-        let committed_poly = instance.generate_oracle();
-        // 1. Use PCS to commit the above polynomial.
-        let start = Instant::now();
-        let pp =
-            BrakedownPCS::<F, H, C, S, EF>::setup(committed_poly.num_vars, Some(code_spec.clone()));
-        let setup_time = start.elapsed().as_millis();
+        let first_committed_poly = instance.generate_oracle();
 
-        let start = Instant::now();
-        let (comm, comm_state) = BrakedownPCS::<F, H, C, S, EF>::commit(&pp, &committed_poly);
-        let commit_time = start.elapsed().as_millis();
+        // Use PCS to commit the above polynomial.
+        let (first_comm, first_comm_state) = Pcs::commit(&params.pp_first, &first_committed_poly);
 
-        // 2. Prover generates the proof
-        let prover_start = Instant::now();
-        let mut iop_proof_size = 0;
-        let mut prover_trans = Transcript::<EF>::new();
+        trans.append_message(b"EP IOP: first commitment", &first_comm);
+
         // Convert the original instance into an instance defined over EF
         let instance_ef = instance.to_ef::<EF>();
         let instance_info = instance_ef.info();
 
-        // --- Lookup Part ---
+        // IOPs
+        let mut ep_iop = ExternalProductIOP::<EF>::default();
+        let mut lookup_iop = LookupIOP::<EF>::default();
+
+        // generate ranomness for EP iop.
+        ep_iop.generate_randomness(trans, &instance_info);
+
+        // --- Lookup instance and commitment ---
         let mut lookup_instance = instance_ef.extract_lookup_instance(block_size);
         let lookup_info = lookup_instance.info();
-        println!("- containing {lookup_info}\n");
-        // random value to initiate lookup
-        let random_value =
-            prover_trans.get_challenge(b"random point used to generate the second oracle");
-        lookup_instance.generate_h_vec(random_value);
-        // --------------------
 
-        // 2.1 Generate the random point to instantiate the sumcheck protocol
-        let prover_u = prover_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
-        );
-        let eq_at_u = Rc::new(gen_identity_evaluations(&prover_u));
+        // Generate the first randomness for lookup iop.
+        lookup_iop.prover_generate_first_randomness(trans, &mut lookup_instance);
 
-        // 2.2 Construct the polynomial and the claimed sum to be proved in the sumcheck protocol
-        let mut sumcheck_poly = ListOfProductsOfPolynomials::<EF>::new(instance.num_vars);
-        let mut claimed_sum = EF::zero();
-        let randomness = ExternalProductIOPPure::sample_coins(&mut prover_trans);
-        let randomness_ntt =
-            <NTTIOP<EF>>::sample_coins(&mut prover_trans, &instance_info.ntt_info.to_clean());
-        ExternalProductIOPPure::<EF>::prove_as_subprotocol(
-            &randomness,
-            &mut sumcheck_poly,
+        // Compute the packed second polynomials for lookup, i.e., h vector.
+        let second_committed_poly = lookup_instance.generate_second_oracle();
+
+        // Commit the second polynomial.
+        let (second_comm, second_comm_state) =
+            Pcs::commit_ef(&params.pp_second, &second_committed_poly);
+
+        trans.append_message(b"EP IOP: second commitment", &second_comm);
+
+        lookup_iop.generate_second_randomness(trans, &lookup_info);
+
+        let (kit, recursive_proof) = ep_iop.prove(
+            trans,
             &instance_ef,
-            &eq_at_u,
-        );
-
-        // 2.? Prover extract the random ntt instance from all ntt instances
-        let ntt_instance = instance.extract_ntt_instance_to_ef::<EF>(&randomness_ntt);
-        <NTTBareIOP<EF>>::prepare_products_of_polynomial(
-            EF::one(),
-            &mut sumcheck_poly,
-            &mut claimed_sum,
-            &ntt_instance,
-            &prover_u,
-            BitsOrder::Normal,
-        );
-        let ntt_instance_info = ntt_instance.info();
-
-        // --- Lookup Part ---
-        // combine lookup sumcheck
-        let mut lookup_randomness =
-            LookupIOP::sample_coins(&mut prover_trans, &lookup_instance.info());
-        lookup_randomness.push(random_value);
-        LookupIOP::prepare_products_of_polynomial(
-            &lookup_randomness,
-            &mut sumcheck_poly,
             &lookup_instance,
-            &eq_at_u,
+            &lookup_iop,
+            bits_order,
         );
-        // --------------------
 
-        let poly_info = sumcheck_poly.info();
-        // 2.3 Generate proof of sumcheck protocol
-        let (sumcheck_proof, sumcheck_state) =
-            <MLSumcheck<EF>>::prove(&mut prover_trans, &sumcheck_poly)
-                .expect("Proof generated in Addition In Zq");
-        iop_proof_size += bincode::serialize(&sumcheck_proof).unwrap().len();
+        let ep_evals_at_r = instance.evaluate_ext(&kit.randomness);
+        let ep_evals_at_u = instance.evaluate_ext(&ep_iop.u);
 
-        // 2.? [one more step] Prover recursive prove the evaluation of F(u, v)
-        let recursive_proof = <NTTIOP<EF>>::prove_recursion(
-            &mut prover_trans,
-            &sumcheck_state.randomness,
-            &ntt_instance_info,
-            &prover_u,
-            BitsOrder::Normal,
-        );
-        iop_proof_size += bincode::serialize(&recursive_proof).unwrap().len();
-        let iop_prover_time = prover_start.elapsed().as_millis();
+        // let eq_at_r = gen_identity_evaluations(&kit.randomness);
+        // let evals_at_r = instance.evaluate_ext_opt(&eq_at_r);
+        // let evals_at_u = instance.evaluate_ext_opt(eq_at_u.as_ref());
 
-        // 2.4 Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
-        let start = Instant::now();
-        // let evals_at_r = instance.evaluate_ext(&sumcheck_state.randomness);
-        // let evals_at_u = instance.evaluate_ext(&prover_u);
-        let eq_at_r = gen_identity_evaluations(&sumcheck_state.randomness);
-        let evals_at_r = instance.evaluate_ext_opt(&eq_at_r);
-        let evals_at_u = instance.evaluate_ext_opt(eq_at_u.as_ref());
+        // Lookup evaluation
+        let lookup_evals = lookup_instance.evaluate(&kit.randomness);
 
-        // --- Lookup Part ---
-        let lookup_evals = lookup_instance.evaluate(&sumcheck_state.randomness);
-        // -------------------
-
-        // 2.5 Reduce the proof of the above evaluations to a single random point over the committed polynomial
-        let mut requested_point_at_r = sumcheck_state.randomness.clone();
-        let mut requested_point_at_u = prover_u.clone();
-        let oracle_randomness = prover_trans.get_vec_challenge(
+        // Reduce the proof of the above evaluations to a single random point over the committed polynomial
+        let mut requested_point_at_r = kit.randomness.clone();
+        let mut requested_point_at_u = ep_iop.u.clone();
+        let oracle_randomness = trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
             instance.info().log_num_oracles(),
         );
         requested_point_at_r.extend(&oracle_randomness);
         requested_point_at_u.extend(&oracle_randomness);
-        let oracle_eval_at_r = committed_poly.evaluate_ext(&requested_point_at_r);
-        let oracle_eval_at_u = committed_poly.evaluate_ext(&requested_point_at_u);
 
-        // 2.6 Generate the evaluation proof of the requested point
-        let eval_proof_at_r = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
+        let first_oracle_eval_at_r = first_committed_poly.evaluate_ext(&requested_point_at_r);
+        let first_oracle_eval_at_u = first_committed_poly.evaluate_ext(&requested_point_at_u);
+
+        let mut second_requested_point = kit.randomness.clone();
+        let second_oracle_randomness = trans.get_vec_challenge(
+            b"Lookup IOP: random linear combination of evaluations of second oracles",
+            lookup_info.log_num_second_oracles(),
+        );
+
+        second_requested_point.extend(&second_oracle_randomness);
+
+        let second_oracle_eval = second_committed_poly.evaluate(&second_requested_point);
+
+        // Generate the evaluation proof of the requested point
+        let first_eval_proof_at_r = Pcs::open(
+            &params.pp_first,
+            &first_comm,
+            &first_comm_state,
             &requested_point_at_r,
-            &mut prover_trans,
+            trans,
         );
-        let eval_proof_at_u = BrakedownPCS::<F, H, C, S, EF>::open(
-            &pp,
-            &comm,
-            &comm_state,
+        let first_eval_proof_at_u = Pcs::open(
+            &params.pp_first,
+            &first_comm,
+            &first_comm_state,
             &requested_point_at_u,
-            &mut prover_trans,
-        );
-        let pcs_open_time = start.elapsed().as_millis();
-
-        // 3. Verifier checks the proof
-        let verifier_start = Instant::now();
-        let mut verifier_trans = Transcript::<EF>::new();
-
-        // --- Lookup Part ---
-        let random_value =
-            verifier_trans.get_challenge(b"random point used to generate the second oracle");
-        // -------------------
-
-        // 3.1 Generate the random point to instantiate the sumcheck protocol
-        let verifier_u = verifier_trans.get_vec_challenge(
-            b"random point used to instantiate sumcheck protocol",
-            instance.num_vars,
+            trans,
         );
 
-        // 3.2 Generate the randomness used to randomize all the sub-sumcheck protocols
-        let randomness = verifier_trans.get_vec_challenge(
-            b"randomness to combine sumcheck protocols",
-            <ExternalProductIOPPure<EF>>::num_coins(),
-        );
-        let randomness_ntt = verifier_trans.get_vec_challenge(
-            b"randomness used to obtain the virtual random ntt instance",
-            <NTTIOP<EF>>::num_coins(&instance_info.ntt_info.to_clean()),
+        let second_eval_proof = Pcs::open_ef(
+            &params.pp_second,
+            &second_comm,
+            &second_comm_state,
+            &second_requested_point,
+            trans,
         );
 
-        // --- Lookup Part ---
-        let mut lookup_randomness = verifier_trans.get_vec_challenge(
-            b"Lookup IOP: randomness to combine sumcheck protocols",
-            <LookupIOP<EF>>::num_coins(&lookup_info),
-        );
-        lookup_randomness.push(random_value);
-        // -------------------
+        ExternalProductProof {
+            poly_info: kit.info,
+            first_comm,
+            first_oracle_eval_at_r,
+            first_eval_proof_at_r,
+            first_oracle_eval_at_u,
+            first_eval_proof_at_u,
+            second_comm,
+            second_oracle_eval,
+            second_eval_proof,
+            sumcheck_proof: kit.proof,
+            recursive_proof,
+            ep_evals_at_r,
+            ep_evals_at_u,
+            lookup_evals,
+            claimed_sum: kit.claimed_sum,
+        }
+    }
+}
 
-        // 3.3 Check the proof of the sumcheck protocol
-        let mut subclaim = <MLSumcheck<EF>>::verify(
-            &mut verifier_trans,
-            &poly_info,
-            claimed_sum,
-            &sumcheck_proof,
-        )
-        .expect("Verify the sumcheck proof generated in RLWE * RGSW");
-        let eq_at_u_r = eval_identity_function(&verifier_u, &subclaim.point);
+/// Prover for external product with PCS.
+pub struct ExternalProductVerifier<
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    S,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+> {
+    _marker_f: PhantomData<F>,
+    _marker_ef: PhantomData<EF>,
+    _marker_s: PhantomData<S>,
+    _marker_pcs: PhantomData<Pcs>,
+}
 
-        // 3.4 Check the evaluation over a random point of the polynomial proved in the sumcheck protocol using evaluations over these small oracles used in IOP
-        let check_subclaim = ExternalProductIOPPure::<EF>::verify_as_subprotocol(
-            &randomness,
-            &mut subclaim,
-            &evals_at_r,
-            &instance_info,
-            eq_at_u_r,
-        );
-        assert!(check_subclaim);
+impl<F, EF, S, Pcs> Default for ExternalProductVerifier<F, EF, S, Pcs>
+where
+    F: Field,
+    EF: AbstractExtensionField<F>,
+    Pcs: PolynomialCommitmentScheme<F, EF, S>,
+{
+    fn default() -> Self {
+        ExternalProductVerifier {
+            _marker_f: PhantomData::<F>,
+            _marker_ef: PhantomData::<EF>,
+            _marker_s: PhantomData::<S>,
+            _marker_pcs: PhantomData::<Pcs>,
+        }
+    }
+}
 
-        // 3.? Check the NTT part
-        let f_delegation = recursive_proof.delegation_claimed_sums[0];
-        // one is to evaluate the random linear combination of evaluations at point r returned from sumcheck protocol
-        let mut ntt_coeff_evals_at_r = EF::zero();
-        evals_at_r.update_ntt_instance_coeff(&mut ntt_coeff_evals_at_r, &randomness_ntt);
-        // the other is to evaluate the random linear combination of evaluations at point u sampled before the sumcheck protocol
-        let mut ntt_point_evals_at_u = EF::zero();
-        evals_at_u.update_ntt_instance_point(&mut ntt_point_evals_at_u, &randomness_ntt);
+impl<F, EF, S, Pcs> ExternalProductVerifier<F, EF, S, Pcs>
+where
+    F: Field + Serialize,
+    EF: AbstractExtensionField<F> + Serialize,
+    S: Clone,
+    Pcs: PolynomialCommitmentScheme<
+        F,
+        EF,
+        S,
+        Polynomial = DenseMultilinearExtension<F>,
+        EFPolynomial = DenseMultilinearExtension<EF>,
+        Point = EF,
+    >,
+{
+    /// The verifier.
+    pub fn verify(
+        &self,
+        trans: &mut Transcript<EF>,
+        params: &ExternalProductParams<F, EF, S, Pcs>,
+        info: &ExternalProductInstanceInfo<F>,
+        block_size: usize,
+        bits_order: BitsOrder,
+        proof: &ExternalProductProof<F, EF, S, Pcs>,
+    ) -> bool {
+        let mut res = true;
 
-        // check the sumcheck part of NTT
-        let check_ntt_bare = <NTTBareIOP<EF>>::verify_subclaim(
-            EF::one(),
-            &mut subclaim,
-            &mut claimed_sum,
-            ntt_coeff_evals_at_r,
-            ntt_point_evals_at_u,
-            f_delegation,
-        );
-        assert!(check_ntt_bare);
+        trans.append_message(b"extenral product instance", &info.to_clean());
+        trans.append_message(b"EP IOP: first commitment", &proof.first_comm);
 
-        // --- Lookup Part ---
-        let check_lookup = LookupIOP::<EF>::verify_subclaim(
-            &lookup_randomness,
-            &mut subclaim,
-            &lookup_evals,
+        let mut ep_iop = ExternalProductIOP::<EF>::default();
+        let mut lookup_iop = LookupIOP::<EF>::default();
+        let info_ef = info.to_ef();
+
+        ep_iop.generate_randomness(trans, &info_ef);
+        lookup_iop.verifier_generate_first_randomness(trans);
+
+        trans.append_message(b"EP IOP: second commitment", &proof.second_comm);
+
+        // Verify the proof of sumcheck protocol.
+        let lookup_info = info.extract_lookup_info(block_size);
+        lookup_iop.generate_second_randomness(trans, &lookup_info);
+
+        let mut wrapper = ProofWrapper {
+            claimed_sum: proof.claimed_sum,
+            info: proof.poly_info,
+            proof: proof.sumcheck_proof.clone(),
+        };
+        let (b, randomness) = ep_iop.verify(
+            trans,
+            &mut wrapper,
+            &proof.ep_evals_at_r,
+            &proof.ep_evals_at_u,
+            &info_ef,
             &lookup_info,
-            eq_at_u_r,
+            &proof.recursive_proof,
+            &proof.lookup_evals,
+            &lookup_iop,
+            bits_order,
         );
-        assert!(check_lookup);
-        // -------------------
+        res &= b;
 
-        assert_eq!(subclaim.expected_evaluations, EF::zero());
-        assert_eq!(claimed_sum, EF::zero());
-        // check the recursive part of NTT
-        let check_recursive = <NTTIOP<EF>>::verify_recursion(
-            &mut verifier_trans,
-            &recursive_proof,
-            &ntt_instance_info,
-            &verifier_u,
-            &subclaim,
-            BitsOrder::Normal,
-        );
-        assert!(check_recursive);
-
-        // 3.5 and also check the relation between these small oracles and the committed oracle
-        let start = Instant::now();
-        let mut pcs_proof_size = 0;
-        let flatten_evals_at_r = evals_at_r.flatten();
-        let flatten_evals_at_u = evals_at_u.flatten();
-        let oracle_randomness = verifier_trans.get_vec_challenge(
+        // Check the relation between these small oracles and the committed oracle.
+        let mut request_point_at_r = randomness.clone();
+        let mut request_point_at_u = ep_iop.u;
+        let flatten_evals_at_r = proof.ep_evals_at_r.flatten();
+        let flatten_evals_at_u = proof.ep_evals_at_u.flatten();
+        let oracle_randomness = trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            evals_at_r.log_num_oracles(),
+            proof.ep_evals_at_r.log_num_oracles(),
         );
-        let check_oracle_at_r =
-            verify_oracle_relation(&flatten_evals_at_r, oracle_eval_at_r, &oracle_randomness);
-        let check_oracle_at_u =
-            verify_oracle_relation(&flatten_evals_at_u, oracle_eval_at_u, &oracle_randomness);
-        assert!(check_oracle_at_r && check_oracle_at_u);
-        let iop_verifier_time = verifier_start.elapsed().as_millis();
 
-        // 3.5 Check the evaluation of a random point over the committed oracle
-        let check_pcs_at_r = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point_at_r,
-            oracle_eval_at_r,
-            &eval_proof_at_r,
-            &mut verifier_trans,
-        );
-        let check_pcs_at_u = BrakedownPCS::<F, H, C, S, EF>::verify(
-            &pp,
-            &comm,
-            &requested_point_at_u,
-            oracle_eval_at_u,
-            &eval_proof_at_u,
-            &mut verifier_trans,
-        );
-        assert!(check_pcs_at_r && check_pcs_at_u);
-        let pcs_verifier_time = start.elapsed().as_millis();
-        pcs_proof_size += bincode::serialize(&eval_proof_at_r).unwrap().len()
-            + bincode::serialize(&eval_proof_at_u).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_r).unwrap().len()
-            + bincode::serialize(&flatten_evals_at_u).unwrap().len();
+        request_point_at_r.extend(&oracle_randomness);
+        request_point_at_u.extend(&oracle_randomness);
 
-        // 4. print statistic
-        print_statistic(
-            iop_prover_time + pcs_open_time,
-            iop_verifier_time + pcs_verifier_time,
-            iop_proof_size + pcs_proof_size,
-            iop_prover_time,
-            iop_verifier_time,
-            iop_proof_size,
-            committed_poly.num_vars,
-            instance.info().num_oracles(),
-            instance.num_vars,
-            setup_time,
-            commit_time,
-            pcs_open_time,
-            pcs_verifier_time,
-            pcs_proof_size,
+        res &= verify_oracle_relation(
+            &flatten_evals_at_r,
+            proof.first_oracle_eval_at_r,
+            &oracle_randomness,
         );
+
+        res &= verify_oracle_relation(
+            &flatten_evals_at_u,
+            proof.first_oracle_eval_at_u,
+            &oracle_randomness,
+        );
+
+        let mut second_requested_point = randomness;
+        let second_oracle_randomness = trans.get_vec_challenge(
+            b"Lookup IOP: random linear combination of evaluations of second oracles",
+            proof.lookup_evals.log_num_second_oracles(),
+        );
+
+        second_requested_point.extend(&second_oracle_randomness);
+
+        res &= verify_oracle_relation(
+            &proof.lookup_evals.h_vec,
+            proof.second_oracle_eval,
+            &second_oracle_randomness,
+        );
+
+        // Check the evaluation of a random point over the committed oracles.
+        res &= Pcs::verify(
+            &params.pp_first,
+            &proof.first_comm,
+            &request_point_at_r,
+            proof.first_oracle_eval_at_r,
+            &proof.first_eval_proof_at_r,
+            trans,
+        );
+
+        res &= Pcs::verify(
+            &params.pp_first,
+            &proof.first_comm,
+            &request_point_at_u,
+            proof.first_oracle_eval_at_u,
+            &proof.first_eval_proof_at_u,
+            trans,
+        );
+
+        res &= Pcs::verify_ef(
+            &params.pp_second,
+            &proof.second_comm,
+            &second_requested_point,
+            proof.second_oracle_eval,
+            &proof.second_eval_proof,
+            trans,
+        );
+
+        res
     }
 }
