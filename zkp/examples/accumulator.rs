@@ -15,11 +15,9 @@ use std::vec;
 use zkp::piop::accumulator::{
     AccumulatorParams, AccumulatorProof, AccumulatorProver, AccumulatorVerifier,
 };
-use zkp::piop::ntt::BitsOrder;
-use zkp::piop::AccumulatorSnarksOpt;
 use zkp::piop::{
-    AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
-    ExternalProductInstance, RlweCiphertext, RlweCiphertextVector,
+    ntt::BitsOrder, AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo,
+    BitDecompositionInstanceInfo, ExternalProductInstance, RlweCiphertext, RlweCiphertextVector,
 };
 
 // # Parameters
@@ -350,49 +348,49 @@ fn generate_instance<F: Field + NTTField>(
     )
 }
 
-fn snark() {
-    // information used to decompose bits
-    let base_len: usize = LOG_B;
-    let base: FF = FF::new(1 << base_len);
-    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = LOG_DIM_RLWE;
-    let bits_info = BitDecompositionInstanceInfo {
-        base,
-        base_len,
-        bits_len,
-        num_vars,
-        num_instances: 0,
-    };
+// fn snark() {
+//     // information used to decompose bits
+//     let base_len: usize = LOG_B;
+//     let base: FF = FF::new(1 << base_len);
+//     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
+//     let num_vars = LOG_DIM_RLWE;
+//     let bits_info = BitDecompositionInstanceInfo {
+//         base,
+//         base_len,
+//         bits_len,
+//         num_vars,
+//         num_instances: 0,
+//     };
 
-    // information used to perform NTT
-    let log_n = num_vars;
-    let m = 1 << (log_n + 1);
-    let mut ntt_table = Vec::with_capacity(m as usize);
-    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
-    let mut power = FF::one();
-    for _ in 0..m {
-        ntt_table.push(power);
-        power *= root;
-    }
-    let ntt_table = Arc::new(ntt_table);
-    let ntt_info = BatchNTTInstanceInfo {
-        num_vars,
-        ntt_table,
-        num_ntt: 0,
-    };
+//     // information used to perform NTT
+//     let log_n = num_vars;
+//     let m = 1 << (log_n + 1);
+//     let mut ntt_table = Vec::with_capacity(m as usize);
+//     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
+//     let mut power = FF::one();
+//     for _ in 0..m {
+//         ntt_table.push(power);
+//         power *= root;
+//     }
+//     let ntt_table = Arc::new(ntt_table);
+//     let ntt_info = BatchNTTInstanceInfo {
+//         num_vars,
+//         ntt_table,
+//         num_ntt: 0,
+//     };
 
-    let num_updations = DIM_LWE;
-    let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
+//     let num_updations = DIM_LWE;
+//     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
+//     let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
 
-    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
-    // <AccumulatorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-    //     &instance, &code_spec,
-    // );
-    <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
-        &instance, &code_spec, BLOCK_SIZE,
-    );
-}
+//     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+//     // <AccumulatorSnarks<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+//     //     &instance, &code_spec,
+//     // );
+//     <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
+//         &instance, &code_spec, BLOCK_SIZE,
+//     );
+// }
 
 fn complete_snark() {
     // information used to decompose bits
@@ -498,6 +496,5 @@ fn complete_snark() {
     assert!(res);
 }
 fn main() {
-    snark();
-    // complete_snark()
+    complete_snark()
 }

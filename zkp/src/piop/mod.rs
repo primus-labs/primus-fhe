@@ -9,7 +9,7 @@ pub mod lookup;
 pub mod ntt;
 pub mod round;
 
-pub use accumulator::{AccumulatorInstance, AccumulatorSnarksOpt, AccumulatorWitness};
+pub use accumulator::{AccumulatorInstance, AccumulatorWitness};
 pub use addition_in_zq::{
     AdditionInZqIOP, AdditionInZqInstance, AdditionInZqInstanceEval, AdditionInZqInstanceInfo,
     AdditionInZqParams, AdditionInZqProof, AdditionInZqProver, AdditionInZqVerifier,
