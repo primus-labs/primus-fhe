@@ -28,9 +28,9 @@ pub trait PolynomialCommitmentScheme<F: Field, EF: AbstractExtensionField<F>, S>
     /// Auxiliary state of the commitment, output by the `commit` phase.
     type CommitmentStateEF;
     /// Opening Proof
-    type Proof: Serialize + for<'de> Deserialize<'de>;
+    type Proof: Serialize + for<'de> Deserialize<'de> + Default + Clone;
     /// Opening Proof for EF
-    type ProofEF: Serialize + for<'de> Deserialize<'de>;
+    type ProofEF: Serialize + for<'de> Deserialize<'de> + Default + Clone;
     /// Point
     type Point;
 

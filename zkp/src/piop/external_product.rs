@@ -241,9 +241,9 @@ pub struct RlweCiphertextVector<F: Field> {
 }
 impl<F: Field> RlweCiphertextVector<F> {
     /// Construct an empty rlweciphertexts
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `bits_len` - the decomposition bits length.
     pub fn new(bits_len: usize) -> Self {
         Self {
@@ -253,9 +253,9 @@ impl<F: Field> RlweCiphertextVector<F> {
     }
 
     /// Add a RLWE ciphertext
-    /// 
+    ///
     /// # Arguments.
-    /// 
+    ///
     /// * `a` - MLE of rlwe a.
     /// * `b` - MLE of rlwe b.
     pub fn add_rlwe_instance(
@@ -804,6 +804,8 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
     ///
     /// * `trans` - The transcripts.
     /// * `instance` - The external product instance.
+    /// * `lookup_instance` - The extracted lookup instance.
+    /// * `lookup_iop` - The lookup IOP.
     /// * `bits_order` - The indicator of bits order.
     pub fn prove(
         &self,
@@ -927,7 +929,10 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
     /// * `evals_at_r` - The evaluation points at r.
     /// * `evals_at_u` - The evaluation points at u.
     /// * `info` - The external product info.
+    /// * `lookup_info` - The derived lookup info.
     /// * `recursive_proof` - The recursive sumcheck proof.
+    /// * `lookup_evals` - The extracted lookup instance evaluations.
+    /// * `lookup_iop` - The lookup IOP.
     /// * `bits_order` - The indicator of bits order.
     #[allow(clippy::too_many_arguments)]
     #[inline]
@@ -1087,6 +1092,7 @@ pub struct ExternalProductProof<
     /// The claimed sum from sumcheck.
     pub claimed_sum: EF,
 }
+
 impl<F, EF, S, Pcs> ExternalProductProof<F, EF, S, Pcs>
 where
     F: Field,

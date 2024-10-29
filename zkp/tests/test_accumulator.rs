@@ -1,15 +1,21 @@
+use algebra::utils::Transcript;
 use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
 use algebra::{
     BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, MultilinearExtension,
 };
 use itertools::izip;
 use num_traits::One;
+use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::thread_rng;
 use sha2::Sha256;
 use std::sync::Arc;
 use std::vec;
-use zkp::piop::accumulator::AccumulatorSnarksOpt;
+use zkp::piop::accumulator::{
+    AccumulatorParams, AccumulatorProof, AccumulatorProver, AccumulatorSnarksOpt,
+    AccumulatorVerifier,
+};
+use zkp::piop::ntt::BitsOrder;
 use zkp::piop::{
     AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
     ExternalProductInstance, RlweCiphertext, RlweCiphertextVector,
@@ -526,4 +532,95 @@ fn test_snarks_with_lookup() {
     <AccumulatorSnarksOpt<FF, EF>>::snarks::<Hash, ExpanderCode<FF>, ExpanderCodeSpec>(
         &instance, &code_spec, 2,
     );
+}
+
+#[test]
+fn test_accumulator_snark() {
+    // information used to decompose bits
+    let base_len: usize = 5;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
+    let num_vars = 10;
+    let bits_info = BitDecompositionInstanceInfo {
+        base,
+        base_len,
+        bits_len,
+        num_vars,
+        num_instances: 0,
+    };
+
+    // information used to perform NTT
+    let log_n = num_vars;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
+    let mut power = FF::one();
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+    let ntt_table = Arc::new(ntt_table);
+    let ntt_info = BatchNTTInstanceInfo {
+        num_vars,
+        ntt_table,
+        num_ntt: 0,
+    };
+
+    let num_updations = 10;
+    let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
+    let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+
+    // Parameters.
+    let mut params = AccumulatorParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let block_size = 2;
+    params.setup(&instance.info(), block_size, code_spec);
+
+    // Prover
+    let acc_prover = AccumulatorProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+
+    let mut prover_trans = Transcript::<EF>::new();
+
+    let proof = acc_prover.prove(
+        &mut prover_trans,
+        &params,
+        &instance,
+        block_size,
+        BitsOrder::Normal,
+    );
+
+    let proof_bytes = proof.to_bytes().unwrap();
+
+    // Verifier.
+    let acc_verifier = AccumulatorVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+
+    let proof = AccumulatorProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = acc_verifier.verify(
+        &mut verifier_trans,
+        &params,
+        &instance.info(),
+        block_size,
+        BitsOrder::Normal,
+        &proof,
+    );
+
+    assert!(res);
 }
