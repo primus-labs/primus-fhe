@@ -253,7 +253,8 @@ where
                 let mut hasher = H::new();
                 // Check the hash of column is the same as the merkle leave.
                 column.iter().for_each(|item| unsafe {
-                    let bytes = transmute::<_, [u8; 8]>(item.value().into());
+                    #[allow(clippy::transmute_num_to_bytes)]
+                    let bytes = transmute::<u64, [u8; 8]>(item.value().into());
                     hasher.update_hash_value(&bytes)
                 });
                 let leaf = hasher.output_reset();
@@ -287,7 +288,8 @@ where
                 // Check the hash of column is the same as the merkle leave.
                 column.iter().for_each(|item| unsafe {
                     item.as_base_slice().iter().for_each(|x| {
-                        let bytes = transmute::<_, [u8; 8]>(x.value().into());
+                        #[allow(clippy::transmute_num_to_bytes)]
+                        let bytes = transmute::<u64, [u8; 8]>(x.value().into());
                         hasher.update_hash_value(&bytes)
                     });
                 });
@@ -442,7 +444,8 @@ where
                 .skip(index)
                 .step_by(codeword_len)
                 .for_each(|item| unsafe {
-                    let bytes = transmute::<_, [u8; 8]>(item.value().into());
+                    #[allow(clippy::transmute_num_to_bytes)]
+                    let bytes = transmute::<u64, [u8; 8]>(item.value().into());
                     hasher.update_hash_value(&bytes)
                 });
             *hash = hasher.output_reset();
@@ -499,7 +502,8 @@ where
                 .step_by(codeword_len)
                 .for_each(|item| unsafe {
                     item.as_base_slice().iter().for_each(|x| {
-                        let bytes = transmute::<_, [u8; 8]>(x.value().into());
+                        #[allow(clippy::transmute_num_to_bytes)]
+                        let bytes = transmute::<u64, [u8; 8]>(x.value().into());
                         hasher.update_hash_value(&bytes)
                     });
                 });

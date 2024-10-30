@@ -781,7 +781,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
         LookupIOP::<F>::prepare_products_of_polynomial(
             &lookup_iop.randomness,
             &mut poly,
-            &lookup_instance,
+            lookup_instance,
             &eq_at_u,
         );
 
@@ -884,6 +884,7 @@ impl<F: Field + Serialize> AccumulatorIOP<F> {
     /// * `lookup_iop` - The lookup IOP.
     /// * `bits_order` - The indicator of bits order.
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn verify(
         &self,
         trans: &mut Transcript<F>,

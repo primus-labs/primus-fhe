@@ -836,7 +836,7 @@ impl<F: Field + Serialize> ExternalProductIOP<F> {
         LookupIOP::<F>::prepare_products_of_polynomial(
             &lookup_iop.randomness,
             &mut poly,
-            &lookup_instance,
+            lookup_instance,
             &eq_at_u,
         );
 
