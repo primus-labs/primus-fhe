@@ -76,7 +76,7 @@ fn test_round_naive_iop() {
         num_vars,
         field_vec!(FF; 0, 1, 1, 2),
     ));
-    let mut output_bits_info = BitDecompositionInstanceInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -84,7 +84,7 @@ fn test_round_naive_iop() {
         num_instances: 2,
     };
 
-    let mut offset_bits_info = BitDecompositionInstanceInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -99,8 +99,8 @@ fn test_round_naive_iop() {
         delta,
         input,
         output,
-        &mut output_bits_info,
-        &mut offset_bits_info,
+        &output_bits_info,
+        &offset_bits_info,
     );
 
     let info = instance.info();
@@ -149,7 +149,7 @@ fn test_round_random_iop() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = BitDecompositionInstanceInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -157,7 +157,7 @@ fn test_round_random_iop() {
         num_instances: 2,
     };
 
-    let mut offset_bits_info = BitDecompositionInstanceInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -172,8 +172,8 @@ fn test_round_random_iop() {
         delta,
         input,
         output,
-        &mut output_bits_info,
-        &mut offset_bits_info,
+        &output_bits_info,
+        &offset_bits_info,
     );
 
     let info = instance.info();
@@ -222,7 +222,7 @@ fn test_round_random_iop_extension_field() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = BitDecompositionInstanceInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -230,7 +230,7 @@ fn test_round_random_iop_extension_field() {
         num_instances: 2,
     };
 
-    let mut offset_bits_info = BitDecompositionInstanceInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -245,8 +245,8 @@ fn test_round_random_iop_extension_field() {
         delta,
         input,
         output,
-        &mut output_bits_info,
-        &mut offset_bits_info,
+        &output_bits_info,
+        &offset_bits_info,
     );
 
     let instance_ef = instance.to_ef::<EF>();
@@ -297,7 +297,7 @@ fn test_round_snark() {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = BitDecompositionInstanceInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -305,7 +305,7 @@ fn test_round_snark() {
         num_instances: 2,
     };
 
-    let mut offset_bits_info = BitDecompositionInstanceInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -320,8 +320,8 @@ fn test_round_snark() {
         delta,
         input,
         output,
-        &mut output_bits_info,
-        &mut offset_bits_info,
+        &output_bits_info,
+        &offset_bits_info,
     );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);

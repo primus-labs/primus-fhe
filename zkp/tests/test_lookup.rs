@@ -90,7 +90,7 @@ fn test_trivial_range_check() {
     lookup.prover_generate_first_randomness(&mut prover_trans, &mut instance);
     lookup.generate_second_randomness(&mut prover_trans, &info);
     lookup.generate_randomness_for_eq_function(&mut prover_trans, &info);
-    let kit = lookup.prove(&mut prover_trans, &mut instance);
+    let kit = lookup.prove(&mut prover_trans, &instance);
     let evals = instance.evaluate(&kit.randomness);
 
     let wrapper = kit.extract();
@@ -150,7 +150,7 @@ fn test_random_range_check() {
     lookup.prover_generate_first_randomness(&mut prover_trans, &mut instance);
     lookup.generate_second_randomness(&mut prover_trans, &info);
     lookup.generate_randomness_for_eq_function(&mut prover_trans, &info);
-    let kit = lookup.prove(&mut prover_trans, &mut instance);
+    let kit = lookup.prove(&mut prover_trans, &instance);
     let evals = instance.evaluate(&kit.randomness);
 
     let wrapper = kit.extract();

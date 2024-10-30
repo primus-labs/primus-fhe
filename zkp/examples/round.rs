@@ -58,7 +58,7 @@ fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
         num_vars,
         input.iter().map(|x| FF::new(decode(*x))).collect(),
     ));
-    let mut output_bits_info = BitDecompositionInstanceInfo {
+    let output_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: LOG_FT,
@@ -66,7 +66,7 @@ fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
         num_instances: 2,
     };
 
-    let mut offset_bits_info = BitDecompositionInstanceInfo {
+    let offset_bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
         bits_len: k_bits_len,
@@ -81,8 +81,8 @@ fn generate_instance(num_vars: usize) -> RoundInstance<FF> {
         delta,
         input,
         output,
-        &mut output_bits_info,
-        &mut offset_bits_info,
+        &output_bits_info,
+        &offset_bits_info,
     )
 }
 fn main() {

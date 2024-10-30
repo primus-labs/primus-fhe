@@ -170,7 +170,7 @@ fn test_trivial_zq_to_rq() {
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
-    let mut wrapper = kit.extract();
+    let wrapper = kit.extract();
 
     let mut lift_iop = LiftIOP::default();
     let mut verifier_trans = Transcript::<FF>::new();
@@ -180,7 +180,7 @@ fn test_trivial_zq_to_rq() {
 
     let (check, _) = lift_iop.verify(
         &mut verifier_trans,
-        &mut wrapper,
+        &wrapper,
         &evals_at_r,
         &evals_at_u,
         &info,
@@ -269,7 +269,7 @@ fn test_random_zq_to_rq() {
     let evals_at_r = instance.evaluate(&kit.randomness);
     let evals_at_u = instance.evaluate(&kit.u);
 
-    let mut wrapper = kit.extract();
+    let wrapper = kit.extract();
 
     let mut lift_iop = LiftIOP::default();
     let mut verifier_trans = Transcript::<FF>::new();
@@ -279,7 +279,7 @@ fn test_random_zq_to_rq() {
 
     let (check, _) = lift_iop.verify(
         &mut verifier_trans,
-        &mut wrapper,
+        &wrapper,
         &evals_at_r,
         &evals_at_u,
         &info,
@@ -352,10 +352,10 @@ fn test_random_zq_to_rq_extension_field() {
     lift_iop.generate_randomness(&mut verifier_trans, &info);
     lift_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
 
-    let mut wrapper = kit.extract();
+    let wrapper = kit.extract();
     let (check, _) = lift_iop.verify(
         &mut verifier_trans,
-        &mut wrapper,
+        &wrapper,
         &evals_at_r,
         &evals_at_u,
         &info,
