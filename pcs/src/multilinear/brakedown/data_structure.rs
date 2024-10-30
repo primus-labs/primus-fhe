@@ -14,7 +14,7 @@ use bincode::Result;
 use crate::multilinear::brakedown::BRAKEDOWN_SECURITY_BIT;
 
 /// Define the structure of Brakedown parameters.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct BrakedownParams<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> {
     security_bit: usize,
     num_vars: usize,
@@ -92,6 +92,7 @@ impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<
     }
 
     /// Return reference of code.
+    #[inline]
     pub fn code(&self) -> &C {
         &self.code
     }
@@ -131,7 +132,7 @@ impl<
 pub type BrakedownPolyCommitment<H> = MerkleRoot<H>;
 
 /// Opening proof of Brakedown.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Clone)]
 pub struct BrakedownOpenProof<F, H, EF>
 where
     F: Field,
@@ -153,6 +154,39 @@ where
     F: Field + Serialize + for<'de> Deserialize<'de>,
     H: Hash,
     EF: AbstractExtensionField<F> + Serialize + for<'de> Deserialize<'de>,
+{
+    /// Convert into bytes.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        bincode::serialize(&self)
+    }
+
+    /// Recover from bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
+/// Opening proof of Brakedown for extension field.
+#[derive(Default, Serialize, Deserialize, Clone)]
+pub struct BrakedownOpenProofGeneral<F, H>
+where
+    F: Field,
+    H: Hash,
+{
+    /// Random linear combination of messages.
+    pub rlc_msgs: Vec<F>,
+
+    /// The opening columns according to the queres.
+    pub opening_columns: Vec<F>,
+
+    /// Merkle paths.
+    pub merkle_paths: Vec<H::Output>,
+}
+
+impl<F, H> BrakedownOpenProofGeneral<F, H>
+where
+    F: Field + Serialize + for<'de> Deserialize<'de>,
+    H: Hash,
 {
     /// Convert into bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {

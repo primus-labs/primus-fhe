@@ -2,7 +2,7 @@ use algebra::{
     utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtension, FieldUniformSampler,
 };
 use pcs::{
-    multilinear::{brakedown::BrakedownPCS, BrakedownOpenProof},
+    multilinear::{brakedown::BrakedownPCS, BrakedownOpenProof, BrakedownOpenProofGeneral},
     utils::code::{ExpanderCode, ExpanderCodeSpec},
     PolynomialCommitmentScheme,
 };
@@ -32,7 +32,7 @@ fn pcs_test() {
         Some(code_spec),
     );
 
-    let mut trans = Transcript::<FF>::new();
+    let mut trans = Transcript::<EF>::new();
 
     let (comm, state) =
         BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::commit(&pp, &poly);
@@ -50,11 +50,47 @@ fn pcs_test() {
 
     let eval = poly.evaluate_ext(&point);
 
-    let mut trans = Transcript::<FF>::new();
+    let mut trans = Transcript::<EF>::new();
 
     let proof = BrakedownOpenProof::<FF, Hash, EF>::from_bytes(&buffer).unwrap();
 
     let check = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::verify(
+        &pp, &comm, &point, eval, &proof, &mut trans,
+    );
+
+    assert!(check);
+
+    // Commit extension field polynomial.
+    let evaluations: Vec<EF> = rand::thread_rng()
+        .sample_iter(FieldUniformSampler::new())
+        .take(1 << num_vars)
+        .collect();
+
+    let ext_poly = DenseMultilinearExtension::from_evaluations_vec(num_vars, evaluations);
+
+    let mut trans = Transcript::<EF>::new();
+
+    let (comm, state) =
+        BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::commit_ef(&pp, &ext_poly);
+
+    let point: Vec<EF> = rand::thread_rng()
+        .sample_iter(FieldUniformSampler::new())
+        .take(num_vars)
+        .collect();
+
+    let proof = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::open_ef(
+        &pp, &comm, &state, &point, &mut trans,
+    );
+
+    let buffer = proof.to_bytes().unwrap();
+
+    let eval = ext_poly.evaluate(&point);
+
+    let mut trans = Transcript::<EF>::new();
+
+    let proof = BrakedownOpenProofGeneral::<EF, Hash>::from_bytes(&buffer).unwrap();
+
+    let check = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::verify_ef(
         &pp, &comm, &point, eval, &proof, &mut trans,
     );
 

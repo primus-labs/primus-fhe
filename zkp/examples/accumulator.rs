@@ -7,20 +7,30 @@ use itertools::izip;
 use num_traits::One;
 use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
-use rand::thread_rng;
+use rand::prelude::*;
 use sha2::Sha256;
 use std::sync::Arc;
+use std::time::Instant;
 use std::vec;
 use zkp::piop::accumulator::{
     AccumulatorParams, AccumulatorProof, AccumulatorProver, AccumulatorVerifier,
 };
-use zkp::piop::ntt::BitsOrder;
 use zkp::piop::{
-    AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
-    ExternalProductInstance, RlweCiphertext, RlweCiphertextVector,
+    ntt::BitsOrder, AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo,
+    BitDecompositionInstanceInfo, ExternalProductInstance, RlweCiphertext, RlweCiphertextVector,
 };
 
-// field type
+// # Parameters
+// n = 1024: denotes the dimension of LWE
+// N = 1024: denotes the dimension of ring in RLWE
+// B = 2^3: denotes the basis used in the bit decomposition
+// q = 1024: denotes the modulus in LWE
+// Q = DefaultFieldU32: denotes the ciphertext modulus in RLWE
+const DIM_LWE: usize = 1024;
+const LOG_DIM_RLWE: usize = 10;
+const LOG_B: usize = 7;
+const BLOCK_SIZE: usize = 3;
+
 type FF = BabyBear;
 type EF = BabyBearExetension;
 type Hash = Sha256;
@@ -119,13 +129,13 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
             .map(|d| d.as_ref().clone())
-            .collect(),
+            .collect::<Vec<_>>(),
         b_vector: input_rlwe
             .b
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
             .map(|d| d.as_ref().clone())
-            .collect(),
+            .collect::<Vec<_>>(),
     };
 
     // 2. Compute the ntt form of the decomposed bits
@@ -309,8 +319,8 @@ fn generate_instance<F: Field + NTTField>(
         );
         // perform ACC + ACC * d * RGSW
         acc_ntt = RlweCiphertext {
-            a: acc_ntt.a + updation.clone().rlwe_mult_rgsw.output_rlwe_ntt.a,
-            b: acc_ntt.b + updation.clone().rlwe_mult_rgsw.output_rlwe_ntt.b,
+            a: acc_ntt.a + updation.rlwe_mult_rgsw.output_rlwe_ntt.a.clone(),
+            b: acc_ntt.b + updation.rlwe_mult_rgsw.output_rlwe_ntt.b.clone(),
         };
         updations.push(updation);
     }
@@ -338,13 +348,12 @@ fn generate_instance<F: Field + NTTField>(
     )
 }
 
-#[test]
-fn test_accumulator_snark() {
+fn complete_snark() {
     // information used to decompose bits
-    let base_len: usize = 5;
+    let base_len: usize = LOG_B;
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
-    let num_vars = 10;
+    let num_vars = LOG_DIM_RLWE;
     let bits_info = BitDecompositionInstanceInfo {
         base,
         base_len,
@@ -370,7 +379,7 @@ fn test_accumulator_snark() {
         num_ntt: 0,
     };
 
-    let num_updations = 10;
+    let num_updations = DIM_LWE;
     let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
     let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
 
@@ -383,9 +392,12 @@ fn test_accumulator_snark() {
         ExpanderCodeSpec,
         BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
     >::default();
-    let block_size = 2;
-    params.setup(&instance.info(), block_size, code_spec);
-
+    let start = Instant::now();
+    params.setup(&instance.info(), BLOCK_SIZE, code_spec);
+    println!(
+        "Accumulator setup time: {:?} ms",
+        start.elapsed().as_millis()
+    );
     // Prover
     let acc_prover = AccumulatorProver::<
         FF,
@@ -396,15 +408,21 @@ fn test_accumulator_snark() {
 
     let mut prover_trans = Transcript::<EF>::new();
 
+    let start = Instant::now();
     let proof = acc_prover.prove(
         &mut prover_trans,
         &params,
         &instance,
-        block_size,
+        BLOCK_SIZE,
         BitsOrder::Normal,
+    );
+    println!(
+        "Accumulator proving time: {:?} ms",
+        start.elapsed().as_millis()
     );
 
     let proof_bytes = proof.to_bytes().unwrap();
+    println!("Accumulator proof size: {:?} bytes", proof_bytes.len());
 
     // Verifier.
     let acc_verifier = AccumulatorVerifier::<
@@ -417,14 +435,22 @@ fn test_accumulator_snark() {
 
     let proof = AccumulatorProof::from_bytes(&proof_bytes).unwrap();
 
+    let start = Instant::now();
     let res = acc_verifier.verify(
         &mut verifier_trans,
         &params,
         &instance.info(),
-        block_size,
+        BLOCK_SIZE,
         BitsOrder::Normal,
         &proof,
     );
+    println!(
+        "Accumulator verifying time: {:?} ms",
+        start.elapsed().as_millis()
+    );
 
     assert!(res);
+}
+fn main() {
+    complete_snark()
 }

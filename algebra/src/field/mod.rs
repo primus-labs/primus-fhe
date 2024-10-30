@@ -1,6 +1,7 @@
 //! This place defines some concrete implement of field of the algebra.
 
 use std::fmt::{Debug, Display};
+use std::hash::Hash;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use num_traits::{ConstOne, ConstZero, Inv, Pow};
@@ -47,6 +48,7 @@ pub trait Field:
     + PartialOrd
     + ConstZero
     + ConstOne
+    + Hash
     + ConstNegOne
     + Add<Self, Output = Self>
     + Sub<Self, Output = Self>
@@ -94,13 +96,13 @@ pub trait Field:
 
         Self::new(hi.as_into())
     }
+
+    /// Gets inner value.
+    fn value(self) -> Self::Value;
 }
 
 /// A trait defined for decomposable field, this is mainly for base field in FHE.
 pub trait DecomposableField: Field {
-    /// Gets inner value.
-    fn value(self) -> Self::Value;
-
     /// Decompose `self` according to `basis`,
     /// return the decomposed vector.
     ///

@@ -1,23 +1,23 @@
 use algebra::utils::Transcript;
-use algebra::{transformation::AbstractNTT, NTTField, NTTPolynomial, Polynomial};
+use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
 use algebra::{
-    BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, MultilinearExtension,
+    BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 use itertools::izip;
 use num_traits::One;
 use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
-use rand::thread_rng;
+use rand_distr::Distribution;
 use sha2::Sha256;
 use std::sync::Arc;
 use std::vec;
-use zkp::piop::accumulator::{
-    AccumulatorParams, AccumulatorProof, AccumulatorProver, AccumulatorVerifier,
+use zkp::piop::external_product::{
+    ExternalProductParams, ExternalProductProof, ExternalProductProver, ExternalProductVerifier,
 };
 use zkp::piop::ntt::BitsOrder;
 use zkp::piop::{
-    AccumulatorInstance, AccumulatorWitness, BatchNTTInstanceInfo, BitDecompositionInstanceInfo,
-    ExternalProductInstance, RlweCiphertext, RlweCiphertextVector,
+    BatchNTTInstanceInfo, BitDecompositionInstanceInfo, ExternalProductInstance, RlweCiphertext,
+    RlweCiphertextVector,
 };
 
 // field type
@@ -25,34 +25,6 @@ type FF = BabyBear;
 type EF = BabyBearExetension;
 type Hash = Sha256;
 const BASE_FIELD_BITS: usize = 31;
-
-fn random_rlwe_ciphertext<F: Field, R>(rng: &mut R, num_vars: usize) -> RlweCiphertext<F>
-where
-    R: rand::Rng + rand::CryptoRng,
-{
-    RlweCiphertext {
-        a: <DenseMultilinearExtension<F>>::random(num_vars, rng),
-        b: <DenseMultilinearExtension<F>>::random(num_vars, rng),
-    }
-}
-
-fn random_rlwe_ciphertexts<F: Field, R>(
-    bits_len: usize,
-    rng: &mut R,
-    num_vars: usize,
-) -> RlweCiphertextVector<F>
-where
-    R: rand::Rng + rand::CryptoRng,
-{
-    RlweCiphertextVector {
-        a_vector: (0..bits_len)
-            .map(|_| <DenseMultilinearExtension<F>>::random(num_vars, rng))
-            .collect(),
-        b_vector: (0..bits_len)
-            .map(|_| <DenseMultilinearExtension<F>>::random(num_vars, rng))
-            .collect(),
-    }
-}
 
 /// Given an `index` of `len` bits, output a new index where the bits are reversed.
 fn reverse_bits(index: usize, len: u32) -> usize {
@@ -94,21 +66,18 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
     sort_array_with_reversed_bits(&ntt_form, log_n)
 }
 
-fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &[F]) -> Vec<F> {
-    assert_eq!(points.len(), (1 << log_n) as usize);
-    let reversed_points = sort_array_with_reversed_bits(points, log_n);
-    let ntt_poly = <NTTPolynomial<F>>::from_slice(&reversed_points);
-    F::get_ntt_table(log_n)
-        .unwrap()
-        .inverse_transform(&ntt_poly)
-        .data()
-}
-
+/// This function DOES NOT implement the real functionality of multiplication between RLWE ciphertext and RGSW ciphertext
+/// It is only used to generate the consistent instance for test.
+///
+/// # Arguments:
+/// * input_rlwe: RLWE ciphertext of the coefficient form
+/// * input_rgsw: RGSW ciphertext of the ntt form
+/// * bits_info: information used to decompose bits
+/// * ntt_info: information used to perform NTT
 fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
     num_vars: usize,
     input_rlwe: RlweCiphertext<F>,
-    bits_rgsw_c_ntt: RlweCiphertextVector<F>,
-    bits_rgsw_f_ntt: RlweCiphertextVector<F>,
+    input_rgsw: (RlweCiphertextVector<F>, RlweCiphertextVector<F>),
     bits_info: BitDecompositionInstanceInfo<F>,
     ntt_info: BatchNTTInstanceInfo<F>,
 ) -> ExternalProductInstance<F> {
@@ -119,14 +88,15 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
             .map(|d| d.as_ref().clone())
-            .collect(),
+            .collect::<Vec<_>>(),
         b_vector: input_rlwe
             .b
             .get_decomposed_mles(bits_info.base_len, bits_info.bits_len)
             .iter()
             .map(|d| d.as_ref().clone())
-            .collect(),
+            .collect::<Vec<_>>(),
     };
+    let (bits_rgsw_c_ntt, bits_rgsw_f_ntt) = input_rgsw;
 
     // 2. Compute the ntt form of the decomposed bits
     let bits_rlwe_ntt = RlweCiphertextVector {
@@ -196,152 +166,16 @@ fn generate_rlwe_mult_rgsw_instance<F: Field + NTTField>(
         bits_rgsw_c_ntt,
         bits_rgsw_f_ntt,
         output_rlwe_ntt,
-        // &output_rlwe,
-    )
-}
-// Perform d * ACC * RGSW(Zu)
-// # Argument
-// * input_d: scalar d = X^{-a_u} - 1 of the coefficient form
-// * input_accumulator_ntt: ACC of the ntt form
-// * input_rgsw_ntt: RGSW(Zu) of the ntt form
-fn update_accumulator<F: Field + NTTField>(
-    num_vars: usize,
-    acc_ntt: RlweCiphertext<F>,
-    d: DenseMultilinearExtension<F>,
-    bits_rgsw_c_ntt: RlweCiphertextVector<F>,
-    bits_rgsw_f_ntt: RlweCiphertextVector<F>,
-    bits_info: BitDecompositionInstanceInfo<F>,
-    ntt_info: BatchNTTInstanceInfo<F>,
-) -> AccumulatorWitness<F> {
-    // 1. Perform ntt transform on (x^{-a_u} - 1)
-    let d_ntt = DenseMultilinearExtension::from_evaluations_vec(
-        ntt_info.num_vars,
-        ntt_transform_normal_order(ntt_info.num_vars as u32, &d.evaluations),
-    );
-
-    // 2. Perform point-multiplication to compute (x^{-a_u} - 1) * ACC
-    let input_rlwe_ntt = RlweCiphertext {
-        a: DenseMultilinearExtension::from_evaluations_vec(
-            ntt_info.num_vars,
-            izip!(&d_ntt.evaluations, &acc_ntt.a.evaluations)
-                .map(|(d_i, a_i)| *d_i * *a_i)
-                .collect(),
-        ),
-        b: DenseMultilinearExtension::from_evaluations_vec(
-            ntt_info.num_vars,
-            izip!(&d_ntt.evaluations, &acc_ntt.b.evaluations)
-                .map(|(d_i, b_i)| *d_i * *b_i)
-                .collect(),
-        ),
-    };
-
-    // 3. Compute the RLWE of coefficient form as the input of the multiplication between RLWE and RGSW
-    let input_rlwe = RlweCiphertext {
-        a: DenseMultilinearExtension::from_evaluations_vec(
-            ntt_info.num_vars,
-            ntt_inverse_transform_normal_order(
-                ntt_info.num_vars as u32,
-                &input_rlwe_ntt.a.evaluations,
-            ),
-        ),
-        b: DenseMultilinearExtension::from_evaluations_vec(
-            ntt_info.num_vars,
-            ntt_inverse_transform_normal_order(
-                ntt_info.num_vars as u32,
-                &input_rlwe_ntt.b.evaluations,
-            ),
-        ),
-    };
-
-    let rlwe_mult_rgsw = generate_rlwe_mult_rgsw_instance(
-        num_vars,
-        input_rlwe,
-        bits_rgsw_c_ntt,
-        bits_rgsw_f_ntt,
-        bits_info,
-        ntt_info,
-    );
-
-    AccumulatorWitness {
-        acc_ntt: acc_ntt.clone(),
-        d,
-        d_ntt,
-        input_rlwe_ntt,
-        rlwe_mult_rgsw,
-    }
-}
-
-fn generate_instance<F: Field + NTTField>(
-    num_vars: usize,
-    input: RlweCiphertext<F>,
-    num_updations: usize,
-    bits_info: BitDecompositionInstanceInfo<F>,
-    ntt_info: BatchNTTInstanceInfo<F>,
-) -> AccumulatorInstance<F> {
-    let mut rng = rand::thread_rng();
-    let mut updations = Vec::with_capacity(num_updations);
-
-    let mut acc_ntt = RlweCiphertext::<F> {
-        a: DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            ntt_transform_normal_order(num_vars as u32, &input.a.evaluations),
-        ),
-        b: DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            ntt_transform_normal_order(num_vars as u32, &input.b.evaluations),
-        ),
-    };
-    for _ in 0..num_updations {
-        let d = DenseMultilinearExtension::random(num_vars, &mut rng);
-        let bits_rgsw_c_ntt =
-            random_rlwe_ciphertexts(bits_info.clone().bits_len, &mut rng, num_vars);
-        let bits_rgsw_f_ntt =
-            random_rlwe_ciphertexts(bits_info.clone().bits_len, &mut rng, num_vars);
-        // perform ACC * d * RGSW
-        let updation = update_accumulator(
-            num_vars,
-            acc_ntt.clone(),
-            d,
-            bits_rgsw_c_ntt,
-            bits_rgsw_f_ntt,
-            bits_info.clone(),
-            ntt_info.clone(),
-        );
-        // perform ACC + ACC * d * RGSW
-        acc_ntt = RlweCiphertext {
-            a: acc_ntt.a + updation.clone().rlwe_mult_rgsw.output_rlwe_ntt.a,
-            b: acc_ntt.b + updation.clone().rlwe_mult_rgsw.output_rlwe_ntt.b,
-        };
-        updations.push(updation);
-    }
-
-    let output = RlweCiphertext {
-        a: DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            ntt_inverse_transform_normal_order(num_vars as u32, &acc_ntt.a.evaluations),
-        ),
-        b: DenseMultilinearExtension::from_evaluations_vec(
-            num_vars,
-            ntt_inverse_transform_normal_order(num_vars as u32, &acc_ntt.b.evaluations),
-        ),
-    };
-    let output_ntt = acc_ntt;
-    AccumulatorInstance::new(
-        num_vars,
-        num_updations,
-        input,
-        updations,
-        output_ntt,
-        output,
-        &bits_info,
-        &ntt_info,
     )
 }
 
 #[test]
-fn test_accumulator_snark() {
+fn test_external_product_snark() {
+    let mut rng = rand::thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+
     // information used to decompose bits
-    let base_len: usize = 5;
+    let base_len: usize = 2;
     let base: FF = FF::new(1 << base_len);
     let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
@@ -370,14 +204,48 @@ fn test_accumulator_snark() {
         num_ntt: 0,
     };
 
-    let num_updations = 10;
-    let input = random_rlwe_ciphertext(&mut thread_rng(), num_vars);
-    let instance = generate_instance(num_vars, input, num_updations, bits_info, ntt_info);
+    // generate random RGSW ciphertext = (bits_rgsw_c_ntt, bits_rgsw_f_ntt) \in RLWE' \times \RLWE'
+    let mut bits_rgsw_c_ntt = <RlweCiphertextVector<FF>>::new(bits_len);
+    let points: Vec<_> = (0..1 << num_vars)
+        .map(|_| uniform.sample(&mut rng))
+        .collect();
+    let coeffs: Vec<_> = (0..1 << num_vars)
+        .map(|_| uniform.sample(&mut rng))
+        .collect();
+    for _ in 0..bits_len {
+        bits_rgsw_c_ntt.add_rlwe_instance(
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+        );
+    }
+
+    let mut bits_rgsw_f_ntt = <RlweCiphertextVector<FF>>::new(bits_len);
+    for _ in 0..bits_len {
+        bits_rgsw_f_ntt.add_rlwe_instance(
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+            DenseMultilinearExtension::from_evaluations_slice(log_n, &points),
+        );
+    }
+
+    // generate the random RLWE ciphertext
+    let input_rlwe = RlweCiphertext {
+        a: DenseMultilinearExtension::from_evaluations_slice(log_n, &coeffs),
+        b: DenseMultilinearExtension::from_evaluations_slice(log_n, &coeffs),
+    };
+
+    // generate all the witness required
+    let instance = generate_rlwe_mult_rgsw_instance(
+        num_vars,
+        input_rlwe,
+        (bits_rgsw_c_ntt, bits_rgsw_f_ntt),
+        bits_info,
+        ntt_info,
+    );
 
     let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
 
     // Parameters.
-    let mut params = AccumulatorParams::<
+    let mut params = ExternalProductParams::<
         FF,
         EF,
         ExpanderCodeSpec,
@@ -387,16 +255,15 @@ fn test_accumulator_snark() {
     params.setup(&instance.info(), block_size, code_spec);
 
     // Prover
-    let acc_prover = AccumulatorProver::<
+    let ep_prover = ExternalProductProver::<
         FF,
         EF,
         ExpanderCodeSpec,
         BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
     >::default();
-
     let mut prover_trans = Transcript::<EF>::new();
 
-    let proof = acc_prover.prove(
+    let proof = ep_prover.prove(
         &mut prover_trans,
         &params,
         &instance,
@@ -407,7 +274,7 @@ fn test_accumulator_snark() {
     let proof_bytes = proof.to_bytes().unwrap();
 
     // Verifier.
-    let acc_verifier = AccumulatorVerifier::<
+    let ep_verifier = ExternalProductVerifier::<
         FF,
         EF,
         ExpanderCodeSpec,
@@ -415,9 +282,9 @@ fn test_accumulator_snark() {
     >::default();
     let mut verifier_trans = Transcript::<EF>::new();
 
-    let proof = AccumulatorProof::from_bytes(&proof_bytes).unwrap();
+    let proof = ExternalProductProof::from_bytes(&proof_bytes).unwrap();
 
-    let res = acc_verifier.verify(
+    let res = ep_verifier.verify(
         &mut verifier_trans,
         &params,
         &instance.info(),

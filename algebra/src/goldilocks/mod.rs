@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use std::{
     fmt::Display,
+    hash::Hash,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
@@ -46,14 +47,14 @@ impl Field for Goldilocks {
     fn new(value: Self::Value) -> Self {
         Self(value)
     }
-}
 
-impl DecomposableField for Goldilocks {
     #[inline]
     fn value(self) -> Self::Value {
         to_canonical_u64(self.0)
     }
+}
 
+impl DecomposableField for Goldilocks {
     #[inline]
     fn decompose(self, basis: crate::Basis<Self>) -> Vec<Self> {
         let mut temp = self.value();
@@ -259,6 +260,12 @@ impl Ord for Goldilocks {
     }
 }
 
+impl Hash for Goldilocks {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_canonical_u64().hash(state);
+    }
+}
 impl Neg for Goldilocks {
     type Output = Self;
     #[inline]

@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// Implementation of BabyBear field.
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
 pub struct BabyBear(u32);
 
 impl Field for BabyBear {
@@ -37,14 +37,30 @@ impl Field for BabyBear {
     fn new(value: Self::Value) -> Self {
         Self(to_monty(value))
     }
-}
 
-impl DecomposableField for BabyBear {
     #[inline]
     fn value(self) -> Self::Value {
         from_monty(self.0)
     }
+}
 
+impl PartialOrd for BabyBear {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.value().cmp(&other.value()))
+    }
+
+    fn lt(&self, other: &Self) -> bool {
+        self.value() < other.value()
+    }
+}
+
+impl Ord for BabyBear {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.value().cmp(&other.value())
+    }
+}
+
+impl DecomposableField for BabyBear {
     #[inline]
     fn decompose(self, basis: crate::Basis<Self>) -> Vec<Self> {
         let mut temp = self.value();
