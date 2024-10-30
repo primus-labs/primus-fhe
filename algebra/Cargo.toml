@@ -20,6 +20,7 @@ serde = { workspace = true }
 bincode = { workspace = true }
 concrete-ntt = { git = "https://github.com/pado-labs/concrete-ntt", branch = "main", optional = true }
 itertools = { workspace = true }
+rayon = { workspace = true }
 
 [features]
 default = ["concrete-ntt"]

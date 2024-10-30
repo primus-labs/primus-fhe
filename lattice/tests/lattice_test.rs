@@ -2,8 +2,8 @@ use algebra::derive::{DecomposableField, FheField, Field, Prime, NTT};
 use algebra::modulus::PowOf2Modulus;
 use algebra::reduce::{AddReduce, MulReduce, SubReduce};
 use algebra::{
-    Basis, DecomposableField, Field, FieldDiscreteGaussianSampler, FieldTernarySampler,
-    FieldUniformSampler, ModulusConfig, Polynomial,
+    Basis, Field, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
+    ModulusConfig, Polynomial,
 };
 use lattice::*;
 use num_traits::{Inv, One};

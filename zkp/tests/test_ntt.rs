@@ -1,26 +1,23 @@
-use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
-    DenseMultilinearExtension, Field, FieldUniformSampler, NTTPolynomial,
-};
+use algebra::utils::Transcript;
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
+use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension, Field, NTTPolynomial};
 use num_traits::{One, Zero};
+use pcs::multilinear::BrakedownPCS;
+use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
-use rand_distr::Distribution;
+use sha2::Sha256;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::vec;
 use zkp::piop::ntt::ntt_bare::init_fourier_table;
+use zkp::piop::ntt::{BatchNTTInstance, BitsOrder, NTTParams, NTTProof, NTTProver, NTTVerifier};
 use zkp::piop::{NTTBareIOP, NTTInstance, NTTIOP};
 
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
-#[derive(Field, Prime)]
-#[modulus = 59]
-pub struct Fq(u32);
-
 // field type
-type FF = Fp32;
+type FF = BabyBear;
+type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
 type PolyFF = Polynomial<FF>;
 
 fn obtain_fourier_matrix_oracle(log_n: u32) -> DenseMultilinearExtension<FF> {
@@ -86,6 +83,14 @@ fn ntt_transform_normal_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> V
     sort_array_with_reversed_bits(&ntt_form, log_n)
 }
 
+/// Invoke the existing api to perform ntt transform.
+/// The input is in normal order and the output is in the bit-reversed order
+fn ntt_transform_reverse_order<F: Field + NTTField>(log_n: u32, coeff: &[F]) -> Vec<F> {
+    assert_eq!(coeff.len(), (1 << log_n) as usize);
+    let poly = <Polynomial<F>>::from_slice(coeff);
+    F::get_ntt_table(log_n).unwrap().transform(&poly).data()
+}
+
 /// Invoke the existing api to perform ntt inverse transform and convert the bit-reversed order to normal order
 /// In other words, the orders of input and output are both normal order.
 fn ntt_inverse_transform_normal_order<F: Field + NTTField>(log_n: u32, points: &[F]) -> Vec<F> {
@@ -128,6 +133,36 @@ fn naive_ntt_transform_normal_order(log_n: u32, coeff: &[FF]) -> Vec<FF> {
         }
     }
     ntt_form
+}
+
+fn generate_single_instance<R: Rng + CryptoRng>(
+    instances: &mut BatchNTTInstance<FF>,
+    log_n: usize,
+    rng: &mut R,
+    bits_order: BitsOrder,
+) {
+    let coeff = PolyFF::random(1 << log_n, rng).data();
+    let point = match bits_order {
+        BitsOrder::Normal => Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            log_n,
+            ntt_transform_normal_order(log_n as u32, &coeff)
+                .iter()
+                .map(|x| FF::new(x.value()))
+                .collect(),
+        )),
+        BitsOrder::Reverse => Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+            log_n,
+            ntt_transform_reverse_order(log_n as u32, &coeff)
+                .iter()
+                .map(|x| FF::new(x.value()))
+                .collect(),
+        )),
+    };
+    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n,
+        coeff.iter().map(|x| FF::new(x.value())).collect(),
+    ));
+    instances.add_ntt_instance(&coeff, &point);
 }
 
 #[test]
@@ -179,10 +214,9 @@ fn test_ntt_bare_without_delegation() {
         ntt_table.push(power);
         power *= root;
     }
-    let ntt_table = Rc::new(ntt_table);
+    let ntt_table = Arc::new(ntt_table);
 
     let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
     let coeff = PolyFF::random(1 << log_n, &mut rng).data();
     let points = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         log_n,
@@ -194,15 +228,85 @@ fn test_ntt_bare_without_delegation() {
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
+    let mut ntt_iop = NTTBareIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
+    let kit = ntt_iop.prove(&mut prover_trans, &ntt_instance, BitsOrder::Normal);
+    let evals_at_u = ntt_instance.points.evaluate(&kit.u);
+    let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
 
-    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-    let f_u = Rc::new(init_fourier_table(&u, &ntt_instance.ntt_table));
-    let proof = NTTBareIOP::prove(&ntt_instance, &f_u, &u);
-    let subclaim = NTTBareIOP::verify(&proof, &ntt_instance_info);
+    let f_u = init_fourier_table(&kit.u, &ntt_instance.ntt_table);
+    let f_delegation = f_u.evaluate(&kit.randomness);
+    let f_oracle = obtain_fourier_matrix_oracle(log_n as u32);
+    let point = [kit.u.clone(), kit.randomness.clone()].concat();
+    assert_eq!(f_oracle.evaluate(&point), f_delegation);
 
-    // Without delegation, the verifier needs to compute F(u, v) on its own.
-    let fourier_matrix = Rc::new(obtain_fourier_matrix_oracle(log_n as u32));
-    assert!(subclaim.verify_subclaim(&fourier_matrix, &points, &coeff, &u, &ntt_instance_info));
+    let mut wrapper = kit.extract();
+    let mut ntt_iop = NTTBareIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
+
+    let check = ntt_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+        BitsOrder::Normal,
+    );
+    assert!(check);
+}
+
+#[test]
+fn test_ntt_bare_without_delegation_extension_field() {
+    let log_n: usize = 10;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
+    let mut power = FF::one();
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+    let ntt_table = Arc::new(ntt_table);
+
+    let mut rng = thread_rng();
+    let coeff = PolyFF::random(1 << log_n, &mut rng).data();
+    let points = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n,
+        ntt_transform_normal_order(log_n as u32, &coeff),
+    ));
+    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n, coeff,
+    ));
+
+    let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
+
+    let instance_ef = ntt_instance.to_ef::<EF>();
+    let ntt_instance_info = instance_ef.info();
+
+    let mut ntt_iop = NTTBareIOP::<EF>::default();
+    let mut prover_trans = Transcript::<EF>::new();
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info);
+
+    let kit = ntt_iop.prove(&mut prover_trans, &instance_ef, BitsOrder::Normal);
+    let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
+    let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
+
+    let mut wrapper = kit.extract();
+
+    let mut ntt_iop = NTTBareIOP::<EF>::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info);
+    let check = ntt_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+        BitsOrder::Normal,
+    );
+    assert!(check);
 }
 
 #[test]
@@ -216,10 +320,9 @@ fn test_ntt_with_delegation() {
         ntt_table.push(power);
         power *= root;
     }
-    let ntt_table = Rc::new(ntt_table);
+    let ntt_table = Arc::new(ntt_table);
 
     let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
     let coeff = PolyFF::random(1 << log_n, &mut rng).data();
     let points = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         log_n,
@@ -231,17 +334,35 @@ fn test_ntt_with_delegation() {
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
     let ntt_instance_info = ntt_instance.info();
+    let mut ntt_iop = NTTIOP::default();
+    let mut prover_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info.to_clean());
+    ntt_iop.generate_randomness_for_eq_function(&mut prover_trans, &ntt_instance_info.to_clean());
 
-    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = NTTIOP::prove(&ntt_instance, &u);
-    let subclaim = NTTIOP::verify(&proof, &ntt_instance_info, &u);
+    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &ntt_instance, BitsOrder::Normal);
+    let evals_at_r = ntt_instance.coeffs.evaluate(&kit.randomness);
+    let evals_at_u = ntt_instance.points.evaluate(&kit.u);
 
-    assert!(subclaim.verify_subcliam(&points, &coeff, &u, &ntt_instance_info));
+    let mut wrapper = kit.extract();
+    let mut ntt_iop = NTTIOP::default();
+    let mut verifier_trans = Transcript::<FF>::new();
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info.to_clean());
+    ntt_iop.generate_randomness_for_eq_function(&mut verifier_trans, &ntt_instance_info.to_clean());
+    let (check, _) = ntt_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+        &recursive_proof,
+        BitsOrder::Normal,
+    );
+    assert!(check);
 }
 
 #[test]
-fn test_ntt_combined_with_delegation() {
-    let log_n: usize = 5;
+fn test_ntt_with_delegation_extension_field() {
+    let log_n: usize = 10;
     let m = 1 << (log_n + 1);
     let mut ntt_table = Vec::with_capacity(m as usize);
     let root = FF::get_ntt_table(log_n as u32).unwrap().root();
@@ -250,44 +371,122 @@ fn test_ntt_combined_with_delegation() {
         ntt_table.push(power);
         power *= root;
     }
-    let ntt_table = Rc::new(ntt_table);
+    let ntt_table = Arc::new(ntt_table);
 
     let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
-    let mut coeff1 = PolyFF::random(1 << log_n, &mut rng);
-    let points1 = DenseMultilinearExtension::from_evaluations_vec(
+    let coeff = PolyFF::random(1 << log_n, &mut rng).data();
+    let points = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
         log_n,
-        ntt_transform_normal_order(log_n as u32, coeff1.as_ref()),
-    );
-
-    let mut coeff2 = PolyFF::random(1 << log_n, &mut rng);
-    let points2 = DenseMultilinearExtension::from_evaluations_vec(
-        log_n,
-        ntt_transform_normal_order(log_n as u32, coeff2.as_ref()),
-    );
-
-    let r_1 = uniform.sample(&mut rng);
-    let r_2 = uniform.sample(&mut rng);
-    coeff1.mul_scalar_assign(r_1);
-    coeff2.mul_scalar_assign(r_2);
-    let coeff = coeff1 + coeff2;
-
-    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
-        log_n,
-        coeff.data(),
+        ntt_transform_normal_order(log_n as u32, &coeff),
     ));
-    let mut points =
-        <DenseMultilinearExtension<FF>>::from_evaluations_vec(log_n, vec![FF::zero(); 1 << log_n]);
-    points += (r_1, &points1);
-    points += (r_2, &points2);
-    let points = Rc::new(points);
+    let coeff = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        log_n, coeff,
+    ));
 
     let ntt_instance = NTTInstance::from_slice(log_n, &ntt_table, &coeff, &points);
-    let ntt_instance_info = ntt_instance.info();
 
-    let u: Vec<_> = (0..log_n).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = NTTIOP::prove(&ntt_instance, &u);
-    let subclaim = NTTIOP::verify(&proof, &ntt_instance_info, &u);
+    let instance_ef = ntt_instance.to_ef::<EF>();
+    let ntt_instance_info = instance_ef.info();
 
-    assert!(subclaim.verify_subcliam(&points, &coeff, &u, &ntt_instance_info));
+    let mut ntt_iop = NTTIOP::default();
+    let mut prover_trans = Transcript::<EF>::new();
+    ntt_iop.generate_randomness(&mut prover_trans, &ntt_instance_info.to_clean());
+    ntt_iop.generate_randomness_for_eq_function(&mut prover_trans, &ntt_instance_info.to_clean());
+
+    let (kit, recursive_proof) = ntt_iop.prove(&mut prover_trans, &instance_ef, BitsOrder::Normal);
+
+    let evals_at_r = ntt_instance.coeffs.evaluate_ext(&kit.randomness);
+    let evals_at_u = ntt_instance.points.evaluate_ext(&kit.u);
+
+    let mut wrapper = kit.extract();
+    let mut ntt_iop = NTTIOP::default();
+    let mut verifier_trans = Transcript::<EF>::new();
+    ntt_iop.generate_randomness(&mut verifier_trans, &ntt_instance_info.to_clean());
+    ntt_iop.generate_randomness_for_eq_function(&mut verifier_trans, &ntt_instance_info.to_clean());
+    let (check, _) = ntt_iop.verify(
+        &mut verifier_trans,
+        &mut wrapper,
+        evals_at_r,
+        evals_at_u,
+        &ntt_instance_info,
+        &recursive_proof,
+        BitsOrder::Normal,
+    );
+    assert!(check);
+}
+
+fn ntt_snark(bits_order: BitsOrder) {
+    let num_vars = 10;
+    let num_ntt = 5;
+    let log_n: usize = num_vars;
+    let m = 1 << (log_n + 1);
+    let mut ntt_table = Vec::with_capacity(m as usize);
+    let root = FF::get_ntt_table(log_n as u32).unwrap().root();
+
+    let mut power = FF::one();
+    for _ in 0..m {
+        ntt_table.push(power);
+        power *= root;
+    }
+    let ntt_table = Arc::new(ntt_table);
+
+    let mut rng = thread_rng();
+
+    let mut ntt_instances = <BatchNTTInstance<FF>>::new(num_vars, &ntt_table);
+    for _ in 0..num_ntt {
+        generate_single_instance(&mut ntt_instances, log_n, &mut rng, bits_order);
+    }
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+
+    // Parameters.
+    let mut params = NTTParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&ntt_instances.info(), code_spec);
+
+    // Prover.
+    let ntt_prover = NTTProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let proof = ntt_prover.prove(&mut prover_trans, &params, &ntt_instances, bits_order);
+
+    let proof_bytes = proof.to_bytes().unwrap();
+
+    // Verifier.
+    let ntt_verifier = NTTVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = NTTProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = ntt_verifier.verify(
+        &mut verifier_trans,
+        &params,
+        &ntt_instances.info(),
+        &proof,
+        bits_order,
+    );
+
+    assert!(res);
+}
+
+#[test]
+fn test_ntt_snarks() {
+    ntt_snark(BitsOrder::Normal);
+    ntt_snark(BitsOrder::Reverse);
 }

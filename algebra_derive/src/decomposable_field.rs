@@ -15,11 +15,6 @@ fn impl_decomposable_field(input: Input) -> TokenStream {
 
     quote! {
         impl ::algebra::DecomposableField for #name{
-            #[inline]
-            fn value(self) -> Self::Value {
-                self.0
-            }
-
             fn decompose(self, basis: ::algebra::Basis<Self>) -> Vec<Self> {
                 let mut temp = self.0;
 

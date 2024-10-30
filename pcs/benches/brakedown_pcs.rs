@@ -42,7 +42,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         Some(code_spec),
     );
 
-    let mut trans = Transcript::<FF>::new();
+    let mut trans = Transcript::<EF>::new();
     let mut comm = BrakedownPolyCommitment::default();
     let mut state = BrakedownCommitmentState::default();
     let mut proof = BrakedownOpenProof::default();
@@ -84,7 +84,7 @@ fn configure() -> Criterion {
 criterion_group! {
     name = benches;
     config = configure();
-    targets =criterion_benchmark
+    targets = criterion_benchmark
 }
 
 criterion_main!(benches);

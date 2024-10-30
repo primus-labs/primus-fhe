@@ -1,21 +1,16 @@
 use algebra::{
-    derive::{Field, Prime},
-    DenseMultilinearExtension, Field, FieldUniformSampler, ListOfProductsOfPolynomials,
-    MultilinearExtension,
+    utils::Transcript, BabyBear, DenseMultilinearExtension, Field, FieldUniformSampler,
+    ListOfProductsOfPolynomials, MultilinearExtension,
 };
 use rand::prelude::*;
-use rand_chacha::ChaCha12Rng;
 use rand_distr::Distribution;
+use serde::Serialize;
 use std::rc::Rc;
 use zkp::sumcheck::IPForMLSumcheck;
 use zkp::sumcheck::MLSumcheck;
 
-#[derive(Field, Prime)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
 // field type
-type FF = Fp32;
+type FF = BabyBear;
 
 fn random_product<F: Field, R: RngCore>(
     nv: usize,
@@ -69,18 +64,27 @@ fn random_list_of_products<F: Field, R: RngCore>(
     (poly, sum)
 }
 
-fn test_protocol(nv: usize, num_multiplicands_range: (usize, usize), num_products: usize) {
+fn test_protocol<F: Field + Serialize>(
+    nv: usize,
+    num_multiplicands_range: (usize, usize),
+    num_products: usize,
+) {
     let mut rng = thread_rng();
     let (poly, asserted_sum) =
-        random_list_of_products::<FF, _>(nv, num_multiplicands_range, num_products, &mut rng);
+        random_list_of_products::<F, _>(nv, num_multiplicands_range, num_products, &mut rng);
     let poly_info = poly.info();
     let mut prover_state = IPForMLSumcheck::prover_init(&poly);
     let mut verifier_state = IPForMLSumcheck::verifier_init(&poly_info);
     let mut verifier_msg = None;
 
+    let mut verifier_trans = Transcript::<F>::new();
     for _ in 0..poly.num_variables {
         let prover_message = IPForMLSumcheck::prove_round(&mut prover_state, &verifier_msg);
-        verifier_msg = IPForMLSumcheck::verify_round(prover_message, &mut verifier_state, &mut rng);
+        verifier_msg = IPForMLSumcheck::verify_round(
+            &prover_message,
+            &mut verifier_state,
+            &mut verifier_trans,
+        );
     }
     let subclaim = IPForMLSumcheck::check_and_generate_subclaim(verifier_state, asserted_sum)
         .expect("fail to generate subclaim");
@@ -95,30 +99,32 @@ fn test_polynomial(nv: usize, num_multiplicands_range: (usize, usize), num_produ
     let (poly, asserted_sum) =
         random_list_of_products::<FF, _>(nv, num_multiplicands_range, num_products, &mut rng);
     let poly_info = poly.info();
-    let proof = MLSumcheck::prove(&poly).expect("fail to prove");
-    let subclaim = MLSumcheck::verify(&poly_info, asserted_sum, &proof).expect("fail to verify");
+    let mut trans = Transcript::<FF>::new();
+    let (proof, _) = MLSumcheck::prove(&mut trans, &poly).expect("fail to prove");
+
+    let mut trans = Transcript::<FF>::new();
+    let subclaim =
+        MLSumcheck::verify(&mut trans, &poly_info, asserted_sum, &proof).expect("fail to verify");
     assert!(
         poly.evaluate(&subclaim.point) == subclaim.expected_evaluations,
         "wrong subclaim"
     );
 }
 
-fn test_polynomial_as_subprotocol(
+fn test_polynomial_as_subprotocol<F: Field + Serialize>(
     nv: usize,
     num_multiplicands_range: (usize, usize),
     num_products: usize,
-    prover_rng: &mut impl RngCore,
-    verifier_rng: &mut impl RngCore,
+    prover_trans: &mut Transcript<F>,
+    verifier_trans: &mut Transcript<F>,
 ) {
     let mut rng = thread_rng();
     let (poly, asserted_sum) =
-        random_list_of_products::<FF, _>(nv, num_multiplicands_range, num_products, &mut rng);
+        random_list_of_products::<F, _>(nv, num_multiplicands_range, num_products, &mut rng);
     let poly_info = poly.info();
-    let (proof, prover_state) =
-        MLSumcheck::prove_as_subprotocol(prover_rng, &poly).expect("fail to prove");
-    let subclaim =
-        MLSumcheck::verify_as_subprotocol(verifier_rng, &poly_info, asserted_sum, &proof)
-            .expect("fail to verify");
+    let (proof, prover_state) = MLSumcheck::prove(prover_trans, &poly).expect("fail to prove");
+    let subclaim = MLSumcheck::verify(verifier_trans, &poly_info, asserted_sum, &proof)
+        .expect("fail to verify");
     assert!(
         poly.evaluate(&subclaim.point) == subclaim.expected_evaluations,
         "wrong subclaim"
@@ -133,20 +139,18 @@ fn test_trivial_polynomial() {
     let num_products = 5;
 
     for _ in 0..10 {
-        test_protocol(nv, num_multiplicands_range, num_products);
+        test_protocol::<FF>(nv, num_multiplicands_range, num_products);
         test_polynomial(nv, num_multiplicands_range, num_products);
 
-        let mut seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        thread_rng().fill(&mut seed);
-        let mut prover_rng = ChaCha12Rng::from_seed(seed);
-        let mut verifier_rng = ChaCha12Rng::from_seed(seed);
+        let mut prover_trans = Transcript::new();
+        let mut verifier_trans = Transcript::new();
 
-        test_polynomial_as_subprotocol(
+        test_polynomial_as_subprotocol::<FF>(
             nv,
             num_multiplicands_range,
             num_products,
-            &mut prover_rng,
-            &mut verifier_rng,
+            &mut prover_trans,
+            &mut verifier_trans,
         )
     }
 }
@@ -158,20 +162,18 @@ fn test_normal_polynomial() {
     let num_products = 5;
 
     for _ in 0..10 {
-        test_protocol(nv, num_multiplicands_range, num_products);
+        test_protocol::<FF>(nv, num_multiplicands_range, num_products);
         test_polynomial(nv, num_multiplicands_range, num_products);
 
-        let mut seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-        thread_rng().fill(&mut seed);
-        let mut prover_rng = ChaCha12Rng::from_seed(seed);
-        let mut verifier_rng = ChaCha12Rng::from_seed(seed);
+        let mut prover_trans = Transcript::new();
+        let mut verifier_trans = Transcript::new();
 
-        test_polynomial_as_subprotocol(
+        test_polynomial_as_subprotocol::<FF>(
             nv,
             num_multiplicands_range,
             num_products,
-            &mut prover_rng,
-            &mut verifier_rng,
+            &mut prover_trans,
+            &mut verifier_trans,
         )
     }
 }
@@ -183,18 +185,16 @@ fn test_normal_polynomial_different_transcript_fails() {
     let num_multiplicands_range = (4, 9);
     let num_products = 5;
 
-    let mut prover_seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-    let mut verifier_seed: <ChaCha12Rng as SeedableRng>::Seed = Default::default();
-    thread_rng().fill(&mut prover_seed);
-    thread_rng().fill(&mut verifier_seed);
-    let mut prover_rng = ChaCha12Rng::from_seed(prover_seed);
-    let mut verifier_rng = ChaCha12Rng::from_seed(verifier_seed);
-    test_polynomial_as_subprotocol(
+    let mut prover_trans = Transcript::new();
+    let mut verifier_trans = Transcript::new();
+    verifier_trans.append_message(b"label", b"different transcript");
+
+    test_polynomial_as_subprotocol::<FF>(
         nv,
         num_multiplicands_range,
         num_products,
-        &mut prover_rng,
-        &mut verifier_rng,
+        &mut prover_trans,
+        &mut verifier_trans,
     )
 }
 
@@ -213,7 +213,8 @@ fn test_extract_sum() {
     let mut rng = thread_rng();
     let (poly, asserted_sum) = random_list_of_products::<FF, _>(8, (3, 4), 3, &mut rng);
 
-    let proof = MLSumcheck::prove(&poly).expect("fail to prove");
+    let mut trans = Transcript::<FF>::new();
+    let (proof, _) = MLSumcheck::prove(&mut trans, &poly).expect("fail to prove");
     assert_eq!(MLSumcheck::extract_sum(&proof), asserted_sum);
 }
 
@@ -269,9 +270,13 @@ fn test_shared_reference() {
     drop(prover);
 
     let poly_info = poly.info();
-    let proof = MLSumcheck::prove(&poly).expect("fail to prove");
+    let mut trans = Transcript::<FF>::new();
+    let (proof, _) = MLSumcheck::prove(&mut trans, &poly).expect("fail to prove");
     let asserted_sum = MLSumcheck::extract_sum(&proof);
-    let subclaim = MLSumcheck::verify(&poly_info, asserted_sum, &proof).expect("fail to verify");
+
+    let mut trans = Transcript::<FF>::new();
+    let subclaim =
+        MLSumcheck::verify(&mut trans, &poly_info, asserted_sum, &proof).expect("fail to verify");
     assert!(
         poly.evaluate(&subclaim.point) == subclaim.expected_evaluations,
         "wrong subclaim"

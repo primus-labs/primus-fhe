@@ -1,21 +1,25 @@
-use algebra::Basis;
 use algebra::{
-    derive::{DecomposableField, FheField, Field, Prime, NTT},
-    DenseMultilinearExtension, Field, FieldUniformSampler,
+    utils::Transcript, BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field,
+    FieldUniformSampler,
 };
-// use protocol::bit_decomposition::{BitDecomposition, DecomposedBits};
+use itertools::izip;
+use pcs::{
+    multilinear::brakedown::BrakedownPCS,
+    utils::code::{ExpanderCode, ExpanderCodeSpec},
+};
 use rand::prelude::*;
 use rand_distr::Distribution;
+use sha2::Sha256;
 use std::rc::Rc;
-use std::vec;
-use zkp::piop::{BitDecomposition, DecomposedBits};
+use zkp::piop::bit_decomposition::{
+    BitDecompositionIOP, BitDecompositionInstance, BitDecompositionParams, BitDecompositionProof,
+    BitDecompositionProver, BitDecompositionVerifier,
+};
 
-#[derive(Field, Prime, DecomposableField, FheField, NTT)]
-#[modulus = 132120577]
-pub struct Fp32(u32);
-
-// field type
-type FF = Fp32;
+type FF = BabyBear;
+type EF = BabyBearExetension;
+type Hash = Sha256;
+const BASE_FIELD_BITS: usize = 31;
 
 macro_rules! field_vec {
     ($t:ty; $elem:expr; $n:expr)=>{
@@ -28,9 +32,9 @@ macro_rules! field_vec {
 
 #[test]
 fn test_single_trivial_bit_decomposition_base_2() {
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = 2;
+    let bits_len = 2;
     let num_vars = 2;
 
     let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
@@ -50,28 +54,40 @@ fn test_single_trivial_bit_decomposition_base_2() {
         )),
     ];
 
-    let mut prover_key = DecomposedBits::new(base, base_len, bits_len, num_vars);
-    prover_key.add_decomposed_bits_instance(&d_bits);
+    let mut prover_key = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
+    prover_key.add_decomposed_bits_instance(&d, &d_bits);
+    let info = prover_key.info();
 
-    let d_verifier = vec![d];
-    let d_bits_verifier = vec![&d_bits];
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut bd_iop = BitDecompositionIOP::default();
 
-    let decomposed_bits_info = prover_key.info();
-    let u = field_vec!(FF; 0, 0);
-    let proof = BitDecomposition::prove(&prover_key, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &u, &decomposed_bits_info));
+    bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = bd_iop.prove(&mut prover_trans, &prover_key);
+
+    let evals = prover_key.evaluate(&kit.randomness);
+
+    let wrapper: zkp::sumcheck::ProofWrapper<BabyBear> = kit.extract();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    let mut bd_iop = BitDecompositionIOP::default();
+
+    bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &prover_key.info());
+
+    assert!(check);
 }
 
 #[test]
 fn test_batch_trivial_bit_decomposition_base_2() {
-    let base_len: u32 = 1;
+    let base_len = 1;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = 2;
+    let bits_len = 2;
     let num_vars = 2;
 
-    let mut rng = thread_rng();
-    let uniform = <FieldUniformSampler<FF>>::new();
     let d = vec![
         Rc::new(DenseMultilinearExtension::from_evaluations_vec(
             num_vars,
@@ -108,26 +124,42 @@ fn test_batch_trivial_bit_decomposition_base_2() {
             )),
         ],
     ];
-    let d_bits_ref: Vec<_> = d_bits.iter().collect();
 
-    let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
-    for d_instance in &d_bits {
-        decomposed_bits.add_decomposed_bits_instance(d_instance);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
+    for (d_val, d_bits) in izip!(d, d_bits) {
+        instance.add_decomposed_bits_instance(&d_val, &d_bits);
     }
 
-    let decomposed_bits_info = decomposed_bits.info();
+    let info = instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = BitDecomposition::prove(&decomposed_bits, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut bd_iop = BitDecompositionIOP::default();
+
+    bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = bd_iop.prove(&mut prover_trans, &instance);
+
+    let evals = instance.evaluate(&kit.randomness);
+
+    let wrapper = kit.extract();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    let mut bd_iop = BitDecompositionIOP::default();
+
+    bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &instance.info());
+
+    assert!(check);
 }
 
 #[test]
 fn test_single_bit_decomposition() {
-    let base_len: u32 = 4;
+    let base_len = 4;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
 
     let mut rng = thread_rng();
@@ -140,25 +172,39 @@ fn test_single_bit_decomposition() {
     ));
 
     let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
-    let d_verifier = vec![d];
-    let d_bits_verifier = vec![&d_bits_prover];
 
-    let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
-    decomposed_bits.add_decomposed_bits_instance(&d_bits_prover);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
+    instance.add_decomposed_bits_instance(&d, &d_bits_prover);
 
-    let decomposed_bits_info = decomposed_bits.info();
+    let info = instance.info();
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut bd_iop = BitDecompositionIOP::default();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = BitDecomposition::prove(&decomposed_bits, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d_verifier, &d_bits_verifier, &u, &decomposed_bits_info));
+    bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = bd_iop.prove(&mut prover_trans, &instance);
+
+    let evals = instance.evaluate(&kit.randomness);
+
+    let wrapper = kit.extract();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    let mut bd_iop = BitDecompositionIOP::default();
+
+    bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &instance.info());
+
+    assert!(check);
 }
 
 #[test]
 fn test_batch_bit_decomposition() {
-    let base_len: u32 = 4;
+    let base_len = 4;
     let base: FF = FF::new(1 << base_len);
-    let bits_len: u32 = <Basis<FF>>::new(base_len).decompose_len() as u32;
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
     let num_vars = 10;
 
     let mut rng = thread_rng();
@@ -194,17 +240,94 @@ fn test_batch_bit_decomposition() {
         .iter()
         .map(|x| x.get_decomposed_mles(base_len, bits_len))
         .collect();
-    let d_bits_ref: Vec<_> = d_bits.iter().collect();
 
-    let mut decomposed_bits = DecomposedBits::new(base, base_len, bits_len, num_vars);
-    for d_instance in d_bits.iter() {
-        decomposed_bits.add_decomposed_bits_instance(d_instance);
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
+    for (val, bits) in izip!(d, d_bits) {
+        instance.add_decomposed_bits_instance(&val, &bits);
     }
 
-    let decomposed_bits_info = decomposed_bits.info();
+    let info = instance.info();
 
-    let u: Vec<_> = (0..num_vars).map(|_| uniform.sample(&mut rng)).collect();
-    let proof = BitDecomposition::prove(&decomposed_bits, &u);
-    let subclaim = BitDecomposition::verifier(&proof, &decomposed_bits_info);
-    assert!(subclaim.verify_subclaim(&d, &d_bits_ref, &u, &decomposed_bits_info));
+    let mut prover_trans = Transcript::<FF>::new();
+    let mut bd_iop = BitDecompositionIOP::default();
+
+    bd_iop.generate_randomness(&mut prover_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut prover_trans, &info);
+
+    let kit = bd_iop.prove(&mut prover_trans, &instance);
+
+    let evals = instance.evaluate(&kit.randomness);
+
+    let wrapper = kit.extract();
+    let mut verifier_trans = Transcript::<FF>::new();
+
+    let mut bd_iop = BitDecompositionIOP::default();
+
+    bd_iop.generate_randomness(&mut verifier_trans, &info);
+    bd_iop.generate_randomness_for_eq_function(&mut verifier_trans, &info);
+
+    let (check, _) = bd_iop.verify(&mut verifier_trans, &wrapper, &evals, &instance.info());
+
+    assert!(check);
+}
+
+#[test]
+fn test_bit_decomposition_snark() {
+    let base_len = 4;
+    let base: FF = FF::new(1 << base_len);
+    let bits_len = <Basis<FF>>::new(base_len as u32).decompose_len();
+    let num_vars = 10;
+
+    let mut rng = thread_rng();
+    let uniform = <FieldUniformSampler<FF>>::new();
+    let d = Rc::new(DenseMultilinearExtension::from_evaluations_vec(
+        num_vars,
+        (0..(1 << num_vars))
+            .map(|_| uniform.sample(&mut rng))
+            .collect(),
+    ));
+
+    let d_bits_prover = d.get_decomposed_mles(base_len, bits_len);
+
+    let mut instance = BitDecompositionInstance::new(base, base_len, bits_len, num_vars);
+    instance.add_decomposed_bits_instance(&d, &d_bits_prover);
+
+    let code_spec = ExpanderCodeSpec::new(0.1195, 0.0248, 1.9, BASE_FIELD_BITS, 10);
+
+    // Parameters.
+    let mut params = BitDecompositionParams::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    params.setup(&instance.info(), code_spec);
+
+    // Prover.
+    let bd_prover = BitDecompositionProver::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut prover_trans = Transcript::<EF>::default();
+
+    let proof = bd_prover.prove(&mut prover_trans, &params, &instance);
+
+    let proof_bytes = proof.to_bytes().unwrap();
+
+    // Verifier.
+    let bd_verifier = BitDecompositionVerifier::<
+        FF,
+        EF,
+        ExpanderCodeSpec,
+        BrakedownPCS<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>,
+    >::default();
+    let mut verifier_trans = Transcript::<EF>::default();
+
+    let proof = BitDecompositionProof::from_bytes(&proof_bytes).unwrap();
+
+    let res = bd_verifier.verify(&mut verifier_trans, &params, &instance.info(), &proof);
+
+    assert!(res);
 }

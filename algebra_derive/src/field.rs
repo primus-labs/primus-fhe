@@ -110,6 +110,11 @@ fn impl_field(name: &proc_macro2::Ident, field_ty: &Type, modulus: &TokenStream)
                     Self(value.reduce(<Self as ::algebra::ModulusConfig>::MODULUS))
                 }
             }
+
+            #[inline]
+            fn value(self) -> Self::Value {
+                self.0
+            }
         }
     }
 }

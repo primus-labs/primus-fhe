@@ -2,9 +2,12 @@
 
 use std::{collections::HashMap, rc::Rc};
 
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
+
 use crate::Field;
 
-use super::{DenseMultilinearExtension, MultilinearExtension};
+use super::DenseMultilinearExtension;
 
 /// Stores a list of products of `DenseMultilinearExtension` that is meant to be added together.
 ///
@@ -48,7 +51,7 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 /// Stores the number of variables and max number of multiplicands of the added polynomial used by the prover.
 /// This data structures will be used as the verifier key.
 pub struct PolynomialInfo {
@@ -131,14 +134,22 @@ impl<F: Field> ListOfProductsOfPolynomials<F> {
 
     /// Evaluate the polynomial at point `point`
     pub fn evaluate(&self, point: &[F]) -> F {
-        self.products
+        let mle_buff: Vec<_> = self
+            .flattened_ml_extensions
             .iter()
-            .zip(self.linear_ops.iter())
-            .fold(F::zero(), |result, ((c, p), ops)| {
-                result
-                    + p.iter().zip(ops.iter()).fold(*c, |acc, (&i, &(a, b))| {
-                        acc * (self.flattened_ml_extensions[i].evaluate(point) * a + b)
+            .map(|m| m.as_ref().clone())
+            .collect();
+        self.products
+            .par_iter()
+            .zip(self.linear_ops.par_iter())
+            .fold(
+                || F::zero(),
+                |res, ((c, p), ops)| {
+                    res + p.iter().zip(ops.iter()).fold(*c, |acc, (&i, &(a, b))| {
+                        acc * (mle_buff[i].evaluate(point) * a + b)
                     })
-            })
+                },
+            )
+            .reduce(|| F::zero(), |acc, v| acc + v)
     }
 }

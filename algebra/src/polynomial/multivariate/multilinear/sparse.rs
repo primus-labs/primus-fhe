@@ -1,6 +1,6 @@
 use std::slice::{Iter, IterMut};
 
-use crate::{DenseMultilinearExtension, Field};
+use crate::{AbstractExtensionField, DenseMultilinearExtension, Field};
 
 /// Sparse polynomial
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -12,6 +12,20 @@ pub struct SparsePolynomial<F: Field> {
 }
 
 impl<F: Field> SparsePolynomial<F> {
+    /// Construct an empty sparse polynomial
+    #[inline]
+    pub fn new(num_vars: usize) -> Self {
+        Self {
+            num_vars,
+            evaluations: Vec::new(),
+        }
+    }
+
+    /// Add one evaluation
+    #[inline]
+    pub fn add_eval(&mut self, idx: usize, val: F) {
+        self.evaluations.push((idx, val));
+    }
     /// Construct a new polynomial from a list of evaluations where the index
     /// represents a point in {0,1}^`num_vars` in little endian form. For
     /// example, `0b1011` represents `P(1,1,0,1)`
@@ -59,5 +73,18 @@ impl<F: Field> SparsePolynomial<F> {
             evaluations[*idx] = *item;
         });
         DenseMultilinearExtension::from_evaluations_vec(self.num_vars, evaluations)
+    }
+
+    /// Convert to EF version
+    #[inline]
+    pub fn to_ef<EF: AbstractExtensionField<F>>(&self) -> SparsePolynomial<EF> {
+        SparsePolynomial::<EF> {
+            num_vars: self.num_vars,
+            evaluations: self
+                .evaluations
+                .iter()
+                .map(|(idx, val)| (*idx, EF::from_base(*val)))
+                .collect(),
+        }
     }
 }

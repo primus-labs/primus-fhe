@@ -26,10 +26,7 @@ pub trait Hash: Debug + Clone + Default + Sized {
     /// Update with input
     fn update_hash_value(&mut self, input: &[u8]);
 
-    /// Update with a string as input
-    fn update_string(&mut self, input: String);
-
-    /// Uutput a hash value and reset
+    /// Output a hash value and reset
     fn output_reset(&mut self) -> Self::Output;
 }
 
@@ -38,11 +35,6 @@ impl Hash for Sha256 {
 
     #[inline]
     fn update_hash_value(&mut self, input: &[u8]) {
-        self.update(input);
-    }
-
-    #[inline]
-    fn update_string(&mut self, input: String) {
         self.update(input);
     }
 

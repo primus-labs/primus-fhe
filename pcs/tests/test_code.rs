@@ -69,13 +69,14 @@ fn code_distance_test() {
     let mut rng = rand::thread_rng();
     let field_distr = FieldUniformSampler::new();
 
-    let spec = ExpanderCodeSpec::new(0.1195, 0.0284, 1.420, 31, 30);
+    let spec = ExpanderCodeSpec::new(0.1195, 0.0284, 1.420, 31, 10);
     let brakedown_code: ExpanderCode<FF32> = ExpanderCode::new(spec, 5000, &mut rng);
 
     let message_len = brakedown_code.message_len;
     let codeword_len = brakedown_code.codeword_len;
 
     let mut target_0 = vec![FF32::zero(); codeword_len];
+
     target_0[..message_len]
         .iter_mut()
         .for_each(|x| *x = rng.sample(field_distr));
@@ -93,6 +94,9 @@ fn code_distance_test() {
             .map(|(x_0, x_1)| (x_0 != x_1) as usize)
             .sum();
         let num_expected = (brakedown_code.distance() * codeword_len as f64) as usize;
+        if num_real < num_expected {
+            println!("num real {:?} num expected {:?}", num_real, num_expected);
+        };
         assert!(num_real >= num_expected);
     }
 }

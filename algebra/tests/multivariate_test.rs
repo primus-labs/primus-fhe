@@ -108,11 +108,11 @@ fn mle_arithmetic() {
 
         // test decomposition of mle
         {
-            let base_len = 3;
+            let base_len: usize = 3;
             let base = FF::new(1 << base_len);
-            let basis = <Basis<FF>>::new(base_len);
+            let basis = <Basis<FF>>::new(base_len as u32);
             let bits_len = basis.decompose_len();
-            let decomposed_polys = poly1.get_decomposed_mles(base_len, bits_len as u32);
+            let decomposed_polys = poly1.get_decomposed_mles(base_len, bits_len);
             let point: Vec<_> = (0..NV).map(|_| uniform.sample(&mut rng)).collect();
             let evaluation = decomposed_polys
                 .iter()

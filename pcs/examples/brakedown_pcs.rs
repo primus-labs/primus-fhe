@@ -34,7 +34,7 @@ fn main() {
     );
     println!("setup time: {:?} ms", start.elapsed().as_millis());
 
-    let mut trans = Transcript::<FF>::new();
+    let mut trans = Transcript::<EF>::new();
 
     let start = Instant::now();
     let (comm, state) =
@@ -54,7 +54,7 @@ fn main() {
 
     let eval = poly.evaluate_ext(&point);
 
-    let mut trans = Transcript::<FF>::new();
+    let mut trans = Transcript::<EF>::new();
 
     let start = Instant::now();
     let check = BrakedownPCS::<FF, Hash, ExpanderCode<FF>, ExpanderCodeSpec, EF>::verify(
