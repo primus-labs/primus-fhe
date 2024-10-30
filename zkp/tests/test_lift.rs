@@ -1,8 +1,8 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
     utils::Transcript,
-    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
-    FieldUniformSampler, SparsePolynomial,
+    BabyBear, BabyBearExetension, DenseMultilinearExtension, Field, FieldUniformSampler,
+    SparsePolynomial,
 };
 use num_traits::{One, Zero};
 use pcs::{

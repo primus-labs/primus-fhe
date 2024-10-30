@@ -41,6 +41,11 @@ impl Field for BabyBear {
     fn new(value: Self::Value) -> Self {
         Self(to_monty(value))
     }
+
+    #[inline]
+    fn value(self) -> Self::Value {
+        from_monty(self.0)
+    }
 }
 
 impl PartialOrd for BabyBear {
@@ -60,11 +65,6 @@ impl Ord for BabyBear {
 }
 
 impl DecomposableField for BabyBear {
-    #[inline]
-    fn value(self) -> Self::Value {
-        from_monty(self.0)
-    }
-
     #[inline]
     fn mask(bits: u32) -> Self::Value {
         u32::MAX >> (u32::BITS - bits)

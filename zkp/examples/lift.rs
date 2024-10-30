@@ -1,7 +1,7 @@
 use algebra::derive::{DecomposableField, Field};
 use algebra::utils::Transcript;
 use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension, SparsePolynomial};
-use algebra::{DecomposableField, Field, FieldUniformSampler};
+use algebra::{Field, FieldUniformSampler};
 use num_traits::{One, Zero};
 use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};

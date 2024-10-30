@@ -1,8 +1,7 @@
 use algebra::{
     derive::{DecomposableField, Field, Prime},
     utils::Transcript,
-    BabyBear, BabyBearExetension, Basis, DecomposableField, DenseMultilinearExtension, Field,
-    FieldUniformSampler,
+    BabyBear, BabyBearExetension, Basis, DenseMultilinearExtension, Field, FieldUniformSampler,
 };
 use num_traits::{One, Zero};
 use pcs::{

@@ -92,6 +92,7 @@ impl<F: Field, EF: AbstractExtensionField<F>, C: LinearCode<F>> BrakedownParams<
     }
 
     /// Return reference of code.
+    #[inline]
     pub fn code(&self) -> &C {
         &self.code
     }

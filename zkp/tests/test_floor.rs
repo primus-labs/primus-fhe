@@ -1,6 +1,6 @@
 use algebra::{
-    utils::Transcript, BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension,
-    Field, FieldUniformSampler,
+    utils::Transcript, BabyBear, BabyBearExetension, DenseMultilinearExtension, Field,
+    FieldUniformSampler,
 };
 use pcs::{
     multilinear::BrakedownPCS,

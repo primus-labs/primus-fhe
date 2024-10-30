@@ -108,13 +108,13 @@ pub trait Field:
 
         Self::new(hi.as_into())
     }
+
+    /// Gets inner value.
+    fn value(self) -> Self::Value;
 }
 
 /// A trait defined for decomposable field, this is mainly for base field in FHE.
 pub trait DecomposableField: Field {
-    /// Gets inner value.
-    fn value(self) -> Self::Value;
-
     /// mask, return a number with `bits` 1s.
     fn mask(bits: u32) -> Self::Value;
 

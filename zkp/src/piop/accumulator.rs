@@ -7,7 +7,7 @@ use crate::{
 };
 
 use core::fmt;
-use std::{marker::PhantomData, rc::Rc, sync::Arc, time::Instant};
+use std::{marker::PhantomData, rc::Rc, sync::Arc};
 
 use super::{
     external_product::{
@@ -29,7 +29,13 @@ use algebra::{
 use bincode::Result;
 use itertools::{izip, Itertools};
 use pcs::PolynomialCommitmentScheme;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::{
+    iter::{
+        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        ParallelIterator,
+    },
+    slice::ParallelSlice,
+};
 use serde::{Deserialize, Serialize};
 
 /// The Accumulator witness when performing ACC = ACC + (X^{-a_u} - 1) * ACC * RGSW(Z_u)
@@ -85,7 +91,7 @@ pub struct AccumulatorInstance<F: Field> {
 }
 
 /// Evaluation of AccumulatorInstance at the same random point
-#[derive(Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct AccumulatorInstanceEval<F: Field> {
     /// The evaluation of the input of the Accumulator in coefficient form.
     pub input: RlweEval<F>,
@@ -388,9 +394,12 @@ impl<F: Field> AccumulatorInstance<F> {
         res.append(&mut self.input.pack_all_mles());
         res.append(&mut self.output_ntt.pack_all_mles());
         res.append(&mut self.output.pack_all_mles());
-        for updation in &self.updations {
-            res.append(&mut updation.pack_all_mles());
-        }
+        res.extend::<Vec<F>>(
+            self.updations
+                .par_iter()
+                .flat_map(|updation| updation.pack_all_mles())
+                .collect(),
+        );
         res
     }
 
@@ -404,7 +413,7 @@ impl<F: Field> AccumulatorInstance<F> {
         let num_zeros_padded = (1 << num_vars) - info.num_oracles() * (1 << self.num_vars);
 
         let mut evals = self.pack_all_mles();
-        evals.append(&mut vec![F::zero(); num_zeros_padded]);
+        evals.extend(&vec![F::zero(); num_zeros_padded]);
         <DenseMultilinearExtension<F>>::from_evaluations_vec(num_vars, evals)
     }
 
@@ -417,7 +426,7 @@ impl<F: Field> AccumulatorInstance<F> {
             input: self.input.to_ef::<EF>(),
             updations: self
                 .updations
-                .iter()
+                .par_iter()
                 .map(|updation| updation.to_ef::<EF>())
                 .collect(),
             output_ntt: self.output_ntt.to_ef::<EF>(),
@@ -483,11 +492,11 @@ impl<F: Field> AccumulatorInstance<F> {
     #[inline]
     pub fn extract_ntt_instance(&self, randomness: &[F]) -> NTTInstance<F> {
         assert_eq!(randomness.len(), self.num_ntt_contained());
-        let mut random_coeffs = <DenseMultilinearExtension<F>>::from_evaluations_vec(
+        let mut random_coeffs = DenseMultilinearExtension::<F>::from_evaluations_vec(
             self.num_vars,
             vec![F::zero(); 1 << self.num_vars],
         );
-        let mut random_points = <DenseMultilinearExtension<F>>::from_evaluations_vec(
+        let mut random_points = DenseMultilinearExtension::<F>::from_evaluations_vec(
             self.num_vars,
             vec![F::zero(); 1 << self.num_vars],
         );
@@ -508,67 +517,37 @@ impl<F: Field> AccumulatorInstance<F> {
 
         let r_each_num = self.updations[0].num_ntt_contained();
         // ntts in each accumulator
-        for (updation, r_each) in izip!(&self.updations, r.chunks_exact(r_each_num)) {
-            updation.update_ntt_instance(&mut random_coeffs, &mut random_points, r_each);
-        }
+
+        let zero = DenseMultilinearExtension {
+            num_vars: self.num_vars,
+            evaluations: vec![F::zero(); 1 << self.num_vars],
+        };
+
+        let mut par_random_coeffs: Vec<DenseMultilinearExtension<F>> =
+            vec![zero.clone(); self.updations.len()];
+        let mut par_random_points: Vec<DenseMultilinearExtension<F>> =
+            vec![zero.clone(); self.updations.len()];
+
+        self.updations
+            .par_iter()
+            .zip(r.par_chunks_exact(r_each_num))
+            .zip(par_random_coeffs.par_iter_mut())
+            .zip(par_random_points.par_iter_mut())
+            .for_each(|(((updation, r_each), coeffs), points)| {
+                updation.update_ntt_instance(coeffs, points, r_each);
+            });
+
+        let random_coeffs = par_random_coeffs
+            .iter()
+            .fold(random_coeffs, |acc, x| acc + x);
+
+        let random_points = par_random_points
+            .iter()
+            .fold(random_points, |acc, x| acc + x);
 
         NTTInstance::<F> {
             num_vars: self.num_vars,
             ntt_table: self.ntt_info.ntt_table.clone(),
-            coeffs: Rc::new(random_coeffs),
-            points: Rc::new(random_points),
-        }
-    }
-
-    /// Extract all ntt instances contained into a single random NTT instance
-    #[inline]
-    pub fn extract_ntt_instance_to_ef<EF: AbstractExtensionField<F>>(
-        &self,
-        randomness: &[EF],
-    ) -> NTTInstance<EF> {
-        assert_eq!(randomness.len(), self.num_ntt_contained());
-        let mut random_coeffs = <DenseMultilinearExtension<EF>>::from_evaluations_vec(
-            self.num_vars,
-            vec![EF::zero(); 1 << self.num_vars],
-        );
-        let mut random_points = <DenseMultilinearExtension<EF>>::from_evaluations_vec(
-            self.num_vars,
-            vec![EF::zero(); 1 << self.num_vars],
-        );
-
-        let (r_used, r) = randomness.split_at(4);
-        // input ==NTT== input_ntt
-        let input_ntt = &self.updations[0].acc_ntt;
-        add_assign_ef(&mut random_coeffs, &r_used[0], &self.input.a);
-        add_assign_ef(&mut random_points, &r_used[0], &input_ntt.a);
-        add_assign_ef(&mut random_coeffs, &r_used[1], &self.input.b);
-        add_assign_ef(&mut random_points, &r_used[1], &input_ntt.b);
-
-        // output_ntt ==NTT== output
-        add_assign_ef(&mut random_coeffs, &r_used[2], &self.output.a);
-        add_assign_ef(&mut random_points, &r_used[2], &self.output_ntt.a);
-        add_assign_ef(&mut random_coeffs, &r_used[3], &self.output.b);
-        add_assign_ef(&mut random_points, &r_used[3], &self.output_ntt.b);
-
-        let r_each_num = self.updations[0].num_ntt_contained();
-        // ntts in each accumulator
-        for (updation, r_each) in izip!(&self.updations, r.chunks_exact(r_each_num)) {
-            updation.update_ntt_instance_to_ef::<EF>(
-                &mut random_coeffs,
-                &mut random_points,
-                r_each,
-            );
-        }
-
-        NTTInstance::<EF> {
-            num_vars: self.num_vars,
-            ntt_table: Arc::new(
-                self.ntt_info
-                    .ntt_table
-                    .iter()
-                    .map(|x| EF::from_base(*x))
-                    .collect::<Vec<EF>>(),
-            ),
             coeffs: Rc::new(random_coeffs),
             points: Rc::new(random_points),
         }
@@ -714,7 +693,7 @@ impl<F: Field> AccumulatorInstanceEval<F> {
 
 /// IOP for Accumulator
 #[derive(Default)]
-pub struct AccumulatorIOPPure<F: Field> {
+pub struct AccumulatorIOP<F: Field> {
     /// The random vector for random linear combination.
     pub randomness: Vec<F>,
     /// The random vector for ntt.
@@ -723,7 +702,7 @@ pub struct AccumulatorIOPPure<F: Field> {
     pub u: Vec<F>,
 }
 
-impl<F: Field + Serialize> AccumulatorIOPPure<F> {
+impl<F: Field + Serialize> AccumulatorIOP<F> {
     /// Sample the random coins before proving sumcheck protocol
     ///
     /// # Arguments.
@@ -783,11 +762,13 @@ impl<F: Field + Serialize> AccumulatorIOPPure<F> {
 
         let mut poly = ListOfProductsOfPolynomials::<F>::new(instance.num_vars);
         let mut claimed_sum = F::zero();
+
         // add sumcheck products (without NTT) into poly
         Self::prepare_products_of_polynomial(&self.randomness, &mut poly, instance, &eq_at_u);
 
         // add sumcheck_products of NTT into poly
         let ntt_instance = instance.extract_ntt_instance(&self.randomness_ntt);
+
         NTTBareIOP::<F>::prepare_products_of_polynomial(
             F::one(),
             &mut poly,
@@ -1042,10 +1023,10 @@ pub struct AccumulatorProof<
     pub sumcheck_proof: sumcheck::Proof<EF>,
     /// NTT recursive proof.
     pub recursive_proof: NTTRecursiveProof<EF>,
-    /// The external product evaluations.
-    pub ep_evals_at_r: AccumulatorInstanceEval<EF>,
-    /// The external product evaluations.
-    pub ep_evals_at_u: AccumulatorInstanceEval<EF>,
+    /// The accumulator evaluations.
+    pub acc_evals_at_r: AccumulatorInstanceEval<EF>,
+    /// The accumulator evaluations.
+    pub acc_evals_at_u: AccumulatorInstanceEval<EF>,
     /// The lookup evaluations.
     pub lookup_evals: LookupInstanceEval<EF>,
     /// The claimed sum from sumcheck.
@@ -1167,7 +1148,6 @@ where
         let instance_info = instance.info();
         println!("Prove {instance_info}\n");
 
-        let first_commit_time = Instant::now();
         // It is better to hash the shared public instance information, including the table.
         trans.append_message(b"accumulator instance", &instance_info.to_clean());
 
@@ -1178,22 +1158,18 @@ where
         let (first_comm, first_comm_state) = Pcs::commit(&params.pp_first, &first_committed_poly);
 
         trans.append_message(b"ACC IOP: first commitment", &first_comm);
+
         println!(
             "first polynomial has {:?} variables",
             first_committed_poly.num_vars
         );
-        println!(
-            "first commit time: {:?} ms",
-            first_commit_time.elapsed().as_millis()
-        );
 
-        let second_commit_time = Instant::now();
         // Convert the original instance into an instance defined over EF
         let instance_ef = instance.to_ef::<EF>();
         let instance_info = instance_ef.info();
 
         // IOPs
-        let mut acc_iop = AccumulatorIOPPure::<EF>::default();
+        let mut acc_iop = AccumulatorIOP::<EF>::default();
         let mut lookup_iop = LookupIOP::<EF>::default();
 
         // generate ranomness for ACC iop.
@@ -1201,6 +1177,7 @@ where
 
         // --- Lookup instance and commitment ---
         let mut lookup_instance = instance_ef.extract_lookup_instance(block_size);
+
         let lookup_info = lookup_instance.info();
         println!("- containing {lookup_info}\n");
 
@@ -1215,16 +1192,12 @@ where
             Pcs::commit_ef(&params.pp_second, &second_committed_poly);
 
         trans.append_message(b"ACC IOP: second commitment", &second_comm);
+
         println!(
             "second polynomial has {:?} variables",
             second_committed_poly.num_vars
         );
-        println!(
-            "second commit time: {:?} ms",
-            second_commit_time.elapsed().as_millis()
-        );
 
-        let iop_time = Instant::now();
         lookup_iop.generate_second_randomness(trans, &lookup_info);
 
         let (kit, recursive_proof) = acc_iop.prove(
@@ -1234,7 +1207,6 @@ where
             &lookup_iop,
             bits_order,
         );
-        println!("iop prover time: {:?} ms", iop_time.elapsed().as_millis());
 
         // Compute all the evaluations of these small polynomials used in IOP over the random point returned from the sumcheck protocol
 
@@ -1242,8 +1214,11 @@ where
         // let evals_at_u = instance.evaluate_ext(&prover_u);
 
         // TODO: use evaluate_opt.
-        let open_time = Instant::now();
-        let (ep_evals_at_r, ep_evals_at_u) = rayon::join(
+
+        // let acc_evals_at_r = instance.evaluate_ext(&kit.randomness);
+        // let acc_evals_at_u = instance.evaluate_ext(&acc_iop.u);
+
+        let (acc_evals_at_r, acc_evals_at_u) = rayon::join(
             || instance.evaluate_ext(&kit.randomness),
             || instance.evaluate_ext(&acc_iop.u),
         );
@@ -1261,6 +1236,7 @@ where
 
         requested_point_at_r.extend(&oracle_randomness);
         requested_point_at_u.extend(&oracle_randomness);
+
         let first_oracle_eval_at_r = first_committed_poly.evaluate_ext(&requested_point_at_r);
         let first_oracle_eval_at_u = first_committed_poly.evaluate_ext(&requested_point_at_u);
 
@@ -1294,7 +1270,6 @@ where
             trans,
         );
 
-        println!("prover open time: {:?} ms", open_time.elapsed().as_millis());
         AccumulatorProof {
             poly_info: kit.info,
             first_comm,
@@ -1307,8 +1282,8 @@ where
             second_eval_proof,
             sumcheck_proof: kit.proof,
             recursive_proof,
-            ep_evals_at_r,
-            ep_evals_at_u,
+            acc_evals_at_r,
+            acc_evals_at_u,
             lookup_evals,
             claimed_sum: kit.claimed_sum,
         }
@@ -1373,7 +1348,7 @@ where
         trans.append_message(b"accumulator instance", &info.to_clean());
         trans.append_message(b"ACC IOP: first commitment", &proof.first_comm);
 
-        let mut acc_iop = AccumulatorIOPPure::<EF>::default();
+        let mut acc_iop = AccumulatorIOP::<EF>::default();
         let mut lookup_iop = LookupIOP::<EF>::default();
         let info_ef = info.to_ef();
 
@@ -1395,8 +1370,8 @@ where
         let (b, randomness) = acc_iop.verify(
             trans,
             &mut wrapper,
-            &proof.ep_evals_at_r,
-            &proof.ep_evals_at_u,
+            &proof.acc_evals_at_r,
+            &proof.acc_evals_at_u,
             &info_ef,
             &lookup_info,
             &proof.recursive_proof,
@@ -1409,11 +1384,11 @@ where
         // Check the relation between these small oracles and the committed oracle.
         let mut requested_point_at_r = randomness.clone();
         let mut requested_point_at_u = acc_iop.u;
-        let flatten_evals_at_r = proof.ep_evals_at_r.flatten();
-        let flatten_evals_at_u = proof.ep_evals_at_u.flatten();
+        let flatten_evals_at_r = proof.acc_evals_at_r.flatten();
+        let flatten_evals_at_u = proof.acc_evals_at_u.flatten();
         let oracle_randomness = trans.get_vec_challenge(
             b"random linear combination for evaluations of oracles",
-            proof.ep_evals_at_r.log_num_oracles(),
+            proof.acc_evals_at_r.log_num_oracles(),
         );
 
         requested_point_at_r.extend(&oracle_randomness);

@@ -172,6 +172,12 @@ impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Field
     fn random<R: CryptoRng + Rng>(rng: &mut R) -> Self {
         Self::from_base_fn(|_| FieldUniformSampler::new().sample(rng))
     }
+
+    /// This part is inaccurate.
+    #[inline]
+    fn value(self) -> Self::Value {
+        self.value[0].value()
+    }
 }
 
 impl<F: Field + BinomiallyExtendable<D> + Packable, const D: usize> Display

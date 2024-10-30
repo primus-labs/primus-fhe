@@ -1,9 +1,6 @@
 use algebra::utils::Transcript;
 use algebra::{transformation::AbstractNTT, NTTField, Polynomial};
-use algebra::{
-    BabyBear, BabyBearExetension, DecomposableField, DenseMultilinearExtension, Field,
-    NTTPolynomial,
-};
+use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension, Field, NTTPolynomial};
 use num_traits::{One, Zero};
 use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};

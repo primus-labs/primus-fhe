@@ -15,11 +15,6 @@ fn impl_decomposable_field(input: Input) -> TokenStream {
 
     quote! {
         impl ::algebra::DecomposableField for #name{
-            #[inline]
-            fn value(self) -> Self::Value {
-                self.0
-            }
-
              #[inline]
             fn mask(bits: u32) -> Self::Value {
                 Self::Value::MAX >> (Self::Value::BITS - bits)

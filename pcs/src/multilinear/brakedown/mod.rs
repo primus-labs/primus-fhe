@@ -15,7 +15,7 @@ use itertools::{izip, Itertools};
 use rand::SeedableRng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, mem::transmute};
 
 use crate::{
     utils::{
@@ -252,9 +252,10 @@ where
             .map(|((column, hashes), column_idx)| {
                 let mut hasher = H::new();
                 // Check the hash of column is the same as the merkle leave.
-                column
-                    .iter()
-                    .for_each(|item| hasher.update_string(item.to_string()));
+                column.iter().for_each(|item| unsafe {
+                    let bytes = transmute::<_, [u8; 8]>(item.value().into());
+                    hasher.update_hash_value(&bytes)
+                });
                 let leaf = hasher.output_reset();
 
                 // Check the merkle path is consistent with the merkle root
@@ -284,9 +285,12 @@ where
             .map(|((column, hashes), column_idx)| {
                 let mut hasher = H::new();
                 // Check the hash of column is the same as the merkle leave.
-                column
-                    .iter()
-                    .for_each(|item| hasher.update_string(item.to_string()));
+                column.iter().for_each(|item| unsafe {
+                    item.as_base_slice().iter().for_each(|x| {
+                        let bytes = transmute::<_, [u8; 8]>(x.value().into());
+                        hasher.update_hash_value(&bytes)
+                    });
+                });
                 let leaf = hasher.output_reset();
 
                 // Check the merkle path is consistent with the merkle root
@@ -416,9 +420,7 @@ where
         let num_cols = pp.code().message_len();
         let num_rows = pp.num_rows();
         let codeword_len = pp.code().codeword_len();
-
         let mut matrix = vec![F::zero(); num_rows * codeword_len];
-
         // Fill each row of the matrix with a message and
         // encode the message into a codeword.
         matrix
@@ -439,7 +441,10 @@ where
                 .iter()
                 .skip(index)
                 .step_by(codeword_len)
-                .for_each(|item| hasher.update_string(item.to_string()));
+                .for_each(|item| unsafe {
+                    let bytes = transmute::<_, [u8; 8]>(item.value().into());
+                    hasher.update_hash_value(&bytes)
+                });
             *hash = hasher.output_reset();
         });
 
@@ -492,7 +497,12 @@ where
                 .iter()
                 .skip(index)
                 .step_by(codeword_len)
-                .for_each(|item| hasher.update_string(item.to_string()));
+                .for_each(|item| unsafe {
+                    item.as_base_slice().iter().for_each(|x| {
+                        let bytes = transmute::<_, [u8; 8]>(x.value().into());
+                        hasher.update_hash_value(&bytes)
+                    });
+                });
             *hash = hasher.output_reset();
         });
 

@@ -1,6 +1,6 @@
 use algebra::utils::Transcript;
 use algebra::{BabyBear, BabyBearExetension, DenseMultilinearExtension};
-use algebra::{DecomposableField, Field, FieldUniformSampler};
+use algebra::{Field, FieldUniformSampler};
 use pcs::multilinear::BrakedownPCS;
 use pcs::utils::code::{ExpanderCode, ExpanderCodeSpec};
 use rand::prelude::*;
