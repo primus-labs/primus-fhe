@@ -451,6 +451,8 @@ fn complete_snark() {
 
     assert!(res);
 }
+#[global_allocator]
+static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 fn main() {
     complete_snark()
 }
