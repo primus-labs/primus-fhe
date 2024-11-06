@@ -451,8 +451,12 @@ fn complete_snark() {
 
     assert!(res);
 }
+
+use mimalloc::MiMalloc;
+
 #[global_allocator]
-static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static GLOBAL: MiMalloc = MiMalloc;
+
 fn main() {
     complete_snark()
 }
