@@ -7,7 +7,7 @@ use crate::{
 };
 
 use core::fmt;
-use std::{marker::PhantomData, rc::Rc, sync::Arc};
+use std::{marker::PhantomData, rc::Rc, sync::Arc, time::Instant};
 
 use super::{
     external_product::{
@@ -1344,6 +1344,7 @@ where
         bits_order: BitsOrder,
         proof: &AccumulatorProof<F, EF, S, Pcs>,
     ) -> bool {
+        let start_piop = Instant::now();
         let mut res = true;
 
         trans.append_message(b"accumulator instance", &info.to_clean());
@@ -1381,6 +1382,13 @@ where
             bits_order,
         );
         res &= b;
+
+        println!(
+            "Accumulator verifying time [PIOP]: {:?} ms",
+            start_piop.elapsed().as_millis()
+        );
+
+        let start_pcs = Instant::now();
 
         // Check the relation between these small oracles and the committed oracle.
         let mut requested_point_at_r = randomness.clone();
@@ -1442,6 +1450,10 @@ where
             trans,
         );
 
+        println!(
+            "Accumulator verifying time [PCS]: {:?} ms",
+            start_pcs.elapsed().as_millis()
+        );
         res
     }
 }
