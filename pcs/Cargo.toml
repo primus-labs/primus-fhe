@@ -31,5 +31,6 @@ sha2 = { workspace = true }
 criterion = { workspace = true }
 
 [[bench]]
-name = "brakedown_pcs"
+name = "packing"
 harness = false
+
