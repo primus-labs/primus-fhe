@@ -26,11 +26,7 @@ count_ntt = ["algebra/count_ntt"]
 criterion = { workspace = true }
 
 [[bench]]
-name = "zk_bfhe"
-harness = false
-
-[[bench]]
-name = "zk_bnfhe"
+name = "bfhe"
 harness = false
 
 [package.metadata.docs.rs]

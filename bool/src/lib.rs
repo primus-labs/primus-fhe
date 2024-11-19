@@ -1,5 +1,4 @@
 pub mod bfhe;
-pub mod ntru_bfhe;
 
 mod decrypt;
 mod encrypt;

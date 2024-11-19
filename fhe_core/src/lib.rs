@@ -21,8 +21,8 @@ pub mod utils;
 pub use error::FHECoreError;
 
 pub use parameter::{
-    BlindRotationType, ConstParameters, DefaultExtendsionFieldU32x4, DefaultFieldU32, DefaultQks,
-    Parameters, ProcessBeforeBlindRotation, ProcessType, Steps,
+    BlindRotationType, ConstParameters, DefaultFieldU32, DefaultQks, Parameters,
+    ProcessBeforeBlindRotation, ProcessType, Steps,
 };
 
 pub use ciphertext::{
@@ -34,7 +34,7 @@ pub use secret_key::{
     LWESecretKeyType, NTTRingSecretKey, RingSecretKey, RingSecretKeyType, SecretKeyPack,
 };
 
-pub use blind_rotation::{NTRUBlindRotationKey, RLWEBlindRotationKey};
+pub use blind_rotation::BlindRotationKey;
 pub use key_switch::{KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey};
 
 pub use modulus_switch::{
