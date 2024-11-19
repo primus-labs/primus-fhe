@@ -3,9 +3,7 @@ use algebra::{
 };
 use lattice::DiscreteGaussian;
 
-use crate::{
-    FHECoreError, LWEModulusType, LWESecretKeyType, ModulusSwitchRoundMethod, RingSecretKeyType,
-};
+use crate::{FHECoreError, LWEModulusType, LWESecretKeyType, RingSecretKeyType};
 
 /// The steps of whole bootstrapping.
 ///
@@ -124,13 +122,6 @@ pub struct KeySwitchingParameters {
     pub noise_standard_deviation: f64,
 }
 
-/// Parameters for modulus switching.
-#[derive(Debug, Clone, Copy)]
-pub struct ModulusSwitchParameters {
-    /// Modulus Switch round method.
-    pub round_method: ModulusSwitchRoundMethod,
-}
-
 /// Parameters for the fully homomorphic encryption scheme.
 #[derive(Debug, Clone, Copy)]
 #[allow(non_snake_case)]
@@ -138,7 +129,6 @@ pub struct Parameters<C: LWEModulusType, Q: NTTField> {
     lwe_params: LWEParameters<C>,
     blind_rotation_params: BlindRotationParameters<Q>,
     key_switching_params: KeySwitchingParameters,
-    modulus_switch_params: ModulusSwitchParameters,
     process_before_blind_rotation: ProcessBeforeBlindRotation<C>,
     steps: Steps,
 }
@@ -181,9 +171,6 @@ pub struct ConstParameters<C: LWEModulusType, Q> {
     pub key_switching_basis_bits: u32,
     /// The noise error's standard deviation for key switching **rlwe** or **lwe**.
     pub key_switching_standard_deviation: f64,
-
-    /// Modulus Switch round method.
-    pub modulus_switching_round_method: ModulusSwitchRoundMethod,
 }
 
 impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
@@ -323,15 +310,10 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
             noise_standard_deviation: params.key_switching_standard_deviation,
         };
 
-        let modulus_switch_params = ModulusSwitchParameters {
-            round_method: params.modulus_switching_round_method,
-        };
-
         Ok(Self {
             lwe_params,
             blind_rotation_params,
             key_switching_params,
-            modulus_switch_params,
             process_before_blind_rotation,
             steps,
         })
@@ -462,12 +444,6 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
     #[inline]
     pub fn steps(&self) -> Steps {
         self.steps
-    }
-
-    /// Returns the modulus switch round method of this [`Parameters<C, Q>`].
-    #[inline]
-    pub fn modulus_switch_round_method(&self) -> ModulusSwitchRoundMethod {
-        self.modulus_switch_params.round_method
     }
 
     /// Returns the LWE parameters of this [`Parameters<C, Q>`].
