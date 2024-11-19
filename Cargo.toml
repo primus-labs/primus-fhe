@@ -1,12 +1,6 @@
 [workspace]
 
-members = [
-    "algebra",
-    "algebra_derive",
-    "fhe_core",
-    "lattice",
-    "bool",
-]
+members = ["algebra", "algebra_derive", "bool", "fhe_core", "lattice"]
 
 resolver = "2"
 
