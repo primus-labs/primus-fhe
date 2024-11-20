@@ -29,47 +29,6 @@ pub enum Steps {
     BrMs,
 }
 
-/// The process type before blind rotation
-#[derive(Debug, Clone, Copy)]
-pub enum ProcessType {
-    /// Modulus Switch
-    ModulusSwitch,
-    /// Scale with the ratio.
-    Scale {
-        /// `2N/q`
-        ratio: usize,
-    },
-    /// Do nothing.
-    Noop,
-}
-
-/// Indicate whether to perform a `modulus switch`, `scale` or `noop` before blind rotation.
-#[derive(Debug, Clone, Copy)]
-pub struct ProcessBeforeBlindRotation<C: LWEModulusType> {
-    process: ProcessType,
-    lut_step: usize,
-    /// `2N`
-    twice_ring_dimension_value: C,
-    twice_ring_dimension_modulus: PowOf2Modulus<C>,
-}
-
-impl<C: LWEModulusType> ProcessBeforeBlindRotation<C> {
-    /// Returns the `process` of this [`ProcessBeforeBlindRotation<C>`].
-    pub fn process(&self) -> ProcessType {
-        self.process
-    }
-
-    /// Returns twice ring dimension value of this [`ProcessBeforeBlindRotation<C>`].
-    pub fn twice_ring_dimension_value(&self) -> C {
-        self.twice_ring_dimension_value
-    }
-
-    /// Returns twice ring dimension modulus of this [`ProcessBeforeBlindRotation<C>`].
-    pub fn twice_ring_dimension_modulus(&self) -> PowOf2Modulus<C> {
-        self.twice_ring_dimension_modulus
-    }
-}
-
 /// Parameters for LWE.
 #[derive(Debug, Clone, Copy)]
 pub struct LWEParameters<C: LWEModulusType> {
@@ -87,30 +46,19 @@ pub struct LWEParameters<C: LWEModulusType> {
     pub noise_standard_deviation: f64,
 }
 
-/// Use `RLWE` or `NTRU` to perform blind rotation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BlindRotationType {
-    /// Use `RLWE` to perform blind rotation.
-    RLWE,
-    /// Use `NTRU` to perform blind rotation.
-    NTRU,
-}
-
 /// Parameters for blind rotation.
 #[derive(Debug, Clone, Copy)]
 pub struct BlindRotationParameters<Q: NTTField> {
-    /// The dimension of the ring for rlwe or ntru, refers to **N** in the paper.
+    /// The dimension of the ring for rlwe, refers to **N** in the paper.
     pub dimension: usize,
-    /// The modulus of the ring for rlwe or ntru, refers to **Q** in the paper.
+    /// The modulus of the ring for rlwe, refers to **Q** in the paper.
     pub modulus: Q::Value,
-    /// The noise error's standard deviation for rlwe or ntru.
+    /// The noise error's standard deviation for rlwe.
     pub noise_standard_deviation: f64,
     /// The distribution type of the Ring Secret Key.
     pub secret_key_type: RingSecretKeyType,
     /// Decompose basis for `Q` used for bootstrapping accumulator.
     pub basis: Basis<Q>,
-    /// Use `RLWE` or `NTRU` to perform blind rotation.
-    pub blind_rotation_type: BlindRotationType,
 }
 
 /// Parameters for key switching.
@@ -129,7 +77,6 @@ pub struct Parameters<C: LWEModulusType, Q: NTTField> {
     lwe_params: LWEParameters<C>,
     blind_rotation_params: BlindRotationParameters<Q>,
     key_switching_params: KeySwitchingParameters,
-    process_before_blind_rotation: ProcessBeforeBlindRotation<C>,
     steps: Steps,
 }
 
@@ -149,14 +96,11 @@ pub struct ConstParameters<C: LWEModulusType, Q> {
     /// **LWE** Secret Key distribution Type.
     pub lwe_secret_key_type: LWESecretKeyType,
 
-    /// Use `RLWE` or `NTRU` to perform blind rotation.
-    pub blind_rotation_type: BlindRotationType,
-
     /// **Ring** polynomial dimension, refers to **N** in the paper.
     pub ring_dimension: usize,
     /// **Ring** polynomial modulus, refers to **Q** in the paper.
     pub ring_modulus: Q,
-    /// The **Ring** noise error's standard deviation for **rlwe** or **ntru**.
+    /// The **Ring** noise error's standard deviation for **rlwe**.
     pub ring_noise_standard_deviation: f64,
     /// The distribution type of the **Ring** Secret Key.
     pub ring_secret_key_type: RingSecretKeyType,
@@ -184,94 +128,14 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         let steps = params.steps;
         let secret_key_type = params.lwe_secret_key_type;
         let ring_secret_key_type = params.ring_secret_key_type;
-        let blind_rotation_type = params.blind_rotation_type;
-
-        match steps {
-            Steps::BrMsKs => {
-                if blind_rotation_type == BlindRotationType::NTRU {
-                    // This method is not supporting `NTRU` now.
-                    return Err(FHECoreError::StepsParametersNotCompatible);
-                }
-                if !(ring_secret_key_type == RingSecretKeyType::Binary
-                    || ring_secret_key_type == RingSecretKeyType::Ternary)
-                {
-                    // `RingSecretKeyType::Gaussian` is unimplemented.
-                    return Err(FHECoreError::StepsParametersNotCompatible);
-                }
-            }
-            Steps::BrKsMs => {
-                if blind_rotation_type == BlindRotationType::NTRU
-                    && ring_secret_key_type != RingSecretKeyType::Ternary
-                {
-                    return Err(FHECoreError::StepsParametersNotCompatible);
-                }
-            }
-            Steps::BrMs => {
-                // Currently, only support RLWE Blind Rotation for this mode
-                if !(blind_rotation_type == BlindRotationType::RLWE
-                    && lwe_dimension == ring_dimension
-                    && ((secret_key_type == LWESecretKeyType::Binary
-                        && ring_secret_key_type == RingSecretKeyType::Binary)
-                        || (secret_key_type == LWESecretKeyType::Ternary
-                            && ring_secret_key_type == RingSecretKeyType::Ternary)))
-                {
-                    return Err(FHECoreError::StepsParametersNotCompatible);
-                }
-            }
-        }
 
         // N = 2^i
         if !ring_dimension.is_power_of_two() {
             return Err(FHECoreError::RingDimensionUnValid(ring_dimension));
         }
 
-        let q: usize = lwe_cipher_modulus.try_into().ok().unwrap();
         let twice_ring_dimension = ring_dimension << 1;
         assert!(twice_ring_dimension != 0, "Ring dimension is too large!");
-
-        let twice_ring_dimension_value = C::try_from(twice_ring_dimension as u64).ok().unwrap();
-        let twice_ring_dimension_modulus = twice_ring_dimension_value.to_power_of_2_modulus();
-
-        // `q|2N` or `2N|q`
-        #[allow(clippy::comparison_chain)]
-        let process_before_blind_rotation = if q == twice_ring_dimension {
-            ProcessBeforeBlindRotation {
-                process: ProcessType::Noop,
-                lut_step: 1,
-                twice_ring_dimension_value: lwe_cipher_modulus,
-                twice_ring_dimension_modulus: lwe_cipher_modulus.to_power_of_2_modulus(),
-            }
-        } else if q < twice_ring_dimension {
-            let ratio = twice_ring_dimension / q;
-            if ratio * q != twice_ring_dimension {
-                return Err(FHECoreError::LweModulusRingDimensionNotCompatible {
-                    lwe_modulus: q,
-                    ring_dimension,
-                });
-            }
-
-            ProcessBeforeBlindRotation {
-                process: ProcessType::Scale { ratio },
-                lut_step: ratio,
-                twice_ring_dimension_value,
-                twice_ring_dimension_modulus,
-            }
-        } else {
-            let ratio = q / twice_ring_dimension;
-            if ratio * twice_ring_dimension != q {
-                return Err(FHECoreError::LweModulusRingDimensionNotCompatible {
-                    lwe_modulus: q,
-                    ring_dimension,
-                });
-            }
-
-            ProcessBeforeBlindRotation {
-                process: ProcessType::ModulusSwitch,
-                lut_step: 1,
-                twice_ring_dimension_value,
-                twice_ring_dimension_modulus,
-            }
-        };
 
         // 2N|(Q-1)
         let coeff_modulus = Into::<u64>::into(ring_modulus).try_into().unwrap();
@@ -301,7 +165,6 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
             modulus: ring_modulus,
             noise_standard_deviation: params.ring_noise_standard_deviation,
             basis: Basis::<Q>::new(params.blind_rotation_basis_bits),
-            blind_rotation_type,
             secret_key_type: ring_secret_key_type,
         };
 
@@ -314,7 +177,6 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
             lwe_params,
             blind_rotation_params,
             key_switching_params,
-            process_before_blind_rotation,
             steps,
         })
     }
@@ -377,12 +239,6 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
     #[inline]
     pub fn ring_secret_key_type(&self) -> RingSecretKeyType {
         self.blind_rotation_params.secret_key_type
-    }
-
-    /// Use `RLWE` or `NTRU` to perform blind rotation.
-    #[inline]
-    pub fn blind_rotation_type(&self) -> BlindRotationType {
-        self.blind_rotation_params.blind_rotation_type
     }
 
     /// Returns the gadget basis of this [`Parameters<C, Q>`],
@@ -450,18 +306,6 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
     #[inline]
     pub fn lwe_params(&self) -> LWEParameters<C> {
         self.lwe_params
-    }
-
-    /// Returns the process before blind rotation of this [`Parameters<C, Q>`].
-    #[inline]
-    pub fn process_before_blind_rotation(&self) -> ProcessBeforeBlindRotation<C> {
-        self.process_before_blind_rotation
-    }
-
-    /// Returns the lut step of this [`Parameters<C, Q>`].
-    #[inline]
-    pub fn lut_step(&self) -> usize {
-        self.process_before_blind_rotation.lut_step
     }
 }
 

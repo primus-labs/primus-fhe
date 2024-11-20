@@ -1,9 +1,8 @@
 use algebra::{NTTField, Polynomial};
 use fhe_core::{
     lwe_modulus_switch, lwe_modulus_switch_assign_between_modulus, lwe_modulus_switch_inplace,
-    BlindRotationKey, BlindRotationType, KeySwitchingKeyEnum, KeySwitchingLWEKey,
-    KeySwitchingRLWEKey, LWECiphertext, LWEModulusType, Parameters, ProcessType, SecretKeyPack,
-    Steps,
+    BlindRotationKey, KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey, LWECiphertext,
+    LWEModulusType, Parameters, SecretKeyPack, Steps,
 };
 
 /// The evaluator of the homomorphic encryption scheme.
@@ -24,10 +23,29 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
         &self.parameters
     }
 
+    /// Compute the lookup table step.
+    #[inline]
+    pub fn lut_step(&self) -> usize {
+        let q: usize = self
+            .parameters
+            .lwe_cipher_modulus_value()
+            .try_into()
+            .ok()
+            .unwrap();
+        let twice_ring_dim = self.parameters.ring_dimension() << 1;
+
+        if twice_ring_dim % q == 0 {
+            twice_ring_dim / q
+        } else if q % twice_ring_dim == 0 {
+            1
+        } else {
+            unimplemented!()
+        }
+    }
+
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     pub fn new(secret_key_pack: &SecretKeyPack<C, Q>) -> Self {
         let parameters = secret_key_pack.parameters();
-        assert_eq!(parameters.blind_rotation_type(), BlindRotationType::RLWE);
 
         let blind_rotation_key = BlindRotationKey::generate(secret_key_pack);
 
@@ -51,23 +69,14 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and lookup table `lut`.
     pub fn bootstrap(&self, mut c: LWECiphertext<C>, lut: Polynomial<Q>) -> LWECiphertext<C> {
         let parameters = self.parameters();
-        let pre = parameters.process_before_blind_rotation();
-
-        match pre.process() {
-            ProcessType::ModulusSwitch => {
-                lwe_modulus_switch_assign_between_modulus(
-                    &mut c,
-                    parameters.lwe_cipher_modulus_value(),
-                    pre.twice_ring_dimension_value(),
-                );
-            }
-            ProcessType::Scale { ratio } => {
-                let ratio = C::as_from(ratio as u64);
-                c.a_mut().iter_mut().for_each(|v| *v = *v * ratio);
-                *c.b_mut() = c.b() * ratio;
-            }
-            ProcessType::Noop => (),
-        }
+        let twice_ring_dimension_value = C::try_from((parameters.ring_dimension() << 1) as u64)
+            .ok()
+            .unwrap();
+        lwe_modulus_switch_assign_between_modulus(
+            &mut c,
+            parameters.lwe_cipher_modulus_value(),
+            twice_ring_dimension_value,
+        );
 
         let mut acc =
             self.blind_rotation_key
@@ -170,7 +179,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
 
         let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let lut = init_nand_lut(parameters.ring_dimension(), parameters.lut_step());
+        let lut = init_nand_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(add, lut)
     }
@@ -189,7 +198,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
         let lut: Polynomial<Q> =
-            init_and_majority_lut(parameters.ring_dimension(), parameters.lut_step());
+            init_and_majority_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(add, lut)
     }
@@ -207,7 +216,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
 
         let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let lut = init_or_lut(parameters.ring_dimension(), parameters.lut_step());
+        let lut = init_or_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(add, lut)
     }
@@ -225,7 +234,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
 
         let add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
 
-        let lut = init_nor_lut(parameters.ring_dimension(), parameters.lut_step());
+        let lut = init_nor_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(add, lut)
     }
@@ -244,7 +253,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
 
-        let lut = init_xor_lut(parameters.ring_dimension(), parameters.lut_step());
+        let lut = init_xor_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(sub, lut)
     }
@@ -263,7 +272,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         let mut sub = c0.sub_reduce_component_wise_ref(c1, lwe_modulus);
         sub.scalar_mul_reduce_inplace(C::TWO, lwe_modulus);
 
-        let lut = init_xnor_lut(parameters.ring_dimension(), parameters.lut_step());
+        let lut = init_xnor_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(sub, lut)
     }
@@ -289,7 +298,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
         add.add_reduce_inplace_component_wise(c2, lwe_modulus);
 
-        let lut = init_and_majority_lut(parameters.ring_dimension(), parameters.lut_step());
+        let lut = init_and_majority_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(add, lut)
     }
@@ -319,7 +328,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         // (a & b) | (!a & c)
         t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
 
-        let lut = init_or_lut(parameters.ring_dimension(), parameters.lut_step());
+        let lut = init_or_lut(parameters.ring_dimension(), self.ek.lut_step());
 
         self.bootstrap(t0, lut)
     }

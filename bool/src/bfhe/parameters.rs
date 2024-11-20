@@ -1,7 +1,6 @@
 use algebra::Field;
 use fhe_core::{
-    BlindRotationType, ConstParameters, DefaultFieldU32, LWESecretKeyType, Parameters,
-    RingSecretKeyType, Steps,
+    ConstParameters, DefaultFieldU32, LWESecretKeyType, Parameters, RingSecretKeyType, Steps,
 };
 use once_cell::sync::Lazy;
 
@@ -14,7 +13,6 @@ pub static DEFAULT_TERNARY_128_BITS_PARAMETERS: Lazy<Parameters<u16, DefaultFiel
             lwe_plain_modulus: 4,
             lwe_noise_standard_deviation: 3.20,
             lwe_secret_key_type: LWESecretKeyType::Ternary,
-            blind_rotation_type: BlindRotationType::RLWE,
             ring_dimension: 1024,
             ring_modulus: DefaultFieldU32::MODULUS_VALUE,
             ring_noise_standard_deviation: 3.20 * ((1 << 1) as f64),
@@ -36,7 +34,6 @@ pub static CUSTOM_TERNARY_128_BITS_PARAMETERS: Lazy<Parameters<u16, DefaultField
             lwe_plain_modulus: 4,
             lwe_noise_standard_deviation: 3.20,
             lwe_secret_key_type: LWESecretKeyType::Ternary,
-            blind_rotation_type: BlindRotationType::RLWE,
             ring_dimension: 1024,
             ring_modulus: DefaultFieldU32::MODULUS_VALUE,
             ring_noise_standard_deviation: 3.20 * ((1 << 1) as f64),

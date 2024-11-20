@@ -20,14 +20,9 @@ pub mod utils;
 
 pub use error::FHECoreError;
 
-pub use parameter::{
-    BlindRotationType, ConstParameters, DefaultFieldU32, DefaultQks, Parameters,
-    ProcessBeforeBlindRotation, ProcessType, Steps,
-};
+pub use parameter::{ConstParameters, DefaultFieldU32, DefaultQks, Parameters, Steps};
 
-pub use ciphertext::{
-    LWECiphertext, NTRUCiphertext, NTTNTRUCiphertext, NTTRLWECiphertext, RLWECiphertext,
-};
+pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::{decode, encode, LWEModulusType, LWEMsgType};
 
 pub use secret_key::{

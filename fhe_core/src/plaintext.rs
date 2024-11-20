@@ -1,5 +1,5 @@
 use std::{
-    fmt::Display,
+    fmt::{Debug, Display},
     ops::{Shl, Shr},
 };
 
@@ -140,6 +140,7 @@ pub trait LWEModulusType:
     + Send
     + Sync
     + Display
+    + Debug
     + ConstOne
     + ConstZero
     + Bits

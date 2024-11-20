@@ -6,7 +6,6 @@ use algebra::{
     ModulusConfig, Polynomial,
 };
 use lattice::*;
-use num_traits::{Inv, One};
 use rand::prelude::*;
 use rand_distr::{Standard, Uniform};
 
@@ -202,52 +201,6 @@ fn test_rlwe_he() {
     let rlwe_add = rlwe0.add_element_wise(&rlwe1);
 
     let decrypted_add = (rlwe_add.b() - rlwe_add.a() * &s)
-        .into_iter()
-        .map(decode)
-        .collect::<Vec<u32>>();
-
-    assert_eq!(decrypted_add, v_add);
-}
-
-#[test]
-fn test_ntru_he() {
-    let mut rng = rand::thread_rng();
-    let chi = FieldDiscreteGaussianSampler::new(0., 3.2).unwrap();
-    let dis = Uniform::new(0, FT);
-
-    let v0: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
-    let v1: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
-
-    let v_add: Vec<Inner> = v0
-        .iter()
-        .zip(v1.iter())
-        .map(|(a, b)| (*a + b) % FT)
-        .collect();
-
-    let v0 = PolyFF::new(v0.into_iter().map(encode).collect());
-    let v1 = PolyFF::new(v1.into_iter().map(encode).collect());
-
-    let mut s = PolyFF::random_with_ternary(N, &mut rng);
-    s.mul_scalar_assign(Fp32(4));
-    s[0] += FF::one();
-
-    let inv_s = (&s).inv();
-
-    let ntru0 = {
-        let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-        let a = e * &inv_s + v0;
-        NTRU::new(a)
-    };
-
-    let ntru1 = {
-        let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-        let a = e * &inv_s + v1;
-        NTRU::new(a)
-    };
-
-    let ntru_add = ntru0.add_element_wise(&ntru1);
-
-    let decrypted_add = (ntru_add.data() * &s)
         .into_iter()
         .map(decode)
         .collect::<Vec<u32>>();
@@ -486,65 +439,4 @@ fn test_rgsw_mul_rgsw() {
     let decoded_neg_sm0m1: Vec<u32> = neg_sm0m1.copied_iter().map(decode).collect();
     let decoded_decrypt_neg_sm0m1: Vec<u32> = decrypted_neg_sm0m1.into_iter().map(decode).collect();
     assert_eq!(decoded_neg_sm0m1, decoded_decrypt_neg_sm0m1);
-}
-
-#[test]
-fn test_gadget_ntru_mul_ntru() {
-    let mut rng = rand::thread_rng();
-    let chi = FieldDiscreteGaussianSampler::new(0., 3.2).unwrap();
-
-    let dis = Uniform::new(0, FT);
-
-    let v0: Vec<Inner> = dis.sample_iter(&mut rng).take(N).collect();
-
-    let m0 = PolyFF::new(v0.into_iter().map(encode).collect());
-    let m1 = PolyFF::random_with_distribution(N, &mut rng, FieldTernarySampler);
-
-    let m0m1 = &m0 * &m1;
-
-    let mut s = PolyFF::random_with_ternary(N, &mut rng);
-    s.mul_scalar_assign(Fp32(4));
-    s[0] += FF::one();
-
-    let inv_s = (&s).inv();
-
-    let basis = <Basis<Fp32>>::new(BITS);
-
-    let gadget_ntru = {
-        let data = (0..basis.decompose_len())
-            .map(|i| {
-                let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-                let a = e * &inv_s + m1.mul_scalar(Fp32::new(B.pow(i as u32) as Inner));
-                NTRU::new(a)
-            })
-            .collect::<Vec<NTRU<FF>>>();
-
-        GadgetNTRU::new(data, basis)
-    };
-
-    let (ntru, _e) = {
-        let e = PolyFF::random_with_distribution(N, &mut rng, chi);
-        let a = &e * &inv_s + m0;
-
-        (NTRU::new(a), e)
-    };
-
-    let mut decompose_space = DecompositionSpace::new(N);
-    let mut polynomial_space = PolynomialSpace::new(N);
-    let mut median = NTTNTRUSpace::new(N);
-    let mut destination = NTRUSpace::new(N);
-
-    let ntt_gadget_ntru = gadget_ntru.into();
-    ntru.mul_small_ntt_gadget_ntru_inplace(
-        &ntt_gadget_ntru,
-        &mut decompose_space,
-        &mut polynomial_space,
-        &mut median,
-        &mut destination,
-    );
-    let decrypt_mul = destination.data() * &s;
-
-    let decoded_m0m1: Vec<u32> = m0m1.into_iter().map(decode).collect();
-    let decoded_decrypt: Vec<u32> = decrypt_mul.into_iter().map(decode).collect();
-    assert_eq!(decoded_m0m1, decoded_decrypt);
 }
