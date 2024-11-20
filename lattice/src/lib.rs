@@ -31,14 +31,12 @@
 
 mod gadget;
 mod lwe;
-mod ntru;
 mod rgsw;
 mod rlwe;
 mod utils;
 
-pub use gadget::{GadgetNTRU, GadgetRLWE, NTTGadgetNTRU, NTTGadgetRLWE};
+pub use gadget::{GadgetRLWE, NTTGadgetRLWE};
 pub use lwe::LWE;
-pub use ntru::{NTRU, NTTNTRU};
 pub use rgsw::{NTTRGSW, RGSW};
 pub use rlwe::{NTTRLWE, RLWE};
 pub use utils::*;

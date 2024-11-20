@@ -3,13 +3,7 @@ use std::slice::ChunksExact;
 use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
 use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, RLWE};
 
-use crate::{LWEModulusType, NTRUCiphertext, SecretKeyPack};
-
-#[derive(Debug, Clone, Copy)]
-enum Operation {
-    AddAMulS,
-    SubAMulS,
-}
+use crate::{LWEModulusType, SecretKeyPack};
 
 /// The Key Switching Key.
 ///
@@ -145,30 +139,7 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
 
         let iter = ciphertext.a_slice().chunks_exact(extended_lwe_dimension);
 
-        self.key_switch_inner(extended_lwe_dimension, init, iter, Operation::SubAMulS)
-    }
-
-    /// Performs key switching operation.
-    pub fn key_switch_for_ntru(&self, mut ciphertext: NTRUCiphertext<Q>) -> LWE<Q> {
-        let extended_lwe_dimension = self.lwe_dimension.next_power_of_two();
-
-        // Because the lwe ciphertext extracted from a ntru ciphertext always has `b = 0`.
-        let init = <NTTRLWE<Q>>::zero(extended_lwe_dimension);
-
-        if ciphertext.as_slice().len() != extended_lwe_dimension {
-            let a = ciphertext.as_mut_slice();
-            a[0] = -a[0];
-            a[1..].reverse();
-            a.chunks_exact_mut(extended_lwe_dimension)
-                .for_each(|chunk| {
-                    chunk[0] = -chunk[0];
-                    chunk[1..].reverse();
-                });
-        }
-
-        let iter = ciphertext.as_slice().chunks_exact(extended_lwe_dimension);
-
-        self.key_switch_inner(extended_lwe_dimension, init, iter, Operation::AddAMulS)
+        self.key_switch_inner(extended_lwe_dimension, init, iter)
     }
 
     /// Performs key switching operation.
@@ -195,7 +166,7 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
 
         let iter = ciphertext.a().chunks_exact(extended_lwe_dimension);
 
-        self.key_switch_inner(extended_lwe_dimension, init, iter, Operation::SubAMulS)
+        self.key_switch_inner(extended_lwe_dimension, init, iter)
     }
 
     fn key_switch_inner(
@@ -203,35 +174,19 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
         extended_lwe_dimension: usize,
         mut init: NTTRLWE<Q>,
         iter: ChunksExact<Q>,
-        op: Operation,
     ) -> LWE<Q> {
         let mut polynomial_space = PolynomialSpace::new(extended_lwe_dimension);
         let mut decompose_space = DecompositionSpace::new(extended_lwe_dimension);
 
-        match op {
-            Operation::AddAMulS => {
-                self.key.iter().zip(iter).for_each(|(k_i, a_i)| {
-                    polynomial_space.copy_from(a_i);
+        self.key.iter().zip(iter).for_each(|(k_i, a_i)| {
+            polynomial_space.copy_from(a_i);
 
-                    init.add_assign_gadget_rlwe_mul_polynomial_inplace_fast(
-                        k_i,
-                        &mut polynomial_space,
-                        &mut decompose_space,
-                    );
-                });
-            }
-            Operation::SubAMulS => {
-                self.key.iter().zip(iter).for_each(|(k_i, a_i)| {
-                    polynomial_space.copy_from(a_i);
-
-                    init.sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(
-                        k_i,
-                        &mut polynomial_space,
-                        &mut decompose_space,
-                    );
-                });
-            }
-        }
+            init.sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(
+                k_i,
+                &mut polynomial_space,
+                &mut decompose_space,
+            );
+        });
 
         <RLWE<Q>>::from(init).extract_partial_lwe_locally(self.lwe_dimension)
     }

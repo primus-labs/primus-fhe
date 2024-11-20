@@ -2,11 +2,10 @@ use std::cell::RefCell;
 
 use algebra::{utils::Prg, NTTField, NTTPolynomial, Polynomial};
 use lattice::{sample_binary_values, sample_ternary_values};
-use num_traits::Inv;
 
 use crate::{
-    ciphertext::LWECiphertext, decode, encode, parameter::LWEParameters, BlindRotationType,
-    LWEModulusType, LWEMsgType, Parameters, Steps,
+    ciphertext::LWECiphertext, decode, encode, parameter::LWEParameters, LWEModulusType,
+    LWEMsgType, Parameters, Steps,
 };
 
 /// The distribution type of the LWE Secret Key.
@@ -85,73 +84,55 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
         let ntt_ring_secret_key;
         let ntt_inv_ring_secret_key;
 
-        match params.blind_rotation_type() {
-            BlindRotationType::RLWE => {
-                ring_secret_key = match params.steps() {
-                    Steps::BrMsKs => match params.ring_secret_key_type() {
-                        RingSecretKeyType::Binary => {
-                            Polynomial::random_with_binary(ring_dimension, &mut csrng)
-                        }
-                        RingSecretKeyType::Ternary => {
-                            Polynomial::random_with_ternary(ring_dimension, &mut csrng)
-                        }
-                        RingSecretKeyType::Gaussian => unimplemented!(),
-                        RingSecretKeyType::Uniform => panic!(),
-                    },
-                    Steps::BrKsMs => match params.ring_secret_key_type() {
-                        RingSecretKeyType::Binary => {
-                            Polynomial::random_with_binary(ring_dimension, &mut csrng)
-                        }
-                        RingSecretKeyType::Ternary => {
-                            Polynomial::random_with_ternary(ring_dimension, &mut csrng)
-                        }
-                        RingSecretKeyType::Gaussian => Polynomial::random_with_gaussian(
-                            ring_dimension,
-                            &mut csrng,
-                            params.ring_noise_distribution(),
-                        ),
-                        RingSecretKeyType::Uniform => {
-                            Polynomial::random(ring_dimension, &mut csrng)
-                        }
-                    },
-                    Steps::BrMs => {
-                        assert!(
-                            params.ring_secret_key_type() == RingSecretKeyType::Binary
-                                || params.ring_secret_key_type() == RingSecretKeyType::Ternary
-                        );
-                        assert_eq!(params.lwe_dimension(), params.ring_dimension());
-                        // conversion
-                        let convert = |v: &C| {
-                            if v.is_zero() {
-                                Q::zero()
-                            } else if v.is_one() {
-                                Q::one()
-                            } else {
-                                Q::neg_one()
-                            }
-                        };
-
-                        // s = [s_0, s_1,..., s_{n-1}]
-                        <Polynomial<Q>>::new(lwe_secret_key.iter().map(convert).collect())
+        ring_secret_key = match params.steps() {
+            Steps::BrMsKs => match params.ring_secret_key_type() {
+                RingSecretKeyType::Binary => {
+                    Polynomial::random_with_binary(ring_dimension, &mut csrng)
+                }
+                RingSecretKeyType::Ternary => {
+                    Polynomial::random_with_ternary(ring_dimension, &mut csrng)
+                }
+                RingSecretKeyType::Gaussian => unimplemented!(),
+                RingSecretKeyType::Uniform => panic!(),
+            },
+            Steps::BrKsMs => match params.ring_secret_key_type() {
+                RingSecretKeyType::Binary => {
+                    Polynomial::random_with_binary(ring_dimension, &mut csrng)
+                }
+                RingSecretKeyType::Ternary => {
+                    Polynomial::random_with_ternary(ring_dimension, &mut csrng)
+                }
+                RingSecretKeyType::Gaussian => Polynomial::random_with_gaussian(
+                    ring_dimension,
+                    &mut csrng,
+                    params.ring_noise_distribution(),
+                ),
+                RingSecretKeyType::Uniform => Polynomial::random(ring_dimension, &mut csrng),
+            },
+            Steps::BrMs => {
+                assert!(
+                    params.ring_secret_key_type() == RingSecretKeyType::Binary
+                        || params.ring_secret_key_type() == RingSecretKeyType::Ternary
+                );
+                assert_eq!(params.lwe_dimension(), params.ring_dimension());
+                // conversion
+                let convert = |v: &C| {
+                    if v.is_zero() {
+                        Q::zero()
+                    } else if v.is_one() {
+                        Q::one()
+                    } else {
+                        Q::neg_one()
                     }
                 };
-                ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
-                ntt_inv_ring_secret_key = None;
+
+                // s = [s_0, s_1,..., s_{n-1}]
+                <Polynomial<Q>>::new(lwe_secret_key.iter().map(convert).collect())
             }
-            BlindRotationType::NTRU => {
-                let four = Q::one() + Q::one() + Q::one() + Q::one();
-                let chi = params.ring_noise_distribution();
-                ring_secret_key = {
-                    let mut ring_secret_key =
-                        Polynomial::random_with_gaussian(ring_dimension, &mut csrng, chi);
-                    ring_secret_key.mul_scalar_assign(four);
-                    ring_secret_key[0] += Q::one();
-                    ring_secret_key
-                };
-                ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
-                ntt_inv_ring_secret_key = Some((&ntt_ring_secret_key).inv());
-            }
-        }
+        };
+        ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
+        ntt_inv_ring_secret_key = None;
+
         Self {
             lwe_secret_key,
             ring_secret_key,
