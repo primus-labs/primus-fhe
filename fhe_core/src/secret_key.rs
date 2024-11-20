@@ -52,9 +52,6 @@ pub struct SecretKeyPack<C: LWEModulusType, Q: NTTField> {
     ring_secret_key: RingSecretKey<Q>,
     /// ntt version ring secret key
     ntt_ring_secret_key: NTTRingSecretKey<Q>,
-    /// ntt version inverse ring secret key
-    ntt_inv_ring_secret_key: Option<NTTRingSecretKey<Q>>,
-
     /// boolean fhe's parameters
     parameters: Parameters<C, Q>,
 
@@ -80,11 +77,7 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
 
         let ring_dimension = params.ring_dimension();
 
-        let ring_secret_key;
-        let ntt_ring_secret_key;
-        let ntt_inv_ring_secret_key;
-
-        ring_secret_key = match params.steps() {
+        let ring_secret_key = match params.steps() {
             Steps::BrMsKs => match params.ring_secret_key_type() {
                 RingSecretKeyType::Binary => {
                     Polynomial::random_with_binary(ring_dimension, &mut csrng)
@@ -130,14 +123,12 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
                 <Polynomial<Q>>::new(lwe_secret_key.iter().map(convert).collect())
             }
         };
-        ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
-        ntt_inv_ring_secret_key = None;
+        let ntt_ring_secret_key = ring_secret_key.clone().into_ntt_polynomial();
 
         Self {
             lwe_secret_key,
             ring_secret_key,
             ntt_ring_secret_key,
-            ntt_inv_ring_secret_key,
             parameters: params,
             csrng: RefCell::new(csrng),
         }
@@ -159,12 +150,6 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
     #[inline]
     pub fn ntt_ring_secret_key(&self) -> &NTTRingSecretKey<Q> {
         &self.ntt_ring_secret_key
-    }
-
-    /// Returns a reference to the ntt inv ring secret key of this [`SecretKeyPack<C, Q>`].
-    #[inline]
-    pub fn ntt_inv_ring_secret_key(&self) -> Option<&NTTPolynomial<Q>> {
-        self.ntt_inv_ring_secret_key.as_ref()
     }
 
     /// Returns the parameters of this [`SecretKeyPack<C, Q>`].
