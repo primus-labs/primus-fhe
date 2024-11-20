@@ -37,7 +37,7 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
         if twice_ring_dim % q == 0 {
             twice_ring_dim / q
         } else if q % twice_ring_dim == 0 {
-            q / twice_ring_dim
+            1
         } else {
             unimplemented!()
         }
