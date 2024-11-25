@@ -2,6 +2,7 @@
 
 use algebra::NTTField;
 use fhe_core::{LWECiphertext, LWEModulusType, LWEMsgType, SecretKeyPack};
+use rand::{CryptoRng, Rng};
 
 /// Encryptor
 pub struct Encryptor<C: LWEModulusType, Q: NTTField> {
@@ -17,7 +18,11 @@ impl<C: LWEModulusType, Q: NTTField> Encryptor<C, Q> {
 
     /// Encrypt a bool message.
     #[inline]
-    pub fn encrypt<M: LWEMsgType>(&self, m: M) -> LWECiphertext<C> {
-        self.sk.encrypt(m)
+    pub fn encrypt<M: LWEMsgType, R: Rng + CryptoRng>(
+        &self,
+        m: M,
+        csrng: &mut R,
+    ) -> LWECiphertext<C> {
+        self.sk.encrypt(m, csrng)
     }
 }

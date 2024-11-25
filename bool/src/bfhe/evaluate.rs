@@ -4,6 +4,7 @@ use fhe_core::{
     BlindRotationKey, KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey, LWECiphertext,
     LWEModulusType, Parameters, SecretKeyPack, Steps,
 };
+use rand::{CryptoRng, Rng};
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Debug, Clone)]
@@ -44,17 +45,17 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
     }
 
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
-    pub fn new(secret_key_pack: &SecretKeyPack<C, Q>) -> Self {
+    pub fn new<R: Rng + CryptoRng>(secret_key_pack: &SecretKeyPack<C, Q>, csrng: &mut R) -> Self {
         let parameters = secret_key_pack.parameters();
 
-        let blind_rotation_key = BlindRotationKey::generate(secret_key_pack);
+        let blind_rotation_key = BlindRotationKey::generate(secret_key_pack, csrng);
 
         let key_switching_key = match parameters.steps() {
             Steps::BrMsKs => {
-                KeySwitchingKeyEnum::LWE(KeySwitchingLWEKey::generate(secret_key_pack))
+                KeySwitchingKeyEnum::LWE(KeySwitchingLWEKey::generate(secret_key_pack, csrng))
             }
             Steps::BrKsMs => {
-                KeySwitchingKeyEnum::RLWE(KeySwitchingRLWEKey::generate(secret_key_pack))
+                KeySwitchingKeyEnum::RLWE(KeySwitchingRLWEKey::generate(secret_key_pack, csrng))
             }
             Steps::BrMs => KeySwitchingKeyEnum::None,
         };
@@ -130,9 +131,9 @@ pub struct Evaluator<C: LWEModulusType, Q: NTTField> {
 impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
     /// Create a new instance.
     #[inline]
-    pub fn new(sk: &SecretKeyPack<C, Q>) -> Self {
+    pub fn new<R: Rng + CryptoRng>(sk: &SecretKeyPack<C, Q>, csrng: &mut R) -> Self {
         Self {
-            ek: EvaluationKey::new(sk),
+            ek: EvaluationKey::new(sk, csrng),
         }
     }
 

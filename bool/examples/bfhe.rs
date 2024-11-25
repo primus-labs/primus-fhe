@@ -1,4 +1,4 @@
-use algebra::NTTField;
+use algebra::{utils::Prg, NTTField};
 use fhe_core::{utils::*, LWECiphertext, LWEModulusType};
 use rand::Rng;
 use zkfhe::{
@@ -26,22 +26,25 @@ fn main() {
         println!("{op:4.4} Noise: {noise:3} < {noise_max:3}");
     };
 
+    let mut prg = Prg::new();
+
     // generate keys
-    let sk = KeyGen::generate_secret_key(params);
+    let sk = KeyGen::generate_secret_key(params, &mut prg);
     println!("Secret Key Generation done!\n");
 
     let enc = Encryptor::new(sk.clone());
-    let eval = Evaluator::new(&sk);
+    let eval = Evaluator::new(&sk, &mut prg);
     let dec = Decryptor::new(sk);
     println!("Evaluation Key Generation done!\n");
 
+    let mut prg = Prg::new();
     let mut a = rng.gen();
     let mut b = rng.gen();
     let mut c = rng.gen();
 
-    let mut x = enc.encrypt(a);
-    let mut y = enc.encrypt(b);
-    let mut z = enc.encrypt(c);
+    let mut x = enc.encrypt(a, &mut prg);
+    let mut y = enc.encrypt(b, &mut prg);
+    let mut z = enc.encrypt(c, &mut prg);
 
     for i in 1..10 {
         // not

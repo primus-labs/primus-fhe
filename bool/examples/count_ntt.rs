@@ -2,6 +2,7 @@
 #[cfg(feature = "count_ntt")]
 use algebra::transformation::count;
 
+use algebra::utils::Prg;
 use fhe_core::utils::nand;
 use rand::Rng;
 use zkfhe::{
@@ -29,12 +30,13 @@ fn main() {
         println!("{op:4.4} Noise: {noise:3} < {noise_max:3}");
     };
 
+    let mut prg = Prg::new();
     // generate keys
-    let sk = KeyGen::generate_secret_key(params);
+    let sk = KeyGen::generate_secret_key(params, &mut prg);
     println!("Secret Key Generation done!\n");
 
     let encryptor = Encryptor::new(sk.clone());
-    let evaluator = Evaluator::new(&sk);
+    let evaluator = Evaluator::new(&sk, &mut prg);
     let decryptor = Decryptor::new(sk);
     println!("Evaluation Key Generation done!\n");
 
@@ -42,9 +44,9 @@ fn main() {
     let b = rng.gen();
     let c = rng.gen();
 
-    let x = encryptor.encrypt(a);
-    let y = encryptor.encrypt(b);
-    let z = encryptor.encrypt(c);
+    let x = encryptor.encrypt(a, &mut prg);
+    let y = encryptor.encrypt(b, &mut prg);
+    let z = encryptor.encrypt(c, &mut prg);
 
     #[cfg(feature = "count_ntt")]
     count::enable_count_ntt_and_intt();
