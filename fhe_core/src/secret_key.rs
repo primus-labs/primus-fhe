@@ -61,7 +61,7 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
         match params.secret_key_type {
             LWESecretKeyType::Binary => sample_binary_values(params.dimension, csrng),
             LWESecretKeyType::Ternary => {
-                sample_ternary_values(params.cipher_modulus_value, params.dimension, csrng)
+                sample_ternary_values(params.cipher_modulus, params.dimension, csrng)
             }
         }
     }

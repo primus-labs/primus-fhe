@@ -37,9 +37,7 @@ pub struct LWEParameters<C: LWEModulusType> {
     /// **LWE** message modulus, refers to **t** in the paper.
     pub plain_modulus: u64,
     /// **LWE** cipher modulus, refers to **q** in the paper.
-    pub cipher_modulus: PowOf2Modulus<C>,
-    /// **LWE** cipher modulus value, refers to **q** in the paper.
-    pub cipher_modulus_value: C,
+    pub cipher_modulus: C,
     /// The distribution type of the LWE Secret Key.
     pub secret_key_type: LWESecretKeyType,
     /// **LWE** noise error's standard deviation.
@@ -138,7 +136,7 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         assert!(twice_ring_dimension != 0, "Ring dimension is too large!");
 
         // 2N|(Q-1)
-        let coeff_modulus = Into::<u64>::into(ring_modulus).try_into().unwrap();
+        let coeff_modulus = ring_modulus.into().try_into().unwrap();
         let factor = (coeff_modulus - 1) / (twice_ring_dimension);
         if factor * (twice_ring_dimension) != (coeff_modulus - 1) {
             return Err(FHECoreError::RingModulusAndDimensionNotCompatible {
@@ -153,8 +151,7 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         assert!(t.is_power_of_two() && q.is_power_of_two());
         let lwe_params = LWEParameters {
             dimension: lwe_dimension,
-            cipher_modulus_value: lwe_cipher_modulus,
-            cipher_modulus: lwe_cipher_modulus.to_power_of_2_modulus(),
+            cipher_modulus: lwe_cipher_modulus,
             noise_standard_deviation: params.lwe_noise_standard_deviation,
             plain_modulus: t,
             secret_key_type,
@@ -196,13 +193,13 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
     /// Returns the LWE cipher modulus of this [`Parameters<C, Q>`], refers to **q** in the paper.
     #[inline]
     pub fn lwe_cipher_modulus(&self) -> PowOf2Modulus<C> {
-        self.lwe_params.cipher_modulus
+        self.lwe_params.cipher_modulus.to_power_of_2_modulus()
     }
 
     /// Returns the LWE cipher modulus value of this [`Parameters<C, Q>`], refers to **q** in the paper.
     #[inline]
     pub fn lwe_cipher_modulus_value(&self) -> C {
-        self.lwe_params.cipher_modulus_value
+        self.lwe_params.cipher_modulus
     }
 
     /// Returns the LWE noise error's standard deviation of this [`Parameters<C, Q>`].
