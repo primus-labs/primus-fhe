@@ -71,7 +71,7 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
 
             let k = (0..len)
                 .map(|i| {
-                    let mut sample = <NTTRLWE<Q>>::generate_random_zero_sample(&lwe_sk, chi, csrng);
+                    let mut sample = NTTRLWE::<Q>::generate_random_zero_sample(&lwe_sk, chi, csrng);
 
                     *sample.b_mut() += &sk;
 
@@ -98,7 +98,7 @@ impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
                     let k = (0..len)
                         .map(|i| {
                             let mut sample =
-                                <NTTRLWE<Q>>::generate_random_zero_sample(&lwe_sk, chi, csrng);
+                                NTTRLWE::<Q>::generate_random_zero_sample(&lwe_sk, chi, csrng);
 
                             *sample.b_mut() += &ntt_z;
 

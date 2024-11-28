@@ -1,3 +1,5 @@
+//! Operations of BabyBear Modulus.
+
 use std::ops::ShrAssign;
 
 use num_traits::PrimInt;

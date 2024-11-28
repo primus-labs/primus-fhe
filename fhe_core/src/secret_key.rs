@@ -44,7 +44,6 @@ pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
 pub struct SecretKeyPack<C: LWEModulusType, Q: NTTField> {
     /// LWE secret key
     lwe_secret_key: Vec<C>,
-
     /// ring secret key
     ring_secret_key: RingSecretKey<Q>,
     /// ntt version ring secret key
