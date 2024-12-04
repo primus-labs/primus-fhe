@@ -1,3 +1,5 @@
+//! Operations of Goldilocks Modulus.
+
 use std::ops::ShrAssign;
 
 use num_traits::PrimInt;

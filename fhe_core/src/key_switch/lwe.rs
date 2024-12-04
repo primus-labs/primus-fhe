@@ -1,5 +1,6 @@
 use algebra::{modulus::PowOf2Modulus, NTTField};
 use lattice::{decompose_lsb_bits_inplace, Basis, LWE};
+use rand::{CryptoRng, Rng};
 
 use crate::{LWEModulusType, SecretKeyPack};
 
@@ -26,9 +27,13 @@ pub struct KeySwitchingLWEKey<C: LWEModulusType> {
 
 impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
     /// Generates a new [`KeySwitchingLWEKey`].
-    pub fn generate<Q>(secret_key_pack: &SecretKeyPack<C, Q>) -> KeySwitchingLWEKey<C>
+    pub fn generate<Q, R>(
+        secret_key_pack: &SecretKeyPack<C, Q>,
+        csrng: &mut R,
+    ) -> KeySwitchingLWEKey<C>
     where
         Q: NTTField,
+        R: Rng + CryptoRng,
     {
         let params = secret_key_pack.parameters();
 
@@ -36,8 +41,6 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
         let lwe_cipher_modulus_value = params.lwe_cipher_modulus_value();
         let lwe_cipher_modulus = params.lwe_cipher_modulus();
         let noise_distribution = params.key_switching_noise_distribution_for_lwe();
-
-        let mut csrng = secret_key_pack.csrng_mut();
 
         let key_switching_basis =
             lattice::Basis::<C>::new(params.key_switching_basis_bits(), lwe_cipher_modulus_value);
@@ -79,7 +82,7 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
                                 lwe_cipher_modulus_value,
                                 lwe_cipher_modulus,
                                 noise_distribution,
-                                &mut *csrng,
+                                csrng,
                             );
 
                             cipher.b_mut().add_reduce_assign(

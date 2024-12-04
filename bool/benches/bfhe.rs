@@ -1,3 +1,4 @@
+use algebra::utils::Prg;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::Rng;
 use zkfhe::{
@@ -10,26 +11,27 @@ type M = bool;
 pub fn criterion_benchmark(c: &mut Criterion) {
     // set random generator
     let mut rng = rand::thread_rng();
+    let mut prg = Prg::new();
 
     // set parameter
     let default_parameters = *DEFAULT_TERNARY_128_BITS_PARAMETERS;
 
     // generate keys
-    let sk = KeyGen::generate_secret_key(default_parameters);
+    let sk = KeyGen::generate_secret_key(default_parameters, &mut prg);
     println!("Secret Key Generation done!\n");
 
-    let evaluator = Evaluator::new(&sk);
+    let evaluator = Evaluator::new(&sk, &mut prg);
     let encryptor = Encryptor::new(sk);
     println!("Evaluation Key Generation done!\n");
 
     let m0: M = rng.gen();
-    let c0 = encryptor.encrypt(m0);
+    let c0 = encryptor.encrypt(m0, &mut prg);
 
     let m1: M = rng.gen();
-    let c1 = encryptor.encrypt(m1);
+    let c1 = encryptor.encrypt(m1, &mut prg);
 
     let m2: M = rng.gen();
-    let c2 = encryptor.encrypt(m2);
+    let c2 = encryptor.encrypt(m2, &mut prg);
 
     c.bench_function("rlwe not", |b| b.iter(|| evaluator.not(black_box(&c0))));
 
