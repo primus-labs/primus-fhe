@@ -43,7 +43,7 @@ pub trait AbstractNTT<F: NTTField> {
     #[inline]
     fn transform_inplace(&self, mut polynomial: Polynomial<F>) -> NTTPolynomial<F> {
         self.transform_slice(polynomial.as_mut_slice());
-        NTTPolynomial::<F>::new(polynomial.data())
+        NTTPolynomial::<F>::new(polynomial.inner_data())
     }
 
     /// Perform a fast inverse number theory transform.
@@ -68,7 +68,7 @@ pub trait AbstractNTT<F: NTTField> {
     #[inline]
     fn inverse_transform_inplace(&self, mut ntt_polynomial: NTTPolynomial<F>) -> Polynomial<F> {
         self.inverse_transform_slice(ntt_polynomial.as_mut_slice());
-        Polynomial::<F>::new(ntt_polynomial.data())
+        Polynomial::<F>::new(ntt_polynomial.inner_data())
     }
 
     /// Perform a fast number theory transform in place.

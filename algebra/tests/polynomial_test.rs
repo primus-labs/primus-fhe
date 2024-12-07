@@ -132,7 +132,7 @@ fn simple_mul<F: Field>(lhs: &Polynomial<F>, rhs: &Polynomial<F>) -> Polynomial<
     assert_eq!(lhs.coeff_count(), rhs.coeff_count());
     let coeff_count = lhs.coeff_count();
 
-    let mut result = vec![F::zero(); coeff_count];
+    let mut result = vec![F::ZERO; coeff_count];
     let poly1: &[F] = lhs.as_ref();
     let poly2: &[F] = rhs.as_ref();
 

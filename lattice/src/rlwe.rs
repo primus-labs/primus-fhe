@@ -2,8 +2,9 @@ use std::ops::MulAssign;
 
 use algebra::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, transformation::AbstractNTT,
-    FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial,
+    AddOps, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial, SubOps,
 };
+use num_traits::ConstZero;
 use rand::{CryptoRng, Rng};
 
 use crate::{
@@ -24,7 +25,7 @@ use crate::{
 /// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
 /// accessible through public API functions that enforce any necessary invariants.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RLWE<F: NTTField> {
+pub struct RLWE<F> {
     /// Represents the first component in the RLWE structure.
     /// It is a polynomial where the coefficients are elements of the field `F`.
     pub(crate) a: Polynomial<F>,
@@ -33,7 +34,7 @@ pub struct RLWE<F: NTTField> {
     pub(crate) b: Polynomial<F>,
 }
 
-impl<F: NTTField> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
+impl<F> From<(Polynomial<F>, Polynomial<F>)> for RLWE<F> {
     /// Converts a tuple of polynomials into an instance of `Self`.
     ///
     /// # Arguments
@@ -82,7 +83,7 @@ impl<F: NTTField> From<NTTRLWE<F>> for RLWE<F> {
     }
 }
 
-impl<F: NTTField> Default for RLWE<F> {
+impl<F> Default for RLWE<F> {
     fn default() -> Self {
         Self {
             a: Polynomial::new(Vec::new()),
@@ -91,49 +92,12 @@ impl<F: NTTField> Default for RLWE<F> {
     }
 }
 
-impl<F: NTTField> RLWE<F> {
+impl<F> RLWE<F> {
     /// Creates a new [`RLWE<F>`].
     #[inline]
     pub fn new(a: Polynomial<F>, b: Polynomial<F>) -> Self {
         assert_eq!(a.coeff_count(), b.coeff_count());
         Self { a, b }
-    }
-
-    /// Creates a new [`RLWE<F>`] with reference of [`Polynomial<F>`].
-    #[inline]
-    pub fn from_ref(a: &Polynomial<F>, b: &Polynomial<F>) -> Self {
-        assert_eq!(a.coeff_count(), b.coeff_count());
-        Self {
-            a: a.clone(),
-            b: b.clone(),
-        }
-    }
-
-    /// Creates a new [`RLWE<F>`] that is initialized to zero.
-    ///
-    /// The `coeff_count` parameter specifies the number of coefficients in the polynomial.
-    /// Both `a` and `b` polynomials of the [`RLWE<F>`] are initialized with zero coefficients.
-    ///
-    /// # Arguments
-    ///
-    /// * `coeff_count` - The number of coefficients in the polynomial.
-    ///
-    /// # Returns
-    ///
-    /// A new [`RLWE<F>`] where both `a` and `b` polynomials are initialized to zero.
-    #[inline]
-    pub fn zero(coeff_count: usize) -> Self {
-        Self {
-            a: Polynomial::zero(coeff_count),
-            b: Polynomial::zero(coeff_count),
-        }
-    }
-
-    /// Set all entries equal to zero.
-    #[inline]
-    pub fn set_zero(&mut self) {
-        self.a.set_zero();
-        self.b.set_zero();
     }
 
     /// Returns a reference to the `a` of this [`RLWE<F>`].
@@ -201,7 +165,50 @@ impl<F: NTTField> RLWE<F> {
     pub fn dimension(&self) -> usize {
         self.a.coeff_count()
     }
+}
 
+impl<F: Clone> RLWE<F> {
+    /// Creates a new [`RLWE<F>`] with reference of [`Polynomial<F>`].
+    #[inline]
+    pub fn from_ref(a: &Polynomial<F>, b: &Polynomial<F>) -> Self {
+        assert_eq!(a.coeff_count(), b.coeff_count());
+        Self {
+            a: a.clone(),
+            b: b.clone(),
+        }
+    }
+}
+
+impl<F: Copy + ConstZero> RLWE<F> {
+    /// Creates a new [`RLWE<F>`] that is initialized to zero.
+    ///
+    /// The `coeff_count` parameter specifies the number of coefficients in the polynomial.
+    /// Both `a` and `b` polynomials of the [`RLWE<F>`] are initialized with zero coefficients.
+    ///
+    /// # Arguments
+    ///
+    /// * `coeff_count` - The number of coefficients in the polynomial.
+    ///
+    /// # Returns
+    ///
+    /// A new [`RLWE<F>`] where both `a` and `b` polynomials are initialized to zero.
+    #[inline]
+    pub fn zero(coeff_count: usize) -> Self {
+        Self {
+            a: Polynomial::zero(coeff_count),
+            b: Polynomial::zero(coeff_count),
+        }
+    }
+
+    /// Set all entries equal to zero.
+    #[inline]
+    pub fn set_zero(&mut self) {
+        self.a.set_zero();
+        self.b.set_zero();
+    }
+}
+
+impl<F: AddOps> RLWE<F> {
     /// Perform element-wise addition of two [`RLWE<F>`].
     ///
     /// # Attention
@@ -214,6 +221,14 @@ impl<F: NTTField> RLWE<F> {
             a: self.a() + rhs.a(),
             b: self.b() + rhs.b(),
         }
+    }
+
+    /// Performs addition operation:`self + rhs`,
+    /// and puts the result to the `destination`.
+    #[inline]
+    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.a().add_inplace(rhs.a(), destination.a_mut());
+        self.b().add_inplace(rhs.b(), destination.b_mut());
     }
 
     /// Perform element-wise addition of two [`RLWE<F>`].
@@ -230,6 +245,16 @@ impl<F: NTTField> RLWE<F> {
         }
     }
 
+    /// Performs an in-place element-wise addition
+    /// on the `self` [`RLWE<F>`] with another `rhs` [`RLWE<F>`].
+    #[inline]
+    pub fn add_assign_element_wise(&mut self, rhs: &Self) {
+        self.a += rhs.a();
+        self.b += rhs.b();
+    }
+}
+
+impl<F: SubOps> RLWE<F> {
     /// Perform element-wise subtraction of two [`RLWE<F>`].
     ///
     /// # Attention
@@ -242,6 +267,14 @@ impl<F: NTTField> RLWE<F> {
             a: self.a() - rhs.a(),
             b: self.b() - rhs.b(),
         }
+    }
+
+    /// Performs subtraction operation:`self - rhs`,
+    /// and put the result to the `destination`.
+    #[inline]
+    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
+        self.a().sub_inplace(rhs.a(), destination.a_mut());
+        self.b().sub_inplace(rhs.b(), destination.b_mut());
     }
 
     /// Perform element-wise subtraction of two [`RLWE<F>`].
@@ -258,14 +291,6 @@ impl<F: NTTField> RLWE<F> {
         }
     }
 
-    /// Performs an in-place element-wise addition
-    /// on the `self` [`RLWE<F>`] with another `rhs` [`RLWE<F>`].
-    #[inline]
-    pub fn add_assign_element_wise(&mut self, rhs: &Self) {
-        self.a += rhs.a();
-        self.b += rhs.b();
-    }
-
     /// Performs an in-place element-wise subtraction
     /// on the `self` [`RLWE<F>`] with another `rhs` [`RLWE<F>`].
     #[inline]
@@ -273,23 +298,9 @@ impl<F: NTTField> RLWE<F> {
         self.a -= rhs.a();
         self.b -= rhs.b();
     }
+}
 
-    /// Performs addition operation:`self + rhs`,
-    /// and puts the result to the `destination`.
-    #[inline]
-    pub fn add_inplace(&self, rhs: &Self, destination: &mut Self) {
-        self.a().add_inplace(rhs.a(), destination.a_mut());
-        self.b().add_inplace(rhs.b(), destination.b_mut());
-    }
-
-    /// Performs subtraction operation:`self - rhs`,
-    /// and put the result to the `destination`.
-    #[inline]
-    pub fn sub_inplace(&self, rhs: &Self, destination: &mut Self) {
-        self.a().sub_inplace(rhs.a(), destination.a_mut());
-        self.b().sub_inplace(rhs.b(), destination.b_mut());
-    }
-
+impl<F: NTTField> RLWE<F> {
     /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`],
     /// store the result into `destination` [`NTTRLWE<F>`].
     #[inline]
@@ -342,7 +353,7 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn extract_lwe_locally(self) -> LWE<F> {
         let Self { a, b } = self;
-        let mut a = a.data();
+        let mut a = a.inner_data();
         a[1..].reverse();
         a[1..].iter_mut().for_each(|v| *v = -*v);
 
@@ -353,14 +364,14 @@ impl<F: NTTField> RLWE<F> {
     #[inline]
     pub fn extract_lwe_reverse_locally(self) -> LWE<F> {
         let Self { a, b } = self;
-        LWE::<F>::new(a.data(), b[0])
+        LWE::<F>::new(a.inner_data(), b[0])
     }
 
     /// Extract an LWE sample from RLWE reverselly.
     #[inline]
     pub fn extract_partial_lwe_reverse_locally(self, dimension: usize) -> LWE<F> {
         let Self { a, b } = self;
-        let mut a = a.data();
+        let mut a = a.inner_data();
         a.truncate(dimension);
         LWE::<F>::new(a, b[0])
     }
@@ -370,7 +381,7 @@ impl<F: NTTField> RLWE<F> {
     pub fn extract_partial_lwe_locally(self, dimension: usize) -> LWE<F> {
         let Self { a, b } = self;
 
-        let mut a = a.data();
+        let mut a = a.inner_data();
         a[1..].reverse();
         a[1..].iter_mut().for_each(|v| *v = -*v);
 
