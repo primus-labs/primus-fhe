@@ -26,9 +26,9 @@ pub use parameter::{ConstParameters, DefaultFieldU32, DefaultQks, Parameters, St
 pub use ciphertext::{LWECiphertext, NTTRLWECiphertext, RLWECiphertext};
 pub use plaintext::{decode, encode, LWEModulusType, LWEMsgType};
 
-pub use public_key::RLWEPublicKey;
+pub use public_key::NTTRLWEPublicKey;
 pub use secret_key::{
-    LWESecretKeyType, NTTRingSecretKey, RingSecretKey, RingSecretKeyType, SecretKeyPack,
+    LWESecretKeyType, NTTRLWESecretKey, RLWESecretKey, RingSecretKeyType, SecretKeyPack,
 };
 
 pub use blind_rotation::BlindRotationKey;

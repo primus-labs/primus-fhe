@@ -1,6 +1,6 @@
 use std::ops::{Mul, MulAssign};
 
-use crate::{transformation::AbstractNTT, MulOps, NTTField, NTTPolynomial};
+use crate::{transformation::AbstractNTT, AddOps, MulOps, NTTField, NTTPolynomial, SubOps};
 
 use super::Polynomial;
 
@@ -10,13 +10,63 @@ impl<F: MulOps> Polynomial<F> {
     pub fn mul_scalar(&self, scalar: F) -> Self {
         Self::new(self.iter().map(|&v| v * scalar).collect())
     }
-}
 
-impl<F: MulOps> Polynomial<F> {
     /// Multiply `self` with the a scalar inplace.
     #[inline]
     pub fn mul_scalar_assign(&mut self, scalar: F) {
         self.iter_mut().for_each(|v| *v *= scalar)
+    }
+}
+
+impl<F: AddOps + SubOps + MulOps> Polynomial<F> {
+    ///
+    pub fn normal_mul(&self, rhs: &Polynomial<F>) -> Polynomial<F> {
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        let coeff_count = self.coeff_count();
+
+        let mut destination = vec![F::ZERO; coeff_count];
+        let poly1: &[F] = self.as_ref();
+        let poly2: &[F] = rhs.as_ref();
+
+        for i in 0..coeff_count {
+            for j in 0..=i {
+                destination[i] += poly1[j] * poly2[i - j];
+            }
+        }
+
+        // mod (x^n + 1)
+        for i in coeff_count..coeff_count * 2 - 1 {
+            let k = i - coeff_count;
+            for j in i - coeff_count + 1..coeff_count {
+                destination[k] -= poly1[j] * poly2[i - j]
+            }
+        }
+
+        Polynomial::new(destination)
+    }
+
+    ///
+    pub fn normal_mul_inplace(&self, rhs: &Polynomial<F>, destination: &mut Polynomial<F>) {
+        debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
+        debug_assert_eq!(self.coeff_count(), destination.coeff_count());
+        let coeff_count = self.coeff_count();
+
+        let poly1: &[F] = self.as_ref();
+        let poly2: &[F] = rhs.as_ref();
+
+        for i in 0..coeff_count {
+            for j in 0..=i {
+                destination[i] += poly1[j] * poly2[i - j];
+            }
+        }
+
+        // mod (x^n + 1)
+        for i in coeff_count..coeff_count * 2 - 1 {
+            let k = i - coeff_count;
+            for j in i - coeff_count + 1..coeff_count {
+                destination[k] -= poly1[j] * poly2[i - j]
+            }
+        }
     }
 }
 

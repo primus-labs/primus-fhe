@@ -7,7 +7,7 @@ use algebra::{
     modulus::PowOf2Modulus,
     reduce::{
         AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, NegReduce,
-        NegReduceAssign, SubReduce,
+        NegReduceAssign, SubReduce, SubReduceAssign,
     },
     AsFrom, AsInto, Bits,
 };
@@ -159,6 +159,7 @@ pub trait LWEModulusType:
     + SubReduce<PowOf2Modulus<Self>, Output = Self>
     + MulReduce<PowOf2Modulus<Self>, Output = Self>
     + AddReduceAssign<PowOf2Modulus<Self>>
+    + SubReduceAssign<PowOf2Modulus<Self>>
     + MulReduceAssign<PowOf2Modulus<Self>>
     + NegReduce<PowOf2Modulus<Self>, Output = Self>
     + NegReduceAssign<PowOf2Modulus<Self>>

@@ -297,7 +297,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         let lwe_modulus = parameters.lwe_cipher_modulus();
 
         let mut add = c0.add_reduce_component_wise_ref(c1, lwe_modulus);
-        add.add_reduce_inplace_component_wise(c2, lwe_modulus);
+        add.add_reduce_component_wise_assign(c2, lwe_modulus);
 
         let lut = init_and_majority_lut(parameters.ring_dimension(), self.ek.lut_step());
 
@@ -327,7 +327,7 @@ impl<C: LWEModulusType, Q: NTTField> Evaluator<C, Q> {
         let (mut t0, t1) = rayon::join(|| self.and(c0, c1), || self.and(&not_c0, c2));
 
         // (a & b) | (!a & c)
-        t0.add_reduce_inplace_component_wise(&t1, lwe_modulus);
+        t0.add_reduce_component_wise_assign(&t1, lwe_modulus);
 
         let lut = init_or_lut(parameters.ring_dimension(), self.ek.lut_step());
 

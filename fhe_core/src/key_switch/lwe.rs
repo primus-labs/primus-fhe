@@ -128,7 +128,7 @@ impl<C: LWEModulusType> KeySwitchingLWEKey<C> {
             decomposed.iter().zip(inner).for_each(|(&d_i, s_i)| {
                 if !d_i.is_zero() {
                     let index: usize = d_i.try_into().ok().unwrap() - 1;
-                    result.add_reduce_inplace_component_wise(&s_i[index], self.modulus);
+                    result.add_reduce_component_wise_assign(&s_i[index], self.modulus);
                 }
             });
         });

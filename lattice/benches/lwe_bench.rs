@@ -72,16 +72,16 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("LWE add inplace component wise", |b| {
-        b.iter(|| black_box(&mut c0).add_inplace_component_wise(black_box(&c1)))
+        b.iter(|| black_box(&mut c0).add_component_wise_assign(black_box(&c1)))
     });
 
     group.bench_function("LWE sub inplace component wise", |b| {
-        b.iter(|| black_box(&mut c0).sub_inplace_component_wise(black_box(&c1)))
+        b.iter(|| black_box(&mut c0).sub_component_wise_assign(black_box(&c1)))
     });
 
     group.bench_function("LWE add reduce inplace component wise", |b| {
         b.iter(|| {
-            black_box(&mut c0).add_reduce_inplace_component_wise(black_box(&c1), black_box(modulus))
+            black_box(&mut c0).add_reduce_component_wise_assign(black_box(&c1), black_box(modulus))
         })
     });
 

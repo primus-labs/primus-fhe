@@ -30,10 +30,10 @@ pub enum RingSecretKeyType {
 }
 
 /// Ring Secret key
-pub type RingSecretKey<F> = Polynomial<F>;
+pub type RLWESecretKey<F> = Polynomial<F>;
 
 /// NTT version Ring Secret key
-pub type NTTRingSecretKey<F> = NTTPolynomial<F>;
+pub type NTTRLWESecretKey<F> = NTTPolynomial<F>;
 
 /// Boolean fhe's secret keys pack.
 ///
@@ -45,9 +45,9 @@ pub struct SecretKeyPack<C: LWEModulusType, Q: NTTField> {
     /// LWE secret key
     lwe_secret_key: Vec<C>,
     /// ring secret key
-    ring_secret_key: RingSecretKey<Q>,
+    ring_secret_key: RLWESecretKey<Q>,
     /// ntt version ring secret key
-    ntt_ring_secret_key: NTTRingSecretKey<Q>,
+    ntt_ring_secret_key: NTTRLWESecretKey<Q>,
     /// FHE parameters
     parameters: Parameters<C, Q>,
 }
@@ -129,13 +129,13 @@ impl<C: LWEModulusType, Q: NTTField> SecretKeyPack<C, Q> {
 
     /// Returns the ring secret key of this [`SecretKeyPack<C, Q>`].
     #[inline]
-    pub fn ring_secret_key(&self) -> &RingSecretKey<Q> {
+    pub fn ring_secret_key(&self) -> &RLWESecretKey<Q> {
         &self.ring_secret_key
     }
 
     /// Returns the ntt ring secret key of this [`SecretKeyPack<C, Q>`].
     #[inline]
-    pub fn ntt_ring_secret_key(&self) -> &NTTRingSecretKey<Q> {
+    pub fn ntt_ring_secret_key(&self) -> &NTTRLWESecretKey<Q> {
         &self.ntt_ring_secret_key
     }
 

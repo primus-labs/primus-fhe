@@ -1,17 +1,19 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::ops::Sub;
 
 use algebra::{
     reduce::{
-        AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, NegReduce,
-        NegReduceAssign, SubReduce, SubReduceAssign,
+        AddReduce, AddReduceOps, DotProductReduce, MulReduce, MulReduceOps, NegReduce,
+        NegReduceAssign, SubReduceOps,
     },
-    AsFrom,
+    AddOps, AsFrom, SubOps,
 };
 use num_traits::ConstZero;
 use rand::{CryptoRng, Rng};
 use rand_distr::{uniform::SampleUniform, Distribution, Uniform};
 
 use crate::DiscreteGaussian;
+
+mod cm_lwe;
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
@@ -71,7 +73,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn add_component_wise_ref(&self, rhs: &Self) -> Self
     where
-        T: Add<T, Output = T>,
+        T: AddOps,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
@@ -89,18 +91,18 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn add_component_wise(mut self, rhs: &Self) -> Self
     where
-        T: AddAssign<T>,
+        T: AddOps,
     {
-        self.add_inplace_component_wise(rhs);
+        self.add_component_wise_assign(rhs);
         self
     }
 
     /// Performs an in-place component-wise addition
     /// on the `self` [`LWE<T>`] with another `rhs` [`LWE<T>`].
     #[inline]
-    pub fn add_inplace_component_wise(&mut self, rhs: &Self)
+    pub fn add_component_wise_assign(&mut self, rhs: &Self)
     where
-        T: AddAssign<T>,
+        T: AddOps,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         self.a
@@ -119,7 +121,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self
     where
-        T: Sub<T, Output = T>,
+        T: SubOps,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
@@ -137,18 +139,18 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn sub_component_wise(mut self, rhs: &Self) -> Self
     where
-        T: SubAssign<T>,
+        T: SubOps,
     {
-        self.sub_inplace_component_wise(rhs);
+        self.sub_component_wise_assign(rhs);
         self
     }
 
     /// Performs an in-place component-wise subtraction
     /// on the `self` [`LWE<T>`] with another `rhs` [`LWE<T>`].
     #[inline]
-    pub fn sub_inplace_component_wise(&mut self, rhs: &Self)
+    pub fn sub_component_wise_assign(&mut self, rhs: &Self)
     where
-        T: SubAssign<T>,
+        T: SubOps,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         self.a
@@ -167,7 +169,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn add_reduce_component_wise_ref<M>(&self, rhs: &Self, modulus: M) -> Self
     where
-        T: AddReduce<M, Output = T>,
+        T: AddReduceOps<M>,
         M: Copy,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
@@ -190,19 +192,19 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn add_reduce_component_wise<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
-        T: AddReduceAssign<M>,
+        T: AddReduceOps<M>,
         M: Copy,
     {
-        self.add_reduce_inplace_component_wise(rhs, modulus);
+        self.add_reduce_component_wise_assign(rhs, modulus);
         self
     }
 
     /// Performs an in-place component-wise reduce addition
     /// on the `self` [`LWE<T>`] with another `rhs` [`LWE<T>`].
     #[inline]
-    pub fn add_reduce_inplace_component_wise<M>(&mut self, rhs: &Self, modulus: M)
+    pub fn add_reduce_component_wise_assign<M>(&mut self, rhs: &Self, modulus: M)
     where
-        T: AddReduceAssign<M>,
+        T: AddReduceOps<M>,
         M: Copy,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
@@ -222,7 +224,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn sub_reduce_component_wise_ref<M>(&self, rhs: &Self, modulus: M) -> Self
     where
-        T: SubReduce<M, Output = T>,
+        T: SubReduceOps<M>,
         M: Copy,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
@@ -245,7 +247,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn sub_reduce_component_wise<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
-        T: SubReduceAssign<M>,
+        T: SubReduceOps<M>,
         M: Copy,
     {
         self.sub_reduce_inplace_component_wise(rhs, modulus);
@@ -257,7 +259,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn sub_reduce_inplace_component_wise<M>(&mut self, rhs: &Self, modulus: M)
     where
-        T: SubReduceAssign<M>,
+        T: SubReduceOps<M>,
         M: Copy,
     {
         debug_assert_eq!(self.a.len(), rhs.a.len());
@@ -273,7 +275,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn scalar_mul_reduce_inplace<M>(&mut self, scalar: T, modulus: M)
     where
-        T: MulReduceAssign<M>,
+        T: MulReduceOps<M>,
         M: Copy,
     {
         self.a
@@ -288,7 +290,7 @@ impl<T: Copy> LWE<T> {
     #[inline]
     pub fn add_assign_rhs_mul_scalar_reduce<M>(&mut self, rhs: &Self, scalar: T, modulus: M)
     where
-        T: MulReduce<M, Output = T> + AddReduceAssign<M>,
+        T: MulReduceOps<M> + AddReduceOps<M>,
         M: Copy,
     {
         self.a
