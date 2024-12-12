@@ -1,0 +1,16 @@
+syntax = "proto3";
+package rsio;
+
+service NodeService {
+    rpc StepCall(StepCallRequest) returns (StepCallResponse) {}
+}
+
+message StepCallRequest {
+  string msgid = 1;
+  bytes content = 2;
+}
+
+message StepCallResponse {
+    int32 status = 1; // 0: success other: fail
+    string message = 2;
+}
