@@ -4,10 +4,7 @@ use crate::AddOps;
 
 use super::Polynomial;
 
-impl<F> Polynomial<F>
-where
-    F: AddOps,
-{
+impl<F: AddOps> Polynomial<F> {
     /// Performs addition operation:`self + rhs`,
     /// and puts the result to the `destination`.
     #[inline]
@@ -29,10 +26,7 @@ impl<F: AddOps> AddAssign<Self> for Polynomial<F> {
     }
 }
 
-impl<F> AddAssign<&Self> for Polynomial<F>
-where
-    F: AddOps,
-{
+impl<F: AddOps> AddAssign<&Self> for Polynomial<F> {
     #[inline]
     fn add_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());

@@ -36,7 +36,7 @@ mod rlwe;
 mod utils;
 
 pub use gadget::{GadgetRLWE, NTTGadgetRLWE};
-pub use lwe::LWE;
+pub use lwe::{CmLwe, LWE};
 pub use rgsw::{NTTRGSW, RGSW};
 pub use rlwe::{NTTRLWE, RLWE};
 pub use utils::*;

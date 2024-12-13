@@ -3,6 +3,7 @@ use algebra::{
     AddOps, SubOps,
 };
 
+///
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CmLwe<T> {
     a: Vec<T>,
@@ -35,12 +36,12 @@ impl<T> CmLwe<T> {
     pub fn b_mut(&mut self) -> &mut Vec<T> {
         &mut self.b
     }
+}
 
+impl<T: AddOps> CmLwe<T> {
+    ///
     #[inline]
-    pub fn add_component_wise_ref(&self, rhs: &Self) -> Self
-    where
-        T: AddOps,
-    {
+    pub fn add_component_wise_ref(&self, rhs: &Self) -> Self {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         debug_assert_eq!(self.b.len(), rhs.b.len());
         Self::new(
@@ -49,20 +50,16 @@ impl<T> CmLwe<T> {
         )
     }
 
+    ///
     #[inline]
-    pub fn add_component_wise(mut self, rhs: &Self) -> Self
-    where
-        T: AddOps,
-    {
+    pub fn add_component_wise(mut self, rhs: &Self) -> Self {
         self.add_component_wise_assign(rhs);
         self
     }
 
+    ///
     #[inline]
-    pub fn add_component_wise_assign(&mut self, rhs: &Self)
-    where
-        T: AddOps,
-    {
+    pub fn add_component_wise_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.b.len(), rhs.b.len());
         debug_assert_eq!(self.a.len(), rhs.a.len());
         self.a
@@ -74,12 +71,12 @@ impl<T> CmLwe<T> {
             .zip(rhs.b())
             .for_each(|(v0, &v1)| *v0 += v1);
     }
+}
 
+impl<T: SubOps> CmLwe<T> {
+    ///
     #[inline]
-    pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self
-    where
-        T: SubOps,
-    {
+    pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
@@ -88,20 +85,16 @@ impl<T> CmLwe<T> {
         )
     }
 
+    ///
     #[inline]
-    pub fn sub_component_wise(mut self, rhs: &Self) -> Self
-    where
-        T: SubOps,
-    {
+    pub fn sub_component_wise(mut self, rhs: &Self) -> Self {
         self.sub_component_wise_assign(rhs);
         self
     }
 
+    ///
     #[inline]
-    pub fn sub_component_wise_assign(&mut self, rhs: &Self)
-    where
-        T: SubOps,
-    {
+    pub fn sub_component_wise_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         debug_assert_eq!(self.a.len(), rhs.a.len());
         self.a
@@ -113,7 +106,10 @@ impl<T> CmLwe<T> {
             .zip(rhs.b())
             .for_each(|(v0, &v1)| *v0 -= v1);
     }
+}
 
+impl<T> CmLwe<T> {
+    ///
     #[inline]
     pub fn add_reduce_component_wise_ref<M>(&self, rhs: &Self, modulus: M) -> Self
     where
@@ -135,6 +131,7 @@ impl<T> CmLwe<T> {
         )
     }
 
+    ///
     #[inline]
     pub fn add_reduce_component_wise<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
@@ -145,6 +142,7 @@ impl<T> CmLwe<T> {
         self
     }
 
+    ///
     #[inline]
     pub fn add_reduce_component_wise_assign<M>(&mut self, rhs: &Self, modulus: M)
     where
@@ -163,6 +161,7 @@ impl<T> CmLwe<T> {
             .for_each(|(v0, &v1)| v0.add_reduce_assign(v1, modulus));
     }
 
+    ///
     #[inline]
     pub fn sub_reduce_component_wise_ref<M>(&self, rhs: &Self, modulus: M) -> Self
     where
@@ -184,6 +183,7 @@ impl<T> CmLwe<T> {
         )
     }
 
+    ///
     #[inline]
     pub fn sub_reduce_component_wise<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
@@ -194,6 +194,7 @@ impl<T> CmLwe<T> {
         self
     }
 
+    ///
     #[inline]
     pub fn sub_reduce_component_wise_assign<M>(&mut self, rhs: &Self, modulus: M)
     where
@@ -211,6 +212,7 @@ impl<T> CmLwe<T> {
             .for_each(|(v0, &v1)| v0.sub_reduce_assign(v1, modulus));
     }
 
+    ///
     #[inline]
     pub fn scalar_mul_reduce_inplace<M>(&mut self, scalar: T, modulus: M)
     where
@@ -225,6 +227,7 @@ impl<T> CmLwe<T> {
             .for_each(|v| v.mul_reduce_assign(scalar, modulus));
     }
 
+    ///
     #[inline]
     pub fn add_assign_rhs_mul_scalar_reduce<M>(&mut self, rhs: &Self, scalar: T, modulus: M)
     where

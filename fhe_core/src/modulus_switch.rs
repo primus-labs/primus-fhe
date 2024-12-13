@@ -21,11 +21,11 @@ pub fn lwe_modulus_switch<C: LWEModulusType, F: Field>(
         }
     };
 
-    let switch = Box::new(|v: F| {
+    let switch = |v: F| {
         reduce(C::as_from(
             (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64).round(),
         ))
-    });
+    };
 
     let a: Vec<C> = c.a().iter().copied().map(&switch).collect();
     let b = switch(c.b());
@@ -53,11 +53,11 @@ pub fn lwe_modulus_switch_inplace<C: LWEModulusType, F: Field>(
         }
     };
 
-    let switch = Box::new(|v: F| {
+    let switch = |v: F| {
         reduce(C::as_from(
             (AsInto::<f64>::as_into(v.value()) * modulus_after_f64 / modulus_before_f64).round(),
         ))
-    });
+    };
 
     destination
         .a_mut()
@@ -88,11 +88,11 @@ pub fn lwe_modulus_switch_assign_between_modulus<C: LWEModulusType>(
         }
     };
 
-    let switch = Box::new(|v: C| {
+    let switch = |v: C| {
         reduce(C::as_from(
             (AsInto::<f64>::as_into(v) * modulus_after_f64 / modulus_before_f64).round(),
         ))
-    });
+    };
 
     c.a_mut().iter_mut().for_each(|v| *v = switch(*v));
     *c.b_mut() = switch(c.b());

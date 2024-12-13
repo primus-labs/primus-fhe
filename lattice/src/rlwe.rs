@@ -2,14 +2,14 @@ use std::ops::MulAssign;
 
 use algebra::{
     ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, transformation::AbstractNTT,
-    AddOps, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial, SubOps,
+    AddOps, Field, FieldDiscreteGaussianSampler, NTTField, NTTPolynomial, Polynomial, SubOps,
 };
 use num_traits::ConstZero;
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE, NTTRGSW,
-    RGSW,
+    CmLwe, DecompositionSpace, GadgetRLWE, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, LWE,
+    NTTRGSW, RGSW,
 };
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
@@ -100,22 +100,35 @@ impl<F> RLWE<F> {
         Self { a, b }
     }
 
+    /// Creates a new [`RLWE<F>`] with reference of [`Polynomial<F>`].
+    #[inline]
+    pub fn from_ref(a: &Polynomial<F>, b: &Polynomial<F>) -> Self
+    where
+        F: Clone,
+    {
+        assert_eq!(a.coeff_count(), b.coeff_count());
+        Self {
+            a: a.clone(),
+            b: b.clone(),
+        }
+    }
+
     /// Returns a reference to the `a` of this [`RLWE<F>`].
     #[inline]
     pub fn a(&self) -> &Polynomial<F> {
         &self.a
     }
 
-    /// Returns a mutable reference to the `a` of this [`RLWE<F>`].
-    #[inline]
-    pub fn a_mut(&mut self) -> &mut Polynomial<F> {
-        &mut self.a
-    }
-
     /// Returns a reference to the `b` of this [`RLWE<F>`].
     #[inline]
     pub fn b(&self) -> &Polynomial<F> {
         &self.b
+    }
+
+    /// Returns a mutable reference to the `a` of this [`RLWE<F>`].
+    #[inline]
+    pub fn a_mut(&mut self) -> &mut Polynomial<F> {
+        &mut self.a
     }
 
     /// Returns a mutable reference to the `b` of this [`RLWE<F>`].
@@ -164,18 +177,6 @@ impl<F> RLWE<F> {
     #[inline]
     pub fn dimension(&self) -> usize {
         self.a.coeff_count()
-    }
-}
-
-impl<F: Clone> RLWE<F> {
-    /// Creates a new [`RLWE<F>`] with reference of [`Polynomial<F>`].
-    #[inline]
-    pub fn from_ref(a: &Polynomial<F>, b: &Polynomial<F>) -> Self {
-        assert_eq!(a.coeff_count(), b.coeff_count());
-        Self {
-            a: a.clone(),
-            b: b.clone(),
-        }
     }
 }
 
@@ -300,41 +301,32 @@ impl<F: SubOps> RLWE<F> {
     }
 }
 
-impl<F: NTTField> RLWE<F> {
-    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`],
-    /// store the result into `destination` [`NTTRLWE<F>`].
+impl<F: Field> RLWE<F> {
+    /// Extract an LWE sample from RLWE.
     #[inline]
-    pub fn mul_ntt_polynomial_inplace(
-        &self,
-        ntt_polynomial: &NTTPolynomial<F>,
-        destination: &mut NTTRLWE<F>,
-    ) {
-        let coeff_count = ntt_polynomial.coeff_count();
-        debug_assert!(coeff_count.is_power_of_two());
+    pub fn extract_lwe_with_index(&self, index: usize) -> LWE<F> {
+        let split = index + 1;
 
-        let log_n = coeff_count.trailing_zeros();
-        let ntt_table = F::get_ntt_table(log_n).unwrap();
+        let mut a: Vec<F> = self.a.data().to_vec();
 
-        let (a, b) = destination.a_b_mut();
+        a[split..].reverse();
+        a[split..].iter_mut().for_each(|x| *x = -*x);
 
-        a.copy_from(self.a());
-        b.copy_from(self.b());
+        let b = self.b()[index];
 
-        ntt_table.transform_slice(a.as_mut_slice());
-        ntt_table.transform_slice(b.as_mut_slice());
-
-        *a *= ntt_polynomial;
-        *b *= ntt_polynomial;
+        LWE::<F>::new(a, b)
     }
 
-    /// Performs `self + gadget_rlwe * polynomial`.
+    /// Extract an LWE sample from RLWE.
     #[inline]
-    pub fn add_gadget_rlwe_mul_polynomial(
-        self,
-        gadget_rlwe: &GadgetRLWE<F>,
-        polynomial: &Polynomial<F>,
-    ) -> RLWE<F> {
-        gadget_rlwe.mul_polynomial_add_rlwe(polynomial, self)
+    pub fn extract_first_few_lwe(&self, count: usize) -> CmLwe<F> {
+        let mut a: Vec<F> = self.a.as_slice().iter().map(|&x| -x).collect();
+        a[1..].reverse();
+        a[0] = -a[0];
+
+        let b = self.b()[..=count].to_vec();
+
+        CmLwe::<F>::new(a, b)
     }
 
     /// Extract an LWE sample from RLWE.
@@ -387,6 +379,44 @@ impl<F: NTTField> RLWE<F> {
 
         a.truncate(dimension);
         LWE::<F>::new(a, b[0])
+    }
+}
+
+impl<F: NTTField> RLWE<F> {
+    /// Performs a multiplication on the `self` [`RLWE<F>`] with another `ntt_polynomial` [`NTTPolynomial<F>`],
+    /// store the result into `destination` [`NTTRLWE<F>`].
+    #[inline]
+    pub fn mul_ntt_polynomial_inplace(
+        &self,
+        ntt_polynomial: &NTTPolynomial<F>,
+        destination: &mut NTTRLWE<F>,
+    ) {
+        let coeff_count = ntt_polynomial.coeff_count();
+        debug_assert!(coeff_count.is_power_of_two());
+
+        let log_n = coeff_count.trailing_zeros();
+        let ntt_table = F::get_ntt_table(log_n).unwrap();
+
+        let (a, b) = destination.a_b_mut();
+
+        a.copy_from(self.a());
+        b.copy_from(self.b());
+
+        ntt_table.transform_slice(a.as_mut_slice());
+        ntt_table.transform_slice(b.as_mut_slice());
+
+        *a *= ntt_polynomial;
+        *b *= ntt_polynomial;
+    }
+
+    /// Performs `self + gadget_rlwe * polynomial`.
+    #[inline]
+    pub fn add_gadget_rlwe_mul_polynomial(
+        self,
+        gadget_rlwe: &GadgetRLWE<F>,
+        polynomial: &Polynomial<F>,
+    ) -> RLWE<F> {
+        gadget_rlwe.mul_polynomial_add_rlwe(polynomial, self)
     }
 
     /// Perform `destination = self * (X^r - 1)`.

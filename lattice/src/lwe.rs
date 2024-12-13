@@ -15,6 +15,8 @@ use crate::DiscreteGaussian;
 
 mod cm_lwe;
 
+pub use cm_lwe::CmLwe;
+
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
 /// secure cryptographic systems that are considered hard to crack by quantum computers.
@@ -63,7 +65,9 @@ impl<T: Copy> LWE<T> {
     pub fn b_mut(&mut self) -> &mut T {
         &mut self.b
     }
+}
 
+impl<T: AddOps> LWE<T> {
     /// Perform component-wise addition of two [`LWE<T>`].
     ///
     /// # Attention
@@ -71,10 +75,7 @@ impl<T: Copy> LWE<T> {
     /// In this function, `self` is a reference.
     /// If your `self` is not a reference, you can use function `add_component_wise`.
     #[inline]
-    pub fn add_component_wise_ref(&self, rhs: &Self) -> Self
-    where
-        T: AddOps,
-    {
+    pub fn add_component_wise_ref(&self, rhs: &Self) -> Self {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
             self.a.iter().zip(rhs.a()).map(|(&x, &y)| x + y).collect(),
@@ -89,10 +90,7 @@ impl<T: Copy> LWE<T> {
     /// In this function, `self` is not a reference.
     /// If your `self` is a reference, you can use function `add_component_wise_ref`.
     #[inline]
-    pub fn add_component_wise(mut self, rhs: &Self) -> Self
-    where
-        T: AddOps,
-    {
+    pub fn add_component_wise(mut self, rhs: &Self) -> Self {
         self.add_component_wise_assign(rhs);
         self
     }
@@ -100,10 +98,7 @@ impl<T: Copy> LWE<T> {
     /// Performs an in-place component-wise addition
     /// on the `self` [`LWE<T>`] with another `rhs` [`LWE<T>`].
     #[inline]
-    pub fn add_component_wise_assign(&mut self, rhs: &Self)
-    where
-        T: AddOps,
-    {
+    pub fn add_component_wise_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         self.a
             .iter_mut()
@@ -111,7 +106,9 @@ impl<T: Copy> LWE<T> {
             .for_each(|(v0, &v1)| *v0 += v1);
         self.b += rhs.b;
     }
+}
 
+impl<T: SubOps> LWE<T> {
     /// Perform component-wise subtraction of two [`LWE<T>`].
     ///
     /// # Attention
@@ -119,10 +116,7 @@ impl<T: Copy> LWE<T> {
     /// In this function, `self` is a reference.
     /// If your `self` is not a reference, you can use function `sub_component_wise`.
     #[inline]
-    pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self
-    where
-        T: SubOps,
-    {
+    pub fn sub_component_wise_ref(&self, rhs: &Self) -> Self {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         Self::new(
             self.a.iter().zip(rhs.a()).map(|(&x, &y)| x - y).collect(),
@@ -137,10 +131,7 @@ impl<T: Copy> LWE<T> {
     /// In this function, `self` is not a reference.
     /// If your `self` is a reference, you can use function `sub_component_wise_ref`.
     #[inline]
-    pub fn sub_component_wise(mut self, rhs: &Self) -> Self
-    where
-        T: SubOps,
-    {
+    pub fn sub_component_wise(mut self, rhs: &Self) -> Self {
         self.sub_component_wise_assign(rhs);
         self
     }
@@ -148,10 +139,7 @@ impl<T: Copy> LWE<T> {
     /// Performs an in-place component-wise subtraction
     /// on the `self` [`LWE<T>`] with another `rhs` [`LWE<T>`].
     #[inline]
-    pub fn sub_component_wise_assign(&mut self, rhs: &Self)
-    where
-        T: SubOps,
-    {
+    pub fn sub_component_wise_assign(&mut self, rhs: &Self) {
         debug_assert_eq!(self.a.len(), rhs.a.len());
         self.a
             .iter_mut()
@@ -159,7 +147,9 @@ impl<T: Copy> LWE<T> {
             .for_each(|(v0, &v1)| *v0 -= v1);
         self.b -= rhs.b;
     }
+}
 
+impl<T: Copy> LWE<T> {
     /// Perform component-wise reduce addition of two [`LWE<T>`].
     ///
     /// # Attention
