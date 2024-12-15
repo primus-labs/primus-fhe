@@ -1,7 +1,6 @@
-use num_traits::NumCast;
 use rand::{CryptoRng, Rng};
 
-use crate::Field;
+use crate::{AsFrom, Field};
 
 /// Sample a binary vector whose values are [`Field`] `F`.
 pub fn sample_binary_field_vec<F, R>(length: usize, rng: &mut R) -> Vec<F>
@@ -66,9 +65,9 @@ where
         let a = x[0].count_ones() + x[1].count_ones() + x[2].count_ones();
         let b = x[3].count_ones() + x[4].count_ones() + x[5].count_ones();
         if a >= b {
-            F::new(NumCast::from(a - b).unwrap())
+            F::new(F::Value::as_from(a - b))
         } else {
-            F::new(modulus - NumCast::from(b - a).unwrap())
+            F::new(modulus - F::Value::as_from(a - b))
         }
     };
 

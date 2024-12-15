@@ -1,9 +1,5 @@
 //! Operations of Goldilocks Modulus.
 
-use std::ops::ShrAssign;
-
-use num_traits::PrimInt;
-
 use crate::{reduce::*, Bits};
 
 use super::{reduce128, try_inverse, GoldilocksModulus, EPSILON, P};
@@ -110,7 +106,13 @@ impl MulReduceAssign<GoldilocksModulus> for u64 {
 
 impl<E> ExpReduce<GoldilocksModulus, E> for u64
 where
-    E: PrimInt + ShrAssign<u32> + Bits,
+    E: Copy
+        + Bits
+        + PartialEq
+        + num_traits::Zero
+        + num_traits::One
+        + std::ops::ShrAssign<u32>
+        + std::ops::BitAnd<Output = E>,
 {
     fn exp_reduce(self, mut exp: E, _: GoldilocksModulus) -> Self {
         if exp.is_zero() {

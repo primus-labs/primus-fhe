@@ -72,23 +72,6 @@ macro_rules! impl_reduce_ops_for_primitive {
             }
         }
 
-        impl $crate::reduce::InvReduce for $t {
-            fn inv_reduce(self, modulus: Self) -> Self {
-                debug_assert!(self < modulus);
-                use $crate::utils::ExtendedGCD;
-
-                let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
-
-                assert_eq!(gcd, 1);
-
-                if inv > 0 {
-                    inv as Self
-                } else {
-                    (inv + modulus as <Self as ExtendedGCD>::SignedT) as Self
-                }
-            }
-        }
-
         impl $crate::reduce::TryInvReduce for $t {
             fn try_inv_reduce(self, modulus: Self) -> Result<Self, crate::AlgebraError> {
                 debug_assert!(self < modulus);

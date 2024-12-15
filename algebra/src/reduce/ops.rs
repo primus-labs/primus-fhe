@@ -111,18 +111,6 @@ pub trait MulReduceAssign<Modulus, Rhs = Self> {
     fn mul_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
 }
 
-/// The modular exponentiation.
-pub trait ExpReduce<Modulus, Exponent> {
-    /// Calculates `self^exp (mod modulus)`.
-    fn exp_reduce(self, exp: Exponent, modulus: Modulus) -> Self;
-}
-
-/// The modular exponentiation.
-pub trait ExpPowOf2Reduce<Modulus> {
-    /// Calculates `self^(2^exp_log) (mod modulus)`.
-    fn exp_power_of_2_reduce(self, exp_log: u32, modulus: Modulus) -> Self;
-}
-
 /// Calculate the inverse element for a field.
 pub trait InvReduce<Modulus = Self>: Sized {
     /// Calculate the multiplicative inverse of `self (mod modulus)`.
@@ -158,6 +146,18 @@ pub trait DivReduce<Modulus, Rhs = Self> {
 pub trait DivReduceAssign<Modulus, Rhs = Self> {
     /// Calculates `self /= rhs (mod modulus)`.
     fn div_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
+}
+
+/// The modular exponentiation.
+pub trait ExpReduce<Modulus, Exponent> {
+    /// Calculates `self^exp (mod modulus)`.
+    fn exp_reduce(self, exp: Exponent, modulus: Modulus) -> Self;
+}
+
+/// The modular exponentiation.
+pub trait ExpPowOf2Reduce<Modulus> {
+    /// Calculates `self^(2^exp_log) (mod modulus)`.
+    fn exp_power_of_2_reduce(self, exp_log: u32, modulus: Modulus) -> Self;
 }
 
 /// The modular dot product.

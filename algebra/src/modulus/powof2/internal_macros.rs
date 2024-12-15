@@ -93,7 +93,13 @@ macro_rules! impl_powof2_modulus {
 
         impl<E> $crate::reduce::ExpReduce<PowOf2Modulus<Self>, E> for $SelfT
         where
-            E: ::num_traits::PrimInt + ::std::ops::ShrAssign<u32> + $crate::Bits,
+            E: Copy
+                + $crate::Bits
+                + PartialEq
+                + ::num_traits::Zero
+                + ::num_traits::One
+                + ::std::ops::ShrAssign<u32>
+                + ::std::ops::BitAnd<Output = E>,
         {
             fn exp_reduce(self, mut exp: E, modulus: PowOf2Modulus<Self>) -> Self {
                 use $crate::reduce::MulReduce;

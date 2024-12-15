@@ -29,12 +29,11 @@ impl<F: DecomposableField> Default for Basis<F> {
 impl<F: DecomposableField> Basis<F> {
     /// Creates a new [`Basis<F>`] with the given basis' bits number.
     pub fn new(bits: u32) -> Self {
-        let mut modulus_bits =
-            <F::Value as Bits>::BITS - num_traits::PrimInt::leading_zeros(F::MODULUS_VALUE);
+        let mut modulus_bits = <F::Value as Bits>::BITS - F::MODULUS_VALUE.leading_zeros();
 
         assert!(modulus_bits >= bits);
 
-        if num_traits::PrimInt::count_ones(F::MODULUS_VALUE).is_one() {
+        if F::MODULUS_VALUE.count_ones().is_one() {
             modulus_bits -= 1;
         }
 

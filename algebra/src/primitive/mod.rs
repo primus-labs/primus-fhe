@@ -1,9 +1,12 @@
 use std::{
     fmt::{Debug, Display},
-    ops::{Add, AddAssign, Mul, MulAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign},
+    ops::{
+        Add, AddAssign, BitAnd, BitOr, BitXor, Mul, MulAssign, Not, Shl, ShlAssign, Shr, ShrAssign,
+        Sub, SubAssign,
+    },
 };
 
-use num_traits::{ConstOne, ConstZero, NumAssign, PrimInt};
+use num_traits::{ConstOne, ConstZero, NumAssign};
 
 mod bits;
 mod bounded;
@@ -16,32 +19,62 @@ pub use bits::Bits;
 pub use bounded::ConstBounded;
 pub use cast::*;
 pub use neg_one::{ConstNegOne, NegOne};
+use rand_distr::uniform::SampleUniform;
 pub use widening::*;
 pub use wrapping::*;
 
-use crate::random::UniformBase;
+use crate::{
+    random::UniformBase,
+    reduce::{
+        AddReduce, AddReduceAssign, NegReduce, NegReduceAssign, SubReduce, SubReduceAssign,
+        TryInvReduce,
+    },
+};
 
 /// Define the primitive value type in `Field`.
 pub trait Primitive:
-    Debug
-    + Display
+    Sized
     + Send
     + Sync
-    + PrimInt
+    + Clone
+    + Copy
+    + Default
+    + PartialOrd
+    + Ord
+    + PartialEq
+    + Eq
+    + Debug
+    + Display
     + Bits
     + ConstZero
     + ConstOne
     + ConstBounded
     + NumAssign
-    + Widening
-    + WrappingOps
     + Into<u64>
     + AsCast
+    + AsFrom<bool>
+    + Widening
+    + WrappingOps
     + UniformBase
+    + Not<Output = Self>
+    + BitAnd<Output = Self>
+    + BitOr<Output = Self>
+    + BitXor<Output = Self>
+    + Shl<usize, Output = Self>
+    + Shr<usize, Output = Self>
     + Shl<u32, Output = Self>
     + Shr<u32, Output = Self>
     + ShlAssign<u32>
     + ShrAssign<u32>
+    + AddReduce<Self, Output = Self>
+    + SubReduce<Self, Output = Self>
+    + NegReduce<Self, Output = Self>
+    + AddReduceAssign<Self>
+    + SubReduceAssign<Self>
+    + NegReduceAssign<Self>
+    + TryInvReduce<Self>
+    + SampleUniform
+    + AsFrom<usize> //For NTT, calculates `N^{-1}`
 {
 }
 

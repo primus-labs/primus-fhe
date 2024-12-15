@@ -1,9 +1,5 @@
 //! Operations of BabyBear Modulus.
 
-use std::ops::ShrAssign;
-
-use num_traits::PrimInt;
-
 use crate::{reduce::*, Bits};
 
 use super::{from_monty, monty_reduce, try_inverse, BabyBearModulus, P};
@@ -83,7 +79,13 @@ impl MulReduceAssign<BabyBearModulus> for u32 {
 
 impl<E> ExpReduce<BabyBearModulus, E> for u32
 where
-    E: PrimInt + ShrAssign<u32> + Bits,
+    E: Copy
+        + Bits
+        + PartialEq
+        + num_traits::Zero
+        + num_traits::One
+        + std::ops::ShrAssign<u32>
+        + std::ops::BitAnd<Output = E>,
 {
     fn exp_reduce(self, mut exp: E, _: BabyBearModulus) -> Self {
         if exp.is_zero() {

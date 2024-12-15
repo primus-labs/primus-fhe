@@ -1,17 +1,10 @@
 use std::{
     fmt::{Debug, Display},
-    ops::{Shl, Shr},
+    ops::{BitAnd, Shl, Shr},
 };
 
-use algebra::{
-    modulus::PowOf2Modulus,
-    reduce::{
-        AddReduce, AddReduceAssign, DotProductReduce, MulReduce, MulReduceAssign, NegReduce,
-        NegReduceAssign, SubReduce, SubReduceAssign,
-    },
-    AsFrom, AsInto, Bits,
-};
-use num_traits::{ConstOne, ConstZero, PrimInt};
+use algebra::{modulus::PowOf2Modulus, reduce::RingReduceOps, AsCast, AsInto, Bits};
+use num_traits::{ConstOne, ConstZero, NumAssign};
 use rand::distributions::uniform::SampleUniform;
 
 pub trait Shrink {
@@ -136,34 +129,31 @@ plain_impl!();
 
 /// Trait for LWE cipher text modulus value type.
 pub trait LWEModulusType:
-    PrimInt
+    Sized
     + Send
     + Sync
-    + Display
+    + Clone
+    + Copy
     + Debug
-    + ConstOne
+    + Display
+    + PartialEq
+    + Eq
+    + PartialOrd
+    + Ord
     + ConstZero
+    + ConstOne
     + Bits
+    + NumAssign
+    + BitAnd<Output = Self>
+    + Shl<usize, Output = Self>
+    + Shr<usize, Output = Self>
     + Shl<u32, Output = Self>
     + Shr<u32, Output = Self>
-    + AsFrom<u32>
-    + AsFrom<u64>
-    + AsFrom<f64>
-    + AsInto<f64>
-    + AsInto<usize>
-    + AsInto<u64>
+    + AsCast
     + TryFrom<u64>
     + TryInto<usize>
     + SampleUniform
-    + AddReduce<PowOf2Modulus<Self>, Output = Self>
-    + SubReduce<PowOf2Modulus<Self>, Output = Self>
-    + MulReduce<PowOf2Modulus<Self>, Output = Self>
-    + AddReduceAssign<PowOf2Modulus<Self>>
-    + SubReduceAssign<PowOf2Modulus<Self>>
-    + MulReduceAssign<PowOf2Modulus<Self>>
-    + NegReduce<PowOf2Modulus<Self>, Output = Self>
-    + NegReduceAssign<PowOf2Modulus<Self>>
-    + DotProductReduce<PowOf2Modulus<Self>, Output = Self>
+    + RingReduceOps<PowOf2Modulus<Self>>
 {
     /// 2
     const TWO: Self;

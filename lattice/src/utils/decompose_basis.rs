@@ -1,9 +1,11 @@
+use std::ops::{BitAnd, Shr};
+
 use algebra::Bits;
-use num_traits::{ConstOne, PrimInt};
+use num_traits::ConstOne;
 
 /// This basis struct is used for decomposition of the primitive type.
 #[derive(Debug, Clone, Copy)]
-pub struct Basis<T: PrimInt + Bits> {
+pub struct Basis<T: Copy> {
     basis: T,
     /// The length of the vector of the decomposed `T` based on the basis.
     decompose_len: usize,
@@ -13,7 +15,10 @@ pub struct Basis<T: PrimInt + Bits> {
     bits: usize,
 }
 
-impl<T: PrimInt + Bits + ConstOne> Basis<T> {
+impl<T> Basis<T>
+where
+    T: Copy + Bits + ConstOne + std::ops::Shl<usize, Output = T> + std::ops::Sub<Output = T>,
+{
     /// Creates a new [`Basis<T>`].
     ///
     /// # Panics
@@ -45,7 +50,9 @@ impl<T: PrimInt + Bits + ConstOne> Basis<T> {
     pub fn decompose_len(&self) -> usize {
         self.decompose_len
     }
+}
 
+impl<T: Copy> Basis<T> {
     /// Returns the mask of this [`Basis<T>`].
     ///
     /// mask is a value of the `bits` 1, used for some bit-operation.
@@ -72,11 +79,10 @@ impl<T: PrimInt + Bits + ConstOne> Basis<T> {
 /// # Attention
 ///
 /// **`self`** will be modified *after* performing this decomposition.
-pub fn decompose_lsb_bits_inplace<T: PrimInt + Bits + ConstOne>(
-    data: &mut [T],
-    basis: Basis<T>,
-    destination: &mut [T],
-) {
+pub fn decompose_lsb_bits_inplace<T>(data: &mut [T], basis: Basis<T>, destination: &mut [T])
+where
+    T: Copy + Bits + ConstOne + Shr<usize, Output = T> + BitAnd<Output = T>,
+{
     debug_assert_eq!(destination.len(), data.len());
     let mask = basis.mask();
     let bits = basis.bits();
