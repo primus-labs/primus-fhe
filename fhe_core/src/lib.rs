@@ -16,6 +16,9 @@ mod secret_key;
 mod blind_rotation;
 mod key_switch;
 
+mod automorphism;
+mod trace;
+
 mod modulus_switch;
 pub mod utils;
 
@@ -33,6 +36,9 @@ pub use secret_key::{
 
 pub use blind_rotation::BlindRotationKey;
 pub use key_switch::{KeySwitchingKeyEnum, KeySwitchingLWEKey, KeySwitchingRLWEKey};
+
+pub use automorphism::AutoKey;
+pub use trace::TraceKey;
 
 pub use modulus_switch::{
     lwe_modulus_switch, lwe_modulus_switch_assign_between_modulus, lwe_modulus_switch_inplace,

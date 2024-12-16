@@ -18,6 +18,16 @@ impl<F: MulOps> Polynomial<F> {
     }
 }
 
+impl<F: MulOps + AddOps> Polynomial<F> {
+    /// Multiply `self` with the a scalar inplace.
+    #[inline]
+    pub fn add_mul_scalar_assign(&mut self, rhs: &Self, scalar: F) {
+        self.iter_mut()
+            .zip(rhs.iter())
+            .for_each(|(r, &v)| *r += v * scalar)
+    }
+}
+
 impl<F: AddOps + SubOps + MulOps> Polynomial<F> {
     ///
     pub fn normal_mul(&self, rhs: &Polynomial<F>) -> Polynomial<F> {

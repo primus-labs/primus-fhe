@@ -1,6 +1,6 @@
 use std::ops::{Mul, MulAssign};
 
-use crate::{MulOps, NTTField, Polynomial};
+use crate::{AddOps, MulOps, NTTField, Polynomial};
 
 use super::NTTPolynomial;
 
@@ -27,6 +27,16 @@ impl<F: MulOps> NTTPolynomial<F> {
             .for_each(|((&x, &y), z)| {
                 *z = x * y;
             })
+    }
+}
+
+impl<F: MulOps + AddOps> NTTPolynomial<F> {
+    /// Multiply `self` with the a scalar inplace.
+    #[inline]
+    pub fn add_mul_scalar_assign(&mut self, rhs: &Self, scalar: F) {
+        self.iter_mut()
+            .zip(rhs.iter())
+            .for_each(|(r, &v)| *r += v * scalar)
     }
 }
 

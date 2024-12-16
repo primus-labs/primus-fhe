@@ -192,6 +192,31 @@ impl<F: NTTField> GadgetRLWE<F> {
         Self { data, basis }
     }
 
+    /// Generate a `GadgetRLWE<F>` sample which encrypts `poly`.
+    pub fn generate_random_poly_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        poly: &Polynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        rng: &mut R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let len = basis.decompose_len();
+        let basis_value = basis.basis();
+        let mut basis_power = F::one();
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..len {
+            let mut r = <RLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng);
+            r.b_mut().add_mul_scalar_assign(poly, basis_power);
+            data.push(r);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
+        }
+
+        Self { data, basis }
+    }
+
     /// Generate a `GadgetRLWE<F>` sample which encrypts `-s`.
     pub fn generate_random_neg_secret_sample<R>(
         secret_key: &NTTPolynomial<F>,
@@ -477,6 +502,36 @@ impl<F: NTTField> NTTGadgetRLWE<F> {
 
         let r =
             <NTTRLWE<F>>::generate_random_value_sample(secret_key, basis_power, error_sampler, rng);
+        data.push(r);
+
+        Self { data, basis }
+    }
+
+    /// Generate a `NTTGadgetRLWE<F>` sample which encrypts `poly`.
+    pub fn generate_random_poly_sample<R>(
+        secret_key: &NTTPolynomial<F>,
+        poly: &NTTPolynomial<F>,
+        basis: Basis<F>,
+        error_sampler: FieldDiscreteGaussianSampler,
+        rng: &mut R,
+    ) -> Self
+    where
+        R: Rng + CryptoRng,
+    {
+        let len = basis.decompose_len();
+        let basis_value = basis.basis();
+        let mut basis_power = F::one();
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..(len - 1) {
+            let mut r = <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng);
+            r.b_mut().add_mul_scalar_assign(poly, basis_power);
+            data.push(r);
+            basis_power = F::lazy_new(basis_power.value() * basis_value);
+        }
+
+        let mut r = <NTTRLWE<F>>::generate_random_zero_sample(secret_key, error_sampler, rng);
+        r.b_mut().add_mul_scalar_assign(poly, basis_power);
+
         data.push(r);
 
         Self { data, basis }
