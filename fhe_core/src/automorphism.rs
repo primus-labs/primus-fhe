@@ -180,12 +180,12 @@ mod tests {
         let sk = <Polynomial<FF>>::random_with_ternary(N, &mut csrng);
         let ntt_sk = sk.clone().into_ntt_polynomial();
 
-        let v0: Vec<Inner> = dis.sample_iter(&mut csrng).take(N).collect();
-        let poly = PolyFF::new(v0.iter().copied().map(encode).collect());
+        let values: Vec<Inner> = dis.sample_iter(&mut csrng).take(N).collect();
+        let encoded_values = PolyFF::new(values.iter().copied().map(encode).collect());
 
         let mut cipher =
             <RLWE<FF>>::generate_random_zero_sample(&ntt_sk, error_sampler, &mut csrng);
-        *cipher.b_mut() += &poly;
+        *cipher.b_mut() += &encoded_values;
 
         let auto_key = AutoKey::new_with_secret_key(
             &sk,
@@ -197,14 +197,14 @@ mod tests {
         );
         let result = auto_key.automorphism(&cipher);
 
-        let decrypted = (result.b() - result.a() * &ntt_sk)
+        let decrypted_values = (result.b() - result.a() * &ntt_sk)
             .into_iter()
             .map(decode)
             .collect::<Vec<u32>>();
 
-        let flag = decrypted
+        let flag = decrypted_values
             .iter()
-            .zip(v0.iter())
+            .zip(values.iter())
             .enumerate()
             .all(|(i, (&r, &p))| {
                 if i % 2 == 1 {
