@@ -1,5 +1,5 @@
 use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, Polynomial};
-use lattice::NTTGadgetRLWE;
+use lattice::{DecompositionSpace, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, RLWESpace};
 use num_traits::One;
 use rand::{CryptoRng, Rng};
 
@@ -48,33 +48,80 @@ impl<F: NTTField> AutoKey<F> {
         let rlwe_dimension = ciphertext.dimension();
 
         let a = poly_auto(ciphertext.a(), self.degree, rlwe_dimension);
-        let b = poly_auto(ciphertext.b(), self.degree, rlwe_dimension);
 
         let r = self.key.mul_polynomial(&a);
 
         let mut r = <RLWECiphertext<F>>::from(r);
 
-        *r.b_mut() += b;
+        poly_auto_inplace(ciphertext.b(), self.degree, rlwe_dimension, r.b_mut());
 
         r
     }
+
+    ///
+    pub fn automorphism_inplace(
+        &self,
+        ciphertext: &RLWECiphertext<F>,
+        // Pre allocate space for decomposition
+        decompose_space: &mut DecompositionSpace<F>,
+        polynomial_space: &mut PolynomialSpace<F>,
+        ntt_rlwe_space: &mut NTTRLWESpace<F>,
+        // Output destination
+        destination: &mut RLWECiphertext<F>,
+    ) {
+        let rlwe_dimension = ciphertext.dimension();
+
+        destination.a_mut().set_zero();
+        poly_auto_inplace(
+            ciphertext.a(),
+            self.degree,
+            rlwe_dimension,
+            destination.a_mut(),
+        );
+
+        self.key.mul_polynomial_inplace(
+            destination.a(),
+            decompose_space,
+            polynomial_space,
+            ntt_rlwe_space,
+        );
+
+        ntt_rlwe_space.inverse_transform_inplace(destination);
+
+        poly_auto_inplace(
+            ciphertext.b(),
+            self.degree,
+            rlwe_dimension,
+            destination.b_mut(),
+        );
+    }
 }
 
+#[inline]
 fn poly_auto<F: NTTField>(
-    a: &Polynomial<F>,
+    poly: &Polynomial<F>,
     degree: usize,
     rlwe_dimension: usize,
 ) -> Polynomial<F> {
     let mut res = Polynomial::zero(rlwe_dimension);
+    poly_auto_inplace(poly, degree, rlwe_dimension, &mut res);
+    res
+}
+
+#[inline]
+fn poly_auto_inplace<F: NTTField>(
+    poly: &Polynomial<F>,
+    degree: usize,
+    rlwe_dimension: usize,
+    destination: &mut Polynomial<F>,
+) {
     let twice_dimension = rlwe_dimension << 1;
-    res[0] = a[0];
-    for (i, c) in a[1..].iter().enumerate() {
-        let j = ((i + 1) * degree) % twice_dimension;
-        if j < twice_dimension {
-            res[j] += *c;
+    for (i, c) in poly.iter().enumerate() {
+        let j = i.checked_mul(degree).unwrap() % twice_dimension;
+        if j < rlwe_dimension {
+            destination[j] += *c;
         } else {
-            res[j - rlwe_dimension] += -*c;
+            destination[j - rlwe_dimension] += -*c;
         }
     }
-    res
 }
