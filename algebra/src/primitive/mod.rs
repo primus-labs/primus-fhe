@@ -32,49 +32,49 @@ use crate::{
 };
 
 /// Define the primitive value type in `Field`.
-pub trait Primitive:
-    Sized
-    + Send
-    + Sync
-    + Clone
-    + Copy
-    + Default
-    + PartialOrd
-    + Ord
-    + PartialEq
-    + Eq
-    + Debug
-    + Display
-    + Bits
-    + ConstZero
-    + ConstOne
-    + ConstBounded
-    + NumAssign
-    + Into<u64>
-    + AsCast
-    + AsFrom<bool>
-    + Widening
-    + WrappingOps
-    + UniformBase
-    + Not<Output = Self>
-    + BitAnd<Output = Self>
-    + BitOr<Output = Self>
-    + BitXor<Output = Self>
-    + Shl<usize, Output = Self>
-    + Shr<usize, Output = Self>
-    + Shl<u32, Output = Self>
-    + Shr<u32, Output = Self>
-    + ShlAssign<u32>
-    + ShrAssign<u32>
-    + AddReduce<Self, Output = Self>
-    + SubReduce<Self, Output = Self>
-    + NegReduce<Self, Output = Self>
-    + AddReduceAssign<Self>
-    + SubReduceAssign<Self>
-    + NegReduceAssign<Self>
-    + TryInvReduce<Self>
-    + SampleUniform
-    + AsFrom<usize> //For NTT, calculates `N^{-1}`
+pub trait Primitive
+where
+    Self: Sized
+        + Send
+        + Sync
+        + Clone
+        + Copy
+        + Default
+        + PartialOrd
+        + Ord
+        + PartialEq
+        + Eq
+        + Debug
+        + Display
+        + Bits
+        + ConstZero
+        + ConstOne
+        + ConstBounded
+        + AsCast
+        + AsFrom<bool>
+        + NumAssign
+        + Widening
+        + WrappingOps
+        + Not<Output = Self>
+        + BitAnd<Output = Self>
+        + BitOr<Output = Self>
+        + BitXor<Output = Self>
+        + Shl<usize, Output = Self>
+        + Shr<usize, Output = Self>
+        + Shl<u32, Output = Self>
+        + Shr<u32, Output = Self>
+        + ShlAssign<u32>
+        + ShrAssign<u32>
+        + AddReduce<Self, Output = Self>
+        + SubReduce<Self, Output = Self>
+        + NegReduce<Self, Output = Self>
+        + AddReduceAssign<Self>
+        + SubReduceAssign<Self>
+        + NegReduceAssign<Self>
+        + TryInvReduce<Self>
+        + SampleUniform
+        + UniformBase
+        + TryInto<usize>,
 {
 }
 

@@ -70,9 +70,8 @@ impl<C: LWEModulusType, Q: NTTField> EvaluationKey<C, Q> {
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and lookup table `lut`.
     pub fn bootstrap(&self, mut c: LWECiphertext<C>, lut: Polynomial<Q>) -> LWECiphertext<C> {
         let parameters = self.parameters();
-        let twice_ring_dimension_value = C::try_from((parameters.ring_dimension() << 1) as u64)
-            .ok()
-            .unwrap();
+        let twice_ring_dimension_value =
+            C::try_from(parameters.ring_dimension() << 1).ok().unwrap();
         lwe_modulus_switch_assign_between_modulus(
             &mut c,
             parameters.lwe_cipher_modulus_value(),

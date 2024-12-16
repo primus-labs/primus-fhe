@@ -136,7 +136,10 @@ impl<C: LWEModulusType, Q: NTTField> Parameters<C, Q> {
         assert!(twice_ring_dimension != 0, "Ring dimension is too large!");
 
         // 2N|(Q-1)
-        let coeff_modulus = ring_modulus.into().try_into().unwrap();
+        let coeff_modulus: usize = ring_modulus
+            .try_into()
+            .map_err(|_| "out of range integral type conversion attempted")
+            .unwrap();
         let factor = (coeff_modulus - 1) / (twice_ring_dimension);
         if factor * (twice_ring_dimension) != (coeff_modulus - 1) {
             return Err(FHECoreError::RingModulusAndDimensionNotCompatible {

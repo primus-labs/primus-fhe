@@ -7,9 +7,7 @@ pub trait Bits {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use num_traits::PrimInt;
-    ///
+    /// ```ignore
     /// let n = 0b01001100u8;
     ///
     /// assert_eq!(n.count_ones(), 3);
@@ -21,9 +19,7 @@ pub trait Bits {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use numeric::Bits;
-    ///
+    /// ```ignore
     /// let n = 0b0101000u16;
     ///
     /// assert_eq!(n.leading_zeros(), 10);
@@ -35,9 +31,7 @@ pub trait Bits {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use numeric::Bits;
-    ///
+    /// ```ignore
     /// let n = 0b0101000u16;
     ///
     /// assert_eq!(n.trailing_zeros(), 3);

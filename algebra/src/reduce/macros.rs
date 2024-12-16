@@ -200,6 +200,26 @@ macro_rules! impl_non_reduce_ops_for_primitive {
                 self.wrapping_pow(exp)
             }
         }
+
+        impl $crate::reduce::DotProductReduce<()> for $t {
+            type Output = Self;
+
+            #[inline]
+            fn dot_product_reduce(
+                a: impl AsRef<[Self]>,
+                b: impl AsRef<[Self]>,
+                _modulus: (),
+            ) -> Self::Output {
+                let a = a.as_ref();
+                let b = b.as_ref();
+                debug_assert_eq!(a.len(), b.len());
+                a.iter()
+                    .zip(b)
+                    .fold(0, |acc: $t, (&x, &y)| {
+                        x.wrapping_mul(y).wrapping_add(acc)
+                    })
+            }
+        }
     )*};
 }
 

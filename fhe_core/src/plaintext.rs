@@ -1,11 +1,4 @@
-use std::{
-    fmt::{Debug, Display},
-    ops::{BitAnd, Shl, Shr},
-};
-
-use algebra::{modulus::PowOf2Modulus, reduce::RingReduceOps, AsCast, AsInto, Bits};
-use num_traits::{ConstOne, ConstZero, NumAssign};
-use rand::distributions::uniform::SampleUniform;
+use algebra::{modulus::PowOf2Modulus, reduce::RingReduceOps, AsInto, Primitive};
 
 pub trait Shrink {
     /// shrink to small container.
@@ -129,31 +122,8 @@ plain_impl!();
 
 /// Trait for LWE cipher text modulus value type.
 pub trait LWEModulusType:
-    Sized
-    + Send
-    + Sync
-    + Clone
-    + Copy
-    + Debug
-    + Display
-    + PartialEq
-    + Eq
-    + PartialOrd
-    + Ord
-    + ConstZero
-    + ConstOne
-    + Bits
-    + NumAssign
-    + BitAnd<Output = Self>
-    + Shl<usize, Output = Self>
-    + Shr<usize, Output = Self>
-    + Shl<u32, Output = Self>
-    + Shr<u32, Output = Self>
-    + AsCast
-    + TryFrom<u64>
-    + TryInto<usize>
-    + SampleUniform
-    + RingReduceOps<PowOf2Modulus<Self>>
+    Primitive + TryFrom<usize> // Modulus to `2N`
+    + RingReduceOps<PowOf2Modulus<Self>> + RingReduceOps<()>
 {
     /// 2
     const TWO: Self;
