@@ -1,5 +1,5 @@
 use algebra::{Basis, FieldDiscreteGaussianSampler, NTTField, Polynomial};
-use lattice::{DecompositionSpace, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace, RLWESpace};
+use lattice::{DecompositionSpace, NTTGadgetRLWE, NTTRLWESpace, PolynomialSpace};
 use num_traits::One;
 use rand::{CryptoRng, Rng};
 
@@ -123,5 +123,97 @@ fn poly_auto_inplace<F: NTTField>(
         } else {
             destination[j - rlwe_dimension] += -*c;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use algebra::{Field, ModulusConfig};
+    use lattice::RLWE;
+    use rand::{distributions::Uniform, prelude::Distribution};
+
+    use crate::DefaultFieldU32;
+
+    use super::*;
+
+    type FF = DefaultFieldU32;
+    type Inner = u32; // inner type
+    type PolyFF = Polynomial<FF>;
+
+    const FP: Inner = FF::MODULUS.value(); // ciphertext space
+    const FT: Inner = 8; // message space
+
+    const N: usize = 1024;
+
+    #[inline]
+    fn encode(m: Inner) -> FF {
+        FF::new((m as f64 * FP as f64 / FT as f64).round() as Inner)
+    }
+
+    #[inline]
+    fn decode(c: FF) -> Inner {
+        (c.value() as f64 * FT as f64 / FP as f64).round() as Inner % FT
+    }
+
+    #[test]
+    fn test_auto() {
+        let csrng = &mut rand::thread_rng();
+
+        let poly = <Polynomial<FF>>::random_with_ternary(N, csrng);
+        let result = poly_auto(&poly, N + 1, N);
+
+        let flag = result
+            .iter()
+            .zip(poly.iter())
+            .enumerate()
+            .all(|(i, (&r, &p))| if i % 2 == 1 { r == -p } else { r == p });
+
+        assert!(flag);
+    }
+
+    #[test]
+    fn test_he_auto() {
+        let mut csrng = rand::thread_rng();
+        let error_sampler = FieldDiscreteGaussianSampler::new(0.0, 3.2).unwrap();
+        let dis = Uniform::new(0, FT);
+
+        let sk = <Polynomial<FF>>::random_with_ternary(N, &mut csrng);
+        let ntt_sk = sk.clone().into_ntt_polynomial();
+
+        let v0: Vec<Inner> = dis.sample_iter(&mut csrng).take(N).collect();
+        let poly = PolyFF::new(v0.iter().copied().map(encode).collect());
+
+        let mut cipher =
+            <RLWE<FF>>::generate_random_zero_sample(&ntt_sk, error_sampler, &mut csrng);
+        *cipher.b_mut() += &poly;
+
+        let auto_key = AutoKey::new_with_secret_key(
+            &sk,
+            &ntt_sk,
+            N + 1,
+            Basis::new(1),
+            error_sampler,
+            &mut csrng,
+        );
+        let result = auto_key.automorphism(&cipher);
+
+        let decrypted = (result.b() - result.a() * &ntt_sk)
+            .into_iter()
+            .map(decode)
+            .collect::<Vec<u32>>();
+
+        let flag = decrypted
+            .iter()
+            .zip(v0.iter())
+            .enumerate()
+            .all(|(i, (&r, &p))| {
+                if i % 2 == 1 {
+                    (r + p) % FT == 0
+                } else {
+                    r == p
+                }
+            });
+
+        assert!(flag);
     }
 }

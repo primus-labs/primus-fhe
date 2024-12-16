@@ -67,7 +67,7 @@ where
         if a >= b {
             F::new(F::Value::as_from(a - b))
         } else {
-            F::new(modulus - F::Value::as_from(a - b))
+            F::new(modulus - F::Value::as_from(b - a))
         }
     };
 
