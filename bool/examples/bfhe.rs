@@ -1,10 +1,10 @@
 use algebra::{utils::Prg, NTTField};
-use fhe_core::{utils::*, LWECiphertext, LWEModulusType};
-use rand::Rng;
-use zkfhe::{
+use bool::{
     bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMETERS},
     Decryptor, Encryptor, KeyGen,
 };
+use fhe_core::{utils::*, LWECiphertext, LWEModulusType};
+use rand::Rng;
 
 type M = bool;
 type C = u16;

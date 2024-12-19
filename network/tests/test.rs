@@ -3,7 +3,7 @@ extern crate pretty_env_logger;
 extern crate log;
 
 use std::env;
-use xio::common::*;
+use network::common::*;
 
 #[test]
 fn test_log() {

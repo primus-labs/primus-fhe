@@ -1,10 +1,10 @@
 use algebra::utils::Prg;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rand::Rng;
-use zkfhe::{
+use bool::{
     bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMETERS},
     Encryptor, KeyGen,
 };
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use rand::Rng;
 
 type M = bool;
 

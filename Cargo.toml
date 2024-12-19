@@ -1,6 +1,13 @@
 [workspace]
 
-members = ["algebra", "algebra_derive", "bool", "fhe_core", "lattice"]
+members = [
+    "algebra",
+    "algebra_derive",
+    "bool",
+    "fhe_core",
+    "lattice",
+    "network",
+]
 
 resolver = "2"
 
@@ -22,6 +29,32 @@ sha2 = { version = "0.10" }
 mimalloc = "0.1"
 
 criterion = "0.5"
+
+# For network
+grpcio = "0.7"
+protobuf = { version = "2.*.*", features = ["with-bytes"] }
+protobuf-codegen = "2.*.*"
+protoc = "2.*.*"
+
+anyhow = "1.0"
+futures = { version = "0.3", features = ["thread-pool", "compat"] }
+futures-executor = "0.3.1"
+futures-timer = "3.0"
+futures-util = { version = "0.3.1", default-features = false, features = [
+    "io",
+    "async-await",
+] }
+
+structopt = "0.3.20"
+log = "0.4"
+pretty_env_logger = "0.4"
+
+
+# for io
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
+
+serde_json = "1.0"
 
 [profile.bench]
 lto = true
