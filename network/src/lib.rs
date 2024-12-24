@@ -2,6 +2,7 @@
 #![deny(missing_docs)]
 //! This crate provides network communication for MPC protocols.
 
+pub mod error;
 pub mod netio;
 
 const SEND_BUFFER_SIZE: usize = 1024 * 1024;
@@ -16,17 +17,17 @@ pub trait IO {
     fn party_num(&self) -> u32;
 
     /// Send data to a party.
-    fn send(&mut self, party_id: u32, data: &[u8]) -> std::io::Result<()>;
+    fn send(&mut self, party_id: u32, data: &[u8]) -> Result<(), error::NetIoError>;
 
     /// Receive data from a party.
-    fn recv(&mut self, party_id: u32, buf: &mut [u8]) -> std::io::Result<()>;
+    fn recv(&mut self, party_id: u32, buf: &mut [u8]) -> Result<usize, error::NetIoError>;
 
     /// Broadcast data to all parties.
-    fn broadcast(&mut self, data: &[u8]) -> std::io::Result<()>;
+    fn broadcast(&mut self, data: &[u8]) -> Result<(), error::NetIoError>;
 
     /// Flush the send buffer.
-    fn flush(&mut self) -> std::io::Result<()>;
+    fn flush(&mut self, party_id: u32) -> Result<(), error::NetIoError>;
 
     /// Flush all send buffers.
-    fn flush_all(&mut self) -> std::io::Result<()>;
+    fn flush_all(&mut self) -> Result<(), error::NetIoError>;
 }

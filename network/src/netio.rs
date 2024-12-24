@@ -8,29 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::{RECV_BUFFER_SIZE, SEND_BUFFER_SIZE};
-
-#[derive(Debug)]
-/// Error types for network I/O operations.
-pub enum NetIoError {
-    /// An I/O error occurred.
-    IoError(std::io::Error),
-    /// Failed to acquire a mutex lock.
-    MutexLockFailed(String),
-    /// The requested connection was not found.
-    ConnectionNotFound(u32),
-    /// A timeout occurred.
-    Timeout(String),
-}
-
-impl From<std::io::Error> for NetIoError {
-    fn from(err: std::io::Error) -> Self {
-        NetIoError::IoError(err)
-    }
-}
-
-/// Type alias for network I/O results.
-pub type NetIoResult<T> = std::result::Result<T, NetIoError>;
+use crate::error::NetIoError;
+use crate::{IO, RECV_BUFFER_SIZE, SEND_BUFFER_SIZE};
 
 /// Performance statistics for `NetIO`
 #[derive(Debug, Default)]
@@ -439,8 +418,52 @@ impl NetIO {
         Ok(())
     }
 
+    /// Get the performance statistics.
+    pub fn get_stats(&self) -> Result<NetIoStats, NetIoError> {
+        let mut connections = self.connections.lock().map_err(|_| {
+            NetIoError::MutexLockFailed("Failed to acquire lock for flush".to_string())
+        })?;
+        self.stats.send_round.store(0, Ordering::Relaxed);
+        self.stats.recv_round.store(0, Ordering::Relaxed);
+        for (_, stream) in connections.iter_mut() {
+            let sr = stream.send_round.load(Ordering::Relaxed);
+            let rr = stream.recv_round.load(Ordering::Relaxed);
+            self.stats.send_round.fetch_add(sr, Ordering::Relaxed);
+            self.stats.recv_round.fetch_add(rr, Ordering::Relaxed);
+        }
+
+        Ok(self.stats.get_stats())
+    }
+}
+
+impl IO for NetIO {
+    /// Get the party ID of the current participant.
+    fn party_id(&self) -> u32 {
+        self.party_id
+    }
+
+    /// Get the number of participants in the network.
+    fn party_num(&self) -> u32 {
+        self.participants.len() as u32
+    }
+
+    /// Sends data to a participant.
+    fn send(&mut self, party_id: u32, buf: &[u8]) -> Result<(), NetIoError> {
+        let start = Instant::now();
+        let mut connections = self.connections.lock().map_err(|_| {
+            NetIoError::MutexLockFailed("Failed to acquire lock for send".to_string())
+        })?;
+
+        let stream = connections
+            .get_mut(&party_id)
+            .ok_or(NetIoError::ConnectionNotFound(party_id))?;
+        stream.write(buf)?;
+        self.stats.update_send(buf.len(), start.elapsed());
+        Ok(())
+    }
+
     /// Receives data from a participant.
-    pub fn recv(&mut self, party_id: u32, buf: &mut [u8]) -> Result<usize, NetIoError> {
+    fn recv(&mut self, party_id: u32, buf: &mut [u8]) -> Result<usize, NetIoError> {
         self.flush_all()?;
 
         let start = Instant::now();
@@ -455,23 +478,8 @@ impl NetIO {
         Ok(bytes_read)
     }
 
-    /// Sends data to a participant.
-    pub fn send(&mut self, party_id: u32, buf: &[u8]) -> Result<(), NetIoError> {
-        let start = Instant::now();
-        let mut connections = self.connections.lock().map_err(|_| {
-            NetIoError::MutexLockFailed("Failed to acquire lock for send".to_string())
-        })?;
-
-        let stream = connections
-            .get_mut(&party_id)
-            .ok_or(NetIoError::ConnectionNotFound(party_id))?;
-        stream.write(buf)?;
-        self.stats.update_send(buf.len(), start.elapsed());
-        Ok(())
-    }
-
     /// Flush the send buffer.
-    pub fn flush(&mut self, party_id: u32) -> Result<(), NetIoError> {
+    fn flush(&mut self, party_id: u32) -> Result<(), NetIoError> {
         let start = Instant::now();
         let mut connections = self.connections.lock().map_err(|_| {
             NetIoError::MutexLockFailed("Failed to acquire lock for flush".to_string())
@@ -489,7 +497,7 @@ impl NetIO {
     }
 
     /// Flush all send buffers.
-    pub fn flush_all(&mut self) -> Result<(), NetIoError> {
+    fn flush_all(&mut self) -> Result<(), NetIoError> {
         for i in 0..self.participants.len() as u32 {
             if i != self.party_id {
                 self.flush(i)?;
@@ -499,30 +507,13 @@ impl NetIO {
     }
 
     /// Broadcast data to all participants.
-    pub fn broadcast(&mut self, buf: &[u8]) -> Result<(), NetIoError> {
+    fn broadcast(&mut self, buf: &[u8]) -> Result<(), NetIoError> {
         for i in 0..self.participants.len() as u32 {
             if i != self.party_id {
                 self.send(i, buf)?;
             }
         }
         Ok(())
-    }
-
-    /// Get the performance statistics.
-    pub fn get_stats(&self) -> Result<NetIoStats, NetIoError> {
-        let mut connections = self.connections.lock().map_err(|_| {
-            NetIoError::MutexLockFailed("Failed to acquire lock for flush".to_string())
-        })?;
-        self.stats.send_round.store(0, Ordering::Relaxed);
-        self.stats.recv_round.store(0, Ordering::Relaxed);
-        for (_, stream) in connections.iter_mut() {
-            let sr = stream.send_round.load(Ordering::Relaxed);
-            let rr = stream.recv_round.load(Ordering::Relaxed);
-            self.stats.send_round.fetch_add(sr, Ordering::Relaxed);
-            self.stats.recv_round.fetch_add(rr, Ordering::Relaxed);
-        }
-
-        Ok(self.stats.get_stats())
     }
 }
 
