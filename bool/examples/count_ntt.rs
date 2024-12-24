@@ -3,12 +3,12 @@
 use algebra::transformation::count;
 
 use algebra::utils::Prg;
-use fhe_core::utils::nand;
-use rand::Rng;
 use bool::{
     bfhe::{Evaluator, DEFAULT_TERNARY_128_BITS_PARAMETERS},
     Decryptor, Encryptor, KeyGen,
 };
+use fhe_core::utils::nand;
+use rand::Rng;
 
 type M = bool;
 type C = u16;
