@@ -12,7 +12,7 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 itertools = { workspace = true }
 
-rayon = "1.10.0"
+rayon = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

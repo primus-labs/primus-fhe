@@ -7,9 +7,12 @@ resolver = "2"
 [workspace.dependencies]
 thiserror = "2"
 num-traits = "0.2"
+rand_core = "0.6"
 rand = "0.8"
 rand_distr = "0.4"
 itertools = "0.14"
+rayon = "1.10"
+bytemuck = "1.21"
 
 criterion = "0.5"
 
