@@ -1,5 +1,7 @@
 //! utility
 
+use std::sync::{Arc, Mutex};
+
 /// NOT
 #[inline]
 pub const fn not(a: bool) -> bool {
@@ -46,4 +48,45 @@ pub const fn xnor(a: bool, b: bool) -> bool {
 #[inline]
 pub const fn majority(a: bool, b: bool, c: bool) -> bool {
     (a & b) | (b & c) | (a & c)
+}
+
+pub struct Pool<T>(Arc<Mutex<Vec<T>>>);
+
+impl<T> Default for Pool<T> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> Clone for Pool<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+impl<T> Pool<T> {
+    #[inline]
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(Vec::new())))
+    }
+
+    #[inline]
+    pub fn get(&self) -> Option<T> {
+        let mut data = self.0.lock().unwrap();
+        data.pop()
+    }
+
+    #[inline]
+    pub fn store(&self, value: T) {
+        let mut data = self.0.lock().unwrap();
+        data.push(value);
+    }
+
+    #[inline]
+    pub fn clear(&self) {
+        let mut data = self.0.lock().unwrap();
+        data.clear();
+    }
 }

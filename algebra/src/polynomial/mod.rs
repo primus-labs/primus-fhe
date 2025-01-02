@@ -1,8 +1,5 @@
-//! Definition and implementation of polynomials.
-mod native_polynomial;
-mod ntt_polynomial;
+mod field;
+mod numeric;
 
-pub use native_polynomial::Polynomial;
-pub use ntt_polynomial::{
-    ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, NTTPolynomial,
-};
+pub use field::{FieldNttPolynomial, FieldPolynomial};
+pub use numeric::{NumNttPolynomial, NumPolynomial};

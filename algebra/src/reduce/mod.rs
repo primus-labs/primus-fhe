@@ -1,111 +1,140 @@
-//! This module defines some traits for modular arithmetic.
-
 mod lazy_ops;
 mod ops;
 
 mod macros;
 
+use std::fmt::Debug;
+
 pub use lazy_ops::*;
-use num_traits::{ConstOne, ConstZero};
 pub use ops::*;
 
-/// A helper trait to get the modulus of the field.
-pub trait ModulusConfig {
-    /// Modulus type
-    type Modulus;
+use crate::{integer::UnsignedInteger, numeric::Numeric};
 
-    /// The modulus of the field.
-    const MODULUS: Self::Modulus;
+pub trait Modulus<T> {
+    fn modulus_minus_one(self) -> T;
+}
 
-    /// Get the modulus of the field.
-    #[inline]
-    fn modulus() -> Self::Modulus {
-        Self::MODULUS
+pub trait RingReduce<T>:
+    Sized
+    + Debug
+    + Clone
+    + Copy
+    + Send
+    + Sync
+    + Modulus<T>
+    + Reduce<T, Output = T>
+    + ReduceAssign<T>
+    + ReduceAdd<T, Output = T>
+    + ReduceAddAssign<T>
+    + ReduceSub<T, Output = T>
+    + ReduceSubAssign<T>
+    + ReduceDouble<T, Output = T>
+    + ReduceDoubleAssign<T>
+    + ReduceNeg<T, Output = T>
+    + ReduceNegAssign<T>
+    + ReduceMul<T, Output = T>
+    + ReduceMulAssign<T>
+    + ReduceMulAdd<T, Output = T>
+    + ReduceMulAddAssign<T>
+    + ReduceExp<T>
+    + ReduceExpPowOf2<T>
+    + ReduceDotProduct<T, Output = T>
+{
+}
+
+impl<T: UnsignedInteger, M> RingReduce<T> for M where
+    M: Sized
+        + Debug
+        + Clone
+        + Copy
+        + Send
+        + Sync
+        + Modulus<T>
+        + Reduce<T, Output = T>
+        + ReduceAssign<T>
+        + ReduceAdd<T, Output = T>
+        + ReduceAddAssign<T>
+        + ReduceSub<T, Output = T>
+        + ReduceSubAssign<T>
+        + ReduceDouble<T, Output = T>
+        + ReduceDoubleAssign<T>
+        + ReduceNeg<T, Output = T>
+        + ReduceNegAssign<T>
+        + ReduceMul<T, Output = T>
+        + ReduceMulAssign<T>
+        + ReduceMulAdd<T, Output = T>
+        + ReduceMulAddAssign<T>
+        + ReduceExp<T>
+        + ReduceExpPowOf2<T>
+        + ReduceDotProduct<T, Output = T>
+{
+}
+
+pub trait FieldReduce<T>:
+    RingReduce<T>
+    + LazyReduce<T, Output = T>
+    + LazyReduceAssign<T>
+    + LazyReduceMul<T, Output = T>
+    + LazyReduceMulAssign<T>
+    + LazyReduceMulAdd<T, Output = T>
+    + LazyReduceMulAddAssign<T>
+    + ReduceInv<T, Output = T>
+    + ReduceInvAssign<T>
+    + ReduceDiv<T, Output = T>
+    + ReduceDivAssign<T>
+{
+}
+
+impl<T: Numeric, M> FieldReduce<T> for M where
+    M: RingReduce<T>
+        + LazyReduce<T, Output = T>
+        + LazyReduceAssign<T>
+        + LazyReduceMul<T, Output = T>
+        + LazyReduceMulAssign<T>
+        + LazyReduceMulAdd<T, Output = T>
+        + LazyReduceMulAddAssign<T>
+        + ReduceInv<T, Output = T>
+        + ReduceInvAssign<T>
+        + ReduceDiv<T, Output = T>
+        + ReduceDivAssign<T>
+{
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::{thread_rng, Rng};
+
+    use super::*;
+
+    type ValueT = u32;
+    type WideT = u64;
+
+    #[test]
+    fn test_reduce() {
+        let mut rng = thread_rng();
+        let m: ValueT = rng.gen_range(2..(ValueT::MAX >> 1));
+        let m_d = WideT::from(m);
+
+        let a = rng.gen_range(0..m);
+        let b = rng.gen_range(0..m);
+
+        let a_d = WideT::from(a);
+        let b_d = WideT::from(b);
+
+        let c = m.reduce_add(a, b);
+        assert_eq!(WideT::from(c), (a_d + b_d) % m_d, "reduce_add");
+
+        let c = m.reduce_double(a);
+        assert_eq!(WideT::from(c), (a_d + a_d) % m_d, "reduce_double");
+
+        let c = m.reduce_sub(a, b);
+        assert_eq!(WideT::from(c), (m_d + a_d - b_d) % m_d, "reduce_sub");
+
+        let c = m.reduce_neg(a);
+        assert_eq!(0, (WideT::from(c) + a_d) % m_d, "reduce_neg");
+
+        if let Ok(c) = m.try_reduce_inv(a) {
+            assert_eq!(1, (WideT::from(c) * a_d) % m_d, "reduce_sub");
+        }
     }
-}
-
-///
-pub trait AddReduceOps<Modulus>
-where
-    Self:
-        Copy + ConstZero + AddReduce<Modulus, Self, Output = Self> + AddReduceAssign<Modulus, Self>,
-{
-}
-
-impl<T, Modulus> AddReduceOps<Modulus> for T where
-    T: Copy + ConstZero + AddReduce<Modulus, Self, Output = Self> + AddReduceAssign<Modulus, Self>
-{
-}
-
-///
-pub trait SubReduceOps<Modulus>
-where
-    Self:
-        Copy + ConstZero + SubReduce<Modulus, Self, Output = Self> + SubReduceAssign<Modulus, Self>,
-{
-}
-
-impl<T, Modulus> SubReduceOps<Modulus> for T where
-    T: Copy + ConstZero + SubReduce<Modulus, Self, Output = Self> + SubReduceAssign<Modulus, Self>
-{
-}
-
-///
-pub trait MulReduceOps<Modulus>
-where
-    Self:
-        Copy + ConstOne + MulReduce<Modulus, Self, Output = Self> + MulReduceAssign<Modulus, Self>,
-{
-}
-
-impl<T, Modulus> MulReduceOps<Modulus> for T where
-    T: Copy + ConstOne + MulReduce<Modulus, Self, Output = Self> + MulReduceAssign<Modulus, Self>
-{
-}
-
-///
-pub trait RingReduceOps<Modulus>
-where
-    Self: AddReduceOps<Modulus>
-        + SubReduceOps<Modulus>
-        + MulReduceOps<Modulus>
-        + NegReduce<Modulus, Output = Self>
-        + NegReduceAssign<Modulus>
-        + DotProductReduce<Modulus, Output = Self>,
-{
-}
-
-impl<T, Modulus> RingReduceOps<Modulus> for T where
-    T: AddReduceOps<Modulus>
-        + SubReduceOps<Modulus>
-        + MulReduceOps<Modulus>
-        + NegReduce<Modulus, Output = T>
-        + NegReduceAssign<Modulus>
-        + DotProductReduce<Modulus, Output = T>
-{
-}
-
-///
-pub trait DivReduceOps<Modulus>
-where
-    Self:
-        Copy + ConstOne + DivReduce<Modulus, Self, Output = Self> + DivReduceAssign<Modulus, Self>,
-{
-}
-
-impl<T, Modulus> DivReduceOps<Modulus> for T where
-    T: Copy + ConstOne + DivReduce<Modulus, Self, Output = Self> + DivReduceAssign<Modulus, Self>
-{
-}
-
-///
-pub trait FieldReduceOps<Modulus>
-where
-    Self: RingReduceOps<Modulus> + DivReduceOps<Modulus>,
-{
-}
-
-impl<T, Modulus> FieldReduceOps<Modulus> for T where
-    T: RingReduceOps<Modulus> + DivReduceOps<Modulus>
-{
 }

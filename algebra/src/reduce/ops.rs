@@ -1,184 +1,270 @@
-use crate::AlgebraError;
+use crate::{integer::UnsignedInteger, AlgebraError};
 
 /// The modulo operation.
-pub trait Reduce<Modulus>: Sized {
+pub trait Reduce<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `self (mod modulus)`.
-    fn reduce(self, modulus: Modulus) -> Self::Output;
+    /// Calculates `value (mod modulus)` where `self` is modulus.
+    fn reduce(self, value: T) -> Self::Output;
 }
 
 /// The modulo assignment operation.
-pub trait ReduceAssign<Modulus>: Sized {
-    /// Calculates `self (mod modulus)`.
-    fn reduce_assign(&mut self, modulus: Modulus);
+pub trait ReduceAssign<T> {
+    /// Calculates `value (mod modulus)` where `self` is modulus.
+    fn reduce_assign(self, value: &mut T);
+}
+
+/// At most one minus operation.
+pub trait ReduceOnce<T> {
+    /// Output type.
+    type Output;
+
+    /// Calculates `value - modulus` if `value >= modulus`.
+    fn reduce_once(self, value: T) -> Self::Output;
+}
+
+/// At most one minus operation assignment.
+pub trait ReduceOnceAssign<T> {
+    /// Calculates `value - modulus` if `value >= modulus`.
+    fn reduce_once_assign(self, value: &mut T);
 }
 
 /// The modular addition.
-pub trait AddReduce<Modulus, Rhs = Self> {
+pub trait ReduceAdd<T, B = T> {
     /// Output type.
     type Output;
 
-    /// Calculates `self + rhs (mod modulus)`
+    /// Calculates `a + b (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self < modulus`
-    /// - `rhs < modulus`
-    fn add_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
+    /// - `a < modulus`
+    /// - `b < modulus`
+    fn reduce_add(self, a: T, b: B) -> Self::Output;
 }
 
 /// The modular addition assignment.
-pub trait AddReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self += rhs (mod modulus)`
+pub trait ReduceAddAssign<T, B = T> {
+    /// Calculates `a += b (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self < modulus`
-    /// - `rhs < modulus`
-    fn add_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
+    /// - `a < modulus`
+    /// - `b < modulus`
+    fn reduce_add_assign(self, a: &mut T, b: B);
+}
+
+/// The modular double.
+pub trait ReduceDouble<T> {
+    /// Output type.
+    type Output;
+
+    /// Calculates `2*value (mod modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `value < modulus`
+    fn reduce_double(self, value: T) -> Self::Output;
+}
+
+/// The modular double assignment.
+pub trait ReduceDoubleAssign<T> {
+    /// Calculates `value = 2*value (mod modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `value < modulus`
+    fn reduce_double_assign(self, value: &mut T);
 }
 
 /// The modular subtraction.
-pub trait SubReduce<Modulus, Rhs = Self> {
+pub trait ReduceSub<T, B = T> {
     /// Output type.
     type Output;
 
-    /// Calculates `self - rhs (mod modulus)`
+    /// Calculates `a - b (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self < modulus`
-    /// - `rhs < modulus`
-    fn sub_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
+    /// - `a < modulus`
+    /// - `b < modulus`
+    fn reduce_sub(self, a: T, b: B) -> Self::Output;
 }
 
 /// The modular subtraction assignment.
-pub trait SubReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self -= rhs (mod modulus)`
+pub trait ReduceSubAssign<T, B = T> {
+    /// Calculates `a -= b (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self < modulus`
-    /// - `rhs < modulus`
-    fn sub_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
+    /// - `a < modulus`
+    /// - `b < modulus`
+    fn reduce_sub_assign(self, a: &mut T, b: B);
 }
 
 /// The modular negation.
-pub trait NegReduce<Modulus> {
+pub trait ReduceNeg<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `-self (mod modulus)`
+    /// Calculates `-value (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self < modulus`
-    fn neg_reduce(self, modulus: Modulus) -> Self::Output;
+    /// - `value < modulus`
+    fn reduce_neg(self, value: T) -> Self::Output;
 }
 
 /// The modular negation assignment.
-pub trait NegReduceAssign<Modulus> {
-    /// Calculates `-self (mod modulus)`
+pub trait ReduceNegAssign<T> {
+    /// Calculates `-value (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self < modulus`
-    fn neg_reduce_assign(&mut self, modulus: Modulus);
+    /// - `value < modulus`
+    fn reduce_neg_assign(self, value: &mut T);
 }
 
 /// The modular multiplication.
-pub trait MulReduce<Modulus, Rhs = Self> {
+pub trait ReduceMul<T, B = T> {
     /// Output type.
     type Output;
 
-    /// Calculates `self * rhs (mod modulus)`.
+    /// Calculates `a * b (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self*rhs < modulus^2`
-    fn mul_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
+    /// - `a*b < modulus²`
+    fn reduce_mul(self, a: T, b: B) -> Self::Output;
 }
 
 /// The modular multiplication assignment.
-pub trait MulReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self *= rhs (mod modulus)`.
+pub trait ReduceMulAssign<T, B = T> {
+    /// Calculates `a *= b (mod modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self*rhs < modulus^2`
-    fn mul_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
+    /// - `a*b < modulus²`
+    fn reduce_mul_assign(self, a: &mut T, b: B);
+}
+
+/// The modular square.
+pub trait ReduceSquare<T> {
+    /// Output type.
+    type Output;
+
+    /// Calculates `value² (mod modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `value < modulus`
+    fn reduce_square(self, value: T) -> Self::Output;
+}
+
+/// The modular square assignment.
+pub trait ReduceSquareAssign<T> {
+    /// Calculates `value = value² (mod modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `value < modulus`
+    fn reduce_square_assign(self, value: &mut T);
+}
+
+/// The modular multiply-add.
+pub trait ReduceMulAdd<T, B = T, C = T> {
+    /// Output type.
+    type Output;
+
+    /// Calculates `(a * b) + c (mod modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `a < modulus`
+    /// - `b < modulus`
+    /// - `c < modulus`
+    fn reduce_mul_add(self, a: T, b: B, c: C) -> Self::Output;
+}
+
+/// The modular multiply-add assignment.
+pub trait ReduceMulAddAssign<T, B = T, C = T> {
+    /// Calculates `(a * b) + c (mod modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `a < modulus`
+    /// - `b < modulus`
+    /// - `c < modulus`
+    fn reduce_mul_add_assign(self, a: &mut T, b: B, c: C);
 }
 
 /// Calculate the inverse element for a field.
-pub trait InvReduce<Modulus = Self>: Sized {
-    /// Calculate the multiplicative inverse of `self (mod modulus)`.
-    fn inv_reduce(self, modulus: Modulus) -> Self;
+pub trait ReduceInv<T> {
+    /// Output type.
+    type Output;
+
+    /// Calculate the multiplicative inverse of `value (mod modulus)` where `self` is modulus.
+    fn reduce_inv(self, value: T) -> Self::Output;
 }
 
 /// The modular inversion assignment for a field.
-pub trait InvReduceAssign<Modulus = Self> {
-    /// Calculates `self^(-1) (mod modulus)`
-    fn inv_reduce_assign(&mut self, modulus: Modulus);
+pub trait ReduceInvAssign<T> {
+    /// Calculates `value^(-1) (mod modulus)` where `self` is modulus.
+    fn reduce_inv_assign(self, value: &mut T);
 }
 
-/// Try to calculate the inverse element when there is not a field.
-pub trait TryInvReduce<Modulus = Self>: Sized {
-    /// Try to calculate the multiplicative inverse of `self modulo modulus`.
+/// Try to calculate the inverse element when there may be not a field.
+pub trait TryReduceInv<T> {
+    /// Output type.
+    type Output;
+
+    /// Try to calculate the multiplicative inverse of `value modulo modulus` where `self` is modulus.
     ///
     /// # Errors
     ///
     /// If there dose not exist the such inverse, a [`AlgebraError`] will be returned.
-    fn try_inv_reduce(self, modulus: Modulus) -> Result<Self, AlgebraError>;
+    fn try_reduce_inv(self, value: T) -> Result<Self::Output, AlgebraError>;
 }
 
 /// The modular division.
-pub trait DivReduce<Modulus, Rhs = Self> {
+pub trait ReduceDiv<T, B = T> {
     /// Output type.
     type Output;
 
-    /// Calculates `self / rhs (mod modulus)`.
-    fn div_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
+    /// Calculates `a / b (mod modulus)` where `self` is modulus.
+    fn reduce_div(self, a: T, b: B) -> Self::Output;
 }
 
 /// The modular division assignment.
-pub trait DivReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self /= rhs (mod modulus)`.
-    fn div_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
+pub trait ReduceDivAssign<T, B = T> {
+    /// Calculates `a /= b (mod modulus)` where `self` is modulus.
+    fn reduce_div_assign(self, a: &mut T, b: B);
 }
 
 /// The modular exponentiation.
-pub trait ExpReduce<Modulus, Exponent> {
-    /// Calculates `self^exp (mod modulus)`.
-    fn exp_reduce(self, exp: Exponent, modulus: Modulus) -> Self;
+pub trait ReduceExp<T> {
+    /// Calculates `base^exp (mod modulus)` where `self` is modulus.
+    fn reduce_exp<Exponent: UnsignedInteger>(self, base: T, exp: Exponent) -> T;
 }
 
 /// The modular exponentiation.
-pub trait ExpPowOf2Reduce<Modulus> {
-    /// Calculates `self^(2^exp_log) (mod modulus)`.
-    fn exp_power_of_2_reduce(self, exp_log: u32, modulus: Modulus) -> Self;
+pub trait ReduceExpPowOf2<T> {
+    /// Calculates `base^(2^exp_log) (mod modulus)` where `self` is modulus.
+    fn reduce_exp_power_of_2(self, base: T, exp_log: u32) -> T;
 }
 
 /// The modular dot product.
 ///
 /// This is always used for slice. For example, `u64` slice `[u64]`.
 ///
-/// For two same length slice `a = (a0, a1, ..., an)` and `b = (b0, b1, ..., bn)`.
+/// For two same length slice `a = (a₀, a₁, ..., an)` and `b = (b₀, b₁, ..., bn)`.
 ///
-/// This trait will calculate `a0×b0 + a1×b1 + ... + an×bn mod modulus`.
-pub trait DotProductReduce<Modulus>: Sized {
+/// This trait will calculate `a₀×b₀ + a₁×b₁ + ... + an×bn mod modulus`.
+pub trait ReduceDotProduct<T> {
     /// Output type.
     type Output;
 
-    /// Calculate `a • b mod modulus`
-    ///
-    /// For two same length slice `a = (a0, a1, ..., an)` and `b = (b0, b1, ..., bn)`.
-    ///
-    /// This trait will calculate `a0×b0 + a1×b1 + ... + an×bn mod modulus`.
-    fn dot_product_reduce(
-        a: impl AsRef<[Self]>,
-        b: impl AsRef<[Self]>,
-        modulus: Modulus,
-    ) -> Self::Output;
+    /// Calculate `∑a_i×b_i (mod modulus)` where `self` is modulus.
+    fn reduce_dot_product(self, a: impl AsRef<[T]>, b: impl AsRef<[T]>) -> Self::Output;
 }

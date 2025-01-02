@@ -1,8 +1,10 @@
-/// LWE Ciphertext
-pub type LWECiphertext<C> = lattice::LWE<C>;
+/// Lwe Ciphertext
+pub type LweCiphertext<C> = lattice::Lwe<C>;
 
-/// RLWE Ciphertext
-pub type RLWECiphertext<F> = lattice::RLWE<F>;
+pub type CmLweCiphertext<C> = lattice::CmLwe<C>;
 
-/// NTT version RLWE Ciphertext
-pub type NTTRLWECiphertext<F> = lattice::NTTRLWE<F>;
+/// Rlwe Ciphertext
+pub type RlweCiphertext<F> = lattice::Rlwe<F>;
+
+/// Ntt version Rlwe Ciphertext
+pub type NttRlweCiphertext<F> = lattice::NttRlwe<F>;

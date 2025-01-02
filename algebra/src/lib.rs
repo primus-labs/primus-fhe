@@ -1,28 +1,29 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-#![deny(missing_docs)]
+#![cfg_attr(feature = "nightly", feature(bigint_helper_methods))]
+#![cfg_attr(
+    all(feature = "nightly", any(target_arch = "x86", target_arch = "x86_64")),
+    feature(avx512_target_feature, stdarch_x86_avx512)
+)]
 
-//! Define arithmetic operations.
-mod decompose_basis;
 mod error;
-mod field;
-mod polynomial;
-mod primitive;
-mod random;
 
-pub mod derive;
+pub mod arith;
+pub mod decompose;
+pub mod integer;
+pub mod numeric;
+
 pub mod modulus;
 pub mod reduce;
-pub mod transformation;
+
+mod field;
+
+pub mod random;
+
+pub mod ntt;
+pub mod polynomial;
+
 pub mod utils;
 
-pub use decompose_basis::Basis;
 pub use error::AlgebraError;
-pub use field::{DecomposableField, FheField, Field, NTTField, PrimeField};
-pub use polynomial::{
-    ntt_add_mul_assign, ntt_add_mul_assign_fast, ntt_add_mul_inplace, NTTPolynomial, Polynomial,
-};
-pub use primitive::*;
-pub use random::{
-    FieldBinarySampler, FieldDiscreteGaussianSampler, FieldTernarySampler, FieldUniformSampler,
-};
-pub use reduce::ModulusConfig;
+
+pub use field::*;

@@ -1,269 +1,164 @@
 use std::ops::{Deref, DerefMut};
 
-use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
+use algebra::{
+    decompose::NonPowOf2ApproxSignedBasis,
+    polynomial::{FieldNttPolynomial, FieldPolynomial},
+    Field, NttField,
+};
 
-use crate::{NTTRGSW, NTTRLWE, RLWE};
+use crate::{NttRgsw, NttRlwe, Rlwe};
 
 /// Pre allocated space for inplace decomposition.
-#[derive(Debug)]
-pub struct DecompositionSpace<F: NTTField> {
-    space: NTTPolynomial<F>,
+pub struct PolyDecomposeSpace<F: NttField> {
+    pub adjust_poly: FieldPolynomial<F>,
+    pub decomposed_poly: FieldNttPolynomial<F>,
+    pub carries: Vec<bool>,
 }
 
-impl<F: NTTField> Deref for DecompositionSpace<F> {
-    type Target = NTTPolynomial<F>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.space
-    }
-}
-
-impl<F: NTTField> DerefMut for DecompositionSpace<F> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.space
-    }
-}
-
-impl<F: NTTField> DecompositionSpace<F> {
-    /// Creates a new [`DecompositionSpace<F>`].
+impl<F: NttField> PolyDecomposeSpace<F> {
+    /// Creates a new [`PolyDecomposeSpace<F>`].
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
         Self {
-            space: <NTTPolynomial<F>>::zero(coeff_count),
+            adjust_poly: FieldPolynomial::zero(coeff_count),
+            decomposed_poly: FieldNttPolynomial::zero(coeff_count),
+            carries: vec![false; coeff_count],
         }
     }
 
-    /// Gets the pre allocated space of decomposition.
+    /// Gets the mutable pre allocated space for decomposition.
     #[inline]
-    pub fn get(&self) -> &NTTPolynomial<F> {
-        &self.space
-    }
-
-    /// Gets the mutable pre allocated space of decomposition.
-    #[inline]
-    pub fn get_mut(&mut self) -> &mut NTTPolynomial<F> {
-        &mut self.space
-    }
-}
-
-/// Pre allocated space for inplace polynomial operation.
-#[derive(Debug)]
-pub struct PolynomialSpace<F: NTTField> {
-    space: Polynomial<F>,
-}
-
-impl<F: NTTField> Deref for PolynomialSpace<F> {
-    type Target = Polynomial<F>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.space
-    }
-}
-
-impl<F: NTTField> DerefMut for PolynomialSpace<F> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.space
-    }
-}
-
-impl<F: NTTField> PolynomialSpace<F> {
-    /// Creates a new [`PolynomialSpace<F>`].
-    #[inline]
-    pub fn new(coeff_count: usize) -> Self {
-        Self {
-            space: <Polynomial<F>>::zero(coeff_count),
-        }
-    }
-
-    /// Gets the pre allocated space.
-    #[inline]
-    pub fn get(&self) -> &Polynomial<F> {
-        &self.space
-    }
-
-    /// Gets the mutable pre allocated space.
-    #[inline]
-    pub fn get_mut(&mut self) -> &mut Polynomial<F> {
-        &mut self.space
-    }
-}
-
-/// Pre allocated space for inplace ntt polynomial operation.
-#[derive(Debug)]
-pub struct NTTPolynomialSpace<F: NTTField> {
-    space: NTTPolynomial<F>,
-}
-
-impl<F: NTTField> Deref for NTTPolynomialSpace<F> {
-    type Target = NTTPolynomial<F>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.space
-    }
-}
-
-impl<F: NTTField> DerefMut for NTTPolynomialSpace<F> {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.space
-    }
-}
-
-impl<F: NTTField> NTTPolynomialSpace<F> {
-    /// Creates a new [`NTTPolynomialSpace<F>`].
-    #[inline]
-    pub fn new(coeff_count: usize) -> Self {
-        Self {
-            space: <NTTPolynomial<F>>::zero(coeff_count),
-        }
-    }
-
-    /// Gets the pre allocated space.
-    #[inline]
-    pub fn get(&self) -> &NTTPolynomial<F> {
-        &self.space
-    }
-
-    /// Gets the mutable pre allocated space.
-    #[inline]
-    pub fn get_mut(&mut self) -> &mut NTTPolynomial<F> {
-        &mut self.space
+    pub fn get_mut(
+        &mut self,
+    ) -> (
+        &mut FieldPolynomial<F>,
+        &mut [bool],
+        &mut FieldNttPolynomial<F>,
+    ) {
+        (
+            &mut self.adjust_poly,
+            self.carries.as_mut_slice(),
+            &mut self.decomposed_poly,
+        )
     }
 }
 
 /// Pre allocated space.
-#[derive(Debug)]
-pub struct NTTRLWESpace<F: NTTField> {
-    space: NTTRLWE<F>,
-}
+pub struct RlweSpace<F: NttField>(Rlwe<F>);
 
-impl<F: NTTField> Deref for NTTRLWESpace<F> {
-    type Target = NTTRLWE<F>;
+impl<F: NttField> Deref for RlweSpace<F> {
+    type Target = Rlwe<F>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.space
+        &self.0
     }
 }
 
-impl<F: NTTField> DerefMut for NTTRLWESpace<F> {
+impl<F: NttField> DerefMut for RlweSpace<F> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.space
+        &mut self.0
     }
 }
 
-impl<F: NTTField> NTTRLWESpace<F> {
-    /// Creates a new [`NTTRLWESpace<F>`].
+impl<F: NttField> RlweSpace<F> {
+    /// Creates a new [`RlweSpace<F>`].
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
-        Self {
-            space: <NTTRLWE<F>>::zero(coeff_count),
-        }
+        Self(<Rlwe<F>>::zero(coeff_count))
     }
 
     /// Gets the pre allocated space.
     #[inline]
-    pub fn get(&self) -> &NTTRLWE<F> {
-        &self.space
+    pub fn get(&self) -> &Rlwe<F> {
+        &self.0
     }
 
     /// Gets the mutable pre allocated space.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut NTTRLWE<F> {
-        &mut self.space
+    pub fn get_mut(&mut self) -> &mut Rlwe<F> {
+        &mut self.0
     }
 }
 
 /// Pre allocated space.
-#[derive(Debug)]
-pub struct RLWESpace<F: NTTField> {
-    space: RLWE<F>,
-}
+pub struct NttRlweSpace<F: NttField>(NttRlwe<F>);
 
-impl<F: NTTField> Deref for RLWESpace<F> {
-    type Target = RLWE<F>;
+impl<F: NttField> Deref for NttRlweSpace<F> {
+    type Target = NttRlwe<F>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.space
+        &self.0
     }
 }
 
-impl<F: NTTField> DerefMut for RLWESpace<F> {
+impl<F: NttField> DerefMut for NttRlweSpace<F> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.space
+        &mut self.0
     }
 }
 
-impl<F: NTTField> RLWESpace<F> {
-    /// Creates a new [`RLWESpace<F>`].
+impl<F: NttField> NttRlweSpace<F> {
+    /// Creates a new [`NttRlweSpace<F>`].
     #[inline]
     pub fn new(coeff_count: usize) -> Self {
-        Self {
-            space: <RLWE<F>>::zero(coeff_count),
-        }
+        Self(<NttRlwe<F>>::zero(coeff_count))
     }
 
     /// Gets the pre allocated space.
     #[inline]
-    pub fn get(&self) -> &RLWE<F> {
-        &self.space
+    pub fn get(&self) -> &NttRlwe<F> {
+        &self.0
     }
 
     /// Gets the mutable pre allocated space.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut RLWE<F> {
-        &mut self.space
+    pub fn get_mut(&mut self) -> &mut NttRlwe<F> {
+        &mut self.0
     }
 }
 
 /// Pre allocated space.
-#[derive(Debug)]
-pub struct NTTRGSWSpace<F: NTTField> {
-    space: NTTRGSW<F>,
-}
+pub struct NttRgswSpace<F: NttField>(NttRgsw<F>);
 
-impl<F: NTTField> Deref for NTTRGSWSpace<F> {
-    type Target = NTTRGSW<F>;
+impl<F: NttField> Deref for NttRgswSpace<F> {
+    type Target = NttRgsw<F>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.space
+        &self.0
     }
 }
 
-impl<F: NTTField> DerefMut for NTTRGSWSpace<F> {
+impl<F: NttField> DerefMut for NttRgswSpace<F> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.space
+        &mut self.0
     }
 }
 
-impl<F: NTTField> NTTRGSWSpace<F> {
-    /// Creates a new [`NTTRGSWSpace<F>`].
+impl<F: NttField> NttRgswSpace<F> {
+    /// Creates a new [`NttRgswSpace<F>`].
     #[inline]
-    pub fn new(coeff_count: usize, basis: Basis<F>) -> Self {
-        Self {
-            space: NTTRGSW::zero(coeff_count, basis),
-        }
+    pub fn new(
+        coeff_count: usize,
+        basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+    ) -> Self {
+        Self(NttRgsw::zero(coeff_count, basis))
     }
 
     /// Gets the pre allocated space.
     #[inline]
-    pub fn get(&self) -> &NTTRGSW<F> {
-        &self.space
+    pub fn get(&self) -> &NttRgsw<F> {
+        &self.0
     }
 
     /// Gets the mutable pre allocated space.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut NTTRGSW<F> {
-        &mut self.space
+    pub fn get_mut(&mut self) -> &mut NttRgsw<F> {
+        &mut self.0
     }
 }
