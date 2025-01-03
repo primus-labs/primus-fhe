@@ -22,12 +22,15 @@ pub enum KeySwitchingKey<C: UnsignedInteger, Q: NttField> {
     PowOf2DimensionLwe(LweKeySwitchingKeyRlweMode<Q>),
     /// The key switching is based on LWE constant multiplication.
     PowOf2ModulusLwe(PowOf2LweKeySwitchingKey<C>),
+    /// The key switching is based on non power of 2 modulus LWE.
     NonPowOf2ModulusLwe(NonPowOf2LweKeySwitchingKey<<Q as Field>::ValueT>),
     /// No key switching.
     None,
 }
 
 impl<C: UnsignedInteger, Q: NttField> KeySwitchingKey<C, Q> {
+    /// Returns an `Option` containing a reference to the
+    /// `LweKeySwitchingKeyRlweMode<Q>` if the key is in `PowOf2DimensionLwe` mode, otherwise `None`.
     #[inline]
     pub fn as_pow_of_2_dimension_lwe(&self) -> Option<&LweKeySwitchingKeyRlweMode<Q>> {
         if let Self::PowOf2DimensionLwe(v) = self {
@@ -37,6 +40,8 @@ impl<C: UnsignedInteger, Q: NttField> KeySwitchingKey<C, Q> {
         }
     }
 
+    /// Returns an `Option` containing a reference to the
+    /// `PowOf2LweKeySwitchingKey<C>` if the key is in `PowOf2ModulusLwe` mode, otherwise `None`.
     #[inline]
     pub fn as_pow_of_2_modulus_lwe(&self) -> Option<&PowOf2LweKeySwitchingKey<C>> {
         if let Self::PowOf2ModulusLwe(v) = self {
@@ -46,6 +51,9 @@ impl<C: UnsignedInteger, Q: NttField> KeySwitchingKey<C, Q> {
         }
     }
 
+    /// Attempts to convert the key into an
+    /// `LweKeySwitchingKeyRlweMode<Q>`. Returns `Ok` with the key if successful, otherwise returns
+    /// `Err` with the original key.
     #[inline]
     pub fn try_into_pow_of_2_dimension_lwe(self) -> Result<LweKeySwitchingKeyRlweMode<Q>, Self> {
         if let Self::PowOf2DimensionLwe(v) = self {
@@ -55,6 +63,9 @@ impl<C: UnsignedInteger, Q: NttField> KeySwitchingKey<C, Q> {
         }
     }
 
+    /// Attempts to convert the key into a
+    /// `PowOf2LweKeySwitchingKey<C>`. Returns `Ok` with the key if successful, otherwise returns
+    /// `Err` with the original key.
     #[inline]
     pub fn try_into_pow_of_2_modulus_lwe(self) -> Result<PowOf2LweKeySwitchingKey<C>, Self> {
         if let Self::PowOf2ModulusLwe(v) = self {
@@ -64,6 +75,9 @@ impl<C: UnsignedInteger, Q: NttField> KeySwitchingKey<C, Q> {
         }
     }
 
+    /// Returns an `Option` containing a reference to the
+    /// `NonPowOf2LweKeySwitchingKey<<Q as Field>::ValueT>` if the key is in `NonPowOf2ModulusLwe` mode,
+    /// otherwise `None`.
     #[inline]
     pub fn as_non_pow_of_2_modulus_lwe(
         &self,
@@ -496,7 +510,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Input: ciphertext `c2`, with message `c`.
     /// * Output: ciphertext with message `(a & b) | (b & c) | (a & c)`.
-    ///     If there are two or three `true`(resp. `false`) in `a`, `b` and `c`, it will return `true`(resp. `false`).
+    ///   If there are two or three `true`(resp. `false`) in `a`, `b` and `c`, it will return `true`(resp. `false`).
     pub fn majority<M>(
         &self,
         c0: &LweCiphertext<C>,
@@ -528,7 +542,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Input: ciphertext `c2`, with message `c`.
     /// * Output: ciphertext with message `if a {b} else {c}`.
-    ///     If `a` is `true`, it will return `b`. If `a` is `false`, it will return `c`.
+    ///   If `a` is `true`, it will return `b`. If `a` is `false`, it will return `c`.
     pub fn mux<M>(
         &self,
         c0: &LweCiphertext<C>,

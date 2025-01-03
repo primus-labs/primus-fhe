@@ -3,8 +3,11 @@ use std::iter::once;
 use algebra::{polynomial::FieldPolynomial, reduce::ReduceNeg, Field};
 use itertools::Itertools;
 
+/// A helper trait for creating look-up tables.
 pub trait LookUpTable<Q: Field> {
+    /// Generates the negacyclic look-up table.
     fn negacyclic_lut(&self, coeff_count: usize, log_t: u32) -> FieldPolynomial<Q>;
+    /// Generates the non-cyclic look-up table.
     fn half_lut(&self, coeff_count: usize, log_t: u32) -> FieldPolynomial<Q>;
 }
 

@@ -28,6 +28,7 @@ pub static DEFAULT_128_BITS_PARAMETERS: LazyLock<BooleanFheParameters<u16, Fp>> 
         .unwrap()
     });
 
+/// Default 128-bits security Parameters without key switching
 pub static NO_KEY_SWITCHING: LazyLock<BooleanFheParameters<u16, Fp>> = LazyLock::new(|| {
     BooleanFheParameters::<u16, Fp>::new(ConstParameters {
         lwe_dimension: 1024,

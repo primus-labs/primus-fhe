@@ -1,3 +1,5 @@
+//! The parameters of the fully homomorphic encryption scheme.
+
 use algebra::decompose::NonPowOf2ApproxSignedBasis;
 use algebra::integer::Bits;
 use algebra::random::DiscreteGaussian;
@@ -285,6 +287,7 @@ impl<C: UnsignedInteger, Q: NttField> BooleanFheParameters<C, Q> {
         &self.lwe_params
     }
 
+    /// Generates the NTT table.
     #[inline]
     pub fn generate_ntt_table_for_rlwe(&self) -> <Q as NttField>::Table {
         Q::generate_ntt_table(self.ring_dimension().trailing_zeros()).unwrap()

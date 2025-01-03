@@ -1,3 +1,8 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![deny(missing_docs)]
+
+//! Boolean FHE is a library for homomorphic encryption of boolean values.
+
 mod parameter;
 
 mod evaluate;

@@ -107,6 +107,7 @@ impl<C: UnsignedInteger, Q: NttField> SecretKeyPack<C, Q> {
         self.parameters.lwe_params()
     }
 
+    /// Encrypts a message with cipher modulus and random number generator.
     #[inline]
     pub fn encrypt<M, R>(
         &self,
@@ -122,6 +123,7 @@ impl<C: UnsignedInteger, Q: NttField> SecretKeyPack<C, Q> {
             .encrypt(message, self.lwe_params(), cipher_modulus, rng)
     }
 
+    /// Decrypts the cipher text.
     #[inline]
     pub fn decrypt<M>(
         &self,
@@ -135,6 +137,7 @@ impl<C: UnsignedInteger, Q: NttField> SecretKeyPack<C, Q> {
             .decrypt(cipher_text, self.lwe_params(), cipher_modulus)
     }
 
+    /// Decrypts the cipher text and calculates the noise.
     #[inline]
     pub fn decrypt_with_noise<M>(
         &self,

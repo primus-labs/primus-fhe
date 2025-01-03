@@ -1,7 +1,9 @@
+use std::ops::MulAssign;
+
 use crate::{
     modulus::ShoupFactor,
     reduce::{ReduceAddAssign, ReduceMul, ReduceMulAdd, ReduceMulAssign},
-    Field,
+    Field, NttField,
 };
 
 use super::FieldPolynomial;
@@ -54,5 +56,16 @@ impl<F: Field> FieldPolynomial<F> {
             <F as Field>::MODULUS
                 .reduce_add_assign(r, <F as Field>::MODULUS_VALUE.reduce_mul(v, scalar))
         });
+    }
+}
+
+impl<F: NttField> FieldPolynomial<F> {
+    /// Multiply `self` with the a polynomial.
+    #[inline]
+    pub fn mul(self, rhs: Self, ntt_table: &<F as NttField>::Table) -> Self {
+        let mut a = self.into_ntt_poly(ntt_table);
+        let b = rhs.into_ntt_poly(ntt_table);
+        a.mul_assign(&b);
+        a.into_coeff_poly(ntt_table)
     }
 }
