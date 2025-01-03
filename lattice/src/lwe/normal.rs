@@ -57,16 +57,19 @@ impl<T: Copy> Lwe<T> {
         &mut self.b
     }
 
+    /// Returns the dimension of this [`Lwe<T>`].
     #[inline]
     pub fn dimension(&self) -> usize {
         self.a.len()
     }
 
+    /// Returns a slice reference to the a of this [`Lwe<T>`].
     #[inline]
     pub fn a_slice(&self) -> &[T] {
         self.a.as_slice()
     }
 
+    /// Returns a mutable slice reference to the a of this [`Lwe<T>`].
     #[inline]
     pub fn a_mut_slice(&mut self) -> &mut [T] {
         self.a.as_mut_slice()
@@ -74,6 +77,7 @@ impl<T: Copy> Lwe<T> {
 }
 
 impl<T: UnsignedInteger> Lwe<T> {
+    /// Generates a [`Lwe<T>`] with all values are `0`.
     #[inline]
     pub fn zero(dimension: usize) -> Self {
         Self {
@@ -82,6 +86,7 @@ impl<T: UnsignedInteger> Lwe<T> {
         }
     }
 
+    /// Sets all values to `0`.
     #[inline]
     pub fn set_zero(&mut self) {
         self.a.fill(T::ZERO);

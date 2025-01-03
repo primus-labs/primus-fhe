@@ -10,8 +10,11 @@ use crate::{NttRgsw, NttRlwe, Rlwe};
 
 /// Pre allocated space for inplace decomposition.
 pub struct PolyDecomposeSpace<F: NttField> {
+    /// store adjusted polynomial
     pub adjust_poly: FieldPolynomial<F>,
+    /// store decompose polynomial
     pub decomposed_poly: FieldNttPolynomial<F>,
+    /// store carries
     pub carries: Vec<bool>,
 }
 

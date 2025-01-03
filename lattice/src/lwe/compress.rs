@@ -9,6 +9,9 @@ use num_traits::Zero;
 
 use super::Lwe;
 
+/// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
+///
+/// This structure encrypts several messages like a rlwe but truncated `b`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CmLwe<T: Copy> {
     a: Vec<T>,
@@ -48,6 +51,7 @@ impl<T: Copy> CmLwe<T> {
 }
 
 impl<T: UnsignedInteger> CmLwe<T> {
+    /// Generates a [`CmLwe<T>`] with all values are `0`.
     #[inline]
     pub fn zero(dimension: usize, msg_count: usize) -> Self {
         Self {
@@ -56,12 +60,19 @@ impl<T: UnsignedInteger> CmLwe<T> {
         }
     }
 
+    /// Sets all values to `0`.
     #[inline]
     pub fn set_zero(&mut self) {
         self.a.fill(T::ZERO);
         self.b.fill(T::ZERO);
     }
 
+    /// Perform component-wise reduce addition of two [`CmLwe<T>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is a reference.
+    /// If your `self` is not a reference, you can use function `add_reduce_component_wise`.
     #[inline]
     pub fn add_reduce_component_wise_ref<M>(&self, rhs: &Self, modulus: M) -> Self
     where
@@ -83,6 +94,12 @@ impl<T: UnsignedInteger> CmLwe<T> {
         )
     }
 
+    /// Perform component-wise reduce addition of two [`CmLwe<T>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is not a reference.
+    /// If your `self` is a reference, you can use function `add_reduce_component_wise_ref`.
     #[inline]
     pub fn add_reduce_component_wise<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
@@ -92,6 +109,8 @@ impl<T: UnsignedInteger> CmLwe<T> {
         self
     }
 
+    /// Performs an in-place component-wise reduce addition
+    /// on the `self` [`CmLwe<T>`] with another `rhs` [`CmLwe<T>`].
     #[inline]
     pub fn add_reduce_assign_component_wise<M>(&mut self, rhs: &Self, modulus: M)
     where
@@ -109,6 +128,12 @@ impl<T: UnsignedInteger> CmLwe<T> {
             .for_each(|(a, &b)| modulus.reduce_add_assign(a, b));
     }
 
+    /// Perform component-wise subtraction of two [`CmLwe<T>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is a reference.
+    /// If your `self` is not a reference, you can use function `sub_reduce_component_wise`.
     #[inline]
     pub fn sub_reduce_component_wise_ref<M>(&self, rhs: &Self, modulus: M) -> Self
     where
@@ -130,6 +155,12 @@ impl<T: UnsignedInteger> CmLwe<T> {
         )
     }
 
+    /// Perform component-wise subtraction of two [`CmLwe<T>`].
+    ///
+    /// # Attention
+    ///
+    /// In this function, `self` is not a reference.
+    /// If your `self` is a reference, you can use function `sub_reduce_component_wise_ref`.
     #[inline]
     pub fn sub_reduce_component_wise<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
@@ -139,6 +170,8 @@ impl<T: UnsignedInteger> CmLwe<T> {
         self
     }
 
+    /// Performs an in-place component-wise subtraction
+    /// on the `self` [`CmLwe<T>`] with another `rhs` [`CmLwe<T>`].
     #[inline]
     pub fn sub_reduce_assign_component_wise<M>(&mut self, rhs: &Self, modulus: M)
     where
@@ -155,6 +188,8 @@ impl<T: UnsignedInteger> CmLwe<T> {
             .for_each(|(a, &b)| modulus.reduce_sub_assign(a, b));
     }
 
+    /// Performs an in-place scalar multiplication
+    /// on the `self` [`CmLwe<T>`] with scalar `T`.
     #[inline]
     pub fn mul_scalar_reduce_inplace<M>(&mut self, scalar: T, modulus: M)
     where
@@ -168,6 +203,9 @@ impl<T: UnsignedInteger> CmLwe<T> {
             .for_each(|v| modulus.reduce_mul_assign(v, scalar));
     }
 
+    /// Performs an in-place scalar multiplication
+    /// on the `rhs` [`CmLwe<T>`] with `scalar` `T`,
+    /// then add to `self`.
     #[inline]
     pub fn add_assign_rhs_mul_scalar_reduce<M>(&mut self, rhs: &Self, scalar: T, modulus: M)
     where
@@ -183,6 +221,7 @@ impl<T: UnsignedInteger> CmLwe<T> {
             .for_each(|(v, &r)| *v = modulus.reduce_mul_add(r, scalar, *v));
     }
 
+    /// Sample extract [Lwe<T>].
     #[inline]
     pub fn extract_rlwe_mode<M>(&self, index: usize, modulus: M) -> Lwe<T>
     where

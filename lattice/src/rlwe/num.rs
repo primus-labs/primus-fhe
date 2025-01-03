@@ -6,6 +6,9 @@ use algebra::{
 
 use crate::{CmLwe, Lwe};
 
+/// A cryptographic structure for Ring Learning with Errors (RLWE).
+/// This structure is used in advanced cryptographic systems and protocols, particularly
+/// those that require efficient homomorphic encryption properties.
 pub struct NumRlwe<T: UnsignedInteger> {
     /// Represents the first component in the RLWE structure.
     /// It is a polynomial where the coefficients are elements of the field `F`.
@@ -168,6 +171,7 @@ impl<T: UnsignedInteger> NumRlwe<T> {
         Lwe::new(a, b[0])
     }
 
+    /// Sample extract a [CmLwe<T>] with several encrypted messages.
     pub fn extract_first_few_lwe_locally<M>(self, count: usize, modulus: M) -> CmLwe<T>
     where
         M: Copy + ReduceNegAssign<T>,
