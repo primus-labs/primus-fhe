@@ -15,11 +15,30 @@ use crate::{
     encode, CmLweCiphertext, LweCiphertext, LweParameters, LweSecretKey, NttRlweSecretKey,
 };
 
+/// Represents a public key for the Learning with Errors (LWE) cryptographic scheme.
+///
+/// # Type Parameters
+///
+/// * `C` - An unsigned integer type that represents the coefficients of the LWE ciphertexts.
 pub struct LwePublicKey<C: UnsignedInteger> {
     public_key: Vec<Lwe<C>>,
 }
 
 impl<C: UnsignedInteger> LwePublicKey<C> {
+    /// Creates a new `LwePublicKey` using the provided secret key,
+    /// parameters, modulus, Gaussian distribution, and random number generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret_key` - A reference to the [LweSecretKey] used to generate the public key.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `modulus` - The modulus used for the LWE scheme.
+    /// * `gaussian` - The Gaussian distribution used for generating random samples.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `LwePublicKey`.
     #[inline]
     pub fn new<M, R>(
         secret_key: &LweSecretKey<C>,
@@ -39,6 +58,18 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
         Self { public_key }
     }
 
+    /// Encrypts a message using the LWE public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `modulus` - The modulus used for the LWE scheme.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// An `LweCiphertext` containing the encrypted message.
     #[inline]
     pub fn encrypt<M, R>(
         &self,
@@ -84,11 +115,29 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
     }
 }
 
+/// Represents a public key for the Learning with Errors (LWE) cryptographic scheme in RLWE mode.
+///
+/// # Type Parameters
+///
+/// * `C` - An unsigned integer type that represents the coefficients of the RLWE ciphertexts.
 pub struct LwePublicKeyRlweMode<C: UnsignedInteger> {
     public_key: NumRlwe<C>,
 }
 
 impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
+    /// Creates a new `LwePublicKeyRlweMode` using the provided secret key,
+    /// parameters, modulus, and random number generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret_key` - A reference to the LweSecretKey used to generate the public key.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `modulus` - The modulus used for the LWE scheme.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `LwePublicKeyRlweMode`.
     #[inline]
     pub fn new<M, R>(
         secret_key: &LweSecretKey<C>,
@@ -113,6 +162,18 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         Self { public_key }
     }
 
+    /// Encrypts a message using the public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `cipher_modulus` - The modulus used for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// An `LweCiphertext` containing the encrypted message.
     #[inline]
     pub fn encrypt<M, R>(
         &self,
@@ -167,6 +228,18 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         result.extract_lwe_locally(cipher_modulus)
     }
 
+    /// Encrypts multiple messages using the public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - A slice of messages to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `cipher_modulus` - The modulus used for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
     #[inline]
     pub fn encrypt_multi_messages<M, R>(
         &self,
@@ -224,12 +297,28 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     }
 }
 
-/// public key
+/// Represents a public key for the NTT RLWE cryptographic scheme.
+///
+/// # Type Parameters
+///
+/// * `F` - A field that supports Number Theoretic Transform (NTT) operations.
 pub struct NttRlwePublicKey<F: NttField> {
     key: NttRlwe<F>,
 }
 
 impl<F: NttField> NttRlwePublicKey<F> {
+    /// Creates a new `NttRlwePublicKey` using the provided secret key, Gaussian distribution, NTT table, and random number generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret_key` - A reference to the NttRlweSecretKey used to generate the public key.
+    /// * `gaussian` - The Gaussian distribution used for generating random samples.
+    /// * `ntt_table` - The NTT table used for Number Theoretic Transform operations.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `NttRlwePublicKey`.
     pub fn new<R>(
         secret_key: &NttRlweSecretKey<F>,
         gaussian: DiscreteGaussian<<F as Field>::ValueT>,
@@ -258,6 +347,15 @@ impl<F: NttField> NttRlwePublicKey<F> {
         &self.key
     }
 
+    /// Encrypts a message using the NTT RLWE public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `_message` - The message to be encrypted.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `R` - A random number generator that implements `Rng` and `CryptoRng`.
     pub fn encrypt<R>(_message: &FieldPolynomial<F>)
     where
         R: Rng + CryptoRng,

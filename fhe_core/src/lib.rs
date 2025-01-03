@@ -1,3 +1,8 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![deny(missing_docs)]
+
+//! This crate defines the core structures and algorithms for fully homomorphic encryption.
+
 mod error;
 
 mod parameter;

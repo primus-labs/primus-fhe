@@ -35,6 +35,11 @@ pub enum RingSecretKeyType {
     Gaussian,
 }
 
+/// Represents a secret key for the Learning with Errors (LWE) cryptographic scheme.
+///
+/// # Type Parameters
+///
+/// * `C` - An unsigned integer type that represents the coefficients of the secret key.
 #[derive(Clone)]
 pub struct LweSecretKey<C: UnsignedInteger> {
     key: Vec<C>,
@@ -49,16 +54,41 @@ impl<C: UnsignedInteger> AsRef<[C]> for LweSecretKey<C> {
 }
 
 impl<C: UnsignedInteger> LweSecretKey<C> {
+    /// Creates a new `LweSecretKey` with the specified key and distribution type.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A vector containing the secret key coefficients.
+    /// * `distr` - The distribution type of the secret key.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `LweSecretKey`.
     #[inline]
     pub fn new(key: Vec<C>, distr: LweSecretKeyType) -> Self {
         Self { key, distr }
     }
 
+    /// Returns the dimension of the secret key.
+    ///
+    /// # Returns
+    ///
+    /// The dimension of the secret key.
     #[inline]
     pub fn dimension(&self) -> usize {
         self.key.len()
     }
 
+    /// Generates a new `LweSecretKey` with random coefficients.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `LweSecretKey` with random coefficients.
     #[inline]
     pub fn generate<R>(params: &LweParameters<C>, rng: &mut R) -> Self
     where
@@ -74,6 +104,16 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
         Self { key, distr }
     }
 
+    /// Creates a new `LweSecretKey` from an RLWE secret key.
+    ///
+    /// # Arguments
+    ///
+    /// * `rlwe_secret_key` - A reference to the RLWE secret key.
+    /// * `lwe_cipher_modulus_minus_one` - The modulus minus one for the LWE scheme.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `LweSecretKey` created from the RLWE secret key.
     #[inline]
     pub fn from_rlwe_secret_key<F: NttField>(
         rlwe_secret_key: &RlweSecretKey<F>,
@@ -100,6 +140,7 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
         }
     }
 
+    /// Returns the distr of this [`LweSecretKey<C>`].
     #[inline]
     pub fn distr(&self) -> LweSecretKeyType {
         self.distr
@@ -186,7 +227,11 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
     }
 }
 
-/// Rlwe Secret key
+/// Represents a secret key for the Ring Learning with Errors (RLWE) cryptographic scheme.
+///
+/// # Type Parameters
+///
+/// * `F` - A field that supports Number Theoretic Transform (NTT) operations.
 #[derive(Clone)]
 pub struct RlweSecretKey<F: NttField> {
     key: FieldPolynomial<F>,
@@ -203,11 +248,33 @@ impl<F: NttField> Deref for RlweSecretKey<F> {
 }
 
 impl<F: NttField> RlweSecretKey<F> {
+    /// Creates a new `RlweSecretKey`.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A polynomial representing the secret key.
+    /// * `distr` - The distribution type of the secret key.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `RlweSecretKey`.
     #[inline]
     pub fn new(key: FieldPolynomial<F>, distr: RingSecretKeyType) -> Self {
         Self { key, distr }
     }
 
+    /// Generates a new `RlweSecretKey` with random coefficients.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret_key_type` - The distribution type of the secret key.
+    /// * `dimension` - The dimension of the secret key.
+    /// * `gaussian` - An optional Gaussian distribution for generating random samples.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `RlweSecretKey` with random coefficients.
     #[inline]
     pub fn generate<R: Rng + CryptoRng>(
         secret_key_type: RingSecretKeyType,
@@ -227,6 +294,15 @@ impl<F: NttField> RlweSecretKey<F> {
         Self { key, distr }
     }
 
+    /// Creates a new `RlweSecretKey` from an LWE secret key.
+    ///
+    /// # Arguments
+    ///
+    /// * `lwe_secret_key` - A reference to the LWE secret key.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `RlweSecretKey` created from the LWE secret key.
     #[inline]
     pub fn from_lwe_secret_key<C: UnsignedInteger>(lwe_secret_key: &LweSecretKey<C>) -> Self {
         let convert = |v: &C| {
@@ -249,13 +325,22 @@ impl<F: NttField> RlweSecretKey<F> {
         }
     }
 
+    /// Returns the distribution type of the secret key.
+    ///
+    /// # Returns
+    ///
+    /// The distribution type of the secret key.
     #[inline]
     pub fn distr(&self) -> RingSecretKeyType {
         self.distr
     }
 }
 
-/// NTT version Ring Secret key
+/// Represents a secret key for the Number Theoretic Transform (NTT) Ring Learning with Errors (RLWE) cryptographic scheme.
+///
+/// # Type Parameters
+///
+/// * `F` - A field that supports Number Theoretic Transform (NTT) operations.
 #[derive(Clone)]
 pub struct NttRlweSecretKey<F: NttField> {
     key: FieldNttPolynomial<F>,
@@ -272,6 +357,16 @@ impl<F: NttField> Deref for NttRlweSecretKey<F> {
 }
 
 impl<F: NttField> NttRlweSecretKey<F> {
+    /// Creates a new `NttRlweSecretKey` from a coefficient secret key.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret_key` - A reference to the RLWE secret key.
+    /// * `ntt_table` - A reference to the NTT table.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `NttRlweSecretKey` created from the coefficient secret key.
     #[inline]
     pub fn from_coeff_secret_key(
         secret_key: &RlweSecretKey<F>,
@@ -283,6 +378,11 @@ impl<F: NttField> NttRlweSecretKey<F> {
         }
     }
 
+    /// Returns the distribution type of the secret key.
+    ///
+    /// # Returns
+    ///
+    /// The distribution type of the secret key.
     #[inline]
     pub fn distr(&self) -> RingSecretKeyType {
         self.distr

@@ -25,12 +25,14 @@ pub struct AutoKey<F: NttField> {
     ntt_table: Arc<<F as NttField>::Table>,
 }
 
+/// Preallocated space for automorphism
 pub struct AutoSpace<F: NttField> {
     decompose_space: PolyDecomposeSpace<F>,
     ntt_rlwe_space: NttRlweSpace<F>,
 }
 
 impl<F: NttField> AutoSpace<F> {
+    /// Creates a new [`AutoSpace<F>`].
     #[inline]
     pub fn new(dimension: usize) -> Self {
         Self {
@@ -41,6 +43,7 @@ impl<F: NttField> AutoSpace<F> {
 }
 
 impl<F: NttField> AutoKey<F> {
+    /// Creates a new [`AutoKey<F>`].
     #[inline]
     pub fn new<R>(
         secret_key: &RlweSecretKey<F>,
@@ -84,6 +87,7 @@ impl<F: NttField> AutoKey<F> {
         }
     }
 
+    /// Performs automorphism on the given RLWE ciphertext.
     #[inline]
     pub fn automorphism(&self, ciphertext: &RlweCiphertext<F>) -> RlweCiphertext<F> {
         let rlwe_dimension = ciphertext.dimension();
@@ -100,6 +104,7 @@ impl<F: NttField> AutoKey<F> {
         result
     }
 
+    /// Performs automorphism on the given RLWE ciphertext in place.
     pub fn automorphism_inplace(
         &self,
         ciphertext: &RlweCiphertext<F>,

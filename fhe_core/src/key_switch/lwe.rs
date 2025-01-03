@@ -30,7 +30,9 @@ pub struct PowOf2LweKeySwitchingKey<C: UnsignedInteger> {
     /// i \in \{0, dks-1\}
     /// j \in \{0, N-1\}
     key: Vec<Vec<Lwe<C>>>,
+    /// Key Switching Key parameters
     params: KeySwitchingParameters,
+    /// Basis for the key switching
     basis: PowOf2ApproxSignedBasis<C>,
     space: Pool<(Vec<C>, Vec<bool>)>,
 }
@@ -107,7 +109,7 @@ impl<C: UnsignedInteger> PowOf2LweKeySwitchingKey<C> {
         ciphertext: &LweCiphertext<C>,
         modulus: impl RingReduce<C>,
     ) -> LweCiphertext<C> {
-        let dimension = self.params.out_cipher_dimension;
+        let dimension = self.params.output_cipher_dimension;
         let minus_one = modulus.modulus_minus_one();
 
         let a = ciphertext.a();
@@ -235,7 +237,7 @@ impl<C: UnsignedInteger> NonPowOf2LweKeySwitchingKey<C> {
         ciphertext: &LweCiphertext<C>,
         modulus: impl RingReduce<C>,
     ) -> LweCiphertext<C> {
-        let dimension = self.params.out_cipher_dimension;
+        let dimension = self.params.output_cipher_dimension;
         let minus_one = modulus.modulus_minus_one();
 
         let a = ciphertext.a();
@@ -285,6 +287,11 @@ impl<C: UnsignedInteger> NonPowOf2LweKeySwitchingKey<C> {
     }
 }
 
+/// Represents a key switching key for the RLWE mode in the Learning with Errors (LWE) cryptographic scheme.
+///
+/// # Type Parameters
+///
+/// * `Q` - A field that supports Number Theoretic Transform (NTT) operations.
 #[derive(Clone)]
 pub struct LweKeySwitchingKeyRlweMode<Q: NttField> {
     key: Vec<NttGadgetRlwe<Q>>,
@@ -294,6 +301,20 @@ pub struct LweKeySwitchingKeyRlweMode<Q: NttField> {
 }
 
 impl<Q: NttField> LweKeySwitchingKeyRlweMode<Q> {
+    /// Generates a new `LweKeySwitchingKeyRlweMode` using the provided RLWE secret key, LWE secret key,
+    /// key switching parameters, NTT table, and random number generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `rlwe_secret_key` - A reference to the RLWE secret key.
+    /// * `lwe_secret_key` - A reference to the LWE secret key.
+    /// * `key_switching_key_params` - The parameters for the key switching key.
+    /// * `ntt_table` - The NTT table used for Number Theoretic Transform operations.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `LweKeySwitchingKeyRlweMode`.
     pub fn generate<C, R>(
         rlwe_secret_key: &RlweSecretKey<Q>,
         lwe_secret_key: &LweSecretKey<C>,
@@ -305,8 +326,8 @@ impl<Q: NttField> LweKeySwitchingKeyRlweMode<Q> {
         C: UnsignedInteger,
         R: Rng + CryptoRng,
     {
-        let rlwe_dimension = key_switching_key_params.in_cipher_dimension;
-        let lwe_dimension = key_switching_key_params.out_cipher_dimension;
+        let rlwe_dimension = key_switching_key_params.input_cipher_dimension;
+        let lwe_dimension = key_switching_key_params.output_cipher_dimension;
         assert!(lwe_dimension.is_power_of_two() && lwe_dimension <= rlwe_dimension);
 
         let ntt_table = if ntt_table.dimension() == lwe_dimension {
@@ -360,7 +381,7 @@ impl<Q: NttField> LweKeySwitchingKeyRlweMode<Q> {
         &self,
         mut ciphertext: RlweCiphertext<Q>,
     ) -> LweCiphertext<<Q as Field>::ValueT> {
-        let lwe_dimension = self.key_switching_key_params.out_cipher_dimension;
+        let lwe_dimension = self.key_switching_key_params.output_cipher_dimension;
         let b = ciphertext.b()[0];
         let init = <NttRlwe<Q>>::new(
             FieldNttPolynomial::zero(lwe_dimension),
@@ -387,7 +408,7 @@ impl<Q: NttField> LweKeySwitchingKeyRlweMode<Q> {
         &self,
         mut ciphertext: LweCiphertext<<Q as Field>::ValueT>,
     ) -> LweCiphertext<<Q as Field>::ValueT> {
-        let lwe_dimension = self.key_switching_key_params.out_cipher_dimension;
+        let lwe_dimension = self.key_switching_key_params.output_cipher_dimension;
         let b = ciphertext.b();
         let init = <NttRlwe<Q>>::new(
             FieldNttPolynomial::zero(lwe_dimension),

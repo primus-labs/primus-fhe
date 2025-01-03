@@ -136,8 +136,8 @@ impl<C: UnsignedInteger, Q: NttField> BooleanFheParameters<C, Q> {
         };
 
         let key_switching_params = KeySwitchingParameters {
-            in_cipher_dimension: ring_dimension,
-            out_cipher_dimension: lwe_dimension,
+            input_cipher_dimension: ring_dimension,
+            output_cipher_dimension: lwe_dimension,
             log_modulus,
             log_basis: params.key_switching_basis_bits,
             noise_standard_deviation: params.key_switching_standard_deviation,

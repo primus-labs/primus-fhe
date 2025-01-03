@@ -6,12 +6,14 @@ use rand::{CryptoRng, Rng};
 
 use crate::{utils::Pool, AutoKey, AutoSpace, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 
+/// Trace key
 pub struct TraceKey<F: NttField> {
     auto_keys: Vec<AutoKey<F>>,
     pool: Pool<(RlweSpace<F>, AutoSpace<F>)>,
 }
 
 impl<F: NttField> TraceKey<F> {
+    /// Creates a new [`TraceKey<F>`].
     pub fn new<R>(
         secret_key: &RlweSecretKey<F>,
         ntt_secret_key: &NttRlweSecretKey<F>,
@@ -46,6 +48,7 @@ impl<F: NttField> TraceKey<F> {
         }
     }
 
+    /// Trace operation
     pub fn trace(&self, ciphertext: &RlweCiphertext<F>) -> RlweCiphertext<F> {
         let dimension = ciphertext.dimension();
 
@@ -66,6 +69,7 @@ impl<F: NttField> TraceKey<F> {
         destination
     }
 
+    /// Trace operation in place
     pub fn trace_inplace(
         &self,
         ciphertext: &RlweCiphertext<F>,

@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 /// Errors that may occur.
 #[derive(thiserror::Error, Debug)]

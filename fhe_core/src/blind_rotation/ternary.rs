@@ -17,6 +17,7 @@ use rand::{CryptoRng, Rng};
 
 use crate::{utils::Pool, LweCiphertext, LweSecretKey, NttRlweSecretKey, RlweCiphertext};
 
+/// The ternary blind rotation key.
 pub struct TernaryBlindRotationKey<F: NttField> {
     key: Vec<(NttRgsw<F>, NttRgsw<F>)>,
     ntt_table: Arc<<F as NttField>::Table>,
@@ -36,6 +37,7 @@ impl<F: NttField> Clone for TernaryBlindRotationKey<F> {
     }
 }
 
+/// Preallocated space for blind rotation
 struct BlindRotateSpace<F: NttField> {
     decompose_space: PolyDecomposeSpace<F>,
     ntt_rlwe_space: NttRlweSpace<F>,

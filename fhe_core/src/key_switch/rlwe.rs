@@ -27,6 +27,21 @@ impl<Q: NttField> RlweKeySwitchingKey<Q> {
         }
     }
 
+    /// Generates a new `RlweKeySwitchingKey` using the provided input and output RLWE secret keys,
+    /// basis, Gaussian distribution, NTT table, and random number generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `s_in` - A reference to the input RLWE secret key.
+    /// * `s_out` - A reference to the output RLWE secret key.
+    /// * `basis` - The basis for the key switching.
+    /// * `gaussian` - The Gaussian distribution used for generating random samples.
+    /// * `ntt_table` - The NTT table used for Number Theoretic Transform operations.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `RlweKeySwitchingKey`.
     pub fn generate<R>(
         s_in: &NttRlweSecretKey<Q>,
         s_out: &NttRlweSecretKey<Q>,
@@ -52,6 +67,15 @@ impl<Q: NttField> RlweKeySwitchingKey<Q> {
         }
     }
 
+    /// Performs key switching on the given RLWE ciphertext.
+    ///
+    /// # Arguments
+    ///
+    /// * `ciphertext` - A reference to the RLWE ciphertext to be key switched.
+    ///
+    /// # Returns
+    ///
+    /// A new RLWE ciphertext after key switching.
     pub fn key_switch(&self, ciphertext: &RlweCiphertext<Q>) -> RlweCiphertext<Q> {
         let ntt_table = self.ntt_table.as_ref();
         let coeff_count = ntt_table.dimension();
