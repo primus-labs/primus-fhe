@@ -12,7 +12,7 @@ mod mul;
 mod neg;
 mod sub;
 
-/// Represents a polynomial where coefficients are elements of a specified numeric `T`.
+/// Represents a polynomial where coefficients are numeric elements.
 pub struct FieldPolynomial<F: Field> {
     data: Vec<<F as Field>::ValueT>,
 }
@@ -24,9 +24,9 @@ impl<F: Field> Default for FieldPolynomial<F> {
     }
 }
 
-impl<F: Field> std::fmt::Debug for FieldPolynomial<F> {
+impl<F: Field> core::fmt::Debug for FieldPolynomial<F> {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("FieldPolynomial")
             .field("data", &self.data)
             .finish()

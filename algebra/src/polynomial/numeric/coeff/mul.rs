@@ -41,6 +41,7 @@ impl<T: Copy> NumPolynomial<T> {
 }
 
 impl<T: UnsignedInteger> NumPolynomial<T> {
+    /// A naive multiplication over polynomial.
     pub fn naive_mul_inplace<M>(&self, rhs: impl AsRef<[T]>, modulus: M, destination: &mut Self)
     where
         M: Copy + ReduceAddAssign<T> + ReduceSubAssign<T> + ReduceMul<T, Output = T>,

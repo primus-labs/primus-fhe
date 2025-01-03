@@ -1,11 +1,16 @@
+//! Defines Number Theory Transform algorithms.
+
 use crate::AlgebraError;
 
 mod table;
 
 pub use table::*;
 
+/// An abstract for ntt table generation.
 pub trait NttTable: Sized + Clone + Send + Sync {
+    /// The value type.
     type ValueT;
+    /// The Modulus type.
     type Modulus;
 
     /// Creates a new [`NttTable`].
@@ -15,8 +20,11 @@ pub trait NttTable: Sized + Clone + Send + Sync {
     fn dimension(&self) -> usize;
 }
 
+/// An abstract for Number Theory Transform.
 pub trait NumberTheoryTransform: NttTable {
+    /// Polynomial type with coefficients.
     type CoeffPoly: Clone;
+    /// Ntt Polynomial type.
     type NttPoly: Clone;
 
     /// Perform a fast number theory transform.

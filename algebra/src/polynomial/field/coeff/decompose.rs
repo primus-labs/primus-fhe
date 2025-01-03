@@ -6,6 +6,7 @@ use crate::{
 use super::FieldPolynomial;
 
 impl<F: Field> FieldPolynomial<F> {
+    /// Decomposes [FieldPolynomial<F>] according to [SignedOnceDecompose].
     #[inline]
     pub fn approx_signed_decompose(
         &self,
@@ -16,6 +17,7 @@ impl<F: Field> FieldPolynomial<F> {
         once_decompose.decompose_slice_inplace(self.as_slice(), carries, decompose_poly);
     }
 
+    /// Init carries and adjusted polynomial for a [FieldPolynomial<F>].
     #[inline]
     pub fn init_adjust_poly_carries(
         &self,
@@ -26,6 +28,7 @@ impl<F: Field> FieldPolynomial<F> {
         basis.init_value_carry_slice(self.as_ref(), carries, adjust_poly.as_mut());
     }
 
+    /// Init carries and adjusted polynomial for a [FieldPolynomial<F>].
     #[inline]
     pub fn init_adjust_poly_carries_assign(
         &mut self,

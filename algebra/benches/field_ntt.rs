@@ -1,5 +1,5 @@
 use algebra::ntt::{NttTable, NumberTheoryTransform};
-use algebra::{ntt::FbsTable, polynomial::FieldPolynomial};
+use algebra::{ntt::FieldTableWithShoupRoot, polynomial::FieldPolynomial};
 use algebra::{Field, U32FieldEval};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Uniform, prelude::*};
@@ -12,7 +12,7 @@ const N: usize = 1 << LOG_N;
 type Fp = U32FieldEval<132120577>;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let table = <FbsTable<Fp>>::new(Fp::MODULUS, LOG_N).unwrap();
+    let table = <FieldTableWithShoupRoot<Fp>>::new(Fp::MODULUS, LOG_N).unwrap();
 
     let mut rng = thread_rng();
 

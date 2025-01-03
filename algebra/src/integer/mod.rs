@@ -1,3 +1,5 @@
+//! Defines some traits and operation for integer.
+
 mod bits;
 mod bounded;
 mod cast;
@@ -26,6 +28,7 @@ pub use overflowing::*;
 pub use two::ConstTwo;
 pub use wrapping::*;
 
+/// An abstract over interger type.
 pub trait Integer:
     'static
     + Sized
@@ -86,6 +89,7 @@ pub trait Integer:
 {
 }
 
+/// An abstract over unsigned interger type.
 pub trait UnsignedInteger:
     Integer
     + Unsigned

@@ -33,14 +33,20 @@ pub enum AlgebraError {
     /// Error that occurs when fails to generate the distribution.
     #[error("Fail to generate the desired distribution.")]
     DistributionErr,
+    /// Error that occurs when fails to convert the degree into desired type.
     #[error("out of range integral type conversion attempted: {degree} -> {modulus:?}")]
     DegreeConversionErr {
+        /// degree
         degree: usize,
+        /// modulus
         modulus: Box<dyn Debug>,
     },
+    /// Error that occurs when the degree is too large.
     #[error("degree should less than modulus: {degree} >= {modulus:?}")]
     TooLargeDegreeErr {
+        /// degree
         degree: usize,
+        /// modulus
         modulus: Box<dyn Debug>,
     },
 }

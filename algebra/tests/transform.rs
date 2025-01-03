@@ -1,6 +1,6 @@
 use algebra::{
     modulus::BarrettModulus,
-    ntt::{BsTable, NttTable, NumberTheoryTransform},
+    ntt::{NttTable, NumberTheoryTransform, TableWithShoupRoot},
     reduce::{ReduceAdd, ReduceAddAssign, ReduceMul, ReduceSubAssign},
 };
 use rand::{distributions::Uniform, prelude::Distribution, thread_rng, Rng};
@@ -12,7 +12,7 @@ const N: usize = 1024;
 #[test]
 fn test_transform() {
     let modulus = <BarrettModulus<P>>::new(M);
-    let table = <BsTable<P>>::new(modulus, N.trailing_zeros()).unwrap();
+    let table = <TableWithShoupRoot<P>>::new(modulus, N.trailing_zeros()).unwrap();
 
     let a: Vec<P> = Uniform::new(0, M)
         .sample_iter(thread_rng())
@@ -53,7 +53,7 @@ fn naive_mul(poly1: &[P], poly2: &[P], modulus: &BarrettModulus<P>) -> Vec<P> {
 fn test_cal() {
     let mut rng = thread_rng();
     let modulus = <BarrettModulus<P>>::new(M);
-    let table = <BsTable<P>>::new(modulus, N.trailing_zeros()).unwrap();
+    let table = <TableWithShoupRoot<P>>::new(modulus, N.trailing_zeros()).unwrap();
 
     let dis = Uniform::new(0, M);
 
@@ -93,7 +93,7 @@ fn test_transform_monomial() {
     let dis = Uniform::new(0, M);
 
     let modulus = <BarrettModulus<P>>::new(M);
-    let table = <BsTable<P>>::new(modulus, N.trailing_zeros()).unwrap();
+    let table = <TableWithShoupRoot<P>>::new(modulus, N.trailing_zeros()).unwrap();
 
     let degree: usize = rng.gen_range(0..N);
     for coeff in [1, modulus.value() - 1, dis.sample(&mut rng)] {

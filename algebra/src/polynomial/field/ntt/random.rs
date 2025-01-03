@@ -7,6 +7,7 @@ use crate::{Field, NttField};
 use super::FieldNttPolynomial;
 
 impl<F: NttField> FieldNttPolynomial<F> {
+    /// Returns a [Uniform] distribution over the values of [Field].
     #[must_use]
     #[inline]
     pub fn uniform_distribution() -> Uniform<<F as Field>::ValueT> {

@@ -1,5 +1,5 @@
 use algebra::modulus::BarrettModulus;
-use algebra::ntt::{BsTable, NttTable, NumberTheoryTransform};
+use algebra::ntt::{NttTable, NumberTheoryTransform, TableWithShoupRoot};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Uniform, prelude::*};
 
@@ -11,7 +11,7 @@ const MODULUS: ValueT = 132120577;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let modulus = <BarrettModulus<ValueT>>::new(MODULUS);
-    let table = <BsTable<ValueT>>::new(modulus, LOG_N).unwrap();
+    let table = <TableWithShoupRoot<ValueT>>::new(modulus, LOG_N).unwrap();
 
     let mut rng = thread_rng();
 

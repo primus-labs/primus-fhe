@@ -8,19 +8,28 @@ mod ntt;
 
 pub use ntt::NttField;
 
+/// An abstract for field evaluator.
 pub trait Field: Sized + Clone + Copy {
+    /// The field elements value type.
     type ValueT: Numeric;
 
+    /// The field modulus type.
     type Modulus: FieldReduce<Self::ValueT>;
 
+    /// The field modulus value.
     const MODULUS_VALUE: Self::ValueT;
 
+    /// The field modulus.
     const MODULUS: Self::Modulus;
 
+    /// 0
     const ZERO: Self::ValueT;
+    /// 1
     const ONE: Self::ValueT;
+    /// -1
     const MINUS_ONE: Self::ValueT;
 
+    /// Returns the field modulus.
     #[inline]
     fn modulus() -> Self::Modulus {
         Self::MODULUS

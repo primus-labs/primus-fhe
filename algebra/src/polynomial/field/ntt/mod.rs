@@ -27,9 +27,9 @@ impl<F: NttField> Default for FieldNttPolynomial<F> {
     }
 }
 
-impl<F: NttField> std::fmt::Debug for FieldNttPolynomial<F> {
+impl<F: NttField> core::fmt::Debug for FieldNttPolynomial<F> {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("FieldNttPolynomial")
             .field("data", &self.data)
             .finish()
@@ -67,13 +67,13 @@ impl<F: NttField> FieldNttPolynomial<F> {
         self.data
     }
 
-    /// Constructs a new polynomial from a slice.
+    /// Constructs a ntt polynomial from a slice.
     #[inline]
     pub fn from_slice(vec: &[<F as Field>::ValueT]) -> Self {
         Self::new(vec.to_vec())
     }
 
-    /// Copy the coefficients from another slice.
+    /// Copy the values from another slice.
     #[inline]
     pub fn copy_from(&mut self, src: impl AsRef<[<F as Field>::ValueT]>) {
         self.data.copy_from_slice(src.as_ref())
@@ -101,19 +101,19 @@ impl<F: NttField> FieldNttPolynomial<F> {
         self.data.as_mut_slice()
     }
 
-    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
+    /// Returns an iterator that allows reading each value or values of the polynomial.
     #[inline]
     pub fn iter(&self) -> core::slice::Iter<<F as Field>::ValueT> {
         self.data.iter()
     }
 
-    /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
+    /// Returns an iterator that allows modifying each value or values of the polynomial.
     #[inline]
     pub fn iter_mut(&mut self) -> core::slice::IterMut<<F as Field>::ValueT> {
         self.data.iter_mut()
     }
 
-    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
+    /// Returns an iterator that allows reading each value or values of the polynomial.
     #[inline]
     pub fn copied_iter(&self) -> core::iter::Copied<core::slice::Iter<'_, <F as Field>::ValueT>> {
         self.data.iter().copied()
@@ -134,7 +134,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
         self.data.resize(new_degree, value);
     }
 
-    /// Creates a [`FieldNttPolynomial<F>`] with all coefficients equal to zero.
+    /// Creates a [`FieldNttPolynomial<F>`] with all values equal to zero.
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
         Self {
@@ -158,6 +158,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
         self.data.fill(<<F as Field>::ValueT as ConstZero>::ZERO);
     }
 
+    /// Performs `self = self + (a * b)`.
     #[inline]
     pub fn add_mul_assign(&mut self, a: &Self, b: &Self) {
         self.into_iter()
@@ -166,6 +167,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
             .for_each(|((z, &x), &y)| *z = F::MODULUS.reduce_mul_add(x, y, *z));
     }
 
+    /// Performs `self = self - (a * b)`.
     #[inline]
     pub fn sub_mul_assign(&mut self, a: &Self, b: &Self) {
         self.into_iter()
@@ -174,6 +176,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
             .for_each(|((z, &x), &y)| *z = F::MODULUS.reduce_mul_add(x, y, F::MODULUS_VALUE - *z));
     }
 
+    /// Performs `self = self + (a * b)`.
     #[inline]
     pub fn add_mul_assign_fast(&mut self, a: &Self, b: &Self) {
         self.into_iter()
@@ -182,6 +185,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
             .for_each(|((z, &x), &y)| *z = F::MODULUS.lazy_reduce_mul_add(x, y, *z));
     }
 
+    /// Performs `self = self - (a * b)`.
     #[inline]
     pub fn sub_mul_assign_fast(&mut self, a: &Self, b: &Self) {
         self.into_iter().zip(a).zip(b).for_each(|((z, &x), &y)| {
@@ -189,6 +193,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
         });
     }
 
+    /// Performs `des = self * b + c`.
     #[inline]
     pub fn mul_add_inplace(&self, b: &Self, c: &Self, des: &mut Self) {
         des.into_iter()
@@ -198,6 +203,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
             .for_each(|(((d, &a), &b), &c)| *d = F::MODULUS.reduce_mul_add(a, b, c));
     }
 
+    /// Performs `des = self * b + c`.
     #[inline]
     pub fn mul_add_inplace_fast(&self, b: &Self, c: &Self, des: &mut Self) {
         des.into_iter()

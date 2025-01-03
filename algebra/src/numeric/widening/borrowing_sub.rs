@@ -1,6 +1,8 @@
 use std::ops::Sub;
 
+/// Borrowing sub operation trait
 pub trait BorrowingSub: Sized + Sub<Self, Output = Self> {
+    /// The type of `borrow`.
     type BorrowT;
 
     /// Calculates `self` - `rhs` - `borrow` and returns a tuple containing

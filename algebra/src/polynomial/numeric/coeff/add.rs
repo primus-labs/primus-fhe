@@ -3,6 +3,7 @@ use crate::reduce::{ReduceAdd, ReduceAddAssign};
 use super::NumPolynomial;
 
 impl<T: Copy> NumPolynomial<T> {
+    /// Performs `self + rhs` according to `modulus`.
     #[inline]
     pub fn add<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
@@ -12,6 +13,7 @@ impl<T: Copy> NumPolynomial<T> {
         self
     }
 
+    /// Performs `self += rhs` according to `modulus`.
     #[inline]
     pub fn add_assign<M>(&mut self, rhs: &Self, modulus: M)
     where

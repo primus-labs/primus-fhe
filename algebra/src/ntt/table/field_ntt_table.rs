@@ -19,7 +19,7 @@ use crate::{
 /// ## The structure members meet the following conditions:
 ///
 /// 1. `n = 1 << log_n`
-/// 1. `root^{2n} ≡ -1 (mod modulus)`
+/// 1. `root^{n} ≡ -1 (mod modulus)`
 /// 1. `root * inv_root ≡ 1 (mod modulus)`
 /// 1. `n * inv_n ≡ 1 (mod modulus)`
 /// 1. `root_powers` holds 1~(n-1)-th powers of root in bit-reversed order, the 0-th power is left unset.
@@ -35,7 +35,7 @@ use crate::{
 /// scrambled order:     0  1  5  3  7  2  6  4
 ///                         ----------  ----  -
 /// ```
-pub struct FbsTable<F>
+pub struct FieldTableWithShoupRoot<F>
 where
     F: NttField,
 {
@@ -50,7 +50,7 @@ where
     reverse_lsbs: Vec<usize>,
 }
 
-impl<F> Clone for FbsTable<F>
+impl<F> Clone for FieldTableWithShoupRoot<F>
 where
     F: NttField,
 {
@@ -70,57 +70,66 @@ where
     }
 }
 
-impl<F> FbsTable<F>
+impl<F> FieldTableWithShoupRoot<F>
 where
     F: NttField,
 {
+    /// Returns the root of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn root(&self) -> <F as Field>::ValueT {
         self.root
     }
 
+    /// Returns the inverse element of the root of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn inv_root(&self) -> <F as Field>::ValueT {
         self.inv_root
     }
 
+    /// Returns the log n of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn log_n(&self) -> u32 {
         self.log_n
     }
 
+    /// Returns the n of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn n(&self) -> usize {
         self.n
     }
 
+    /// Returns the inverse element of the n of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn inv_n(&self) -> ShoupFactor<<F as Field>::ValueT> {
         self.inv_n
     }
 
+    /// Returns a reference to the root powers of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn root_powers(&self) -> &[ShoupFactor<<F as Field>::ValueT>] {
         &self.root_powers
     }
 
+    /// Returns a reference to the inverse elements of the root powers of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn inv_root_powers(&self) -> &[ShoupFactor<<F as Field>::ValueT>] {
         &self.inv_root_powers
     }
 
+    /// Returns a reference to the ordinal root powers of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn ordinal_root_powers(&self) -> &[ShoupFactor<<F as Field>::ValueT>] {
         &self.ordinal_root_powers
     }
 
+    /// Returns a reference to the reverse lsbs of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
     pub fn reverse_lsbs(&self) -> &[usize] {
         &self.reverse_lsbs
     }
 }
 
-impl<F> NttTable for FbsTable<F>
+impl<F> NttTable for FieldTableWithShoupRoot<F>
 where
     F: NttField,
 {
@@ -210,7 +219,7 @@ where
     }
 }
 
-impl<F> NumberTheoryTransform for FbsTable<F>
+impl<F> NumberTheoryTransform for FieldTableWithShoupRoot<F>
 where
     F: NttField<Modulus = BarrettModulus<<F as Field>::ValueT>>,
 {

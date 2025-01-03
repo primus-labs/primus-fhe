@@ -3,6 +3,7 @@ use crate::reduce::{ReduceSub, ReduceSubAssign};
 use super::NumNttPolynomial;
 
 impl<T: Copy> NumNttPolynomial<T> {
+    /// Performs `self - rhs` according to `modulus`.
     #[inline]
     pub fn sub<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
@@ -12,6 +13,7 @@ impl<T: Copy> NumNttPolynomial<T> {
         self
     }
 
+    /// Performs `self -= rhs` according to `modulus`.
     #[inline]
     pub fn sub_assign<M>(&mut self, rhs: &Self, modulus: M)
     where

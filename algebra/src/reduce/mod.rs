@@ -1,3 +1,5 @@
+//! Defines some reduce operation.
+
 mod lazy_ops;
 mod ops;
 
@@ -10,10 +12,13 @@ pub use ops::*;
 
 use crate::{integer::UnsignedInteger, numeric::Numeric};
 
+/// An abstract over modulus.
 pub trait Modulus<T> {
+    /// Returns the modulus monius one.
     fn modulus_minus_one(self) -> T;
 }
 
+/// An trait indicate the modulus can perform operation like a ring.
 pub trait RingReduce<T>:
     Sized
     + Debug
@@ -70,6 +75,7 @@ impl<T: UnsignedInteger, M> RingReduce<T> for M where
 {
 }
 
+/// An trait indicate the modulus can perform operation like a field.
 pub trait FieldReduce<T>:
     RingReduce<T>
     + LazyReduce<T, Output = T>

@@ -12,7 +12,7 @@ use crate::{utils::ReverseLsbs, AlgebraError};
 /// ## The structure members meet the following conditions:
 ///
 /// 1. `n = 1 << log_n`
-/// 1. `root^{2n} ≡ -1 (mod modulus)`
+/// 1. `root^{n} ≡ -1 (mod modulus)`
 /// 1. `root * inv_root ≡ 1 (mod modulus)`
 /// 1. `n * inv_n ≡ 1 (mod modulus)`
 /// 1. `root_powers` holds 1~(n-1)-th powers of root in bit-reversed order, the 0-th power is left unset.
@@ -29,7 +29,7 @@ use crate::{utils::ReverseLsbs, AlgebraError};
 ///                         ----------  ----  -
 /// ```
 #[derive(Clone)]
-pub struct BsTable<T: Numeric> {
+pub struct TableWithShoupRoot<T: Numeric> {
     root: T,
     inv_root: T,
     modulus_value: T,
@@ -42,59 +42,69 @@ pub struct BsTable<T: Numeric> {
     reverse_lsbs: Vec<usize>,
 }
 
-impl<T: Numeric> BsTable<T> {
+impl<T: Numeric> TableWithShoupRoot<T> {
+    /// Returns the root of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn root(&self) -> T {
         self.root
     }
 
+    /// Returns the inverse element of the root of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn inv_root(&self) -> T {
         self.inv_root
     }
 
+    /// Returns the modulus value of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn modulus_value(&self) -> T {
         self.modulus_value
     }
 
+    /// Returns the log n of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn log_n(&self) -> u32 {
         self.log_n
     }
 
+    /// Returns the n of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn n(&self) -> usize {
         self.n
     }
 
+    /// Returns the inverse element of the n of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn inv_n(&self) -> ShoupFactor<T> {
         self.inv_n
     }
 
+    /// Returns a reference to the root powers of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn root_powers(&self) -> &[ShoupFactor<T>] {
         &self.root_powers
     }
 
+    /// Returns a reference to the inverse elements of the root powers of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn inv_root_powers(&self) -> &[ShoupFactor<T>] {
         &self.inv_root_powers
     }
 
+    /// Returns a reference to the ordinal root powers of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn ordinal_root_powers(&self) -> &[ShoupFactor<T>] {
         &self.ordinal_root_powers
     }
 
+    /// Returns a reference to the reverse lsbs of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn reverse_lsbs(&self) -> &[usize] {
         &self.reverse_lsbs
     }
 }
 
-impl<T: Numeric> NttTable for BsTable<T> {
+impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
     type ValueT = T;
 
     type Modulus = BarrettModulus<T>;
@@ -177,7 +187,7 @@ impl<T: Numeric> NttTable for BsTable<T> {
     }
 }
 
-impl<T: Numeric> NumberTheoryTransform for BsTable<T> {
+impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
     type CoeffPoly = NumPolynomial<T>;
 
     type NttPoly = NumNttPolynomial<T>;

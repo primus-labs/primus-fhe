@@ -3,6 +3,7 @@ use crate::reduce::{ReduceNeg, ReduceNegAssign};
 use super::NumPolynomial;
 
 impl<T: Copy> NumPolynomial<T> {
+    /// Performs the unary `-` operation.
     #[inline]
     pub fn neg<M>(mut self, modulus: M) -> Self
     where
@@ -12,6 +13,7 @@ impl<T: Copy> NumPolynomial<T> {
         self
     }
 
+    /// Performs the unary `-` operation.
     #[inline]
     pub fn neg_assign<M>(&mut self, modulus: M)
     where
@@ -22,6 +24,7 @@ impl<T: Copy> NumPolynomial<T> {
             .for_each(|v| modulus.reduce_neg_assign(v));
     }
 
+    /// Performs the unary `-` operation.
     #[inline]
     pub fn neg_inplace<M>(&self, modulus: M, destination: &mut Self)
     where

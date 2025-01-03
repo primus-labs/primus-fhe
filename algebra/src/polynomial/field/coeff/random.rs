@@ -7,6 +7,7 @@ use crate::{random::DiscreteGaussian, Field};
 use super::FieldPolynomial;
 
 impl<F: Field> FieldPolynomial<F> {
+    /// Returns a [Uniform] distribution over the values of [Field].
     #[must_use]
     #[inline]
     pub fn uniform_distribution() -> Uniform<<F as Field>::ValueT> {

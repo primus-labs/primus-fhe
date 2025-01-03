@@ -5,6 +5,7 @@ use crate::integer::UnsignedInteger;
 
 use super::{ScalarIter, SignedDecomposeIter};
 
+/// The basis for approximate signed decomposition of power of 2 modulus value.
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct PowOf2ApproxSignedBasis<T: UnsignedInteger> {
     log_modulus: u32,
@@ -27,6 +28,14 @@ impl<T: UnsignedInteger> PartialEq for PowOf2ApproxSignedBasis<T> {
 }
 
 impl<T: UnsignedInteger> PowOf2ApproxSignedBasis<T> {
+    /// Creates a new [`PowOf2ApproxSignedBasis<T>`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if
+    /// - modulus is not suitable for [`UnsignedInteger`] type `T`.
+    /// - `log_basis` is large than `log_modulus` or equals to `0`.
+    /// - `decompose_length` is equals to 0.
     #[inline]
     pub fn new(log_modulus: u32, log_basis: u32, reverse_length: Option<usize>) -> Self {
         assert!(log_basis > 0 && log_modulus <= T::BITS && log_modulus >= log_basis);
@@ -67,36 +76,48 @@ impl<T: UnsignedInteger> PowOf2ApproxSignedBasis<T> {
         }
     }
 
+    /// Returns the decompose length of this [`PowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn decompose_length(&self) -> usize {
         self.decompose_length
     }
 
+    /// Returns the basis value of this [`PowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn basis_value(&self) -> T {
         self.basis
     }
 
+    /// Returns the basis minus one of this [`PowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn basis_minus_one(&self) -> T {
         self.basis_minus_one
     }
 
+    /// Returns the log basis of this [`PowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn log_basis(&self) -> u32 {
         self.log_basis
     }
 
+    /// Returns the drop bits of this [`PowOf2ApproxSignedBasis<T>`].
+    ///
+    /// This means some bits of the value will be droped
+    /// according to approximate signed decomposition.
     #[inline]
     pub fn drop_bits(&self) -> u32 {
         self.drop_bits
     }
 
+    /// Returns the init carry mask of this [`PowOf2ApproxSignedBasis<T>`].
+    ///
+    /// This value is used for generating the initial carry for decomposition.
     #[inline]
     pub fn init_carry_mask(&self) -> Option<T> {
         self.init_carry_mask
     }
 
+    /// Returns an iterator over the signed decomposition operators of this [`PowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn decompose_iter(&self) -> SignedDecomposeIter<T> {
         SignedDecomposeIter::<T> {
@@ -110,6 +131,7 @@ impl<T: UnsignedInteger> PowOf2ApproxSignedBasis<T> {
         }
     }
 
+    /// Returns an iterator over scalars of this [`PowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn scalar_iter(&self) -> ScalarIter<T> {
         ScalarIter::new(
@@ -119,6 +141,7 @@ impl<T: UnsignedInteger> PowOf2ApproxSignedBasis<T> {
         )
     }
 
+    /// Init carry for a value.
     #[inline]
     pub fn init_carry(&self, value: T) -> bool {
         match self.init_carry_mask {
@@ -127,6 +150,7 @@ impl<T: UnsignedInteger> PowOf2ApproxSignedBasis<T> {
         }
     }
 
+    /// Init carries for a slice.
     #[inline]
     pub fn init_carry_slice(&self, values: &[T], carries: &mut [bool]) {
         match self.init_carry_mask {

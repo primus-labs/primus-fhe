@@ -1,3 +1,5 @@
+//! Defines some algorithms for random values generation.
+
 mod numeric;
 mod prg;
 

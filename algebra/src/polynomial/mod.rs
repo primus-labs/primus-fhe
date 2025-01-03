@@ -1,3 +1,5 @@
+//! Defines polynomial.
+
 mod field;
 mod numeric;
 

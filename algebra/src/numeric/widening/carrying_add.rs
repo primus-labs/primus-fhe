@@ -1,6 +1,8 @@
 use std::ops::Add;
 
+/// Carrying add operation trait
 pub trait CarryingAdd: Sized + Add<Self, Output = Self> {
+    /// The type of `carry`.
     type CarryT;
 
     /// Calculates `self` + `rhs` + `carry` and checks for overflow.

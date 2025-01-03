@@ -15,6 +15,7 @@ impl<F: Field> FieldPolynomial<F> {
             .for_each(|v| F::MODULUS.reduce_neg_assign(v));
     }
 
+    /// Performs the unary `-` operation.
     #[inline]
     pub fn neg_inplace(&self, destination: &mut Self) {
         destination

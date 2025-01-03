@@ -1,10 +1,14 @@
+//! Defines some traits for extended [UnsignedInteger].
+
 use crate::integer::{AsFrom, UnsignedInteger};
 
 mod widening;
 
 pub use widening::*;
 
+/// [UnsignedInteger] extended trait, insure some arithmetic operation.
 pub trait Numeric: UnsignedInteger + WideningMul + CarryingMul + AsFrom<Self::WideT> {
+    /// Wide type for multiplication and division.
     type WideT: UnsignedInteger + AsFrom<Self>;
 }
 

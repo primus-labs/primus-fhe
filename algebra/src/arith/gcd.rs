@@ -1,3 +1,4 @@
+//! This implementation refers to the following codebases.
 //! <https://flintlib.org/doc/ulong_extras.html#c.n_xgcd>
 //! <https://flintlib.org/doc/ulong_extras.html#c.n_gcdinv>
 

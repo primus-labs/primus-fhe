@@ -3,6 +3,7 @@ use num_traits::ConstOne;
 
 use crate::integer::{Bits, UnsignedInteger};
 
+/// The basis for approximate signed decomposition of **non** power of 2 modulus value.
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct NonPowOf2ApproxSignedBasis<T: UnsignedInteger> {
     modulus: T,
@@ -27,6 +28,14 @@ impl<T: UnsignedInteger> PartialEq for NonPowOf2ApproxSignedBasis<T> {
 }
 
 impl<T: UnsignedInteger> NonPowOf2ApproxSignedBasis<T> {
+    /// Creates a new [`NonPowOf2ApproxSignedBasis<T>`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if
+    /// - modulus is a power of 2.
+    /// - `log_basis` is large than `modulus bits` or equals to `0`.
+    /// - `decompose_length` is equals to 0.
     #[inline]
     pub fn new(modulus: T, log_basis: u32, reverse_length: Option<usize>) -> Self {
         assert!(log_basis > 0 && !modulus.is_power_of_two());
@@ -115,36 +124,48 @@ impl<T: UnsignedInteger> NonPowOf2ApproxSignedBasis<T> {
         }
     }
 
+    /// Returns the decompose length of this [`NonPowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn decompose_length(&self) -> usize {
         self.decompose_length
     }
 
+    /// Returns the basis value of this [`NonPowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn basis_value(&self) -> T {
         self.basis
     }
 
+    /// Returns the basis minus one of this [`NonPowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn basis_minus_one(&self) -> T {
         self.basis_minus_one
     }
 
+    /// Returns the log basis of this [`NonPowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn log_basis(&self) -> u32 {
         self.log_basis
     }
 
+    /// Returns the drop bits of this [`NonPowOf2ApproxSignedBasis<T>`].
+    ///
+    /// This means some bits of the value will be droped
+    /// according to approximate signed decomposition.
     #[inline]
     pub fn drop_bits(&self) -> u32 {
         self.drop_bits
     }
 
+    /// Returns the init carry mask of this [`NonPowOf2ApproxSignedBasis<T>`].
+    ///
+    /// This value is used for generating the initial carry for decomposition.
     #[inline]
     pub fn init_carry_mask(&self) -> Option<T> {
         self.init_carry_mask
     }
 
+    /// Returns an iterator over the signed decomposition operators of this [`NonPowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn decompose_iter(&self) -> SignedDecomposeIter<T> {
         SignedDecomposeIter::<T> {
@@ -158,6 +179,7 @@ impl<T: UnsignedInteger> NonPowOf2ApproxSignedBasis<T> {
         }
     }
 
+    /// Returns an iterator over scalars of this [`NonPowOf2ApproxSignedBasis<T>`].
     #[inline]
     pub fn scalar_iter(&self) -> ScalarIter<T> {
         ScalarIter::new(
@@ -167,6 +189,7 @@ impl<T: UnsignedInteger> NonPowOf2ApproxSignedBasis<T> {
         )
     }
 
+    /// Init carry and adjusted value for a value.
     #[inline]
     pub fn init_value_carry(&self, value: T) -> (T, bool) {
         let mut adjust = value;
@@ -185,6 +208,7 @@ impl<T: UnsignedInteger> NonPowOf2ApproxSignedBasis<T> {
         )
     }
 
+    /// Init carries and adjusted values for a slice and store the adjusted values back to `values`.
     #[inline]
     pub fn init_value_carry_slice_inplace(&self, values: &mut [T], carries: &mut [bool]) {
         if let Some(split) = self.split_value {
@@ -203,6 +227,7 @@ impl<T: UnsignedInteger> NonPowOf2ApproxSignedBasis<T> {
         };
     }
 
+    /// Init carries and adjusted values for a slice.
     #[inline]
     pub fn init_value_carry_slice(
         &self,
@@ -234,6 +259,7 @@ impl<T: UnsignedInteger> NonPowOf2ApproxSignedBasis<T> {
     }
 }
 
+/// An iterator over the signed decomposition operators.
 pub struct SignedDecomposeIter<T: UnsignedInteger> {
     pub(super) length: usize,
     pub(super) value_chunk_mask: T,
@@ -272,6 +298,7 @@ impl<T: UnsignedInteger> Iterator for SignedDecomposeIter<T> {
     }
 }
 
+/// The signed decomposition operator which can execute once decomposition.
 pub struct SignedOnceDecompose<T: UnsignedInteger> {
     value_chunk_mask: T,
     shr_bits: u32,
@@ -281,6 +308,7 @@ pub struct SignedOnceDecompose<T: UnsignedInteger> {
 }
 
 impl<T: UnsignedInteger> SignedOnceDecompose<T> {
+    /// Execute once decomposition and return the decomposed value and carry for next decomposition.
     #[inline]
     pub fn decompose(&self, value: T, carry: bool) -> (T, bool) {
         let mut temp = ((value & self.value_chunk_mask) >> self.shr_bits) + T::as_from(carry);
@@ -297,6 +325,7 @@ impl<T: UnsignedInteger> SignedOnceDecompose<T> {
         (temp, next_carry)
     }
 
+    /// Execute once decomposition, store carry for next decomposition back to `carry`.
     #[inline]
     pub fn decompose_inplace(&self, value: T, carry: &mut bool, decomposed_value: &mut T) {
         let temp = ((value & self.value_chunk_mask) >> self.shr_bits) + T::as_from(*carry);
@@ -313,6 +342,7 @@ impl<T: UnsignedInteger> SignedOnceDecompose<T> {
         }
     }
 
+    /// Execute once decomposition for slice, store carries for next decomposition back to `carries`.
     #[inline]
     pub fn decompose_slice_inplace(
         &self,
@@ -326,6 +356,7 @@ impl<T: UnsignedInteger> SignedOnceDecompose<T> {
     }
 }
 
+/// An iterator over scalars.
 pub struct ScalarIter<T: UnsignedInteger> {
     scalar: T,
     length: usize,

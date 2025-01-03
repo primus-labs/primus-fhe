@@ -1,3 +1,5 @@
+//! Define arithmetic operations and traits.
+
 mod gcd;
 mod minus_one;
 mod prim_root;

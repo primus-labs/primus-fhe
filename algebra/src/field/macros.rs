@@ -1,5 +1,6 @@
 macro_rules! impl_barrett_field {
     ($(#[$cfg:meta])* impl $Vis:vis $FieldName:ident<$ValueT:ty>) => {
+        /// This define a field based the barrett reduction.
         $(#[$cfg])*
         $Vis struct $FieldName<const P:$ValueT>;
 
@@ -75,7 +76,7 @@ macro_rules! impl_barrett_field {
         }
 
         impl<const P:$ValueT> $crate::NttField for $FieldName<P> {
-            type Table = $crate::ntt::FbsTable<Self>;
+            type Table = $crate::ntt::FieldTableWithShoupRoot<Self>;
 
             #[inline]
             fn generate_ntt_table(log_n: u32) -> Result<Self::Table, $crate::AlgebraError> {

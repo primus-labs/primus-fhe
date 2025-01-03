@@ -5,6 +5,7 @@ use crate::{
 
 use super::Field;
 
+/// Extended the [Field] to [NttField], enables fast polynomial multiplication.
 pub trait NttField: Field {
     /// An abstraction over the data structure used to store precomputed values for NTT.
     type Table: NttTable<ValueT = Self::ValueT>

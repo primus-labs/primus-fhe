@@ -57,6 +57,7 @@ impl<T: Numeric> NumNttPolynomial<T> {
 }
 
 impl<T: UnsignedInteger> NumNttPolynomial<T> {
+    /// Performs `self * rhs` according to `modulus`.
     #[inline]
     pub fn mul<M>(mut self, rhs: &Self, modulus: M) -> Self
     where
@@ -66,6 +67,7 @@ impl<T: UnsignedInteger> NumNttPolynomial<T> {
         self
     }
 
+    /// Performs `self *= rhs` according to `modulus`.
     #[inline]
     pub fn mul_assign<M>(&mut self, rhs: &Self, modulus: M)
     where
@@ -76,6 +78,7 @@ impl<T: UnsignedInteger> NumNttPolynomial<T> {
             .for_each(|(a, &b)| modulus.reduce_mul_assign(a, b));
     }
 
+    /// Performs `destination = self * rhs` according to `modulus`.
     #[inline]
     pub fn mul_inplace<M>(&self, rhs: &Self, modulus: M, destination: &mut Self)
     where

@@ -1,9 +1,6 @@
-use std::ops::{Add, AddAssign};
+use core::ops::{Add, AddAssign};
 
-use crate::{
-    reduce::{ReduceAdd, ReduceAddAssign},
-    Field,
-};
+use crate::Field;
 
 use super::FieldPolynomial;
 
@@ -15,7 +12,7 @@ impl<F: Field> FieldPolynomial<F> {
         self.iter()
             .zip(rhs)
             .zip(destination)
-            .for_each(|((&a, &b), c)| *c = F::MODULUS.reduce_add(a, b))
+            .for_each(|((&a, &b), c)| *c = F::add(a, b))
     }
 }
 
@@ -25,7 +22,7 @@ impl<F: Field> AddAssign for FieldPolynomial<F> {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut()
             .zip(rhs)
-            .for_each(|(a, b)| F::MODULUS.reduce_add_assign(a, b));
+            .for_each(|(a, b)| F::add_assign(a, b));
     }
 }
 
@@ -35,7 +32,7 @@ impl<F: Field> AddAssign<&Self> for FieldPolynomial<F> {
         debug_assert_eq!(self.coeff_count(), rhs.coeff_count());
         self.iter_mut()
             .zip(rhs)
-            .for_each(|(a, &b)| F::MODULUS.reduce_add_assign(a, b));
+            .for_each(|(a, &b)| F::add_assign(a, b));
     }
 }
 
