@@ -3,45 +3,36 @@ name = "algebra"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-algebra_derive = { path = "../algebra_derive", default-features = false }
-
 thiserror = { workspace = true }
 num-traits = { workspace = true }
-once_cell = { workspace = true }
-rand = { workspace = true }
 rand_core = { workspace = true }
+rand = { workspace = true }
 rand_distr = { workspace = true }
-bytemuck = { workspace = true }
-merlin = { workspace = true }
-serde = { workspace = true }
-bincode = { workspace = true }
-concrete-ntt = { git = "https://github.com/pado-labs/concrete-ntt", branch = "main", optional = true }
 itertools = { workspace = true }
-rayon = { workspace = true }
-
-[features]
-default = ["concrete-ntt"]
-concrete-ntt = ["dep:concrete-ntt", "algebra_derive/concrete-ntt"]
-nightly = ["concrete-ntt?/nightly"]
-count_ntt = []
+bytemuck = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-rand_chacha = { workspace = true }
+
+[features]
+default = []
+nightly = []
+
+[[bench]]
+name = "gcd_bench"
+harness = false
+
+[[bench]]
+name = "fast_reduce_bench"
+harness = false
 
 [[bench]]
 name = "ntt_bench"
 harness = false
 
 [[bench]]
-name = "modulus_bench"
-harness = false
-
-[[bench]]
-name = "sample"
+name = "field_ntt"
 harness = false
 
 [package.metadata.docs.rs]

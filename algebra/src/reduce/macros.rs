@@ -1,111 +1,162 @@
 macro_rules! impl_reduce_ops_for_primitive {
-    ($($t:ty),*) => {$(
-        impl $crate::reduce::AddReduce<Self> for $t {
-            type Output = Self;
+    ($($ValueT:ty),*) => {$(
+        impl $crate::reduce::Modulus<$ValueT> for $ValueT {
+            #[inline(always)]
+            fn modulus_minus_one(self) -> $ValueT {
+                self - 1
+            }
+        }
+
+        impl $crate::reduce::ReduceOnce<Self> for $ValueT {
+            type Output = $ValueT;
 
             #[inline]
-            fn add_reduce(self, rhs: Self, modulus: Self) -> Self::Output {
-                let r = self + rhs;
-                if r >= modulus {
-                    r - modulus
+            fn reduce_once(self, value: Self) -> Self::Output {
+                if value >= self {
+                    value - self
                 } else {
-                    r
+                    value
                 }
             }
         }
 
-        impl $crate::reduce::AddReduceAssign<Self> for $t {
+        impl $crate::reduce::ReduceOnceAssign<Self> for $ValueT {
             #[inline]
-            fn add_reduce_assign(&mut self, rhs: Self, modulus: Self) {
-                let r = *self + rhs;
-                *self = if r >= modulus {
-                    r - modulus
-                } else {
-                    r
+            fn reduce_once_assign(self, value: &mut Self) {
+                if *value >= self {
+                    *value -= self;
                 };
             }
         }
 
-        impl $crate::reduce::SubReduce<Self> for $t {
-            type Output = Self;
+        impl $crate::reduce::ReduceAdd<Self> for $ValueT {
+            type Output = $ValueT;
 
             #[inline]
-            fn sub_reduce(self, rhs: Self, modulus: Self) -> Self::Output {
-                if self >= rhs {
-                    self - rhs
+            fn reduce_add(self, a: Self, b: Self) -> Self {
+                if self - b > a{
+                    a + b
                 } else {
-                    modulus - rhs + self
+                    a.wrapping_add(b).wrapping_sub(self)
                 }
             }
         }
 
-        impl $crate::reduce::SubReduceAssign<Self> for $t {
+        impl $crate::reduce::ReduceAddAssign<Self> for $ValueT {
             #[inline]
-            fn sub_reduce_assign(&mut self, rhs: Self, modulus: Self) {
-                if *self >= rhs {
-                    *self -= rhs;
+            fn reduce_add_assign(self, a: &mut Self, b: Self) {
+                if self - b > *a{
+                    *a += b;
                 } else {
-                    *self += modulus - rhs;
+                    *a = a.wrapping_add(b).wrapping_sub(self)
                 }
             }
         }
 
-        impl $crate::reduce::NegReduce<Self> for $t {
-            type Output = Self;
+        impl $crate::reduce::ReduceDouble<Self> for $ValueT {
+            type Output = $ValueT;
 
             #[inline]
-            fn neg_reduce(self, modulus: Self) -> Self::Output {
-                if self == 0 {
+            fn reduce_double(self, value: Self) -> Self {
+                use $crate::reduce::ReduceAdd;
+                self.reduce_add(value, value)
+            }
+        }
+
+        impl $crate::reduce::ReduceDoubleAssign<Self> for $ValueT {
+            #[inline]
+            fn reduce_double_assign(self, value: &mut Self) {
+                use $crate::reduce::ReduceAdd;
+                *value = self.reduce_add(*value, *value);
+            }
+        }
+
+        impl $crate::reduce::ReduceSub<Self> for $ValueT {
+            type Output = $ValueT;
+
+            #[inline]
+            fn reduce_sub(self, a: Self, b: Self) -> Self {
+                if b > a {
+                    a.wrapping_sub(b).wrapping_add(self)
+                } else {
+                    a - b
+                }
+            }
+        }
+
+        impl $crate::reduce::ReduceSubAssign<Self> for $ValueT {
+            #[inline]
+            fn reduce_sub_assign(self, a: &mut Self, b: Self) {
+                if b > *a {
+                    *a = a.wrapping_sub(b).wrapping_add(self);
+                } else {
+                    *a -= b;
+                }
+            }
+        }
+
+        impl $crate::reduce::ReduceNeg<Self> for $ValueT {
+            type Output = $ValueT;
+
+            #[inline]
+            fn reduce_neg(self, value: Self) -> Self {
+                if value == 0 {
                     0
                 } else {
-                    modulus - self
+                    self - value
                 }
             }
         }
 
-        impl $crate::reduce::NegReduceAssign<Self> for $t {
+        impl $crate::reduce::ReduceNegAssign<Self> for $ValueT {
             #[inline]
-            fn neg_reduce_assign(&mut self, modulus: Self) {
-                if *self != 0 {
-                    *self = modulus - *self;
+            fn reduce_neg_assign(self, value: &mut Self) {
+                if *value != 0 {
+                    *value = self - *value;
                 }
             }
         }
 
-        impl $crate::reduce::InvReduce for $t {
-            fn inv_reduce(self, modulus: Self) -> Self {
-                debug_assert!(self < modulus);
-                use $crate::utils::ExtendedGCD;
+        impl $crate::reduce::ReduceInv<Self> for $ValueT {
+            type Output = Self;
 
-                let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
+            #[inline]
+            fn reduce_inv(self, value: $ValueT) -> Self::Output {
+                debug_assert!(self > value);
 
-                assert_eq!(gcd, 1);
+                let (inv, gcd) = $crate::arith::Xgcd::gcdinv(value, self);
+                assert_eq!(gcd, 1, "No {value}^(-1) mod {}", self);
 
-                if inv > 0 {
-                    inv as Self
-                } else {
-                    (inv + modulus as <Self as ExtendedGCD>::SignedT) as Self
-                }
+                inv
             }
         }
 
-        impl $crate::reduce::TryInvReduce for $t {
-            fn try_inv_reduce(self, modulus: Self) -> Result<Self, crate::AlgebraError> {
-                debug_assert!(self < modulus);
-                use $crate::utils::ExtendedGCD;
+        impl $crate::reduce::ReduceInvAssign<Self> for $ValueT {
+            #[inline]
+            fn reduce_inv_assign(self, value: &mut $ValueT) {
+                debug_assert!(self > *value);
 
-                let (_, inv, gcd) = ExtendedGCD::extended_gcd(modulus, self);
+                let (inv, gcd) = $crate::arith::Xgcd::gcdinv(*value, self);
+                assert_eq!(gcd, 1, "No {}^(-1) mod {}", *value, self);
+
+                *value = inv;
+            }
+        }
+
+        impl $crate::reduce::TryReduceInv<Self> for $ValueT {
+            type Output = Self;
+
+            fn try_reduce_inv(self, value: Self) -> Result<Self::Output, crate::AlgebraError> {
+                debug_assert!(self > value);
+
+                let (inv, gcd) = $crate::arith::Xgcd::gcdinv(value, self);
 
                 if gcd == 1 {
-                    if inv > 0 {
-                        Ok(inv as Self)
-                    } else {
-                        Ok((inv + modulus as <Self as ExtendedGCD>::SignedT) as Self)
-                    }
+                    Ok(inv)
                 } else {
-                    Err($crate::AlgebraError::NoReduceInverse {
-                        value: self.to_string(),
-                        modulus: modulus.to_string(),
+                    Err($crate::AlgebraError::NoInverse {
+                        value: Box::new(value),
+                        modulus: Box::new(self),
                     })
                 }
             }
@@ -113,111 +164,4 @@ macro_rules! impl_reduce_ops_for_primitive {
     )*};
 }
 
-impl_reduce_ops_for_primitive!(u8, u16, u32, u64);
-
-macro_rules! impl_non_reduce_ops_for_primitive {
-    ($($t:ty),*) => {$(
-        impl $crate::reduce::Reduce<()> for $t {
-            type Output = Self;
-
-            #[inline]
-            fn reduce(self, _modulus: ()) -> Self::Output {
-                self
-            }
-        }
-
-        impl $crate::reduce::ReduceAssign<()> for $t {
-            #[inline]
-            fn reduce_assign(&mut self, _modulus: ()) {}
-        }
-
-        impl $crate::reduce::AddReduce<()> for $t {
-            type Output = Self;
-
-            #[inline]
-            fn add_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
-                self.wrapping_add(rhs)
-            }
-        }
-
-        impl $crate::reduce::AddReduceAssign<()> for $t {
-            #[inline]
-            fn add_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
-                *self = self.wrapping_add(rhs)
-            }
-        }
-
-        impl $crate::reduce::SubReduce<()> for $t {
-            type Output = Self;
-
-            #[inline]
-            fn sub_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
-                self.wrapping_sub(rhs)
-            }
-        }
-
-        impl $crate::reduce::SubReduceAssign<()> for $t {
-            #[inline]
-            fn sub_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
-                *self = self.wrapping_sub(rhs);
-            }
-        }
-
-        impl $crate::reduce::NegReduce<()> for $t {
-            type Output = Self;
-
-            #[inline]
-            fn neg_reduce(self, _modulus: ()) -> Self::Output {
-                self.wrapping_neg()
-            }
-        }
-
-        impl $crate::reduce::NegReduceAssign<()> for $t {
-            #[inline]
-            fn neg_reduce_assign(&mut self, _modulus: ()) {
-                *self = self.wrapping_neg();
-            }
-        }
-
-        impl $crate::reduce::MulReduce<()> for $t {
-            type Output = Self;
-
-            #[inline]
-            fn mul_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
-                self.wrapping_mul(rhs)
-            }
-        }
-
-        impl $crate::reduce::MulReduceAssign<()> for $t {
-            #[inline]
-            fn mul_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
-                *self = self.wrapping_mul(rhs)
-            }
-        }
-
-        impl $crate::reduce::DivReduce<()> for $t {
-            type Output = Self;
-
-            #[inline]
-            fn div_reduce(self, rhs: Self, _modulus: ()) -> Self::Output {
-                self.wrapping_div(rhs)
-            }
-        }
-
-        impl $crate::reduce::DivReduceAssign<()> for $t {
-            #[inline]
-            fn div_reduce_assign(&mut self, rhs: Self, _modulus: ()) {
-                *self = self.wrapping_div(rhs)
-            }
-        }
-
-        impl $crate::reduce::ExpReduce<(), u32> for $t {
-            #[inline]
-            fn exp_reduce(self, exp: u32, _modulus: ()) -> Self {
-                self.wrapping_pow(exp)
-            }
-        }
-    )*};
-}
-
-impl_non_reduce_ops_for_primitive! {u8, u16, u32, u64}
+impl_reduce_ops_for_primitive!(u8, u16, u32, u64, u128, usize);

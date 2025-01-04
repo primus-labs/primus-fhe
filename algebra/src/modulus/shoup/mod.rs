@@ -1,12 +1,14 @@
-#[macro_use]
-mod internal_macros;
+use crate::integer::{AsFrom, AsInto};
+use crate::numeric::Numeric;
+
+mod ops;
 
 /// A number used for fast modular multiplication.
 ///
 /// This is efficient if many operations are multiplied by
 /// the same number and then reduced with the same modulus.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ShoupFactor<T: Copy> {
+pub struct ShoupFactor<T: Numeric> {
     /// value
     value: T,
 
@@ -14,7 +16,37 @@ pub struct ShoupFactor<T: Copy> {
     quotient: T,
 }
 
-impl<T: Copy> ShoupFactor<T> {
+impl<T: Numeric> ShoupFactor<T> {
+    /// Constructs a [`ShoupFactor<T>`].
+    ///
+    /// * `value` must be less than `modulus`.
+    #[inline]
+    pub fn new(value: T, modulus: T) -> Self {
+        debug_assert!(value < modulus);
+        Self {
+            value,
+            quotient: ((<T::WideT>::as_from(value) << T::BITS) / <T::WideT>::as_from(modulus))
+                .as_into(),
+        }
+    }
+
+    /// Resets the `modulus` of [`ShoupFactor<T>`].
+    #[inline]
+    pub fn set_modulus(&mut self, modulus: T) {
+        debug_assert!(self.value < modulus);
+        self.quotient =
+            ((<T::WideT>::as_from(self.value) << T::BITS) / <T::WideT>::as_from(modulus)).as_into();
+    }
+
+    /// Resets the content of [`ShoupFactor<T>`].
+    ///
+    /// * `value` must be less than `modulus`.
+    #[inline]
+    pub fn set(&mut self, value: T, modulus: T) {
+        self.value = value;
+        self.set_modulus(modulus);
+    }
+
     /// Returns the value of this [`ShoupFactor<T>`].
     #[inline]
     pub const fn value(self) -> T {
@@ -25,44 +57,5 @@ impl<T: Copy> ShoupFactor<T> {
     #[inline]
     pub const fn quotient(self) -> T {
         self.quotient
-    }
-}
-
-impl_shoup_factor!(impl ShoupFactor<u8>; WideType: u16);
-impl_shoup_factor!(impl ShoupFactor<u16>; WideType: u32);
-impl_shoup_factor!(impl ShoupFactor<u32>; WideType: u64);
-impl_shoup_factor!(impl ShoupFactor<u64>; WideType: u128);
-
-impl_shoup_factor_ops!(impl ShoupFactor<u8>);
-impl_shoup_factor_ops!(impl ShoupFactor<u16>);
-impl_shoup_factor_ops!(impl ShoupFactor<u32>);
-impl_shoup_factor_ops!(impl ShoupFactor<u64>);
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        modulus::BarrettModulus,
-        reduce::{MulReduce, Reduce},
-    };
-
-    use super::*;
-    use rand::prelude::*;
-
-    #[test]
-    fn test_shoup_factor() {
-        let mut rng = thread_rng();
-
-        let modulus_value: u64 = rng.gen_range(2..=(u64::MAX >> 2));
-        let modulus = BarrettModulus::<u64>::new(modulus_value);
-
-        let a = rng.gen_range(0..modulus_value);
-        let factor = <ShoupFactor<u64>>::new(a, modulus_value);
-
-        let b: u64 = rng.gen();
-
-        assert_eq!(
-            a.mul_reduce(b.reduce(modulus), modulus),
-            factor.mul_reduce(b, modulus_value)
-        );
     }
 }

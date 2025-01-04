@@ -1,49 +1,82 @@
 /// The lazy modulo operation.
-pub trait LazyReduce<Modulus>: Sized {
+pub trait LazyReduce<T> {
     /// Output type.
     type Output;
 
-    /// Calculates `self (mod 2*modulus)`.
+    /// Calculates `value (mod 2*modulus)` where `self` is modulus.
     ///
-    /// If `Modulus` doesn't support this special case,
-    /// just fall back to `Reduce` trait.
-    fn lazy_reduce(self, modulus: Modulus) -> Self::Output;
+    /// If modulus doesn't support this special case,
+    /// just fall back to [crate::reduce::Reduce] trait.
+    fn lazy_reduce(self, value: T) -> Self::Output;
 }
 
 /// The lazy modulo assignment operation.
-pub trait LazyReduceAssign<Modulus>: Sized {
-    /// Calculates `self (mod 2*modulus)`.
+pub trait LazyReduceAssign<T> {
+    /// Calculates `value (mod 2*modulus)` where `self` is modulus.
     ///
-    /// If `Modulus` doesn't support this special case,
-    /// just fall back to `ReduceAssign` trait.
-    fn lazy_reduce_assign(&mut self, modulus: Modulus);
+    /// If modulus doesn't support this special case,
+    /// just fall back to [crate::reduce::ReduceAssign] trait.
+    fn lazy_reduce_assign(self, value: &mut T);
 }
 
 /// The lazy modular multiplication.
-pub trait LazyMulReduce<Modulus, Rhs = Self> {
+pub trait LazyReduceMul<T, B = T> {
     /// Output type.
     type Output;
 
-    /// Calculates `self * rhs (mod 2*modulus)`.
+    /// Calculates `a * b (mod 2*modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self*rhs < modulus^2`
+    /// - `a*b < modulus²`
     ///
-    /// If `Modulus` doesn't support this special case,
-    /// just fall back to `MulReduce` trait.
-    fn lazy_mul_reduce(self, rhs: Rhs, modulus: Modulus) -> Self::Output;
+    /// If modulus doesn't support this special case,
+    /// just fall back to [crate::reduce::ReduceMul] trait.
+    fn lazy_reduce_mul(self, a: T, b: B) -> Self::Output;
 }
 
 /// The lazy modular multiplication assignment.
-pub trait LazyMulReduceAssign<Modulus, Rhs = Self> {
-    /// Calculates `self *= rhs (mod 2*modulus)`.
+pub trait LazyReduceMulAssign<T, B = T> {
+    /// Calculates `a *= b (mod 2*modulus)` where `self` is modulus.
     ///
     /// # Correctness
     ///
-    /// - `self*rhs < modulus^2`
+    /// - `a*b < modulus²`
     ///
-    /// If `Modulus` doesn't support this special case,
-    /// just fall back to `MulReduceAssign` trait.
-    fn lazy_mul_reduce_assign(&mut self, rhs: Rhs, modulus: Modulus);
+    /// If modulus doesn't support this special case,
+    /// just fall back to [crate::reduce::ReduceMulAssign] trait.
+    fn lazy_reduce_mul_assign(self, a: &mut T, b: B);
+}
+
+/// The lazy modular multiply-add.
+pub trait LazyReduceMulAdd<T, B = T, C = T> {
+    /// Output type.
+    type Output;
+
+    /// Calculates `a * b + c (mod 2*modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `a < modulus`
+    /// - `b < modulus`
+    /// - `c < modulus`
+    ///
+    /// If modulus doesn't support this special case,
+    /// just fall back to [crate::reduce::ReduceMulAdd] trait.
+    fn lazy_reduce_mul_add(self, a: T, b: B, c: C) -> Self::Output;
+}
+
+/// The lazy modular multiply-add assignment.
+pub trait LazyReduceMulAddAssign<T, B = T, C = T> {
+    /// Calculates `a * b + c (mod 2*modulus)` where `self` is modulus.
+    ///
+    /// # Correctness
+    ///
+    /// - `a < modulus`
+    /// - `b < modulus`
+    /// - `c < modulus`
+    ///
+    /// If modulus doesn't support this special case,
+    /// just fall back to [crate::reduce::ReduceMulAddAssign] trait.
+    fn lazy_reduce_mul_add_assign(self, a: &mut T, b: B, c: C);
 }

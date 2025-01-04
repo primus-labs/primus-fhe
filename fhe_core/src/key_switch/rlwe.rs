@@ -1,193 +1,106 @@
-use std::slice::ChunksExact;
+use std::sync::Arc;
 
-use algebra::{Basis, NTTField, NTTPolynomial, Polynomial};
-use lattice::{DecompositionSpace, NTTGadgetRLWE, PolynomialSpace, LWE, NTTRLWE, RLWE};
+use algebra::{
+    decompose::NonPowOf2ApproxSignedBasis, ntt::NttTable, random::DiscreteGaussian, Field, NttField,
+};
+use lattice::{utils::PolyDecomposeSpace, NttGadgetRlwe, NttRlwe};
 use rand::{CryptoRng, Rng};
 
-use crate::{LWEModulusType, SecretKeyPack};
+use crate::{utils::Pool, NttRlweSecretKey, RlweCiphertext};
 
 /// The Key Switching Key.
-///
-/// This struct stores the key
-/// that switch a ciphertext of the ring Secret Key
-/// to a [`LWE<F>`] ciphertext of the LWE Secret Key.
-#[derive(Debug, Clone, Default)]
-pub struct KeySwitchingRLWEKey<Q: NTTField> {
-    /// LWE vector dimension, refers to **n** in the paper.
-    lwe_dimension: usize,
-    /// Key Switching Key data
-    key: Vec<NTTGadgetRLWE<Q>>,
+#[derive(Clone)]
+pub struct RlweKeySwitchingKey<Q: NttField> {
+    key: NttGadgetRlwe<Q>,
+    ntt_table: Arc<<Q as NttField>::Table>,
+    space: Pool<PolyDecomposeSpace<Q>>,
 }
 
-impl<Q: NTTField> KeySwitchingRLWEKey<Q> {
-    /// Generates a new [`KeySwitchingKey`].
-    pub fn generate<C, R>(
-        secret_key_pack: &SecretKeyPack<C, Q>,
-        csrng: &mut R,
-    ) -> KeySwitchingRLWEKey<Q>
+impl<Q: NttField> RlweKeySwitchingKey<Q> {
+    /// Creates a new [`RlweKeySwitchingKey<Q>`].
+    #[inline]
+    pub fn new(key: NttGadgetRlwe<Q>, ntt_table: Arc<<Q as NttField>::Table>) -> Self {
+        Self {
+            key,
+            ntt_table,
+            space: Pool::new(),
+        }
+    }
+
+    /// Generates a new `RlweKeySwitchingKey` using the provided input and output RLWE secret keys,
+    /// basis, Gaussian distribution, NTT table, and random number generator.
+    ///
+    /// # Arguments
+    ///
+    /// * `s_in` - A reference to the input RLWE secret key.
+    /// * `s_out` - A reference to the output RLWE secret key.
+    /// * `basis` - The basis for the key switching.
+    /// * `gaussian` - The Gaussian distribution used for generating random samples.
+    /// * `ntt_table` - The NTT table used for Number Theoretic Transform operations.
+    /// * `rng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `RlweKeySwitchingKey`.
+    pub fn generate<R>(
+        s_in: &NttRlweSecretKey<Q>,
+        s_out: &NttRlweSecretKey<Q>,
+        basis: &NonPowOf2ApproxSignedBasis<<Q as Field>::ValueT>,
+        gaussian: DiscreteGaussian<<Q as Field>::ValueT>,
+        ntt_table: Arc<<Q as NttField>::Table>,
+        rng: &mut R,
+    ) -> Self
     where
-        C: LWEModulusType,
         R: Rng + CryptoRng,
     {
-        let parameters = secret_key_pack.parameters();
+        // other case will be added later.
+        assert_eq!(s_in.coeff_count(), s_out.coeff_count());
 
-        let lwe_dimension = parameters.lwe_dimension();
-        let extended_lwe_dimension = lwe_dimension.next_power_of_two();
-        let ring_dimension = parameters.ring_dimension();
-        assert!(extended_lwe_dimension <= ring_dimension);
+        let key = NttGadgetRlwe::generate_random_poly_sample(
+            s_out, s_in, basis, gaussian, &ntt_table, rng,
+        );
 
-        let chi = parameters.key_switching_noise_distribution_for_ring();
+        Self {
+            key,
+            ntt_table,
+            space: Pool::new(),
+        }
+    }
 
-        let key_switching_basis = Basis::<Q>::new(parameters.key_switching_basis_bits());
+    /// Performs key switching on the given RLWE ciphertext.
+    ///
+    /// # Arguments
+    ///
+    /// * `ciphertext` - A reference to the RLWE ciphertext to be key switched.
+    ///
+    /// # Returns
+    ///
+    /// A new RLWE ciphertext after key switching.
+    pub fn key_switch(&self, ciphertext: &RlweCiphertext<Q>) -> RlweCiphertext<Q> {
+        let ntt_table = self.ntt_table.as_ref();
+        let coeff_count = ntt_table.dimension();
 
-        // conversion
-        let convert = |v: &C| {
-            if *v == C::ZERO {
-                Q::zero()
-            } else if *v == C::ONE {
-                Q::one()
-            } else {
-                Q::neg_one()
-            }
+        let mut decompose_space = match self.space.get() {
+            Some(sp) => sp,
+            None => PolyDecomposeSpace::new(coeff_count),
         };
 
-        // s = [s_0, s_1,..., s_{n-1}, 0,..., 0]
-        let mut s = <Polynomial<Q>>::new(
-            secret_key_pack
-                .lwe_secret_key()
-                .iter()
-                .map(convert)
-                .collect(),
-        );
-        s.resize(extended_lwe_dimension, Q::zero());
+        let mut ntt_rlwe = <NttRlwe<Q>>::zero(coeff_count);
 
-        let lwe_sk = s.into_ntt_polynomial();
-
-        let len = key_switching_basis.decompose_len();
-        let basis = Q::new(key_switching_basis.basis());
-
-        let key = if extended_lwe_dimension == ring_dimension {
-            let mut sk = secret_key_pack.ntt_ring_secret_key().clone();
-
-            let k = (0..len)
-                .map(|i| {
-                    let mut sample = NTTRLWE::<Q>::generate_random_zero_sample(&lwe_sk, chi, csrng);
-
-                    *sample.b_mut() += &sk;
-
-                    if i < len - 1 {
-                        sk.mul_scalar_assign(basis);
-                    }
-
-                    sample
-                })
-                .collect();
-            vec![NTTGadgetRLWE::new(k, key_switching_basis)]
-        } else {
-            let key_chunks: Vec<Polynomial<Q>> = secret_key_pack
-                .ring_secret_key()
-                .as_slice()
-                .chunks_exact(extended_lwe_dimension)
-                .map(|part| Polynomial::from_slice(part))
-                .collect();
-
-            key_chunks
-                .into_iter()
-                .map(|z| {
-                    let mut ntt_z = z.into_ntt_polynomial();
-                    let k = (0..len)
-                        .map(|i| {
-                            let mut sample =
-                                NTTRLWE::<Q>::generate_random_zero_sample(&lwe_sk, chi, csrng);
-
-                            *sample.b_mut() += &ntt_z;
-
-                            if i < len - 1 {
-                                ntt_z.mul_scalar_assign(basis);
-                            }
-
-                            sample
-                        })
-                        .collect();
-                    NTTGadgetRLWE::new(k, key_switching_basis)
-                })
-                .collect()
-        };
-
-        Self { lwe_dimension, key }
-    }
-
-    /// Performs key switching operation.
-    pub fn key_switch_for_rlwe(&self, mut ciphertext: RLWE<Q>) -> LWE<Q> {
-        let extended_lwe_dimension = self.lwe_dimension.next_power_of_two();
-
-        let init = <NTTRLWE<Q>>::new(
-            NTTPolynomial::zero(extended_lwe_dimension),
-            NTTPolynomial::new(vec![ciphertext.b()[0]; extended_lwe_dimension]),
+        self.key.mul_polynomial_inplace_fast(
+            ciphertext.a(),
+            ntt_table,
+            &mut decompose_space,
+            &mut ntt_rlwe,
         );
 
-        if ciphertext.a_slice().len() != extended_lwe_dimension {
-            let a = ciphertext.a_mut_slice();
-            a[0] = -a[0];
-            a[1..].reverse();
-            a.chunks_exact_mut(extended_lwe_dimension)
-                .for_each(|chunk| {
-                    chunk[0] = -chunk[0];
-                    chunk[1..].reverse();
-                });
-        }
+        self.space.store(decompose_space);
 
-        let iter = ciphertext.a_slice().chunks_exact(extended_lwe_dimension);
+        let mut result = ntt_rlwe.to_rlwe(ntt_table);
+        result.a_mut().neg_assign();
+        result.b_mut().neg_assign();
+        *result.b_mut() += ciphertext.b();
 
-        self.key_switch_inner(extended_lwe_dimension, init, iter)
-    }
-
-    /// Performs key switching operation.
-    pub fn key_switch_for_lwe(&self, mut ciphertext: LWE<Q>) -> LWE<Q> {
-        let extended_lwe_dimension = self.lwe_dimension.next_power_of_two();
-
-        let init = <NTTRLWE<Q>>::new(
-            NTTPolynomial::zero(extended_lwe_dimension),
-            NTTPolynomial::new(vec![ciphertext.b(); extended_lwe_dimension]),
-        );
-
-        if ciphertext.a().len() != extended_lwe_dimension {
-            let a = ciphertext.a_mut();
-            a.chunks_exact_mut(extended_lwe_dimension)
-                .for_each(|chunk| {
-                    chunk[1..].reverse();
-                    chunk[1..].iter_mut().for_each(|v| *v = -*v);
-                });
-        } else {
-            let a = ciphertext.a_mut();
-            a[1..].reverse();
-            a[1..].iter_mut().for_each(|v| *v = -*v);
-        }
-
-        let iter = ciphertext.a().chunks_exact(extended_lwe_dimension);
-
-        self.key_switch_inner(extended_lwe_dimension, init, iter)
-    }
-
-    fn key_switch_inner(
-        &self,
-        extended_lwe_dimension: usize,
-        mut init: NTTRLWE<Q>,
-        iter: ChunksExact<Q>,
-    ) -> LWE<Q> {
-        let mut polynomial_space = PolynomialSpace::new(extended_lwe_dimension);
-        let mut decompose_space = DecompositionSpace::new(extended_lwe_dimension);
-
-        self.key.iter().zip(iter).for_each(|(k_i, a_i)| {
-            polynomial_space.copy_from(a_i);
-
-            init.sub_assign_gadget_rlwe_mul_polynomial_inplace_fast(
-                k_i,
-                &mut polynomial_space,
-                &mut decompose_space,
-            );
-        });
-
-        <RLWE<Q>>::from(init).extract_partial_lwe_locally(self.lwe_dimension)
+        result
     }
 }
