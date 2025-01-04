@@ -1,0 +1,32 @@
+[package]
+name = "boolean_fhe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+algebra = { path = "../algebra", default-features = false }
+lattice = { path = "../lattice", default-features = false }
+fhe_core = { path = "../fhe_core", default-features = false }
+
+num-traits = { workspace = true }
+rand = { workspace = true }
+itertools = { workspace = true }
+
+rayon = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[features]
+default = []
+nightly = ["algebra/nightly", "lattice/nightly", "fhe_core/nightly"]
+
+[[bench]]
+name = "boolean_fhe"
+harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+# enable unstable features in the documentation
+rustdoc-args = ["--cfg", "docsrs"]
+# RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --all-features --no-deps

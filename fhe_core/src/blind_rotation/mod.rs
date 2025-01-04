@@ -1,15 +1,17 @@
-//! Blind Rotation
-use algebra::{Basis, NTTField, Polynomial};
-use lattice::{LWE, RLWE};
-use rand::{CryptoRng, Rng};
-
-use crate::{LWEModulusType, LWESecretKeyType, SecretKeyPack};
-
 mod binary;
 mod ternary;
 
-use binary::BinaryBlindRotationKey;
-use ternary::TernaryBlindRotationKey;
+use std::sync::Arc;
+
+use algebra::{
+    decompose::NonPowOf2ApproxSignedBasis, integer::UnsignedInteger, polynomial::FieldPolynomial,
+    random::DiscreteGaussian, Field, NttField,
+};
+pub use binary::BinaryBlindRotationKey;
+use rand::{CryptoRng, Rng};
+pub use ternary::TernaryBlindRotationKey;
+
+use crate::{LweCiphertext, LweSecretKey, LweSecretKeyType, NttRlweSecretKey, RlweCiphertext};
 
 /// Blind rotation key.
 ///
@@ -19,15 +21,15 @@ use ternary::TernaryBlindRotationKey;
 /// and if left unchecked, it can eventually lead to decryption errors.
 /// Bootstrapping is a method to reduce the noise and refresh the
 /// ciphertexts, allowing the computation to continue.
-#[derive(Debug, Clone)]
-pub enum BlindRotationKey<F: NTTField> {
+#[derive(Clone)]
+pub enum BlindRotationKey<F: NttField> {
     /// FHE binary blind rotation key
     Binary(BinaryBlindRotationKey<F>),
     /// FHE ternary blind rotation key
     Ternary(TernaryBlindRotationKey<F>),
 }
 
-impl<F: NTTField> BlindRotationKey<F> {
+impl<F: NttField> BlindRotationKey<F> {
     /// Creates the binary blind rotation key.
     #[inline]
     pub fn binary(key: BinaryBlindRotationKey<F>) -> Self {
@@ -41,44 +43,49 @@ impl<F: NTTField> BlindRotationKey<F> {
     }
 
     /// Performs the blind rotation operation.
-    pub fn blind_rotate<C: LWEModulusType>(
+    pub fn blind_rotate<C: UnsignedInteger>(
         &self,
-        lut: Polynomial<F>,
-        lwe: &LWE<C>,
-        blind_rotation_basis: Basis<F>,
-    ) -> RLWE<F> {
+        lut: FieldPolynomial<F>,
+        lwe: &LweCiphertext<C>,
+    ) -> RlweCiphertext<F> {
         match self {
             BlindRotationKey::Binary(bootstrapping_key) => bootstrapping_key.blind_rotate(lut, lwe),
             BlindRotationKey::Ternary(bootstrapping_key) => {
-                bootstrapping_key.blind_rotate(lut, lwe, blind_rotation_basis)
+                bootstrapping_key.blind_rotate(lut, lwe)
             }
         }
     }
 
     /// Generates the [`BlindRotationKey<F>`].
-    pub fn generate<C, R>(secret_key_pack: &SecretKeyPack<C, F>, csrng: &mut R) -> Self
+    pub fn generate<C, R>(
+        lwe_secret_key: &LweSecretKey<C>,
+        rlwe_secret_key: &NttRlweSecretKey<F>,
+        blind_rotation_basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: Arc<<F as NttField>::Table>,
+        rng: &mut R,
+    ) -> Self
     where
-        C: LWEModulusType,
+        C: UnsignedInteger,
         R: Rng + CryptoRng,
     {
-        let parameters = secret_key_pack.parameters();
-        let chi = parameters.ring_noise_distribution();
-
-        match parameters.lwe_secret_key_type() {
-            LWESecretKeyType::Binary => BlindRotationKey::Binary(BinaryBlindRotationKey::generate(
-                secret_key_pack.lwe_secret_key(),
-                secret_key_pack.ntt_ring_secret_key(),
-                parameters.blind_rotation_basis(),
-                chi,
-                csrng,
+        match lwe_secret_key.distr() {
+            LweSecretKeyType::Binary => BlindRotationKey::Binary(BinaryBlindRotationKey::generate(
+                lwe_secret_key,
+                rlwe_secret_key,
+                blind_rotation_basis,
+                gaussian,
+                ntt_table,
+                rng,
             )),
-            LWESecretKeyType::Ternary => {
+            LweSecretKeyType::Ternary => {
                 BlindRotationKey::Ternary(TernaryBlindRotationKey::generate(
-                    secret_key_pack.lwe_secret_key(),
-                    secret_key_pack.ntt_ring_secret_key(),
-                    parameters.blind_rotation_basis(),
-                    chi,
-                    csrng,
+                    lwe_secret_key,
+                    rlwe_secret_key,
+                    blind_rotation_basis,
+                    gaussian,
+                    ntt_table,
+                    rng,
                 ))
             }
         }
