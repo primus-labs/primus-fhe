@@ -2,10 +2,7 @@ use algebra::{
     integer::UnsignedInteger,
     polynomial::{FieldNttPolynomial, FieldPolynomial, NumPolynomial},
     random::{sample_binary_values, DiscreteGaussian},
-    reduce::{
-        Modulus, ReduceAdd, ReduceAddAssign, ReduceDotProduct, ReduceMul, ReduceSubAssign,
-        RingReduce,
-    },
+    reduce::RingReduce,
     Field, NttField,
 };
 use lattice::{Lwe, NttRlwe, NumRlwe};
@@ -40,19 +37,25 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
     ///
     /// A new instance of `LwePublicKey`.
     #[inline]
-    pub fn new<M, R>(
+    pub fn new<R, Modulus>(
         secret_key: &LweSecretKey<C>,
-        params: &LweParameters<C>,
-        modulus: M,
+        params: &LweParameters<C, Modulus>,
         gaussian: DiscreteGaussian<C>,
         rng: &mut R,
     ) -> Self
     where
-        M: Copy + Modulus<C> + ReduceDotProduct<C, Output = C> + ReduceAdd<C, Output = C>,
         R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
     {
         let public_key: Vec<_> = (0..params.dimension)
-            .map(|_| Lwe::generate_random_zero_sample(secret_key.as_ref(), modulus, gaussian, rng))
+            .map(|_| {
+                Lwe::generate_random_zero_sample(
+                    secret_key.as_ref(),
+                    params.cipher_modulus,
+                    gaussian,
+                    rng,
+                )
+            })
             .collect();
 
         Self { public_key }
@@ -71,19 +74,20 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
     ///
     /// An `LweCiphertext` containing the encrypted message.
     #[inline]
-    pub fn encrypt<M, R>(
+    pub fn encrypt<Msg, R, Modulus>(
         &self,
-        message: M,
-        params: &LweParameters<C>,
-        modulus: impl RingReduce<C>,
+        message: Msg,
+        params: &LweParameters<C, Modulus>,
         rng: &mut R,
     ) -> LweCiphertext<C>
     where
-        M: TryInto<C>,
+        Msg: TryInto<C>,
         R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
     {
         let dimension = params.dimension;
         let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
 
         let r: Vec<C> = sample_binary_values(dimension, rng);
 
@@ -98,8 +102,13 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
             ),
         );
 
-        for (zero, &ri) in self.public_key.iter().zip(r.iter()) {
-            result.add_assign_rhs_mul_scalar_reduce(zero, ri, modulus);
+        for (zero, _) in self
+            .public_key
+            .iter()
+            .zip(r.iter())
+            .filter(|(_, ri)| ri.is_one())
+        {
+            result.add_reduce_assign_component_wise(zero, modulus);
         }
 
         for (ai, ei) in result
@@ -139,18 +148,18 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     ///
     /// A new instance of `LwePublicKeyRlweMode`.
     #[inline]
-    pub fn new<M, R>(
+    pub fn new<R, Modulus>(
         secret_key: &LweSecretKey<C>,
-        params: &LweParameters<C>,
-        modulus: M,
+        params: &LweParameters<C, Modulus>,
         rng: &mut R,
     ) -> LwePublicKeyRlweMode<C>
     where
-        M: Copy + Modulus<C> + ReduceAddAssign<C> + ReduceSubAssign<C> + ReduceMul<C, Output = C>,
         R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
     {
         let dimension = params.dimension;
         let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
 
         let a = NumPolynomial::random(dimension, modulus, rng);
         let mut e = NumPolynomial::random_gaussian(dimension, gaussian, rng);
@@ -175,19 +184,20 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     ///
     /// An `LweCiphertext` containing the encrypted message.
     #[inline]
-    pub fn encrypt<M, R>(
+    pub fn encrypt<Msg, R, Modulus>(
         &self,
-        message: M,
-        params: &LweParameters<C>,
-        cipher_modulus: impl RingReduce<C>,
+        message: Msg,
+        params: &LweParameters<C, Modulus>,
         csrng: &mut R,
     ) -> LweCiphertext<C>
     where
-        M: TryInto<C>,
+        Msg: TryInto<C>,
         R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
     {
         let dimension = params.dimension;
         let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
 
         let r: Vec<C> = sample_binary_values(dimension, csrng);
 
@@ -195,12 +205,12 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
 
         self.public_key
             .a()
-            .naive_mul_inplace(&r, cipher_modulus, result.a_mut());
+            .naive_mul_inplace(&r, modulus, result.a_mut());
         self.public_key
             .b()
-            .naive_mul_inplace(&r, cipher_modulus, result.b_mut());
+            .naive_mul_inplace(&r, modulus, result.b_mut());
 
-        cipher_modulus.reduce_add_assign(
+        modulus.reduce_add_assign(
             &mut result.b_mut()[0],
             encode(
                 message,
@@ -214,7 +224,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
             .iter_mut()
             .zip(gaussian.sample_iter(&mut *csrng))
         {
-            cipher_modulus.reduce_add_assign(ai, ei);
+            modulus.reduce_add_assign(ai, ei);
         }
 
         for (bi, ei) in result
@@ -222,10 +232,10 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
             .iter_mut()
             .zip(gaussian.sample_iter(&mut *csrng))
         {
-            cipher_modulus.reduce_add_assign(bi, ei);
+            modulus.reduce_add_assign(bi, ei);
         }
 
-        result.extract_lwe_locally(cipher_modulus)
+        result.extract_lwe_locally(modulus)
     }
 
     /// Encrypts multiple messages using the public key.
@@ -241,19 +251,20 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     ///
     /// A `CmLweCiphertext` containing the encrypted messages.
     #[inline]
-    pub fn encrypt_multi_messages<M, R>(
+    pub fn encrypt_multi_messages<Msg, R, Modulus>(
         &self,
-        messages: &[M],
-        params: &LweParameters<C>,
-        cipher_modulus: impl RingReduce<C>,
+        messages: &[Msg],
+        params: &LweParameters<C, Modulus>,
         csrng: &mut R,
     ) -> CmLweCiphertext<C>
     where
-        M: Copy + TryInto<C>,
+        Msg: Copy + TryInto<C>,
         R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
     {
         let dimension = params.dimension;
         let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
 
         let r: Vec<C> = sample_binary_values(dimension, csrng);
 
@@ -261,13 +272,13 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
 
         self.public_key
             .a()
-            .naive_mul_inplace(&r, cipher_modulus, result.a_mut());
+            .naive_mul_inplace(&r, modulus, result.a_mut());
         self.public_key
             .b()
-            .naive_mul_inplace(&r, cipher_modulus, result.b_mut());
+            .naive_mul_inplace(&r, modulus, result.b_mut());
 
         for (&message, bi) in messages.iter().zip(result.b_mut()) {
-            cipher_modulus.reduce_add_assign(
+            modulus.reduce_add_assign(
                 bi,
                 encode(
                     message,
@@ -282,7 +293,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
             .iter_mut()
             .zip(gaussian.sample_iter(&mut *csrng))
         {
-            cipher_modulus.reduce_add_assign(ai, ei);
+            modulus.reduce_add_assign(ai, ei);
         }
 
         for (bi, ei) in result
@@ -290,10 +301,10 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
             .iter_mut()
             .zip(gaussian.sample_iter(&mut *csrng))
         {
-            cipher_modulus.reduce_add_assign(bi, ei);
+            modulus.reduce_add_assign(bi, ei);
         }
 
-        result.extract_first_few_lwe_locally(messages.len(), cipher_modulus)
+        result.extract_first_few_lwe_locally(messages.len(), modulus)
     }
 }
 

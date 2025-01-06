@@ -1,6 +1,9 @@
-use algebra::integer::{AsInto, UnsignedInteger};
+use algebra::{
+    integer::{AsInto, UnsignedInteger},
+    reduce::ModulusValue,
+};
 
-use crate::{LweCiphertext, ModulusValue};
+use crate::LweCiphertext;
 
 /// Implementation of modulus switching.
 ///

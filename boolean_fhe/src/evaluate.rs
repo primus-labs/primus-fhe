@@ -3,12 +3,12 @@ use std::sync::Arc;
 use algebra::{
     integer::UnsignedInteger,
     polynomial::FieldPolynomial,
-    reduce::{ReduceAddAssign, ReduceNeg, RingReduce},
+    reduce::{ModulusValue, ReduceAddAssign, RingReduce},
     Field, NttField,
 };
 use fhe_core::{
     lwe_modulus_switch, lwe_modulus_switch_assign, lwe_modulus_switch_inplace, BlindRotationKey,
-    LweCiphertext, LweKeySwitchingKeyRlweMode, LweSecretKey, LweSecretKeyType, ModulusValue,
+    LweCiphertext, LweKeySwitchingKeyRlweMode, LweSecretKey, LweSecretKeyType,
     NonPowOf2LweKeySwitchingKey, PowOf2LweKeySwitchingKey, RingSecretKeyType,
 };
 use rand::{CryptoRng, Rng};
@@ -92,29 +92,25 @@ impl<C: UnsignedInteger, Q: NttField> KeySwitchingKey<C, Q> {
 
 /// The evaluator of the homomorphic encryption scheme.
 #[derive(Clone)]
-pub struct EvaluationKey<C: UnsignedInteger, Q: NttField> {
+pub struct EvaluationKey<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> {
     /// Blind rotation key.
     blind_rotation_key: BlindRotationKey<Q>,
     /// Key switching key.
     key_switching_key: KeySwitchingKey<C, Q>,
     /// The parameters of the fully homomorphic encryption scheme.
-    parameters: BooleanFheParameters<C, Q>,
+    parameters: BooleanFheParameters<C, LweModulus, Q>,
 }
 
-impl<C: UnsignedInteger, Q: NttField> EvaluationKey<C, Q> {
-    /// Returns a reference to the parameters of this [`EvaluationKey<C, Q>`].
+impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C, LweModulus, Q> {
+    /// Returns a reference to the parameters of this [`EvaluationKey<C, LweModulus, Q>`].
     #[inline]
-    pub fn parameters(&self) -> &BooleanFheParameters<C, Q> {
+    pub fn parameters(&self) -> &BooleanFheParameters<C, LweModulus, Q> {
         &self.parameters
     }
 
     /// Creates a new [`EvaluationKey`] from the given [`SecretKeyPack`].
     #[inline]
-    pub fn new<R>(
-        secret_key_pack: &SecretKeyPack<C, Q>,
-        lwe_cipher_modulus: impl RingReduce<C>,
-        rng: &mut R,
-    ) -> Self
+    pub fn new<R>(secret_key_pack: &SecretKeyPack<C, LweModulus, Q>, rng: &mut R) -> Self
     where
         R: Rng + CryptoRng,
     {
@@ -140,7 +136,7 @@ impl<C: UnsignedInteger, Q: NttField> EvaluationKey<C, Q> {
                     &s_in,
                     s_out,
                     parameters.key_switching_params(),
-                    lwe_cipher_modulus,
+                    parameters.lwe_cipher_modulus(),
                     rng,
                 );
                 KeySwitchingKey::PowOf2ModulusLwe(ksk)
@@ -184,12 +180,7 @@ impl<C: UnsignedInteger, Q: NttField> EvaluationKey<C, Q> {
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and lookup table `lut`.
-    pub fn bootstrap(
-        &self,
-        mut c: LweCiphertext<C>,
-        lut: FieldPolynomial<Q>,
-        lwe_cipher_modulus: impl RingReduce<C>,
-    ) -> LweCiphertext<C> {
+    pub fn bootstrap(&self, mut c: LweCiphertext<C>, lut: FieldPolynomial<Q>) -> LweCiphertext<C> {
         let parameters = self.parameters();
         let twice_ring_dimension_value =
             C::try_from(parameters.ring_dimension() << 1).ok().unwrap();
@@ -221,7 +212,7 @@ impl<C: UnsignedInteger, Q: NttField> EvaluationKey<C, Q> {
                     _ => panic!("Unable to get the corresponding key switching key!"),
                 };
 
-                c = ksk.key_switch(&cipher, lwe_cipher_modulus);
+                c = ksk.key_switch(&cipher, parameters.lwe_cipher_modulus());
             }
             Steps::BrKsRlevMs => {
                 let ksk = match self.key_switching_key {
@@ -270,38 +261,29 @@ impl<C: UnsignedInteger, Q: NttField> EvaluationKey<C, Q> {
 
 /// Evaluator
 #[derive(Clone)]
-pub struct Evaluator<C: UnsignedInteger, Q: NttField> {
-    ek: EvaluationKey<C, Q>,
+pub struct Evaluator<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> {
+    ek: EvaluationKey<C, LweModulus, Q>,
 }
 
-impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
+impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> Evaluator<C, LweModulus, Q> {
     /// Create a new instance.
     #[inline]
-    pub fn new<R: Rng + CryptoRng>(
-        sk: &SecretKeyPack<C, Q>,
-        lwe_cipher_modulus: impl RingReduce<C>,
-        rng: &mut R,
-    ) -> Self {
+    pub fn new<R: Rng + CryptoRng>(sk: &SecretKeyPack<C, LweModulus, Q>, rng: &mut R) -> Self {
         Self {
-            ek: EvaluationKey::new(sk, lwe_cipher_modulus, rng),
+            ek: EvaluationKey::new(sk, rng),
         }
     }
 
     /// Returns a reference to the parameters of this [`Evaluator<F>`].
     #[inline]
-    pub fn parameters(&self) -> &BooleanFheParameters<C, Q> {
+    pub fn parameters(&self) -> &BooleanFheParameters<C, LweModulus, Q> {
         self.ek.parameters()
     }
 
     /// Complete the bootstrapping operation with LWE Ciphertext *`c`* and lookup table `lut`.
     #[inline]
-    pub fn bootstrap(
-        &self,
-        c: LweCiphertext<C>,
-        lut: FieldPolynomial<Q>,
-        lwe_cipher_modulus: impl RingReduce<C>,
-    ) -> LweCiphertext<C> {
-        self.ek.bootstrap(c, lut, lwe_cipher_modulus)
+    pub fn bootstrap(&self, c: LweCiphertext<C>, lut: FieldPolynomial<Q>) -> LweCiphertext<C> {
+        self.ek.bootstrap(c, lut)
     }
 
     /// Performs the homomorphic not operation.
@@ -312,11 +294,9 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Output: ciphertext with message `false`(resp. `true`).
     ///
     /// Link: <https://eprint.iacr.org/2020/086>
-    pub fn not<M>(&self, c: &LweCiphertext<C>, cipher_modulus: M) -> LweCiphertext<C>
-    where
-        M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
-    {
+    pub fn not(&self, c: &LweCiphertext<C>) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let mut neg = c.neg_reduce(cipher_modulus);
 
@@ -339,16 +319,9 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `not(a and b)`.
-    pub fn nand<M>(
-        &self,
-        c0: &LweCiphertext<C>,
-        c1: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    pub fn nand(&self, c0: &LweCiphertext<C>, c1: &LweCiphertext<C>) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let add = c0.add_reduce_component_wise_ref(c1, cipher_modulus);
 
@@ -357,7 +330,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(add, lut, cipher_modulus)
+        self.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic and operation.
@@ -367,16 +340,9 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `a and b`.
-    pub fn and<M>(
-        &self,
-        c0: &LweCiphertext<C>,
-        c1: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    pub fn and(&self, c0: &LweCiphertext<C>, c1: &LweCiphertext<C>) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let add = c0.add_reduce_component_wise_ref(c1, cipher_modulus);
 
@@ -385,7 +351,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(add, lut, cipher_modulus)
+        self.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic or operation.
@@ -395,16 +361,9 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `a or b`.
-    pub fn or<M>(
-        &self,
-        c0: &LweCiphertext<C>,
-        c1: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    pub fn or(&self, c0: &LweCiphertext<C>, c1: &LweCiphertext<C>) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let add = c0.add_reduce_component_wise_ref(c1, cipher_modulus);
 
@@ -413,7 +372,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(add, lut, cipher_modulus)
+        self.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic nor operation.
@@ -423,16 +382,9 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `not(a or b)`.
-    pub fn nor<M>(
-        &self,
-        c0: &LweCiphertext<C>,
-        c1: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    pub fn nor(&self, c0: &LweCiphertext<C>, c1: &LweCiphertext<C>) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let add = c0.add_reduce_component_wise_ref(c1, cipher_modulus);
 
@@ -441,7 +393,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(add, lut, cipher_modulus)
+        self.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic xor operation.
@@ -451,16 +403,9 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `a xor b`.
-    pub fn xor<M>(
-        &self,
-        c0: &LweCiphertext<C>,
-        c1: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    pub fn xor(&self, c0: &LweCiphertext<C>, c1: &LweCiphertext<C>) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, cipher_modulus);
         sub.mul_scalar_reduce_assign(C::ONE + C::ONE, cipher_modulus);
@@ -470,7 +415,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(sub, lut, cipher_modulus)
+        self.bootstrap(sub, lut)
     }
 
     /// Performs the homomorphic xnor operation.
@@ -480,16 +425,9 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c0`, with message `a`.
     /// * Input: ciphertext `c1`, with message `b`.
     /// * Output: ciphertext with message `not(a xor b)`.
-    pub fn xnor<M>(
-        &self,
-        c0: &LweCiphertext<C>,
-        c1: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    pub fn xnor(&self, c0: &LweCiphertext<C>, c1: &LweCiphertext<C>) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let mut sub = c0.sub_reduce_component_wise_ref(c1, cipher_modulus);
         sub.mul_scalar_reduce_assign(C::ONE + C::ONE, cipher_modulus);
@@ -499,7 +437,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(sub, lut, cipher_modulus)
+        self.bootstrap(sub, lut)
     }
 
     /// Performs the homomorphic majority operation.
@@ -511,17 +449,14 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c2`, with message `c`.
     /// * Output: ciphertext with message `(a & b) | (b & c) | (a & c)`.
     ///   If there are two or three `true`(resp. `false`) in `a`, `b` and `c`, it will return `true`(resp. `false`).
-    pub fn majority<M>(
+    pub fn majority(
         &self,
         c0: &LweCiphertext<C>,
         c1: &LweCiphertext<C>,
         c2: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    ) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
         let mut add = c0.add_reduce_component_wise_ref(c1, cipher_modulus);
         add.add_reduce_assign_component_wise(c2, cipher_modulus);
@@ -531,7 +466,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(add, lut, cipher_modulus)
+        self.bootstrap(add, lut)
     }
 
     /// Performs the homomorphic mux operation.
@@ -543,24 +478,18 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
     /// * Input: ciphertext `c2`, with message `c`.
     /// * Output: ciphertext with message `if a {b} else {c}`.
     ///   If `a` is `true`, it will return `b`. If `a` is `false`, it will return `c`.
-    pub fn mux<M>(
+    pub fn mux(
         &self,
         c0: &LweCiphertext<C>,
         c1: &LweCiphertext<C>,
         c2: &LweCiphertext<C>,
-        cipher_modulus: M,
-    ) -> LweCiphertext<C>
-    where
-        M: RingReduce<C>,
-    {
+    ) -> LweCiphertext<C> {
         let parameters = self.parameters();
+        let cipher_modulus = parameters.lwe_cipher_modulus();
 
-        let not_c0 = self.not(c0, cipher_modulus);
+        let not_c0 = self.not(c0);
 
-        let (mut t0, t1) = rayon::join(
-            || self.and(c0, c1, cipher_modulus),
-            || self.and(&not_c0, c2, cipher_modulus),
-        );
+        let (mut t0, t1) = rayon::join(|| self.and(c0, c1), || self.and(&not_c0, c2));
 
         // (a & b) | (!a & c)
         t0.add_reduce_assign_component_wise(&t1, cipher_modulus);
@@ -570,7 +499,7 @@ impl<C: UnsignedInteger, Q: NttField> Evaluator<C, Q> {
             parameters.lwe_plain_modulus().as_into(),
         );
 
-        self.bootstrap(t0, lut, cipher_modulus)
+        self.bootstrap(t0, lut)
     }
 }
 
