@@ -1,8 +1,8 @@
 use crate::reduce::{ReduceNeg, ReduceNegAssign};
 
-use super::NumNttPolynomial;
+use super::NttPolynomial;
 
-impl<T: Copy> NumNttPolynomial<T> {
+impl<T: Copy> NttPolynomial<T> {
     /// Performs the unary `-` operation.
     #[inline]
     pub fn neg<M>(mut self, modulus: M) -> Self
@@ -19,7 +19,7 @@ impl<T: Copy> NumNttPolynomial<T> {
     where
         M: Copy + ReduceNegAssign<T>,
     {
-        self.data
+        self.values
             .iter_mut()
             .for_each(|v| modulus.reduce_neg_assign(v));
     }
@@ -30,6 +30,7 @@ impl<T: Copy> NumNttPolynomial<T> {
     where
         M: Copy + ReduceNeg<T, Output = T>,
     {
+        debug_assert_eq!(self.coeff_count(), destination.coeff_count());
         destination
             .iter_mut()
             .zip(self.iter())

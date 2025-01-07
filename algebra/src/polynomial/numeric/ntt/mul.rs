@@ -5,9 +5,9 @@ use crate::{
     reduce::{ReduceMul, ReduceMulAdd, ReduceMulAssign},
 };
 
-use super::NumNttPolynomial;
+use super::NttPolynomial;
 
-impl<T: Copy> NumNttPolynomial<T> {
+impl<T: Copy> NttPolynomial<T> {
     /// Multiply `self` with a scalar.
     #[inline]
     pub fn mul_scalar<M>(mut self, scalar: T, modulus: M) -> Self
@@ -40,7 +40,7 @@ impl<T: Copy> NumNttPolynomial<T> {
     }
 }
 
-impl<T: Numeric> NumNttPolynomial<T> {
+impl<T: Numeric> NttPolynomial<T> {
     /// Multiply `self` with a shoup scalar.
     #[inline]
     pub fn mul_shoup_scalar(mut self, scalar: ShoupFactor<T>, modulus: T) -> Self {
@@ -54,9 +54,17 @@ impl<T: Numeric> NumNttPolynomial<T> {
         self.iter_mut()
             .for_each(|v| modulus.reduce_mul_assign(v, scalar))
     }
+
+    /// Multiply `self` with a scalar and add to self.
+    #[inline]
+    pub fn add_mul_shoup_scalar_assign(&mut self, rhs: &Self, scalar: ShoupFactor<T>, modulus: T) {
+        self.iter_mut()
+            .zip(rhs.iter())
+            .for_each(|(r, &v)| modulus.reduce_add_assign(r, modulus.reduce_mul(v, scalar)))
+    }
 }
 
-impl<T: UnsignedInteger> NumNttPolynomial<T> {
+impl<T: UnsignedInteger> NttPolynomial<T> {
     /// Performs `self * rhs` according to `modulus`.
     #[inline]
     pub fn mul<M>(mut self, rhs: &Self, modulus: M) -> Self

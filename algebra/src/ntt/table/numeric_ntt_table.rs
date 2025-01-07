@@ -2,7 +2,7 @@ use crate::arith::PrimitiveRoot;
 use crate::modulus::{BarrettModulus, ShoupFactor};
 use crate::ntt::{NttTable, NumberTheoryTransform};
 use crate::numeric::Numeric;
-use crate::polynomial::{NumNttPolynomial, NumPolynomial};
+use crate::polynomial::{NttPolynomial, Polynomial};
 use crate::reduce::{LazyReduceMul, ReduceMul, ReduceMulAssign};
 use crate::{utils::ReverseLsbs, AlgebraError};
 
@@ -188,20 +188,20 @@ impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
 }
 
 impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
-    type CoeffPoly = NumPolynomial<T>;
+    type CoeffPoly = Polynomial<T>;
 
-    type NttPoly = NumNttPolynomial<T>;
+    type NttPoly = NttPolynomial<T>;
 
     #[inline]
     fn transform_inplace(&self, mut poly: Self::CoeffPoly) -> Self::NttPoly {
         self.transform_slice(poly.as_mut_slice());
-        Self::NttPoly::new(poly.inner_data())
+        Self::NttPoly::new(poly.inner_vec())
     }
 
     #[inline]
     fn inverse_transform_inplace(&self, mut values: Self::NttPoly) -> Self::CoeffPoly {
         self.inverse_transform_slice(values.as_mut_slice());
-        Self::CoeffPoly::new(values.inner_data())
+        Self::CoeffPoly::new(values.inner_vec())
     }
 
     #[inline]

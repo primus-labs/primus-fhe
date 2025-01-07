@@ -1,6 +1,6 @@
 use algebra::{
     integer::UnsignedInteger,
-    polynomial::NumPolynomial,
+    polynomial::Polynomial,
     reduce::{ReduceNeg, ReduceNegAssign},
 };
 
@@ -12,10 +12,10 @@ use crate::{CmLwe, Lwe};
 pub struct NumRlwe<T: UnsignedInteger> {
     /// Represents the first component in the RLWE structure.
     /// It is a polynomial where the coefficients are elements of the field `F`.
-    pub(crate) a: NumPolynomial<T>,
+    pub(crate) a: Polynomial<T>,
     /// Represents the second component in the RLWE structure.
     /// It's also a polynomial with coefficients in the field `F`.
-    pub(crate) b: NumPolynomial<T>,
+    pub(crate) b: Polynomial<T>,
 }
 
 impl<T: UnsignedInteger> Default for NumRlwe<T> {
@@ -31,37 +31,37 @@ impl<T: UnsignedInteger> Default for NumRlwe<T> {
 impl<T: UnsignedInteger> NumRlwe<T> {
     /// Creates a new [`NumRlwe<T>`].
     #[inline]
-    pub fn new(a: NumPolynomial<T>, b: NumPolynomial<T>) -> Self {
+    pub fn new(a: Polynomial<T>, b: Polynomial<T>) -> Self {
         Self { a, b }
     }
 
     /// Returns a reference to the a of this [`NumRlwe<T>`].
     #[inline]
-    pub fn a(&self) -> &NumPolynomial<T> {
+    pub fn a(&self) -> &Polynomial<T> {
         &self.a
     }
 
     /// Returns a reference to the b of this [`NumRlwe<T>`].
     #[inline]
-    pub fn b(&self) -> &NumPolynomial<T> {
+    pub fn b(&self) -> &Polynomial<T> {
         &self.b
     }
 
     /// Returns a mutable reference to the a of this [`NumRlwe<T>`].
     #[inline]
-    pub fn a_mut(&mut self) -> &mut NumPolynomial<T> {
+    pub fn a_mut(&mut self) -> &mut Polynomial<T> {
         &mut self.a
     }
 
     /// Returns a mutable reference to the b of this [`NumRlwe<T>`].
     #[inline]
-    pub fn b_mut(&mut self) -> &mut NumPolynomial<T> {
+    pub fn b_mut(&mut self) -> &mut Polynomial<T> {
         &mut self.b
     }
 
     /// Returns a mutable reference to the `a` and `b` of this [`NumRlwe<T>`].
     #[inline]
-    pub fn a_b_mut(&mut self) -> (&mut NumPolynomial<T>, &mut NumPolynomial<T>) {
+    pub fn a_b_mut(&mut self) -> (&mut Polynomial<T>, &mut Polynomial<T>) {
         (&mut self.a, &mut self.b)
     }
 
@@ -100,8 +100,8 @@ impl<T: UnsignedInteger> NumRlwe<T> {
     #[inline]
     pub fn zero(coeff_count: usize) -> Self {
         Self {
-            a: NumPolynomial::zero(coeff_count),
-            b: NumPolynomial::zero(coeff_count),
+            a: Polynomial::zero(coeff_count),
+            b: Polynomial::zero(coeff_count),
         }
     }
 
@@ -163,7 +163,7 @@ impl<T: UnsignedInteger> NumRlwe<T> {
         M: Copy + ReduceNegAssign<T>,
     {
         let Self { a, b } = self;
-        let mut a = a.inner_data();
+        let mut a = a.inner_vec();
 
         a[1..].reverse();
         a[1..].iter_mut().for_each(|v| modulus.reduce_neg_assign(v));
@@ -177,8 +177,8 @@ impl<T: UnsignedInteger> NumRlwe<T> {
         M: Copy + ReduceNegAssign<T>,
     {
         let Self { a, b } = self;
-        let mut a = a.inner_data();
-        let mut b = b.inner_data();
+        let mut a = a.inner_vec();
+        let mut b = b.inner_vec();
 
         b.truncate(count);
 

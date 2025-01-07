@@ -92,7 +92,7 @@ pub trait Modulus<T> {
     /// Returns the modulus value.
     fn modulus_value(&self) -> ModulusValue<T>;
 
-    /// Returns the modulus monius one.
+    /// Returns the modulus minus one.
     fn modulus_minus_one(&self) -> T;
 }
 

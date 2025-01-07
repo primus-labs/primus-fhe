@@ -4,4 +4,4 @@ mod field;
 mod numeric;
 
 pub use field::{FieldNttPolynomial, FieldPolynomial};
-pub use numeric::{NumNttPolynomial, NumPolynomial};
+pub use numeric::{NttPolynomial, Polynomial};

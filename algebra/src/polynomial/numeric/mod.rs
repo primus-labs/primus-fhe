@@ -1,5 +1,5 @@
 mod coeff;
 mod ntt;
 
-pub use coeff::NumPolynomial;
-pub use ntt::NumNttPolynomial;
+pub use coeff::Polynomial;
+pub use ntt::NttPolynomial;

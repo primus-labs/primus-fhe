@@ -1,6 +1,6 @@
 use algebra::{
     integer::UnsignedInteger,
-    polynomial::{FieldNttPolynomial, FieldPolynomial, NumPolynomial},
+    polynomial::{FieldNttPolynomial, FieldPolynomial, Polynomial},
     random::{sample_binary_values, DiscreteGaussian},
     reduce::RingReduce,
     Field, NttField,
@@ -148,21 +148,21 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     ///
     /// A new instance of `LwePublicKeyRlweMode`.
     #[inline]
-    pub fn new<R, Modulus>(
+    pub fn new<R, LweModulus>(
         secret_key: &LweSecretKey<C>,
-        params: &LweParameters<C, Modulus>,
+        params: &LweParameters<C, LweModulus>,
         rng: &mut R,
     ) -> LwePublicKeyRlweMode<C>
     where
         R: Rng + CryptoRng,
-        Modulus: RingReduce<C>,
+        LweModulus: RingReduce<C>,
     {
         let dimension = params.dimension;
         let gaussian = params.noise_distribution();
         let modulus = params.cipher_modulus;
 
-        let a = NumPolynomial::random(dimension, modulus, rng);
-        let mut e = NumPolynomial::random_gaussian(dimension, gaussian, rng);
+        let a = Polynomial::random(modulus.modulus_minus_one(), dimension, rng);
+        let mut e = Polynomial::random_gaussian(gaussian, dimension, rng);
 
         a.naive_mul_inplace(secret_key, modulus, &mut e);
 
