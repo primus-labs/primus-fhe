@@ -18,7 +18,7 @@ use crate::{integer::UnsignedInteger, numeric::Numeric};
 /// # Type Parameters
 ///
 /// * `C` - An unsigned integer type that represents the coefficients.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModulusValue<C> {
     /// Native modulus.
     Native,

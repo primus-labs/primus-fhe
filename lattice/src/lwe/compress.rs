@@ -48,6 +48,12 @@ impl<T: Copy> CmLwe<T> {
     pub fn b_mut(&mut self) -> &mut Vec<T> {
         &mut self.b
     }
+
+    /// Returns the message count of this [`CmLwe<T>`].
+    #[inline]
+    pub fn msg_count(&self) -> usize {
+        self.b.len()
+    }
 }
 
 impl<T: UnsignedInteger> CmLwe<T> {

@@ -202,7 +202,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
             Steps::BrMsKs => {
                 let acc = acc.extract_lwe_locally();
                 let cipher = lwe_modulus_switch(
-                    acc,
+                    &acc,
                     parameters.ring_modulus(),
                     parameters.lwe_cipher_modulus_value(),
                 );
@@ -238,7 +238,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
                 let temp = ksk.key_switch(&acc, Q::MODULUS);
 
                 c = lwe_modulus_switch(
-                    temp,
+                    &temp,
                     parameters.ring_modulus(),
                     parameters.lwe_cipher_modulus_value(),
                 );
