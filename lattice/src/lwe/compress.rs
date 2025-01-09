@@ -244,4 +244,24 @@ impl<T: UnsignedInteger> CmLwe<T> {
             Lwe::new(a, self.b[index])
         }
     }
+
+    /// Sample extract all [Lwe<T>].
+    #[inline]
+    pub fn extract_all<M>(&self, modulus: M) -> Vec<Lwe<T>>
+    where
+        M: Copy + ReduceNegAssign<T>,
+    {
+        let msg_count = self.msg_count();
+        let mut result = Vec::with_capacity(msg_count);
+        let mut a = self.a.clone();
+        self.b[0..msg_count - 1].iter().for_each(|&b| {
+            let lwe = Lwe::new(a.clone(), b);
+            a.rotate_right(1);
+            modulus.reduce_neg_assign(&mut a[0]);
+            result.push(lwe);
+        });
+        result.push(Lwe::new(a, *self.b.last().unwrap()));
+
+        result
+    }
 }

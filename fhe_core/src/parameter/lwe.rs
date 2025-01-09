@@ -50,6 +50,48 @@ impl<LweValue: UnsignedInteger, LweModulus: RingReduce<LweValue>>
         }
     }
 
+    /// Returns the dimension of this [`LweParameters<LweValue, LweModulus>`].
+    #[inline]
+    pub fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    /// Returns the plain modulus value of this [`LweParameters<LweValue, LweModulus>`].
+    #[inline]
+    pub fn plain_modulus_value(&self) -> LweValue {
+        self.plain_modulus_value
+    }
+
+    /// Returns the cipher modulus value of this [`LweParameters<LweValue, LweModulus>`].
+    #[inline]
+    pub fn cipher_modulus_value(&self) -> ModulusValue<LweValue> {
+        self.cipher_modulus_value
+    }
+
+    /// Returns the cipher modulus minus one of this [`LweParameters<LweValue, LweModulus>`].
+    #[inline]
+    pub fn cipher_modulus_minus_one(&self) -> LweValue {
+        self.cipher_modulus_minus_one
+    }
+
+    /// Returns the cipher modulus of this [`LweParameters<LweValue, LweModulus>`].
+    #[inline]
+    pub fn cipher_modulus(&self) -> LweModulus {
+        self.cipher_modulus
+    }
+
+    /// Returns the secret key type of this [`LweParameters<LweValue, LweModulus>`].
+    #[inline]
+    pub fn secret_key_type(&self) -> LweSecretKeyType {
+        self.secret_key_type
+    }
+
+    /// Returns the noise standard deviation of this [`LweParameters<LweValue, LweModulus>`].
+    #[inline]
+    pub fn noise_standard_deviation(&self) -> f64 {
+        self.noise_standard_deviation
+    }
+
     /// Gets the discrete gaussian noise distribution.
     #[inline]
     pub fn noise_distribution(&self) -> DiscreteGaussian<LweValue> {
