@@ -12,7 +12,8 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 
 [features]
-default = []
+default = ["concrete-ntt"]
+concrete-ntt = ["algebra/concrete-ntt", "lattice/concrete-ntt"]
 nightly = ["algebra/nightly", "lattice/nightly"]
 
 [package.metadata.docs.rs]

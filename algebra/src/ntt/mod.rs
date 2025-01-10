@@ -1,6 +1,6 @@
 //! Defines Number Theory Transform algorithms.
 
-use crate::AlgebraError;
+use crate::{arith::PrimitiveRoot, reduce::Modulus, AlgebraError};
 
 mod table;
 
@@ -10,11 +10,11 @@ pub use table::*;
 pub trait NttTable: Sized + Clone + Send + Sync {
     /// The value type.
     type ValueT;
-    /// The Modulus type.
-    type Modulus;
 
     /// Creates a new [`NttTable`].
-    fn new(modulus: <Self as NttTable>::Modulus, log_n: u32) -> Result<Self, AlgebraError>;
+    fn new<M>(modulus: M, log_n: u32) -> Result<Self, AlgebraError>
+    where
+        M: Modulus<Self::ValueT> + PrimitiveRoot<Self::ValueT>;
 
     /// Get the polynomial modulus degree.
     fn dimension(&self) -> usize;

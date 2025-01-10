@@ -4,8 +4,11 @@ use crate::reduce::*;
 
 #[macro_use]
 mod macros;
+mod impls;
 mod ntt;
 
+pub use impls::f32::U32FieldEval;
+pub use impls::f64::U64FieldEval;
 pub use ntt::NttField;
 
 /// An abstract for field evaluator.
@@ -152,5 +155,3 @@ pub trait Field: Sized + Clone + Copy {
 
 impl_barrett_field!(#[derive(Clone, Copy)] impl pub U8FieldEval<u8>);
 impl_barrett_field!(#[derive(Clone, Copy)] impl pub U16FieldEval<u16>);
-impl_barrett_field!(#[derive(Clone, Copy)] impl pub U32FieldEval<u32>);
-impl_barrett_field!(#[derive(Clone, Copy)] impl pub U64FieldEval<u64>);
