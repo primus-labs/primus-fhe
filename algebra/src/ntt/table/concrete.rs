@@ -88,7 +88,7 @@ pub mod prime32 {
             degree: usize,
             values: &mut [<Self as NttTable>::ValueT],
         ) {
-            self.plan.fwd_coeff_neg_one_monomial(degree, values);
+            self.plan.fwd_coeff_minus_one_monomial(degree, values);
         }
     }
 
@@ -220,7 +220,7 @@ pub mod prime64 {
             degree: usize,
             values: &mut [<Self as NttTable>::ValueT],
         ) {
-            self.plan.fwd_coeff_neg_one_monomial(degree, values);
+            self.plan.fwd_coeff_minus_one_monomial(degree, values);
         }
     }
 

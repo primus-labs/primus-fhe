@@ -10,7 +10,9 @@ const LOG_N: u32 = 10;
 const N: usize = 1 << LOG_N;
 
 type F32 = U32FieldEval<132120577>;
-type F64 = U64FieldEval<18014398509404161>;
+// type F64 = U64FieldEval<18014398509404161>;
+// type F64 = U64FieldEval<4503599627366401>;
+type F64 = U64FieldEval<2251799813640193>;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = thread_rng();
