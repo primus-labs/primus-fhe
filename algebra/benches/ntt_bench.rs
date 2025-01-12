@@ -3,11 +3,11 @@ use algebra::ntt::{NttTable, NumberTheoryTransform, TableWithShoupRoot};
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Uniform, prelude::*};
 
-type ValueT = u32;
+type ValueT = u64;
 
-const LOG_N: u32 = 10;
+const LOG_N: u32 = 11;
 const N: usize = 1 << LOG_N;
-const MODULUS: ValueT = 132120577;
+const MODULUS: ValueT = 1125899906826241;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let modulus = <BarrettModulus<ValueT>>::new(MODULUS);
