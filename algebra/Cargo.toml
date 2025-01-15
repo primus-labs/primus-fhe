@@ -11,7 +11,7 @@ rand = { workspace = true }
 rand_distr = { workspace = true }
 itertools = { workspace = true }
 bytemuck = { workspace = true }
-concrete-ntt = { git = "https://github.com/serendipity-crypto/concrete-ntt", branch = "dev", default-features = false, optional = true }
+concrete-ntt = { git = "https://github.com/primus-labs/concrete-ntt", branch = "dev", default-features = false, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
