@@ -1,4 +1,3 @@
-mod common;
 mod key_switching;
 mod lwe;
 mod rlwe;
