@@ -40,13 +40,13 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
     pub fn new<R, Modulus>(
         secret_key: &LweSecretKey<C>,
         params: &LweParameters<C, Modulus>,
-        gaussian: DiscreteGaussian<C>,
         rng: &mut R,
     ) -> Self
     where
         R: Rng + CryptoRng,
         Modulus: RingReduce<C>,
     {
+        let gaussian = params.noise_distribution();
         let public_key: Vec<_> = (0..params.dimension)
             .map(|_| {
                 Lwe::generate_random_zero_sample(

@@ -28,8 +28,6 @@ fn test_lwe_pk() {
         noise_standard_deviation: 3.20,
     };
 
-    let gaussian = params.noise_distribution();
-
     // generate secret key
     let sk = LweSecretKey::generate(&params, &mut rng);
 
@@ -40,7 +38,7 @@ fn test_lwe_pk() {
     assert_eq!(m, message);
 
     // generate public key
-    let pk = LwePublicKey::new(&sk, &params, gaussian, &mut rng);
+    let pk = LwePublicKey::new(&sk, &params, &mut rng);
 
     // encrypt message with public key
     let message: MsgT = rng.sample(distr);
