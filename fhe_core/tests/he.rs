@@ -12,7 +12,7 @@ fn test_lwe_pk() {
     let mut rng = thread_rng();
 
     let plian_modulus = 4;
-    let cipher_modulus = 2048;
+    let cipher_modulus = 1 << 14;
 
     let distr = Uniform::new(0, plian_modulus);
 
