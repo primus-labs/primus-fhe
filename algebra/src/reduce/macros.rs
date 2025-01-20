@@ -1,9 +1,23 @@
 macro_rules! impl_reduce_ops_for_primitive {
     ($($ValueT:ty),*) => {$(
         impl $crate::reduce::Modulus<$ValueT> for $ValueT {
+            fn from_value(value: $crate::reduce::ModulusValue<$ValueT>) -> Self {
+                match value {
+                    $crate::reduce::ModulusValue::Native => panic!("Not match for native"),
+                    $crate::reduce::ModulusValue::PowerOf2(value)
+                    | $crate::reduce::ModulusValue::Prime(value)
+                    | $crate::reduce::ModulusValue::Others(value) => value,
+                }
+            }
+
             #[inline(always)]
-            fn modulus_minus_one(self) -> $ValueT {
-                self - 1
+            fn modulus_value(&self) -> $crate::reduce::ModulusValue<$ValueT> {
+                $crate::reduce::ModulusValue::Others(*self)
+            }
+
+            #[inline(always)]
+            fn modulus_minus_one(&self) -> $ValueT {
+                *self - 1
             }
         }
 

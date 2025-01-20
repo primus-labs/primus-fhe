@@ -90,9 +90,10 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
     ///
     /// A new instance of `LweSecretKey` with random coefficients.
     #[inline]
-    pub fn generate<R>(params: &LweParameters<C>, rng: &mut R) -> Self
+    pub fn generate<R, M>(params: &LweParameters<C, M>, rng: &mut R) -> Self
     where
         R: Rng + CryptoRng,
+        M: RingReduce<C>,
     {
         let distr = params.secret_key_type;
         let key = match distr {
@@ -148,25 +149,23 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
 
     /// Encrypts message into [`LweCiphertext<C>`].
     #[inline]
-    pub fn encrypt<M, R>(
+    pub fn encrypt<Msg, R, Modulus>(
         &self,
-        message: M,
-        params: &LweParameters<C>,
-        cipher_modulus: impl RingReduce<C>,
+        message: Msg,
+        params: &LweParameters<C, Modulus>,
         rng: &mut R,
     ) -> LweCiphertext<C>
     where
-        M: TryInto<C>,
+        Msg: TryInto<C>,
         R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
     {
         let gaussian = params.noise_distribution();
-        let mut ciphertext = LweCiphertext::generate_random_zero_sample(
-            self.as_ref(),
-            cipher_modulus,
-            gaussian,
-            rng,
-        );
-        cipher_modulus.reduce_add_assign(
+        let modulus = params.cipher_modulus;
+
+        let mut ciphertext =
+            LweCiphertext::generate_random_zero_sample(self.as_ref(), modulus, gaussian, rng);
+        modulus.reduce_add_assign(
             ciphertext.b_mut(),
             encode(
                 message,
@@ -180,17 +179,19 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
 
     /// Decrypts the [`LweCiphertext`] back to message.
     #[inline]
-    pub fn decrypt<M>(
+    pub fn decrypt<Msg, Modulus>(
         &self,
         cipher_text: &LweCiphertext<C>,
-        params: &LweParameters<C>,
-        cipher_modulus: impl RingReduce<C>,
-    ) -> M
+        params: &LweParameters<C, Modulus>,
+    ) -> Msg
     where
-        M: TryFrom<C>,
+        Msg: TryFrom<C>,
+        Modulus: RingReduce<C>,
     {
-        let a_mul_s = cipher_modulus.reduce_dot_product(cipher_text.a(), self);
-        let plaintext = cipher_modulus.reduce_sub(cipher_text.b(), a_mul_s);
+        let modulus = params.cipher_modulus;
+
+        let a_mul_s = modulus.reduce_dot_product(cipher_text.a(), self);
+        let plaintext = modulus.reduce_sub(cipher_text.b(), a_mul_s);
 
         decode(
             plaintext,
@@ -201,17 +202,18 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
 
     /// Decrypts the [`LweCiphertext`] back to message.
     #[inline]
-    pub fn decrypt_with_noise<M>(
+    pub fn decrypt_with_noise<Msg, Modulus>(
         &self,
         cipher_text: &LweCiphertext<C>,
-        params: &LweParameters<C>,
-        cipher_modulus: impl RingReduce<C>,
-    ) -> (M, C)
+        params: &LweParameters<C, Modulus>,
+    ) -> (Msg, C)
     where
-        M: Copy + TryFrom<C> + TryInto<C>,
+        Msg: Copy + TryFrom<C> + TryInto<C>,
+        Modulus: RingReduce<C>,
     {
-        let a_mul_s = cipher_modulus.reduce_dot_product(cipher_text.a(), self);
-        let plaintext = cipher_modulus.reduce_sub(cipher_text.b(), a_mul_s);
+        let modulus = params.cipher_modulus;
+        let a_mul_s = modulus.reduce_dot_product(cipher_text.a(), self);
+        let plaintext = modulus.reduce_sub(cipher_text.b(), a_mul_s);
 
         let t = params.plain_modulus_value;
         let q = params.cipher_modulus_value;
@@ -220,9 +222,9 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
 
         (
             message,
-            cipher_modulus
+            modulus
                 .reduce_sub(plaintext, fresh)
-                .min(cipher_modulus.reduce_sub(fresh, plaintext)),
+                .min(modulus.reduce_sub(fresh, plaintext)),
         )
     }
 }

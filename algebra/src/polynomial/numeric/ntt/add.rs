@@ -1,8 +1,8 @@
 use crate::reduce::{ReduceAdd, ReduceAddAssign};
 
-use super::NumNttPolynomial;
+use super::NttPolynomial;
 
-impl<T: Copy> NumNttPolynomial<T> {
+impl<T: Copy> NttPolynomial<T> {
     /// Performs `self + rhs` according to `modulus`.
     #[inline]
     pub fn add<M>(mut self, rhs: &Self, modulus: M) -> Self

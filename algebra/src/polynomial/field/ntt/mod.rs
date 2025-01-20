@@ -167,15 +167,6 @@ impl<F: NttField> FieldNttPolynomial<F> {
             .for_each(|((z, &x), &y)| *z = F::MODULUS.reduce_mul_add(x, y, *z));
     }
 
-    /// Performs `self = self - (a * b)`.
-    #[inline]
-    pub fn sub_mul_assign(&mut self, a: &Self, b: &Self) {
-        self.into_iter()
-            .zip(a)
-            .zip(b)
-            .for_each(|((z, &x), &y)| *z = F::MODULUS.reduce_mul_add(x, y, F::MODULUS_VALUE - *z));
-    }
-
     /// Performs `self = self + (a * b)`.
     #[inline]
     pub fn add_mul_assign_fast(&mut self, a: &Self, b: &Self) {
@@ -183,14 +174,6 @@ impl<F: NttField> FieldNttPolynomial<F> {
             .zip(a)
             .zip(b)
             .for_each(|((z, &x), &y)| *z = F::MODULUS.lazy_reduce_mul_add(x, y, *z));
-    }
-
-    /// Performs `self = self - (a * b)`.
-    #[inline]
-    pub fn sub_mul_assign_fast(&mut self, a: &Self, b: &Self) {
-        self.into_iter().zip(a).zip(b).for_each(|((z, &x), &y)| {
-            *z = F::MODULUS.lazy_reduce_mul_add(x, y, F::MODULUS_VALUE - *z)
-        });
     }
 
     /// Performs `des = self * b + c`.

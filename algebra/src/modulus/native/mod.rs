@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
-use crate::{integer::UnsignedInteger, reduce::Modulus};
+use crate::{
+    integer::UnsignedInteger,
+    reduce::{Modulus, ModulusValue},
+};
 
 mod ops;
 
@@ -36,7 +39,20 @@ impl<T: UnsignedInteger> NativeModulus<T> {
 
 impl<T: UnsignedInteger> Modulus<T> for NativeModulus<T> {
     #[inline(always)]
-    fn modulus_minus_one(self) -> T {
+    fn modulus_minus_one(&self) -> T {
         T::MAX
+    }
+
+    #[inline(always)]
+    fn modulus_value(&self) -> ModulusValue<T> {
+        ModulusValue::Native
+    }
+
+    #[inline]
+    fn from_value(value: ModulusValue<T>) -> Self {
+        match value {
+            ModulusValue::Native => Self::new(),
+            _ => panic!("The value is not a native modulus."),
+        }
     }
 }

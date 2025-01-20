@@ -1,13 +1,15 @@
 use crate::{
     integer::UnsignedInteger,
     modulus::ShoupFactor,
+    ntt::{NttTable, NumberTheoryTransform},
     numeric::Numeric,
+    polynomial::NttPolynomial,
     reduce::{ReduceAddAssign, ReduceMul, ReduceMulAdd, ReduceMulAssign, ReduceSubAssign},
 };
 
-use super::NumPolynomial;
+use super::Polynomial;
 
-impl<T: Copy> NumPolynomial<T> {
+impl<T: Copy> Polynomial<T> {
     /// Multiply `self` with a scalar.
     #[inline]
     pub fn mul_scalar<M>(mut self, scalar: T, modulus: M) -> Self
@@ -40,7 +42,7 @@ impl<T: Copy> NumPolynomial<T> {
     }
 }
 
-impl<T: UnsignedInteger> NumPolynomial<T> {
+impl<T: UnsignedInteger> Polynomial<T> {
     /// A naive multiplication over polynomial.
     pub fn naive_mul_inplace<M>(&self, rhs: impl AsRef<[T]>, modulus: M, destination: &mut Self)
     where
@@ -75,7 +77,7 @@ impl<T: UnsignedInteger> NumPolynomial<T> {
     }
 }
 
-impl<T: Numeric> NumPolynomial<T> {
+impl<T: Numeric> Polynomial<T> {
     /// Multiply `self` with a scalar.
     #[inline]
     pub fn mul_shoup_scalar(mut self, scalar: ShoupFactor<T>, modulus: T) -> Self {
@@ -88,5 +90,27 @@ impl<T: Numeric> NumPolynomial<T> {
     pub fn mul_shoup_scalar_assign(&mut self, scalar: ShoupFactor<T>, modulus: T) {
         self.iter_mut()
             .for_each(|v| modulus.reduce_mul_assign(v, scalar))
+    }
+
+    /// Multiply `self` with the a shoup scalar and add to self.
+    #[inline]
+    pub fn add_mul_shoup_scalar_assign(&mut self, rhs: &Self, scalar: ShoupFactor<T>, modulus: T) {
+        self.iter_mut()
+            .zip(rhs)
+            .for_each(|(r, &v)| modulus.reduce_add_assign(r, modulus.reduce_mul(v, scalar)));
+    }
+
+    /// Multiply `self` with the a polynomial.
+    #[inline]
+    pub fn mul<M, Table>(self, rhs: Self, modulus: M, ntt_table: &Table) -> Self
+    where
+        M: Copy + ReduceMulAssign<T>,
+        Table: NttTable<ValueT = T>
+            + NumberTheoryTransform<CoeffPoly = Self, NttPoly = NttPolynomial<T>>,
+    {
+        let mut a = self.into_ntt_poly(ntt_table);
+        let b = rhs.into_ntt_poly(ntt_table);
+        a.mul_assign(&b, modulus);
+        a.into_coeff_poly(ntt_table)
     }
 }

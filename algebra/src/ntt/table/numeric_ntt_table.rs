@@ -1,9 +1,11 @@
+use num_traits::ConstOne;
+
 use crate::arith::PrimitiveRoot;
-use crate::modulus::{BarrettModulus, ShoupFactor};
+use crate::modulus::ShoupFactor;
 use crate::ntt::{NttTable, NumberTheoryTransform};
 use crate::numeric::Numeric;
-use crate::polynomial::{NumNttPolynomial, NumPolynomial};
-use crate::reduce::{LazyReduceMul, ReduceMul, ReduceMulAssign};
+use crate::polynomial::{NttPolynomial, Polynomial};
+use crate::reduce::{LazyReduceMul, Modulus, ReduceMul, ReduceMulAssign};
 use crate::{utils::ReverseLsbs, AlgebraError};
 
 /// This struct store the pre-computed data for number theory transform and
@@ -107,12 +109,13 @@ impl<T: Numeric> TableWithShoupRoot<T> {
 impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
     type ValueT = T;
 
-    type Modulus = BarrettModulus<T>;
-
-    fn new(modulus: BarrettModulus<T>, log_n: u32) -> Result<Self, crate::AlgebraError> {
+    fn new<M>(modulus: M, log_n: u32) -> Result<Self, crate::AlgebraError>
+    where
+        M: Modulus<Self::ValueT> + PrimitiveRoot<Self::ValueT>,
+    {
         let n = 1usize << log_n;
 
-        let modulus_value = modulus.value();
+        let modulus_value = modulus.modulus_minus_one() + <T as ConstOne>::ONE;
         let to_root_type = |x| -> ShoupFactor<T> { <ShoupFactor<T>>::new(x, modulus_value) };
 
         let root = modulus.try_minimal_primitive_root(log_n + 1)?;
@@ -188,20 +191,20 @@ impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
 }
 
 impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
-    type CoeffPoly = NumPolynomial<T>;
+    type CoeffPoly = Polynomial<T>;
 
-    type NttPoly = NumNttPolynomial<T>;
+    type NttPoly = NttPolynomial<T>;
 
     #[inline]
     fn transform_inplace(&self, mut poly: Self::CoeffPoly) -> Self::NttPoly {
         self.transform_slice(poly.as_mut_slice());
-        Self::NttPoly::new(poly.inner_data())
+        Self::NttPoly::new(poly.inner_vec())
     }
 
     #[inline]
     fn inverse_transform_inplace(&self, mut values: Self::NttPoly) -> Self::CoeffPoly {
         self.inverse_transform_slice(values.as_mut_slice());
-        Self::CoeffPoly::new(values.inner_data())
+        Self::CoeffPoly::new(values.inner_vec())
     }
 
     #[inline]

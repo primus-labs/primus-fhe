@@ -1,4 +1,7 @@
-use crate::{integer::UnsignedInteger, reduce::Modulus};
+use crate::{
+    integer::UnsignedInteger,
+    reduce::{Modulus, ModulusValue},
+};
 
 #[macro_use]
 mod macros;
@@ -31,7 +34,22 @@ impl<T: UnsignedInteger> PowOf2Modulus<T> {
 
 impl<T: UnsignedInteger> Modulus<T> for PowOf2Modulus<T> {
     #[inline]
-    fn modulus_minus_one(self) -> T {
+    fn from_value(value: ModulusValue<T>) -> Self {
+        match value {
+            ModulusValue::PowerOf2(value) => Self {
+                mask: value - T::ONE,
+            },
+            _ => panic!("The value is not a power of 2."),
+        }
+    }
+
+    #[inline]
+    fn modulus_value(&self) -> ModulusValue<T> {
+        ModulusValue::PowerOf2(self.value())
+    }
+
+    #[inline]
+    fn modulus_minus_one(&self) -> T {
         self.mask
     }
 }

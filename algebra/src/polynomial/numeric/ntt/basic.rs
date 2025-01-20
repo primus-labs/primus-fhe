@@ -3,67 +3,67 @@ use core::{
     slice::SliceIndex,
 };
 
-use super::NumNttPolynomial;
+use super::NttPolynomial;
 
-impl<T, I: SliceIndex<[T]>> IndexMut<I> for NumNttPolynomial<T> {
+impl<T, I: SliceIndex<[T]>> IndexMut<I> for NttPolynomial<T> {
     #[inline]
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
-        IndexMut::index_mut(&mut *self.data, index)
+        IndexMut::index_mut(&mut *self.values, index)
     }
 }
 
-impl<T, I: SliceIndex<[T]>> Index<I> for NumNttPolynomial<T> {
+impl<T, I: SliceIndex<[T]>> Index<I> for NttPolynomial<T> {
     type Output = I::Output;
 
     #[inline]
     fn index(&self, index: I) -> &Self::Output {
-        Index::index(&*self.data, index)
+        Index::index(&*self.values, index)
     }
 }
 
-impl<T> AsRef<[T]> for NumNttPolynomial<T> {
+impl<T> AsRef<[T]> for NttPolynomial<T> {
     #[inline]
     fn as_ref(&self) -> &[T] {
-        self.data.as_ref()
+        self.values.as_ref()
     }
 }
 
-impl<T> AsMut<[T]> for NumNttPolynomial<T> {
+impl<T> AsMut<[T]> for NttPolynomial<T> {
     #[inline]
     fn as_mut(&mut self) -> &mut [T] {
-        self.data.as_mut()
+        self.values.as_mut()
     }
 }
 
-impl<T> IntoIterator for NumNttPolynomial<T> {
+impl<T> IntoIterator for NttPolynomial<T> {
     type Item = T;
 
     type IntoIter = std::vec::IntoIter<T>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.data.into_iter()
+        self.values.into_iter()
     }
 }
 
-impl<'a, T> IntoIterator for &'a NumNttPolynomial<T> {
+impl<'a, T> IntoIterator for &'a NttPolynomial<T> {
     type Item = &'a T;
 
     type IntoIter = core::slice::Iter<'a, T>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.data.iter()
+        self.values.iter()
     }
 }
 
-impl<'a, T> IntoIterator for &'a mut NumNttPolynomial<T> {
+impl<'a, T> IntoIterator for &'a mut NttPolynomial<T> {
     type Item = &'a mut T;
 
     type IntoIter = core::slice::IterMut<'a, T>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.data.iter_mut()
+        self.values.iter_mut()
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     ntt::{NttTable, NumberTheoryTransform},
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     reduce::{
-        LazyReduceMul, ReduceAdd, ReduceInv, ReduceMul, ReduceMulAssign, ReduceOnce,
+        LazyReduceMul, Modulus, ReduceAdd, ReduceInv, ReduceMul, ReduceMulAssign, ReduceOnce,
         ReduceOnceAssign,
     },
     utils::ReverseLsbs,
@@ -135,12 +135,13 @@ where
 {
     type ValueT = <F as Field>::ValueT;
 
-    type Modulus = BarrettModulus<<F as Field>::ValueT>;
-
-    fn new(modulus: <Self as NttTable>::Modulus, log_n: u32) -> Result<Self, crate::AlgebraError> {
+    fn new<M>(modulus: M, log_n: u32) -> Result<Self, crate::AlgebraError>
+    where
+        M: Modulus<<F as Field>::ValueT> + PrimitiveRoot<<F as Field>::ValueT>,
+    {
         let n = 1usize << log_n;
 
-        let modulus_value = modulus.value();
+        let modulus_value = F::MODULUS_VALUE;
         let to_root_type =
             |x| -> ShoupFactor<<F as Field>::ValueT> { ShoupFactor::new(x, modulus_value) };
 

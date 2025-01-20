@@ -3,9 +3,10 @@
 use algebra::decompose::NonPowOf2ApproxSignedBasis;
 use algebra::integer::Bits;
 use algebra::random::DiscreteGaussian;
+use algebra::reduce::{ModulusValue, RingReduce};
 use algebra::Field;
 use algebra::{integer::UnsignedInteger, NttField};
-use fhe_core::{FHECoreError, GadgetRlweParameters as BlindRotationParameters, ModulusValue};
+use fhe_core::{FHECoreError, GadgetRlweParameters as BlindRotationParameters};
 use fhe_core::{KeySwitchingParameters, LweParameters, LweSecretKeyType, RingSecretKeyType};
 
 mod constants;
@@ -53,23 +54,30 @@ pub struct ConstParameters<C: UnsignedInteger, Q> {
 
 /// Parameters for the boolean fully homomorphic encryption scheme.
 #[derive(Debug)]
-pub struct BooleanFheParameters<C: UnsignedInteger, Q: NttField> {
-    lwe_params: LweParameters<C>,
+pub struct BooleanFheParameters<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> {
+    lwe_params: LweParameters<C, LweModulus>,
     blind_rotation_params: BlindRotationParameters<Q>,
     key_switching_params: KeySwitchingParameters,
     steps: Steps,
 }
 
-impl<C: UnsignedInteger, Q: NttField> Clone for BooleanFheParameters<C, Q> {
+impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> Clone
+    for BooleanFheParameters<C, LweModulus, Q>
+{
     #[inline]
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<C: UnsignedInteger, Q: NttField> Copy for BooleanFheParameters<C, Q> {}
+impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> Copy
+    for BooleanFheParameters<C, LweModulus, Q>
+{
+}
 
-impl<C: UnsignedInteger, Q: NttField> BooleanFheParameters<C, Q> {
+impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField>
+    BooleanFheParameters<C, LweModulus, Q>
+{
     /// Create a new Parameter instance.
     pub fn new(params: ConstParameters<C, <Q as Field>::ValueT>) -> Result<Self, FHECoreError> {
         let lwe_dimension = params.lwe_dimension;
@@ -108,6 +116,7 @@ impl<C: UnsignedInteger, Q: NttField> BooleanFheParameters<C, Q> {
         if let Some(&q) = lwe_cipher_modulus.as_power_of2() {
             assert!(t <= q);
         }
+        let lwe_cipher_modulus = LweModulus::from_value(lwe_cipher_modulus);
 
         let lwe_params = LweParameters::new(
             lwe_dimension,
@@ -130,7 +139,7 @@ impl<C: UnsignedInteger, Q: NttField> BooleanFheParameters<C, Q> {
         };
 
         let log_modulus = match steps {
-            Steps::BrMsKs => lwe_cipher_modulus.log_modulus(),
+            Steps::BrMsKs => params.lwe_cipher_modulus.log_modulus(),
             Steps::BrKsRlevMs | Steps::BrKsLevMs => {
                 <Q as Field>::ValueT::BITS - <Q as Field>::MODULUS_VALUE.leading_zeros()
             }
@@ -164,6 +173,12 @@ impl<C: UnsignedInteger, Q: NttField> BooleanFheParameters<C, Q> {
     #[inline]
     pub fn lwe_plain_modulus(&self) -> C {
         self.lwe_params.plain_modulus_value
+    }
+
+    /// Returns the LWE cipher modulus of this [`BooleanFheParameters<C, Q>`], refers to **q** in the paper.
+    #[inline]
+    pub fn lwe_cipher_modulus(&self) -> LweModulus {
+        self.lwe_params.cipher_modulus
     }
 
     /// Returns the LWE cipher modulus value of this [`BooleanFheParameters<C, Q>`], refers to **q** in the paper.
@@ -283,7 +298,7 @@ impl<C: UnsignedInteger, Q: NttField> BooleanFheParameters<C, Q> {
 
     /// Returns a reference to the lwe params of this [`BooleanFheParameters<C, Q>`].
     #[inline]
-    pub fn lwe_params(&self) -> &LweParameters<C> {
+    pub fn lwe_params(&self) -> &LweParameters<C, LweModulus> {
         &self.lwe_params
     }
 

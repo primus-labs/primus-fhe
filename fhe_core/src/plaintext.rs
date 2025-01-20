@@ -1,6 +1,4 @@
-use algebra::integer::UnsignedInteger;
-
-use crate::parameter::ModulusValue;
+use algebra::{integer::UnsignedInteger, reduce::ModulusValue};
 
 /// Encodes a message.
 ///
