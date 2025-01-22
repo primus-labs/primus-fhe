@@ -160,6 +160,11 @@ pub mod prime32 {
         }
 
         #[inline]
+        fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly) {
+            self.lazy_mul_assign(a, b);
+        }
+
+        #[inline]
         fn lazy_mul_inplace(
             &self,
             a: &Self::CoeffPoly,
@@ -168,6 +173,11 @@ pub mod prime32 {
         ) {
             c.copy_from(a);
             self.lazy_mul_assign(c, b);
+        }
+
+        #[inline]
+        fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly) {
+            self.lazy_mul_inplace(a, b, c);
         }
     }
 }
@@ -333,6 +343,11 @@ pub mod prime64 {
         }
 
         #[inline]
+        fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly) {
+            self.lazy_mul_assign(a, b);
+        }
+
+        #[inline]
         fn lazy_mul_inplace(
             &self,
             a: &Self::CoeffPoly,
@@ -341,6 +356,11 @@ pub mod prime64 {
         ) {
             c.copy_from(a);
             self.lazy_mul_assign(c, b);
+        }
+
+        #[inline]
+        fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly) {
+            self.lazy_mul_inplace(a, b, c);
         }
     }
 }

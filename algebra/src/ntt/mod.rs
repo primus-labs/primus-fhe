@@ -136,5 +136,11 @@ pub trait NumberTheoryTransform: NttTable {
     fn lazy_mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
 
     ///
+    fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
+
+    ///
     fn lazy_mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
+
+    ///
+    fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
 }
