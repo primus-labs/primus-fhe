@@ -1,11 +1,12 @@
-use num_traits::ConstOne;
+use num_traits::ConstZero;
 
 use crate::arith::PrimitiveRoot;
-use crate::modulus::ShoupFactor;
+use crate::modulus::{BarrettModulus, ShoupFactor};
 use crate::ntt::{NttTable, NumberTheoryTransform};
 use crate::numeric::Numeric;
 use crate::polynomial::{NttPolynomial, Polynomial};
-use crate::reduce::{LazyReduceMul, Modulus, ReduceMul, ReduceMulAssign};
+use crate::reduce::{LazyReduceMul, LazyReduceMulAssign, ReduceMul, ReduceMulAssign};
+use crate::utils::Pool;
 use crate::{utils::ReverseLsbs, AlgebraError};
 
 /// This struct store the pre-computed data for number theory transform and
@@ -30,11 +31,10 @@ use crate::{utils::ReverseLsbs, AlgebraError};
 /// scrambled order:     0  1  5  3  7  2  6  4
 ///                         ----------  ----  -
 /// ```
-#[derive(Clone)]
 pub struct TableWithShoupRoot<T: Numeric> {
     root: T,
     inv_root: T,
-    modulus_value: T,
+    modulus: BarrettModulus<T>,
     log_n: u32,
     n: usize,
     inv_n: ShoupFactor<T>,
@@ -42,6 +42,7 @@ pub struct TableWithShoupRoot<T: Numeric> {
     inv_root_powers: Vec<ShoupFactor<T>>,
     ordinal_root_powers: Vec<ShoupFactor<T>>,
     reverse_lsbs: Vec<usize>,
+    pool: Pool<Vec<T>>,
 }
 
 impl<T: Numeric> TableWithShoupRoot<T> {
@@ -60,7 +61,13 @@ impl<T: Numeric> TableWithShoupRoot<T> {
     /// Returns the modulus value of this [`TableWithShoupRoot<T>`].
     #[inline]
     pub fn modulus_value(&self) -> T {
-        self.modulus_value
+        self.modulus.value()
+    }
+
+    /// Returns the modulus of this [`TableWithShoupRoot<T>`].
+    #[inline]
+    pub fn modulus(&self) -> BarrettModulus<T> {
+        self.modulus
     }
 
     /// Returns the log n of this [`TableWithShoupRoot<T>`].
@@ -109,13 +116,12 @@ impl<T: Numeric> TableWithShoupRoot<T> {
 impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
     type ValueT = T;
 
-    fn new<M>(modulus: M, log_n: u32) -> Result<Self, crate::AlgebraError>
-    where
-        M: Modulus<Self::ValueT> + PrimitiveRoot<Self::ValueT>,
-    {
+    type ModulusT = BarrettModulus<T>;
+
+    fn new(modulus: Self::ModulusT, log_n: u32) -> Result<Self, crate::AlgebraError> {
         let n = 1usize << log_n;
 
-        let modulus_value = modulus.modulus_minus_one() + <T as ConstOne>::ONE;
+        let modulus_value = modulus.value();
         let to_root_type = |x| -> ShoupFactor<T> { <ShoupFactor<T>>::new(x, modulus_value) };
 
         let root = modulus.try_minimal_primitive_root(log_n + 1)?;
@@ -156,7 +162,7 @@ impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
             inv_root_powers[i + 1] = inv_root_power;
         }
 
-        let n_cast = <T>::try_from(n).map_err(|_| AlgebraError::DegreeConversionErr {
+        let n_cast = T::try_from(n).map_err(|_| AlgebraError::DegreeConversionErr {
             degree: n,
             modulus: Box::new(modulus_value),
         })?;
@@ -170,10 +176,12 @@ impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
 
         let inv_n = to_root_type(modulus_value.reduce_inv(n_cast));
 
+        let pool = Pool::new_with(2, || vec![ConstZero::ZERO; n]);
+
         Ok(Self {
             root,
             inv_root,
-            modulus_value,
+            modulus,
             log_n,
             n,
             inv_n,
@@ -181,6 +189,7 @@ impl<T: Numeric> NttTable for TableWithShoupRoot<T> {
             inv_root_powers,
             ordinal_root_powers,
             reverse_lsbs,
+            pool,
         })
     }
 
@@ -211,7 +220,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
     fn lazy_transform_slice(&self, poly: &mut [T]) {
         debug_assert_eq!(poly.len(), self.n);
 
-        let modulus_value = self.modulus_value;
+        let modulus_value = self.modulus_value();
         let twice_modulus_value = modulus_value << 1u32;
 
         let roots = self.root_powers();
@@ -235,7 +244,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
     fn transform_slice(&self, poly: &mut [Self::ValueT]) {
         self.lazy_transform_slice(poly);
 
-        let modulus_value = self.modulus_value;
+        let modulus_value = self.modulus_value();
         let twice_modulus_value = modulus_value << 1u32;
         poly.iter_mut().for_each(|v| {
             let r = twice_modulus_value.reduce_once(*v);
@@ -249,7 +258,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
 
         let log_n = self.log_n;
 
-        let modulus_value = self.modulus_value;
+        let modulus_value = self.modulus_value();
         let twice_modulus_value = modulus_value << 1u32;
 
         let roots = self.inv_root_powers();
@@ -287,7 +296,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
     fn inverse_transform_slice(&self, values: &mut [Self::ValueT]) {
         self.lazy_inverse_transform_slice(values);
 
-        let modulus_value = self.modulus_value;
+        let modulus_value = self.modulus_value();
         values.iter_mut().for_each(|v| {
             modulus_value.reduce_once_assign(v);
         });
@@ -308,7 +317,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
         let n = self.n;
         let log_n = self.log_n;
         debug_assert_eq!(values.len(), n);
-        let modulus_value = self.modulus_value;
+        let modulus_value = self.modulus_value();
 
         let mask = usize::MAX >> (usize::BITS - log_n - 1);
 
@@ -320,7 +329,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
                     let index = ((2 * i + 1) * degree) & mask;
                     *v = unsafe { *self.ordinal_root_powers.get_unchecked(index) }.value();
                 });
-        } else if coeff == self.modulus_value - T::ONE {
+        } else if coeff == self.modulus_value() - T::ONE {
             values
                 .iter_mut()
                 .zip(&self.reverse_lsbs)
@@ -367,7 +376,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
     #[inline]
     fn transform_coeff_minus_one_monomial(&self, degree: usize, values: &mut [Self::ValueT]) {
         if degree == 0 {
-            values.fill(self.modulus_value - T::ONE);
+            values.fill(self.modulus_value() - T::ONE);
             return;
         }
 
@@ -384,5 +393,30 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
                 let index = (((2 * i + 1) * degree) & mask) ^ n;
                 *v = unsafe { *self.ordinal_root_powers.get_unchecked(index) }.value();
             });
+    }
+
+    fn lazy_mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly) {
+        let mut bv = self.pool.try_get().map_or_else(
+            || b.as_slice().to_vec(),
+            |mut t| {
+                t.copy_from_slice(b.as_slice());
+                t
+            },
+        );
+
+        self.lazy_transform_slice(a.as_mut_slice());
+        self.lazy_transform_slice(bv.as_mut_slice());
+
+        for (ai, &bi) in a.iter_mut().zip(bv.iter()) {
+            self.modulus.lazy_reduce_mul_assign(ai, bi);
+        }
+
+        self.pool.store(bv);
+        self.lazy_inverse_transform_slice(a.as_mut_slice());
+    }
+
+    fn lazy_mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly) {
+        c.copy_from(a);
+        self.lazy_mul_assign(c, b);
     }
 }
