@@ -395,6 +395,7 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
             });
     }
 
+    #[inline]
     fn lazy_mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly) {
         let mut bv = self.pool.try_get().map_or_else(
             || b.as_slice().to_vec(),
@@ -415,8 +416,29 @@ impl<T: Numeric> NumberTheoryTransform for TableWithShoupRoot<T> {
         self.lazy_inverse_transform_slice(a.as_mut_slice());
     }
 
+    #[inline]
+    fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly) {
+        self.lazy_mul_assign(a, b);
+
+        let modulus_value = self.modulus_value();
+        a.iter_mut().for_each(|v| {
+            modulus_value.reduce_once_assign(v);
+        });
+    }
+
+    #[inline]
     fn lazy_mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly) {
         c.copy_from(a);
         self.lazy_mul_assign(c, b);
+    }
+
+    #[inline]
+    fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly) {
+        self.lazy_mul_inplace(a, b, c);
+
+        let modulus_value = self.modulus_value();
+        c.iter_mut().for_each(|v| {
+            modulus_value.reduce_once_assign(v);
+        });
     }
 }
