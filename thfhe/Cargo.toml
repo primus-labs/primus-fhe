@@ -1,0 +1,13 @@
+[package]
+name = "thfhe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mpc = { path = "../mpc" }
+
+algebra = { path = "../algebra", default-features = false }
+lattice = { path = "../lattice", default-features = false }
+fhe_core = { path = "../fhe_core", default-features = false }
+
+rand = { workspace = true }
