@@ -1,13 +1,16 @@
-use algebra::integer::{AsInto, UnsignedInteger};
+use algebra::{
+    integer::{AsInto, UnsignedInteger},
+    reduce::ModulusValue,
+};
 
-use crate::{LweCiphertext, ModulusValue};
+use crate::LweCiphertext;
 
 /// Implementation of modulus switching.
 ///
 /// This function performs on a [`LweCiphertext<CIn>`],
 /// returns a [`LweCiphertext<COut>`] with desired modulus `modulus_out`.
 pub fn lwe_modulus_switch<CIn: UnsignedInteger, COut: UnsignedInteger>(
-    c_in: LweCiphertext<CIn>,
+    c_in: &LweCiphertext<CIn>,
     modulus_in: CIn,
     modulus_out: ModulusValue<COut>,
 ) -> LweCiphertext<COut> {
@@ -25,7 +28,7 @@ pub fn lwe_modulus_switch<CIn: UnsignedInteger, COut: UnsignedInteger>(
 /// This function performs on a [`LweCiphertext<CIn>`],
 /// returns a [`LweCiphertext<COut>`] with desired modulus `modulus_out`.
 pub fn lwe_modulus_switch_to_pow_of_2<CIn: UnsignedInteger, COut: UnsignedInteger>(
-    c_in: LweCiphertext<CIn>,
+    c_in: &LweCiphertext<CIn>,
     modulus_in: CIn,
     modulus_out: COut,
 ) -> LweCiphertext<COut> {
@@ -57,7 +60,7 @@ pub fn lwe_modulus_switch_to_pow_of_2<CIn: UnsignedInteger, COut: UnsignedIntege
 /// This function performs on a [`LweCiphertext<CIn>`],
 /// returns a [`LweCiphertext<COut>`] with desired modulus `modulus_out`.
 pub fn lwe_modulus_switch_to_native<CIn: UnsignedInteger, COut: UnsignedInteger>(
-    c_in: LweCiphertext<CIn>,
+    c_in: &LweCiphertext<CIn>,
     modulus_in: CIn,
 ) -> LweCiphertext<COut> {
     let modulus_in_f64: f64 = modulus_in.as_into();
@@ -166,10 +169,11 @@ pub fn lwe_modulus_switch_assign<C: UnsignedInteger>(
 ) {
     match modulus_in {
         ModulusValue::Native => lwe_modulus_switch_assign_native(c, modulus_out),
-        ModulusValue::PowerOf2(modulus_in) => {
-            lwe_modulus_switch_assign_pow_of_2(c, modulus_in, modulus_out)
+        ModulusValue::PowerOf2(modulus_in)
+        | ModulusValue::Prime(modulus_in)
+        | ModulusValue::Others(modulus_in) => {
+            lwe_modulus_switch_assign_normal(c, modulus_in, modulus_out)
         }
-        ModulusValue::Prime(_) | ModulusValue::Others(_) => unimplemented!(),
     }
 }
 
@@ -178,7 +182,7 @@ pub fn lwe_modulus_switch_assign<C: UnsignedInteger>(
 /// This function performs on a [`LweCiphertext<C>`] with modulus `modulus_in`,
 /// puts the result [`LweCiphertext<C>`] with desired modulus `modulus_out`
 /// back to `c`.
-pub fn lwe_modulus_switch_assign_pow_of_2<C: UnsignedInteger>(
+pub fn lwe_modulus_switch_assign_normal<C: UnsignedInteger>(
     c: &mut LweCiphertext<C>,
     modulus_in: C,
     modulus_out: C,

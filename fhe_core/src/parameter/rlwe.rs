@@ -1,4 +1,4 @@
-use algebra::{decompose::NonPowOf2ApproxSignedBasis, Field, NttField};
+use algebra::{decompose::NonPowOf2ApproxSignedBasis, random::DiscreteGaussian, Field, NttField};
 
 use crate::RingSecretKeyType;
 
@@ -15,6 +15,26 @@ pub struct GadgetRlweParameters<Q: NttField> {
     pub noise_standard_deviation: f64,
     /// Decompose basis for `Q`.
     pub basis: NonPowOf2ApproxSignedBasis<<Q as Field>::ValueT>,
+}
+
+impl<Q: NttField> GadgetRlweParameters<Q> {
+    /// Returns the noise distribution.
+    #[inline]
+    pub fn noise_distribution(&self) -> DiscreteGaussian<<Q as Field>::ValueT> {
+        DiscreteGaussian::new(0.0, self.noise_standard_deviation, Q::MINUS_ONE).unwrap()
+    }
+
+    /// Returns the decompose basis.
+    #[inline]
+    pub fn basis(&self) -> &NonPowOf2ApproxSignedBasis<<Q as Field>::ValueT> {
+        &self.basis
+    }
+
+    /// Returns the dimension.
+    #[inline]
+    pub fn dimension(&self) -> usize {
+        self.dimension
+    }
 }
 
 impl<Q: NttField> Copy for GadgetRlweParameters<Q> {}

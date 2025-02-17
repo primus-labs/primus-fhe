@@ -259,17 +259,6 @@ impl<F: NttField> NttRlwe<F> {
     }
 
     /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
-    #[inline]
-    pub fn sub_ntt_rlwe_mul_ntt_polynomial_assign(
-        &mut self,
-        ntt_rlwe: &Self,
-        ntt_polynomial: &FieldNttPolynomial<F>,
-    ) {
-        self.a_mut().sub_mul_assign(ntt_rlwe.a(), ntt_polynomial);
-        self.b_mut().sub_mul_assign(ntt_rlwe.b(), ntt_polynomial);
-    }
-
-    /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
     ///
     /// The result coefficients may be in [0, 2*modulus) for some case,
     /// and fall back to [0, modulus) for normal case.
@@ -283,22 +272,6 @@ impl<F: NttField> NttRlwe<F> {
             .add_mul_assign_fast(ntt_rlwe.a(), ntt_polynomial);
         self.b_mut()
             .add_mul_assign_fast(ntt_rlwe.b(), ntt_polynomial);
-    }
-
-    /// Performs `self = self + ntt_rlwe * ntt_polynomial`.
-    ///
-    /// The result coefficients may be in [0, 2*modulus) for some case,
-    /// and fall back to [0, modulus) for normal case.
-    #[inline]
-    pub fn sub_ntt_rlwe_mul_ntt_polynomial_assign_fast(
-        &mut self,
-        ntt_rlwe: &Self,
-        ntt_polynomial: &FieldNttPolynomial<F>,
-    ) {
-        self.a_mut()
-            .sub_mul_assign_fast(ntt_rlwe.a(), ntt_polynomial);
-        self.b_mut()
-            .sub_mul_assign_fast(ntt_rlwe.b(), ntt_polynomial);
     }
 
     /// Performs `destination = self + ntt_rlwe * ntt_polynomial`.

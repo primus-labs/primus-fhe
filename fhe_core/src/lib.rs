@@ -25,7 +25,7 @@ pub mod utils;
 
 pub use error::FHECoreError;
 
-pub use parameter::{GadgetRlweParameters, KeySwitchingParameters, LweParameters, ModulusValue};
+pub use parameter::{GadgetRlweParameters, KeySwitchingParameters, LweParameters};
 
 pub use public_key::{LwePublicKey, LwePublicKeyRlweMode, NttRlwePublicKey};
 pub use secret_key::{

@@ -1,20 +1,21 @@
 //! Defines Number Theory Transform algorithms.
 
-use crate::AlgebraError;
+use crate::{arith::PrimitiveRoot, AlgebraError};
 
 mod table;
 
 pub use table::*;
 
 /// An abstract for ntt table generation.
-pub trait NttTable: Sized + Clone + Send + Sync {
+pub trait NttTable: Sized + Send + Sync {
     /// The value type.
     type ValueT;
-    /// The Modulus type.
-    type Modulus;
+
+    /// The modulus type.
+    type ModulusT: PrimitiveRoot<Self::ValueT>;
 
     /// Creates a new [`NttTable`].
-    fn new(modulus: <Self as NttTable>::Modulus, log_n: u32) -> Result<Self, AlgebraError>;
+    fn new(modulus: Self::ModulusT, log_n: u32) -> Result<Self, AlgebraError>;
 
     /// Get the polynomial modulus degree.
     fn dimension(&self) -> usize;
@@ -130,4 +131,16 @@ pub trait NumberTheoryTransform: NttTable {
         degree: usize,
         values: &mut [<Self as NttTable>::ValueT],
     );
+
+    ///
+    fn lazy_mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
+
+    ///
+    fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
+
+    ///
+    fn lazy_mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
+
+    ///
+    fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
 }

@@ -12,7 +12,7 @@ use crate::{parameter::Steps, BooleanFheParameters};
 /// ring secret key, ntt version ring secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
-pub struct SecretKeyPack<C: UnsignedInteger, Q: NttField> {
+pub struct SecretKeyPack<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> {
     /// LWE secret key
     lwe_secret_key: LweSecretKey<C>,
     /// rlwe secret key
@@ -20,13 +20,13 @@ pub struct SecretKeyPack<C: UnsignedInteger, Q: NttField> {
     /// ntt version rlwe secret key
     ntt_rlwe_secret_key: NttRlweSecretKey<Q>,
     /// FHE parameters
-    parameters: BooleanFheParameters<C, Q>,
+    parameters: BooleanFheParameters<C, LweModulus, Q>,
     ntt_table: Arc<<Q as NttField>::Table>,
 }
 
-impl<C: UnsignedInteger, Q: NttField> SecretKeyPack<C, Q> {
+impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> SecretKeyPack<C, LweModulus, Q> {
     /// Creates a new [`SecretKeyPack<C, Q>`].
-    pub fn new<R>(parameters: BooleanFheParameters<C, Q>, rng: &mut R) -> Self
+    pub fn new<R>(parameters: BooleanFheParameters<C, LweModulus, Q>, rng: &mut R) -> Self
     where
         R: Rng + CryptoRng,
     {
@@ -73,7 +73,7 @@ impl<C: UnsignedInteger, Q: NttField> SecretKeyPack<C, Q> {
 
     /// Returns a reference to the parameters of this [`SecretKeyPack<C, Q>`].
     #[inline]
-    pub fn parameters(&self) -> &BooleanFheParameters<C, Q> {
+    pub fn parameters(&self) -> &BooleanFheParameters<C, LweModulus, Q> {
         &self.parameters
     }
 
@@ -103,51 +103,36 @@ impl<C: UnsignedInteger, Q: NttField> SecretKeyPack<C, Q> {
 
     /// Returns a reference to the lwe params of this [`SecretKeyPack<C, Q>`].
     #[inline]
-    pub fn lwe_params(&self) -> &fhe_core::LweParameters<C> {
+    pub fn lwe_params(&self) -> &fhe_core::LweParameters<C, LweModulus> {
         self.parameters.lwe_params()
     }
 
     /// Encrypts a message with cipher modulus and random number generator.
     #[inline]
-    pub fn encrypt<M, R>(
-        &self,
-        message: M,
-        cipher_modulus: impl RingReduce<C>,
-        rng: &mut R,
-    ) -> fhe_core::LweCiphertext<C>
+    pub fn encrypt<M, R>(&self, message: M, rng: &mut R) -> fhe_core::LweCiphertext<C>
     where
         M: TryInto<C>,
         R: Rng + CryptoRng,
     {
-        self.lwe_secret_key
-            .encrypt(message, self.lwe_params(), cipher_modulus, rng)
+        self.lwe_secret_key.encrypt(message, self.lwe_params(), rng)
     }
 
     /// Decrypts the cipher text.
     #[inline]
-    pub fn decrypt<M>(
-        &self,
-        cipher_text: &fhe_core::LweCiphertext<C>,
-        cipher_modulus: impl RingReduce<C>,
-    ) -> M
+    pub fn decrypt<M>(&self, cipher_text: &fhe_core::LweCiphertext<C>) -> M
     where
         M: TryFrom<C>,
     {
-        self.lwe_secret_key
-            .decrypt(cipher_text, self.lwe_params(), cipher_modulus)
+        self.lwe_secret_key.decrypt(cipher_text, self.lwe_params())
     }
 
     /// Decrypts the cipher text and calculates the noise.
     #[inline]
-    pub fn decrypt_with_noise<M>(
-        &self,
-        cipher_text: &fhe_core::LweCiphertext<C>,
-        cipher_modulus: impl RingReduce<C>,
-    ) -> (M, C)
+    pub fn decrypt_with_noise<M>(&self, cipher_text: &fhe_core::LweCiphertext<C>) -> (M, C)
     where
         M: Copy + TryFrom<C> + TryInto<C>,
     {
         self.lwe_secret_key
-            .decrypt_with_noise(cipher_text, self.lwe_params(), cipher_modulus)
+            .decrypt_with_noise(cipher_text, self.lwe_params())
     }
 }
