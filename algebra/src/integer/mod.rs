@@ -28,7 +28,7 @@ pub use overflowing::*;
 pub use two::ConstTwo;
 pub use wrapping::*;
 
-/// An abstract over interger type.
+/// An abstract over integer type.
 pub trait Integer:
     'static
     + Sized
@@ -89,7 +89,7 @@ pub trait Integer:
 {
 }
 
-/// An abstract over unsigned interger type.
+/// An abstract over unsigned integer type.
 pub trait UnsignedInteger:
     Integer
     + Unsigned
