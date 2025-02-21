@@ -102,7 +102,7 @@ impl<T: UnsignedInteger> PowOf2ApproxSignedBasis<T> {
 
     /// Returns the drop bits of this [`PowOf2ApproxSignedBasis<T>`].
     ///
-    /// This means some bits of the value will be droped
+    /// This means some bits of the value will be dropped
     /// according to approximate signed decomposition.
     #[inline]
     pub fn drop_bits(&self) -> u32 {
