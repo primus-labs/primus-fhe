@@ -76,6 +76,32 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         Ok(res)
     }
 
+    fn inner_product(
+        &mut self,
+        a: Vec<Self::Sharing>,
+        b: Vec<Self::Sharing>,
+    ) -> Result<Self::Sharing, crate::error::MPCErr> {
+        let mut res = DummyShare { value: 0 };
+        for i in 0..a.len() {
+            let mul_result = Self::mul(self, a[i], b[i])?;
+            res = Self::add(self, res, mul_result)?;
+        }
+        Ok(res)
+    }
+
+    fn inner_product_const(
+        &mut self,
+        a: Vec<Self::Sharing>,
+        b: Vec<u64>,
+    ) -> Result<Self::Sharing, crate::error::MPCErr> {
+        let mut res = DummyShare { value: 0 };
+        for i in 0..a.len() {
+            let mul_const_result = Self::mul_const(self, a[i], b[i])?;
+            res = Self::add(self, res, mul_const_result)?;
+        }
+        Ok(res)
+    }
+
     fn double(&mut self, a: DummyShare) -> Result<DummyShare, MPCErr> {
         Self::mul_const(self, a, 2)
     }
@@ -173,5 +199,49 @@ mod tests {
             .collect();
         assert_eq!(result_values[0], U64FieldEval::<P>::mul(10, 30));
         assert_eq!(result_values[1], U64FieldEval::<P>::mul(20, 40));
+    }
+
+    #[test]
+    fn test_inner_product() {
+        let mut backend = DummyBackend::<P> {};
+        let a = vec![
+            backend.input(Some(1), 0).unwrap(),
+            backend.input(Some(2), 0).unwrap(),
+            backend.input(Some(3), 0).unwrap(),
+        ];
+        let b = vec![
+            backend.input(Some(4), 0).unwrap(),
+            backend.input(Some(5), 0).unwrap(),
+            backend.input(Some(6), 0).unwrap(),
+        ];
+        let result = backend.inner_product(a, b).unwrap();
+        let result_value = backend.reveal_to_all(result).unwrap();
+        assert_eq!(
+            result_value,
+            U64FieldEval::<P>::add(
+                U64FieldEval::<P>::add(U64FieldEval::<P>::mul(1, 4), U64FieldEval::<P>::mul(2, 5)),
+                U64FieldEval::<P>::mul(3, 6)
+            )
+        );
+    }
+
+    #[test]
+    fn test_inner_product_const() {
+        let mut backend = DummyBackend::<P> {};
+        let a = vec![
+            backend.input(Some(1), 0).unwrap(),
+            backend.input(Some(2), 0).unwrap(),
+            backend.input(Some(3), 0).unwrap(),
+        ];
+        let b = vec![4, 5, 6];
+        let result = backend.inner_product_const(a, b).unwrap();
+        let result_value = backend.reveal_to_all(result).unwrap();
+        assert_eq!(
+            result_value,
+            U64FieldEval::<P>::add(
+                U64FieldEval::<P>::add(U64FieldEval::<P>::mul(1, 4), U64FieldEval::<P>::mul(2, 5)),
+                U64FieldEval::<P>::mul(3, 6)
+            )
+        );
     }
 }

@@ -43,6 +43,20 @@ pub trait MPCBackend {
         b: Vec<Self::Sharing>,
     ) -> Result<Vec<Self::Sharing>, error::MPCErr>;
 
+    /// Inner product of two arrays of secret shares.
+    fn inner_product(
+        &mut self,
+        a: Vec<Self::Sharing>,
+        b: Vec<Self::Sharing>,
+    ) -> Result<Self::Sharing, error::MPCErr>;
+
+    /// Inner product of an array of secret shares with an array of constants.
+    fn inner_product_const(
+        &mut self,
+        a: Vec<Self::Sharing>,
+        b: Vec<u64>,
+    ) -> Result<Self::Sharing, error::MPCErr>;
+
     /// Double a secret share.
     fn double(&mut self, a: Self::Sharing) -> Result<Self::Sharing, error::MPCErr>;
 
