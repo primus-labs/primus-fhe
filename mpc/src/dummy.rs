@@ -3,7 +3,7 @@
 use algebra::{Field, U64FieldEval};
 
 use crate::error::MPCErr;
-use crate::MPCBackend;
+use crate::{MPCBackend, MPCResult};
 
 /// Dummy MPC secret share (storing plain value).
 #[derive(Debug, Clone, Copy)]
@@ -29,41 +29,37 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         0
     }
 
-    fn neg(&mut self, a: DummyShare) -> Result<DummyShare, MPCErr> {
+    fn neg(&mut self, a: DummyShare) -> MPCResult<DummyShare> {
         Ok(DummyShare {
             value: U64FieldEval::<P>::neg(a.value),
         })
     }
 
-    fn add(&mut self, a: DummyShare, b: DummyShare) -> Result<DummyShare, MPCErr> {
+    fn add(&mut self, a: DummyShare, b: DummyShare) -> MPCResult<DummyShare> {
         Ok(DummyShare {
             value: U64FieldEval::<P>::add(a.value, b.value),
         })
     }
 
-    fn sub(&mut self, a: DummyShare, b: DummyShare) -> Result<DummyShare, MPCErr> {
+    fn sub(&mut self, a: DummyShare, b: DummyShare) -> MPCResult<DummyShare> {
         Ok(DummyShare {
             value: U64FieldEval::<P>::sub(a.value, b.value),
         })
     }
 
-    fn mul(&mut self, a: DummyShare, b: DummyShare) -> Result<DummyShare, MPCErr> {
+    fn mul(&mut self, a: DummyShare, b: DummyShare) -> MPCResult<DummyShare> {
         Ok(DummyShare {
             value: U64FieldEval::<P>::mul(a.value, b.value),
         })
     }
 
-    fn mul_const(&mut self, a: DummyShare, b: u64) -> Result<DummyShare, MPCErr> {
+    fn mul_const(&mut self, a: DummyShare, b: u64) -> MPCResult<DummyShare> {
         Ok(DummyShare {
             value: U64FieldEval::<P>::mul(a.value, b),
         })
     }
 
-    fn mul_batch(
-        &mut self,
-        a: Vec<DummyShare>,
-        b: Vec<DummyShare>,
-    ) -> Result<Vec<DummyShare>, MPCErr> {
+    fn mul_batch(&mut self, a: &[DummyShare], b: &[DummyShare]) -> MPCResult<Vec<DummyShare>> {
         let mut res = Vec::new();
         if a.len() != b.len() {
             return Err(MPCErr::InvalidOperation(
@@ -76,11 +72,7 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         Ok(res)
     }
 
-    fn inner_product(
-        &mut self,
-        a: Vec<Self::Sharing>,
-        b: Vec<Self::Sharing>,
-    ) -> Result<Self::Sharing, crate::error::MPCErr> {
+    fn inner_product(&mut self, a: &[DummyShare], b: &[DummyShare]) -> MPCResult<Self::Sharing> {
         let mut res = DummyShare { value: 0 };
         for i in 0..a.len() {
             let mul_result = Self::mul(self, a[i], b[i])?;
@@ -89,11 +81,7 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         Ok(res)
     }
 
-    fn inner_product_const(
-        &mut self,
-        a: Vec<Self::Sharing>,
-        b: Vec<u64>,
-    ) -> Result<Self::Sharing, crate::error::MPCErr> {
+    fn inner_product_const(&mut self, a: &[DummyShare], b: &[u64]) -> MPCResult<Self::Sharing> {
         let mut res = DummyShare { value: 0 };
         for i in 0..a.len() {
             let mul_const_result = Self::mul_const(self, a[i], b[i])?;
@@ -102,22 +90,22 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         Ok(res)
     }
 
-    fn double(&mut self, a: DummyShare) -> Result<DummyShare, MPCErr> {
-        Self::mul_const(self, a, 2)
+    fn double(&mut self, a: DummyShare) -> MPCResult<DummyShare> {
+        Self::add(self, a, a)
     }
 
-    fn input(&mut self, value: Option<u64>, party_id: u32) -> Result<DummyShare, MPCErr> {
+    fn input(&mut self, value: Option<u64>, _party_id: u32) -> MPCResult<DummyShare> {
         match value {
             Some(v) => Ok(DummyShare { value: v }),
             None => Err(MPCErr::InvalidOperation("input value is None".to_string())),
         }
     }
 
-    fn reveal(&mut self, a: DummyShare, party_id: u32) -> Result<Option<u64>, MPCErr> {
+    fn reveal(&mut self, a: DummyShare, _party_id: u32) -> MPCResult<Option<u64>> {
         Ok(Some(a.value))
     }
 
-    fn reveal_to_all(&mut self, a: DummyShare) -> Result<u64, MPCErr> {
+    fn reveal_to_all(&mut self, a: DummyShare) -> MPCResult<u64> {
         Ok(a.value)
     }
 
@@ -182,40 +170,35 @@ mod tests {
     }
 
     #[test]
-    fn test_mul_batch() {
+    fn test_mul_batch() -> MPCResult<()> {
         let mut backend = DummyBackend::<P> {};
-        let a = vec![
-            backend.input(Some(10), 0).unwrap(),
-            backend.input(Some(20), 0).unwrap(),
-        ];
-        let b = vec![
-            backend.input(Some(30), 0).unwrap(),
-            backend.input(Some(40), 0).unwrap(),
-        ];
-        let result = backend.mul_batch(a, b).unwrap();
+        let a = vec![backend.input(Some(10), 0)?, backend.input(Some(20), 0)?];
+        let b = vec![backend.input(Some(30), 0)?, backend.input(Some(40), 0)?];
+        let result = backend.mul_batch(&a, &b)?;
         let result_values: Vec<u64> = result
             .into_iter()
             .map(|share| backend.reveal_to_all(share).unwrap())
             .collect();
         assert_eq!(result_values[0], U64FieldEval::<P>::mul(10, 30));
         assert_eq!(result_values[1], U64FieldEval::<P>::mul(20, 40));
+        Ok(())
     }
 
     #[test]
-    fn test_inner_product() {
+    fn test_inner_product() -> MPCResult<()> {
         let mut backend = DummyBackend::<P> {};
         let a = vec![
-            backend.input(Some(1), 0).unwrap(),
-            backend.input(Some(2), 0).unwrap(),
-            backend.input(Some(3), 0).unwrap(),
+            backend.input(Some(1), 0)?,
+            backend.input(Some(2), 0)?,
+            backend.input(Some(3), 0)?,
         ];
         let b = vec![
-            backend.input(Some(4), 0).unwrap(),
-            backend.input(Some(5), 0).unwrap(),
-            backend.input(Some(6), 0).unwrap(),
+            backend.input(Some(4), 0)?,
+            backend.input(Some(5), 0)?,
+            backend.input(Some(6), 0)?,
         ];
-        let result = backend.inner_product(a, b).unwrap();
-        let result_value = backend.reveal_to_all(result).unwrap();
+        let result = backend.inner_product(&a, &b)?;
+        let result_value = backend.reveal_to_all(result)?;
         assert_eq!(
             result_value,
             U64FieldEval::<P>::add(
@@ -223,19 +206,20 @@ mod tests {
                 U64FieldEval::<P>::mul(3, 6)
             )
         );
+        Ok(())
     }
 
     #[test]
-    fn test_inner_product_const() {
+    fn test_inner_product_const() -> MPCResult<()> {
         let mut backend = DummyBackend::<P> {};
         let a = vec![
-            backend.input(Some(1), 0).unwrap(),
-            backend.input(Some(2), 0).unwrap(),
-            backend.input(Some(3), 0).unwrap(),
+            backend.input(Some(1), 0)?,
+            backend.input(Some(2), 0)?,
+            backend.input(Some(3), 0)?,
         ];
         let b = vec![4, 5, 6];
-        let result = backend.inner_product_const(a, b).unwrap();
-        let result_value = backend.reveal_to_all(result).unwrap();
+        let result = backend.inner_product_const(&a, &b)?;
+        let result_value = backend.reveal_to_all(result)?;
         assert_eq!(
             result_value,
             U64FieldEval::<P>::add(
@@ -243,5 +227,6 @@ mod tests {
                 U64FieldEval::<P>::mul(3, 6)
             )
         );
+        Ok(())
     }
 }
