@@ -3,8 +3,8 @@
 #[derive(Debug)]
 /// Error types for MPC backend operations.
 pub enum MPCErr {
-    /// MPC ID not found.
-    IdNotFound(usize),
     /// Invalid operation.
     InvalidOperation(String),
+    /// Input not provided.
+    InputNotProvided(u32),
 }

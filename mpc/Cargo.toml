@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+algebra = { version = "0.1.0", path = "../algebra" }
+network = { version = "0.1.0", path = "../network" }
 
