@@ -328,3 +328,60 @@ fn test_untested_operations() {
         assert!(handle.join().unwrap());
     }
 }
+
+/// Tests that rand_coin returns consistent values across all parties.
+/// Verifies that the shared PRG produces identical sequences for each party.
+#[test]
+fn test_rand_coin_consistency() {
+    const NUM_PARTIES: u32 = 4;
+    const THRESHOLD: u32 = 1;
+    const BASE_PORT: u32 = 50800;
+    const NUM_COINS: usize = 10000;
+
+    let mut threads = Vec::new();
+    
+    // Create a channel to collect results from all parties
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    for id in 0..NUM_PARTIES {
+        let tx = tx.clone();
+        threads.push(thread::spawn(move || {
+            // Setup the DN backend
+            let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
+            let mut dn = DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 5, participants);
+
+            // Generate a sequence of random coins
+            let mut coins = Vec::with_capacity(NUM_COINS);
+            for _ in 0..NUM_COINS {
+                coins.push(dn.rand_coin());
+            }
+
+            // Send party ID and coin values to the main thread
+            tx.send((id, coins)).unwrap();
+            true
+        }));
+    }
+
+    // Collect all results
+    drop(tx); // Drop the extra sender so the receiver knows when to stop
+    let mut all_results = Vec::new();
+    while let Ok((id, coins)) = rx.recv() {
+        all_results.push((id, coins));
+    }
+
+    // Verify all parties got the same values
+    if !all_results.is_empty() {
+        let reference_coins = &all_results[0].1;
+        for (id, coins) in &all_results[1..] {
+            assert_eq!(
+                coins, reference_coins,
+                "Party {id} got different random coins than party 0"
+            );
+        }
+    }
+
+    // Wait for all threads to complete
+    for handle in threads {
+        assert!(handle.join().unwrap());
+    }
+}
