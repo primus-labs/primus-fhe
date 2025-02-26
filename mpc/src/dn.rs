@@ -602,7 +602,7 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     }
 
     fn double(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::mul(a, 2))
+        Ok(U64FieldEval::<P>::add(a, a))
     }
 
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing> {
