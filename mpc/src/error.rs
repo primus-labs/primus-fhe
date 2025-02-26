@@ -7,4 +7,6 @@ pub enum MPCErr {
     InvalidOperation(String),
     /// Input not provided.
     InputNotProvided(u32),
+    /// Protocol error.
+    ProtocolError(String),
 }

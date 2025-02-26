@@ -2,10 +2,11 @@
 #![deny(missing_docs)]
 //! This crate provides backend for various MPC operations over a network.
 
+pub mod dn;
 pub mod dummy;
 pub mod error;
-// pub mod bgw;
-// pub mod dn;
+
+pub use dn::DNBackend;
 
 type MPCResult<T> = Result<T, error::MPCErr>;
 

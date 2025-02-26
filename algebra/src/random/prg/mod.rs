@@ -5,7 +5,7 @@ mod block;
 mod sse2neon;
 
 pub use aes::Aes;
-use block::Block;
+pub use block::Block;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_core::block::{BlockRng, BlockRngCore};
 

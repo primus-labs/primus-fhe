@@ -4,4 +4,4 @@ mod numeric;
 mod prg;
 
 pub use numeric::*;
-pub use prg::{Aes, Prg};
+pub use prg::{Aes, Block, Prg};
