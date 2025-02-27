@@ -480,8 +480,11 @@ impl<T: Numeric> ReduceDotProduct<T> for BarrettModulus<T> {
 
         debug_assert_eq!(a.len(), b.len());
 
-        a.chunks_exact(16)
-            .zip(b.chunks_exact(16))
+        let mut a_iter = a.chunks_exact(16);
+        let mut b_iter = b.chunks_exact(16);
+
+        let inter = (&mut a_iter)
+            .zip(&mut b_iter)
             .map(|(a_s, b_s)| {
                 let mut c: [T; 2] = [T::ZERO, T::ZERO];
                 for (&a, &b) in a_s.iter().zip(b_s) {
@@ -489,7 +492,17 @@ impl<T: Numeric> ReduceDotProduct<T> for BarrettModulus<T> {
                 }
                 self.reduce(c)
             })
-            .fold(T::ZERO, |acc: T, b| self.value.reduce_add(acc, b))
+            .fold(T::ZERO, |acc: T, b| self.value.reduce_add(acc, b));
+
+        let mut c: [T; 2] = [T::ZERO, T::ZERO];
+        a_iter
+            .remainder()
+            .iter()
+            .zip(b_iter.remainder())
+            .for_each(|(&a, &b)| {
+                multiply_add(&mut c, a, b);
+            });
+        self.reduce_add(self.reduce(c), inter)
     }
 }
 
