@@ -1,20 +1,20 @@
-use mpc::{MPCBackend, MPCId};
+use mpc::MPCBackend;
 use rand::Rng;
 
 pub fn generate_shared_binary_value_two_field<Backendq, BackendQ, R>(
     backend_q: &mut Backendq,
     backend_big_q: &mut BackendQ,
     rng: &mut R,
-) -> (MPCId, MPCId)
+) -> (Backendq::Sharing, BackendQ::Sharing)
 where
     Backendq: MPCBackend,
     BackendQ: MPCBackend,
     R: Rng,
 {
-    let id = backend_q.id().0 as u32;
+    let id = backend_q.party_id();
     let t = backend_q.num_threshold();
 
-    let b_vec: Vec<(MPCId, MPCId)> = (0..t)
+    let b_vec: Vec<(Backendq::Sharing, BackendQ::Sharing)> = (0..t)
         .map(|i| {
             if id == i {
                 let b = rng.gen_bool(0.5) as u64;
@@ -54,7 +54,7 @@ pub fn generate_shared_ternary_value_two_field<Backendq, BackendQ, R>(
     backend_q: &mut Backendq,
     backend_big_q: &mut BackendQ,
     rng: &mut R,
-) -> (MPCId, MPCId)
+) -> (Backendq::Sharing, BackendQ::Sharing)
 where
     Backendq: MPCBackend,
     BackendQ: MPCBackend,
@@ -68,15 +68,18 @@ where
     )
 }
 
-pub fn generate_shared_binary_value<Backend, R>(backend: &mut Backend, rng: &mut R) -> MPCId
+pub fn generate_shared_binary_value<Backend, R>(
+    backend: &mut Backend,
+    rng: &mut R,
+) -> Backend::Sharing
 where
     Backend: MPCBackend,
     R: Rng,
 {
+    let id = backend.party_id();
     let t = backend.num_threshold();
-    let id = backend.id().0 as u32;
 
-    let b_vec: Vec<MPCId> = (0..t)
+    let b_vec: Vec<Backend::Sharing> = (0..t)
         .map(|i| {
             if id == i {
                 backend.input(Some(rng.gen_bool(0.5) as u64), id).unwrap()
@@ -97,7 +100,10 @@ where
         .unwrap()
 }
 
-pub fn generate_shared_ternary_value<Backend, R>(backend: &mut Backend, rng: &mut R) -> MPCId
+pub fn generate_shared_ternary_value<Backend, R>(
+    backend: &mut Backend,
+    rng: &mut R,
+) -> Backend::Sharing
 where
     Backend: MPCBackend,
     R: Rng,

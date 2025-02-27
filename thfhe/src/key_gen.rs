@@ -1,6 +1,6 @@
 use algebra::{decompose::NonPowOf2ApproxSignedBasis, random::DiscreteGaussian};
 use fhe_core::{LweSecretKeyType, RingSecretKeyType};
-use mpc::{MPCBackend, MPCId};
+use mpc::MPCBackend;
 use rand::Rng;
 
 use crate::{
@@ -15,14 +15,14 @@ pub fn generate_shared_lwe_secret_key<Backendq, BackendQ, R>(
     secret_key_type: LweSecretKeyType,
     dimension: usize,
     rng: &mut R,
-) -> (Vec<MPCId>, Vec<MPCId>)
+) -> (Vec<Backendq::Sharing>, Vec<BackendQ::Sharing>)
 where
     Backendq: MPCBackend,
     BackendQ: MPCBackend,
     R: Rng,
 {
-    let mut s_q = vec![MPCId(0); dimension];
-    let mut s_big_q = vec![MPCId(0); dimension];
+    let mut s_q: Vec<<Backendq as MPCBackend>::Sharing> = vec![Default::default(); dimension];
+    let mut s_big_q: Vec<<BackendQ as MPCBackend>::Sharing> = vec![Default::default(); dimension];
 
     s_q.iter_mut()
         .zip(s_big_q.iter_mut())
@@ -39,19 +39,19 @@ where
     (s_q, s_big_q)
 }
 
-pub struct MPCRlweSecretKey(pub Vec<MPCId>);
+pub struct MPCRlweSecretKey<Share>(pub Vec<Share>);
 
 pub fn generate_shared_rlwe_secret_key<Backend, R>(
     backend: &mut Backend,
     secret_key_type: RingSecretKeyType,
     dimension: usize,
     rng: &mut R,
-) -> MPCRlweSecretKey
+) -> MPCRlweSecretKey<Backend::Sharing>
 where
     Backend: MPCBackend,
     R: Rng,
 {
-    let mut z = vec![MPCId(0); dimension];
+    let mut z: Vec<<Backend as MPCBackend>::Sharing> = vec![Default::default(); dimension];
 
     z.iter_mut().for_each(|z_i| {
         *z_i = match secret_key_type {
@@ -72,7 +72,7 @@ pub struct MPCLwePublicKey(pub Vec<RevealLwe>);
 
 pub fn generate_lwe_public_key<Backend, R>(
     backend: &mut Backend,
-    lwe_secret_key: &[MPCId],
+    lwe_secret_key: &[Backend::Sharing],
     gaussian: DiscreteGaussian<u64>,
     kappa: usize,
     rng: &mut R,
@@ -112,8 +112,8 @@ pub struct MPCBootstrappingKey(pub Vec<RevealRgsw>);
 
 pub fn generate_bootstrapping_key<Backend, R>(
     backend: &mut Backend,
-    lwe_secret_key: &[MPCId],
-    rlwe_secret_key: &[MPCId],
+    lwe_secret_key: &[Backend::Sharing],
+    rlwe_secret_key: &[Backend::Sharing],
     gaussian: DiscreteGaussian<u64>,
     basis: NonPowOf2ApproxSignedBasis<u64>,
     rng: &mut R,
@@ -188,8 +188,8 @@ pub struct MPCKeySwitchingKey(pub Vec<RevealGadgetLwe>);
 
 pub fn generate_key_switching_key<Backend, R>(
     backend: &mut Backend,
-    input_secret_key: &[MPCId],
-    output_secret_key: &[MPCId],
+    input_secret_key: &[Backend::Sharing],
+    output_secret_key: &[Backend::Sharing],
     gaussian: DiscreteGaussian<u64>,
     basis: NonPowOf2ApproxSignedBasis<u64>,
     rng: &mut R,

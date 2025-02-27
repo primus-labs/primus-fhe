@@ -6,7 +6,7 @@ use crate::error::MPCErr;
 use crate::{MPCBackend, MPCResult};
 
 /// Dummy MPC secret share (storing plain value).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct DummyShare {
     value: u64,
 }
@@ -27,6 +27,10 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
 
     fn num_threshold(&self) -> u32 {
         0
+    }
+
+    fn field_modulus_value(&self) -> u64 {
+        P
     }
 
     fn neg(&mut self, a: DummyShare) -> MPCResult<DummyShare> {
@@ -111,6 +115,14 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
 
     fn rand_coin(&mut self) -> u64 {
         0
+    }
+
+    fn rand_field_element(&mut self) -> u64 {
+        0
+    }
+
+    fn rand_field_elements(&mut self, destination: &mut [u64]) {
+        destination.fill(0);
     }
 }
 #[cfg(test)]

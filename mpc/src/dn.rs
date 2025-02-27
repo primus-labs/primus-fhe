@@ -3,6 +3,7 @@
 
 use crate::{error::MPCErr, MPCBackend, MPCResult};
 use algebra::random::Prg;
+use algebra::reduce::Reduce;
 use algebra::{Field, U64FieldEval};
 use network::netio::{NetIO, Participant};
 use network::IO;
@@ -153,11 +154,7 @@ impl<const P: u64> DNBackend<P> {
     /// Generates random field elements.
     fn gen_random_field(&mut self, buf: &mut [u64]) {
         // Create mask for rejection sampling
-        let field_mask = if P.leading_zeros() == 0 {
-            u64::MAX
-        } else {
-            (1u64 << (64 - P.leading_zeros())) - 1
-        };
+        let field_mask = u64::MAX >> P.leading_zeros();
 
         // Fill buffer with field elements using rejection sampling
         for value in buf.iter_mut() {
@@ -504,6 +501,10 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         self.num_threshold
     }
 
+    fn field_modulus_value(&self) -> u64 {
+        P
+    }
+
     fn neg(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing> {
         Ok(U64FieldEval::<P>::neg(a))
     }
@@ -517,7 +518,10 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     }
 
     fn mul_const(&mut self, a: Self::Sharing, b: u64) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::mul(a, b % P))
+        Ok(U64FieldEval::<P>::mul(
+            a,
+            U64FieldEval::<P>::MODULUS.reduce(b),
+        ))
     }
 
     fn mul(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing> {
@@ -595,14 +599,17 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
 
         // Local computation only (no degree increase)
         let sum = a.iter().zip(b.iter()).fold(0, |acc, (&share, &constant)| {
-            U64FieldEval::<P>::add(acc, U64FieldEval::<P>::mul(share, constant % P))
+            U64FieldEval::<P>::add(
+                acc,
+                U64FieldEval::<P>::mul(share, U64FieldEval::<P>::MODULUS.reduce(constant)),
+            )
         });
 
         Ok(sum)
     }
 
     fn double(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::add(a, a))
+        Ok(U64FieldEval::<P>::double(a))
     }
 
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing> {
@@ -654,5 +661,15 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
 
     fn rand_coin(&mut self) -> Self::RandomField {
         self.shared_prg.next_u64()
+    }
+
+    fn rand_field_element(&mut self) -> u64 {
+        U64FieldEval::<P>::MODULUS.reduce(self.shared_prg.next_u64())
+    }
+
+    fn rand_field_elements(&mut self, destination: &mut [u64]) {
+        for value in destination.iter_mut() {
+            *value = U64FieldEval::<P>::MODULUS.reduce(self.shared_prg.next_u64());
+        }
     }
 }

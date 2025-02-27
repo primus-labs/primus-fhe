@@ -339,7 +339,7 @@ fn test_rand_coin_consistency() {
     const NUM_COINS: usize = 10000;
 
     let mut threads = Vec::new();
-    
+
     // Create a channel to collect results from all parties
     let (tx, rx) = std::sync::mpsc::channel();
 

@@ -13,7 +13,7 @@ type MPCResult<T> = Result<T, error::MPCErr>;
 /// MPC backend trait
 pub trait MPCBackend {
     /// Generic secret sharing type.
-    type Sharing;
+    type Sharing: Clone + Copy + Default;
 
     /// Generic field type for random values.
     type RandomField: Clone;
@@ -26,6 +26,9 @@ pub trait MPCBackend {
 
     /// Get the number of threshold.
     fn num_threshold(&self) -> u32;
+
+    /// Get the field modulus.
+    fn field_modulus_value(&self) -> u64;
 
     /// Negate a secret share.
     fn neg(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing>;
@@ -71,6 +74,12 @@ pub trait MPCBackend {
     /// Output a secret value to all parties.
     fn reveal_to_all(&mut self, a: Self::Sharing) -> MPCResult<u64>;
 
+    /// Generate a random value over `u64`.
+    fn rand_coin(&mut self) -> u64;
+
     /// Generate a random value over a specific field.
-    fn rand_coin(&mut self) -> Self::RandomField;
+    fn rand_field_element(&mut self) -> u64;
+
+    /// Generate random values over a specific field.
+    fn rand_field_elements(&mut self, destination: &mut [u64]);
 }

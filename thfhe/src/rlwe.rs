@@ -1,28 +1,28 @@
 use algebra::random::DiscreteGaussian;
-use mpc::{MPCBackend, MPCId};
+use mpc::MPCBackend;
 use rand::{prelude::Distribution, Rng};
 
-pub struct MPCRlwe {
+pub struct MPCRlwe<Share> {
     pub a: Vec<u64>,
-    pub b: Vec<MPCId>,
+    pub b: Vec<Share>,
 }
 
 pub fn generate_share_rlwe_ciphertext<Backend, R>(
     backend: &mut Backend,
-    secret_key_share: &[MPCId],
+    secret_key_share: &[Backend::Sharing],
     gaussian: DiscreteGaussian<u64>,
     rng: &mut R,
-) -> MPCRlwe
+) -> MPCRlwe<Backend::Sharing>
 where
     Backend: MPCBackend,
     R: Rng,
 {
-    let id = backend.id().0 as u32;
-    let field = backend.field_modulus();
-    let mut a = vec![backend.rand_coin(); secret_key_share.len()];
+    let id = backend.party_id();
+    let mut a = vec![0; secret_key_share.len()];
+    backend.rand_field_elements(&mut a);
 
-    let mut e = vec![MPCId(0); secret_key_share.len()];
-    let mut e_vec = vec![MPCId(0); backend.num_parties() as usize];
+    let mut e = vec![Default::default(); secret_key_share.len()];
+    let mut e_vec = vec![Default::default(); backend.num_parties() as usize];
 
     e.iter_mut().for_each(|e_i| {
         e_vec.iter_mut().enumerate().for_each(|(i, eij)| {
@@ -40,6 +40,7 @@ where
             .unwrap();
     });
 
+    let field = backend.field_modulus_value();
     a[1..].reverse();
     a[1..].iter_mut().for_each(|ai| {
         *ai = field - *ai;
