@@ -1,5 +1,12 @@
+use std::{marker::PhantomData, sync::Arc};
+
+use algebra::NttField;
 use mpc::MPCBackend;
 use rand::Rng;
+
+use crate::{
+    generate_shared_lwe_secret_key, Fp, MPCLweSecretKey, MPCRlweSecretKey, ThFheParameters,
+};
 
 pub fn generate_shared_binary_value_two_field<Backendq, BackendQ, R>(
     backend_q: &mut Backendq,
@@ -111,4 +118,88 @@ where
     let b1 = generate_shared_binary_value(backend, rng);
     let b2 = generate_shared_binary_value(backend, rng);
     backend.sub(b1, b2).unwrap()
+}
+
+/// Boolean fhe's secret keys pack.
+///
+/// This struct contains the LWE secret key,
+/// ring secret key, ntt version ring secret key
+/// and boolean fhe's parameters.
+#[derive(Clone)]
+pub struct SecretKeyPack<Backendq, BackendQ>
+where
+    Backendq: MPCBackend,
+    BackendQ: MPCBackend,
+{
+    /// LWE secret key
+    pub input_lwe_secret_key:
+        MPCLweSecretKey<<Backendq as MPCBackend>::Sharing, <BackendQ as MPCBackend>::Sharing>,
+    /// LWE secret key
+    pub intermediate_lwe_secret_key:
+        MPCLweSecretKey<<Backendq as MPCBackend>::Sharing, <BackendQ as MPCBackend>::Sharing>,
+    /// rlwe secret key
+    pub rlwe_secret_key: MPCRlweSecretKey<<BackendQ as MPCBackend>::Sharing>,
+    /// FHE parameters
+    pub parameters: ThFheParameters,
+    pub ntt_table: Arc<<Fp as NttField>::Table>,
+    phantom: PhantomData<(Backendq, BackendQ)>,
+}
+
+impl<Backendq, BackendQ> SecretKeyPack<Backendq, BackendQ>
+where
+    Backendq: MPCBackend,
+    BackendQ: MPCBackend,
+{
+    /// Create a new secret key pack.
+    pub fn new<R>(
+        backend_q: &mut Backendq,
+        backend_big_q: &mut BackendQ,
+        parameters: ThFheParameters,
+        rng: &mut R,
+    ) -> Self
+    where
+        R: Rng,
+    {
+        let input_lwe_secret_key_type = parameters.input_lwe_secret_key_type();
+        let input_lwe_dimension = parameters.input_lwe_dimension();
+
+        let input_lwe_secret_key: MPCLweSecretKey<
+            <Backendq as MPCBackend>::Sharing,
+            <BackendQ as MPCBackend>::Sharing,
+        > = generate_shared_lwe_secret_key(
+            backend_q,
+            backend_big_q,
+            input_lwe_secret_key_type,
+            input_lwe_dimension,
+            rng,
+        );
+
+        let intermediate_lwe_secret_key = generate_shared_lwe_secret_key(
+            backend_q,
+            backend_big_q,
+            parameters.intermediate_lwe_secret_key_type(),
+            parameters.intermediate_lwe_dimension(),
+            rng,
+        );
+
+        let rlwe_secret_key: MPCRlweSecretKey<<BackendQ as MPCBackend>::Sharing> = {
+            let mut temp = input_lwe_secret_key.1.clone();
+            temp[1..].reverse();
+            temp[1..]
+                .iter_mut()
+                .for_each(|x| *x = backend_big_q.neg(*x).unwrap());
+            MPCRlweSecretKey(temp)
+        };
+
+        let ntt_table = parameters.generate_ntt_table_for_rlwe();
+
+        Self {
+            input_lwe_secret_key,
+            intermediate_lwe_secret_key,
+            rlwe_secret_key,
+            parameters,
+            ntt_table: Arc::new(ntt_table),
+            phantom: PhantomData,
+        }
+    }
 }

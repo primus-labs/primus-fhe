@@ -80,7 +80,7 @@ pub mod f64 {
     use crate::reduce::*;
 
     #[doc = r" This define a field based the barrett reduction."]
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct U64FieldEval<const P: u64>;
 
     impl<const P: u64> crate::Field for U64FieldEval<P> {

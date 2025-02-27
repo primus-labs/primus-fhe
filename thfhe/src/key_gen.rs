@@ -1,5 +1,9 @@
-use algebra::{decompose::NonPowOf2ApproxSignedBasis, random::DiscreteGaussian};
+use algebra::{
+    decompose::NonPowOf2ApproxSignedBasis, polynomial::FieldPolynomial, random::DiscreteGaussian,
+    Field,
+};
 use fhe_core::{LweSecretKeyType, RingSecretKeyType};
+use lattice::{Lwe, Rlwe};
 use mpc::MPCBackend;
 use rand::Rng;
 
@@ -9,13 +13,16 @@ use crate::{
     generate_shared_ternary_value, generate_shared_ternary_value_two_field, MPCLwe, MPCRlwe,
 };
 
+#[derive(Clone)]
+pub struct MPCLweSecretKey<Shareq, ShareQ>(pub Vec<Shareq>, pub Vec<ShareQ>);
+
 pub fn generate_shared_lwe_secret_key<Backendq, BackendQ, R>(
     backend_q: &mut Backendq,
     backend_big_q: &mut BackendQ,
     secret_key_type: LweSecretKeyType,
     dimension: usize,
     rng: &mut R,
-) -> (Vec<Backendq::Sharing>, Vec<BackendQ::Sharing>)
+) -> MPCLweSecretKey<Backendq::Sharing, BackendQ::Sharing>
 where
     Backendq: MPCBackend,
     BackendQ: MPCBackend,
@@ -36,9 +43,10 @@ where
                 }
             };
         });
-    (s_q, s_big_q)
+    MPCLweSecretKey(s_q, s_big_q)
 }
 
+#[derive(Clone)]
 pub struct MPCRlweSecretKey<Share>(pub Vec<Share>);
 
 pub fn generate_shared_rlwe_secret_key<Backend, R>(
@@ -66,6 +74,13 @@ where
 pub struct RevealLwe {
     pub a: Vec<u64>,
     pub b: u64,
+}
+
+impl Into<Lwe<u64>> for RevealLwe {
+    #[inline]
+    fn into(self) -> Lwe<u64> {
+        Lwe::new(self.a, self.b)
+    }
 }
 
 pub struct MPCLwePublicKey(pub Vec<RevealLwe>);
@@ -99,6 +114,16 @@ where
 pub struct RevealRlwe {
     pub a: Vec<u64>,
     pub b: Vec<u64>,
+}
+
+impl<F> Into<Rlwe<F>> for RevealRlwe
+where
+    F: Field<ValueT = u64>,
+{
+    #[inline]
+    fn into(self) -> Rlwe<F> {
+        Rlwe::new(FieldPolynomial::new(self.a), FieldPolynomial::new(self.b))
+    }
 }
 
 pub struct RevealGadgetRlwe(pub Vec<RevealRlwe>);
