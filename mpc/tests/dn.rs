@@ -151,7 +151,7 @@ fn test_mpc_operations() {
             };
 
             // Addition (local operation).
-            let share_sum = dn.add(share_a, share_b).unwrap();
+            let share_sum = dn.add(share_a, share_b);
             let sum_result = dn.reveal_to_all(share_sum).unwrap();
             assert_eq!(
                 sum_result,
@@ -172,7 +172,7 @@ fn test_mpc_operations() {
             let shares_a = vec![share_a, share_a, share_a];
             let shares_b = vec![share_b, share_b, share_b];
 
-            let shares_prod = dn.mul_batch(&shares_a, &shares_b).unwrap();
+            let shares_prod = dn.mul_element_wise(&shares_a, &shares_b).unwrap();
             assert_eq!(shares_prod.len(), 3, "Batch size mismatch");
 
             for share_p in shares_prod {
@@ -266,7 +266,7 @@ fn test_untested_operations() {
             };
 
             // 1. Test neg operation.
-            let neg_share = dn.neg(share_a).unwrap();
+            let neg_share = dn.neg(share_a);
             let neg_result = dn.reveal_to_all(neg_share).unwrap();
             assert_eq!(
                 neg_result,
@@ -275,7 +275,7 @@ fn test_untested_operations() {
             );
 
             // 2. Test sub operation.
-            let sub_share = dn.sub(share_a, share_b).unwrap();
+            let sub_share = dn.sub(share_a, share_b);
             let sub_result = dn.reveal_to_all(sub_share).unwrap();
             assert_eq!(
                 sub_result,
@@ -285,7 +285,7 @@ fn test_untested_operations() {
 
             // 3. Test mul_const operation.
             let const_value = 13;
-            let mul_const_share = dn.mul_const(share_a, const_value).unwrap();
+            let mul_const_share = dn.mul_const(share_a, const_value);
             let mul_const_result = dn.reveal_to_all(mul_const_share).unwrap();
             assert_eq!(
                 mul_const_result,
@@ -294,7 +294,7 @@ fn test_untested_operations() {
             );
 
             // 4. Test double operation.
-            let double_share = dn.double(share_a).unwrap();
+            let double_share = dn.double(share_a);
             let double_result = dn.reveal_to_all(double_share).unwrap();
             assert_eq!(
                 double_result,
@@ -313,7 +313,7 @@ fn test_untested_operations() {
                 U64FieldEval::<PRIME>::mul(a_value, 5),
             );
 
-            let inner_const_share = dn.inner_product_const(&shares, &constants).unwrap();
+            let inner_const_share = dn.inner_product_const(&shares, &constants);
             let inner_const_result = dn.reveal_to_all(inner_const_share).unwrap();
             assert_eq!(
                 inner_const_result, expected_inner,
@@ -353,7 +353,7 @@ fn test_rand_coin_consistency() {
             // Generate a sequence of random coins
             let mut coins = Vec::with_capacity(NUM_COINS);
             for _ in 0..NUM_COINS {
-                coins.push(dn.rand_coin());
+                coins.push(dn.shared_rand_coin());
             }
 
             // Send party ID and coin values to the main thread

@@ -19,7 +19,7 @@ where
 {
     let id = backend.party_id();
     let mut a = vec![0; secret_key_share.len()];
-    backend.rand_field_elements(&mut a);
+    backend.shared_rand_field_elements(&mut a);
 
     let mut e = vec![Default::default(); secret_key_share.len()];
     let mut e_vec = vec![Default::default(); backend.num_parties() as usize];
@@ -36,7 +36,7 @@ where
         *e_i = e_vec
             .iter()
             .copied()
-            .reduce(|x, y| backend.add(x, y).unwrap())
+            .reduce(|x, y| backend.add(x, y))
             .unwrap();
     });
 
@@ -52,8 +52,8 @@ where
             .iter()
             .zip(a.iter())
             .for_each(|(s_i, a_i)| {
-                let temp1 = backend.mul_const(*s_i, *a_i).unwrap();
-                temp = backend.add(temp1, temp).unwrap();
+                let temp1 = backend.mul_const(*s_i, *a_i);
+                temp = backend.add(temp1, temp);
             });
         *ei = temp;
 

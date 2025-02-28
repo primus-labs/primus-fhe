@@ -229,6 +229,12 @@ impl ThFheParameters {
         self.intermediate_lwe_params.secret_key_type
     }
 
+    /// Returns a reference to the blind rotation params of this [`ThFheParameters`].
+    #[inline]
+    pub fn blind_rotation_params(&self) -> &BlindRotationParameters<Fp> {
+        &self.blind_rotation_params
+    }
+
     /// Returns the ring dimension of this [`BooleanFheParameters<C, Q>`], refers to **N** in the paper.
     #[inline]
     pub fn ring_dimension(&self) -> usize {

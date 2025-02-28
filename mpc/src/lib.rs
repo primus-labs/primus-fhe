@@ -31,22 +31,22 @@ pub trait MPCBackend {
     fn field_modulus_value(&self) -> u64;
 
     /// Negate a secret share.
-    fn neg(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing>;
+    fn neg(&mut self, a: Self::Sharing) -> Self::Sharing;
 
     /// Add two secret shares.
-    fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing>;
+    fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
 
     /// Subtract two secret shares.
-    fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing>;
+    fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
 
     /// Multiply a secret share with a constant.
-    fn mul_const(&mut self, a: Self::Sharing, b: u64) -> MPCResult<Self::Sharing>;
+    fn mul_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing;
 
     /// Multiply two secret shares.
     fn mul(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing>;
 
     /// Multiply batch of secret shares.
-    fn mul_batch(
+    fn mul_element_wise(
         &mut self,
         a: &[Self::Sharing],
         b: &[Self::Sharing],
@@ -60,10 +60,10 @@ pub trait MPCBackend {
     ) -> MPCResult<Self::Sharing>;
 
     /// Inner product of an array of secret shares with an array of constants.
-    fn inner_product_const(&mut self, a: &[Self::Sharing], b: &[u64]) -> MPCResult<Self::Sharing>;
+    fn inner_product_const(&mut self, a: &[Self::Sharing], b: &[u64]) -> Self::Sharing;
 
     /// Double a secret share.
-    fn double(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing>;
+    fn double(&mut self, a: Self::Sharing) -> Self::Sharing;
 
     /// Input a secret value from a party (party_id). Inputs from all other parties are omitted.
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing>;
@@ -75,11 +75,11 @@ pub trait MPCBackend {
     fn reveal_to_all(&mut self, a: Self::Sharing) -> MPCResult<u64>;
 
     /// Generate a random value over `u64`.
-    fn rand_coin(&mut self) -> u64;
+    fn shared_rand_coin(&mut self) -> Self::RandomField;
 
     /// Generate a random value over a specific field.
-    fn rand_field_element(&mut self) -> u64;
+    fn shared_rand_field_element(&mut self) -> u64;
 
     /// Generate random values over a specific field.
-    fn rand_field_elements(&mut self, destination: &mut [u64]);
+    fn shared_rand_field_elements(&mut self, destination: &mut [u64]);
 }

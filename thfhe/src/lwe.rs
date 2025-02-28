@@ -19,7 +19,7 @@ where
 {
     let id = backend.party_id();
     let mut a = vec![0; shared_secret_key.len()];
-    backend.rand_field_elements(&mut a);
+    backend.shared_rand_field_elements(&mut a);
 
     let e_vec: Vec<Backend::Sharing> = (0..backend.num_parties())
         .map(|i| {
@@ -32,14 +32,11 @@ where
         })
         .collect();
 
-    let mut e = e_vec
-        .into_iter()
-        .reduce(|x, y| backend.add(x, y).unwrap())
-        .unwrap();
+    let mut e = e_vec.into_iter().reduce(|x, y| backend.add(x, y)).unwrap();
 
     for (s_i, a_i) in shared_secret_key.iter().zip(a.iter()) {
-        let temp = backend.mul_const(*s_i, *a_i).unwrap();
-        e = backend.add(temp, e).unwrap();
+        let temp = backend.mul_const(*s_i, *a_i);
+        e = backend.add(temp, e);
     }
 
     MPCLwe { a, b: e }

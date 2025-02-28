@@ -3,10 +3,11 @@
 
 use crate::{error::MPCErr, MPCBackend, MPCResult};
 use algebra::random::Prg;
-use algebra::reduce::Reduce;
 use algebra::{Field, U64FieldEval};
 use network::netio::{NetIO, Participant};
 use network::IO;
+use rand::distributions::Uniform;
+use rand::prelude::Distribution;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
 
@@ -29,6 +30,7 @@ pub struct DNBackend<const P: u64> {
     triple_buffer: VecDeque<(u64, u64, u64)>,
     // Buffer size for triple generation
     triple_buffer_capacity: usize,
+    uniform_distr: Uniform<u64>,
 }
 
 impl<const P: u64> DNBackend<P> {
@@ -68,6 +70,7 @@ impl<const P: u64> DNBackend<P> {
             netio,
             triple_buffer: VecDeque::with_capacity(buffer_size),
             triple_buffer_capacity: buffer_size,
+            uniform_distr: Uniform::new(0, P),
         };
 
         // Generate initial supply of triples
@@ -505,31 +508,28 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         P
     }
 
-    fn neg(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::neg(a))
+    fn neg(&mut self, a: Self::Sharing) -> Self::Sharing {
+        U64FieldEval::<P>::neg(a)
     }
 
-    fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::add(a, b))
+    fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+        U64FieldEval::<P>::add(a, b)
     }
 
-    fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::sub(a, b))
+    fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+        U64FieldEval::<P>::sub(a, b)
     }
 
-    fn mul_const(&mut self, a: Self::Sharing, b: u64) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::mul(
-            a,
-            U64FieldEval::<P>::MODULUS.reduce(b),
-        ))
+    fn mul_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
+        U64FieldEval::<P>::mul(a, b)
     }
 
     fn mul(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing> {
-        let result = self.mul_batch(&[a], &[b])?;
+        let result = self.mul_element_wise(&[a], &[b])?;
         Ok(result[0])
     }
 
-    fn mul_batch(
+    fn mul_element_wise(
         &mut self,
         a: &[Self::Sharing],
         b: &[Self::Sharing],
@@ -584,7 +584,7 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         b: &[Self::Sharing],
     ) -> MPCResult<Self::Sharing> {
         // Batch multiply all elements
-        let products = self.mul_batch(a, b)?;
+        let products = self.mul_element_wise(a, b)?;
 
         // Sum locally (no communication needed)
         let sum = products
@@ -594,22 +594,19 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(sum)
     }
 
-    fn inner_product_const(&mut self, a: &[Self::Sharing], b: &[u64]) -> MPCResult<Self::Sharing> {
+    fn inner_product_const(&mut self, a: &[Self::Sharing], b: &[u64]) -> Self::Sharing {
         assert_eq!(a.len(), b.len(), "Input vector lengths must match");
 
         // Local computation only (no degree increase)
         let sum = a.iter().zip(b.iter()).fold(0, |acc, (&share, &constant)| {
-            U64FieldEval::<P>::add(
-                acc,
-                U64FieldEval::<P>::mul(share, U64FieldEval::<P>::MODULUS.reduce(constant)),
-            )
+            U64FieldEval::<P>::mul_add(share, constant, acc)
         });
 
-        Ok(sum)
+        sum
     }
 
-    fn double(&mut self, a: Self::Sharing) -> MPCResult<Self::Sharing> {
-        Ok(U64FieldEval::<P>::double(a))
+    fn double(&mut self, a: Self::Sharing) -> Self::Sharing {
+        U64FieldEval::<P>::double(a)
     }
 
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing> {
@@ -659,17 +656,20 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(result[0])
     }
 
-    fn rand_coin(&mut self) -> Self::RandomField {
+    fn shared_rand_coin(&mut self) -> Self::RandomField {
         self.shared_prg.next_u64()
     }
 
-    fn rand_field_element(&mut self) -> u64 {
-        U64FieldEval::<P>::MODULUS.reduce(self.shared_prg.next_u64())
+    fn shared_rand_field_element(&mut self) -> u64 {
+        self.uniform_distr.sample(&mut self.shared_prg)
     }
 
-    fn rand_field_elements(&mut self, destination: &mut [u64]) {
-        for value in destination.iter_mut() {
-            *value = U64FieldEval::<P>::MODULUS.reduce(self.shared_prg.next_u64());
-        }
+    fn shared_rand_field_elements(&mut self, destination: &mut [u64]) {
+        destination
+            .iter_mut()
+            .zip(self.uniform_distr.sample_iter(&mut self.shared_prg))
+            .for_each(|(des, value)| {
+                *des = value;
+            });
     }
 }

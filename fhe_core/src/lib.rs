@@ -35,7 +35,7 @@ pub use secret_key::{
 pub use ciphertext::{CmLweCiphertext, LweCiphertext, NttRlweCiphertext, RlweCiphertext};
 pub use plaintext::{decode, encode};
 
-pub use blind_rotation::BlindRotationKey;
+pub use blind_rotation::{BinaryBlindRotationKey, BlindRotationKey, TernaryBlindRotationKey};
 pub use key_switch::*;
 
 pub use automorphism::{AutoKey, AutoSpace};

@@ -5,7 +5,8 @@ use mpc::MPCBackend;
 use rand::Rng;
 
 use crate::{
-    generate_shared_lwe_secret_key, Fp, MPCLweSecretKey, MPCRlweSecretKey, ThFheParameters,
+    generate_shared_lwe_secret_key, Fp, MPCDoubleBackendLweSecretKey, MPCRlweSecretKey,
+    ThFheParameters,
 };
 
 pub fn generate_shared_binary_value_two_field<Backendq, BackendQ, R>(
@@ -41,18 +42,15 @@ where
     b_vec
         .into_iter()
         .reduce(|(b_q_x, b_big_q_x), (b_q_y, b_big_q_y)| {
-            let temp1 = backend_q.add(b_q_x, b_q_y).unwrap();
+            let temp1 = backend_q.add(b_q_x, b_q_y);
             let temp2 = backend_q.mul(b_q_x, b_q_y).unwrap();
-            let temp3 = backend_q.double(temp2).unwrap();
+            let temp3 = backend_q.double(temp2);
 
-            let temp4 = backend_big_q.add(b_big_q_x, b_big_q_y).unwrap();
+            let temp4 = backend_big_q.add(b_big_q_x, b_big_q_y);
             let temp5 = backend_big_q.mul(b_big_q_x, b_big_q_y).unwrap();
-            let temp6 = backend_big_q.double(temp5).unwrap();
+            let temp6 = backend_big_q.double(temp5);
 
-            (
-                backend_q.sub(temp1, temp3).unwrap(),
-                backend_big_q.sub(temp4, temp6).unwrap(),
-            )
+            (backend_q.sub(temp1, temp3), backend_big_q.sub(temp4, temp6))
         })
         .unwrap()
 }
@@ -70,8 +68,8 @@ where
     let (b_q1, b_big_q1) = generate_shared_binary_value_two_field(backend_q, backend_big_q, rng);
     let (b_q2, b_big_q2) = generate_shared_binary_value_two_field(backend_q, backend_big_q, rng);
     (
-        backend_q.sub(b_q1, b_q2).unwrap(),
-        backend_big_q.sub(b_big_q1, b_big_q2).unwrap(),
+        backend_q.sub(b_q1, b_q2),
+        backend_big_q.sub(b_big_q1, b_big_q2),
     )
 }
 
@@ -99,10 +97,10 @@ where
     b_vec
         .into_iter()
         .reduce(|b_x, b_y| {
-            let temp1 = backend.add(b_x, b_y).unwrap();
+            let temp1 = backend.add(b_x, b_y);
             let temp2 = backend.mul(b_x, b_y).unwrap();
-            let temp3 = backend.double(temp2).unwrap();
-            backend.sub(temp1, temp3).unwrap()
+            let temp3 = backend.double(temp2);
+            backend.sub(temp1, temp3)
         })
         .unwrap()
 }
@@ -117,7 +115,7 @@ where
 {
     let b1 = generate_shared_binary_value(backend, rng);
     let b2 = generate_shared_binary_value(backend, rng);
-    backend.sub(b1, b2).unwrap()
+    backend.sub(b1, b2)
 }
 
 /// Boolean fhe's secret keys pack.
@@ -132,11 +130,15 @@ where
     BackendQ: MPCBackend,
 {
     /// LWE secret key
-    pub input_lwe_secret_key:
-        MPCLweSecretKey<<Backendq as MPCBackend>::Sharing, <BackendQ as MPCBackend>::Sharing>,
+    pub input_lwe_secret_key: MPCDoubleBackendLweSecretKey<
+        <Backendq as MPCBackend>::Sharing,
+        <BackendQ as MPCBackend>::Sharing,
+    >,
     /// LWE secret key
-    pub intermediate_lwe_secret_key:
-        MPCLweSecretKey<<Backendq as MPCBackend>::Sharing, <BackendQ as MPCBackend>::Sharing>,
+    pub intermediate_lwe_secret_key: MPCDoubleBackendLweSecretKey<
+        <Backendq as MPCBackend>::Sharing,
+        <BackendQ as MPCBackend>::Sharing,
+    >,
     /// rlwe secret key
     pub rlwe_secret_key: MPCRlweSecretKey<<BackendQ as MPCBackend>::Sharing>,
     /// FHE parameters
@@ -163,7 +165,7 @@ where
         let input_lwe_secret_key_type = parameters.input_lwe_secret_key_type();
         let input_lwe_dimension = parameters.input_lwe_dimension();
 
-        let input_lwe_secret_key: MPCLweSecretKey<
+        let input_lwe_secret_key: MPCDoubleBackendLweSecretKey<
             <Backendq as MPCBackend>::Sharing,
             <BackendQ as MPCBackend>::Sharing,
         > = generate_shared_lwe_secret_key(
@@ -187,7 +189,7 @@ where
             temp[1..].reverse();
             temp[1..]
                 .iter_mut()
-                .for_each(|x| *x = backend_big_q.neg(*x).unwrap());
+                .for_each(|x| *x = backend_big_q.neg(*x));
             MPCRlweSecretKey(temp)
         };
 
