@@ -7,6 +7,7 @@ pub mod dummy;
 pub mod error;
 
 pub use dn::DNBackend;
+pub use dummy::DummyBackend;
 
 type MPCResult<T> = Result<T, error::MPCErr>;
 

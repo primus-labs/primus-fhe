@@ -25,6 +25,7 @@ where
         .map(|i| {
             if i == id {
                 let e = gaussian.sample(rng);
+                // let e: u64 = 0;
                 backend.input(Some(e), id).unwrap()
             } else {
                 backend.input(None, id).unwrap()
@@ -32,12 +33,10 @@ where
         })
         .collect();
 
-    let mut e = e_vec.into_iter().reduce(|x, y| backend.add(x, y)).unwrap();
+    let e = e_vec.into_iter().reduce(|x, y| backend.add(x, y)).unwrap();
 
-    for (s_i, a_i) in shared_secret_key.iter().zip(a.iter()) {
-        let temp = backend.mul_const(*s_i, *a_i);
-        e = backend.add(temp, e);
-    }
+    let b = backend.inner_product_const(shared_secret_key, &a);
+    let b = backend.add(b, e);
 
-    MPCLwe { a, b: e }
+    MPCLwe { a, b }
 }

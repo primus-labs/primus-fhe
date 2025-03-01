@@ -5,18 +5,115 @@ use algebra::{
     Field, NttField,
 };
 use fhe_core::{
-    BinaryBlindRotationKey, BlindRotationKey, KeySwitchingParameters, LwePublicKey,
-    LweSecretKeyType, NonPowOf2LweKeySwitchingKey, RingSecretKeyType,
+    BinaryBlindRotationKey, KeySwitchingParameters, LwePublicKey, LweSecretKeyType,
+    NonPowOf2LweKeySwitchingKey, RingSecretKeyType,
 };
 use lattice::{GadgetRlwe, Lwe, Rgsw, Rlwe};
 use mpc::MPCBackend;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 
 use crate::{
     generate_share_rlwe_ciphertext, generate_shared_binary_value,
     generate_shared_binary_value_two_field, generate_shared_lwe_ciphertext,
-    generate_shared_ternary_value, generate_shared_ternary_value_two_field, MPCLwe, MPCRlwe,
+    generate_shared_ternary_value, generate_shared_ternary_value_two_field, EvaluationKey, Fp,
+    MPCLwe, MPCRlwe, MPCSecretKeyPack, ThFheParameters,
 };
+
+/// Struct of key generation.
+pub struct KeyGen;
+
+impl KeyGen {
+    /// Generate key pair
+    #[inline]
+    pub fn generate_mpc_key_pair<Backendq, BackendQ, R>(
+        backend_q: &mut Backendq,
+        backend_big_q: &mut BackendQ,
+        params: ThFheParameters,
+        rng: &mut R,
+    ) -> (
+        MPCSecretKeyPack<Backendq, BackendQ>,
+        LwePublicKey<u64>,
+        EvaluationKey,
+    )
+    where
+        R: Rng + CryptoRng,
+
+        Backendq: MPCBackend,
+        BackendQ: MPCBackend,
+    {
+        let sk = MPCSecretKeyPack::new(backend_q, backend_big_q, params, rng);
+
+        println!(
+            "Party {} is generating the secret key",
+            backend_q.party_id()
+        );
+
+        let input_lwe_params = params.input_lwe_params();
+        let key_switching_params = params.key_switching_params();
+        let blind_rotation_params = params.blind_rotation_params();
+
+        // let kappa = input_lwe_params.dimension
+        //     * input_lwe_params.cipher_modulus_value.log_modulus() as usize;
+        let kappa = input_lwe_params.cipher_modulus_value.log_modulus() as usize;
+
+        let lwe_public_key: LwePublicKey<u64> = generate_lwe_public_key(
+            backend_big_q,
+            sk.input_lwe_secret_key.as_ref(),
+            input_lwe_params.noise_distribution(),
+            kappa,
+            rng,
+        )
+        .into();
+
+        println!(
+            "Party {} is generating the public key",
+            backend_q.party_id()
+        );
+
+        let key_switching_key_basis: NonPowOf2ApproxSignedBasis<u64> =
+            NonPowOf2ApproxSignedBasis::new(
+                blind_rotation_params.modulus,
+                key_switching_params.log_basis,
+                key_switching_params.reverse_length,
+            );
+
+        let key_switching_key = generate_key_switching_key(
+            backend_big_q,
+            sk.input_lwe_secret_key.as_ref(),
+            sk.intermediate_lwe_secret_key.1.as_ref(),
+            key_switching_params.noise_distribution_for_Q::<Fp>(),
+            key_switching_key_basis,
+            rng,
+        )
+        .to_fhe_ksk(key_switching_params, key_switching_key_basis);
+
+        println!(
+            "Party {} is generating the key switching key",
+            backend_q.party_id()
+        );
+
+        let bootstrapping_key: BinaryBlindRotationKey<Fp> = generate_bootstrapping_key(
+            backend_big_q,
+            sk.intermediate_lwe_secret_key.1.as_ref(),
+            sk.rlwe_secret_key.0.as_ref(),
+            blind_rotation_params.noise_distribution(),
+            blind_rotation_params.basis,
+            rng,
+        )
+        .to_fhe_binary_bsk(blind_rotation_params.dimension);
+
+        println!(
+            "Party {} is generating the bootstrapping key",
+            backend_q.party_id()
+        );
+
+        (
+            sk,
+            lwe_public_key,
+            EvaluationKey::new(key_switching_key, bootstrapping_key, params),
+        )
+    }
+}
 
 #[derive(Clone)]
 pub struct MPCDoubleBackendLweSecretKey<Shareq, ShareQ>(pub Vec<Shareq>, pub Vec<ShareQ>);
@@ -140,6 +237,7 @@ where
     )
 }
 
+#[derive(Debug)]
 pub struct RevealRlwe {
     pub a: Vec<u64>,
     pub b: Vec<u64>,
@@ -155,6 +253,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct RevealGadgetRlwe(pub Vec<RevealRlwe>, pub NonPowOf2ApproxSignedBasis<u64>);
 
 impl<F> Into<GadgetRlwe<F>> for RevealGadgetRlwe
@@ -167,6 +266,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct RevealRgsw {
     pub m: RevealGadgetRlwe,
     pub minus_z_m: RevealGadgetRlwe,
@@ -250,11 +350,10 @@ where
                                     gaussian,
                                     rng,
                                 );
-                                let minus_si = backend.neg(*si);
-                                let scaled_si = backend.mul_const(minus_si, scalar);
+                                let scaled_si = backend.mul_const(*si, scalar);
                                 b.iter_mut().zip(rlwe_secret_key).for_each(|(bi, zi)| {
                                     let temp = backend.mul(*zi, scaled_si).unwrap();
-                                    *bi = backend.add(*bi, temp);
+                                    *bi = backend.sub(*bi, temp);
                                 });
 
                                 let b = b
@@ -275,7 +374,7 @@ where
 
 pub struct RevealGadgetLwe(pub Vec<RevealLwe>);
 
-pub struct MPCKeySwitchingKey(pub Vec<RevealGadgetLwe>);
+pub struct MPCKeySwitchingKey(pub Vec<Vec<RevealLwe>>);
 
 impl MPCKeySwitchingKey {
     #[inline]
@@ -287,7 +386,7 @@ impl MPCKeySwitchingKey {
         NonPowOf2LweKeySwitchingKey::new(
             self.0
                 .into_iter()
-                .map(|RevealGadgetLwe(lwe)| lwe.into_iter().map(Into::into).collect())
+                .map(|lwe| lwe.into_iter().map(Into::into).collect())
                 .collect(),
             params,
             basis,
@@ -307,29 +406,51 @@ where
     Backend: MPCBackend,
     R: Rng,
 {
+    // MPCKeySwitchingKey(
+    //     input_secret_key
+    //         .iter()
+    //         .map(|zi| {
+    //             RevealGadgetLwe(
+    //                 basis
+    //                     .scalar_iter()
+    //                     .map(|scalar| {
+    //                         let MPCLwe { a, b } = generate_shared_lwe_ciphertext(
+    //                             backend,
+    //                             output_secret_key,
+    //                             gaussian,
+    //                             rng,
+    //                         );
+    //                         let scaled_zi = backend.mul_const(*zi, scalar);
+    //                         let b = backend.add(b, scaled_zi);
+    //                         let b = backend.reveal_to_all(b).unwrap();
+
+    //                         RevealLwe { a, b }
+    //                     })
+    //                     .collect(),
+    //             )
+    //         })
+    //         .collect(),
+    // )
     MPCKeySwitchingKey(
-        input_secret_key
-            .iter()
-            .map(|zi| {
-                RevealGadgetLwe(
-                    basis
-                        .scalar_iter()
-                        .map(|scalar| {
-                            let MPCLwe { a, b } = generate_shared_lwe_ciphertext(
-                                backend,
-                                output_secret_key,
-                                gaussian,
-                                rng,
-                            );
-                            let scaled_zi = backend.mul_const(*zi, scalar);
-                            let b = backend.add(b, scaled_zi);
-                            RevealLwe {
-                                a,
-                                b: backend.reveal_to_all(b).unwrap(),
-                            }
-                        })
-                        .collect(),
-                )
+        basis
+            .scalar_iter()
+            .map(|scalar| {
+                input_secret_key
+                    .iter()
+                    .map(|zi| {
+                        let MPCLwe { a, b } = generate_shared_lwe_ciphertext(
+                            backend,
+                            output_secret_key,
+                            gaussian,
+                            rng,
+                        );
+                        let scaled_zi = backend.mul_const(*zi, scalar);
+                        let b = backend.add(b, scaled_zi);
+                        let b = backend.reveal_to_all(b).unwrap();
+
+                        RevealLwe { a, b }
+                    })
+                    .collect()
             })
             .collect(),
     )

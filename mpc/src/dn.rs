@@ -538,10 +538,10 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         let batch_size = a.len();
 
         // Get required Beaver triples
-        let triples: Vec<_> = (0..batch_size).map(|_| self.next_triple()).collect();
+        let triples: Vec<(u64, u64, u64)> = (0..batch_size).map(|_| self.next_triple()).collect();
 
         // Mask inputs: d = a - r, e = b - s
-        let masked_values: Vec<_> = triples
+        let masked_values: Vec<u64> = triples
             .iter()
             .enumerate()
             .flat_map(|(i, &(r, s, _))| {

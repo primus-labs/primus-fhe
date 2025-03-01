@@ -68,12 +68,12 @@ impl Copy for ThFheParameters {}
 impl ThFheParameters {
     /// Create a new Parameter instance.
     pub fn new(params: ConstParameters) -> Result<Self, FHECoreError> {
-        let lwe_dimension = params.lwe_dimension;
-        let lwe_cipher_modulus = params.lwe_cipher_modulus;
+        let intermediate_lwe_dimension = params.lwe_dimension;
+        let intermediate_lwe_cipher_modulus = params.lwe_cipher_modulus;
         let ring_dimension = params.ring_dimension;
         let ring_modulus = params.ring_modulus;
 
-        let secret_key_type = params.lwe_secret_key_type;
+        let intermediate_secret_key_type = params.lwe_secret_key_type;
         let ring_secret_key_type = params.ring_secret_key_type;
 
         // N = 2^i
@@ -99,17 +99,21 @@ impl ThFheParameters {
 
         let t = params.lwe_plain_modulus;
         assert!(t.is_power_of_two());
-        assert!(lwe_cipher_modulus.is_native() || lwe_cipher_modulus.is_power_of2());
-        if let Some(&q) = lwe_cipher_modulus.as_power_of2() {
+        assert!(
+            intermediate_lwe_cipher_modulus.is_native()
+                || intermediate_lwe_cipher_modulus.is_power_of2()
+        );
+        if let Some(&q) = intermediate_lwe_cipher_modulus.as_power_of2() {
             assert!(t <= q);
         }
-        let lwe_cipher_modulus = <Fp as Field>::Modulus::from_value(lwe_cipher_modulus);
+        let intermediate_lwe_cipher_modulus =
+            <Fp as Field>::Modulus::from_value(intermediate_lwe_cipher_modulus);
 
-        let lwe_params = LweParameters::new(
-            lwe_dimension,
+        let intermediate_lwe_params = LweParameters::new(
+            intermediate_lwe_dimension,
             t,
-            lwe_cipher_modulus,
-            secret_key_type,
+            intermediate_lwe_cipher_modulus,
+            intermediate_secret_key_type,
             params.lwe_noise_standard_deviation,
         );
 
@@ -130,7 +134,7 @@ impl ThFheParameters {
 
         let key_switching_params = KeySwitchingParameters {
             input_cipher_dimension: ring_dimension,
-            output_cipher_dimension: lwe_dimension,
+            output_cipher_dimension: intermediate_lwe_dimension,
             log_modulus,
             log_basis: params.key_switching_basis_bits,
             noise_standard_deviation: params.key_switching_standard_deviation,
@@ -151,7 +155,7 @@ impl ThFheParameters {
                 },
                 params.ring_noise_standard_deviation,
             ),
-            intermediate_lwe_params: lwe_params,
+            intermediate_lwe_params,
             blind_rotation_params,
             key_switching_params,
         })

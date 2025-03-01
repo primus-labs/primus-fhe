@@ -28,6 +28,7 @@ where
         e_vec.iter_mut().enumerate().for_each(|(i, eij)| {
             *eij = if i == id as usize {
                 let e = gaussian.sample(rng);
+                // let e: u64 = 0;
                 backend.input(Some(e), id).unwrap()
             } else {
                 backend.input(None, id).unwrap()
@@ -41,26 +42,22 @@ where
     });
 
     let field = backend.field_modulus_value();
-    a[1..].reverse();
-    a[1..].iter_mut().for_each(|ai| {
-        *ai = field - *ai;
-    });
 
-    e.iter_mut().enumerate().for_each(|(i, ei)| {
-        let mut temp = *ei;
-        secret_key_share
-            .iter()
-            .zip(a.iter())
-            .for_each(|(s_i, a_i)| {
-                let temp1 = backend.mul_const(*s_i, *a_i);
-                temp = backend.add(temp1, temp);
-            });
-        *ei = temp;
-
-        if i == secret_key_share.len() - 1 {
-            a.rotate_right(1);
-            a[0] = field - a[0];
+    let neg = |v: &mut u64| {
+        if *v != 0 {
+            *v = field - *v;
         }
+    };
+    let mut a_clone = a.clone();
+    a_clone[1..].reverse();
+    a_clone[1..].iter_mut().for_each(neg);
+
+    e.iter_mut().for_each(|ei| {
+        let temp = backend.inner_product_const(secret_key_share, &a_clone);
+        *ei = backend.sub(*ei, temp);
+
+        a_clone.rotate_right(1);
+        neg(&mut a_clone[0]);
     });
 
     MPCRlwe { a, b: e }

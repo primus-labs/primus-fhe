@@ -5,8 +5,8 @@ use mpc::MPCBackend;
 use rand::Rng;
 
 use crate::{
-    generate_shared_lwe_secret_key, Fp, MPCDoubleBackendLweSecretKey, MPCRlweSecretKey,
-    ThFheParameters,
+    generate_shared_lwe_secret_key, generate_shared_rlwe_secret_key, Fp,
+    MPCDoubleBackendLweSecretKey, MPCLweSecretKey, MPCRlweSecretKey, ThFheParameters,
 };
 
 pub fn generate_shared_binary_value_two_field<Backendq, BackendQ, R>(
@@ -22,7 +22,7 @@ where
     let id = backend_q.party_id();
     let t = backend_q.num_threshold();
 
-    let b_vec: Vec<(Backendq::Sharing, BackendQ::Sharing)> = (0..t)
+    let b_vec: Vec<(Backendq::Sharing, BackendQ::Sharing)> = (0..=t)
         .map(|i| {
             if id == i {
                 let b = rng.gen_bool(0.5) as u64;
@@ -84,7 +84,7 @@ where
     let id = backend.party_id();
     let t = backend.num_threshold();
 
-    let b_vec: Vec<Backend::Sharing> = (0..t)
+    let b_vec: Vec<Backend::Sharing> = (0..=t)
         .map(|i| {
             if id == i {
                 backend.input(Some(rng.gen_bool(0.5) as u64), id).unwrap()
@@ -124,17 +124,14 @@ where
 /// ring secret key, ntt version ring secret key
 /// and boolean fhe's parameters.
 #[derive(Clone)]
-pub struct SecretKeyPack<Backendq, BackendQ>
+pub struct MPCSecretKeyPack<Backendq, BackendQ>
 where
     Backendq: MPCBackend,
     BackendQ: MPCBackend,
 {
-    /// LWE secret key
-    pub input_lwe_secret_key: MPCDoubleBackendLweSecretKey<
-        <Backendq as MPCBackend>::Sharing,
-        <BackendQ as MPCBackend>::Sharing,
-    >,
-    /// LWE secret key
+    /// input LWE secret key
+    pub input_lwe_secret_key: MPCLweSecretKey<<BackendQ as MPCBackend>::Sharing>,
+    /// intermediate LWE secret key
     pub intermediate_lwe_secret_key: MPCDoubleBackendLweSecretKey<
         <Backendq as MPCBackend>::Sharing,
         <BackendQ as MPCBackend>::Sharing,
@@ -147,7 +144,7 @@ where
     phantom: PhantomData<(Backendq, BackendQ)>,
 }
 
-impl<Backendq, BackendQ> SecretKeyPack<Backendq, BackendQ>
+impl<Backendq, BackendQ> MPCSecretKeyPack<Backendq, BackendQ>
 where
     Backendq: MPCBackend,
     BackendQ: MPCBackend,
@@ -162,36 +159,54 @@ where
     where
         R: Rng,
     {
-        let input_lwe_secret_key_type = parameters.input_lwe_secret_key_type();
-        let input_lwe_dimension = parameters.input_lwe_dimension();
+        let intermediate_lwe_params = parameters.intermediate_lwe_params();
+        let blind_rotation_params = parameters.blind_rotation_params();
 
-        let input_lwe_secret_key: MPCDoubleBackendLweSecretKey<
-            <Backendq as MPCBackend>::Sharing,
-            <BackendQ as MPCBackend>::Sharing,
+        let intermediate_lwe_secret_key: MPCDoubleBackendLweSecretKey<
+            Backendq::Sharing,
+            BackendQ::Sharing,
         > = generate_shared_lwe_secret_key(
             backend_q,
             backend_big_q,
-            input_lwe_secret_key_type,
-            input_lwe_dimension,
+            intermediate_lwe_params.secret_key_type(),
+            intermediate_lwe_params.dimension(),
             rng,
         );
 
-        let intermediate_lwe_secret_key = generate_shared_lwe_secret_key(
-            backend_q,
-            backend_big_q,
-            parameters.intermediate_lwe_secret_key_type(),
-            parameters.intermediate_lwe_dimension(),
-            rng,
-        );
+        let rlwe_secret_key: MPCRlweSecretKey<<BackendQ as MPCBackend>::Sharing> =
+            generate_shared_rlwe_secret_key(
+                backend_big_q,
+                blind_rotation_params.secret_key_type,
+                blind_rotation_params.dimension,
+                rng,
+            );
 
-        let rlwe_secret_key: MPCRlweSecretKey<<BackendQ as MPCBackend>::Sharing> = {
-            let mut temp = input_lwe_secret_key.1.clone();
-            temp[1..].reverse();
-            temp[1..]
-                .iter_mut()
-                .for_each(|x| *x = backend_big_q.neg(*x));
-            MPCRlweSecretKey(temp)
-        };
+        let input_lwe_secret_key: MPCLweSecretKey<<BackendQ as MPCBackend>::Sharing> =
+            MPCLweSecretKey::new(rlwe_secret_key.0.clone());
+
+        // let lwe_sk: Vec<u64> = input_lwe_secret_key
+        //     .as_ref()
+        //     .iter()
+        //     .map(|s| backend_big_q.reveal_to_all(*s).unwrap())
+        //     .collect();
+
+        // let rlwe_sk: Vec<u64> = rlwe_secret_key
+        //     .0
+        //     .iter()
+        //     .map(|s| backend_big_q.reveal_to_all(*s).unwrap())
+        //     .collect();
+
+        // println!("lwe_sk: {:?}", lwe_sk);
+        // println!("rlwe_sk: {:?}", rlwe_sk);
+        // assert_eq!(lwe_sk, rlwe_sk);
+
+        // let inter_lwe_sk: Vec<u64> = intermediate_lwe_secret_key
+        //     .1
+        //     .iter()
+        //     .map(|s| backend_big_q.reveal_to_all(*s).unwrap())
+        //     .collect();
+
+        // println!("inter_lwe_sk: {:?}", inter_lwe_sk);
 
         let ntt_table = parameters.generate_ntt_table_for_rlwe();
 

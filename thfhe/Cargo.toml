@@ -11,4 +11,6 @@ algebra = { path = "../algebra", default-features = false }
 lattice = { path = "../lattice", default-features = false }
 fhe_core = { path = "../fhe_core", default-features = false }
 
+itertools = { workspace = true }
+
 rand = { workspace = true }

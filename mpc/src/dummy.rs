@@ -7,11 +7,12 @@ use crate::{MPCBackend, MPCResult};
 
 /// Dummy MPC secret share (storing plain value).
 #[derive(Debug, Clone, Copy, Default)]
-struct DummyShare {
+pub struct DummyShare {
     value: u64,
 }
 
-struct DummyBackend<const P: u64> {}
+/// Dummy MPC backend.
+pub struct DummyBackend<const P: u64> {}
 
 impl<const P: u64> MPCBackend for DummyBackend<P> {
     type Sharing = DummyShare;
@@ -22,7 +23,7 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
     }
 
     fn num_parties(&self) -> u32 {
-        0
+        1
     }
 
     fn num_threshold(&self) -> u32 {
@@ -68,34 +69,60 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         a: &[DummyShare],
         b: &[DummyShare],
     ) -> MPCResult<Vec<DummyShare>> {
-        let mut res = Vec::new();
         if a.len() != b.len() {
             return Err(MPCErr::InvalidOperation(
                 "batch operations length mismatch".to_string(),
             ));
         }
-        for i in 0..a.len() {
-            res.push(Self::mul(self, a[i], b[i])?);
-        }
-        Ok(res)
+        Ok(a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| DummyShare {
+                value: U64FieldEval::<P>::mul(a.value, b.value),
+            })
+            .collect())
+        // let mut res = Vec::new();
+        // if a.len() != b.len() {
+        //     return Err(MPCErr::InvalidOperation(
+        //         "batch operations length mismatch".to_string(),
+        //     ));
+        // }
+        // for i in 0..a.len() {
+        //     res.push(Self::mul(self, a[i], b[i])?);
+        // }
+        // Ok(res)
     }
 
     fn inner_product(&mut self, a: &[DummyShare], b: &[DummyShare]) -> MPCResult<Self::Sharing> {
-        let mut res = DummyShare { value: 0 };
-        for i in 0..a.len() {
-            let mul_result = Self::mul(self, a[i], b[i])?;
-            res = Self::add(self, res, mul_result);
+        if a.len() != b.len() {
+            return Err(MPCErr::InvalidOperation(
+                "batch operations length mismatch".to_string(),
+            ));
         }
-        Ok(res)
+        let value = a.iter().zip(b.iter()).fold(0u64, |acc, (x, y)| {
+            U64FieldEval::<P>::mul_add(x.value, y.value, acc)
+        });
+
+        Ok(DummyShare { value })
+        // let mut res = DummyShare { value: 0 };
+        // for i in 0..a.len() {
+        //     let mul_result = Self::mul(self, a[i], b[i])?;
+        //     res = Self::add(self, res, mul_result);
+        // }
+        // Ok(res)
     }
 
     fn inner_product_const(&mut self, a: &[DummyShare], b: &[u64]) -> Self::Sharing {
-        let mut res = DummyShare { value: 0 };
-        for i in 0..a.len() {
-            let mul_const_result = Self::mul_const(self, a[i], b[i]);
-            res = Self::add(self, res, mul_const_result);
-        }
-        res
+        let value = a.iter().zip(b.iter()).fold(0u64, |acc, (x, y)| {
+            U64FieldEval::<P>::mul_add(x.value, *y, acc)
+        });
+
+        DummyShare { value }
+        // let mut res = DummyShare { value: 0 };
+        // for i in 0..a.len() {
+        //     let mul_const_result = Self::mul_const(self, a[i], b[i]);
+        //     res = Self::add(self, res, mul_const_result);
+        // }
+        // res
     }
 
     fn double(&mut self, a: DummyShare) -> DummyShare {
