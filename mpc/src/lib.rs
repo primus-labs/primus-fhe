@@ -69,11 +69,31 @@ pub trait MPCBackend {
     /// Input a secret value from a party (party_id). Inputs from all other parties are omitted.
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing>;
 
+    /// Input a slice of secret values from a party (party_id). Inputs from all other parties are omitted.
+    fn input_slice(
+        &mut self,
+        values: Option<&[Self::Sharing]>,
+        party_id: u32,
+    ) -> MPCResult<Vec<Self::Sharing>>;
+
+    /// Input a secret value from many parties.
+    fn input_slice_with_different_party_ids(
+        &mut self,
+        values: &[Option<Self::Sharing>],
+        party_ids: &[u32],
+    ) -> MPCResult<Vec<Self::Sharing>>;
+
     /// Output a secret value to a party (party_id). Other parties get a dummy value.
     fn reveal(&mut self, a: Self::Sharing, party_id: u32) -> MPCResult<Option<u64>>;
 
+    /// Output a slice of secret values to a party (party_id). Other parties get dummy values.
+    fn reveal_slice(&mut self, a: &[Self::Sharing], party_id: u32) -> MPCResult<Vec<Option<u64>>>;
+
     /// Output a secret value to all parties.
     fn reveal_to_all(&mut self, a: Self::Sharing) -> MPCResult<u64>;
+
+    /// Output a slice of secret values to all parties.
+    fn reveal_slice_to_all(&mut self, a: &[Self::Sharing]) -> MPCResult<Vec<u64>>;
 
     /// Generate a random value over `u64`.
     fn shared_rand_coin(&mut self) -> Self::RandomField;
