@@ -10,6 +10,7 @@ use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
+use std::sync::atomic::AtomicUsize;
 
 /// MPC backend implementing the DN07 protocol with honest-majority security.
 pub struct DNBackend<const P: u64> {
@@ -323,12 +324,16 @@ impl<const P: u64> DNBackend<P> {
                 // Flush all connections
                 for party_id in 0..self.num_parties {
                     if party_id != self.party_id {
-                        self.netio.flush(party_id).expect("Failed to flush network buffer");
+                        self.netio
+                            .flush(party_id)
+                            .expect("Failed to flush network buffer");
                     }
                 }
             } else if self.party_id != reconstructor_id {
                 // Flush only to the reconstructor
-                self.netio.flush(reconstructor_id).expect("Failed to flush network buffer");
+                self.netio
+                    .flush(reconstructor_id)
+                    .expect("Failed to flush network buffer");
             }
 
             Some(results)
@@ -369,12 +374,16 @@ impl<const P: u64> DNBackend<P> {
                     // Flush all connections
                     for party_id in 0..self.num_parties {
                         if party_id != self.party_id {
-                            self.netio.flush(party_id).expect("Failed to flush network buffer");
+                            self.netio
+                                .flush(party_id)
+                                .expect("Failed to flush network buffer");
                         }
                     }
                 } else if self.party_id != reconstructor_id {
                     // Flush only to the reconstructor
-                    self.netio.flush(reconstructor_id).expect("Failed to flush network buffer");
+                    self.netio
+                        .flush(reconstructor_id)
+                        .expect("Failed to flush network buffer");
                 }
 
                 Some(results)
@@ -513,6 +522,8 @@ impl<const P: u64> DNBackend<P> {
     }
 }
 
+static COUNT: AtomicUsize = AtomicUsize::new(0);
+
 /// MPCBackend trait implementation for DN07 protocol.
 impl<const P: u64> MPCBackend for DNBackend<P> {
     type Sharing = u64;
@@ -562,6 +573,9 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     ) -> MPCResult<Vec<Self::Sharing>> {
         assert_eq!(a.len(), b.len(), "Input vector lengths must match");
         let batch_size = a.len();
+
+        COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        println!("Count: {}", COUNT.load(std::sync::atomic::Ordering::SeqCst));
 
         // Get required Beaver triples
         let triples: Vec<(u64, u64, u64)> = (0..batch_size).map(|_| self.next_triple()).collect();
@@ -640,6 +654,8 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             return Err(MPCErr::ProtocolError("Invalid party ID".into()));
         }
 
+        println!("Party {} inputting value: {:?}", self.party_id, value);
+
         // Create shares directly in the Option
         let share_batch = if self.party_id == party_id {
             let val = value.ok_or(MPCErr::ProtocolError(
@@ -661,12 +677,14 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         }
 
         let result = self.open_secrets(party_id, self.num_threshold, &[a], false);
-        
+
         // Flush connection with the specific party
         if party_id != self.party_id {
-            self.netio.flush(party_id).expect("Failed to flush network buffer");
+            self.netio
+                .flush(party_id)
+                .expect("Failed to flush network buffer");
         }
-        
+
         if self.party_id == party_id {
             match result {
                 Some(values) => Ok(Some(values[0])),
@@ -683,14 +701,16 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         let result = self
             .open_secrets(0, self.num_threshold, &[a], true)
             .ok_or(MPCErr::ProtocolError("Failed to reveal value".into()))?;
-        
+
         // Add explicit flush after all communication in reveal_to_all
         for party_id in 0..self.num_parties {
             if party_id != self.party_id {
-                self.netio.flush(party_id).expect("Failed to flush network buffer");
+                self.netio
+                    .flush(party_id)
+                    .expect("Failed to flush network buffer");
             }
         }
-        
+
         Ok(result[0])
     }
 
@@ -709,5 +729,29 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             .for_each(|(des, value)| {
                 *des = value;
             });
+    }
+
+    fn input_slice(
+        &mut self,
+        values: Option<&[Self::Sharing]>,
+        party_id: u32,
+    ) -> MPCResult<Vec<Self::Sharing>> {
+        todo!()
+    }
+
+    fn input_slice_with_different_party_ids(
+        &mut self,
+        values: &[Option<Self::Sharing>],
+        party_ids: &[u32],
+    ) -> MPCResult<Vec<Self::Sharing>> {
+        todo!()
+    }
+
+    fn reveal_slice(&mut self, a: &[Self::Sharing], party_id: u32) -> MPCResult<Vec<Option<u64>>> {
+        todo!()
+    }
+
+    fn reveal_slice_to_all(&mut self, a: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
+        todo!()
     }
 }

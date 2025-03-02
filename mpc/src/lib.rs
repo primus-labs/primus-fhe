@@ -6,6 +6,8 @@ pub mod dn;
 pub mod dummy;
 pub mod error;
 
+use std::fmt::Debug;
+
 pub use dn::DNBackend;
 pub use dummy::DummyBackend;
 
@@ -14,7 +16,7 @@ type MPCResult<T> = Result<T, error::MPCErr>;
 /// MPC backend trait
 pub trait MPCBackend {
     /// Generic secret sharing type.
-    type Sharing: Clone + Copy + Default;
+    type Sharing: Clone + Copy + Default + Debug;
 
     /// Generic field type for random values.
     type RandomField: Clone;

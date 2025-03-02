@@ -157,6 +157,30 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
     fn shared_rand_field_elements(&mut self, destination: &mut [u64]) {
         destination.fill(0);
     }
+
+    fn input_slice(
+        &mut self,
+        values: Option<&[Self::Sharing]>,
+        party_id: u32,
+    ) -> MPCResult<Vec<Self::Sharing>> {
+        todo!()
+    }
+
+    fn input_slice_with_different_party_ids(
+        &mut self,
+        values: &[Option<Self::Sharing>],
+        party_ids: &[u32],
+    ) -> MPCResult<Vec<Self::Sharing>> {
+        todo!()
+    }
+
+    fn reveal_slice(&mut self, a: &[Self::Sharing], party_id: u32) -> MPCResult<Vec<Option<u64>>> {
+        todo!()
+    }
+
+    fn reveal_slice_to_all(&mut self, a: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
+        todo!()
+    }
 }
 #[cfg(test)]
 mod tests {

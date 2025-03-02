@@ -26,15 +26,20 @@ where
         .map(|i| {
             if id == i {
                 let b = rng.gen_bool(0.5) as u64;
-                (
-                    backend_q.input(Some(b), i).unwrap(),
-                    backend_big_q.input(Some(b), i).unwrap(),
-                )
+
+                let b_q = backend_q.input(Some(b), i).unwrap();
+                println!("b_q id:{} b:{b} send:{b_q:?}", id);
+                let b_big_q = backend_big_q.input(Some(b), i).unwrap();
+                println!("b_Q id:{} b:{b} send:{b_big_q:?}", id);
+
+                (b_q, b_big_q)
             } else {
-                (
-                    backend_q.input(None, i).unwrap(),
-                    backend_big_q.input(None, i).unwrap(),
-                )
+                let b_q = backend_q.input(None, i).unwrap();
+                println!("b_q id:{} rev:{b_q:?}", id);
+                let b_big_q = backend_big_q.input(None, i).unwrap();
+                println!("b_Q id:{} rev:{b_big_q:?}", id);
+
+                (b_q, b_big_q)
             }
         })
         .collect();

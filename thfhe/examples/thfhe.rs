@@ -35,9 +35,9 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port1: u32, base_
     let participants_q = Participant::from_default(num_parties, base_port1);
     let participants_big_q = Participant::from_default(num_parties, base_port2);
     let mut dn_q =
-        DNBackend::<RING_MODULUS>::new(party_id, num_parties, threshold, 20, participants_q);
+        DNBackend::<RING_MODULUS>::new(party_id, num_parties, threshold, 2000, participants_q);
     let mut dn_big_q =
-        DNBackend::<RING_MODULUS>::new(party_id, num_parties, threshold, 20, participants_big_q);
+        DNBackend::<RING_MODULUS>::new(party_id, num_parties, threshold, 2000, participants_big_q);
     // let mut dn_q = DummyBackend::<LWE_MODULUS> {};
     // let mut dn_big_q = DummyBackend::<RING_MODULUS> {};
 
