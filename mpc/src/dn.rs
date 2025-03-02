@@ -318,6 +318,19 @@ impl<const P: u64> DNBackend<P> {
                 }
             }
 
+            // After network operations, flush appropriate connections
+            if broadcast_result {
+                // Flush all connections
+                for party_id in 0..self.num_parties {
+                    if party_id != self.party_id {
+                        self.netio.flush(party_id).expect("Failed to flush network buffer");
+                    }
+                }
+            } else if self.party_id != reconstructor_id {
+                // Flush only to the reconstructor
+                self.netio.flush(reconstructor_id).expect("Failed to flush network buffer");
+            }
+
             Some(results)
         } else {
             // Determine if this party participates in reconstruction
@@ -350,6 +363,19 @@ impl<const P: u64> DNBackend<P> {
                     .chunks_exact(8)
                     .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
                     .collect();
+
+                // After network operations, flush appropriate connections
+                if broadcast_result {
+                    // Flush all connections
+                    for party_id in 0..self.num_parties {
+                        if party_id != self.party_id {
+                            self.netio.flush(party_id).expect("Failed to flush network buffer");
+                        }
+                    }
+                } else if self.party_id != reconstructor_id {
+                    // Flush only to the reconstructor
+                    self.netio.flush(reconstructor_id).expect("Failed to flush network buffer");
+                }
 
                 Some(results)
             } else {
@@ -635,7 +661,12 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         }
 
         let result = self.open_secrets(party_id, self.num_threshold, &[a], false);
-
+        
+        // Flush connection with the specific party
+        if party_id != self.party_id {
+            self.netio.flush(party_id).expect("Failed to flush network buffer");
+        }
+        
         if self.party_id == party_id {
             match result {
                 Some(values) => Ok(Some(values[0])),
@@ -652,7 +683,14 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         let result = self
             .open_secrets(0, self.num_threshold, &[a], true)
             .ok_or(MPCErr::ProtocolError("Failed to reveal value".into()))?;
-
+        
+        // Add explicit flush after all communication in reveal_to_all
+        for party_id in 0..self.num_parties {
+            if party_id != self.party_id {
+                self.netio.flush(party_id).expect("Failed to flush network buffer");
+            }
+        }
+        
         Ok(result[0])
     }
 
