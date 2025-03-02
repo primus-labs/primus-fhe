@@ -26,9 +26,9 @@ where
             if i == id {
                 let e = gaussian.sample(rng);
                 // let e: u64 = 0;
-                backend.input(Some(e), id).unwrap()
+                backend.input(Some(e), i).unwrap()
             } else {
-                backend.input(None, id).unwrap()
+                backend.input(None, i).unwrap()
             }
         })
         .collect();

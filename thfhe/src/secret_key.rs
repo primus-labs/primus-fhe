@@ -27,13 +27,13 @@ where
             if id == i {
                 let b = rng.gen_bool(0.5) as u64;
                 (
-                    backend_q.input(Some(b), id).unwrap(),
-                    backend_big_q.input(Some(b), id).unwrap(),
+                    backend_q.input(Some(b), i).unwrap(),
+                    backend_big_q.input(Some(b), i).unwrap(),
                 )
             } else {
                 (
-                    backend_q.input(None, id).unwrap(),
-                    backend_big_q.input(None, id).unwrap(),
+                    backend_q.input(None, i).unwrap(),
+                    backend_big_q.input(None, i).unwrap(),
                 )
             }
         })
@@ -87,9 +87,9 @@ where
     let b_vec: Vec<Backend::Sharing> = (0..=t)
         .map(|i| {
             if id == i {
-                backend.input(Some(rng.gen_bool(0.5) as u64), id).unwrap()
+                backend.input(Some(rng.gen_bool(0.5) as u64), i).unwrap()
             } else {
-                backend.input(None, id).unwrap()
+                backend.input(None, i).unwrap()
             }
         })
         .collect();

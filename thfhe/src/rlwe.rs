@@ -29,9 +29,9 @@ where
             *eij = if i == id as usize {
                 let e = gaussian.sample(rng);
                 // let e: u64 = 0;
-                backend.input(Some(e), id).unwrap()
+                backend.input(Some(e), i as u32).unwrap()
             } else {
-                backend.input(None, id).unwrap()
+                backend.input(None, i as u32).unwrap()
             };
         });
         *e_i = e_vec
