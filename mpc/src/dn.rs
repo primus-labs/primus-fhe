@@ -140,6 +140,7 @@ impl<const P: u64> DNBackend<P> {
                 netio
                     .send(receiver_id, &seed_bytes)
                     .expect("Seed distribution failed");
+                netio.flush(receiver_id).expect("Failed to flush network buffer");
             }
 
             Prg::from_seed(seed)
@@ -230,6 +231,7 @@ impl<const P: u64> DNBackend<P> {
                 self.netio
                     .send(party_idx as u32, &share_buffer)
                     .expect("Share distribution failed");
+                self.netio.flush(party_idx as u32).expect("Failed to flush network buffer");
             }
 
             // Return own shares
@@ -315,6 +317,7 @@ impl<const P: u64> DNBackend<P> {
                         self.netio
                             .send(party_idx, &result_buffer)
                             .expect("Result broadcast failed");
+                        self.netio.flush(party_idx as u32).expect("Failed to flush network buffer");
                     }
                 }
             }
@@ -355,6 +358,7 @@ impl<const P: u64> DNBackend<P> {
                 self.netio
                     .send(reconstructor_id, &share_buffer)
                     .expect("Share sending failed");
+                self.netio.flush(reconstructor_id).expect("Failed to flush network buffer");
             }
 
             // Receive results if they're being broadcast
@@ -368,23 +372,6 @@ impl<const P: u64> DNBackend<P> {
                     .chunks_exact(8)
                     .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
                     .collect();
-
-                // After network operations, flush appropriate connections
-                if broadcast_result {
-                    // Flush all connections
-                    for party_id in 0..self.num_parties {
-                        if party_id != self.party_id {
-                            self.netio
-                                .flush(party_id)
-                                .expect("Failed to flush network buffer");
-                        }
-                    }
-                } else if self.party_id != reconstructor_id {
-                    // Flush only to the reconstructor
-                    self.netio
-                        .flush(reconstructor_id)
-                        .expect("Failed to flush network buffer");
-                }
 
                 Some(results)
             } else {
@@ -677,13 +664,6 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         }
 
         let result = self.open_secrets(party_id, self.num_threshold, &[a], false);
-
-        // Flush connection with the specific party
-        if party_id != self.party_id {
-            self.netio
-                .flush(party_id)
-                .expect("Failed to flush network buffer");
-        }
 
         if self.party_id == party_id {
             match result {
