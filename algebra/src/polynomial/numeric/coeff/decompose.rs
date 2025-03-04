@@ -6,7 +6,7 @@ use crate::{
 use super::Polynomial;
 
 impl<T: UnsignedInteger> Polynomial<T> {
-    /// Decomposes [Polynomial<T>] according to [SignedOnceDecompose].
+    /// Decomposes [`Polynomial<T>`] according to [SignedOnceDecompose].
     #[inline]
     pub fn approx_signed_decompose(
         &self,
@@ -17,7 +17,7 @@ impl<T: UnsignedInteger> Polynomial<T> {
         once_decompose.decompose_slice_inplace(self.as_slice(), carries, decompose_poly);
     }
 
-    /// Init carries and adjusted polynomial for a [Polynomial<T>].
+    /// Init carries and adjusted polynomial for a [`Polynomial<T>`].
     #[inline]
     pub fn init_adjust_poly_carries(
         &self,
@@ -28,7 +28,7 @@ impl<T: UnsignedInteger> Polynomial<T> {
         basis.init_value_carry_slice(self.as_ref(), carries, adjust_poly.as_mut());
     }
 
-    /// Init carries and adjusted polynomial for a [Polynomial<T>].
+    /// Init carries and adjusted polynomial for a [`Polynomial<T>`].
     #[inline]
     pub fn init_adjust_poly_carries_assign(
         &mut self,

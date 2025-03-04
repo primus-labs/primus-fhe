@@ -7,7 +7,7 @@ use crate::{
 use super::Polynomial;
 
 impl<T: Numeric> Polynomial<T> {
-    /// Converts [Polynomial<T>] into [NttPolynomial<T>].
+    /// Converts [`Polynomial<T>`] into [`NttPolynomial<T>`].
     #[inline]
     pub fn into_ntt_poly<Table>(mut self, ntt_table: &Table) -> NttPolynomial<T>
     where

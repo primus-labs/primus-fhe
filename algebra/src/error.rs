@@ -19,7 +19,7 @@ pub enum AlgebraError {
     /// Error that occurs when the given modulus has no primitive root with the given degree.
     #[error("There is no primitive root with the degree {degree:?} and the modulus {modulus:?}!")]
     NoPrimitiveRoot {
-        /// the degree for the primitive root
+        /// The degree for the primitive root
         degree: Box<dyn Debug>,
         /// The modulus.
         modulus: Box<dyn Debug>,

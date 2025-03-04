@@ -109,7 +109,7 @@ impl<F: NttField> Rgsw<F> {
         self.minus_s_m.basis()
     }
 
-    /// Converts self into [NttRgsw<F>].
+    /// Converts self into [`NttRgsw<F>`].
     #[inline]
     pub fn to_ntt_rgsw(self, ntt_table: &<F as NttField>::Table) -> NttRgsw<F> {
         NttRgsw::new(

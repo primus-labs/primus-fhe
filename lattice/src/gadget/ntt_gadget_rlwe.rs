@@ -110,7 +110,7 @@ impl<F: NttField> NttGadgetRlwe<F> {
         self.data.iter_mut()
     }
 
-    /// Converts [NttGadgetRlwe<F>] into [GadgetRlwe<F>].
+    /// Converts [`NttGadgetRlwe<F>`] into [`GadgetRlwe<F>`].
     #[inline]
     pub fn to_gadget_rlwe(self, ntt_table: &<F as NttField>::Table) -> GadgetRlwe<F> {
         GadgetRlwe::new(

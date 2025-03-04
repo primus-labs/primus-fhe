@@ -171,7 +171,7 @@ impl<T: UnsignedInteger> NumRlwe<T> {
         Lwe::new(a, b[0])
     }
 
-    /// Sample extract a [CmLwe<T>] with several encrypted messages.
+    /// Sample extract a [`CmLwe<T>`] with several encrypted messages.
     pub fn extract_first_few_lwe_locally<M>(self, count: usize, modulus: M) -> CmLwe<T>
     where
         M: Copy + ReduceNegAssign<T>,

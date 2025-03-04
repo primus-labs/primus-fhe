@@ -132,15 +132,27 @@ pub trait NumberTheoryTransform: NttTable {
         values: &mut [<Self as NttTable>::ValueT],
     );
 
+    /// Perform a fast lazy polynomial multiplication assignment.
     ///
+    /// The coefficients of the result polynomial are in the range `[0, 2*modulus)`
+    /// and fall back to the range `[0, modulus)` if the ntt table does not support
+    /// this special case.
     fn lazy_mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
 
+    /// Perform a fast polynomial multiplication assignment.
     ///
+    /// The coefficients of the result polynomial are in the range `[0, modulus)`.
     fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
 
+    /// Perform a fast lazy polynomial multiplication in place.
     ///
+    /// The coefficients of the result polynomial are in the range `[0, 2*modulus)`
+    /// and fall back to the range `[0, modulus)` if the ntt table does not support
+    /// this special case.
     fn lazy_mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
 
+    /// Perform a fast polynomial multiplication in place.
     ///
+    /// The coefficients of the result polynomial are in the range `[0, modulus)`.
     fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
 }
