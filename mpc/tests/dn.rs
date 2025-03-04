@@ -24,7 +24,8 @@ fn test_secret_sharing_and_recovery() {
         threads.push(thread::spawn(move || {
             // Setup the DN backend.
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
-            let mut dn = DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 10, participants);
+            let mut dn =
+                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 10, participants, 1024);
 
             // Test input and reveal_to_all for each secret.
             for secret in secrets {
@@ -78,8 +79,14 @@ fn test_triple_correctness() {
         threads.push(thread::spawn(move || {
             // Setup the DN backend.
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
-            let mut dn =
-                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, NUM_TRIPLES, participants);
+            let mut dn = DNBackend::<PRIME>::new(
+                id,
+                NUM_PARTIES,
+                THRESHOLD,
+                NUM_TRIPLES,
+                participants,
+                1024,
+            );
 
             for _ in 0..NUM_TRIPLES / 2 {
                 // Get a triple from the buffer.
@@ -131,7 +138,8 @@ fn test_mpc_operations() {
         threads.push(thread::spawn(move || {
             // Setup the DN backend.
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
-            let mut dn = DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants);
+            let mut dn =
+                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants, 1024);
 
             // Test 1: Addition.
             let a_value = 42;
@@ -246,7 +254,8 @@ fn test_untested_operations() {
         threads.push(thread::spawn(move || {
             // Setup the DN backend.
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
-            let mut dn = DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants);
+            let mut dn =
+                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants, 1024);
 
             // Test values.
             let a_value = 42;
@@ -348,7 +357,7 @@ fn test_rand_coin_consistency() {
         threads.push(thread::spawn(move || {
             // Setup the DN backend
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
-            let mut dn = DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 5, participants);
+            let mut dn = DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 5, participants, 1024);
 
             // Generate a sequence of random coins
             let mut coins = Vec::with_capacity(NUM_COINS);

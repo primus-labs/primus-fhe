@@ -1,217 +1,73 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use algebra::NttField;
+use algebra::{reduce::*, NttField};
 use mpc::MPCBackend;
-use rand::Rng;
 
 use crate::{
-    generate_shared_lwe_secret_key, generate_shared_rlwe_secret_key, Fp,
-    MPCDoubleBackendLweSecretKey, MPCLweSecretKey, MPCRlweSecretKey, ThFheParameters,
+    generate_shared_lwe_secret_key, generate_shared_rlwe_secret_key, Fp, MPCLweSecretKey,
+    MPCRlweSecretKey, ThFheParameters,
 };
 
-pub fn generate_shared_binary_value_two_field<Backendq, BackendQ, R>(
-    backend_q: &mut Backendq,
-    backend_big_q: &mut BackendQ,
-    rng: &mut R,
-) -> (Backendq::Sharing, BackendQ::Sharing)
-where
-    Backendq: MPCBackend,
-    BackendQ: MPCBackend,
-    R: Rng,
-{
-    let id = backend_q.party_id();
-    let t = backend_q.num_threshold();
-
-    let b_vec: Vec<(Backendq::Sharing, BackendQ::Sharing)> = (0..=t)
-        .map(|i| {
-            if id == i {
-                let b = rng.gen_bool(0.5) as u64;
-
-                let b_q = backend_q.input(Some(b), i).unwrap();
-                println!("b_q id:{} b:{b} send:{b_q:?}", id);
-                let b_big_q = backend_big_q.input(Some(b), i).unwrap();
-                println!("b_Q id:{} b:{b} send:{b_big_q:?}", id);
-
-                (b_q, b_big_q)
-            } else {
-                let b_q = backend_q.input(None, i).unwrap();
-                println!("b_q id:{} rev:{b_q:?}", id);
-                let b_big_q = backend_big_q.input(None, i).unwrap();
-                println!("b_Q id:{} rev:{b_big_q:?}", id);
-
-                (b_q, b_big_q)
-            }
-        })
-        .collect();
-
-    b_vec
-        .into_iter()
-        .reduce(|(b_q_x, b_big_q_x), (b_q_y, b_big_q_y)| {
-            let temp1 = backend_q.add(b_q_x, b_q_y);
-            let temp2 = backend_q.mul(b_q_x, b_q_y).unwrap();
-            let temp3 = backend_q.double(temp2);
-
-            let temp4 = backend_big_q.add(b_big_q_x, b_big_q_y);
-            let temp5 = backend_big_q.mul(b_big_q_x, b_big_q_y).unwrap();
-            let temp6 = backend_big_q.double(temp5);
-
-            (backend_q.sub(temp1, temp3), backend_big_q.sub(temp4, temp6))
-        })
-        .unwrap()
-}
-
-pub fn generate_shared_ternary_value_two_field<Backendq, BackendQ, R>(
-    backend_q: &mut Backendq,
-    backend_big_q: &mut BackendQ,
-    rng: &mut R,
-) -> (Backendq::Sharing, BackendQ::Sharing)
-where
-    Backendq: MPCBackend,
-    BackendQ: MPCBackend,
-    R: Rng,
-{
-    let (b_q1, b_big_q1) = generate_shared_binary_value_two_field(backend_q, backend_big_q, rng);
-    let (b_q2, b_big_q2) = generate_shared_binary_value_two_field(backend_q, backend_big_q, rng);
-    (
-        backend_q.sub(b_q1, b_q2),
-        backend_big_q.sub(b_big_q1, b_big_q2),
-    )
-}
-
-pub fn generate_shared_binary_value<Backend, R>(
-    backend: &mut Backend,
-    rng: &mut R,
-) -> Backend::Sharing
-where
-    Backend: MPCBackend,
-    R: Rng,
-{
-    let id = backend.party_id();
-    let t = backend.num_threshold();
-
-    let b_vec: Vec<Backend::Sharing> = (0..=t)
-        .map(|i| {
-            if id == i {
-                backend.input(Some(rng.gen_bool(0.5) as u64), i).unwrap()
-            } else {
-                backend.input(None, i).unwrap()
-            }
-        })
-        .collect();
-
-    b_vec
-        .into_iter()
-        .reduce(|b_x, b_y| {
-            let temp1 = backend.add(b_x, b_y);
-            let temp2 = backend.mul(b_x, b_y).unwrap();
-            let temp3 = backend.double(temp2);
-            backend.sub(temp1, temp3)
-        })
-        .unwrap()
-}
-
-pub fn generate_shared_ternary_value<Backend, R>(
-    backend: &mut Backend,
-    rng: &mut R,
-) -> Backend::Sharing
-where
-    Backend: MPCBackend,
-    R: Rng,
-{
-    let b1 = generate_shared_binary_value(backend, rng);
-    let b2 = generate_shared_binary_value(backend, rng);
-    backend.sub(b1, b2)
-}
-
-/// Boolean fhe's secret keys pack.
+/// Thfhe's secret keys pack.
 ///
 /// This struct contains the LWE secret key,
 /// ring secret key, ntt version ring secret key
-/// and boolean fhe's parameters.
+/// and thfhe's parameters.
 #[derive(Clone)]
-pub struct MPCSecretKeyPack<Backendq, BackendQ>
+pub struct MPCSecretKeyPack<Backend>
 where
-    Backendq: MPCBackend,
-    BackendQ: MPCBackend,
+    Backend: MPCBackend,
 {
     /// input LWE secret key
-    pub input_lwe_secret_key: MPCLweSecretKey<<BackendQ as MPCBackend>::Sharing>,
+    pub input_lwe_secret_key: MPCLweSecretKey<<Backend as MPCBackend>::Sharing>,
     /// intermediate LWE secret key
-    pub intermediate_lwe_secret_key: MPCDoubleBackendLweSecretKey<
-        <Backendq as MPCBackend>::Sharing,
-        <BackendQ as MPCBackend>::Sharing,
-    >,
+    pub intermediate_lwe_secret_key: MPCLweSecretKey<<Backend as MPCBackend>::Sharing>,
     /// rlwe secret key
-    pub rlwe_secret_key: MPCRlweSecretKey<<BackendQ as MPCBackend>::Sharing>,
+    pub rlwe_secret_key: MPCRlweSecretKey<<Backend as MPCBackend>::Sharing>,
     /// FHE parameters
     pub parameters: ThFheParameters,
     pub ntt_table: Arc<<Fp as NttField>::Table>,
-    phantom: PhantomData<(Backendq, BackendQ)>,
+    phantom: PhantomData<Backend>,
 }
 
-impl<Backendq, BackendQ> MPCSecretKeyPack<Backendq, BackendQ>
+impl<Backend> MPCSecretKeyPack<Backend>
 where
-    Backendq: MPCBackend,
-    BackendQ: MPCBackend,
+    Backend: MPCBackend,
 {
     /// Create a new secret key pack.
-    pub fn new<R>(
-        backend_q: &mut Backendq,
-        backend_big_q: &mut BackendQ,
-        parameters: ThFheParameters,
-        rng: &mut R,
-    ) -> Self
-    where
-        R: Rng,
-    {
-        let intermediate_lwe_params = parameters.intermediate_lwe_params();
-        let blind_rotation_params = parameters.blind_rotation_params();
+    pub fn new(backend: &mut Backend, parameters: ThFheParameters) -> Self {
+        let id = backend.party_id();
 
-        let intermediate_lwe_secret_key: MPCDoubleBackendLweSecretKey<
-            Backendq::Sharing,
-            BackendQ::Sharing,
-        > = generate_shared_lwe_secret_key(
-            backend_q,
-            backend_big_q,
-            intermediate_lwe_params.secret_key_type(),
-            intermediate_lwe_params.dimension(),
-            rng,
+        let start = std::time::Instant::now();
+        let intermediate_lwe_params = parameters.intermediate_lwe_params();
+        let intermediate_lwe_secret_key: MPCLweSecretKey<Backend::Sharing> =
+            generate_shared_lwe_secret_key(
+                backend,
+                intermediate_lwe_params.secret_key_type(),
+                intermediate_lwe_params.dimension(),
+            );
+        println!(
+            "Party {} had generated the intermediate lwe secret key with time {:?}",
+            id,
+            start.elapsed()
         );
 
-        let rlwe_secret_key: MPCRlweSecretKey<<BackendQ as MPCBackend>::Sharing> =
+        let start = std::time::Instant::now();
+        let blind_rotation_params = parameters.blind_rotation_params();
+        let rlwe_secret_key: MPCRlweSecretKey<<Backend as MPCBackend>::Sharing> =
             generate_shared_rlwe_secret_key(
-                backend_big_q,
+                backend,
                 blind_rotation_params.secret_key_type,
                 blind_rotation_params.dimension,
-                rng,
             );
+        println!(
+            "Party {} had generated the rlwe secret key with time {:?}",
+            id,
+            start.elapsed()
+        );
 
-        let input_lwe_secret_key: MPCLweSecretKey<<BackendQ as MPCBackend>::Sharing> =
+        let input_lwe_secret_key: MPCLweSecretKey<<Backend as MPCBackend>::Sharing> =
             MPCLweSecretKey::new(rlwe_secret_key.0.clone());
-
-        // let lwe_sk: Vec<u64> = input_lwe_secret_key
-        //     .as_ref()
-        //     .iter()
-        //     .map(|s| backend_big_q.reveal_to_all(*s).unwrap())
-        //     .collect();
-
-        // let rlwe_sk: Vec<u64> = rlwe_secret_key
-        //     .0
-        //     .iter()
-        //     .map(|s| backend_big_q.reveal_to_all(*s).unwrap())
-        //     .collect();
-
-        // println!("lwe_sk: {:?}", lwe_sk);
-        // println!("rlwe_sk: {:?}", rlwe_sk);
-        // assert_eq!(lwe_sk, rlwe_sk);
-
-        // let inter_lwe_sk: Vec<u64> = intermediate_lwe_secret_key
-        //     .1
-        //     .iter()
-        //     .map(|s| backend_big_q.reveal_to_all(*s).unwrap())
-        //     .collect();
-
-        // println!("inter_lwe_sk: {:?}", inter_lwe_sk);
 
         let ntt_table = parameters.generate_ntt_table_for_rlwe();
 
@@ -223,5 +79,111 @@ where
             ntt_table: Arc::new(ntt_table),
             phantom: PhantomData,
         }
+    }
+}
+
+pub fn generate_shared_binary_slices<Backend>(
+    backend: &mut Backend,
+    length: usize,
+) -> Vec<Backend::Sharing>
+where
+    Backend: MPCBackend,
+{
+    let random_elements = backend.create_random_elements(length);
+
+    let square = backend
+        .mul_element_wise(&random_elements, &random_elements)
+        .unwrap();
+
+    let square = backend.reveal_slice_to_all(&square).unwrap();
+
+    let modulus = backend.modulus();
+
+    let inv_two = modulus.reduce_inv(2);
+
+    let sqrt = square
+        .iter()
+        .map(|&x| sqrt_mod_p(x, modulus))
+        .collect::<Vec<_>>();
+
+    let mut c = sqrt
+        .iter()
+        .zip(random_elements.iter())
+        .map(|(&x, &y)| backend.mul_const(y, modulus.reduce_inv(x)))
+        .collect::<Vec<_>>();
+    c.iter_mut().for_each(|x| *x = backend.add_const(*x, 1));
+    c.iter_mut()
+        .for_each(|x| *x = backend.mul_const(*x, inv_two));
+
+    c
+}
+
+pub fn generate_shared_ternary_slices<Backend>(
+    backend: &mut Backend,
+    length: usize,
+) -> Vec<Backend::Sharing>
+where
+    Backend: MPCBackend,
+{
+    let mut b = generate_shared_binary_slices(backend, length * 2);
+    let (front, end) = b.split_at_mut(length);
+    front
+        .iter_mut()
+        .zip(end.iter_mut())
+        .for_each(|(x, y)| *x = backend.sub(*x, *y));
+    b.truncate(length);
+    b
+}
+
+/// 费马小定理方法 (适用于 p ≡ 3 mod 4)
+fn sqrt_mod_p_fermat<M: FieldReduce<u64>>(a: u64, p: M) -> u64 {
+    p.reduce_exp(a, (p.modulus_minus_one() + 2) / 4)
+}
+
+/// Tonelli-Shanks 算法 (适用于 p ≡ 1 mod 4)
+fn sqrt_mod_p_tonelli_shanks<M: FieldReduce<u64>>(a: u64, p: M) -> u64 {
+    let modulus_minus_one = p.modulus_minus_one();
+    let mut q = p.modulus_minus_one();
+    let mut s = 0;
+
+    s += q.trailing_zeros();
+    q >>= q.trailing_zeros();
+
+    let mut z = 2;
+    while p.reduce_exp(z, modulus_minus_one / 2) == 1 {
+        z += 1;
+    }
+
+    let mut m = s;
+    let mut c = p.reduce_exp(z, q);
+    let mut t = p.reduce_exp(a, q);
+    let mut r = p.reduce_exp(a, (q + 1) / 2);
+
+    while t != 1 {
+        let mut i = 0;
+        let mut temp = t;
+        while temp != 1 {
+            p.reduce_square_assign(&mut temp);
+            i += 1;
+        }
+
+        let b = p.reduce_exp_power_of_2(c, m - i - 1);
+
+        p.reduce_mul_assign(&mut r, b);
+        c = p.reduce_square(b);
+        p.reduce_mul_assign(&mut t, c);
+
+        m = i;
+    }
+
+    r
+}
+
+/// 计算平方根
+fn sqrt_mod_p<M: FieldReduce<u64>>(a: u64, p: M) -> u64 {
+    if p.modulus_minus_one() & 0b11 == 0b10 {
+        sqrt_mod_p_fermat(a, p)
+    } else {
+        sqrt_mod_p_tonelli_shanks(a, p)
     }
 }

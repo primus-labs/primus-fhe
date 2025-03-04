@@ -2,9 +2,75 @@ use algebra::random::DiscreteGaussian;
 use mpc::MPCBackend;
 use rand::{prelude::Distribution, Rng};
 
-pub struct MPCLwe<Share> {
+#[derive(Debug, Clone, Default)]
+pub struct MPCLwe<Share: Default> {
     pub a: Vec<u64>,
     pub b: Share,
+}
+
+impl<Share: Default> MPCLwe<Share> {
+    pub fn zero(dimension: usize) -> Self {
+        MPCLwe {
+            a: vec![0; dimension],
+            b: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BatchMPCLwe<Share: Default> {
+    pub a: Vec<Vec<u64>>,
+    pub b: Vec<Share>,
+}
+
+pub fn generate_shared_lwe_ciphertext_vec<Backend, R>(
+    backend: &mut Backend,
+    shared_secret_key: &[Backend::Sharing],
+    count: usize,
+    gaussian: DiscreteGaussian<u64>,
+    rng: &mut R,
+) -> BatchMPCLwe<Backend::Sharing>
+where
+    Backend: MPCBackend,
+    R: Rng,
+{
+    let id = backend.party_id();
+
+    let mut batch_mpc_lwe = BatchMPCLwe {
+        a: vec![vec![0; shared_secret_key.len()]; count],
+        b: vec![Default::default(); count],
+    };
+
+    batch_mpc_lwe.a.iter_mut().for_each(|a| {
+        backend.shared_rand_field_elements(a);
+    });
+
+    let b = &mut batch_mpc_lwe.b;
+    for i in 0..backend.num_parties() {
+        let temp = if i == id {
+            let e = gaussian
+                .sample_iter(&mut *rng)
+                .take(count)
+                .collect::<Vec<_>>();
+            backend.input_slice(Some(&e), count, i).unwrap()
+        } else {
+            backend.input_slice(None, count, i).unwrap()
+        };
+        b.iter_mut().zip(temp.iter()).for_each(|(e, temp)| {
+            *e = backend.add(*e, *temp);
+        });
+    }
+
+    batch_mpc_lwe
+        .a
+        .iter()
+        .zip(batch_mpc_lwe.b.iter_mut())
+        .for_each(|(a, b)| {
+            let ip = backend.inner_product_const(shared_secret_key, &a);
+            *b = backend.add(ip, *b);
+        });
+
+    batch_mpc_lwe
 }
 
 pub fn generate_shared_lwe_ciphertext<Backend, R>(

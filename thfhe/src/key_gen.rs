@@ -1,22 +1,24 @@
 use std::sync::Arc;
 
 use algebra::{
-    decompose::NonPowOf2ApproxSignedBasis, polynomial::FieldPolynomial, random::DiscreteGaussian,
+    decompose::NonPowOf2ApproxSignedBasis,
+    polynomial::{FieldNttPolynomial, FieldPolynomial},
+    random::DiscreteGaussian,
     Field, NttField,
 };
 use fhe_core::{
     BinaryBlindRotationKey, KeySwitchingParameters, LwePublicKey, LweSecretKeyType,
     NonPowOf2LweKeySwitchingKey, RingSecretKeyType,
 };
-use lattice::{GadgetRlwe, Lwe, Rgsw, Rlwe};
+use itertools::izip;
+use lattice::{GadgetRlwe, Lwe, NttGadgetRlwe, NttRgsw, NttRlwe, Rgsw, Rlwe};
 use mpc::MPCBackend;
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    generate_share_rlwe_ciphertext, generate_shared_binary_value,
-    generate_shared_binary_value_two_field, generate_shared_lwe_ciphertext,
-    generate_shared_ternary_value, generate_shared_ternary_value_two_field, EvaluationKey, Fp,
-    MPCLwe, MPCRlwe, MPCSecretKeyPack, ThFheParameters,
+    generate_share_ntt_rlwe_ciphertext_vec, generate_shared_binary_slices,
+    generate_shared_lwe_ciphertext_vec, generate_shared_ternary_slices, EvaluationKey, Fp,
+    MPCSecretKeyPack, ThFheParameters,
 };
 
 /// Struct of key generation.
@@ -25,39 +27,37 @@ pub struct KeyGen;
 impl KeyGen {
     /// Generate key pair
     #[inline]
-    pub fn generate_mpc_key_pair<Backendq, BackendQ, R>(
-        backend_q: &mut Backendq,
-        backend_big_q: &mut BackendQ,
+    pub fn generate_mpc_key_pair<Backend, R>(
+        backend: &mut Backend,
         params: ThFheParameters,
         rng: &mut R,
-    ) -> (
-        MPCSecretKeyPack<Backendq, BackendQ>,
-        LwePublicKey<u64>,
-        EvaluationKey,
-    )
+    ) -> (MPCSecretKeyPack<Backend>, LwePublicKey<u64>, EvaluationKey)
     where
         R: Rng + CryptoRng,
 
-        Backendq: MPCBackend,
-        BackendQ: MPCBackend,
+        Backend: MPCBackend,
     {
-        let sk = MPCSecretKeyPack::new(backend_q, backend_big_q, params, rng);
+        let id = backend.party_id();
 
+        let start = std::time::Instant::now();
+        let sk = MPCSecretKeyPack::new(backend, params);
         println!(
-            "Party {} is generating the secret key",
-            backend_q.party_id()
+            "Party {} had generated the secret key pack with time {:?}",
+            id,
+            start.elapsed()
         );
 
         let input_lwe_params = params.input_lwe_params();
         let key_switching_params = params.key_switching_params();
         let blind_rotation_params = params.blind_rotation_params();
 
+        let start = std::time::Instant::now();
         // let kappa = input_lwe_params.dimension
         //     * input_lwe_params.cipher_modulus_value.log_modulus() as usize;
         let kappa = input_lwe_params.cipher_modulus_value.log_modulus() as usize;
 
         let lwe_public_key: LwePublicKey<u64> = generate_lwe_public_key(
-            backend_big_q,
+            backend,
             sk.input_lwe_secret_key.as_ref(),
             input_lwe_params.noise_distribution(),
             kappa,
@@ -66,10 +66,12 @@ impl KeyGen {
         .into();
 
         println!(
-            "Party {} is generating the public key",
-            backend_q.party_id()
+            "Party {} had generated the lwe public key with time {:?}",
+            id,
+            start.elapsed()
         );
 
+        let start = std::time::Instant::now();
         let key_switching_key_basis: NonPowOf2ApproxSignedBasis<u64> =
             NonPowOf2ApproxSignedBasis::new(
                 blind_rotation_params.modulus,
@@ -78,23 +80,24 @@ impl KeyGen {
             );
 
         let key_switching_key = generate_key_switching_key(
-            backend_big_q,
+            backend,
             sk.input_lwe_secret_key.as_ref(),
-            sk.intermediate_lwe_secret_key.1.as_ref(),
+            sk.intermediate_lwe_secret_key.as_ref(),
             key_switching_params.noise_distribution_for_Q::<Fp>(),
             key_switching_key_basis,
             rng,
         )
         .to_fhe_ksk(key_switching_params, key_switching_key_basis);
-
         println!(
-            "Party {} is generating the key switching key",
-            backend_q.party_id()
+            "Party {} had generated the key switching key with time {:?}",
+            id,
+            start.elapsed()
         );
 
+        let start = std::time::Instant::now();
         let bootstrapping_key: BinaryBlindRotationKey<Fp> = generate_bootstrapping_key(
-            backend_big_q,
-            sk.intermediate_lwe_secret_key.1.as_ref(),
+            backend,
+            sk.intermediate_lwe_secret_key.as_ref(),
             sk.rlwe_secret_key.0.as_ref(),
             blind_rotation_params.noise_distribution(),
             blind_rotation_params.basis,
@@ -103,8 +106,9 @@ impl KeyGen {
         .to_fhe_binary_bsk(blind_rotation_params.dimension);
 
         println!(
-            "Party {} is generating the bootstrapping key",
-            backend_q.party_id()
+            "Party {} had generated the bootstrapping key with time {:?}",
+            id,
+            start.elapsed()
         );
 
         (
@@ -114,9 +118,6 @@ impl KeyGen {
         )
     }
 }
-
-#[derive(Clone)]
-pub struct MPCDoubleBackendLweSecretKey<Shareq, ShareQ>(pub Vec<Shareq>, pub Vec<ShareQ>);
 
 #[derive(Clone)]
 pub struct MPCLweSecretKey<Share>(pub Vec<Share>);
@@ -135,58 +136,38 @@ impl<Share> MPCLweSecretKey<Share> {
     }
 }
 
-pub fn generate_shared_lwe_secret_key<Backendq, BackendQ, R>(
-    backend_q: &mut Backendq,
-    backend_big_q: &mut BackendQ,
+pub fn generate_shared_lwe_secret_key<Backend>(
+    backend: &mut Backend,
     secret_key_type: LweSecretKeyType,
     dimension: usize,
-    rng: &mut R,
-) -> MPCDoubleBackendLweSecretKey<Backendq::Sharing, BackendQ::Sharing>
+) -> MPCLweSecretKey<Backend::Sharing>
 where
-    Backendq: MPCBackend,
-    BackendQ: MPCBackend,
-    R: Rng,
+    Backend: MPCBackend,
 {
-    let mut s_q: Vec<<Backendq as MPCBackend>::Sharing> = vec![Default::default(); dimension];
-    let mut s_big_q: Vec<<BackendQ as MPCBackend>::Sharing> = vec![Default::default(); dimension];
-
-    s_q.iter_mut()
-        .zip(s_big_q.iter_mut())
-        .for_each(|(s_q_i, s_big_q_i)| {
-            (*s_q_i, *s_big_q_i) = match secret_key_type {
-                LweSecretKeyType::Binary => {
-                    generate_shared_binary_value_two_field(backend_q, backend_big_q, rng)
-                }
-                LweSecretKeyType::Ternary => {
-                    generate_shared_ternary_value_two_field(backend_q, backend_big_q, rng)
-                }
-            };
-        });
-    MPCDoubleBackendLweSecretKey(s_q, s_big_q)
+    let s = match secret_key_type {
+        LweSecretKeyType::Binary => generate_shared_binary_slices(backend, dimension),
+        LweSecretKeyType::Ternary => generate_shared_ternary_slices(backend, dimension),
+    };
+    MPCLweSecretKey(s)
 }
 
 #[derive(Clone)]
 pub struct MPCRlweSecretKey<Share>(pub Vec<Share>);
 
-pub fn generate_shared_rlwe_secret_key<Backend, R>(
+pub fn generate_shared_rlwe_secret_key<Backend>(
     backend: &mut Backend,
     secret_key_type: RingSecretKeyType,
     dimension: usize,
-    rng: &mut R,
 ) -> MPCRlweSecretKey<Backend::Sharing>
 where
     Backend: MPCBackend,
-    R: Rng,
 {
-    let mut z: Vec<<Backend as MPCBackend>::Sharing> = vec![Default::default(); dimension];
+    let z = match secret_key_type {
+        RingSecretKeyType::Binary => generate_shared_binary_slices(backend, dimension),
+        RingSecretKeyType::Ternary => generate_shared_ternary_slices(backend, dimension),
+        RingSecretKeyType::Gaussian => unreachable!("Gaussian secret key is not supported"),
+    };
 
-    z.iter_mut().for_each(|z_i| {
-        *z_i = match secret_key_type {
-            RingSecretKeyType::Binary => generate_shared_binary_value(backend, rng),
-            RingSecretKeyType::Ternary => generate_shared_ternary_value(backend, rng),
-            RingSecretKeyType::Gaussian => unreachable!("Gaussian secret key is not supported"),
-        };
-    });
     MPCRlweSecretKey(z)
 }
 
@@ -222,17 +203,17 @@ where
     Backend: MPCBackend,
     R: Rng,
 {
+    let batch_mpc_lwe =
+        generate_shared_lwe_ciphertext_vec(backend, lwe_secret_key, kappa, gaussian, rng);
+    let b = backend
+        .reveal_slice_to_all(batch_mpc_lwe.b.as_slice())
+        .unwrap();
     MPCLwePublicKey(
-        (0..kappa)
-            .map(|_| {
-                let MPCLwe { a, b } =
-                    generate_shared_lwe_ciphertext(backend, lwe_secret_key, gaussian, rng);
-
-                RevealLwe {
-                    a,
-                    b: backend.reveal_to_all(b).unwrap(),
-                }
-            })
+        batch_mpc_lwe
+            .a
+            .into_iter()
+            .zip(b.iter())
+            .map(|(a, b)| RevealLwe { a, b: *b })
             .collect(),
     )
 }
@@ -254,6 +235,25 @@ where
 }
 
 #[derive(Debug)]
+pub struct RevealNttRlwe {
+    pub a: Vec<u64>,
+    pub b: Vec<u64>,
+}
+
+impl<F> Into<NttRlwe<F>> for RevealNttRlwe
+where
+    F: Field<ValueT = u64> + NttField,
+{
+    #[inline]
+    fn into(self) -> NttRlwe<F> {
+        NttRlwe::new(
+            FieldNttPolynomial::new(self.a),
+            FieldNttPolynomial::new(self.b),
+        )
+    }
+}
+
+#[derive(Debug)]
 pub struct RevealGadgetRlwe(pub Vec<RevealRlwe>, pub NonPowOf2ApproxSignedBasis<u64>);
 
 impl<F> Into<GadgetRlwe<F>> for RevealGadgetRlwe
@@ -263,6 +263,19 @@ where
     #[inline]
     fn into(self) -> GadgetRlwe<F> {
         GadgetRlwe::new(self.0.into_iter().map(Into::into).collect(), self.1)
+    }
+}
+
+#[derive(Debug)]
+pub struct RevealNttGadgetRlwe(pub Vec<RevealNttRlwe>, pub NonPowOf2ApproxSignedBasis<u64>);
+
+impl<F> Into<NttGadgetRlwe<F>> for RevealNttGadgetRlwe
+where
+    F: Field<ValueT = u64> + NttField,
+{
+    #[inline]
+    fn into(self) -> NttGadgetRlwe<F> {
+        NttGadgetRlwe::new(self.0.into_iter().map(Into::into).collect(), self.1)
     }
 }
 
@@ -282,19 +295,58 @@ where
     }
 }
 
+#[derive(Debug)]
+pub struct RevealNttRgsw {
+    pub m: RevealNttGadgetRlwe,
+    pub minus_z_m: RevealNttGadgetRlwe,
+}
+
+impl<F> Into<NttRgsw<F>> for RevealNttRgsw
+where
+    F: Field<ValueT = u64> + NttField,
+{
+    #[inline]
+    fn into(self) -> NttRgsw<F> {
+        NttRgsw::new(self.minus_z_m.into(), self.m.into())
+    }
+}
+
 pub struct MPCBootstrappingKey(pub Vec<RevealRgsw>);
+
+pub struct MPCNttBootstrappingKey(pub Vec<RevealNttRgsw>);
+
+impl MPCNttBootstrappingKey {
+    pub fn to_fhe_binary_bsk<F>(self, dimension: usize) -> BinaryBlindRotationKey<F>
+    where
+        F: Field<ValueT = u64> + NttField,
+    {
+        let start = std::time::Instant::now();
+        let temp: Vec<NttRgsw<F>> = self.0.into_iter().map(Into::into).collect();
+        println!("Into Ntt Rgsw takes {:?}", start.elapsed());
+
+        let ntt_table = F::generate_ntt_table(dimension.trailing_zeros()).unwrap();
+
+        BinaryBlindRotationKey::new(temp, Arc::new(ntt_table))
+    }
+}
 
 impl MPCBootstrappingKey {
     pub fn to_fhe_binary_bsk<F>(self, dimension: usize) -> BinaryBlindRotationKey<F>
     where
         F: Field<ValueT = u64> + NttField,
     {
+        let start = std::time::Instant::now();
         let temp: Vec<Rgsw<F>> = self.0.into_iter().map(Into::into).collect();
+        println!("Into Rgsw takes {:?}", start.elapsed());
+
         let ntt_table = F::generate_ntt_table(dimension.trailing_zeros()).unwrap();
+        let start = std::time::Instant::now();
         let temp = temp
             .into_iter()
             .map(|rgsw| rgsw.to_ntt_rgsw(&ntt_table))
             .collect();
+        println!("Into NttRgsw takes {:?}", start.elapsed());
+
         BinaryBlindRotationKey::new(temp, Arc::new(ntt_table))
     }
 }
@@ -306,67 +358,91 @@ pub fn generate_bootstrapping_key<Backend, R>(
     gaussian: DiscreteGaussian<u64>,
     basis: NonPowOf2ApproxSignedBasis<u64>,
     rng: &mut R,
-) -> MPCBootstrappingKey
+) -> MPCNttBootstrappingKey
 where
     Backend: MPCBackend,
     R: Rng,
 {
-    MPCBootstrappingKey(
-        lwe_secret_key
-            .iter()
-            .map(|si| {
-                let m = {
-                    RevealGadgetRlwe(
-                        basis
-                            .scalar_iter()
-                            .map(|scalar| {
-                                let MPCRlwe { a, mut b } = generate_share_rlwe_ciphertext(
-                                    backend,
-                                    rlwe_secret_key,
-                                    gaussian,
-                                    rng,
-                                );
-                                let scaled_si = backend.mul_const(*si, scalar);
-                                b[0] = backend.add(b[0], scaled_si);
+    let n = lwe_secret_key.len();
+    let l = basis.decompose_length();
+    let big_n = rlwe_secret_key.len();
+    let basis_scalar = basis.scalar_iter().collect::<Vec<_>>();
 
-                                let b = b
-                                    .into_iter()
-                                    .map(|v| backend.reveal_to_all(v).unwrap())
-                                    .collect();
-                                RevealRlwe { a, b }
+    let mut ntt_rlwe_secret_key = rlwe_secret_key.to_vec();
+    backend.ntt_sharing_poly_inplace(&mut ntt_rlwe_secret_key);
+
+    let mut batch_mpc_ntt_rlwe = generate_share_ntt_rlwe_ciphertext_vec(
+        backend,
+        rlwe_secret_key,
+        &ntt_rlwe_secret_key,
+        2 * n * l,
+        gaussian,
+        rng,
+    );
+
+    for (si, b_x) in izip!(
+        lwe_secret_key.iter(),
+        batch_mpc_ntt_rlwe.b.chunks_exact_mut(2 * big_n * l)
+    ) {
+        let (m, minus_z_m) = b_x.split_at_mut(big_n * l);
+
+        m.chunks_exact_mut(big_n)
+            .zip(basis_scalar.iter())
+            .for_each(|(mi, scalar)| {
+                let scaled_si = backend.mul_const(*si, *scalar);
+                mi.iter_mut().for_each(|mij| {
+                    *mij = backend.add(*mij, scaled_si);
+                });
+            });
+
+        minus_z_m
+            .chunks_exact_mut(big_n)
+            .zip(basis_scalar.iter())
+            .for_each(|(mi, scalar)| {
+                let scaled_si = backend.mul_const(*si, *scalar);
+
+                let temp = backend
+                    .mul_element_wise(&ntt_rlwe_secret_key, &vec![scaled_si; big_n])
+                    .unwrap();
+
+                mi.iter_mut().zip(temp).for_each(|(mij, t)| {
+                    *mij = backend.sub(*mij, t);
+                });
+            });
+    }
+
+    let b = backend
+        .reveal_slice_to_all(batch_mpc_ntt_rlwe.b.as_slice())
+        .unwrap();
+
+    let mut a_iter = batch_mpc_ntt_rlwe.a.into_iter();
+
+    MPCNttBootstrappingKey(
+        b.chunks_exact(2 * big_n * l)
+            .map(|b_x| {
+                let (m_slice, minus_z_m_slice) = b_x.split_at(big_n * l);
+                RevealNttRgsw {
+                    m: RevealNttGadgetRlwe(
+                        m_slice
+                            .chunks_exact(big_n)
+                            .map(|b| RevealNttRlwe {
+                                a: a_iter.next().unwrap(),
+                                b: b.to_vec(),
                             })
                             .collect(),
                         basis,
-                    )
-                };
-                let minus_z_m = {
-                    RevealGadgetRlwe(
-                        basis
-                            .scalar_iter()
-                            .map(|scalar| {
-                                let MPCRlwe { a, mut b } = generate_share_rlwe_ciphertext(
-                                    backend,
-                                    rlwe_secret_key,
-                                    gaussian,
-                                    rng,
-                                );
-                                let scaled_si = backend.mul_const(*si, scalar);
-                                b.iter_mut().zip(rlwe_secret_key).for_each(|(bi, zi)| {
-                                    let temp = backend.mul(*zi, scaled_si).unwrap();
-                                    *bi = backend.sub(*bi, temp);
-                                });
-
-                                let b = b
-                                    .into_iter()
-                                    .map(|v| backend.reveal_to_all(v).unwrap())
-                                    .collect();
-                                RevealRlwe { a, b }
+                    ),
+                    minus_z_m: RevealNttGadgetRlwe(
+                        minus_z_m_slice
+                            .chunks_exact(big_n)
+                            .map(|b| RevealNttRlwe {
+                                a: a_iter.next().unwrap(),
+                                b: b.to_vec(),
                             })
                             .collect(),
                         basis,
-                    )
-                };
-                RevealRgsw { m, minus_z_m }
+                    ),
+                }
             })
             .collect(),
     )
@@ -406,49 +482,32 @@ where
     Backend: MPCBackend,
     R: Rng,
 {
-    // MPCKeySwitchingKey(
-    //     input_secret_key
-    //         .iter()
-    //         .map(|zi| {
-    //             RevealGadgetLwe(
-    //                 basis
-    //                     .scalar_iter()
-    //                     .map(|scalar| {
-    //                         let MPCLwe { a, b } = generate_shared_lwe_ciphertext(
-    //                             backend,
-    //                             output_secret_key,
-    //                             gaussian,
-    //                             rng,
-    //                         );
-    //                         let scaled_zi = backend.mul_const(*zi, scalar);
-    //                         let b = backend.add(b, scaled_zi);
-    //                         let b = backend.reveal_to_all(b).unwrap();
+    let n = input_secret_key.len();
+    let l = basis.decompose_length();
 
-    //                         RevealLwe { a, b }
-    //                     })
-    //                     .collect(),
-    //             )
-    //         })
-    //         .collect(),
-    // )
+    let mut batch_mpc_lwe =
+        generate_shared_lwe_ciphertext_vec(backend, output_secret_key, n * l, gaussian, rng);
+
+    for (x, scalar) in batch_mpc_lwe.b.chunks_exact_mut(n).zip(basis.scalar_iter()) {
+        for (b, s) in x.iter_mut().zip(input_secret_key.iter()) {
+            let scaled_si = backend.mul_const(*s, scalar);
+            *b = backend.add(*b, scaled_si);
+        }
+    }
+
+    let b = backend
+        .reveal_slice_to_all(batch_mpc_lwe.b.as_slice())
+        .unwrap();
+
+    let mut a_iter = batch_mpc_lwe.a.into_iter();
+
     MPCKeySwitchingKey(
-        basis
-            .scalar_iter()
-            .map(|scalar| {
-                input_secret_key
-                    .iter()
-                    .map(|zi| {
-                        let MPCLwe { a, b } = generate_shared_lwe_ciphertext(
-                            backend,
-                            output_secret_key,
-                            gaussian,
-                            rng,
-                        );
-                        let scaled_zi = backend.mul_const(*zi, scalar);
-                        let b = backend.add(b, scaled_zi);
-                        let b = backend.reveal_to_all(b).unwrap();
-
-                        RevealLwe { a, b }
+        b.chunks_exact(n)
+            .map(|b_x| {
+                b_x.iter()
+                    .map(|b_x_s| RevealLwe {
+                        a: a_iter.next().unwrap(),
+                        b: *b_x_s,
                     })
                     .collect()
             })

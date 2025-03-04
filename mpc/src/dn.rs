@@ -2,15 +2,15 @@
 //! Provides t-privacy in an (n,t) threshold setting where n > 2t.
 
 use crate::{error::MPCErr, MPCBackend, MPCResult};
+use algebra::ntt::NumberTheoryTransform;
 use algebra::random::Prg;
-use algebra::{Field, U64FieldEval};
+use algebra::{Field, NttField, U64FieldEval};
 use network::netio::{NetIO, Participant};
 use network::IO;
 use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
-use std::sync::atomic::AtomicUsize;
 
 /// MPC backend implementing the DN07 protocol with honest-majority security.
 pub struct DNBackend<const P: u64> {
@@ -32,6 +32,7 @@ pub struct DNBackend<const P: u64> {
     // Buffer size for triple generation
     triple_buffer_capacity: usize,
     uniform_distr: Uniform<u64>,
+    ntt_table: <U64FieldEval<P> as NttField>::Table,
 }
 
 impl<const P: u64> DNBackend<P> {
@@ -42,6 +43,7 @@ impl<const P: u64> DNBackend<P> {
         num_threshold: u32,
         triple_required: u32,
         participants: Vec<Participant>,
+        polynomial_size: usize,
     ) -> Self {
         // Initialize Vandermonde matrix for share generation
         let party_positions: Vec<u64> = (1..=num_parties as u64).collect();
@@ -72,6 +74,10 @@ impl<const P: u64> DNBackend<P> {
             triple_buffer: VecDeque::with_capacity(buffer_size),
             triple_buffer_capacity: buffer_size,
             uniform_distr: Uniform::new(0, P),
+            ntt_table: <U64FieldEval<P> as NttField>::generate_ntt_table(
+                polynomial_size.trailing_zeros(),
+            )
+            .unwrap(),
         };
 
         // Generate initial supply of triples
@@ -535,12 +541,11 @@ impl<const P: u64> DNBackend<P> {
     }
 }
 
-static COUNT: AtomicUsize = AtomicUsize::new(0);
-
 /// MPCBackend trait implementation for DN07 protocol.
 impl<const P: u64> MPCBackend for DNBackend<P> {
     type Sharing = u64;
-    type RandomField = u64;
+
+    type Modulus = <U64FieldEval<P> as Field>::Modulus;
 
     fn party_id(&self) -> u32 {
         self.party_id
@@ -558,11 +563,19 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         P
     }
 
+    fn modulus(&self) -> Self::Modulus {
+        U64FieldEval::<P>::MODULUS
+    }
+
     fn neg(&mut self, a: Self::Sharing) -> Self::Sharing {
         U64FieldEval::<P>::neg(a)
     }
 
     fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+        U64FieldEval::<P>::add(a, b)
+    }
+
+    fn add_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
         U64FieldEval::<P>::add(a, b)
     }
 
@@ -586,9 +599,6 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     ) -> MPCResult<Vec<Self::Sharing>> {
         assert_eq!(a.len(), b.len(), "Input vector lengths must match");
         let batch_size = a.len();
-
-        COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        println!("Count: {}", COUNT.load(std::sync::atomic::Ordering::SeqCst));
 
         // Get required Beaver triples
         let triples: Vec<(u64, u64, u64)> = (0..batch_size).map(|_| self.next_triple()).collect();
@@ -799,7 +809,7 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(results)
     }
 
-    fn shared_rand_coin(&mut self) -> Self::RandomField {
+    fn shared_rand_coin(&mut self) -> u64 {
         self.shared_prg.next_u64()
     }
 
@@ -814,5 +824,33 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             .for_each(|(des, value)| {
                 *des = value;
             });
+    }
+
+    fn create_random_elements(&mut self, length: usize) -> Vec<u64> {
+        let batch_size = length.div_ceil((self.num_parties - self.num_threshold) as usize);
+        let output_size = batch_size * (self.num_parties - self.num_threshold) as usize;
+        let t_degree = self.num_threshold as usize;
+
+        // Generate random a-values with t-degree polynomials
+        let mut random_a = vec![0u64; batch_size];
+        self.gen_random_field(&mut random_a);
+        let all_a_shares = self.collect_party_shares(
+            &vec![batch_size; self.num_parties as usize],
+            &random_a,
+            t_degree,
+        );
+
+        // Apply Vandermonde combinations to derive final shares
+        let mut ret = self.vandermonde_combine(&all_a_shares, batch_size, output_size);
+        ret.truncate(length);
+        ret
+    }
+
+    fn ntt_sharing_poly_inplace(&self, poly: &mut [Self::Sharing]) {
+        self.ntt_table.transform_slice(poly);
+    }
+
+    fn ntt_poly_inplace(&self, poly: &mut [u64]) {
+        self.ntt_table.transform_slice(poly);
     }
 }

@@ -8,6 +8,7 @@ pub mod error;
 
 use std::fmt::Debug;
 
+use algebra::reduce::FieldReduce;
 pub use dn::DNBackend;
 pub use dummy::DummyBackend;
 
@@ -18,8 +19,8 @@ pub trait MPCBackend {
     /// Generic secret sharing type.
     type Sharing: Clone + Copy + Default + Debug;
 
-    /// Generic field type for random values.
-    type RandomField: Clone;
+    /// Generic field modulus type.
+    type Modulus: FieldReduce<u64>;
 
     /// Get the party id.
     fn party_id(&self) -> u32;
@@ -31,6 +32,9 @@ pub trait MPCBackend {
     fn num_threshold(&self) -> u32;
 
     /// Get the field modulus.
+    fn modulus(&self) -> Self::Modulus;
+
+    /// Get the field modulus.
     fn field_modulus_value(&self) -> u64;
 
     /// Negate a secret share.
@@ -38,6 +42,9 @@ pub trait MPCBackend {
 
     /// Add two secret shares.
     fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
+
+    /// Add two secret shares.
+    fn add_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing;
 
     /// Subtract two secret shares.
     fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
@@ -103,11 +110,20 @@ pub trait MPCBackend {
     fn reveal_slice_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>>;
 
     /// Generate a random value over `u64`.
-    fn shared_rand_coin(&mut self) -> Self::RandomField;
+    fn shared_rand_coin(&mut self) -> u64;
 
     /// Generate a random value over a specific field.
     fn shared_rand_field_element(&mut self) -> u64;
 
     /// Generate random values over a specific field.
     fn shared_rand_field_elements(&mut self, destination: &mut [u64]);
+
+    /// Generates a batch of random elements.
+    fn create_random_elements(&mut self, batch_size: usize) -> Vec<Self::Sharing>;
+
+    /// Transform a polynomial to NTT domain.
+    fn ntt_sharing_poly_inplace(&self, poly: &mut [Self::Sharing]);
+
+    /// Transform a polynomial to NTT domain.
+    fn ntt_poly_inplace(&self, poly: &mut [u64]);
 }

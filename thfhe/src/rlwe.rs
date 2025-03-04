@@ -7,6 +7,88 @@ pub struct MPCRlwe<Share> {
     pub b: Vec<Share>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct BatchMPCRlwe<Share: Default> {
+    pub a: Vec<Vec<u64>>,
+    pub b: Vec<Share>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BatchMPCNttRlwe<Share: Default> {
+    pub a: Vec<Vec<u64>>,
+    pub b: Vec<Share>,
+}
+
+pub fn generate_share_ntt_rlwe_ciphertext_vec<Backend, R>(
+    backend: &mut Backend,
+    secret_key_share: &[Backend::Sharing],
+    ntt_secret_key_share: &[Backend::Sharing],
+    count: usize,
+    gaussian: DiscreteGaussian<u64>,
+    rng: &mut R,
+) -> BatchMPCNttRlwe<Backend::Sharing>
+where
+    Backend: MPCBackend,
+    R: Rng,
+{
+    let id = backend.party_id();
+
+    let polynomial_size = secret_key_share.len();
+
+    let mut batch_mpc_rlwe = BatchMPCRlwe {
+        a: vec![vec![0; polynomial_size]; count],
+        b: vec![Default::default(); count * polynomial_size],
+    };
+
+    batch_mpc_rlwe.a.iter_mut().for_each(|a| {
+        backend.shared_rand_field_elements(a);
+    });
+
+    let b = &mut batch_mpc_rlwe.b;
+    for i in 0..backend.num_parties() {
+        let temp = if i == id {
+            let e = gaussian
+                .sample_iter(&mut *rng)
+                .take(count * polynomial_size)
+                .collect::<Vec<_>>();
+            backend
+                .input_slice(Some(&e), count * polynomial_size, i)
+                .unwrap()
+        } else {
+            backend
+                .input_slice(None, count * polynomial_size, i)
+                .unwrap()
+        };
+        b.iter_mut().zip(temp.iter()).for_each(|(e, temp)| {
+            *e = backend.add(*e, *temp);
+        });
+    }
+
+    batch_mpc_rlwe
+        .a
+        .iter_mut()
+        .zip(batch_mpc_rlwe.b.chunks_mut(polynomial_size))
+        .for_each(|(a, b)| {
+            backend.ntt_sharing_poly_inplace(b);
+            backend.ntt_poly_inplace(a);
+
+            let res = ntt_secret_key_share
+                .iter()
+                .zip(a.iter())
+                .map(|(s, a)| backend.mul_const(*s, *a))
+                .collect::<Vec<_>>();
+
+            b.iter_mut().zip(res.iter()).for_each(|(b, res)| {
+                *b = backend.add(*b, *res);
+            });
+        });
+
+    BatchMPCNttRlwe {
+        a: batch_mpc_rlwe.a,
+        b: batch_mpc_rlwe.b,
+    }
+}
+
 pub fn generate_share_rlwe_ciphertext<Backend, R>(
     backend: &mut Backend,
     secret_key_share: &[Backend::Sharing],

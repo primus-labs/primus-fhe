@@ -1,5 +1,6 @@
 //! Implementation of a dummy MPC backend.
 
+use algebra::modulus::BarrettModulus;
 use algebra::{Field, U64FieldEval};
 
 use crate::error::MPCErr;
@@ -16,7 +17,7 @@ pub struct DummyBackend<const P: u64> {}
 
 impl<const P: u64> MPCBackend for DummyBackend<P> {
     type Sharing = DummyShare;
-    type RandomField = u64;
+    type Modulus = BarrettModulus<u64>;
 
     fn party_id(&self) -> u32 {
         0
@@ -34,6 +35,10 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         P
     }
 
+    fn modulus(&self) -> Self::Modulus {
+        U64FieldEval::<P>::MODULUS
+    }
+
     fn neg(&mut self, a: DummyShare) -> DummyShare {
         DummyShare {
             value: U64FieldEval::<P>::neg(a.value),
@@ -43,6 +48,12 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
     fn add(&mut self, a: DummyShare, b: DummyShare) -> DummyShare {
         DummyShare {
             value: U64FieldEval::<P>::add(a.value, b.value),
+        }
+    }
+
+    fn add_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
+        DummyShare {
+            value: U64FieldEval::<P>::add(a.value, b),
         }
     }
 
@@ -80,16 +91,6 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
                 value: U64FieldEval::<P>::mul(a.value, b.value),
             })
             .collect())
-        // let mut res = Vec::new();
-        // if a.len() != b.len() {
-        //     return Err(MPCErr::InvalidOperation(
-        //         "batch operations length mismatch".to_string(),
-        //     ));
-        // }
-        // for i in 0..a.len() {
-        //     res.push(Self::mul(self, a[i], b[i])?);
-        // }
-        // Ok(res)
     }
 
     fn inner_product(&mut self, a: &[DummyShare], b: &[DummyShare]) -> MPCResult<Self::Sharing> {
@@ -103,12 +104,6 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         });
 
         Ok(DummyShare { value })
-        // let mut res = DummyShare { value: 0 };
-        // for i in 0..a.len() {
-        //     let mul_result = Self::mul(self, a[i], b[i])?;
-        //     res = Self::add(self, res, mul_result);
-        // }
-        // Ok(res)
     }
 
     fn inner_product_const(&mut self, a: &[DummyShare], b: &[u64]) -> Self::Sharing {
@@ -117,12 +112,6 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         });
 
         DummyShare { value }
-        // let mut res = DummyShare { value: 0 };
-        // for i in 0..a.len() {
-        //     let mul_const_result = Self::mul_const(self, a[i], b[i]);
-        //     res = Self::add(self, res, mul_const_result);
-        // }
-        // res
     }
 
     fn double(&mut self, a: DummyShare) -> DummyShare {
@@ -161,10 +150,14 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
     fn input_slice(
         &mut self,
         values: Option<&[u64]>,
-        batch_size: usize,
-        party_id: u32,
+        _batch_size: usize,
+        _party_id: u32,
     ) -> MPCResult<Vec<DummyShare>> {
-        todo!()
+        Ok(values
+            .unwrap()
+            .iter()
+            .map(|v| DummyShare { value: *v })
+            .collect())
     }
 
     fn input_slice_with_different_party_ids(
@@ -172,15 +165,35 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         values: &[Option<u64>],
         party_ids: &[u32],
     ) -> MPCResult<Vec<DummyShare>> {
-        todo!()
+        Ok(values
+            .iter()
+            .zip(party_ids.iter())
+            .map(|(v, _)| DummyShare {
+                value: v.unwrap_or(0),
+            })
+            .collect())
     }
 
     fn reveal_slice(&mut self, a: &[DummyShare], party_id: u32) -> MPCResult<Vec<Option<u64>>> {
-        todo!()
+        Ok(a.iter()
+            .map(|share| self.reveal(*share, party_id).unwrap())
+            .collect())
     }
 
     fn reveal_slice_to_all(&mut self, a: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
-        todo!()
+        Ok(a.iter().map(|share| share.value).collect())
+    }
+
+    fn create_random_elements(&mut self, batch_size: usize) -> Vec<Self::Sharing> {
+        vec![DummyShare { value: 0 }; batch_size]
+    }
+
+    fn ntt_sharing_poly_inplace(&self, _poly: &mut [Self::Sharing]) {
+        unimplemented!()
+    }
+
+    fn ntt_poly_inplace(&self, _poly: &mut [u64]) {
+        unimplemented!()
     }
 }
 #[cfg(test)]
