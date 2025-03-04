@@ -12,7 +12,7 @@ impl<F: Field> FieldPolynomial<F> {
         self.iter()
             .zip(rhs)
             .zip(destination)
-            .for_each(|((&a, &b), c)| *c = F::add(a, b))
+            .for_each(|((&a, &b), c)| *c = F::add(a, b));
     }
 }
 
