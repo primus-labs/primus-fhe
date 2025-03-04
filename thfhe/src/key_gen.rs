@@ -52,9 +52,9 @@ impl KeyGen {
         let blind_rotation_params = params.blind_rotation_params();
 
         let start = std::time::Instant::now();
-        // let kappa = input_lwe_params.dimension
-        //     * input_lwe_params.cipher_modulus_value.log_modulus() as usize;
-        let kappa = input_lwe_params.cipher_modulus_value.log_modulus() as usize;
+        let kappa = input_lwe_params.dimension
+            * input_lwe_params.cipher_modulus_value.log_modulus() as usize;
+        // let kappa = input_lwe_params.cipher_modulus_value.log_modulus() as usize;
 
         let lwe_public_key: LwePublicKey<u64> = generate_lwe_public_key(
             backend,

@@ -11,6 +11,7 @@ use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
+use std::sync::atomic::AtomicU32;
 
 /// MPC backend implementing the DN07 protocol with honest-majority security.
 pub struct DNBackend<const P: u64> {
@@ -541,6 +542,9 @@ impl<const P: u64> DNBackend<P> {
     }
 }
 
+/// Atomic counter for tracking element-wise multiplications.
+pub static MUL_ELEMENT_WISE_COUNT: AtomicU32 = AtomicU32::new(0);
+
 /// MPCBackend trait implementation for DN07 protocol.
 impl<const P: u64> MPCBackend for DNBackend<P> {
     type Sharing = u64;
@@ -599,6 +603,8 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     ) -> MPCResult<Vec<Self::Sharing>> {
         assert_eq!(a.len(), b.len(), "Input vector lengths must match");
         let batch_size = a.len();
+
+        MUL_ELEMENT_WISE_COUNT.fetch_add(batch_size as u32, std::sync::atomic::Ordering::Relaxed);
 
         // Get required Beaver triples
         let triples: Vec<(u64, u64, u64)> = (0..batch_size).map(|_| self.next_triple()).collect();

@@ -9,7 +9,7 @@ pub mod error;
 use std::fmt::Debug;
 
 use algebra::reduce::FieldReduce;
-pub use dn::DNBackend;
+pub use dn::{DNBackend, MUL_ELEMENT_WISE_COUNT};
 pub use dummy::DummyBackend;
 
 type MPCResult<T> = Result<T, error::MPCErr>;
