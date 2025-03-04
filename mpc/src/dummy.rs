@@ -160,21 +160,22 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
 
     fn input_slice(
         &mut self,
-        values: Option<&[Self::Sharing]>,
+        values: Option<&[u64]>,
+        batch_size: usize,
         party_id: u32,
-    ) -> MPCResult<Vec<Self::Sharing>> {
+    ) -> MPCResult<Vec<DummyShare>> {
         todo!()
     }
 
     fn input_slice_with_different_party_ids(
         &mut self,
-        values: &[Option<Self::Sharing>],
+        values: &[Option<u64>],
         party_ids: &[u32],
-    ) -> MPCResult<Vec<Self::Sharing>> {
+    ) -> MPCResult<Vec<DummyShare>> {
         todo!()
     }
 
-    fn reveal_slice(&mut self, a: &[Self::Sharing], party_id: u32) -> MPCResult<Vec<Option<u64>>> {
+    fn reveal_slice(&mut self, a: &[DummyShare], party_id: u32) -> MPCResult<Vec<Option<u64>>> {
         todo!()
     }
 

@@ -140,7 +140,9 @@ impl<const P: u64> DNBackend<P> {
                 netio
                     .send(receiver_id, &seed_bytes)
                     .expect("Seed distribution failed");
-                netio.flush(receiver_id).expect("Failed to flush network buffer");
+                netio
+                    .flush(receiver_id)
+                    .expect("Failed to flush network buffer");
             }
 
             Prg::from_seed(seed)
@@ -207,18 +209,22 @@ impl<const P: u64> DNBackend<P> {
             .collect()
     }
 
-    /// Distributes shares from a dealer to all parties.
+    /// Distributes shares from a dealer to selected parties.
     fn share_secrets(
         &mut self,
         dealer_id: u32,
         batch_size: usize,
-        shares: Option<Vec<Vec<u64>>>,
+        shares: Option<&Vec<Vec<u64>>>,
+        target_range: (u32, u32),
     ) -> Vec<u64> {
+        // Default range is all parties
+        let (start_id, end_id) = target_range;
+
         if self.party_id == dealer_id {
             let all_shares = shares.expect("Dealer must provide shares");
 
-            // Send shares to each party
-            for party_idx in 0..self.num_parties {
+            // Send shares only to parties in the target range
+            for party_idx in start_id..end_id {
                 if party_idx as u32 == self.party_id {
                     continue;
                 }
@@ -229,9 +235,11 @@ impl<const P: u64> DNBackend<P> {
                     .collect();
 
                 self.netio
-                    .send(party_idx as u32, &share_buffer)
+                    .send(party_idx, &share_buffer)
                     .expect("Share distribution failed");
-                self.netio.flush(party_idx as u32).expect("Failed to flush network buffer");
+                self.netio
+                    .flush(party_idx)
+                    .expect("Failed to flush network buffer");
             }
 
             // Return own shares
@@ -239,8 +247,8 @@ impl<const P: u64> DNBackend<P> {
                 .iter()
                 .map(|share_vec| share_vec[self.party_id as usize])
                 .collect()
-        } else {
-            // Receive shares from dealer
+        } else if self.party_id >= start_id && self.party_id < end_id {
+            // Only receive shares if we're in the target range
             let mut buffer = vec![0u8; batch_size * 8];
 
             self.netio
@@ -251,6 +259,9 @@ impl<const P: u64> DNBackend<P> {
                 .chunks_exact(8)
                 .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
                 .collect()
+        } else {
+            // Not in target range, return empty shares
+            vec![0u64; batch_size]
         }
     }
 
@@ -317,26 +328,11 @@ impl<const P: u64> DNBackend<P> {
                         self.netio
                             .send(party_idx, &result_buffer)
                             .expect("Result broadcast failed");
-                        self.netio.flush(party_idx as u32).expect("Failed to flush network buffer");
-                    }
-                }
-            }
-
-            // After network operations, flush appropriate connections
-            if broadcast_result {
-                // Flush all connections
-                for party_id in 0..self.num_parties {
-                    if party_id != self.party_id {
                         self.netio
-                            .flush(party_id)
+                            .flush(party_idx as u32)
                             .expect("Failed to flush network buffer");
                     }
                 }
-            } else if self.party_id != reconstructor_id {
-                // Flush only to the reconstructor
-                self.netio
-                    .flush(reconstructor_id)
-                    .expect("Failed to flush network buffer");
             }
 
             Some(results)
@@ -358,7 +354,9 @@ impl<const P: u64> DNBackend<P> {
                 self.netio
                     .send(reconstructor_id, &share_buffer)
                     .expect("Share sending failed");
-                self.netio.flush(reconstructor_id).expect("Failed to flush network buffer");
+                self.netio
+                    .flush(reconstructor_id)
+                    .expect("Failed to flush network buffer");
             }
 
             // Receive results if they're being broadcast
@@ -407,18 +405,34 @@ impl<const P: u64> DNBackend<P> {
         // Generate random a-values with t-degree polynomials
         let mut random_a = vec![0u64; batch_size];
         self.gen_random_field(&mut random_a);
-        let all_a_shares = self.collect_party_shares(batch_size, &random_a, t_degree);
+        let all_a_shares = self.collect_party_shares(
+            &vec![batch_size; self.num_parties as usize],
+            &random_a,
+            t_degree,
+        );
 
         // Generate random b-values with t-degree polynomials
         let mut random_b = vec![0u64; batch_size];
         self.gen_random_field(&mut random_b);
-        let all_b_shares = self.collect_party_shares(batch_size, &random_b, t_degree);
+        let all_b_shares = self.collect_party_shares(
+            &vec![batch_size; self.num_parties as usize],
+            &random_b,
+            t_degree,
+        );
 
         // Generate random masks with both t and 2t degree polynomials
         let mut random_masks = vec![0u64; batch_size];
         self.gen_random_field(&mut random_masks);
-        let all_mask_t_shares = self.collect_party_shares(batch_size, &random_masks, t_degree);
-        let all_mask_2t_shares = self.collect_party_shares(batch_size, &random_masks, t_degree * 2);
+        let all_mask_t_shares = self.collect_party_shares(
+            &vec![batch_size; self.num_parties as usize],
+            &random_masks,
+            t_degree,
+        );
+        let all_mask_2t_shares = self.collect_party_shares(
+            &vec![batch_size; self.num_parties as usize],
+            &random_masks,
+            t_degree * 2,
+        );
 
         // Apply Vandermonde combinations to derive final shares
         let a_shares = self.vandermonde_combine(&all_a_shares, batch_size, output_size);
@@ -477,23 +491,35 @@ impl<const P: u64> DNBackend<P> {
     }
 
     /// Collects shares of random values from all parties using polynomial of specified degree.
-    fn collect_party_shares(
-        &mut self,
-        batch_size: usize,
-        values: &[u64],
-        degree: usize,
-    ) -> Vec<u64> {
-        let mut all_shares = Vec::with_capacity(self.num_parties as usize * batch_size);
+    /// Optimized to require only O(1) communication rounds.
+    fn collect_party_shares(&mut self, size: &[usize], values: &[u64], degree: usize) -> Vec<u64> {
+        let mut all_shares = Vec::with_capacity(size.iter().sum());
 
+        // Generate our shares
+        let our_shares = self.generate_shares(values, degree);
+
+        // Share with higher party IDs
         for party_idx in 0..self.num_parties {
-            let shares = if party_idx == self.party_id {
-                Some(self.generate_shares(values, degree))
-            } else {
-                None
-            };
+            let shares = (party_idx == self.party_id).then_some(&our_shares);
+            let party_shares = self.share_secrets(
+                party_idx,
+                size[party_idx as usize],
+                shares,
+                (party_idx, self.num_parties),
+            );
+            if party_idx <= self.party_id {
+                all_shares.extend_from_slice(&party_shares);
+            }
+        }
 
-            let party_shares = self.share_secrets(party_idx, batch_size, shares);
-            all_shares.extend(party_shares);
+        // Share with lower party IDs
+        for party_idx in 0..self.num_parties {
+            let shares = (party_idx == self.party_id).then_some(&our_shares);
+            let party_shares =
+                self.share_secrets(party_idx, size[party_idx as usize], shares, (0, party_idx));
+            if party_idx > self.party_id {
+                all_shares.extend_from_slice(&party_shares);
+            }
         }
 
         all_shares
@@ -637,61 +663,140 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     }
 
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing> {
+        let shares = self.input_slice(value.as_ref().map(std::slice::from_ref), 1, party_id)?;
+        Ok(shares[0])
+    }
+
+    fn input_slice(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> MPCResult<Vec<Self::Sharing>> {
         if party_id >= self.num_parties {
             return Err(MPCErr::ProtocolError("Invalid party ID".into()));
         }
 
-        println!("Party {} inputting value: {:?}", self.party_id, value);
-
-        // Create shares directly in the Option
-        let share_batch = if self.party_id == party_id {
-            let val = value.ok_or(MPCErr::ProtocolError(
-                "Input party must provide a value".into(),
-            ))?;
-            Some(self.generate_shares(&[val], self.num_threshold as usize))
+        let all_shares = if self.party_id == party_id {
+            Some(self.generate_shares(values.unwrap(), self.num_threshold as usize))
         } else {
             None
         };
 
-        // Distribute the shares with explicit batch size of 1
-        let shares = self.share_secrets(party_id, 1, share_batch);
-        Ok(shares[0])
+        let shares = self.share_secrets(
+            party_id,
+            batch_size,
+            all_shares.as_ref(),
+            (0, self.num_parties),
+        );
+
+        Ok(shares)
     }
 
-    fn reveal(&mut self, a: Self::Sharing, party_id: u32) -> MPCResult<Option<u64>> {
+    fn input_slice_with_different_party_ids(
+        &mut self,
+        values: &[Option<u64>],
+        party_ids: &[u32],
+    ) -> MPCResult<Vec<Self::Sharing>> {
+        if party_ids.len() != values.len() {
+            return Err(MPCErr::ProtocolError(
+                "Party IDs and values must have the same length".into(),
+            ));
+        }
+
+        if let Some(&invalid_id) = party_ids.iter().find(|&&id| id >= self.num_parties) {
+            return Err(MPCErr::ProtocolError(format!(
+                "Invalid party ID: {}",
+                invalid_id
+            )));
+        }
+
+        let mut values_per_party = vec![0; self.num_parties as usize];
+        for &party_id in party_ids {
+            values_per_party[party_id as usize] += 1;
+        }
+
+        let mut base_indices = vec![0; self.num_parties as usize];
+        let mut sum = 0;
+        for (i, &count) in values_per_party.iter().enumerate() {
+            base_indices[i] = sum;
+            sum += count;
+        }
+
+        let my_values: Vec<u64> = values
+            .iter()
+            .zip(party_ids)
+            .filter_map(|(value, &id)| {
+                if id == self.party_id {
+                    value.as_ref().copied()
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Generate and distribute shares
+        let all_shares =
+            self.collect_party_shares(&values_per_party, &my_values, self.num_threshold as usize);
+
+        let mut position_counters = vec![0; self.num_parties as usize];
+
+        let result = party_ids
+            .iter()
+            .map(|&party_id| {
+                let idx = party_id as usize;
+                let pos = position_counters[idx];
+                position_counters[idx] += 1;
+
+                all_shares[base_indices[idx] + pos]
+            })
+            .collect();
+
+        Ok(result)
+    }
+
+    fn reveal(&mut self, share: Self::Sharing, party_id: u32) -> MPCResult<Option<u64>> {
+        let result = self.reveal_slice(&[share], party_id)?;
+
+        Ok(result[0])
+    }
+
+    fn reveal_slice(
+        &mut self,
+        shares: &[Self::Sharing],
+        party_id: u32,
+    ) -> MPCResult<Vec<Option<u64>>> {
         if party_id >= self.num_parties {
             return Err(MPCErr::ProtocolError("Invalid party ID".into()));
         }
 
-        let result = self.open_secrets(party_id, self.num_threshold, &[a], false);
+        let values = self.open_secrets(party_id, self.num_threshold, shares, false);
 
-        if self.party_id == party_id {
-            match result {
-                Some(values) => Ok(Some(values[0])),
-                None => Err(MPCErr::ProtocolError(
+        let result = match (self.party_id == party_id, values) {
+            (true, Some(v)) => v.into_iter().map(Some).collect(),
+            (true, None) => {
+                return Err(MPCErr::ProtocolError(
                     "Failed to receive reconstruction".into(),
-                )),
+                ))
             }
-        } else {
-            Ok(None)
-        }
+            (false, _) => vec![None; shares.len()],
+        };
+
+        Ok(result)
     }
 
-    fn reveal_to_all(&mut self, a: Self::Sharing) -> MPCResult<u64> {
-        let result = self
-            .open_secrets(0, self.num_threshold, &[a], true)
-            .ok_or(MPCErr::ProtocolError("Failed to reveal value".into()))?;
-
-        // Add explicit flush after all communication in reveal_to_all
-        for party_id in 0..self.num_parties {
-            if party_id != self.party_id {
-                self.netio
-                    .flush(party_id)
-                    .expect("Failed to flush network buffer");
-            }
-        }
+    fn reveal_to_all(&mut self, share: Self::Sharing) -> MPCResult<u64> {
+        let result = self.reveal_slice_to_all(&[share])?;
 
         Ok(result[0])
+    }
+
+    fn reveal_slice_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
+        let results = self
+            .open_secrets(0, self.num_threshold, shares, true)
+            .ok_or(MPCErr::ProtocolError("Failed to reveal values".into()))?;
+
+        Ok(results)
     }
 
     fn shared_rand_coin(&mut self) -> Self::RandomField {
@@ -709,29 +814,5 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             .for_each(|(des, value)| {
                 *des = value;
             });
-    }
-
-    fn input_slice(
-        &mut self,
-        values: Option<&[Self::Sharing]>,
-        party_id: u32,
-    ) -> MPCResult<Vec<Self::Sharing>> {
-        todo!()
-    }
-
-    fn input_slice_with_different_party_ids(
-        &mut self,
-        values: &[Option<Self::Sharing>],
-        party_ids: &[u32],
-    ) -> MPCResult<Vec<Self::Sharing>> {
-        todo!()
-    }
-
-    fn reveal_slice(&mut self, a: &[Self::Sharing], party_id: u32) -> MPCResult<Vec<Option<u64>>> {
-        todo!()
-    }
-
-    fn reveal_slice_to_all(&mut self, a: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
-        todo!()
     }
 }
