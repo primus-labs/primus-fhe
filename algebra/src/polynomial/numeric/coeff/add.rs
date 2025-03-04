@@ -35,6 +35,6 @@ impl<T: Copy> Polynomial<T> {
         self.iter()
             .zip(rhs)
             .zip(destination)
-            .for_each(|((&a, &b), c)| *c = modulus.reduce_add(a, b))
+            .for_each(|((&a, &b), c)| *c = modulus.reduce_add(a, b));
     }
 }
