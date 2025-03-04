@@ -7,7 +7,7 @@ use crate::{
 
 mod ops;
 
-/// Natvie modulus.
+/// Native modulus.
 ///
 /// - For `u8`, this type acts as `2⁸`
 /// - For `u16`, this type acts as `2¹⁶`
