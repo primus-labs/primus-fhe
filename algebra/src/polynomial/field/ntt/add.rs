@@ -15,7 +15,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
         self.iter()
             .zip(rhs)
             .zip(destination)
-            .for_each(|((&a, &b), z)| *z = <F as Field>::MODULUS.reduce_add(a, b))
+            .for_each(|((&a, &b), z)| *z = <F as Field>::MODULUS.reduce_add(a, b));
     }
 }
 

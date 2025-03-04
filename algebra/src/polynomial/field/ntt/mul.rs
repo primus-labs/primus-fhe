@@ -28,7 +28,7 @@ impl<F: NttField> FieldNttPolynomial<F> {
     pub fn add_mul_scalar_assign(&mut self, rhs: &Self, scalar: <F as Field>::ValueT) {
         self.iter_mut()
             .zip(rhs.iter())
-            .for_each(|(r, &v)| *r = <F as Field>::MODULUS.reduce_mul_add(v, scalar, *r))
+            .for_each(|(r, &v)| *r = <F as Field>::MODULUS.reduce_mul_add(v, scalar, *r));
     }
 
     /// Multiply `self` with a scalar.
