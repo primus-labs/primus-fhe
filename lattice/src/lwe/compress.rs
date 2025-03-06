@@ -227,7 +227,7 @@ impl<T: UnsignedInteger> CmLwe<T> {
             .for_each(|(v, &r)| *v = modulus.reduce_mul_add(r, scalar, *v));
     }
 
-    /// Sample extract [Lwe<T>].
+    /// Sample extract [`Lwe<T>`].
     #[inline]
     pub fn extract_rlwe_mode<M>(&self, index: usize, modulus: M) -> Lwe<T>
     where
@@ -245,7 +245,7 @@ impl<T: UnsignedInteger> CmLwe<T> {
         }
     }
 
-    /// Sample extract all [Lwe<T>].
+    /// Sample extract all [`Lwe<T>`].
     #[inline]
     pub fn extract_all<M>(&self, modulus: M) -> Vec<Lwe<T>>
     where

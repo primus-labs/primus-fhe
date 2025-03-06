@@ -42,6 +42,15 @@ impl<F: NttField> BlindRotationKey<F> {
         Self::Ternary(key)
     }
 
+    /// Returns the NTT table.
+    #[inline]
+    pub fn ntt_table(&self) -> &<F as NttField>::Table {
+        match self {
+            BlindRotationKey::Binary(key) => key.ntt_table(),
+            BlindRotationKey::Ternary(key) => key.ntt_table(),
+        }
+    }
+
     /// Performs the blind rotation operation.
     pub fn blind_rotate<C: UnsignedInteger>(
         &self,

@@ -44,7 +44,7 @@ impl<T: Numeric> PrimitiveRoot<T> for BarrettModulus<T> {
         }
 
         let mut rng = rand::thread_rng();
-        let distr = Uniform::new_inclusive(T::ONE + T::ONE, modulus_minus_one);
+        let distr = Uniform::new_inclusive(T::TWO, modulus_minus_one);
 
         let mut w = T::ZERO;
 

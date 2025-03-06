@@ -6,10 +6,10 @@ use crate::{
     ntt::{NttTable, NumberTheoryTransform},
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     reduce::{
-        LazyReduceMul, Modulus, ReduceAdd, ReduceInv, ReduceMul, ReduceMulAssign, ReduceOnce,
-        ReduceOnceAssign,
+        LazyReduceMul, LazyReduceMulAssign, ReduceAdd, ReduceInv, ReduceMul, ReduceMulAssign,
+        ReduceOnce, ReduceOnceAssign,
     },
-    utils::ReverseLsbs,
+    utils::{Pool, ReverseLsbs},
     AlgebraError, Field, NttField,
 };
 
@@ -37,10 +37,11 @@ use crate::{
 /// ```
 pub struct FieldTableWithShoupRoot<F>
 where
-    F: NttField,
+    F: Field<Modulus = BarrettModulus<<F as Field>::ValueT>> + NttField<Table = Self>,
 {
     root: <F as Field>::ValueT,
     inv_root: <F as Field>::ValueT,
+    modulus: BarrettModulus<<F as Field>::ValueT>,
     log_n: u32,
     n: usize,
     inv_n: ShoupFactor<<F as Field>::ValueT>,
@@ -48,31 +49,12 @@ where
     inv_root_powers: Vec<ShoupFactor<<F as Field>::ValueT>>,
     ordinal_root_powers: Vec<ShoupFactor<<F as Field>::ValueT>>,
     reverse_lsbs: Vec<usize>,
-}
-
-impl<F> Clone for FieldTableWithShoupRoot<F>
-where
-    F: NttField,
-{
-    #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            root: self.root,
-            inv_root: self.inv_root,
-            log_n: self.log_n,
-            n: self.n,
-            inv_n: self.inv_n,
-            root_powers: self.root_powers.clone(),
-            inv_root_powers: self.inv_root_powers.clone(),
-            ordinal_root_powers: self.ordinal_root_powers.clone(),
-            reverse_lsbs: self.reverse_lsbs.clone(),
-        }
-    }
+    pool: Pool<Vec<<F as Field>::ValueT>>,
 }
 
 impl<F> FieldTableWithShoupRoot<F>
 where
-    F: NttField,
+    F: Field<Modulus = BarrettModulus<<F as Field>::ValueT>> + NttField<Table = Self>,
 {
     /// Returns the root of this [`FieldTableWithShoupRoot<F>`].
     #[inline]
@@ -84,6 +66,12 @@ where
     #[inline]
     pub fn inv_root(&self) -> <F as Field>::ValueT {
         self.inv_root
+    }
+
+    /// Returns the modulus of this [`FieldTableWithShoupRoot<F>`].
+    #[inline]
+    pub fn modulus(&self) -> BarrettModulus<<F as Field>::ValueT> {
+        self.modulus
     }
 
     /// Returns the log n of this [`FieldTableWithShoupRoot<F>`].
@@ -131,14 +119,13 @@ where
 
 impl<F> NttTable for FieldTableWithShoupRoot<F>
 where
-    F: NttField,
+    F: Field<Modulus = BarrettModulus<<F as Field>::ValueT>> + NttField<Table = Self>,
 {
     type ValueT = <F as Field>::ValueT;
 
-    fn new<M>(modulus: M, log_n: u32) -> Result<Self, crate::AlgebraError>
-    where
-        M: Modulus<<F as Field>::ValueT> + PrimitiveRoot<<F as Field>::ValueT>,
-    {
+    type ModulusT = <F as Field>::Modulus;
+
+    fn new(modulus: Self::ModulusT, log_n: u32) -> Result<Self, crate::AlgebraError> {
         let n = 1usize << log_n;
 
         let modulus_value = F::MODULUS_VALUE;
@@ -201,9 +188,12 @@ where
 
         let inv_n = to_root_type(modulus_value.reduce_inv(n_cast));
 
+        let pool = Pool::new_with(2, || vec![ConstZero::ZERO; n]);
+
         Ok(Self {
             root,
             inv_root,
+            modulus,
             log_n,
             n,
             inv_n,
@@ -211,6 +201,7 @@ where
             inv_root_powers,
             ordinal_root_powers,
             reverse_lsbs,
+            pool,
         })
     }
 
@@ -222,7 +213,7 @@ where
 
 impl<F> NumberTheoryTransform for FieldTableWithShoupRoot<F>
 where
-    F: NttField<Modulus = BarrettModulus<<F as Field>::ValueT>>,
+    F: Field<Modulus = BarrettModulus<<F as Field>::ValueT>> + NttField<Table = Self>,
 {
     type CoeffPoly = FieldPolynomial<F>;
 
@@ -430,5 +421,51 @@ where
                 let index = (((2 * i + 1) * degree) & mask) ^ n;
                 *v = unsafe { *self.ordinal_root_powers.get_unchecked(index) }.value();
             });
+    }
+
+    fn lazy_mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly) {
+        let mut bv = self.pool.try_get().map_or_else(
+            || b.as_slice().to_vec(),
+            |mut t| {
+                t.copy_from_slice(b.as_slice());
+                t
+            },
+        );
+
+        self.lazy_transform_slice(a.as_mut_slice());
+        self.lazy_transform_slice(bv.as_mut_slice());
+
+        for (ai, &bi) in a.iter_mut().zip(bv.iter()) {
+            self.modulus.lazy_reduce_mul_assign(ai, bi);
+        }
+
+        self.pool.store(bv);
+        self.lazy_inverse_transform_slice(a.as_mut_slice());
+    }
+
+    #[inline]
+    fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly) {
+        self.lazy_mul_assign(a, b);
+
+        let modulus_value = self.modulus.value();
+        a.iter_mut().for_each(|v| {
+            modulus_value.reduce_once_assign(v);
+        });
+    }
+
+    #[inline]
+    fn lazy_mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly) {
+        c.copy_from(a);
+        self.lazy_mul_assign(c, b);
+    }
+
+    #[inline]
+    fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly) {
+        self.lazy_mul_inplace(a, b, c);
+
+        let modulus_value = self.modulus.value();
+        c.iter_mut().for_each(|v| {
+            modulus_value.reduce_once_assign(v);
+        });
     }
 }

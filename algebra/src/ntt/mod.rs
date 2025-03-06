@@ -1,20 +1,21 @@
 //! Defines Number Theory Transform algorithms.
 
-use crate::{arith::PrimitiveRoot, reduce::Modulus, AlgebraError};
+use crate::{arith::PrimitiveRoot, AlgebraError};
 
 mod table;
 
 pub use table::*;
 
 /// An abstract for ntt table generation.
-pub trait NttTable: Sized + Clone + Send + Sync {
+pub trait NttTable: Sized + Send + Sync {
     /// The value type.
     type ValueT;
 
+    /// The modulus type.
+    type ModulusT: PrimitiveRoot<Self::ValueT>;
+
     /// Creates a new [`NttTable`].
-    fn new<M>(modulus: M, log_n: u32) -> Result<Self, AlgebraError>
-    where
-        M: Modulus<Self::ValueT> + PrimitiveRoot<Self::ValueT>;
+    fn new(modulus: Self::ModulusT, log_n: u32) -> Result<Self, AlgebraError>;
 
     /// Get the polynomial modulus degree.
     fn dimension(&self) -> usize;
@@ -130,4 +131,28 @@ pub trait NumberTheoryTransform: NttTable {
         degree: usize,
         values: &mut [<Self as NttTable>::ValueT],
     );
+
+    /// Perform a fast lazy polynomial multiplication assignment.
+    ///
+    /// The coefficients of the result polynomial are in the range `[0, 2*modulus)`
+    /// and fall back to the range `[0, modulus)` if the ntt table does not support
+    /// this special case.
+    fn lazy_mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
+
+    /// Perform a fast polynomial multiplication assignment.
+    ///
+    /// The coefficients of the result polynomial are in the range `[0, modulus)`.
+    fn mul_assign(&self, a: &mut Self::CoeffPoly, b: &Self::CoeffPoly);
+
+    /// Perform a fast lazy polynomial multiplication in place.
+    ///
+    /// The coefficients of the result polynomial are in the range `[0, 2*modulus)`
+    /// and fall back to the range `[0, modulus)` if the ntt table does not support
+    /// this special case.
+    fn lazy_mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
+
+    /// Perform a fast polynomial multiplication in place.
+    ///
+    /// The coefficients of the result polynomial are in the range `[0, modulus)`.
+    fn mul_inplace(&self, a: &Self::CoeffPoly, b: &Self::CoeffPoly, c: &mut Self::CoeffPoly);
 }

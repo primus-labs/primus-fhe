@@ -11,7 +11,7 @@ pub use lazy_ops::*;
 use num_traits::ConstOne;
 pub use ops::*;
 
-use crate::{integer::UnsignedInteger, numeric::Numeric};
+use crate::{arith::PrimitiveRoot, integer::UnsignedInteger, numeric::Numeric};
 
 /// Represents different types of modulus values.
 ///
@@ -166,6 +166,7 @@ pub trait FieldReduce<T>:
     + ReduceInvAssign<T>
     + ReduceDiv<T, Output = T>
     + ReduceDivAssign<T>
+    + PrimitiveRoot<T>
 {
 }
 
@@ -181,6 +182,7 @@ impl<T: Numeric, M> FieldReduce<T> for M where
         + ReduceInvAssign<T>
         + ReduceDiv<T, Output = T>
         + ReduceDivAssign<T>
+        + PrimitiveRoot<T>
 {
 }
 

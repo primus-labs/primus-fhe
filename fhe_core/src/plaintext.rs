@@ -1,4 +1,7 @@
-use algebra::{integer::UnsignedInteger, reduce::ModulusValue};
+use algebra::{
+    integer::{AsInto, UnsignedInteger},
+    reduce::ModulusValue,
+};
 
 /// Encodes a message.
 ///
@@ -15,7 +18,7 @@ where
     match q {
         ModulusValue::Native => encode_native(message, t),
         ModulusValue::PowerOf2(q) => encode_pow_of_2(message, t, q),
-        ModulusValue::Prime(_) | ModulusValue::Others(_) => unimplemented!(),
+        ModulusValue::Prime(q) | ModulusValue::Others(q) => encode_normal(message, t, q),
     }
 }
 
@@ -77,6 +80,23 @@ where
     message << (C::BITS - t.trailing_zeros())
 }
 
+pub fn encode_normal<M, C>(message: M, t: C, q: C) -> C
+where
+    C: UnsignedInteger,
+    M: TryInto<C>,
+{
+    let message: C = message
+        .try_into()
+        .map_err(|_| "out of range integral type conversion attempted")
+        .unwrap();
+
+    let q: f64 = q.as_into();
+    let t: f64 = t.as_into();
+    let m: f64 = message.as_into();
+
+    (q / t * m).round().as_into()
+}
+
 /// Decodes an encode value.
 ///
 /// # Parameters
@@ -92,8 +112,25 @@ where
     match q {
         ModulusValue::Native => decode_native(cipher, t),
         ModulusValue::PowerOf2(q) => decode_pow_of_2(cipher, t, q),
-        ModulusValue::Prime(_) | ModulusValue::Others(_) => unimplemented!(),
+        ModulusValue::Prime(q) | ModulusValue::Others(q) => decode_normal(cipher, t, q),
     }
+}
+
+pub fn decode_normal<M, C>(cipher: C, t: C, q: C) -> M
+where
+    M: TryFrom<C>,
+    C: UnsignedInteger,
+{
+    debug_assert!(t.is_power_of_two());
+    let q_f: f64 = q.as_into();
+    let t_f: f64 = t.as_into();
+    let c: f64 = cipher.as_into();
+    let temp: C = (c / (q_f / t_f)).round().as_into();
+    let temp = if temp >= t { temp - t } else { temp };
+
+    M::try_from(temp)
+        .map_err(|_| "out of range integral type conversion attempted")
+        .unwrap()
 }
 
 /// Decodes an encode value.

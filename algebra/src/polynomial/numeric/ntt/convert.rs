@@ -7,7 +7,7 @@ use crate::{
 use super::NttPolynomial;
 
 impl<T: Numeric> NttPolynomial<T> {
-    /// Converts [NttPolynomial<T>] into [Polynomial<T>].
+    /// Converts [`NttPolynomial<T>`] into [`Polynomial<T>`].
     #[inline]
     pub fn into_coeff_poly<Table>(mut self, ntt_table: &Table) -> Polynomial<T>
     where
