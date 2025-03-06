@@ -85,7 +85,7 @@ pub trait Integer:
     + ShrAssign<u32>
     + Pow<u32, Output = Self>
     + Pow<usize, Output = Self>
-    + SampleUniform
+    + SampleUniform<Sampler: Copy + Clone>
 {
 }
 
