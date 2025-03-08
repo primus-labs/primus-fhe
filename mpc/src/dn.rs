@@ -11,7 +11,6 @@ use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
-use std::sync::atomic::AtomicU32;
 
 /// MPC backend implementing the DN07 protocol with honest-majority security.
 pub struct DNBackend<const P: u64> {
@@ -32,6 +31,12 @@ pub struct DNBackend<const P: u64> {
     triple_buffer: VecDeque<(u64, u64, u64)>,
     // Buffer size for triple generation
     triple_buffer_capacity: usize,
+
+    // Precomputed double randoms ([r]_t, [t]_{2t})
+    doublerandom_buffer: VecDeque<(u64, u64)>,
+    // Buffer size for double random generation
+    doublerandom_buffer_capacity: usize,
+
     uniform_distr: Uniform<u64>,
     ntt_table: <U64FieldEval<P> as NttField>::Table,
 }
@@ -74,6 +79,10 @@ impl<const P: u64> DNBackend<P> {
             netio,
             triple_buffer: VecDeque::with_capacity(buffer_size),
             triple_buffer_capacity: buffer_size,
+
+            doublerandom_buffer: VecDeque::with_capacity(buffer_size),
+            doublerandom_buffer_capacity: buffer_size,
+
             uniform_distr: Uniform::new(0, P),
             ntt_table: <U64FieldEval<P> as NttField>::generate_ntt_table(
                 polynomial_size.trailing_zeros(),
@@ -83,6 +92,10 @@ impl<const P: u64> DNBackend<P> {
 
         // Generate initial supply of triples
         backend.generate_triples(buffer_size);
+        // backend
+
+        // Generate initial supply of triples
+        // backend.generate_doublerandoms(buffer_size);
         backend
     }
 
@@ -97,7 +110,7 @@ impl<const P: u64> DNBackend<P> {
         for i in 2..(num_parties as usize) {
             matrix.push(
                 (0..num_parties as usize)
-                    .map(|j| U64FieldEval::<P>::mul(positions[j], matrix[i - 1][j]))
+                    .map(|j| <U64FieldEval<P>>::mul(positions[j], matrix[i - 1][j]))
                     .collect(),
             );
         }
@@ -118,14 +131,14 @@ impl<const P: u64> DNBackend<P> {
                             .filter(|&j| j != i)
                             .fold((1, 1), |(num, den), j| {
                                 (
-                                    U64FieldEval::<P>::mul(num, positions[j]),
-                                    U64FieldEval::<P>::mul(
+                                    <U64FieldEval<P>>::mul(num, positions[j]),
+                                    <U64FieldEval<P>>::mul(
                                         den,
-                                        U64FieldEval::<P>::sub(positions[j], positions[i]),
+                                        <U64FieldEval<P>>::sub(positions[j], positions[i]),
                                     ),
                                 )
                             });
-                    U64FieldEval::<P>::div(num, den)
+                    <U64FieldEval<P>>::div(num, den)
                 })
                 .collect()
         };
@@ -187,7 +200,7 @@ impl<const P: u64> DNBackend<P> {
             .iter()
             .zip(lagrange_coefs.iter())
             .fold(0, |acc, (&share, &coef)| {
-                U64FieldEval::<P>::add(acc, U64FieldEval::<P>::mul(share, coef))
+                <U64FieldEval<P>>::add(acc, <U64FieldEval<P>>::mul(share, coef))
             })
     }
 
@@ -205,9 +218,9 @@ impl<const P: u64> DNBackend<P> {
                 (0..self.num_parties as usize)
                     .map(|party_idx| {
                         (1..=degree).fold(value, |sum, j| {
-                            U64FieldEval::<P>::add(
+                            <U64FieldEval<P>>::add(
                                 sum,
-                                U64FieldEval::<P>::mul(coeffs[j], self.van_matrix[j][party_idx]),
+                                <U64FieldEval<P>>::mul(coeffs[j], self.van_matrix[j][party_idx]),
                             )
                         })
                     })
@@ -404,6 +417,25 @@ impl<const P: u64> DNBackend<P> {
         }
     }
 
+    /// Replenishes the double random buffer.
+    fn generate_doublerandoms(&mut self, count: usize) {
+        self.doublerandom_buffer.clear();
+
+        const MAX_BATCH_SIZE: usize = 128;
+        let batch_size =
+            MAX_BATCH_SIZE.min(count / (self.num_parties - self.num_threshold) as usize);
+
+        while self.doublerandom_buffer.len() < count {
+            let current_batch_size = batch_size.min(
+                (count - self.doublerandom_buffer.len())
+                    / (self.num_parties - self.num_threshold) as usize,
+            );
+
+            let new_doublerandoms = self.create_double_randoms_batch(current_batch_size);
+            self.doublerandom_buffer.extend(new_doublerandoms);
+        }
+    }
+
     /// Generates a batch of Beaver triples (a, b, c where c = a*b).
     fn create_beaver_triples_batch(&mut self, batch_size: usize) -> Vec<(u64, u64, u64)> {
         let output_size = batch_size * (self.num_parties - self.num_threshold) as usize;
@@ -453,7 +485,7 @@ impl<const P: u64> DNBackend<P> {
             .zip(b_shares.iter())
             .zip(mask_2t_shares.iter())
             .map(|((a, b), mask_r2)| {
-                U64FieldEval::<P>::add(U64FieldEval::<P>::mul(*a, *b), *mask_r2)
+                <U64FieldEval<P>>::add(<U64FieldEval<P>>::mul(*a, *b), *mask_r2)
             })
             .collect();
 
@@ -467,8 +499,40 @@ impl<const P: u64> DNBackend<P> {
             .iter()
             .zip(b_shares.iter())
             .zip(opened_values.iter().zip(mask_t_shares.iter()))
-            .map(|((a, b), (d, mask_r))| (*a, *b, U64FieldEval::<P>::sub(*d, *mask_r)))
+            .map(|((a, b), (d, mask_r))| (*a, *b, <U64FieldEval<P>>::sub(*d, *mask_r)))
             .collect()
+    }
+
+    /// Generates a batch of double randoms ([r]_t, [r]_{2t}).
+    fn create_double_randoms_batch(&mut self, batch_size: usize) -> Vec<(u64, u64)> {
+        let output_size = batch_size * (self.num_parties - self.num_threshold) as usize;
+        let t_degree = self.num_threshold as usize;
+
+        // Generate random masks with both t and 2t degree polynomials
+        let mut random_masks = vec![0u64; batch_size];
+        self.gen_random_field(&mut random_masks);
+        let all_mask_t_shares = self.collect_party_shares(
+            &vec![batch_size; self.num_parties as usize],
+            &random_masks,
+            t_degree,
+        );
+        let all_mask_2t_shares = self.collect_party_shares(
+            &vec![batch_size; self.num_parties as usize],
+            &random_masks,
+            t_degree * 2,
+        );
+
+        // Apply Vandermonde combinations to derive final shares
+        let mask_t_shares = self.vandermonde_combine(&all_mask_t_shares, batch_size, output_size);
+        let mask_2t_shares = self.vandermonde_combine(&all_mask_2t_shares, batch_size, output_size);
+
+        //return result
+        let ret: Vec<(u64, u64)> = mask_t_shares
+            .iter()
+            .cloned()
+            .zip(mask_2t_shares.iter().cloned())
+            .collect();
+        ret
     }
 
     /// Computes linear combinations of shares using Vandermonde coefficients.
@@ -490,7 +554,7 @@ impl<const P: u64> DNBackend<P> {
             result[output_idx] = (0..=self.num_threshold as usize).fold(0u64, |acc, j| {
                 let seed = shares[j * batch_size + batch_idx];
                 let coefficient = self.van_matrix[share_idx][j];
-                U64FieldEval::<P>::add(acc, U64FieldEval::<P>::mul(seed, coefficient))
+                <U64FieldEval<P>>::add(acc, <U64FieldEval<P>>::mul(seed, coefficient))
             });
         }
 
@@ -540,10 +604,16 @@ impl<const P: u64> DNBackend<P> {
 
         self.triple_buffer.pop_front().unwrap()
     }
-}
 
-/// Atomic counter for tracking element-wise multiplications.
-pub static MUL_ELEMENT_WISE_COUNT: AtomicU32 = AtomicU32::new(0);
+    /// Gets the next available double random.
+    pub fn next_doublerandom(&mut self) -> (u64, u64) {
+        if self.doublerandom_buffer.is_empty() {
+            self.generate_doublerandoms(self.doublerandom_buffer_capacity);
+        }
+
+        self.doublerandom_buffer.pop_front().unwrap()
+    }
+}
 
 /// MPCBackend trait implementation for DN07 protocol.
 impl<const P: u64> MPCBackend for DNBackend<P> {
@@ -568,27 +638,27 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     }
 
     fn modulus(&self) -> Self::Modulus {
-        U64FieldEval::<P>::MODULUS
+        <U64FieldEval<P>>::MODULUS
     }
 
     fn neg(&mut self, a: Self::Sharing) -> Self::Sharing {
-        U64FieldEval::<P>::neg(a)
+        <U64FieldEval<P>>::neg(a)
     }
 
     fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
-        U64FieldEval::<P>::add(a, b)
+        <U64FieldEval<P>>::add(a, b)
     }
 
     fn add_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
-        U64FieldEval::<P>::add(a, b)
+        <U64FieldEval<P>>::add(a, b)
     }
 
     fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
-        U64FieldEval::<P>::sub(a, b)
+        <U64FieldEval<P>>::sub(a, b)
     }
 
     fn mul_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
-        U64FieldEval::<P>::mul(a, b)
+        <U64FieldEval<P>>::mul(a, b)
     }
 
     fn mul(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing> {
@@ -604,8 +674,6 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         assert_eq!(a.len(), b.len(), "Input vector lengths must match");
         let batch_size = a.len();
 
-        MUL_ELEMENT_WISE_COUNT.fetch_add(batch_size as u32, std::sync::atomic::Ordering::Relaxed);
-
         // Get required Beaver triples
         let triples: Vec<(u64, u64, u64)> = (0..batch_size).map(|_| self.next_triple()).collect();
 
@@ -615,8 +683,8 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             .enumerate()
             .flat_map(|(i, &(r, s, _))| {
                 [
-                    U64FieldEval::<P>::sub(a[i], r),
-                    U64FieldEval::<P>::sub(b[i], s),
+                    <U64FieldEval<P>>::sub(a[i], r),
+                    <U64FieldEval<P>>::sub(b[i], s),
                 ]
             })
             .collect();
@@ -634,11 +702,11 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
                 let d = opened_values[i * 2];
                 let e = opened_values[i * 2 + 1];
 
-                U64FieldEval::<P>::add(
-                    U64FieldEval::<P>::add(t, U64FieldEval::<P>::mul(d, s)),
-                    U64FieldEval::<P>::add(
-                        U64FieldEval::<P>::mul(e, r),
-                        U64FieldEval::<P>::mul(d, e),
+                <U64FieldEval<P>>::add(
+                    <U64FieldEval<P>>::add(t, <U64FieldEval<P>>::mul(d, s)),
+                    <U64FieldEval<P>>::add(
+                        <U64FieldEval<P>>::mul(e, r),
+                        <U64FieldEval<P>>::mul(d, e),
                     ),
                 )
             })
@@ -647,20 +715,63 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(results)
     }
 
+    // Use double random, not beaver triples
+    fn double_mul_element_wise(
+        &mut self,
+        a: &[Self::Sharing],
+        b: &[Self::Sharing],
+    ) -> MPCResult<Vec<Self::Sharing>> {
+        assert_eq!(a.len(), b.len(), "Input vector lengths must match");
+        let batch_size = a.len();
+
+        // Get required double randoms
+        let double_randoms: Vec<(u64, u64)> =
+            (0..batch_size).map(|_| self.next_doublerandom()).collect();
+
+        // Mask inputs: d = a *b +r
+        let masked_values: Vec<u64> = double_randoms
+            .iter()
+            .enumerate()
+            .flat_map(|(i, &(_, r2))| {
+                [<U64FieldEval<P>>::add(
+                    <U64FieldEval<P>>::mul(a[i], b[i]),
+                    r2,
+                )]
+            })
+            .collect();
+
+        // Open masked values
+        let opened_values = self
+            .open_secrets(0, self.num_threshold as u32 * 2, &masked_values, true)
+            .ok_or(MPCErr::ProtocolError("Failed to open masked values".into()))?;
+
+        // Compute c = d-r
+        let results = double_randoms
+            .iter()
+            .enumerate()
+            .map(|(i, &(r_1, _))| <U64FieldEval<P>>::sub(opened_values[i], r_1))
+            .collect();
+        Ok(results)
+    }
+
     fn inner_product(
         &mut self,
         a: &[Self::Sharing],
         b: &[Self::Sharing],
     ) -> MPCResult<Self::Sharing> {
-        // Batch multiply all elements
-        let products = self.mul_element_wise(a, b)?;
+        let r = a
+            .iter()
+            .zip(b.iter())
+            .fold(0, |acc, (&a, &b)| <U64FieldEval<P>>::mul_add(a, b, acc));
 
-        // Sum locally (no communication needed)
-        let sum = products
-            .into_iter()
-            .fold(0, |acc, val| U64FieldEval::<P>::add(acc, val));
+        let double_random = self.next_doublerandom();
+        let masked_value = <U64FieldEval<P>>::add(r, double_random.1);
 
-        Ok(sum)
+        let opened_value = self
+            .open_secrets(0, self.num_threshold as u32 * 2, &[masked_value], true)
+            .ok_or(MPCErr::ProtocolError("Failed to open masked value".into()))?;
+
+        Ok(<U64FieldEval<P>>::sub(opened_value[0], double_random.0))
     }
 
     fn inner_product_const(&mut self, a: &[Self::Sharing], b: &[u64]) -> Self::Sharing {
@@ -668,14 +779,14 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
 
         // Local computation only (no degree increase)
         let sum = a.iter().zip(b.iter()).fold(0, |acc, (&share, &constant)| {
-            U64FieldEval::<P>::mul_add(share, constant, acc)
+            <U64FieldEval<P>>::mul_add(share, constant, acc)
         });
 
         sum
     }
 
     fn double(&mut self, a: Self::Sharing) -> Self::Sharing {
-        U64FieldEval::<P>::double(a)
+        <U64FieldEval<P>>::double(a)
     }
 
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing> {

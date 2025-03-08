@@ -92,7 +92,7 @@ where
     let random_elements = backend.create_random_elements(length);
 
     let square = backend
-        .mul_element_wise(&random_elements, &random_elements)
+        .double_mul_element_wise(&random_elements, &random_elements)
         .unwrap();
 
     let square = backend.reveal_slice_to_all(&square).unwrap();

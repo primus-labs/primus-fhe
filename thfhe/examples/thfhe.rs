@@ -2,7 +2,7 @@ use std::thread;
 
 use algebra::Field;
 use fhe_core::LweSecretKey;
-use mpc::{DNBackend, MPCBackend, MUL_ELEMENT_WISE_COUNT};
+use mpc::{DNBackend, MPCBackend};
 use network::netio::Participant;
 use thfhe::{Evaluator, Fp, KeyGen, DEFAULT_128_BITS_PARAMETERS};
 
@@ -88,8 +88,4 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
     }
 
     println!("Party {} took {:?} to finish.", party_id, start.elapsed());
-    println!(
-        "MUL_ELEMENT_WISE_COUNT:{}",
-        MUL_ELEMENT_WISE_COUNT.load(std::sync::atomic::Ordering::Relaxed)
-    );
 }

@@ -402,7 +402,7 @@ where
                 let scaled_si = backend.mul_const(*si, *scalar);
 
                 let temp = backend
-                    .mul_element_wise(&ntt_rlwe_secret_key, &vec![scaled_si; big_n])
+                    .double_mul_element_wise(&ntt_rlwe_secret_key, &vec![scaled_si; big_n])
                     .unwrap();
 
                 mi.iter_mut().zip(temp).for_each(|(mij, t)| {

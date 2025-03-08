@@ -93,6 +93,24 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
             .collect())
     }
 
+    fn double_mul_element_wise(
+        &mut self,
+        a: &[DummyShare],
+        b: &[DummyShare],
+    ) -> MPCResult<Vec<DummyShare>> {
+        if a.len() != b.len() {
+            return Err(MPCErr::InvalidOperation(
+                "batch operations length mismatch".to_string(),
+            ));
+        }
+        Ok(a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| DummyShare {
+                value: U64FieldEval::<P>::mul(a.value, b.value),
+            })
+            .collect())
+    }
+
     fn inner_product(&mut self, a: &[DummyShare], b: &[DummyShare]) -> MPCResult<Self::Sharing> {
         if a.len() != b.len() {
             return Err(MPCErr::InvalidOperation(

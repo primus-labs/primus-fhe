@@ -9,7 +9,7 @@ pub mod error;
 use std::fmt::Debug;
 
 use algebra::reduce::FieldReduce;
-pub use dn::{DNBackend, MUL_ELEMENT_WISE_COUNT};
+pub use dn::DNBackend;
 pub use dummy::DummyBackend;
 
 type MPCResult<T> = Result<T, error::MPCErr>;
@@ -57,6 +57,13 @@ pub trait MPCBackend {
 
     /// Multiply batch of secret shares.
     fn mul_element_wise(
+        &mut self,
+        a: &[Self::Sharing],
+        b: &[Self::Sharing],
+    ) -> MPCResult<Vec<Self::Sharing>>;
+
+    /// Multiply batch of secret shares use double random.
+    fn double_mul_element_wise(
         &mut self,
         a: &[Self::Sharing],
         b: &[Self::Sharing],
