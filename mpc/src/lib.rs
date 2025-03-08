@@ -52,6 +52,9 @@ pub trait MPCBackend {
     /// Multiply a secret share with a constant.
     fn mul_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing;
 
+    /// Multiply two secret shares locally.
+    fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
+
     /// Multiply two secret shares.
     fn mul(&mut self, a: Self::Sharing, b: Self::Sharing) -> MPCResult<Self::Sharing>;
 
@@ -115,6 +118,9 @@ pub trait MPCBackend {
 
     /// Output a slice of secret values to all parties.
     fn reveal_slice_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>>;
+
+    /// Reveal a slice of secret values to all parties.
+    fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>>;
 
     /// Generate a random value over `u64`.
     fn shared_rand_coin(&mut self) -> u64;

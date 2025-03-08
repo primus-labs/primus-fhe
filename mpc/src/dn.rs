@@ -970,4 +970,16 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     fn ntt_poly_inplace(&self, poly: &mut [u64]) {
         self.ntt_table.transform_slice(poly);
     }
+
+    fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+        <U64FieldEval<P>>::mul(a, b)
+    }
+
+    fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
+        let results = self
+            .open_secrets(0, self.num_threshold * 2, shares, true)
+            .ok_or(MPCErr::ProtocolError("Failed to reveal values".into()))?;
+
+        Ok(results)
+    }
 }

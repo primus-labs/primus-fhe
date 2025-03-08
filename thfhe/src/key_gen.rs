@@ -401,18 +401,16 @@ where
             .for_each(|(mi, scalar)| {
                 let scaled_si = backend.mul_const(*si, *scalar);
 
-                let temp = backend
-                    .double_mul_element_wise(&ntt_rlwe_secret_key, &vec![scaled_si; big_n])
-                    .unwrap();
-
-                mi.iter_mut().zip(temp).for_each(|(mij, t)| {
-                    *mij = backend.sub(*mij, t);
-                });
+                mi.iter_mut()
+                    .zip(ntt_rlwe_secret_key.iter())
+                    .for_each(|(mij, &zi)| {
+                        *mij = backend.sub(*mij, backend.mul_local(zi, scaled_si));
+                    });
             });
     }
 
     let b = backend
-        .reveal_slice_to_all(batch_mpc_ntt_rlwe.b.as_slice())
+        .reveal_slice_degree_2t_to_all(batch_mpc_ntt_rlwe.b.as_slice())
         .unwrap();
 
     let mut a_iter = batch_mpc_ntt_rlwe.a.into_iter();

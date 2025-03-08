@@ -213,6 +213,16 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
     fn ntt_poly_inplace(&self, _poly: &mut [u64]) {
         unimplemented!()
     }
+
+    fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+        DummyShare {
+            value: U64FieldEval::<P>::mul(a.value, b.value),
+        }
+    }
+
+    fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
+        Ok(shares.iter().map(|share| share.value).collect())
+    }
 }
 #[cfg(test)]
 mod tests {
