@@ -44,13 +44,16 @@ where
         backend.shared_rand_field_elements(a);
     });
 
+    let start = std::time::Instant::now();
     let b = &mut batch_mpc_rlwe.b;
+
+    let e = gaussian
+        .sample_iter(&mut *rng)
+        .take(count * polynomial_size)
+        .collect::<Vec<_>>();
+
     for i in 0..backend.num_parties() {
         let temp = if i == id {
-            let e = gaussian
-                .sample_iter(&mut *rng)
-                .take(count * polynomial_size)
-                .collect::<Vec<_>>();
             backend
                 .input_slice(Some(&e), count * polynomial_size, i)
                 .unwrap()
@@ -63,6 +66,8 @@ where
             *e = backend.add(*e, *temp);
         });
     }
+    let end = std::time::Instant::now();
+    println!("Generate random e takes time: {:?}", end - start);
 
     batch_mpc_rlwe
         .a
@@ -75,11 +80,10 @@ where
             let res = ntt_secret_key_share
                 .iter()
                 .zip(a.iter())
-                .map(|(s, a)| backend.mul_const(*s, *a))
-                .collect::<Vec<_>>();
+                .map(|(s, a)| backend.mul_const(*s, *a));
 
-            b.iter_mut().zip(res.iter()).for_each(|(b, res)| {
-                *b = backend.add(*b, *res);
+            b.iter_mut().zip(res).for_each(|(b, res)| {
+                *b = backend.add(*b, res);
             });
         });
 
@@ -106,12 +110,11 @@ where
     let mut e = vec![Default::default(); secret_key_share.len()];
     let mut e_vec = vec![Default::default(); backend.num_parties() as usize];
 
+    let e_wil_share = gaussian.sample(rng);
     e.iter_mut().for_each(|e_i| {
         e_vec.iter_mut().enumerate().for_each(|(i, eij)| {
             *eij = if i == id as usize {
-                let e = gaussian.sample(rng);
-                // let e: u64 = 0;
-                backend.input(Some(e), i as u32).unwrap()
+                backend.input(Some(e_wil_share), i as u32).unwrap()
             } else {
                 backend.input(None, i as u32).unwrap()
             };

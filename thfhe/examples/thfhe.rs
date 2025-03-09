@@ -39,7 +39,7 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
         party_id,
         num_parties,
         threshold,
-        2000,
+        5600,
         participants,
         parameters.ring_dimension(),
     );

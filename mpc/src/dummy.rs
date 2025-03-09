@@ -31,35 +31,53 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         0
     }
 
-    fn field_modulus_value(&self) -> u64 {
-        P
-    }
-
     fn modulus(&self) -> Self::Modulus {
         U64FieldEval::<P>::MODULUS
     }
 
-    fn neg(&mut self, a: DummyShare) -> DummyShare {
+    fn field_modulus_value(&self) -> u64 {
+        P
+    }
+
+    fn neg(&self, a: DummyShare) -> DummyShare {
         DummyShare {
             value: U64FieldEval::<P>::neg(a.value),
         }
     }
 
-    fn add(&mut self, a: DummyShare, b: DummyShare) -> DummyShare {
+    fn add(&self, a: DummyShare, b: DummyShare) -> DummyShare {
         DummyShare {
             value: U64FieldEval::<P>::add(a.value, b.value),
         }
     }
 
-    fn add_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
+    fn double(&self, a: DummyShare) -> DummyShare {
+        DummyShare {
+            value: U64FieldEval::<P>::double(a.value),
+        }
+    }
+
+    fn add_const(&self, a: Self::Sharing, b: u64) -> Self::Sharing {
         DummyShare {
             value: U64FieldEval::<P>::add(a.value, b),
         }
     }
 
-    fn sub(&mut self, a: DummyShare, b: DummyShare) -> DummyShare {
+    fn sub(&self, a: DummyShare, b: DummyShare) -> DummyShare {
         DummyShare {
             value: U64FieldEval::<P>::sub(a.value, b.value),
+        }
+    }
+
+    fn mul_const(&self, a: DummyShare, b: u64) -> DummyShare {
+        DummyShare {
+            value: U64FieldEval::<P>::mul(a.value, b),
+        }
+    }
+
+    fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+        DummyShare {
+            value: U64FieldEval::<P>::mul(a.value, b.value),
         }
     }
 
@@ -67,12 +85,6 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         Ok(DummyShare {
             value: U64FieldEval::<P>::mul(a.value, b.value),
         })
-    }
-
-    fn mul_const(&mut self, a: DummyShare, b: u64) -> DummyShare {
-        DummyShare {
-            value: U64FieldEval::<P>::mul(a.value, b),
-        }
     }
 
     fn mul_element_wise(
@@ -132,37 +144,11 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         DummyShare { value }
     }
 
-    fn double(&mut self, a: DummyShare) -> DummyShare {
-        DummyShare {
-            value: U64FieldEval::<P>::double(a.value),
-        }
-    }
-
     fn input(&mut self, value: Option<u64>, _party_id: u32) -> MPCResult<DummyShare> {
         match value {
             Some(v) => Ok(DummyShare { value: v }),
             None => Err(MPCErr::InvalidOperation("input value is None".to_string())),
         }
-    }
-
-    fn reveal(&mut self, a: DummyShare, _party_id: u32) -> MPCResult<Option<u64>> {
-        Ok(Some(a.value))
-    }
-
-    fn reveal_to_all(&mut self, a: DummyShare) -> MPCResult<u64> {
-        Ok(a.value)
-    }
-
-    fn shared_rand_coin(&mut self) -> u64 {
-        0
-    }
-
-    fn shared_rand_field_element(&mut self) -> u64 {
-        0
-    }
-
-    fn shared_rand_field_elements(&mut self, destination: &mut [u64]) {
-        destination.fill(0);
     }
 
     fn input_slice(
@@ -192,14 +178,38 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
             .collect())
     }
 
+    fn reveal(&mut self, a: DummyShare, _party_id: u32) -> MPCResult<Option<u64>> {
+        Ok(Some(a.value))
+    }
+
     fn reveal_slice(&mut self, a: &[DummyShare], party_id: u32) -> MPCResult<Vec<Option<u64>>> {
         Ok(a.iter()
             .map(|share| self.reveal(*share, party_id).unwrap())
             .collect())
     }
 
+    fn reveal_to_all(&mut self, a: DummyShare) -> MPCResult<u64> {
+        Ok(a.value)
+    }
+
     fn reveal_slice_to_all(&mut self, a: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
         Ok(a.iter().map(|share| share.value).collect())
+    }
+
+    fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
+        Ok(shares.iter().map(|share| share.value).collect())
+    }
+
+    fn shared_rand_coin(&mut self) -> u64 {
+        0
+    }
+
+    fn shared_rand_field_element(&mut self) -> u64 {
+        0
+    }
+
+    fn shared_rand_field_elements(&mut self, destination: &mut [u64]) {
+        destination.fill(0);
     }
 
     fn create_random_elements(&mut self, batch_size: usize) -> Vec<Self::Sharing> {
@@ -212,16 +222,6 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
 
     fn ntt_poly_inplace(&self, _poly: &mut [u64]) {
         unimplemented!()
-    }
-
-    fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
-        DummyShare {
-            value: U64FieldEval::<P>::mul(a.value, b.value),
-        }
-    }
-
-    fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
-        Ok(shares.iter().map(|share| share.value).collect())
     }
 }
 #[cfg(test)]

@@ -38,19 +38,22 @@ pub trait MPCBackend {
     fn field_modulus_value(&self) -> u64;
 
     /// Negate a secret share.
-    fn neg(&mut self, a: Self::Sharing) -> Self::Sharing;
+    fn neg(&self, a: Self::Sharing) -> Self::Sharing;
 
     /// Add two secret shares.
-    fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
+    fn add(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
+
+    /// Double a secret share.
+    fn double(&self, a: Self::Sharing) -> Self::Sharing;
 
     /// Add two secret shares.
-    fn add_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing;
+    fn add_const(&self, a: Self::Sharing, b: u64) -> Self::Sharing;
 
     /// Subtract two secret shares.
-    fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
+    fn sub(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
 
     /// Multiply a secret share with a constant.
-    fn mul_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing;
+    fn mul_const(&self, a: Self::Sharing, b: u64) -> Self::Sharing;
 
     /// Multiply two secret shares locally.
     fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
@@ -81,9 +84,6 @@ pub trait MPCBackend {
 
     /// Inner product of an array of secret shares with an array of constants.
     fn inner_product_const(&mut self, a: &[Self::Sharing], b: &[u64]) -> Self::Sharing;
-
-    /// Double a secret share.
-    fn double(&mut self, a: Self::Sharing) -> Self::Sharing;
 
     /// Input a secret value from a party (party_id). Inputs from all other parties are omitted.
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing>;

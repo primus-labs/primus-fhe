@@ -46,18 +46,18 @@ where
     });
 
     let b = &mut batch_mpc_lwe.b;
+    let e = gaussian
+        .sample_iter(&mut *rng)
+        .take(count)
+        .collect::<Vec<_>>();
     for i in 0..backend.num_parties() {
         let temp = if i == id {
-            let e = gaussian
-                .sample_iter(&mut *rng)
-                .take(count)
-                .collect::<Vec<_>>();
             backend.input_slice(Some(&e), count, i).unwrap()
         } else {
             backend.input_slice(None, count, i).unwrap()
         };
-        b.iter_mut().zip(temp.iter()).for_each(|(e, temp)| {
-            *e = backend.add(*e, *temp);
+        b.iter_mut().zip(temp.iter()).for_each(|(bi, temp)| {
+            *bi = backend.add(*bi, *temp);
         });
     }
 
@@ -87,12 +87,11 @@ where
     let mut a = vec![0; shared_secret_key.len()];
     backend.shared_rand_field_elements(&mut a);
 
+    let e_wil_share = gaussian.sample(rng);
     let e_vec: Vec<Backend::Sharing> = (0..backend.num_parties())
         .map(|i| {
             if i == id {
-                let e = gaussian.sample(rng);
-                // let e: u64 = 0;
-                backend.input(Some(e), i).unwrap()
+                backend.input(Some(e_wil_share), i).unwrap()
             } else {
                 backend.input(None, i).unwrap()
             }

@@ -91,11 +91,11 @@ impl<const P: u64> DNBackend<P> {
         };
 
         // Generate initial supply of triples
-        backend.generate_triples(buffer_size);
+        // backend.generate_triples(buffer_size);
         // backend
 
         // Generate initial supply of triples
-        // backend.generate_doublerandoms(buffer_size);
+        backend.generate_doublerandoms(buffer_size);
         backend
     }
 
@@ -633,31 +633,39 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         self.num_threshold
     }
 
-    fn field_modulus_value(&self) -> u64 {
-        P
-    }
-
     fn modulus(&self) -> Self::Modulus {
         <U64FieldEval<P>>::MODULUS
     }
 
-    fn neg(&mut self, a: Self::Sharing) -> Self::Sharing {
+    fn field_modulus_value(&self) -> u64 {
+        P
+    }
+
+    fn neg(&self, a: Self::Sharing) -> Self::Sharing {
         <U64FieldEval<P>>::neg(a)
     }
 
-    fn add(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+    fn add(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
         <U64FieldEval<P>>::add(a, b)
     }
 
-    fn add_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
+    fn double(&self, a: Self::Sharing) -> Self::Sharing {
+        <U64FieldEval<P>>::double(a)
+    }
+
+    fn add_const(&self, a: Self::Sharing, b: u64) -> Self::Sharing {
         <U64FieldEval<P>>::add(a, b)
     }
 
-    fn sub(&mut self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
+    fn sub(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
         <U64FieldEval<P>>::sub(a, b)
     }
 
-    fn mul_const(&mut self, a: Self::Sharing, b: u64) -> Self::Sharing {
+    fn mul_const(&self, a: Self::Sharing, b: u64) -> Self::Sharing {
+        <U64FieldEval<P>>::mul(a, b)
+    }
+
+    fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
         <U64FieldEval<P>>::mul(a, b)
     }
 
@@ -783,10 +791,6 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         });
 
         sum
-    }
-
-    fn double(&mut self, a: Self::Sharing) -> Self::Sharing {
-        <U64FieldEval<P>>::double(a)
     }
 
     fn input(&mut self, value: Option<u64>, party_id: u32) -> MPCResult<Self::Sharing> {
@@ -926,6 +930,14 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(results)
     }
 
+    fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
+        let results = self
+            .open_secrets(0, self.num_threshold * 2, shares, true)
+            .ok_or(MPCErr::ProtocolError("Failed to reveal values".into()))?;
+
+        Ok(results)
+    }
+
     fn shared_rand_coin(&mut self) -> u64 {
         self.shared_prg.next_u64()
     }
@@ -969,17 +981,5 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
 
     fn ntt_poly_inplace(&self, poly: &mut [u64]) {
         self.ntt_table.transform_slice(poly);
-    }
-
-    fn mul_local(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing {
-        <U64FieldEval<P>>::mul(a, b)
-    }
-
-    fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
-        let results = self
-            .open_secrets(0, self.num_threshold * 2, shares, true)
-            .ok_or(MPCErr::ProtocolError("Failed to reveal values".into()))?;
-
-        Ok(results)
     }
 }
