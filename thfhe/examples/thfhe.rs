@@ -88,4 +88,5 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
     }
 
     println!("Party {} took {:?} to finish.", party_id, start.elapsed());
+    println!("IO statistics: {:#?}", backend.netio.get_stats().unwrap());
 }

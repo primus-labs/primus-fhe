@@ -46,13 +46,13 @@ where
     });
 
     let b = &mut batch_mpc_lwe.b;
-    let e = gaussian
+    let e_will_share = gaussian
         .sample_iter(&mut *rng)
         .take(count)
         .collect::<Vec<_>>();
     for i in 0..backend.num_parties() {
         let temp = if i == id {
-            backend.input_slice(Some(&e), count, i).unwrap()
+            backend.input_slice(Some(&e_will_share), count, i).unwrap()
         } else {
             backend.input_slice(None, count, i).unwrap()
         };
@@ -66,7 +66,7 @@ where
         .iter()
         .zip(batch_mpc_lwe.b.iter_mut())
         .for_each(|(a, b)| {
-            let ip = backend.inner_product_const(shared_secret_key, &a);
+            let ip = backend.inner_product_const(shared_secret_key, a);
             *b = backend.add(ip, *b);
         });
 

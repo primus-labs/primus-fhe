@@ -44,7 +44,6 @@ where
         backend.shared_rand_field_elements(a);
     });
 
-    let start = std::time::Instant::now();
     let b = &mut batch_mpc_rlwe.b;
 
     let e = gaussian
@@ -52,6 +51,7 @@ where
         .take(count * polynomial_size)
         .collect::<Vec<_>>();
 
+    let start = std::time::Instant::now();
     for i in 0..backend.num_parties() {
         let temp = if i == id {
             backend
@@ -67,7 +67,7 @@ where
         });
     }
     let end = std::time::Instant::now();
-    println!("Generate random e takes time: {:?}", end - start);
+    println!("Share random e takes time: {:?}", end - start);
 
     batch_mpc_rlwe
         .a

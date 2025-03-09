@@ -25,8 +25,8 @@ pub struct DNBackend<const P: u64> {
     prg: Prg,
     // Shared PRG for consistent randomness across parties
     shared_prg: Prg,
-    // Network I/O for communication
-    netio: NetIO,
+    /// Network I/O for communication
+    pub netio: NetIO,
     // Precomputed Beaver triples (a, b, c) where c = a*b
     triple_buffer: VecDeque<(u64, u64, u64)>,
     // Buffer size for triple generation
@@ -65,7 +65,7 @@ impl<const P: u64> DNBackend<P> {
 
         // Calculate appropriate buffer size (rounded up to next multiple of (n-t))
         let batch_size = (num_parties - num_threshold) as usize;
-        let buffer_size = ((triple_required as usize + batch_size - 1) / batch_size) * batch_size;
+        let buffer_size = (triple_required as usize).div_ceil(batch_size) * batch_size;
 
         // Create and initialize the backend
         let mut backend = Self {
@@ -218,9 +218,10 @@ impl<const P: u64> DNBackend<P> {
                 (0..self.num_parties as usize)
                     .map(|party_idx| {
                         (1..=degree).fold(value, |sum, j| {
-                            <U64FieldEval<P>>::add(
+                            <U64FieldEval<P>>::mul_add(
+                                coeffs[j],
+                                self.van_matrix[j][party_idx],
                                 sum,
-                                <U64FieldEval<P>>::mul(coeffs[j], self.van_matrix[j][party_idx]),
                             )
                         })
                     })
@@ -245,7 +246,7 @@ impl<const P: u64> DNBackend<P> {
 
             // Send shares only to parties in the target range
             for party_idx in start_id..end_id {
-                if party_idx as u32 == self.party_id {
+                if party_idx == self.party_id {
                     continue;
                 }
 
@@ -349,7 +350,7 @@ impl<const P: u64> DNBackend<P> {
                             .send(party_idx, &result_buffer)
                             .expect("Result broadcast failed");
                         self.netio
-                            .flush(party_idx as u32)
+                            .flush(party_idx)
                             .expect("Failed to flush network buffer");
                     }
                 }
@@ -546,15 +547,15 @@ impl<const P: u64> DNBackend<P> {
         // batch * n -> batch * (n-t)
         let mut result = vec![0u64; output_size];
 
-        for output_idx in 0..output_size {
+        for (output_idx, item) in result.iter_mut().enumerate() {
             let share_idx = output_idx / batch_size;
             let batch_idx = output_idx % batch_size;
 
             // Compute linear combination for this share
-            result[output_idx] = (0..=self.num_threshold as usize).fold(0u64, |acc, j| {
+            *item = (0..=self.num_threshold as usize).fold(0u64, |acc, j| {
                 let seed = shares[j * batch_size + batch_idx];
                 let coefficient = self.van_matrix[share_idx][j];
-                <U64FieldEval<P>>::add(acc, <U64FieldEval<P>>::mul(seed, coefficient))
+                <U64FieldEval<P>>::mul_add(seed, coefficient, acc)
             });
         }
 
@@ -750,7 +751,7 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
 
         // Open masked values
         let opened_values = self
-            .open_secrets(0, self.num_threshold as u32 * 2, &masked_values, true)
+            .open_secrets(0, self.num_threshold * 2, &masked_values, true)
             .ok_or(MPCErr::ProtocolError("Failed to open masked values".into()))?;
 
         // Compute c = d-r

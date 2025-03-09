@@ -320,9 +320,7 @@ impl MPCNttBootstrappingKey {
     where
         F: Field<ValueT = u64> + NttField,
     {
-        let start = std::time::Instant::now();
         let temp: Vec<NttRgsw<F>> = self.0.into_iter().map(Into::into).collect();
-        println!("Into Ntt Rgsw takes {:?}", start.elapsed());
 
         let ntt_table = F::generate_ntt_table(dimension.trailing_zeros()).unwrap();
 
@@ -335,17 +333,14 @@ impl MPCBootstrappingKey {
     where
         F: Field<ValueT = u64> + NttField,
     {
-        let start = std::time::Instant::now();
         let temp: Vec<Rgsw<F>> = self.0.into_iter().map(Into::into).collect();
-        println!("Into Rgsw takes {:?}", start.elapsed());
 
         let ntt_table = F::generate_ntt_table(dimension.trailing_zeros()).unwrap();
-        let start = std::time::Instant::now();
+
         let temp = temp
             .into_iter()
             .map(|rgsw| rgsw.to_ntt_rgsw(&ntt_table))
             .collect();
-        println!("Into NttRgsw takes {:?}", start.elapsed());
 
         BinaryBlindRotationKey::new(temp, Arc::new(ntt_table))
     }
