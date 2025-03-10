@@ -1,3 +1,5 @@
+use std::vec;
+
 use algebra::random::DiscreteGaussian;
 use algebra::Field;
 use crossbeam::channel;
@@ -49,43 +51,73 @@ pub fn send_and_recv_data_all_parties(
 }
 
 pub fn send_and_recv_data_all_parties_mul_threads(
-    e: Vec<u64>,
+    e: Option<&[u64]>,
     len: usize,
     myid: u32,
     num_parties: u32,
     num_threshold: u32,
     tx: channel::Sender<Vec<u64>>,
 ) {
-    let pool = threadpool::ThreadPool::new(1);
-    for i in 0..num_parties {
-        let tx_clone = tx.clone();
-        if i == myid {
-            let send_data = e.clone();
-            pool.execute(move || {
-                send_and_recv_data_all_parties(
-                    Some(&send_data),
-                    len,
-                    myid,
-                    num_parties,
-                    num_threshold,
-                    tx_clone,
-                    i,
-                )
-            });
-        } else {
-            pool.execute(move || {
-                send_and_recv_data_all_parties(
-                    None,
-                    len,
-                    myid,
-                    num_parties,
-                    num_threshold,
-                    tx_clone,
-                    i,
-                )
-            });
-        };
-    }
+    std::thread::scope(|s| {
+        for i in 0..num_parties {
+            let tx_clone = tx.clone();
+            if i == myid {
+                s.spawn(move || {
+                    send_and_recv_data_all_parties(
+                        e,
+                        len,
+                        myid,
+                        num_parties,
+                        num_threshold,
+                        tx_clone,
+                        i,
+                    )
+                });
+            } else {
+                s.spawn(move || {
+                    send_and_recv_data_all_parties(
+                        None,
+                        len,
+                        myid,
+                        num_parties,
+                        num_threshold,
+                        tx_clone,
+                        i,
+                    )
+                });
+            };
+        }
+    });
+
+    // for i in 0..num_parties {
+    //     let tx_clone = tx.clone();
+    //     if i == myid {
+    //         let send_data = e.clone();
+    //         pool.execute(move || {
+    //             send_and_recv_data_all_parties(
+    //                 Some(&send_data),
+    //                 len,
+    //                 myid,
+    //                 num_parties,
+    //                 num_threshold,
+    //                 tx_clone,
+    //                 i,
+    //             )
+    //         });
+    //     } else {
+    //         pool.execute(move || {
+    //             send_and_recv_data_all_parties(
+    //                 None,
+    //                 len,
+    //                 myid,
+    //                 num_parties,
+    //                 num_threshold,
+    //                 tx_clone,
+    //                 i,
+    //             )
+    //         });
+    //     };
+    // }
 }
 
 pub fn generate_share_ntt_rlwe_ciphertext_vec<Backend, R>(
@@ -115,10 +147,10 @@ where
 
     let b = &mut batch_mpc_rlwe.b;
 
-    let e = gaussian
-        .sample_iter(&mut *rng)
-        .take(count * polynomial_size)
-        .collect::<Vec<_>>();
+    // let e = gaussian
+    //     .sample_iter(&mut *rng)
+    //     .take(count * polynomial_size)
+    //     .collect::<Vec<_>>();
 
     let start = std::time::Instant::now();
     // for i in 0..backend.num_parties() {
@@ -137,22 +169,48 @@ where
     // }
 
     // 使用无界通道来收集线程结果
-    let (tx, rx) = channel::unbounded::<Vec<u64>>();
+    // let (tx, rx) = channel::unbounded::<Vec<u64>>();
 
-    send_and_recv_data_all_parties_mul_threads(
-        e,
-        count * polynomial_size,
-        id,
-        backend.num_parties(),
-        backend.num_threshold(),
-        tx.clone(),
-    );
+    // send_and_recv_data_all_parties_mul_threads(
+    //     e,
+    //     count * polynomial_size,
+    //     id,
+    //     backend.num_parties(),
+    //     backend.num_threshold(),
+    //     tx.clone(),
+    // );
 
-    drop(tx);
-    for res in rx.iter() {
-        b.iter_mut()
-            .zip(res.iter())
-            .for_each(|(e, res)| *e = backend.add_const(*e, *res));
+    // drop(tx);
+    // for res in rx.iter() {
+    //     b.iter_mut()
+    //         .zip(res.iter())
+    //         .for_each(|(e, res)| *e = backend.add_const(*e, *res));
+    // }
+
+    let chunk_size = 2048 * polynomial_size;
+    let mut e = vec![0; chunk_size];
+    for b_chunk in b.chunks_exact_mut(chunk_size) {
+        let (tx, rx) = channel::unbounded::<Vec<u64>>();
+        e.iter_mut()
+            .zip(gaussian.sample_iter(&mut *rng))
+            .for_each(|(e, res)| *e = res);
+
+        send_and_recv_data_all_parties_mul_threads(
+            Some(&e),
+            chunk_size,
+            id,
+            backend.num_parties(),
+            backend.num_threshold(),
+            tx.clone(),
+        );
+
+        drop(tx);
+        for res in rx.iter() {
+            b_chunk
+                .iter_mut()
+                .zip(res.iter())
+                .for_each(|(e, res)| *e = backend.add_const(*e, *res));
+        }
     }
 
     let end = std::time::Instant::now();
