@@ -5,6 +5,7 @@ use crate::{error::MPCErr, MPCBackend, MPCResult};
 use algebra::ntt::NumberTheoryTransform;
 use algebra::random::Prg;
 use algebra::{Field, NttField, U64FieldEval};
+use bytemuck::{cast_slice, cast_slice_mut};
 use network::netio::{NetIO, Participant};
 use network::IO;
 use rand::distributions::Uniform;
@@ -244,19 +245,23 @@ impl<const P: u64> DNBackend<P> {
         if self.party_id == dealer_id {
             let all_shares = shares.expect("Dealer must provide shares");
 
+            let mut share_buffer = vec![0u64; batch_size];
+
             // Send shares only to parties in the target range
             for party_idx in start_id..end_id {
                 if party_idx == self.party_id {
                     continue;
                 }
 
-                let share_buffer: Vec<u8> = all_shares
-                    .iter()
-                    .flat_map(|share_vec| share_vec[party_idx as usize].to_le_bytes())
-                    .collect();
+                share_buffer
+                    .iter_mut()
+                    .zip(all_shares.iter())
+                    .for_each(|(share, share_vec)| {
+                        *share = share_vec[party_idx as usize];
+                    });
 
                 self.netio
-                    .send(party_idx, &share_buffer)
+                    .send(party_idx, cast_slice(&share_buffer))
                     .expect("Share distribution failed");
                 self.netio
                     .flush(party_idx)
@@ -264,22 +269,23 @@ impl<const P: u64> DNBackend<P> {
             }
 
             // Return own shares
-            all_shares
-                .iter()
-                .map(|share_vec| share_vec[self.party_id as usize])
-                .collect()
+            share_buffer
+                .iter_mut()
+                .zip(all_shares.iter())
+                .for_each(|(share, share_vec)| {
+                    *share = share_vec[self.party_id as usize];
+                });
+
+            share_buffer
         } else if self.party_id >= start_id && self.party_id < end_id {
             // Only receive shares if we're in the target range
-            let mut buffer = vec![0u8; batch_size * 8];
+            let mut buffer = vec![0u64; batch_size];
 
             self.netio
-                .recv(dealer_id, &mut buffer)
+                .recv(dealer_id, cast_slice_mut(&mut buffer))
                 .expect("Share reception failed");
 
             buffer
-                .chunks_exact(8)
-                .map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap()))
-                .collect()
         } else {
             // Not in target range, return empty shares
             vec![0u64; batch_size]
