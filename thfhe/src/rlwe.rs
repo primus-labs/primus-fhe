@@ -1,6 +1,11 @@
 use algebra::random::DiscreteGaussian;
-use mpc::MPCBackend;
+use algebra::Field;
+use crossbeam::channel;
+use mpc::{DNBackend, MPCBackend};
+use network::netio::Participant;
 use rand::{prelude::Distribution, Rng};
+
+use crate::{parameter::DEFAULT_128_BITS_PARAMETERS, Fp};
 
 pub struct MPCRlwe<Share> {
     pub a: Vec<u64>,
@@ -17,6 +22,70 @@ pub struct BatchMPCRlwe<Share: Default> {
 pub struct BatchMPCNttRlwe<Share: Default> {
     pub a: Vec<Vec<u64>>,
     pub b: Vec<Share>,
+}
+
+pub fn send_and_recv_data_all_parties(
+    e: Option<&[u64]>,
+    len: usize,
+    id: u32,
+    num_parties: u32,
+    num_threshold: u32,
+    tx: channel::Sender<Vec<u64>>,
+    sender_id: u32,
+) {
+    const RING_MODULUS: u64 = Fp::MODULUS_VALUE;
+    let parameters = &DEFAULT_128_BITS_PARAMETERS;
+
+    let mut temp_backend = DNBackend::<RING_MODULUS>::new(
+        id,
+        num_parties,
+        num_threshold,
+        0,
+        Participant::from_default(3, 50000 + sender_id * 100),
+        parameters.ring_dimension(),
+    );
+    tx.send(temp_backend.input_slice(e, len, sender_id).unwrap())
+        .unwrap();
+}
+
+pub fn send_and_recv_data_all_parties_mul_threads(
+    e: Vec<u64>,
+    len: usize,
+    myid: u32,
+    num_parties: u32,
+    num_threshold: u32,
+    tx: channel::Sender<Vec<u64>>,
+) {
+    let pool = threadpool::ThreadPool::new(1);
+    for i in 0..num_parties {
+        let tx_clone = tx.clone();
+        if i == myid {
+            let send_data = e.clone();
+            pool.execute(move || {
+                send_and_recv_data_all_parties(
+                    Some(&send_data),
+                    len,
+                    myid,
+                    num_parties,
+                    num_threshold,
+                    tx_clone,
+                    i,
+                )
+            });
+        } else {
+            pool.execute(move || {
+                send_and_recv_data_all_parties(
+                    None,
+                    len,
+                    myid,
+                    num_parties,
+                    num_threshold,
+                    tx_clone,
+                    i,
+                )
+            });
+        };
+    }
 }
 
 pub fn generate_share_ntt_rlwe_ciphertext_vec<Backend, R>(
@@ -52,20 +121,40 @@ where
         .collect::<Vec<_>>();
 
     let start = std::time::Instant::now();
-    for i in 0..backend.num_parties() {
-        let temp = if i == id {
-            backend
-                .input_slice(Some(&e), count * polynomial_size, i)
-                .unwrap()
-        } else {
-            backend
-                .input_slice(None, count * polynomial_size, i)
-                .unwrap()
-        };
-        b.iter_mut().zip(temp.iter()).for_each(|(e, temp)| {
-            *e = backend.add(*e, *temp);
-        });
+    // for i in 0..backend.num_parties() {
+    //     let temp = if i == id {
+    //         backend
+    //             .input_slice(Some(&e), count * polynomial_size, i)
+    //             .unwrap()
+    //     } else {
+    //         backend
+    //             .input_slice(None, count * polynomial_size, i)
+    //             .unwrap()
+    //     };
+    //     b.iter_mut().zip(temp.iter()).for_each(|(e, temp)| {
+    //         *e = backend.add(*e, *temp);
+    //     });
+    // }
+
+    // 使用无界通道来收集线程结果
+    let (tx, rx) = channel::unbounded::<Vec<u64>>();
+
+    send_and_recv_data_all_parties_mul_threads(
+        e,
+        count * polynomial_size,
+        id,
+        backend.num_parties(),
+        backend.num_threshold(),
+        tx.clone(),
+    );
+
+    drop(tx);
+    for res in rx.iter() {
+        b.iter_mut()
+            .zip(res.iter())
+            .for_each(|(e, res)| *e = backend.add_const(*e, *res));
     }
+
     let end = std::time::Instant::now();
     println!("Share random e takes time: {:?}", end - start);
 

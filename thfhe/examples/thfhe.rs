@@ -14,7 +14,7 @@ const RING_MODULUS: u64 = Fp::MODULUS_VALUE;
 fn main() {
     const NUM_PARTIES: u32 = 3;
     const THRESHOLD: u32 = 1;
-    const BASE_PORT: u32 = 50000;
+    const BASE_PORT: u32 = 30000;
 
     let threads = (0..NUM_PARTIES)
         .map(|party_id| thread::spawn(move || thfhe(party_id, NUM_PARTIES, THRESHOLD, BASE_PORT)))
