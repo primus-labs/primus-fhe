@@ -6,6 +6,7 @@ use algebra::{
     ntt::NttTable,
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     reduce::{ReduceNegAssign, RingReduce},
+    utils::Size,
     Field, NttField,
 };
 use lattice::{utils::PolyDecomposeSpace, Lwe, NttGadgetRlwe, NttRlwe};
@@ -150,6 +151,16 @@ impl<C: UnsignedInteger> PowOf2LweKeySwitchingKey<C> {
     }
 }
 
+impl<C: UnsignedInteger> Size for PowOf2LweKeySwitchingKey<C> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.key.is_empty() || self.key[0].is_empty() {
+            return 0;
+        }
+        self.key.len() * self.key[0].len() * self.key[0][0].size()
+    }
+}
+
 /// The Key Switching Key.
 ///
 /// This struct stores the key that switch a ciphertext of the another secret key
@@ -284,6 +295,16 @@ impl<C: UnsignedInteger> NonPowOf2LweKeySwitchingKey<C> {
         modulus.reduce_add_assign(result.b_mut(), ciphertext.b());
 
         result
+    }
+}
+
+impl<C: UnsignedInteger> Size for NonPowOf2LweKeySwitchingKey<C> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.key.is_empty() || self.key[0].is_empty() {
+            return 0;
+        }
+        self.key.len() * self.key[0].len() * self.key[0][0].size()
     }
 }
 
@@ -458,5 +479,15 @@ impl<Q: NttField> LweKeySwitchingKeyRlweMode<Q> {
         self.space.store((decompose_space, poly_space));
 
         init.to_rlwe(ntt_table).extract_lwe_locally()
+    }
+}
+
+impl<Q: NttField> Size for LweKeySwitchingKeyRlweMode<Q> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.key.is_empty() {
+            return 0;
+        }
+        self.key.len() * self.key[0].size()
     }
 }

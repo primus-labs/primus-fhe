@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use algebra::{decompose::NonPowOf2ApproxSignedBasis, random::DiscreteGaussian, Field, NttField};
+use algebra::{
+    decompose::NonPowOf2ApproxSignedBasis, random::DiscreteGaussian, utils::Size, Field, NttField,
+};
 use lattice::utils::RlweSpace;
 use rand::{CryptoRng, Rng};
 
@@ -91,6 +93,16 @@ impl<F: NttField> TraceKey<F> {
         }
 
         self.pool.store((rlwe_space, auto_space));
+    }
+}
+
+impl<F: NttField> Size for TraceKey<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.auto_keys.is_empty() {
+            return 0;
+        }
+        self.auto_keys.len() * self.auto_keys[0].size()
     }
 }
 

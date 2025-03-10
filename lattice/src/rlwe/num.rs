@@ -2,6 +2,7 @@ use algebra::{
     integer::UnsignedInteger,
     polynomial::Polynomial,
     reduce::{ReduceNeg, ReduceNegAssign},
+    utils::Size,
 };
 
 use crate::{CmLwe, Lwe};
@@ -186,5 +187,12 @@ impl<T: UnsignedInteger> NumRlwe<T> {
         a[1..].iter_mut().for_each(|v| modulus.reduce_neg_assign(v));
 
         CmLwe::new(a, b)
+    }
+}
+
+impl<T: UnsignedInteger> Size for NumRlwe<T> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.a.size() * 2
     }
 }

@@ -1,6 +1,6 @@
 use algebra::{
     decompose::NonPowOf2ApproxSignedBasis, ntt::NttTable, polynomial::FieldNttPolynomial,
-    random::DiscreteGaussian, Field, NttField,
+    random::DiscreteGaussian, utils::Size, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
 
@@ -228,5 +228,12 @@ impl<F: NttField> Rgsw<F> {
                 secret_key, basis, gaussian, ntt_table, rng,
             ),
         }
+    }
+}
+
+impl<F: NttField> Size for Rgsw<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.minus_s_m.size() * 2
     }
 }

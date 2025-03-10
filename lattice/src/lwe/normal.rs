@@ -5,6 +5,7 @@ use algebra::{
         Modulus, ReduceAdd, ReduceAddAssign, ReduceDotProduct, ReduceMulAdd, ReduceMulAssign,
         ReduceNeg, ReduceNegAssign, ReduceSub, ReduceSubAssign,
     },
+    utils::Size,
 };
 use rand::{distributions::Uniform, prelude::Distribution};
 
@@ -267,5 +268,12 @@ impl<T: UnsignedInteger> Lwe<T> {
         let b = modulus.reduce_add(b, e);
 
         Lwe { a, b }
+    }
+}
+
+impl<T: Copy> Size for Lwe<T> {
+    #[inline]
+    fn size(&self) -> usize {
+        (self.a.len() + 1) * core::mem::size_of::<T>()
     }
 }

@@ -6,6 +6,7 @@ use algebra::{
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     random::{sample_binary_values, sample_ternary_values, DiscreteGaussian},
     reduce::RingReduce,
+    utils::Size,
     Field, NttField,
 };
 use num_traits::{ConstOne, ConstZero, One, Zero};
@@ -229,6 +230,13 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
     }
 }
 
+impl<C: UnsignedInteger> Size for LweSecretKey<C> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.key.size()
+    }
+}
+
 /// Represents a secret key for the Ring Learning with Errors (RLWE) cryptographic scheme.
 ///
 /// # Type Parameters
@@ -388,5 +396,12 @@ impl<F: NttField> NttRlweSecretKey<F> {
     #[inline]
     pub fn distr(&self) -> RingSecretKeyType {
         self.distr
+    }
+}
+
+impl<F: NttField> Size for RlweSecretKey<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.key.size()
     }
 }

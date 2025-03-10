@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use algebra::{
-    decompose::NonPowOf2ApproxSignedBasis, ntt::NttTable, random::DiscreteGaussian, Field, NttField,
+    decompose::NonPowOf2ApproxSignedBasis, ntt::NttTable, random::DiscreteGaussian, utils::Size,
+    Field, NttField,
 };
 use lattice::{utils::PolyDecomposeSpace, NttGadgetRlwe, NttRlwe};
 use rand::{CryptoRng, Rng};
@@ -102,5 +103,12 @@ impl<Q: NttField> RlweKeySwitchingKey<Q> {
         *result.b_mut() += ciphertext.b();
 
         result
+    }
+}
+
+impl<Q: NttField> Size for RlweKeySwitchingKey<Q> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.key.size()
     }
 }

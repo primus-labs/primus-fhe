@@ -5,6 +5,7 @@ use algebra::{
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     random::DiscreteGaussian,
     reduce::ReduceAddAssign,
+    utils::Size,
     Field, NttField,
 };
 use rand::{CryptoRng, Rng};
@@ -442,5 +443,12 @@ impl<F: NttField> NttRlwe<F> {
         b.add_mul_assign(&a, secret_key);
 
         Self { a, b }
+    }
+}
+
+impl<F: NttField> Size for NttRlwe<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.a.size() * 2
     }
 }

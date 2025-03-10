@@ -4,6 +4,7 @@ use algebra::{
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     random::DiscreteGaussian,
     reduce::ReduceAddAssign,
+    utils::Size,
     Field, NttField,
 };
 use rand::{CryptoRng, Rng};
@@ -309,5 +310,15 @@ impl<F: NttField> GadgetRlwe<F> {
             data,
             basis: *basis,
         }
+    }
+}
+
+impl<F: NttField> Size for GadgetRlwe<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.data.is_empty() {
+            return 0;
+        }
+        self.data.len() * self.data[0].size()
     }
 }

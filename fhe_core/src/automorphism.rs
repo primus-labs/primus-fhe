@@ -7,6 +7,7 @@ use algebra::{
     polynomial::FieldPolynomial,
     random::DiscreteGaussian,
     reduce::{ReduceAddAssign, ReduceMul, ReduceSubAssign},
+    utils::Size,
     Field, NttField,
 };
 use lattice::{
@@ -138,6 +139,13 @@ impl<F: NttField> AutoKey<F> {
             rlwe_dimension,
             destination.b_mut(),
         );
+    }
+}
+
+impl<F: NttField> Size for AutoKey<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.key.size()
     }
 }
 
