@@ -197,12 +197,7 @@ impl<const P: u64> DNBackend<P> {
 
     /// Interpolates a polynomial using Lagrange coefficients.
     fn interpolate_polynomial(&self, shares: &[u64], lagrange_coefs: &[u64]) -> u64 {
-        shares
-            .iter()
-            .zip(lagrange_coefs.iter())
-            .fold(0, |acc, (&share, &coef)| {
-                <U64FieldEval<P>>::add(acc, <U64FieldEval<P>>::mul(share, coef))
-            })
+        <U64FieldEval<P>>::dot_product(shares, lagrange_coefs)
     }
 
     /// Creates secret shares using polynomial of specified degree.
