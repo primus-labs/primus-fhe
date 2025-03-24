@@ -223,6 +223,78 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
     fn ntt_poly_inplace(&self, _poly: &mut [u64]) {
         unimplemented!()
     }
+
+    fn mul_element_wise_z2k(&mut self, a: &[u64], b: &[u64]) -> Vec<u64> {
+        unimplemented!()
+    }
+    fn init_z2k_triples_from_files(&mut self) {
+        unimplemented!()
+    }
+    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64]) -> Vec<u64> {
+        unimplemented!()
+    }
+    fn test_open_secrets_z2k(
+        &mut self,
+        reconstructor_id: u32,
+        degree: u32,
+        shares: &[u64],
+        broadcast_result: bool,
+    ) -> Option<Vec<u64>> {
+        unimplemented!()
+    }
+
+    fn reveal_slice_z2k(&mut self, shares: &[u64], party_id: u32) -> Vec<Option<u64>> {
+        unimplemented!()
+    }
+
+    fn input_slice_z2k(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> Vec<u64> {
+        unimplemented!()
+    }
+
+    fn add_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64> {
+        unimplemented!()
+    }
+
+    fn sub_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64> {
+        unimplemented!()
+    }
+
+    fn double_z2k_slice(&self, a: &[u64]) -> Vec<u64> {
+        unimplemented!()
+    }
+    fn shamir_secrets_to_additive_secrets(&mut self, shares: &[Self::Sharing]) -> Vec<u64> {
+        unimplemented!()
+    }
+
+    fn add_z2k_const(&mut self, a: u64, b: u64) -> u64 {
+        unimplemented!()
+    }
+
+    fn sub_z2k_const(&mut self, a: u64, b: u64) -> u64 {
+        unimplemented!()
+    }
+    fn sub_additive_const_p(&mut self, a: u64, b: u64) -> u64 {
+        unimplemented!()
+    }
+    fn mul_additive_const_p(&mut self, a: u64, b: u64) -> u64 {
+        unimplemented!()
+    }
+    fn inner_product_additive_const_p(&mut self, a: &[u64], b: &[u64]) -> u64 {
+        unimplemented!()
+    }
+    fn sends_slice_to_all_parties(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> Vec<u64> {
+        unimplemented!()
+    }
 }
 #[cfg(test)]
 mod tests {

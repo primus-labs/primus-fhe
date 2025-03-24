@@ -139,4 +139,68 @@ pub trait MPCBackend {
 
     /// Transform a polynomial to NTT domain.
     fn ntt_poly_inplace(&self, poly: &mut [u64]);
+
+    ///  multipliaction for shares over z2k
+    fn mul_element_wise_z2k(&mut self, a: &[u64], b: &[u64]) -> Vec<u64>;
+
+    /// init z2k triples, read triples from files
+    fn init_z2k_triples_from_files(&mut self);
+
+    /// Output a slice of secret values over z2k to all parties.
+    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64]) -> Vec<u64>;
+
+    /// test
+    fn test_open_secrets_z2k(
+        &mut self,
+        reconstructor_id: u32,
+        degree: u32,
+        shares: &[u64],
+        broadcast_result: bool,
+    ) -> Option<Vec<u64>>;
+
+    /// reveal_slice_z2k
+    fn reveal_slice_z2k(&mut self, shares: &[u64], party_id: u32) -> Vec<Option<u64>>;
+
+    /// input slice over z2k
+    fn input_slice_z2k(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> Vec<u64>;
+
+    /// add vec additive secret sharing over z2k
+    fn add_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64>;
+
+    /// sub vec additive secret sharing over z2k
+    fn sub_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64>;
+
+    /// double vec additive secret sharing over z2k
+    fn double_z2k_slice(&self, a: &[u64]) -> Vec<u64>;
+
+    /// convert additive secret sharing to additive secret sharing
+    fn shamir_secrets_to_additive_secrets(&mut self, shares: &[Self::Sharing]) -> Vec<u64>;
+
+    /// addition between a consant a and an additive secret sharing b
+    fn add_z2k_const(&mut self, a: u64, b: u64) -> u64;
+
+    /// sub between a consant a and an additive secret sharing b over z2k
+    fn sub_z2k_const(&mut self, a: u64, b: u64) -> u64;
+
+    /// sub between a consant a and an additive secret sharing b over F_p
+    fn sub_additive_const_p(&mut self, a: u64, b: u64) -> u64;
+
+    /// mul between a consant a and an additive secret sharing b over F_p
+    fn mul_additive_const_p(&mut self, a: u64, b: u64) -> u64;
+
+    ///inner product between a consant vec a and an additive secret sharing vec b over F_p
+    fn inner_product_additive_const_p(&mut self, a: &[u64], b: &[u64]) -> u64;
+
+    /// sends public message to all parties
+    fn sends_slice_to_all_parties(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> Vec<u64>;
 }
