@@ -23,7 +23,7 @@ use crate::{NttRlweCiphertext, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 pub struct AutoKey<F: NttField> {
     degree: usize,
     key: NttGadgetRlwe<F>,
-    ntt_table: Arc<<F as NttField>::Table>,
+    pub(crate)  ntt_table: Arc<<F as NttField>::Table>,
 }
 
 /// Preallocated space for automorphism
@@ -313,6 +313,31 @@ mod tests {
 
         let decrypted_values = (result.b()
             - ntt_table.inverse_transform_inplace(ntt_table.transform(result.a()) * &*ntt_sk))
+        .into_iter()
+        .map(decode)
+        .collect::<Vec<u32>>();
+
+        let flag = decrypted_values
+            .iter()
+            .zip(values.iter())
+            .enumerate()
+            .all(|(i, (&r, &p))| {
+                if i % 2 == 1 {
+                    (r + p) % PLAIN_MODULUS == 0
+                } else {
+                    r == p
+                }
+            });
+
+        assert!(flag);
+
+        let mut auto_space = AutoSpace::new(N);
+        let mut poly_space = <FieldPolynomial<Fp>>::zero(N);
+        let mut result = <NttRlweCiphertext<Fp>>::zero(N);
+        auto_key.automorphism_ntt_inplace(&cipher, &mut auto_space, &mut poly_space, &mut result);
+
+        let decrypted_values = (ntt_table
+            .inverse_transform_inplace(result.b() - result.a().clone() * &*ntt_sk))
         .into_iter()
         .map(decode)
         .collect::<Vec<u32>>();

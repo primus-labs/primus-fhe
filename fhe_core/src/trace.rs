@@ -6,10 +6,7 @@ use algebra::{
 use lattice::utils::RlweSpace;
 use rand::{CryptoRng, Rng};
 
-use crate::{
-    utils::Pool, AutoKey, AutoSpace, NttRlweCiphertext, NttRlweSecretKey, RlweCiphertext,
-    RlweSecretKey,
-};
+use crate::{utils::Pool, AutoKey, AutoSpace, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 
 /// Trace key
 pub struct TraceKey<F: NttField> {
@@ -72,37 +69,6 @@ impl<F: NttField> TraceKey<F> {
         self.pool.store((rlwe_space, auto_space));
 
         destination
-    }
-
-    /// Trace operation
-    pub fn trace_ntt(&self, mut ciphertext: RlweCiphertext<F>) -> NttRlweCiphertext<F> {
-        let dimension = ciphertext.dimension();
-
-        let mut destination = ciphertext.clone();
-        let mut result = <NttRlweCiphertext<F>>::zero(dimension);
-
-        let (mut rlwe_space, mut auto_space) = match self.pool.get() {
-            Some(space) => space,
-            None => (RlweSpace::new(dimension), AutoSpace::new(dimension)),
-        };
-
-        let (last, others) = self.auto_keys.split_last().unwrap();
-
-        for auto_key in others.iter() {
-            auto_key.automorphism_inplace(&destination, &mut auto_space, &mut rlwe_space);
-            destination.add_assign_element_wise(&rlwe_space);
-        }
-
-        last.automorphism_ntt_inplace(
-            &destination,
-            &mut auto_space,
-            ciphertext.a_mut(),
-            &mut result,
-        );
-
-        self.pool.store((rlwe_space, auto_space));
-
-        result
     }
 
     /// Trace operation in place
