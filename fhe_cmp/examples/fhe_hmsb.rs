@@ -4,8 +4,10 @@ use fhe_cmp::{
 };
 use fhe_core::LweCiphertext;
 use rand::{thread_rng, Rng};
-use rayon::prelude::*; // Importing rayon library to parallelize operations
-use std::sync::{Arc, Mutex}; // Import Arc and Mutex to implement thread-safe shared data
+// Importing rayon library to parallelize operations
+use rayon::prelude::*; 
+// Import Arc and Mutex to implement thread-safe shared data
+use std::sync::{Arc, Mutex}; 
 use std::time::Instant;
 
 type M = u64;
