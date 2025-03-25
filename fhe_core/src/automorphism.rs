@@ -17,7 +17,7 @@ use lattice::{
 use num_traits::One;
 use rand::{CryptoRng, Rng};
 
-use crate::{NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
+use crate::{NttRlweCiphertext, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 
 /// Automorphism key
 pub struct AutoKey<F: NttField> {
@@ -69,7 +69,7 @@ impl<F: NttField> AutoKey<F> {
                 rng,
             )
         } else {
-            let p_auto = poly_auto(secret_key, degree, rlwe_dimension);
+            let p_auto = poly_auto_add(secret_key, degree, rlwe_dimension);
             let auto_sk = ntt_table.transform_inplace(-p_auto);
             NttGadgetRlwe::generate_random_poly_sample(
                 ntt_secret_key,
@@ -93,14 +93,14 @@ impl<F: NttField> AutoKey<F> {
     pub fn automorphism(&self, ciphertext: &RlweCiphertext<F>) -> RlweCiphertext<F> {
         let rlwe_dimension = ciphertext.dimension();
 
-        let a = poly_auto(ciphertext.a(), self.degree, rlwe_dimension);
+        let a = poly_auto_add(ciphertext.a(), self.degree, rlwe_dimension);
 
         let mut result = self
             .key
             .mul_polynomial(&a, &self.ntt_table)
             .to_rlwe(&self.ntt_table);
 
-        poly_auto_inplace(ciphertext.b(), self.degree, rlwe_dimension, result.b_mut());
+        poly_auto_add_inplace(ciphertext.b(), self.degree, rlwe_dimension, result.b_mut());
 
         result
     }
@@ -115,7 +115,7 @@ impl<F: NttField> AutoKey<F> {
         let rlwe_dimension = ciphertext.dimension();
 
         destination.a_mut().set_zero();
-        poly_auto_inplace(
+        poly_auto_add_inplace(
             ciphertext.a(),
             self.degree,
             rlwe_dimension,
@@ -133,12 +133,40 @@ impl<F: NttField> AutoKey<F> {
             .ntt_rlwe_space
             .inverse_transform_inplace(&self.ntt_table, destination);
 
-        poly_auto_inplace(
+        poly_auto_add_inplace(
             ciphertext.b(),
             self.degree,
             rlwe_dimension,
             destination.b_mut(),
         );
+    }
+
+    /// Performs automorphism on the given RLWE ciphertext in place.
+    pub fn automorphism_ntt_inplace(
+        &self,
+        ciphertext: &RlweCiphertext<F>,
+        auto_space: &mut AutoSpace<F>,
+        poly_space: &mut FieldPolynomial<F>,
+        destination: &mut NttRlweCiphertext<F>,
+    ) {
+        let rlwe_dimension = ciphertext.dimension();
+
+        poly_auto_inplace(ciphertext.a(), self.degree, rlwe_dimension, poly_space);
+
+        self.key.mul_polynomial_inplace(
+            poly_space,
+            &self.ntt_table,
+            &mut auto_space.decompose_space,
+            &mut auto_space.ntt_rlwe_space,
+        );
+
+        poly_auto_inplace(ciphertext.b(), self.degree, rlwe_dimension, poly_space);
+
+        self.ntt_table.transform_slice(poly_space.as_mut_slice());
+
+        destination.a_mut().copy_from(auto_space.ntt_rlwe_space.a());
+        destination.b_mut().copy_from(poly_space);
+        *destination.b_mut() += auto_space.ntt_rlwe_space.b();
     }
 }
 
@@ -150,18 +178,18 @@ impl<F: NttField> Size for AutoKey<F> {
 }
 
 #[inline]
-fn poly_auto<F: NttField>(
+fn poly_auto_add<F: NttField>(
     poly: &FieldPolynomial<F>,
     degree: usize,
     dimension: usize,
 ) -> FieldPolynomial<F> {
     let mut res = FieldPolynomial::zero(dimension);
-    poly_auto_inplace(poly, degree, dimension, &mut res);
+    poly_auto_add_inplace(poly, degree, dimension, &mut res);
     res
 }
 
 #[inline]
-fn poly_auto_inplace<F: NttField>(
+fn poly_auto_add_inplace<F: NttField>(
     poly: &FieldPolynomial<F>,
     degree: usize,
     dimension: usize,
@@ -171,10 +199,31 @@ fn poly_auto_inplace<F: NttField>(
     let modulus = <PowOf2Modulus<usize>>::new(twice_dimension);
     for (i, c) in poly.iter().enumerate() {
         let j = modulus.reduce_mul(i, degree);
+
         if j < dimension {
             F::MODULUS.reduce_add_assign(&mut destination[j], *c);
         } else {
             F::MODULUS.reduce_sub_assign(&mut destination[j - dimension], *c);
+        }
+    }
+}
+
+#[inline]
+fn poly_auto_inplace<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    degree: usize,
+    dimension: usize,
+    destination: &mut FieldPolynomial<F>,
+) {
+    destination.set_zero();
+    let twice_dimension = dimension << 1;
+    let modulus = <PowOf2Modulus<usize>>::new(twice_dimension);
+    for (i, c) in poly.iter().enumerate() {
+        let j = modulus.reduce_mul(i, degree);
+        if j < dimension {
+            destination[j] = *c;
+        } else {
+            destination[j - dimension] = F::neg(*c);
         }
     }
 }
@@ -212,7 +261,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         let poly = PolyT::random_ternary(N, &mut rng);
-        let result = poly_auto(&poly, N + 1, N);
+        let result = poly_auto_add(&poly, N + 1, N);
 
         let flag = result
             .iter()
