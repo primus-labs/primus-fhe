@@ -16,7 +16,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let distr_msb = Uniform::new_inclusive(0, (1u64 << PLAIN_MODULUS_BITS) - 1);
     let distr_cmp = Uniform::new_inclusive(0, (1u64 << (PLAIN_MODULUS_BITS - 1)) - 1);
 
-
     // generate keys
     let sk = KeyGen::generate_secret_key(params, &mut rng);
     println!("Secret Key Generation done!\n");

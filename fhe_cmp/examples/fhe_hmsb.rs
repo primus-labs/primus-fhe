@@ -73,7 +73,7 @@ fn msb_single_threaded_tests(
         let i = rng.gen_range(0..(1u64 << plain_modulus_bits));
 
         // The expected MSB is the top bit of i.
-        let expected: M = ((i >> (plain_modulus_bits - 1)) & 1).try_into().unwrap();
+        let expected: M = (i >> (plain_modulus_bits - 1)) & 1;
 
         // Encrypt the number using the provided modulus.
         let enc_text = enc.encrypt(i, modulus, &mut rng, plain_modulus_bits);
