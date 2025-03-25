@@ -33,9 +33,9 @@ pub static LVL1PARAM_128_BITS_PARAMETERS: LazyLock<
 });
 
 type FpU64 = U64FieldEval<4179340454199820289>;
-//P=1205862401 lwe_cipher_modulus=32bit blind_rotation_basis_bits= 10
-//P=20967325697 lwe_cipher_modulus=36bit blind_rotation_basis_bits= 11
-//P=4179340454199820289 lwe_cipher_modulus=63bit blind_rotation_basis_bits= 13
+// P=1205862401 lwe_cipher_modulus=32bit blind_rotation_basis_bits= 10
+// P=20967325697 lwe_cipher_modulus=36bit blind_rotation_basis_bits= 11
+// P=4179340454199820289 lwe_cipher_modulus=63bit blind_rotation_basis_bits= 13
 /// Default 128-bits security Parameters
 pub static LVL2PARAM_128_BITS_PARAMETERS: LazyLock<
     CmpFheParameters<u64, PowOf2Modulus<u64>, FpU64>,
