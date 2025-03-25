@@ -24,5 +24,5 @@ pub mod polynomial;
 pub mod utils;
 
 pub use error::AlgebraError;
-
+pub use integer::*;
 pub use field::*;
