@@ -7,8 +7,8 @@ use super::{CmpFheParameters, ConstParameters, Steps};
 
 type FpU32 = U32FieldEval<576716801>;
 
-//P=132120577 lwe_cipher_modulus=28bit blind_rotation_basis_bits= 5
-//P=576716801 lwe_cipher_modulus=31bit blind_rotation_basis_bits= 8
+// P=132120577 lwe_cipher_modulus=28bit blind_rotation_basis_bits= 5
+// P=576716801 lwe_cipher_modulus=31bit blind_rotation_basis_bits= 8
 
 /// Default 128-bits security Parameters
 pub static LVL1PARAM_128_BITS_PARAMETERS: LazyLock<
