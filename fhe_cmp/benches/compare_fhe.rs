@@ -14,7 +14,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let params = *LVL2PARAM_128_BITS_PARAMETERS;
     let modulus = <PowOf2Modulus<M>>::new_with_mask(params.lwe_cipher_modulus_minus_one());
     let distr_msb = Uniform::new_inclusive(0, (1u64 << PLAIN_MODULUS_BITS) - 1);
-    let distr_cmp = Uniform::new_inclusive(0, (1u64 << PLAIN_MODULUS_BITS - 1) - 1);
+    let distr_cmp = Uniform::new_inclusive(0, (1u64 << (PLAIN_MODULUS_BITS - 1)) - 1);
+
 
     // generate keys
     let sk = KeyGen::generate_secret_key(params, &mut rng);
