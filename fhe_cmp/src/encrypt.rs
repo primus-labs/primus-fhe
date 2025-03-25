@@ -1,7 +1,6 @@
-use algebra::{integer::UnsignedInteger, reduce::RingReduce, AsInto, NttField};
-use fhe_core::{LweCiphertext, LweParameters, LweSecretKey,encode};
 use crate::SecretKeyPack;
-
+use algebra::{integer::UnsignedInteger, reduce::RingReduce, AsInto, NttField};
+use fhe_core::{encode, LweCiphertext, LweParameters, LweSecretKey};
 
 /// Encryptor
 pub struct Encryptor<C: UnsignedInteger, LweModulus: RingReduce<C>> {
@@ -19,7 +18,6 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>> Encryptor<C, LweModulus> {
         }
     }
 
-
     /// Encrypt message.
     #[inline]
     pub fn encrypt<M, R>(
@@ -27,13 +25,12 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>> Encryptor<C, LweModulus> {
         message: M,
         cipher_modulus: impl RingReduce<C>,
         rng: &mut R,
-        plain_modulus_bits:u32,
+        plain_modulus_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: TryInto<C>,
         R: rand::Rng + rand::CryptoRng,
     {
-
         let gaussian = self.params.noise_distribution();
         let mut ciphertext = LweCiphertext::generate_random_zero_sample(
             self.lwe_secret_key.as_ref(),
@@ -41,14 +38,14 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>> Encryptor<C, LweModulus> {
             gaussian,
             rng,
         );
-        let plain_modulus_value:C=(1u64<<plain_modulus_bits).as_into();
+        let plain_modulus_value: C = (1u64 << plain_modulus_bits).as_into();
         cipher_modulus.reduce_add_assign(
             ciphertext.b_mut(),
             encode(
                 message,
                 plain_modulus_value,
                 self.params.cipher_modulus_value,
-            )
+            ),
         );
 
         ciphertext

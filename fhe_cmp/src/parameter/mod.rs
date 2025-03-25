@@ -52,7 +52,6 @@ pub struct ConstParameters<C: UnsignedInteger, Q> {
     pub key_switching_standard_deviation: f64,
 }
 
-
 #[derive(Debug)]
 pub struct CmpFheParameters<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> {
     lwe_params: LweParameters<C, LweModulus>,

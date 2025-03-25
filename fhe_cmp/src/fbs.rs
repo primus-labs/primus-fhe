@@ -1,17 +1,17 @@
+use crate::{bootstrap, CmpFheParameters, SecretKeyPack};
 use algebra::{
-    integer::{UnsignedInteger, AsInto},
+    integer::{AsInto, UnsignedInteger},
     polynomial::FieldPolynomial,
     reduce::{ReduceAddAssign, ReduceNeg, RingReduce},
     NttField,
 };
 use fhe_core::LweCiphertext;
 use rand::{CryptoRng, Rng};
-use crate::{CmpFheParameters, SecretKeyPack, bootstrap};
 
 /// An evaluator for performing bootstrapping and homomorphic operations on LWE ciphertexts.
-/// 
+///
 /// This struct encapsulates the necessary evaluation key for bootstrapping.
-/// 
+///
 /// # Type Parameters
 /// - `C`: An unsigned integer type representing ciphertext coefficients.
 /// - `LweModulus`: A modulus type implementing [`RingReduce`] for `C`.
@@ -67,15 +67,11 @@ where
     /// # Returns
     /// A refreshed LWE ciphertext after bootstrapping.
     #[inline]
-    pub fn bootstrap(
-        &self,
-        c: LweCiphertext<C>,
-        lut: FieldPolynomial<Q>,
-    ) -> LweCiphertext<C> {
+    pub fn bootstrap(&self, c: LweCiphertext<C>, lut: FieldPolynomial<Q>) -> LweCiphertext<C> {
         self.ek.bootstrap(c, lut)
     }
 
-    /// Computes the "MSB gate" on a provided LWE ciphertext. 
+    /// Computes the "MSB gate" on a provided LWE ciphertext.
     ///
     /// Internally, this method calls the evaluation key’s [`msb_gate`] implementation,
     /// which roughly extracts the most significant bit information of the plaintext
@@ -90,8 +86,7 @@ where
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
-        let acc = self.ek.msb_gate::<M>(c);
-        acc
+        self.ek.msb_gate::<M>(c)
     }
 
     /// Performs an "ideal" MSB gate operation, which includes an internal scaling step.
@@ -109,10 +104,9 @@ where
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
-        let acc = self.ek.ide_msb_gate::<M>(c, scale_bits);
-        acc
+        self.ek.ide_msb_gate::<M>(c, scale_bits)
     }
-    
+
     /// Converts an arithmetic-based ciphertext representation into a log-based one.
     ///
     /// This method leverages arithmetic-to-log conversion defined by the evaluation key
@@ -131,7 +125,7 @@ where
     }
 
     /// Extracts the 5 most significant bits (MSBs) of the plaintext enclosed within
-    /// an LWE ciphertext. 
+    /// an LWE ciphertext.
     ///
     /// This method simply calls [`msb_gate`] internally to obtain the relevant bits.
     ///
@@ -144,8 +138,7 @@ where
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
-        let output = self.msb_gate::<M>(&c.clone());
-        output
+        self.msb_gate::<M>(&c.clone())
     }
 
     /// Extracts 9 bits (in particular, splits a 4-bit and 5-bit portion) from the
@@ -172,7 +165,7 @@ where
         &self,
         c: &LweCiphertext<C>,
         lwe_cipher_modulus: impl RingReduce<C>,
-        plain_bits: u32
+        plain_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
@@ -191,13 +184,11 @@ where
         // Multiply each coefficient in the ciphertext by `2^(shift_bits)`, effectively
         // performing a left shift modulo the LWE ciphertext modulus.
         for i in 0..self.parameters().lwe_dimension() {
-            cipher1.a_mut()[i] =
-                lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], C::from(shift_value));
+            cipher1.a_mut()[i] = lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], shift_value);
         }
 
         // Shift the constant term (b) in the same manner.
-        *cipher1.b_mut() =
-            lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), C::from(shift_value));
+        *cipher1.b_mut() = lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), shift_value);
 
         // Apply MSB gate to the shifted ciphertext, yielding an intermediate ciphertext
         // containing sign/MSB information.
@@ -206,11 +197,9 @@ where
         // Subtract `cipher2` from `cipher1` to isolate specific bits of interest in `cipher3`.
         let mut cipher3 = cipher1.clone();
         for i in 0..self.parameters().lwe_dimension() {
-            cipher3.a_mut()[i] =
-                lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
+            cipher3.a_mut()[i] = lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
         }
-        *cipher3.b_mut() =
-            lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
+        *cipher3.b_mut() = lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
 
         // Apply an "ideal" MSB gate with `plain_bits` scaling to bring the shifted result back
         // into an appropriate range.
@@ -222,16 +211,14 @@ where
 
         // Finally, call `extractmsb5` on the difference to pick out the 5 MSBs. This step
         // integrates everything and yields the final 9-bit extraction result.
-        let res = self.extractmsb5::<M>(&cipher5.clone());
-
-        res
+        self.extractmsb5::<M>(&cipher5.clone())
     }
 
     /// Extracts 13 bits from the given ciphertext by performing multi-step MSB extractions.
-    /// 
+    ///
     /// This method follows a similar procedure as smaller-bit extractions but extends it to
     /// retrieve a total of 13 MSBs. The internal steps are as follows:
-    /// 
+    ///
     /// 1. **Clone** the original ciphertext into `cipher_in` and `cipher1` for manipulation.
     /// 2. **Compute Shift**:  
     ///    - Determine how many bits to shift by `(plain_bits - 5)`, and build the `shift_value`.
@@ -251,16 +238,16 @@ where
     /// 8. **Recursive Extraction** (to reach 13 bits):  
     ///    - Calls `extractmsb9` on `cipher5` (with updated `plain_bits - 4`) to progressively
     ///      incorporate an additional block of bits.
-    /// 
+    ///
     /// # Parameters
     /// - `c`: The ciphertext from which 13 MSBs are extracted.
     /// - `lwe_cipher_modulus`: The modulus used for LWE ciphertext operations.
     /// - `plain_bits`: The total number of plaintext bits; assumes we are extracting a specific
     ///   13-bit segment from that range.
-    /// 
+    ///
     /// # Returns
     /// A ciphertext corresponding to the 13-bit extraction result.
-    /// 
+    ///
     /// # Type Parameters
     /// - `M`: A type bound that includes `Copy`, `ReduceNeg`, and `ReduceAddAssign`, indicating
     ///   the supported arithmetic operations required by the bootstrapping.
@@ -268,7 +255,7 @@ where
         &self,
         c: &LweCiphertext<C>,
         lwe_cipher_modulus: impl RingReduce<C>,
-        plain_bits: u32
+        plain_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
@@ -284,11 +271,9 @@ where
 
         // 3. Left-shift cipher1’s coefficients and scalar part.
         for i in 0..self.parameters().lwe_dimension() {
-            cipher1.a_mut()[i] =
-                lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], C::from(shift_value));
+            cipher1.a_mut()[i] = lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], shift_value);
         }
-        *cipher1.b_mut() =
-            lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), C::from(shift_value));
+        *cipher1.b_mut() = lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), shift_value);
 
         // 4. Apply MSB gate to the shifted ciphertext, capturing MSB info in cipher2.
         let cipher2 = self.msb_gate::<M>(&cipher1.clone());
@@ -296,11 +281,9 @@ where
         // 5. Subtract cipher2 from cipher1 to isolate bits in cipher3.
         let mut cipher3 = cipher1.clone();
         for i in 0..self.parameters().lwe_dimension() {
-            cipher3.a_mut()[i] =
-                lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
+            cipher3.a_mut()[i] = lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
         }
-        *cipher3.b_mut() =
-            lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
+        *cipher3.b_mut() = lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
 
         // 6. Rescale cipher3 using the ideal MSB gate.
         let cipher4 = self.ide_msb_gate::<M>(&cipher3.clone(), plain_bits);
@@ -309,8 +292,7 @@ where
         let cipher5 = c.sub_reduce_component_wise_ref(&cipher4, lwe_cipher_modulus);
 
         // 8. Call extractmsb9 on cipher5 with adjusted plain_bits to fully obtain 13 bits.
-        let res = self.extractmsb9::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32);
-        res
+        self.extractmsb9::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32)
     }
 
     /// Extracts 17 bits from the given ciphertext by chaining multiple MSB extraction operations.
@@ -318,17 +300,17 @@ where
     /// - `c`: The ciphertext from which 17 MSBs are extracted.
     /// - `lwe_cipher_modulus`: The modulus for ciphertext operations.
     /// - `plain_bits`: The total plaintext bits, from which we isolate 17 MSBs.
-    /// 
+    ///
     /// # Returns
     /// A ciphertext capturing the 17 extracted bits.
-    /// 
+    ///
     /// # Type Parameters
     /// - `M`: A type that implements necessary reduce/negation traits for the MSB gate.
     pub fn extractmsb17<M>(
         &self,
         c: &LweCiphertext<C>,
         lwe_cipher_modulus: impl RingReduce<C>,
-        plain_bits: u32
+        plain_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
@@ -340,49 +322,44 @@ where
         let shift_value: C = (1u64 << shift_bits).as_into();
 
         for i in 0..self.parameters().lwe_dimension() {
-            cipher1.a_mut()[i] =
-                lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], C::from(shift_value));
+            cipher1.a_mut()[i] = lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], shift_value);
         }
-        *cipher1.b_mut() =
-            lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), C::from(shift_value));
+        *cipher1.b_mut() = lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), shift_value);
 
         let cipher2 = self.msb_gate::<M>(&cipher1.clone());
 
         let mut cipher3 = cipher1.clone();
         for i in 0..self.parameters().lwe_dimension() {
-            cipher3.a_mut()[i] =
-                lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
+            cipher3.a_mut()[i] = lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
         }
-        *cipher3.b_mut() =
-            lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
+        *cipher3.b_mut() = lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
 
         let cipher4 = self.ide_msb_gate::<M>(&cipher3.clone(), plain_bits);
         let cipher5 = c.sub_reduce_component_wise_ref(&cipher4, lwe_cipher_modulus);
 
         // Recursively extract 13 bits from the updated ciphertext to reach 17 bits overall.
-        let res = self.extractmsb13::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32);
-        res
+        self.extractmsb13::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32)
     }
 
     /// Extracts 21 bits from the given ciphertext by chaining multiple extractions.
-    /// 
+    ///
     /// The procedure is an extension of the smaller MSB gate extraction, now repeated enough
     /// times to accumulate 21 bits overall.
     /// # Parameters
     /// - `c`: Original ciphertext from which 21 bits are extracted.
     /// - `lwe_cipher_modulus`: Modulus used for LWE ciphertext operations.
     /// - `plain_bits`: Total plaintext bit-length.
-    /// 
+    ///
     /// # Returns
     /// A ciphertext containing 21 extracted bits.
-    /// 
+    ///
     /// # Type Parameters
     /// - `M`: Type bound that requires copying and certain arithmetic reductions for the MSB gate.
     pub fn extractmsb21<M>(
         &self,
         c: &LweCiphertext<C>,
         lwe_cipher_modulus: impl RingReduce<C>,
-        plain_bits: u32
+        plain_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
@@ -394,28 +371,23 @@ where
         let shift_value: C = (1u64 << shift_bits).as_into();
 
         for i in 0..self.parameters().lwe_dimension() {
-            cipher1.a_mut()[i] =
-                lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], C::from(shift_value));
+            cipher1.a_mut()[i] = lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], shift_value);
         }
-        *cipher1.b_mut() =
-            lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), C::from(shift_value));
+        *cipher1.b_mut() = lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), shift_value);
 
         let cipher2 = self.msb_gate::<M>(&cipher1.clone());
 
         let mut cipher3 = cipher1.clone();
         for i in 0..self.parameters().lwe_dimension() {
-            cipher3.a_mut()[i] =
-                lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
+            cipher3.a_mut()[i] = lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
         }
-        *cipher3.b_mut() =
-            lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
+        *cipher3.b_mut() = lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
 
         let cipher4 = self.ide_msb_gate::<M>(&cipher3.clone(), plain_bits);
         let cipher5 = c.sub_reduce_component_wise_ref(&cipher4, lwe_cipher_modulus);
 
         // Recursively extract 17 bits from cipher5, culminating in 21 bits total.
-        let res = self.extractmsb17::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32);
-        res
+        self.extractmsb17::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32)
     }
 
     /// Extracts 25 bits from the given ciphertext by chaining several MSB extractions.
@@ -423,7 +395,7 @@ where
     /// - `c`: The input LWE ciphertext.
     /// - `lwe_cipher_modulus`: The modulus used for ring reduction on ciphertext components.
     /// - `plain_bits`: The total number of bits in the underlying plaintext message space.
-    /// 
+    ///
     /// # Returns
     /// A new LWE ciphertext containing the extracted 25 bits.
     ///
@@ -433,7 +405,7 @@ where
         &self,
         c: &LweCiphertext<C>,
         lwe_cipher_modulus: impl RingReduce<C>,
-        plain_bits: u32
+        plain_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
@@ -447,11 +419,9 @@ where
 
         // Perform left-shifting (multiplying) of each coefficient and the scalar part by 2^(shift_bits).
         for i in 0..self.parameters().lwe_dimension() {
-            cipher1.a_mut()[i] =
-                lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], C::from(shift_value));
+            cipher1.a_mut()[i] = lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], shift_value);
         }
-        *cipher1.b_mut() =
-            lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), C::from(shift_value));
+        *cipher1.b_mut() = lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), shift_value);
 
         // Apply MSB gate to capture the most significant bit of the shifted ciphertext.
         let cipher2 = self.msb_gate::<M>(&cipher1.clone());
@@ -459,11 +429,9 @@ where
         // Subtract the MSB portion from the shifted ciphertext.
         let mut cipher3 = cipher1.clone();
         for i in 0..self.parameters().lwe_dimension() {
-            cipher3.a_mut()[i] =
-                lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
+            cipher3.a_mut()[i] = lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
         }
-        *cipher3.b_mut() =
-            lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
+        *cipher3.b_mut() = lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
 
         // Use the "ideal" MSB gate to rescale the result.
         let cipher4 = self.ide_msb_gate::<M>(&cipher3.clone(), plain_bits);
@@ -472,8 +440,7 @@ where
         let cipher5 = c.sub_reduce_component_wise_ref(&cipher4, lwe_cipher_modulus);
 
         // Recursively extract 21 bits from `cipher5` to complete the 25-bit extraction.
-        let res = self.extractmsb21::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32);
-        res
+        self.extractmsb21::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32)
     }
 
     /// Extracts 29 bits from the given ciphertext by extending the MSB extraction procedure.
@@ -481,14 +448,14 @@ where
     /// - `c`: The LWE ciphertext to be processed.
     /// - `lwe_cipher_modulus`: The modulus for LWE operations.
     /// - `plain_bits`: Total bits of the underlying plaintext.
-    /// 
+    ///
     /// # Returns
     /// A new ciphertext embedding the 29 extracted bits.
     pub fn extractmsb29<M>(
         &self,
         c: &LweCiphertext<C>,
         lwe_cipher_modulus: impl RingReduce<C>,
-        plain_bits: u32
+        plain_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
@@ -500,48 +467,43 @@ where
         let shift_value: C = (1u64 << shift_bits).as_into();
 
         for i in 0..self.parameters().lwe_dimension() {
-            cipher1.a_mut()[i] =
-                lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], C::from(shift_value));
+            cipher1.a_mut()[i] = lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], shift_value);
         }
-        *cipher1.b_mut() =
-            lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), C::from(shift_value));
+        *cipher1.b_mut() = lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), shift_value);
 
         let cipher2 = self.msb_gate::<M>(&cipher1.clone());
 
         let mut cipher3 = cipher1.clone();
         for i in 0..self.parameters().lwe_dimension() {
-            cipher3.a_mut()[i] =
-                lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
+            cipher3.a_mut()[i] = lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
         }
-        *cipher3.b_mut() =
-            lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
+        *cipher3.b_mut() = lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
 
         let cipher4 = self.ide_msb_gate::<M>(&cipher3.clone(), plain_bits);
         let cipher5 = c.sub_reduce_component_wise_ref(&cipher4, lwe_cipher_modulus);
 
         // Recursively call extractmsb25 to complete the extraction to 29 bits.
-        let res = self.extractmsb25::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32);
-        res
+        self.extractmsb25::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32)
     }
 
     /// Extracts 33 bits from the given ciphertext.
-    /// 
+    ///
     /// The logic follows the same pattern of shifting, extracting MSBs, rescaling,
     /// subtracting from the original ciphertext, and then performing another MSB extraction
     /// recursively. This time, it calls `extractmsb29` after preparing the intermediary.
-    /// 
+    ///
     /// # Parameters
     /// - `c`: Original LWE ciphertext.
     /// - `lwe_cipher_modulus`: Modulus for LWE ring operations.
     /// - `plain_bits`: The total number of bits in the plaintext domain.
-    /// 
+    ///
     /// # Returns
     /// A ciphertext that contains 33 MSBs of the original message.
     pub fn extractmsb33<M>(
         &self,
         c: &LweCiphertext<C>,
         lwe_cipher_modulus: impl RingReduce<C>,
-        plain_bits: u32
+        plain_bits: u32,
     ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
@@ -553,33 +515,28 @@ where
         let shift_value: C = (1u64 << shift_bits).as_into();
 
         for i in 0..self.parameters().lwe_dimension() {
-            cipher1.a_mut()[i] =
-                lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], C::from(shift_value));
+            cipher1.a_mut()[i] = lwe_cipher_modulus.reduce_mul(cipher_in.a_mut()[i], shift_value);
         }
-        *cipher1.b_mut() =
-            lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), C::from(shift_value));
+        *cipher1.b_mut() = lwe_cipher_modulus.reduce_mul(*cipher_in.b_mut(), shift_value);
 
         let cipher2 = self.msb_gate::<M>(&cipher1.clone());
 
         let mut cipher3 = cipher1.clone();
         for i in 0..self.parameters().lwe_dimension() {
-            cipher3.a_mut()[i] =
-                lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
+            cipher3.a_mut()[i] = lwe_cipher_modulus.reduce_sub(cipher1.a()[i], cipher2.a()[i]);
         }
-        *cipher3.b_mut() =
-            lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
+        *cipher3.b_mut() = lwe_cipher_modulus.reduce_sub(cipher1.b(), cipher2.b());
 
         let cipher4 = self.ide_msb_gate::<M>(&cipher3.clone(), plain_bits);
         let cipher5 = c.sub_reduce_component_wise_ref(&cipher4, lwe_cipher_modulus);
 
         // Recursively call extractmsb29 to finalize the 33-bit extraction.
-        let res = self.extractmsb29::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32);
-        res
+        self.extractmsb29::<M>(&cipher5.clone(), lwe_cipher_modulus, plain_bits - 4u32)
     }
 
     /// A convenience function to homomorphically extract the MSB portion of a ciphertext,
     /// selecting the appropriate extraction method based on the number of `plain_bits`.
-    /// 
+    ///
     /// # Operation
     /// - If `plain_bits` is **≤ 6**, calls `extractmsb5`.
     /// - If **≤ 9**, calls `extractmsb9`.
@@ -590,17 +547,17 @@ where
     /// - If **≤ 29**, calls `extractmsb29`.
     /// - If **≤ 33**, calls `extractmsb33`.
     /// - Otherwise, it panics with an error.
-    /// 
+    ///
     /// This switch-case style logic centralizes MSB extraction, making it easier to handle
     /// varying plaintext bit sizes from a single API entry point.
-    /// 
+    ///
     /// # Parameters
     /// - `c`: The ciphertext from which we want to extract the MSB (or a range of bits).
     /// - `plain_bits`: The total bit width of the underlying plaintext.
-    /// 
+    ///
     /// # Returns
     /// A ciphertext containing the extracted MSB segment.
-    /// 
+    ///
     /// # Type Parameters
     /// - `M`: A type implementing the necessary reduce/negation traits used in bootstrapping.
     pub fn hommsb<M>(&self, c: &LweCiphertext<C>, plain_bits: u32) -> LweCiphertext<C>
@@ -610,7 +567,7 @@ where
         let parameters = self.parameters();
         let cipher_modulus = parameters.lwe_cipher_modulus();
 
-        let output = if plain_bits <= 6u32 {
+        if plain_bits <= 6u32 {
             // Extract up to 5 bits
             self.extractmsb5::<M>(c)
         } else if plain_bits <= 9u32 {
@@ -629,8 +586,6 @@ where
             self.extractmsb33::<M>(c, cipher_modulus, plain_bits)
         } else {
             panic!("Error: plain_bits out of range");
-        };
-
-        output
+        }
     }
 }

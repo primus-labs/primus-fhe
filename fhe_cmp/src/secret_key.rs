@@ -8,15 +8,15 @@ use crate::{parameter::Steps, CmpFheParameters};
 
 #[derive(Clone)]
 pub struct SecretKeyPack<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> {
-    /// LWE 密钥
+    /// LWE secret key
     lwe_secret_key: LweSecretKey<C>,
-    /// RLWE 密钥
+    /// RLWE secret key
     rlwe_secret_key: RlweSecretKey<Q>,
-    /// NTT 版本的 RLWE 密钥
+    /// NTT version of the RLWE secret key
     ntt_rlwe_secret_key: NttRlweSecretKey<Q>,
-    /// 同态加密参数
+    /// Homomorphic encryption parameters
     parameters: CmpFheParameters<C, LweModulus, Q>,
-    /// NTT 表，使用 Arc 进行共享引用
+    /// NTT table, shared using Arc
     ntt_table: Arc<<Q as NttField>::Table>,
 }
 

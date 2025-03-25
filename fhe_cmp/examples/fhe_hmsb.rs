@@ -1,21 +1,21 @@
-use algebra::{
-    modulus::PowOf2Modulus, AsInto, U64FieldEval,
+use algebra::{modulus::PowOf2Modulus, AsInto, U64FieldEval};
+use fhe_cmp::{
+    CmpFheParameters, Decryptor, Encryptor, FheCompare, KeyGen, LVL2PARAM_128_BITS_PARAMETERS,
 };
-use fhe_cmp::{FheCompare, CmpFheParameters, Decryptor, Encryptor, KeyGen, LVL2PARAM_128_BITS_PARAMETERS};
 use fhe_core::LweCiphertext;
-use rand::{Rng, thread_rng};
-use rayon::prelude::*;  // Importing rayon library to parallelize operations
-use std::sync::{Arc, Mutex};  // Import Arc and Mutex to implement thread-safe shared data
+use rand::{thread_rng, Rng};
+use rayon::prelude::*; // Importing rayon library to parallelize operations
+use std::sync::{Arc, Mutex}; // Import Arc and Mutex to implement thread-safe shared data
 use std::time::Instant;
 
 type M = u64;
-type Fp= U64FieldEval<4179340454199820289>;
-type LweModulus=PowOf2Modulus<u64>;
+type Fp = U64FieldEval<4179340454199820289>;
+type LweModulus = PowOf2Modulus<u64>;
 fn main() {
-    let params=*LVL2PARAM_128_BITS_PARAMETERS;
+    let params = *LVL2PARAM_128_BITS_PARAMETERS;
     // Set the number of valid bits for the plaintext and total tests
-    let plain_modulus_bits: u32 =9;//support 33bit
-    let total_tests:u32 = 32;
+    let plain_modulus_bits: u32 = 9; //support 33bit
+    let total_tests: u32 = 32;
     let if_run_thread: bool = true;
 
     if if_run_thread {
@@ -23,7 +23,6 @@ fn main() {
         println!("\nRunning multi-threaded tests...");
         msb_multi_threaded_tests(plain_modulus_bits, total_tests, params);
         cmp_multi_threaded_tests(plain_modulus_bits, total_tests, params);
-        
     } else {
         // Running single-threaded tests
         println!("Running single-threaded tests...");
@@ -31,7 +30,6 @@ fn main() {
         cmp_single_threaded_tests(plain_modulus_bits, total_tests, params);
     }
 }
-
 
 /// A single-threaded function that tests extracting the Most Significant Bit (MSB)
 /// from homomorphically encrypted data. It randomly generates numbers, encrypts them,
@@ -67,7 +65,7 @@ fn msb_single_threaded_tests(
     let mut correct_predictions = 0;
 
     // 3. Run tests sequentially from 0..total_tests.
-    for test_num in 1..(total_tests+1) {
+    for test_num in 1..(total_tests + 1) {
         let mut rng = thread_rng();
         let start_time = Instant::now();
 
@@ -75,19 +73,16 @@ fn msb_single_threaded_tests(
         let i = rng.gen_range(0..(1u64 << plain_modulus_bits));
 
         // The expected MSB is the top bit of i.
-        let expected: M = ((i >> (plain_modulus_bits - 1)) & 1)
-            .try_into()
-            .unwrap();
+        let expected: M = ((i >> (plain_modulus_bits - 1)) & 1).try_into().unwrap();
 
         // Encrypt the number using the provided modulus.
         let enc_text = enc.encrypt(i, modulus, &mut rng, plain_modulus_bits);
 
         // Perform homomorphic MSB extraction.
-        let enc_extract: LweCiphertext<M> =cmp.hommsb::<M>(&enc_text,  plain_modulus_bits);
-        
+        let enc_extract: LweCiphertext<M> = cmp.hommsb::<M>(&enc_text, plain_modulus_bits);
+
         // Decrypt the extracted MSB (boolean result, so mod 2).
-        let dec_extract=
-            dec.decrypt_custom::<M>(&enc_extract, modulus, 1u32);
+        let dec_extract = dec.decrypt_custom::<M>(&enc_extract, modulus, 1u32);
 
         let epoch_duration = start_time.elapsed();
 
@@ -119,7 +114,6 @@ fn msb_single_threaded_tests(
     );
 }
 
-
 /// This function performs a multi-threaded test to check the correctness
 /// of extracting the Most Significant Bit (MSB) from a homomorphically
 /// encrypted value. It uses Arc and Mutex to safely share state among threads,
@@ -132,11 +126,11 @@ fn msb_single_threaded_tests(
 fn msb_multi_threaded_tests(
     plain_modulus_bits: u32,
     total_tests: u32,
-    params: CmpFheParameters<M, LweModulus, Fp>
+    params: CmpFheParameters<M, LweModulus, Fp>,
 ) {
     // Set modulus to (q - 1) for BrMsKs (Bootstrap + Relinearization) mode conversion.
     let modulus = <PowOf2Modulus<M>>::new_with_mask(params.lwe_cipher_modulus_minus_one());
-    
+
     // Start timing the entire test process.
     let global_start_time = Instant::now();
 
@@ -154,65 +148,67 @@ fn msb_multi_threaded_tests(
     // Use Arc and Mutex to safely share state among threads.
     // 'output' will store messages about test errors for later processing.
     let output = Arc::new(Mutex::new(Vec::new()));
-    
+
     // 'progress' stores the last test index that triggered a periodic accuracy update (every 10%).
     let progress = Arc::new(Mutex::new(0));
-    
+
     // 'shared_var' tracks the count of completed tests, so we can compute a simple progress bar.
     let shared_var = Arc::new(Mutex::new(0));
 
     // 3. Run the tests in parallel using Rayon's parallel iterator.
-    let results: Vec<_> = (1..(total_tests+1)).into_par_iter().map(|test_num| {
-        let mut rng = thread_rng();
+    let results: Vec<_> = (1..(total_tests + 1))
+        .into_par_iter()
+        .map(|test_num| {
+            let mut rng = thread_rng();
 
-        // Generate a random plaintext number in the range of [0, 2^plain_modulus_bits).
-        let i = rng.gen_range(0..(1u64 << plain_modulus_bits));
+            // Generate a random plaintext number in the range of [0, 2^plain_modulus_bits).
+            let i = rng.gen_range(0..(1u64 << plain_modulus_bits));
 
-        // The expected MSB is the (plain_modulus_bits - 1)-th bit of i.
-        let expected: M = ((i >> (plain_modulus_bits - 1)) & 1)
-            .try_into()
-            .unwrap();
+            // The expected MSB is the (plain_modulus_bits - 1)-th bit of i.
+            let expected: M = ((i >> (plain_modulus_bits - 1)) & 1).try_into().unwrap();
 
-        // Encrypt the number using the provided modulus.
-        let enc_text = enc.encrypt(i, modulus, &mut rng, plain_modulus_bits);
+            // Encrypt the number using the provided modulus.
+            let enc_text = enc.encrypt(i, modulus, &mut rng, plain_modulus_bits);
 
-        // Extract the MSB homomorphically.
-        let enc_extract: LweCiphertext<M> = cmp.hommsb::<M>(&enc_text,  plain_modulus_bits);
+            // Extract the MSB homomorphically.
+            let enc_extract: LweCiphertext<M> = cmp.hommsb::<M>(&enc_text, plain_modulus_bits);
 
-        // Decrypt the extracted ciphertext (MSB). For a boolean result, use mod 2.
-        let dec_extract=dec.decrypt_custom::<M>(&enc_extract, modulus, 1u32);
+            // Decrypt the extracted ciphertext (MSB). For a boolean result, use mod 2.
+            let dec_extract = dec.decrypt_custom::<M>(&enc_extract, modulus, 1u32);
 
-        // Check whether the extracted MSB matches the expected MSB.
-        let error_flag = dec_extract != expected;
+            // Check whether the extracted MSB matches the expected MSB.
+            let error_flag = dec_extract != expected;
 
-        // Thread-safe access to the shared test counter.
-        {
-            let mut shared_var_lock = shared_var.lock().unwrap();
-            *shared_var_lock += 1; // Increment the completed tests counter.
+            // Thread-safe access to the shared test counter.
+            {
+                let mut shared_var_lock = shared_var.lock().unwrap();
+                *shared_var_lock += 1; // Increment the completed tests counter.
 
-            // Compute progress percentage.
-            let percentage = (*shared_var_lock as f64 / total_tests as f64) * 100.0;
+                // Compute progress percentage.
+                let percentage = (*shared_var_lock as f64 / total_tests as f64) * 100.0;
 
-            // Build a progress bar string of length 50 characters.
-            let progress_bar_length = 50;
-            let filled_length = (percentage / 100.0 * progress_bar_length as f64).round() as usize;
-            let progress_string = format!(
-                "[{}{}] {:.2}% ({}/{})",
-                "=".repeat(filled_length),
-                " ".repeat(progress_bar_length - filled_length),
-                percentage,
-                *shared_var_lock,
-                total_tests
-            );
+                // Build a progress bar string of length 50 characters.
+                let progress_bar_length = 50;
+                let filled_length =
+                    (percentage / 100.0 * progress_bar_length as f64).round() as usize;
+                let progress_string = format!(
+                    "[{}{}] {:.2}% ({}/{})",
+                    "=".repeat(filled_length),
+                    " ".repeat(progress_bar_length - filled_length),
+                    percentage,
+                    *shared_var_lock,
+                    total_tests
+                );
 
-            // Clear the console and print the updated progress bar.
-            print!("\x1b[2J\x1b[H");
-            println!("Progress: {}", progress_string);
-        }
+                // Clear the console and print the updated progress bar.
+                print!("\x1b[2J\x1b[H");
+                println!("Progress: {}", progress_string);
+            }
 
-        // Return the test result information for later aggregation.
-        (test_num, error_flag, i, dec_extract, expected)
-    }).collect();
+            // Return the test result information for later aggregation.
+            (test_num, error_flag, i, dec_extract, expected)
+        })
+        .collect();
 
     // 4. Process the results and print statistics.
     let mut correct_predictions = 0;
@@ -247,7 +243,7 @@ fn msb_multi_threaded_tests(
 
     println!(
         "\nTotal tests: {}\nPlaintext bits: {}\nFinal Accuracy (MSB): {:.2}%\nTime Cost: {:?}\n",
-        total_tests,plain_modulus_bits, final_accuracy, global_duration
+        total_tests, plain_modulus_bits, final_accuracy, global_duration
     );
 }
 
@@ -261,7 +257,7 @@ fn msb_multi_threaded_tests(
 fn cmp_single_threaded_tests(
     plain_modulus_bits: u32,
     total_tests: u32,
-    params: CmpFheParameters<M, LweModulus, Fp>
+    params: CmpFheParameters<M, LweModulus, Fp>,
 ) {
     // Use q-1 as the modulus for BrMsKs (Bootstrap + Relinearization) mode conversion.
     let modulus = <PowOf2Modulus<M>>::new_with_mask(params.lwe_cipher_modulus_minus_one());
@@ -295,23 +291,24 @@ fn cmp_single_threaded_tests(
         let m_2: u64 = rng.gen_range(0..(1 << (plain_modulus_bits - 1)));
 
         // Determine the expected results for the three comparisons.
-        let expected_greater: M        = if m_1 >  m_2 { 1u64 } else { 0u64 }.as_into();
-        let expected_greater_equal: M  = if m_1 >= m_2 { 1u64 } else { 0u64 }.as_into();
-        let expected_equal: M          = if m_1 == m_2 { 1u64 } else { 0u64 }.as_into();
+        let expected_greater: M = if m_1 > m_2 { 1u64 } else { 0u64 }.as_into();
+        let expected_greater_equal: M = if m_1 >= m_2 { 1u64 } else { 0u64 }.as_into();
+        let expected_equal: M = if m_1 == m_2 { 1u64 } else { 0u64 }.as_into();
 
         // Encrypt the plaintexts using the given modulus.
         let enc_text_1 = enc.encrypt(m_1, modulus, &mut rng, plain_modulus_bits);
         let enc_text_2 = enc.encrypt(m_2, modulus, &mut rng, plain_modulus_bits);
 
         // Perform homomorphic comparisons.
-        let greater_enc       = cmp.greater_than::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
-        let greater_equal_enc = cmp.greater_than_equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
-        let equal_enc         = cmp.equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+        let greater_enc = cmp.greater_than::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+        let greater_equal_enc =
+            cmp.greater_than_equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+        let equal_enc = cmp.equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
 
         // Decrypt the comparison results (boolean results mod 2).
-        let dec_greater       = dec.decrypt_custom::<M>(&greater_enc,       modulus, 1u32);
+        let dec_greater = dec.decrypt_custom::<M>(&greater_enc, modulus, 1u32);
         let dec_greater_equal = dec.decrypt_custom::<M>(&greater_equal_enc, modulus, 1u32);
-        let dec_equal         = dec.decrypt_custom::<M>(&equal_enc,         modulus, 1u32);
+        let dec_equal = dec.decrypt_custom::<M>(&equal_enc, modulus, 1u32);
 
         // Measure the time taken for this single iteration.
         let epoch_duration = start_time.elapsed();
@@ -345,10 +342,14 @@ fn cmp_single_threaded_tests(
                  | ==? decrypted = {}, expected = {} \
                  [ERROR] total time: {:?}",
                 i,
-                m_1, m_2,
-                dec_greater,       expected_greater,
-                dec_greater_equal, expected_greater_equal,
-                dec_equal,         expected_equal,
+                m_1,
+                m_2,
+                dec_greater,
+                expected_greater,
+                dec_greater_equal,
+                expected_greater_equal,
+                dec_equal,
+                expected_equal,
                 epoch_duration
             );
         } else {
@@ -360,9 +361,9 @@ fn cmp_single_threaded_tests(
 
         // Print accuracy every 10% of the total tests, to track progress.
         if i % (total_tests / 10) == 0 {
-            let acc_g  = (correct_count_greater as f64       / i as f64) * 100.0;
+            let acc_g = (correct_count_greater as f64 / i as f64) * 100.0;
             let acc_ge = (correct_count_greater_equal as f64 / i as f64) * 100.0;
-            let acc_e  = (correct_count_equal as f64         / i as f64) * 100.0;
+            let acc_e = (correct_count_equal as f64 / i as f64) * 100.0;
 
             println!(
                 "[Progress] After {} tests: \
@@ -376,24 +377,18 @@ fn cmp_single_threaded_tests(
     let global_duration = global_start_time.elapsed();
 
     // Calculate final accuracy for each type of comparison.
-    let accuracy_g  = (correct_count_greater        as f64 / total_tests as f64) * 100.0;
-    let accuracy_ge = (correct_count_greater_equal  as f64 / total_tests as f64) * 100.0;
-    let accuracy_e  = (correct_count_equal          as f64 / total_tests as f64) * 100.0;
+    let accuracy_g = (correct_count_greater as f64 / total_tests as f64) * 100.0;
+    let accuracy_ge = (correct_count_greater_equal as f64 / total_tests as f64) * 100.0;
+    let accuracy_e = (correct_count_equal as f64 / total_tests as f64) * 100.0;
 
     // Print the final accuracy of each comparison, along with the total execution time.
     println!(
         "Total tests: {} \n Plaintext bits: {}\n
          Accuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}%\n
          Time Cost: {:?}",
-        total_tests,
-        plain_modulus_bits,
-        accuracy_g,
-        accuracy_ge,
-        accuracy_e,
-        global_duration
+        total_tests, plain_modulus_bits, accuracy_g, accuracy_ge, accuracy_e, global_duration
     );
 }
-
 
 /// A multi-threaded function that tests three comparison operations
 /// (>, >=, ==) homomorphically. It spawns parallel tasks
@@ -408,7 +403,7 @@ fn cmp_single_threaded_tests(
 fn cmp_multi_threaded_tests(
     plain_modulus_bits: u32,
     total_tests: u32,
-    params: CmpFheParameters<M, LweModulus, Fp>
+    params: CmpFheParameters<M, LweModulus, Fp>,
 ) {
     // 1. Prepare modulus for BrMsKs mode conversion.
     let modulus = <PowOf2Modulus<M>>::new_with_mask(params.lwe_cipher_modulus_minus_one());
@@ -446,26 +441,26 @@ fn cmp_multi_threaded_tests(
             };
 
             // Determine the expected results for three comparisons.
-            let expected_greater: M       = if m_1 >  m_2 { 1u64 } else { 0u64 }.as_into();
+            let expected_greater: M = if m_1 > m_2 { 1u64 } else { 0u64 }.as_into();
             let expected_greater_equal: M = if m_1 >= m_2 { 1u64 } else { 0u64 }.as_into();
-            let expected_equal: M         = if m_1 == m_2 { 1u64 } else { 0u64 }.as_into();
+            let expected_equal: M = if m_1 == m_2 { 1u64 } else { 0u64 }.as_into();
 
             // Encrypt both plaintexts.
             let enc_text_1 = enc.encrypt(m_1, modulus, &mut rng, plain_modulus_bits);
             let enc_text_2 = enc.encrypt(m_2, modulus, &mut rng, plain_modulus_bits);
 
             // Perform homomorphic comparisons.
-            let enc_g  = cmp.greater_than::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+            let enc_g = cmp.greater_than::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
             let enc_ge = cmp.greater_than_equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
             let enc_eq = cmp.equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
 
             // Decrypt results (mod 1 => boolean).
-            let dec_g  = dec.decrypt_custom::<u64>(&enc_g,  modulus, 1);
+            let dec_g = dec.decrypt_custom::<u64>(&enc_g, modulus, 1);
             let dec_ge = dec.decrypt_custom::<u64>(&enc_ge, modulus, 1);
             let dec_eq = dec.decrypt_custom::<u64>(&enc_eq, modulus, 1);
 
             // Compare decrypted values to the expected results.
-            let error_flag_g  = dec_g  != expected_greater;
+            let error_flag_g = dec_g != expected_greater;
             let error_flag_ge = dec_ge != expected_greater_equal;
             let error_flag_eq = dec_eq != expected_equal;
 
@@ -496,16 +491,23 @@ fn cmp_multi_threaded_tests(
             // Return this test's outcomes.
             (
                 test_idx,
-                m_1, m_2,
-                dec_g,  expected_greater,       error_flag_g,
-                dec_ge, expected_greater_equal, error_flag_ge,
-                dec_eq, expected_equal,         error_flag_eq
+                m_1,
+                m_2,
+                dec_g,
+                expected_greater,
+                error_flag_g,
+                dec_ge,
+                expected_greater_equal,
+                error_flag_ge,
+                dec_eq,
+                expected_equal,
+                error_flag_eq,
             )
         })
         .collect();
 
     // 5. Aggregate results. We maintain correctness counters for each comparison.
-    let mut correct_count_g  = 0;
+    let mut correct_count_g = 0;
     let mut correct_count_ge = 0;
     let mut correct_count_eq = 0;
 
@@ -514,9 +516,15 @@ fn cmp_multi_threaded_tests(
         test_idx,
         m_1,
         m_2,
-        dec_g,  expected_g,  error_flag_g,
-        dec_ge, expected_ge, error_flag_ge,
-        dec_eq, expected_eq, error_flag_eq
+        dec_g,
+        expected_g,
+        error_flag_g,
+        dec_ge,
+        expected_ge,
+        error_flag_ge,
+        dec_eq,
+        expected_eq,
+        error_flag_eq,
     ) in results
     {
         if !error_flag_g {
@@ -531,10 +539,7 @@ fn cmp_multi_threaded_tests(
 
         // If any comparison was incorrect, we store its info.
         if error_flag_g || error_flag_ge || error_flag_eq {
-            let mut message = format!(
-                "Test #{:05}: m1 = {}, m2 = {} | ",
-                test_idx, m_1, m_2
-            );
+            let mut message = format!("Test #{:05}: m1 = {}, m2 = {} | ", test_idx, m_1, m_2);
 
             if error_flag_g {
                 message.push_str(&format!(">? dec={}, exp={} [ERR]", dec_g, expected_g));
@@ -556,17 +561,14 @@ fn cmp_multi_threaded_tests(
             let mut progress_lock = progress.lock().unwrap();
             *progress_lock = test_idx;
 
-            let curr_acc_g  = correct_count_g  as f64 / test_idx as f64 * 100.0;
+            let curr_acc_g = correct_count_g as f64 / test_idx as f64 * 100.0;
             let curr_acc_ge = correct_count_ge as f64 / test_idx as f64 * 100.0;
             let curr_acc_eq = correct_count_eq as f64 / test_idx as f64 * 100.0;
 
             println!(
                 "[Progress] After {} tests:\n  \
                    Accuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}%",
-                *progress_lock,
-                curr_acc_g,
-                curr_acc_ge,
-                curr_acc_eq
+                *progress_lock, curr_acc_g, curr_acc_ge, curr_acc_eq
             );
         }
     }
@@ -582,7 +584,7 @@ fn cmp_multi_threaded_tests(
 
     // Compute and print the final statistics for each comparison.
     let global_duration = global_start_time.elapsed();
-    let final_acc_g  = correct_count_g  as f64 / total_tests as f64 * 100.0;
+    let final_acc_g = correct_count_g as f64 / total_tests as f64 * 100.0;
     let final_acc_ge = correct_count_ge as f64 / total_tests as f64 * 100.0;
     let final_acc_eq = correct_count_eq as f64 / total_tests as f64 * 100.0;
 
@@ -591,11 +593,6 @@ fn cmp_multi_threaded_tests(
          Total tests: {} \nPlaintext bits: {}\n
          Accuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}% \n
          Time Cost: {:?}",
-        total_tests,
-        plain_modulus_bits,
-        final_acc_g,
-        final_acc_ge,
-        final_acc_eq,
-        global_duration
+        total_tests, plain_modulus_bits, final_acc_g, final_acc_ge, final_acc_eq, global_duration
     );
 }

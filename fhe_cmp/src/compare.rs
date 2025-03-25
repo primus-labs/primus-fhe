@@ -1,19 +1,21 @@
+use crate::{CmpFheParameters, Mbsextract, SecretKeyPack};
 use algebra::{
-    integer::UnsignedInteger, reduce::{ModulusValue,ReduceAddAssign, ReduceNeg, RingReduce}, NttField
+    integer::UnsignedInteger,
+    reduce::{ModulusValue, ReduceAddAssign, ReduceNeg, RingReduce},
+    NttField,
 };
 use fhe_core::LweCiphertext;
 use rand::{CryptoRng, Rng};
-use crate::{Mbsextract, CmpFheParameters, SecretKeyPack};
 
 /// Evaluator struct for performing bootstrapping and homomorphic operations.
-/// 
+///
 /// This struct encapsulates an evaluation key used during the bootstrapping procedure.
 #[derive(Clone)]
 pub struct FheCompare<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> {
-    fbs:Mbsextract<C,LweModulus,Q>
+    fbs: Mbsextract<C, LweModulus, Q>,
 }
 
-impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,LweModulus,Q> {
+impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C, LweModulus, Q> {
     // ---------------------------------------------------------------------------------------------
     // Constructor
     // ---------------------------------------------------------------------------------------------
@@ -29,12 +31,9 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     ///
     /// A newly instantiated `FheCompare` object that can perform various homomorphic operations.
     #[inline]
-    pub fn new<R: Rng + CryptoRng>(
-        sk: &SecretKeyPack<C,LweModulus,Q>,
-        rng: &mut R,
-    ) -> Self {
+    pub fn new<R: Rng + CryptoRng>(sk: &SecretKeyPack<C, LweModulus, Q>, rng: &mut R) -> Self {
         Self {
-            fbs:Mbsextract::new(sk,rng),
+            fbs: Mbsextract::new(sk, rng),
         }
     }
 
@@ -50,7 +49,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     pub fn parameters(&self) -> &CmpFheParameters<C, LweModulus, Q> {
         self.fbs.parameters()
     }
-// ---------------------------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------------
     // Utility Methods
     // ---------------------------------------------------------------------------------------------
 
@@ -96,8 +95,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
-        let res = self.fbs.hommsb::<M>(c, plain_bits);
-        res
+        self.fbs.hommsb::<M>(c, plain_bits)
     }
     // ---------------------------------------------------------------------------------------------
     // Boolean-like Operations
@@ -129,9 +127,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
                 cipher_modulus.reduce_add_assign(neg.b_mut(), C::ONE << (C::BITS - 2));
                 cipher_modulus.reduce_add_assign(neg.b_mut(), C::ONE << (C::BITS - 6));
             }
-            ModulusValue::PowerOf2(q)
-            | ModulusValue::Prime(q)
-            | ModulusValue::Others(q) => {
+            ModulusValue::PowerOf2(q) | ModulusValue::Prime(q) | ModulusValue::Others(q) => {
                 cipher_modulus.reduce_add_assign(neg.b_mut(), q >> 2u32);
                 cipher_modulus.reduce_add_assign(neg.b_mut(), q >> 6u32);
             }
@@ -169,9 +165,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
                 // Could raise an error here; returning default if needed.
                 C::default()
             }
-            ModulusValue::PowerOf2(v)
-            | ModulusValue::Prime(v)
-            | ModulusValue::Others(v) => v,
+            ModulusValue::PowerOf2(v) | ModulusValue::Prime(v) | ModulusValue::Others(v) => v,
         };
 
         // Convert each ciphertext into a log-friendly representation.
@@ -182,8 +176,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
         let mut add_enc = cipher_2.add_reduce_component_wise(&cipher_1, cipher_modulus);
         cipher_modulus.reduce_add_assign(add_enc.b_mut(), val >> 3u32);
 
-        let output = self.fbs.msb_gate::<M>(&add_enc);
-        output
+        self.fbs.msb_gate::<M>(&add_enc)
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -206,7 +199,12 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     /// # Returns
     ///
     /// A ciphertext decrypting to `1` if `c1` > `c2`, otherwise `0`.
-    pub fn greater_than<M>(&self, c1: &LweCiphertext<C>, c2: &LweCiphertext<C>, plain_bits: u32) -> LweCiphertext<C>
+    pub fn greater_than<M>(
+        &self,
+        c1: &LweCiphertext<C>,
+        c2: &LweCiphertext<C>,
+        plain_bits: u32,
+    ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
@@ -218,8 +216,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
         let cipher_2 = c2.clone();
         let sub_enc = cipher_2.sub_reduce_component_wise(&cipher_1, cipher_modulus);
 
-        let output = self.hommsb::<M>(&sub_enc, plain_bits);
-        output
+        self.hommsb::<M>(&sub_enc, plain_bits)
     }
 
     /// Produces a ciphertext indicating whether `c1` >= `c2`.
@@ -238,13 +235,17 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     /// # Returns
     ///
     /// A ciphertext decrypting to `1` if `c1` >= `c2`, otherwise `0`.
-    pub fn greater_than_equal<M>(&self, c1: &LweCiphertext<C>, c2: &LweCiphertext<C>, plain_bits: u32) -> LweCiphertext<C>
+    pub fn greater_than_equal<M>(
+        &self,
+        c1: &LweCiphertext<C>,
+        c2: &LweCiphertext<C>,
+        plain_bits: u32,
+    ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
         let greater_than_enc = self.greater_than::<C>(c2, c1, plain_bits);
-        let output = self.homnot(&greater_than_enc);
-        output
+        self.homnot(&greater_than_enc)
     }
 
     /// Produces a ciphertext indicating whether `c1` < `c2`.
@@ -263,12 +264,16 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     /// # Returns
     ///
     /// A ciphertext decrypting to `1` if `c1` < `c2`, otherwise `0`.
-    pub fn less_than<M>(&self, c1: &LweCiphertext<C>, c2: &LweCiphertext<C>, plain_bits: u32) -> LweCiphertext<C>
+    pub fn less_than<M>(
+        &self,
+        c1: &LweCiphertext<C>,
+        c2: &LweCiphertext<C>,
+        plain_bits: u32,
+    ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
-        let output = self.greater_than::<C>(c2, c1, plain_bits);
-        output
+        self.greater_than::<C>(c2, c1, plain_bits)
     }
 
     /// Produces a ciphertext indicating whether `c1` <= `c2`.
@@ -287,12 +292,16 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     /// # Returns
     ///
     /// A ciphertext decrypting to `1` if `c1` <= `c2`, otherwise `0`.
-    pub fn less_than_equal<M>(&self, c1: &LweCiphertext<C>, c2: &LweCiphertext<C>, plain_bits: u32) -> LweCiphertext<C>
+    pub fn less_than_equal<M>(
+        &self,
+        c1: &LweCiphertext<C>,
+        c2: &LweCiphertext<C>,
+        plain_bits: u32,
+    ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
-        let output = self.greater_than_equal::<C>(c2, c1, plain_bits);
-        output
+        self.greater_than_equal::<C>(c2, c1, plain_bits)
     }
 
     /// Produces a ciphertext indicating whether `c1` == `c2`.
@@ -312,7 +321,12 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
     ///
     /// A ciphertext decrypting to `1` if `c1` and `c2` represent the same value,
     /// otherwise `0`.
-    pub fn equal<M>(&self, c1: &LweCiphertext<C>, c2: &LweCiphertext<C>, plain_bits: u32) -> LweCiphertext<C>
+    pub fn equal<M>(
+        &self,
+        c1: &LweCiphertext<C>,
+        c2: &LweCiphertext<C>,
+        plain_bits: u32,
+    ) -> LweCiphertext<C>
     where
         M: Copy + ReduceNeg<C, Output = C> + ReduceAddAssign<C>,
     {
@@ -322,7 +336,6 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C,Lw
         let less_than_cipher = self.less_than_equal::<M>(&cipher_1, &cipher_2, plain_bits);
         let greater_than_cipher = self.greater_than_equal::<M>(&cipher_1, &cipher_2, plain_bits);
 
-        let output = self.homand::<M>(&less_than_cipher, &greater_than_cipher);
-        output
+        self.homand::<M>(&less_than_cipher, &greater_than_cipher)
     }
 }

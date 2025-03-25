@@ -1,7 +1,6 @@
-use std::sync::Arc;
-use std::f64::consts::LOG2_E;
+use crate::{parameter::Steps, CmpFheParameters, SecretKeyPack};
 use algebra::{
-    integer::{UnsignedInteger,AsFrom},
+    integer::{AsFrom, UnsignedInteger},
     polynomial::FieldPolynomial,
     reduce::{ModulusValue, ReduceAddAssign, ReduceNeg, RingReduce},
     Field, NttField,
@@ -12,8 +11,8 @@ use fhe_core::{
     NonPowOf2LweKeySwitchingKey, PowOf2LweKeySwitchingKey, RingSecretKeyType,
 };
 use rand::{CryptoRng, Rng};
-use crate::{parameter::Steps, CmpFheParameters, SecretKeyPack};
-
+use std::f64::consts::LOG2_E;
+use std::sync::Arc;
 
 /// A enum type for different key switching purposes.
 #[derive(Clone)]
@@ -31,50 +30,6 @@ pub enum KeySwitchingKey<C: UnsignedInteger, Q: NttField> {
 impl<C: UnsignedInteger, Q: NttField> KeySwitchingKey<C, Q> {
     /// Returns an `Option` containing a reference to the
     /// `LweKeySwitchingKeyRlweMode<Q>` if the key is in `PowOf2DimensionLwe` mode, otherwise `None`.
-    #[inline]
-    pub fn as_pow_of_2_dimension_lwe(&self) -> Option<&LweKeySwitchingKeyRlweMode<Q>> {
-        if let Self::PowOf2DimensionLwe(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
-    /// Returns an `Option` containing a reference to the
-    /// `PowOf2LweKeySwitchingKey<C>` if the key is in `PowOf2ModulusLwe` mode, otherwise `None`.
-    #[inline]
-    pub fn as_pow_of_2_modulus_lwe(&self) -> Option<&PowOf2LweKeySwitchingKey<C>> {
-        if let Self::PowOf2ModulusLwe(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
-    /// Attempts to convert the key into an
-    /// `LweKeySwitchingKeyRlweMode<Q>`. Returns `Ok` with the key if successful, otherwise returns
-    /// `Err` with the original key.
-    #[inline]
-    pub fn try_into_pow_of_2_dimension_lwe(self) -> Result<LweKeySwitchingKeyRlweMode<Q>, Self> {
-        if let Self::PowOf2DimensionLwe(v) = self {
-            Ok(v)
-        } else {
-            Err(self)
-        }
-    }
-
-    /// Attempts to convert the key into a
-    /// `PowOf2LweKeySwitchingKey<C>`. Returns `Ok` with the key if successful, otherwise returns
-    /// `Err` with the original key.
-    #[inline]
-    pub fn try_into_pow_of_2_modulus_lwe(self) -> Result<PowOf2LweKeySwitchingKey<C>, Self> {
-        if let Self::PowOf2ModulusLwe(v) = self {
-            Ok(v)
-        } else {
-            Err(self)
-        }
-    }
-
     /// Returns an `Option` containing a reference to the
     /// `NonPowOf2LweKeySwitchingKey<<Q as Field>::ValueT>` if the key is in `NonPowOf2ModulusLwe` mode,
     /// otherwise `None`.
@@ -266,21 +221,21 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
     pub fn lut_init_msb(&self) -> FieldPolynomial<Q> {
         // Obtain the polynomial ring dimension from the parameters.
         let ring_dim = self.parameters().ring_dimension();
-    
+
         // Compute constants used for setting the polynomial's coefficients.
         let mu = Q::MODULUS_VALUE >> 2u32;
         let div_mu = Q::MODULUS_VALUE - mu;
-    
+
         // Initialize a zero polynomial of the correct degree.
         let mut poly = FieldPolynomial::<Q>::zero(ring_dim);
-    
+
         // Assign the computed value to each coefficient.
         for coeff in poly.iter_mut() {
             *coeff = div_mu;
         }
         poly
     }
-    
+
     /// Performs a functional bootstrapping step to isolate the MSB of a ciphertext.
     ///
     /// This method uses a pre-initialized LUT (Lookup Table) to transform the ciphertext
@@ -305,39 +260,37 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
     {
         let parameters = self.parameters();
         let cipher_modulus = parameters.lwe_cipher_modulus();
-    
+
         // Build the LUT polynomial for MSB extraction.
         let test_vector = self.lut_init_msb();
-    
+
         // Retrieve the modulus as a raw integer value for bias adjustments.
         let cipher_modulus_value = match parameters.lwe_cipher_modulus_value() {
             ModulusValue::Native => {
                 // In some implementations, this could raise an error or handle differently.
                 C::default()
             }
-            ModulusValue::PowerOf2(v)
-            | ModulusValue::Prime(v)
-            | ModulusValue::Others(v) => v,
+            ModulusValue::PowerOf2(v) | ModulusValue::Prime(v) | ModulusValue::Others(v) => v,
         };
         let cipher_modulus_value: u64 = cipher_modulus_value.as_into();
-    
+
         // Define offsets and biases.
         let offset = cipher_modulus_value >> 6u32;
         let mu = cipher_modulus_value >> 2u64;
-    
+
         // Clone and offset the input ciphertext to prepare for bootstrapping.
         let mut cipher = c.clone();
         cipher_modulus.reduce_add_assign(cipher.b_mut(), C::as_from(offset));
-    
+
         // Perform the actual bootstrapping with the LUT.
         let mut acc = self.bootstrap(cipher, test_vector);
-    
+
         // Final adjustment to center the result on the MSB.
         cipher_modulus.reduce_add_assign(acc.b_mut(), C::as_from(mu));
-    
+
         acc
     }
-    
+
     /// Generates a polynomial lookup table (LUT) for the IDE (Index-based Digit Extraction) operation,
     /// targeting the MSB (or other bits) of a ciphertext based on its scale and plaintext bit sizes.
     ///
@@ -352,8 +305,8 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
     #[inline]
     pub fn lut_init_ide(&self, plain_bits: u32, scale_bits: u32) -> FieldPolynomial<Q> {
         // Calculate the number of padding bits based on the LWE dimension and plain_bits.
-        let padding_bits: u32 = (((self.parameters().lwe_dimension() as f64) * LOG2_E).log2() as u32)
-            - plain_bits;
+        let padding_bits: u32 =
+            (((self.parameters().lwe_dimension() as f64) * LOG2_E).log2() as u32) - plain_bits;
 
         // Create a zero polynomial with degree equal to the ring dimension.
         let mut poly = FieldPolynomial::<Q>::zero(self.parameters().ring_dimension());
@@ -362,7 +315,8 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
         for (index, coeff) in poly.iter_mut().enumerate() {
             let index = index as u32;
             let padding_index = <Q as Field>::ValueT::as_from(index >> padding_bits);
-            let value = (Q::MODULUS_VALUE >> (scale_bits as u32)) * padding_index;
+            let value = (Q::MODULUS_VALUE >> scale_bits) * padding_index;
+
             *coeff = <Q as Field>::ValueT::as_from(value);
         }
 
@@ -393,9 +347,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
                 // Could raise an error here; returning default in this example.
                 C::default()
             }
-            ModulusValue::PowerOf2(v)
-            | ModulusValue::Prime(v)
-            | ModulusValue::Others(v) => v,
+            ModulusValue::PowerOf2(v) | ModulusValue::Prime(v) | ModulusValue::Others(v) => v,
         };
 
         // Clone the ciphertext and offset it by shifting to set up the proper interval for bootstrapping.
@@ -410,9 +362,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
         let test_vector = self.lut_init_ide(plain_bits, scale_bits);
 
         // Perform the bootstrapping operation with the LUT.
-        let acc = self.bootstrap(cipher, test_vector);
-
-        acc
+        self.bootstrap(cipher, test_vector)
     }
 
     /// Builds a lookup table (LUT) polynomial for converting an LWE ciphertext
@@ -461,9 +411,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
                 // Could raise an error here; returning default in this example.
                 C::default()
             }
-            ModulusValue::PowerOf2(v)
-            | ModulusValue::Prime(v)
-            | ModulusValue::Others(v) => v,
+            ModulusValue::PowerOf2(v) | ModulusValue::Prime(v) | ModulusValue::Others(v) => v,
         };
 
         // Subtract a small offset to align the ciphertext correctly before bootstrapping.
@@ -473,10 +421,6 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
         cipher_modulus.reduce_sub_assign(cipher.b_mut(), C::as_from(offset));
 
         // Execute the functional bootstrapping with the generated LUT.
-        let acc = self.bootstrap(cipher, test_vector);
-
-        acc
+        self.bootstrap(cipher, test_vector)
     }
-
-
 }
