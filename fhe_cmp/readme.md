@@ -26,7 +26,7 @@ Below is a brief explanation of each major part of the code, details on running 
 The code tests two main functionalities:
 
 1. **Homomorphic MSB Extraction**
-   Given an integer $m$ encrypted under a TFHE-like scheme, this operation returns the integer’s most significant bit – still in encrypted form. For instance, if $m$ is within 5 bits $[0, 2^5)$, extracting its MSB would yield whether $m$ is in the top half of that range $(16 \dots 31$ in cleartext).
+   Given an integer $m$ encrypted under a TFHE-like scheme, this operation returns the integer’s most significant bit – still in encrypted form. For instance, if $m$ is within 5 bits $[0, 2^5)$, extracting its MSB would yield whether $m$ is in the top half of that range $(16 \dots 31)$ in cleartext.
 2. **Homomorphic Comparison**
    Comparisons such as $m1 > m2$, $m1 >= m2$, and $m1 == m2$ are performed directly on encrypted data, yielding an encrypted boolean result. Decrypting that result indicates whether the relationship is true or false without revealing the cleartext of $m1$ or $m2$.
 
