@@ -16,10 +16,6 @@ pub struct FheCompare<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField
 }
 
 impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C, LweModulus, Q> {
-    // ---------------------------------------------------------------------------------------------
-    // Constructor
-    // ---------------------------------------------------------------------------------------------
-
     /// Creates a new `FheCompare` instance with a given secret key pack and random generator.
     ///
     /// # Arguments
@@ -37,10 +33,6 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C, L
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Accessor
-    // ---------------------------------------------------------------------------------------------
-
     /// Returns a reference to the comparison (FHE) parameters.
     ///
     /// These parameters include the cipher modulus details, polynomial degree,
@@ -49,10 +41,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C, L
     pub fn parameters(&self) -> &CmpFheParameters<C, LweModulus, Q> {
         self.fbs.parameters()
     }
-    // ---------------------------------------------------------------------------------------------
-    // Utility Methods
-    // ---------------------------------------------------------------------------------------------
-
+    
     /// Converts an LWE ciphertext from its arithmetic domain representation to a
     /// logarithmic or gate-friendly representation.
     ///
