@@ -19,7 +19,7 @@ fn main() {
     // Set the number of valid bits for the plaintext and total tests
     let plain_modulus_bits: u32 = 9; //support 33bit
     let total_tests: u32 = 10;
-    let if_run_thread: bool = false;
+    let if_run_thread: bool = true;
 
     if if_run_thread {
         // Running multi-threaded tests
@@ -121,7 +121,6 @@ fn msb_single_threaded_tests(
 /// * `plain_modulus_bits` - The bit-size of the plaintext modulus range.
 /// * `total_tests`        - The total number of tests to run.
 /// * `params`             - The parameters used for key generation and encryption/decryption.
-/// Function to run multiple MSB (Most Significant Bit) extraction tests in parallel.
 fn msb_multi_threaded_tests(
     plain_modulus_bits: u32,
     total_tests: u32,
