@@ -4,7 +4,6 @@
 use crate::{error::MPCErr, MPCBackend, MPCResult};
 use algebra::ntt::NumberTheoryTransform;
 use algebra::random::Prg;
-use algebra::reduce::ReduceInv;
 use algebra::{Field, NttField, U64FieldEval};
 use bytemuck::{cast_slice, cast_slice_mut};
 use network::netio::{NetIO, Participant};
@@ -13,9 +12,6 @@ use rand::distributions::Uniform;
 use rand::prelude::Distribution;
 use rand::{RngCore, SeedableRng};
 use std::collections::VecDeque;
-use std::ops::Mul;
-use std::result;
-///use std::intrinsics::abort;
 
 /// MPC backend implementing the DN07 protocol with honest-majority security.
 pub struct DNBackend<const P: u64> {
@@ -50,6 +46,12 @@ pub struct DNBackend<const P: u64> {
     triplez2k_buffer: VecDeque<(u64, u64, u64)>,
     // Buffer size for triple generation over z2k
     triplez2k_buffer_capacity: usize,
+
+    //pre-shared prg seed
+    shared_prgs_pair_to_pair: Vec<Prg>,
+
+    //pre_shamir_to_additive_vec
+    shamir_to_additive: Vec<u64>,
 }
 
 impl<const P: u64> DNBackend<P> {
@@ -61,6 +63,7 @@ impl<const P: u64> DNBackend<P> {
         triple_required: u32,
         participants: Vec<Participant>,
         polynomial_size: usize,
+        need_mul_init: bool,
     ) -> Self {
         // Initialize Vandermonde matrix for share generation
         let party_positions: Vec<u64> = (1..=num_parties as u64).collect();
@@ -73,11 +76,9 @@ impl<const P: u64> DNBackend<P> {
         let mut prg = Prg::new();
         let mut netio = NetIO::new(party_id, participants).expect("Network initialization failed");
         let shared_prg = Self::setup_shared_prg(party_id, num_parties, &mut prg, &mut netio);
-
         // Calculate appropriate buffer size (rounded up to next multiple of (n-t))
         let batch_size = (num_parties - num_threshold) as usize;
         let buffer_size = (triple_required as usize).div_ceil(batch_size) * batch_size;
-
         // Create and initialize the backend
         let mut backend = Self {
             party_id,
@@ -90,10 +91,10 @@ impl<const P: u64> DNBackend<P> {
             netio,
             triple_buffer: VecDeque::with_capacity(buffer_size),
             triple_buffer_capacity: buffer_size,
-
+            shared_prgs_pair_to_pair: Vec::new(),
             triplez2k_buffer: VecDeque::new(),
             triplez2k_buffer_capacity: buffer_size,
-
+            shamir_to_additive: Vec::new(),
             doublerandom_buffer: VecDeque::with_capacity(buffer_size),
             doublerandom_buffer_capacity: buffer_size,
 
@@ -109,7 +110,11 @@ impl<const P: u64> DNBackend<P> {
         // backend
 
         // Generate initial supply of triples
-        backend.generate_doublerandoms(buffer_size);
+        if need_mul_init == true {
+            backend.init_pair_to_pair_prg();
+            backend.init_shamir_to_additive_vec_z2k();
+            backend.generate_doublerandoms(buffer_size);
+        }
         backend
     }
 
@@ -265,46 +270,9 @@ impl<const P: u64> DNBackend<P> {
         shares
     }
 
-    /// compute inv of van martix
-    // fn van_inver(&mut self){
-    //     let msize = (self.num_threshold()+1) as usize;
-    //     let mut inv_l_martix:Vec<Vec<u64>> = vec![vec![0; msize]; msize];
-    //     let mut inv_u_martix:Vec<Vec<u64>> = vec![vec![0; msize]; msize];
-    //     inv_l_martix[0][0] = 1;
-    //     let modulus = self.modulus();
-    //     let x_martix:Vec<u64> =(1 as u64..=msize as u64).map(|x| x).collect();
-    //     for i in 0..msize{
-    //         for j in 0..msize{
-    //             if i<j {
-    //                 inv_l_martix[i][j] = 0;
-    //             }else{
-    //                 let mut temp:u64 = 1;
-    //                 for k in 0..=i{
-    //                     if j!=k{
-    //                         temp = temp*modulus.reduce_inv(x_martix[j]-x_martix[k]);
-    //                     }
-    //                 }
-    //                 inv_l_martix[i][j] = temp;
-    //             }
-    //         }
-    //     }
-
-    //     for i in 0..msize{
-    //         for j in 0..msize{
-    //             if i==j{
-    //                 inv_u_martix[i][j] = 1;
-    //             }else if i>j {
-    //                 inv_u_martix[i][j] = 0;
-    //             }
-    //         }
-    //     }
-    // }
-    /// 计算给定 Vandermonde 矩阵的逆矩阵（模素数 p）。
-    /// 输入 `vander` 是 Vandermonde 矩阵（Vec<Vec<u64>> 格式），其中第 i 行对应节点 x_i 的 [1, x_i, x_i^2, ..., x_i^{n-1}]。
-    /// 返回与之对应的逆矩阵（模 p）。
     fn inverse_vandermonde_mod_p(&mut self, vander: Vec<Vec<u64>>, p: u64) -> Vec<Vec<u64>> {
         let n = vander.len();
-        assert!(n > 0 && vander[0].len() == n, "输入矩阵必须是 n x n 的方阵");
+        // assert!(n > 0 && vander[0].len() == n, "输入矩阵必须是 n x n 的方阵");
         // 提取节点值 x_i。假定输入矩阵满足定义，第 i 行第二个元素即为 x_i（索引从0计则为 vander[i][1]）。
         let mut x = Vec::with_capacity(n);
         for i in 0..n {
@@ -316,10 +284,8 @@ impl<const P: u64> DNBackend<P> {
         }
 
         // 工具闭包：计算 (a + b) mod p 和 (a * b) mod p，使用 u128 防止溢出。
-        let mut add_mod =
-            |a: u64, b: u64| -> u64 { ((a as u128 + b as u128) % (p as u128)) as u64 };
-        let mut mul_mod =
-            |a: u64, b: u64| -> u64 { ((a as u128 * b as u128) % (p as u128)) as u64 };
+        let add_mod = |a: u64, b: u64| -> u64 { ((a as u128 + b as u128) % (p as u128)) as u64 };
+        let mul_mod = |a: u64, b: u64| -> u64 { ((a as u128 * b as u128) % (p as u128)) as u64 };
 
         // 计算乘法逆元的函数，使用扩展欧几里得算法求 a 在 mod p 下的逆（假定 p 是素数且 a 与 p 共质）。
         fn mod_inv(a: u64, p: u64) -> u64 {
@@ -501,6 +467,42 @@ impl<const P: u64> DNBackend<P> {
             // Not in target range, return empty shares
             vec![0u64; batch_size]
         }
+    }
+
+    /// Distributes shares from a dealer to selected parties.
+    fn send_additive_shares_z2k_with_prg(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        sender_id: u32,
+    ) -> Vec<u64> {
+        // Default range is all parties
+        let num_parties = (self.num_threshold + 1) as usize;
+        let mut my_shares: Vec<u64> = Vec::new();
+        if sender_id == self.party_id {
+            let mut shares = Vec::with_capacity(values.unwrap().len());
+            for &val in values.unwrap().iter() {
+                let mut row = vec![0u64; num_parties];
+                let mut sum = 0u64;
+
+                for i in 0..num_parties {
+                    if i != sender_id as usize {
+                        let rand = self.shared_prgs_pair_to_pair[i].next_u64();
+                        row[i] = rand;
+                        sum = sum + rand; // 防止 u64 溢出
+                    }
+                }
+                // 当前方负责补足剩余值（值减去其余 share）
+                row[sender_id as usize] = val - sum; // 用 wrapping 保证不 panic
+                my_shares.push(val - sum);
+                shares.push(row);
+            }
+        } else {
+            for _i in 0..batch_size {
+                my_shares.push(self.shared_prgs_pair_to_pair[sender_id as usize].next_u64());
+            }
+        }
+        my_shares
     }
 
     /// Reconstructs secrets from shares through polynomial interpolation.
@@ -969,90 +971,49 @@ impl<const P: u64> DNBackend<P> {
         }
     }
 
-    fn modinv(&mut self, a: u64, p: u64) -> u64 {
-        // 求 a^(-1) mod p，使用扩展欧几里得算法
-        let (mut a, mut b, mut u) = (a as i64, p as i64, 1i64);
-        let mut v = 0i64;
-        while b != 0 {
-            let q = a / b;
-            a = a - q * b;
-            std::mem::swap(&mut a, &mut b);
-            u = u - q * v;
-            std::mem::swap(&mut u, &mut v);
+    fn init_pair_to_pair_prg(&mut self) {
+        for id in 0..self.party_id {
+            // receiver prg seed from party<my_party_id
+            let mut seed_bytes = [0u8; 16];
+            let len = self
+                .netio
+                .recv(id, &mut seed_bytes)
+                .expect("Seed reception failed");
+            assert_eq!(len, 16, "Invalid PRG seed length");
+            self.shared_prgs_pair_to_pair
+                .push(Prg::from_seed(seed_bytes.into()));
         }
-        assert!(a == 1, "No inverse exists");
-        ((u + p as i64) % p as i64) as u64
+        // push my seed
+        let seed = self.prg.random_block();
+        let seed_bytes: [u8; 16] = seed.into();
+        self.shared_prgs_pair_to_pair
+            .push(Prg::from_seed(seed_bytes.into()));
+        for id in self.party_id + 1..self.num_parties {
+            // Leader generates and distributes seed
+            let seed = self.prg.random_block();
+            let seed_bytes: [u8; 16] = seed.into();
+            self.netio
+                .send(id, &seed_bytes)
+                .expect("Seed distribution failed");
+            self.netio
+                .flush(id)
+                .expect("Failed to flush network buffer");
+            self.shared_prgs_pair_to_pair.push(Prg::from_seed(seed));
+        }
     }
 
-    // fn vandermonde_inverse_first_row(&mut self, n: usize, p: u64) -> Vec<u64> {
-    //     let x: Vec<u64> = (0..=n as u64).collect(); // x = [0, 1, ..., n]
-    //     let mut first_row = vec![0u64; n + 1];
-
-    //     for j in 0..=n {
-    //         let mut prod = 1u64;
-    //         for m in 0..=n {
-    //             if m != j {
-    //                 let denom = (x[j] + p - x[m]) % p;
-    //                 prod = prod * self.modinv(denom, p) % p;
-    //             }
-    //         }
-    //         // Now compute each entry in the first row
-    //         for k in 0..=n {
-    //             let mut term = 0u64;
-    //             for m in 0..=n {
-    //                 if m != j {
-    //                     let mut num = 1u64;
-    //                     for l in 0..=n {
-    //                         if l != j && l != m {
-    //                             num = num * (p - x[l]) % p;
-    //                         }
-    //                     }
-    //                     let denom = (x[j] + p - x[m]) % p;
-    //                     let denom_inv = self.modinv(denom, p);
-    //                     let sign = if (j + m) % 2 == 0 { 1 } else { p - 1 };
-    //                     term = (term + sign * num % p * denom_inv % p) % p;
-    //                 }
-    //             }
-    //             if k == 0 {
-    //                 first_row[j] = prod;
-    //             }
-    //         }
-    //     }
-    //     first_row
-    // }
-    // 求拉格朗日插值多项式的系数，返回 n+1 长度的 Vec<u64>
-    fn lagrange_basis_inverse_matrix(&mut self, xs: &[u64], p: u64) -> Vec<Vec<u64>> {
-        let n = xs.len();
-        let mut inv_matrix = vec![vec![0u64; n]; n];
-
-        // 对每一个单位向量 e_i 构造拉格朗日插值多项式
-        for i in 0..n {
-            // 构造 y 向量: y[j] = 1 if j == i, else 0
-            let mut coeffs = vec![0u64; n];
-            for j in 0..n {
-                if i == j {
-                    continue;
-                }
-                let denom = (xs[i] + p - xs[j]) % p;
-                let denom_inv = self.modinv(denom, p);
-                for k in (0..n).rev() {
-                    coeffs[k] = if k == 0 { 0 } else { coeffs[k - 1] };
-                }
-                for k in 0..n {
-                    coeffs[k] = (p + coeffs[k] + p - xs[j] * coeffs[k] % p) % p;
-                }
-                let scale = denom_inv;
-                for k in 0..n {
-                    coeffs[k] = coeffs[k] * scale % p;
-                }
-            }
-            // 把这个插值多项式的系数作为第 i 行（或列）
-            for k in 0..n {
-                inv_matrix[i][k] = coeffs[k];
+    fn init_shamir_to_additive_vec_z2k(&mut self) {
+        let msize = (self.num_threshold + 1) as usize;
+        let mut van_t: Vec<Vec<u64>> = vec![vec![0; msize]; msize];
+        for i in 0..msize {
+            for j in 0..msize {
+                van_t[i][j] = self.van_matrix[j][i];
             }
         }
-
-        inv_matrix
+        let res = self.inverse_vandermonde_mod_p(van_t, self.modulus().value());
+        for x in res[0].iter() {
+            self.shamir_to_additive.push(*x);
+        }
     }
 }
 
@@ -1104,10 +1065,11 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     }
 
     fn inner_product_additive_const_p(&mut self, a: &[u64], b: &[u64]) -> u64 {
-        let sum = a.iter().zip(b.iter()).fold(0, |acc, (&share, &constant)| {
-            <U64FieldEval<P>>::mul_add(share, constant, acc)
-        });
-        sum
+        <U64FieldEval<P>>::dot_product(a, b)
+        // let sum = a.iter().zip(b.iter()).fold(0, |acc, (&share, &constant)| {
+        //     <U64FieldEval<P>>::mul_add(share, constant, acc)
+        // });
+        // sum
     }
 
     /// return additive secret sharing of a-b where a is const and b is additive sharing
@@ -1407,6 +1369,14 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         shares
     }
 
+    fn input_slice_with_prg_z2k(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> Vec<u64> {
+        self.send_additive_shares_z2k_with_prg(values, batch_size, party_id)
+    }
     fn input_slice_with_different_party_ids(
         &mut self,
         values: &[Option<u64>],
@@ -1612,18 +1582,11 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     }
 
     fn shamir_secrets_to_additive_secrets(&mut self, shares: &[Self::Sharing]) -> Vec<u64> {
-        let msize = (self.num_threshold + 1) as usize;
-        let mut van_t: Vec<Vec<u64>> = vec![vec![0; msize]; msize];
-        for i in 0..msize {
-            for j in 0..msize {
-                van_t[i][j] = self.van_matrix[j][i];
-            }
-        }
-        let res = self.inverse_vandermonde_mod_p(van_t, self.modulus().value());
+        let coeff = self.shamir_to_additive[self.party_id as usize];
         if self.party_id <= self.num_threshold {
             let res = shares
                 .iter()
-                .map(|x| <U64FieldEval<P>>::mul(*x, res[0][(self.party_id) as usize]))
+                .map(|x| <U64FieldEval<P>>::mul(*x, coeff))
                 .collect();
             res
         } else {

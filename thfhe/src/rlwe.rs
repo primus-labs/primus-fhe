@@ -45,6 +45,7 @@ pub fn send_and_recv_data_all_parties(
         0,
         Participant::from_default(3, 50000 + sender_id * 100),
         parameters.ring_dimension(),
+        false,
     );
     tx.send(temp_backend.input_slice(e, len, sender_id).unwrap())
         .unwrap();

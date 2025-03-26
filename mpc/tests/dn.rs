@@ -25,7 +25,7 @@ fn test_secret_sharing_and_recovery() {
             // Setup the DN backend.
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
             let mut dn =
-                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 10, participants, 1024);
+                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 10, participants, 1024, true);
 
             // Test input and reveal_to_all for each secret.
             for secret in secrets {
@@ -86,6 +86,7 @@ fn test_triple_correctness() {
                 NUM_TRIPLES,
                 participants,
                 1024,
+                true,
             );
 
             for _ in 0..NUM_TRIPLES / 2 {
@@ -139,7 +140,7 @@ fn test_mpc_operations() {
             // Setup the DN backend.
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
             let mut dn =
-                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants, 1024);
+                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants, 1024, true);
 
             // Test 1: Addition.
             let a_value = 42;
@@ -255,7 +256,7 @@ fn test_untested_operations() {
             // Setup the DN backend.
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
             let mut dn =
-                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants, 1024);
+                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 20, participants, 1024, true);
 
             // Test values.
             let a_value = 42;
@@ -357,7 +358,8 @@ fn test_rand_coin_consistency() {
         threads.push(thread::spawn(move || {
             // Setup the DN backend
             let participants = Participant::from_default(NUM_PARTIES, BASE_PORT);
-            let mut dn = DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 5, participants, 1024);
+            let mut dn =
+                DNBackend::<PRIME>::new(id, NUM_PARTIES, THRESHOLD, 5, participants, 1024, true);
 
             // Generate a sequence of random coins
             let mut coins = Vec::with_capacity(NUM_COINS);

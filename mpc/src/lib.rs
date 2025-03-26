@@ -203,4 +203,12 @@ pub trait MPCBackend {
         batch_size: usize,
         party_id: u32,
     ) -> Vec<u64>;
+
+    /// input slice over z2k and share with prg
+    fn input_slice_with_prg_z2k(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> Vec<u64>;
 }
