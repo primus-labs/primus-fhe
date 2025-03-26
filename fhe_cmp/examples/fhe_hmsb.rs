@@ -5,10 +5,11 @@ use fhe_cmp::{
 use fhe_core::LweCiphertext;
 use rand::{thread_rng, Rng};
 // Importing rayon library to parallelize operations
-use rayon::prelude::*; 
+use rayon::prelude::*;
+use std::io::Write;
 // Import Arc and Mutex to implement thread-safe shared data
-use std::sync::{Arc, Mutex}; 
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 type M = u64;
 type Fp = U64FieldEval<4179340454199820289>;
@@ -17,8 +18,8 @@ fn main() {
     let params = *LVL2PARAM_128_BITS_PARAMETERS;
     // Set the number of valid bits for the plaintext and total tests
     let plain_modulus_bits: u32 = 9; //support 33bit
-    let total_tests: u32 = 32;
-    let if_run_thread: bool = true;
+    let total_tests: u32 = 10;
+    let if_run_thread: bool = false;
 
     if if_run_thread {
         // Running multi-threaded tests
@@ -50,17 +51,16 @@ fn msb_single_threaded_tests(
     let modulus = <PowOf2Modulus<M>>::new_with_mask(params.lwe_cipher_modulus_minus_one());
 
     // Start timing the entire testing process.
+    let mut total_msb_time = Duration::new(0, 0);
     let global_start_time = Instant::now();
-
     // 1. Generate a secret key.
     let sk = KeyGen::generate_secret_key(params, &mut thread_rng());
-    println!("Secret Key Generation done!\n");
+    println!("======================msb_single_threaded_tests======================\n");
 
     // 2. Create Encryptor, Decryptor, and Compare (FBS) instances.
     let enc = Encryptor::new(&sk);
     let dec = Decryptor::new(&sk);
     let cmp = FheCompare::new(&sk, &mut thread_rng());
-    println!("Evaluation Key Generation done!\n");
     println!("Initialized!");
 
     // A counter to track how many tests produced the correct MSB.
@@ -69,7 +69,6 @@ fn msb_single_threaded_tests(
     // 3. Run tests sequentially from 0..total_tests.
     for test_num in 1..(total_tests + 1) {
         let mut rng = thread_rng();
-        let start_time = Instant::now();
 
         // Generate a random number in the range [0, 2^plain_modulus_bits).
         let i = rng.gen_range(0..(1u64 << plain_modulus_bits));
@@ -81,12 +80,12 @@ fn msb_single_threaded_tests(
         let enc_text = enc.encrypt(i, modulus, &mut rng, plain_modulus_bits);
 
         // Perform homomorphic MSB extraction.
+        let start_time = Instant::now();
         let enc_extract: LweCiphertext<M> = cmp.hommsb::<M>(&enc_text, plain_modulus_bits);
-
+        let epoch_duration = start_time.elapsed();
+        total_msb_time += epoch_duration;
         // Decrypt the extracted MSB (boolean result, so mod 2).
         let dec_extract = dec.decrypt_custom::<M>(&enc_extract, modulus, 1u32);
-
-        let epoch_duration = start_time.elapsed();
 
         // Check correctness. Print detailed info for each test.
         if dec_extract == expected {
@@ -102,18 +101,15 @@ fn msb_single_threaded_tests(
             );
         }
     }
-
-    // 4. Calculate accuracy and display final statistics.
     let global_duration = global_start_time.elapsed();
-    let accuracy = correct_predictions as f64 / total_tests as f64;
+    // 4. Calculate accuracy and display final statistics.
+    let accuracy = correct_predictions as f64 / total_tests as f64 * 100.0;
 
     println!(
-        "Total tests: {}\nPlaintext bits: {} \nFinal Accuracy(MSB): {:.2}% \nTime Cost: {:?}",
-        total_tests,
-        plain_modulus_bits,
-        accuracy * 100.0,
-        global_duration
+        "\n===== Final Statistics =====\nTotal tests: {}\nPlaintext bits: {}\nFinal Accuracy (MSB): {:.2}%\nTotal Time Cost: {:?}\nSingle MSB Time Cost: {:?}",
+        total_tests, plain_modulus_bits, accuracy,global_duration, total_msb_time/total_tests
     );
+    println!("=============================Finish!=============================\n");
 }
 
 /// This function performs a multi-threaded test to check the correctness
@@ -125,99 +121,86 @@ fn msb_single_threaded_tests(
 /// * `plain_modulus_bits` - The bit-size of the plaintext modulus range.
 /// * `total_tests`        - The total number of tests to run.
 /// * `params`             - The parameters used for key generation and encryption/decryption.
+/// Function to run multiple MSB (Most Significant Bit) extraction tests in parallel.
 fn msb_multi_threaded_tests(
     plain_modulus_bits: u32,
     total_tests: u32,
     params: CmpFheParameters<M, LweModulus, Fp>,
 ) {
-    // Set modulus to (q - 1) for BrMsKs (Bootstrap + Relinearization) mode conversion.
+    // Prepare the modulus for the encryption based on the given parameters.
     let modulus = <PowOf2Modulus<M>>::new_with_mask(params.lwe_cipher_modulus_minus_one());
 
-    // Start timing the entire test process.
+    // Start measuring the total execution time.
     let global_start_time = Instant::now();
 
-    // 1. Generate a secret key.
+    // Generate the secret key for encryption and decryption.
     let sk = KeyGen::generate_secret_key(params, &mut thread_rng());
-    println!("Secret Key Generation done!\n");
+    println!("======================msb_multi_threaded_tests======================\n");
 
-    // 2. Create Encryptor, Decryptor, and compare (FBS) instances.
+    // Create instances of Encryptor, Decryptor, and comparison functions.
     let enc = Encryptor::new(&sk);
     let dec = Decryptor::new(&sk);
     let cmp = FheCompare::new(&sk, &mut thread_rng());
-    println!("Evaluation Key Generation done!\n");
     println!("Initialized!");
 
-    // Use Arc and Mutex to safely share state among threads.
-    // 'output' will store messages about test errors for later processing.
-    let output = Arc::new(Mutex::new(Vec::new()));
+    // Shared state for tracking progress and errors.
+    let output = Arc::new(Mutex::new(Vec::new())); // Store error messages.
+    let progress = Arc::new(Mutex::new(0)); // Track the current progress.
+    let shared_var = Arc::new(Mutex::new(0)); // Counter to track the number of tests processed.
 
-    // 'progress' stores the last test index that triggered a periodic accuracy update (every 10%).
-    let progress = Arc::new(Mutex::new(0));
-
-    // 'shared_var' tracks the count of completed tests, so we can compute a simple progress bar.
-    let shared_var = Arc::new(Mutex::new(0));
-
-    // 3. Run the tests in parallel using Rayon's parallel iterator.
-    let results: Vec<_> = (1..(total_tests + 1))
+    // Run tests in parallel using Rayon library.
+    let results: Vec<_> = (1..=total_tests)
         .into_par_iter()
         .map(|test_num| {
             let mut rng = thread_rng();
 
-            // Generate a random plaintext number in the range of [0, 2^plain_modulus_bits).
+            // Generate a random number and calculate its expected MSB.
             let i = rng.gen_range(0..(1u64 << plain_modulus_bits));
-
-            // The expected MSB is the (plain_modulus_bits - 1)-th bit of i.
             let expected: M = (i >> (plain_modulus_bits - 1)) & 1;
 
-            // Encrypt the number using the provided modulus.
+            // Encrypt the random number.
             let enc_text = enc.encrypt(i, modulus, &mut rng, plain_modulus_bits);
 
-            // Extract the MSB homomorphically.
+            // Perform the homomorphic MSB extraction.
             let enc_extract: LweCiphertext<M> = cmp.hommsb::<M>(&enc_text, plain_modulus_bits);
 
-            // Decrypt the extracted ciphertext (MSB). For a boolean result, use mod 2.
+            // Decrypt the extracted MSB and check for errors.
             let dec_extract = dec.decrypt_custom::<M>(&enc_extract, modulus, 1u32);
-
-            // Check whether the extracted MSB matches the expected MSB.
             let error_flag = dec_extract != expected;
 
-            // Thread-safe access to the shared test counter.
+            // Update progress bar.
             {
                 let mut shared_var_lock = shared_var.lock().unwrap();
-                *shared_var_lock += 1; // Increment the completed tests counter.
-
-                // Compute progress percentage.
+                *shared_var_lock += 1;
                 let percentage = (*shared_var_lock as f64 / total_tests as f64) * 100.0;
-
-                // Build a progress bar string of length 50 characters.
                 let progress_bar_length = 50;
-                let filled_length =
-                    (percentage / 100.0 * progress_bar_length as f64).round() as usize;
-                let progress_string = format!(
-                    "[{}{}] {:.2}% ({}/{})",
+                let filled_length = (percentage / 100.0 * progress_bar_length as f64) as usize;
+
+                print!(
+                    "\rProgress: [{}{}] {:.2}% ({}/{})",
                     "=".repeat(filled_length),
                     " ".repeat(progress_bar_length - filled_length),
                     percentage,
                     *shared_var_lock,
                     total_tests
                 );
-
-                // Clear the console and print the updated progress bar.
-                print!("\x1b[2J\x1b[H");
-                println!("Progress: {}", progress_string);
+                std::io::stdout().flush().unwrap(); // Immediately flush to the terminal
             }
 
-            // Return the test result information for later aggregation.
+            // Return test results including any errors.
             (test_num, error_flag, i, dec_extract, expected)
         })
         .collect();
 
-    // 4. Process the results and print statistics.
+    // Print a new line after the progress bar is complete.
+    println!();
+
+    // Initialize the counter for correct predictions.
     let mut correct_predictions = 0;
 
+    // Process the results and log any errors.
     for (test_num, error_flag, m, dec_extract, expected) in results {
         if error_flag {
-            // If there's an error, store a diagnostic message in 'output'.
             let mut output_lock = output.lock().unwrap();
             output_lock.push(format!(
                 "Test #{:05} [ERROR]: m = {}, expected MSB = {}, extracted MSB = {}",
@@ -227,8 +210,8 @@ fn msb_multi_threaded_tests(
             correct_predictions += 1;
         }
 
-        // Periodically show accuracy updates every 10% of total tests.
-        if (test_num) % (total_tests / 10) == 0 && test_num != 0 {
+        // Print progress every 10% of the total tests.
+        if test_num % (total_tests / 10) == 0 && test_num != 0 {
             let accuracy = (correct_predictions as f64 / test_num as f64) * 100.0;
             let mut progress_lock = progress.lock().unwrap();
             *progress_lock = test_num;
@@ -238,15 +221,24 @@ fn msb_multi_threaded_tests(
             );
         }
     }
-
-    // Measure and report the total elapsed time after all tests finish.
+    // 6. Print all stored error lines.
+    {
+        let output_lock = output.lock().unwrap();
+        println!("\n===== Error Logs (if any) =====");
+        for line in output_lock.iter() {
+            println!("{}", line);
+        }
+    }
+    // Calculate the total execution time and final accuracy.
     let global_duration = global_start_time.elapsed();
-    let final_accuracy = (correct_predictions as f64 / total_tests as f64) * 100.0;
+    let accuracy = (correct_predictions as f64 / total_tests as f64) * 100.0;
 
+    // Print the final statistics.
     println!(
-        "\nTotal tests: {}\nPlaintext bits: {}\nFinal Accuracy (MSB): {:.2}%\nTime Cost: {:?}\n",
-        total_tests, plain_modulus_bits, final_accuracy, global_duration
+        "\n===== Final Statistics =====\nTotal tests: {}\nPlaintext bits: {}\nFinal Accuracy (MSB): {:.2}%\nTotal Time Cost: {:?}\nSingle Time Cost: {:?}",
+        total_tests, plain_modulus_bits, accuracy, global_duration, global_duration / total_tests
     );
+    println!("=============================Finish!=============================\n");
 }
 
 /// A single-threaded test function that compares two random plaintexts homomorphically.
@@ -268,20 +260,21 @@ fn cmp_single_threaded_tests(
 
     // 1. Generate a secret key.
     let sk = KeyGen::generate_secret_key(params, &mut thread_rng());
-    println!("Secret Key Generation done!\n");
+    println!("======================cmp_single_threaded_tests======================\n");
 
     // 2. Create Encryptor, Decryptor, and fhe_compare instances.
     let enc = Encryptor::new(&sk);
     let dec = Decryptor::new(&sk);
     let cmp = FheCompare::new(&sk, &mut thread_rng());
-    println!("Evaluation Key Generation done!\n");
     println!("Initialized!");
 
     // Counters for correct comparisons of each type.
     let mut correct_count_greater = 0;
     let mut correct_count_greater_equal = 0;
     let mut correct_count_equal = 0;
-
+    let mut total_time_g = Duration::new(0, 0);
+    let mut total_time_ge = Duration::new(0, 0);
+    let mut total_time_eq = Duration::new(0, 0);
     // 3. Run the tests for the specified number of iterations.
     for i in 1..=total_tests {
         let mut rng = thread_rng();
@@ -302,15 +295,22 @@ fn cmp_single_threaded_tests(
         let enc_text_2 = enc.encrypt(m_2, modulus, &mut rng, plain_modulus_bits);
 
         // Perform homomorphic comparisons.
-        let greater_enc = cmp.greater_than::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
-        let greater_equal_enc =
-            cmp.greater_than_equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
-        let equal_enc = cmp.equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+        let start_g = Instant::now();
+        let enc_g = cmp.greater_than::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+        total_time_g += start_g.elapsed();
+
+        let start_ge = Instant::now();
+        let enc_ge = cmp.greater_than_equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+        total_time_ge += start_ge.elapsed();
+
+        let start_eq = Instant::now();
+        let enc_eq = cmp.equal::<M>(&enc_text_1, &enc_text_2, plain_modulus_bits);
+        total_time_eq += start_eq.elapsed();
 
         // Decrypt the comparison results (boolean results mod 2).
-        let dec_greater = dec.decrypt_custom::<M>(&greater_enc, modulus, 1u32);
-        let dec_greater_equal = dec.decrypt_custom::<M>(&greater_equal_enc, modulus, 1u32);
-        let dec_equal = dec.decrypt_custom::<M>(&equal_enc, modulus, 1u32);
+        let dec_greater = dec.decrypt_custom::<M>(&enc_g, modulus, 1u32);
+        let dec_greater_equal = dec.decrypt_custom::<M>(&enc_ge, modulus, 1u32);
+        let dec_equal = dec.decrypt_custom::<M>(&enc_eq, modulus, 1u32);
 
         // Measure the time taken for this single iteration.
         let epoch_duration = start_time.elapsed();
@@ -360,19 +360,6 @@ fn cmp_single_threaded_tests(
                 i, m_1, m_2, epoch_duration
             );
         }
-
-        // Print accuracy every 10% of the total tests, to track progress.
-        if i % (total_tests / 10) == 0 {
-            let acc_g = (correct_count_greater as f64 / i as f64) * 100.0;
-            let acc_ge = (correct_count_greater_equal as f64 / i as f64) * 100.0;
-            let acc_e = (correct_count_equal as f64 / i as f64) * 100.0;
-
-            println!(
-                "[Progress] After {} tests: \
-                 accuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}%",
-                i, acc_g, acc_ge, acc_e
-            );
-        }
     }
 
     // After completing all tests, measure total elapsed time.
@@ -382,14 +369,22 @@ fn cmp_single_threaded_tests(
     let accuracy_g = (correct_count_greater as f64 / total_tests as f64) * 100.0;
     let accuracy_ge = (correct_count_greater_equal as f64 / total_tests as f64) * 100.0;
     let accuracy_e = (correct_count_equal as f64 / total_tests as f64) * 100.0;
-
+    let avg_time_g = total_time_g / total_tests;
+    let avg_time_ge = total_time_ge / total_tests;
+    let avg_time_eq = total_time_eq / total_tests;
     // Print the final accuracy of each comparison, along with the total execution time.
     println!(
-        "Total tests: {} \n Plaintext bits: {}\n
-         Accuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}%\n
-         Time Cost: {:?}",
+        "\n===== Final Statistics =====\nTotal tests: {}\nPlaintext bits: {}\nAccuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}%\nTime Cost: {:?}",
         total_tests, plain_modulus_bits, accuracy_g, accuracy_ge, accuracy_e, global_duration
     );
+    println!(
+        "Average comparison times:\n\
+        >  : {:?} \n\
+        >= : {:?} \n\
+        == : {:?} ",
+        avg_time_g, avg_time_ge, avg_time_eq
+    );
+    println!("=============================Finish!=============================\n");
 }
 
 /// A multi-threaded function that tests three comparison operations
@@ -407,21 +402,20 @@ fn cmp_multi_threaded_tests(
     total_tests: u32,
     params: CmpFheParameters<M, LweModulus, Fp>,
 ) {
-    // 1. Prepare modulus for BrMsKs mode conversion.
+    // Prepare the modulus for the encryption based on the given parameters.
     let modulus = <PowOf2Modulus<M>>::new_with_mask(params.lwe_cipher_modulus_minus_one());
 
     // Start measuring total execution time.
     let global_start_time = Instant::now();
 
-    // 2. Generate a secret key.
+    // Generate the secret key for encryption and decryption.
     let sk = KeyGen::generate_secret_key(params, &mut thread_rng());
-    println!("Secret Key Generation done!\n");
+    println!("======================cmp_multi_threaded_tests======================\n");
 
     // 3. Create Encryptor, Decryptor, and comparison instances.
     let enc = Encryptor::new(&sk);
     let dec = Decryptor::new(&sk);
     let cmp = FheCompare::new(&sk, &mut thread_rng());
-    println!("Evaluation Key Generation done!\n");
     println!("Initialized!");
 
     // Shared state for collecting only error outputs and tracking progress.
@@ -429,7 +423,7 @@ fn cmp_multi_threaded_tests(
     let progress = Arc::new(Mutex::new(0));
     let shared_var = Arc::new(Mutex::new(0));
 
-    // 4. Run tests in parallel using Rayon.
+    // Run tests in parallel using Rayon.
     let results: Vec<_> = (1..=total_tests)
         .into_par_iter()
         .map(|test_idx| {
@@ -485,9 +479,9 @@ fn cmp_multi_threaded_tests(
                     total_tests
                 );
 
-                // Clear the console and show the updated progress bar.
-                print!("\x1b[2J\x1b[H");
-                println!("Progress: {}", progress_str);
+                // Print updated progress bar without clearing screen.
+                print!("\rProgress: {}", progress_str);
+                std::io::stdout().flush().unwrap();
             }
 
             // Return this test's outcomes.
@@ -507,8 +501,8 @@ fn cmp_multi_threaded_tests(
             )
         })
         .collect();
-
-    // 5. Aggregate results. We maintain correctness counters for each comparison.
+    println!();
+    // Aggregate results. We maintain correctness counters for each comparison.
     let mut correct_count_g = 0;
     let mut correct_count_ge = 0;
     let mut correct_count_eq = 0;
@@ -591,10 +585,8 @@ fn cmp_multi_threaded_tests(
     let final_acc_eq = correct_count_eq as f64 / total_tests as f64 * 100.0;
 
     println!(
-        "\n===== Final Statistics =====\n\
-         Total tests: {} \nPlaintext bits: {}\n
-         Accuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}% \n
-         Time Cost: {:?}",
+        "\n===== Final Statistics =====\nTotal tests: {} \nPlaintext bits: {}\nAccuracy(>) = {:.2}%, (>=) = {:.2}%, (==) = {:.2}% \nTime Cost: {:?}",
         total_tests, plain_modulus_bits, final_acc_g, final_acc_ge, final_acc_eq, global_duration
     );
+    println!("=============================Finish!=============================\n");
 }

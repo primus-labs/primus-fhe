@@ -41,7 +41,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> FheCompare<C, L
     pub fn parameters(&self) -> &CmpFheParameters<C, LweModulus, Q> {
         self.fbs.parameters()
     }
-    
+
     /// Converts an LWE ciphertext from its arithmetic domain representation to a
     /// logarithmic or gate-friendly representation.
     ///

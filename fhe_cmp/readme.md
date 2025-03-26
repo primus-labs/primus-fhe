@@ -2,8 +2,6 @@
 
 This repository demonstrates how to **homomorphically** extract the most significant bit (MSB) of encrypted integers and perform homomorphic comparisons (>, >=, ==) using a TFHE scheme. It leverages:
 
-Below is a brief explanation of each major part of the code, details on running it, and the bit-range limitations.
-
 ## Overview
 
 The code tests two main functionalities:
