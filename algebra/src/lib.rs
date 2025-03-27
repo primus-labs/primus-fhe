@@ -26,3 +26,4 @@ pub mod utils;
 pub use error::AlgebraError;
 
 pub use field::*;
+pub use integer::*;

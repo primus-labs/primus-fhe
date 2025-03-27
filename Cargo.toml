@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["algebra", "boolean_fhe", "fhe_core", "lattice"]
+members = ["algebra", "boolean_fhe", "fhe_core", "lattice","fhe_cmp"]
 
 resolver = "2"
 
