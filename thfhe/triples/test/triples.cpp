@@ -7,7 +7,7 @@ using namespace emp;
 
 int main(int argc, char** argv) {
     // execute: ./test_triples total_party party_id base_port
-    const int num_triples = 100000;
+    const int num_triples = int(1e6);
     size_t total_party = atoi(argv[1]);
     size_t party = atoi(argv[2]);
     int base_port = atoi(argv[3]);
@@ -23,6 +23,7 @@ int main(int argc, char** argv) {
         }
     }
 
+    auto start = chrono::high_resolution_clock::now();
     vector<uint64_t> in_a(num_triples), in_b(num_triples);
     PRG prg;
     prg.random_data(in_a.data(), num_triples * sizeof(uint64_t));
@@ -59,7 +60,12 @@ int main(int argc, char** argv) {
         t.join();
     }
     threads.clear();
-    
+
+    auto end = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::microseconds>(end - start);
+    cout << "Initialization time: " << duration.count() << " microseconds" << endl;
+
+    start = chrono::high_resolution_clock::now();
     for (size_t i = 0; i < total_party; ++i) if (i != party) {
         tmp_out[i].resize(num_triples << 1);
         threads.push_back(thread([&, i]() {
@@ -82,13 +88,21 @@ int main(int argc, char** argv) {
         }
     }
 
+    end = chrono::high_resolution_clock::now();
+    duration = chrono::duration_cast<chrono::microseconds>(end - start);
+    cout << "Computation time: " << duration.count() << " microseconds for " << num_triples << " triples" << endl;
+
     // adhoc: saving the triples
+    start = chrono::high_resolution_clock::now();
     ofstream ofile("data/triples_P_" + to_string(party) + ".txt");
     for (size_t i = 0; i < num_triples; ++i) {
       ofile << "a: " << in_a[i] << ", b: " << in_b[i] << ", c: " << out[i]
             << endl;
     }
     ofile.close();
+    end = chrono::high_resolution_clock::now();
+    duration = chrono::duration_cast<chrono::microseconds>(end - start);
+    cout << "File writing time: " << duration.count() << " microseconds" << endl;
 
     // test the correctness (should be removed)
     if (party == 0) {
