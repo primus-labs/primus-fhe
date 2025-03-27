@@ -8,7 +8,6 @@ class OLEZ2K {
    public:
     IO* io;
     COT<IO>* ot;
-    vector<BIGNUM*> exp;
     CCRH ccrh;
     size_t bit_length;
     OLEZ2K(IO* io, COT<IO>* ot, size_t bit_length)
