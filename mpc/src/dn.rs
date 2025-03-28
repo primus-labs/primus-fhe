@@ -13,7 +13,7 @@ use rand::prelude::*;
 use rand::{RngCore, SeedableRng};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -163,6 +163,38 @@ impl<const P: u64> DNBackend<P> {
         matrix
     }
 
+    ///  parallel_recv_from_many
+    fn parallel_recv_from_many(
+        &self,
+        netio: Arc<NetIO>,
+        from_ids: &[u32],
+        item_count: usize,
+    ) -> HashMap<u32, Vec<u64>> {
+        let mut results = HashMap::new();
+        let mut handles = vec![];
+
+        for &from_id in from_ids {
+            let netio_clone = Arc::clone(&netio);
+
+            let handle = thread::spawn(move || {
+                let mut buffer = vec![0u64; item_count];
+                {
+                    netio_clone
+                        .recv(from_id, cast_slice_mut(&mut buffer))
+                        .expect("Recv failed");
+                }
+                (from_id, buffer)
+            });
+
+            handles.push(handle);
+        }
+        handles.into_iter().for_each(|handle| {
+            let (from_id, buffer) = handle.join().expect("Recv thread panicked");
+            results.insert(from_id, buffer);
+        });
+        results
+    }
+
     /// eval polynomial
     pub fn eval_polynomial(coeffs: &[u64], x: u64) -> u64 {
         let mut res = 0;
@@ -182,10 +214,9 @@ impl<const P: u64> DNBackend<P> {
         target_range: (u32, u32),
     ) -> Vec<u64> {
         let (start_id, end_id) = target_range;
-        let batch_size = values.len();
         let party_id = self.party_id;
-        let van_matrix = self.van_matrix.clone();
-        let (tx, rx) = mpsc::channel::<(usize, u64)>();
+        let van_matrix_ref = Arc::new(self.van_matrix.clone());
+        let (tx, rx) = mpsc::channel::<Vec<u64>>();
 
         let values = Arc::new(values.to_vec());
 
@@ -195,16 +226,15 @@ impl<const P: u64> DNBackend<P> {
             let netio = Arc::clone(&self.netio);
             let tx = tx.clone();
             let values = Arc::clone(&values);
-            let van_matrix = van_matrix.clone();
             let my_pid = party_id;
             let mut prg = self.prg.clone();
-
+            let van_matrix_ref = Arc::clone(&van_matrix_ref);
             handles.push(std::thread::spawn(move || {
                 // Send incrementally per share (streaming)
                 let mut share_column = vec![0u64; values.len()];
                 let field_mask = u64::MAX >> P.leading_zeros();
 
-                for (i, &val) in values.iter().enumerate() {
+                for (&val, share_ele) in values.iter().zip(share_column.iter_mut()) {
                     let mut coeffs = vec![0u64; degree + 1];
                     coeffs[0] = val;
 
@@ -216,32 +246,23 @@ impl<const P: u64> DNBackend<P> {
                             }
                         };
                     }
-
                     let share = (1..=degree).fold(coeffs[0], |sum, j| {
-                        <U64FieldEval<P>>::mul_add(coeffs[j], van_matrix[j][pid as usize], sum)
+                        <U64FieldEval<P>>::mul_add(coeffs[j], van_matrix_ref[j][pid as usize], sum)
                     });
-
-                    if pid == my_pid {
-                        tx.send((i, share)).expect("Send my_share failed");
-                    } else {
-                        share_column[i] = share;
-                    }
+                    *share_ele = share;
                 }
 
                 if pid != my_pid {
                     let data = bytemuck::cast_slice(&share_column).to_vec();
                     netio.send(pid, &data).expect("Send failed");
                     netio.flush(pid).expect("Flush failed");
+                } else {
+                    tx.send(share_column).expect("Send failed");
                 }
             }));
         }
 
-        let mut my_shares = vec![0u64; batch_size];
-        for _ in 0..batch_size {
-            let (i, val) = rx.recv().expect("Receive my_share failed");
-            my_shares[i] = val;
-        }
-
+        let my_shares = rx.recv().expect("Receive my_share failed");
         for h in handles {
             h.join().expect("Thread panicked");
         }
@@ -799,39 +820,6 @@ impl<const P: u64> DNBackend<P> {
         shares: &[u64],
         broadcast_result: bool,
     ) -> Option<Vec<u64>> {
-        ///  parallel_recv_from_many
-        fn parallel_recv_from_many(
-            netio: Arc<NetIO>,
-            from_ids: &[u32],
-            item_count: usize,
-        ) -> HashMap<u32, Vec<u64>> {
-            let results = Arc::new(Mutex::new(HashMap::new()));
-            let mut handles = vec![];
-
-            for &from_id in from_ids {
-                let netio_clone = Arc::clone(&netio);
-                let results_clone = Arc::clone(&results);
-
-                let handle = thread::spawn(move || {
-                    let mut buffer = vec![0u64; item_count];
-                    {
-                        netio_clone
-                            .recv(from_id, cast_slice_mut(&mut buffer))
-                            .expect("Recv failed");
-                    }
-                    results_clone.lock().unwrap().insert(from_id, buffer);
-                });
-
-                handles.push(handle);
-            }
-
-            for handle in handles {
-                handle.join().expect("Recv thread panicked");
-            }
-
-            Arc::try_unwrap(results).unwrap().into_inner().unwrap()
-        }
-
         let lagrange_coef = match degree {
             d if d == self.num_threshold => &self.lagrange_coeffs.0,
             d if d == (self.num_threshold * 2) => &self.lagrange_coeffs.1,
@@ -853,7 +841,8 @@ impl<const P: u64> DNBackend<P> {
             let from_ids: Vec<u32> = (0..=degree).filter(|&id| id != pos).collect();
 
             // 并发接收
-            let recv_map = parallel_recv_from_many(Arc::clone(&self.netio), &from_ids, batch_size);
+            let recv_map =
+                self.parallel_recv_from_many(Arc::clone(&self.netio), &from_ids, batch_size);
 
             // 汇总所有 shares
             for (&from_id, share_vec) in &recv_map {
@@ -1973,7 +1962,11 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     fn init_z2k_triples_from_files(&mut self) {
         if self.party_id() <= self.num_threshold() {
             let cwd = std::env::current_dir().unwrap();
-            let path = cwd.join(format!("thfhe/predata/triples_P_{}.txt", self.party_id()));
+            let path = cwd.join(format!(
+                "thfhe/predata/{}/triples_P_{}.txt",
+                self.num_threshold() + 1,
+                self.party_id()
+            ));
             self.read_z2k_triples_from_files(&path);
         }
     }

@@ -9,8 +9,8 @@ use thfhe::{distdec, Evaluator, Fp, KeyGen, DEFAULT_128_BITS_PARAMETERS};
 const RING_MODULUS: u64 = Fp::MODULUS_VALUE;
 
 fn main() {
-    const NUM_PARTIES: u32 = 3;
-    const THRESHOLD: u32 = 1;
+    const NUM_PARTIES: u32 = 5;
+    const THRESHOLD: u32 = 2;
     const BASE_PORT: u32 = 20500;
 
     let threads = (0..NUM_PARTIES)
