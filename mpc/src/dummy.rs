@@ -1,10 +1,10 @@
 //! Implementation of a dummy MPC backend.
 
-use algebra::modulus::BarrettModulus;
-use algebra::{Field, U64FieldEval};
-
 use crate::error::MPCErr;
 use crate::{MPCBackend, MPCResult};
+use algebra::modulus::BarrettModulus;
+use algebra::{Field, U64FieldEval};
+use std::time::Duration;
 
 /// Dummy MPC secret share (storing plain value).
 #[derive(Debug, Clone, Copy, Default)]
@@ -224,84 +224,96 @@ impl<const P: u64> MPCBackend for DummyBackend<P> {
         unimplemented!()
     }
 
-    fn mul_element_wise_z2k(&mut self, _a: &[u64], _b: &[u64]) -> Vec<u64> {
+    fn mul_element_wise_z2k(&mut self, a: &[u64], b: &[u64]) -> Vec<u64> {
         unimplemented!()
     }
     fn init_z2k_triples_from_files(&mut self) {
         unimplemented!()
     }
-    fn reveal_slice_to_all_z2k(&mut self, _shares: &[u64]) -> Vec<u64> {
+    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64]) -> Vec<u64> {
         unimplemented!()
     }
     fn test_open_secrets_z2k(
         &mut self,
-        _reconstructor_id: u32,
-        _degree: u32,
-        _shares: &[u64],
-        _broadcast_result: bool,
+        reconstructor_id: u32,
+        degree: u32,
+        shares: &[u64],
+        broadcast_result: bool,
     ) -> Option<Vec<u64>> {
         unimplemented!()
     }
 
-    fn reveal_slice_z2k(&mut self, _shares: &[u64], _party_id: u32) -> Vec<Option<u64>> {
+    fn reveal_slice_z2k(&mut self, shares: &[u64], party_id: u32) -> Vec<Option<u64>> {
         unimplemented!()
     }
 
     fn input_slice_z2k(
         &mut self,
-        _values: Option<&[u64]>,
-        _batch_size: usize,
-        _party_id: u32,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
     ) -> Vec<u64> {
         unimplemented!()
     }
 
-    fn add_z2k_slice(&self, _a: &[u64], _b: &[u64]) -> Vec<u64> {
+    fn add_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64> {
         unimplemented!()
     }
 
-    fn sub_z2k_slice(&self, _a: &[u64], _b: &[u64]) -> Vec<u64> {
+    fn sub_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64> {
         unimplemented!()
     }
 
-    fn double_z2k_slice(&self, _a: &[u64]) -> Vec<u64> {
+    fn double_z2k_slice(&self, a: &[u64]) -> Vec<u64> {
         unimplemented!()
     }
-    fn shamir_secrets_to_additive_secrets(&mut self, _shares: &[Self::Sharing]) -> Vec<u64> {
-        unimplemented!()
-    }
-
-    fn add_z2k_const(&mut self, _a: u64, _b: u64) -> u64 {
+    fn shamir_secrets_to_additive_secrets(&mut self, shares: &[Self::Sharing]) -> Vec<u64> {
         unimplemented!()
     }
 
-    fn sub_z2k_const(&mut self, _a: u64, _b: u64) -> u64 {
+    fn add_z2k_const(&mut self, a: u64, b: u64) -> u64 {
         unimplemented!()
     }
-    fn sub_additive_const_p(&mut self, _a: u64, _b: u64) -> u64 {
+
+    fn sub_z2k_const(&mut self, a: u64, b: u64) -> u64 {
         unimplemented!()
     }
-    fn mul_additive_const_p(&mut self, _a: u64, _b: u64) -> u64 {
+    fn sub_additive_const_p(&mut self, a: u64, b: u64) -> u64 {
         unimplemented!()
     }
-    fn inner_product_additive_const_p(&mut self, _a: &[u64], _b: &[u64]) -> u64 {
+    fn mul_additive_const_p(&mut self, a: u64, b: u64) -> u64 {
+        unimplemented!()
+    }
+    fn inner_product_additive_const_p(&mut self, a: &[u64], b: &[u64]) -> u64 {
         unimplemented!()
     }
     fn sends_slice_to_all_parties(
         &mut self,
-        _values: Option<&[u64]>,
-        _batch_size: usize,
-        _party_id: u32,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
     ) -> Vec<u64> {
         unimplemented!()
     }
 
     fn input_slice_with_prg_z2k(
         &mut self,
-        _values: Option<&[u64]>,
-        _batch_size: usize,
-        _party_id: u32,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
     ) -> Vec<u64> {
+        unimplemented!()
+    }
+    fn input_slice_with_prg(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> MPCResult<Vec<Self::Sharing>> {
+        unimplemented!()
+    }
+
+    fn total_mul_triple_duration(&mut self) -> Duration {
         unimplemented!()
     }
 }

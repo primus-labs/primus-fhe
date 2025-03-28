@@ -1,7 +1,6 @@
 use std::thread;
 
 use algebra::Field;
-use fhe_core::LweSecretKey;
 use mpc::{DNBackend, MPCBackend};
 use network::netio::Participant;
 use thfhe::{distdec, Evaluator, Fp, KeyGen, DEFAULT_128_BITS_PARAMETERS};
@@ -12,7 +11,7 @@ const RING_MODULUS: u64 = Fp::MODULUS_VALUE;
 fn main() {
     const NUM_PARTIES: u32 = 3;
     const THRESHOLD: u32 = 1;
-    const BASE_PORT: u32 = 30000;
+    const BASE_PORT: u32 = 20500;
 
     let threads = (0..NUM_PARTIES)
         .map(|party_id| thread::spawn(move || thfhe(party_id, NUM_PARTIES, THRESHOLD, BASE_PORT)))
@@ -41,6 +40,7 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
         participants,
         parameters.ring_dimension(),
         true,
+        true,
     );
 
     let (sk, pk, evk) = KeyGen::generate_mpc_key_pair(&mut backend, **parameters, rng);
@@ -49,33 +49,23 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
         party_id
     );
 
-    let lwe_sk: Vec<u64> = backend
-        .reveal_slice_to_all(sk.input_lwe_secret_key.as_ref())
-        .unwrap();
-
-    let _lwe_sk = LweSecretKey::new(lwe_sk, fhe_core::LweSecretKeyType::Ternary);
-
     let evaluator = Evaluator::new(evk);
 
     let test_num = 16;
     let mut public_a: Vec<Vec<u64>> = Vec::with_capacity(test_num);
     let mut public_b: Vec<u64> = Vec::new();
 
+    println!(
+        "double randoms cost {} ns,",
+        backend.total_mul_triple_duration().as_nanos()
+    );
+
     backend.init_z2k_triples_from_files();
     let a = 3;
     let b = 3;
-
     for _i in 0..test_num {
         let x = pk.encrypt(a, lwe_params, rng);
         let y = pk.encrypt(b, lwe_params, rng);
-
-        //println!("Party {} is adding {} and {}", party_id, a, b);
-
-        // let a_d: u64 = lwe_sk.decrypt(&x, lwe_params);
-        // assert_eq!(a, a_d);
-
-        // let b_d: u64 = lwe_sk.decrypt(&y, lwe_params);
-        // assert_eq!(b, b_d);
 
         let res = evaluator.add(&x, &y);
 
@@ -99,7 +89,5 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
             );
         }
     }
-
     println!("Party {} took {:?} to finish.", party_id, start.elapsed());
-    //println!("IO statistics: {:#?}", backend.netio.get_stats().unwrap());
 }

@@ -323,6 +323,7 @@ impl Participant {
 ///
 /// Manages connections and provides methods for sending, receiving,
 /// and broadcasting messages between participants.
+#[derive(Clone)]
 pub struct NetIO {
     party_id: u32,
     participants: Vec<Participant>,
@@ -356,22 +357,22 @@ impl NetIO {
         let self_address = &self.participants[self.party_id as usize].address;
         let listener = TcpListener::bind(self_address)
             .map_err(|e| Error::new(ErrorKind::AddrInUse, format!("Failed to bind: {}", e)))?;
-        println!("Listening on {}", self_address);
+        //println!("Listening on {}", self_address);
 
         // Connect to participants
         for i in 0..self.party_id {
             let peer_address = &self.participants[i as usize].address;
-            let mut stream = self.connect_with_retry(peer_address, 30)?;
+            let mut stream = self.connect_with_retry(peer_address, 200000)?;
             stream.write_all(&self.party_id.to_be_bytes())?; // Sends the current participant's ID to a peer
             self.setup_connection(i, stream)?;
         }
 
         // Accept connections from participants
         for _ in self.party_id + 1..self.participants.len() as u32 {
-            let (mut stream, addr) = listener.accept().map_err(|e| {
+            let (mut stream, _addr) = listener.accept().map_err(|e| {
                 Error::new(ErrorKind::ConnectionAborted, format!("Accept error: {}", e))
             })?;
-            println!("Connection from {}", addr);
+            //println!("Connection from {}", addr);
             let mut buffer = [0u8; 4];
             stream.read_exact(&mut buffer)?; // Receives the peer's ID
             let peer_id = u32::from_be_bytes(buffer);

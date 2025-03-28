@@ -30,8 +30,8 @@ pub struct BatchMPCLwe<Share: Default> {
     pub b: Vec<Share>,
 }
 
-pub fn lwe_send_and_recv_data_all_parties<'a>(
-    e: Option<&'a [u64]>,
+pub fn lwe_send_and_recv_data_all_parties(
+    e: Option<&[u64]>,
     len: usize,
     id: u32,
     num_parties: u32,
@@ -47,16 +47,17 @@ pub fn lwe_send_and_recv_data_all_parties<'a>(
         num_parties,
         num_threshold,
         0,
-        Participant::from_default(3, 50000 + sender_id * 100),
+        Participant::from_default(num_parties, 40500 + sender_id * 100),
         parameters.ring_dimension(),
+        false,
         false,
     );
     tx.send(temp_backend.input_slice(e, len, sender_id).unwrap())
         .unwrap();
 }
 
-pub fn lwe_send_and_recv_data_all_parties_mul_threads<'a>(
-    e: Option<&'a [u64]>,
+pub fn lwe_send_and_recv_data_all_parties_mul_threads(
+    e: Option<&[u64]>,
     len: usize,
     myid: u32,
     num_parties: u32,

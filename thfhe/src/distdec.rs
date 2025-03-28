@@ -4,15 +4,14 @@ use algebra::Field;
 use mpc::MPCBackend;
 use rand::Rng;
 use std::time::Instant;
-use std::u64;
 
 use crate::parameter::{Fp, DEFAULT_128_BITS_PARAMETERS};
 
 pub fn distdec<Backend, R>(
     backend: &mut Backend,
     rng: &mut R,
-    a: &Vec<Vec<u64>>,
-    b: &Vec<u64>,
+    a: &[Vec<u64>],
+    b: &[u64],
     shared_secret_key: &[Backend::Sharing],
 ) -> Option<Vec<u64>>
 where
@@ -26,7 +25,7 @@ where
     let len_p = (p as f64).log2().floor() as u64 + 1;
     let len_q = (q as f64).log2().floor() as u64 + 1;
 
-    let rho: u64 = (2 as u64).pow(len_q as u32);
+    let rho: u64 = (2_u64).pow(len_q as u32);
 
     let v_delta: u64 = rho / p;
 
@@ -108,9 +107,9 @@ where
                 .collect(),
         );
         //println!("eda_elements:{:?}, result before div: {}, result: {}",open_eda_elements,result1,result);
-        return result;
+        result
     } else {
-        return None;
+        None
     }
     //modulus switch
 }

@@ -1,16 +1,16 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![deny(missing_docs)]
 //! This crate provides backend for various MPC operations over a network.
-
+use std::time::Duration;
 pub mod dn;
-pub mod dummy;
+// pub mod dummy;
 pub mod error;
 
 use std::fmt::Debug;
 
 use algebra::reduce::FieldReduce;
 pub use dn::DNBackend;
-pub use dummy::DummyBackend;
+// pub use dummy::DummyBackend;
 
 type MPCResult<T> = Result<T, error::MPCErr>;
 
@@ -211,4 +211,15 @@ pub trait MPCBackend {
         batch_size: usize,
         party_id: u32,
     ) -> Vec<u64>;
+
+    /// input slice by shamir and share with prg
+    fn input_slice_with_prg(
+        &mut self,
+        values: Option<&[u64]>,
+        batch_size: usize,
+        party_id: u32,
+    ) -> MPCResult<Vec<Self::Sharing>>;
+
+    /// count double random times
+    fn total_mul_triple_duration(&mut self) -> Duration;
 }
