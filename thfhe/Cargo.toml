@@ -15,4 +15,4 @@ itertools = { workspace = true }
 
 rand = { workspace = true }
 crossbeam = "0.8.4"
-threadpool = "1.8.1"
+mimalloc = "0.1.44"

@@ -1,5 +1,12 @@
 mod parameter;
 
+// const POLYNOMIAL_COUNT: usize = 1024;
+
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 mod lwe;
 mod rlwe;
 
