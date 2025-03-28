@@ -136,7 +136,11 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
 impl<T: UnsignedInteger> Distribution<T> for DiscreteGaussian<T> {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> T {
+        if self.max_std_dev < 0.5 {
+            return T::ZERO;
+        }
         let mean = self.normal.mean();
+
         loop {
             let value = self.normal.sample(rng);
             if (value - mean).abs() < self.max_std_dev {
