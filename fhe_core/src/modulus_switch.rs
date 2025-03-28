@@ -1,7 +1,6 @@
-use algebra::{
-    integer::{AsInto, UnsignedInteger},
-    reduce::ModulusValue,
-};
+use algebra::{integer::UnsignedInteger, reduce::ModulusValue};
+use bigdecimal::{BigDecimal, RoundingMode};
+use num_traits::FromPrimitive;
 
 use crate::LweCiphertext;
 
@@ -32,8 +31,8 @@ pub fn lwe_modulus_switch_to_pow_of_2<CIn: UnsignedInteger, COut: UnsignedIntege
     modulus_in: CIn,
     modulus_out: COut,
 ) -> LweCiphertext<COut> {
-    let modulus_in_f64: f64 = modulus_in.as_into();
-    let modulus_out_f64: f64 = modulus_out.as_into();
+    let modulus_in_dec = modulus_in.to_decimal();
+    let modulus_out_dec = modulus_out.to_decimal();
 
     let reduce = |v: COut| {
         if v < modulus_out {
@@ -44,8 +43,9 @@ pub fn lwe_modulus_switch_to_pow_of_2<CIn: UnsignedInteger, COut: UnsignedIntege
     };
 
     let switch = |v: CIn| {
-        reduce(COut::as_from(
-            (AsInto::<f64>::as_into(v) * modulus_out_f64 / modulus_in_f64).round(),
+        reduce(COut::from_decimal(
+            &(v.to_decimal() * &modulus_out_dec / &modulus_in_dec)
+                .with_scale_round(0, RoundingMode::HalfUp),
         ))
     };
 
@@ -63,11 +63,16 @@ pub fn lwe_modulus_switch_to_native<CIn: UnsignedInteger, COut: UnsignedInteger>
     c_in: &LweCiphertext<CIn>,
     modulus_in: CIn,
 ) -> LweCiphertext<COut> {
-    let modulus_in_f64: f64 = modulus_in.as_into();
-    let modulus_out_f64: f64 = 2.0f64.powi(COut::BITS as i32);
+    let modulus_in_dec = modulus_in.to_decimal();
+    let modulus_out_dec = BigDecimal::from_u128(1_u128 << (COut::BITS - 1))
+        .unwrap()
+        .double();
 
     let switch = |v: CIn| {
-        COut::as_from((AsInto::<f64>::as_into(v) * modulus_out_f64 / modulus_in_f64).round())
+        COut::from_decimal(
+            &(v.to_decimal() * &modulus_out_dec / &modulus_in_dec)
+                .with_scale_round(0, RoundingMode::HalfUp),
+        )
     };
 
     let a: Vec<COut> = c_in.a().iter().copied().map(&switch).collect();
@@ -107,8 +112,8 @@ pub fn lwe_modulus_switch_inplace_to_pow_of_2<CIn: UnsignedInteger, COut: Unsign
     modulus_out: COut,
     c_out: &mut LweCiphertext<COut>,
 ) {
-    let modulus_in_f64: f64 = modulus_in.as_into();
-    let modulus_out_f64: f64 = modulus_out.as_into();
+    let modulus_in_dec = modulus_in.to_decimal();
+    let modulus_out_dec = modulus_out.to_decimal();
 
     let reduce = |v: COut| {
         if v < modulus_out {
@@ -119,8 +124,9 @@ pub fn lwe_modulus_switch_inplace_to_pow_of_2<CIn: UnsignedInteger, COut: Unsign
     };
 
     let switch = |v: CIn| {
-        reduce(COut::as_from(
-            (AsInto::<f64>::as_into(v) * modulus_out_f64 / modulus_in_f64).round(),
+        reduce(COut::from_decimal(
+            &(v.to_decimal() * &modulus_out_dec / &modulus_in_dec)
+                .with_scale_round(0, RoundingMode::HalfUp),
         ))
     };
 
@@ -142,11 +148,16 @@ pub fn lwe_modulus_switch_inplace_to_native<CIn: UnsignedInteger, COut: Unsigned
     modulus_in: CIn,
     c_out: &mut LweCiphertext<COut>,
 ) {
-    let modulus_in_f64: f64 = modulus_in.as_into();
-    let modulus_out_f64: f64 = 2.0f64.powi(COut::BITS as i32);
+    let modulus_in_dec = modulus_in.to_decimal();
+    let modulus_out_dec = BigDecimal::from_u128(1_u128 << (COut::BITS - 1))
+        .unwrap()
+        .double();
 
     let switch = |v: CIn| {
-        COut::as_from((AsInto::<f64>::as_into(v) * modulus_out_f64 / modulus_in_f64).round())
+        COut::from_decimal(
+            &(v.to_decimal() * &modulus_out_dec / &modulus_in_dec)
+                .with_scale_round(0, RoundingMode::HalfUp),
+        )
     };
 
     c_out
@@ -187,8 +198,8 @@ pub fn lwe_modulus_switch_assign_normal<C: UnsignedInteger>(
     modulus_in: C,
     modulus_out: C,
 ) {
-    let modulus_in_f64: f64 = modulus_in.as_into();
-    let modulus_out_f64: f64 = modulus_out.as_into();
+    let modulus_in_dec = modulus_in.to_decimal();
+    let modulus_out_dec = modulus_out.to_decimal();
 
     let reduce = |v: C| {
         if v < modulus_out {
@@ -199,8 +210,9 @@ pub fn lwe_modulus_switch_assign_normal<C: UnsignedInteger>(
     };
 
     let switch = |v: C| {
-        reduce(C::as_from(
-            (AsInto::<f64>::as_into(v) * modulus_out_f64 / modulus_in_f64).round(),
+        reduce(C::from_decimal(
+            &(v.to_decimal() * &modulus_out_dec / &modulus_in_dec)
+                .with_scale_round(0, RoundingMode::HalfUp),
         ))
     };
 
@@ -217,8 +229,10 @@ pub fn lwe_modulus_switch_assign_native<C: UnsignedInteger>(
     c: &mut LweCiphertext<C>,
     modulus_out: C,
 ) {
-    let modulus_in_f64: f64 = 2.0f64.powi(C::BITS as i32);
-    let modulus_out_f64: f64 = modulus_out.as_into();
+    let modulus_in_dec = BigDecimal::from_u128(1_u128 << (C::BITS - 1))
+        .unwrap()
+        .double();
+    let modulus_out_dec = modulus_out.to_decimal();
 
     let reduce = |v: C| {
         if v < modulus_out {
@@ -229,8 +243,9 @@ pub fn lwe_modulus_switch_assign_native<C: UnsignedInteger>(
     };
 
     let switch = |v: C| {
-        reduce(C::as_from(
-            (AsInto::<f64>::as_into(v) * modulus_out_f64 / modulus_in_f64).round(),
+        reduce(C::from_decimal(
+            &(v.to_decimal() * &modulus_out_dec / &modulus_in_dec)
+                .with_scale_round(0, RoundingMode::HalfUp),
         ))
     };
 
