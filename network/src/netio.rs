@@ -133,6 +133,7 @@ impl NetIoStats {
 }
 
 /// A buffer for sending and receiving data.
+#[derive(Clone)]
 pub struct Buffer {
     data: Vec<u8>,
     capacity: usize,
@@ -203,8 +204,8 @@ impl Buffer {
 /// A buffered TCP stream with send and receive buffers.
 pub struct BufferedTcpStream {
     stream: TcpStream,
-    send_buffer: Buffer,
-    recv_buffer: Buffer,
+    send_buffer: Mutex<Buffer>,
+    recv_buffer: Mutex<Buffer>,
     recv_round: AtomicUsize,
     send_round: AtomicUsize,
 }
@@ -220,28 +221,35 @@ impl BufferedTcpStream {
     pub fn new(stream: TcpStream, send_capacity: usize, recv_capacity: usize) -> Self {
         Self {
             stream,
-            send_buffer: Buffer::new(send_capacity),
-            recv_buffer: Buffer::new(recv_capacity),
+            send_buffer: Mutex::new(Buffer::new(send_capacity)),
+            recv_buffer: Mutex::new(Buffer::new(recv_capacity)),
             recv_round: AtomicUsize::new(0),
             send_round: AtomicUsize::new(0),
         }
     }
 
     /// Write data to the send buffer
-    pub fn write(&mut self, data: &[u8]) -> std::io::Result<()> {
-        if let Some(overflow) = self.send_buffer.append(data) {
+    pub fn write(&self, data: &[u8]) -> std::io::Result<()> {
+        let overflow = {
+            let mut send_buf = self.send_buffer.lock().unwrap();
+            send_buf.append(data)
+        };
+
+        if let Some(overflow) = overflow {
             self.flush()?; // Flush the buffer if overflow occurs
-            self.stream.write_all(&overflow)?; // Write the remaining data directly
+            (&self.stream).write_all(&overflow)?; // Write the remaining data directly
             self.send_round.fetch_add(1, Ordering::Relaxed);
         }
         Ok(())
     }
 
     /// Forcefully flush the send buffer
-    pub fn flush(&mut self) -> std::io::Result<bool> {
-        if !self.send_buffer.is_empty() {
-            let data = self.send_buffer.take_all();
-            self.stream.write_all(&data)?;
+    pub fn flush(&self) -> std::io::Result<bool> {
+        let mut send_buf = self.send_buffer.lock().unwrap();
+
+        if !send_buf.is_empty() {
+            let data = send_buf.take_all();
+            (&self.stream).write_all(&data)?;
             self.send_round.fetch_add(1, Ordering::Relaxed);
             Ok(true)
         } else {
@@ -250,17 +258,18 @@ impl BufferedTcpStream {
     }
 
     /// Read data into the provided buffer
-    pub fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut bytes_read = self.recv_buffer.consume(buf);
+    pub fn read(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let mut recv_buf = self.recv_buffer.lock().unwrap();
+        let mut bytes_read = recv_buf.consume(buf);
 
         while bytes_read < buf.len() {
-            let mut temp_buf = vec![0; self.recv_buffer.capacity];
-            match self.stream.read(&mut temp_buf) {
+            let mut temp_buf = vec![0; recv_buf.capacity];
+            match (&self.stream).read(&mut temp_buf) {
                 Ok(0) => break, // EOF
                 Ok(n) => {
                     self.recv_round.fetch_add(1, Ordering::Relaxed);
-                    self.recv_buffer.fill(&temp_buf[..n]);
-                    bytes_read += self.recv_buffer.consume(&mut buf[bytes_read..]);
+                    recv_buf.fill(&temp_buf[..n]);
+                    bytes_read += recv_buf.consume(&mut buf[bytes_read..]);
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break, // non-blocking read
                 Err(ref e) if e.kind() == std::io::ErrorKind::ConnectionReset => break,
@@ -327,7 +336,7 @@ impl Participant {
 pub struct NetIO {
     party_id: u32,
     participants: Vec<Participant>,
-    connections: Arc<Mutex<HashMap<u32, BufferedTcpStream>>>,
+    connections: HashMap<u32, Arc<BufferedTcpStream>>,
     stats: Arc<NetIoStats>,
 }
 
@@ -345,7 +354,7 @@ impl NetIO {
         let mut net_io = NetIO {
             party_id,
             participants,
-            connections: Arc::new(Mutex::new(HashMap::new())),
+            connections: HashMap::new(),
             stats,
         };
         net_io.initialize()?;
@@ -410,23 +419,16 @@ impl NetIO {
 
     /// Sets up the connection.
     fn setup_connection(&mut self, id: u32, stream: TcpStream) -> Result<(), NetIoError> {
-        let mut connections = self.connections.lock().map_err(|_| {
-            NetIoError::MutexLockFailed("Failed to acquire lock for connection setup".to_string())
-        })?;
-
         let buffered_stream = BufferedTcpStream::new(stream, SEND_BUFFER_SIZE, RECV_BUFFER_SIZE);
-        connections.insert(id, buffered_stream);
+        self.connections.insert(id, Arc::new(buffered_stream));
         Ok(())
     }
 
     /// Get the performance statistics.
     pub fn get_stats(&self) -> Result<NetIoStats, NetIoError> {
-        let mut connections = self.connections.lock().map_err(|_| {
-            NetIoError::MutexLockFailed("Failed to acquire lock for flush".to_string())
-        })?;
         self.stats.send_round.store(0, Ordering::Relaxed);
         self.stats.recv_round.store(0, Ordering::Relaxed);
-        for (_, stream) in connections.iter_mut() {
+        for (_, stream) in self.connections.iter() {
             let sr = stream.send_round.load(Ordering::Relaxed);
             let rr = stream.recv_round.load(Ordering::Relaxed);
             self.stats.send_round.fetch_add(sr, Ordering::Relaxed);
@@ -449,46 +451,43 @@ impl IO for NetIO {
     }
 
     /// Sends data to a participant.
-    fn send(&mut self, party_id: u32, buf: &[u8]) -> Result<(), NetIoError> {
+    fn send(&self, party_id: u32, buf: &[u8]) -> Result<(), NetIoError> {
         let start = Instant::now();
-        let mut connections = self.connections.lock().map_err(|_| {
-            NetIoError::MutexLockFailed("Failed to acquire lock for send".to_string())
-        })?;
-
-        let stream = connections
-            .get_mut(&party_id)
-            .ok_or(NetIoError::ConnectionNotFound(party_id))?;
+        let stream = self
+            .connections
+            .get(&party_id)
+            .ok_or(NetIoError::ConnectionNotFound(party_id))?
+            .as_ref();
         stream.write(buf)?;
         self.stats.update_send(buf.len(), start.elapsed());
         Ok(())
     }
 
     /// Receives data from a participant.
-    fn recv(&mut self, party_id: u32, buf: &mut [u8]) -> Result<usize, NetIoError> {
+    fn recv(&self, party_id: u32, buf: &mut [u8]) -> Result<usize, NetIoError> {
         self.flush_all()?;
 
         let start = Instant::now();
-        let mut connections = self.connections.lock().map_err(|_| {
-            NetIoError::MutexLockFailed("Failed to acquire lock for recv".to_string())
-        })?;
-        let stream = connections
-            .get_mut(&party_id)
-            .ok_or(NetIoError::ConnectionNotFound(party_id))?;
+
+        let stream = self
+            .connections
+            .get(&party_id)
+            .ok_or(NetIoError::ConnectionNotFound(party_id))?
+            .as_ref();
         let bytes_read = stream.read(buf)?;
         self.stats.update_recv(bytes_read, start.elapsed());
         Ok(bytes_read)
     }
 
     /// Flush the send buffer.
-    fn flush(&mut self, party_id: u32) -> Result<(), NetIoError> {
+    fn flush(&self, party_id: u32) -> Result<(), NetIoError> {
         let start = Instant::now();
-        let mut connections = self.connections.lock().map_err(|_| {
-            NetIoError::MutexLockFailed("Failed to acquire lock for flush".to_string())
-        })?;
 
-        let stream = connections
-            .get_mut(&party_id)
-            .ok_or(NetIoError::ConnectionNotFound(party_id))?;
+        let stream = self
+            .connections
+            .get(&party_id)
+            .ok_or(NetIoError::ConnectionNotFound(party_id))?
+            .as_ref();
         let flushed = stream.flush()?;
         if flushed {
             self.stats.update_send(0, start.elapsed());
@@ -498,7 +497,7 @@ impl IO for NetIO {
     }
 
     /// Flush all send buffers.
-    fn flush_all(&mut self) -> Result<(), NetIoError> {
+    fn flush_all(&self) -> Result<(), NetIoError> {
         for i in 0..self.participants.len() as u32 {
             if i != self.party_id {
                 self.flush(i)?;
@@ -508,7 +507,7 @@ impl IO for NetIO {
     }
 
     /// Broadcast data to all participants.
-    fn broadcast(&mut self, buf: &[u8]) -> Result<(), NetIoError> {
+    fn broadcast(&self, buf: &[u8]) -> Result<(), NetIoError> {
         for i in 0..self.participants.len() as u32 {
             if i != self.party_id {
                 self.send(i, buf)?;
@@ -630,29 +629,29 @@ mod tests {
     #[test]
     fn test_buffered_tcp_stream_write_and_flush() {
         let stream = setup_simple_tcp(30010);
-        let mut buffered_stream = BufferedTcpStream::new(stream, 10, 10);
+        let buffered_stream = BufferedTcpStream::new(stream, 10, 10);
 
         // Write data smaller than buffer capacity
         buffered_stream.write(b"hello").unwrap();
-        assert!(!buffered_stream.send_buffer.is_empty());
+        assert!(!buffered_stream.send_buffer.lock().unwrap().is_empty());
         buffered_stream.flush().unwrap();
-        assert!(buffered_stream.send_buffer.is_empty());
+        assert!(buffered_stream.send_buffer.lock().unwrap().is_empty());
     }
 
     #[test]
     fn test_buffered_tcp_stream_write_with_overflow() {
         let stream = setup_simple_tcp(30020);
-        let mut buffered_stream = BufferedTcpStream::new(stream, 10, 10);
+        let buffered_stream = BufferedTcpStream::new(stream, 10, 10);
 
         // Write data larger than buffer capacity
         buffered_stream.write(b"hello world").unwrap(); // Should flush immediately
-        assert!(buffered_stream.send_buffer.is_empty());
+        assert!(buffered_stream.send_buffer.lock().unwrap().is_empty());
     }
 
     #[test]
     fn test_buffered_tcp_stream_read() {
         let stream = setup_simple_tcp(30030);
-        let mut buffered_stream = BufferedTcpStream::new(stream, 10, 10);
+        let buffered_stream = BufferedTcpStream::new(stream, 10, 10);
 
         // Send and read data
         buffered_stream.write(b"hello").unwrap();
@@ -668,7 +667,7 @@ mod tests {
     #[test]
     fn test_buffered_tcp_stream_read_with_partial_buffer() {
         let stream = setup_simple_tcp(30040);
-        let mut buffered_stream = BufferedTcpStream::new(stream, 10, 10);
+        let buffered_stream = BufferedTcpStream::new(stream, 10, 10);
 
         // Send and read data in chunks
         buffered_stream.write(b"hello world").unwrap();
@@ -689,7 +688,7 @@ mod tests {
     #[test]
     fn test_buffered_tcp_stream_read_with_partial_buffer2() {
         let stream = setup_simple_tcp(30050);
-        let mut buffered_stream = BufferedTcpStream::new(stream, 10, 10);
+        let buffered_stream = BufferedTcpStream::new(stream, 10, 10);
 
         // Send and read data in chunks
         buffered_stream.write(b"hello worldhello world").unwrap();
@@ -710,7 +709,7 @@ mod tests {
     #[test]
     fn test_buffered_tcp_stream_flush_stats() {
         let stream = setup_simple_tcp(30060);
-        let mut buffered_stream = BufferedTcpStream::new(stream, 20, 20);
+        let buffered_stream = BufferedTcpStream::new(stream, 20, 20);
 
         buffered_stream.write(b"Hello, World!").unwrap();
         assert_eq!(buffered_stream.get_send_round(), 0); // No write yet
@@ -722,7 +721,7 @@ mod tests {
     #[test]
     fn test_buffered_tcp_stream_flush_stats2() {
         let stream = setup_simple_tcp(30070);
-        let mut buffered_stream = BufferedTcpStream::new(stream, 10, 10);
+        let buffered_stream = BufferedTcpStream::new(stream, 10, 10);
 
         buffered_stream.write(b"Hello, World!").unwrap();
         assert_eq!(buffered_stream.get_send_round(), 2); // Write yet
@@ -737,7 +736,7 @@ mod tests {
 
         let participants = _participants.clone();
         let party1 = thread::spawn(move || {
-            let mut net_io = NetIO::new(0, participants.clone()).unwrap();
+            let net_io = NetIO::new(0, participants.clone()).unwrap();
             let mut buf = [0u8; 16];
             net_io.recv(1, &mut buf).unwrap();
             assert_eq!(&buf[..11], b"Hello Party");
@@ -745,7 +744,7 @@ mod tests {
 
         let participants = _participants.clone();
         let party2 = thread::spawn(move || {
-            let mut net_io = NetIO::new(1, participants.clone()).unwrap();
+            let net_io = NetIO::new(1, participants.clone()).unwrap();
             net_io.send(0, b"Hello Party").unwrap();
         });
 
@@ -761,7 +760,7 @@ mod tests {
             .map(|id| {
                 let participants = participants.clone();
                 thread::spawn(move || {
-                    let mut net_io = NetIO::new(id, participants).unwrap();
+                    let net_io = NetIO::new(id, participants).unwrap();
                     if id == 0 {
                         net_io.broadcast(b"Broadcast A Message").unwrap();
                     } else {
@@ -784,12 +783,12 @@ mod tests {
 
         let participants_clone = participants.clone();
         thread::spawn(move || {
-            let mut net_io = NetIO::new(0, participants_clone).unwrap();
+            let net_io = NetIO::new(0, participants_clone).unwrap();
             let mut buffer = vec![0u8; 1024];
             net_io.recv(1, &mut buffer).expect("Failed to receive data");
         });
 
-        let mut net_io = NetIO::new(1, participants).unwrap();
+        let net_io = NetIO::new(1, participants).unwrap();
         net_io.send(0, b"Test Message").unwrap();
 
         let stats = net_io.get_stats().unwrap();
@@ -820,7 +819,7 @@ mod tests {
                     const C: usize = N as usize - 1;
                     const MSG_SIZE: usize = SEND_BUFFER_SIZE - 1;
                     let data: Vec<u8> = (0..MSG_SIZE).map(|i| (i % 256) as u8).collect();
-                    let mut net_io = NetIO::new(id, participants).unwrap();
+                    let net_io = NetIO::new(id, participants).unwrap();
                     if id == 0 {
                         net_io.broadcast(&data).unwrap();
 
@@ -884,7 +883,7 @@ mod tests {
                     const C: usize = N as usize - 1;
                     const MSG_SIZE: usize = SEND_BUFFER_SIZE + 1;
                     let data: Vec<u8> = (0..MSG_SIZE).map(|i| (i % 256) as u8).collect();
-                    let mut net_io = NetIO::new(id, participants).unwrap();
+                    let net_io = NetIO::new(id, participants).unwrap();
                     if id == 0 {
                         net_io.broadcast(&data).unwrap();
 

@@ -32,7 +32,7 @@ pub struct DNBackend<const P: u64> {
     shared_prg: Prg,
     /// Network I/O for communication
     //pub netio: NetIO,
-    pub netio: Arc<Mutex<NetIO>>,
+    pub netio: Arc<NetIO>,
 
     // Precomputed Beaver triples (a, b, c) where c = a*b
     triple_buffer: VecDeque<(u64, u64, u64)>,
@@ -85,9 +85,9 @@ impl<const P: u64> DNBackend<P> {
         // Setup network and PRG instances
         let mut prg = Prg::new();
         //let mut netio = NetIO::new(party_id, participants).expect("Network initialization failed");
-        let netio = Arc::new(Mutex::new(
+        let netio = Arc::new(
             NetIO::new(party_id, participants).expect("Network initialization failed,party id: {}"),
-        ));
+        );
 
         let shared_prg =
             Self::setup_shared_prg(party_id, num_parties, &mut prg, Arc::clone(&netio));
@@ -140,10 +140,10 @@ impl<const P: u64> DNBackend<P> {
         backend
     }
 
-    /// lock the netio
-    pub fn netio_lock(&self) -> std::sync::MutexGuard<'_, NetIO> {
-        self.netio.lock().unwrap()
-    }
+    // /// lock the netio
+    // pub fn netio_lock(&self) -> std::sync::MutexGuard<'_, NetIO> {
+    //     self.netio.lock().unwrap()
+    // }
 
     /// Builds the Vandermonde matrix for polynomial evaluation at party positions.
     fn build_vandermonde_matrix(num_parties: u32, positions: &[u64]) -> Vec<Vec<u64>> {
@@ -184,7 +184,6 @@ impl<const P: u64> DNBackend<P> {
         let (start_id, end_id) = target_range;
         let batch_size = values.len();
         let party_id = self.party_id;
-        let netio = Arc::clone(&self.netio);
         let van_matrix = self.van_matrix.clone();
         let (tx, rx) = mpsc::channel::<(usize, u64)>();
 
@@ -193,7 +192,7 @@ impl<const P: u64> DNBackend<P> {
         let mut handles = vec![];
 
         for pid in start_id..end_id {
-            let netio = Arc::clone(&netio);
+            let netio = Arc::clone(&self.netio);
             let tx = tx.clone();
             let values = Arc::clone(&values);
             let van_matrix = van_matrix.clone();
@@ -230,10 +229,9 @@ impl<const P: u64> DNBackend<P> {
                 }
 
                 if pid != my_pid {
-                    let mut net = netio.lock().unwrap();
                     let data = bytemuck::cast_slice(&share_column).to_vec();
-                    net.send(pid, &data).expect("Send failed");
-                    net.flush(pid).expect("Flush failed");
+                    netio.send(pid, &data).expect("Send failed");
+                    netio.flush(pid).expect("Flush failed");
                 }
             }));
         }
@@ -283,12 +281,7 @@ impl<const P: u64> DNBackend<P> {
     }
 
     /// Creates a common PRG seed shared among all parties.
-    fn setup_shared_prg(
-        party_id: u32,
-        num_parties: u32,
-        prg: &mut Prg,
-        netio: Arc<Mutex<NetIO>>,
-    ) -> Prg {
+    fn setup_shared_prg(party_id: u32, num_parties: u32, prg: &mut Prg, netio: Arc<NetIO>) -> Prg {
         if party_id == 0 {
             // Leader generates and distributes seed
             let seed = prg.random_block();
@@ -296,13 +289,9 @@ impl<const P: u64> DNBackend<P> {
 
             for receiver_id in 1..num_parties {
                 netio
-                    .lock()
-                    .unwrap()
                     .send(receiver_id, &seed_bytes)
                     .expect("Seed distribution failed");
                 netio
-                    .lock()
-                    .unwrap()
                     .flush(receiver_id)
                     .expect("Failed to flush network buffer");
             }
@@ -312,8 +301,6 @@ impl<const P: u64> DNBackend<P> {
             // Other parties receive the seed
             let mut seed_bytes = [0u8; 16];
             let len = netio
-                .lock()
-                .unwrap()
                 .recv(0, &mut seed_bytes)
                 .expect("Seed reception failed");
 
@@ -424,9 +411,10 @@ impl<const P: u64> DNBackend<P> {
                 let data_bytes = cast_slice(&share_column).to_vec(); // owned
 
                 handles.push(std::thread::spawn(move || {
-                    let mut net = netio_clone.lock().unwrap();
-                    net.send(party_idx, &data_bytes).expect("Send failed");
-                    net.flush(party_idx).expect("Flush failed");
+                    netio_clone
+                        .send(party_idx, &data_bytes)
+                        .expect("Send failed");
+                    netio_clone.flush(party_idx).expect("Flush failed");
                 }));
             }
 
@@ -443,7 +431,7 @@ impl<const P: u64> DNBackend<P> {
             my_share_buffer
         } else if self.party_id >= start_id && self.party_id < end_id {
             let mut buffer = vec![0u64; batch_size];
-            self.netio_lock()
+            self.netio
                 .recv(dealer_id, cast_slice_mut(&mut buffer))
                 .expect("Receive failed");
             buffer
@@ -559,10 +547,10 @@ impl<const P: u64> DNBackend<P> {
                         *share = share_vec[party_idx as usize];
                     });
 
-                self.netio_lock()
+                self.netio
                     .send(party_idx, cast_slice(&share_buffer))
                     .expect("Share distribution failed");
-                self.netio_lock()
+                self.netio
                     .flush(party_idx)
                     .expect("Failed to flush network buffer");
             }
@@ -580,7 +568,7 @@ impl<const P: u64> DNBackend<P> {
             // Only receive shares if we're in the target range
             let mut buffer = vec![0u64; batch_size];
 
-            self.netio_lock()
+            self.netio
                 .recv(dealer_id, cast_slice_mut(&mut buffer))
                 .expect("Share reception failed");
 
@@ -619,10 +607,10 @@ impl<const P: u64> DNBackend<P> {
                         *share = share_vec[party_idx as usize];
                     });
 
-                self.netio_lock()
+                self.netio
                     .send(party_idx, cast_slice(&share_buffer))
                     .expect("Share distribution failed");
-                self.netio_lock()
+                self.netio
                     .flush(party_idx)
                     .expect("Failed to flush network buffer");
             }
@@ -640,7 +628,7 @@ impl<const P: u64> DNBackend<P> {
             // Only receive shares if we're in the target range
             let mut buffer = vec![0u64; batch_size];
 
-            self.netio_lock()
+            self.netio
                 .recv(dealer_id, cast_slice_mut(&mut buffer))
                 .expect("Share reception failed");
 
@@ -725,7 +713,7 @@ impl<const P: u64> DNBackend<P> {
                 }
 
                 let mut batch_buffer = vec![0u8; batch_size * 8];
-                self.netio_lock()
+                self.netio
                     .recv(party_idx, &mut batch_buffer)
                     .expect("Share collection failed");
 
@@ -751,10 +739,10 @@ impl<const P: u64> DNBackend<P> {
 
                 for party_idx in 0..self.num_parties {
                     if party_idx != self.party_id {
-                        self.netio_lock()
+                        self.netio
                             .send(party_idx, &result_buffer)
                             .expect("Result broadcast failed");
-                        self.netio_lock()
+                        self.netio
                             .flush(party_idx)
                             .expect("Failed to flush network buffer");
                     }
@@ -777,10 +765,10 @@ impl<const P: u64> DNBackend<P> {
                     .flat_map(|&share| share.to_le_bytes())
                     .collect();
 
-                self.netio_lock()
+                self.netio
                     .send(reconstructor_id, &share_buffer)
                     .expect("Share sending failed");
-                self.netio_lock()
+                self.netio
                     .flush(reconstructor_id)
                     .expect("Failed to flush network buffer");
             }
@@ -788,7 +776,7 @@ impl<const P: u64> DNBackend<P> {
             // Receive results if they're being broadcast
             if broadcast_result {
                 let mut result_buffer = vec![0u8; batch_size * 8];
-                self.netio_lock()
+                self.netio
                     .recv(reconstructor_id, &mut result_buffer)
                     .expect("Result reception failed");
 
@@ -813,7 +801,7 @@ impl<const P: u64> DNBackend<P> {
     ) -> Option<Vec<u64>> {
         ///  parallel_recv_from_many
         fn parallel_recv_from_many(
-            netio: Arc<Mutex<NetIO>>,
+            netio: Arc<NetIO>,
             from_ids: &[u32],
             item_count: usize,
         ) -> HashMap<u32, Vec<u64>> {
@@ -827,8 +815,8 @@ impl<const P: u64> DNBackend<P> {
                 let handle = thread::spawn(move || {
                     let mut buffer = vec![0u64; item_count];
                     {
-                        let mut net = netio_clone.lock().unwrap();
-                        net.recv(from_id, cast_slice_mut(&mut buffer))
+                        netio_clone
+                            .recv(from_id, cast_slice_mut(&mut buffer))
                             .expect("Recv failed");
                     }
                     results_clone.lock().unwrap().insert(from_id, buffer);
@@ -887,15 +875,9 @@ impl<const P: u64> DNBackend<P> {
                 for party_idx in 0..self.num_parties {
                     if party_idx != self.party_id {
                         self.netio
-                            .lock()
-                            .unwrap()
                             .send(party_idx, &result_buffer)
                             .expect("Broadcast send failed");
-                        self.netio
-                            .lock()
-                            .unwrap()
-                            .flush(party_idx)
-                            .expect("Broadcast flush failed");
+                        self.netio.flush(party_idx).expect("Broadcast flush failed");
                     }
                 }
             }
@@ -912,22 +894,14 @@ impl<const P: u64> DNBackend<P> {
             if should_send {
                 let share_buffer: Vec<u8> = shares.iter().flat_map(|&x| x.to_le_bytes()).collect();
                 self.netio
-                    .lock()
-                    .unwrap()
                     .send(reconstructor_id, &share_buffer)
                     .expect("Send to reconstructor failed");
-                self.netio
-                    .lock()
-                    .unwrap()
-                    .flush(reconstructor_id)
-                    .expect("Flush failed");
+                self.netio.flush(reconstructor_id).expect("Flush failed");
             }
 
             if broadcast_result {
                 let mut result_buffer = vec![0u8; batch_size * 8];
                 self.netio
-                    .lock()
-                    .unwrap()
                     .recv(reconstructor_id, &mut result_buffer)
                     .expect("Result recv failed");
 
@@ -1226,7 +1200,7 @@ impl<const P: u64> DNBackend<P> {
                 }
 
                 let mut batch_buffer = vec![0u8; batch_size * 8];
-                self.netio_lock()
+                self.netio
                     .recv(party_idx, &mut batch_buffer)
                     .expect("Share collection failed");
 
@@ -1252,10 +1226,10 @@ impl<const P: u64> DNBackend<P> {
 
                 for party_idx in 0..=self.num_threshold {
                     if party_idx != self.party_id {
-                        self.netio_lock()
+                        self.netio
                             .send(party_idx, &result_buffer)
                             .expect("Result broadcast failed");
-                        self.netio_lock()
+                        self.netio
                             .flush(party_idx)
                             .expect("Failed to flush network buffer");
                     }
@@ -1278,10 +1252,10 @@ impl<const P: u64> DNBackend<P> {
                     .flat_map(|&share| share.to_le_bytes())
                     .collect();
 
-                self.netio_lock()
+                self.netio
                     .send(reconstructor_id, &share_buffer)
                     .expect("Share sending failed");
-                self.netio_lock()
+                self.netio
                     .flush(reconstructor_id)
                     .expect("Failed to flush network buffer");
             }
@@ -1289,7 +1263,7 @@ impl<const P: u64> DNBackend<P> {
             // Receive results if they're being broadcast
             if broadcast_result {
                 let mut result_buffer = vec![0u8; batch_size * 8];
-                self.netio_lock()
+                self.netio
                     .recv(reconstructor_id, &mut result_buffer)
                     .expect("Result reception failed");
 
@@ -1311,10 +1285,10 @@ impl<const P: u64> DNBackend<P> {
             // println!("my party_id:{}, number_parties:{},",self.party_id, self.num_parties);
             let seed = self.prg.random_block();
             let seed_bytes: [u8; 16] = seed.into();
-            self.netio_lock()
+            self.netio
                 .send(id, &seed_bytes)
                 .expect("Seed distribution failed");
-            self.netio_lock()
+            self.netio
                 .flush(id)
                 .expect("Failed to flush network buffer");
             self.shared_prgs_pair_to_pair.push(Prg::from_seed(seed));
@@ -1330,7 +1304,7 @@ impl<const P: u64> DNBackend<P> {
             // receiver prg seed from party<my_party_id
             let mut seed_bytes = [0u8; 16];
             let len = self
-                .netio_lock()
+                .netio
                 .recv(id, &mut seed_bytes)
                 .expect("Seed reception failed");
             assert_eq!(len, 16, "Invalid PRG seed length");
@@ -1425,7 +1399,7 @@ impl<const P: u64> DNBackend<P> {
     fn receive_share_column(&mut self, dealer_id: u32, batch_size: usize) -> Vec<u64> {
         //println!("Party {} receiving from {}", self.party_id, dealer_id);
         let mut buffer = vec![0u64; batch_size];
-        self.netio_lock()
+        self.netio
             .recv(dealer_id, bytemuck::cast_slice_mut(&mut buffer))
             .expect("Receive failed");
         buffer

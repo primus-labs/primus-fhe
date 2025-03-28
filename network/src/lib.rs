@@ -17,17 +17,17 @@ pub trait IO {
     fn party_num(&self) -> u32;
 
     /// Send data to a party.
-    fn send(&mut self, party_id: u32, data: &[u8]) -> Result<(), error::NetIoError>;
+    fn send(&self, party_id: u32, data: &[u8]) -> Result<(), error::NetIoError>;
 
     /// Receive data from a party.
-    fn recv(&mut self, party_id: u32, buf: &mut [u8]) -> Result<usize, error::NetIoError>;
+    fn recv(&self, party_id: u32, buf: &mut [u8]) -> Result<usize, error::NetIoError>;
 
     /// Broadcast data to all parties.
-    fn broadcast(&mut self, data: &[u8]) -> Result<(), error::NetIoError>;
+    fn broadcast(&self, data: &[u8]) -> Result<(), error::NetIoError>;
 
     /// Flush the send buffer.
-    fn flush(&mut self, party_id: u32) -> Result<(), error::NetIoError>;
+    fn flush(&self, party_id: u32) -> Result<(), error::NetIoError>;
 
     /// Flush all send buffers.
-    fn flush_all(&mut self) -> Result<(), error::NetIoError>;
+    fn flush_all(&self) -> Result<(), error::NetIoError>;
 }
