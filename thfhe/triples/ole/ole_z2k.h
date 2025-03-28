@@ -17,22 +17,27 @@ class OLEZ2K {
     /* Compute the OLE protocol */
     void compute(uint64_t* out, const uint64_t* in, size_t length) {
         block* raw = new block[length * bit_length];
+        uint64_t *msg = new uint64_t[bit_length];
         if (!cmpBlock(&ot->Delta, &zero_block, 1)) {
+            block* pad = new block[bit_length << 1];
             ot->send_cot(raw, length * bit_length);
             for (size_t i = 0; i < length; ++i) {
                 out[i] = 0;
-                block pad[2]; uint64_t msg = 0;
                 for (size_t j = 0; j < bit_length; ++j) {
-                    pad[0] = raw[i * bit_length + j];
-                    pad[1] = raw[i * bit_length + j] ^ ot->Delta;
-                    ccrh.H<2>(pad, pad);
-                    msg = pad[0][0] + pad[1][0] + in[i];
-                    out[i] += (-pad[0][0]) << j;
-                    io->send_data(&msg, sizeof(uint64_t));
+                    pad[j << 1] = raw[i * bit_length + j];
+                    pad[j << 1 | 1] = raw[i * bit_length + j] ^ ot->Delta;
                 }
+                ccrh.Hn(pad, pad, bit_length << 1);
+                for (size_t j = 0; j < bit_length; ++j) {
+                    msg[j] = pad[j << 1][0] + pad[j << 1 | 1][0] + in[i];
+                    out[i] += (-pad[j << 1][0]) << j;
+                }
+                io->send_data(msg, sizeof(uint64_t) * bit_length);
                 io->flush();
             }
+            delete[] pad;
         } else {
+            block* pad = new block[bit_length];
             bool* bits = new bool[length * bit_length];
             for (size_t i = 0; i < length; ++i)
                 for (size_t j = 0; j < bit_length; ++j)
@@ -41,18 +46,23 @@ class OLEZ2K {
             ot->recv_cot(raw, bits, length * bit_length);
 
             for (size_t i = 0; i < length; ++i) {
-                out[i] = 0; uint64_t msg = 0;
+                out[i] = 0;
                 for (size_t j = 0; j < bit_length; ++j) {
-                    io->recv_data(&msg, sizeof(uint64_t));
-                    uint64_t pad = ccrh.H(raw[i * bit_length + j])[0];
+                    pad[j] = raw[i * bit_length + j];
+                }
+                ccrh.Hn(pad, pad, bit_length);
+                io->recv_data(msg, sizeof(uint64_t) * bit_length);
+                for (size_t j = 0; j < bit_length; ++j) {
                     if (bits[i * bit_length + j]) {
-                        pad = msg - pad;
+                        pad[j][0] = msg[j] - pad[j][0];
                     }
-                    out[i] += pad << j;
+                    out[i] += pad[j][0] << j;
                 }
             }
+            delete[] pad;
             delete[] bits;
         }
+        delete[] msg;
         delete[] raw;
     }
 };
