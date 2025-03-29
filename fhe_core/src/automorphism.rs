@@ -23,7 +23,7 @@ use crate::{NttRlweCiphertext, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 pub struct AutoKey<F: NttField> {
     degree: usize,
     key: NttGadgetRlwe<F>,
-    pub(crate)  ntt_table: Arc<<F as NttField>::Table>,
+    pub(crate) ntt_table: Arc<<F as NttField>::Table>,
 }
 
 /// Preallocated space for automorphism

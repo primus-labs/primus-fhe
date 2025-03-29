@@ -145,7 +145,7 @@ impl<T: UnsignedInteger> Distribution<T> for DiscreteGaussian<T> {
             let value = self.normal.sample(rng);
             if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
-                if round < 0.5 {
+                if round < -0.5 {
                     return self.modulus_minus_one - T::as_from(-round) + T::ONE;
                 } else {
                     return T::as_from(round);
