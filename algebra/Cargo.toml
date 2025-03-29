@@ -16,6 +16,8 @@ bigdecimal = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+csv = "1.3"
 
 [features]
 default = ["concrete-ntt"]
