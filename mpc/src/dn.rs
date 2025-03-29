@@ -832,26 +832,21 @@ impl<const P: u64> DNBackend<P> {
             let mut all_shares = vec![vec![0u64; (degree + 1) as usize]; batch_size];
             let pos = self.party_id.min(degree);
 
-            // 存自己 share
             for (i, &share) in shares.iter().enumerate() {
                 all_shares[i][pos as usize] = share;
             }
 
-            // 构建目标列表
             let from_ids: Vec<u32> = (0..=degree).filter(|&id| id != pos).collect();
 
-            // 并发接收
             let recv_map =
                 self.parallel_recv_from_many(Arc::clone(&self.netio), &from_ids, batch_size);
 
-            // 汇总所有 shares
             for (&from_id, share_vec) in &recv_map {
                 for (i, &val) in share_vec.iter().enumerate() {
                     all_shares[i][from_id as usize] = val;
                 }
             }
 
-            // 插值重构
             let results: Vec<u64> = all_shares
                 .iter()
                 .map(|shares| self.interpolate_polynomial(shares, lagrange_coef))
@@ -1175,6 +1170,9 @@ impl<const P: u64> DNBackend<P> {
         if self.party_id == reconstructor_id {
             // Reconstructor collects shares
             let mut all_shares = vec![vec![0u64; (degree + 1) as usize]; batch_size];
+            let from_ids: Vec<u32> = (0..=degree).filter(|&id| id != self.party_id).collect();
+            let recv_map =
+                self.parallel_recv_from_many(Arc::clone(&self.netio), &from_ids, batch_size);
 
             // Store own shares
             let pos = self.party_id.min(degree);
@@ -1183,20 +1181,9 @@ impl<const P: u64> DNBackend<P> {
             }
 
             // Collect shares from other parties
-            for party_idx in 0..=degree {
-                if party_idx == pos {
-                    continue;
-                }
-
-                let mut batch_buffer = vec![0u8; batch_size * 8];
-                self.netio
-                    .recv(party_idx, &mut batch_buffer)
-                    .expect("Share collection failed");
-
-                for i in 0..batch_size {
-                    let share_bytes = &batch_buffer[i * 8..(i + 1) * 8];
-                    all_shares[i][party_idx as usize] =
-                        u64::from_le_bytes(share_bytes.try_into().unwrap());
+            for (&from_id, share_vec) in &recv_map {
+                for (i, &val) in share_vec.iter().enumerate() {
+                    all_shares[i][from_id as usize] = val;
                 }
             }
 
@@ -1494,6 +1481,10 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
     }
 
     fn add_const(&self, a: Self::Sharing, b: u64) -> Self::Sharing {
+        <U64FieldEval<P>>::add(a, b)
+    }
+
+    fn add_const_pub(a: Self::Sharing, b: u64) -> Self::Sharing {
         <U64FieldEval<P>>::add(a, b)
     }
 

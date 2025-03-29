@@ -50,19 +50,26 @@ pub fn send_and_recv_data_all_parties(
     );
     tx.send(temp_backend.input_slice(e, len, sender_id).unwrap())
         .unwrap();
+    drop(tx);
 }
 
-pub fn send_and_recv_data_all_parties_mul_threads(
+pub fn send_and_recv_data_all_parties_mul_threads<Backend>(
     e: Option<&[u64]>,
     len: usize,
     myid: u32,
     num_parties: u32,
     num_threshold: u32,
     tx: channel::Sender<Vec<u64>>,
-) {
+    rx: channel::Receiver<Vec<u64>>,
+    b_chunk: &mut [Backend::Sharing],
+) where
+    Backend: MPCBackend,
+{
+    let txc = tx.clone();
+    drop(tx);
     std::thread::scope(|s| {
         for i in 0..num_parties {
-            let tx_clone = tx.clone();
+            let tx_clone = txc.clone();
             if i == myid {
                 s.spawn(move || {
                     send_and_recv_data_all_parties(
@@ -72,10 +79,10 @@ pub fn send_and_recv_data_all_parties_mul_threads(
                         num_parties,
                         num_threshold,
                         tx_clone,
-                        i,
+                        myid,
                     )
                 });
-            } else {
+            } else if i != myid {
                 s.spawn(move || {
                     send_and_recv_data_all_parties(
                         None,
@@ -89,6 +96,15 @@ pub fn send_and_recv_data_all_parties_mul_threads(
                 });
             };
         }
+        drop(txc);
+        s.spawn(move || {
+            for res in rx.iter() {
+                b_chunk
+                    .iter_mut()
+                    .zip(res.iter())
+                    .for_each(|(e, res)| *e = Backend::add_const_pub(*e, *res));
+            }
+        });
     });
 
     // for i in 0..num_parties {
@@ -197,22 +213,16 @@ where
             .zip(gaussian.sample_iter(&mut *rng))
             .for_each(|(e, res)| *e = res);
 
-        send_and_recv_data_all_parties_mul_threads(
+        send_and_recv_data_all_parties_mul_threads::<Backend>(
             Some(&e),
             chunk_size,
             id,
             backend.num_parties(),
             backend.num_threshold(),
-            tx.clone(),
+            tx,
+            rx,
+            b_chunk,
         );
-
-        drop(tx);
-        for res in rx.iter() {
-            b_chunk
-                .iter_mut()
-                .zip(res.iter())
-                .for_each(|(e, res)| *e = backend.add_const(*e, *res));
-        }
     }
 
     let end = std::time::Instant::now();

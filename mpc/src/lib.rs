@@ -17,7 +17,7 @@ type MPCResult<T> = Result<T, error::MPCErr>;
 /// MPC backend trait
 pub trait MPCBackend {
     /// Generic secret sharing type.
-    type Sharing: Clone + Copy + Default + Debug;
+    type Sharing: Clone + Copy + Default + Debug + Send;
 
     /// Generic field modulus type.
     type Modulus: FieldReduce<u64>;
@@ -48,6 +48,9 @@ pub trait MPCBackend {
 
     /// Add two secret shares.
     fn add_const(&self, a: Self::Sharing, b: u64) -> Self::Sharing;
+
+    /// Add two secret shares.
+    fn add_const_pub(a: Self::Sharing, b: u64) -> Self::Sharing;
 
     /// Subtract two secret shares.
     fn sub(&self, a: Self::Sharing, b: Self::Sharing) -> Self::Sharing;
