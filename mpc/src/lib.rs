@@ -93,7 +93,7 @@ pub trait MPCBackend {
 
     /// Input several secret values from a party (party_id). Inputs from all other parties are omitted.
     fn input_slice(
-        &mut self,
+        &self,
         values: Option<&[u64]>,
         batch_size: usize,
         party_id: u32,
@@ -222,6 +222,14 @@ pub trait MPCBackend {
         batch_size: usize,
         party_id: u32,
     ) -> MPCResult<Vec<Self::Sharing>>;
+
+    /// all parties sends slice to all parties, and sum them up with sum_result, e.g. sum_result = sum_result + \sum_{i=0}^{n-1} values
+    fn all_paries_sends_slice_to_all_parties_sum(
+        &self,
+        values: &[u64],
+        batch_size: usize,
+        sum_result: &mut [Self::Sharing],
+    );
 
     /// count double random times
     fn total_mul_triple_duration(&mut self) -> Duration;

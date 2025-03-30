@@ -9,3 +9,4 @@ network = { version = "0.1.0", path = "../network" }
 rand.workspace = true
 rand_core.workspace = true
 bytemuck = "1.22.0"
+crossbeam = "0.8.4"
