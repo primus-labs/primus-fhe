@@ -8,10 +8,8 @@ use serde::{Deserialize, Serialize};
 type ValueT = u64;
 
 const Q: ValueT = 1125899906826241;
-const MEAN: f64 = 0.0;
-
 const HALF_Q: ValueT = Q >> 1;
-const N: usize = 1 << 17;
+const N: usize = 1 << 16;
 
 fn main() {
     check_standard_deviation();
@@ -80,11 +78,24 @@ fn check_standard_deviation() {
     let mut rng = thread_rng();
 
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
-    let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
+    // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
+    let sigams: Vec<f64> = vec![10f64];
 
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
-        let distr = <DiscreteGaussian<ValueT>>::new(MEAN, sigma, Q - 1).unwrap();
+        let one_sigma = sigma.trunc() as ValueT;
+        let two_sigma = (sigma * 2.0).trunc() as ValueT;
+        let three_sigma = (sigma * 3.0).trunc() as ValueT;
+        let four_sigma = (sigma * 4.0).trunc() as ValueT;
+        let five_sigma = (sigma * 5.0).trunc() as ValueT;
+        let six_sigma = (sigma * 6.0).trunc() as ValueT;
+        let mut one_sigma_count = 0usize;
+        let mut two_sigma_count = 0usize;
+        let mut three_sigma_count = 0usize;
+        let mut four_sigma_count = 0usize;
+        let mut five_sigma_count = 0usize;
+        let mut six_sigma_count = 0usize;
+        let distr = <DiscreteGaussian<ValueT>>::new(0.0, sigma, Q - 1).unwrap();
         data.iter_mut()
             .zip(distr.sample_iter(&mut rng))
             .for_each(|(d, v)| *d = v);
@@ -93,8 +104,45 @@ fn check_standard_deviation() {
 
         let sum = data.iter().fold(BigDecimal::zero(), |acc, &x| {
             if x <= HALF_Q {
+                if x <= six_sigma {
+                    six_sigma_count += 1;
+                    if x <= five_sigma {
+                        five_sigma_count += 1;
+                        if x <= four_sigma {
+                            four_sigma_count += 1;
+                            if x <= three_sigma {
+                                three_sigma_count += 1;
+                                if x <= two_sigma {
+                                    two_sigma_count += 1;
+                                    if x <= one_sigma {
+                                        one_sigma_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 acc + x
             } else if x < Q {
+                let t = Q - x;
+                if t <= six_sigma {
+                    six_sigma_count += 1;
+                    if t <= five_sigma {
+                        five_sigma_count += 1;
+                        if t <= four_sigma {
+                            four_sigma_count += 1;
+                            if t <= three_sigma {
+                                three_sigma_count += 1;
+                                if t <= two_sigma {
+                                    two_sigma_count += 1;
+                                    if t <= one_sigma {
+                                        one_sigma_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 acc - (Q - x)
             } else {
                 panic!("Err value:{}", x);
@@ -111,5 +159,22 @@ fn check_standard_deviation() {
         }) / N as u64;
 
         println!("real standard deviation:{}\n", variance.sqrt().unwrap());
+        println!("one sigma count:{}", one_sigma_count);
+        println!("two sigma count:{}", two_sigma_count);
+        println!("three sigma count:{}", three_sigma_count);
+        println!("four sigma count:{}", four_sigma_count);
+        println!("five sigma count:{}", five_sigma_count);
+        println!("six sigma count:{}", six_sigma_count);
+        println!("one sigma ratio:{}", one_sigma_count as f64 / N as f64);
+        println!("two sigma ratio:{}", two_sigma_count as f64 / N as f64);
+        println!("three sigma ratio:{}", three_sigma_count as f64 / N as f64);
+        println!("four sigma ratio:{}", four_sigma_count as f64 / N as f64);
+        println!("five sigma ratio:{}", five_sigma_count as f64 / N as f64);
+        println!("six sigma ratio:{}", six_sigma_count as f64 / N as f64);
+        println!(
+            "more than six sigma ratio:{}",
+            1.0 - six_sigma_count as f64 / N as f64
+        );
+        println!("----------------------------------");
     }
 }
