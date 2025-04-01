@@ -3,7 +3,7 @@
 use crate::{error::MPCErr, MPCBackend, MPCResult};
 use algebra::ntt::NumberTheoryTransform;
 use algebra::random::Prg;
-use algebra::reduce::{Reduce, ReduceAdd, ReduceDotProduct, ReduceDouble, ReduceNeg, ReduceSub};
+use algebra::reduce::{Reduce, ReduceAdd, ReduceDouble, ReduceNeg, ReduceSub};
 use algebra::{modulus::PowOf2Modulus, Field, NttField, U64FieldEval};
 use bytemuck::{cast_slice, cast_slice_mut};
 use crossbeam::channel;

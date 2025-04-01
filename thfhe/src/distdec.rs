@@ -1,4 +1,4 @@
-use algebra::reduce::Reduce;
+use algebra::reduce::{Reduce, ReduceMul};
 use algebra::Field;
 use algebra::{modulus::PowOf2Modulus, reduce::ReduceInv};
 use mpc::MPCBackend;
@@ -155,8 +155,12 @@ where
     // let r_1:u64 = (0..len1).map(|i| bits[(len2-1) as usize]*(2 as u64 ).pow((i+len2)as u32)).sum();
     // return vec![r_2, r_1+r_2];
     //let bits = generate_shared_bits_z2k(backend, rng, len2 * triples_num, 64);
-    let bits =
-        generate_shared_bits_constant_round_z2k(backend, rng, len2 * triples_num, len2 as u32);
+    let bits = generate_shared_bits_constant_round_z2k(
+        backend,
+        rng,
+        len2 * triples_num,
+        (len1 + len2) as u32,
+    );
     let results: Vec<(u64, u64)> = bits
         .chunks(len2 as usize)
         .map(|chunk| {
@@ -166,7 +170,7 @@ where
                 .map(|(i, bit)| bit * (2u64.pow(i as u32)))
                 .sum::<u64>();
 
-            let high_bit = chunk[(len2 - 1) as usize]; // 最高位
+            let high_bit = chunk[(len2 - 1) as usize];
             let r_1 = (0..len1)
                 .map(|i| high_bit * (2u64.pow((i + len2) as u32)))
                 .sum::<u64>();
@@ -190,6 +194,7 @@ where
     let my_power: u32 = k;
     let m = 1u64 << my_power;
     let m_mod = <PowOf2Modulus<u64>>::new(m);
+
     let r_vec: Vec<u64> = (0..len).map(|_| rng.next_u64() as u64).collect();
     let shares = (0..=backend.num_threshold())
         .map(|i| {
@@ -248,7 +253,7 @@ where
     let b_vec: Vec<u64> = b_vec
         .iter()
         .zip(d_reverse.iter())
-        .map(|(&x, &y)| x * y)
+        .map(|(&x, &y)| m_mod.reduce_mul(x, y))
         .collect();
 
     b_vec
