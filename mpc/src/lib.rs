@@ -144,13 +144,13 @@ pub trait MPCBackend {
     fn ntt_poly_inplace(&self, poly: &mut [u64]);
 
     ///  multipliaction for shares over z2k
-    fn mul_element_wise_z2k(&mut self, a: &[u64], b: &[u64]) -> Vec<u64>;
+    fn mul_element_wise_z2k(&mut self, a: &[u64], b: &[u64], k: u32) -> Vec<u64>;
 
     /// init z2k triples, read triples from files
     fn init_z2k_triples_from_files(&mut self);
 
     /// Output a slice of secret values over z2k to all parties.
-    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64]) -> Vec<u64>;
+    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64], k: u32) -> Vec<u64>;
 
     /// test
     fn test_open_secrets_z2k(
@@ -162,7 +162,7 @@ pub trait MPCBackend {
     ) -> Option<Vec<u64>>;
 
     /// reveal_slice_z2k
-    fn reveal_slice_z2k(&mut self, shares: &[u64], party_id: u32) -> Vec<Option<u64>>;
+    fn reveal_slice_z2k(&mut self, shares: &[u64], party_id: u32, k: u32) -> Vec<Option<u64>>;
 
     /// input slice over z2k
     fn input_slice_z2k(
@@ -173,22 +173,22 @@ pub trait MPCBackend {
     ) -> Vec<u64>;
 
     /// add vec additive secret sharing over z2k
-    fn add_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64>;
+    fn add_z2k_slice(&self, a: &[u64], b: &[u64], k: u32) -> Vec<u64>;
 
     /// sub vec additive secret sharing over z2k
-    fn sub_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64>;
+    fn sub_z2k_slice(&self, a: &[u64], b: &[u64], k: u32) -> Vec<u64>;
 
     /// double vec additive secret sharing over z2k
-    fn double_z2k_slice(&self, a: &[u64]) -> Vec<u64>;
+    fn double_z2k_slice(&self, a: &[u64], k: u32) -> Vec<u64>;
 
     /// convert additive secret sharing to additive secret sharing
     fn shamir_secrets_to_additive_secrets(&mut self, shares: &[Self::Sharing]) -> Vec<u64>;
 
     /// addition between a consant a and an additive secret sharing b
-    fn add_z2k_const(&mut self, a: u64, b: u64) -> u64;
+    fn add_z2k_const(&mut self, a: u64, b: u64, k: u32) -> u64;
 
-    /// sub between a consant a and an additive secret sharing b over z2k
-    fn sub_z2k_const(&mut self, a: u64, b: u64) -> u64;
+    /// return additive secret sharing of a-b where a is const and b is additive sharing
+    fn sub_z2k_const(&mut self, a: u64, b: u64, k: u32) -> u64;
 
     /// sub between a consant a and an additive secret sharing b over F_p
     fn sub_additive_const_p(&mut self, a: u64, b: u64) -> u64;
@@ -233,4 +233,7 @@ pub trait MPCBackend {
 
     /// count double random times
     fn total_mul_triple_duration(&mut self) -> Duration;
+
+    /// return additive secret sharing of a-b where a is additive sharing and b is const
+    fn sub_z2k_const_a_sub_c(&mut self, a: u64, b: u64, k: u32) -> u64;
 }

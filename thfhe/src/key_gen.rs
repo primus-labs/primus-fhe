@@ -39,13 +39,13 @@ impl KeyGen {
     {
         let id = backend.party_id();
 
-        let start = std::time::Instant::now();
+        //let start = std::time::Instant::now();
         let sk = MPCSecretKeyPack::new(backend, params);
-        println!(
-            "Party {} had generated the secret key pack with time {:?}",
-            id,
-            start.elapsed()
-        );
+        // println!(
+        //     "Party {} had finished the secret key pack with time {:?}",
+        //     id,
+        //     start.elapsed()
+        // );
 
         let input_lwe_params = params.input_lwe_params();
         let key_switching_params = params.key_switching_params();
@@ -66,7 +66,7 @@ impl KeyGen {
         .into();
 
         println!(
-            "Party {} had generated the lwe public key with time {:?}",
+            "Party {} had finished the lwe public key with time {:?}",
             id,
             start.elapsed()
         );
@@ -89,7 +89,7 @@ impl KeyGen {
         )
         .to_fhe_ksk(key_switching_params, key_switching_key_basis);
         println!(
-            "Party {} had generated the key switching key with time {:?}",
+            "Party {} had finished the key switching key with time {:?}",
             id,
             start.elapsed()
         );
@@ -106,7 +106,7 @@ impl KeyGen {
         .to_fhe_binary_bsk(blind_rotation_params.dimension);
 
         println!(
-            "Party {} had generated the bootstrapping key with time {:?}",
+            "Party {} had finished the bootstrapping key with time {:?}",
             id,
             start.elapsed()
         );

@@ -1,3 +1,4 @@
+/// cargo run --package thfhe --example thfhe --release -- -n 3
 use std::thread;
 
 use algebra::Field;
@@ -12,17 +13,17 @@ struct Args {
     /// 参数 n
     #[arg(short = 'n')]
     n: u32,
-
-    /// 参数 t
-    #[arg(short = 't')]
-    t: u32,
+    // 参数 t
+    // #[arg(short = 't')]
+    // t: u32,
 }
 
 fn main() {
     let args = Args::parse();
     //const NUM_PARTIES: u32 =args.n;
     let number_parties = args.n;
-    let number_threshold = args.t;
+    //let number_threshold = args.t;
+    let number_threshold = (number_parties - 1) / 2;
     //const THRESHOLD: u32 = args.t;
     const BASE_PORT: u32 = 20500;
 
@@ -51,29 +52,25 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
         party_id,
         num_parties,
         threshold,
-        5600,
+        1,
         participants,
         parameters.ring_dimension(),
         true,
         true,
     );
+    println!(
+        "Party {} had finished the double randoms with time {} ns,",
+        party_id,
+        backend.total_mul_triple_duration().as_nanos()
+    );
 
     let (sk, pk, evk) = KeyGen::generate_mpc_key_pair(&mut backend, **parameters, rng);
-    println!(
-        "Party {} has generated the secret key, public key, and evaluation key.",
-        party_id
-    );
 
     let evaluator = Evaluator::new(evk);
 
     let test_num = 1;
     let mut public_a: Vec<Vec<u64>> = Vec::with_capacity(test_num);
     let mut public_b: Vec<u64> = Vec::new();
-
-    println!(
-        "double randoms cost {} ns,",
-        backend.total_mul_triple_duration().as_nanos()
-    );
 
     backend.init_z2k_triples_from_files();
     let a = 2;
@@ -93,7 +90,18 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
     if party_id <= threshold {
         let my_sk = sk.input_lwe_secret_key.as_ref();
 
-        let my_dd_res = distdec(&mut backend, rng, &public_a, &public_b, my_sk);
+        let (my_dd_res, (online_duration, offline_duration)) =
+            distdec(&mut backend, rng, &public_a, &public_b, my_sk);
+        println!(
+            "Party {} had finished the dd-online with time {} ns,",
+            party_id,
+            online_duration.as_nanos()
+        );
+        println!(
+            "Party {} had finished the dd-offline with time {} ns,",
+            party_id,
+            offline_duration.as_nanos()
+        );
 
         if party_id == 0 {
             println!(
@@ -104,5 +112,9 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
             );
         }
     }
-    println!("Party {} took {:?} to finish.", party_id, start.elapsed());
+    println!(
+        "Party {} had finished the program with time {:?}",
+        party_id,
+        start.elapsed()
+    );
 }

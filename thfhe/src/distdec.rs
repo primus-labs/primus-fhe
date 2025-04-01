@@ -1,9 +1,10 @@
-use algebra::modulus::PowOf2Modulus;
 use algebra::reduce::Reduce;
 use algebra::Field;
+use algebra::{modulus::PowOf2Modulus, reduce::ReduceInv};
 use mpc::MPCBackend;
 use rand::Rng;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use std::u64;
 
 use crate::parameter::{Fp, DEFAULT_128_BITS_PARAMETERS};
 
@@ -13,7 +14,7 @@ pub fn distdec<Backend, R>(
     a: &[Vec<u64>],
     b: &[u64],
     shared_secret_key: &[Backend::Sharing],
-) -> Option<Vec<u64>>
+) -> (Option<Vec<u64>>, (Duration, Duration))
 where
     Backend: MPCBackend,
     R: Rng,
@@ -38,12 +39,7 @@ where
         (v_delta as f64).log2() as u64,
         b.len() as u64,
     );
-    let duration = start.elapsed();
-    println!(
-        "DD offline, prepare {} eda elements, Time elapsed: {} ns",
-        b.len(),
-        duration.as_nanos()
-    );
+    let offline_duration = start.elapsed();
 
     let start = Instant::now();
 
@@ -71,16 +67,10 @@ where
 
     // compute e_prime_shares + r_shares over v_delta and reveal
     let res: Vec<u64> = backend
-        .reveal_slice_to_all_z2k(&res_vec)
+        .reveal_slice_to_all_z2k(&res_vec, 64)
         .iter()
         .map(|x| v_delta_mod.reduce(*x))
         .collect();
-
-    // let real_res = if res > v_delta/2{
-    //     res +  rho-v_delta
-    // }else{
-    //     res
-    // };
 
     let real_res: Vec<u64> = res
         .iter()
@@ -88,17 +78,17 @@ where
         .zip(u_prime_shares_vec.iter())
         .map(|((ax, (_, bx)), cx)| {
             if *ax > (v_delta >> 1) {
-                rho_mod
-                    .reduce(*cx - rho_mod.reduce(backend.sub_z2k_const(*ax + rho - v_delta, *bx)))
+                rho_mod.reduce(
+                    *cx - rho_mod.reduce(backend.sub_z2k_const(*ax + rho - v_delta, *bx, 64)),
+                )
             } else {
-                rho_mod.reduce(*cx - rho_mod.reduce(backend.sub_z2k_const(*ax, *bx)))
+                rho_mod.reduce(*cx - rho_mod.reduce(backend.sub_z2k_const(*ax, *bx, 64)))
             }
         })
         .collect();
 
-    let res = backend.reveal_slice_z2k(&real_res, 0);
-    let duration = start.elapsed();
-    println!("DD online, Time elapsed: {} ns", duration.as_nanos());
+    let res = backend.reveal_slice_z2k(&real_res, 0, 64);
+    let online_duration = start.elapsed();
 
     if backend.party_id() == 0 {
         let result: Option<Vec<u64>> = Some(
@@ -107,9 +97,9 @@ where
                 .collect(),
         );
         //println!("eda_elements:{:?}, result before div: {}, result: {}",open_eda_elements,result1,result);
-        result
+        (result, (online_duration, offline_duration))
     } else {
-        None
+        (None, (online_duration, offline_duration))
     }
     //modulus switch
 }
@@ -140,10 +130,10 @@ where
     b_vec_share
         .into_iter()
         .reduce(|b_x, b_y| {
-            let temp1 = backend.add_z2k_slice(&b_x, &b_y);
-            let temp2 = backend.mul_element_wise_z2k(&b_x, &b_y);
-            let temp3 = backend.double_z2k_slice(&temp2);
-            backend.sub_z2k_slice(&temp1, &temp3)
+            let temp1 = backend.add_z2k_slice(&b_x, &b_y, 64);
+            let temp2 = backend.mul_element_wise_z2k(&b_x, &b_y, 64);
+            let temp3 = backend.double_z2k_slice(&temp2, 64);
+            backend.sub_z2k_slice(&temp1, &temp3, 64)
         })
         .unwrap()
 }
@@ -164,7 +154,9 @@ where
     // let r_2:u64 = (0..len2).map(|i| bits[i as usize]*((2 as u64).pow(i as u32))).sum();
     // let r_1:u64 = (0..len1).map(|i| bits[(len2-1) as usize]*(2 as u64 ).pow((i+len2)as u32)).sum();
     // return vec![r_2, r_1+r_2];
-    let bits = generate_shared_bits_z2k(backend, rng, len2 * triples_num);
+    //let bits = generate_shared_bits_z2k(backend, rng, len2 * triples_num, 64);
+    let bits =
+        generate_shared_bits_constant_round_z2k(backend, rng, len2 * triples_num, len2 as u32);
     let results: Vec<(u64, u64)> = bits
         .chunks(len2 as usize)
         .map(|chunk| {
@@ -183,4 +175,123 @@ where
         })
         .collect();
     results
+}
+
+pub fn generate_shared_bits_constant_round_z2k<Backend, R>(
+    backend: &mut Backend,
+    rng: &mut R,
+    len: u64,
+    k: u32,
+) -> Vec<u64>
+where
+    Backend: MPCBackend,
+    R: Rng,
+{
+    let my_power: u32 = k;
+    let m = 1u64 << my_power;
+    let m_mod = <PowOf2Modulus<u64>>::new(m);
+    let r_vec: Vec<u64> = (0..len).map(|_| rng.next_u64() as u64).collect();
+    let shares = (0..=backend.num_threshold())
+        .map(|i| {
+            if backend.party_id() == i {
+                backend.input_slice_with_prg_z2k(Some(&r_vec), len as usize, i)
+            } else {
+                backend.input_slice_with_prg_z2k(None, len as usize, i)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let a_vec = shares
+        .into_iter()
+        .reduce(|x, y| backend.add_z2k_slice(&x, &y, my_power))
+        .unwrap();
+
+    let u_vec = backend.mul_element_wise_z2k(&a_vec, &a_vec, my_power);
+
+    let v_vec = backend.add_z2k_slice(&u_vec, &a_vec, my_power);
+    let v_vec_open = backend.reveal_slice_to_all_z2k(&v_vec, my_power);
+
+    let r_vec: Vec<Option<u64>> = v_vec_open
+        .iter()
+        .map(|x| solve(m_mod.reduce(*x), k))
+        .collect();
+
+    let r_vec: Vec<u64> = r_vec
+        .iter()
+        .map(|x| if let Some(x) = x { *x } else { 0u64 })
+        .collect::<Vec<_>>();
+
+    let d_vec: Vec<u64> = r_vec
+        .iter()
+        .map(|x| m_mod.reduce((1u64 << my_power) - 1 - 2 * m_mod.reduce(*x)))
+        .collect::<Vec<_>>();
+
+    // compute d^{-1}
+    let d_reverse: Vec<u64> = if my_power < 64 {
+        d_vec.iter().map(|&x| m.reduce_inv(x)).collect()
+    } else {
+        let m = 1u128 << my_power;
+        d_vec
+            .iter()
+            .map(|&x| m.reduce_inv(x as u128) as u64)
+            .collect()
+    };
+
+    // a-r
+    let b_vec: Vec<u64> = a_vec
+        .iter()
+        .zip(r_vec.iter())
+        .map(|(x, y)| backend.sub_z2k_const_a_sub_c(*x, *y, my_power))
+        .collect();
+
+    // (a-r)*(d^{-1})
+    let b_vec: Vec<u64> = b_vec
+        .iter()
+        .zip(d_reverse.iter())
+        .map(|(&x, &y)| x * y)
+        .collect();
+
+    b_vec
+}
+
+pub fn solve(v: u64, k: u32) -> Option<u64> {
+    // if modulus 2^0 = 1
+    if k == 0 {
+        return Some(0);
+    }
+    // cpmpute mask (1 << k) - 1
+    let mask: u64 = if k < 64 {
+        (1u64 << k) - 1
+    } else {
+        u64::MAX // 2^64 - 1
+    };
+    //
+    let v_mod = v & mask;
+    //
+    if v_mod & 1 == 1 {
+        return None;
+    }
+    //
+    let mut x = 0u128; // init soluation X ≡ 0 (mod 2)
+    let v_mod_128 = v_mod as u128;
+    //  mod 2^2, 2^3, ..., 2^k
+    for i in 1..k {
+        // 2^(i+1)
+        let mod_val = 1u128 << (i + 1); // 2^(i+1)
+        let mask_cur = mod_val - 1; // mask 2^(i+1) - 1
+                                    // Compute f(X) = X^2 + X - v mod 2^(i+1)
+        let lhs = (x * x + x) & mask_cur; // X^2 + X mod 2^(i+1)
+        let rhs = v_mod_128 & mask_cur; // v mod  2^(i+1)
+                                        //  Compute (lhs - rhs) mod 2^(i+1)
+        let f_mod = (lhs + mod_val - rhs) & mask_cur;
+        //  f_mod = (X^2 + X - v) mod 2^(i+1)，and satisfy f_mod can be divied by 2^i
+        // Compute E = f_mod / 2^i ）
+        let e_div_2i = f_mod >> i;
+        // Based on Hensel lemma
+        let t = (e_div_2i & 1) as u128;
+
+        x += t << i;
+    }
+
+    Some(x as u64)
 }

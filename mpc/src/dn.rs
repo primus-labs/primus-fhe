@@ -1,10 +1,10 @@
 //! DN07 protocol implementation (Damgård-Nielsen 2007) for honest-majority MPC.
 //! Provides t-privacy in an (n,t) threshold setting where n > 2t.
-
 use crate::{error::MPCErr, MPCBackend, MPCResult};
 use algebra::ntt::NumberTheoryTransform;
 use algebra::random::Prg;
-use algebra::{Field, NttField, U64FieldEval};
+use algebra::reduce::{Reduce, ReduceAdd, ReduceDotProduct, ReduceDouble, ReduceNeg, ReduceSub};
+use algebra::{modulus::PowOf2Modulus, Field, NttField, U64FieldEval};
 use bytemuck::{cast_slice, cast_slice_mut};
 use crossbeam::channel;
 use network::netio::{NetIO, Participant};
@@ -64,6 +64,9 @@ pub struct DNBackend<const P: u64> {
 
     //count multiplication
     mul_count: u32,
+
+    // count z2k multiplication
+    mul_count_z2k: u32,
 }
 
 impl<const P: u64> DNBackend<P> {
@@ -124,6 +127,7 @@ impl<const P: u64> DNBackend<P> {
             .unwrap(),
             total_mul_triple_duration: Duration::ZERO,
             mul_count: 0,
+            mul_count_z2k: 0,
         };
 
         // Generate initial supply of triples
@@ -219,58 +223,57 @@ impl<const P: u64> DNBackend<P> {
     ) -> Vec<u64> {
         let (start_id, end_id) = target_range;
         let party_id = self.party_id;
-        let van_matrix_ref = Arc::new(self.van_matrix.clone());
+        let van_matrix_ref = &self.van_matrix;
         let (tx, rx) = mpsc::channel::<Vec<u64>>();
 
-        let values = Arc::new(values.to_vec());
+        let my_shares = std::thread::scope(|s| {
+            for pid in start_id..end_id {
+                let netio = Arc::clone(&self.netio);
+                let tx = tx.clone();
+                let my_pid = party_id;
+                let mut prg = self.prg.clone();
+                s.spawn(move || {
+                    // Send incrementally per share (streaming)
+                    let mut share_column = vec![0u64; values.len()];
+                    let field_mask = u64::MAX >> P.leading_zeros();
 
-        let mut handles = vec![];
+                    for (&val, share_ele) in values.iter().zip(share_column.iter_mut()) {
+                        let mut coeffs = vec![0u64; degree + 1];
+                        coeffs[0] = val;
 
-        for pid in start_id..end_id {
-            let netio = Arc::clone(&self.netio);
-            let tx = tx.clone();
-            let values = Arc::clone(&values);
-            let my_pid = party_id;
-            let mut prg = self.prg.clone();
-            let van_matrix_ref = Arc::clone(&van_matrix_ref);
-            handles.push(std::thread::spawn(move || {
-                // Send incrementally per share (streaming)
-                let mut share_column = vec![0u64; values.len()];
-                let field_mask = u64::MAX >> P.leading_zeros();
-
-                for (&val, share_ele) in values.iter().zip(share_column.iter_mut()) {
-                    let mut coeffs = vec![0u64; degree + 1];
-                    coeffs[0] = val;
-
-                    for coeff in coeffs.iter_mut().take(degree + 1).skip(1) {
-                        *coeff = loop {
-                            let r = prg.next_u64() & field_mask;
-                            if r < P {
-                                break r;
-                            }
-                        };
+                        for coeff in coeffs.iter_mut().take(degree + 1).skip(1) {
+                            *coeff = loop {
+                                let r = prg.next_u64() & field_mask;
+                                if r < P {
+                                    break r;
+                                }
+                            };
+                        }
+                        let share = (1..=degree).fold(coeffs[0], |sum, j| {
+                            <U64FieldEval<P>>::mul_add(
+                                coeffs[j],
+                                van_matrix_ref[j][pid as usize],
+                                sum,
+                            )
+                        });
+                        *share_ele = share;
                     }
-                    let share = (1..=degree).fold(coeffs[0], |sum, j| {
-                        <U64FieldEval<P>>::mul_add(coeffs[j], van_matrix_ref[j][pid as usize], sum)
-                    });
-                    *share_ele = share;
-                }
 
-                if pid != my_pid {
-                    let data = bytemuck::cast_slice(&share_column).to_vec();
-                    netio.send(pid, &data).expect("Send failed");
-                    netio.flush(pid).expect("Flush failed");
-                } else {
-                    tx.send(share_column).expect("Send failed");
-                }
-            }));
-        }
+                    if pid != my_pid {
+                        let data = bytemuck::cast_slice(&share_column);
+                        netio.send(pid, data).expect("Send failed");
+                        netio.flush(pid).expect("Flush failed");
+                    } else {
+                        tx.send(share_column).expect("Send failed");
+                    }
+                });
+            }
 
-        let my_shares = rx.recv().expect("Receive my_share failed");
-        for h in handles {
-            h.join().expect("Thread panicked");
-        }
-
+            rx.recv().expect("Receive my_share failed")
+            // for h in handles {
+            //     h.join().expect("Thread panicked");
+            // }
+        });
         my_shares
     }
 
@@ -407,7 +410,7 @@ impl<const P: u64> DNBackend<P> {
     }
 
     fn share_secrets_parallel(
-        &mut self,
+        &self,
         dealer_id: u32,
         batch_size: usize,
         shares: Option<&Vec<Vec<u64>>>,
@@ -433,11 +436,11 @@ impl<const P: u64> DNBackend<P> {
                     .collect();
 
                 let netio_clone = Arc::clone(&self.netio);
-                let data_bytes = cast_slice(&share_column).to_vec(); // owned
 
                 handles.push(std::thread::spawn(move || {
+                    let data_bytes = cast_slice(&share_column);
                     netio_clone
-                        .send(party_idx, &data_bytes)
+                        .send(party_idx, data_bytes)
                         .expect("Send failed");
                     netio_clone.flush(party_idx).expect("Flush failed");
                 }));
@@ -541,67 +544,6 @@ impl<const P: u64> DNBackend<P> {
         }
 
         inv_matrix
-    }
-
-    /// Distributes shares from a dealer to selected parties.
-    fn share_secrets(
-        &mut self,
-        dealer_id: u32,
-        batch_size: usize,
-        shares: Option<&Vec<Vec<u64>>>,
-        target_range: (u32, u32),
-    ) -> Vec<u64> {
-        // Default range is all parties
-        let (start_id, end_id) = target_range;
-
-        if self.party_id == dealer_id {
-            let all_shares = shares.expect("Dealer must provide shares");
-
-            let mut share_buffer = vec![0u64; batch_size];
-
-            // Send shares only to parties in the target range
-            for party_idx in start_id..end_id {
-                if party_idx == self.party_id {
-                    continue;
-                }
-
-                share_buffer
-                    .iter_mut()
-                    .zip(all_shares.iter())
-                    .for_each(|(share, share_vec)| {
-                        *share = share_vec[party_idx as usize];
-                    });
-
-                self.netio
-                    .send(party_idx, cast_slice(&share_buffer))
-                    .expect("Share distribution failed");
-                self.netio
-                    .flush(party_idx)
-                    .expect("Failed to flush network buffer");
-            }
-
-            // Return own shares
-            share_buffer
-                .iter_mut()
-                .zip(all_shares.iter())
-                .for_each(|(share, share_vec)| {
-                    *share = share_vec[self.party_id as usize];
-                });
-
-            share_buffer
-        } else if self.party_id >= start_id && self.party_id < end_id {
-            // Only receive shares if we're in the target range
-            let mut buffer = vec![0u64; batch_size];
-
-            self.netio
-                .recv(dealer_id, cast_slice_mut(&mut buffer))
-                .expect("Share reception failed");
-
-            buffer
-        } else {
-            // Not in target range, return empty shares
-            vec![0u64; batch_size]
-        }
     }
 
     /// Distributes shares from a dealer to selected parties with prg.
@@ -1034,7 +976,11 @@ impl<const P: u64> DNBackend<P> {
     fn generate_doublerandoms(&mut self, count: usize) {
         self.doublerandom_buffer.clear();
 
-        const MAX_BATCH_SIZE: usize = 128;
+        const MAX_BATCH_SIZE: usize = 6000;
+
+        // n = 5, t=2, n-t=3, count=3000, count/(n-t)=1000
+        // batch_size = 1000
+        //current_batch_size = min(1000, (3000-0)/(3)) = 0
         let batch_size =
             MAX_BATCH_SIZE.min(count / (self.num_parties - self.num_threshold) as usize);
 
@@ -1043,7 +989,6 @@ impl<const P: u64> DNBackend<P> {
                 (count - self.doublerandom_buffer.len())
                     / (self.num_parties - self.num_threshold) as usize,
             );
-
             let new_doublerandoms = self.create_double_randoms_batch(current_batch_size);
             self.doublerandom_buffer.extend(new_doublerandoms);
         }
@@ -1119,29 +1064,27 @@ impl<const P: u64> DNBackend<P> {
     /// Generates a batch of double randoms ([r]_t, [r]_{2t}).
     fn create_double_randoms_batch(&mut self, batch_size: usize) -> Vec<(u64, u64)> {
         let start = Instant::now();
-
         let output_size = batch_size * (self.num_parties - self.num_threshold) as usize;
         let t_degree = self.num_threshold as usize;
 
-        // Generate random masks with both t and 2t degree polynomials
         let mut random_masks = vec![0u64; batch_size];
         self.gen_random_field(&mut random_masks);
+
         let all_mask_t_shares = self.collect_party_shares(
             &vec![batch_size; self.num_parties as usize],
             &random_masks,
             t_degree,
         );
+
         let all_mask_2t_shares = self.collect_party_shares(
             &vec![batch_size; self.num_parties as usize],
             &random_masks,
             t_degree * 2,
         );
 
-        // Apply Vandermonde combinations to derive final shares
         let mask_t_shares = self.vandermonde_combine(&all_mask_t_shares, batch_size, output_size);
         let mask_2t_shares = self.vandermonde_combine(&all_mask_2t_shares, batch_size, output_size);
 
-        //return result
         let ret: Vec<(u64, u64)> = mask_t_shares
             .iter()
             .cloned()
@@ -1149,6 +1092,7 @@ impl<const P: u64> DNBackend<P> {
             .collect();
 
         self.total_mul_triple_duration += start.elapsed();
+
         ret
     }
 
@@ -1214,6 +1158,16 @@ impl<const P: u64> DNBackend<P> {
             }
         }
 
+        // for party_idx in 0..self.num_parties {
+        //     let shares = (party_idx == self.party_id).then_some(&our_shares);
+        //     let party_shares = self.share_secrets_parallel(
+        //         party_idx,
+        //         size[party_idx as usize],
+        //         shares,
+        //         (0, self.num_parties),
+        //     );
+        //     all_shares.extend_from_slice(&party_shares);
+        // }
         all_shares
     }
 
@@ -1448,19 +1402,16 @@ impl<const P: u64> DNBackend<P> {
         let result: Vec<Vec<u64>> = values
             .iter()
             .map(|&value| {
-                // Step 1: 生成 f(0) 到 f(t)
                 let mut fpoint: Vec<u64> = Vec::with_capacity(self.num_threshold as usize + 1);
                 fpoint.push(value); // f(0)
                 fpoint.extend((0..degree).map(|j| self.shared_prgs_pair_to_pair[j].next_u64()));
 
-                // Step 2: 计算多项式系数 coeff_vec
                 let coeff: Vec<u64> = self
                     .reverse_vander_matrix
                     .iter()
                     .map(|row| <U64FieldEval<P>>::dot_product(&fpoint, row))
                     .collect();
 
-                // Step 3: 计算 f(t+1) 到 f(n-1)
                 let extra_shares: Vec<u64> = ((self.num_threshold as usize)
                     ..(self.num_parties as usize))
                     .map(|party_idx| {
@@ -1470,7 +1421,6 @@ impl<const P: u64> DNBackend<P> {
                     })
                     .collect();
 
-                // Step 4: 拼接 f(1..=t) 和 extra_shares
                 fpoint[1..]
                     .iter()
                     .chain(extra_shares.iter())
@@ -1489,6 +1439,47 @@ impl<const P: u64> DNBackend<P> {
             .recv(dealer_id, bytemuck::cast_slice_mut(&mut buffer))
             .expect("Receive failed");
         buffer
+    }
+
+    /// generates shares and sends to all parties
+    fn all_parties_generate_shares_and_sends_to_all_parties(
+        &mut self,
+        values: &[u64],
+        batch_size: usize,
+        degree: usize,
+    ) -> Vec<u64> {
+        let shares = self.generate_shares(values, degree);
+        let shares_clone = Arc::new(shares);
+        let self_ref = &*self;
+        let my_id = self_ref.party_id;
+        let num_parties = self_ref.num_parties;
+
+        let results = std::thread::scope(|s| {
+            let mut handles = Vec::new();
+            for i in 0..self_ref.num_parties {
+                let shares_clone = Arc::clone(&shares_clone);
+                let handle = s.spawn(move || {
+                    if i == my_id {
+                        self_ref.share_secrets_parallel(
+                            i,
+                            batch_size,
+                            Some(&shares_clone),
+                            (0, num_parties),
+                        )
+                    } else {
+                        self_ref.receive_share_column(i, batch_size)
+                    }
+                });
+                handles.push(handle);
+            }
+            // Wait for all threads to finish and collect results
+            handles
+                .into_iter()
+                .flat_map(|handle| handle.join().unwrap().into_iter())
+                .collect::<Vec<u64>>()
+        });
+
+        results
     }
 }
 
@@ -1541,25 +1532,50 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
 
     fn inner_product_additive_const_p(&mut self, a: &[u64], b: &[u64]) -> u64 {
         <U64FieldEval<P>>::dot_product(a, b)
-        // let sum = a.iter().zip(b.iter()).fold(0, |acc, (&share, &constant)| {
-        //     <U64FieldEval<P>>::mul_add(share, constant, acc)
-        // });
-        // sum
     }
 
     /// return additive secret sharing of a-b where a is const and b is additive sharing
-    fn sub_z2k_const(&mut self, a: u64, b: u64) -> u64 {
+    fn sub_z2k_const(&mut self, a: u64, b: u64, k: u32) -> u64 {
         if self.party_id() == 0 {
-            a - b
+            if k < 64 {
+                let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+                m_mod.reduce_sub(a, b)
+            } else {
+                a.wrapping_sub(b)
+            }
         } else {
-            0 - b
+            if k < 64 {
+                let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+                m_mod.reduce_neg(b)
+            } else {
+                b.wrapping_neg()
+            }
+        }
+    }
+
+    /// return additive secret sharing of a-b where a is additive sharing and b is const
+    fn sub_z2k_const_a_sub_c(&mut self, a: u64, b: u64, k: u32) -> u64 {
+        if self.party_id() == 0 {
+            if k < 64 {
+                let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+                m_mod.reduce_sub(a, b)
+            } else {
+                a.wrapping_sub(b)
+            }
+        } else {
+            a
         }
     }
 
     /// return additive secret sharing of a+b where a is const and b is additive sharing
-    fn add_z2k_const(&mut self, a: u64, b: u64) -> u64 {
+    fn add_z2k_const(&mut self, a: u64, b: u64, k: u32) -> u64 {
         if self.party_id() == 0 {
-            a + b
+            if k < 64 {
+                let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+                m_mod.reduce_add(a, b)
+            } else {
+                a.wrapping_add(b)
+            }
         } else {
             b
         }
@@ -1570,20 +1586,45 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         self.total_mul_triple_duration
     }
 
-    fn add_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64> {
+    fn add_z2k_slice(&self, a: &[u64], b: &[u64], k: u32) -> Vec<u64> {
         assert_eq!(a.len(), b.len(), "vectors must be of the same length");
-
-        a.iter().zip(b.iter()).map(|(x, y)| x + y).collect()
+        if k < 64 {
+            let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+            a.iter()
+                .zip(b.iter())
+                .map(|(&x, &y)| m_mod.reduce_add(x, y))
+                .collect()
+        } else {
+            a.iter()
+                .zip(b.iter())
+                .map(|(x, &y)| x.wrapping_add(y))
+                .collect()
+        }
     }
 
-    fn sub_z2k_slice(&self, a: &[u64], b: &[u64]) -> Vec<u64> {
+    fn sub_z2k_slice(&self, a: &[u64], b: &[u64], k: u32) -> Vec<u64> {
         assert_eq!(a.len(), b.len(), "vectors must be of the same length");
-
-        a.iter().zip(b.iter()).map(|(x, y)| x - y).collect()
+        if k < 64 {
+            let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+            a.iter()
+                .zip(b.iter())
+                .map(|(&x, &y)| m_mod.reduce_sub(x, y))
+                .collect()
+        } else {
+            a.iter()
+                .zip(b.iter())
+                .map(|(x, &y)| x.wrapping_sub(y))
+                .collect()
+        }
     }
 
-    fn double_z2k_slice(&self, a: &[u64]) -> Vec<u64> {
-        a.iter().map(|x| 2 * x).collect()
+    fn double_z2k_slice(&self, a: &[u64], k: u32) -> Vec<u64> {
+        if k < 64 {
+            let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+            a.iter().map(|&x| m_mod.reduce_double(x)).collect()
+        } else {
+            a.iter().map(|x| x.wrapping_shl(1)).collect()
+        }
     }
 
     fn double(&self, a: Self::Sharing) -> Self::Sharing {
@@ -1615,7 +1656,9 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(result[0])
     }
 
-    fn mul_element_wise_z2k(&mut self, a: &[u64], b: &[u64]) -> Vec<u64> {
+    fn mul_element_wise_z2k(&mut self, a: &[u64], b: &[u64], k: u32) -> Vec<u64> {
+        self.mul_count_z2k = self.mul_count_z2k + a.len() as u32;
+        println!("mul count z2k: {}", self.mul_count_z2k);
         assert_eq!(a.len(), b.len(), "Input vector lengths must match");
         let batch_size = a.len();
 
@@ -1645,7 +1688,7 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             .map(|(i, &(r, s, t))| {
                 let d = opened_values[i * 2];
                 let e = opened_values[i * 2 + 1];
-                self.add_z2k_const(d * e, d * s + e * r + t)
+                self.add_z2k_const(d * e, d * s + e * r + t, k)
                 // <U64FieldEval<P>>::add(
                 //     <U64FieldEval<P>>::add(t, <U64FieldEval<P>>::mul(d, s)),
                 //     <U64FieldEval<P>>::add(
@@ -1655,6 +1698,7 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
                 // )
             })
             .collect();
+
         results
     }
 
@@ -1974,17 +2018,25 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(result)
     }
 
-    fn reveal_slice_z2k(&mut self, shares: &[u64], party_id: u32) -> Vec<Option<u64>> {
+    fn reveal_slice_z2k(&mut self, shares: &[u64], party_id: u32, k: u32) -> Vec<Option<u64>> {
         if party_id >= self.num_parties {
             return vec![None; shares.len()];
         }
 
         let values = self.open_secrets_z2k(party_id, self.num_threshold, shares, false);
-
-        match (self.party_id == party_id, values) {
-            (true, Some(v)) => v.into_iter().map(Some).collect(),
-            (true, None) => vec![None; shares.len()],
-            (false, _) => vec![None; shares.len()],
+        if k < 64 {
+            let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+            match (self.party_id == party_id, values) {
+                (true, Some(v)) => v.into_iter().map(|x| Some(m_mod.reduce(x))).collect(),
+                (true, None) => vec![None; shares.len()],
+                (false, _) => vec![None; shares.len()],
+            }
+        } else {
+            match (self.party_id == party_id, values) {
+                (true, Some(v)) => v.into_iter().map(|x| Some(x)).collect(),
+                (true, None) => vec![None; shares.len()],
+                (false, _) => vec![None; shares.len()],
+            }
         }
     }
 
@@ -2002,9 +2054,21 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         Ok(results)
     }
 
-    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64]) -> Vec<u64> {
-        self.open_secrets_z2k(0, self.num_threshold, shares, true)
-            .unwrap()
+    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64], k: u32) -> Vec<u64> {
+        if k < 64 {
+            let m_mod = <PowOf2Modulus<u64>>::new(1u64 << k);
+            self.open_secrets_z2k(0, self.num_threshold, shares, true)
+                .unwrap()
+                .iter()
+                .map(|&x| m_mod.reduce(x))
+                .collect()
+        } else {
+            self.open_secrets_z2k(0, self.num_threshold, shares, true)
+                .unwrap()
+                .iter()
+                .map(|&x| x)
+                .collect()
+        }
     }
 
     fn reveal_slice_degree_2t_to_all(&mut self, shares: &[Self::Sharing]) -> MPCResult<Vec<u64>> {
@@ -2045,7 +2109,7 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             &random_a,
             t_degree,
         );
-
+        // let all_a_shares = self.all_parties_generate_shares_and_sends_to_all_parties(&random_a, batch_size,  t_degree);
         // Apply Vandermonde combinations to derive final shares
         let mut ret = self.vandermonde_combine(&all_a_shares, batch_size, output_size);
         ret.truncate(length);
@@ -2125,14 +2189,14 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
                 };
             }
             drop(tx);
-            // s.spawn(move || {
+            //s.spawn(move || {
             for res in rx.iter() {
                 sum_result
                     .iter_mut()
                     .zip(res.iter())
                     .for_each(|(e, res)| *e = self.add_const(*e, *res));
             }
-            // });
+            //});
         });
     }
 }
