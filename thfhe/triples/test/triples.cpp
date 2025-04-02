@@ -5,6 +5,9 @@
 using namespace std;
 using namespace emp;
 
+// modify the batch size according to the memory of the machine
+const size_t MAX_BATCH_SIZE = 1e6;
+
 int main(int argc, char** argv) {
     // execute: ./test_triples total_party party_id base_port
     const int num_triples = int(1e6);
@@ -31,12 +34,12 @@ int main(int argc, char** argv) {
 
     vector<uint64_t> a_extend_b(num_triples << 1), b_extend_a(num_triples << 1);
     for (size_t i = 0; i < num_triples; ++i) {
-        a_extend_b[i] = in_a[i];
-        b_extend_a[i] = in_b[i];
+        a_extend_b[i<<1] = in_a[i];
+        b_extend_a[i<<1] = in_b[i];
     }
     for (size_t i = 0; i < num_triples; ++i) {
-        a_extend_b[i + num_triples] = in_b[i];
-        b_extend_a[i + num_triples] = in_a[i];
+        a_extend_b[i<<1|1] = in_b[i];
+        b_extend_a[i<<1|1] = in_a[i];
     }
 
     vector<uint64_t> out;
@@ -45,8 +48,6 @@ int main(int argc, char** argv) {
         out[i] = in_a[i] * in_b[i];
     }
 
-    vector<uint64_t> *tmp_out = new vector<uint64_t>[total_party];
-    
     FerretCOT<NetIO> **cots = new FerretCOT<NetIO>*[total_party];
     vector<thread> threads;
     for (size_t i = 0; i < total_party; ++i) if (i != party) {
@@ -66,25 +67,35 @@ int main(int argc, char** argv) {
     cout << "Initialization time: " << duration.count() << " microseconds" << endl;
 
     start = chrono::high_resolution_clock::now();
-    for (size_t i = 0; i < total_party; ++i) if (i != party) {
-        tmp_out[i].resize(num_triples << 1);
-        threads.push_back(thread([&, i]() {
-            OLEZ2K<NetIO> ole(ios[i], cots[i], 64);
-            if (i > party) {
-                ole.compute(tmp_out[i].data(), a_extend_b.data(), num_triples << 1);
-            } else {
-                ole.compute(tmp_out[i].data(), b_extend_a.data(), num_triples << 1);
-            }
-        }));
+    vector<uint64_t> *tmp_out = new vector<uint64_t>[total_party];
+    for (size_t i = 0; i < total_party; ++i) {
+        tmp_out[i].resize(MAX_BATCH_SIZE << 1);
     }
-    
-    for (auto& t : threads) {
-        t.join();
-    }
+    size_t num_remaining = num_triples;
+    while (num_remaining > 0) {
+        size_t num_to_compute = min(num_remaining, MAX_BATCH_SIZE);
+        num_remaining -= num_to_compute;
+        for (size_t i = 0; i < total_party; ++i) if (i != party) {
+            threads.push_back(thread([&, i]() {
+                OLEZ2K<NetIO> ole(ios[i], cots[i], 64);
+                if (i > party) {
+                    ole.compute(tmp_out[i].data(), a_extend_b.data() + (num_remaining << 1), num_to_compute << 1);
+                } else {
+                    ole.compute(tmp_out[i].data(), b_extend_a.data() + (num_remaining << 1), num_to_compute << 1);
+                }
+            }));
+        }
+        
+        for (auto& t : threads) {
+            t.join();
+        }
+        threads.clear();
 
-    for (size_t i = 0; i < total_party; ++i) if (i != party) {
-        for (size_t j = 0; j < num_triples; ++j) {
-            out[j] += tmp_out[i][j] + tmp_out[i][j + num_triples];
+
+        for (size_t i = 0; i < total_party; ++i) if (i != party) {
+            for (size_t j = 0; j < num_to_compute; ++j) {
+                out[j+num_remaining] += tmp_out[i][j<<1] + tmp_out[i][j<<1|1];
+            }
         }
     }
 
