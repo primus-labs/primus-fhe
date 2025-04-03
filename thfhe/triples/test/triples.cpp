@@ -6,7 +6,21 @@ using namespace std;
 using namespace emp;
 
 // modify the batch size according to the memory of the machine
-const size_t MAX_BATCH_SIZE = 1e6;
+const size_t MAX_BATCH_SIZE = 1e5;
+
+std::vector<std::string> read_ip_list(const std::string& filename, size_t total_party) {
+    std::ifstream infile(filename);
+    std::vector<std::string> ip_list;
+    std::string ip;
+    size_t count = 0;
+    while (count < total_party && std::getline(infile, ip)) {
+        ip_list.push_back(ip);
+        ++count;
+    }
+    return ip_list;
+}
+
+
 
 int main(int argc, char** argv) {
     // execute: ./test_triples total_party party_id base_port
@@ -16,12 +30,14 @@ int main(int argc, char** argv) {
     int base_port = atoi(argv[3]);
 
     NetIO** ios = new NetIO*[total_party];
-    for (size_t i = 0; i < total_party; ++i) if (i != party) {
-        // party with larger index is the server
+    std::vector<std::string> ip_list = read_ip_list("ip.txt", total_party);
+
+    for (size_t i = 0; i < total_party; ++i) {
+        if (i == party) continue;
         if (i > party) {
-            // change to the ip address of the i-th server
-            ios[i] = new NetIO("127.0.0.1", base_port + party * total_party + i);
+            ios[i] = new NetIO(ip_list[i].c_str(), base_port + party * total_party + i);
         } else {
+ 
             ios[i] = new NetIO(nullptr, base_port + i * total_party + party);
         }
     }

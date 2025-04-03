@@ -318,11 +318,53 @@ impl Participant {
     ///
     /// # Returns
     /// A vector of participants.
+    // pub fn from_default(count: u32, base_port: u32) -> Vec<Self> {
+    //     (0..count)
+    //         .map(|i| Participant {
+    //             id: i,
+    //             address: format!("127.0.0.1:{}", base_port + i),
+    //         })
+    //         .collect()
+    // }
     pub fn from_default(count: u32, base_port: u32) -> Vec<Self> {
+        use std::fs::File;
+        use std::io::{BufRead, BufReader};
+        let cwd = std::env::current_dir().unwrap();
+        let path = cwd.join("thfhe/batch/iplist/ip.txt");
+        let file = File::open(path).expect("Failed to open ip.txt");
+        let reader = BufReader::new(file);
+
+        let ip_list: Vec<String> = reader
+            .lines()
+            .filter_map(|line| {
+                let ip = line.ok()?.trim().to_string();
+                if ip.is_empty() {
+                    None
+                } else {
+                    Some(ip)
+                }
+            })
+            .take(count as usize)
+            .collect();
+
+        if ip_list.len() < count as usize {
+            panic!(
+                "Insufficient IPs in ip.txt: expected {}, found {}",
+                count,
+                ip_list.len()
+            );
+        }
+
+        assert_eq!(
+            ip_list.len(),
+            count as usize,
+            "IP list size mismatch with count"
+        );
+
         (0..count)
             .map(|i| Participant {
                 id: i,
-                address: format!("127.0.0.1:{}", base_port + i),
+                address: format!("{}:{}", ip_list[i as usize], base_port + i),
             })
             .collect()
     }
@@ -458,12 +500,13 @@ impl IO for NetIO {
             .get(&party_id)
             .ok_or(NetIoError::ConnectionNotFound(party_id))?
             .as_ref();
+
         stream.write(buf)?;
         self.stats.update_send(buf.len(), start.elapsed());
         Ok(())
     }
 
-    /// Receives data from a participant.
+    /// Receives data from a participant. try version
     fn recv(&self, party_id: u32, buf: &mut [u8]) -> Result<usize, NetIoError> {
         self.flush_all()?;
 
@@ -474,10 +517,45 @@ impl IO for NetIO {
             .get(&party_id)
             .ok_or(NetIoError::ConnectionNotFound(party_id))?
             .as_ref();
-        let bytes_read = stream.read(buf)?;
+
+        const MAX_ATTEMPTS: usize = 10000;
+        const RETRY_DELAY_MS: u64 = 100;
+
+        let mut attempts = 0;
+        let bytes_read = loop {
+            match stream.read(buf) {
+                Ok(n) => break n,
+                Err(ref e) => {
+                    if attempts >= MAX_ATTEMPTS {
+                        return Err(NetIoError::Timeout(format!(
+                            "recv from party {} timed out after {} retries, {:?}",
+                            party_id, MAX_ATTEMPTS, e
+                        )));
+                    }
+                    attempts += 1;
+                    std::thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                }
+            }
+        };
+
         self.stats.update_recv(bytes_read, start.elapsed());
         Ok(bytes_read)
     }
+
+    // Receives data from a participant
+    // fn recv(&self, party_id: u32, buf: &mut [u8]) -> Result<usize, NetIoError> {
+    //     self.flush_all()?;
+
+    //     let start = Instant::now();
+    //     let stream = self
+    //         .connections
+    //         .get(&party_id)
+    //         .ok_or(NetIoError::ConnectionNotFound(party_id))?
+    //         .as_ref();
+    //     let bytes_read = stream.read(buf)?;
+    //     self.stats.update_recv(bytes_read, start.elapsed());
+    //     Ok(bytes_read)
+    // }
 
     /// Flush the send buffer.
     fn flush(&self, party_id: u32) -> Result<(), NetIoError> {

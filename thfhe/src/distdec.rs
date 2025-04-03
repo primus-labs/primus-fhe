@@ -4,7 +4,6 @@ use algebra::{modulus::PowOf2Modulus, reduce::ReduceInv};
 use mpc::MPCBackend;
 use rand::Rng;
 use std::time::{Duration, Instant};
-use std::u64;
 
 use crate::parameter::{Fp, DEFAULT_128_BITS_PARAMETERS};
 
@@ -195,7 +194,7 @@ where
     let m = 1u64 << my_power;
     let m_mod = <PowOf2Modulus<u64>>::new(m);
 
-    let r_vec: Vec<u64> = (0..len).map(|_| rng.next_u64() as u64).collect();
+    let r_vec: Vec<u64> = (0..len).map(|_| rng.next_u64()).collect();
     let shares = (0..=backend.num_threshold())
         .map(|i| {
             if backend.party_id() == i {
@@ -293,7 +292,7 @@ pub fn solve(v: u64, k: u32) -> Option<u64> {
         // Compute E = f_mod / 2^i ）
         let e_div_2i = f_mod >> i;
         // Based on Hensel lemma
-        let t = (e_div_2i & 1) as u128;
+        let t = e_div_2i & 1;
 
         x += t << i;
     }
