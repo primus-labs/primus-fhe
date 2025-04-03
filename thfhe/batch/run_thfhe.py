@@ -26,7 +26,7 @@ def main():
         sys.exit(1)
 
     num_parties = sys.argv[1]
-    ip_file = Path("./iplist/ip.txt")
+    ip_file = Path("./thfhe/batch/iplist/ip.txt")
     if not ip_file.exists():
         print(f"错误: {ip_file} 不存在")
         sys.exit(1)

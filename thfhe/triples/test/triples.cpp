@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     int base_port = atoi(argv[3]);
 
     NetIO** ios = new NetIO*[total_party];
-    std::vector<std::string> ip_list = read_ip_list("ip.txt", total_party);
+    std::vector<std::string> ip_list = read_ip_list("../batch/iplist/ip.txt", total_party);
 
     for (size_t i = 0; i < total_party; ++i) {
         if (i == party) continue;
