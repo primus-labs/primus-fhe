@@ -1258,9 +1258,9 @@ impl<const P: u64> DNBackend<P> {
     /// next z2k triple
     pub fn next_triple_z2k(&mut self) -> (u64, u64, u64) {
         if self.triplez2k_buffer.is_empty() {
-            panic!("Triples over tiples finished");
+            println!("Triples over tiples finished");
+            self.init_z2k_triples_from_files();
         }
-
         self.triplez2k_buffer.pop_front().unwrap()
     }
 
