@@ -27,7 +27,7 @@ def main():
 
     parties_num = sys.argv[1]
     base_port = sys.argv[2]
-    ip_file = Path("../batch/test/ip.txt")
+    ip_file = Path("../batch/iplist/ip.txt")
 
     if not ip_file.exists():
         print(f"错误: {ip_file} 不存在")

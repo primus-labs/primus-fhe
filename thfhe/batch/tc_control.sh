@@ -78,11 +78,11 @@ echo "6. Set only 100ms delay (no bandwidth limit)"
 read -p "Enter your choice (1-6): " choice
 
 case "$choice" in
-    1) set_tc "1ms" "1gbit" ;;
-    2) set_tc "100ms" "100mbit" ;;
-    3) reset_tc ;;
-    4) show_current_tc ;;
-    5) set_delay_only "1ms" ;;
-    6) set_delay_only "100ms" ;;
-    *) echo "Invalid choice. Exiting." ;;
+1) set_tc "1ms" "1gbit" ;;
+2) set_tc "100ms" "100mbit" ;;
+3) reset_tc ;;
+4) show_current_tc ;;
+5) set_delay_only "1ms" ;;
+6) set_delay_only "100ms" ;;
+*) echo "Invalid choice. Exiting." ;;
 esac

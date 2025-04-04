@@ -14,14 +14,14 @@ struct Args {
     n: u32,
     // 参数 t
     #[arg(short = 'i')]
-    id: u32,
+    i: u32,
 }
 
 fn main() {
     let args = Args::parse();
     //const NUM_PARTIES: u32 =args.n;
     let number_parties = args.n;
-    let party_id = args.id;
+    let party_id = args.i;
     //let number_threshold = args.t;
     let number_threshold = (number_parties - 1) / 2;
     //const THRESHOLD: u32 = args.t;
@@ -69,7 +69,7 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
         party_id,
         num_parties,
         threshold,
-        1,
+        5600,
         participants,
         parameters.ring_dimension(),
         true,
@@ -90,8 +90,8 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
     // let mut public_b: Vec<u64> = Vec::new();
 
     backend.init_z2k_triples_from_files();
-    let a = 2;
-    let b = 3;
+    let a = 1;
+    let b = 2;
     let x = pk.encrypt(a, lwe_params, rng);
     let y = pk.encrypt(b, lwe_params, rng);
 
@@ -121,11 +121,12 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
         );
 
         if party_id == 0 {
+            let my_dd_res: Vec<u64> = my_dd_res.unwrap();
             println!(
                 "(a + b )%4= {}, my party id: {}, my dd result: {:?}",
                 (a + b) % 4,
                 backend.party_id(),
-                my_dd_res.unwrap()[0]
+                my_dd_res[0] % 4
             );
         }
     }

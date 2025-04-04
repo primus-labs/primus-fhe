@@ -217,10 +217,11 @@ pub trait MPCBackend {
 
     /// input slice by shamir and share with prg
     fn input_slice_with_prg(
-        &mut self,
+        &self,
         values: Option<&[u64]>,
         batch_size: usize,
         party_id: u32,
+        degree: usize,
     ) -> MPCResult<Vec<Self::Sharing>>;
 
     /// all parties sends slice to all parties, and sum them up with sum_result, e.g. sum_result = sum_result + \sum_{i=0}^{n-1} values
@@ -236,4 +237,12 @@ pub trait MPCBackend {
 
     /// return additive secret sharing of a-b where a is additive sharing and b is const
     fn sub_z2k_const_a_sub_c(&mut self, a: u64, b: u64, k: u32) -> u64;
+
+    /// all parties sends slice to all parties, and sum them up with sum_result, e.g. sum_result = sum_result + \sum_{i=0}^{n-1} values,  with prg
+    fn all_paries_sends_slice_to_all_parties_sum_with_prg(
+        &self,
+        values: &[u64],
+        batch_size: usize,
+        sum_result: &mut [Self::Sharing],
+    );
 }
