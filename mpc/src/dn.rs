@@ -10,12 +10,13 @@ use crossbeam::channel;
 use matrix::Matrix;
 use network::netio::{NetIO, Participant};
 use network::IO;
+use parking_lot::Mutex;
 use rand::distributions::Uniform;
 use rand::prelude::*;
 use rand::{RngCore, SeedableRng};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, MutexGuard};
 use std::time::{Duration, Instant};
 use std::{thread, u64};
 
@@ -655,18 +656,16 @@ impl<const P: u64> DNBackend<P> {
     fn receive_shares_from_pair_to_pair_prg(&self, sender_id: u32, shares: &mut [u64]) {
         let field_mask = u64::MAX >> P.leading_zeros();
         if self.party_id < sender_id {
-            // let prg_ref = &self.shared_prgs_pair_to_pair_lh[sender_id as usize];
-            // let mut prg = prg_ref.lock().unwrap();
-            // prg.fill(shares);
-            shares.fill(1);
+            let prg_ref = &self.shared_prgs_pair_to_pair_hl[sender_id as usize];
+            let mut prg = prg_ref.lock();
+            prg.fill(shares);
             shares.iter_mut().for_each(|share| {
                 *share &= field_mask;
             });
         } else {
-            // let prg_ref = &self.shared_prgs_pair_to_pair_lh[sender_id as usize];
-            // let mut prg = prg_ref.lock().unwrap();
-            // prg.fill(shares);
-            shares.fill(1);
+            let prg_ref = &self.shared_prgs_pair_to_pair_lh[sender_id as usize];
+            let mut prg = prg_ref.lock();
+            prg.fill(shares);
             shares.iter_mut().for_each(|share| {
                 *share &= field_mask;
             });
@@ -678,13 +677,11 @@ impl<const P: u64> DNBackend<P> {
         let ret = if self.party_id < sender_id {
             self.shared_prgs_pair_to_pair_hl[sender_id as usize]
                 .lock()
-                .unwrap()
                 .next_u64()
                 & field_mask
         } else {
             self.shared_prgs_pair_to_pair_lh[sender_id as usize]
                 .lock()
-                .unwrap()
                 .next_u64()
                 & field_mask
         };
@@ -703,7 +700,6 @@ impl<const P: u64> DNBackend<P> {
             for i in 0..batch_size {
                 shares[i] = self.shared_prgs_pair_to_pair_lh[receiver_id as usize]
                     .lock()
-                    .unwrap()
                     .next_u64()
                     & field_mask;
             }
@@ -711,7 +707,6 @@ impl<const P: u64> DNBackend<P> {
             for i in 0..batch_size {
                 shares[i] = self.shared_prgs_pair_to_pair_hl[receiver_id as usize]
                     .lock()
-                    .unwrap()
                     .next_u64()
                     & field_mask;
             }
@@ -719,21 +714,9 @@ impl<const P: u64> DNBackend<P> {
     }
 
     /// get send share from pair to pair prg
-    fn send_share_from_pair_to_pair_prg(&self, receiver_id: u32) -> u64 {
+    fn send_share_from_pair_to_pair_prg(&self, prg: &mut Prg) -> u64 {
         let field_mask = u64::MAX >> P.leading_zeros();
-        let ret: u64 = if self.party_id <= receiver_id {
-            self.shared_prgs_pair_to_pair_lh[receiver_id as usize]
-                .lock()
-                .unwrap()
-                .next_u64()
-                & field_mask
-        } else {
-            self.shared_prgs_pair_to_pair_hl[receiver_id as usize]
-                .lock()
-                .unwrap()
-                .next_u64()
-                & field_mask
-        };
+        let ret: u64 = prg.next_u64() & field_mask;
         //println!("party {} send {:?} to party {}", self.party_id,ret, receiver_id);
         ret
     }
@@ -756,10 +739,7 @@ impl<const P: u64> DNBackend<P> {
 
                 for (i, ele) in row.iter_mut().enumerate().take(num_parties) {
                     if i != sender_id as usize {
-                        let rand = self.shared_prgs_pair_to_pair_lh[i]
-                            .lock()
-                            .unwrap()
-                            .next_u64();
+                        let rand = self.shared_prgs_pair_to_pair_lh[i].lock().next_u64();
                         *ele = rand;
                         sum += rand;
                     }
@@ -774,7 +754,6 @@ impl<const P: u64> DNBackend<P> {
                 my_shares.push(
                     self.shared_prgs_pair_to_pair_lh[sender_id as usize]
                         .lock()
-                        .unwrap()
                         .next_u64(),
                 );
             }
@@ -1549,8 +1528,8 @@ impl<const P: u64> DNBackend<P> {
         self.reverse_vander_matrix = self.inverse_vandermonde_mod_p(matrix);
         let temp = Matrix::transposed_sub_matrix_with_data(
             &self.van_matrix,
-            self.num_threshold as usize,
-            self.num_parties as usize,
+            0,
+            (self.num_threshold + 1) as usize,
             self.num_threshold as usize,
             self.num_parties as usize,
         );
@@ -1576,6 +1555,14 @@ impl<const P: u64> DNBackend<P> {
 
     // input values, generates shares where P_0 to P_{t}'s shares are generated by prg and do not require send
     fn generate_shares_with_prg(&self, values: &[u64], degree: usize) -> Vec<Vec<u64>> {
+        let mut prg_ref_vec: Vec<_> = self
+            .shared_prgs_pair_to_pair_hl
+            .iter()
+            .take(self.party_id as usize)
+            .chain(self.shared_prgs_pair_to_pair_lh[self.party_id as usize..].iter())
+            .take(degree + 1)
+            .map(|x| x.lock())
+            .collect::<Vec<_>>();
         let result: Vec<Vec<u64>> = values
             .iter()
             .map(|&value| {
@@ -1583,8 +1570,9 @@ impl<const P: u64> DNBackend<P> {
                 fpoint.push(value); // f(0)
 
                 //fpoint.extend((0..degree).map(|j| self.shared_prgs_pair_to_pair[j].lock().unwrap().next_u64()));
-                // fpoint.extend((0..degree).map(|j| self.send_share_from_pair_to_pair_prg(j as u32)));
-                fpoint.extend((0..degree).map(|j| 1));
+                fpoint.extend(
+                    (0..degree).map(|j| self.send_share_from_pair_to_pair_prg(&mut prg_ref_vec[j])),
+                );
 
                 let extra_shares: Vec<u64> = self.prg_van_matrix.multiply_with_vec::<P>(&fpoint);
 
