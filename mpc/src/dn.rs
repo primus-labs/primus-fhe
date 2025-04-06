@@ -3,7 +3,7 @@
 use crate::{error::MPCErr, MPCBackend, MPCResult};
 use algebra::ntt::NumberTheoryTransform;
 use algebra::random::Prg;
-use algebra::reduce::{Reduce, ReduceAdd, ReduceAddAssign, ReduceDouble, ReduceNeg, ReduceSub};
+use algebra::reduce::*;
 use algebra::{modulus::PowOf2Modulus, Field, NttField, U64FieldEval};
 use bytemuck::{cast_slice, cast_slice_mut};
 use crossbeam::channel;
@@ -16,7 +16,7 @@ use rand::prelude::*;
 use rand::{RngCore, SeedableRng};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-use std::sync::{mpsc, Arc, MutexGuard};
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 use std::{thread, u64};
 
@@ -765,21 +765,26 @@ impl<const P: u64> DNBackend<P> {
 
             // Broadcast results if needed
             if broadcast_result {
-                let result_buffer: Vec<u8> = results
-                    .iter()
-                    .flat_map(|&result| result.to_le_bytes())
-                    .collect();
-
-                for party_idx in 0..=self.num_threshold {
-                    if party_idx != self.party_id {
-                        self.netio
-                            .send(party_idx, &result_buffer)
-                            .expect("Result broadcast failed");
-                        self.netio
-                            .flush(party_idx)
-                            .expect("Failed to flush network buffer");
+                thread::scope(|s| {
+                    let party_id = self.party_id;
+                    for party_idx in 0..=self.num_threshold {
+                        let result_buffer: Vec<u8> = results
+                            .iter()
+                            .flat_map(|&result| result.to_le_bytes())
+                            .collect();
+                        let netio_clone = Arc::clone(&self.netio);
+                        s.spawn(move || {
+                            if party_idx != party_id {
+                                netio_clone
+                                    .send(party_idx, &result_buffer)
+                                    .expect("Result broadcast failed");
+                                netio_clone
+                                    .flush(party_idx)
+                                    .expect("Failed to flush network buffer");
+                            }
+                        });
                     }
-                }
+                })
             }
 
             Some(results)
@@ -1010,17 +1015,24 @@ impl<const P: u64> DNBackend<P> {
                 .collect();
 
             if broadcast_result {
-                let result_buffer: Vec<u8> =
-                    results.iter().flat_map(|&x| x.to_le_bytes()).collect();
+                thread::scope(|s| {
+                    for party_idx in 0..self.num_parties {
+                        let result_buffer: Vec<u8> =
+                            results.iter().flat_map(|&x| x.to_le_bytes()).collect();
 
-                for party_idx in 0..self.num_parties {
-                    if party_idx != self.party_id {
-                        self.netio
-                            .send(party_idx, &result_buffer)
-                            .expect("Broadcast send failed");
-                        self.netio.flush(party_idx).expect("Broadcast flush failed");
+                        let netio_clone = Arc::clone(&self.netio);
+                        if party_idx != self.party_id {
+                            s.spawn(move || {
+                                netio_clone
+                                    .send(party_idx, &result_buffer)
+                                    .expect("Broadcast send failed");
+                                netio_clone
+                                    .flush(party_idx)
+                                    .expect("Broadcast flush failed");
+                            });
+                        }
                     }
-                }
+                })
             }
 
             Some(results)
@@ -1362,24 +1374,30 @@ impl<const P: u64> DNBackend<P> {
             let results: Vec<u64> = all_shares.iter().map(|row| row.iter().sum()).collect();
 
             //println!("result: {:?}", results);
-
+            let results_ref = results.as_slice();
             // Broadcast results if needed
-            if broadcast_result {
-                let result_buffer: Vec<u8> = results
-                    .iter()
-                    .flat_map(|&result| result.to_le_bytes())
-                    .collect();
 
-                for party_idx in 0..=self.num_threshold {
-                    if party_idx != self.party_id {
-                        self.netio
-                            .send(party_idx, &result_buffer)
-                            .expect("Result broadcast failed");
-                        self.netio
-                            .flush(party_idx)
-                            .expect("Failed to flush network buffer");
+            if broadcast_result {
+                let party_id = self.party_id;
+                thread::scope(|s| {
+                    for party_idx in 0..=self.num_threshold {
+                        let netio_clone = Arc::clone(&self.netio);
+                        let result_buffer: Vec<u8> = results_ref
+                            .iter()
+                            .flat_map(|&result| result.to_le_bytes())
+                            .collect();
+                        s.spawn(move || {
+                            if party_idx != party_id {
+                                netio_clone
+                                    .send(party_idx, &result_buffer)
+                                    .expect("Result broadcast failed");
+                                netio_clone
+                                    .flush(party_idx)
+                                    .expect("Failed to flush network buffer");
+                            }
+                        });
                     }
-                }
+                });
             }
 
             Some(results)
@@ -2047,15 +2065,12 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
         sender_id: u32,
         degree: usize,
     ) -> MPCResult<Vec<Self::Sharing>> {
-        let start = Instant::now();
-
         let all_shares = if self.party_id == sender_id {
             Some(self.generate_shares_with_prg(values.unwrap(), degree))
         } else {
             None
         };
-        let duration = start.elapsed();
-        let start = Instant::now();
+
         let shares = self.share_secrets_with_prg(
             sender_id,
             batch_size,
@@ -2063,8 +2078,6 @@ impl<const P: u64> MPCBackend for DNBackend<P> {
             // only parties P_t ~ P_{n-1} need to send
             (self.num_threshold, self.num_parties),
         );
-        let duration = start.elapsed();
-        println!("share_secrets_with_prg :{:?}", duration.as_secs_f32());
         Ok(shares)
     }
 

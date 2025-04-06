@@ -423,7 +423,7 @@ where
         batch_mpc_ntt_rlwe
             .b
             .as_slice()
-            .chunks_exact(2 * big_n * l)
+            .chunks_exact(1024 * big_n)
             .map(|b_chunk| backend.reveal_slice_degree_2t_to_all(b_chunk).unwrap())
             // b.chunks_exact(2 * big_n * l)
             .map(|b_x| {

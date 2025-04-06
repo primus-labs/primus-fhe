@@ -5,9 +5,10 @@ use clap::Parser;
 use mpc::{DNBackend, MPCBackend};
 use network::netio::Participant;
 use thfhe::{distdec, Evaluator, Fp, KeyGen, DEFAULT_128_BITS_PARAMETERS};
+
 // const LWE_MODULUS: u64 = 4096;
 const RING_MODULUS: u64 = Fp::MODULUS_VALUE;
-use std::thread;
+
 #[derive(Parser)]
 struct Args {
     /// 参数 n
@@ -80,7 +81,7 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
 
     let evaluator = Evaluator::new(evk);
 
-    let test_total_num = [1,10,100,1000,20000];
+    let test_total_num = [1, 10, 100, 1000, 20000];
     // let mut public_a: Vec<Vec<u64>> = Vec::with_capacity(test_num);
     // let mut public_b: Vec<u64> = Vec::new();
     if backend.party_id() == (num_parties - 1) {
@@ -124,7 +125,7 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
                     "(a + b )%4= {}, my party id: {}, my dd result: {:?}",
                     (a + b) % 4,
                     backend.party_id(),
-                    my_dd_res[0]%4
+                    my_dd_res[0] % 4
                 );
             }
         }
