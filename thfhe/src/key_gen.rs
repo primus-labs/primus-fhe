@@ -361,6 +361,9 @@ where
     let n = lwe_secret_key.len();
     let l = basis.decompose_length();
     let big_n = rlwe_secret_key.len();
+
+    // println!("n: {}, l: {}, big_n: {}", n, l, big_n);
+
     let basis_scalar = basis.scalar_iter().collect::<Vec<_>>();
 
     let mut ntt_rlwe_secret_key = rlwe_secret_key.to_vec();
@@ -404,14 +407,25 @@ where
             });
     }
 
-    let b = backend
-        .reveal_slice_degree_2t_to_all(batch_mpc_ntt_rlwe.b.as_slice())
-        .unwrap();
+    // let b = backend
+    //     .reveal_slice_degree_2t_to_all(batch_mpc_ntt_rlwe.b.as_slice())
+    //     .unwrap();
+    // let b = batch_mpc_ntt_rlwe
+    //     .b
+    //     .as_slice()
+    //     .chunks_exact( big_n * l)
+    //     .map(|b_chunk| backend.reveal_slice_degree_2t_to_all(b_chunk).unwrap())
+    //     .concat();
 
     let mut a_iter = batch_mpc_ntt_rlwe.a.into_iter();
 
     MPCNttBootstrappingKey(
-        b.chunks_exact(2 * big_n * l)
+        batch_mpc_ntt_rlwe
+            .b
+            .as_slice()
+            .chunks_exact(2 * big_n * l)
+            .map(|b_chunk| backend.reveal_slice_degree_2t_to_all(b_chunk).unwrap())
+            // b.chunks_exact(2 * big_n * l)
             .map(|b_x| {
                 let (m_slice, minus_z_m_slice) = b_x.split_at(big_n * l);
                 RevealNttRgsw {
