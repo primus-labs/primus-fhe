@@ -56,8 +56,11 @@ where
         e.iter_mut()
             .zip(gaussian.sample_iter(&mut *rng))
             .for_each(|(e, res)| *e = res);
-
-        backend.all_paries_sends_slice_to_all_parties_sum(&e, chunk_size, b_chunk);
+        if backend.num_parties() <= 5 {
+            backend.all_paries_sends_slice_to_all_parties_sum(&e, chunk_size, b_chunk);
+        } else {
+            backend.all_paries_sends_slice_to_all_parties_sum_with_prg(&e, chunk_size, b_chunk);
+        }
     }
 
     let end = std::time::Instant::now();
