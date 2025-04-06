@@ -7,53 +7,54 @@ use network::netio::Participant;
 use thfhe::{distdec, Evaluator, Fp, KeyGen, DEFAULT_128_BITS_PARAMETERS};
 // const LWE_MODULUS: u64 = 4096;
 const RING_MODULUS: u64 = Fp::MODULUS_VALUE;
+use std::thread;
 #[derive(Parser)]
-struct Args {
-    /// 参数 n
-    #[arg(short = 'n')]
-    n: u32,
-    // 参数 t
-    #[arg(short = 'i')]
-    i: u32,
-}
-
-fn main() {
-    let args = Args::parse();
-    //const NUM_PARTIES: u32 =args.n;
-    let number_parties = args.n;
-    let party_id = args.i;
-    //let number_threshold = args.t;
-    let number_threshold = (number_parties - 1) / 2;
-    //const THRESHOLD: u32 = args.t;
-    const BASE_PORT: u32 = 20500;
-    thfhe(party_id, number_parties, number_threshold, BASE_PORT);
-}
-
 // struct Args {
 //     /// 参数 n
 //     #[arg(short = 'n')]
 //     n: u32,
+//     // 参数 t
+//     #[arg(short = 'i')]
+//     i: u32,
 // }
 
 // fn main() {
 //     let args = Args::parse();
 //     //const NUM_PARTIES: u32 =args.n;
 //     let number_parties = args.n;
+//     let party_id = args.i;
 //     //let number_threshold = args.t;
 //     let number_threshold = (number_parties - 1) / 2;
 //     //const THRESHOLD: u32 = args.t;
 //     const BASE_PORT: u32 = 20500;
-//     // thfhe(party_id, number_parties, number_threshold, BASE_PORT);
-//     let threads = (0..number_parties)
-//         .map(|party_id| {
-//             thread::spawn(move || thfhe(party_id, number_parties, number_threshold, BASE_PORT))
-//         })
-//         .collect::<Vec<_>>();
-
-//     for handle in threads {
-//         handle.join().unwrap();
-//     }
+//     thfhe(party_id, number_parties, number_threshold, BASE_PORT);
 // }
+
+struct Args {
+    /// 参数 n
+    #[arg(short = 'n')]
+    n: u32,
+}
+
+fn main() {
+    let args = Args::parse();
+    //const NUM_PARTIES: u32 =args.n;
+    let number_parties = args.n;
+    //let number_threshold = args.t;
+    let number_threshold = (number_parties - 1) / 2;
+    //const THRESHOLD: u32 = args.t;
+    const BASE_PORT: u32 = 20500;
+    // thfhe(party_id, number_parties, number_threshold, BASE_PORT);
+    let threads = (0..number_parties)
+        .map(|party_id| {
+            thread::spawn(move || thfhe(party_id, number_parties, number_threshold, BASE_PORT))
+        })
+        .collect::<Vec<_>>();
+
+    for handle in threads {
+        handle.join().unwrap();
+    }
+}
 
 fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
     let start = std::time::Instant::now();
@@ -85,10 +86,14 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
 
     let evaluator = Evaluator::new(evk);
 
-    let test_total_num = [1, 10, 100, 1000, 20000];
+    let test_total_num = [10];
     // let mut public_a: Vec<Vec<u64>> = Vec::with_capacity(test_num);
     // let mut public_b: Vec<u64> = Vec::new();
-
+    if backend.party_id() == (num_parties - 1) {
+        println!("{:?}", backend.netio.get_stats());
+    }
+    // Ok(NetIoStats { send_count: 1226, recv_count: 1351, send_bytes: 2985836896, recv_bytes: 5671871472, send_round: 1306, recv_round: 10143, send_elaps: AtomicDuration(1927358), recv_elaps: AtomicDuration(537552602) })
+    // Ok(NetIoStats { send_count: 1306, recv_count: 1351, send_bytes: 5670191456, recv_bytes: 5671871472, send_round: 1466, recv_round: 38760, send_elaps: AtomicDuration(211283965), recv_elaps: AtomicDuration(178109564) })
     backend.init_z2k_triples_from_files();
     let a: u64 = 1;
     let b: u64 = 2;
@@ -127,8 +132,12 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
                     "(a + b )%4= {}, my party id: {}, my dd result: {:?}",
                     (a + b) % 4,
                     backend.party_id(),
-                    my_dd_res[0] % 4
+                    my_dd_res.iter().map(|x| *x % 4).collect::<Vec<u64>>()
                 );
+
+                println!("{:?}", backend.netio.get_stats());
+                // Ok(NetIoStats { send_count: 1226, recv_count: 1351, send_bytes: 2985836896, recv_bytes: 5671871472, send_round: 1306, recv_round: 10303, send_elaps: AtomicDuration(2056310), recv_elaps: AtomicDuration(529276089) })
+                // Ok(NetIoStats { send_count: 21010, recv_count: 20880, send_bytes: 10805380960, recv_bytes: 10788259360, send_round: 21170, recv_round: 75849, send_elaps: AtomicDuration(60441433), recv_elaps: AtomicDuration(298024439) })
             }
         }
     }

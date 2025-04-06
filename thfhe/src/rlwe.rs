@@ -39,6 +39,8 @@ where
         a: vec![vec![0; polynomial_size]; count],
         b: vec![Default::default(); count * polynomial_size],
     };
+    // count = 2 n l = 2 * 1024 * 8
+    // polynomial_size = 2024
 
     batch_mpc_rlwe.a.iter_mut().for_each(|a| {
         backend.shared_rand_field_elements(a);
@@ -49,13 +51,13 @@ where
     let start = std::time::Instant::now();
 
     let chunk_size = 2048 * polynomial_size;
-    let mut e = vec![0; chunk_size];
+    let mut e: Vec<u64> = vec![0; chunk_size];
     for b_chunk in b.chunks_exact_mut(chunk_size) {
         e.iter_mut()
             .zip(gaussian.sample_iter(&mut *rng))
             .for_each(|(e, res)| *e = res);
 
-        backend.all_paries_sends_slice_to_all_parties_sum(&e, chunk_size, b_chunk);
+        backend.all_paries_sends_slice_to_all_parties_sum_with_prg(&e, chunk_size, b_chunk);
     }
 
     let end = std::time::Instant::now();

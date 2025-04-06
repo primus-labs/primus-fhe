@@ -150,7 +150,7 @@ pub trait MPCBackend {
     fn init_z2k_triples_from_files(&mut self);
 
     /// Output a slice of secret values over z2k to all parties.
-    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64], k: u32) -> Vec<u64>;
+    fn reveal_slice_to_all_z2k(&mut self, shares: &[u64], k: u32, need_leader: bool) -> Vec<u64>;
 
     /// test
     fn test_open_secrets_z2k(
