@@ -5,7 +5,7 @@
 using namespace std;
 using namespace emp;
 
-// modify the batch size according to the memory of the machine
+// adjust the batch size to trade off between computation time & rounds
 const size_t MAX_BATCH_SIZE = 1e5;
 
 std::vector<std::string> read_ip_list(const std::string& filename, size_t total_party) {
@@ -35,10 +35,9 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < total_party; ++i) {
         if (i == party) continue;
         if (i > party) {
-            ios[i] = new NetIO(ip_list[i].c_str(), base_port + party * total_party + i);
+            ios[i] = new NetIO(ip_list[i].c_str(), (party * total_party + i) + base_port);
         } else {
- 
-            ios[i] = new NetIO(nullptr, base_port + i * total_party + party);
+            ios[i] = new NetIO(nullptr, (i * total_party + party) + base_port);
         }
     }
 
@@ -80,38 +79,34 @@ int main(int argc, char** argv) {
 
     auto end = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(end - start);
-    cout << "Initialization time: " << duration.count() << " microseconds" << endl;
+    cout << "COT Instances Initialization time: " << duration.count() << " microseconds" << endl;
 
     start = chrono::high_resolution_clock::now();
     vector<uint64_t> *tmp_out = new vector<uint64_t>[total_party];
     for (size_t i = 0; i < total_party; ++i) {
-        tmp_out[i].resize(MAX_BATCH_SIZE << 1);
+        tmp_out[i].resize(num_triples << 1);
     }
-    size_t num_remaining = num_triples;
-    while (num_remaining > 0) {
-        size_t num_to_compute = min(num_remaining, MAX_BATCH_SIZE);
-        num_remaining -= num_to_compute;
-        for (size_t i = 0; i < total_party; ++i) if (i != party) {
-            threads.push_back(thread([&, i]() {
-                OLEZ2K<NetIO> ole(ios[i], cots[i], 64);
-                if (i > party) {
-                    ole.compute(tmp_out[i].data(), a_extend_b.data() + (num_remaining << 1), num_to_compute << 1);
-                } else {
-                    ole.compute(tmp_out[i].data(), b_extend_a.data() + (num_remaining << 1), num_to_compute << 1);
-                }
-            }));
-        }
-        
-        for (auto& t : threads) {
-            t.join();
-        }
-        threads.clear();
 
-
-        for (size_t i = 0; i < total_party; ++i) if (i != party) {
-            for (size_t j = 0; j < num_to_compute; ++j) {
-                out[j+num_remaining] += tmp_out[i][j<<1] + tmp_out[i][j<<1|1];
+    for (size_t i = 0; i < total_party; ++i) if (i != party) {
+        threads.push_back(thread([&, i]() {
+            OLEZ2K<NetIO> ole(ios[i], cots[i], 64);
+            if (i > party) {
+                ole.compute(tmp_out[i].data(), a_extend_b.data(), num_triples << 1, MAX_BATCH_SIZE);
+            } else {
+                ole.compute(tmp_out[i].data(), b_extend_a.data(), num_triples << 1, MAX_BATCH_SIZE);
             }
+        }));
+    }
+    
+    for (auto& t : threads) {
+        t.join();
+    }
+    threads.clear();
+
+
+    for (size_t i = 0; i < total_party; ++i) if (i != party) {
+        for (size_t j = 0; j < num_triples; ++j) {
+            out[j] += tmp_out[i][j<<1] + tmp_out[i][j<<1|1];
         }
     }
 
@@ -131,8 +126,10 @@ int main(int argc, char** argv) {
     duration = chrono::duration_cast<chrono::microseconds>(end - start);
     cout << "File writing time: " << duration.count() << " microseconds" << endl;
 
-    // test the correctness (should be removed)
+    #ifdef NDEBUG
+    // test the correctness (should be skipped for the released version)
     if (party == 0) {
+        cout << "Testing correctness..." << endl;
         vector<uint64_t> buf(num_triples);
         for (size_t i = 1; i < total_party; ++i) {
             ios[i]->recv_data(buf.data(), num_triples * sizeof(uint64_t));
@@ -150,14 +147,17 @@ int main(int argc, char** argv) {
         }
         for (size_t i = 0; i < num_triples; ++i) {
             if (in_a[i] * in_b[i] != out[i]) {
+                cout << "in_a * in_b: " << in_a[i] * in_b[i] << " != out: " << out[i] << endl;
                 error("not correct!!");
             }
         }
+        cout << "passed" << endl;
     } else {
         ios[0]->send_data(in_a.data(), num_triples * sizeof(uint64_t));
         ios[0]->send_data(in_b.data(), num_triples * sizeof(uint64_t));
         ios[0]->send_data(out.data(), num_triples * sizeof(uint64_t));
     }
+    #endif
 
     // clean up
     for (size_t i = 0; i < total_party; ++i) if (i != party) {
