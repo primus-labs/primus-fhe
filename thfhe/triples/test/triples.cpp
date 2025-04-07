@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
     duration = chrono::duration_cast<chrono::microseconds>(end - start);
     cout << "File writing time: " << duration.count() << " microseconds" << endl;
 
-    #ifdef NDEBUG
+    #ifndef NDEBUG
     // test the correctness (should be skipped for the released version)
     if (party == 0) {
         cout << "Testing correctness..." << endl;
