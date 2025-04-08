@@ -407,13 +407,11 @@ where
             });
     }
 
-    // let b = backend
-    //     .reveal_slice_degree_2t_to_all(batch_mpc_ntt_rlwe.b.as_slice())
-    //     .unwrap();
-    // let b = batch_mpc_ntt_rlwe
+    // use itertools::Itertools;
+    // let b: Vec<u64> = batch_mpc_ntt_rlwe
     //     .b
     //     .as_slice()
-    //     .chunks_exact( big_n * l)
+    //     .chunks_exact(big_n * 1024)
     //     .map(|b_chunk| backend.reveal_slice_degree_2t_to_all(b_chunk).unwrap())
     //     .concat();
 
@@ -423,7 +421,7 @@ where
         batch_mpc_ntt_rlwe
             .b
             .as_slice()
-            .chunks_exact(1024 * big_n)
+            .chunks_exact(2 * l * big_n)
             .map(|b_chunk| backend.reveal_slice_degree_2t_to_all(b_chunk).unwrap())
             // b.chunks_exact(2 * big_n * l)
             .map(|b_x| {
