@@ -74,11 +74,14 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
         std_dev: f64,
         modulus_minus_one: T,
     ) -> Result<DiscreteGaussian<T>, AlgebraError> {
-        let max_std_dev = std_dev * 6.0;
         if std_dev < 0. {
             return Err(AlgebraError::DistributionErr);
         }
-        match Normal::new(mean, std_dev) {
+
+        let continuous_std_dev = std_dev_discrete_to_continuous(std_dev)?;
+
+        let max_std_dev = std_dev * 6.0f64;
+        match Normal::new(mean, continuous_std_dev) {
             Ok(normal) => Ok(DiscreteGaussian {
                 normal,
                 max_std_dev,
@@ -104,7 +107,14 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
         if max_std_dev <= std_dev || std_dev < 0. {
             return Err(AlgebraError::DistributionErr);
         }
-        match Normal::new(mean, std_dev) {
+
+        let continuous_std_dev = std_dev_discrete_to_continuous(std_dev)?;
+
+        if max_std_dev <= continuous_std_dev {
+            return Err(AlgebraError::DistributionErr);
+        }
+
+        match Normal::new(mean, continuous_std_dev) {
             Ok(inner) => Ok(DiscreteGaussian {
                 normal: inner,
                 max_std_dev,
@@ -136,18 +146,41 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
 impl<T: UnsignedInteger> Distribution<T> for DiscreteGaussian<T> {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> T {
+        if self.max_std_dev < 0.5 {
+            return T::ZERO;
+        }
         let mean = self.normal.mean();
+
         loop {
             let value = self.normal.sample(rng);
             if (value - mean).abs() < self.max_std_dev {
                 let round = value.round();
-                if round < 0.5 {
+                if round < -0.5 {
                     return self.modulus_minus_one - T::as_from(-round) + T::ONE;
                 } else {
                     return T::as_from(round);
                 }
             }
         }
+    }
+}
+
+fn std_dev_discrete_to_continuous(std_dev: f64) -> Result<f64, AlgebraError> {
+    let std_dev_square = std_dev * std_dev;
+    let std_dev_cube = std_dev_square * std_dev;
+    let std_dev_quartic = std_dev_square * std_dev_square;
+
+    if std_dev <= 0.65 {
+        let var = std_dev_square
+            - (-2.88 * std_dev_quartic + -14.23 * std_dev_cube + 18.17 * std_dev_square
+                - 3.442 * std_dev
+                - 0.1585)
+                / 12.0;
+        Ok(var.sqrt())
+    } else if std_dev <= 32768f64 {
+        Ok((std_dev_square - 12.0f64.recip()).sqrt())
+    } else {
+        Ok(std_dev)
     }
 }
 

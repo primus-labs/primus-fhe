@@ -4,6 +4,7 @@ use algebra::{
         ReduceAdd, ReduceAddAssign, ReduceMulAdd, ReduceMulAssign, ReduceNegAssign, ReduceSub,
         ReduceSubAssign,
     },
+    utils::Size,
 };
 use num_traits::Zero;
 
@@ -263,5 +264,12 @@ impl<T: UnsignedInteger> CmLwe<T> {
         result.push(Lwe::new(a, *self.b.last().unwrap()));
 
         result
+    }
+}
+
+impl<T: Copy> Size for CmLwe<T> {
+    #[inline]
+    fn size(&self) -> usize {
+        (self.a.len() + self.b.len()) * core::mem::size_of::<T>()
     }
 }

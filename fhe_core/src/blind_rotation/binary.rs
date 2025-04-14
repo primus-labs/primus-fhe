@@ -7,6 +7,7 @@ use algebra::{
     polynomial::FieldPolynomial,
     random::DiscreteGaussian,
     reduce::ReduceNegAssign,
+    utils::Size,
     Field, NttField,
 };
 use lattice::{
@@ -32,6 +33,16 @@ impl<F: NttField> Clone for BinaryBlindRotationKey<F> {
             ntt_table: Arc::clone(&self.ntt_table),
             space: self.space.clone(),
         }
+    }
+}
+
+impl<F: NttField> Size for BinaryBlindRotationKey<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.key.is_empty() {
+            return 0;
+        }
+        self.key.len() * self.key[0].size()
     }
 }
 

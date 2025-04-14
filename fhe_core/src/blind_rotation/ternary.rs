@@ -7,6 +7,7 @@ use algebra::{
     polynomial::FieldPolynomial,
     random::DiscreteGaussian,
     reduce::ReduceNegAssign,
+    utils::Size,
     Field, NttField,
 };
 use lattice::{
@@ -34,6 +35,16 @@ impl<F: NttField> Clone for TernaryBlindRotationKey<F> {
             blind_rotation_basis: self.blind_rotation_basis,
             space: self.space.clone(),
         }
+    }
+}
+
+impl<F: NttField> Size for TernaryBlindRotationKey<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.key.is_empty() {
+            return 0;
+        }
+        self.key.len() * self.key[0].0.size() * 2
     }
 }
 

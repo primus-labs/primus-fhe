@@ -14,7 +14,10 @@ use core::{
 };
 use std::ops::BitXorAssign;
 
-use num_traits::{ConstOne, ConstZero, MulAdd, MulAddAssign, NumAssign, Pow, Unsigned};
+use bigdecimal::BigDecimal;
+use num_traits::{
+    ConstOne, ConstZero, FromPrimitive, MulAdd, MulAddAssign, NumAssign, Pow, ToPrimitive, Unsigned,
+};
 use rand::distributions::uniform::SampleUniform;
 
 use crate::numeric::{BorrowingSub, CarryingAdd};
@@ -85,7 +88,7 @@ pub trait Integer:
     + ShrAssign<u32>
     + Pow<u32, Output = Self>
     + Pow<usize, Output = Self>
-    + SampleUniform
+    + SampleUniform<Sampler: Copy + Clone>
 {
 }
 
@@ -117,6 +120,14 @@ pub trait UnsignedInteger:
     fn is_power_of_two(self) -> bool {
         self.count_ones() == 1
     }
+
+    /// Convert into [`BigDecimal`].
+    #[must_use]
+    fn to_decimal(self) -> BigDecimal;
+
+    /// Convert from [`BigDecimal`].
+    #[must_use]
+    fn from_decimal(value: &BigDecimal) -> Self;
 }
 
 macro_rules! empty_trait_impl {
@@ -127,4 +138,24 @@ macro_rules! empty_trait_impl {
 
 empty_trait_impl!(Integer for u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize);
 
-empty_trait_impl!(UnsignedInteger for u8 u16 u32 u64 u128 usize);
+macro_rules! impl_unsigned_integer {
+    ($t:ty, $from_method:ident, $to_method:ident) => {
+        impl UnsignedInteger for $t {
+            #[inline(always)]
+            fn to_decimal(self) -> BigDecimal {
+                BigDecimal::$from_method(self).unwrap()
+            }
+
+            #[inline(always)]
+            fn from_decimal(value: &BigDecimal) -> Self {
+                value.$to_method().unwrap()
+            }
+        }
+    };
+}
+impl_unsigned_integer!(u8, from_u8, to_u8);
+impl_unsigned_integer!(u16, from_u16, to_u16);
+impl_unsigned_integer!(u32, from_u32, to_u32);
+impl_unsigned_integer!(u64, from_u64, to_u64);
+impl_unsigned_integer!(u128, from_u128, to_u128);
+impl_unsigned_integer!(usize, from_usize, to_usize);

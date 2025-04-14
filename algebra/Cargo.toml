@@ -12,9 +12,12 @@ rand_distr = { workspace = true }
 itertools = { workspace = true }
 bytemuck = { workspace = true }
 concrete-ntt = { git = "https://github.com/primus-labs/concrete-ntt", branch = "dev", default-features = false, optional = true }
+bigdecimal = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+csv = "1.3"
 
 [features]
 default = ["concrete-ntt"]
@@ -32,6 +35,7 @@ harness = false
 [[bench]]
 name = "ntt_bench"
 harness = false
+required-features=["concrete-ntt"]
 
 [[bench]]
 name = "field_ntt"

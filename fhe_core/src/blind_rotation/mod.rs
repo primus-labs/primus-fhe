@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use algebra::{
     decompose::NonPowOf2ApproxSignedBasis, integer::UnsignedInteger, polynomial::FieldPolynomial,
-    random::DiscreteGaussian, Field, NttField,
+    random::DiscreteGaussian, utils::Size, Field, NttField,
 };
 pub use binary::BinaryBlindRotationKey;
 use rand::{CryptoRng, Rng};
@@ -27,6 +27,16 @@ pub enum BlindRotationKey<F: NttField> {
     Binary(BinaryBlindRotationKey<F>),
     /// FHE ternary blind rotation key
     Ternary(TernaryBlindRotationKey<F>),
+}
+
+impl<F: NttField> Size for BlindRotationKey<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        match self {
+            BlindRotationKey::Binary(key) => key.size(),
+            BlindRotationKey::Ternary(key) => key.size(),
+        }
+    }
 }
 
 impl<F: NttField> BlindRotationKey<F> {

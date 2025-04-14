@@ -3,6 +3,7 @@ use algebra::{
     polynomial::{FieldNttPolynomial, FieldPolynomial, Polynomial},
     random::{sample_binary_values, DiscreteGaussian},
     reduce::RingReduce,
+    utils::Size,
     Field, NttField,
 };
 use lattice::{Lwe, NttRlwe, NumRlwe};
@@ -121,6 +122,16 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
         modulus.reduce_add_assign(result.b_mut(), gaussian.sample(rng));
 
         result
+    }
+}
+
+impl<C: UnsignedInteger> Size for LwePublicKey<C> {
+    #[inline]
+    fn size(&self) -> usize {
+        if self.public_key.is_empty() {
+            return 0;
+        }
+        self.public_key.len() * self.public_key[0].size()
     }
 }
 
@@ -308,6 +319,13 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     }
 }
 
+impl<C: UnsignedInteger> Size for LwePublicKeyRlweMode<C> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.public_key.size()
+    }
+}
+
 /// Represents a public key for the NTT RLWE cryptographic scheme.
 ///
 /// # Type Parameters
@@ -372,5 +390,12 @@ impl<F: NttField> NttRlwePublicKey<F> {
         R: Rng + CryptoRng,
     {
         todo!()
+    }
+}
+
+impl<F: NttField> Size for NttRlwePublicKey<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.key.size()
     }
 }

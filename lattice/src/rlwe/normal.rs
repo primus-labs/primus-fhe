@@ -3,6 +3,7 @@ use algebra::{
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     random::DiscreteGaussian,
     reduce::{ReduceAddAssign, ReduceNeg, ReduceNegAssign, ReduceSubAssign},
+    utils::Size,
     Field, NttField,
 };
 use rand::{CryptoRng, Rng};
@@ -535,5 +536,12 @@ impl<F: NttField> Rlwe<F> {
         e += ntt_table.inverse_transform_inplace(a_ntt);
 
         Self { a, b: e }
+    }
+}
+
+impl<F: Field> Size for Rlwe<F> {
+    #[inline]
+    fn size(&self) -> usize {
+        self.a.size() * 2
     }
 }
