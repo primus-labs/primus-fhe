@@ -35,6 +35,7 @@ harness = false
 [[bench]]
 name = "ntt_bench"
 harness = false
+required-features=["concrete-ntt"]
 
 [[bench]]
 name = "field_ntt"
