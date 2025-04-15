@@ -160,41 +160,6 @@ impl<const P: u64> DNBackend<P> {
         backend
     }
 
-    // /// lock the netio
-    // pub fn netio_lock(&self) -> std::sync::MutexGuard<'_, NetIO> {
-    //     self.netio.lock().unwrap()
-    // }
-    fn send_with_retry(
-        &self,
-        netio: &NetIO,
-        pid: u32,
-        share_column: &[u8],
-        max_retries: usize,
-    ) -> Result<(), String> {
-        let data = bytemuck::cast_slice(share_column);
-
-        for attempt in 0..=max_retries {
-            let send_result = netio.send(pid, data);
-            let flush_result = send_result.and_then(|_| netio.flush(pid));
-
-            match flush_result {
-                Ok(_) => return Ok(()),
-                Err(e) if attempt < max_retries => {
-                    eprintln!(
-                        "Attempt {} failed: {:?}. Retrying..., party : {} send to {} failed",
-                        attempt + 1,
-                        e,
-                        self.party_id,
-                        pid
-                    );
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-                Err(e) => return Err(format!("Failed after {} attempts: {:?}", attempt + 1, e)),
-            }
-        }
-        unreachable!()
-    }
-
     /// Builds the Vandermonde matrix for polynomial evaluation at party positions.
     fn build_vandermonde_matrix(num_parties: u32, positions: &[u64]) -> Vec<Vec<u64>> {
         let mut matrix = Vec::with_capacity(num_parties as usize);
@@ -1645,45 +1610,6 @@ impl<const P: u64> DNBackend<P> {
         }
 
         buffer
-    }
-
-    /// generates shares and sends to all parties
-    fn all_parties_generate_shares_and_sends_to_all_parties(
-        &mut self,
-        values: &[u64],
-        batch_size: usize,
-        degree: usize,
-    ) -> Vec<u64> {
-        let shares = self.generate_shares(values, degree);
-        let shares_clone = Arc::new(shares);
-        let self_ref = &*self;
-        let my_id = self_ref.party_id;
-        let num_parties = self_ref.num_parties;
-
-        std::thread::scope(|s| {
-            let mut handles = Vec::new();
-            for i in 0..self_ref.num_parties {
-                let shares_clone = Arc::clone(&shares_clone);
-                let handle = s.spawn(move || {
-                    if i == my_id {
-                        self_ref.share_secrets_parallel(
-                            i,
-                            batch_size,
-                            Some(&shares_clone),
-                            (0, num_parties),
-                        )
-                    } else {
-                        self_ref.receive_share_column(i, batch_size)
-                    }
-                });
-                handles.push(handle);
-            }
-            // Wait for all threads to finish and collect results
-            handles
-                .into_iter()
-                .flat_map(|handle| handle.join().unwrap().into_iter())
-                .collect::<Vec<u64>>()
-        })
     }
 }
 
