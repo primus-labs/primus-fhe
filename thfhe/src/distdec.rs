@@ -74,7 +74,7 @@ where
             .chunks_exact(res_vec.len() / 4)
             .map(|chunk| {
                 backend
-                    .reveal_slice_to_all_z2k(&chunk, 64, true)
+                    .reveal_slice_to_all_z2k(chunk, 64, true)
                     .iter()
                     .map(|x| v_delta_mod.reduce(*x))
                     .collect::<Vec<u64>>()
@@ -244,7 +244,6 @@ where
                 .chunks(v_vec_open.len() / 8)
                 .map(|chunk| {
                     let chunk = chunk.to_vec();
-                    let m_mod = m_mod.clone();
                     s.spawn(move || {
                         chunk
                             .iter()

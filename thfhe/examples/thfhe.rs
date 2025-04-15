@@ -11,10 +11,10 @@ const RING_MODULUS: u64 = Fp::MODULUS_VALUE;
 
 #[derive(Parser)]
 struct Args {
-    /// 参数 n
+    ///  n
     #[arg(short = 'n')]
     n: u32,
-    // 参数 t
+    //  t
     #[arg(short = 'i')]
     i: u32,
 }
@@ -32,7 +32,7 @@ fn main() {
 }
 
 // struct Args {
-//     /// 参数 n
+//
 //     #[arg(short = 'n')]
 //     n: u32,
 // }
@@ -84,9 +84,6 @@ fn thfhe(party_id: u32, num_parties: u32, threshold: u32, base_port: u32) {
     let test_total_num = [1, 10, 100, 1000, 20000];
     // let mut public_a: Vec<Vec<u64>> = Vec::with_capacity(test_num);
     // let mut public_b: Vec<u64> = Vec::new();
-    if backend.party_id() == (num_parties - 1) {
-        println!("{:?}", backend.netio.get_stats());
-    }
     backend.init_z2k_triples_from_files();
     let a: u64 = 1;
     let b: u64 = 2;
