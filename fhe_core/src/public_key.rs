@@ -492,7 +492,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
         &self,
         coeff: <F as Field>::ValueT,
         degree: usize,
-        basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+        basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
         gaussian: DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
@@ -532,8 +532,8 @@ impl<F: NttField> NttRlwePublicKey<F> {
             .collect();
 
         NttRgsw::new(
-            <NttGadgetRlwe<F>>::new(minus_s_m, *basis),
-            <NttGadgetRlwe<F>>::new(m, *basis),
+            <NttGadgetRlwe<F>>::new(minus_s_m, basis),
+            <NttGadgetRlwe<F>>::new(m, basis),
         )
     }
 }
