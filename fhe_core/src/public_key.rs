@@ -1,12 +1,14 @@
 use algebra::{
+    decompose::NonPowOf2ApproxSignedBasis,
     integer::UnsignedInteger,
+    ntt::{NttTable, NumberTheoryTransform},
     polynomial::{FieldNttPolynomial, FieldPolynomial, Polynomial},
-    random::{sample_binary_values, DiscreteGaussian},
+    random::{sample_binary_values, BinarySampler, DiscreteGaussian},
     reduce::RingReduce,
     utils::Size,
     Field, NttField,
 };
-use lattice::{Lwe, NttRlwe, NumRlwe};
+use lattice::{Lwe, NttGadgetRlwe, NttRgsw, NttRlwe, NumRlwe};
 use rand::{prelude::Distribution, CryptoRng, Rng};
 
 use crate::{
@@ -336,7 +338,7 @@ pub struct NttRlwePublicKey<F: NttField> {
 }
 
 impl<F: NttField> NttRlwePublicKey<F> {
-    /// Creates a new `NttRlwePublicKey` using the provided secret key, Gaussian distribution, NTT table, and random number generator.
+    /// Creates a new [`NttRlwePublicKey`] using the provided secret key, Gaussian distribution, NTT table, and random number generator.
     ///
     /// # Arguments
     ///
@@ -347,7 +349,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
     ///
     /// # Returns
     ///
-    /// A new instance of `NttRlwePublicKey`.
+    /// A new instance of [`NttRlwePublicKey`].
     pub fn new<R>(
         secret_key: &NttRlweSecretKey<F>,
         gaussian: DiscreteGaussian<<F as Field>::ValueT>,
@@ -385,11 +387,154 @@ impl<F: NttField> NttRlwePublicKey<F> {
     /// # Type Parameters
     ///
     /// * `R` - A random number generator that implements `Rng` and `CryptoRng`.
-    pub fn encrypt<R>(_message: &FieldPolynomial<F>)
+    pub fn encrypt<R>(
+        &self,
+        message: &FieldPolynomial<F>,
+        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+    ) -> NttRlwe<F>
     where
         R: Rng + CryptoRng,
     {
-        todo!()
+        let dimension = ntt_table.dimension();
+
+        let v = <FieldPolynomial<F>>::random_binary(dimension, rng);
+        let e0 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        let e1 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+
+        let mut v = ntt_table.transform_inplace(v);
+        let mut e0 = ntt_table.transform_inplace(e0);
+        let mut e1 = ntt_table.transform_inplace(e1);
+
+        e0.add_mul_assign(self.key().a(), &v);
+        e1.add_mul_assign(self.key().b(), &v);
+
+        v.copy_from(message);
+        ntt_table.transform_slice(v.as_mut_slice());
+        e1 += v;
+
+        NttRlwe::new(e0, e1)
+    }
+
+    fn encrypt_monomial_inner<R>(
+        &self,
+        coeff: <F as Field>::ValueT,
+        degree: usize,
+        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+        v: &mut FieldNttPolynomial<F>,
+    ) -> NttRlwe<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = ntt_table.dimension();
+
+        v.iter_mut()
+            .zip(BinarySampler.sample_iter(&mut *rng))
+            .for_each(
+                |(a, b): (&mut <F as Field>::ValueT, <F as Field>::ValueT)| {
+                    *a = b;
+                },
+            );
+        let e0 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        let mut e1 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        F::add_assign(&mut e1[degree], coeff);
+
+        ntt_table.transform_slice(v.as_mut_slice());
+        let mut e0 = ntt_table.transform_inplace(e0);
+        let mut e1 = ntt_table.transform_inplace(e1);
+
+        e0.add_mul_assign(self.key().a(), v);
+        e1.add_mul_assign(self.key().b(), v);
+
+        NttRlwe::new(e0, e1)
+    }
+
+    fn encrypt_neg_secret_monomial_inner<R>(
+        &self,
+        coeff: <F as Field>::ValueT,
+        degree: usize,
+        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+        v: &mut FieldNttPolynomial<F>,
+    ) -> NttRlwe<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = ntt_table.dimension();
+
+        v.iter_mut()
+            .zip(BinarySampler.sample_iter(&mut *rng))
+            .for_each(
+                |(a, b): (&mut <F as Field>::ValueT, <F as Field>::ValueT)| {
+                    *a = b;
+                },
+            );
+        let mut e0 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        let e1 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        F::add_assign(&mut e0[degree], coeff);
+
+        ntt_table.transform_slice(v.as_mut_slice());
+        let mut e0 = ntt_table.transform_inplace(e0);
+        let mut e1 = ntt_table.transform_inplace(e1);
+
+        e0.add_mul_assign(self.key().a(), v);
+        e1.add_mul_assign(self.key().b(), v);
+
+        NttRlwe::new(e0, e1)
+    }
+
+    ///
+    pub fn encrypt_monomial_rgsw<R>(
+        &self,
+        coeff: <F as Field>::ValueT,
+        degree: usize,
+        basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+    ) -> NttRgsw<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = ntt_table.dimension();
+
+        let mut v = <FieldNttPolynomial<F>>::zero(dimension);
+        let m: Vec<NttRlwe<F>> = basis
+            .scalar_iter()
+            .map(|scalar| {
+                self.encrypt_monomial_inner(
+                    F::mul(coeff, scalar),
+                    degree,
+                    gaussian,
+                    ntt_table,
+                    rng,
+                    &mut v,
+                )
+            })
+            .collect();
+
+        let minus_s_m: Vec<NttRlwe<F>> = basis
+            .scalar_iter()
+            .map(|scalar| {
+                self.encrypt_neg_secret_monomial_inner(
+                    F::mul(coeff, scalar),
+                    degree,
+                    gaussian,
+                    ntt_table,
+                    rng,
+                    &mut v,
+                )
+            })
+            .collect();
+
+        NttRgsw::new(
+            <NttGadgetRlwe<F>>::new(minus_s_m, *basis),
+            <NttGadgetRlwe<F>>::new(m, *basis),
+        )
     }
 }
 
