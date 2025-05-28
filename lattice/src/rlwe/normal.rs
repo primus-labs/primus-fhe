@@ -7,6 +7,7 @@ use algebra::{
     Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use super::NttRlwe;
 
@@ -27,6 +28,8 @@ use crate::{
 ///
 /// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
 /// accessible through public API functions that enforce any necessary invariants.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rlwe<F: Field> {
     /// Represents the first component in the RLWE structure.
     /// It is a polynomial where the coefficients are elements of the field `F`.

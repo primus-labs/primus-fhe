@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["algebra", "boolean_fhe", "fhe_core", "lattice","fhe_cmp"]
+members = ["algebra", "boolean_fhe", "fhe_core", "lattice", "fhe_cmp"]
 
 resolver = "2"
 
@@ -12,10 +12,11 @@ rand = "0.8"
 rand_distr = "0.4"
 itertools = "0.14"
 rayon = "1.10"
-bytemuck = "1.21"
-bigdecimal = "0.4.7"
+bytemuck = "1.23"
+serde = { version = "1.0", features = ["derive"] }
+bigdecimal = "0.4.8"
 
-criterion = "0.5"
+criterion = "0.6"
 
 [profile.bench]
 lto = true

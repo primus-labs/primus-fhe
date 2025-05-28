@@ -1,4 +1,5 @@
 use num_traits::{ConstZero, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     reduce::{LazyReduceMulAdd, ReduceMulAdd},
@@ -16,6 +17,8 @@ mod neg;
 mod sub;
 
 /// A representation of a polynomial in Number Theoretic Transform (NTT) form.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct FieldNttPolynomial<F: NttField> {
     data: Vec<<F as Field>::ValueT>,
 }

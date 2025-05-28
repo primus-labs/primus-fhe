@@ -9,6 +9,7 @@ use algebra::{
     Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{utils::PolyDecomposeSpace, NttGadgetRlwe};
 
@@ -26,6 +27,8 @@ use super::Rlwe;
 ///
 /// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
 /// accessible through public API functions that enforce any necessary invariants.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: NttField")]
 pub struct NttRlwe<F: NttField> {
     /// Represents the first component in the RLWE structure.
     pub(crate) a: FieldNttPolynomial<F>,

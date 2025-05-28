@@ -8,6 +8,7 @@ use algebra::{
     Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{utils::PolyDecomposeSpace, NttRlwe};
 
@@ -25,6 +26,8 @@ use super::GadgetRlwe;
 /// The struct is generic over a type `F` that must implement the [`NttField`] trait, which ensures that
 /// the field operations are compatible with Number Theoretic Transforms, a key requirement for
 /// efficient polynomial operations in RLWE-based cryptography.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: NttField")]
 pub struct NttGadgetRlwe<F: NttField> {
     /// A vector of NTT RLWE ciphertexts, each encrypted message with a different power of the `basis`.
     data: Vec<NttRlwe<F>>,

@@ -1,4 +1,5 @@
 use num_traits::{ConstZero, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::{reduce::ReduceMulAdd, Field};
 
@@ -13,6 +14,8 @@ mod neg;
 mod sub;
 
 /// Represents a polynomial where coefficients are numeric elements.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct FieldPolynomial<F: Field> {
     data: Vec<<F as Field>::ValueT>,
 }

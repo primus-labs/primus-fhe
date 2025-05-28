@@ -7,13 +7,14 @@ use algebra::{
     utils::Size,
 };
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 
 use super::Lwe;
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 ///
 /// This structure encrypts several messages like a rlwe but truncated `b`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CmLwe<T: Copy> {
     a: Vec<T>,
     b: Vec<T>,

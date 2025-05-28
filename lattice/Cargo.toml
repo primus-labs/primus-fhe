@@ -8,6 +8,7 @@ algebra = { path = "../algebra", default-features = false }
 
 num-traits = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
 
 [features]
 default = ["concrete-ntt"]

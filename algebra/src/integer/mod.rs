@@ -19,6 +19,7 @@ use num_traits::{
     ConstOne, ConstZero, FromPrimitive, MulAdd, MulAddAssign, NumAssign, Pow, ToPrimitive, Unsigned,
 };
 use rand::distributions::uniform::SampleUniform;
+use serde::{Deserialize, Serialize};
 
 use crate::numeric::{BorrowingSub, CarryingAdd};
 use crate::reduce::*;
@@ -89,6 +90,8 @@ pub trait Integer:
     + Pow<u32, Output = Self>
     + Pow<usize, Output = Self>
     + SampleUniform<Sampler: Copy + Clone>
+    + Serialize
+    + for<'de> Deserialize<'de>
 {
 }
 

@@ -1,4 +1,5 @@
 use num_traits::{ConstZero, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::reduce::ReduceMulAdd;
 
@@ -13,7 +14,7 @@ mod neg;
 mod sub;
 
 /// Represents a polynomial where coefficients are elements of a specified numeric `T`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Polynomial<T> {
     poly: Vec<T>,
 }

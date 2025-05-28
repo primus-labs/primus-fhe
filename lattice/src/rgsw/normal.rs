@@ -3,6 +3,7 @@ use algebra::{
     random::DiscreteGaussian, utils::Size, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     utils::{NttRlweSpace, PolyDecomposeSpace},
@@ -26,6 +27,8 @@ use super::NttRgsw;
 /// The struct is generic over a type `F` that must implement the [`NttField`] trait, indicating that field
 /// operations are compatible with Number Theoretic Transforms. This is essential for the efficient polynomial
 /// arithmetic required by the encryption scheme.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: NttField")]
 pub struct Rgsw<F: NttField> {
     /// The first part of the RGSW ciphertext, which is often used for homomorphic operations
     /// and can represent the encrypted data multiplied by some secret value.

@@ -11,6 +11,7 @@ rand = { workspace = true }
 rand_distr = { workspace = true }
 itertools = { workspace = true }
 bytemuck = { workspace = true }
+serde = { workspace = true }
 concrete-ntt = { git = "https://github.com/primus-labs/concrete-ntt", branch = "dev", default-features = false, optional = true }
 bigdecimal = { workspace = true }
 

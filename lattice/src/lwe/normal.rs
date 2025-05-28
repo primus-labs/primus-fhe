@@ -8,11 +8,12 @@ use algebra::{
     utils::Size,
 };
 use rand::{distributions::Uniform, prelude::Distribution};
+use serde::{Deserialize, Serialize};
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
 /// secure cryptographic systems that are considered hard to crack by quantum computers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Lwe<T: Copy> {
     /// A vector of elements of `T`, representing the public vector part of the LWE instance.
     a: Vec<T>,
