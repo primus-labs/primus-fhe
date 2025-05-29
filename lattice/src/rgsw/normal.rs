@@ -156,15 +156,15 @@ impl<F: NttField> Rgsw<F> {
             .minus_s_m
             .iter()
             .map(|rlwe| {
-                let mut detination = Rlwe::zero(dimension);
+                let mut destination = Rlwe::zero(dimension);
                 rlwe.mul_ntt_rgsw_inplace(
                     ntt_rgsw,
                     ntt_table,
                     decompose_space,
                     median,
-                    &mut detination,
+                    &mut destination,
                 );
-                detination
+                destination
             })
             .collect();
 
@@ -174,15 +174,15 @@ impl<F: NttField> Rgsw<F> {
             .m
             .iter()
             .map(|rlwe| {
-                let mut detination = Rlwe::zero(dimension);
+                let mut destination = Rlwe::zero(dimension);
                 rlwe.mul_ntt_rgsw_inplace(
                     ntt_rgsw,
                     ntt_table,
                     decompose_space,
                     median,
-                    &mut detination,
+                    &mut destination,
                 );
-                detination
+                destination
             })
             .collect();
 

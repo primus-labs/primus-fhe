@@ -337,6 +337,14 @@ pub struct NttRlwePublicKey<F: NttField> {
     key: NttRlwe<F>,
 }
 
+impl<F: NttField> Clone for NttRlwePublicKey<F> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+        }
+    }
+}
+
 impl<F: NttField> NttRlwePublicKey<F> {
     /// Creates a new [`NttRlwePublicKey`] using the provided secret key, Gaussian distribution, NTT table, and random number generator.
     ///
