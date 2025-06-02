@@ -39,7 +39,7 @@ pub use blind_rotation::BlindRotationKey;
 pub use key_switch::*;
 
 pub use automorphism::{AutoKey, AutoSpace};
-pub use trace::TraceKey;
+pub use trace::{expand_coefficients, TraceKey};
 
 pub use modulus_switch::{
     lwe_modulus_switch, lwe_modulus_switch_assign, lwe_modulus_switch_inplace,

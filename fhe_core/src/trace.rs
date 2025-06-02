@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use algebra::{
-    decompose::NonPowOf2ApproxSignedBasis, random::DiscreteGaussian, utils::Size, Field, NttField,
+    decompose::NonPowOf2ApproxSignedBasis, modulus::ShoupFactor, random::DiscreteGaussian,
+    utils::Size, AsInto, Field, NttField,
 };
 use lattice::utils::RlweSpace;
 use rand::{CryptoRng, Rng};
@@ -104,6 +105,48 @@ impl<F: NttField> Size for TraceKey<F> {
         }
         self.auto_keys.len() * self.auto_keys[0].size()
     }
+}
+
+///
+pub fn expand_coefficients<F: NttField>(
+    ciphertext: &RlweCiphertext<F>,
+    trace_key: &TraceKey<F>,
+) -> Vec<RlweCiphertext<F>> {
+    let dimension = ciphertext.dimension();
+    let mut elems = vec![ciphertext.clone()];
+
+    let (mut rlwe_space, mut auto_space) = match trace_key.pool.get() {
+        Some(space) => space,
+        None => (RlweSpace::new(dimension), AutoSpace::new(dimension)),
+    };
+
+    for (i, auto_key) in trace_key.auto_keys.iter().enumerate() {
+        let mut chunk0 = Vec::with_capacity(1 << i + 1);
+        let mut chunk1 = Vec::with_capacity(1 << i);
+
+        for ele in elems {
+            auto_key.automorphism_inplace(&ele, &mut auto_space, &mut rlwe_space);
+
+            let mut t = (&*rlwe_space).clone().sub_element_wise(&ele);
+            t.mul_monic_monomial_assign(dimension, dimension - (1 << i));
+            chunk1.push(t);
+
+            chunk0.push(ele.add_element_wise(&*rlwe_space));
+        }
+
+        chunk0.append(&mut chunk1);
+        elems = chunk0;
+    }
+
+    let inv_n = F::inv(dimension.as_into());
+    let n_inv = ShoupFactor::new(inv_n, F::MODULUS_VALUE);
+
+    elems.iter_mut().for_each(|ciphertext| {
+        ciphertext.a_mut().mul_shoup_scalar_assign(n_inv);
+        ciphertext.b_mut().mul_shoup_scalar_assign(n_inv);
+    });
+
+    elems
 }
 
 #[cfg(test)]

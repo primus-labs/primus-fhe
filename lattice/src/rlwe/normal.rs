@@ -362,6 +362,36 @@ impl<F: NttField> Rlwe<F> {
         *b *= ntt_polynomial;
     }
 
+    ///
+    pub fn mul_monic_monomial_assign(
+        &mut self,
+        dimension: usize, // N
+        r: usize,
+    ) {
+        if r == 0 {
+            return;
+        } else if r <= dimension {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_right(r);
+                x[0..n_sub_r].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let n_sub_r = dimension - r;
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        } else {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_right(r);
+                x[n_sub_r..].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let r = r - dimension;
+            let n_sub_r = dimension.checked_sub(r).expect("r > 2N !");
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        }
+    }
+
     /// Perform `destination = self * (X^r - 1)`.
     pub fn mul_monic_monomial_sub_one_inplace(
         &self,
