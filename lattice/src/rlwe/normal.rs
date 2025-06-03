@@ -362,15 +362,11 @@ impl<F: NttField> Rlwe<F> {
         *b *= ntt_polynomial;
     }
 
-    ///
-    pub fn mul_monic_monomial_assign(
-        &mut self,
-        dimension: usize, // N
-        r: usize,
-    ) {
-        if r == 0 {
-            return;
-        } else if r <= dimension {
+    /// Perform `self * X^r`.
+    pub fn mul_monic_monomial(mut self, r: usize) -> Self {
+        let dimension = self.dimension();
+
+        if r < dimension {
             #[inline]
             fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
                 x.as_mut_slice().rotate_right(r);
@@ -382,10 +378,37 @@ impl<F: NttField> Rlwe<F> {
         } else {
             #[inline]
             fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
-                x.as_mut_slice().rotate_right(r);
+                x.as_mut_slice().rotate_left(r);
                 x[n_sub_r..].iter_mut().for_each(<F as Field>::neg_assign);
             }
-            let r = r - dimension;
+            let r = (dimension << 1) - r;
+            let n_sub_r = dimension.checked_sub(r).expect("r > 2N !");
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        }
+        self
+    }
+
+    /// Perform `self = self * X^r`.
+    pub fn mul_monic_monomial_assign(&mut self, r: usize) {
+        let dimension = self.dimension();
+
+        if r < dimension {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_right(r);
+                x[0..n_sub_r].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let n_sub_r = dimension - r;
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        } else {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_left(r);
+                x[n_sub_r..].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let r = (dimension << 1) - r;
             let n_sub_r = dimension.checked_sub(r).expect("r > 2N !");
             rotate(self.a_mut(), r, n_sub_r);
             rotate(self.b_mut(), r, n_sub_r);

@@ -495,7 +495,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
         NttRlwe::new(e0, e1)
     }
 
-    ///
+    /// Generate a RGSW ciphertext which encrypted `coeff*X^degree`.
     pub fn encrypt_monomial_rgsw<R>(
         &self,
         coeff: <F as Field>::ValueT,

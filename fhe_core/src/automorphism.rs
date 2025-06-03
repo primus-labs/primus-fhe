@@ -26,6 +26,16 @@ pub struct AutoKey<F: NttField> {
     pub(crate) ntt_table: Arc<<F as NttField>::Table>,
 }
 
+impl<F: NttField> Clone for AutoKey<F> {
+    fn clone(&self) -> Self {
+        Self {
+            degree: self.degree,
+            key: self.key.clone(),
+            ntt_table: Arc::clone(&self.ntt_table),
+        }
+    }
+}
+
 /// Preallocated space for automorphism
 pub struct AutoSpace<F: NttField> {
     decompose_space: PolyDecomposeSpace<F>,
@@ -221,9 +231,9 @@ fn poly_auto_inplace<F: NttField>(
     for (i, c) in poly.iter().enumerate() {
         let j = modulus.reduce_mul(i, degree);
         if j < dimension {
-            destination[j] = *c;
+            F::MODULUS.reduce_add_assign(&mut destination[j], *c);
         } else {
-            destination[j - dimension] = F::neg(*c);
+            F::MODULUS.reduce_sub_assign(&mut destination[j - dimension], *c);
         }
     }
 }
@@ -237,7 +247,7 @@ mod tests {
     use super::*;
 
     type Fp = U32FieldEval<132120577>;
-    type ValT = u32; // inner type
+    type ValT = <Fp as Field>::ValueT; // inner type
     type PolyT = FieldPolynomial<Fp>;
 
     const CIPHER_MODULUS: ValT = <Fp as Field>::MODULUS_VALUE; // ciphertext space

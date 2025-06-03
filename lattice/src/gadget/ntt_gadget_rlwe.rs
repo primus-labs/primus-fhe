@@ -3,7 +3,6 @@ use algebra::{
     ntt::NumberTheoryTransform,
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     random::DiscreteGaussian,
-    reduce::ReduceAddAssign,
     utils::Size,
     Field, NttField,
 };
@@ -352,7 +351,7 @@ impl<F: NttField> NttGadgetRlwe<F> {
                     <NttRlwe<F>>::generate_random_zero_sample(secret_key, gaussian, ntt_table, rng);
                 r.a_mut_slice()
                     .iter_mut()
-                    .for_each(|v| F::MODULUS.reduce_add_assign(v, scalar));
+                    .for_each(|v| F::add_assign(v, scalar));
                 r
             })
             .collect();
