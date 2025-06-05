@@ -165,7 +165,10 @@ impl<F: NttField> Size for TraceKey<F> {
 
 #[cfg(test)]
 mod tests {
-    use algebra::{ntt::NumberTheoryTransform, polynomial::FieldPolynomial, Field, U32FieldEval};
+    use algebra::{
+        modulus::PowOf2Modulus, ntt::NumberTheoryTransform, polynomial::FieldPolynomial,
+        reduce::Reduce, Field, U32FieldEval,
+    };
     use rand::{distributions::Uniform, prelude::Distribution};
 
     use crate::RingSecretKeyType;
@@ -178,6 +181,7 @@ mod tests {
 
     const CIPHER_MODULUS: ValT = FieldT::MODULUS_VALUE; // ciphertext space
     const PLAIN_MODULUS: ValT = 8; // message space
+    const PLAIN_MODULUS_M: PowOf2Modulus<ValT> = <PowOf2Modulus<ValT>>::new(PLAIN_MODULUS);
 
     const LOG_N: u32 = 10;
     const N: usize = 1 << LOG_N;
@@ -189,9 +193,11 @@ mod tests {
 
     #[inline]
     fn decode(c: ValT) -> ValT {
-        (c as f64 * PLAIN_MODULUS as f64 / CIPHER_MODULUS as f64).round() as ValT % PLAIN_MODULUS
+        PLAIN_MODULUS_M
+            .reduce((c as f64 * PLAIN_MODULUS as f64 / CIPHER_MODULUS as f64).round() as ValT)
     }
 
+    // cargo test -r -p fhe_core --lib -- trace::tests::test_trace
     #[test]
     fn test_trace() {
         let ntt_table = Arc::new(FieldT::generate_ntt_table(LOG_N).unwrap());
@@ -238,7 +244,7 @@ mod tests {
         let decrypted_values = (result.b() - a_mul_s)
             .into_iter()
             .map(decode)
-            .collect::<Vec<u32>>();
+            .collect::<Vec<ValT>>();
         let flag =
             decrypted_values[0] == values[0] && decrypted_values[1..].iter().all(|&v| v == 0);
 
@@ -253,7 +259,7 @@ mod tests {
         let mut csrng = rand::thread_rng();
 
         let gaussian = DiscreteGaussian::new(0.0, 3.2, FieldT::MINUS_ONE).unwrap();
-        let distr = Uniform::new(0, 2);
+        let distr = Uniform::new(0, PLAIN_MODULUS);
 
         let sk = RlweSecretKey::new(
             PolyT::random_ternary(N, &mut csrng),
@@ -299,7 +305,10 @@ mod tests {
 
 #[cfg(test)]
 mod tests2 {
-    use algebra::{ntt::NumberTheoryTransform, polynomial::FieldPolynomial, U64FieldEval};
+    use algebra::{
+        modulus::PowOf2Modulus, ntt::NumberTheoryTransform, polynomial::FieldPolynomial,
+        reduce::Reduce, U64FieldEval,
+    };
     use rand::{distributions::Uniform, prelude::Distribution};
 
     use crate::RingSecretKeyType;
@@ -312,6 +321,7 @@ mod tests2 {
 
     const CIPHER_MODULUS: ValT = FieldT::MODULUS_VALUE; // ciphertext space
     const PLAIN_MODULUS: ValT = 4096; // message space
+    const PLAIN_MODULUS_M: PowOf2Modulus<ValT> = <PowOf2Modulus<ValT>>::new(PLAIN_MODULUS);
 
     const LOG_N: u32 = 11;
     const N: usize = 1 << LOG_N;
@@ -323,7 +333,8 @@ mod tests2 {
 
     #[inline]
     fn decode(c: ValT) -> ValT {
-        (c as f64 * PLAIN_MODULUS as f64 / CIPHER_MODULUS as f64).round() as ValT % PLAIN_MODULUS
+        PLAIN_MODULUS_M
+            .reduce((c as f64 * PLAIN_MODULUS as f64 / CIPHER_MODULUS as f64).round() as ValT)
     }
 
     // cargo test -r -p fhe_core --lib -- trace::tests2::test_expand_coeffs
@@ -334,7 +345,7 @@ mod tests2 {
         let mut csrng = rand::thread_rng();
 
         let gaussian = DiscreteGaussian::new(0.0, 3.2, FieldT::MINUS_ONE).unwrap();
-        let distr = Uniform::new(0, 2);
+        let distr = Uniform::new(0, PLAIN_MODULUS);
 
         let sk = RlweSecretKey::new(
             PolyT::random_ternary(N, &mut csrng),

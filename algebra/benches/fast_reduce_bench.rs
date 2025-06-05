@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use algebra::reduce::{ReduceAdd, ReduceDouble, ReduceNeg, ReduceSub, TryReduceInv};
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use rand::{distributions::Uniform, thread_rng, Rng};
 
 pub fn criterion_benchmark(c: &mut Criterion) {
