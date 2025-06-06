@@ -10,6 +10,7 @@ use algebra::{
 };
 use lattice::{Lwe, NttGadgetRlwe, NttRgsw, NttRlwe, NumRlwe};
 use rand::{prelude::Distribution, CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     encode, CmLweCiphertext, LweCiphertext, LweParameters, LweSecretKey, NttRlweSecretKey,
@@ -142,6 +143,8 @@ impl<C: UnsignedInteger> Size for LwePublicKey<C> {
 /// # Type Parameters
 ///
 /// * `C` - An unsigned integer type that represents the coefficients of the RLWE ciphertexts.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(bound(deserialize = "C: UnsignedInteger"))]
 pub struct LwePublicKeyRlweMode<C: UnsignedInteger> {
     public_key: NumRlwe<C>,
 }
