@@ -3,16 +3,17 @@ use std::ops::Deref;
 use algebra::{
     integer::UnsignedInteger,
     ntt::NumberTheoryTransform,
-    polynomial::{FieldNttPolynomial, FieldPolynomial},
+    polynomial::{FieldNttPolynomial, FieldPolynomial, Polynomial},
     random::{sample_binary_values, sample_ternary_values, DiscreteGaussian},
     reduce::RingReduce,
     utils::Size,
     Field, NttField,
 };
+use lattice::NumRlwe;
 use num_traits::{ConstOne, ConstZero, One, Zero};
-use rand::{CryptoRng, Rng};
+use rand::{distributions::Uniform, prelude::Distribution, CryptoRng, Rng};
 
-use crate::{decode, encode, LweCiphertext, LweParameters};
+use crate::{decode, encode, CmLweCiphertext, LweCiphertext, LweParameters};
 
 /// The distribution type of the LWE Secret Key.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -176,6 +177,106 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
         );
 
         ciphertext
+    }
+
+    /// Encrypts multiple messages using the secret key.
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - A slice of messages to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
+    #[inline]
+    pub fn encrypt_multi_messages<Msg, R, Modulus>(
+        &self,
+        messages: &[Msg],
+        params: &LweParameters<C, Modulus>,
+        csrng: &mut R,
+    ) -> CmLweCiphertext<C>
+    where
+        Msg: Copy + TryInto<C>,
+        R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
+    {
+        let dimension = params.dimension;
+        let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
+
+        let distr = <Uniform<C>>::new_inclusive(C::ZERO, params.cipher_modulus_minus_one());
+
+        let mut a = Polynomial::zero(dimension);
+        let mut b = Polynomial::zero(dimension);
+
+        for (i, o) in a.iter_mut().zip(distr.sample_iter(&mut *csrng)) {
+            *i = o;
+        }
+
+        a.naive_mul_inplace(&self.key, modulus, &mut b);
+
+        for (&message, bi) in messages.iter().zip(b.iter_mut()) {
+            modulus.reduce_add_assign(
+                bi,
+                encode(
+                    message,
+                    params.plain_modulus_value,
+                    params.cipher_modulus_value,
+                ),
+            );
+        }
+
+        for (bi, ei) in b.iter_mut().zip(gaussian.sample_iter(&mut *csrng)) {
+            modulus.reduce_add_assign(bi, ei);
+        }
+
+        NumRlwe::new(a, b).extract_first_few_lwe_locally(messages.len(), modulus)
+    }
+
+    /// Encrypts multiple zeros using the secret key.
+    ///
+    /// # Arguments
+    ///
+    /// * `zero_count` - The count of zeros to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
+    #[inline]
+    pub fn encrypt_multi_zeros<R, Modulus>(
+        &self,
+        zero_count: usize,
+        params: &LweParameters<C, Modulus>,
+        csrng: &mut R,
+    ) -> CmLweCiphertext<C>
+    where
+        R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
+    {
+        let dimension = params.dimension;
+        let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
+
+        let distr = <Uniform<C>>::new_inclusive(C::ZERO, params.cipher_modulus_minus_one());
+
+        let mut a = Polynomial::zero(dimension);
+        let mut b = Polynomial::zero(dimension);
+
+        for (i, o) in a.iter_mut().zip(distr.sample_iter(&mut *csrng)) {
+            *i = o;
+        }
+
+        a.naive_mul_inplace(&self.key, modulus, &mut b);
+
+        for (bi, ei) in b.iter_mut().zip(gaussian.sample_iter(&mut *csrng)) {
+            modulus.reduce_add_assign(bi, ei);
+        }
+
+        NumRlwe::new(a, b).extract_first_few_lwe_locally(zero_count, modulus)
     }
 
     /// Decrypts the [`LweCiphertext`] back to message.

@@ -257,7 +257,6 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     ///
     /// * `messages` - A slice of messages to be encrypted.
     /// * `params` - The parameters for the LWE scheme.
-    /// * `cipher_modulus` - The modulus used for the LWE scheme.
     /// * `csrng` - A mutable reference to a random number generator.
     ///
     /// # Returns
@@ -318,6 +317,62 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         }
 
         result.extract_first_few_lwe_locally(messages.len(), modulus)
+    }
+
+    /// Encrypts multiple zeros using the public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `zero_count` - The count of zeros to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
+    #[inline]
+    pub fn encrypt_multi_zeros<R, Modulus>(
+        &self,
+        zero_count: usize,
+        params: &LweParameters<C, Modulus>,
+        csrng: &mut R,
+    ) -> CmLweCiphertext<C>
+    where
+        R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
+    {
+        let dimension = params.dimension;
+        let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
+
+        let r: Vec<C> = sample_binary_values(dimension, csrng);
+
+        let mut result = NumRlwe::zero(dimension);
+
+        self.public_key
+            .a()
+            .naive_mul_inplace(&r, modulus, result.a_mut());
+        self.public_key
+            .b()
+            .naive_mul_inplace(&r, modulus, result.b_mut());
+
+        for (ai, ei) in result
+            .a_mut()
+            .iter_mut()
+            .zip(gaussian.sample_iter(&mut *csrng))
+        {
+            modulus.reduce_add_assign(ai, ei);
+        }
+
+        for (bi, ei) in result
+            .b_mut()
+            .iter_mut()
+            .zip(gaussian.sample_iter(&mut *csrng))
+        {
+            modulus.reduce_add_assign(bi, ei);
+        }
+
+        result.extract_first_few_lwe_locally(zero_count, modulus)
     }
 }
 
