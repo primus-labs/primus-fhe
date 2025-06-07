@@ -504,6 +504,58 @@ impl<T: Numeric> ReduceDotProduct<T> for BarrettModulus<T> {
             });
         self.reduce_add(self.reduce(c), inter)
     }
+
+    #[inline]
+    fn reduce_dot_product2(
+        self,
+        a: impl IntoIterator<Item = T>,
+        b: impl IntoIterator<Item = T>,
+    ) -> Self::Output {
+        /// `c += a * b`
+        fn multiply_add<T: Numeric>(c: &mut [T; 2], a: T, b: T) {
+            let (lw, hw) = a.widening_mul(b);
+            let carry;
+            (c[0], carry) = c[0].overflowing_add(lw);
+            (c[1], _) = c[1].carrying_add(hw, carry);
+        }
+
+        let mut a_iter = a.into_iter();
+        let mut b_iter = b.into_iter();
+
+        let mut a_temp_array = [T::ZERO; 16];
+        let mut b_temp_array = [T::ZERO; 16];
+
+        let mut i = 0;
+        let mut result = T::ZERO;
+
+        while let (Some(a_next), Some(b_next)) = (a_iter.next(), b_iter.next()) {
+            if i < 16 {
+                a_temp_array[i] = a_next;
+                b_temp_array[i] = b_next;
+                i += 1;
+            } else {
+                let mut c: [T; 2] = [T::ZERO, T::ZERO];
+                for (&a, b) in a_temp_array.iter().zip(b_temp_array) {
+                    multiply_add(&mut c, a, b);
+                }
+                self.reduce_add_assign(&mut result, self.reduce(c));
+
+                a_temp_array.fill(T::ZERO);
+                b_temp_array.fill(T::ZERO);
+                a_temp_array[0] = a_next;
+                b_temp_array[0] = b_next;
+                i = 1;
+            }
+        }
+
+        let mut c: [T; 2] = [T::ZERO, T::ZERO];
+        for (&a, &b) in a_temp_array[..i].iter().zip(b_temp_array[..i].iter()) {
+            multiply_add(&mut c, a, b);
+        }
+        self.reduce_add_assign(&mut result, self.reduce(c));
+
+        result
+    }
 }
 
 #[cfg(test)]

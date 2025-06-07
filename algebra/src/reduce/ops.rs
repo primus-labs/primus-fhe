@@ -267,4 +267,11 @@ pub trait ReduceDotProduct<T> {
 
     /// Calculate `∑a_i×b_i (mod modulus)` where `self` is modulus.
     fn reduce_dot_product(self, a: impl AsRef<[T]>, b: impl AsRef<[T]>) -> Self::Output;
+
+    /// Calculate `∑a_i×b_i (mod modulus)` where `self` is modulus.
+    fn reduce_dot_product2(
+        self,
+        a: impl IntoIterator<Item = T>,
+        b: impl IntoIterator<Item = T>,
+    ) -> Self::Output;
 }

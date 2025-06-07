@@ -329,6 +329,41 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
                 .min(modulus.reduce_sub(fresh, plaintext)),
         )
     }
+
+    /// Decrypts the [`LweCiphertext`] back to message.
+    #[inline]
+    pub fn decrypt_multi_messages<Msg, Modulus>(
+        &self,
+        cipher_text: &CmLweCiphertext<C>,
+        params: &LweParameters<C, Modulus>,
+    ) -> Vec<Msg>
+    where
+        Msg: TryFrom<C>,
+        Modulus: RingReduce<C>,
+    {
+        let modulus = params.cipher_modulus;
+
+        let mut result = Vec::with_capacity(cipher_text.msg_count());
+
+        for (i, &b) in cipher_text.b().iter().enumerate() {
+            let a_mul_s = modulus.reduce_dot_product2(
+                cipher_text.a()[i..]
+                    .iter()
+                    .copied()
+                    .chain(cipher_text.a()[..i].iter().map(|&v| modulus.reduce_neg(v))),
+                self.key.iter().copied(),
+            );
+            let plaintext = modulus.reduce_sub(b, a_mul_s);
+
+            result.push(decode(
+                plaintext,
+                params.plain_modulus_value,
+                params.cipher_modulus_value,
+            ))
+        }
+
+        result
+    }
 }
 
 impl<C: UnsignedInteger> Size for LweSecretKey<C> {
