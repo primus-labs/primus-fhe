@@ -143,10 +143,19 @@ impl<C: UnsignedInteger> Size for LwePublicKey<C> {
 /// # Type Parameters
 ///
 /// * `C` - An unsigned integer type that represents the coefficients of the RLWE ciphertexts.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(bound(deserialize = "C: UnsignedInteger"))]
 pub struct LwePublicKeyRlweMode<C: UnsignedInteger> {
     public_key: NumRlwe<C>,
+}
+
+impl<C: UnsignedInteger> Clone for LwePublicKeyRlweMode<C> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            public_key: self.public_key.clone(),
+        }
+    }
 }
 
 impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {

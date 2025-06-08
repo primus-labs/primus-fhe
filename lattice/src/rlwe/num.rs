@@ -11,7 +11,7 @@ use crate::{CmLwe, Lwe};
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
 /// This structure is used in advanced cryptographic systems and protocols, particularly
 /// those that require efficient homomorphic encryption properties.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(bound(deserialize = "T: UnsignedInteger"))]
 pub struct NumRlwe<T: UnsignedInteger> {
     /// Represents the first component in the RLWE structure.
@@ -20,6 +20,16 @@ pub struct NumRlwe<T: UnsignedInteger> {
     /// Represents the second component in the RLWE structure.
     /// It's also a polynomial with coefficients in the field `F`.
     pub(crate) b: Polynomial<T>,
+}
+
+impl<T: UnsignedInteger> Clone for NumRlwe<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            a: self.a.clone(),
+            b: self.b.clone(),
+        }
+    }
 }
 
 impl<T: UnsignedInteger> Default for NumRlwe<T> {
