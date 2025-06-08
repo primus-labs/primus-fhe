@@ -43,6 +43,16 @@ fn test_lwe_pk() {
     let m: MsgT = sk.decrypt(&c, &params);
     assert_eq!(m, message);
 
+    // encrypt multi messages with secret key
+    let messages: Vec<MsgT> = (&mut rng).sample_iter(distr).take(256).collect();
+    let c = sk.encrypt_multi_messages(&messages, &params, &mut rng);
+    let index = rng.gen_range(0..256);
+    let c1 = c.extract_rlwe_mode(index, modulus);
+    let m: MsgT = sk.decrypt(&c1, &params);
+    assert_eq!(m, messages[index]);
+    let msgs = sk.decrypt_multi_messages::<MsgT, Modulus>(&c, &params);
+    assert_eq!(msgs, messages);
+
     // generate public key
     let pk = LwePublicKey::new(&sk, &params, &mut rng);
 
@@ -62,12 +72,13 @@ fn test_lwe_pk() {
     assert_eq!(m, message);
 
     // encrypt multi messages with public key
-    let messages: Vec<MsgT> = (&mut rng).sample_iter(distr).take(256).collect();
     let c = pk2.encrypt_multi_messages(&messages, &params, &mut rng);
     let index = rng.gen_range(0..256);
     let c1 = c.extract_rlwe_mode(index, modulus);
     let m: MsgT = sk.decrypt(&c1, &params);
     assert_eq!(m, messages[index]);
+    let msgs = sk.decrypt_multi_messages::<MsgT, Modulus>(&c, &params);
+    assert_eq!(msgs, messages);
 }
 
 #[test]

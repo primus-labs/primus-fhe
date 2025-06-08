@@ -342,27 +342,29 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
         Modulus: RingReduce<C>,
     {
         let modulus = params.cipher_modulus;
+        let dimension = cipher_text.a().len();
 
-        let mut result = Vec::with_capacity(cipher_text.msg_count());
+        cipher_text
+            .b()
+            .iter()
+            .enumerate()
+            .map(|(i, &b)| {
+                let a_mul_s = modulus.reduce_dot_product2(
+                    cipher_text.a()[dimension - i..]
+                        .iter()
+                        .map(|&v| modulus.reduce_neg(v))
+                        .chain(cipher_text.a()[..dimension - i].iter().copied()),
+                    self.key.iter().copied(),
+                );
+                let plaintext = modulus.reduce_sub(b, a_mul_s);
 
-        for (i, &b) in cipher_text.b().iter().enumerate() {
-            let a_mul_s = modulus.reduce_dot_product2(
-                cipher_text.a()[i..]
-                    .iter()
-                    .copied()
-                    .chain(cipher_text.a()[..i].iter().map(|&v| modulus.reduce_neg(v))),
-                self.key.iter().copied(),
-            );
-            let plaintext = modulus.reduce_sub(b, a_mul_s);
-
-            result.push(decode(
-                plaintext,
-                params.plain_modulus_value,
-                params.cipher_modulus_value,
-            ))
-        }
-
-        result
+                decode(
+                    plaintext,
+                    params.plain_modulus_value,
+                    params.cipher_modulus_value,
+                )
+            })
+            .collect()
     }
 }
 
