@@ -151,6 +151,61 @@ impl<F: NttField> TraceKey<F> {
 
         elems
     }
+
+    /// Coefficient Expansion Algorithm.
+    ///
+    /// (Alg. 1)[https://eprint.iacr.org/2024/266.pdf]
+    pub fn expand_partial_coefficients(
+        &self,
+        ciphertext: &RlweCiphertext<F>,
+        coeff_count: usize,
+    ) -> Vec<RlweCiphertext<F>> {
+        let dimension = ciphertext.dimension();
+        let twice_dimension = dimension << 1;
+
+        let op_len = coeff_count.next_power_of_two();
+        let log_d = op_len.trailing_zeros() as usize;
+
+        let inv_n = F::inv(op_len.as_into());
+        let n_inv = ShoupFactor::new(inv_n, F::MODULUS_VALUE);
+
+        let (mut a_1, mut auto_space) = match self.pool.get() {
+            Some(space) => space,
+            None => (RlweSpace::new(dimension), AutoSpace::new(dimension)),
+        };
+
+        let mut ct = ciphertext.clone();
+
+        ct.a_mut().mul_shoup_scalar_assign(n_inv);
+        ct.b_mut().mul_shoup_scalar_assign(n_inv);
+
+        let mut elems = vec![ct];
+
+        for (i, auto_key) in self.auto_keys.iter().enumerate().take(log_d) {
+            let two_pow_i = 1 << i;
+            let mut chunk0 = Vec::with_capacity(two_pow_i << 1);
+            let mut chunk1 = Vec::with_capacity(two_pow_i);
+
+            for a_0 in elems.into_iter() {
+                auto_key.automorphism_inplace(&a_0, &mut auto_space, &mut a_1);
+
+                chunk0.push(a_0.clone().add_element_wise(&*a_1));
+
+                let t = a_0
+                    .sub_element_wise(&*a_1)
+                    .mul_monic_monomial(twice_dimension - two_pow_i);
+                chunk1.push(t);
+            }
+
+            chunk0.append(&mut chunk1);
+            elems = chunk0;
+        }
+
+        self.pool.store((a_1, auto_space));
+
+        elems.truncate(op_len);
+        elems
+    }
 }
 
 impl<F: NttField> Size for TraceKey<F> {
@@ -287,6 +342,60 @@ mod tests {
         *cipher.b_mut() += &encoded_values;
 
         let result = trace_key.expand_coefficients(&cipher);
+
+        let flag = result.into_iter().zip(values).all(|(cipher, value)| {
+            let a_mul_s =
+                ntt_table.inverse_transform_inplace(ntt_table.transform(cipher.a()) * &*ntt_sk);
+            let decrypted_values = (cipher.b() - a_mul_s)
+                .into_iter()
+                .map(decode)
+                .collect::<Vec<ValT>>();
+
+            decrypted_values[0] == value && decrypted_values[1..].iter().all(|&v| v == 0)
+        });
+
+        assert!(flag);
+    }
+
+    // cargo test -r -p fhe_core --lib -- trace::tests::test_expand_partial_coeffs
+    #[test]
+    fn test_expand_partial_coeffs() {
+        let ntt_table = Arc::new(FieldT::generate_ntt_table(LOG_N).unwrap());
+
+        let mut csrng = rand::thread_rng();
+
+        let gaussian = DiscreteGaussian::new(0.0, 3.2, FieldT::MINUS_ONE).unwrap();
+        let distr = Uniform::new(0, PLAIN_MODULUS);
+
+        let sk = RlweSecretKey::new(
+            PolyT::random_ternary(N, &mut csrng),
+            RingSecretKeyType::Ternary,
+        );
+        let ntt_sk = NttRlweSecretKey::from_coeff_secret_key(&sk, &ntt_table);
+
+        let basis = NonPowOf2ApproxSignedBasis::new(FieldT::MODULUS_VALUE, 4, None);
+
+        let trace_key = TraceKey::new(
+            &sk,
+            &ntt_sk,
+            &basis,
+            gaussian,
+            Arc::clone(&ntt_table),
+            &mut csrng,
+        );
+
+        let op_len = 125;
+
+        let mut values: Vec<ValT> = distr.sample_iter(&mut csrng).take(N).collect();
+        values[op_len..].fill(0);
+        let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
+
+        let mut cipher = <RlweCiphertext<FieldT>>::generate_random_zero_sample(
+            &ntt_sk, gaussian, &ntt_table, &mut csrng,
+        );
+        *cipher.b_mut() += &encoded_values;
+
+        let result = trace_key.expand_partial_coefficients(&cipher, op_len);
 
         let flag = result.into_iter().zip(values).all(|(cipher, value)| {
             let a_mul_s =
