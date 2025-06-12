@@ -1,5 +1,6 @@
 #include "emp-ot/emp-ot.h"
 #include "ole/ole_z2k.h"
+#include "ole/countio.h"
 #include <thread>
 
 using namespace std;
@@ -29,15 +30,15 @@ int main(int argc, char** argv) {
     size_t party = atoi(argv[2]);
     int base_port = atoi(argv[3]);
 
-    NetIO** ios = new NetIO*[total_party];
+    CountNetIO** ios = new CountNetIO*[total_party];
     std::vector<std::string> ip_list = read_ip_list("../batch/iplist/ip.txt", total_party);
 
     for (size_t i = 0; i < total_party; ++i) {
         if (i == party) continue;
         if (i > party) {
-            ios[i] = new NetIO(ip_list[i].c_str(), (party * total_party + i) + base_port);
+            ios[i] = new CountNetIO(ip_list[i].c_str(), (party * total_party + i) + base_port);
         } else {
-            ios[i] = new NetIO(nullptr, (i * total_party + party) + base_port);
+            ios[i] = new CountNetIO(nullptr, (i * total_party + party) + base_port);
         }
     }
 
@@ -63,11 +64,11 @@ int main(int argc, char** argv) {
         out[i] = in_a[i] * in_b[i];
     }
 
-    FerretCOT<NetIO> **cots = new FerretCOT<NetIO>*[total_party];
+    FerretCOT<CountNetIO> **cots = new FerretCOT<CountNetIO>*[total_party];
     vector<thread> threads;
     for (size_t i = 0; i < total_party; ++i) if (i != party) {
         threads.push_back(thread([&, i]() {
-            cots[i] = new FerretCOT<NetIO>(i > party ? BOB : ALICE, 1, &ios[i], false, 
+            cots[i] = new FerretCOT<CountNetIO>(i > party ? BOB : ALICE, 1, &ios[i], false, 
             true, ferret_b13, "data/pre_file_" + to_string(party) + "_" + to_string(i) + ".txt");
         }));
     }
@@ -89,7 +90,7 @@ int main(int argc, char** argv) {
 
     for (size_t i = 0; i < total_party; ++i) if (i != party) {
         threads.push_back(thread([&, i]() {
-            OLEZ2K<NetIO> ole(ios[i], cots[i], 64);
+            OLEZ2K<CountNetIO> ole(ios[i], cots[i], 64);
             if (i > party) {
                 ole.compute(tmp_out[i].data(), a_extend_b.data(), num_triples << 1, MAX_BATCH_SIZE);
             } else {
@@ -158,6 +159,17 @@ int main(int argc, char** argv) {
         ios[0]->send_data(out.data(), num_triples * sizeof(uint64_t));
     }
     #endif
+
+    // communication cost
+    size_t total_bytes_sent = 0, total_bytes_recv = 0;
+    for (size_t i = 0; i < total_party; ++i) {
+        if (i != party) {
+            total_bytes_sent += ios[i]->get_total_bytes_sent();
+            total_bytes_recv += ios[i]->get_total_bytes_recv();
+        }
+    }
+    cout << "Party " << party << " send + recv: " << total_bytes_sent + total_bytes_recv << " bytes" << endl;
+    cout << "sent: " << total_bytes_sent << " bytes, recv: " << total_bytes_recv << " bytes" << endl;
 
     // clean up
     for (size_t i = 0; i < total_party; ++i) if (i != party) {
