@@ -63,6 +63,12 @@ impl<F: NttField> NttRlwe<F> {
         Self { a, b }
     }
 
+    /// Given the a and b, drop self.
+    #[inline]
+    pub fn into_inner(self) -> (FieldNttPolynomial<F>, FieldNttPolynomial<F>) {
+        (self.a, self.b)
+    }
+
     /// Creates a new [`NttRlwe<F>`] with reference of [`FieldNttPolynomial<F>`].
     #[inline]
     pub fn from_ref(a: &FieldNttPolynomial<F>, b: &FieldNttPolynomial<F>) -> Self {

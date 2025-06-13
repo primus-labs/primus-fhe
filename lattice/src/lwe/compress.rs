@@ -51,6 +51,12 @@ impl<T: Copy> CmLwe<T> {
         &mut self.b
     }
 
+    /// Returns mutable references to the a and b of this [`CmLwe<T>`].
+    #[inline]
+    pub fn a_b_mut(&mut self) -> (&mut [T], &mut [T]) {
+        (&mut self.a, &mut self.b)
+    }
+
     /// Returns the message count of this [`CmLwe<T>`].
     #[inline]
     pub fn msg_count(&self) -> usize {

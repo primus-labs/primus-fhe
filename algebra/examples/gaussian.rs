@@ -1,4 +1,4 @@
-use algebra::random::DiscreteGaussian;
+use algebra::random::CumulativeDistributionTableSampler;
 use bigdecimal::BigDecimal;
 use num_traits::{ConstZero, Zero};
 use rand::thread_rng;
@@ -79,7 +79,7 @@ fn check_standard_deviation() {
 
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
     // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
-    let sigams: Vec<f64> = vec![10f64];
+    let sigams: Vec<f64> = vec![0.5f64];
 
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
@@ -95,7 +95,7 @@ fn check_standard_deviation() {
         let mut four_sigma_count = 0usize;
         let mut five_sigma_count = 0usize;
         let mut six_sigma_count = 0usize;
-        let distr = <DiscreteGaussian<ValueT>>::new(0.0, sigma, Q - 1).unwrap();
+        let distr = <CumulativeDistributionTableSampler<ValueT>>::new(0.0, sigma, Q - 1);
         data.iter_mut()
             .zip(distr.sample_iter(&mut rng))
             .for_each(|(d, v)| *d = v);

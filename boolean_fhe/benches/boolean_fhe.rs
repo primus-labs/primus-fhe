@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use boolean_fhe::{Encryptor, Evaluator, KeyGen, DEFAULT_128_BITS_PARAMETERS};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{distributions::Uniform, Rng};
 
 type M = u8;
