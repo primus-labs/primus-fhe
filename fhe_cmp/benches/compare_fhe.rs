@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use algebra::modulus::PowOf2Modulus;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use fhe_cmp::{Encryptor, FheCompare, KeyGen, LVL2PARAM_128_BITS_PARAMETERS};
 use rand::{distributions::Uniform, Rng};
 
