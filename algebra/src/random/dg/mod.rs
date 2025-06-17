@@ -1,11 +1,14 @@
-use std::{f64::consts::TAU, u64};
+use std::{num::NonZero, sync::LazyLock, u128, u64};
 
-use rand_distr::{Distribution, Standard};
+use bigdecimal::{BigDecimal, Context, RoundingMode};
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use rand_distr::{Distribution, Standard, Uniform};
 
 use crate::{AsInto, UnsignedInteger};
 
 type Float = f64;
 const N: usize = 32;
+const PRECISION: u64 = 1024;
 
 ///
 #[derive(Debug, Clone, Copy)]
@@ -14,7 +17,7 @@ pub struct CumulativeDistributionTableSampler<T: UnsignedInteger> {
     std_dev: Float,
     upper_bound: usize,
     modulus_minus_one: T,
-    cdt: [u64; N],
+    cdt: [u128; N],
 }
 
 impl<T: UnsignedInteger> CumulativeDistributionTableSampler<T> {
@@ -23,47 +26,94 @@ impl<T: UnsignedInteger> CumulativeDistributionTableSampler<T> {
         let max_std_dev = std_dev * 10.0;
         let mut upper_bound = max_std_dev.floor() as usize;
 
-        assert!(upper_bound < N);
-        upper_bound = upper_bound.next_power_of_two();
+        assert!(upper_bound <= N);
+        if upper_bound <= 1 {
+            upper_bound = 2;
+        }
 
-        let s = (TAU.sqrt() * std_dev).recip();
-        let s2 = s * 2.0;
+        let context = Context::new(NonZero::new(PRECISION).unwrap(), RoundingMode::HalfUp);
 
-        let mut cdf = [0.0; N];
-        cdf[0] = 0.5 * s;
+        let std_dev_b = BigDecimal::from_f64(std_dev).unwrap();
+        let var_b = std_dev_b.square();
+
+        let minus_twice_variance_recip = -var_b.double().inverse_with_context(&context);
+
+        let mut cdf = vec![BigDecimal::default(); N];
+        cdf[0] = BigDecimal::one().half();
+        cdf[1] = minus_twice_variance_recip.exp();
+
+        let mut i = 2;
+        while i < upper_bound {
+            cdf[i] =
+                (BigDecimal::from_usize(i).unwrap().square() * &minus_twice_variance_recip).exp();
+            i += 1;
+        }
+
+        let s = cdf
+            .iter()
+            .take(upper_bound)
+            .fold(BigDecimal::zero(), |acc, v| acc + v);
+
+        let cdf: Vec<BigDecimal> = cdf.into_iter().map(|v| v / &s).take(upper_bound).collect();
+
         println!("Prob[0]={}", cdf[0]);
-        cdf[1] = (-(std_dev * std_dev * 2.0).recip()).exp() * s2;
         println!("Prob[1]={}", cdf[1]);
 
+        let mut cdt = vec![BigDecimal::default(); N];
+        cdt[0] = cdf[0].clone();
+        cdt[1] = cdt[0].clone() + &cdf[1];
         let mut i = 2;
-        while i <= upper_bound {
-            let i_f = i as Float;
-            let i_f_square = i_f * i_f;
-            cdf[i] = (-(std_dev * std_dev * 2.0).recip() * i_f_square).exp() * s2;
+        while i < upper_bound {
+            cdt[i] = cdt[i - 1].clone() + &cdf[i];
+            if cdt[i] >= BigDecimal::one() {
+                cdt[i] = BigDecimal::one();
+                upper_bound = i + 1;
+                break;
+            }
+            // assert!(
+            //     cdt[i] <= BigDecimal::one(),
+            //     "failed at {i}: {}\n {}",
+            //     upper_bound,
+            //     cdt[i]
+            // );
             i += 1;
         }
-        println!("Prob[2]={}", cdf[2]);
 
-        let mut cdt = [0.0; N];
-        cdt[0] = 0.5;
-        cdt[1] = 0.5 + cdf[1];
-        let mut i = 2;
-        while i <= upper_bound {
-            cdt[i] = cdt[i - 1] + cdf[i];
-            assert!(cdt[i] <= 1.0);
-            i += 1;
+        println!("------------------------------");
+        for i in 0..upper_bound {
+            println!("{}", cdt[i]);
         }
+        println!("------------------------------");
 
-        let new_cdt = cdt
-            // .map(|f| ((HALF as f64) * f) as u64 + ((HALF as f64) * (f * 2.0f64.powi(32))) as u64);
-            .map(|f| (2.0f64.powi(64) * f) as u64);
+        let t = BigDecimal::from_u128(u128::MAX).unwrap();
+
+        let new_cdt: Vec<u128> = cdt
+            .into_iter()
+            .map(|f| {
+                (f * &t)
+                    .with_scale_round(0, RoundingMode::HalfUp)
+                    .to_u128()
+                    .unwrap()
+            })
+            .collect();
+
+        println!("------------------------------");
+        for i in 0..upper_bound {
+            println!("{}", new_cdt[i]);
+        }
+        println!("------------------------------");
+
+        let mut cdt = [0; N];
+        for (o, i) in cdt[1..].iter_mut().zip(new_cdt) {
+            *o = i;
+        }
 
         Self {
             mean,
             std_dev,
             upper_bound,
             modulus_minus_one,
-            cdt: new_cdt,
+            cdt,
         }
     }
 
@@ -78,9 +128,11 @@ impl<T: UnsignedInteger> CumulativeDistributionTableSampler<T> {
     }
 }
 
+static D: LazyLock<Uniform<u128>> = LazyLock::new(|| Uniform::new_inclusive(0, u128::MAX));
+
 impl<T: UnsignedInteger> Distribution<T> for CumulativeDistributionTableSampler<T> {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> T {
-        let r = rng.next_u64();
+        let r: u128 = D.sample(rng);
 
         let mut min = 0;
         let mut cur = self.upper_bound / 2;

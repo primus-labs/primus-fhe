@@ -1,4 +1,3 @@
-use algebra::random::CumulativeDistributionTableSampler;
 use bigdecimal::BigDecimal;
 use num_traits::{ConstZero, Zero};
 use rand::thread_rng;
@@ -79,7 +78,7 @@ fn check_standard_deviation() {
 
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
     // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
-    let sigams: Vec<f64> = vec![0.5f64];
+    let sigams: Vec<f64> = vec![0.55f64];
 
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
@@ -95,7 +94,9 @@ fn check_standard_deviation() {
         let mut four_sigma_count = 0usize;
         let mut five_sigma_count = 0usize;
         let mut six_sigma_count = 0usize;
-        let distr = <CumulativeDistributionTableSampler<ValueT>>::new(0.0, sigma, Q - 1);
+        let distr =
+            <algebra::random::CumulativeDistributionTableSampler<ValueT>>::new(0.0, sigma, Q - 1);
+        // let distr = <algebra::random::DiscreteGaussian<ValueT>>::new(0.0, sigma, Q - 1).unwrap();
         data.iter_mut()
             .zip(distr.sample_iter(&mut rng))
             .for_each(|(d, v)| *d = v);
@@ -159,12 +160,14 @@ fn check_standard_deviation() {
         }) / N as u64;
 
         println!("real standard deviation:{}\n", variance.sqrt().unwrap());
+        println!("----------------------------------");
         println!("one sigma count:{}", one_sigma_count);
         println!("two sigma count:{}", two_sigma_count);
         println!("three sigma count:{}", three_sigma_count);
         println!("four sigma count:{}", four_sigma_count);
         println!("five sigma count:{}", five_sigma_count);
         println!("six sigma count:{}", six_sigma_count);
+        println!("----------------------------------");
         println!("one sigma ratio:{}", one_sigma_count as f64 / N as f64);
         println!("two sigma ratio:{}", two_sigma_count as f64 / N as f64);
         println!("three sigma ratio:{}", three_sigma_count as f64 / N as f64);
@@ -176,5 +179,13 @@ fn check_standard_deviation() {
             1.0 - six_sigma_count as f64 / N as f64
         );
         println!("----------------------------------");
+        println!(
+            "Prob[0]={}",
+            data.iter().filter(|v| **v == 0).count() as f64 / N as f64
+        );
+        println!(
+            "Prob[1]={}",
+            data.iter().filter(|v| **v == 1 || **v == Q - 1).count() as f64 / N as f64
+        );
     }
 }

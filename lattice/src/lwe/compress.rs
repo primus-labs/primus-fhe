@@ -27,6 +27,26 @@ impl<T: Copy> CmLwe<T> {
         Self { a, b }
     }
 
+    /// Creates a new [`CmLwe<T>`] from single `Vec<T>`.
+    #[inline]
+    pub fn from_vec(mut data: Vec<T>, dimension: usize) -> Self {
+        let b = data.split_off(dimension);
+        Self { a: data, b }
+    }
+
+    /// Given inner data.
+    #[inline]
+    pub fn into_inner(self) -> (Vec<T>, Vec<T>) {
+        (self.a, self.b)
+    }
+
+    /// Given inner data.
+    #[inline]
+    pub fn into_vec(mut self) -> Vec<T> {
+        self.a.append(&mut self.b);
+        self.a
+    }
+
     /// Returns a reference to the a of this [`CmLwe<T>`].
     #[inline]
     pub fn a(&self) -> &[T] {
@@ -53,7 +73,7 @@ impl<T: Copy> CmLwe<T> {
 
     /// Returns mutable references to the a and b of this [`CmLwe<T>`].
     #[inline]
-    pub fn a_b_mut(&mut self) -> (&mut [T], &mut [T]) {
+    pub fn a_b_mut_slice(&mut self) -> (&mut [T], &mut [T]) {
         (&mut self.a, &mut self.b)
     }
 

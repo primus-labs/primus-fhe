@@ -13,7 +13,7 @@ use lattice::NumRlwe;
 use num_traits::{ConstOne, ConstZero, One, Zero};
 use rand::{distributions::Uniform, prelude::Distribution, CryptoRng, Rng};
 
-use crate::{decode, encode, CmLweCiphertext, LweCiphertext, LweParameters};
+use crate::{decode, encode, CmLweCiphertext, LweCiphertext, LweParameters, NttRlweCiphertext};
 
 /// The distribution type of the LWE Secret Key.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -534,6 +534,18 @@ impl<F: NttField> NttRlweSecretKey<F> {
     #[inline]
     pub fn distr(&self) -> RingSecretKeyType {
         self.distr
+    }
+
+    /// Performs `b-as`.
+    pub fn phase(
+        &self,
+        cipher: NttRlweCiphertext<F>,
+        ntt_table: &<F as NttField>::Table,
+    ) -> FieldPolynomial<F> {
+        let (a_ntt, b_ntt) = cipher.into_inner();
+        let a_mul_s_ntt = a_ntt * &self.key;
+        let dec_poly_ntt = b_ntt - a_mul_s_ntt;
+        dec_poly_ntt.into_coeff_poly(ntt_table)
     }
 }
 
