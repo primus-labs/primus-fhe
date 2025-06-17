@@ -8,7 +8,7 @@ use crate::{AsInto, UnsignedInteger};
 
 type Float = f64;
 const N: usize = 32;
-const PRECISION: u64 = 1024;
+const PRECISION: u64 = 256;
 
 ///
 #[derive(Debug, Clone, Copy)]
@@ -24,7 +24,7 @@ impl<T: UnsignedInteger> CumulativeDistributionTableSampler<T> {
     ///
     pub fn new(mean: Float, std_dev: Float, modulus_minus_one: T) -> Self {
         let max_std_dev = std_dev * 10.0;
-        let mut upper_bound = max_std_dev.floor() as usize;
+        let mut upper_bound = max_std_dev.ceil() as usize;
 
         assert!(upper_bound <= N);
         if upper_bound <= 1 {
@@ -58,6 +58,7 @@ impl<T: UnsignedInteger> CumulativeDistributionTableSampler<T> {
 
         println!("Prob[0]={}", cdf[0]);
         println!("Prob[1]={}", cdf[1]);
+        println!("----------------------------------");
 
         let mut cdt = vec![BigDecimal::default(); N];
         cdt[0] = cdf[0].clone();
@@ -67,23 +68,11 @@ impl<T: UnsignedInteger> CumulativeDistributionTableSampler<T> {
             cdt[i] = cdt[i - 1].clone() + &cdf[i];
             if cdt[i] >= BigDecimal::one() {
                 cdt[i] = BigDecimal::one();
-                upper_bound = i + 1;
+                assert_eq!(upper_bound, i + 1);
                 break;
             }
-            // assert!(
-            //     cdt[i] <= BigDecimal::one(),
-            //     "failed at {i}: {}\n {}",
-            //     upper_bound,
-            //     cdt[i]
-            // );
             i += 1;
         }
-
-        println!("------------------------------");
-        for i in 0..upper_bound {
-            println!("{}", cdt[i]);
-        }
-        println!("------------------------------");
 
         let t = BigDecimal::from_u128(u128::MAX).unwrap();
 
@@ -96,12 +85,6 @@ impl<T: UnsignedInteger> CumulativeDistributionTableSampler<T> {
                     .unwrap()
             })
             .collect();
-
-        println!("------------------------------");
-        for i in 0..upper_bound {
-            println!("{}", new_cdt[i]);
-        }
-        println!("------------------------------");
 
         let mut cdt = [0; N];
         for (o, i) in cdt[1..].iter_mut().zip(new_cdt) {
