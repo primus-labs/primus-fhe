@@ -9,6 +9,7 @@ algebra = { path = "../algebra", default-features = false }
 num-traits = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
+bytemuck = { workspace = true }
 
 [features]
 default = ["concrete-ntt"]

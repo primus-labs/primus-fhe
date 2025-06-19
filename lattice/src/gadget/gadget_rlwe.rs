@@ -5,7 +5,7 @@ use algebra::{
     random::DiscreteGaussian,
     reduce::ReduceAddAssign,
     utils::Size,
-    Field, NttField,
+    ByteCount, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,82 @@ impl<F: NttField> Clone for GadgetRlwe<F> {
             data: self.data.clone(),
             basis: self.basis,
         }
+    }
+}
+
+impl<F: NttField> GadgetRlwe<F> {
+    /// Creates a new [`GadgetRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(
+        data: &[u8],
+        dimension: usize,
+        basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+    ) -> Self {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+
+        let data: Vec<Rlwe<F>> = converted_data
+            .chunks_exact(dimension << 1)
+            .map(|chunk| {
+                let (a, b) = unsafe { chunk.split_at_unchecked(dimension) };
+                Rlwe {
+                    a: FieldPolynomial::from_slice(a),
+                    b: FieldPolynomial::from_slice(b),
+                }
+            })
+            .collect();
+
+        assert_eq!(data.len(), basis.decompose_length());
+
+        Self { data, basis }
+    }
+
+    /// Creates a new [`GadgetRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8], dimension: usize) {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+
+        converted_data
+            .chunks_exact(dimension << 1)
+            .zip(self.iter_mut())
+            .for_each(|(chunk, rlwe)| {
+                let (a, b) = unsafe { chunk.split_at_unchecked(dimension) };
+                rlwe.a.copy_from(a);
+                rlwe.b.copy_from(b);
+            });
+    }
+
+    /// Converts [`GadgetRlwe<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self, dimension: usize) -> Vec<u8> {
+        let size = (self.data.len() << 1) * dimension * <F::ValueT as ByteCount>::BYTES_COUNT;
+        let mut result = Vec::with_capacity(size);
+
+        self.iter().for_each(|rlwe| {
+            result.extend_from_slice(bytemuck::cast_slice(rlwe.a_slice()));
+            result.extend_from_slice(bytemuck::cast_slice(rlwe.b_slice()));
+        });
+
+        result
+    }
+
+    /// Converts [`GadgetRlwe<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8], dimension: usize) {
+        let poly_bytes_count = dimension * <F::ValueT as ByteCount>::BYTES_COUNT;
+
+        data.chunks_exact_mut(poly_bytes_count << 1)
+            .zip(self.iter())
+            .for_each(|(chunk, rlwe): (&mut [u8], &Rlwe<F>)| {
+                let (a, b) = unsafe { chunk.split_at_mut_unchecked(poly_bytes_count) };
+                a.copy_from_slice(bytemuck::cast_slice(rlwe.a_slice()));
+                b.copy_from_slice(bytemuck::cast_slice(rlwe.b_slice()));
+            });
+    }
+
+    /// Returns the bytes count of [`GadgetRlwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        self.data.len() * self.data[0].bytes_count()
     }
 }
 

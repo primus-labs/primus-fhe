@@ -6,7 +6,7 @@ use algebra::{
     random::DiscreteGaussian,
     reduce::ReduceAddAssign,
     utils::Size,
-    Field, NttField,
+    ByteCount, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,61 @@ impl<F: NttField> Clone for NttRlwe<F> {
             a: self.a.clone(),
             b: self.b.clone(),
         }
+    }
+}
+
+impl<F: NttField> NttRlwe<F> {
+    /// Creates a new [`NttRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+
+        let (a, b) = converted_data.split_at(converted_data.len() >> 1);
+
+        Self {
+            a: FieldNttPolynomial::from_slice(a),
+            b: FieldNttPolynomial::from_slice(b),
+        }
+    }
+
+    /// Creates a new [`NttRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+
+        let (a, b) = converted_data.split_at(converted_data.len() >> 1);
+
+        self.a.copy_from(a);
+        self.b.copy_from(b);
+    }
+
+    /// Converts [`NttRlwe<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        let data_a: &[u8] = bytemuck::cast_slice(self.a.as_slice());
+        let data_b: &[u8] = bytemuck::cast_slice(self.b.as_slice());
+
+        [data_a, data_b].concat()
+    }
+
+    /// Converts [`NttRlwe<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        let data_a: &[u8] = bytemuck::cast_slice(self.a.as_slice());
+        let data_b: &[u8] = bytemuck::cast_slice(self.b.as_slice());
+
+        assert_eq!(data.len(), data_a.len() + data_b.len());
+
+        let (a, b) = unsafe { data.split_at_mut_unchecked(data_a.len()) };
+
+        a.copy_from_slice(data_a);
+        b.copy_from_slice(data_b);
+    }
+
+    /// Returns the bytes count of [`NttRlwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        (self.a.coeff_count() << 1) * <F::ValueT as ByteCount>::BYTES_COUNT
     }
 }
 

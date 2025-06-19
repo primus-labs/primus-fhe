@@ -2,6 +2,7 @@
 
 mod bits;
 mod bounded;
+mod bytes;
 mod cast;
 mod checked;
 mod overflowing;
@@ -15,6 +16,7 @@ use core::{
 use std::ops::BitXorAssign;
 
 use bigdecimal::BigDecimal;
+use bytemuck::Pod;
 use num_traits::{
     ConstOne, ConstZero, FromPrimitive, MulAdd, MulAddAssign, NumAssign, Pow, ToPrimitive, Unsigned,
 };
@@ -26,6 +28,7 @@ use crate::reduce::*;
 
 pub use bits::Bits;
 pub use bounded::ConstBounded;
+pub use bytes::ByteCount;
 pub use cast::*;
 pub use checked::*;
 pub use overflowing::*;
@@ -36,6 +39,7 @@ pub use wrapping::*;
 pub trait Integer:
     'static
     + Sized
+    + Pod
     + Send
     + Sync
     + Clone
@@ -48,6 +52,7 @@ pub trait Integer:
     + Debug
     + Display
     + Bits
+    + ByteCount
     + ConstZero
     + ConstOne
     + ConstTwo

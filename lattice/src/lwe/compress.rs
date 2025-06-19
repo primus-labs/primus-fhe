@@ -5,7 +5,9 @@ use algebra::{
         ReduceSubAssign,
     },
     utils::Size,
+    ByteCount,
 };
+use bytemuck::Pod;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +20,61 @@ use super::Lwe;
 pub struct CmLwe<T: Copy> {
     a: Vec<T>,
     b: Vec<T>,
+}
+
+impl<T: Copy + Pod + ByteCount> CmLwe<T> {
+    /// Creates a new [`CmLwe<T>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8], dimension: usize) -> Self {
+        let converted_data: &[T] = bytemuck::cast_slice(&data);
+
+        let (a, b) = converted_data.split_at(dimension);
+
+        Self {
+            a: a.to_vec(),
+            b: b.to_vec(),
+        }
+    }
+
+    /// Creates a new [`CmLwe<T>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        let converted_data: &[T] = bytemuck::cast_slice(&data);
+
+        let (a, b) = converted_data.split_at(self.a.len());
+
+        self.a.copy_from_slice(a);
+        self.b.copy_from_slice(b);
+    }
+
+    /// Converts [`CmLwe<T>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        let data_a: &[u8] = bytemuck::cast_slice(&self.a);
+        let data_b: &[u8] = bytemuck::cast_slice(&self.b);
+
+        [data_a, data_b].concat()
+    }
+
+    /// Converts [`CmLwe<T>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        let data_a: &[u8] = bytemuck::cast_slice(&self.a);
+        let data_b: &[u8] = bytemuck::cast_slice(&self.b);
+
+        assert_eq!(data.len(), data_a.len() + data_b.len());
+
+        let (a, b) = unsafe { data.split_at_mut_unchecked(data_a.len()) };
+
+        a.copy_from_slice(data_a);
+        b.copy_from_slice(data_b);
+    }
+
+    /// Returns the bytes count of [`CmLwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        (self.a.len() + self.b.len()) * T::BYTES_COUNT
+    }
 }
 
 impl<T: Copy> CmLwe<T> {

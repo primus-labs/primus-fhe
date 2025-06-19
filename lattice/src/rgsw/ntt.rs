@@ -1,11 +1,11 @@
 use algebra::{
     decompose::NonPowOf2ApproxSignedBasis, polynomial::FieldNttPolynomial,
-    random::DiscreteGaussian, utils::Size, Field, NttField,
+    random::DiscreteGaussian, utils::Size, ByteCount, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::NttGadgetRlwe;
+use crate::{NttGadgetRlwe, NttRlwe};
 
 use super::Rgsw;
 
@@ -41,6 +41,102 @@ impl<F: NttField> Clone for NttRgsw<F> {
             minus_s_m: self.minus_s_m.clone(),
             m: self.m.clone(),
         }
+    }
+}
+
+impl<F: NttField> NttRgsw<F> {
+    /// Creates a new [`NttRgsw<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(
+        data: &[u8],
+        dimension: usize,
+        basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+    ) -> Self {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+
+        let (data_m, data_minus_s_m) = converted_data.split_at(converted_data.len() >> 1);
+
+        let m: Vec<NttRlwe<F>> = data_m
+            .chunks_exact(dimension << 1)
+            .map(|chunk| {
+                let (a, b) = unsafe { chunk.split_at_unchecked(dimension) };
+                NttRlwe {
+                    a: FieldNttPolynomial::from_slice(a),
+                    b: FieldNttPolynomial::from_slice(b),
+                }
+            })
+            .collect();
+
+        let minus_s_m: Vec<NttRlwe<F>> = data_minus_s_m
+            .chunks_exact(dimension << 1)
+            .map(|chunk| {
+                let (a, b) = unsafe { chunk.split_at_unchecked(dimension) };
+                NttRlwe {
+                    a: FieldNttPolynomial::from_slice(a),
+                    b: FieldNttPolynomial::from_slice(b),
+                }
+            })
+            .collect();
+
+        Self {
+            minus_s_m: NttGadgetRlwe::new(minus_s_m, basis),
+            m: NttGadgetRlwe::new(m, basis),
+        }
+    }
+
+    /// Creates a new [`NttRgsw<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8], dimension: usize) {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+
+        self.m
+            .iter_mut()
+            .chain(self.minus_s_m.iter_mut())
+            .zip(converted_data.chunks_exact(dimension << 1))
+            .for_each(
+                |(rlwe, chunk): (&mut NttRlwe<F>, &[<F as Field>::ValueT])| {
+                    let (a, b) = unsafe { chunk.split_at_unchecked(dimension) };
+                    rlwe.a.copy_from(a);
+                    rlwe.b.copy_from(b);
+                },
+            );
+    }
+
+    /// Converts [`NttRgsw<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self, dimension: usize) -> Vec<u8> {
+        let size = (self.m.data().len() << 2) * dimension * <F::ValueT as ByteCount>::BYTES_COUNT;
+        let mut result: Vec<u8> = Vec::with_capacity(size);
+
+        self.m
+            .iter()
+            .chain(self.minus_s_m.iter())
+            .for_each(|rlwe: &NttRlwe<F>| {
+                result.extend_from_slice(bytemuck::cast_slice(rlwe.a_slice()));
+                result.extend_from_slice(bytemuck::cast_slice(rlwe.b_slice()));
+            });
+
+        result
+    }
+
+    /// Converts [`NttRgsw<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8], dimension: usize) {
+        let poly_bytes_count = dimension * <F::ValueT as ByteCount>::BYTES_COUNT;
+
+        data.chunks_exact_mut(poly_bytes_count << 1)
+            .zip(self.m.iter().chain(self.minus_s_m.iter()))
+            .for_each(|(chunk, rlwe): (&mut [u8], &NttRlwe<F>)| {
+                let (a, b) = unsafe { chunk.split_at_mut_unchecked(poly_bytes_count) };
+                a.copy_from_slice(bytemuck::cast_slice(rlwe.a_slice()));
+                b.copy_from_slice(bytemuck::cast_slice(rlwe.b_slice()));
+            });
+    }
+
+    /// Returns the bytes count of [`NttRgsw<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        self.m.bytes_count() << 1
     }
 }
 
