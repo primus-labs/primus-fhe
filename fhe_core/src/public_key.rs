@@ -159,6 +159,40 @@ impl<C: UnsignedInteger> Clone for LwePublicKeyRlweMode<C> {
 }
 
 impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
+    /// Creates a new [`LwePublicKeyRlweMode<C>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        Self {
+            public_key: NumRlwe::from_bytes(data),
+        }
+    }
+
+    /// Creates a new [`LwePublicKeyRlweMode<C>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        self.public_key.from_bytes_assign(data);
+    }
+
+    /// Converts [`LwePublicKeyRlweMode<C>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        self.public_key.into_bytes()
+    }
+
+    /// Converts [`LwePublicKeyRlweMode<C>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        self.public_key.into_bytes_inplace(data);
+    }
+
+    /// Returns the bytes count of [`LwePublicKeyRlweMode<C>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        self.public_key.bytes_count()
+    }
+}
+
+impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     /// Creates a new `LwePublicKeyRlweMode` using the provided secret key,
     /// parameters, modulus, and random number generator.
     ///
