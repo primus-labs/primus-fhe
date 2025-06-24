@@ -35,12 +35,13 @@ impl<T: UnsignedInteger> DiscreteZiggurat<T> {
             loop {
                 let mut pre_y = 0f64;
                 let mut pre_x = x_m;
-                for (y, x) in y.iter_mut().rev().skip(1).zip(x.iter_mut().rev().skip(1)) {
+                for (y, x) in y.iter_mut().rev().zip(x.iter_mut().rev()) {
                     *y = s / (1.0f64 + pre_x) + pre_y;
                     *x = ((*y).ln() * sigma_square_mul_minus_two).sqrt().floor();
                     pre_y = *y;
                     pre_x = *x;
                 }
+                x[0] = 0f64;
                 if y[0] > 1.0 {
                     break;
                 }
