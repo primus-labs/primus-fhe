@@ -6,6 +6,10 @@ use rand_distr::{Distribution, Standard, Uniform};
 
 use crate::{AsInto, UnsignedInteger};
 
+pub use ziggurat::DiscreteZiggurat;
+
+mod ziggurat;
+
 type Float = f64;
 const N: usize = 32;
 const PRECISION: u64 = 256;
