@@ -81,7 +81,7 @@ fn check_standard_deviation() {
 
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
     // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
-    let sigams: Vec<f64> = vec![3.4 * 2.0f64.powi(26)];
+    let sigams: Vec<f64> = vec![10.0];
     let chunk_size = 10usize;
 
     let modulus = <BarrettModulus<ValueT>>::new(Q);
@@ -89,9 +89,8 @@ fn check_standard_deviation() {
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
         println!("----------------single-------------------------");
-        // let distr =
-        //     <algebra::random::CumulativeDistributionTableSampler<ValueT>>::new(0.0, sigma, Q - 1);
-        let distr = <algebra::random::DiscreteZiggurat<ValueT>>::new(sigma, 10.0, Q - 1);
+        let distr = <algebra::random::CDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
+        // let distr = <algebra::random::DiscreteZiggurat<ValueT>>::new(sigma, 9.42, Q - 1);
         // let distr = <algebra::random::DiscreteGaussian<ValueT>>::new(0.0, sigma, Q - 1).unwrap();
         data.iter_mut()
             .zip(distr.clone().sample_iter(&mut rng))

@@ -7,7 +7,7 @@ use crate::UnsignedInteger;
 ///
 #[derive(Clone)]
 pub struct DiscreteZiggurat<T: UnsignedInteger> {
-    sigma: f64,
+    std_dev: f64,
     x: Vec<f64>,
     y: Vec<f64>,
     sample_m: Uniform<usize>,
@@ -17,11 +17,11 @@ pub struct DiscreteZiggurat<T: UnsignedInteger> {
 
 impl<T: UnsignedInteger> DiscreteZiggurat<T> {
     ///
-    pub fn new(sigma: f64, t: f64, modulus_minus_one: T) -> Self {
-        let x_m = (t * sigma).floor();
-        let sigma_square_mul_minus_two = sigma * sigma * (-2.0f64);
+    pub fn new(std_dev: f64, tail_cut: f64, modulus_minus_one: T) -> Self {
+        let x_m = (tail_cut * std_dev).floor();
+        let sigma_square_mul_minus_two = std_dev * std_dev * (-2.0f64);
 
-        let mut m = 7;
+        let mut m = 3;
         'outer: loop {
             let mut x = Vec::with_capacity(m + 1);
             let mut y = Vec::with_capacity(m + 1);
@@ -29,7 +29,7 @@ impl<T: UnsignedInteger> DiscreteZiggurat<T> {
             x.resize(m, 0.0);
             y.resize(m, 0.0);
 
-            let initial_s = sigma * FRAC_1_SQRT_2 * FRAC_2_SQRT_PI / (m as f64);
+            let initial_s = std_dev * FRAC_1_SQRT_2 * FRAC_2_SQRT_PI / (m as f64);
 
             let mut s = initial_s;
             loop {
@@ -47,8 +47,8 @@ impl<T: UnsignedInteger> DiscreteZiggurat<T> {
                 }
                 s += initial_s;
                 if s > x_m + 1.0 {
-                    m += 1;
-                    if m == 258 {
+                    m += m.next_power_of_two();
+                    if m >= 512 {
                         panic!("error");
                     }
                     continue 'outer;
@@ -61,7 +61,7 @@ impl<T: UnsignedInteger> DiscreteZiggurat<T> {
                 .map(|&v| Uniform::new_inclusive(T::ZERO, T::as_from(v.floor())))
                 .collect();
             break Self {
-                sigma,
+                std_dev,
                 x,
                 y,
                 sample_m: Uniform::new_inclusive(1, m),
@@ -74,7 +74,7 @@ impl<T: UnsignedInteger> DiscreteZiggurat<T> {
 
 impl<T: UnsignedInteger> Distribution<T> for DiscreteZiggurat<T> {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> T {
-        let pdf = |x: f64| ((x * x) / (-2.0 * self.sigma * self.sigma)).exp();
+        let pdf = |x: f64| ((x * x) / (-2.0 * self.std_dev * self.std_dev)).exp();
         let combine = |sign: bool, x: T| {
             if sign {
                 x
@@ -104,7 +104,7 @@ impl<T: UnsignedInteger> Distribution<T> for DiscreteZiggurat<T> {
                     let y_prime = rng.next_u32();
                     let y = (self.y[i - 1] - self.y[i]) * y_prime as f64;
 
-                    if self.x[i] + 1.0 <= self.sigma {
+                    if self.x[i] + 1.0 <= self.std_dev {
                         if y <= mask
                             * s_line(i, self.x[i - 1], self.x[i], self.y[i - 1], self.y[i], x_f)
                             || y <= mask * (pdf(x_f) - self.y[i])
@@ -113,7 +113,7 @@ impl<T: UnsignedInteger> Distribution<T> for DiscreteZiggurat<T> {
                         } else {
                             continue;
                         }
-                    } else if self.sigma <= self.x[i - 1] {
+                    } else if self.std_dev <= self.x[i - 1] {
                         if y >= mask
                             * s_line(
                                 i,
