@@ -51,21 +51,6 @@ impl<T: UnsignedInteger> CDTSampler<T> {
         println!("Prob[1]={}", pdf[1]);
         println!("----------------------------------");
 
-        let mut cdt = vec![BigDecimal::default(); length];
-
-        cdt[0] = pdf[0].clone();
-        cdt[1] = cdt[0].clone() + &pdf[1];
-        let mut i = 2;
-        while i < length {
-            cdt[i] = cdt[i - 1].clone() + &pdf[i];
-            if cdt[i] >= BigDecimal::one() {
-                cdt[i] = BigDecimal::one();
-                assert_eq!(length, i + 1);
-                break;
-            }
-            i += 1;
-        }
-
         let mut cdt = Vec::with_capacity(length + 1);
         let mut pre = BigDecimal::zero();
 

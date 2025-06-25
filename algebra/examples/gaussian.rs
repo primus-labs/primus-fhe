@@ -81,7 +81,7 @@ fn check_standard_deviation() {
 
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
     // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
-    let sigams: Vec<f64> = vec![10.0];
+    let sigams: Vec<f64> = vec![3.0];
     let chunk_size = 10usize;
 
     let modulus = <BarrettModulus<ValueT>>::new(Q);
