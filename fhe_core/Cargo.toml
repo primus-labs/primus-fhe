@@ -13,11 +13,19 @@ rand = { workspace = true }
 bigdecimal = { workspace = true }
 serde = { workspace = true }
 bytemuck = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
 
 [features]
 default = ["concrete-ntt"]
 concrete-ntt = ["algebra/concrete-ntt", "lattice/concrete-ntt"]
 nightly = ["algebra/nightly", "lattice/nightly"]
+
+[[bench]]
+name = "trace"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

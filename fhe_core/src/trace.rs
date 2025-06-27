@@ -6,6 +6,7 @@ use algebra::{
 };
 use lattice::utils::RlweSpace;
 use rand::{CryptoRng, Rng};
+use rayon::prelude::*;
 
 use crate::{utils::Pool, AutoKey, AutoSpace, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 
@@ -125,29 +126,81 @@ impl<F: NttField> TraceKey<F> {
         ct.a_mut().mul_shoup_scalar_assign(n_inv);
         ct.b_mut().mul_shoup_scalar_assign(n_inv);
 
-        let mut elems = vec![ct];
+        let mut elems = Vec::with_capacity(dimension);
+        elems.push(ct);
 
         for (i, auto_key) in self.auto_keys.iter().enumerate() {
             let two_pow_i = 1 << i;
-            let mut chunk0 = Vec::with_capacity(two_pow_i << 1);
-            let mut chunk1 = Vec::with_capacity(two_pow_i);
 
-            for a_0 in elems.into_iter() {
-                auto_key.automorphism_inplace(&a_0, &mut auto_space, &mut a_1);
+            let mut temp_vec: Vec<RlweCiphertext<F>> = elems
+                .iter_mut()
+                .map(|a_0| {
+                    auto_key.automorphism_inplace(a_0, &mut auto_space, &mut a_1);
 
-                chunk0.push(a_0.clone().add_element_wise(&*a_1));
+                    let t = a_0
+                        .clone()
+                        .sub_element_wise(&*a_1)
+                        .mul_monic_monomial(twice_dimension - two_pow_i);
 
-                let t = a_0
-                    .sub_element_wise(&*a_1)
-                    .mul_monic_monomial(twice_dimension - two_pow_i);
-                chunk1.push(t);
-            }
+                    a_0.add_assign_element_wise(&*a_1);
 
-            chunk0.append(&mut chunk1);
-            elems = chunk0;
+                    t
+                })
+                .collect();
+
+            elems.append(&mut temp_vec);
         }
 
         self.pool.store((a_1, auto_space));
+
+        elems
+    }
+
+    /// Coefficient Expansion Algorithm.
+    ///
+    /// (Alg. 1)[https://eprint.iacr.org/2024/266.pdf]
+    pub fn par_expand_coefficients(
+        &self,
+        ciphertext: &RlweCiphertext<F>,
+    ) -> Vec<RlweCiphertext<F>> {
+        let dimension = ciphertext.dimension();
+        let twice_dimension = dimension << 1;
+
+        let inv_n = F::inv(dimension.as_into());
+        let n_inv = ShoupFactor::new(inv_n, F::MODULUS_VALUE);
+
+        let mut ct = ciphertext.clone();
+
+        ct.a_mut().mul_shoup_scalar_assign(n_inv);
+        ct.b_mut().mul_shoup_scalar_assign(n_inv);
+
+        let mut elems = Vec::with_capacity(dimension);
+        elems.push(ct);
+
+        for (i, auto_key) in self.auto_keys.iter().enumerate() {
+            let two_pow_i = 1 << i;
+
+            let mut temp_vec: Vec<RlweCiphertext<F>> = elems
+                .par_iter_mut()
+                .map_init(
+                    || (RlweSpace::new(dimension), AutoSpace::new(dimension)),
+                    |(a_1, auto_space), a_0| {
+                        auto_key.automorphism_inplace(a_0, auto_space, a_1);
+
+                        let t = a_0
+                            .clone()
+                            .sub_element_wise(&*a_1)
+                            .mul_monic_monomial(twice_dimension - two_pow_i);
+
+                        a_0.add_assign_element_wise(&*a_1);
+
+                        t
+                    },
+                )
+                .collect();
+
+            elems.append(&mut temp_vec);
+        }
 
         elems
     }
@@ -179,29 +232,86 @@ impl<F: NttField> TraceKey<F> {
         ct.a_mut().mul_shoup_scalar_assign(n_inv);
         ct.b_mut().mul_shoup_scalar_assign(n_inv);
 
-        let mut elems = vec![ct];
+        let mut elems = Vec::with_capacity(dimension);
+        elems.push(ct);
 
         for (i, auto_key) in self.auto_keys.iter().enumerate().take(log_d) {
             let two_pow_i = 1 << i;
-            let mut chunk0 = Vec::with_capacity(two_pow_i << 1);
-            let mut chunk1 = Vec::with_capacity(two_pow_i);
 
-            for a_0 in elems.into_iter() {
-                auto_key.automorphism_inplace(&a_0, &mut auto_space, &mut a_1);
+            let mut temp_vec: Vec<RlweCiphertext<F>> = elems
+                .iter_mut()
+                .map(|a_0| {
+                    auto_key.automorphism_inplace(a_0, &mut auto_space, &mut a_1);
 
-                chunk0.push(a_0.clone().add_element_wise(&*a_1));
+                    let t = a_0
+                        .clone()
+                        .sub_element_wise(&*a_1)
+                        .mul_monic_monomial(twice_dimension - two_pow_i);
 
-                let t = a_0
-                    .sub_element_wise(&*a_1)
-                    .mul_monic_monomial(twice_dimension - two_pow_i);
-                chunk1.push(t);
-            }
+                    a_0.add_assign_element_wise(&*a_1);
 
-            chunk0.append(&mut chunk1);
-            elems = chunk0;
+                    t
+                })
+                .collect();
+
+            elems.append(&mut temp_vec);
         }
 
         self.pool.store((a_1, auto_space));
+
+        elems.truncate(op_len);
+        elems
+    }
+
+    /// Coefficient Expansion Algorithm.
+    ///
+    /// (Alg. 1)[https://eprint.iacr.org/2024/266.pdf]
+    pub fn par_expand_partial_coefficients(
+        &self,
+        ciphertext: &RlweCiphertext<F>,
+        coeff_count: usize,
+    ) -> Vec<RlweCiphertext<F>> {
+        let dimension = ciphertext.dimension();
+        let twice_dimension = dimension << 1;
+
+        let op_len = coeff_count.next_power_of_two();
+        let log_d = op_len.trailing_zeros() as usize;
+
+        let inv_n = F::inv(op_len.as_into());
+        let n_inv = ShoupFactor::new(inv_n, F::MODULUS_VALUE);
+
+        let mut ct = ciphertext.clone();
+
+        ct.a_mut().mul_shoup_scalar_assign(n_inv);
+        ct.b_mut().mul_shoup_scalar_assign(n_inv);
+
+        let mut elems = Vec::with_capacity(dimension);
+        elems.push(ct);
+
+        for (i, auto_key) in self.auto_keys.iter().enumerate().take(log_d) {
+            let two_pow_i = 1 << i;
+
+            let mut temp_vec: Vec<RlweCiphertext<F>> = elems
+                .par_iter_mut()
+                .map_init(
+                    || (RlweSpace::new(dimension), AutoSpace::new(dimension)),
+                    |(a_1, auto_space), a_0| {
+                        auto_key.automorphism_inplace(a_0, auto_space, a_1);
+
+                        let t = a_0
+                            .clone()
+                            .sub_element_wise(&*a_1)
+                            .mul_monic_monomial(twice_dimension - two_pow_i);
+
+                        a_0.add_assign_element_wise(&*a_1);
+
+                        t
+                    },
+                )
+                .collect();
+
+            elems.append(&mut temp_vec);
+        }
 
         elems.truncate(op_len);
         elems
