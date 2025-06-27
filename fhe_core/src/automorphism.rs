@@ -16,29 +16,30 @@ use crate::{NttRlweCiphertext, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 
 /// This defines the operation when perform automorphism on each coefficient.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AssignOp {
+pub enum Op {
     Add,
     Sub,
 }
 
-/// This defines the operation and the rotation index.
+/// This defines the operation and the source index
+/// when perform automorphism on each coefficient.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ElementAutoOp {
-    assign_op: AssignOp,
-    to_index: usize,
+pub struct FromOp {
+    from: usize,
+    op: Op,
 }
 
 #[derive(Debug, Clone)]
-pub enum AutoType {
+pub enum AutoHelper {
+    Permutation(Vec<FromOp>),
     DimensionPlusOne,
-    Others(Vec<ElementAutoOp>),
     One,
 }
 
 /// Automorphism key
 pub struct AutoKey<F: NttField> {
     degree: usize,
-    auto_type: AutoType,
+    auto_helper: AutoHelper,
     key: NttGadgetRlwe<F>,
     pub(crate) ntt_table: Arc<<F as NttField>::Table>,
 }
@@ -47,7 +48,7 @@ impl<F: NttField> Clone for AutoKey<F> {
     fn clone(&self) -> Self {
         Self {
             degree: self.degree,
-            auto_type: self.auto_type.clone(),
+            auto_helper: self.auto_helper.clone(),
             key: self.key.clone(),
             ntt_table: Arc::clone(&self.ntt_table),
         }
@@ -89,9 +90,9 @@ impl<F: NttField> AutoKey<F> {
         let rlwe_dimension = secret_key.coeff_count();
         assert!(degree & 1 == 1 && Xgcd::gcd(degree, rlwe_dimension << 1) == 1);
 
-        let auto_type;
+        let auto_helper;
         let key = if degree.is_one() {
-            auto_type = AutoType::One;
+            auto_helper = AutoHelper::One;
             NttGadgetRlwe::generate_random_neg_secret_sample(
                 ntt_secret_key,
                 basis,
@@ -100,13 +101,13 @@ impl<F: NttField> AutoKey<F> {
                 rng,
             )
         } else {
-            auto_type = if degree == rlwe_dimension + 1 {
-                AutoType::DimensionPlusOne
+            auto_helper = if degree == rlwe_dimension + 1 {
+                AutoHelper::DimensionPlusOne
             } else {
-                AutoType::Others(generate_auto_ops(degree, rlwe_dimension))
+                AutoHelper::Permutation(generate_permutate_ops(degree, rlwe_dimension))
             };
 
-            let p_auto = poly_auto(secret_key, &auto_type);
+            let p_auto = poly_auto(secret_key, &auto_helper);
             let auto_sk = ntt_table.transform_inplace(-p_auto);
             NttGadgetRlwe::generate_random_poly_sample(
                 ntt_secret_key,
@@ -120,7 +121,7 @@ impl<F: NttField> AutoKey<F> {
 
         Self {
             key,
-            auto_type,
+            auto_helper,
             ntt_table,
             degree,
         }
@@ -129,17 +130,17 @@ impl<F: NttField> AutoKey<F> {
     /// Performs automorphism on the given RLWE ciphertext.
     #[inline]
     pub fn automorphism(&self, ciphertext: &RlweCiphertext<F>) -> RlweCiphertext<F> {
-        if let AutoType::One = self.auto_type {
+        if let AutoHelper::One = self.auto_helper {
             ciphertext.clone()
         } else {
-            let a = poly_auto(ciphertext.a(), &self.auto_type);
+            let a = poly_auto(ciphertext.a(), &self.auto_helper);
 
             let mut result = self
                 .key
                 .mul_polynomial(&a, &self.ntt_table)
                 .to_rlwe(&self.ntt_table);
 
-            poly_auto_add_inplace(ciphertext.b(), &self.auto_type, result.b_mut());
+            poly_auto_add_inplace(ciphertext.b(), &self.auto_helper, result.b_mut());
 
             result
         }
@@ -152,7 +153,7 @@ impl<F: NttField> AutoKey<F> {
         auto_space: &mut AutoSpace<F>,
         destination: &mut RlweCiphertext<F>,
     ) {
-        poly_auto_inplace(ciphertext.a(), &self.auto_type, destination.a_mut());
+        poly_auto_inplace(ciphertext.a(), &self.auto_helper, destination.a_mut());
 
         self.key.mul_polynomial_inplace(
             destination.a(),
@@ -165,7 +166,7 @@ impl<F: NttField> AutoKey<F> {
             .ntt_rlwe_space
             .inverse_transform_inplace(&self.ntt_table, destination);
 
-        poly_auto_add_inplace(ciphertext.b(), &self.auto_type, destination.b_mut());
+        poly_auto_add_inplace(ciphertext.b(), &self.auto_helper, destination.b_mut());
     }
 
     /// Performs automorphism on the given RLWE ciphertext in place.
@@ -176,7 +177,7 @@ impl<F: NttField> AutoKey<F> {
         poly_space: &mut FieldPolynomial<F>,
         destination: &mut NttRlweCiphertext<F>,
     ) {
-        poly_auto_inplace(ciphertext.a(), &self.auto_type, poly_space);
+        poly_auto_inplace(ciphertext.a(), &self.auto_helper, poly_space);
 
         self.key.mul_polynomial_inplace(
             poly_space,
@@ -185,7 +186,7 @@ impl<F: NttField> AutoKey<F> {
             &mut auto_space.ntt_rlwe_space,
         );
 
-        poly_auto_inplace(ciphertext.b(), &self.auto_type, poly_space);
+        poly_auto_inplace(ciphertext.b(), &self.auto_helper, poly_space);
 
         self.ntt_table.transform_slice(poly_space.as_mut_slice());
 
@@ -203,96 +204,84 @@ impl<F: NttField> Size for AutoKey<F> {
 }
 
 #[inline]
-fn generate_auto_ops(degree: usize, dimension: usize) -> Vec<ElementAutoOp> {
+fn generate_permutate_ops(degree: usize, dimension: usize) -> Vec<FromOp> {
     let twice_dimension = dimension << 1;
     let modulus = <PowOf2Modulus<usize>>::new(twice_dimension);
-    (0..dimension)
-        .map(|i| {
-            let to = modulus.reduce_mul(i, degree);
-            if to < dimension {
-                ElementAutoOp {
-                    assign_op: AssignOp::Add,
-                    to_index: to,
-                }
-            } else {
-                ElementAutoOp {
-                    assign_op: AssignOp::Sub,
-                    to_index: to - dimension,
-                }
-            }
-        })
-        .collect()
+
+    let mut result = vec![
+        FromOp {
+            from: 0,
+            op: Op::Add
+        };
+        dimension
+    ];
+
+    for i in 0..dimension {
+        let to = modulus.reduce_mul(i, degree);
+        if to < dimension {
+            result[to] = FromOp {
+                from: i,
+                op: Op::Add,
+            };
+        } else {
+            result[to - dimension] = FromOp {
+                from: i,
+                op: Op::Sub,
+            };
+        }
+    }
+    result
 }
 
 #[inline]
-fn poly_auto<F: NttField>(poly: &FieldPolynomial<F>, auto_type: &AutoType) -> FieldPolynomial<F> {
-    let dimension = poly.coeff_count();
-    match auto_type {
-        AutoType::DimensionPlusOne => {
-            let mut res = FieldPolynomial::zero(dimension);
-            poly_auto_inplace_for_dimension_plus_one(poly, &mut res);
-            res
-        }
-        AutoType::Others(auto_ops) => {
-            let mut res = FieldPolynomial::zero(dimension);
-            poly_auto_add_inplace_for_others(poly, auto_ops, &mut res);
-            res
-        }
-        AutoType::One => poly.clone(),
+fn poly_auto<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    auto_helper: &AutoHelper,
+) -> FieldPolynomial<F> {
+    match auto_helper {
+        AutoHelper::Permutation(from_ops) => poly_auto_for_permutation(poly, from_ops),
+        AutoHelper::DimensionPlusOne => poly_auto_for_dimension_plus_one(poly),
+        AutoHelper::One => poly_auto_for_one(poly),
     }
 }
 
 #[inline]
 fn poly_auto_inplace<F: NttField>(
     poly: &FieldPolynomial<F>,
-    auto_type: &AutoType,
+    auto_helper: &AutoHelper,
     destination: &mut FieldPolynomial<F>,
 ) {
-    match auto_type {
-        AutoType::DimensionPlusOne => {
+    match auto_helper {
+        AutoHelper::Permutation(from_ops) => {
+            poly_auto_inplace_for_permutation(poly, from_ops, destination);
+        }
+        AutoHelper::DimensionPlusOne => {
             poly_auto_inplace_for_dimension_plus_one(poly, destination);
         }
-        AutoType::Others(auto_ops) => {
-            destination.set_zero();
-            poly_auto_add_inplace_for_others(poly, auto_ops, destination);
-        }
-        AutoType::One => poly_auto_inplace_for_one(poly, destination),
+        AutoHelper::One => poly_auto_inplace_for_one(poly, destination),
     }
 }
 
 #[inline]
 fn poly_auto_add_inplace<F: NttField>(
     poly: &FieldPolynomial<F>,
-    auto_type: &AutoType,
+    auto_helper: &AutoHelper,
     destination: &mut FieldPolynomial<F>,
 ) {
-    match auto_type {
-        AutoType::DimensionPlusOne => {
+    match auto_helper {
+        AutoHelper::Permutation(from_ops) => {
+            poly_auto_add_inplace_for_permutation(poly, from_ops, destination)
+        }
+        AutoHelper::DimensionPlusOne => {
             poly_auto_add_inplace_for_dimension_plus_one(poly, destination);
         }
-        AutoType::Others(auto_ops) => {
-            poly_auto_add_inplace_for_others(poly, auto_ops, destination);
-        }
-        AutoType::One => poly_auto_add_inplace_for_one(poly, destination),
+        AutoHelper::One => poly_auto_add_inplace_for_one(poly, destination),
     }
 }
 
 #[inline]
-fn poly_auto_add_inplace_for_others<F: NttField>(
-    poly: &FieldPolynomial<F>,
-    auto_ops: &[ElementAutoOp],
-    destination: &mut FieldPolynomial<F>,
-) {
-    for (&c, op) in poly.iter().zip(auto_ops.iter()) {
-        match op.assign_op {
-            AssignOp::Add => {
-                F::add_assign(&mut destination[op.to_index], c);
-            }
-            AssignOp::Sub => {
-                F::sub_assign(&mut destination[op.to_index], c);
-            }
-        }
-    }
+fn poly_auto_for_one<F: NttField>(poly: &FieldPolynomial<F>) -> FieldPolynomial<F> {
+    poly.clone()
 }
 
 #[inline]
@@ -309,6 +298,73 @@ fn poly_auto_add_inplace_for_one<F: NttField>(
     destination: &mut FieldPolynomial<F>,
 ) {
     *destination += poly;
+}
+
+#[inline]
+fn poly_auto_for_permutation<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    from_ops: &[FromOp],
+) -> FieldPolynomial<F> {
+    FieldPolynomial::new(
+        from_ops
+            .iter()
+            .map(|from_op| {
+                let c = unsafe { poly.as_slice().get_unchecked(from_op.from) };
+                match from_op.op {
+                    Op::Add => *c,
+                    Op::Sub => F::neg(*c),
+                }
+            })
+            .collect(),
+    )
+}
+
+#[inline]
+fn poly_auto_inplace_for_permutation<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    from_ops: &[FromOp],
+    destination: &mut FieldPolynomial<F>,
+) {
+    for (d, from_op) in destination.iter_mut().zip(from_ops.iter()) {
+        let c = unsafe { poly.as_slice().get_unchecked(from_op.from) };
+        match from_op.op {
+            Op::Add => {
+                *d = *c;
+            }
+            Op::Sub => {
+                *d = F::neg(*c);
+            }
+        }
+    }
+}
+
+#[inline]
+fn poly_auto_add_inplace_for_permutation<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    from_ops: &[FromOp],
+    destination: &mut FieldPolynomial<F>,
+) {
+    for (d, from_op) in destination.iter_mut().zip(from_ops.iter()) {
+        let c = unsafe { poly.as_slice().get_unchecked(from_op.from) };
+        match from_op.op {
+            Op::Add => {
+                F::add_assign(d, *c);
+            }
+            Op::Sub => {
+                F::sub_assign(d, *c);
+            }
+        }
+    }
+}
+
+#[inline]
+fn poly_auto_for_dimension_plus_one<F: NttField>(poly: &FieldPolynomial<F>) -> FieldPolynomial<F> {
+    let mut result = poly.clone();
+    result[1..]
+        .iter_mut()
+        .step_by(2)
+        .for_each(|v| F::neg_assign(v));
+    result
 }
 
 #[inline]
@@ -374,7 +430,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         let poly = PolyT::random_ternary(N, &mut rng);
-        let auto_type = AutoType::DimensionPlusOne;
+        let auto_type = AutoHelper::DimensionPlusOne;
         let result = poly_auto(&poly, &auto_type);
 
         let flag = result
@@ -469,53 +525,5 @@ mod tests {
             });
 
         assert!(flag);
-    }
-
-    #[test]
-    fn test_auto_index() {
-        let log_step = 3;
-        let step = 1 << log_step;
-        let degree = 2usize.pow(10 - log_step) + 1;
-        // let degree = 1023;
-        let auto_ops = generate_auto_ops(degree, N);
-        let mut tags = vec![(false, 0); N];
-        for (i, auto_op) in auto_ops.iter().enumerate() {
-            if tags[auto_op.to_index].0 {
-                println!("{:4} vs {:4}", tags[auto_op.to_index].1, i);
-                panic!("err");
-            } else {
-                tags[auto_op.to_index] = (true, i);
-            }
-        }
-
-        println!("\n---------");
-        for i in 0..step {
-            for auto_op in auto_ops[i..].iter().step_by(step) {
-                print!("{},", auto_op.to_index);
-            }
-            println!("\n---------");
-            for auto_op in auto_ops[i..].iter().step_by(step) {
-                print!("{:?},", auto_op.assign_op);
-            }
-            println!("\n---------");
-        }
-
-        // let mut inv_auto_ops = vec![(0, AssignOp::Add); 1024];
-        // for (i, auto_op) in auto_ops.iter().enumerate() {
-        //     inv_auto_ops[auto_op.to_index] = (i, auto_op.assign_op);
-        // }
-
-        // println!("\n---------");
-        // let step = 1 << log_step;
-        // for i in 0..step {
-        //     for auto_op in inv_auto_ops[i..].iter().step_by(step) {
-        //         print!("{},", auto_op.0);
-        //     }
-        //     println!("\n---------");
-        //     for auto_op in inv_auto_ops[i..].iter().step_by(step) {
-        //         print!("{:?},", auto_op.1);
-        //     }
-        //     println!("\n---------");
-        // }
     }
 }
