@@ -1,3 +1,5 @@
+// cargo bench -p fhe_core --bench trace
+
 use std::sync::Arc;
 
 use algebra::{
@@ -18,12 +20,19 @@ const PLAIN_MODULUS: ValT = 8; // message space
 const LOG_N: u32 = 10;
 const N: usize = 1 << LOG_N;
 
+const TC: usize = 16; // threads count
+
 #[inline]
 fn encode(m: ValT) -> ValT {
     (m as f64 * CIPHER_MODULUS as f64 / PLAIN_MODULUS as f64).round() as ValT
 }
 
 pub fn criterion_benchmark(c: &mut Criterion) {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(TC)
+        .build_global()
+        .unwrap();
+
     let ntt_table = Arc::new(FieldT::generate_ntt_table(LOG_N).unwrap());
 
     let mut csrng = rand::thread_rng();
@@ -66,9 +75,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| trace_key.expand_coefficients(&cipher))
     });
 
-    c.bench_function(&format!("par expand coefficients {}", N), |b| {
-        b.iter(|| trace_key.par_expand_coefficients(&cipher))
-    });
+    c.bench_function(
+        &format!("par expand coefficients {}, max threads count {}", N, TC),
+        |b| b.iter(|| trace_key.par_expand_coefficients(&cipher)),
+    );
 
     let op_len = 128;
 
@@ -84,9 +94,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| trace_key.expand_partial_coefficients(&cipher, op_len))
     });
 
-    c.bench_function(&format!("par expand partial coefficients {}", N), |b| {
-        b.iter(|| trace_key.par_expand_partial_coefficients(&cipher, op_len))
-    });
+    c.bench_function(
+        &format!(
+            "par expand partial coefficients {}, max threads count {}",
+            N, TC
+        ),
+        |b| b.iter(|| trace_key.par_expand_partial_coefficients(&cipher, op_len)),
+    );
 }
 
 criterion_group!(benches, criterion_benchmark);

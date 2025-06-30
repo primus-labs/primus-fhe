@@ -104,6 +104,14 @@ impl<T: Copy> CmLwe<T> {
         self.a
     }
 
+    /// Put data into buffer.
+    #[inline]
+    pub fn into_slice_inplace(&self, buffer: &mut [T]) {
+        let dimension = self.a.len();
+        buffer[0..dimension].copy_from_slice(&self.a);
+        buffer[dimension..].copy_from_slice(&self.b);
+    }
+
     /// Returns a reference to the a of this [`CmLwe<T>`].
     #[inline]
     pub fn a(&self) -> &[T] {
