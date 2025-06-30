@@ -159,6 +159,50 @@ impl<F: NttField> TraceKey<F> {
     /// Coefficient Expansion Algorithm.
     ///
     /// (Alg. 1)[https://eprint.iacr.org/2024/266.pdf]
+    pub fn expand_coefficients_inplace(
+        &self,
+        ciphertext: &RlweCiphertext<F>,
+        destination: &mut [RlweCiphertext<F>],
+    ) {
+        let dimension = ciphertext.dimension();
+        let twice_dimension = dimension << 1;
+
+        let inv_n = F::inv(dimension.as_into());
+        let n_inv = ShoupFactor::new(inv_n, F::MODULUS_VALUE);
+
+        let (mut a_1, mut auto_space) = match self.pool.get() {
+            Some(space) => space,
+            None => (RlweSpace::new(dimension), AutoSpace::new(dimension)),
+        };
+
+        ciphertext
+            .a()
+            .mul_shoup_scalar_inplace(n_inv, destination[0].a_mut());
+        ciphertext
+            .b()
+            .mul_shoup_scalar_inplace(n_inv, destination[0].b_mut());
+
+        for (i, auto_key) in self.auto_keys.iter().enumerate() {
+            let two_pow_i = 1 << i;
+
+            let (x, y) = unsafe { destination[..two_pow_i * 2].split_at_mut_unchecked(two_pow_i) };
+
+            x.iter_mut().zip(y.iter_mut()).for_each(|(a_0, b_0)| {
+                auto_key.automorphism_inplace(a_0, &mut auto_space, &mut a_1);
+
+                a_0.sub_inplace(&a_1, b_0);
+                b_0.mul_monic_monomial_assign(twice_dimension - two_pow_i);
+
+                a_0.add_assign_element_wise(&*a_1);
+            });
+        }
+
+        self.pool.store((a_1, auto_space));
+    }
+
+    /// Coefficient Expansion Algorithm.
+    ///
+    /// (Alg. 1)[https://eprint.iacr.org/2024/266.pdf]
     pub fn par_expand_coefficients(
         &self,
         ciphertext: &RlweCiphertext<F>,
@@ -315,6 +359,51 @@ impl<F: NttField> TraceKey<F> {
 
         elems.truncate(op_len);
         elems
+    }
+
+    /// Coefficient Expansion Algorithm.
+    ///
+    /// (Alg. 1)[https://eprint.iacr.org/2024/266.pdf]
+    pub fn par_expand_partial_coefficients_inplace(
+        &self,
+        ciphertext: &RlweCiphertext<F>,
+        coeff_count: usize,
+        destination: &mut [RlweCiphertext<F>],
+    ) {
+        let dimension = ciphertext.dimension();
+        let twice_dimension = dimension << 1;
+
+        let op_len = coeff_count.next_power_of_two();
+        assert_eq!(destination.len(), op_len);
+        let log_d = op_len.trailing_zeros() as usize;
+
+        let inv_n = F::inv(op_len.as_into());
+        let n_inv = ShoupFactor::new(inv_n, F::MODULUS_VALUE);
+
+        ciphertext
+            .a()
+            .mul_shoup_scalar_inplace(n_inv, destination[0].a_mut());
+        ciphertext
+            .b()
+            .mul_shoup_scalar_inplace(n_inv, destination[0].b_mut());
+
+        for (i, auto_key) in self.auto_keys.iter().enumerate().take(log_d) {
+            let two_pow_i = 1 << i;
+
+            let (x, y) = unsafe { destination[..two_pow_i * 2].split_at_mut_unchecked(two_pow_i) };
+
+            x.par_iter_mut().zip(y.par_iter_mut()).for_each_init(
+                || (RlweSpace::new(dimension), AutoSpace::new(dimension)),
+                |(a_1, auto_space), (a_0, b_0)| {
+                    auto_key.automorphism_inplace(a_0, auto_space, a_1);
+
+                    a_0.sub_inplace(a_1, b_0);
+                    b_0.mul_monic_monomial_assign(twice_dimension - two_pow_i);
+
+                    a_0.add_assign_element_wise(&*a_1);
+                },
+            );
+        }
     }
 }
 

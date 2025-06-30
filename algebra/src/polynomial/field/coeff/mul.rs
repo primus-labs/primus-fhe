@@ -45,6 +45,19 @@ impl<F: Field> FieldPolynomial<F> {
             .for_each(|v| <F as Field>::MODULUS_VALUE.reduce_mul_assign(v, scalar));
     }
 
+    /// Multiply `self` with a shoup scalar and assign self.
+    #[inline]
+    pub fn mul_shoup_scalar_inplace(
+        &self,
+        scalar: ShoupFactor<<F as Field>::ValueT>,
+        destination: &mut Self,
+    ) {
+        destination
+            .iter_mut()
+            .zip(self.iter())
+            .for_each(|(d, &v)| *d = <F as Field>::MODULUS_VALUE.reduce_mul(v, scalar));
+    }
+
     /// Multiply `self` with a shoup scalar and add to self.
     #[inline]
     pub fn add_mul_shoup_scalar_assign(
