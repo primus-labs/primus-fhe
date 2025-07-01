@@ -80,6 +80,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         |b| b.iter(|| trace_key.par_expand_coefficients(&cipher)),
     );
 
+    let mut result = vec![<RlweCiphertext<FieldT>>::zero(N); N];
+
+    c.bench_function(&format!("expand coefficients inplace {}", N), |b| {
+        b.iter(|| trace_key.expand_coefficients_inplace(&cipher, &mut result))
+    });
+
     let op_len = 128;
 
     values[op_len..].fill(0);
@@ -100,6 +106,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             N, TC
         ),
         |b| b.iter(|| trace_key.par_expand_partial_coefficients(&cipher, op_len)),
+    );
+
+    let mut result = vec![<RlweCiphertext<FieldT>>::zero(N); op_len];
+
+    c.bench_function(
+        &format!(
+            "par expand partial coefficients inplace {}, max threads count {}",
+            N, TC
+        ),
+        |b| {
+            b.iter(|| {
+                trace_key.par_expand_partial_coefficients_inplace(&cipher, op_len, &mut result)
+            })
+        },
     );
 }
 
