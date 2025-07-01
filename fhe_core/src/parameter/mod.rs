@@ -4,4 +4,4 @@ mod rlwe;
 
 pub use key_switching::KeySwitchingParameters;
 pub use lwe::LweParameters;
-pub use rlwe::GadgetRlweParameters;
+pub use rlwe::{GadgetRlweParameters, RlweParameters};

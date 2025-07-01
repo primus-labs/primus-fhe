@@ -5,15 +5,18 @@ use algebra::{
     ntt::NumberTheoryTransform,
     polynomial::{FieldNttPolynomial, FieldPolynomial, Polynomial},
     random::{sample_binary_values, sample_ternary_values, DiscreteGaussian},
-    reduce::RingReduce,
+    reduce::{ModulusValue, RingReduce},
     utils::Size,
     Field, NttField,
 };
-use lattice::NumRlwe;
+use lattice::{NumRlwe, SparseRlwe};
 use num_traits::{ConstOne, ConstZero, One, Zero};
 use rand::{distributions::Uniform, prelude::Distribution, CryptoRng, Rng};
 
-use crate::{decode, encode, CmLweCiphertext, LweCiphertext, LweParameters, NttRlweCiphertext};
+use crate::{
+    decode, encode, CmLweCiphertext, LweCiphertext, LweParameters, NttRlweCiphertext,
+    RlweParameters,
+};
 
 /// The distribution type of the LWE Secret Key.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -266,9 +269,11 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
         let mut a = Polynomial::zero(dimension);
         let mut b = Polynomial::zero(dimension);
 
-        for (i, o) in a.iter_mut().zip(distr.sample_iter(&mut *csrng)) {
-            *i = o;
-        }
+        a.iter_mut()
+            .zip(distr.sample_iter(&mut *csrng))
+            .for_each(|(i, o): (&mut C, C)| {
+                *i = o;
+            });
 
         a.naive_mul_inplace(&self.key, modulus, &mut b);
 
@@ -546,6 +551,66 @@ impl<F: NttField> NttRlweSecretKey<F> {
         let a_mul_s_ntt = a_ntt * &self.key;
         let dec_poly_ntt = b_ntt - a_mul_s_ntt;
         dec_poly_ntt.into_coeff_poly(ntt_table)
+    }
+
+    /// Encrypts multiple zeros using the secret key.
+    ///
+    /// # Arguments
+    ///
+    /// * `zero_count` - The count of zeros to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
+    pub fn encrypt_multi_zeros<R>(
+        &self,
+        zero_count: usize,
+        params: &RlweParameters<F>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+    ) -> SparseRlwe<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        SparseRlwe::generate_random_zero_sample(
+            zero_count,
+            &self.key,
+            params.noise_distribution(),
+            ntt_table,
+            rng,
+        )
+    }
+
+    /// Decrypts the [`LweCiphertext`] back to message.
+    #[inline]
+    pub fn decrypt_multi_messages<Msg>(
+        &self,
+        cipher: &SparseRlwe<F>,
+        params: &RlweParameters<F>,
+        ntt_table: &<F as NttField>::Table,
+    ) -> Vec<Msg>
+    where
+        Msg: TryFrom<<F as Field>::ValueT>,
+    {
+        let a = cipher.a().clone();
+        let a_ntt = a.into_ntt_poly(ntt_table);
+        let a_mul_s_ntt = a_ntt * &self.key;
+        let a_mul_s = a_mul_s_ntt.into_coeff_poly(ntt_table);
+
+        cipher
+            .b()
+            .iter()
+            .zip(a_mul_s.into_iter())
+            .map(|(x, y)| {
+                decode(
+                    F::sub(*x, y),
+                    params.plain_modulus_value,
+                    ModulusValue::Prime(params.modulus),
+                )
+            })
+            .collect()
     }
 }
 

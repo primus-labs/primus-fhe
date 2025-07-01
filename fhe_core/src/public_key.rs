@@ -8,12 +8,13 @@ use algebra::{
     utils::Size,
     Field, NttField,
 };
-use lattice::{Lwe, NttGadgetRlwe, NttRgsw, NttRlwe, NumRlwe};
+use lattice::{Lwe, NttGadgetRlwe, NttRgsw, NttRlwe, NumRlwe, SparseRlwe};
 use rand::{prelude::Distribution, CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     encode, CmLweCiphertext, LweCiphertext, LweParameters, LweSecretKey, NttRlweSecretKey,
+    RlweParameters,
 };
 
 /// Represents a public key for the Learning with Errors (LWE) cryptographic scheme.
@@ -447,6 +448,38 @@ impl<F: NttField> Clone for NttRlwePublicKey<F> {
 }
 
 impl<F: NttField> NttRlwePublicKey<F> {
+    /// Creates a new [`NttRlwePublicKey<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        Self {
+            key: NttRlwe::from_bytes(data),
+        }
+    }
+
+    /// Creates a new [`NttRlwePublicKey<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        self.key.from_bytes_assign(data);
+    }
+
+    /// Converts [`NttRlwePublicKey<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        self.key.into_bytes()
+    }
+
+    /// Converts [`NttRlwePublicKey<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        self.key.into_bytes_inplace(data);
+    }
+
+    /// Returns the bytes count of [`NttRlwePublicKey<F>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        self.key.bytes_count()
+    }
+
     /// Creates a new [`NttRlwePublicKey`] using the provided secret key, Gaussian distribution, NTT table, and random number generator.
     ///
     /// # Arguments
@@ -644,6 +677,53 @@ impl<F: NttField> NttRlwePublicKey<F> {
             <NttGadgetRlwe<F>>::new(minus_s_m, basis),
             <NttGadgetRlwe<F>>::new(m, basis),
         )
+    }
+
+    /// Encrypts multiple zeros using the public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `zero_count` - The count of zeros to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
+    #[inline]
+    pub fn encrypt_multi_zeros<R>(
+        &self,
+        zero_count: usize,
+        params: &RlweParameters<F>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+    ) -> SparseRlwe<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = params.dimension;
+        let gaussian = params.noise_distribution();
+
+        let r = FieldPolynomial::random_binary(dimension, rng).into_ntt_poly(ntt_table);
+
+        let mut temp = NttRlwe::zero(dimension);
+
+        r.mul_inplace(self.key.a(), temp.a_mut());
+        r.mul_inplace(self.key.b(), temp.b_mut());
+
+        let (mut a, b) = temp.to_rlwe(ntt_table).into_inner();
+        let mut b = b.inner_data();
+        b.truncate(zero_count);
+
+        for (ai, ei) in a.iter_mut().zip(gaussian.sample_iter(&mut *rng)) {
+            F::add_assign(ai, ei);
+        }
+
+        for (bi, ei) in b.iter_mut().zip(gaussian.sample_iter(&mut *rng)) {
+            F::add_assign(bi, ei);
+        }
+
+        SparseRlwe::new(a, b)
     }
 }
 

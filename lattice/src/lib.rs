@@ -13,4 +13,4 @@ pub mod utils;
 pub use gadget::{GadgetRlwe, NttGadgetRlwe};
 pub use lwe::{CmLwe, Lwe};
 pub use rgsw::{NttRgsw, Rgsw};
-pub use rlwe::{NttRlwe, NumRlwe, Rlwe};
+pub use rlwe::{NttRlwe, NumRlwe, Rlwe, SparseRlwe};

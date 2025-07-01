@@ -106,13 +106,13 @@ impl<F: NttField> FieldNttPolynomial<F> {
 
     /// Returns an iterator that allows reading each value or values of the polynomial.
     #[inline]
-    pub fn iter(&self) -> core::slice::Iter<<F as Field>::ValueT> {
+    pub fn iter(&self) -> core::slice::Iter<'_, <F as Field>::ValueT> {
         self.data.iter()
     }
 
     /// Returns an iterator that allows modifying each value or values of the polynomial.
     #[inline]
-    pub fn iter_mut(&mut self) -> core::slice::IterMut<<F as Field>::ValueT> {
+    pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, <F as Field>::ValueT> {
         self.data.iter_mut()
     }
 

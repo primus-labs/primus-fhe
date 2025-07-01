@@ -131,6 +131,12 @@ impl<F: Field> Rlwe<F> {
         Self { a, b }
     }
 
+    /// Given the a and b, drop self.
+    #[inline]
+    pub fn into_inner(self) -> (FieldPolynomial<F>, FieldPolynomial<F>) {
+        (self.a, self.b)
+    }
+
     /// Creates a new [`Rlwe<F>`] with reference of [`FieldPolynomial<F>`].
     #[inline]
     pub fn from_ref(a: &FieldPolynomial<F>, b: &FieldPolynomial<F>) -> Self {
