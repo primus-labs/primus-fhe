@@ -1,4 +1,5 @@
 // cargo bench -p fhe_core --bench trace
+// cargo +nightly bench -p fhe_core --features="nightly" --bench trace
 
 use std::sync::Arc;
 
@@ -67,22 +68,22 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut destination = <RlweCiphertext<FieldT>>::zero(N);
 
-    c.bench_function(&format!("trace {}", N), |b| {
+    c.bench_function(&format!("trace: {}", N), |b| {
         b.iter(|| trace_key.trace_inplace(&cipher, &mut destination))
     });
 
-    c.bench_function(&format!("expand coefficients {}", N), |b| {
+    c.bench_function(&format!("expand coefficients: {}", N), |b| {
         b.iter(|| trace_key.expand_coefficients(&cipher))
     });
 
     c.bench_function(
-        &format!("par expand coefficients {}, max threads count {}", N, TC),
+        &format!("par expand coefficients: {}, max threads count {}", N, TC),
         |b| b.iter(|| trace_key.par_expand_coefficients(&cipher)),
     );
 
     let mut result = vec![<RlweCiphertext<FieldT>>::zero(N); N];
 
-    c.bench_function(&format!("expand coefficients inplace {}", N), |b| {
+    c.bench_function(&format!("expand coefficients inplace: {}", N), |b| {
         b.iter(|| trace_key.expand_coefficients_inplace(&cipher, &mut result))
     });
 
@@ -96,15 +97,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     );
     *cipher.b_mut() += &encoded_values;
 
-    c.bench_function(&format!("expand partial coefficients {}", N), |b| {
-        b.iter(|| trace_key.expand_partial_coefficients(&cipher, op_len))
-    });
+    c.bench_function(
+        &format!("expand partial coefficients: {op_len} of {N}"),
+        |b| b.iter(|| trace_key.expand_partial_coefficients(&cipher, op_len)),
+    );
 
     c.bench_function(
-        &format!(
-            "par expand partial coefficients {}, max threads count {}",
-            N, TC
-        ),
+        &format!("par expand partial coefficients: {op_len} of {N}, max threads count {TC}"),
         |b| b.iter(|| trace_key.par_expand_partial_coefficients(&cipher, op_len)),
     );
 
@@ -112,8 +111,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function(
         &format!(
-            "par expand partial coefficients inplace {}, max threads count {}",
-            N, TC
+            "par expand partial coefficients inplace: {op_len} of {N}, max threads count {TC}"
         ),
         |b| {
             b.iter(|| {
