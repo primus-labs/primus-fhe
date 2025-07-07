@@ -7,6 +7,7 @@ use algebra::{
     ByteCount, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{utils::PolyDecomposeSpace, NttRlwe};
@@ -189,6 +190,12 @@ impl<F: NttField> NttGadgetRlwe<F> {
         self.data.iter_mut()
     }
 
+    /// Returns a parallel iterator over the `data` of this [`NttGadgetRlwe<F>`].
+    #[inline]
+    pub fn par_iter(&self) -> rayon::slice::Iter<'_, NttRlwe<F>> {
+        self.data.par_iter()
+    }
+
     /// Converts [`NttGadgetRlwe<F>`] into [`GadgetRlwe<F>`].
     #[inline]
     pub fn to_gadget_rlwe(self, ntt_table: &<F as NttField>::Table) -> GadgetRlwe<F> {
@@ -331,6 +338,48 @@ impl<F: NttField> NttGadgetRlwe<F> {
                 destination.add_ntt_rlwe_mul_ntt_polynomial_assign_fast(g_rlwe, decompose_poly);
             },
         )
+    }
+
+    /// Perform multiplication between [`NttGadgetRlwe<F>`] and [`FieldPolynomial<F>`],
+    /// stores the result into `destination`.
+    ///
+    /// The coefficients in the `destination` may be in [0, 2*modulus) for some case,
+    /// and fall back to [0, modulus) for normal case.
+    pub fn mul_polynomial_inplace_fast_mt(
+        &self,
+        polynomial: &FieldPolynomial<F>,
+        ntt_table: &<F as NttField>::Table,
+        adjust_poly: &mut FieldPolynomial<F>,
+        carries: &mut [bool],
+        decompose_polys: &mut [FieldNttPolynomial<F>],
+        destination: &mut [NttRlwe<F>],
+    ) {
+        polynomial.init_adjust_poly_carries(self.basis(), carries, adjust_poly);
+
+        self.basis
+            .decompose_iter()
+            .zip(decompose_polys.iter_mut())
+            .for_each(|(once_decompose, decompose_poly)| {
+                adjust_poly.approx_signed_decompose(
+                    once_decompose,
+                    carries,
+                    decompose_poly.as_mut_slice(),
+                );
+            });
+
+        decompose_polys
+            .par_iter_mut()
+            .zip(self.par_iter())
+            .zip(destination.par_iter_mut())
+            .for_each(
+                |((decompose_poly, g_rlwe), di): (
+                    (&mut FieldNttPolynomial<F>, &NttRlwe<F>),
+                    &mut NttRlwe<F>,
+                )| {
+                    ntt_table.transform_slice(decompose_poly.as_mut_slice());
+                    g_rlwe.mul_ntt_polynomial_inplace(decompose_poly, di)
+                },
+            );
     }
 
     /// Generate a [`NttGadgetRlwe<F>`] sample which encrypts `0`.

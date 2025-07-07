@@ -27,6 +27,10 @@ nightly = ["algebra/nightly", "lattice/nightly"]
 name = "trace"
 harness = false
 
+[[bench]]
+name = "rlwe_mul_rgsw"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 # enable unstable features in the documentation

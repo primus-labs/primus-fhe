@@ -608,6 +608,60 @@ impl<F: NttField> Rlwe<F> {
     }
 
     /// Performs a multiplication on the `self` [`Rlwe<F>`] with another `ntt_rgsw` [`NttRgsw<F>`],
+    /// output the [`Rlwe<F>`] result to `destination`.
+    ///
+    /// # Attention
+    /// The message of **`ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    #[inline]
+    pub fn mul_ntt_rgsw_inplace_mt(
+        &self,
+        rgsw: &NttRgsw<F>,
+        ntt_table: &<F as NttField>::Table,
+        adjust_polys_0: &mut FieldPolynomial<F>,
+        adjust_polys_1: &mut FieldPolynomial<F>,
+        carries: &mut [bool],
+        decompose_polys: &mut [FieldNttPolynomial<F>],
+        constant_mul_result: &mut [NttRlwe<F>],
+        median: &mut NttRlweSpace<F>,
+        destination: &mut Rlwe<F>,
+    ) {
+        let (carries_0, carries_1) = carries.split_at_mut(carries.len() / 2);
+        let (decompose_polys_0, decompose_polys_1) =
+            decompose_polys.split_at_mut(decompose_polys.len() / 2);
+        let (constant_mul_result_0, constant_mul_result_1) =
+            constant_mul_result.split_at_mut(constant_mul_result.len() / 2);
+        rayon::join(
+            || {
+                rgsw.minus_s_m().mul_polynomial_inplace_fast_mt(
+                    self.a(),
+                    ntt_table,
+                    adjust_polys_0,
+                    carries_0,
+                    decompose_polys_0,
+                    constant_mul_result_0,
+                )
+            },
+            || {
+                rgsw.m().mul_polynomial_inplace_fast_mt(
+                    self.b(),
+                    ntt_table,
+                    adjust_polys_1,
+                    carries_1,
+                    decompose_polys_1,
+                    constant_mul_result_1,
+                )
+            },
+        );
+
+        let median = constant_mul_result.iter().fold(median, |acc, x| {
+            acc.add_assign_element_wise(x);
+            acc
+        });
+
+        median.inverse_transform_inplace(ntt_table, destination)
+    }
+
+    /// Performs a multiplication on the `self` [`Rlwe<F>`] with another `ntt_rgsw` [`NttRgsw<F>`],
     /// output the [`Rlwe<F>`] result back to `self`.
     ///
     /// # Attention

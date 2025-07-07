@@ -62,12 +62,14 @@ impl<F: NttField> FieldNttPolynomial<F> {
     /// and puts the result to the `destination`.
     #[inline]
     pub fn mul_inplace(&self, rhs: &Self, destination: &mut Self) {
-        self.iter()
-            .zip(rhs)
-            .zip(destination)
-            .for_each(|((&a, &b), z)| {
+        self.iter().zip(rhs).zip(destination).for_each(
+            |((&a, &b), z): (
+                (&<F as Field>::ValueT, &<F as Field>::ValueT),
+                &mut <F as Field>::ValueT,
+            )| {
                 *z = <F as Field>::MODULUS.reduce_mul(a, b);
-            })
+            },
+        )
     }
 }
 

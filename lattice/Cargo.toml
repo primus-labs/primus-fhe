@@ -10,12 +10,12 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 bytemuck = { workspace = true }
+rayon = { workspace = true }
 
 [features]
 default = ["concrete-ntt"]
 concrete-ntt = ["algebra/concrete-ntt"]
 nightly = ["algebra/nightly"]
-
 
 [package.metadata.docs.rs]
 all-features = true
