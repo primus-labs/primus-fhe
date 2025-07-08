@@ -85,7 +85,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let decompose_polys = &mut vec![FieldNttPolynomial::zero(N); l * 2];
     let wide_destination = &mut vec![NttRlwe::zero(N); l * 2];
 
-    c.bench_function("rlwe mul rgsw multi thread 2", |b| {
+    c.bench_function(&format!("rlwe mul rgsw multi thread: {}", TC), |b| {
         b.iter(|| {
             cipher.mul_ntt_rgsw_inplace_mt(
                 &rgsw,
