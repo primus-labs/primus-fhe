@@ -46,7 +46,7 @@ impl<Q: NttField> RlweKeySwitchingKey<Q> {
         s_in: &NttRlweSecretKey<Q>,
         s_out: &NttRlweSecretKey<Q>,
         basis: &NonPowOf2ApproxSignedBasis<<Q as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<Q as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<Q as Field>::ValueT>,
         ntt_table: Arc<<Q as NttField>::Table>,
         rng: &mut R,
     ) -> Self

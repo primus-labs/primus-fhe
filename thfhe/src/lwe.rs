@@ -27,7 +27,7 @@ pub fn generate_shared_lwe_ciphertext_vec<Backend, R>(
     backend: &mut Backend,
     shared_secret_key: &[Backend::Sharing],
     count: usize,
-    gaussian: DiscreteGaussian<u64>,
+    gaussian: &DiscreteGaussian<u64>,
     rng: &mut R,
 ) -> BatchMPCLwe<Backend::Sharing>
 where
@@ -66,7 +66,7 @@ where
 pub fn generate_shared_lwe_ciphertext<Backend, R>(
     backend: &mut Backend,
     shared_secret_key: &[Backend::Sharing],
-    gaussian: DiscreteGaussian<u64>,
+    gaussian: &DiscreteGaussian<u64>,
     rng: &mut R,
 ) -> MPCLwe<Backend::Sharing>
 where

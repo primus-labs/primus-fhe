@@ -404,7 +404,7 @@ impl<F: NttField> NttRlwe<F> {
     /// Generate a [`NttRlwe<F>`] sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
@@ -425,7 +425,7 @@ impl<F: NttField> NttRlwe<F> {
     pub fn generate_random_value_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
         value: <F as Field>::ValueT,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self

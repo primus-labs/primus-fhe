@@ -52,7 +52,7 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
                 Lwe::generate_random_zero_sample(
                     secret_key.as_ref(),
                     params.cipher_modulus,
-                    gaussian,
+                    &gaussian,
                     rng,
                 )
             })
@@ -120,7 +120,7 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *rng))
+            .zip((&gaussian).sample_iter(&mut *rng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -168,7 +168,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         let modulus = params.cipher_modulus;
 
         let a = Polynomial::random(modulus.modulus_minus_one(), dimension, rng);
-        let mut e = Polynomial::random_gaussian(gaussian, dimension, rng);
+        let mut e = Polynomial::random_gaussian(&gaussian, dimension, rng);
 
         a.naive_mul_inplace(secret_key, modulus, &mut e);
 
@@ -228,7 +228,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -236,7 +236,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (bi, ei) in result
             .b_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(bi, ei);
         }
@@ -297,7 +297,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -305,7 +305,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (bi, ei) in result
             .b_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(bi, ei);
         }
@@ -338,7 +338,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
     /// A new instance of `NttRlwePublicKey`.
     pub fn new<R>(
         secret_key: &NttRlweSecretKey<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> NttRlwePublicKey<F>

@@ -50,7 +50,7 @@ impl<F: NttField> AutoKey<F> {
         ntt_secret_key: &NttRlweSecretKey<F>,
         degree: usize,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: Arc<<F as NttField>::Table>,
         rng: &mut R,
     ) -> Self
@@ -240,7 +240,7 @@ mod tests {
         let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
 
         let mut cipher =
-            <Rlwe<Fp>>::generate_random_zero_sample(&ntt_sk, gaussian, &ntt_table, &mut rng);
+            <Rlwe<Fp>>::generate_random_zero_sample(&ntt_sk, &gaussian, &ntt_table, &mut rng);
         *cipher.b_mut() += &encoded_values;
 
         let auto_key = AutoKey::new(
@@ -248,7 +248,7 @@ mod tests {
             &ntt_sk,
             N + 1,
             &basis,
-            gaussian,
+            &gaussian,
             Arc::clone(&ntt_table),
             &mut rng,
         );

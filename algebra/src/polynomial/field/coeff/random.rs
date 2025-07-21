@@ -19,7 +19,7 @@ impl<F: Field> FieldPolynomial<F> {
 
     /// Generate a random [`FieldPolynomial<F>`] with a specified `distribution`.
     #[inline]
-    pub fn random_with_distribution<R, D>(n: usize, distribution: D, rng: &mut R) -> Self
+    pub fn random_with_distribution<R, D>(n: usize, distribution: &D, rng: &mut R) -> Self
     where
         D: Distribution<<F as Field>::ValueT>,
         R: Rng + CryptoRng,
@@ -53,7 +53,7 @@ impl<F: Field> FieldPolynomial<F> {
     #[inline]
     pub fn random_gaussian<R>(
         n: usize,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         rng: &mut R,
     ) -> Self
     where

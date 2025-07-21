@@ -49,7 +49,7 @@ impl<T: UnsignedInteger> Polynomial<T> {
     /// Generate a random [`Polynomial<T>`] with discrete gaussian distribution.
     #[inline]
     pub fn random_gaussian<R>(
-        gaussian: DiscreteGaussian<T>,
+        gaussian: &DiscreteGaussian<T>,
         coeff_count: usize,
         rng: &mut R,
     ) -> Self

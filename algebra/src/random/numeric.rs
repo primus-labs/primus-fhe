@@ -1,8 +1,9 @@
 use rand::{CryptoRng, Rng};
-use rand_distr::{Distribution, Normal};
+use rand_distr::Distribution;
 
 use crate::{
     integer::{Integer, UnsignedInteger},
+    random::{CDTSampler, DiscreteZiggurat},
     AlgebraError,
 };
 
@@ -54,11 +55,12 @@ where
 }
 
 /// The gaussian distribution `N(mean, std_dev**2)`.
-#[derive(Clone, Copy, Debug)]
-pub struct DiscreteGaussian<T: UnsignedInteger> {
-    normal: Normal<f64>,
-    max_std_dev: f64,
-    modulus_minus_one: T,
+#[derive(Clone)]
+pub enum DiscreteGaussian<T: UnsignedInteger> {
+    ///
+    Cdt(CDTSampler<T>),
+    ///
+    Ziggurat(DiscreteZiggurat<T>),
 }
 
 impl<T: UnsignedInteger> DiscreteGaussian<T> {
@@ -70,21 +72,24 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
     /// -   standard deviation (`σ`, must be finite)
     #[inline]
     pub fn new(
-        mean: f64,
+        _mean: f64,
         std_dev: f64,
         modulus_minus_one: T,
     ) -> Result<DiscreteGaussian<T>, AlgebraError> {
-        let max_std_dev = std_dev * 6.0;
-        if std_dev < 0. {
-            return Err(AlgebraError::DistributionErr);
-        }
-        match Normal::new(mean, std_dev) {
-            Ok(normal) => Ok(DiscreteGaussian {
-                normal,
-                max_std_dev,
+        if std_dev < 0.7 {
+            Err(AlgebraError::DistributionErr)
+        } else if std_dev < 3.0 {
+            Ok(DiscreteGaussian::Cdt(CDTSampler::new(
+                std_dev,
+                6.0,
                 modulus_minus_one,
-            }),
-            Err(_) => Err(AlgebraError::DistributionErr),
+            )))
+        } else {
+            Ok(DiscreteGaussian::Ziggurat(DiscreteZiggurat::new(
+                std_dev,
+                6.0,
+                modulus_minus_one,
+            )))
         }
     }
 
@@ -96,57 +101,42 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
     /// -   standard deviation (`σ`, must be finite)
     #[inline]
     pub fn new_with_max_limit(
-        mean: f64,
+        _mean: f64,
         std_dev: f64,
         max_std_dev: f64,
-        modulus_minus_one: T,
+        _modulus_minus_one: T,
     ) -> Result<DiscreteGaussian<T>, AlgebraError> {
-        if max_std_dev <= std_dev || std_dev < 0. {
+        if max_std_dev <= std_dev || std_dev < 0.7 {
             return Err(AlgebraError::DistributionErr);
         }
-        match Normal::new(mean, std_dev) {
-            Ok(inner) => Ok(DiscreteGaussian {
-                normal: inner,
-                max_std_dev,
-                modulus_minus_one,
-            }),
-            Err(_) => Err(AlgebraError::DistributionErr),
-        }
+        unimplemented!()
     }
 
-    /// Returns the mean (`μ`) of the distribution.
-    #[inline]
-    pub fn mean(&self) -> f64 {
-        self.normal.mean()
-    }
+    // /// Returns the mean (`μ`) of the distribution.
+    // #[inline]
+    // pub fn mean(&self) -> f64 {
+    //     self.normal.mean()
+    // }
 
-    /// Returns the standard deviation (`σ`) of the distribution.
-    #[inline]
-    pub fn std_dev(&self) -> f64 {
-        self.normal.std_dev()
-    }
+    // /// Returns the standard deviation (`σ`) of the distribution.
+    // #[inline]
+    // pub fn std_dev(&self) -> f64 {
+    //     self.normal.std_dev()
+    // }
 
-    /// Returns the max deviation of the distribution.
-    #[inline]
-    pub fn max_std_dev(&self) -> f64 {
-        self.max_std_dev
-    }
+    // /// Returns the max deviation of the distribution.
+    // #[inline]
+    // pub fn max_std_dev(&self) -> f64 {
+    //     self.max_std_dev
+    // }
 }
 
 impl<T: UnsignedInteger> Distribution<T> for DiscreteGaussian<T> {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> T {
-        let mean = self.normal.mean();
-        loop {
-            let value = self.normal.sample(rng);
-            if (value - mean).abs() < self.max_std_dev {
-                let round = value.round();
-                if round < 0.5 {
-                    return self.modulus_minus_one - T::as_from(-round) + T::ONE;
-                } else {
-                    return T::as_from(round);
-                }
-            }
+        match self {
+            DiscreteGaussian::Cdt(cdtsampler) => cdtsampler.sample(rng),
+            DiscreteGaussian::Ziggurat(discrete_ziggurat) => discrete_ziggurat.sample(rng),
         }
     }
 }

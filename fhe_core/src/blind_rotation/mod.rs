@@ -61,7 +61,7 @@ impl<F: NttField> BlindRotationKey<F> {
         lwe_secret_key: &LweSecretKey<C>,
         rlwe_secret_key: &NttRlweSecretKey<F>,
         blind_rotation_basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: Arc<<F as NttField>::Table>,
         rng: &mut R,
     ) -> Self

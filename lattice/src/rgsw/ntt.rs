@@ -154,7 +154,7 @@ impl<F: NttField> NttRgsw<F> {
     pub fn generate_random_zero_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
@@ -175,7 +175,7 @@ impl<F: NttField> NttRgsw<F> {
     pub fn generate_random_one_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self

@@ -26,7 +26,7 @@ pub fn generate_share_ntt_rlwe_ciphertext_vec<Backend, R>(
     secret_key_share: &[Backend::Sharing],
     ntt_secret_key_share: &[Backend::Sharing],
     count: usize,
-    gaussian: DiscreteGaussian<u64>,
+    gaussian: &DiscreteGaussian<u64>,
     rng: &mut R,
 ) -> BatchMPCNttRlwe<Backend::Sharing>
 where
@@ -93,7 +93,7 @@ where
 pub fn generate_share_rlwe_ciphertext<Backend, R>(
     backend: &mut Backend,
     secret_key_share: &[Backend::Sharing],
-    gaussian: DiscreteGaussian<u64>,
+    gaussian: &DiscreteGaussian<u64>,
     rng: &mut R,
 ) -> MPCRlwe<Backend::Sharing>
 where

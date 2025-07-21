@@ -195,7 +195,7 @@ impl Into<LwePublicKey<u64>> for MPCLwePublicKey {
 pub fn generate_lwe_public_key<Backend, R>(
     backend: &mut Backend,
     lwe_secret_key: &[Backend::Sharing],
-    gaussian: DiscreteGaussian<u64>,
+    gaussian: &DiscreteGaussian<u64>,
     kappa: usize,
     rng: &mut R,
 ) -> MPCLwePublicKey
@@ -350,7 +350,7 @@ pub fn generate_bootstrapping_key<Backend, R>(
     backend: &mut Backend,
     lwe_secret_key: &[Backend::Sharing],
     rlwe_secret_key: &[Backend::Sharing],
-    gaussian: DiscreteGaussian<u64>,
+    gaussian: &DiscreteGaussian<u64>,
     basis: NonPowOf2ApproxSignedBasis<u64>,
     rng: &mut R,
 ) -> MPCNttBootstrappingKey
@@ -479,7 +479,7 @@ pub fn generate_key_switching_key<Backend, R>(
     backend: &mut Backend,
     input_secret_key: &[Backend::Sharing],
     output_secret_key: &[Backend::Sharing],
-    gaussian: DiscreteGaussian<u64>,
+    gaussian: &DiscreteGaussian<u64>,
     basis: NonPowOf2ApproxSignedBasis<u64>,
     rng: &mut R,
 ) -> MPCKeySwitchingKey
