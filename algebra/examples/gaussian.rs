@@ -81,9 +81,9 @@ fn check_standard_deviation() {
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
     // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
     let sigams: Vec<f64> = vec![10.0];
-    // let chunk_size = 10usize;
 
-    // let modulus = <algebra::modulus::BarrettModulus<ValueT>>::new(Q);
+    let chunk_size = 10usize;
+    let modulus = <algebra::modulus::BarrettModulus<ValueT>>::new(Q);
 
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
@@ -98,23 +98,23 @@ fn check_standard_deviation() {
 
         check(&data, sigma);
 
-        // let datas: Vec<Vec<ValueT>> = (0..chunk_size)
-        //     .map(|_| distr.clone().sample_iter(&mut rng).take(N).collect())
-        //     .collect();
+        let datas: Vec<Vec<ValueT>> = (0..chunk_size)
+            .map(|_| distr.clone().sample_iter(&mut rng).take(N).collect())
+            .collect();
 
-        // let new_data = datas
-        //     .into_iter()
-        //     .reduce(|mut acc, x| {
-        //         for (a, b) in acc.iter_mut().zip(x) {
-        //             algebra::reduce::ReduceAddAssign::reduce_add_assign(modulus, a, b);
-        //         }
-        //         acc
-        //     })
-        //     .unwrap();
+        let new_data = datas
+            .into_iter()
+            .reduce(|mut acc, x| {
+                for (a, b) in acc.iter_mut().zip(x) {
+                    algebra::reduce::ReduceAddAssign::reduce_add_assign(modulus, a, b);
+                }
+                acc
+            })
+            .unwrap();
 
-        // println!("----------------sum-------------------------");
+        println!("----------------sum-------------------------");
 
-        // check(&new_data, (chunk_size as f64).sqrt() * sigma);
+        check(&new_data, (chunk_size as f64).sqrt() * sigma);
     }
 }
 
