@@ -1,6 +1,5 @@
 use std::{num::NonZero, sync::LazyLock};
 
-use bigdecimal::{BigDecimal, Context, RoundingMode};
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use rand_distr::{Distribution, Standard, Uniform};
 
@@ -10,14 +9,14 @@ const PRECISION: u64 = 256;
 
 ///
 #[derive(Debug, Clone)]
-pub struct CDTSampler<T: UnsignedInteger> {
+pub struct UnixCDTSampler<T: UnsignedInteger> {
     std_dev: f64,
     upper_bound: usize,
     modulus_minus_one: T,
     cdt: Vec<u128>,
 }
 
-impl<T: UnsignedInteger> CDTSampler<T> {
+impl<T: UnsignedInteger> UnixCDTSampler<T> {
     ///
     pub fn new(std_dev: f64, tail_cut: f64, modulus_minus_one: T) -> Self {
         let max_std_dev = std_dev * tail_cut;
@@ -28,39 +27,37 @@ impl<T: UnsignedInteger> CDTSampler<T> {
             length = 2;
         }
 
-        let context = Context::new(NonZero::new(PRECISION).unwrap(), RoundingMode::HalfUp);
-
-        let std_dev_hp = BigDecimal::from_f64(std_dev).unwrap();
+        let std_dev_hp = Float::with_val(PRECISION, std_dev);
         let var_hp = std_dev_hp.square();
 
-        let minus_twice_variance_recip = -var_hp.double().inverse_with_context(&context);
+        let minus_twice_variance_recip = -var_hp.double().recip();
 
-        let mut pdf = vec![BigDecimal::default(); length];
-        pdf[0] = BigDecimal::one().half();
+        let mut pdf = vec![Float::new(PRECISION); length];
+        pdf[0] = Float::with_val(PRECISION, 1) / 2;
         pdf[1] = minus_twice_variance_recip.exp();
 
         pdf.iter_mut().enumerate().skip(2).for_each(|(i, v)| {
-            *v = (BigDecimal::from_usize(i * i).unwrap() * &minus_twice_variance_recip).exp();
+            *v = (Float::with_val(PRECISION, i * i) * &minus_twice_variance_recip).exp();
         });
 
-        let s = pdf.iter().fold(BigDecimal::zero(), |acc, v| acc + v);
+        let s = pdf.iter().fold(Float::new(PRECISION), |acc, v| acc + v);
 
-        let pdf: Vec<BigDecimal> = pdf.into_iter().map(|v| v / &s).collect();
+        let pdf: Vec<Float> = pdf.into_iter().map(|v| v / &s).collect();
 
         println!("Prob[0]={}", pdf[0]);
         println!("Prob[1]={}", pdf[1]);
         println!("----------------------------------");
 
         let mut cdt = Vec::with_capacity(length + 1);
-        let mut pre = BigDecimal::zero();
+        let mut pre = Float::new(PRECISION);
 
-        cdt.push(BigDecimal::zero());
+        cdt.push(Float::new(PRECISION));
         for p in pdf.iter() {
             pre += p;
-            if pre < BigDecimal::one() {
+            if pre < Float::with_val(PRECISION, 1) {
                 cdt.push(pre.clone());
             } else {
-                cdt.push(BigDecimal::one());
+                cdt.push(Float::with_val(PRECISION, 1));
                 break;
             }
         }
@@ -68,12 +65,7 @@ impl<T: UnsignedInteger> CDTSampler<T> {
 
         let cdt: Vec<u128> = cdt
             .into_iter()
-            .map(|f| {
-                (f * u128::MAX)
-                    .with_scale_round(0, RoundingMode::HalfUp)
-                    .to_u128()
-                    .unwrap()
-            })
+            .map(|f| (f * u128::MAX).to_u128().unwrap())
             .collect();
 
         Self {
@@ -92,7 +84,7 @@ impl<T: UnsignedInteger> CDTSampler<T> {
 
 static D: LazyLock<Uniform<u128>> = LazyLock::new(|| Uniform::new_inclusive(0, u128::MAX));
 
-impl<T: UnsignedInteger> Distribution<T> for CDTSampler<T> {
+impl<T: UnsignedInteger> Distribution<T> for UnixCDTSampler<T> {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> T {
         let r: u128 = D.sample(rng);
 
