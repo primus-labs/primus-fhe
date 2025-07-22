@@ -10,7 +10,7 @@ type ValueT = u64;
 
 const Q: ValueT = 1125899906826241;
 const HALF_Q: ValueT = Q >> 1;
-const N: usize = 1 << 17;
+const N: usize = 1 << 20;
 
 fn main() {
     check_standard_deviation();
@@ -80,17 +80,18 @@ fn check_standard_deviation() {
 
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
     // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
-    let sigams: Vec<f64> = vec![0.7];
+    let sigams: Vec<f64> = vec![10.0];
     // let chunk_size = 10usize;
 
-    // let modulus = <BarrettModulus<ValueT>>::new(Q);
+    // let modulus = <algebra::modulus::BarrettModulus<ValueT>>::new(Q);
 
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
         println!("----------------single-------------------------");
-        let distr = <algebra::random::CDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
-        // let distr = <algebra::random::DiscreteZiggurat<ValueT>>::new(sigma, 9.42, Q - 1);
+        // let distr = <algebra::random::CDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
+        let distr = <algebra::random::DiscreteZiggurat<ValueT>>::new(sigma, 9.42, Q - 1);
         // let distr = <algebra::random::DiscreteGaussian<ValueT>>::new(0.0, sigma, Q - 1).unwrap();
+        // let distr = <algebra::random::UnixCDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
         data.iter_mut()
             .zip(distr.clone().sample_iter(&mut rng))
             .for_each(|(d, v)| *d = v);
@@ -105,7 +106,7 @@ fn check_standard_deviation() {
         //     .into_iter()
         //     .reduce(|mut acc, x| {
         //         for (a, b) in acc.iter_mut().zip(x) {
-        //             modulus.reduce_add_assign(a, b);
+        //             algebra::reduce::ReduceAddAssign::reduce_add_assign(modulus, a, b);
         //         }
         //         acc
         //     })

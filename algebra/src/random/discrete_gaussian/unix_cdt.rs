@@ -1,11 +1,11 @@
-use std::{num::NonZero, sync::LazyLock};
+use std::sync::LazyLock;
 
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use rand_distr::{Distribution, Standard, Uniform};
+use rug::{az::Cast, Float};
 
 use crate::{AsInto, UnsignedInteger};
 
-const PRECISION: u64 = 256;
+const PRECISION: u32 = 512;
 
 ///
 #[derive(Debug, Clone)]
@@ -19,8 +19,7 @@ pub struct UnixCDTSampler<T: UnsignedInteger> {
 impl<T: UnsignedInteger> UnixCDTSampler<T> {
     ///
     pub fn new(std_dev: f64, tail_cut: f64, modulus_minus_one: T) -> Self {
-        let max_std_dev = std_dev * tail_cut;
-        let mut length = max_std_dev.floor() as usize + 1;
+        let mut length = (std_dev * tail_cut).floor() as usize + 1;
 
         assert!(length <= 1024);
         if length <= 1 {
@@ -30,11 +29,11 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
         let std_dev_hp = Float::with_val(PRECISION, std_dev);
         let var_hp = std_dev_hp.square();
 
-        let minus_twice_variance_recip = -var_hp.double().recip();
+        let minus_twice_variance_recip = -(var_hp * 2u32).recip();
 
         let mut pdf = vec![Float::new(PRECISION); length];
         pdf[0] = Float::with_val(PRECISION, 1) / 2;
-        pdf[1] = minus_twice_variance_recip.exp();
+        pdf[1] = minus_twice_variance_recip.clone().exp();
 
         pdf.iter_mut().enumerate().skip(2).for_each(|(i, v)| {
             *v = (Float::with_val(PRECISION, i * i) * &minus_twice_variance_recip).exp();
@@ -65,7 +64,7 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
 
         let cdt: Vec<u128> = cdt
             .into_iter()
-            .map(|f| (f * u128::MAX).to_u128().unwrap())
+            .map(|f| (f * u128::MAX).round().cast())
             .collect();
 
         Self {
