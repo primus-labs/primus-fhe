@@ -1,6 +1,5 @@
 // cargo r -r -p algebra --example gaussian
 
-use algebra::{modulus::BarrettModulus, reduce::ReduceAddAssign};
 use bigdecimal::BigDecimal;
 use num_traits::{ConstZero, Zero};
 use rand::thread_rng;
@@ -11,7 +10,7 @@ type ValueT = u64;
 
 const Q: ValueT = 1125899906826241;
 const HALF_Q: ValueT = Q >> 1;
-const N: usize = 1 << 16;
+const N: usize = 1 << 17;
 
 fn main() {
     check_standard_deviation();
@@ -81,10 +80,10 @@ fn check_standard_deviation() {
 
     // let sigams: Vec<f64> = (1..10).into_iter().map(|v| v as f64 / 10.0f64).collect();
     // let sigams: Vec<f64> = vec![1024f64, 4096f64, 8192f64, 16384f64, 32768f64, 65536f64];
-    let sigams: Vec<f64> = vec![3.0];
-    let chunk_size = 10usize;
+    let sigams: Vec<f64> = vec![0.7];
+    // let chunk_size = 10usize;
 
-    let modulus = <BarrettModulus<ValueT>>::new(Q);
+    // let modulus = <BarrettModulus<ValueT>>::new(Q);
 
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
@@ -98,23 +97,23 @@ fn check_standard_deviation() {
 
         check(&data, sigma);
 
-        let datas: Vec<Vec<ValueT>> = (0..chunk_size)
-            .map(|_| distr.clone().sample_iter(&mut rng).take(N).collect())
-            .collect();
+        // let datas: Vec<Vec<ValueT>> = (0..chunk_size)
+        //     .map(|_| distr.clone().sample_iter(&mut rng).take(N).collect())
+        //     .collect();
 
-        let new_data = datas
-            .into_iter()
-            .reduce(|mut acc, x| {
-                for (a, b) in acc.iter_mut().zip(x) {
-                    modulus.reduce_add_assign(a, b);
-                }
-                acc
-            })
-            .unwrap();
+        // let new_data = datas
+        //     .into_iter()
+        //     .reduce(|mut acc, x| {
+        //         for (a, b) in acc.iter_mut().zip(x) {
+        //             modulus.reduce_add_assign(a, b);
+        //         }
+        //         acc
+        //     })
+        //     .unwrap();
 
-        println!("----------------sum-------------------------");
+        // println!("----------------sum-------------------------");
 
-        check(&new_data, (chunk_size as f64).sqrt() * sigma);
+        // check(&new_data, (chunk_size as f64).sqrt() * sigma);
     }
 }
 
@@ -211,13 +210,22 @@ fn check(data: &[ValueT], sigma: f64) {
         1.0 - six_sigma_count as f64 / N as f64
     );
     println!("----------------------------------");
-    println!(
-        "Prob[0]={}",
-        data.iter().filter(|v| **v == 0).count() as f64 / N as f64
-    );
-    println!(
-        "Prob[1]={}",
-        data.iter().filter(|v| **v == 1 || **v == Q - 1).count() as f64 / N as f64
-    );
+    // println!(
+    //     "Prob[0]={}",
+    //     data.iter().filter(|v| **v == 0).count() as f64 / N as f64
+    // );
+    // println!(
+    //     "Prob[1]={}",
+    //     data.iter().filter(|v| **v == 1 || **v == Q - 1).count() as f64 / N as f64
+    // );
+    let mut count: Vec<usize> = vec![0; 16];
+    data.iter()
+        .filter(|i| **i < 16)
+        .for_each(|i| count[*i as usize] += 1);
+
+    for (i, c) in count.into_iter().take(10).enumerate() {
+        println!("Prob[{}]={}", { i }, c as f64 / N as f64);
+    }
+
     println!("----------------------------------\n\n");
 }
