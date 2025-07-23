@@ -14,6 +14,9 @@ bytemuck = { workspace = true }
 concrete-ntt = { git = "https://github.com/primus-labs/concrete-ntt", branch = "dev", default-features = false, optional = true }
 bigdecimal = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rug = "1.27"
+
 [dev-dependencies]
 criterion = { workspace = true }
 

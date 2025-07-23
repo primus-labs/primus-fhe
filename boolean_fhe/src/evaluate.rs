@@ -120,7 +120,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>, Q: NttField> EvaluationKey<C
             secret_key_pack.lwe_secret_key(),
             secret_key_pack.ntt_rlwe_secret_key(),
             parameters.blind_rotation_basis(),
-            parameters.ring_noise_distribution(),
+            &parameters.ring_noise_distribution(),
             Arc::clone(secret_key_pack.ntt_table()),
             rng,
         );

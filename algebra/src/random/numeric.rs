@@ -7,6 +7,9 @@ use crate::{
     AlgebraError,
 };
 
+#[cfg(target_os = "linux")]
+use crate::random::UnixCDTSampler;
+
 /// Sample a binary vector whose values are `T`.
 pub fn sample_binary_values<T, R>(length: usize, rng: &mut R) -> Vec<T>
 where
@@ -60,6 +63,9 @@ pub enum DiscreteGaussian<T: UnsignedInteger> {
     ///
     Cdt(CDTSampler<T>),
     ///
+    #[cfg(target_os = "linux")]
+    Unix(UnixCDTSampler<T>),
+    ///
     Ziggurat(DiscreteZiggurat<T>),
 }
 
@@ -79,6 +85,16 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
         if std_dev < 0.7 {
             Err(AlgebraError::DistributionErr)
         } else if std_dev < 3.0 {
+            #[cfg(target_os = "linux")]
+            {
+                Ok(DiscreteGaussian::Unix(UnixCDTSampler::new(
+                    std_dev,
+                    6.0,
+                    modulus_minus_one,
+                )))
+            }
+
+            #[cfg(not(target_os = "linux"))]
             Ok(DiscreteGaussian::Cdt(CDTSampler::new(
                 std_dev,
                 6.0,
@@ -136,6 +152,8 @@ impl<T: UnsignedInteger> Distribution<T> for DiscreteGaussian<T> {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> T {
         match self {
             DiscreteGaussian::Cdt(cdtsampler) => cdtsampler.sample(rng),
+            #[cfg(target_os = "linux")]
+            DiscreteGaussian::Unix(sampler) => sampler.sample(rng),
             DiscreteGaussian::Ziggurat(discrete_ziggurat) => discrete_ziggurat.sample(rng),
         }
     }
