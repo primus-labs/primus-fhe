@@ -102,4 +102,12 @@ impl<LweValue: UnsignedInteger, LweModulus: RingReduce<LweValue>>
         )
         .unwrap()
     }
+
+    /// Gets the discrete gaussian noise distribution.
+    #[inline]
+    pub fn noise_distribution_multi_party(&self, party_count: u32) -> DiscreteGaussian<LweValue> {
+        let var = self.noise_standard_deviation * self.noise_standard_deviation;
+        let sigma = (var / party_count as f64).sqrt();
+        DiscreteGaussian::new(0.0, sigma, self.cipher_modulus_minus_one).unwrap()
+    }
 }

@@ -28,9 +28,33 @@ impl KeySwitchingParameters {
     }
 
     /// Gets the discrete gaussian noise distribution.
+    #[inline]
+    pub fn noise_distribution_for_q_multi_party<C: UnsignedInteger>(
+        &self,
+        modulus_minus_one: C,
+        party_count: u32,
+    ) -> DiscreteGaussian<C> {
+        let var = self.noise_standard_deviation * self.noise_standard_deviation;
+        let sigma = (var / party_count as f64).sqrt();
+        DiscreteGaussian::new(0.0, sigma, modulus_minus_one).unwrap()
+    }
+
+    /// Gets the discrete gaussian noise distribution.
     #[allow(non_snake_case)]
     #[inline]
     pub fn noise_distribution_for_Q<Q: Field>(&self) -> DiscreteGaussian<<Q as Field>::ValueT> {
         DiscreteGaussian::new(0.0, self.noise_standard_deviation, Q::MINUS_ONE).unwrap()
+    }
+
+    /// Gets the discrete gaussian noise distribution.
+    #[allow(non_snake_case)]
+    #[inline]
+    pub fn noise_distribution_for_Q_multi_party<Q: Field>(
+        &self,
+        party_count: u32,
+    ) -> DiscreteGaussian<<Q as Field>::ValueT> {
+        let var = self.noise_standard_deviation * self.noise_standard_deviation;
+        let sigma = (var / party_count as f64).sqrt();
+        DiscreteGaussian::new(0.0, sigma, Q::MINUS_ONE).unwrap()
     }
 }
