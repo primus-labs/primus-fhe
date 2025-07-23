@@ -43,9 +43,9 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
 
         let pdf: Vec<Float> = pdf.into_iter().map(|v| v / &s).collect();
 
-        println!("Prob[0]={}", pdf[0]);
-        println!("Prob[1]={}", pdf[1]);
-        println!("----------------------------------");
+        // println!("Prob[0]={}", pdf[0]);
+        // println!("Prob[1]={}", pdf[1]);
+        // println!("----------------------------------");
 
         let mut cdt = Vec::with_capacity(length + 1);
         let mut pre = Float::new(PRECISION);
