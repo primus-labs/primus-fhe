@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use rand_distr::{Distribution, Standard, Uniform};
 use rug::{az::Cast, Float};
 
-use crate::{AsInto, UnsignedInteger};
+use crate::integer::{AsInto, UnsignedInteger};
 
 const PRECISION: u32 = 512;
 
