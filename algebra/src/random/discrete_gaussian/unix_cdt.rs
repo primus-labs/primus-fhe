@@ -1,6 +1,4 @@
-use std::sync::LazyLock;
-
-use rand_distr::{Distribution, Standard, Uniform};
+use rand_distr::{Distribution, Standard};
 use rug::{az::Cast, Float};
 
 use crate::integer::{AsInto, UnsignedInteger};
@@ -13,7 +11,7 @@ pub struct UnixCDTSampler<T: UnsignedInteger> {
     std_dev: f64,
     upper_bound: usize,
     modulus_minus_one: T,
-    cdt: Vec<u128>,
+    cdt: Vec<rug::Integer>,
 }
 
 impl<T: UnsignedInteger> UnixCDTSampler<T> {
@@ -43,10 +41,6 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
 
         let pdf: Vec<Float> = pdf.into_iter().map(|v| v / &s).collect();
 
-        // println!("Prob[0]={}", pdf[0]);
-        // println!("Prob[1]={}", pdf[1]);
-        // println!("----------------------------------");
-
         let mut cdt = Vec::with_capacity(length + 1);
         let mut pre = Float::new(PRECISION);
 
@@ -62,9 +56,13 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
         }
         assert_eq!(cdt.len(), length + 1);
 
-        let cdt: Vec<u128> = cdt
+        let scalar = rug::Integer::from(1) << 256;
+        let cdt: Vec<rug::Integer> = cdt
             .into_iter()
-            .map(|f| (f * u128::MAX).round().cast())
+            .map(|f| {
+                let t: Float = f * &scalar;
+                t.cast()
+            })
             .collect();
 
         Self {
@@ -81,11 +79,10 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
     }
 }
 
-static D: LazyLock<Uniform<u128>> = LazyLock::new(|| Uniform::new_inclusive(0, u128::MAX));
-
 impl<T: UnsignedInteger> Distribution<T> for UnixCDTSampler<T> {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> T {
-        let r: u128 = D.sample(rng);
+        let r: [u32; 8] = Standard.sample(rng);
+        let r = rug::Integer::from_digits(&r, rug::integer::Order::Lsf);
 
         let mut min = 0;
         let mut max = self.upper_bound;
