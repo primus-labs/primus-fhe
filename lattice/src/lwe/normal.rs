@@ -28,7 +28,7 @@ impl<T: Copy + Pod + ByteCount> Lwe<T> {
     /// Creates a new [`Lwe<T>`] from bytes `data`.
     #[inline]
     pub fn from_bytes(data: &[u8]) -> Self {
-        let converted_data: &[T] = bytemuck::cast_slice(&data);
+        let converted_data: &[T] = bytemuck::cast_slice(data);
 
         let (&b, a) = converted_data.split_last().unwrap();
 
@@ -38,7 +38,7 @@ impl<T: Copy + Pod + ByteCount> Lwe<T> {
     /// Creates a new [`Lwe<T>`] from bytes `data`.
     #[inline]
     pub fn from_bytes_assign(&mut self, data: &[u8]) {
-        let converted_data: &[T] = bytemuck::cast_slice(&data);
+        let converted_data: &[T] = bytemuck::cast_slice(data);
 
         let (&b, a) = converted_data.split_last().unwrap();
 

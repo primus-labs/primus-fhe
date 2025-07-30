@@ -131,7 +131,7 @@ impl Debug for Block {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let block: [u8; 16] = (*self).into();
         for byte in block.iter().rev() {
-            write!(f, "{:02X}", byte)?;
+            write!(f, "{byte:02X}")?;
         }
         Ok(())
     }
@@ -141,7 +141,7 @@ impl Display for Block {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let block: [u8; 16] = (*self).into();
         for byte in block.iter().rev() {
-            write!(f, "{:02X}", byte)?;
+            write!(f, "{byte:02X}")?;
         }
         Ok(())
     }

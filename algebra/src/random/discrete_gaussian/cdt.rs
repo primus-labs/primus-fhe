@@ -111,12 +111,10 @@ impl<T: UnsignedInteger> Distribution<T> for CDTSampler<T> {
 
         if rng.sample(Standard) {
             v
+        } else if v.is_zero() {
+            T::ZERO
         } else {
-            if v.is_zero() {
-                T::ZERO
-            } else {
-                self.modulus_minus_one - v + T::ONE
-            }
+            self.modulus_minus_one - v + T::ONE
         }
     }
 }

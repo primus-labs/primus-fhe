@@ -56,7 +56,7 @@ impl<F: Field> SparseRlwe<F> {
     /// Creates a new [`SparseRlwe<F>`] from bytes `data`.
     #[inline]
     pub fn from_bytes(data: &[u8], dimension: usize) -> Self {
-        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
 
         let (a, b) = converted_data.split_at(dimension);
 
@@ -69,7 +69,7 @@ impl<F: Field> SparseRlwe<F> {
     /// Creates a new [`SparseRlwe<F>`] from bytes `data`.
     #[inline]
     pub fn from_bytes_assign(&mut self, data: &[u8]) {
-        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
 
         let (a, b) = converted_data.split_at(self.a.coeff_count());
 

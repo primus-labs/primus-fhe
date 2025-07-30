@@ -26,7 +26,7 @@ impl<T: Copy + Pod + ByteCount> CmLwe<T> {
     /// Creates a new [`CmLwe<T>`] from bytes `data`.
     #[inline]
     pub fn from_bytes(data: &[u8], dimension: usize) -> Self {
-        let converted_data: &[T] = bytemuck::cast_slice(&data);
+        let converted_data: &[T] = bytemuck::cast_slice(data);
 
         let (a, b) = converted_data.split_at(dimension);
 
@@ -39,7 +39,7 @@ impl<T: Copy + Pod + ByteCount> CmLwe<T> {
     /// Creates a new [`CmLwe<T>`] from bytes `data`.
     #[inline]
     pub fn from_bytes_assign(&mut self, data: &[u8]) {
-        let converted_data: &[T] = bytemuck::cast_slice(&data);
+        let converted_data: &[T] = bytemuck::cast_slice(data);
 
         let (a, b) = converted_data.split_at(self.a.len());
 

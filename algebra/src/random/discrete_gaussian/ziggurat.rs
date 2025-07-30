@@ -92,50 +92,46 @@ impl<T: UnsignedInteger> Distribution<T> for DiscreteZiggurat<T> {
 
             if x_f <= self.x[i - 1] && x > T::ZERO {
                 return combine(sign, x);
+            } else if x == T::ZERO {
+                if Standard.sample(rng) {
+                    return T::ZERO;
+                } else {
+                    continue;
+                }
             } else {
-                if x == T::ZERO {
-                    if Standard.sample(rng) {
-                        return T::ZERO;
+                let mask = 2.0f64.powi(32);
+                let y_prime = rng.next_u32();
+                let y = (self.y[i - 1] - self.y[i]) * y_prime as f64;
+
+                if self.x[i] + 1.0 <= self.std_dev {
+                    if y <= mask
+                        * s_line(i, self.x[i - 1], self.x[i], self.y[i - 1], self.y[i], x_f)
+                        || y <= mask * (pdf(x_f) - self.y[i])
+                    {
+                        return combine(sign, x);
                     } else {
                         continue;
                     }
-                } else {
-                    let mask = 2.0f64.powi(32);
-                    let y_prime = rng.next_u32();
-                    let y = (self.y[i - 1] - self.y[i]) * y_prime as f64;
-
-                    if self.x[i] + 1.0 <= self.std_dev {
-                        if y <= mask
-                            * s_line(i, self.x[i - 1], self.x[i], self.y[i - 1], self.y[i], x_f)
-                            || y <= mask * (pdf(x_f) - self.y[i])
-                        {
-                            return combine(sign, x);
-                        } else {
-                            continue;
-                        }
-                    } else if self.std_dev <= self.x[i - 1] {
-                        if y >= mask
-                            * s_line(
-                                i,
-                                self.x[i - 1],
-                                self.x[i],
-                                self.y[i - 1],
-                                self.y[i],
-                                x_f - 1.0,
-                            )
-                            || y > mask * (pdf(x_f) - self.y[i])
-                        {
-                            continue;
-                        } else {
-                            return combine(sign, x);
-                        }
+                } else if self.std_dev <= self.x[i - 1] {
+                    if y >= mask
+                        * s_line(
+                            i,
+                            self.x[i - 1],
+                            self.x[i],
+                            self.y[i - 1],
+                            self.y[i],
+                            x_f - 1.0,
+                        )
+                        || y > mask * (pdf(x_f) - self.y[i])
+                    {
+                        continue;
                     } else {
-                        if y <= mask * (pdf(x_f) - self.y[i]) {
-                            return combine(sign, x);
-                        } else {
-                            continue;
-                        }
+                        return combine(sign, x);
                     }
+                } else if y <= mask * (pdf(x_f) - self.y[i]) {
+                    return combine(sign, x);
+                } else {
+                    continue;
                 }
             }
         }

@@ -59,7 +59,7 @@ impl<F: NttField> Rgsw<F> {
         dimension: usize,
         basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
     ) -> Self {
-        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
 
         let (data_m, data_minus_s_m) = converted_data.split_at(converted_data.len() >> 1);
 
@@ -94,7 +94,7 @@ impl<F: NttField> Rgsw<F> {
     /// Creates a new [`Rgsw<F>`] from bytes `data`.
     #[inline]
     pub fn from_bytes_assign(&mut self, data: &[u8], dimension: usize) {
-        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
 
         self.m
             .iter_mut()

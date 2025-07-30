@@ -602,7 +602,7 @@ impl<F: NttField> NttRlweSecretKey<F> {
         cipher
             .b()
             .iter()
-            .zip(a_mul_s.into_iter())
+            .zip(a_mul_s)
             .map(|(x, y)| {
                 decode(
                     F::sub(*x, y),

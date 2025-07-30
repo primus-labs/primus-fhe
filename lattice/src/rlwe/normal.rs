@@ -72,7 +72,7 @@ impl<F: Field> Rlwe<F> {
     /// Creates a new [`Rlwe<F>`] from bytes `data`.
     #[inline]
     pub fn from_bytes(data: &[u8]) -> Self {
-        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
 
         let (a, b) = converted_data.split_at(converted_data.len() >> 1);
 
@@ -85,7 +85,7 @@ impl<F: Field> Rlwe<F> {
     /// Creates a new [`Rlwe<F>`] from bytes `data`.
     #[inline]
     pub fn from_bytes_assign(&mut self, data: &[u8]) {
-        let converted_data: &[F::ValueT] = bytemuck::cast_slice(&data);
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
 
         let (a, b) = converted_data.split_at(converted_data.len() >> 1);
 
