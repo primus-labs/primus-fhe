@@ -39,6 +39,17 @@ impl<Q: NttField> RlweParameters<Q> {
         DiscreteGaussian::new(0.0, self.noise_standard_deviation, Q::MINUS_ONE).unwrap()
     }
 
+    /// Returns the noise distribution.
+    #[inline]
+    pub fn noise_distribution_div_count(
+        &self,
+        count: u32,
+    ) -> DiscreteGaussian<<Q as Field>::ValueT> {
+        let var = self.noise_standard_deviation * self.noise_standard_deviation;
+        let sigma = (var / count as f64).sqrt();
+        DiscreteGaussian::new(0.0, sigma, Q::MINUS_ONE).unwrap()
+    }
+
     /// Returns the cipher modulus of this [`RlweParameters<Q>`].
     #[inline]
     pub fn cipher_modulus(&self) -> <Q as Field>::Modulus {
