@@ -88,10 +88,10 @@ fn check_standard_deviation() {
     let mut data: Vec<ValueT> = vec![ValueT::ZERO; N];
     for sigma in sigams {
         println!("----------------single-------------------------");
-        // let distr = <algebra::random::CDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
+        let distr = <algebra::random::CDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
         // let distr = <algebra::random::DiscreteZiggurat<ValueT>>::new(sigma, 9.42, Q - 1);
         // let distr = <algebra::random::DiscreteGaussian<ValueT>>::new(0.0, sigma, Q - 1).unwrap();
-        let distr = <algebra::random::UnixCDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
+        // let distr = <algebra::random::UnixCDTSampler<ValueT>>::new(sigma, 9.42, Q - 1);
         data.iter_mut()
             .zip(distr.clone().sample_iter(&mut rng))
             .for_each(|(d, v)| *d = v);
