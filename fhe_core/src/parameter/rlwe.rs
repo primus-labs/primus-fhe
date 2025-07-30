@@ -73,12 +73,6 @@ pub struct GadgetRlweParameters<Q: NttField> {
 }
 
 impl<Q: NttField> GadgetRlweParameters<Q> {
-    /// Returns the noise distribution.
-    #[inline]
-    pub fn noise_distribution(&self) -> DiscreteGaussian<<Q as Field>::ValueT> {
-        DiscreteGaussian::new(0.0, self.noise_standard_deviation, Q::MINUS_ONE).unwrap()
-    }
-
     /// Returns the decompose basis.
     #[inline]
     pub fn basis(&self) -> &NonPowOf2ApproxSignedBasis<<Q as Field>::ValueT> {
@@ -89,6 +83,23 @@ impl<Q: NttField> GadgetRlweParameters<Q> {
     #[inline]
     pub fn dimension(&self) -> usize {
         self.dimension
+    }
+
+    /// Returns the noise distribution.
+    #[inline]
+    pub fn noise_distribution(&self) -> DiscreteGaussian<<Q as Field>::ValueT> {
+        DiscreteGaussian::new(0.0, self.noise_standard_deviation, Q::MINUS_ONE).unwrap()
+    }
+
+    /// Returns the noise distribution.
+    #[inline]
+    pub fn noise_distribution_div_count(
+        &self,
+        count: u32,
+    ) -> DiscreteGaussian<<Q as Field>::ValueT> {
+        let var = self.noise_standard_deviation * self.noise_standard_deviation;
+        let sigma = (var / count as f64).sqrt();
+        DiscreteGaussian::new(0.0, sigma, Q::MINUS_ONE).unwrap()
     }
 }
 
