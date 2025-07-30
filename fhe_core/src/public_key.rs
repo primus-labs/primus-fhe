@@ -66,6 +66,12 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
         Self { public_key }
     }
 
+    /// Creates a new `LwePublicKey` using the provided public key.
+    #[inline]
+    pub fn with_public_key(public_key: Vec<Lwe<C>>) -> Self {
+        Self { public_key }
+    }
+
     /// Encrypts a message using the LWE public key.
     ///
     /// # Arguments

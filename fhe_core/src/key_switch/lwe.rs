@@ -180,6 +180,21 @@ pub struct NonPowOf2LweKeySwitchingKey<C: UnsignedInteger> {
 }
 
 impl<C: UnsignedInteger> NonPowOf2LweKeySwitchingKey<C> {
+    /// Creates a new [`NonPowOf2LweKeySwitchingKey<C>`].
+    #[inline]
+    pub fn new(
+        key: Vec<Vec<Lwe<C>>>,
+        params: KeySwitchingParameters,
+        basis: NonPowOf2ApproxSignedBasis<C>,
+    ) -> Self {
+        Self {
+            key,
+            params,
+            basis,
+            space: Pool::new(),
+        }
+    }
+
     /// Generates a new [`NonPowOf2LweKeySwitchingKey<C>`].
     pub fn generate<COut, R>(
         s_in: &LweSecretKey<C>,
