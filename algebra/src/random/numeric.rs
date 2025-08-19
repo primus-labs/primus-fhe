@@ -78,9 +78,10 @@ impl<T: UnsignedInteger> DiscreteGaussian<T> {
         std_dev: f64,
         modulus_minus_one: T,
     ) -> Result<DiscreteGaussian<T>, AlgebraError> {
-        if std_dev < 0.7 {
-            Err(AlgebraError::DistributionErr)
-        } else if std_dev < 3.0 {
+        // if std_dev < 0.7 {
+        //     Err(AlgebraError::DistributionErr)
+        // } else 
+        if std_dev < 3.0 {
             #[cfg(target_os = "linux")]
             {
                 Ok(DiscreteGaussian::Unix(super::UnixCDTSampler::new(
