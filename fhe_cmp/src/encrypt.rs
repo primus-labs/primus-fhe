@@ -35,7 +35,7 @@ impl<C: UnsignedInteger, LweModulus: RingReduce<C>> Encryptor<C, LweModulus> {
         let mut ciphertext = LweCiphertext::generate_random_zero_sample(
             self.lwe_secret_key.as_ref(),
             cipher_modulus,
-            gaussian,
+            &gaussian,
             rng,
         );
         let plain_modulus_value: C = (1u64 << plain_modulus_bits).as_into();

@@ -8,7 +8,7 @@ use crate::{AsInto, UnsignedInteger};
 
 const PRECISION: u64 = 256;
 
-///
+/// cdt sampler
 #[derive(Debug, Clone)]
 pub struct CDTSampler<T: UnsignedInteger> {
     std_dev: f64,
@@ -18,7 +18,7 @@ pub struct CDTSampler<T: UnsignedInteger> {
 }
 
 impl<T: UnsignedInteger> CDTSampler<T> {
-    ///
+    /// Generate a [`CDTSampler<T>`]
     pub fn new(std_dev: f64, tail_cut: f64, modulus_minus_one: T) -> Self {
         let max_std_dev = std_dev * tail_cut;
         let mut length = max_std_dev.floor() as usize + 1;

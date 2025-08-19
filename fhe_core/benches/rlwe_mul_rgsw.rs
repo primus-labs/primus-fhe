@@ -58,14 +58,14 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     println!("decompose length: {}", l);
 
     let rgsw = <NttRgsw<FieldT>>::generate_random_zero_sample(
-        &ntt_sk, &basis, gaussian, &ntt_table, &mut rng,
+        &ntt_sk, &basis, &gaussian, &ntt_table, &mut rng,
     );
 
     let values: Vec<ValT> = distr.sample_iter(&mut rng).take(N).collect();
     let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
 
     let mut cipher = <RlweCiphertext<FieldT>>::generate_random_zero_sample(
-        &ntt_sk, gaussian, &ntt_table, &mut rng,
+        &ntt_sk, &gaussian, &ntt_table, &mut rng,
     );
     *cipher.b_mut() += &encoded_values;
 

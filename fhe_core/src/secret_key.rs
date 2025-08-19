@@ -169,7 +169,7 @@ impl<C: UnsignedInteger> LweSecretKey<C> {
         let modulus = params.cipher_modulus;
 
         let mut ciphertext =
-            LweCiphertext::generate_random_zero_sample(self.as_ref(), modulus, gaussian, rng);
+            LweCiphertext::generate_random_zero_sample(self.as_ref(), modulus, &gaussian, rng);
         modulus.reduce_add_assign(
             ciphertext.b_mut(),
             encode(
@@ -440,7 +440,7 @@ impl<F: NttField> RlweSecretKey<F> {
             RingSecretKeyType::Binary => FieldPolynomial::random_binary(dimension, rng),
             RingSecretKeyType::Ternary => FieldPolynomial::random_ternary(dimension, rng),
             RingSecretKeyType::Gaussian => {
-                FieldPolynomial::random_gaussian(dimension, gaussian.unwrap(), rng)
+                FieldPolynomial::random_gaussian(dimension, &gaussian.unwrap(), rng)
             }
         };
 

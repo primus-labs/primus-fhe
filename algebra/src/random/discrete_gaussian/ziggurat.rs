@@ -4,7 +4,7 @@ use rand_distr::{Distribution, Standard, Uniform};
 
 use crate::UnsignedInteger;
 
-///
+/// Discrete Ziggurat
 #[derive(Clone)]
 pub struct DiscreteZiggurat<T: UnsignedInteger> {
     std_dev: f64,
@@ -16,7 +16,7 @@ pub struct DiscreteZiggurat<T: UnsignedInteger> {
 }
 
 impl<T: UnsignedInteger> DiscreteZiggurat<T> {
-    ///
+    /// Generate a [`DiscreteZiggurat<T>`]
     pub fn new(std_dev: f64, tail_cut: f64, modulus_minus_one: T) -> Self {
         let x_m = (tail_cut * std_dev).floor();
         let sigma_square_mul_minus_two = std_dev * std_dev * (-2.0f64);

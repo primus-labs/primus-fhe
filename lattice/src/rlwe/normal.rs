@@ -613,6 +613,7 @@ impl<F: NttField> Rlwe<F> {
     /// # Attention
     /// The message of **`ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub fn mul_ntt_rgsw_inplace_mt(
         &self,
         rgsw: &NttRgsw<F>,
@@ -690,7 +691,7 @@ impl<F: NttField> Rlwe<F> {
     /// Generate a `Rlwe<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self

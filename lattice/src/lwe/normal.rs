@@ -310,7 +310,7 @@ impl<T: UnsignedInteger> Lwe<T> {
     pub fn generate_random_zero_sample<M, R>(
         secret_key: &[T],
         modulus: M,
-        gaussian: DiscreteGaussian<T>,
+        gaussian: &DiscreteGaussian<T>,
         rng: &mut R,
     ) -> Self
     where

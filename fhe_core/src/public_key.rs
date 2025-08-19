@@ -57,7 +57,7 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
                 Lwe::generate_random_zero_sample(
                     secret_key.as_ref(),
                     params.cipher_modulus,
-                    gaussian,
+                    &gaussian,
                     rng,
                 )
             })
@@ -125,7 +125,7 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *rng))
+            .zip((&gaussian).sample_iter(&mut *rng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -288,7 +288,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -356,7 +356,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -412,7 +412,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -500,7 +500,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
     /// A new instance of [`NttRlwePublicKey`].
     pub fn new<R>(
         secret_key: &NttRlweSecretKey<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> NttRlwePublicKey<F>
@@ -538,7 +538,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
     pub fn encrypt<R>(
         &self,
         message: &FieldPolynomial<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> NttRlwe<F>
@@ -569,7 +569,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
         &self,
         coeff: <F as Field>::ValueT,
         degree: usize,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
         v: &mut FieldNttPolynomial<F>,
@@ -604,7 +604,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
         &self,
         coeff: <F as Field>::ValueT,
         degree: usize,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
         v: &mut FieldNttPolynomial<F>,
@@ -641,7 +641,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
         coeff: <F as Field>::ValueT,
         degree: usize,
         basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> NttRgsw<F>
@@ -721,7 +721,7 @@ impl<F: NttField> NttRlwePublicKey<F> {
         let mut b = b.inner_data();
         b.truncate(zero_count);
 
-        for (ai, ei) in a.iter_mut().zip(gaussian.sample_iter(&mut *rng)) {
+        for (ai, ei) in a.iter_mut().zip((&gaussian).sample_iter(&mut *rng)) {
             F::add_assign(ai, ei);
         }
 

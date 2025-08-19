@@ -5,7 +5,7 @@ use crate::{AsInto, UnsignedInteger};
 
 const PRECISION: u32 = 512;
 
-///
+/// UnixCDTSampler
 #[derive(Debug, Clone)]
 pub struct UnixCDTSampler<T: UnsignedInteger> {
     std_dev: f64,
@@ -15,7 +15,7 @@ pub struct UnixCDTSampler<T: UnsignedInteger> {
 }
 
 impl<T: UnsignedInteger> UnixCDTSampler<T> {
-    ///
+    /// Generate UnixCDTSampler
     pub fn new(std_dev: f64, tail_cut: f64, modulus_minus_one: T) -> Self {
         let mut length = (std_dev * tail_cut).floor() as usize + 1;
 
@@ -41,9 +41,9 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
 
         let pdf: Vec<Float> = pdf.into_iter().map(|v| v / &s).collect();
 
-        println!("Prob[0]={}", pdf[0]);
-        println!("Prob[1]={}", pdf[1]);
-        println!("----------------------------------");
+        // println!("Prob[0]={}", pdf[0]);
+        // println!("Prob[1]={}", pdf[1]);
+        // println!("----------------------------------");
 
         let mut cdt = Vec::with_capacity(length + 1);
         let mut pre = Float::new(PRECISION);
@@ -85,7 +85,7 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
 
 impl<T: UnsignedInteger> Distribution<T> for UnixCDTSampler<T> {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> T {
-        let r: [u32; 8] = rng.gen();
+        let r: [u32; 8] = Standard.sample(rng);
         let r = rug::Integer::from_digits(&r, rug::integer::Order::Lsf);
 
         let mut min = 0;

@@ -31,7 +31,7 @@ impl<F: NttField> TraceKey<F> {
         secret_key: &RlweSecretKey<F>,
         ntt_secret_key: &NttRlweSecretKey<F>,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: Arc<<F as NttField>::Table>,
         rng: &mut R,
     ) -> TraceKey<F>
@@ -473,7 +473,7 @@ mod tests {
             &sk,
             &ntt_sk,
             &basis,
-            gaussian,
+            &gaussian,
             Arc::clone(&ntt_table),
             &mut csrng,
         );
@@ -482,7 +482,7 @@ mod tests {
         let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
 
         let mut cipher = <RlweCiphertext<FieldT>>::generate_random_zero_sample(
-            &ntt_sk, gaussian, &ntt_table, &mut csrng,
+            &ntt_sk, &gaussian, &ntt_table, &mut csrng,
         );
         *cipher.b_mut() += &encoded_values;
 
@@ -527,7 +527,7 @@ mod tests {
             &sk,
             &ntt_sk,
             &basis,
-            gaussian,
+            &gaussian,
             Arc::clone(&ntt_table),
             &mut csrng,
         );
@@ -536,7 +536,7 @@ mod tests {
         let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
 
         let mut cipher = <RlweCiphertext<FieldT>>::generate_random_zero_sample(
-            &ntt_sk, gaussian, &ntt_table, &mut csrng,
+            &ntt_sk, &gaussian, &ntt_table, &mut csrng,
         );
         *cipher.b_mut() += &encoded_values;
 
@@ -578,7 +578,7 @@ mod tests {
             &sk,
             &ntt_sk,
             &basis,
-            gaussian,
+            &gaussian,
             Arc::clone(&ntt_table),
             &mut csrng,
         );
@@ -590,7 +590,7 @@ mod tests {
         let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
 
         let mut cipher = <RlweCiphertext<FieldT>>::generate_random_zero_sample(
-            &ntt_sk, gaussian, &ntt_table, &mut csrng,
+            &ntt_sk, &gaussian, &ntt_table, &mut csrng,
         );
         *cipher.b_mut() += &encoded_values;
 
@@ -667,7 +667,7 @@ mod tests2 {
             &sk,
             &ntt_sk,
             &basis,
-            gaussian,
+            &gaussian,
             Arc::clone(&ntt_table),
             &mut csrng,
         );
@@ -676,7 +676,7 @@ mod tests2 {
         let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
 
         let mut cipher = <RlweCiphertext<FieldT>>::generate_random_zero_sample(
-            &ntt_sk, gaussian, &ntt_table, &mut csrng,
+            &ntt_sk, &gaussian, &ntt_table, &mut csrng,
         );
         *cipher.b_mut() += &encoded_values;
 
