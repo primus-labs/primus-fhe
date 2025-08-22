@@ -284,6 +284,14 @@ impl<F: Field> SparseRlwe<F> {
         });
     }
 
+    /// Performs an in-place constant multiplication
+    /// on the `self` [`SparseRlwe<F>`] with scalar `<F as Field>::ValueT`.
+    #[inline]
+    pub fn mul_assign_constant(&mut self, scalar: <F as Field>::ValueT) {
+        self.a.mul_scalar_assign(scalar);
+        self.b.iter_mut().for_each(|v| F::mul_assign(v, scalar));
+    }
+
     /// Performs addition operation:`self + rhs`,
     /// and puts the result to the `destination`.
     #[inline]
