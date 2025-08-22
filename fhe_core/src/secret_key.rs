@@ -612,6 +612,26 @@ impl<F: NttField> NttRlweSecretKey<F> {
             })
             .collect()
     }
+
+    /// Decrypts the [`LweCiphertext`] back to message.
+    #[inline]
+    pub fn phase_multi_messages(
+        &self,
+        cipher: &SparseRlwe<F>,
+        ntt_table: &<F as NttField>::Table,
+    ) -> Vec<<F as Field>::ValueT> {
+        let a = cipher.a().clone();
+        let a_ntt = a.into_ntt_poly(ntt_table);
+        let a_mul_s_ntt = a_ntt * &self.key;
+        let a_mul_s = a_mul_s_ntt.into_coeff_poly(ntt_table);
+
+        cipher
+            .b()
+            .iter()
+            .zip(a_mul_s)
+            .map(|(x, y)| F::sub(*x, y))
+            .collect()
+    }
 }
 
 impl<F: NttField> Size for RlweSecretKey<F> {
