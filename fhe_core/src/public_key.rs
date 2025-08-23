@@ -486,6 +486,14 @@ impl<F: NttField> NttRlwePublicKey<F> {
         self.key.bytes_count()
     }
 
+    /// Creates a [`NttRlwePublicKey<F>`] with all entries equal to zero.
+    #[inline]
+    pub fn zero(coeff_count: usize) -> NttRlwePublicKey<F> {
+        Self {
+            key: NttRlwe::zero(coeff_count),
+        }
+    }
+
     /// Creates a new [`NttRlwePublicKey`] using the provided secret key, Gaussian distribution, NTT table, and random number generator.
     ///
     /// # Arguments
