@@ -16,7 +16,7 @@ concrete-ntt = { git = "https://github.com/primus-labs/concrete-ntt", branch = "
 bigdecimal = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rug = "1.27"
+rug = "=1.27"
 
 [dev-dependencies]
 criterion = { workspace = true }
