@@ -41,10 +41,6 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
 
         let pdf: Vec<Float> = pdf.into_iter().map(|v| v / &s).collect();
 
-        // println!("Prob[0]={}", pdf[0]);
-        // println!("Prob[1]={}", pdf[1]);
-        // println!("----------------------------------");
-
         let mut cdt = Vec::with_capacity(length + 1);
         let mut pre = Float::new(PRECISION);
 
@@ -77,7 +73,7 @@ impl<T: UnsignedInteger> UnixCDTSampler<T> {
         }
     }
 
-    /// Returns the std dev of this [`CumulativeDistributionTableSampler<T>`].
+    /// Returns the std dev of this [`UnixCDTSampler<T>`].
     pub fn std_dev(&self) -> f64 {
         self.std_dev
     }
@@ -103,12 +99,10 @@ impl<T: UnsignedInteger> Distribution<T> for UnixCDTSampler<T> {
 
         if rng.sample(Standard) {
             v
+        } else if v.is_zero() {
+            T::ZERO
         } else {
-            if v.is_zero() {
-                T::ZERO
-            } else {
-                self.modulus_minus_one - v + T::ONE
-            }
+            self.modulus_minus_one - v + T::ONE
         }
     }
 }
