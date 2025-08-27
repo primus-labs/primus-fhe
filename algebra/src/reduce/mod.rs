@@ -119,6 +119,8 @@ pub trait RingReduce<T>:
     + ReduceMulAssign<T>
     + ReduceMulAdd<T, Output = T>
     + ReduceMulAddAssign<T>
+    + ReduceSquare<T, Output = T>
+    + ReduceSquareAssign<T>
     + ReduceExp<T>
     + ReduceExpPowOf2<T>
     + ReduceDotProduct<T, Output = T>
@@ -147,6 +149,8 @@ impl<T: UnsignedInteger, M> RingReduce<T> for M where
         + ReduceMulAssign<T>
         + ReduceMulAdd<T, Output = T>
         + ReduceMulAddAssign<T>
+        + ReduceSquare<T, Output = T>
+        + ReduceSquareAssign<T>
         + ReduceExp<T>
         + ReduceExpPowOf2<T>
         + ReduceDotProduct<T, Output = T>

@@ -1,10 +1,12 @@
 use itertools::izip;
 use num_traits::ConstOne;
+use serde::{Deserialize, Serialize};
 
 use crate::integer::{Bits, UnsignedInteger};
 
 /// The basis for approximate signed decomposition of **non** power of 2 modulus value.
-#[derive(Debug, Clone, Copy, Eq)]
+#[derive(Debug, Clone, Copy, Eq, Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: UnsignedInteger"))]
 pub struct NonPowOf2ApproxSignedBasis<T: UnsignedInteger> {
     modulus: T,
     basis: T,

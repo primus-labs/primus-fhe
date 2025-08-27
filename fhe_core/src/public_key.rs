@@ -1,16 +1,20 @@
 use algebra::{
+    decompose::NonPowOf2ApproxSignedBasis,
     integer::UnsignedInteger,
+    ntt::{NttTable, NumberTheoryTransform},
     polynomial::{FieldNttPolynomial, FieldPolynomial, Polynomial},
-    random::{sample_binary_values, DiscreteGaussian},
+    random::{sample_binary_values, BinarySampler, DiscreteGaussian},
     reduce::RingReduce,
     utils::Size,
     Field, NttField,
 };
-use lattice::{Lwe, NttRlwe, NumRlwe};
+use lattice::{Lwe, NttGadgetRlwe, NttRgsw, NttRlwe, NumRlwe, SparseRlwe};
 use rand::{prelude::Distribution, CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     encode, CmLweCiphertext, LweCiphertext, LweParameters, LweSecretKey, NttRlweSecretKey,
+    RlweParameters,
 };
 
 /// Represents a public key for the Learning with Errors (LWE) cryptographic scheme.
@@ -53,12 +57,18 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
                 Lwe::generate_random_zero_sample(
                     secret_key.as_ref(),
                     params.cipher_modulus,
-                    gaussian,
+                    &gaussian,
                     rng,
                 )
             })
             .collect();
 
+        Self { public_key }
+    }
+
+    /// Creates a new `LwePublicKey` using the provided public key.
+    #[inline]
+    pub fn with_public_key(public_key: Vec<Lwe<C>>) -> Self {
         Self { public_key }
     }
 
@@ -115,7 +125,7 @@ impl<C: UnsignedInteger> LwePublicKey<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *rng))
+            .zip((&gaussian).sample_iter(&mut *rng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -140,8 +150,53 @@ impl<C: UnsignedInteger> Size for LwePublicKey<C> {
 /// # Type Parameters
 ///
 /// * `C` - An unsigned integer type that represents the coefficients of the RLWE ciphertexts.
+#[derive(Serialize, Deserialize)]
+#[serde(bound(deserialize = "C: UnsignedInteger"))]
 pub struct LwePublicKeyRlweMode<C: UnsignedInteger> {
     public_key: NumRlwe<C>,
+}
+
+impl<C: UnsignedInteger> Clone for LwePublicKeyRlweMode<C> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            public_key: self.public_key.clone(),
+        }
+    }
+}
+
+impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
+    /// Creates a new [`LwePublicKeyRlweMode<C>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        Self {
+            public_key: NumRlwe::from_bytes(data),
+        }
+    }
+
+    /// Creates a new [`LwePublicKeyRlweMode<C>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        self.public_key.from_bytes_assign(data);
+    }
+
+    /// Converts [`LwePublicKeyRlweMode<C>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        self.public_key.into_bytes()
+    }
+
+    /// Converts [`LwePublicKeyRlweMode<C>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        self.public_key.into_bytes_inplace(data);
+    }
+
+    /// Returns the bytes count of [`LwePublicKeyRlweMode<C>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        self.public_key.bytes_count()
+    }
 }
 
 impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
@@ -233,7 +288,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -255,7 +310,6 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
     ///
     /// * `messages` - A slice of messages to be encrypted.
     /// * `params` - The parameters for the LWE scheme.
-    /// * `cipher_modulus` - The modulus used for the LWE scheme.
     /// * `csrng` - A mutable reference to a random number generator.
     ///
     /// # Returns
@@ -302,7 +356,7 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         for (ai, ei) in result
             .a_mut()
             .iter_mut()
-            .zip(gaussian.sample_iter(&mut *csrng))
+            .zip((&gaussian).sample_iter(&mut *csrng))
         {
             modulus.reduce_add_assign(ai, ei);
         }
@@ -316,6 +370,62 @@ impl<C: UnsignedInteger> LwePublicKeyRlweMode<C> {
         }
 
         result.extract_first_few_lwe_locally(messages.len(), modulus)
+    }
+
+    /// Encrypts multiple zeros using the public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `zero_count` - The count of zeros to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
+    #[inline]
+    pub fn encrypt_multi_zeros<R, Modulus>(
+        &self,
+        zero_count: usize,
+        params: &LweParameters<C, Modulus>,
+        csrng: &mut R,
+    ) -> CmLweCiphertext<C>
+    where
+        R: Rng + CryptoRng,
+        Modulus: RingReduce<C>,
+    {
+        let dimension = params.dimension;
+        let gaussian = params.noise_distribution();
+        let modulus = params.cipher_modulus;
+
+        let r: Vec<C> = sample_binary_values(dimension, csrng);
+
+        let mut result = NumRlwe::zero(dimension);
+
+        self.public_key
+            .a()
+            .naive_mul_inplace(&r, modulus, result.a_mut());
+        self.public_key
+            .b()
+            .naive_mul_inplace(&r, modulus, result.b_mut());
+
+        for (ai, ei) in result
+            .a_mut()
+            .iter_mut()
+            .zip((&gaussian).sample_iter(&mut *csrng))
+        {
+            modulus.reduce_add_assign(ai, ei);
+        }
+
+        for (bi, ei) in result
+            .b_mut()
+            .iter_mut()
+            .zip(gaussian.sample_iter(&mut *csrng))
+        {
+            modulus.reduce_add_assign(bi, ei);
+        }
+
+        result.extract_first_few_lwe_locally(zero_count, modulus)
     }
 }
 
@@ -335,8 +445,56 @@ pub struct NttRlwePublicKey<F: NttField> {
     key: NttRlwe<F>,
 }
 
+impl<F: NttField> Clone for NttRlwePublicKey<F> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+        }
+    }
+}
+
 impl<F: NttField> NttRlwePublicKey<F> {
-    /// Creates a new `NttRlwePublicKey` using the provided secret key, Gaussian distribution, NTT table, and random number generator.
+    /// Creates a new [`NttRlwePublicKey<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        Self {
+            key: NttRlwe::from_bytes(data),
+        }
+    }
+
+    /// Creates a new [`NttRlwePublicKey<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        self.key.from_bytes_assign(data);
+    }
+
+    /// Converts [`NttRlwePublicKey<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        self.key.into_bytes()
+    }
+
+    /// Converts [`NttRlwePublicKey<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        self.key.into_bytes_inplace(data);
+    }
+
+    /// Returns the bytes count of [`NttRlwePublicKey<F>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        self.key.bytes_count()
+    }
+
+    /// Creates a [`NttRlwePublicKey<F>`] with all entries equal to zero.
+    #[inline]
+    pub fn zero(coeff_count: usize) -> NttRlwePublicKey<F> {
+        Self {
+            key: NttRlwe::zero(coeff_count),
+        }
+    }
+
+    /// Creates a new [`NttRlwePublicKey`] using the provided secret key, Gaussian distribution, NTT table, and random number generator.
     ///
     /// # Arguments
     ///
@@ -347,10 +505,10 @@ impl<F: NttField> NttRlwePublicKey<F> {
     ///
     /// # Returns
     ///
-    /// A new instance of `NttRlwePublicKey`.
+    /// A new instance of [`NttRlwePublicKey`].
     pub fn new<R>(
         secret_key: &NttRlweSecretKey<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> NttRlwePublicKey<F>
@@ -385,11 +543,201 @@ impl<F: NttField> NttRlwePublicKey<F> {
     /// # Type Parameters
     ///
     /// * `R` - A random number generator that implements `Rng` and `CryptoRng`.
-    pub fn encrypt<R>(_message: &FieldPolynomial<F>)
+    pub fn encrypt<R>(
+        &self,
+        message: &FieldPolynomial<F>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+    ) -> NttRlwe<F>
     where
         R: Rng + CryptoRng,
     {
-        todo!()
+        let dimension = ntt_table.dimension();
+
+        let v = <FieldPolynomial<F>>::random_binary(dimension, rng);
+        let e0 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        let e1 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+
+        let mut v = ntt_table.transform_inplace(v);
+        let mut e0 = ntt_table.transform_inplace(e0);
+        let mut e1 = ntt_table.transform_inplace(e1);
+
+        e0.add_mul_assign(self.key().a(), &v);
+        e1.add_mul_assign(self.key().b(), &v);
+
+        v.copy_from(message);
+        ntt_table.transform_slice(v.as_mut_slice());
+        e1 += v;
+
+        NttRlwe::new(e0, e1)
+    }
+
+    fn encrypt_monomial_inner<R>(
+        &self,
+        coeff: <F as Field>::ValueT,
+        degree: usize,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+        v: &mut FieldNttPolynomial<F>,
+    ) -> NttRlwe<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = ntt_table.dimension();
+
+        v.iter_mut()
+            .zip(BinarySampler.sample_iter(&mut *rng))
+            .for_each(
+                |(a, b): (&mut <F as Field>::ValueT, <F as Field>::ValueT)| {
+                    *a = b;
+                },
+            );
+        let e0 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        let mut e1 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        F::add_assign(&mut e1[degree], coeff);
+
+        ntt_table.transform_slice(v.as_mut_slice());
+        let mut e0 = ntt_table.transform_inplace(e0);
+        let mut e1 = ntt_table.transform_inplace(e1);
+
+        e0.add_mul_assign(self.key().a(), v);
+        e1.add_mul_assign(self.key().b(), v);
+
+        NttRlwe::new(e0, e1)
+    }
+
+    fn encrypt_neg_secret_monomial_inner<R>(
+        &self,
+        coeff: <F as Field>::ValueT,
+        degree: usize,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+        v: &mut FieldNttPolynomial<F>,
+    ) -> NttRlwe<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = ntt_table.dimension();
+
+        v.iter_mut()
+            .zip(BinarySampler.sample_iter(&mut *rng))
+            .for_each(
+                |(a, b): (&mut <F as Field>::ValueT, <F as Field>::ValueT)| {
+                    *a = b;
+                },
+            );
+        let mut e0 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        let e1 = <FieldPolynomial<F>>::random_gaussian(dimension, gaussian, rng);
+        F::add_assign(&mut e0[degree], coeff);
+
+        ntt_table.transform_slice(v.as_mut_slice());
+        let mut e0 = ntt_table.transform_inplace(e0);
+        let mut e1 = ntt_table.transform_inplace(e1);
+
+        e0.add_mul_assign(self.key().a(), v);
+        e1.add_mul_assign(self.key().b(), v);
+
+        NttRlwe::new(e0, e1)
+    }
+
+    /// Generate a RGSW ciphertext which encrypted `coeff*X^degree`.
+    pub fn encrypt_monomial_rgsw<R>(
+        &self,
+        coeff: <F as Field>::ValueT,
+        degree: usize,
+        basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+    ) -> NttRgsw<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = ntt_table.dimension();
+
+        let mut v = <FieldNttPolynomial<F>>::zero(dimension);
+        let m: Vec<NttRlwe<F>> = basis
+            .scalar_iter()
+            .map(|scalar| {
+                self.encrypt_monomial_inner(
+                    F::mul(coeff, scalar),
+                    degree,
+                    gaussian,
+                    ntt_table,
+                    rng,
+                    &mut v,
+                )
+            })
+            .collect();
+
+        let minus_s_m: Vec<NttRlwe<F>> = basis
+            .scalar_iter()
+            .map(|scalar| {
+                self.encrypt_neg_secret_monomial_inner(
+                    F::mul(coeff, scalar),
+                    degree,
+                    gaussian,
+                    ntt_table,
+                    rng,
+                    &mut v,
+                )
+            })
+            .collect();
+
+        NttRgsw::new(
+            <NttGadgetRlwe<F>>::new(minus_s_m, basis),
+            <NttGadgetRlwe<F>>::new(m, basis),
+        )
+    }
+
+    /// Encrypts multiple zeros using the public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `zero_count` - The count of zeros to be encrypted.
+    /// * `params` - The parameters for the LWE scheme.
+    /// * `csrng` - A mutable reference to a random number generator.
+    ///
+    /// # Returns
+    ///
+    /// A `CmLweCiphertext` containing the encrypted messages.
+    #[inline]
+    pub fn encrypt_multi_zeros<R>(
+        &self,
+        zero_count: usize,
+        params: &RlweParameters<F>,
+        ntt_table: &<F as NttField>::Table,
+        rng: &mut R,
+    ) -> SparseRlwe<F>
+    where
+        R: Rng + CryptoRng,
+    {
+        let dimension = params.dimension;
+        let gaussian = params.noise_distribution();
+
+        let r = FieldPolynomial::random_binary(dimension, rng).into_ntt_poly(ntt_table);
+
+        let mut temp = NttRlwe::zero(dimension);
+
+        r.mul_inplace(self.key.a(), temp.a_mut());
+        r.mul_inplace(self.key.b(), temp.b_mut());
+
+        let (mut a, b) = temp.to_rlwe(ntt_table).into_inner();
+        let mut b = b.inner_data();
+        b.truncate(zero_count);
+
+        for (ai, ei) in a.iter_mut().zip((&gaussian).sample_iter(&mut *rng)) {
+            F::add_assign(ai, ei);
+        }
+
+        for (bi, ei) in b.iter_mut().zip(gaussian.sample_iter(&mut *rng)) {
+            F::add_assign(bi, ei);
+        }
+
+        SparseRlwe::new(a, b)
     }
 }
 

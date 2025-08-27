@@ -179,7 +179,7 @@ fn test_rlwe_he() {
 
     let mut encrypt = |v: PolyFF| {
         let a = PolyFF::random(N, &mut rng);
-        let e = PolyFF::random_with_distribution(N, chi, &mut rng);
+        let e = PolyFF::random_with_distribution(N, &chi, &mut rng);
 
         let a_mul_s = NTT_TABLE.inverse_transform_inplace(NTT_TABLE.transform(&a) * &ntt_s);
 
@@ -247,7 +247,7 @@ fn test_gadget_rlwe() {
     let mut direct = NttRlwe::zero(N);
 
     let rlwe_m = {
-        let mut temp = Rlwe::generate_random_zero_sample(&ntt_s, gaussian, &NTT_TABLE, &mut rng);
+        let mut temp = Rlwe::generate_random_zero_sample(&ntt_s, &gaussian, &NTT_TABLE, &mut rng);
         *temp.b_mut() += &m;
         temp
     };
@@ -259,8 +259,9 @@ fn test_gadget_rlwe() {
     let bad_mul = bad_rlwe_mul.b()
         - NTT_TABLE.inverse_transform_inplace(NTT_TABLE.transform(bad_rlwe_mul.a()) * &ntt_s);
 
-    let gadget_rlwe =
-        GadgetRlwe::generate_random_poly_sample(&ntt_s, &m, &basis, gaussian, &NTT_TABLE, &mut rng);
+    let gadget_rlwe = GadgetRlwe::generate_random_poly_sample(
+        &ntt_s, &m, &basis, &gaussian, &NTT_TABLE, &mut rng,
+    );
 
     let good_rlwe_mul = gadget_rlwe.mul_polynomial(&poly, &NTT_TABLE);
     let good_mul = good_rlwe_mul.b()

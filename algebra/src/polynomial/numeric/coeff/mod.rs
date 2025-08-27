@@ -1,4 +1,5 @@
 use num_traits::{ConstZero, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::reduce::ReduceMulAdd;
 
@@ -13,7 +14,7 @@ mod neg;
 mod sub;
 
 /// Represents a polynomial where coefficients are elements of a specified numeric `T`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Polynomial<T> {
     poly: Vec<T>,
 }
@@ -62,13 +63,13 @@ impl<T> Polynomial<T> {
 
     /// Returns an iterator that allows reading each value or coefficient of the polynomial.
     #[inline]
-    pub fn iter(&self) -> std::slice::Iter<T> {
+    pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.poly.iter()
     }
 
     /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
     #[inline]
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<T> {
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
         self.poly.iter_mut()
     }
 

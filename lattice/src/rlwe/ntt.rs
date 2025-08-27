@@ -6,9 +6,10 @@ use algebra::{
     random::DiscreteGaussian,
     reduce::ReduceAddAssign,
     utils::Size,
-    Field, NttField,
+    ByteCount, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{utils::PolyDecomposeSpace, NttGadgetRlwe};
 
@@ -26,6 +27,8 @@ use super::Rlwe;
 ///
 /// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
 /// accessible through public API functions that enforce any necessary invariants.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: NttField")]
 pub struct NttRlwe<F: NttField> {
     /// Represents the first component in the RLWE structure.
     pub(crate) a: FieldNttPolynomial<F>,
@@ -53,11 +56,72 @@ impl<F: NttField> Clone for NttRlwe<F> {
 }
 
 impl<F: NttField> NttRlwe<F> {
+    /// Creates a new [`NttRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
+
+        let (a, b) = converted_data.split_at(converted_data.len() >> 1);
+
+        Self {
+            a: FieldNttPolynomial::from_slice(a),
+            b: FieldNttPolynomial::from_slice(b),
+        }
+    }
+
+    /// Creates a new [`NttRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
+
+        let (a, b) = converted_data.split_at(converted_data.len() >> 1);
+
+        self.a.copy_from(a);
+        self.b.copy_from(b);
+    }
+
+    /// Converts [`NttRlwe<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        let data_a: &[u8] = bytemuck::cast_slice(self.a.as_slice());
+        let data_b: &[u8] = bytemuck::cast_slice(self.b.as_slice());
+
+        [data_a, data_b].concat()
+    }
+
+    /// Converts [`NttRlwe<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        let data_a: &[u8] = bytemuck::cast_slice(self.a.as_slice());
+        let data_b: &[u8] = bytemuck::cast_slice(self.b.as_slice());
+
+        assert_eq!(data.len(), data_a.len() + data_b.len());
+
+        let (a, b) = unsafe { data.split_at_mut_unchecked(data_a.len()) };
+
+        a.copy_from_slice(data_a);
+        b.copy_from_slice(data_b);
+    }
+
+    /// Returns the bytes count of [`NttRlwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        (self.a.coeff_count() << 1) * <F::ValueT as ByteCount>::BYTES_COUNT
+    }
+}
+
+impl<F: NttField> NttRlwe<F> {
     /// Creates a new [`NttRlwe<F>`].
     #[inline]
     pub fn new(a: FieldNttPolynomial<F>, b: FieldNttPolynomial<F>) -> Self {
         assert_eq!(a.coeff_count(), b.coeff_count());
         Self { a, b }
+    }
+
+    /// Given the a and b, drop self.
+    #[inline]
+    pub fn into_inner(self) -> (FieldNttPolynomial<F>, FieldNttPolynomial<F>) {
+        (self.a, self.b)
     }
 
     /// Creates a new [`NttRlwe<F>`] with reference of [`FieldNttPolynomial<F>`].
@@ -405,7 +469,7 @@ impl<F: NttField> NttRlwe<F> {
     /// Generate a [`NttRlwe<F>`] sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
@@ -426,7 +490,7 @@ impl<F: NttField> NttRlwe<F> {
     pub fn generate_random_value_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
         value: <F as Field>::ValueT,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self

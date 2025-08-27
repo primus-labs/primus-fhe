@@ -5,18 +5,76 @@ use algebra::{
         ReduceSubAssign,
     },
     utils::Size,
+    ByteCount,
 };
+use bytemuck::Pod;
 use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 
 use super::Lwe;
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 ///
 /// This structure encrypts several messages like a rlwe but truncated `b`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CmLwe<T: Copy> {
     a: Vec<T>,
     b: Vec<T>,
+}
+
+impl<T: Copy + Pod + ByteCount> CmLwe<T> {
+    /// Creates a new [`CmLwe<T>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8], dimension: usize) -> Self {
+        let converted_data: &[T] = bytemuck::cast_slice(data);
+
+        let (a, b) = converted_data.split_at(dimension);
+
+        Self {
+            a: a.to_vec(),
+            b: b.to_vec(),
+        }
+    }
+
+    /// Creates a new [`CmLwe<T>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        let converted_data: &[T] = bytemuck::cast_slice(data);
+
+        let (a, b) = converted_data.split_at(self.a.len());
+
+        self.a.copy_from_slice(a);
+        self.b.copy_from_slice(b);
+    }
+
+    /// Converts [`CmLwe<T>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        let data_a: &[u8] = bytemuck::cast_slice(&self.a);
+        let data_b: &[u8] = bytemuck::cast_slice(&self.b);
+
+        [data_a, data_b].concat()
+    }
+
+    /// Converts [`CmLwe<T>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        let data_a: &[u8] = bytemuck::cast_slice(&self.a);
+        let data_b: &[u8] = bytemuck::cast_slice(&self.b);
+
+        assert_eq!(data.len(), data_a.len() + data_b.len());
+
+        let (a, b) = unsafe { data.split_at_mut_unchecked(data_a.len()) };
+
+        a.copy_from_slice(data_a);
+        b.copy_from_slice(data_b);
+    }
+
+    /// Returns the bytes count of [`CmLwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        (self.a.len() + self.b.len()) * T::BYTES_COUNT
+    }
 }
 
 impl<T: Copy> CmLwe<T> {
@@ -24,6 +82,34 @@ impl<T: Copy> CmLwe<T> {
     #[inline]
     pub fn new(a: Vec<T>, b: Vec<T>) -> Self {
         Self { a, b }
+    }
+
+    /// Creates a new [`CmLwe<T>`] from single `Vec<T>`.
+    #[inline]
+    pub fn from_vec(mut data: Vec<T>, dimension: usize) -> Self {
+        let b = data.split_off(dimension);
+        Self { a: data, b }
+    }
+
+    /// Given inner data.
+    #[inline]
+    pub fn into_inner(self) -> (Vec<T>, Vec<T>) {
+        (self.a, self.b)
+    }
+
+    /// Given inner data.
+    #[inline]
+    pub fn into_vec(mut self) -> Vec<T> {
+        self.a.append(&mut self.b);
+        self.a
+    }
+
+    /// Put data into buffer.
+    #[inline]
+    pub fn into_slice_inplace(&self, buffer: &mut [T]) {
+        let dimension = self.a.len();
+        buffer[0..dimension].copy_from_slice(&self.a);
+        buffer[dimension..].copy_from_slice(&self.b);
     }
 
     /// Returns a reference to the a of this [`CmLwe<T>`].
@@ -48,6 +134,12 @@ impl<T: Copy> CmLwe<T> {
     #[inline]
     pub fn b_mut(&mut self) -> &mut Vec<T> {
         &mut self.b
+    }
+
+    /// Returns mutable references to the a and b of this [`CmLwe<T>`].
+    #[inline]
+    pub fn a_b_mut_slice(&mut self) -> (&mut [T], &mut [T]) {
+        (&mut self.a, &mut self.b)
     }
 
     /// Returns the message count of this [`CmLwe<T>`].

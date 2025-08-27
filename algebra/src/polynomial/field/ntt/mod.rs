@@ -1,4 +1,5 @@
 use num_traits::{ConstZero, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     reduce::{LazyReduceMulAdd, ReduceMulAdd},
@@ -16,6 +17,8 @@ mod neg;
 mod sub;
 
 /// A representation of a polynomial in Number Theoretic Transform (NTT) form.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct FieldNttPolynomial<F: NttField> {
     data: Vec<<F as Field>::ValueT>,
 }
@@ -103,13 +106,13 @@ impl<F: NttField> FieldNttPolynomial<F> {
 
     /// Returns an iterator that allows reading each value or values of the polynomial.
     #[inline]
-    pub fn iter(&self) -> core::slice::Iter<<F as Field>::ValueT> {
+    pub fn iter(&self) -> core::slice::Iter<'_, <F as Field>::ValueT> {
         self.data.iter()
     }
 
     /// Returns an iterator that allows modifying each value or values of the polynomial.
     #[inline]
-    pub fn iter_mut(&mut self) -> core::slice::IterMut<<F as Field>::ValueT> {
+    pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, <F as Field>::ValueT> {
         self.data.iter_mut()
     }
 

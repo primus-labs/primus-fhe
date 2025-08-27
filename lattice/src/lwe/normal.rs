@@ -6,19 +6,78 @@ use algebra::{
         ReduceNeg, ReduceNegAssign, ReduceSub, ReduceSubAssign,
     },
     utils::Size,
+    ByteCount,
 };
+use bytemuck::Pod;
 use rand::{distributions::Uniform, prelude::Distribution};
+use serde::{Deserialize, Serialize};
 
 /// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
 /// The LWE problem is a fundamental component in modern cryptography, often used to build
 /// secure cryptographic systems that are considered hard to crack by quantum computers.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Lwe<T: Copy> {
     /// A vector of elements of `T`, representing the public vector part of the LWE instance.
     a: Vec<T>,
     /// An element of `T`, representing the value which is computed as
     /// the dot product of `a` with a secret vector, plus message and some noise.
     b: T,
+}
+
+impl<T: Copy + Pod + ByteCount> Lwe<T> {
+    /// Creates a new [`Lwe<T>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        let converted_data: &[T] = bytemuck::cast_slice(data);
+
+        let (&b, a) = converted_data.split_last().unwrap();
+
+        Self { a: a.to_vec(), b }
+    }
+
+    /// Creates a new [`Lwe<T>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        let converted_data: &[T] = bytemuck::cast_slice(data);
+
+        let (&b, a) = converted_data.split_last().unwrap();
+
+        self.a.copy_from_slice(a);
+        self.b = b;
+    }
+
+    /// Converts [`Lwe<T>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        let b = &[self.b];
+
+        let data_a: &[u8] = bytemuck::cast_slice(&self.a);
+        let data_b: &[u8] = bytemuck::cast_slice(b);
+
+        [data_a, data_b].concat()
+    }
+
+    /// Converts [`Lwe<T>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        let b = &[self.b];
+
+        let data_a: &[u8] = bytemuck::cast_slice(&self.a);
+        let data_b: &[u8] = bytemuck::cast_slice(b);
+
+        assert_eq!(data.len(), data_a.len() + data_b.len());
+
+        let (a, b) = unsafe { data.split_at_mut_unchecked(data_a.len()) };
+
+        a.copy_from_slice(data_a);
+        b.copy_from_slice(data_b);
+    }
+
+    /// Returns the bytes count of [`Lwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        (self.a.len() + 1) * T::BYTES_COUNT
+    }
 }
 
 impl<T: Copy> Lwe<T> {
@@ -251,7 +310,7 @@ impl<T: UnsignedInteger> Lwe<T> {
     pub fn generate_random_zero_sample<M, R>(
         secret_key: &[T],
         modulus: M,
-        gaussian: DiscreteGaussian<T>,
+        gaussian: &DiscreteGaussian<T>,
         rng: &mut R,
     ) -> Self
     where

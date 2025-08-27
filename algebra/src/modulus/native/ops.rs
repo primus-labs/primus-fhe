@@ -213,4 +213,13 @@ impl<T: UnsignedInteger> ReduceDotProduct<T> for NativeModulus<T> {
             .zip(b)
             .fold(T::ZERO, |acc, (&x, &y)| x.wrapping_mul(y).wrapping_add(acc))
     }
+
+    #[inline]
+    fn reduce_dot_product2(
+        self,
+        a: impl IntoIterator<Item = T>,
+        b: impl IntoIterator<Item = T>,
+    ) -> Self::Output {
+        std::iter::zip(a, b).fold(T::ZERO, |acc, (x, y)| x.wrapping_mul(y).wrapping_add(acc))
+    }
 }

@@ -1,4 +1,5 @@
 use num_traits::{ConstZero, Zero};
+use serde::{Deserialize, Serialize};
 
 use crate::{reduce::ReduceMulAdd, Field};
 
@@ -13,6 +14,8 @@ mod neg;
 mod sub;
 
 /// Represents a polynomial where coefficients are numeric elements.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct FieldPolynomial<F: Field> {
     data: Vec<<F as Field>::ValueT>,
 }
@@ -94,13 +97,13 @@ impl<F: Field> FieldPolynomial<F> {
 
     /// Returns an iterator that allows reading each value or coefficient of the polynomial.
     #[inline]
-    pub fn iter(&self) -> core::slice::Iter<<F as Field>::ValueT> {
+    pub fn iter(&self) -> core::slice::Iter<'_, <F as Field>::ValueT> {
         self.data.iter()
     }
 
     /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
     #[inline]
-    pub fn iter_mut(&mut self) -> core::slice::IterMut<<F as Field>::ValueT> {
+    pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, <F as Field>::ValueT> {
         self.data.iter_mut()
     }
 

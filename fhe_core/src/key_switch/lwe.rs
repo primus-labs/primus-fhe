@@ -81,7 +81,7 @@ impl<C: UnsignedInteger> PowOf2LweKeySwitchingKey<C> {
                         let mut cipher = <Lwe<C>>::generate_random_zero_sample(
                             s_out.as_ref(),
                             modulus,
-                            gaussian,
+                            &gaussian,
                             rng,
                         );
 
@@ -180,6 +180,21 @@ pub struct NonPowOf2LweKeySwitchingKey<C: UnsignedInteger> {
 }
 
 impl<C: UnsignedInteger> NonPowOf2LweKeySwitchingKey<C> {
+    /// Creates a new [`NonPowOf2LweKeySwitchingKey<C>`].
+    #[inline]
+    pub fn new(
+        key: Vec<Vec<Lwe<C>>>,
+        params: KeySwitchingParameters,
+        basis: NonPowOf2ApproxSignedBasis<C>,
+    ) -> Self {
+        Self {
+            key,
+            params,
+            basis,
+            space: Pool::new(),
+        }
+    }
+
     /// Generates a new [`NonPowOf2LweKeySwitchingKey<C>`].
     pub fn generate<COut, R>(
         s_in: &LweSecretKey<C>,
@@ -221,7 +236,7 @@ impl<C: UnsignedInteger> NonPowOf2LweKeySwitchingKey<C> {
                         let mut cipher = <Lwe<C>>::generate_random_zero_sample(
                             s_out_vec.as_ref(),
                             modulus,
-                            gaussian,
+                            &gaussian,
                             rng,
                         );
 
@@ -382,7 +397,7 @@ impl<Q: NttField> LweKeySwitchingKeyRlweMode<Q> {
                     &lwe_secret_key,
                     &ntt_rlwe_secret_key_chunks,
                     &key_switching_basis,
-                    gaussian,
+                    &gaussian,
                     &ntt_table,
                     rng,
                 )

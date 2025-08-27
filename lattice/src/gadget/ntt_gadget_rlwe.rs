@@ -3,11 +3,12 @@ use algebra::{
     ntt::NumberTheoryTransform,
     polynomial::{FieldNttPolynomial, FieldPolynomial},
     random::DiscreteGaussian,
-    reduce::ReduceAddAssign,
     utils::Size,
-    Field, NttField,
+    ByteCount, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::{utils::PolyDecomposeSpace, NttRlwe};
 
@@ -25,6 +26,8 @@ use super::GadgetRlwe;
 /// The struct is generic over a type `F` that must implement the [`NttField`] trait, which ensures that
 /// the field operations are compatible with Number Theoretic Transforms, a key requirement for
 /// efficient polynomial operations in RLWE-based cryptography.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: NttField")]
 pub struct NttGadgetRlwe<F: NttField> {
     /// A vector of NTT RLWE ciphertexts, each encrypted message with a different power of the `basis`.
     data: Vec<NttRlwe<F>>,
@@ -39,6 +42,82 @@ impl<F: NttField> Clone for NttGadgetRlwe<F> {
             data: self.data.clone(),
             basis: self.basis,
         }
+    }
+}
+
+impl<F: NttField> NttGadgetRlwe<F> {
+    /// Creates a new [`NttGadgetRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(
+        data: &[u8],
+        dimension: usize,
+        basis: NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
+    ) -> Self {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
+
+        let data: Vec<NttRlwe<F>> = converted_data
+            .chunks_exact(dimension << 1)
+            .map(|chunk| {
+                let (a, b) = unsafe { chunk.split_at_unchecked(dimension) };
+                NttRlwe {
+                    a: FieldNttPolynomial::from_slice(a),
+                    b: FieldNttPolynomial::from_slice(b),
+                }
+            })
+            .collect();
+
+        assert_eq!(data.len(), basis.decompose_length());
+
+        Self { data, basis }
+    }
+
+    /// Creates a new [`NttGadgetRlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8], dimension: usize) {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
+
+        converted_data
+            .chunks_exact(dimension << 1)
+            .zip(self.iter_mut())
+            .for_each(|(chunk, rlwe)| {
+                let (a, b) = unsafe { chunk.split_at_unchecked(dimension) };
+                rlwe.a.copy_from(a);
+                rlwe.b.copy_from(b);
+            });
+    }
+
+    /// Converts [`NttGadgetRlwe<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self, dimension: usize) -> Vec<u8> {
+        let size = (self.data.len() << 1) * dimension * <F::ValueT as ByteCount>::BYTES_COUNT;
+        let mut result = Vec::with_capacity(size);
+
+        self.iter().for_each(|rlwe| {
+            result.extend_from_slice(bytemuck::cast_slice(rlwe.a_slice()));
+            result.extend_from_slice(bytemuck::cast_slice(rlwe.b_slice()));
+        });
+
+        result
+    }
+
+    /// Converts [`NttGadgetRlwe<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8], dimension: usize) {
+        let poly_bytes_count = dimension * <F::ValueT as ByteCount>::BYTES_COUNT;
+
+        data.chunks_exact_mut(poly_bytes_count << 1)
+            .zip(self.iter())
+            .for_each(|(chunk, rlwe): (&mut [u8], &NttRlwe<F>)| {
+                let (a, b) = unsafe { chunk.split_at_mut_unchecked(poly_bytes_count) };
+                a.copy_from_slice(bytemuck::cast_slice(rlwe.a_slice()));
+                b.copy_from_slice(bytemuck::cast_slice(rlwe.b_slice()));
+            });
+    }
+
+    /// Returns the bytes count of [`NttGadgetRlwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        self.data.len() * self.data[0].bytes_count()
     }
 }
 
@@ -109,6 +188,12 @@ impl<F: NttField> NttGadgetRlwe<F> {
     #[inline]
     pub fn iter_mut(&mut self) -> core::slice::IterMut<'_, NttRlwe<F>> {
         self.data.iter_mut()
+    }
+
+    /// Returns a parallel iterator over the `data` of this [`NttGadgetRlwe<F>`].
+    #[inline]
+    pub fn par_iter(&self) -> rayon::slice::Iter<'_, NttRlwe<F>> {
+        self.data.par_iter()
     }
 
     /// Converts [`NttGadgetRlwe<F>`] into [`GadgetRlwe<F>`].
@@ -255,11 +340,53 @@ impl<F: NttField> NttGadgetRlwe<F> {
         )
     }
 
+    /// Perform multiplication between [`NttGadgetRlwe<F>`] and [`FieldPolynomial<F>`],
+    /// stores the result into `destination`.
+    ///
+    /// The coefficients in the `destination` may be in [0, 2*modulus) for some case,
+    /// and fall back to [0, modulus) for normal case.
+    pub fn mul_polynomial_inplace_fast_mt(
+        &self,
+        polynomial: &FieldPolynomial<F>,
+        ntt_table: &<F as NttField>::Table,
+        adjust_poly: &mut FieldPolynomial<F>,
+        carries: &mut [bool],
+        decompose_polys: &mut [FieldNttPolynomial<F>],
+        destination: &mut [NttRlwe<F>],
+    ) {
+        polynomial.init_adjust_poly_carries(self.basis(), carries, adjust_poly);
+
+        self.basis
+            .decompose_iter()
+            .zip(decompose_polys.iter_mut())
+            .for_each(|(once_decompose, decompose_poly)| {
+                adjust_poly.approx_signed_decompose(
+                    once_decompose,
+                    carries,
+                    decompose_poly.as_mut_slice(),
+                );
+            });
+
+        decompose_polys
+            .par_iter_mut()
+            .zip(self.par_iter())
+            .zip(destination.par_iter_mut())
+            .for_each(
+                |((decompose_poly, g_rlwe), di): (
+                    (&mut FieldNttPolynomial<F>, &NttRlwe<F>),
+                    &mut NttRlwe<F>,
+                )| {
+                    ntt_table.transform_slice(decompose_poly.as_mut_slice());
+                    g_rlwe.mul_ntt_polynomial_inplace(decompose_poly, di)
+                },
+            );
+    }
+
     /// Generate a [`NttGadgetRlwe<F>`] sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
@@ -281,7 +408,7 @@ impl<F: NttField> NttGadgetRlwe<F> {
     pub fn generate_random_one_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
@@ -308,7 +435,7 @@ impl<F: NttField> NttGadgetRlwe<F> {
         secret_key: &FieldNttPolynomial<F>,
         poly: &FieldNttPolynomial<F>,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
@@ -335,7 +462,7 @@ impl<F: NttField> NttGadgetRlwe<F> {
     pub fn generate_random_neg_secret_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
@@ -349,7 +476,7 @@ impl<F: NttField> NttGadgetRlwe<F> {
                     <NttRlwe<F>>::generate_random_zero_sample(secret_key, gaussian, ntt_table, rng);
                 r.a_mut_slice()
                     .iter_mut()
-                    .for_each(|v| F::MODULUS.reduce_add_assign(v, scalar));
+                    .for_each(|v| F::add_assign(v, scalar));
                 r
             })
             .collect();

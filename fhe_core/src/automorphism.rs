@@ -1,14 +1,9 @@
 use std::sync::Arc;
 
 use algebra::{
-    decompose::NonPowOf2ApproxSignedBasis,
-    modulus::PowOf2Modulus,
-    ntt::NumberTheoryTransform,
-    polynomial::FieldPolynomial,
-    random::DiscreteGaussian,
-    reduce::{ReduceAddAssign, ReduceMul, ReduceSubAssign},
-    utils::Size,
-    Field, NttField,
+    arith::Xgcd, decompose::NonPowOf2ApproxSignedBasis, modulus::PowOf2Modulus,
+    ntt::NumberTheoryTransform, polynomial::FieldPolynomial, random::DiscreteGaussian,
+    reduce::ReduceMul, utils::Size, Field, NttField,
 };
 use lattice::{
     utils::{NttRlweSpace, PolyDecomposeSpace},
@@ -19,11 +14,45 @@ use rand::{CryptoRng, Rng};
 
 use crate::{NttRlweCiphertext, NttRlweSecretKey, RlweCiphertext, RlweSecretKey};
 
+/// This defines the operation when perform automorphism on each coefficient.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Op {
+    Add,
+    Sub,
+}
+
+/// This defines the operation and the source index
+/// when perform automorphism on each coefficient.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FromOp {
+    from: usize,
+    op: Op,
+}
+
+#[derive(Debug, Clone)]
+pub enum AutoHelper {
+    Permutation(Vec<FromOp>),
+    DimensionPlusOne,
+    One,
+}
+
 /// Automorphism key
 pub struct AutoKey<F: NttField> {
     degree: usize,
+    auto_helper: AutoHelper,
     key: NttGadgetRlwe<F>,
     pub(crate) ntt_table: Arc<<F as NttField>::Table>,
+}
+
+impl<F: NttField> Clone for AutoKey<F> {
+    fn clone(&self) -> Self {
+        Self {
+            degree: self.degree,
+            auto_helper: self.auto_helper.clone(),
+            key: self.key.clone(),
+            ntt_table: Arc::clone(&self.ntt_table),
+        }
+    }
 }
 
 /// Preallocated space for automorphism
@@ -51,7 +80,7 @@ impl<F: NttField> AutoKey<F> {
         ntt_secret_key: &NttRlweSecretKey<F>,
         degree: usize,
         basis: &NonPowOf2ApproxSignedBasis<<F as Field>::ValueT>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: Arc<<F as NttField>::Table>,
         rng: &mut R,
     ) -> Self
@@ -59,8 +88,11 @@ impl<F: NttField> AutoKey<F> {
         R: Rng + CryptoRng,
     {
         let rlwe_dimension = secret_key.coeff_count();
-        assert!(degree > 0 && degree < rlwe_dimension << 1);
+        assert!(degree & 1 == 1 && Xgcd::gcd(degree, rlwe_dimension << 1) == 1);
+
+        let auto_helper;
         let key = if degree.is_one() {
+            auto_helper = AutoHelper::One;
             NttGadgetRlwe::generate_random_neg_secret_sample(
                 ntt_secret_key,
                 basis,
@@ -69,7 +101,13 @@ impl<F: NttField> AutoKey<F> {
                 rng,
             )
         } else {
-            let p_auto = poly_auto_add(secret_key, degree, rlwe_dimension);
+            auto_helper = if degree == rlwe_dimension + 1 {
+                AutoHelper::DimensionPlusOne
+            } else {
+                AutoHelper::Permutation(generate_permutate_ops(degree, rlwe_dimension))
+            };
+
+            let p_auto = poly_auto(secret_key, &auto_helper);
             let auto_sk = ntt_table.transform_inplace(-p_auto);
             NttGadgetRlwe::generate_random_poly_sample(
                 ntt_secret_key,
@@ -83,6 +121,7 @@ impl<F: NttField> AutoKey<F> {
 
         Self {
             key,
+            auto_helper,
             ntt_table,
             degree,
         }
@@ -91,18 +130,20 @@ impl<F: NttField> AutoKey<F> {
     /// Performs automorphism on the given RLWE ciphertext.
     #[inline]
     pub fn automorphism(&self, ciphertext: &RlweCiphertext<F>) -> RlweCiphertext<F> {
-        let rlwe_dimension = ciphertext.dimension();
+        if let AutoHelper::One = self.auto_helper {
+            ciphertext.clone()
+        } else {
+            let a = poly_auto(ciphertext.a(), &self.auto_helper);
 
-        let a = poly_auto_add(ciphertext.a(), self.degree, rlwe_dimension);
+            let mut result = self
+                .key
+                .mul_polynomial(&a, &self.ntt_table)
+                .to_rlwe(&self.ntt_table);
 
-        let mut result = self
-            .key
-            .mul_polynomial(&a, &self.ntt_table)
-            .to_rlwe(&self.ntt_table);
+            poly_auto_add_inplace(ciphertext.b(), &self.auto_helper, result.b_mut());
 
-        poly_auto_add_inplace(ciphertext.b(), self.degree, rlwe_dimension, result.b_mut());
-
-        result
+            result
+        }
     }
 
     /// Performs automorphism on the given RLWE ciphertext in place.
@@ -112,15 +153,7 @@ impl<F: NttField> AutoKey<F> {
         auto_space: &mut AutoSpace<F>,
         destination: &mut RlweCiphertext<F>,
     ) {
-        let rlwe_dimension = ciphertext.dimension();
-
-        destination.a_mut().set_zero();
-        poly_auto_add_inplace(
-            ciphertext.a(),
-            self.degree,
-            rlwe_dimension,
-            destination.a_mut(),
-        );
+        poly_auto_inplace(ciphertext.a(), &self.auto_helper, destination.a_mut());
 
         self.key.mul_polynomial_inplace(
             destination.a(),
@@ -133,12 +166,7 @@ impl<F: NttField> AutoKey<F> {
             .ntt_rlwe_space
             .inverse_transform_inplace(&self.ntt_table, destination);
 
-        poly_auto_add_inplace(
-            ciphertext.b(),
-            self.degree,
-            rlwe_dimension,
-            destination.b_mut(),
-        );
+        poly_auto_add_inplace(ciphertext.b(), &self.auto_helper, destination.b_mut());
     }
 
     /// Performs automorphism on the given RLWE ciphertext in place.
@@ -149,9 +177,7 @@ impl<F: NttField> AutoKey<F> {
         poly_space: &mut FieldPolynomial<F>,
         destination: &mut NttRlweCiphertext<F>,
     ) {
-        let rlwe_dimension = ciphertext.dimension();
-
-        poly_auto_inplace(ciphertext.a(), self.degree, rlwe_dimension, poly_space);
+        poly_auto_inplace(ciphertext.a(), &self.auto_helper, poly_space);
 
         self.key.mul_polynomial_inplace(
             poly_space,
@@ -160,7 +186,7 @@ impl<F: NttField> AutoKey<F> {
             &mut auto_space.ntt_rlwe_space,
         );
 
-        poly_auto_inplace(ciphertext.b(), self.degree, rlwe_dimension, poly_space);
+        poly_auto_inplace(ciphertext.b(), &self.auto_helper, poly_space);
 
         self.ntt_table.transform_slice(poly_space.as_mut_slice());
 
@@ -178,53 +204,196 @@ impl<F: NttField> Size for AutoKey<F> {
 }
 
 #[inline]
-fn poly_auto_add<F: NttField>(
-    poly: &FieldPolynomial<F>,
-    degree: usize,
-    dimension: usize,
-) -> FieldPolynomial<F> {
-    let mut res = FieldPolynomial::zero(dimension);
-    poly_auto_add_inplace(poly, degree, dimension, &mut res);
-    res
+fn generate_permutate_ops(degree: usize, dimension: usize) -> Vec<FromOp> {
+    let twice_dimension = dimension << 1;
+    let modulus = <PowOf2Modulus<usize>>::new(twice_dimension);
+
+    let mut result = vec![
+        FromOp {
+            from: 0,
+            op: Op::Add
+        };
+        dimension
+    ];
+
+    for i in 0..dimension {
+        let to = modulus.reduce_mul(i, degree);
+        if to < dimension {
+            result[to] = FromOp {
+                from: i,
+                op: Op::Add,
+            };
+        } else {
+            result[to - dimension] = FromOp {
+                from: i,
+                op: Op::Sub,
+            };
+        }
+    }
+    result
 }
 
 #[inline]
-fn poly_auto_add_inplace<F: NttField>(
+fn poly_auto<F: NttField>(
     poly: &FieldPolynomial<F>,
-    degree: usize,
-    dimension: usize,
-    destination: &mut FieldPolynomial<F>,
-) {
-    let twice_dimension = dimension << 1;
-    let modulus = <PowOf2Modulus<usize>>::new(twice_dimension);
-    for (i, c) in poly.iter().enumerate() {
-        let j = modulus.reduce_mul(i, degree);
-
-        if j < dimension {
-            F::MODULUS.reduce_add_assign(&mut destination[j], *c);
-        } else {
-            F::MODULUS.reduce_sub_assign(&mut destination[j - dimension], *c);
-        }
+    auto_helper: &AutoHelper,
+) -> FieldPolynomial<F> {
+    match auto_helper {
+        AutoHelper::Permutation(from_ops) => poly_auto_for_permutation(poly, from_ops),
+        AutoHelper::DimensionPlusOne => poly_auto_for_dimension_plus_one(poly),
+        AutoHelper::One => poly_auto_for_one(poly),
     }
 }
 
 #[inline]
 fn poly_auto_inplace<F: NttField>(
     poly: &FieldPolynomial<F>,
-    degree: usize,
-    dimension: usize,
+    auto_helper: &AutoHelper,
     destination: &mut FieldPolynomial<F>,
 ) {
-    destination.set_zero();
-    let twice_dimension = dimension << 1;
-    let modulus = <PowOf2Modulus<usize>>::new(twice_dimension);
-    for (i, c) in poly.iter().enumerate() {
-        let j = modulus.reduce_mul(i, degree);
-        if j < dimension {
-            destination[j] = *c;
-        } else {
-            destination[j - dimension] = F::neg(*c);
+    match auto_helper {
+        AutoHelper::Permutation(from_ops) => {
+            poly_auto_inplace_for_permutation(poly, from_ops, destination);
         }
+        AutoHelper::DimensionPlusOne => {
+            poly_auto_inplace_for_dimension_plus_one(poly, destination);
+        }
+        AutoHelper::One => poly_auto_inplace_for_one(poly, destination),
+    }
+}
+
+#[inline]
+fn poly_auto_add_inplace<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    auto_helper: &AutoHelper,
+    destination: &mut FieldPolynomial<F>,
+) {
+    match auto_helper {
+        AutoHelper::Permutation(from_ops) => {
+            poly_auto_add_inplace_for_permutation(poly, from_ops, destination)
+        }
+        AutoHelper::DimensionPlusOne => {
+            poly_auto_add_inplace_for_dimension_plus_one(poly, destination);
+        }
+        AutoHelper::One => poly_auto_add_inplace_for_one(poly, destination),
+    }
+}
+
+#[inline]
+fn poly_auto_for_one<F: NttField>(poly: &FieldPolynomial<F>) -> FieldPolynomial<F> {
+    poly.clone()
+}
+
+#[inline]
+fn poly_auto_inplace_for_one<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    destination: &mut FieldPolynomial<F>,
+) {
+    destination.copy_from(poly);
+}
+
+#[inline]
+fn poly_auto_add_inplace_for_one<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    destination: &mut FieldPolynomial<F>,
+) {
+    *destination += poly;
+}
+
+#[inline]
+fn poly_auto_for_permutation<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    from_ops: &[FromOp],
+) -> FieldPolynomial<F> {
+    FieldPolynomial::new(
+        from_ops
+            .iter()
+            .map(|from_op| {
+                let c = unsafe { poly.as_slice().get_unchecked(from_op.from) };
+                match from_op.op {
+                    Op::Add => *c,
+                    Op::Sub => F::neg(*c),
+                }
+            })
+            .collect(),
+    )
+}
+
+#[inline]
+fn poly_auto_inplace_for_permutation<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    from_ops: &[FromOp],
+    destination: &mut FieldPolynomial<F>,
+) {
+    for (d, from_op) in destination.iter_mut().zip(from_ops.iter()) {
+        let c = unsafe { poly.as_slice().get_unchecked(from_op.from) };
+        match from_op.op {
+            Op::Add => {
+                *d = *c;
+            }
+            Op::Sub => {
+                *d = F::neg(*c);
+            }
+        }
+    }
+}
+
+#[inline]
+fn poly_auto_add_inplace_for_permutation<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    from_ops: &[FromOp],
+    destination: &mut FieldPolynomial<F>,
+) {
+    for (d, from_op) in destination.iter_mut().zip(from_ops.iter()) {
+        let c = unsafe { poly.as_slice().get_unchecked(from_op.from) };
+        match from_op.op {
+            Op::Add => {
+                F::add_assign(d, *c);
+            }
+            Op::Sub => {
+                F::sub_assign(d, *c);
+            }
+        }
+    }
+}
+
+#[inline]
+fn poly_auto_for_dimension_plus_one<F: NttField>(poly: &FieldPolynomial<F>) -> FieldPolynomial<F> {
+    let mut result = poly.clone();
+    result[1..]
+        .iter_mut()
+        .step_by(2)
+        .for_each(|v| F::neg_assign(v));
+    result
+}
+
+#[inline]
+fn poly_auto_inplace_for_dimension_plus_one<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    destination: &mut FieldPolynomial<F>,
+) {
+    for (pi, di) in poly
+        .as_slice()
+        .chunks_exact(2)
+        .zip(destination.as_mut_slice().chunks_exact_mut(2))
+    {
+        di[0] = pi[0];
+        di[1] = F::neg(pi[1]);
+    }
+}
+
+#[inline]
+fn poly_auto_add_inplace_for_dimension_plus_one<F: NttField>(
+    poly: &FieldPolynomial<F>,
+    destination: &mut FieldPolynomial<F>,
+) {
+    for (pi, di) in poly
+        .as_slice()
+        .chunks_exact(2)
+        .zip(destination.as_mut_slice().chunks_exact_mut(2))
+    {
+        F::add_assign(&mut di[0], pi[0]);
+        F::sub_assign(&mut di[1], pi[1]);
     }
 }
 
@@ -237,7 +406,7 @@ mod tests {
     use super::*;
 
     type Fp = U32FieldEval<132120577>;
-    type ValT = u32; // inner type
+    type ValT = <Fp as Field>::ValueT; // inner type
     type PolyT = FieldPolynomial<Fp>;
 
     const CIPHER_MODULUS: ValT = <Fp as Field>::MODULUS_VALUE; // ciphertext space
@@ -261,7 +430,8 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         let poly = PolyT::random_ternary(N, &mut rng);
-        let result = poly_auto_add(&poly, N + 1, N);
+        let auto_type = AutoHelper::DimensionPlusOne;
+        let result = poly_auto(&poly, &auto_type);
 
         let flag = result
             .iter()
@@ -297,7 +467,7 @@ mod tests {
         let encoded_values = PolyT::new(values.iter().copied().map(encode).collect());
 
         let mut cipher =
-            <Rlwe<Fp>>::generate_random_zero_sample(&ntt_sk, gaussian, &ntt_table, &mut rng);
+            <Rlwe<Fp>>::generate_random_zero_sample(&ntt_sk, &gaussian, &ntt_table, &mut rng);
         *cipher.b_mut() += &encoded_values;
 
         let auto_key = AutoKey::new(
@@ -305,7 +475,7 @@ mod tests {
             &ntt_sk,
             N + 1,
             &basis,
-            gaussian,
+            &gaussian,
             Arc::clone(&ntt_table),
             &mut rng,
         );

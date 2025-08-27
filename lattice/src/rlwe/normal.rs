@@ -4,9 +4,10 @@ use algebra::{
     random::DiscreteGaussian,
     reduce::{ReduceAddAssign, ReduceNeg, ReduceNegAssign, ReduceSubAssign},
     utils::Size,
-    Field, NttField,
+    ByteCount, Field, NttField,
 };
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 use super::NttRlwe;
 
@@ -27,6 +28,8 @@ use crate::{
 ///
 /// The fields `a` and `b` are kept private within the crate to maintain encapsulation and are
 /// accessible through public API functions that enforce any necessary invariants.
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "F: Field")]
 pub struct Rlwe<F: Field> {
     /// Represents the first component in the RLWE structure.
     /// It is a polynomial where the coefficients are elements of the field `F`.
@@ -66,11 +69,72 @@ impl<F: Field> Default for Rlwe<F> {
 }
 
 impl<F: Field> Rlwe<F> {
+    /// Creates a new [`Rlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes(data: &[u8]) -> Self {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
+
+        let (a, b) = converted_data.split_at(converted_data.len() >> 1);
+
+        Self {
+            a: FieldPolynomial::from_slice(a),
+            b: FieldPolynomial::from_slice(b),
+        }
+    }
+
+    /// Creates a new [`Rlwe<F>`] from bytes `data`.
+    #[inline]
+    pub fn from_bytes_assign(&mut self, data: &[u8]) {
+        let converted_data: &[F::ValueT] = bytemuck::cast_slice(data);
+
+        let (a, b) = converted_data.split_at(converted_data.len() >> 1);
+
+        self.a.copy_from(a);
+        self.b.copy_from(b);
+    }
+
+    /// Converts [`Rlwe<F>`] into bytes.
+    #[inline]
+    pub fn into_bytes(&self) -> Vec<u8> {
+        let data_a: &[u8] = bytemuck::cast_slice(self.a.as_slice());
+        let data_b: &[u8] = bytemuck::cast_slice(self.b.as_slice());
+
+        [data_a, data_b].concat()
+    }
+
+    /// Converts [`Rlwe<F>`] into bytes, stored in `data``.
+    #[inline]
+    pub fn into_bytes_inplace(&self, data: &mut [u8]) {
+        let data_a: &[u8] = bytemuck::cast_slice(self.a.as_slice());
+        let data_b: &[u8] = bytemuck::cast_slice(self.b.as_slice());
+
+        assert_eq!(data.len(), data_a.len() + data_b.len());
+
+        let (a, b) = unsafe { data.split_at_mut_unchecked(data_a.len()) };
+
+        a.copy_from_slice(data_a);
+        b.copy_from_slice(data_b);
+    }
+
+    /// Returns the bytes count of [`Rlwe<T>`].
+    #[inline]
+    pub fn bytes_count(&self) -> usize {
+        (self.a.coeff_count() << 1) * <F::ValueT as ByteCount>::BYTES_COUNT
+    }
+}
+
+impl<F: Field> Rlwe<F> {
     /// Creates a new [`Rlwe<F>`].
     #[inline]
     pub fn new(a: FieldPolynomial<F>, b: FieldPolynomial<F>) -> Self {
         assert_eq!(a.coeff_count(), b.coeff_count());
         Self { a, b }
+    }
+
+    /// Given the a and b, drop self.
+    #[inline]
+    pub fn into_inner(self) -> (FieldPolynomial<F>, FieldPolynomial<F>) {
+        (self.a, self.b)
     }
 
     /// Creates a new [`Rlwe<F>`] with reference of [`FieldPolynomial<F>`].
@@ -359,6 +423,59 @@ impl<F: NttField> Rlwe<F> {
         *b *= ntt_polynomial;
     }
 
+    /// Perform `self * X^r`.
+    pub fn mul_monic_monomial(mut self, r: usize) -> Self {
+        let dimension = self.dimension();
+
+        if r < dimension {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_right(r);
+                x[0..n_sub_r].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let n_sub_r = dimension - r;
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        } else {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_left(r);
+                x[n_sub_r..].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let r = (dimension << 1) - r;
+            let n_sub_r = dimension.checked_sub(r).expect("r > 2N !");
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        }
+        self
+    }
+
+    /// Perform `self = self * X^r`.
+    pub fn mul_monic_monomial_assign(&mut self, r: usize) {
+        let dimension = self.dimension();
+
+        if r < dimension {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_right(r);
+                x[0..n_sub_r].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let n_sub_r = dimension - r;
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        } else {
+            #[inline]
+            fn rotate<F: NttField>(x: &mut FieldPolynomial<F>, r: usize, n_sub_r: usize) {
+                x.as_mut_slice().rotate_left(r);
+                x[n_sub_r..].iter_mut().for_each(<F as Field>::neg_assign);
+            }
+            let r = (dimension << 1) - r;
+            let n_sub_r = dimension.checked_sub(r).expect("r > 2N !");
+            rotate(self.a_mut(), r, n_sub_r);
+            rotate(self.b_mut(), r, n_sub_r);
+        }
+    }
+
     /// Perform `destination = self * (X^r - 1)`.
     pub fn mul_monic_monomial_sub_one_inplace(
         &self,
@@ -491,6 +608,61 @@ impl<F: NttField> Rlwe<F> {
     }
 
     /// Performs a multiplication on the `self` [`Rlwe<F>`] with another `ntt_rgsw` [`NttRgsw<F>`],
+    /// output the [`Rlwe<F>`] result to `destination`.
+    ///
+    /// # Attention
+    /// The message of **`ntt_rgsw`** is restricted to small messages `m`, typically `m = ±Xⁱ`
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    pub fn mul_ntt_rgsw_inplace_mt(
+        &self,
+        rgsw: &NttRgsw<F>,
+        ntt_table: &<F as NttField>::Table,
+        adjust_polys_0: &mut FieldPolynomial<F>,
+        adjust_polys_1: &mut FieldPolynomial<F>,
+        carries: &mut [bool],
+        decompose_polys: &mut [FieldNttPolynomial<F>],
+        constant_mul_result: &mut [NttRlwe<F>],
+        median: &mut NttRlweSpace<F>,
+        destination: &mut Rlwe<F>,
+    ) {
+        let (carries_0, carries_1) = carries.split_at_mut(carries.len() / 2);
+        let (decompose_polys_0, decompose_polys_1) =
+            decompose_polys.split_at_mut(decompose_polys.len() / 2);
+        let (constant_mul_result_0, constant_mul_result_1) =
+            constant_mul_result.split_at_mut(constant_mul_result.len() / 2);
+        rayon::join(
+            || {
+                rgsw.minus_s_m().mul_polynomial_inplace_fast_mt(
+                    self.a(),
+                    ntt_table,
+                    adjust_polys_0,
+                    carries_0,
+                    decompose_polys_0,
+                    constant_mul_result_0,
+                )
+            },
+            || {
+                rgsw.m().mul_polynomial_inplace_fast_mt(
+                    self.b(),
+                    ntt_table,
+                    adjust_polys_1,
+                    carries_1,
+                    decompose_polys_1,
+                    constant_mul_result_1,
+                )
+            },
+        );
+
+        let median = constant_mul_result.iter().fold(median, |acc, x| {
+            acc.add_assign_element_wise(x);
+            acc
+        });
+
+        median.inverse_transform_inplace(ntt_table, destination)
+    }
+
+    /// Performs a multiplication on the `self` [`Rlwe<F>`] with another `ntt_rgsw` [`NttRgsw<F>`],
     /// output the [`Rlwe<F>`] result back to `self`.
     ///
     /// # Attention
@@ -519,7 +691,7 @@ impl<F: NttField> Rlwe<F> {
     /// Generate a `Rlwe<F>` sample which encrypts `0`.
     pub fn generate_random_zero_sample<R>(
         secret_key: &FieldNttPolynomial<F>,
-        gaussian: DiscreteGaussian<<F as Field>::ValueT>,
+        gaussian: &DiscreteGaussian<<F as Field>::ValueT>,
         ntt_table: &<F as NttField>::Table,
         rng: &mut R,
     ) -> Self
