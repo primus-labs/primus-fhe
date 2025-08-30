@@ -43,7 +43,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    c.bench_function(&format!(" concreteintt {}", N), |b| {
+    c.bench_function(&format!(" concrete intt {}", N), |b| {
         b.iter(|| {
             concrete_table.inverse_transform_slice(poly.as_mut_slice());
         })

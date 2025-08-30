@@ -339,14 +339,14 @@ impl<F: Field> Rlwe<F> {
         Lwe::new(a, b[0])
     }
 
-    /// Extract an LWE sample from RLWE reverselly.
+    /// Extract an LWE sample from RLWE reversely.
     #[inline]
     pub fn extract_lwe_reverse_locally(self) -> Lwe<<F as Field>::ValueT> {
         let Self { a, b } = self;
         Lwe::new(a.inner_data(), b[0])
     }
 
-    /// Extract an LWE sample from RLWE reverselly.
+    /// Extract an LWE sample from RLWE reversely.
     #[inline]
     pub fn extract_partial_lwe_reverse_locally(
         self,
@@ -717,3 +717,4 @@ impl<F: Field> Size for Rlwe<F> {
         self.a.size() * 2
     }
 }
+
