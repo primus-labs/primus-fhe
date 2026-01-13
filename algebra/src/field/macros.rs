@@ -17,61 +17,61 @@ macro_rules! impl_barrett_field {
             /// Calculates `a + b`.
             #[inline]
             fn add(a: Self::ValueT, b: Self::ValueT) -> Self::ValueT {
-                Self::MODULUS_VALUE.reduce_add(a, b)
+                Self::MODULUS.reduce_add(a, b)
             }
 
             /// Calculates `a += b`.
             #[inline]
             fn add_assign(a: &mut Self::ValueT, b: Self::ValueT) {
-                Self::MODULUS_VALUE.reduce_add_assign(a, b);
+                Self::MODULUS.reduce_add_assign(a, b);
             }
 
             /// Calculates `2*value`.
             #[inline]
             fn double(value: Self::ValueT) -> Self::ValueT {
-                Self::MODULUS_VALUE.reduce_double(value)
+                Self::MODULUS.reduce_double(value)
             }
 
             /// Calculates `value = 2*value`.
             #[inline]
             fn double_assign(value: &mut Self::ValueT) {
-                Self::MODULUS_VALUE.reduce_double_assign(value);
+                Self::MODULUS.reduce_double_assign(value);
             }
 
             /// Calculates `a - b`.
             #[inline]
             fn sub(a: Self::ValueT, b: Self::ValueT) -> Self::ValueT {
-                Self::MODULUS_VALUE.reduce_sub(a, b)
+                Self::MODULUS.reduce_sub(a, b)
             }
 
             /// Calculates `a -= b`.
             #[inline]
             fn sub_assign(a: &mut Self::ValueT, b: Self::ValueT) {
-                Self::MODULUS_VALUE.reduce_sub_assign(a, b);
+                Self::MODULUS.reduce_sub_assign(a, b);
             }
 
             /// Calculates `-value`.
             #[inline]
             fn neg(value: Self::ValueT) -> Self::ValueT {
-                Self::MODULUS_VALUE.reduce_neg(value)
+                Self::MODULUS.reduce_neg(value)
             }
 
             /// Calculates `-value`.
             #[inline]
             fn neg_assign(value: &mut Self::ValueT) {
-                Self::MODULUS_VALUE.reduce_neg_assign(value);
+                Self::MODULUS.reduce_neg_assign(value);
             }
 
             /// Calculate the multiplicative inverse of `value`.
             #[inline]
             fn inv(value: Self::ValueT) -> Self::ValueT {
-                Self::MODULUS_VALUE.reduce_inv(value)
+                Self::MODULUS.reduce_inv(value)
             }
 
             /// Calculates `value^(-1)`.
             #[inline]
             fn inv_assign(value: &mut Self::ValueT) {
-                Self::MODULUS_VALUE.reduce_inv_assign(value);
+                Self::MODULUS.reduce_inv_assign(value);
             }
         }
 
