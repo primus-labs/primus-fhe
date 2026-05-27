@@ -1,6 +1,8 @@
 [workspace]
-members = ["primus_data"]
+members = ["primus_data", "primus_gcd"]
 resolver = "3"
 
 [workspace.dependencies]
+rand = "0.10.1"
 
+criterion = "0.8"

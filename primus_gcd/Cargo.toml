@@ -1,0 +1,16 @@
+[package]
+name = "primus_gcd"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/primus-labs/primus-fhe"
+
+[dependencies]
+
+[dev-dependencies]
+criterion = { workspace = true }
+rand = { workspace = true }
+
+[[bench]]
+name = "xgcd"
+harness = false
