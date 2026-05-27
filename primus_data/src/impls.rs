@@ -13,7 +13,7 @@ impl<T> RawData for &[T] {
 impl<T> Data for &[T] {
     #[inline(always)]
     fn as_slice(&self) -> &[T] {
-        *self
+        self
     }
 }
 
@@ -28,14 +28,14 @@ impl<T> RawData for &mut [T] {
 impl<T> Data for &mut [T] {
     #[inline(always)]
     fn as_slice(&self) -> &[T] {
-        &**self
+        self
     }
 }
 
 impl<T> DataMut for &mut [T] {
     #[inline(always)]
     fn as_mut_slice(&mut self) -> &mut [T] {
-        *self
+        self
     }
 }
 
