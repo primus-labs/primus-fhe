@@ -1,0 +1,6 @@
+[workspace]
+members = ["primus_data"]
+resolver = "3"
+
+[workspace.dependencies]
+
