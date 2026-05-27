@@ -1,0 +1,26 @@
+[package]
+name = "primus_integer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_data = { path = "../primus_data" }
+primus_gcd = { path = "../primus_gcd" }
+
+num-traits = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+zeroize = { workspace = true }
+bytemuck = { workspace = true }
+paste = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[features]
+default = []
+simd = ["rand/simd_support"]
+
+[[bench]]
+name = "ops"
+harness = false
