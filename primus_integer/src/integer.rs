@@ -97,10 +97,21 @@ macro_rules! empty_trait_impl {
 
 empty_trait_impl!(Integer for u8 u16 u32 u64 u128 usize i8 i16 i32 i64 i128 isize);
 
+#[cfg(not(feature = "simd"))]
 /// Signed integer types used as the scalar basis of ciphertext arithmetic.
 ///
 /// Only `i16`, `i32`, and `i64` are included — `i8` is too narrow and `i128`
 /// lacks native SIMD support.
 pub trait FheInt: Integer + SampleUniform<Sampler: Copy + Send + Sync> {}
+
+#[cfg(feature = "simd")]
+/// Signed integer types used as the scalar basis of ciphertext arithmetic.
+///
+/// Only `i16`, `i32`, and `i64` are included — `i8` is too narrow and `i128`
+/// lacks native SIMD support.
+pub trait FheInt:
+    Integer + SampleUniform<Sampler: Copy + Send + Sync> + crate::SimdInteger
+{
+}
 
 empty_trait_impl!(FheInt for i16 i32 i64 u16 u32 u64);

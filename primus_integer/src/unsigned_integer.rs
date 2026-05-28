@@ -91,63 +91,22 @@ impl_unsigned_integer! {usize, isize}
 ///
 /// Only `u16`, `u32`, and `u64` are included — `u8` is too narrow, `u128`
 /// lacks native SIMD support, and `usize` is platform-dependent.
-pub trait FheUint: UnsignedInteger + FheInt {
-    /// The matching signed type (e.g. `i64` for `u64`).
-    type FheSignedInt: FheInt;
-
-    /// Reinterprets the signed companion value as `Self` using `as`.
-    ///
-    /// Performs a width-preserving bit-pattern cast (`value as Self`), so
-    /// negative values become their two's-complement unsigned encoding (for
-    /// example `-1i64` maps to `u64::MAX`). This is the inverse of
-    /// [`wrapping_add_signed`](Self::wrapping_add_signed) when interpreting
-    /// the result modulo `2^BITS`.
-    fn cast_from_signed(value: Self::FheSignedInt) -> Self;
-
-    /// Wrapping (modular) addition with a signed integer. Computes `self + rhs`, wrapping around at the boundary of the type.
-    fn wrapping_add_signed(self, rhs: Self::FheSignedInt) -> Self;
-}
+pub trait FheUint: UnsignedInteger<SignedInteger: FheInt> + FheInt {}
 
 #[cfg(feature = "simd")]
 /// Unsigned integer types used as the scalar basis of ciphertext arithmetic.
 ///
 /// Only `u16`, `u32`, and `u64` are included — `u8` is too narrow, `u128`
 /// lacks native SIMD support, and `usize` is platform-dependent.
-pub trait FheUint: UnsignedInteger + FheInt + crate::SimdUnsignedInteger {
-    /// The matching signed type (e.g. `i64` for `u64`).
-    type FheSignedInt: FheInt;
-
-    /// Reinterprets the signed companion value as `Self` using `as`.
-    ///
-    /// Performs a width-preserving bit-pattern cast (`value as Self`), so
-    /// negative values become their two's-complement unsigned encoding (for
-    /// example `-1i64` maps to `u64::MAX`). This is the inverse of
-    /// [`wrapping_add_signed`](Self::wrapping_add_signed) when interpreting
-    /// the result modulo `2^BITS`.
-    fn cast_from_signed(value: Self::FheSignedInt) -> Self;
-
-    /// Wrapping (modular) addition with a signed integer. Computes `self + rhs`, wrapping around at the boundary of the type.
-    fn wrapping_add_signed(self, rhs: Self::FheSignedInt) -> Self;
+pub trait FheUint:
+    UnsignedInteger<SignedInteger: FheInt> + FheInt + crate::SimdUnsignedInteger
+{
 }
 
 macro_rules! impl_fhe_uint {
-    ($t:ty, $i:ty) => {
-        impl FheUint for $t {
-            type FheSignedInt = $i;
-
-            #[inline]
-            fn cast_from_signed(value: Self::FheSignedInt) -> Self {
-                value as $t
-            }
-
-            #[inline(always)]
-            fn wrapping_add_signed(self, rhs: Self::FheSignedInt) -> Self {
-                <$t>::wrapping_add_signed(self, rhs)
-            }
-        }
+    ($($t:ty),*) => {
+        $(impl FheUint for $t {})*
     };
 }
 
-impl_fhe_uint!(u16, i16);
-impl_fhe_uint!(u32, i32);
-impl_fhe_uint!(u64, i64);
+impl_fhe_uint!(u16, u32, u64);

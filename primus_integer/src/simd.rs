@@ -14,13 +14,13 @@ use core::{
     iter::{Product, Sum},
     ops::*,
     simd::{
-        Mask, MaskElement, Select, Simd, SimdCast, SimdElement,
+        Mask, Select, Simd, SimdCast, SimdElement,
         cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
         num::SimdUint,
     },
 };
 
-use crate::{BorrowingSub, CarryingAdd, CarryingMul, WideningMul};
+use crate::{BorrowingSub, CarryingAdd, CarryingMul, Integer, WideningMul};
 
 use super::UnsignedInteger;
 
@@ -32,27 +32,11 @@ pub const VECTOR_BITS: usize = 512;
 #[cfg(not(target_feature = "avx512f"))]
 pub const VECTOR_BITS: usize = 256;
 
-/// Unsigned integer types that can serve as SIMD lane elements.
-pub trait SimdUnsignedInteger: UnsignedInteger + SimdElement + SimdCast {
-    /// SIMD vector type using this scalar's default lane count.
-    ///
-    /// Generic code should prefer this associated type over spelling
-    /// `Simd<Self, { Self::LANE_COUNT }>` directly, because const expressions
-    /// involving type parameters still require unstable `generic_const_exprs`.
-    type SimdT: SimdArray<Self>;
-
-    /// Signed SIMD vector with the same lane count as [`Self::SimdT`].
-    ///
-    /// This is the vector representation used when converting masks to and
-    /// from integer lanes. A true lane is represented as `-1`, and a false lane
-    /// as `0`, matching `portable_simd` mask conversion semantics.
-    type SignedSimdT;
-
-    /// SIMD mask type matching [`Self::SimdT`].
-    ///
-    /// The mask element type is the signed mask backing type associated with
-    /// this scalar through [`SimdElement::Mask`].
-    type MaskT: SimdMaskArray<Self, <Self as SimdElement>::Mask>;
+/// Integer types that can serve as SIMD lane elements.
+pub trait SimdInteger: Integer + SimdElement + SimdCast {
+    /// The number of lanes in a SIMD vector for this element type at the
+    /// target's preferred vector width.
+    const LANE_COUNT: usize;
 
     /// Array type containing exactly one default SIMD chunk of scalar lanes.
     ///
@@ -61,15 +45,30 @@ pub trait SimdUnsignedInteger: UnsignedInteger + SimdElement + SimdCast {
     /// const expression directly.
     type Array: Copy;
 
-    /// Boolean selector array matching [`Self::MaskT`].
+    /// Boolean selector array matching [`Self::MaskT`](Self::MaskT).
     ///
     /// This is normally `[bool; Self::LANE_COUNT]` and is used for converting
     /// masks to and from their lane-wise boolean representation.
     type Selector: Copy;
 
-    /// The number of lanes in a SIMD vector for this element type at the
-    /// target's preferred vector width.
-    const LANE_COUNT: usize;
+    /// SIMD vector type using this scalar's default lane count.
+    ///
+    /// Generic code should prefer this associated type over spelling
+    /// `Simd<Self, { Self::LANE_COUNT }>` directly, because const expressions
+    /// involving type parameters still require unstable `generic_const_exprs`.
+    type SimdT: SimdArray<Self, Array = Self::Array>;
+
+    /// SIMD mask type matching [`Self::SimdT`].
+    ///
+    /// The mask element type is the signed mask backing type associated with
+    /// this scalar through [`SimdElement::Mask`].
+    type MaskT: SimdMaskArray<Self, Selector = Self::Selector, MaskReprT = Self::MaskReprT>;
+
+    /// Integer SIMD vector used as the mask representation.
+    ///
+    /// A true lane is represented as `-1`, and a false lane as `0`, matching
+    /// `portable_simd` mask conversion semantics.
+    type MaskReprT;
 
     /// Splits a slice into default SIMD-sized chunks and a scalar tail.
     ///
@@ -86,15 +85,15 @@ pub trait SimdUnsignedInteger: UnsignedInteger + SimdElement + SimdCast {
     fn simd_as_chunks_mut(slice: &mut [Self]) -> (&mut [Self::Array], &mut [Self]);
 }
 
-macro_rules! impl_simd_unsigned_integer {
+macro_rules! impl_simd_integer {
     ($($t:ty)*) => ($(
-        impl SimdUnsignedInteger for $t {
+        impl SimdInteger for $t {
             const LANE_COUNT: usize = VECTOR_BITS / <$t>::BITS as usize;
-            type SimdT = Simd<$t, {Self::LANE_COUNT}>;
-            type SignedSimdT = Simd<<$t as SimdElement>::Mask, {Self::LANE_COUNT}>;
-            type MaskT = Mask<<$t as SimdElement>::Mask, {Self::LANE_COUNT}>;
             type Array = [$t; {Self::LANE_COUNT}];
             type Selector = [bool; {Self::LANE_COUNT}];
+            type SimdT = Simd<$t, {Self::LANE_COUNT}>;
+            type MaskT = Mask<<$t as SimdElement>::Mask, {Self::LANE_COUNT}>;
+            type MaskReprT = Simd<<$t as SimdElement>::Mask, {Self::LANE_COUNT}>;
 
             #[inline]
             fn simd_as_chunks(slice: &[Self]) -> (&[Self::Array], &[Self]) {
@@ -109,20 +108,59 @@ macro_rules! impl_simd_unsigned_integer {
     )*)
 }
 
+impl_simd_integer! {i8 i16 i32 i64 isize u8 u16 u32 u64 usize}
+
+/// Unsigned integer types that can serve as SIMD lane elements.
+pub trait SimdUnsignedInteger:
+    UnsignedInteger + SimdInteger<SimdT: SimdUnsignedArray<Self>>
+{
+}
+
+macro_rules! impl_simd_unsigned_integer {
+    ($($t:ty)*) => ($(
+        impl SimdUnsignedInteger for $t {}
+    )*)
+}
+
 impl_simd_unsigned_integer! {u8 u16 u32 u64 usize}
 
 /// SIMD vector of `N` elements of type `T`, extending [`Simd`] with the
 /// arithmetic and comparison capabilities required by higher-level crates.
-pub trait SimdArray<T: SimdUnsignedInteger>
+pub trait SimdUnsignedArray<T>:
+    SimdArray<T>
+    + SimdUint<Scalar = T>
+    + CarryingAdd<CarryT = T::MaskT>
+    + BorrowingSub<BorrowT = T::MaskT>
+    + WideningMul
+    + CarryingMul
+where
+    T: UnsignedInteger + SimdInteger,
+{
+}
+
+impl<T, V> SimdUnsignedArray<T> for V
+where
+    T: UnsignedInteger + SimdInteger,
+    V: SimdArray<T>
+        + SimdUint<Scalar = T>
+        + CarryingAdd<CarryT = T::MaskT>
+        + BorrowingSub<BorrowT = T::MaskT>
+        + WideningMul
+        + CarryingMul,
+{
+}
+
+/// SIMD vector of `N` elements of type `T`, extending [`Simd`] with the
+/// arithmetic and comparison capabilities required by higher-level crates.
+pub trait SimdArray<T: SimdInteger>
 where
     Self: Send + Sync + Clone + Copy + Default,
     Self: PartialEq + PartialOrd + Eq + Ord,
     Self: Debug,
-    Self: From<T::SimdT> + Into<T::SimdT>,
-    Self: From<<T as SimdUnsignedInteger>::Array> + Into<<T as SimdUnsignedInteger>::Array>,
-    Self: AsRef<<T as SimdUnsignedInteger>::Array> + AsMut<<T as SimdUnsignedInteger>::Array>,
-    Self:
-        SimdPartialEq<Mask: SimdMaskArray<T, <T as SimdElement>::Mask>> + SimdPartialOrd + SimdOrd,
+    Self: From<<T as SimdInteger>::SimdT> + Into<<T as SimdInteger>::SimdT>,
+    Self: From<<T as SimdInteger>::Array> + Into<<T as SimdInteger>::Array>,
+    Self: AsRef<<T as SimdInteger>::Array> + AsMut<<T as SimdInteger>::Array>,
+    Self: SimdPartialEq<Mask = T::MaskT> + SimdPartialOrd + SimdOrd,
     Self: Product<Self> + Sum<Self>,
     for<'a> Self: Product<&'a Self> + Sum<&'a Self>,
     Self: Index<usize, Output = T> + IndexMut<usize, Output = T>,
@@ -143,15 +181,13 @@ where
     for<'a> Self: BitAnd<&'a Self, Output = Self> + BitAndAssign<&'a Self>,
     for<'a> Self: BitOr<&'a Self, Output = Self> + BitOrAssign<&'a Self>,
     for<'a> Self: BitXor<&'a Self, Output = Self> + BitXorAssign<&'a Self>,
-    Self: SimdUint<Scalar = T>,
-    Self: CarryingAdd<CarryT = Self::Mask>
-        + BorrowingSub<BorrowT = Self::Mask>
-        + WideningMul
-        + CarryingMul,
 {
+    /// Array type containing one vector worth of scalar lanes.
+    type Array;
+
     /// Returns a tuple of the sum along with a boolean indicating whether an arithmetic overflow would occur.
     /// If an overflow would have occurred then the wrapped value is returned.
-    fn overflowing_add(self, rhs: Self) -> (Self, Self::Mask) {
+    fn overflowing_add(self, rhs: Self) -> (Self, T::MaskT) {
         let a = self + rhs;
         (a, a.simd_lt(self))
     }
@@ -159,32 +195,39 @@ where
 
 macro_rules! impl_simd_array {
     ($($t:ty)*) => ($(
-        impl SimdArray<$t> for Simd<$t, {<$t>::LANE_COUNT}>  {}
+        impl SimdArray<$t> for Simd<$t, {<$t>::LANE_COUNT}>  {
+            type Array = <$t as SimdInteger>::Array;
+        }
     )*)
 }
 
-impl_simd_array! {u8 u16 u32 u64 usize}
+impl_simd_array! {i8 i16 i32 i64 isize u8 u16 u32 u64 usize}
 
 /// SIMD mask of `N` elements, providing bitwise and selection operations.
 #[allow(clippy::len_without_is_empty)]
-pub trait SimdMaskArray<U: SimdUnsignedInteger, T: MaskElement>
+pub trait SimdMaskArray<T: SimdInteger>
 where
     Self: Send + Sync + Clone + Copy + Default,
     Self: PartialEq + PartialOrd,
     Self: Debug,
-    Self: Select<U::SimdT>,
-    Self: From<U::Selector> + Into<U::Selector>,
+    Self: Select<T::SimdT>,
+    Self: From<T::Selector> + Into<T::Selector>,
     Self: SimdPartialEq<Mask = Self> + SimdPartialOrd + SimdOrd,
     Self: BitAnd<Output = Self> + BitAndAssign + BitAnd<bool, Output = Self> + BitAndAssign<bool>,
     Self: BitOr<Output = Self> + BitOrAssign + BitOr<bool, Output = Self> + BitOrAssign<bool>,
     Self: BitXor<Output = Self> + BitXorAssign + BitXor<bool, Output = Self> + BitXorAssign<bool>,
     Self: Not<Output = Self>,
 {
+    /// Boolean selector array matching this mask.
+    type Selector: Copy;
+    /// Integer SIMD vector used as the mask representation.
+    type MaskReprT;
+
     /// Get the number of lanes in this vector.
     #[must_use]
     #[inline]
     fn len(&self) -> usize {
-        U::LANE_COUNT
+        T::LANE_COUNT
     }
 
     /// Choose elements from two vectors.
@@ -203,16 +246,16 @@ where
     /// assert_eq!(c.to_array(), [0, 5, 6, 3]);
     /// ```
     #[must_use = "method returns a new vector and does not mutate the original inputs"]
-    fn select(self, true_values: U::SimdT, false_values: U::SimdT) -> U::SimdT;
+    fn select(self, true_values: T::SimdT, false_values: T::SimdT) -> T::SimdT;
 
     /// Constructs a mask by setting all elements to the given value.
     fn splat(value: bool) -> Self;
 
     /// Converts an array of bools to a SIMD mask.
-    fn from_array(array: U::Selector) -> Self;
+    fn from_array(array: Self::Selector) -> Self;
 
     /// Converts a SIMD mask to an array of bools.
-    fn to_array(self) -> U::Selector;
+    fn to_array(self) -> Self::Selector;
 
     /// Converts a vector of integers to a mask, where 0 represents `false` and -1
     /// represents `true`.
@@ -221,12 +264,12 @@ where
     /// Panics if any element is not 0 or -1.
     #[must_use = "method returns a new mask and does not mutate the original value"]
     #[track_caller]
-    fn from_simd(value: U::SignedSimdT) -> Self;
+    fn from_simd(value: Self::MaskReprT) -> Self;
 
-    /// Converts the mask to a vector of integers, where 0 represents `false` and -1
-    /// represents `true`.
+    /// Converts the mask to a vector of integers, where 0 represents `false`
+    /// and -1 represents `true`.
     #[must_use = "method returns a new vector and does not mutate the original value"]
-    fn to_simd(self) -> U::SignedSimdT;
+    fn to_simd(self) -> Self::MaskReprT;
 
     /// Returns true if any element is set, or false otherwise.
     #[must_use = "method returns a new bool and does not mutate the original value"]
@@ -238,14 +281,17 @@ where
 }
 
 macro_rules! impl_mask_array {
-    ($t:ty, $u:ty) => {
-        impl SimdMaskArray<$u, $t> for Mask<$t, { <$u>::LANE_COUNT }> {
+    ($t:ty) => {
+        impl SimdMaskArray<$t> for Mask<<$t as SimdElement>::Mask, { <$t>::LANE_COUNT }> {
+            type Selector = <$t as SimdInteger>::Selector;
+            type MaskReprT = <$t as SimdInteger>::MaskReprT;
+
             #[inline]
             fn select(
                 self,
-                true_values: Simd<$u, { <$u>::LANE_COUNT }>,
-                false_values: Simd<$u, { <$u>::LANE_COUNT }>,
-            ) -> Simd<$u, { <$u>::LANE_COUNT }> {
+                true_values: <$t as SimdInteger>::SimdT,
+                false_values: <$t as SimdInteger>::SimdT,
+            ) -> <$t as SimdInteger>::SimdT {
                 Select::select(self, true_values, false_values)
             }
 
@@ -255,22 +301,22 @@ macro_rules! impl_mask_array {
             }
 
             #[inline]
-            fn from_array(array: [bool; { <$u>::LANE_COUNT }]) -> Self {
+            fn from_array(array: <$t as SimdInteger>::Selector) -> Self {
                 Self::from_array(array)
             }
 
             #[inline]
-            fn to_array(self) -> [bool; { <$u>::LANE_COUNT }] {
+            fn to_array(self) -> <$t as SimdInteger>::Selector {
                 self.to_array()
             }
 
             #[inline]
-            fn from_simd(value: Simd<$t, { <$u>::LANE_COUNT }>) -> Self {
+            fn from_simd(value: <$t as SimdInteger>::MaskReprT) -> Self {
                 Self::from_simd(value)
             }
 
             #[inline]
-            fn to_simd(self) -> Simd<$t, { <$u>::LANE_COUNT }> {
+            fn to_simd(self) -> <$t as SimdInteger>::MaskReprT {
                 self.to_simd()
             }
 
@@ -287,11 +333,16 @@ macro_rules! impl_mask_array {
     };
 }
 
-impl_mask_array! {i8, u8}
-impl_mask_array! {i16, u16}
-impl_mask_array! {i32, u32}
-impl_mask_array! {i64, u64}
-impl_mask_array! {isize, usize}
+impl_mask_array! {i8}
+impl_mask_array! {i16}
+impl_mask_array! {i32}
+impl_mask_array! {i64}
+impl_mask_array! {isize}
+impl_mask_array! {u8}
+impl_mask_array! {u16}
+impl_mask_array! {u32}
+impl_mask_array! {u64}
+impl_mask_array! {usize}
 
 #[cfg(test)]
 mod tests {

@@ -5,7 +5,8 @@
 //! with [`BigUint`] for arbitrary-precision unsigned integers.
 //!
 //! When the `simd` feature is enabled (requires nightly), SIMD vector
-//! abstractions ([`SimdArray`], [`SimdMaskArray`], [`SimdUnsignedInteger`])
+//! abstractions ([`SimdArray`], [`SimdInteger`], [`SimdMaskArray`],
+//! [`SimdUnsignedInteger`])
 //! are also available.
 
 #![cfg_attr(feature = "simd", feature(portable_simd))]
@@ -37,4 +38,4 @@ pub use big_integer::{
 };
 
 #[cfg(feature = "simd")]
-pub use simd::{SimdArray, SimdMaskArray, SimdUnsignedInteger};
+pub use simd::{SimdArray, SimdInteger, SimdMaskArray, SimdUnsignedArray, SimdUnsignedInteger};
