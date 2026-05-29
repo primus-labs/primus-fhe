@@ -133,7 +133,7 @@ pub trait ReduceSubSlice<T, B = T> {
 }
 
 /// Slice form of [`crate::ReduceMul`].
-pub trait ReduceMulSlice<T, B = T> {
+pub trait ReduceMulSlice<T> {
     /// Calculates `a[i] = (a[i] * b[i]) (mod modulus)` element-wise,
     /// where `self` is the modulus.
     ///
@@ -141,7 +141,7 @@ pub trait ReduceMulSlice<T, B = T> {
     ///
     /// - `a.len() == b.len()`
     /// - Each `a[i] * b[i] < modulus²`
-    fn reduce_mul_slice_assign(self, a: &mut [T], b: &[B]);
+    fn reduce_mul_slice_assign(self, a: &mut [T], b: &[T]);
 
     /// Writes `a[i] * b[i] (mod modulus)` into `output[i]` element-wise,
     /// where `self` is the modulus.
@@ -150,7 +150,7 @@ pub trait ReduceMulSlice<T, B = T> {
     ///
     /// - `a.len() == b.len() == output.len()`
     /// - Each `a[i] * b[i] < modulus²`
-    fn reduce_mul_slice_to(self, a: &[T], b: &[B], output: &mut [T]);
+    fn reduce_mul_slice_to(self, a: &[T], b: &[T], output: &mut [T]);
 
     /// Calculates `a[i] = (a[i] * scalar) (mod modulus)` element-wise,
     /// where `self` is the modulus.
@@ -159,7 +159,7 @@ pub trait ReduceMulSlice<T, B = T> {
     ///
     /// - `scalar < modulus`
     /// - Each `a[i] < modulus`
-    fn reduce_scalar_mul_slice_assign(self, a: &mut [T], scalar: B);
+    fn reduce_mul_scalar_slice_assign(self, a: &mut [T], scalar: T);
 
     /// Writes `a[i] * scalar (mod modulus)` into `output[i]` element-wise,
     /// where `self` is the modulus.
@@ -168,7 +168,7 @@ pub trait ReduceMulSlice<T, B = T> {
     ///
     /// - `a.len() == output.len()`
     /// - `scalar < modulus`, each `a[i] < modulus`
-    fn reduce_scalar_mul_slice_to(self, a: &[T], scalar: B, output: &mut [T]);
+    fn reduce_mul_scalar_slice_to(self, a: &[T], scalar: T, output: &mut [T]);
 }
 
 /// Slice form of [`crate::ReduceMulAdd`].
@@ -200,14 +200,14 @@ pub trait ReduceMulAddSlice<T> {
     /// - Each `acc[i] < modulus`, `a[i] < modulus`, `b[i] < modulus`
     fn reduce_sub_mul_slice_assign(self, acc: &mut [T], a: &[T], b: &[T]);
 
-    /// Calculates `acc[i] = (acc[i] + scalar * b[i]) (mod modulus)`
+    /// Calculates `acc[i] = (acc[i] + a[i] * scalar) (mod modulus)`
     /// element-wise, where `self` is the modulus.
     ///
     /// # Correctness
     ///
-    /// - `acc.len() == b.len()`
-    /// - `scalar < modulus`, each `acc[i] < modulus`, `b[i] < modulus`
-    fn reduce_add_scalar_mul_slice_assign(self, acc: &mut [T], scalar: T, b: &[T]);
+    /// - `acc.len() == a.len()`
+    /// - `scalar < modulus`, each `acc[i] < modulus`, `a[i] < modulus`
+    fn reduce_add_mul_scalar_slice_assign(self, acc: &mut [T], a: &[T], scalar: T);
 
     /// Writes `a[i] * b[i] + c[i] (mod modulus)` into `output[i]`,
     /// where `self` is the modulus.
@@ -218,14 +218,14 @@ pub trait ReduceMulAddSlice<T> {
     /// - Each `a[i] < modulus`, `b[i] < modulus`, `c[i] < modulus`
     fn reduce_mul_add_slice_to(self, a: &[T], b: &[T], c: &[T], output: &mut [T]);
 
-    /// Writes `scalar * b[i] + c[i] (mod modulus)` into `output[i]`,
+    /// Writes `a[i] * scalar + c[i] (mod modulus)` into `output[i]`,
     /// where `self` is the modulus.
     ///
     /// # Correctness
     ///
-    /// - `b.len() == c.len() == output.len()`
-    /// - `scalar < modulus`, each `b[i] < modulus`, `c[i] < modulus`
-    fn reduce_scalar_mul_add_slice_to(self, scalar: T, b: &[T], c: &[T], output: &mut [T]);
+    /// - `a.len() == c.len() == output.len()`
+    /// - `scalar < modulus`, each `a[i] < modulus`, `c[i] < modulus`
+    fn reduce_mul_scalar_add_slice_to(self, a: &[T], scalar: T, c: &[T], output: &mut [T]);
 }
 
 /// Slice form of [`crate::ReduceInv`].

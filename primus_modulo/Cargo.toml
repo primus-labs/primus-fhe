@@ -6,3 +6,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/primus-labs/primus-fhe"
 
 [dependencies]
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+
+thiserror = { workspace = true }

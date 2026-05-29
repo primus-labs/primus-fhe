@@ -9,7 +9,7 @@
 //! (`debug_assert*!`) and the lack of default impls.
 
 /// Lazy slice form of [`crate::ReduceMul`] / [`crate::LazyReduceMul`].
-pub trait LazyReduceMulSlice<T, B = T> {
+pub trait LazyReduceMulSlice<T> {
     /// Calculates `a[i] = (a[i] * b[i]) (mod 2 * modulus)` element-wise,
     /// where `self` is the modulus.
     ///
@@ -18,7 +18,7 @@ pub trait LazyReduceMulSlice<T, B = T> {
     /// - `a.len() == b.len()`
     /// - Each `a[i] * b[i] < modulus²`
     /// - Each result is in `[0, 2 * modulus)`
-    fn lazy_reduce_mul_slice_assign(self, a: &mut [T], b: &[B]);
+    fn lazy_reduce_mul_slice_assign(self, a: &mut [T], b: &[T]);
 
     /// Writes `a[i] * b[i] (mod 2 * modulus)` into `output[i]`
     /// element-wise, where `self` is the modulus.
@@ -28,7 +28,7 @@ pub trait LazyReduceMulSlice<T, B = T> {
     /// - `a.len() == b.len() == output.len()`
     /// - Each `a[i] * b[i] < modulus²`
     /// - Each result is in `[0, 2 * modulus)`
-    fn lazy_reduce_mul_slice_to(self, a: &[T], b: &[B], output: &mut [T]);
+    fn lazy_reduce_mul_slice_to(self, a: &[T], b: &[T], output: &mut [T]);
 
     /// Calculates `a[i] = (a[i] * scalar) (mod 2 * modulus)` element-wise,
     /// where `self` is the modulus.
@@ -38,7 +38,7 @@ pub trait LazyReduceMulSlice<T, B = T> {
     /// - `scalar < modulus`
     /// - Each `a[i] < modulus`
     /// - Each result is in `[0, 2 * modulus)`
-    fn lazy_reduce_scalar_mul_slice_assign(self, a: &mut [T], scalar: B);
+    fn lazy_reduce_mul_scalar_slice_assign(self, a: &mut [T], scalar: T);
 
     /// Writes `a[i] * scalar (mod 2 * modulus)` into `output[i]`
     /// element-wise, where `self` is the modulus.
@@ -48,7 +48,7 @@ pub trait LazyReduceMulSlice<T, B = T> {
     /// - `a.len() == output.len()`
     /// - `scalar < modulus`, each `a[i] < modulus`
     /// - Each result is in `[0, 2 * modulus)`
-    fn lazy_reduce_scalar_mul_slice_to(self, a: &[T], scalar: B, output: &mut [T]);
+    fn lazy_reduce_mul_scalar_slice_to(self, a: &[T], scalar: T, output: &mut [T]);
 }
 
 /// Lazy slice form of [`crate::ReduceSub`] / [`crate::LazyReduceSub`].
@@ -134,14 +134,14 @@ pub trait LazyReduceMulAddSlice<T> {
     /// - Each result is in `[0, 2 * modulus)`
     fn lazy_reduce_sub_mul_slice_assign(self, acc: &mut [T], a: &[T], b: &[T]);
 
-    /// Calculates `acc[i] = (acc[i] + scalar * b[i]) (mod 2 * modulus)`
+    /// Calculates `acc[i] = (acc[i] + a[i] * scalar) (mod 2 * modulus)`
     /// element-wise, where `self` is the modulus.
     ///
     /// # Correctness
     ///
-    /// - `acc.len() == b.len()`
-    /// - `scalar < modulus`, each `acc[i] < modulus`, `b[i] < modulus`
-    fn lazy_reduce_add_scalar_mul_slice_assign(self, acc: &mut [T], scalar: T, b: &[T]);
+    /// - `acc.len() == a.len()`
+    /// - `scalar < modulus`, each `acc[i] < modulus`, `a[i] < modulus`
+    fn lazy_reduce_add_mul_scalar_slice_assign(self, acc: &mut [T], a: &[T], scalar: T);
 
     /// Writes `a[i] * b[i] + c[i] (mod 2 * modulus)` into `output[i]`,
     /// where `self` is the modulus.
@@ -153,13 +153,13 @@ pub trait LazyReduceMulAddSlice<T> {
     /// - Each result is in `[0, 2 * modulus)`
     fn lazy_reduce_mul_add_slice_to(self, a: &[T], b: &[T], c: &[T], output: &mut [T]);
 
-    /// Writes `scalar * b[i] + c[i] (mod 2 * modulus)` into `output[i]`,
+    /// Writes `a[i] * scalar + c[i] (mod 2 * modulus)` into `output[i]`,
     /// where `self` is the modulus.
     ///
     /// # Correctness
     ///
-    /// - `b.len() == c.len() == output.len()`
-    /// - `scalar < modulus`, each `b[i] < modulus`, `c[i] < modulus`
+    /// - `a.len() == c.len() == output.len()`
+    /// - `scalar < modulus`, each `a[i] < modulus`, `c[i] < modulus`
     /// - Each result is in `[0, 2 * modulus)`
-    fn lazy_reduce_scalar_mul_add_slice_to(self, scalar: T, b: &[T], c: &[T], output: &mut [T]);
+    fn lazy_reduce_mul_scalar_add_slice_to(self, a: &[T], scalar: T, c: &[T], output: &mut [T]);
 }
