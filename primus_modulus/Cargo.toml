@@ -6,3 +6,16 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/primus-labs/primus-fhe"
 
 [dependencies]
+primus_gcd = { path = "../primus_gcd" }
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+
+num-traits = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+rand = { workspace = true }
+
+[features]
+default = []
+simd = ["primus_integer/simd"]
