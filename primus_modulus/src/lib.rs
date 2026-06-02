@@ -22,8 +22,11 @@ pub mod common;
 
 mod compact;
 
+mod native;
+mod power_of_two;
 mod uint;
 
 pub use compact::CompactModulus;
 
+pub use native::NativeModulus;
 pub use uint::UintModulus;
