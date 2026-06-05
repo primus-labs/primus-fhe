@@ -43,8 +43,6 @@ impl<T: ByteCount> Size for Arc<[T]> {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -52,11 +50,24 @@ mod tests {
 	macro_rules! test_size_per_type {
 		($($T:ty),*; $($W:literal),*) => {
 			$(
-				assert_eq!(<$T as ByteCount>::BYTES, $W); 
+				let v : Vec<$T> = Vec::<$T>::from([1,2,3,4]);
+				assert_eq!(v.byte_count(), $W*4); 
+
+				let slice_v : &[$T] = &Vec::<$T>::from([1,2,3,4]);
+				assert_eq!(slice_v.byte_count(), $W*4); 
+
+				let boxed: Box<[$T]> = Vec::<$T>::from([1,2,3,4]).into_boxed_slice();
+				assert_eq!(boxed.byte_count(), $W*4); 
+
+				let arr = [1 as $T; 4];
+				assert_eq!(arr.byte_count(), $W*4);
+
+				let a: Arc<[$T]> = Arc::from([1 as $T,2,3,4]);
+				assert_eq!(a.byte_count(), $W*4);
+
 			)*
 		};
 	}
-
 
     #[test]
     fn test_size() {
@@ -71,6 +82,5 @@ mod tests {
 			 1,  1,   2,   2,   4,   4,   8,   8,   16,   16,     8,     8
 		);
     }
-
 }
 
