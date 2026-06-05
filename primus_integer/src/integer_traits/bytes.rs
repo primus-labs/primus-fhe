@@ -25,7 +25,7 @@ mod tests {
     macro_rules! test_bytes_per_type {
         ($($T:ty),*; $($W:literal),*) => {
             $(
-+                assert_eq!(<$T as ByteCount>::BYTES, $W);
+                assert_eq!(<$T as ByteCount>::BYTES, $W);
             )*
         };
     }
