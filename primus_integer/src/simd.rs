@@ -43,7 +43,7 @@ pub trait SimdInteger: Integer + SimdElement + SimdCast {
     /// This is normally `[Self; Self::LANE_COUNT]`, exposed as an associated
     /// type so generic code can work with SIMD-sized chunks without naming the
     /// const expression directly.
-    type Array: Copy;
+    type Array: Copy + IntoIterator<Item = Self>;
 
     /// Boolean selector array matching [`Self::MaskT`](Self::MaskT).
     ///

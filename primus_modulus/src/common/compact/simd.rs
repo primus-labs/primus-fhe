@@ -1,6 +1,8 @@
 use std::simd::cmp::SimdOrd;
 
-use primus_integer::{SimdArray, SimdUnsignedInteger};
+use primus_integer::{CarryingAdd, SimdArray, SimdUnsignedInteger, WideningMul};
+
+pub use crate::common::uint::simd::{simd_reduce_neg, simd_reduce_once};
 
 #[inline]
 pub fn simd_reduce_add<T: SimdUnsignedInteger>(a: T::SimdT, b: T::SimdT, m: T::SimdT) -> T::SimdT {
@@ -142,4 +144,12 @@ pub fn reduce_double_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], o
     for (&i, o) in in_rem.iter().zip(out_rem) {
         *o = super::reduce_double(modulus, i);
     }
+}
+
+#[inline]
+pub fn simd_multiply_add<T: SimdUnsignedInteger>(c: &mut [T::SimdT; 2], a: T::SimdT, b: T::SimdT) {
+    let (lw, hw) = a.widening_mul(b);
+    let carry;
+    (c[0], carry) = c[0].overflowing_add(lw);
+    (c[1], _) = c[1].carrying_add(hw, carry);
 }

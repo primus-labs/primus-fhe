@@ -20,14 +20,22 @@ pub use primus_reduce as reduce;
 
 pub mod common;
 
+mod barrett;
 mod compact;
 
 mod native;
 mod power_of_two;
 mod uint;
 
+pub use barrett::BarrettModulus;
 pub use compact::CompactModulus;
 
 pub use native::NativeModulus;
 pub use power_of_two::PowOf2Modulus;
 pub use uint::UintModulus;
+
+#[cfg(feature = "simd")]
+pub use barrett::SimdBarrettModulus;
+
+#[cfg(feature = "simd")]
+pub use barrett::simd_kernel as barrett_simd_kernel;

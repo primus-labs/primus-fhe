@@ -131,8 +131,8 @@ use crate::{CompactModulus, common::compact::slice};
 
 impl<T: FheUint> ReduceInvSlice<T> for CompactModulus<T> {
     #[inline]
-    fn reduce_inv_slice_assign(self, values: &mut [T], scratch: &mut [T]) {
-        slice::reduce_inv_slice_assign(self.0, values, scratch);
+    fn reduce_inv_slice_assign(self, values: &mut [T], _scratch: &mut [T]) {
+        slice::reduce_inv_slice_assign(self.0, values);
     }
     #[inline]
     fn reduce_inv_slice_to(self, input: &[T], output: &mut [T]) {
@@ -145,9 +145,9 @@ impl<T: FheUint> TryReduceInvSlice<T> for CompactModulus<T> {
     fn try_reduce_inv_slice_assign(
         self,
         values: &mut [T],
-        scratch: &mut [T],
+        _scratch: &mut [T],
     ) -> Result<(), ReduceError<T>> {
-        slice::try_reduce_inv_slice_assign(self.0, values, scratch)
+        slice::try_reduce_inv_slice_assign(self.0, values)
     }
     #[inline]
     fn try_reduce_inv_slice_to(self, input: &[T], output: &mut [T]) -> Result<(), ReduceError<T>> {

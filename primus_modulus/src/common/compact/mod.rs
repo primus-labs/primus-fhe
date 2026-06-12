@@ -5,3 +5,5 @@ pub mod slice;
 pub mod simd;
 
 pub use primitive::*;
+
+pub const DOT_PRODUCT_INNER_CHUNK: usize = 16;

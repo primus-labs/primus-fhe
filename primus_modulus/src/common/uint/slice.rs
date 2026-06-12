@@ -87,12 +87,7 @@ pub fn reduce_double_slice_to<T: UnsignedInteger>(modulus: T, input: &[T], outpu
 }
 
 #[inline]
-pub fn reduce_inv_slice_assign<T: UnsignedInteger>(
-    modulus: T,
-    values: &mut [T],
-    _scratch: &mut [T],
-) {
-    debug_assert!(_scratch.len() >= values.len());
+pub fn reduce_inv_slice_assign<T: UnsignedInteger>(modulus: T, values: &mut [T]) {
     values
         .iter_mut()
         .for_each(|v| super::reduce_inv_assign(modulus, v));
@@ -110,9 +105,7 @@ pub fn reduce_inv_slice_to<T: UnsignedInteger>(modulus: T, input: &[T], output: 
 pub fn try_reduce_inv_slice_assign<T: UnsignedInteger>(
     modulus: T,
     values: &mut [T],
-    _scratch: &mut [T],
 ) -> Result<(), ReduceError<T>> {
-    debug_assert!(_scratch.len() >= values.len());
     for (i, v) in values.iter_mut().enumerate() {
         *v = super::try_reduce_inv(modulus, *v).map_err(|_| ReduceError::NoInverseAtIndex {
             index: i,
