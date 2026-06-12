@@ -29,4 +29,5 @@ mod uint;
 pub use compact::CompactModulus;
 
 pub use native::NativeModulus;
+pub use power_of_two::PowOf2Modulus;
 pub use uint::UintModulus;

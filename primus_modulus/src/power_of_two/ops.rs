@@ -2,161 +2,165 @@ use primus_gcd::Xgcd;
 use primus_integer::UnsignedInteger;
 use primus_reduce::{ReduceError, prelude::*};
 
-use super::NativeModulus;
+use super::PowOf2Modulus;
 
-impl<T: UnsignedInteger> Reduce<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> Reduce<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce(self, value: T) -> Self::Output {
-        value
+        value & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceAssign<T> for NativeModulus<T> {
-    #[inline(always)]
-    fn reduce_assign(self, _value: &mut T) {}
+impl<T: UnsignedInteger> ReduceAssign<T> for PowOf2Modulus<T> {
+    #[inline]
+    fn reduce_assign(self, value: &mut T) {
+        *value &= self.mask;
+    }
 }
 
-impl<T: UnsignedInteger> ReduceOnce<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceOnce<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_once(self, value: T) -> Self::Output {
-        value
+        value & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceOnceAssign<T> for NativeModulus<T> {
-    #[inline(always)]
-    fn reduce_once_assign(self, _value: &mut T) {}
+impl<T: UnsignedInteger> ReduceOnceAssign<T> for PowOf2Modulus<T> {
+    #[inline]
+    fn reduce_once_assign(self, value: &mut T) {
+        *value &= self.mask;
+    }
 }
 
-impl<T: UnsignedInteger> ReduceAdd<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceAdd<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_add(self, a: T, b: T) -> Self::Output {
-        a.wrapping_add(b)
+        a.wrapping_add(b) & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceAddAssign<T> for NativeModulus<T> {
-    #[inline(always)]
+impl<T: UnsignedInteger> ReduceAddAssign<T> for PowOf2Modulus<T> {
+    #[inline]
     fn reduce_add_assign(self, a: &mut T, b: T) {
-        *a = a.wrapping_add(b);
+        *a = a.wrapping_add(b) & self.mask;
     }
 }
 
-impl<T: UnsignedInteger> ReduceDouble<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceDouble<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_double(self, value: T) -> Self::Output {
-        value.wrapping_shl(1)
+        value.wrapping_shl(1) & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceDoubleAssign<T> for NativeModulus<T> {
-    #[inline(always)]
+impl<T: UnsignedInteger> ReduceDoubleAssign<T> for PowOf2Modulus<T> {
+    #[inline]
     fn reduce_double_assign(self, value: &mut T) {
-        *value = value.wrapping_shl(1);
+        *value = value.wrapping_shl(1) & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceSub<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceSub<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_sub(self, a: T, b: T) -> Self::Output {
-        a.wrapping_sub(b)
+        a.wrapping_sub(b) & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceSubAssign<T> for NativeModulus<T> {
-    #[inline(always)]
+impl<T: UnsignedInteger> ReduceSubAssign<T> for PowOf2Modulus<T> {
+    #[inline]
     fn reduce_sub_assign(self, a: &mut T, b: T) {
-        *a = a.wrapping_sub(b);
+        *a = a.wrapping_sub(b) & self.mask;
     }
 }
 
-impl<T: UnsignedInteger> ReduceNeg<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceNeg<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_neg(self, value: T) -> Self::Output {
-        value.wrapping_neg()
+        value.wrapping_neg() & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceNegAssign<T> for NativeModulus<T> {
-    #[inline(always)]
+impl<T: UnsignedInteger> ReduceNegAssign<T> for PowOf2Modulus<T> {
+    #[inline]
     fn reduce_neg_assign(self, value: &mut T) {
-        *value = value.wrapping_neg();
+        *value = value.wrapping_neg() & self.mask;
     }
 }
 
-impl<T: UnsignedInteger> ReduceMul<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceMul<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_mul(self, a: T, b: T) -> Self::Output {
-        a.wrapping_mul(b)
+        a.wrapping_mul(b) & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceMulAssign<T> for NativeModulus<T> {
-    #[inline(always)]
+impl<T: UnsignedInteger> ReduceMulAssign<T> for PowOf2Modulus<T> {
+    #[inline]
     fn reduce_mul_assign(self, a: &mut T, b: T) {
-        *a = a.wrapping_mul(b);
+        *a = a.wrapping_mul(b) & self.mask;
     }
 }
 
-impl<T: UnsignedInteger> ReduceSquare<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceSquare<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_square(self, value: T) -> Self::Output {
-        value.wrapping_mul(value)
+        value.wrapping_mul(value) & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceSquareAssign<T> for NativeModulus<T> {
-    #[inline(always)]
+impl<T: UnsignedInteger> ReduceSquareAssign<T> for PowOf2Modulus<T> {
+    #[inline]
     fn reduce_square_assign(self, value: &mut T) {
-        *value = value.wrapping_mul(*value);
+        *value = value.wrapping_mul(*value) & self.mask;
     }
 }
 
-impl<T: UnsignedInteger> ReduceMulAdd<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceMulAdd<T> for PowOf2Modulus<T> {
     type Output = T;
 
-    #[inline(always)]
+    #[inline]
     fn reduce_mul_add(self, a: T, b: T, c: T) -> Self::Output {
-        a.wrapping_mul(b).wrapping_add(c)
+        a.wrapping_mul(b).wrapping_add(c) & self.mask
     }
 }
 
-impl<T: UnsignedInteger> ReduceMulAddAssign<T> for NativeModulus<T> {
-    #[inline(always)]
+impl<T: UnsignedInteger> ReduceMulAddAssign<T> for PowOf2Modulus<T> {
+    #[inline]
     fn reduce_mul_add_assign(self, a: &mut T, b: T, c: T) {
-        *a = a.wrapping_mul(b).wrapping_add(c);
+        *a = a.wrapping_mul(b).wrapping_add(c) & self.mask;
     }
 }
 
-impl<T: UnsignedInteger> TryReduceInv<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> TryReduceInv<T> for PowOf2Modulus<T> {
     type Output = T;
 
     #[inline]
     fn try_reduce_inv(self, value: T) -> Result<Self::Output, ReduceError<T>> {
-        Xgcd::gcdinv_native(value).ok_or(ReduceError::NoInverse {
+        Xgcd::gcdinv_pow_of_2(value, self.mask).ok_or(ReduceError::NoInverse {
             value,
-            modulus: T::ZERO,
+            modulus: self.value(),
         })
     }
 }
 
-impl<T> ReduceExp<T> for NativeModulus<T>
+impl<T> ReduceExp<T> for PowOf2Modulus<T>
 where
     T: UnsignedInteger,
 {
@@ -169,6 +173,8 @@ where
         if base.is_zero() {
             return T::ZERO;
         }
+
+        debug_assert!(base <= self.mask);
 
         let mut power: T = base;
 
@@ -196,7 +202,7 @@ where
     }
 }
 
-impl<T: UnsignedInteger> ReduceExpPowOf2<T> for NativeModulus<T> {
+impl<T: UnsignedInteger> ReduceExpPowOf2<T> for PowOf2Modulus<T> {
     #[inline]
     fn reduce_exp_power_of_2(self, base: T, exp_log: u32) -> T {
         if base.is_zero() {
