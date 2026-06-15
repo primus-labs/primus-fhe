@@ -1,8 +1,8 @@
 use primus_integer::UnsignedInteger;
 
 pub use crate::common::uint::{
-    reduce_inv, reduce_inv_assign, reduce_neg, reduce_neg_assign, reduce_once, reduce_once_assign,
-    try_reduce_inv,
+    lazy_reduce_neg, lazy_reduce_neg_assign, reduce_inv, reduce_inv_assign, reduce_neg,
+    reduce_neg_assign, reduce_once, reduce_once_assign, try_reduce_inv,
 };
 
 #[inline(always)]
@@ -47,14 +47,4 @@ pub fn lazy_reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
 #[inline(always)]
 pub fn lazy_reduce_sub_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
     *a += modulus - b;
-}
-
-#[inline(always)]
-pub fn lazy_reduce_neg<T: UnsignedInteger>(modulus: T, value: T) -> T {
-    modulus - value
-}
-
-#[inline(always)]
-pub fn lazy_reduce_neg_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
-    *value = modulus - *value;
 }

@@ -67,7 +67,7 @@ pub fn reduce_sub_slice_to<T: UnsignedInteger>(modulus: T, a: &[T], b: &[T], out
 pub fn reduce_sub_slice_rev_assign<T: UnsignedInteger>(modulus: T, a: &[T], b: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
     a.iter()
-        .zip(b.iter_mut())
+        .zip(b)
         .for_each(|(&x, y)| *y = super::reduce_sub(modulus, x, *y));
 }
 
@@ -84,6 +84,22 @@ pub fn reduce_double_slice_to<T: UnsignedInteger>(modulus: T, input: &[T], outpu
         .iter_mut()
         .zip(input)
         .for_each(|(x, &y)| *x = super::reduce_double(modulus, y));
+}
+
+#[inline]
+pub fn lazy_reduce_neg_slice_assign<T: UnsignedInteger>(modulus: T, values: &mut [T]) {
+    values
+        .iter_mut()
+        .for_each(|value| super::lazy_reduce_neg_assign(modulus, value));
+}
+
+#[inline]
+pub fn lazy_reduce_neg_slice_to<T: UnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
+    debug_assert_eq!(input.len(), output.len());
+    output
+        .iter_mut()
+        .zip(input)
+        .for_each(|(x, &y)| *x = super::lazy_reduce_neg(modulus, y));
 }
 
 #[inline]

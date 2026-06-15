@@ -95,3 +95,13 @@ pub fn try_reduce_inv<T: UnsignedInteger>(modulus: T, value: T) -> Result<T, Red
         Err(ReduceError::NoInverse { value, modulus })
     }
 }
+
+#[inline(always)]
+pub fn lazy_reduce_neg<T: UnsignedInteger>(modulus: T, value: T) -> T {
+    modulus - value
+}
+
+#[inline(always)]
+pub fn lazy_reduce_neg_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
+    *value = modulus - *value;
+}

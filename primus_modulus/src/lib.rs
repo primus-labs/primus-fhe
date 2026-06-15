@@ -35,7 +35,4 @@ pub use power_of_two::PowOf2Modulus;
 pub use uint::UintModulus;
 
 #[cfg(feature = "simd")]
-pub use barrett::SimdBarrettModulus;
-
-#[cfg(feature = "simd")]
-pub use barrett::simd_kernel as barrett_simd_kernel;
+pub use barrett::{SimdBarrettModulus, simd_reduce_dot_product};

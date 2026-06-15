@@ -12,28 +12,7 @@ mod slice;
 pub mod simd;
 
 #[cfg(feature = "simd")]
-pub use simd::SimdBarrettModulus;
-
-/// Lower-level SIMD slice kernels with an explicit lane count, for callers
-/// that want to override the default vector width.
-///
-/// The default slice trait impls in `slice` pick a lane count at compile
-/// time based on the target CPU's SIMD width
-/// (see [`primus_integer::lanes`]). Reach for this module only when
-/// you have measured a different `N` that performs better on your workload.
-#[cfg(feature = "simd")]
-pub mod simd_kernel {
-    pub use super::simd::{
-        lazy_reduce_add_mul_slice_assign, lazy_reduce_mul_add_slice_to,
-        lazy_reduce_mul_slice_assign, lazy_reduce_mul_slice_to,
-        lazy_reduce_scalar_mul_add_slice_to, lazy_reduce_scalar_mul_slice_assign,
-        lazy_reduce_scalar_mul_slice_to, lazy_reduce_sub_mul_slice_assign,
-        reduce_add_mul_slice_assign, reduce_add_scalar_mul_slice_assign, reduce_dot_product,
-        reduce_mul_add_slice_to, reduce_mul_slice_assign, reduce_mul_slice_to,
-        reduce_scalar_mul_add_slice_to, reduce_scalar_mul_slice_assign, reduce_scalar_mul_slice_to,
-        reduce_sub_mul_slice_assign,
-    };
-}
+pub use simd::{SimdBarrettModulus, simd_reduce_dot_product};
 
 /// A modulus, using barrett reduction algorithm.
 ///

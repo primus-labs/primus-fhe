@@ -2,9 +2,9 @@ use primus_integer::{FheUint, UnsignedInteger};
 use primus_reduce::{Modulus, prelude::*};
 
 pub use crate::common::uint::slice::{
-    reduce_inv_slice_assign, reduce_inv_slice_to, reduce_neg_slice_assign, reduce_neg_slice_to,
-    reduce_once_slice_assign, reduce_once_slice_to, try_reduce_inv_slice_assign,
-    try_reduce_inv_slice_to,
+    lazy_reduce_neg_slice_assign, lazy_reduce_neg_slice_to, reduce_inv_slice_assign,
+    reduce_inv_slice_to, reduce_neg_slice_assign, reduce_neg_slice_to, reduce_once_slice_assign,
+    reduce_once_slice_to, try_reduce_inv_slice_assign, try_reduce_inv_slice_to,
 };
 
 use super::DOT_PRODUCT_INNER_CHUNK;
@@ -89,22 +89,6 @@ pub fn lazy_reduce_sub_slice_rev_assign<T: UnsignedInteger>(modulus: T, a: &[T],
     a.iter()
         .zip(b.iter_mut())
         .for_each(|(&x, y)| *y = super::lazy_reduce_sub(modulus, x, *y));
-}
-
-#[inline]
-pub fn lazy_reduce_neg_slice_assign<T: UnsignedInteger>(modulus: T, values: &mut [T]) {
-    values
-        .iter_mut()
-        .for_each(|value| super::lazy_reduce_neg_assign(modulus, value));
-}
-
-#[inline]
-pub fn lazy_reduce_neg_slice_to<T: UnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
-    debug_assert_eq!(input.len(), output.len());
-    output
-        .iter_mut()
-        .zip(input)
-        .for_each(|(x, &y)| *x = super::lazy_reduce_neg(modulus, y));
 }
 
 #[inline]
