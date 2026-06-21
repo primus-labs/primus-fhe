@@ -1,3 +1,5 @@
+//! SIMD kernels for compact modular arithmetic helpers.
+
 use std::simd::cmp::SimdOrd;
 
 use primus_integer::{CarryingAdd, SimdArray, SimdUnsignedInteger, WideningMul};
@@ -8,6 +10,7 @@ mod mul;
 
 pub use mul::*;
 
+/// Adds SIMD lanes modulo `m` using compact-modulus bounds.
 #[inline]
 pub fn reduce_add<T>(m: T::SimdT, a: T::SimdT, b: T::SimdT) -> T::SimdT
 where
@@ -17,6 +20,7 @@ where
     sum.simd_min(sum - m)
 }
 
+/// Doubles SIMD lanes modulo `m` using compact-modulus bounds.
 #[inline]
 pub fn reduce_double<T>(m: T::SimdT, a: T::SimdT) -> T::SimdT
 where
@@ -26,6 +30,7 @@ where
     sum.simd_min(sum - m)
 }
 
+/// Subtracts SIMD lanes modulo `m` using compact-modulus bounds.
 #[inline]
 pub fn reduce_sub<T>(m: T::SimdT, a: T::SimdT, b: T::SimdT) -> T::SimdT
 where
@@ -40,6 +45,7 @@ where
     diff.simd_min(diff + m)
 }
 
+/// Returns the lane-wise lazy difference `a + m - b`.
 #[inline]
 pub fn lazy_reduce_sub<T>(m: T::SimdT, a: T::SimdT, b: T::SimdT) -> T::SimdT
 where
@@ -48,6 +54,7 @@ where
     m - b + a
 }
 
+/// Adds the lane-wise product `a * b` into a double-word SIMD accumulator.
 #[inline]
 pub fn multiply_add<T: SimdUnsignedInteger>(c: &mut [T::SimdT; 2], a: T::SimdT, b: T::SimdT) {
     let (lw, hw) = a.widening_mul(b);
@@ -65,6 +72,7 @@ pub use crate::common::uint::simd::{
     reduce_neg_slice_to, reduce_once_slice_assign, reduce_once_slice_to,
 };
 
+/// Adds `b` into `a` element-wise modulo `modulus`.
 #[inline]
 pub fn reduce_add_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -81,6 +89,7 @@ pub fn reduce_add_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], 
     }
 }
 
+/// Writes the element-wise sum of `a` and `b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_add_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T], output: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -99,6 +108,7 @@ pub fn reduce_add_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T],
     }
 }
 
+/// Subtracts `b` from `a` element-wise modulo `modulus`.
 #[inline]
 pub fn reduce_sub_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -115,6 +125,7 @@ pub fn reduce_sub_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], 
     }
 }
 
+/// Writes the element-wise difference `a - b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_sub_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T], output: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -133,6 +144,7 @@ pub fn reduce_sub_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T],
     }
 }
 
+/// Replaces each `b` element with the corresponding `a - b` modulo `modulus`.
 #[inline]
 pub fn reduce_sub_slice_rev_assign<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -149,6 +161,7 @@ pub fn reduce_sub_slice_rev_assign<T: SimdUnsignedInteger>(modulus: T, a: &[T], 
     }
 }
 
+/// Doubles each value in place modulo `modulus`.
 #[inline]
 pub fn reduce_double_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &mut [T]) {
     let m = T::SimdT::splat(modulus);
@@ -161,6 +174,7 @@ pub fn reduce_double_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &m
         super::reduce_double_assign(modulus, value);
     }
 }
+/// Writes each doubled `input` value modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_double_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
     debug_assert_eq!(input.len(), output.len());
@@ -176,6 +190,7 @@ pub fn reduce_double_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], o
     }
 }
 
+/// Applies lazy element-wise subtraction `a += modulus - b`.
 #[inline]
 pub fn lazy_reduce_sub_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -192,6 +207,7 @@ pub fn lazy_reduce_sub_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut 
     }
 }
 
+/// Writes the lazy element-wise difference `a + modulus - b` into `output`.
 #[inline]
 pub fn lazy_reduce_sub_slice_to<T: SimdUnsignedInteger>(
     modulus: T,
@@ -215,6 +231,7 @@ pub fn lazy_reduce_sub_slice_to<T: SimdUnsignedInteger>(
     }
 }
 
+/// Replaces each `b` element with the lazy difference `a + modulus - b`.
 #[inline]
 pub fn lazy_reduce_sub_slice_rev_assign<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());

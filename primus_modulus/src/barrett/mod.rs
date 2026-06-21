@@ -8,6 +8,7 @@ use crate::integer::{DivRemScalar, UnsignedInteger};
 mod ops;
 mod slice;
 
+/// SIMD Barrett modulus implementation.
 #[cfg(feature = "simd")]
 pub mod simd;
 
@@ -130,6 +131,7 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
         lo.wrapping_sub(q.wrapping_mul(self.value))
     }
 
+    /// Reduces a 2-limb value `(hi * B + lo)` modulo this modulus.
     #[inline]
     pub fn reduce_wide(&self, lo: T, hi: T) -> T {
         self.reduce_once(self.lazy_reduce_wide(lo, hi))

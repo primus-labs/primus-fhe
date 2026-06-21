@@ -1,8 +1,11 @@
+//! SIMD slice kernels for compact modular multiplication helpers.
+
 use primus_integer::{SimdArray, SimdUnsignedInteger};
 use primus_reduce::{Modulus, prelude::*};
 
 use crate::common::compact;
 
+/// Multiplies `a` by `b` element-wise in place using lazy modular reduction.
 #[inline]
 pub fn lazy_reduce_mul_slice_assign<T, M, SM>(modulus: M, a: &mut [T], b: &[T])
 where
@@ -28,6 +31,7 @@ where
     }
 }
 
+/// Writes lazy element-wise products of `a` and `b` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_slice_to<T, M, SM>(modulus: M, a: &[T], b: &[T], output: &mut [T])
 where
@@ -55,6 +59,7 @@ where
     }
 }
 
+/// Multiplies every element of `a` by `scalar` in place using lazy modular reduction.
 #[inline]
 pub fn lazy_reduce_mul_scalar_slice_assign<T, M, SM>(modulus: M, a: &mut [T], scalar: T)
 where
@@ -75,6 +80,7 @@ where
     }
 }
 
+/// Writes lazy products of each `a` element and `scalar` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_scalar_slice_to<T, M, SM>(modulus: M, a: &[T], scalar: T, output: &mut [T])
 where
@@ -97,6 +103,7 @@ where
     }
 }
 
+/// Lazily adds the element-wise product `a * b` into `acc`.
 #[inline]
 pub fn lazy_reduce_add_mul_slice_assign<T, M, SM>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -122,6 +129,7 @@ where
     }
 }
 
+/// Lazily subtracts the element-wise product `a * b` from `acc`.
 #[inline]
 pub fn lazy_reduce_sub_mul_slice_assign<T, M, SM>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -154,6 +162,7 @@ where
     }
 }
 
+/// Writes the lazy element-wise value `a * b + c` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_add_slice_to<T, M, SM>(
     modulus: M,
@@ -189,6 +198,7 @@ pub fn lazy_reduce_mul_add_slice_to<T, M, SM>(
     }
 }
 
+/// Writes the lazy element-wise value `a * scalar + c` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_scalar_add_slice_to<T, M, SM>(
     modulus: M,
@@ -222,6 +232,7 @@ pub fn lazy_reduce_mul_scalar_add_slice_to<T, M, SM>(
     }
 }
 
+/// Lazily adds the element-wise product `b * scalar` into `acc`.
 #[inline]
 pub fn lazy_reduce_add_mul_scalar_slice_assign<T, M, SM>(
     modulus: M,
@@ -252,6 +263,7 @@ pub fn lazy_reduce_add_mul_scalar_slice_assign<T, M, SM>(
     }
 }
 
+/// Multiplies `a` by `b` element-wise in place modulo `modulus`.
 #[inline]
 pub fn reduce_mul_slice_assign<T, M, SM>(modulus: M, a: &mut [T], b: &[T])
 where
@@ -274,6 +286,7 @@ where
     }
 }
 
+/// Writes the element-wise product of `a` and `b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_mul_slice_to<T, M, SM>(modulus: M, a: &[T], b: &[T], output: &mut [T])
 where
@@ -298,6 +311,7 @@ where
     }
 }
 
+/// Multiplies every element of `a` by `scalar` in place modulo `modulus`.
 #[inline]
 pub fn reduce_mul_scalar_slice_assign<T, M, SM>(modulus: M, a: &mut [T], scalar: T)
 where
@@ -320,6 +334,7 @@ where
     }
 }
 
+/// Writes each `a` element multiplied by `scalar` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_mul_scalar_slice_to<T, M, SM>(modulus: M, a: &[T], scalar: T, output: &mut [T])
 where
@@ -345,6 +360,7 @@ where
     }
 }
 
+/// Adds the element-wise product `a * b` into `acc` modulo `modulus`.
 #[inline]
 pub fn reduce_add_mul_slice_assign<T, M, SM>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -370,6 +386,7 @@ where
     }
 }
 
+/// Subtracts the element-wise product `a * b` from `acc` modulo `modulus`.
 #[inline]
 pub fn reduce_sub_mul_slice_assign<T, M, SM>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -402,6 +419,7 @@ where
     }
 }
 
+/// Writes `(a * b + c) mod modulus` element-wise into `output`.
 #[inline]
 pub fn reduce_mul_add_slice_to<T, M, SM>(modulus: M, a: &[T], b: &[T], c: &[T], output: &mut [T])
 where
@@ -432,6 +450,7 @@ where
     }
 }
 
+/// Writes `(a * scalar + c) mod modulus` element-wise into `output`.
 #[inline]
 pub fn reduce_mul_scalar_add_slice_to<T, M, SM>(
     modulus: M,
@@ -465,6 +484,7 @@ pub fn reduce_mul_scalar_add_slice_to<T, M, SM>(
     }
 }
 
+/// Adds the element-wise product `b * scalar` into `acc` modulo `modulus`.
 #[inline]
 pub fn reduce_add_mul_scalar_slice_assign<T, M, SM>(modulus: M, acc: &mut [T], b: &[T], scalar: T)
 where

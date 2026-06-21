@@ -9,6 +9,7 @@ pub use crate::common::uint::slice::{
 
 use super::DOT_PRODUCT_INNER_CHUNK;
 
+/// Adds `b` into `a` element-wise modulo `modulus` using compact-modulus bounds.
 #[inline]
 pub fn reduce_add_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -16,6 +17,7 @@ pub fn reduce_add_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T], b: &
         .zip(b)
         .for_each(|(x, &y)| super::reduce_add_assign(modulus, x, y));
 }
+/// Writes the element-wise sum of `a` and `b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_add_slice_to<T: UnsignedInteger>(modulus: T, a: &[T], b: &[T], output: &mut [T]) {
     debug_assert_eq!(output.len(), a.len());
@@ -25,6 +27,7 @@ pub fn reduce_add_slice_to<T: UnsignedInteger>(modulus: T, a: &[T], b: &[T], out
     });
 }
 
+/// Subtracts `b` from `a` element-wise modulo `modulus`.
 #[inline]
 pub fn reduce_sub_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -32,6 +35,7 @@ pub fn reduce_sub_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T], b: &
         .zip(b)
         .for_each(|(x, &y)| super::reduce_sub_assign(modulus, x, y));
 }
+/// Writes the element-wise difference `a - b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_sub_slice_to<T: UnsignedInteger>(modulus: T, a: &[T], b: &[T], output: &mut [T]) {
     debug_assert_eq!(output.len(), a.len());
@@ -40,6 +44,7 @@ pub fn reduce_sub_slice_to<T: UnsignedInteger>(modulus: T, a: &[T], b: &[T], out
         *out = super::reduce_sub(modulus, x, y);
     });
 }
+/// Replaces each `b` element with the corresponding `a - b` modulo `modulus`.
 #[inline]
 pub fn reduce_sub_slice_rev_assign<T: UnsignedInteger>(modulus: T, a: &[T], b: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -48,12 +53,14 @@ pub fn reduce_sub_slice_rev_assign<T: UnsignedInteger>(modulus: T, a: &[T], b: &
         .for_each(|(&x, y)| *y = super::reduce_sub(modulus, x, *y));
 }
 
+/// Doubles each value in place modulo `modulus`.
 #[inline]
 pub fn reduce_double_slice_assign<T: UnsignedInteger>(modulus: T, values: &mut [T]) {
     values
         .iter_mut()
         .for_each(|v| super::reduce_double_assign(modulus, v));
 }
+/// Writes each doubled `input` value modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_double_slice_to<T: UnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
     debug_assert_eq!(input.len(), output.len());
@@ -63,6 +70,7 @@ pub fn reduce_double_slice_to<T: UnsignedInteger>(modulus: T, input: &[T], outpu
         .for_each(|(x, &y)| *x = super::reduce_double(modulus, y));
 }
 
+/// Applies lazy element-wise subtraction `a += modulus - b`.
 #[inline]
 pub fn lazy_reduce_sub_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -70,6 +78,7 @@ pub fn lazy_reduce_sub_slice_assign<T: UnsignedInteger>(modulus: T, a: &mut [T],
         .zip(b)
         .for_each(|(x, &y)| super::lazy_reduce_sub_assign(modulus, x, y));
 }
+/// Writes the lazy element-wise difference `a + modulus - b` into `output`.
 #[inline]
 pub fn lazy_reduce_sub_slice_to<T: UnsignedInteger>(
     modulus: T,
@@ -83,6 +92,7 @@ pub fn lazy_reduce_sub_slice_to<T: UnsignedInteger>(
         *out = super::lazy_reduce_sub(modulus, x, y);
     });
 }
+/// Replaces each `b` element with the lazy difference `a + modulus - b`.
 #[inline]
 pub fn lazy_reduce_sub_slice_rev_assign<T: UnsignedInteger>(modulus: T, a: &[T], b: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -91,6 +101,7 @@ pub fn lazy_reduce_sub_slice_rev_assign<T: UnsignedInteger>(modulus: T, a: &[T],
         .for_each(|(&x, y)| *y = super::lazy_reduce_sub(modulus, x, *y));
 }
 
+/// Multiplies `a` by `b` element-wise in place modulo `modulus`.
 #[inline]
 pub fn reduce_mul_slice_assign<T, M>(modulus: M, a: &mut [T], b: &[T])
 where
@@ -103,6 +114,7 @@ where
         .for_each(|(a, &b)| modulus.reduce_mul_assign(a, b));
 }
 
+/// Writes the element-wise product of `a` and `b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_mul_slice_to<T, M>(modulus: M, a: &[T], b: &[T], output: &mut [T])
 where
@@ -117,6 +129,7 @@ where
         .for_each(|((&a, &b), o)| *o = modulus.reduce_mul(a, b));
 }
 
+/// Multiplies every element of `a` by `scalar` in place modulo `modulus`.
 #[inline]
 pub fn reduce_mul_scalar_slice_assign<T, M>(modulus: M, a: &mut [T], scalar: T)
 where
@@ -127,6 +140,7 @@ where
         .for_each(|a| modulus.reduce_mul_assign(a, scalar));
 }
 
+/// Writes each `a` element multiplied by `scalar` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_mul_scalar_slice_to<T, M>(modulus: M, a: &[T], scalar: T, output: &mut [T])
 where
@@ -139,6 +153,7 @@ where
         .for_each(|(&a, o)| *o = modulus.reduce_mul(a, scalar));
 }
 
+/// Multiplies `a` by `b` element-wise in place using lazy modular reduction.
 #[inline]
 pub fn lazy_reduce_mul_slice_assign<T, M>(modulus: M, a: &mut [T], b: &[T])
 where
@@ -151,6 +166,7 @@ where
         .for_each(|(a, &b)| modulus.lazy_reduce_mul_assign(a, b));
 }
 
+/// Writes lazy element-wise products of `a` and `b` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_slice_to<T, M>(modulus: M, a: &[T], b: &[T], output: &mut [T])
 where
@@ -165,6 +181,7 @@ where
         .for_each(|((&a, &b), o)| *o = modulus.lazy_reduce_mul(a, b));
 }
 
+/// Multiplies every element of `a` by `scalar` in place using lazy modular reduction.
 #[inline]
 pub fn lazy_reduce_mul_scalar_slice_assign<T, M>(modulus: M, a: &mut [T], scalar: T)
 where
@@ -175,6 +192,7 @@ where
         .for_each(|a| modulus.lazy_reduce_mul_assign(a, scalar));
 }
 
+/// Writes lazy products of each `a` element and `scalar` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_scalar_slice_to<T, M>(modulus: M, a: &[T], scalar: T, output: &mut [T])
 where
@@ -187,6 +205,7 @@ where
         .for_each(|(&a, o)| *o = modulus.lazy_reduce_mul(a, scalar));
 }
 
+/// Adds the element-wise product `a * b` into `acc` modulo `modulus`.
 #[inline]
 pub fn reduce_add_mul_slice_assign<T, M>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -201,6 +220,7 @@ where
         .for_each(|((acc, &a), &b)| *acc = modulus.reduce_mul_add(a, b, *acc));
 }
 
+/// Subtracts the element-wise product `a * b` from `acc` modulo `modulus`.
 #[inline]
 pub fn reduce_sub_mul_slice_assign<T, M>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -215,6 +235,7 @@ where
     });
 }
 
+/// Writes `(a * b + c) mod modulus` element-wise into `output`.
 #[inline]
 pub fn reduce_mul_add_slice_to<T, M>(modulus: M, a: &[T], b: &[T], c: &[T], output: &mut [T])
 where
@@ -231,6 +252,7 @@ where
         .for_each(|(((&a, &b), &c), o)| *o = modulus.reduce_mul_add(a, b, c));
 }
 
+/// Writes `(a * scalar + c) mod modulus` element-wise into `output`.
 #[inline]
 pub fn reduce_mul_scalar_add_slice_to<T, M>(
     modulus: M,
@@ -250,6 +272,7 @@ pub fn reduce_mul_scalar_add_slice_to<T, M>(
         .for_each(|((&a, &c), o)| *o = modulus.reduce_mul_add(a, scalar, c));
 }
 
+/// Adds the element-wise product `a * scalar` into `acc` modulo `modulus`.
 #[inline]
 pub fn reduce_add_mul_scalar_slice_assign<T, M>(modulus: M, acc: &mut [T], a: &[T], scalar: T)
 where
@@ -262,6 +285,7 @@ where
         .for_each(|(acc, &a)| *acc = modulus.reduce_mul_add(a, scalar, *acc));
 }
 
+/// Lazily adds the element-wise product `a * b` into `acc`.
 #[inline]
 pub fn lazy_reduce_add_mul_slice_assign<T, M>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -276,6 +300,7 @@ where
         .for_each(|((acc, &a), &b)| *acc = modulus.lazy_reduce_mul_add(a, b, *acc));
 }
 
+/// Lazily subtracts the element-wise product `a * b` from `acc`.
 #[inline]
 pub fn lazy_reduce_sub_mul_slice_assign<T, M>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
@@ -291,6 +316,7 @@ where
     });
 }
 
+/// Writes the lazy element-wise value `a * b + c` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_add_slice_to<T, M>(modulus: M, a: &[T], b: &[T], c: &[T], output: &mut [T])
 where
@@ -307,6 +333,7 @@ where
         .for_each(|(((&a, &b), &c), o)| *o = modulus.lazy_reduce_mul_add(a, b, c));
 }
 
+/// Lazily adds the element-wise product `a * scalar` into `acc`.
 #[inline]
 pub fn lazy_reduce_add_mul_scalar_slice_assign<T, M>(modulus: M, acc: &mut [T], a: &[T], scalar: T)
 where
@@ -319,6 +346,7 @@ where
         .for_each(|(x, &y)| *x = modulus.lazy_reduce_mul_add(y, scalar, *x));
 }
 
+/// Writes the lazy element-wise value `a * scalar + c` into `output`.
 #[inline]
 pub fn lazy_reduce_mul_scalar_add_slice_to<T, M>(
     modulus: M,
@@ -347,6 +375,7 @@ pub fn multiply_add<T: UnsignedInteger>(c: &mut [T; 2], a: T, b: T) {
     (c[1], _) = c[1].carrying_add(hw, carry);
 }
 
+/// Computes the dot product of `a` and `b` modulo `modulus`.
 #[inline]
 pub fn reduce_dot_product<T, M>(modulus: M, a: &[T], b: &[T]) -> T
 where
@@ -380,6 +409,7 @@ where
     modulus.reduce_add(modulus.reduce(c), inter)
 }
 
+/// Computes the dot product of two iterators modulo `modulus`.
 #[inline]
 pub fn reduce_dot_product_iter<T, M>(
     modulus: M,

@@ -1,3 +1,5 @@
+//! SIMD Barrett modulus implementation and dot-product helper.
+
 use primus_integer::{CarryingAdd, CarryingMul, SimdArray, SimdUnsignedInteger, WideningMul};
 use primus_reduce::prelude::*;
 
@@ -18,6 +20,7 @@ pub struct SimdBarrettModulus<T: SimdUnsignedInteger> {
 }
 
 impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
+    /// Lazily reduces a lane-wise 2-limb value `(hi * B + lo)` modulo this modulus.
     #[inline]
     pub fn lazy_reduce_wide(&self, lo: T::SimdT, hi: T::SimdT) -> T::SimdT {
         let ah = lo.widening_mul_hw(self.ratio[0]);
@@ -35,6 +38,7 @@ impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
         lo - (q * self.value)
     }
 
+    /// Reduces a lane-wise 2-limb value `(hi * B + lo)` modulo this modulus.
     #[inline]
     pub fn reduce_wide(&self, lo: T::SimdT, hi: T::SimdT) -> T::SimdT {
         compact::simd::reduce_once::<T>(self.value, self.lazy_reduce_wide(lo, hi))
@@ -178,6 +182,7 @@ impl<T: SimdUnsignedInteger> ReduceMulAddAssign<T::SimdT> for SimdBarrettModulus
 // limbs stay strictly below `2^BITS` — identical bound to the scalar path.
 // ---------------------------------------------------------------------------
 
+/// Computes the dot product of `a` and `b` modulo `modulus` using SIMD chunks.
 #[inline]
 pub fn simd_reduce_dot_product<T: SimdUnsignedInteger, M>(modulus: M, a: &[T], b: &[T]) -> T
 where

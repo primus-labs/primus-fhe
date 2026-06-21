@@ -1,7 +1,10 @@
+//! SIMD kernels for unsigned-integer modular arithmetic helpers.
+
 use std::simd::cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd};
 
 use primus_integer::{SimdArray, SimdMaskArray, SimdUnsignedInteger};
 
+/// Reduces each SIMD lane by subtracting `m` at most once.
 #[inline]
 pub fn reduce_once<T: SimdUnsignedInteger>(m: T::SimdT, v: T::SimdT) -> T::SimdT {
     // `min(v, v - m)` trick: when `v < m`, `v - m` wraps to a huge value so
@@ -11,23 +14,27 @@ pub fn reduce_once<T: SimdUnsignedInteger>(m: T::SimdT, v: T::SimdT) -> T::SimdT
     v.simd_min(v - m)
 }
 
+/// Adds SIMD lanes modulo `m`.
 #[inline]
 pub fn reduce_add<T: SimdUnsignedInteger>(m: T::SimdT, a: T::SimdT, b: T::SimdT) -> T::SimdT {
     let threshold = m - b;
     a.simd_ge(threshold).select(a - threshold, a + b)
 }
 
+/// Subtracts SIMD lanes modulo `m`.
 #[inline]
 pub fn reduce_sub<T: SimdUnsignedInteger>(m: T::SimdT, a: T::SimdT, b: T::SimdT) -> T::SimdT {
     a.simd_ge(b).select(a - b, a + m - b)
 }
 
+/// Returns the lane-wise additive inverse modulo `m`.
 #[inline]
 pub fn reduce_neg<T: SimdUnsignedInteger>(m: T::SimdT, v: T::SimdT) -> T::SimdT {
     let zero = T::SimdT::splat(T::ZERO);
     v.simd_eq(zero).select(zero, m - v)
 }
 
+/// Returns the lane-wise lazy additive inverse `m - v`.
 #[inline]
 pub fn lazy_reduce_neg<T: SimdUnsignedInteger>(m: T::SimdT, v: T::SimdT) -> T::SimdT {
     m - v
@@ -37,6 +44,7 @@ pub fn lazy_reduce_neg<T: SimdUnsignedInteger>(m: T::SimdT, v: T::SimdT) -> T::S
 // SIMD slice kernels.
 // ===========================================================================
 
+/// Reduces each value in place by subtracting `modulus` at most once.
 #[inline]
 pub fn reduce_once_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &mut [T]) {
     let m = T::SimdT::splat(modulus);
@@ -51,6 +59,7 @@ pub fn reduce_once_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &mut
     }
 }
 
+/// Reduces `input` into `output` by subtracting `modulus` at most once per element.
 #[inline]
 pub fn reduce_once_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
     debug_assert_eq!(input.len(), output.len());
@@ -66,6 +75,7 @@ pub fn reduce_once_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], out
     }
 }
 
+/// Replaces each value with its additive inverse modulo `modulus`.
 #[inline]
 pub fn reduce_neg_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &mut [T]) {
     let m = T::SimdT::splat(modulus);
@@ -80,6 +90,7 @@ pub fn reduce_neg_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &mut 
     }
 }
 
+/// Writes the additive inverse of each `input` value modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_neg_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
     debug_assert_eq!(input.len(), output.len());
@@ -96,6 +107,7 @@ pub fn reduce_neg_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], outp
     }
 }
 
+/// Adds `b` into `a` element-wise modulo `modulus`.
 #[inline]
 pub fn reduce_add_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -113,6 +125,7 @@ pub fn reduce_add_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], 
     }
 }
 
+/// Writes the element-wise sum of `a` and `b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_add_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T], output: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -132,6 +145,7 @@ pub fn reduce_add_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T],
     }
 }
 
+/// Subtracts `b` from `a` element-wise modulo `modulus`.
 #[inline]
 pub fn reduce_sub_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], b: &[T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -149,6 +163,7 @@ pub fn reduce_sub_slice_assign<T: SimdUnsignedInteger>(modulus: T, a: &mut [T], 
     }
 }
 
+/// Writes the element-wise difference `a - b` modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_sub_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T], output: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -168,6 +183,7 @@ pub fn reduce_sub_slice_to<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &[T],
     }
 }
 
+/// Replaces each `b` element with the corresponding `a - b` modulo `modulus`.
 #[inline]
 pub fn reduce_sub_slice_rev_assign<T: SimdUnsignedInteger>(modulus: T, a: &[T], b: &mut [T]) {
     debug_assert_eq!(a.len(), b.len());
@@ -185,6 +201,7 @@ pub fn reduce_sub_slice_rev_assign<T: SimdUnsignedInteger>(modulus: T, a: &[T], 
     }
 }
 
+/// Doubles each value in place modulo `modulus`.
 #[inline]
 pub fn reduce_double_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &mut [T]) {
     let m = T::SimdT::splat(modulus);
@@ -197,6 +214,7 @@ pub fn reduce_double_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &m
         super::reduce_double_assign(modulus, value);
     }
 }
+/// Writes each doubled `input` value modulo `modulus` into `output`.
 #[inline]
 pub fn reduce_double_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
     debug_assert_eq!(input.len(), output.len());
@@ -212,6 +230,7 @@ pub fn reduce_double_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], o
     }
 }
 
+/// Replaces each value with the lazy additive inverse `modulus - value`.
 #[inline]
 pub fn lazy_reduce_neg_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: &mut [T]) {
     let m = T::SimdT::splat(modulus);
@@ -226,6 +245,7 @@ pub fn lazy_reduce_neg_slice_assign<T: SimdUnsignedInteger>(modulus: T, values: 
     }
 }
 
+/// Writes the lazy additive inverse of each `input` value into `output`.
 #[inline]
 pub fn lazy_reduce_neg_slice_to<T: SimdUnsignedInteger>(modulus: T, input: &[T], output: &mut [T]) {
     debug_assert_eq!(input.len(), output.len());
