@@ -113,6 +113,38 @@ impl<T: UnsignedInteger> LazyReduceMulAddAssign<T> for BarrettModulus<T> {
     }
 }
 
+impl<T: UnsignedInteger> LazyReduceSub<T> for BarrettModulus<T> {
+    type Output = T;
+
+    #[inline]
+    fn lazy_reduce_sub(self, a: T, b: T) -> Self::Output {
+        compact::lazy_reduce_sub(self.value, a, b)
+    }
+}
+
+impl<T: UnsignedInteger> LazyReduceSubAssign<T> for BarrettModulus<T> {
+    #[inline]
+    fn lazy_reduce_sub_assign(self, a: &mut T, b: T) {
+        compact::lazy_reduce_sub_assign(self.value, a, b);
+    }
+}
+
+impl<T: UnsignedInteger> LazyReduceNeg<T> for BarrettModulus<T> {
+    type Output = T;
+
+    #[inline]
+    fn lazy_reduce_neg(self, value: T) -> Self::Output {
+        compact::lazy_reduce_neg(self.value, value)
+    }
+}
+
+impl<T: UnsignedInteger> LazyReduceNegAssign<T> for BarrettModulus<T> {
+    #[inline]
+    fn lazy_reduce_neg_assign(self, value: &mut T) {
+        compact::lazy_reduce_neg_assign(self.value, value);
+    }
+}
+
 impl<T: UnsignedInteger> Reduce<T> for BarrettModulus<T> {
     type Output = T;
 

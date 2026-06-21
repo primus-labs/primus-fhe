@@ -20,6 +20,16 @@ pub struct SimdBarrettModulus<T: SimdUnsignedInteger> {
 }
 
 impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
+    /// Creates a new [`SimdBarrettModulus<T>`].
+    pub fn new(value: T, ratio: [T; 2]) -> Self {
+        Self {
+            value: T::SimdT::splat(value),
+            ratio: [T::SimdT::splat(ratio[0]), T::SimdT::splat(ratio[1])],
+        }
+    }
+}
+
+impl<T: SimdUnsignedInteger> SimdBarrettModulus<T> {
     /// Lazily reduces a lane-wise 2-limb value `(hi * B + lo)` modulo this modulus.
     #[inline]
     pub fn lazy_reduce_wide(&self, lo: T::SimdT, hi: T::SimdT) -> T::SimdT {

@@ -23,6 +23,9 @@ mod native;
 mod power_of_two;
 mod uint;
 
+#[cfg(feature = "derive")]
+pub use primus_barrett_derive::Barrett;
+
 pub use barrett::BarrettModulus;
 pub use compact::CompactModulus;
 

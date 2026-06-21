@@ -1,5 +1,5 @@
 [workspace]
-members = [
+members = ["primus_barrett_derive",
     "primus_data",
     "primus_gcd",
     "primus_integer",
@@ -13,7 +13,7 @@ resolver = "3"
 num-traits = "0.2"
 rand = "0.10.1"
 serde = { version = "1.0", features = ["derive"] }
-zeroize = "1.8"
+zeroize = "1.9"
 bytemuck = "1.25.0"
 paste = "1.0"
 thiserror = "2"
