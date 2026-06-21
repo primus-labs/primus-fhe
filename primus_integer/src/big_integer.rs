@@ -183,7 +183,7 @@ where
     /// Adds a value to the big integer, returning true if there was a carry.
     #[must_use]
     #[inline]
-    pub fn add_value_inplace<A>(&self, value: T, result: &mut BigUint<A>) -> bool
+    pub fn add_value_to<A>(&self, value: T, result: &mut BigUint<A>) -> bool
     where
         A: DataMut<Elem = T>,
     {
@@ -220,7 +220,7 @@ where
     /// Subtracts a value to the big integer, returning true if there was a borrow.
     #[must_use]
     #[inline]
-    pub fn sub_value_inplace<A>(&self, value: T, result: &mut BigUint<A>) -> bool
+    pub fn sub_value_to<A>(&self, value: T, result: &mut BigUint<A>) -> bool
     where
         A: DataMut<Elem = T>,
     {
@@ -257,7 +257,7 @@ where
     /// Multiplies the big integer by a value, storing the result in another big integer.
     #[must_use]
     #[inline]
-    pub fn mul_value_inplace<A>(&self, value: T, result: &mut BigUint<A>) -> T
+    pub fn mul_value_to<A>(&self, value: T, result: &mut BigUint<A>) -> T
     where
         A: DataMut<Elem = T>,
     {
@@ -279,18 +279,18 @@ where
     /// Multiplies the big integer by a value, then add to another big integer.
     #[must_use]
     #[inline]
-    pub fn mul_value_add_inplace<A>(&self, value: T, result: &mut BigUint<A>) -> T
+    pub fn mul_value_add_to<A>(&self, value: T, acc: &mut BigUint<A>) -> T
     where
         A: DataMut<Elem = T>,
     {
-        debug_assert_eq!(result.len(), self.len());
+        debug_assert_eq!(acc.len(), self.len());
 
         if value.is_zero() {
             return T::ZERO;
         }
 
         let mut carry = T::ZERO;
-        for (ele, res) in self.iter().zip(result.iter_mut()) {
+        for (ele, res) in self.iter().zip(acc.iter_mut()) {
             (*res, carry) = value.carrying_mul_add(*ele, *res, carry);
         }
 
@@ -300,7 +300,7 @@ where
     /// Adds two big integers to the result, returning true if there was a carry.
     #[must_use]
     #[inline]
-    pub fn add_inplace<A, B>(&self, other: &BigUint<A>, result: &mut BigUint<B>) -> bool
+    pub fn add_to<A, B>(&self, other: &BigUint<A>, result: &mut BigUint<B>) -> bool
     where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
@@ -319,7 +319,7 @@ where
     /// Subtracts another big integer from this one, returning true if there was a borrow.
     #[must_use]
     #[inline]
-    pub fn sub_inplace<A, B>(&self, other: &BigUint<A>, result: &mut BigUint<B>) -> bool
+    pub fn sub_to<A, B>(&self, other: &BigUint<A>, result: &mut BigUint<B>) -> bool
     where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
@@ -357,7 +357,7 @@ where
 
     /// Adds two big integers to the result modulo a given modulus.
     #[inline]
-    pub fn add_modulo_inplace<A, B, C>(
+    pub fn add_modulo_to<A, B, C>(
         &self,
         other: &BigUint<A>,
         result: &mut BigUint<B>,
@@ -373,7 +373,7 @@ where
         debug_assert!(self.cmp(modulus).is_lt());
         debug_assert!(other.cmp(modulus).is_lt());
 
-        let carry = self.add_inplace(other, result);
+        let carry = self.add_to(other, result);
         if carry || result.cmp(modulus).is_ge() {
             let _ = result.sub_assign(modulus);
         }
@@ -381,7 +381,7 @@ where
 
     /// Subs another big integer to this one modulo a given modulus.
     #[inline]
-    pub fn sub_modulo_inplace<A, B, C>(
+    pub fn sub_modulo_to<A, B, C>(
         &self,
         other: &BigUint<A>,
         result: &mut BigUint<B>,
@@ -397,14 +397,14 @@ where
         debug_assert!(self.cmp(modulus).is_lt());
         debug_assert!(other.cmp(modulus).is_lt());
 
-        if self.sub_inplace(other, result) {
+        if self.sub_to(other, result) {
             let _ = result.add_assign(modulus);
         }
     }
 
     /// Negates the big integer modulo a given modulus.
     #[inline]
-    pub fn neg_modulo_inplace<A, B>(&self, result: &mut BigUint<A>, modulus: &BigUint<B>)
+    pub fn neg_modulo_to<A, B>(&self, result: &mut BigUint<A>, modulus: &BigUint<B>)
     where
         A: DataMut<Elem = T>,
         B: Data<Elem = T>,
@@ -685,7 +685,7 @@ pub fn multiply_many_values_except<T: UnsignedInteger>(values: &[T], except: usi
 ///
 /// - `values` is empty
 /// - `except >= values.len()`
-pub fn multiply_many_values_except_inplace<T: UnsignedInteger>(
+pub fn multiply_many_values_except_to<T: UnsignedInteger>(
     values: &[T],
     except: usize,
     result: &mut [T],
@@ -775,13 +775,13 @@ mod tests {
 
         let mut result = BigUint(vec![0; a.len()]);
         a_raw = compose(a.digits());
-        let _carry = a.add_value_inplace(v, &mut result);
+        let _carry = a.add_value_to(v, &mut result);
         assert_eq!(a_raw + v as u128, compose(result.digits()));
 
-        let _borrow = a.sub_value_inplace(v, &mut result);
+        let _borrow = a.sub_value_to(v, &mut result);
         assert_eq!(a_raw - v as u128, compose(result.digits()));
 
-        let r = a.mul_value_inplace(v, &mut result);
+        let r = a.mul_value_to(v, &mut result);
         result.0.push(r);
         assert_eq!(a_raw * v as u128, compose(result.digits()));
 
@@ -793,7 +793,7 @@ mod tests {
         let b_raw = compose(b.digits());
 
         let mut result = b.clone();
-        let carry = a.mul_value_add_inplace(v, &mut result);
+        let carry = a.mul_value_add_to(v, &mut result);
         result.0.push(carry);
         assert_eq!(a_raw * v as u128 + b_raw, compose(result.digits()));
 
@@ -826,44 +826,44 @@ mod tests {
     }
 
     #[test]
-    fn add_value_inplace_stops_after_carry_chain() {
+    fn add_value_to_stops_after_carry_chain() {
         let input = [u32::MAX, u32::MAX, 7, 9];
         let mut result = [0u32; 4];
 
-        let carry = BigUint(&input[..]).add_value_inplace(1, &mut BigUint(&mut result[..]));
+        let carry = BigUint(&input[..]).add_value_to(1, &mut BigUint(&mut result[..]));
 
         assert!(!carry);
         assert_eq!(result, [0, 0, 8, 9]);
     }
 
     #[test]
-    fn add_value_inplace_reports_final_carry() {
+    fn add_value_to_reports_final_carry() {
         let input = [u32::MAX, u32::MAX];
         let mut result = [1u32; 2];
 
-        let carry = BigUint(&input[..]).add_value_inplace(1, &mut BigUint(&mut result[..]));
+        let carry = BigUint(&input[..]).add_value_to(1, &mut BigUint(&mut result[..]));
 
         assert!(carry);
         assert_eq!(result, [0, 0]);
     }
 
     #[test]
-    fn sub_value_inplace_stops_after_borrow_chain() {
+    fn sub_value_to_stops_after_borrow_chain() {
         let input = [0u32, 0, 7, 9];
         let mut result = [0u32; 4];
 
-        let borrow = BigUint(&input[..]).sub_value_inplace(1, &mut BigUint(&mut result[..]));
+        let borrow = BigUint(&input[..]).sub_value_to(1, &mut BigUint(&mut result[..]));
 
         assert!(!borrow);
         assert_eq!(result, [u32::MAX, u32::MAX, 6, 9]);
     }
 
     #[test]
-    fn sub_value_inplace_reports_final_borrow() {
+    fn sub_value_to_reports_final_borrow() {
         let input = [0u32, 0];
         let mut result = [1u32; 2];
 
-        let borrow = BigUint(&input[..]).sub_value_inplace(1, &mut BigUint(&mut result[..]));
+        let borrow = BigUint(&input[..]).sub_value_to(1, &mut BigUint(&mut result[..]));
 
         assert!(borrow);
         assert_eq!(result, [u32::MAX, u32::MAX]);
