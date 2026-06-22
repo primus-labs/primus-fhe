@@ -1,12 +1,5 @@
 [workspace]
-members = ["primus_barrett_derive",
-    "primus_data",
-    "primus_gcd",
-    "primus_integer",
-    "primus_modulo",
-    "primus_modulus",
-    "primus_reduce",
-]
+members = ["crates/*"]
 resolver = "3"
 
 [workspace.dependencies]
