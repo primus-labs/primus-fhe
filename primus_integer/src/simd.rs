@@ -43,7 +43,7 @@ pub trait SimdInteger: Integer + SimdElement + SimdCast {
     /// This is normally `[Self; Self::LANE_COUNT]`, exposed as an associated
     /// type so generic code can work with SIMD-sized chunks without naming the
     /// const expression directly.
-    type Array: Copy;
+    type Array: Copy + IntoIterator<Item = Self>;
 
     /// Boolean selector array matching [`Self::MaskT`](Self::MaskT).
     ///
@@ -173,6 +173,7 @@ where
     Self: BitOr<Output = Self> + BitOrAssign,
     Self: BitXor<Output = Self> + BitXorAssign,
     Self: Not<Output = Self>,
+    Self: Shl<Output = Self>,
     for<'a> Self: Add<&'a Self, Output = Self> + AddAssign<&'a Self>,
     for<'a> Self: Sub<&'a Self, Output = Self> + SubAssign<&'a Self>,
     for<'a> Self: Mul<&'a Self, Output = Self> + MulAssign<&'a Self>,
@@ -184,6 +185,15 @@ where
 {
     /// Array type containing one vector worth of scalar lanes.
     type Array;
+
+    /// Constructs a new SIMD vector with all elements set to the given value.
+    fn splat(value: T) -> T::SimdT;
+
+    /// Converts an array to a SIMD vector.
+    fn from_array(array: Self::Array) -> T::SimdT;
+
+    /// Converts a SIMD vector to an array.
+    fn to_array(self) -> Self::Array;
 
     /// Returns a tuple of the sum along with a boolean indicating whether an arithmetic overflow would occur.
     /// If an overflow would have occurred then the wrapped value is returned.
@@ -197,6 +207,21 @@ macro_rules! impl_simd_array {
     ($($t:ty)*) => ($(
         impl SimdArray<$t> for Simd<$t, {<$t>::LANE_COUNT}>  {
             type Array = <$t as SimdInteger>::Array;
+
+            #[inline]
+            fn splat(value: $t) -> Self {
+                Simd::<$t, {<$t>::LANE_COUNT}>::splat(value)
+            }
+
+            #[inline]
+            fn from_array(array: Self::Array) -> Self {
+                Simd::<$t, {<$t>::LANE_COUNT}>::from_array(array)
+            }
+
+            #[inline]
+            fn to_array(self) -> Self::Array {
+                self.to_array()
+            }
         }
     )*)
 }

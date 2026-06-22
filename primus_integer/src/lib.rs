@@ -34,7 +34,7 @@ pub use unsigned_integer::{FheUint, UnsignedInteger};
 
 pub use big_integer::{
     BigUint, BigUintIter, BigUintIterMut, BigUintMut, BigUintOwned, BigUintRef,
-    multiply_many_values, multiply_many_values_except, multiply_many_values_except_inplace,
+    multiply_many_values, multiply_many_values_except, multiply_many_values_except_to,
 };
 
 #[cfg(feature = "simd")]
