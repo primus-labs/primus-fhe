@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-pub(crate) fn impl_reduce_ops(name: &Ident, modulus: &TokenStream, ty: &syn::Path) -> TokenStream {
+pub(crate) fn ops(name: &Ident, modulus: &TokenStream, ty: &syn::Path) -> TokenStream {
     quote! {
         impl ::primus_modulus::reduce::Reduce<#ty> for #name {
             type Output = #ty;
@@ -312,106 +312,6 @@ pub(crate) fn impl_reduce_ops(name: &Ident, modulus: &TokenStream, ty: &syn::Pat
                 }
 
                 power
-            }
-        }
-
-        impl ::primus_modulus::reduce::ReduceDotProduct<#ty> for #name {
-            type Output = #ty;
-
-            #[inline]
-            fn reduce_dot_product(self, a: impl AsRef<[#ty]>, b: impl AsRef<[#ty]>) -> #ty {
-                use ::primus_modulus::reduce::*;
-                /// `c += a * b`
-                fn multiply_add(c: &mut [#ty; 2], a: #ty, b: #ty) {
-                    use ::primus_modulus::integer::{CarryingAdd, WideningMul};
-                    let (lw, hw) = WideningMul::widening_mul(a, b);
-                    let carry;
-                    (c[0], carry) = c[0].overflowing_add(lw);
-                    (c[1], _) = CarryingAdd::carrying_add(c[1], hw, carry);
-                }
-
-                let a = a.as_ref();
-                let b = b.as_ref();
-
-                assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
-
-                let mut a_iter = a.chunks_exact(16);
-                let mut b_iter = b.chunks_exact(16);
-
-                let inter = (&mut a_iter)
-                    .zip(&mut b_iter)
-                    .map(|(a_s, b_s)| {
-                        let mut c: [#ty; 2] = [0, 0];
-                        for (&a, &b) in a_s.iter().zip(b_s) {
-                            multiply_add(&mut c, a, b);
-                        }
-                        self.reduce(c)
-                    })
-                    .fold(0, |acc: #ty, b| self.reduce_add(acc, b));
-
-                let mut c: [#ty; 2] = [0, 0];
-                a_iter
-                    .remainder()
-                    .iter()
-                    .zip(b_iter.remainder())
-                    .for_each(|(&a, &b)| {
-                        multiply_add(&mut c, a, b);
-                    });
-                self.reduce_add(self.reduce(c), inter)
-            }
-
-            #[inline]
-            fn reduce_dot_product_iter(
-                self,
-                a: impl IntoIterator<Item = #ty>,
-                b: impl IntoIterator<Item = #ty>,
-            ) -> #ty {
-                use ::primus_modulus::reduce::*;
-                /// `c += a * b`
-                fn multiply_add(c: &mut [#ty; 2], a: #ty, b: #ty) {
-                    use ::primus_modulus::integer::{CarryingAdd, WideningMul};
-                    let (lw, hw) = WideningMul::widening_mul(a, b);
-                    let carry;
-                    (c[0], carry) = c[0].overflowing_add(lw);
-                    (c[1], _) = CarryingAdd::carrying_add(c[1], hw, carry);
-                }
-
-                let mut a_iter = a.into_iter();
-                let mut b_iter = b.into_iter();
-
-                let mut a_temp_array = [0; 16];
-                let mut b_temp_array = [0; 16];
-
-                let mut i = 0;
-                let mut result = 0;
-
-                while let (Some(a_next), Some(b_next)) = (a_iter.next(), b_iter.next()) {
-                    if i < 16 {
-                        a_temp_array[i] = a_next;
-                        b_temp_array[i] = b_next;
-                        i += 1;
-                    } else {
-                        let mut c: [#ty; 2] = [0, 0];
-                        for (&a, b) in a_temp_array.iter().zip(b_temp_array) {
-                            multiply_add(&mut c, a, b);
-                        }
-                        self.reduce_add_assign(&mut result, self.reduce(c));
-
-                        a_temp_array.fill(0);
-                        b_temp_array.fill(0);
-                        a_temp_array[0] = a_next;
-                        b_temp_array[0] = b_next;
-                        i = 1;
-                    }
-                }
-
-                let mut c: [#ty; 2] = [0, 0];
-                for (&a, &b) in a_temp_array[..i].iter().zip(b_temp_array[..i].iter()) {
-                    multiply_add(&mut c, a, b);
-                }
-                self.reduce_add_assign(&mut result, self.reduce(c));
-
-                result
             }
         }
 

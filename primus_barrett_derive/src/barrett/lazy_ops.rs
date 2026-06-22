@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-pub(crate) fn impl_lazy_reduce_ops(
+pub(crate) fn lazy_ops(
     name: &Ident,
     modulus: &TokenStream,
     ty: &syn::Path,

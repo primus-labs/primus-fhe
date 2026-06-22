@@ -11,10 +11,11 @@
 //!
 //! # Length and value-range invariants
 //!
-//! All slice traits use `debug_assert*!` to check length agreement and
-//! value-range pre-conditions. In release builds the checks are stripped;
+//! Most slice traits use `debug_assert*!` to check length agreement and
+//! value-range pre-conditions. In release builds those checks are stripped;
 //! callers (typically the polynomial / NTT layer) are expected to uphold
-//! them at higher-level boundaries.
+//! them at higher-level boundaries. APIs that document panics, such as
+//! [`ReduceDotProduct::reduce_dot_product`], perform unconditional checks.
 
 /// Slice form of [`crate::ReduceOnce`].
 pub trait ReduceOnceSlice<T> {

@@ -382,7 +382,7 @@ where
     T: UnsignedInteger,
     M: Copy + Reduce<[T; 2], Output = T> + ReduceAdd<T, Output = T>,
 {
-    debug_assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
+    assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
 
     let mut a_iter = a.chunks_exact(DOT_PRODUCT_INNER_CHUNK);
     let mut b_iter = b.chunks_exact(DOT_PRODUCT_INNER_CHUNK);
@@ -417,43 +417,27 @@ pub fn reduce_dot_product_iter<T, M>(
     b: impl IntoIterator<Item = T>,
 ) -> T
 where
-    T: FheUint,
+    T: UnsignedInteger,
     M: Copy + Reduce<[T; 2], Output = T> + ReduceAddAssign<T>,
 {
-    let mut a_iter = a.into_iter();
-    let mut b_iter = b.into_iter();
-
-    let mut a_temp_array = [T::ZERO; DOT_PRODUCT_INNER_CHUNK];
-    let mut b_temp_array = [T::ZERO; DOT_PRODUCT_INNER_CHUNK];
-
-    let mut i = 0;
     let mut result = T::ZERO;
+    let mut c = [T::ZERO, T::ZERO];
+    let mut count = 0;
 
-    while let (Some(a_next), Some(b_next)) = (a_iter.next(), b_iter.next()) {
-        if i < DOT_PRODUCT_INNER_CHUNK {
-            a_temp_array[i] = a_next;
-            b_temp_array[i] = b_next;
-            i += 1;
-        } else {
-            let mut c: [T; 2] = [T::ZERO, T::ZERO];
-            for (&a, b) in a_temp_array.iter().zip(b_temp_array) {
-                multiply_add(&mut c, a, b);
-            }
+    for (a, b) in std::iter::zip(a, b) {
+        multiply_add(&mut c, a, b);
+        count += 1;
+
+        if count == DOT_PRODUCT_INNER_CHUNK {
             modulus.reduce_add_assign(&mut result, modulus.reduce(c));
-
-            a_temp_array.fill(T::ZERO);
-            b_temp_array.fill(T::ZERO);
-            a_temp_array[0] = a_next;
-            b_temp_array[0] = b_next;
-            i = 1;
+            c = [T::ZERO, T::ZERO];
+            count = 0;
         }
     }
 
-    let mut c: [T; 2] = [T::ZERO, T::ZERO];
-    for (&a, &b) in a_temp_array[..i].iter().zip(b_temp_array[..i].iter()) {
-        multiply_add(&mut c, a, b);
+    if count != 0 {
+        modulus.reduce_add_assign(&mut result, modulus.reduce(c));
     }
-    modulus.reduce_add_assign(&mut result, modulus.reduce(c));
 
     result
 }

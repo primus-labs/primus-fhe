@@ -38,23 +38,31 @@ fn impl_barrett(input: &BarrettModulusInput, modulus: Modulus) -> TokenStream {
 
     let impl_basic = basic::basic(vis, name, &modulus, ty, &ratio);
 
-    let lazy_reduce_ops = lazy_ops::impl_lazy_reduce_ops(name, &modulus, ty, &ratio);
+    let impl_simd = basic::into_simd_modulus(name, &modulus, ty, &ratio);
 
-    let reduce_ops = ops::impl_reduce_ops(name, &modulus, ty);
+    let lazy_ops = lazy_ops::lazy_ops(name, &modulus, ty, &ratio);
 
-    let reduce_slice_ops = slice_ops::impl_reduce_slice_ops(name, &modulus, ty);
+    let ops = ops::ops(name, &modulus, ty);
 
-    let lazy_reduce_slice_ops = lazy_slice_ops::impl_lazy_reduce_slice_ops(name, &modulus, ty);
+    let lazy_slice_ops = lazy_slice_ops::lazy_slice_ops(name, &modulus, ty);
+
+    let slice_ops = slice_ops::slice_ops(name, &modulus, ty);
+
+    let slice_inv_ops = slice_ops::slice_inv_ops(name, ty);
 
     quote::quote! {
         #impl_basic
 
-        #lazy_reduce_ops
+        #impl_simd
 
-        #reduce_ops
+        #lazy_ops
 
-        #reduce_slice_ops
+        #ops
 
-        #lazy_reduce_slice_ops
+        #lazy_slice_ops
+
+        #slice_ops
+
+        #slice_inv_ops
     }
 }

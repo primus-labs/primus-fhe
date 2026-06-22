@@ -65,8 +65,18 @@ pub(crate) fn basic(
                 #modulus.hash(state)
             }
         }
+    }
+}
 
-        #[cfg(feature = "simd")]
+#[cfg(feature = "simd")]
+pub(crate) fn into_simd_modulus(
+    name: &Ident,
+    modulus: &TokenStream,
+    ty: &syn::Path,
+    ratio: &[TokenStream; 2],
+) -> TokenStream {
+    let [r0, r1] = ratio;
+    quote! {
         impl ::std::convert::Into<::primus_modulus::SimdBarrettModulus<#ty>> for #name {
             #[inline]
             fn into(self) -> ::primus_modulus::SimdBarrettModulus<#ty> {
@@ -74,4 +84,14 @@ pub(crate) fn basic(
             }
         }
     }
+}
+
+#[cfg(not(feature = "simd"))]
+pub(crate) fn into_simd_modulus(
+    _name: &Ident,
+    _modulus: &TokenStream,
+    _ty: &syn::Path,
+    _ratio: &[TokenStream; 2],
+) -> TokenStream {
+    TokenStream::new()
 }
