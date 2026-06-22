@@ -34,4 +34,4 @@ pub use power_of_two::PowOf2Modulus;
 pub use uint::UintModulus;
 
 #[cfg(feature = "simd")]
-pub use barrett::{SimdBarrettModulus, simd_reduce_dot_product};
+pub use barrett::{SimdBarrettModulus, simd_reduce_dot_product as barrett_simd_reduce_dot_product};

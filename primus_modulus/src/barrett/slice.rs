@@ -482,7 +482,7 @@ mod dot_product {
 
         #[inline]
         fn reduce_dot_product(self, a: impl AsRef<[T]>, b: impl AsRef<[T]>) -> Self::Output {
-            crate::simd_reduce_dot_product(self, a.as_ref(), b.as_ref())
+            crate::barrett_simd_reduce_dot_product(self, a.as_ref(), b.as_ref())
         }
 
         #[inline]

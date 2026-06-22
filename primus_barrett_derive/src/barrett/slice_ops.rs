@@ -338,7 +338,7 @@ pub(crate) fn slice_ops(name: &Ident, modulus: &TokenStream, ty: &syn::Path) -> 
 
             #[inline]
             fn reduce_dot_product(self, a: impl AsRef<[#ty]>, b: impl AsRef<[#ty]>) -> Self::Output {
-                ::primus_modulus::simd_reduce_dot_product(self, a.as_ref(), b.as_ref())
+                ::primus_modulus::barrett_simd_reduce_dot_product(self, a.as_ref(), b.as_ref())
             }
 
             #[inline]
