@@ -9,10 +9,12 @@
 pub(crate) mod common;
 mod ops;
 
+mod mul_factor;
 mod shoup_factor;
 
 pub use ops::*;
 
+pub use mul_factor::MultiplyFactor;
 pub use shoup_factor::ShoupFactor;
 
 #[cfg(feature = "simd")]

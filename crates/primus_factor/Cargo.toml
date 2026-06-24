@@ -15,3 +15,7 @@ criterion = { workspace = true }
 [features]
 default = []
 simd = ["primus_integer/simd"]
+
+[[bench]]
+name = "shoup_factor"
+harness = false
