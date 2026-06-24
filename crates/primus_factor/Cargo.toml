@@ -1,0 +1,21 @@
+[package]
+name = "primus_factor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_integer = { path = "../primus_integer" }
+
+[dev-dependencies]
+primus_modulus = { path = "../primus_modulus" }
+primus_reduce = { path = "../primus_reduce" }
+rand = { workspace = true }
+criterion = { workspace = true }
+
+[features]
+default = []
+simd = ["primus_integer/simd"]
+
+[[bench]]
+name = "shoup_factor"
+harness = false

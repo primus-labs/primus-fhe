@@ -200,6 +200,7 @@ fn backend_mut_array() {
 // Edge cases
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::const_is_empty)]
 #[test]
 fn empty_buffers() {
     let v: Vec<u64> = vec![];

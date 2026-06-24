@@ -32,6 +32,41 @@ pub const VECTOR_BITS: usize = 512;
 #[cfg(not(target_feature = "avx512f"))]
 pub const VECTOR_BITS: usize = 256;
 
+/// Array type containing exactly one SIMD chunk of scalar lanes.
+pub trait LaneArray<T>: Copy + Default + AsRef<[T]> + AsMut<[T]> + IntoIterator<Item = T> {
+    /// Maps each lane to a new array without exposing lane indices.
+    #[inline]
+    fn map_lanes(mut self, mut f: impl FnMut(T) -> T) -> Self {
+        let input = self;
+        for (dst, src) in self.as_mut().iter_mut().zip(input) {
+            *dst = f(src);
+        }
+        self
+    }
+
+    /// Builds a lane array from exactly one SIMD chunk worth of scalar values.
+    #[inline]
+    fn try_from_iter(iter: impl IntoIterator<Item = T>) -> Option<Self> {
+        let mut iter = iter.into_iter();
+        let mut output = Self::default();
+
+        for lane in output.as_mut() {
+            *lane = iter.next()?;
+        }
+
+        if iter.next().is_none() {
+            Some(output)
+        } else {
+            None
+        }
+    }
+}
+
+impl<T, A> LaneArray<T> for A where
+    A: Copy + Default + AsRef<[T]> + AsMut<[T]> + IntoIterator<Item = T>
+{
+}
+
 /// Integer types that can serve as SIMD lane elements.
 pub trait SimdInteger: Integer + SimdElement + SimdCast {
     /// The number of lanes in a SIMD vector for this element type at the
@@ -43,7 +78,7 @@ pub trait SimdInteger: Integer + SimdElement + SimdCast {
     /// This is normally `[Self; Self::LANE_COUNT]`, exposed as an associated
     /// type so generic code can work with SIMD-sized chunks without naming the
     /// const expression directly.
-    type Array: Copy + IntoIterator<Item = Self>;
+    type Array: LaneArray<Self>;
 
     /// Boolean selector array matching [`Self::MaskT`](Self::MaskT).
     ///
@@ -184,7 +219,7 @@ where
     for<'a> Self: BitXor<&'a Self, Output = Self> + BitXorAssign<&'a Self>,
 {
     /// Array type containing one vector worth of scalar lanes.
-    type Array;
+    type Array: LaneArray<T>;
 
     /// Constructs a new SIMD vector with all elements set to the given value.
     fn splat(value: T) -> T::SimdT;
@@ -194,6 +229,12 @@ where
 
     /// Converts a SIMD vector to an array.
     fn to_array(self) -> Self::Array;
+
+    /// Returns an array reference containing the entire SIMD vector.
+    fn as_array(&self) -> &Self::Array;
+
+    /// Returns a mutable array reference containing the entire SIMD vector.
+    fn as_mut_array(&mut self) -> &mut Self::Array;
 
     /// Returns a tuple of the sum along with a boolean indicating whether an arithmetic overflow would occur.
     /// If an overflow would have occurred then the wrapped value is returned.
@@ -221,6 +262,16 @@ macro_rules! impl_simd_array {
             #[inline]
             fn to_array(self) -> Self::Array {
                 self.to_array()
+            }
+
+            #[inline]
+            fn as_array(&self) -> &Self::Array {
+                self.as_array()
+            }
+
+            #[inline]
+            fn as_mut_array(&mut self) -> &mut Self::Array {
+                self.as_mut_array()
             }
         }
     )*)
