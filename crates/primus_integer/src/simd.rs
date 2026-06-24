@@ -20,9 +20,7 @@ use core::{
     },
 };
 
-use crate::{BorrowingSub, CarryingAdd, CarryingMul, Integer, WideningMul};
-
-use super::UnsignedInteger;
+use crate::{BorrowingSub, CarryingAdd, CarryingMul, Integer, UnsignedInteger, WideningMul};
 
 /// Native SIMD vector width in bits.
 #[cfg(target_feature = "avx512f")]
@@ -33,38 +31,48 @@ pub const VECTOR_BITS: usize = 512;
 pub const VECTOR_BITS: usize = 256;
 
 /// Array type containing exactly one SIMD chunk of scalar lanes.
-pub trait LaneArray<T>: Copy + Default + AsRef<[T]> + AsMut<[T]> + IntoIterator<Item = T> {
+pub trait LaneArray<T: Integer>: Copy + AsRef<[T]> + AsMut<[T]> + IntoIterator<Item = T> {
+    /// Builds a lane array with every lane set to zero.
+    #[inline]
+    fn zero() -> Self {
+        Self::splat(T::ZERO)
+    }
+
+    /// Builds a lane array with every lane set to `value`.
+    fn splat(value: T) -> Self;
+
+    /// Builds a lane array by calling `f` once for each lane index.
+    fn from_fn<F: FnMut(usize) -> T>(f: F) -> Self;
+
     /// Maps each lane to a new array without exposing lane indices.
-    #[inline]
-    fn map_lanes(mut self, mut f: impl FnMut(T) -> T) -> Self {
-        let input = self;
-        for (dst, src) in self.as_mut().iter_mut().zip(input) {
-            *dst = f(src);
-        }
-        self
-    }
+    fn map(self, f: impl FnMut(T) -> T) -> Self;
 
-    /// Builds a lane array from exactly one SIMD chunk worth of scalar values.
-    #[inline]
-    fn try_from_iter(iter: impl IntoIterator<Item = T>) -> Option<Self> {
-        let mut iter = iter.into_iter();
-        let mut output = Self::default();
-
-        for lane in output.as_mut() {
-            *lane = iter.next()?;
-        }
-
-        if iter.next().is_none() {
-            Some(output)
-        } else {
-            None
-        }
-    }
+    /// Builds a lane array from a slice with exactly one SIMD chunk worth of
+    /// scalar values.
+    fn try_from_slice(slice: &[T]) -> Option<Self>;
 }
 
-impl<T, A> LaneArray<T> for A where
-    A: Copy + Default + AsRef<[T]> + AsMut<[T]> + IntoIterator<Item = T>
-{
+impl<T: Integer, const N: usize> LaneArray<T> for [T; N] {
+    #[inline]
+    fn splat(value: T) -> Self {
+        [value; N]
+    }
+
+    #[inline]
+    fn from_fn<F: FnMut(usize) -> T>(f: F) -> Self {
+        core::array::from_fn(f)
+    }
+
+    #[inline]
+    fn map(self, f: impl FnMut(T) -> T) -> Self {
+        self.map(f)
+    }
+
+    #[inline]
+    fn try_from_slice(slice: &[T]) -> Option<Self> {
+        let array: &[T; N] = slice.try_into().ok()?;
+        Some(*array)
+    }
 }
 
 /// Integer types that can serve as SIMD lane elements.
@@ -73,7 +81,7 @@ pub trait SimdInteger: Integer + SimdElement + SimdCast {
     /// target's preferred vector width.
     const LANE_COUNT: usize;
 
-    /// Array type containing exactly one default SIMD chunk of scalar lanes.
+    /// Array type containing exactly one SIMD chunk of scalar lanes.
     ///
     /// This is normally `[Self; Self::LANE_COUNT]`, exposed as an associated
     /// type so generic code can work with SIMD-sized chunks without naming the

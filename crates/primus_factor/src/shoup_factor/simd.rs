@@ -2,7 +2,7 @@ use core::simd::cmp::SimdPartialOrd;
 use std::simd::cmp::SimdOrd;
 
 use primus_integer::{
-    DivWide, SimdArray, SimdInteger, SimdMaskArray, SimdUnsignedInteger, WideningMul,
+    DivWide, LaneArray, SimdArray, SimdInteger, SimdMaskArray, SimdUnsignedInteger, WideningMul,
 };
 
 use crate::{FactorMul, LazyFactorMul};
@@ -68,8 +68,8 @@ impl<T: SimdUnsignedInteger> SimdShoupFactor<T> {
     pub fn from_slice(factors: &[ShoupFactor<T>]) -> Self {
         assert_eq!(factors.len(), T::LANE_COUNT);
 
-        let mut values = <T as SimdInteger>::Array::default();
-        let mut quotients = <T as SimdInteger>::Array::default();
+        let mut values = <T as SimdInteger>::Array::zero();
+        let mut quotients = <T as SimdInteger>::Array::zero();
         for ((value, quotient), factor) in values
             .as_mut()
             .iter_mut()
@@ -121,7 +121,7 @@ impl<T: SimdUnsignedInteger> SimdShoupFactor<T> {
 
     #[inline]
     fn compute_quotient(value: T::SimdT, modulus: T) -> T::SimdT {
-        let mut quotient = <T as SimdInteger>::Array::default();
+        let mut quotient = <T as SimdInteger>::Array::zero();
         for (quotient, value) in quotient.as_mut().iter_mut().zip(value.to_array()) {
             *quotient = DivWide::div_wide(T::ZERO, value, modulus);
         }
