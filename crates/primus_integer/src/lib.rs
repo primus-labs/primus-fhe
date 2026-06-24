@@ -38,4 +38,6 @@ pub use big_integer::{
 };
 
 #[cfg(feature = "simd")]
-pub use simd::{SimdArray, SimdInteger, SimdMaskArray, SimdUnsignedArray, SimdUnsignedInteger};
+pub use simd::{
+    LaneArray, SimdArray, SimdInteger, SimdMaskArray, SimdUnsignedArray, SimdUnsignedInteger,
+};
