@@ -34,10 +34,7 @@ impl MultiplyFactor {
 
         let quotient = divide_u128_u64_lo(op_hi, op_lo, modulus);
 
-        Self {
-            operand,
-            quotient,
-        }
+        Self { operand, quotient }
     }
 
     /// Returns the fixed operand represented by this factor.
