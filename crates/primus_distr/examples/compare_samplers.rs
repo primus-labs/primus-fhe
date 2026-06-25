@@ -1,9 +1,9 @@
 // cargo r -r -p primus_distr --example compare_samplers
 //
-// Compares the accuracy and performance of all available discrete Gaussian
+// Compares the accuracy and performance of available discrete Gaussian
 // samplers side by side across multiple sigma values:
-//   - CDTSampler (f64 precision, portable)
-//   - Discrete Ziggurat
+//   - CDTSampler (f64 precision, portable, default for σ ≤ 20)
+//   - DiscreteZiggurat (large σ)
 //   - UnixCDTSampler (256-bit precision, Unix + high_precision feature only)
 
 use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, presets::UTF8_FULL};
@@ -277,7 +277,7 @@ fn compare_samplers_at_sigma(sigma: f64) {
 // ---------------------------------------------------------------------------
 
 fn main() {
-    let sigmas: Vec<f64> = vec![0.8, 1.5, 3.19, 9.0, 13.0, 15.0, 16.0, 17.0];
+    let sigmas: Vec<f64> = vec![0.8, 1.5, 3.19, 9.0, 20.0, 30.0, 40.0];
 
     println!("\n{}", "═".repeat(100));
     println!("Discrete Gaussian Sampler Comparison");

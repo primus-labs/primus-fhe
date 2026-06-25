@@ -16,10 +16,11 @@
 //!
 //! # Sampler selection
 //!
-//! The Gaussian samplers internally choose between a CDT (cumulative
-//! distribution table) sampler and a Ziggurat sampler based on the standard
-//! deviation. On Linux with the `high_precision` feature, optional 256-bit
-//! CDT samplers are available.
+//! The Gaussian samplers internally choose between a CDT sampler
+//! ([`CDTSampler`]) and a Ziggurat sampler ([`DiscreteZiggurat`]) based on
+//! the standard deviation (threshold: σ = 20).
+//! On Linux with the `high_precision` feature, a 256-bit CDT sampler
+//! ([`UnixCDTSampler`]) is also available.
 //!
 //! # Batch sampling
 //!
@@ -28,6 +29,8 @@
 //! values are replicated across multiple modulus slots.
 
 mod error;
+
+mod utils;
 
 mod common;
 

@@ -1,35 +1,14 @@
 use primus_integer::{AsInto, FheUint};
 use rand::distr::Distribution;
 
+use crate::utils::log_sum_exp;
+
 /// CDT sampler using log-space computation
 #[derive(Debug, Clone)]
 pub struct CDTSampler<T: FheUint> {
     std_dev: f64,
     modulus_minus_one: T,
     cdt: Vec<u64>,
-}
-
-/// Log-sum-exp trick to compute log(sum(exp(log_values))) stably
-/// This avoids numerical underflow when summing very small probabilities
-fn log_sum_exp(log_values: &[f64]) -> f64 {
-    if log_values.is_empty() {
-        return f64::NEG_INFINITY;
-    }
-
-    // Find maximum value for numerical stability
-    let max_log = log_values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-
-    if max_log.is_infinite() && max_log.is_sign_negative() {
-        return f64::NEG_INFINITY;
-    }
-
-    // Compute sum(exp(log_values - max_log))
-    let sum_exp: f64 = log_values
-        .iter()
-        .map(|&log_val| (log_val - max_log).exp())
-        .sum();
-
-    max_log + sum_exp.ln()
 }
 
 impl<T: FheUint> CDTSampler<T> {

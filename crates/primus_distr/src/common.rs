@@ -48,12 +48,12 @@ where
     R: rand::Rng + rand::CryptoRng,
 {
     let mut v = vec![T::ZERO; length];
-    sample_ternary_values_inplace(&mut v, minus_one, rng);
+    sample_ternary_values_to(&mut v, minus_one, rng);
     v
 }
 
 /// Sample a ternary vector whose values are `T`.
-pub fn sample_ternary_values_inplace<T, R>(result: &mut [T], minus_one: T, rng: &mut R)
+pub fn sample_ternary_values_to<T, R>(result: &mut [T], minus_one: T, rng: &mut R)
 where
     T: FheInt,
     R: rand::Rng + rand::CryptoRng,
@@ -85,7 +85,7 @@ where
 }
 
 /// Fill `result` with samples from a uniform distribution (in-place).
-pub fn sample_uniform_values_inplace<T, R>(result: &mut [T], distr: &Uniform<T>, rng: &mut R)
+pub fn sample_uniform_values_to<T, R>(result: &mut [T], distr: &Uniform<T>, rng: &mut R)
 where
     T: FheInt,
     R: rand::Rng + rand::CryptoRng,
@@ -110,11 +110,8 @@ where
 }
 
 /// Fill `result` with samples from a discrete Gaussian distribution (in-place).
-pub fn sample_gaussian_values_inplace<T, R>(
-    result: &mut [T],
-    distr: &DiscreteGaussian<T>,
-    rng: &mut R,
-) where
+pub fn sample_gaussian_values_to<T, R>(result: &mut [T], distr: &DiscreteGaussian<T>, rng: &mut R)
+where
     T: FheUint,
     R: rand::Rng + rand::CryptoRng,
 {
@@ -136,7 +133,7 @@ where
 {
     let mut result = vec![T::ZERO; length * moduli_count];
 
-    sample_crt_binary_values_inplace(&mut result, length, rng);
+    sample_crt_binary_values_to(&mut result, length, rng);
 
     result
 }
@@ -145,7 +142,7 @@ where
 ///
 /// Samples `length` binary values into the first chunk, then copies them
 /// into each subsequent chunk of `length` elements.
-pub fn sample_crt_binary_values_inplace<T, R>(result: &mut [T], length: usize, rng: &mut R)
+pub fn sample_crt_binary_values_to<T, R>(result: &mut [T], length: usize, rng: &mut R)
 where
     T: FheInt,
     R: rand::Rng + rand::CryptoRng,
@@ -167,13 +164,13 @@ where
     let moduli_count = moduli_minus_one.len();
     let mut result = vec![T::ZERO; length * moduli_count];
 
-    sample_crt_ternary_values_inplace(&mut result, length, moduli_minus_one, rng);
+    sample_crt_ternary_values_to(&mut result, length, moduli_minus_one, rng);
 
     result
 }
 
 /// Sample a ternary vector whose values are `T`.
-pub fn sample_crt_ternary_values_inplace<T, R>(
+pub fn sample_crt_ternary_values_to<T, R>(
     result: &mut [T],
     length: usize,
     moduli_minus_one: &[T],
@@ -238,13 +235,13 @@ where
 {
     let mut result = vec![T::ZERO; length * uniform_distrs.len()];
 
-    sample_crt_uniform_values_inplace(&mut result, length, uniform_distrs, rng);
+    sample_crt_uniform_values_to(&mut result, length, uniform_distrs, rng);
 
     result
 }
 
 /// Sample a uniform vector whose values are `T`.
-pub fn sample_crt_uniform_values_inplace<T, R>(
+pub fn sample_crt_uniform_values_to<T, R>(
     result: &mut [T],
     length: usize,
     uniform_distrs: &[Uniform<T>],
@@ -332,7 +329,7 @@ where
 }
 
 /// Sample a gaussian vector whose values are `T`.
-pub fn sample_crt_gaussian_values_inplace<T, R>(
+pub fn sample_crt_gaussian_values_to<T, R>(
     result: &mut [T],
     length: usize,
     moduli_value: &[T],

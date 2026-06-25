@@ -7,7 +7,7 @@
 //   samples should follow N(0, CHUNK_SIZE * sigma^2)
 //
 // Edit main() to choose which sampler to validate (CDTSampler or
-// DiscreteZiggurat), or uncomment both blocks to test side by side.
+// DiscreteZiggurat), or uncomment blocks to test side by side.
 
 use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, presets::UTF8_FULL};
 use primus_distr::stats;
@@ -259,9 +259,9 @@ fn main() {
         }
     }
 
-    // DiscreteZiggurat (efficient for sigma >= 10):
+    // DiscreteZiggurat (large σ):
     // {
-    //     let sigmas = [10.0, 15.0, 20.0, 25.0, 30.0];
+    //     let sigmas = [10.0, 20.0, 30.0, 40.0];
     //     for &sigma in &sigmas {
     //         let distr = primus_distr::DiscreteZiggurat::<ValueT>::new(sigma, TAIL_CUT, Q - 1);
     //         validate_sampler("DiscreteZiggurat", sigma, &distr, &mut rng);

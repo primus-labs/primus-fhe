@@ -19,8 +19,8 @@ use crate::DistrErr;
 /// are mapped into the upper half of the modulus range via
 /// `modulus_minus_one - |x| + 1`.
 ///
-/// Internally delegates to [`CDTSampler`] (for small σ) or
-/// [`DiscreteZiggurat`] (for large σ).
+/// Internally delegates to [`CDTSampler`] (σ ≤ 20) or
+/// [`DiscreteZiggurat`] (σ > 20).
 #[derive(Clone)]
 pub enum DiscreteGaussian<T: FheUint> {
     /// CDT (cumulative distribution table) based sampler.
@@ -45,7 +45,7 @@ impl<T: FheUint> DiscreteGaussian<T> {
                 std_dev,
                 modulus_minus_one,
             })
-        } else if std_dev <= 16.0 {
+        } else if std_dev <= 20.0 {
             Ok(DiscreteGaussian::Cdt(CDTSampler::new(
                 std_dev,
                 12.0,

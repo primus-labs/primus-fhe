@@ -16,8 +16,7 @@ pub use ziggurat::SignedDiscreteZiggurat;
 /// A centered discrete Gaussian distribution over signed integers.
 ///
 /// Samples can be positive, zero, or negative. Internally delegates to
-/// [`SignedCDTSampler`] (for small σ) or [`SignedDiscreteZiggurat`] (for
-/// large σ).
+/// [`SignedCDTSampler`] (σ ≤ 20) or [`SignedDiscreteZiggurat`] (σ > 20).
 #[derive(Clone)]
 pub enum SignedDiscreteGaussian<T: FheInt> {
     /// CDT (cumulative distribution table) based sampler.
@@ -35,7 +34,7 @@ impl<T: FheInt> SignedDiscreteGaussian<T> {
     /// - `std_dev` — standard deviation (`σ`).
     #[inline]
     pub fn new(std_dev: f64) -> Result<SignedDiscreteGaussian<T>, DistrErr<T>> {
-        if std_dev <= 16.0 {
+        if std_dev <= 20.0 {
             Ok(SignedDiscreteGaussian::Cdt(SignedCDTSampler::new(
                 std_dev, 12.0,
             )))
