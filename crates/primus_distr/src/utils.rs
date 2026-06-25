@@ -18,29 +18,3 @@ pub(crate) fn log_sum_exp(log_values: &[f64]) -> f64 {
         .sum();
     max_log + sum_exp.ln()
 }
-
-/// Kahan compensated summation accumulator.
-///
-/// Reduces floating-point accumulation error from O(n·ε) to O(ε) by
-/// tracking a running compensation term.
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct KahanSum {
-    sum: f64,
-    compensation: f64,
-}
-
-impl KahanSum {
-    /// Add `x` to the running total with compensation.
-    #[inline]
-    pub(crate) fn add(&mut self, x: f64) {
-        let y = x - self.compensation;
-        let t = self.sum + y;
-        self.compensation = (t - self.sum) - y;
-        self.sum = t;
-    }
-
-    /// Return the compensated sum.
-    pub(crate) fn result(self) -> f64 {
-        self.sum
-    }
-}

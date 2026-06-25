@@ -277,7 +277,7 @@ fn compare_samplers_at_sigma(sigma: f64) {
 // ---------------------------------------------------------------------------
 
 fn main() {
-    let sigmas: Vec<f64> = vec![0.8, 1.5, 3.19, 9.0, 20.0, 30.0, 40.0];
+    let sigmas: Vec<f64> = vec![0.8, 1.5, 3.19, 9.0, 15.0, 20.0];
 
     println!("\n{}", "═".repeat(100));
     println!("Discrete Gaussian Sampler Comparison");

@@ -52,44 +52,33 @@ impl<T: Integer> SignedCDTSampler<T> {
             .map(|&log_p| log_p.exp())
             .collect();
 
-        // Build cumulative distribution
-        let mut cdt_f64 = Vec::with_capacity(length + 1);
-        let mut acc = 0.0;
+        // Build CDF and quantize directly to u64 (single pass)
+        let mut cdt = Vec::with_capacity(length + 1);
+        let mut acc = 0.0_f64;
+        cdt.push(0);
 
-        cdt_f64.push(0.0);
         for &p in pdf_normalized.iter() {
             acc += p;
-            // Clamp to [0, 1] to handle floating-point errors
-            cdt_f64.push(acc.min(1.0));
+            let scaled = acc.min(1.0) * (u64::MAX as f64);
+            let val = if scaled >= u64::MAX as f64 {
+                u64::MAX
+            } else {
+                (scaled + 0.5) as u64
+            };
+            cdt.push(val);
         }
 
-        // Ensure last value is exactly 1.0
-        if let Some(last) = cdt_f64.last_mut() {
-            *last = 1.0;
+        // Ensure last value is exactly MAX
+        if let Some(last) = cdt.last_mut() {
+            *last = u64::MAX;
         }
 
-        assert_eq!(cdt_f64.len(), length + 1, "CDT length mismatch");
-
-        // Map to u64 range [0, 2^64-1]
-        let cdt: Vec<u64> = cdt_f64
-            .into_iter()
-            .map(|f| {
-                // Use careful rounding to minimize quantization error
-                let scaled = f * u64::MAX as f64;
-
-                // Round to nearest u64
-                if scaled >= u64::MAX as f64 {
-                    u64::MAX
-                } else {
-                    (scaled + 0.5) as u64
-                }
-            })
-            .collect();
+        assert_eq!(cdt.len(), length + 1, "CDT length mismatch");
 
         Self {
             std_dev,
             cdt,
-            phantom: PhantomData::<T>,
+            phantom: PhantomData,
         }
     }
 
@@ -116,7 +105,7 @@ impl<T: Integer> Distribution<T> for SignedCDTSampler<T> {
             return T::ZERO;
         }
 
-        if positive { v } else { T::ONE - v }
+        if positive { v } else { T::ZERO - v }
     }
 }
 
