@@ -1,5 +1,5 @@
 use primus_integer::{AsInto, FheUint};
-use rand::distr::Distribution;
+use rand::distr::{Distribution, RngExt};
 use rug::{Float, az::Cast};
 
 const PRECISION: u32 = 512;
