@@ -1,0 +1,30 @@
+[package]
+name = "primus_distr"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_integer = { path = "../primus_integer" }
+
+thiserror = { workspace = true }
+num-traits = { workspace = true }
+rand = { workspace = true }
+itertools = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rug = { version = "=1.30", optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+comfy-table = "7.1"
+
+[features]
+high_precision = ["dep:rug"]
+
+[[bench]]
+name = "sample_gaussian"
+harness = false
+
+[[bench]]
+name = "gen_sampler"
+harness = false
