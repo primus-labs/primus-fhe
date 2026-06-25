@@ -37,10 +37,10 @@ impl<T: Integer> SignedUnixCDTSampler<T> {
 
         let mut pre = minus_twice_variance_recip.clone().exp();
         pdf[1] = pre.clone();
-        for i in 2..length {
+        for (i, item) in pdf.iter_mut().enumerate().skip(2) {
             let factor = Float::with_val(PRECISION, 2 * i - 1) * &minus_twice_variance_recip;
-            pre = pre * factor.exp();
-            pdf[i] = pre.clone();
+            pre *= factor.exp();
+            *item = pre.clone();
         }
 
         let s = pdf.iter().fold(Float::new(PRECISION), |acc, v| acc + v);
