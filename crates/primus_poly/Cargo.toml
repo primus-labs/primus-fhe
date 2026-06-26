@@ -1,0 +1,25 @@
+[package]
+name = "primus_poly"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_data = { path = "../primus_data" }
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+primus_modulo = { path = "../primus_modulo" }
+primus_modulus = { path = "../primus_modulus" }
+primus_factor = { path = "../primus_factor" }
+primus_distr = { path = "../primus_distr" }
+
+num-traits = { workspace = true }
+rand = { workspace = true }
+itertools = { workspace = true }
+paste = { workspace = true }
+
+[features]
+default = []
+simd = ["primus_integer/simd", "primus_modulus/simd", "primus_factor/simd"]
+
+[dev-dependencies]
+criterion = { workspace = true }
