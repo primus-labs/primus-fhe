@@ -5,7 +5,7 @@ use primus_integer::{
     DivWide, LaneArray, SimdArray, SimdInteger, SimdMaskArray, SimdUnsignedInteger, WideningMul,
 };
 
-use crate::{FactorMul, LazyFactorMul};
+use crate::{FactorMul, LazyFactorMul, SimdFactorMul};
 
 use super::ShoupFactor;
 
@@ -32,6 +32,15 @@ impl<T: SimdUnsignedInteger> From<ShoupFactor<T>> for SimdShoupFactor<T> {
             value: T::SimdT::splat(factor.value()),
             quotient: T::SimdT::splat(factor.quotient()),
         }
+    }
+}
+
+impl<T: SimdUnsignedInteger> SimdFactorMul<T> for ShoupFactor<T> {
+    type SimdFactor = SimdShoupFactor<T>;
+
+    #[inline]
+    fn simd_from_factor_slice(factors: &[Self]) -> Self::SimdFactor {
+        SimdShoupFactor::from_slice(factors)
     }
 }
 

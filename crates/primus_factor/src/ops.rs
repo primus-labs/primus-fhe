@@ -1,3 +1,6 @@
+#[cfg(feature = "simd")]
+use primus_integer::SimdUnsignedInteger;
+
 /// Lazy modular multiplication by a precomputed factor.
 ///
 /// Implementations return a value in the representation-specific lazy range,
@@ -18,6 +21,27 @@ pub trait LazyFactorMul<T> {
 pub trait FactorMul<T>: LazyFactorMul<T> {
     /// Calculates `self * b (mod modulus)` for canonical `b`.
     fn factor_mul_modulo(self, b: T, modulus: T) -> T;
+}
+
+/// SIMD multiplication support for precomputed factors.
+///
+/// This trait covers kernels that keep one scalar factor per input element and
+/// need to pack one SIMD chunk of scalar factors into a SIMD factor. The SIMD
+/// factor must use the same modulus precomputation as the scalar factors.
+#[cfg(feature = "simd")]
+pub trait SimdFactorMul<T>: Copy + FactorMul<T>
+where
+    T: SimdUnsignedInteger,
+{
+    /// SIMD factor type containing one scalar factor per SIMD lane.
+    type SimdFactor: Copy + FactorMul<T::SimdT>;
+
+    /// Packs one SIMD chunk of scalar factors into a SIMD factor.
+    ///
+    /// # Panics
+    ///
+    /// Implementations may panic if `factors.len()` is not the SIMD lane count.
+    fn simd_from_factor_slice(factors: &[Self]) -> Self::SimdFactor;
 }
 
 /// Slice-level lazy multiplication by a precomputed factor.

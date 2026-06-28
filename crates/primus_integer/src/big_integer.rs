@@ -183,17 +183,17 @@ where
     /// Adds a value to the big integer, returning true if there was a carry.
     #[must_use]
     #[inline]
-    pub fn add_value_to<A>(&self, value: T, result: &mut BigUint<A>) -> bool
+    pub fn add_value_to<A>(&self, value: T, output: &mut BigUint<A>) -> bool
     where
         A: DataMut<Elem = T>,
     {
         debug_assert!(!self.0.as_slice().is_empty());
-        debug_assert_eq!(self.len(), result.len());
+        debug_assert_eq!(self.len(), output.len());
 
         let mut carry;
 
         let mut a_iter = self.iter();
-        let mut b_iter = result.iter_mut();
+        let mut b_iter = output.iter_mut();
 
         let a_first = a_iter.next().unwrap();
         let b_first = b_iter.next().unwrap();
@@ -220,17 +220,17 @@ where
     /// Subtracts a value to the big integer, returning true if there was a borrow.
     #[must_use]
     #[inline]
-    pub fn sub_value_to<A>(&self, value: T, result: &mut BigUint<A>) -> bool
+    pub fn sub_value_to<A>(&self, value: T, output: &mut BigUint<A>) -> bool
     where
         A: DataMut<Elem = T>,
     {
         debug_assert!(!self.0.as_slice().is_empty());
-        debug_assert_eq!(self.len(), result.len());
+        debug_assert_eq!(self.len(), output.len());
 
         let mut borrow;
 
         let mut a_iter = self.iter();
-        let mut b_iter = result.iter_mut();
+        let mut b_iter = output.iter_mut();
 
         let a_first = a_iter.next().unwrap();
         let b_first = b_iter.next().unwrap();
@@ -257,19 +257,19 @@ where
     /// Multiplies the big integer by a value, storing the result in another big integer.
     #[must_use]
     #[inline]
-    pub fn mul_value_to<A>(&self, value: T, result: &mut BigUint<A>) -> T
+    pub fn mul_value_to<A>(&self, value: T, output: &mut BigUint<A>) -> T
     where
         A: DataMut<Elem = T>,
     {
-        debug_assert_eq!(result.len(), self.len());
+        debug_assert_eq!(output.len(), self.len());
 
         if value.is_zero() {
-            result.set_zero();
+            output.set_zero();
             return T::ZERO;
         }
 
         let mut carry = T::ZERO;
-        for (ele, res) in self.iter().zip(result.iter_mut()) {
+        for (ele, res) in self.iter().zip(output.iter_mut()) {
             (*res, carry) = value.carrying_mul(*ele, carry);
         }
 
@@ -300,16 +300,16 @@ where
     /// Adds two big integers to the result, returning true if there was a carry.
     #[must_use]
     #[inline]
-    pub fn add_to<A, B>(&self, other: &BigUint<A>, result: &mut BigUint<B>) -> bool
+    pub fn add_to<A, B>(&self, other: &BigUint<A>, output: &mut BigUint<B>) -> bool
     where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
     {
         debug_assert_eq!(self.len(), other.len());
-        debug_assert_eq!(self.len(), result.len());
+        debug_assert_eq!(self.len(), output.len());
 
         let mut carry = false;
-        for ((xs, ys), zs) in self.iter().zip(other.iter()).zip(result.iter_mut()) {
+        for ((xs, ys), zs) in self.iter().zip(other.iter()).zip(output.iter_mut()) {
             (*zs, carry) = xs.carrying_add(*ys, carry);
         }
 
@@ -319,16 +319,16 @@ where
     /// Subtracts another big integer from this one, returning true if there was a borrow.
     #[must_use]
     #[inline]
-    pub fn sub_to<A, B>(&self, other: &BigUint<A>, result: &mut BigUint<B>) -> bool
+    pub fn sub_to<A, B>(&self, other: &BigUint<A>, output: &mut BigUint<B>) -> bool
     where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
     {
         debug_assert_eq!(self.len(), other.len());
-        debug_assert_eq!(self.len(), result.len());
+        debug_assert_eq!(self.len(), output.len());
 
         let mut borrow = false;
-        for ((xs, ys), zs) in self.iter().zip(other.iter()).zip(result.iter_mut()) {
+        for ((xs, ys), zs) in self.iter().zip(other.iter()).zip(output.iter_mut()) {
             (*zs, borrow) = xs.borrowing_sub(*ys, borrow);
         }
 
@@ -360,7 +360,7 @@ where
     pub fn add_modulo_to<A, B, C>(
         &self,
         other: &BigUint<A>,
-        result: &mut BigUint<B>,
+        output: &mut BigUint<B>,
         modulus: &BigUint<C>,
     ) where
         A: Data<Elem = T>,
@@ -368,14 +368,14 @@ where
         C: Data<Elem = T>,
     {
         debug_assert!(
-            self.len() == other.len() && self.len() == result.len() && self.len() == modulus.len()
+            self.len() == other.len() && self.len() == output.len() && self.len() == modulus.len()
         );
         debug_assert!(self.cmp(modulus).is_lt());
         debug_assert!(other.cmp(modulus).is_lt());
 
-        let carry = self.add_to(other, result);
-        if carry || result.cmp(modulus).is_ge() {
-            let _ = result.sub_assign(modulus);
+        let carry = self.add_to(other, output);
+        if carry || output.cmp(modulus).is_ge() {
+            let _ = output.sub_assign(modulus);
         }
     }
 
@@ -384,7 +384,7 @@ where
     pub fn sub_modulo_to<A, B, C>(
         &self,
         other: &BigUint<A>,
-        result: &mut BigUint<B>,
+        output: &mut BigUint<B>,
         modulus: &BigUint<C>,
     ) where
         A: Data<Elem = T>,
@@ -392,31 +392,31 @@ where
         C: Data<Elem = T>,
     {
         debug_assert!(
-            self.len() == other.len() && self.len() == result.len() && self.len() == modulus.len()
+            self.len() == other.len() && self.len() == output.len() && self.len() == modulus.len()
         );
         debug_assert!(self.cmp(modulus).is_lt());
         debug_assert!(other.cmp(modulus).is_lt());
 
-        if self.sub_to(other, result) {
-            let _ = result.add_assign(modulus);
+        if self.sub_to(other, output) {
+            let _ = output.add_assign(modulus);
         }
     }
 
     /// Negates the big integer modulo a given modulus.
     #[inline]
-    pub fn neg_modulo_to<A, B>(&self, result: &mut BigUint<A>, modulus: &BigUint<B>)
+    pub fn neg_modulo_to<A, B>(&self, output: &mut BigUint<A>, modulus: &BigUint<B>)
     where
         A: DataMut<Elem = T>,
         B: Data<Elem = T>,
     {
-        debug_assert!(self.len() == result.len() && self.len() == modulus.len());
+        debug_assert!(self.len() == output.len() && self.len() == modulus.len());
         debug_assert!(self.cmp(modulus).is_lt());
 
         if self.is_zero() {
-            result.set_zero();
+            output.set_zero();
         } else {
             let mut borrow = false;
-            for ((xs, ys), zs) in self.iter().zip(modulus.iter()).zip(result.iter_mut()) {
+            for ((xs, ys), zs) in self.iter().zip(modulus.iter()).zip(output.iter_mut()) {
                 (*zs, borrow) = ys.borrowing_sub(*xs, borrow);
             }
         }
@@ -597,6 +597,33 @@ where
         }
     }
 
+    /// Performs `self = other - self` modulo `modulus`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any operand has a different length, or if `self` or `other` is
+    /// not strictly less than `modulus`.
+    #[inline]
+    pub fn sub_modulo_rev_assign<A, B>(&mut self, other: &BigUint<A>, modulus: &BigUint<B>)
+    where
+        A: Data<Elem = T>,
+        B: Data<Elem = T>,
+    {
+        debug_assert!(self.len() == other.len() && self.len() == modulus.len());
+        debug_assert!(self.cmp(modulus).is_lt());
+        debug_assert!(other.cmp(modulus).is_lt());
+
+        let mut borrow = false;
+        for (self_limb, &other_limb) in self.iter_mut().zip(other.iter()) {
+            let old = *self_limb;
+            (*self_limb, borrow) = other_limb.borrowing_sub(old, borrow);
+        }
+
+        if borrow {
+            let _ = self.add_assign(modulus);
+        }
+    }
+
     /// Subs another big integer from this one modulo a given modulus.
     #[inline]
     pub fn sub_modulo_assign<A, B>(&mut self, other: &BigUint<A>, modulus: &BigUint<B>)
@@ -688,17 +715,17 @@ pub fn multiply_many_values_except<T: UnsignedInteger>(values: &[T], except: usi
 pub fn multiply_many_values_except_to<T: UnsignedInteger>(
     values: &[T],
     except: usize,
-    result: &mut [T],
+    output: &mut [T],
 ) {
     debug_assert!(!values.is_empty() && except < values.len());
-    result.fill(T::ZERO);
-    result[0] = T::ONE;
+    output.fill(T::ZERO);
+    output[0] = T::ONE;
     let mut len = 1;
 
     for (_, &v) in values.iter().enumerate().filter(|(i, _)| *i != except) {
-        let carry = BigUint(&mut result[0..len]).mul_value_assign(v);
+        let carry = BigUint(&mut output[0..len]).mul_value_assign(v);
         if !carry.is_zero() {
-            result[len] = carry;
+            output[len] = carry;
             len += 1;
         }
     }

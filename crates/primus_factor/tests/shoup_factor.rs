@@ -1,6 +1,7 @@
 use primus_factor::{
     Factor, FactorMul, FactorSliceOps, LazyFactorMul, LazyFactorSliceOps, ShoupFactor,
 };
+use primus_integer::FheUint;
 use primus_modulus::BarrettModulus;
 use primus_reduce::prelude::*;
 use rand::{distr::Uniform, prelude::*};
@@ -9,7 +10,7 @@ type ValueT = u32;
 
 const MODULUS: ValueT = 536_813_569;
 
-fn ensure_trait<T, F: Factor<T>>(_factor: F) {}
+fn ensure_trait<T: FheUint, F: Factor<T>>(_factor: F) {}
 
 #[test]
 fn test_trait_bound() {

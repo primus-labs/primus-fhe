@@ -17,6 +17,7 @@ macro_rules! impl_iters {
     ($big_uint:ident, $short_name:ident) => {
         paste::paste! {
             /// Iterator over non-overlapping chunks of a `$big_uint` buffer.
+            #[derive(Debug, Clone)]
             pub struct [<$big_uint Iter>]<'a, T>
             where
                 T: UnsignedInteger,
@@ -42,13 +43,46 @@ macro_rules! impl_iters {
                 fn next(&mut self) -> Option<Self::Item> {
                     self.iter.next().map(|slice| $big_uint(slice))
                 }
+
+                #[inline]
+                fn size_hint(&self) -> (usize, Option<usize>) {
+                    self.iter.size_hint()
+                }
+
+                #[inline]
+                fn count(self) -> usize {
+                    self.len()
+                }
+
+                #[inline]
+                fn nth(&mut self, n: usize) -> Option<Self::Item> {
+                    self.iter.nth(n).map(|slice| $big_uint(slice))
+                }
+
+                #[inline]
+                fn last(mut self) -> Option<Self::Item> {
+                    self.next_back()
+                }
             }
 
             impl<'a, T: UnsignedInteger> core::iter::FusedIterator for [<$big_uint Iter>]<'a, T> {}
+            impl<'a, T: UnsignedInteger> core::iter::DoubleEndedIterator for [<$big_uint Iter>]<'a, T> {
+                #[inline]
+                fn next_back(&mut self) -> Option<Self::Item> {
+                    self.iter.next_back().map(|slice| $big_uint(slice))
+                }
+
+                #[inline]
+                fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+                    self.iter.nth_back(n).map(|slice| $big_uint(slice))
+                }
+            }
+            impl<'a, T: UnsignedInteger> core::iter::ExactSizeIterator for [<$big_uint Iter>]<'a, T> {}
         }
 
         paste::paste! {
             /// Mutable iterator over non-overlapping chunks of a `$big_uint` buffer.
+            #[derive(Debug)]
             pub struct [<$big_uint IterMut>]<'a, T>
             where
                 T: UnsignedInteger,
@@ -74,9 +108,41 @@ macro_rules! impl_iters {
                 fn next(&mut self) -> Option<Self::Item> {
                     self.iter.next().map(|slice| $big_uint(slice))
                 }
+
+                #[inline]
+                fn size_hint(&self) -> (usize, Option<usize>) {
+                    self.iter.size_hint()
+                }
+
+                #[inline]
+                fn count(self) -> usize {
+                    self.len()
+                }
+
+                #[inline]
+                fn nth(&mut self, n: usize) -> Option<Self::Item> {
+                    self.iter.nth(n).map(|slice| $big_uint(slice))
+                }
+
+                #[inline]
+                fn last(mut self) -> Option<Self::Item> {
+                    self.next_back()
+                }
             }
 
             impl<'a, T: UnsignedInteger> core::iter::FusedIterator for [<$big_uint IterMut>]<'a, T> {}
+            impl<'a, T: UnsignedInteger> core::iter::DoubleEndedIterator for [<$big_uint IterMut>]<'a, T> {
+                #[inline]
+                fn next_back(&mut self) -> Option<Self::Item> {
+                    self.iter.next_back().map(|slice| $big_uint(slice))
+                }
+
+                #[inline]
+                fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+                    self.iter.nth_back(n).map(|slice| $big_uint(slice))
+                }
+            }
+            impl<'a, T: UnsignedInteger> core::iter::ExactSizeIterator for [<$big_uint IterMut>]<'a, T> {}
         }
     };
 }
