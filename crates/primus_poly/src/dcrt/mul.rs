@@ -30,6 +30,7 @@ where
 }
 
 #[cfg(feature = "simd")]
+#[allow(clippy::chunks_exact_to_as_chunks)]
 fn simd_butterfly<T, F>(a: &mut [T], s: &[T], w: &[F], b: &mut [T], modulus: T)
 where
     T: FheUint,
