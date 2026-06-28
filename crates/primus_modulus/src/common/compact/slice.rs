@@ -384,11 +384,10 @@ where
 {
     assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
 
-    let mut a_iter = a.chunks_exact(DOT_PRODUCT_INNER_CHUNK);
-    let mut b_iter = b.chunks_exact(DOT_PRODUCT_INNER_CHUNK);
+    let (a_chunks, a_rem) = a.as_chunks::<DOT_PRODUCT_INNER_CHUNK>();
+    let (b_chunks, b_rem) = b.as_chunks::<DOT_PRODUCT_INNER_CHUNK>();
 
-    let inter = (&mut a_iter)
-        .zip(&mut b_iter)
+    let inter = core::iter::zip(a_chunks, b_chunks)
         .map(|(a_s, b_s)| {
             let mut c: [T; 2] = [T::ZERO, T::ZERO];
             for (&a, &b) in a_s.iter().zip(b_s) {
@@ -399,13 +398,9 @@ where
         .fold(T::ZERO, |acc: T, b| modulus.reduce_add(acc, b));
 
     let mut c: [T; 2] = [T::ZERO, T::ZERO];
-    a_iter
-        .remainder()
-        .iter()
-        .zip(b_iter.remainder())
-        .for_each(|(&a, &b)| {
-            multiply_add(&mut c, a, b);
-        });
+    a_rem.iter().zip(b_rem).for_each(|(&a, &b)| {
+        multiply_add(&mut c, a, b);
+    });
     modulus.reduce_add(modulus.reduce(c), inter)
 }
 
