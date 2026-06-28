@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use primus_factor::{FactorSliceOps, ShoupFactor};
+use primus_factor::{FactorBase, FactorSliceOps, ShoupFactor};
 use rand::distr::{Distribution, Uniform};
 
 type ValueT = u64;

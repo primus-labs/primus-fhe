@@ -39,6 +39,11 @@ impl<T: SimdUnsignedInteger> SimdFactorMul<T> for ShoupFactor<T> {
     type SimdFactor = SimdShoupFactor<T>;
 
     #[inline]
+    fn simd_from_factor(factor: Self) -> Self::SimdFactor {
+        SimdShoupFactor::from(factor)
+    }
+
+    #[inline]
     fn simd_from_factor_slice(factors: &[Self]) -> Self::SimdFactor {
         SimdShoupFactor::from_slice(factors)
     }

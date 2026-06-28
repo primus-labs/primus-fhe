@@ -1,6 +1,6 @@
 use primus_integer::{DivWide, UnsignedInteger};
 
-use crate::{FactorMul, LazyFactorMul};
+use crate::{FactorBase, FactorMul, LazyFactorMul};
 
 mod slice;
 
@@ -26,13 +26,13 @@ pub struct ShoupFactor<T: UnsignedInteger> {
     quotient: T,
 }
 
-impl<T: UnsignedInteger> ShoupFactor<T> {
+impl<T: UnsignedInteger> FactorBase<T> for ShoupFactor<T> {
     /// Constructs a [`ShoupFactor<T>`].
     ///
     /// * `value` must be less than `modulus`.
     /// * `modulus` must be less than `2^(T::BITS - 1)`.
     #[inline]
-    pub fn new(value: T, modulus: T) -> Self {
+    fn new(value: T, modulus: T) -> Self {
         debug_assert!(value < modulus);
 
         // Calculate the quotient of `value * 2^T::BITS / modulus`.
@@ -40,7 +40,9 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
 
         Self { value, quotient }
     }
+}
 
+impl<T: UnsignedInteger> ShoupFactor<T> {
     /// Recomputes the quotient for a new modulus.
     ///
     /// The current value must be less than `modulus`, and `modulus` must be

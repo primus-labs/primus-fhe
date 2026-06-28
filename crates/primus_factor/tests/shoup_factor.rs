@@ -1,5 +1,5 @@
 use primus_factor::{
-    Factor, FactorMul, FactorSliceOps, LazyFactorMul, LazyFactorSliceOps, ShoupFactor,
+    Factor, FactorBase, FactorMul, FactorSliceOps, LazyFactorMul, LazyFactorSliceOps, ShoupFactor,
 };
 use primus_integer::FheUint;
 use primus_modulus::BarrettModulus;
