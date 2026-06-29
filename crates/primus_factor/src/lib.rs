@@ -22,6 +22,15 @@ pub use shoup_factor::SimdShoupFactor;
 
 use primus_integer::FheUint;
 
+/// Constructs precomputed factors for multiplication under a fixed modulus.
+///
+/// Implementations store `value` in a representation that can later multiply
+/// operands modulo the same `modulus`.
+pub trait FactorBase<T> {
+    /// Creates a factor for multiplying by `value` modulo `modulus`.
+    fn new(value: T, modulus: T) -> Self;
+}
+
 /// Marker trait for complete scalar and slice-level precomputed-factor operations.
 ///
 /// A factor can multiply one value or a slice in lazy and canonical modular

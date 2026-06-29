@@ -25,16 +25,19 @@ pub trait FactorMul<T>: LazyFactorMul<T> {
 
 /// SIMD multiplication support for precomputed factors.
 ///
-/// This trait covers kernels that keep one scalar factor per input element and
-/// need to pack one SIMD chunk of scalar factors into a SIMD factor. The SIMD
-/// factor must use the same modulus precomputation as the scalar factors.
+/// This trait covers kernels that either broadcast one scalar factor across a
+/// SIMD chunk or pack one scalar factor per lane. The SIMD factor must use the
+/// same modulus precomputation as the scalar factor or factors.
 #[cfg(feature = "simd")]
 pub trait SimdFactorMul<T>: Copy + FactorMul<T>
 where
     T: SimdUnsignedInteger,
 {
-    /// SIMD factor type containing one scalar factor per SIMD lane.
+    /// SIMD factor type containing lane-wise precomputed factors.
     type SimdFactor: Copy + FactorMul<T::SimdT>;
+
+    /// Broadcasts one scalar factor into every SIMD lane.
+    fn simd_from_factor(factor: Self) -> Self::SimdFactor;
 
     /// Packs one SIMD chunk of scalar factors into a SIMD factor.
     ///
