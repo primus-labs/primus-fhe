@@ -1,0 +1,24 @@
+[package]
+name = "primus_decompose"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_data = { path = "../primus_data" }
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+primus_rns = { path = "../primus_rns" }
+
+num-traits = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+primus_modulus = { path = "../primus_modulus" }
+
+rand = { workspace = true }
+itertools = { workspace = true }
+rayon = { workspace = true }
+
+[features]
+default = []
+simd = ["primus_integer/simd", "primus_rns/simd"]
