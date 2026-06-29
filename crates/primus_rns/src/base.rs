@@ -9,7 +9,7 @@ use primus_integer::{
 };
 use primus_modulo::prelude::*;
 use primus_poly::{BigUintPolynomial, CrtPolynomial, Polynomial};
-use primus_reduce::FieldContext;
+use primus_reduce::{FieldContext, Modulus};
 
 use crate::RNSError;
 
@@ -38,6 +38,26 @@ where
     inv_punctured_product_mod_modulus: Vec<ShoupFactor<T>>,
 }
 
+fn checked_moduli_values<T, M>(moduli: &[M]) -> Result<Vec<T>, RNSError>
+where
+    T: FheUint,
+    M: Modulus<ValueT = T>,
+{
+    if moduli.is_empty() {
+        return Err(RNSError::EmptyBase);
+    }
+
+    moduli
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, modulus)| {
+            modulus
+                .value()
+                .ok_or(RNSError::UnrepresentableModulus { index })
+        })
+        .collect()
+}
 impl<T, M> RNSBase<T, M>
 where
     T: FheUint,
@@ -47,19 +67,17 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if `moduli` is empty, if a modulus implementation cannot return
-    /// a representable value from `value_unchecked`, or if modular inverse
-    /// computation panics unexpectedly.
+    /// Panics if modular inverse computation panics unexpectedly.
     ///
     /// # Errors
     ///
+    /// Returns [`RNSError::EmptyBase`] when `moduli` is empty.
+    /// Returns [`RNSError::UnrepresentableModulus`] when a modulus cannot be
+    /// represented as a scalar value.
     /// Returns [`RNSError::CoPrimeError`] when any two moduli are not coprime.
     #[inline]
     pub fn new(moduli: &[M]) -> Result<Self, RNSError> {
-        let moduli_values = moduli
-            .iter()
-            .map(|m| unsafe { m.value_unchecked() })
-            .collect::<Vec<_>>();
+        let moduli_values = checked_moduli_values(moduli)?;
 
         if moduli_values
             .iter()
@@ -83,9 +101,10 @@ where
         let inv_punctured_product_mod_modulus = punctured_product
             .chunks_exact(big_uint_len)
             .zip(moduli)
-            .map(|(p, &modulus)| {
+            .zip(moduli_values.iter().copied())
+            .map(|((p, &modulus), modulus_value)| {
                 let inv = p.modulo(modulus).try_inv_modulo(modulus).unwrap();
-                ShoupFactor::new(inv, unsafe { modulus.value_unchecked() })
+                ShoupFactor::new(inv, modulus_value)
             })
             .collect::<Vec<ShoupFactor<T>>>();
 
@@ -809,5 +828,46 @@ mod simd {
         super::slice::wrapping_decompose_chunk_scaled_to(
             val_rem, acc_rem, half, temp, modulus, factor,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::fmt;
+
+    use super::*;
+
+    #[derive(Clone, Copy)]
+    struct UnrepresentableModulus;
+
+    impl fmt::Debug for UnrepresentableModulus {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("UnrepresentableModulus")
+        }
+    }
+
+    impl Modulus for UnrepresentableModulus {
+        type ValueT = u64;
+
+        fn value(self) -> Option<Self::ValueT> {
+            None
+        }
+
+        unsafe fn value_unchecked(self) -> Self::ValueT {
+            panic!("unrepresentable modulus")
+        }
+
+        fn minus_one(self) -> Self::ValueT {
+            u64::MAX
+        }
+    }
+
+    #[test]
+    fn checked_moduli_values_rejects_unrepresentable_modulus() {
+        let moduli = [UnrepresentableModulus];
+        assert!(matches!(
+            checked_moduli_values(&moduli),
+            Err(RNSError::UnrepresentableModulus { index: 0 })
+        ));
     }
 }
