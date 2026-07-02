@@ -1,0 +1,35 @@
+[package]
+name = "primus_ntt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_data = { path = "../primus_data" }
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+primus_modulo = { path = "../primus_modulo" }
+primus_modulus = { path = "../primus_modulus" }
+primus_factor = { path = "../primus_factor" }
+primus_poly = { path = "../primus_poly" }
+
+thiserror = { workspace = true }
+rand = { workspace = true }
+concrete-ntt = { git = "https://github.com/serendipity-crypto/concrete-ntt", branch = "sync_from_tfhe_ntt", optional = true }
+aligned-vec = "0.6.4"
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[features]
+default = ["concrete-ntt"]
+concrete-ntt = ["dep:concrete-ntt"]
+simd = [
+    "primus_integer/simd",
+    "primus_modulus/simd",
+    "primus_factor/simd",
+    "primus_poly/simd",
+]
+
+[[bench]]
+name = "ntt"
+harness = false
