@@ -33,15 +33,9 @@ mod tests {
         // make test simple
         assert!(basis.drop_bits() < ValueT::BITS);
 
-        let difference_bound = basis
-            .init_carry_mask()
-            .map(|(a, b)| {
-                assert_eq!(a, 0);
-                b
-            })
-            .unwrap_or(0);
+        let difference_bound = basis.approximate_error_bound();
 
-        println!("difference bound: {}", difference_bound);
+        println!("difference bound: {:?}", difference_bound);
 
         let basis_value = basis.basis_value();
         let log_basis = basis.log_basis() as usize;
@@ -132,7 +126,7 @@ mod tests {
         }
 
         assert!(
-            difference.cmp(&BigUint([difference_bound, 0])).is_le(),
+            difference.cmp(&difference_bound).is_le(),
             "value: {:?}\ndifference: {:?}",
             value,
             difference
@@ -157,13 +151,7 @@ mod tests {
         // make test simple
         assert!(basis.drop_bits() < ValueT::BITS);
 
-        let difference_bound = basis
-            .init_carry_mask()
-            .map(|(a, b)| {
-                assert_eq!(a, 0);
-                b
-            })
-            .unwrap_or(0);
+        let difference_bound = basis.approximate_error_bound();
 
         let basis_value = basis.basis_value();
         let mut decomposed_unsigned_value = vec![0; basis.decompose_length()];
@@ -205,7 +193,7 @@ mod tests {
             }
 
             assert!(
-                difference.cmp(&BigUint([difference_bound, 0])).is_le(),
+                difference.cmp(&difference_bound).is_le(),
                 "value: {:?}\ndifference: {:?}",
                 value,
                 difference
@@ -230,15 +218,9 @@ mod tests {
         let basis = BigUintApproxSignedBasis::new(modulus, 5, None, &rns_base);
         let basis_value = basis.basis_value();
 
-        let difference_bound = basis
-            .init_carry_mask()
-            .map(|(a, b)| {
-                assert_eq!(a, 0);
-                b
-            })
-            .unwrap_or(0);
+        let difference_bound = basis.approximate_error_bound();
 
-        println!("difference bound: {}", difference_bound);
+        println!("difference bound: {:?}", difference_bound);
 
         let mut input_residues: Vec<ValueT> = vec![0; N * moduli_count];
         input_residues
@@ -265,7 +247,7 @@ mod tests {
 
         let mut adjust_big_uint_values = vec![0; N * big_uint_value_len];
         let mut carries = vec![false; N];
-        basis.init_value_carry_slice(
+        basis.init_value_carry_slice_to(
             &input_values,
             &mut adjust_big_uint_values,
             &mut carries,
@@ -327,16 +309,15 @@ mod tests {
             }
         });
 
-        for &differ in min.iter().step_by(big_uint_value_len) {
-            if differ > difference_bound {
-                println!("differ={}", differ);
+        for differ in BigUintIter::new(&min, big_uint_value_len) {
+            if differ.cmp(&difference_bound).is_gt() {
+                println!("differ={:?}", differ);
             }
         }
 
         assert!(
-            min.iter()
-                .step_by(big_uint_value_len)
-                .all(|&v| v <= difference_bound)
+            BigUintIter::new(&min, big_uint_value_len)
+                .all(|differ| differ.cmp(&difference_bound).is_le())
         )
     }
 
@@ -377,7 +358,7 @@ mod tests {
             let mut residues1: [ValueT; 2] = [0, 0];
             let mut residues2: [ValueT; 2] = [0, 0];
 
-            basis.init_value_carry_slice(
+            basis.init_value_carry_slice_to(
                 &input_big_uint_value,
                 &mut adjust_big_uint_values,
                 &mut carries,
@@ -420,8 +401,8 @@ mod tests {
     }
 
     #[test]
-    fn test_split() {
-        let rng = rand::rng();
+    fn test_init_value_carry_slice_matches_single() {
+        let mut rng = rand::rng();
         let moduli_value: [ValueT; 2] = [134215681, 134176769];
         let moduli = moduli_value.map(BarrettModulus::new);
 
@@ -431,43 +412,29 @@ mod tests {
         let basis = BigUintApproxSignedBasis::new(composed_modulus, 5, None, &rns_base);
 
         let modulus: WideT = 134215681 * 134176769;
+        let random_values: Vec<WideT> = Uniform::new(0, modulus)
+            .unwrap()
+            .sample_iter(&mut rng)
+            .take(1_0000)
+            .collect();
 
-        if basis.split_value().is_some() {
-            let random_values: Vec<WideT> = Uniform::new(0, modulus)
-                .unwrap()
-                .sample_iter(rng)
-                .take(1_0000)
-                .collect();
+        random_values.par_iter().for_each(|i: &WideT| {
+            let input_big_uint_value: [ValueT; 2] = [*i as ValueT, (i >> 32) as ValueT];
+            let input_big_uint = BigUint(input_big_uint_value);
+            let (adjust_value, carry) = basis.init_value_carry(&input_big_uint);
 
-            random_values.par_iter().for_each(|i: &WideT| {
-                let input_big_uint_value: [ValueT; 2] = [*i as ValueT, (i >> 32) as ValueT];
+            let mut adjust_big_uint_values: [ValueT; 2] = [0, 0];
+            let mut carries: [bool; 1] = [false; 1];
 
-                let mut adjust_big_uint_values: [ValueT; 2] = [0, 0];
-                let mut carries: [bool; 1] = [false; 1];
-                let mut decomposed_unsigned_values: [ValueT; 1] = [0];
+            basis.init_value_carry_slice_to(
+                &input_big_uint_value,
+                &mut adjust_big_uint_values,
+                &mut carries,
+                big_uint_value_len,
+            );
 
-                basis.init_value_carry_slice(
-                    &input_big_uint_value,
-                    &mut adjust_big_uint_values,
-                    &mut carries,
-                    big_uint_value_len,
-                );
-
-                basis.decomposer_iter().for_each(|once_decomposer| {
-                    once_decomposer.unsigned_decompose_slice_to(
-                        &input_big_uint_value,
-                        &mut decomposed_unsigned_values,
-                        &mut carries,
-                        big_uint_value_len,
-                    );
-                });
-
-                if BigUint(input_big_uint_value).cmp(&composed_modulus).is_ge() {
-                    assert!(carries[0]);
-                }
-            });
-        } else {
-            println!("No Split Value!")
-        }
+            assert_eq!(adjust_big_uint_values.as_slice(), adjust_value.as_slice());
+            assert_eq!(carries[0], carry);
+        });
     }
 }

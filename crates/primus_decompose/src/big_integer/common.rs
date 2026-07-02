@@ -3,6 +3,55 @@ use core::{iter::FusedIterator, num::NonZeroU32, slice::Iter};
 use primus_integer::{BigUint, FheUint};
 use serde::{Deserialize, Serialize};
 
+/// How to initialize the carry bit and adjust a `BigUint` input before decomposition.
+///
+/// `threshold` is the split value: inputs `>= threshold` are adjusted by `add`.
+/// `index` and `mask` select the limb and bit used to extract the initial carry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(deserialize = "T: FheUint"))]
+pub enum BigUintValueCarryInitMode<T: FheUint> {
+    /// Both adjust the value and extract a carry bit.
+    AdjustAndCarry {
+        /// Values `>= threshold` are adjusted.
+        threshold: BigUint<Vec<T>>,
+        /// Amount added to adjust the value.
+        add: BigUint<Vec<T>>,
+        /// Limb index used to extract the initial carry.
+        index: usize,
+        /// Mask applied to extract the initial carry.
+        mask: T,
+    },
+    /// Extract a carry bit from the value without adjustment.
+    CarryOnly {
+        /// Limb index used to extract the initial carry.
+        index: usize,
+        /// Mask applied to extract the initial carry.
+        mask: T,
+    },
+    /// Adjust the value without extracting a carry bit.
+    AdjustOnly {
+        /// Values `>= threshold` are adjusted.
+        threshold: BigUint<Vec<T>>,
+        /// Amount added to adjust the value.
+        add: BigUint<Vec<T>>,
+    },
+    /// No adjustment and no initial carry - value passes through unchanged.
+    Plain,
+}
+
+impl<T: FheUint> BigUintValueCarryInitMode<T> {
+    #[inline]
+    pub(super) fn approximate_error_bound(&self, value_len: usize) -> BigUint<Vec<T>> {
+        let mut bound = BigUint(vec![T::ZERO; value_len]);
+        match self {
+            Self::AdjustAndCarry { index, mask, .. } | Self::CarryOnly { index, mask } => {
+                bound[*index] = *mask;
+            }
+            Self::AdjustOnly { .. } | Self::Plain => {}
+        }
+        bound
+    }
+}
 /// Mask to extract a window of bits from a multi-limb `BigUint`.
 ///
 /// The window spans `bit_len(mask)` bits, starting at bit position `shr_bits`

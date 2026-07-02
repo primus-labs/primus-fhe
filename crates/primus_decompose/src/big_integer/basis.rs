@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::big_integer::BigUintSignedDecomposerIter;
 
-use super::ValueMask;
+use super::{BigUintValueCarryInitMode, ValueMask};
 
 /// The basis for approximate signed decomposition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,11 +21,9 @@ pub struct BigUintApproxSignedBasis<T: FheUint> {
     decompose_length: usize,
     log_basis: u32,
     drop_bits: u32,
-    init_carry_mask: Option<(usize, T)>,
+    value_carry_init_mode: BigUintValueCarryInitMode<T>,
     carry_mask: T,
-    split_value: Option<BigUint<Vec<T>>>,
     modulus_sub_basis: Vec<T>,
-    next_pow_of_2_sub_modulus: BigUint<Vec<T>>,
     scalars: Vec<T>,
     scalars_residue: Vec<T>,
     moduli_count: usize,
@@ -136,7 +134,7 @@ impl<T: FheUint> BigUintApproxSignedBasis<T> {
         let borrow = modulus_sub_basis.sub_value_assign(basis);
         assert!(!borrow);
 
-        let next_pow_of_2_sub_modulus: BigUint<Vec<T>> = {
+        let make_adjust_add = || {
             let mut next_pow_of_2_minus_one = BigUint(vec![T::MAX; modulus_value_len]);
             next_pow_of_2_minus_one[modulus_value_len - 1] >>= unused_bits;
 
@@ -180,6 +178,21 @@ impl<T: FheUint> BigUintApproxSignedBasis<T> {
             .take(decompose_length)
             .collect();
 
+        let value_carry_init_mode = match (split_value, init_carry_mask) {
+            (Some(threshold), Some((index, mask))) => BigUintValueCarryInitMode::AdjustAndCarry {
+                threshold,
+                add: make_adjust_add(),
+                index,
+                mask,
+            },
+            (None, Some((index, mask))) => BigUintValueCarryInitMode::CarryOnly { index, mask },
+            (Some(threshold), None) => BigUintValueCarryInitMode::AdjustOnly {
+                threshold,
+                add: make_adjust_add(),
+            },
+            (None, None) => BigUintValueCarryInitMode::Plain,
+        };
+
         Self {
             modulus: modulus.0.to_vec(),
             basis,
@@ -187,11 +200,9 @@ impl<T: FheUint> BigUintApproxSignedBasis<T> {
             decompose_length,
             log_basis,
             drop_bits,
-            init_carry_mask,
+            value_carry_init_mode,
             carry_mask,
-            split_value,
             modulus_sub_basis: modulus_sub_basis.0,
-            next_pow_of_2_sub_modulus,
             scalars,
             scalars_residue,
             moduli_count,
@@ -235,34 +246,19 @@ impl<T: FheUint> BigUintApproxSignedBasis<T> {
         self.drop_bits
     }
 
-    /// Returns the init carry mask of this [`BigUintApproxSignedBasis<T>`].
+    /// Returns the maximum approximation error caused by the dropped low bits.
+    ///
+    /// This is `0` when no bits are dropped, otherwise the initial carry mask.
     #[inline]
-    pub fn init_carry_mask(&self) -> Option<(usize, T)> {
-        self.init_carry_mask
-    }
-
-    /// Returns the carry mask of this [`BigUintApproxSignedBasis<T>`].
-    #[inline]
-    pub fn carry_mask(&self) -> T {
-        self.carry_mask
-    }
-
-    /// Returns the split value of this [`BigUintApproxSignedBasis<T>`].
-    #[inline]
-    pub fn split_value(&self) -> Option<&BigUint<Vec<T>>> {
-        self.split_value.as_ref()
+    pub fn approximate_error_bound(&self) -> BigUint<Vec<T>> {
+        self.value_carry_init_mode
+            .approximate_error_bound(self.modulus.len())
     }
 
     /// Returns a reference to the modulus sub basis of this [`BigUintApproxSignedBasis<T>`].
     #[inline]
     pub fn modulus_sub_basis(&self) -> &[T] {
         &self.modulus_sub_basis
-    }
-
-    /// Returns a reference to the next pow of 2 sub modulus of this [`BigUintApproxSignedBasis<T>`].
-    #[inline]
-    pub fn next_pow_of_2_sub_modulus(&self) -> &BigUint<Vec<T>> {
-        &self.next_pow_of_2_sub_modulus
     }
 
     /// Returns a reference to the scalars residue of this [`BigUintApproxSignedBasis<T>`].
@@ -294,19 +290,35 @@ impl<T: FheUint> BigUintApproxSignedBasis<T> {
     where
         A: Data<Elem = T>,
     {
-        let mut adjust = BigUint(value.0.as_slice().to_vec());
-        if let Some(split) = &self.split_value
-            && value.cmp(split).is_ge()
-        {
-            let _ = adjust.add_assign(&self.next_pow_of_2_sub_modulus);
+        let value_digits = value.0.as_slice();
+
+        match &self.value_carry_init_mode {
+            BigUintValueCarryInitMode::AdjustAndCarry {
+                threshold,
+                add,
+                index,
+                mask,
+            } => {
+                let mut adjust = BigUint(value_digits.to_vec());
+                if value.cmp(threshold).is_ge() {
+                    let _ = adjust.add_assign(add);
+                }
+                let carry = !(adjust[*index] & *mask).is_zero();
+                (adjust.0, carry)
+            }
+            BigUintValueCarryInitMode::AdjustOnly { threshold, add } => {
+                let mut adjust = BigUint(value_digits.to_vec());
+                if value.cmp(threshold).is_ge() {
+                    let _ = adjust.add_assign(add);
+                }
+                (adjust.0, false)
+            }
+            BigUintValueCarryInitMode::CarryOnly { index, mask } => (
+                value_digits.to_vec(),
+                !(value_digits[*index] & *mask).is_zero(),
+            ),
+            BigUintValueCarryInitMode::Plain => (value_digits.to_vec(), false),
         }
-
-        let carry = match self.init_carry_mask {
-            Some((i, mask)) => !(adjust[i] & mask).is_zero(),
-            None => false,
-        };
-
-        (adjust.0, carry)
     }
 
     /// Init carries and adjusted values for a slice and store the adjusted values back to `values`.
@@ -317,34 +329,106 @@ impl<T: FheUint> BigUintApproxSignedBasis<T> {
         carries: &mut [bool],
         big_uint_value_len: usize,
     ) {
-        if let Some(split) = &self.split_value {
-            BigUintIterMut::new(values, big_uint_value_len).for_each(|mut value| {
-                if value.cmp(split).is_ge() {
-                    let _ = value.add_assign(&self.next_pow_of_2_sub_modulus);
-                }
-            })
-        }
+        debug_assert_eq!(values.len(), carries.len() * big_uint_value_len);
 
-        match self.init_carry_mask {
-            Some((i, mask)) => BigUintIterMut::new(values, big_uint_value_len)
-                .zip(carries)
-                .for_each(|(value, carry)| {
-                    *carry = !(value[i] & mask).is_zero();
-                }),
-            None => carries.fill(false),
-        };
+        match &self.value_carry_init_mode {
+            BigUintValueCarryInitMode::AdjustAndCarry {
+                threshold,
+                add,
+                index,
+                mask,
+            } => {
+                BigUintIterMut::new(values, big_uint_value_len)
+                    .zip(carries)
+                    .for_each(|(mut value, carry)| {
+                        if value.cmp(threshold).is_ge() {
+                            let _ = value.add_assign(add);
+                        }
+                        *carry = !(value[*index] & *mask).is_zero();
+                    });
+            }
+            BigUintValueCarryInitMode::AdjustOnly { threshold, add } => {
+                BigUintIterMut::new(values, big_uint_value_len).for_each(|mut value| {
+                    if value.cmp(threshold).is_ge() {
+                        let _ = value.add_assign(add);
+                    }
+                });
+                carries.fill(false);
+            }
+            BigUintValueCarryInitMode::CarryOnly { index, mask } => {
+                BigUintIter::new(values, big_uint_value_len)
+                    .zip(carries)
+                    .for_each(|(value, carry)| {
+                        *carry = !(value[*index] & *mask).is_zero();
+                    });
+            }
+            BigUintValueCarryInitMode::Plain => carries.fill(false),
+        }
     }
 
     /// Init carries and adjusted values for a slice.
     #[inline]
-    pub fn init_value_carry_slice(
+    pub fn init_value_carry_slice_to(
         &self,
         big_uint_values: &[T],
         adjust_big_uint_values: &mut [T],
         carries: &mut [bool],
         big_uint_value_len: usize,
     ) {
-        adjust_big_uint_values.copy_from_slice(big_uint_values);
-        self.init_value_carry_slice_inplace(adjust_big_uint_values, carries, big_uint_value_len);
+        debug_assert_eq!(big_uint_values.len(), adjust_big_uint_values.len());
+        debug_assert_eq!(big_uint_values.len(), carries.len() * big_uint_value_len);
+
+        match &self.value_carry_init_mode {
+            BigUintValueCarryInitMode::AdjustAndCarry {
+                threshold,
+                add,
+                index,
+                mask,
+            } => {
+                BigUintIter::new(big_uint_values, big_uint_value_len)
+                    .zip(BigUintIterMut::new(
+                        adjust_big_uint_values,
+                        big_uint_value_len,
+                    ))
+                    .zip(carries)
+                    .for_each(|((value, mut adjust), carry)| {
+                        adjust.0.copy_from_slice(value.0);
+                        if value.cmp(threshold).is_ge() {
+                            let _ = adjust.add_assign(add);
+                        }
+                        *carry = !(adjust[*index] & *mask).is_zero();
+                    });
+            }
+            BigUintValueCarryInitMode::AdjustOnly { threshold, add } => {
+                BigUintIter::new(big_uint_values, big_uint_value_len)
+                    .zip(BigUintIterMut::new(
+                        adjust_big_uint_values,
+                        big_uint_value_len,
+                    ))
+                    .for_each(|(value, mut adjust)| {
+                        adjust.0.copy_from_slice(value.0);
+                        if value.cmp(threshold).is_ge() {
+                            let _ = adjust.add_assign(add);
+                        }
+                    });
+                carries.fill(false);
+            }
+            BigUintValueCarryInitMode::CarryOnly { index, mask } => {
+                BigUintIter::new(big_uint_values, big_uint_value_len)
+                    .zip(BigUintIterMut::new(
+                        adjust_big_uint_values,
+                        big_uint_value_len,
+                    ))
+                    .zip(carries)
+                    .for_each(|((value, adjust), carry)| {
+                        adjust.0.copy_from_slice(value.0);
+                        *carry = !(value[*index] & *mask).is_zero();
+                    });
+            }
+            BigUintValueCarryInitMode::Plain => {
+                adjust_big_uint_values.copy_from_slice(big_uint_values);
+                carries.fill(false);
+            }
+        }
     }
 }

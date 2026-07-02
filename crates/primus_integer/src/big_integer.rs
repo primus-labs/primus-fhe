@@ -44,7 +44,7 @@ where
     S: RawData,
     <S as RawData>::Elem: UnsignedInteger;
 
-impl_iters!(BigUint, bit_uint);
+impl_iters!(BigUint, big_uint);
 
 /// Owned [`BigUint`] backed by a [`Vec`].
 pub type BigUintOwned<T> = BigUint<Vec<T>>;
