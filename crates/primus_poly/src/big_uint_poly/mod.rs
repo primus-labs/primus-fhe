@@ -13,7 +13,7 @@ where
     S: RawData,
     <S as RawData>::Elem: FheUint;
 
-impl_iters!(BigUintPolynomial, bit_uint_poly);
+impl_iters!(BigUintPolynomial, big_uint_poly);
 
 impl<S, T> BigUintPolynomial<S>
 where

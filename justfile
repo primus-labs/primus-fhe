@@ -1,7 +1,7 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-simd-packages := "-p primus_integer -p primus_modulus -p primus_barrett_derive -p primus_factor -p primus_rns"
-simd-features := "primus_integer/simd,primus_modulus/simd,primus_barrett_derive/simd,primus_factor/simd,primus_rns/simd"
+simd-packages := "-p primus_integer -p primus_modulus -p primus_barrett_derive -p primus_factor -p primus_rns -p primus_decompose"
+simd-features := "primus_integer/simd,primus_modulus/simd,primus_barrett_derive/simd,primus_factor/simd,primus_rns/simd,primus_decompose/simd"
 
 default: fmt check lint test
 
