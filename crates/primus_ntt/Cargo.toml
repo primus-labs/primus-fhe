@@ -34,3 +34,7 @@ simd = [
 [[bench]]
 name = "ntt"
 harness = false
+
+[[bench]]
+name = "avx2_ntt"
+harness = false

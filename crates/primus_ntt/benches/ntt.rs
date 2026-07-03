@@ -2,7 +2,10 @@ use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use primus_modulus::BarrettModulus;
-use primus_ntt::{Concrete64Table, HexlNttTable, NttTable, U32NttTable, U64NttTable, UintNttTable};
+use primus_ntt::{
+    Concrete32Table, Concrete64Table, HexlNttTable, NttTable, U32NttTable, U64NttTable,
+    UintNttTable,
+};
 use rand::distr::{Distribution, Uniform};
 
 /// u32 primes < 2^30.
@@ -32,7 +35,7 @@ fn gen_input_pool_u64(distr: &Uniform<u64>, n: usize) -> Vec<Vec<u64>> {
 fn bench_u32(c: &mut Criterion) {
     for &q in U32_PRIMES {
         for &n in NS {
-            if (q - 1) % (2 * n as u32) != 0 {
+            if !(q - 1).is_multiple_of(2 * n as u32) {
                 continue;
             }
 
@@ -42,12 +45,13 @@ fn bench_u32(c: &mut Criterion) {
 
             let u32_table = U32NttTable::new(log_n, modulus).unwrap();
             let uint32_table = UintNttTable::<u32>::new(log_n, modulus).unwrap();
+            let concrete32_table = Concrete32Table::new(log_n, modulus).unwrap();
 
             let pool = gen_input_pool_u32(&distr, n);
             let mut pool_idx = 0usize;
 
             // Forward canonical
-            c.bench_function(&format!("U32Ntt  FWD: q:{q} n:{n}"), |b| {
+            c.bench_function(&format!("U32Ntt   FWD: q:{q} n:{n}"), |b| {
                 b.iter_batched_ref(
                     || {
                         let p = pool[pool_idx % POOL_SIZE].clone();
@@ -58,7 +62,7 @@ fn bench_u32(c: &mut Criterion) {
                     BatchSize::SmallInput,
                 )
             });
-            c.bench_function(&format!("Uint32  FWD: q:{q} n:{n}"), |b| {
+            c.bench_function(&format!("Uint32   FWD: q:{q} n:{n}"), |b| {
                 b.iter_batched_ref(
                     || {
                         let p = pool[pool_idx % POOL_SIZE].clone();
@@ -69,9 +73,20 @@ fn bench_u32(c: &mut Criterion) {
                     BatchSize::SmallInput,
                 )
             });
+            c.bench_function(&format!("Concr32  FWD: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[pool_idx % POOL_SIZE].clone();
+                        pool_idx += 1;
+                        p
+                    },
+                    |poly| concrete32_table.transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
 
             // Inverse canonical
-            c.bench_function(&format!("U32Ntt  INV: q:{q} n:{n}"), |b| {
+            c.bench_function(&format!("U32Ntt   INV: q:{q} n:{n}"), |b| {
                 b.iter_batched_ref(
                     || {
                         let p = pool[pool_idx % POOL_SIZE].clone();
@@ -82,7 +97,7 @@ fn bench_u32(c: &mut Criterion) {
                     BatchSize::SmallInput,
                 )
             });
-            c.bench_function(&format!("Uint32  INV: q:{q} n:{n}"), |b| {
+            c.bench_function(&format!("Uint32   INV: q:{q} n:{n}"), |b| {
                 b.iter_batched_ref(
                     || {
                         let p = pool[pool_idx % POOL_SIZE].clone();
@@ -93,6 +108,17 @@ fn bench_u32(c: &mut Criterion) {
                     BatchSize::SmallInput,
                 )
             });
+            c.bench_function(&format!("Concr32  INV: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[pool_idx % POOL_SIZE].clone();
+                        pool_idx += 1;
+                        p
+                    },
+                    |poly| concrete32_table.inverse_transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
         }
     }
 }
@@ -100,7 +126,7 @@ fn bench_u32(c: &mut Criterion) {
 fn bench_u64(c: &mut Criterion) {
     for &q in U64_PRIMES {
         for &n in NS {
-            if (q - 1) % (2 * n as u64) != 0 {
+            if !(q - 1).is_multiple_of(2 * n as u64) {
                 continue;
             }
 

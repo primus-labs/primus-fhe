@@ -26,7 +26,7 @@ pub fn reduce_twice(x: u32, q: u32, two_q: u32) -> u32 {
 /// result fits in `[0, 2q)`, and `q < 2^30` keeps `[0, 4q)` operands
 /// safe.
 #[inline(always)]
-fn mul_mod_lazy(y: u32, w: u32, w_precon: u32, q: u32) -> u32 {
+pub(super) fn mul_mod_lazy(y: u32, w: u32, w_precon: u32, q: u32) -> u32 {
     let qhat = ((y as u64).wrapping_mul(w_precon as u64) >> 32) as u32;
     w.wrapping_mul(y).wrapping_sub(q.wrapping_mul(qhat))
 }
@@ -168,7 +168,7 @@ pub fn forward_transform(
 /// Plain Harvey forward butterfly — no ShoupFactor construction in the
 /// hot path.
 #[inline(always)]
-fn fwd_butterfly(x: &mut u32, y: &mut u32, w: u32, wp: u32, q: u32, two_q: u32) {
+pub(super) fn fwd_butterfly(x: &mut u32, y: &mut u32, w: u32, wp: u32, q: u32, two_q: u32) {
     let tx = reduce_once(*x, two_q);
     let t = mul_mod_lazy(*y, w, wp, q);
     *x = tx + t;
@@ -178,7 +178,7 @@ fn fwd_butterfly(x: &mut u32, y: &mut u32, w: u32, wp: u32, q: u32, two_q: u32) 
 /// Plain Harvey inverse butterfly — no ShoupFactor construction in the
 /// hot path.
 #[inline(always)]
-fn inv_butterfly(x: &mut u32, y: &mut u32, w: u32, wp: u32, q: u32, two_q: u32) {
+pub(super) fn inv_butterfly(x: &mut u32, y: &mut u32, w: u32, wp: u32, q: u32, two_q: u32) {
     let tx = *x + *y;
     let y_red = *x + two_q - *y;
     *x = reduce_once(tx, two_q);
