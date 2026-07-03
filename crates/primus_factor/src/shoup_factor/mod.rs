@@ -43,6 +43,29 @@ impl<T: UnsignedInteger> FactorBase<T> for ShoupFactor<T> {
 }
 
 impl<T: UnsignedInteger> ShoupFactor<T> {
+    /// Constructs a [`ShoupFactor<T>`] from an already-computed value and
+    /// quotient pair.
+    ///
+    /// The caller must ensure that `quotient == floor(value * 2^T::BITS /
+    /// modulus)` for the intended modulus. No division is performed.
+    ///
+    /// This is useful when value and quotient are stored in separate
+    /// structure-of-arrays layouts (e.g. for SIMD).
+    #[inline]
+    pub const fn from_raw(value: T, quotient: T) -> Self {
+        Self { value, quotient }
+    }
+
+    /// Computes the Shoup quotient `floor(value * 2^T::BITS / modulus)`
+    /// without constructing a full [`ShoupFactor<T>`].
+    ///
+    /// This is equivalent to `ShoupFactor::new(value, modulus).quotient()`
+    /// but avoids discarding the value field.
+    #[inline]
+    pub fn quotient_for(value: T, modulus: T) -> T {
+        DivWide::div_wide(T::ZERO, value, modulus)
+    }
+
     /// Recomputes the quotient for a new modulus.
     ///
     /// The current value must be less than `modulus`, and `modulus` must be

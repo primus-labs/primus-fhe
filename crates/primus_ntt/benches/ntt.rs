@@ -1,75 +1,215 @@
 use std::hint::black_box;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use primus_modulus::BarrettModulus;
-use primus_ntt::{Concrete64Table, HexlNttTable, NttTable, UintNttTable};
+use primus_ntt::{Concrete64Table, HexlNttTable, NttTable, U32NttTable, U64NttTable, UintNttTable};
 use rand::distr::{Distribution, Uniform};
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+/// u32 primes < 2^30.
+const U32_PRIMES: &[u32] = &[132120577, 536813569];
+/// u64 primes covering 32/52/64-bit regimes.
+const U64_PRIMES: &[u64] = &[536813569, 562949953392641, 1152921504606830593];
+/// Representative N values for HE workloads.
+const NS: &[usize] = &[1024, 4096];
+/// Number of pre-generated input batches to rotate through to avoid
+/// re-sampling overhead in the setup closure.
+const POOL_SIZE: usize = 16;
+
+fn gen_input_pool_u32(distr: &Uniform<u32>, n: usize) -> Vec<Vec<u32>> {
     let mut rng = rand::rng();
-    for q in [536813569u64, 562949953392641u64, 1152921504606830593u64] {
-        for n in [512usize, 1024, 2048, 4096] {
-            if q % (2 * n as u64) != 1 {
+    (0..POOL_SIZE)
+        .map(|_| distr.sample_iter(&mut rng).take(n).collect())
+        .collect()
+}
+
+fn gen_input_pool_u64(distr: &Uniform<u64>, n: usize) -> Vec<Vec<u64>> {
+    let mut rng = rand::rng();
+    (0..POOL_SIZE)
+        .map(|_| distr.sample_iter(&mut rng).take(n).collect())
+        .collect()
+}
+
+fn bench_u32(c: &mut Criterion) {
+    for &q in U32_PRIMES {
+        for &n in NS {
+            if (q - 1) % (2 * n as u32) != 0 {
                 continue;
             }
 
             let modulus = BarrettModulus::new(q);
+            let log_n = n.trailing_zeros();
             let distr = Uniform::new(0, q).unwrap();
-            let log_n: u32 = n.trailing_zeros();
 
-            let hexl_table = HexlNttTable::new(log_n, modulus).unwrap();
-            let uint_table = UintNttTable::new(log_n, modulus).unwrap();
-            let concrete_table = Concrete64Table::new(log_n, modulus).unwrap();
+            let u32_table = U32NttTable::new(log_n, modulus).unwrap();
+            let uint32_table = UintNttTable::<u32>::new(log_n, modulus).unwrap();
 
-            let mut poly1: Vec<u64> = distr.sample_iter(&mut rng).take(n).collect();
-            let mut poly2: Vec<u64> = poly1.clone();
-            let mut poly3: Vec<u64> = poly1.clone();
+            let pool = gen_input_pool_u32(&distr, n);
+            let mut pool_idx = 0usize;
 
-            c.bench_function(&format!("Hexl NTT: q:{q} n:{n}"), |b| {
-                b.iter(|| {
-                    hexl_table.transform_slice(black_box(&mut poly1));
-                })
+            // Forward canonical
+            c.bench_function(&format!("U32Ntt  FWD: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[pool_idx % POOL_SIZE].clone();
+                        pool_idx += 1;
+                        p
+                    },
+                    |poly| u32_table.transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+            c.bench_function(&format!("Uint32  FWD: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[pool_idx % POOL_SIZE].clone();
+                        pool_idx += 1;
+                        p
+                    },
+                    |poly| uint32_table.transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
             });
 
-            c.bench_function(&format!("Uint NTT: q:{q} n:{n}"), |b| {
-                b.iter(|| {
-                    uint_table.transform_slice(black_box(&mut poly2));
-                })
+            // Inverse canonical
+            c.bench_function(&format!("U32Ntt  INV: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[pool_idx % POOL_SIZE].clone();
+                        pool_idx += 1;
+                        p
+                    },
+                    |poly| u32_table.inverse_transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
             });
-
-            c.bench_function(&format!("Concrete NTT: q:{q} n:{n}"), |b| {
-                b.iter(|| {
-                    concrete_table.transform_slice(black_box(&mut poly3));
-                })
-            });
-
-            poly1
-                .iter_mut()
-                .zip(distr.sample_iter(&mut rng))
-                .for_each(|(a, b)| *a = b);
-            poly2.clone_from_slice(&poly1);
-            poly3.clone_from_slice(&poly1);
-
-            c.bench_function(&format!("Hexl INTT: q:{q} n:{n}"), |b| {
-                b.iter(|| {
-                    hexl_table.inverse_transform_slice(black_box(&mut poly1));
-                })
-            });
-
-            c.bench_function(&format!("Uint INTT: q:{q} n:{n}"), |b| {
-                b.iter(|| {
-                    uint_table.inverse_transform_slice(black_box(&mut poly2));
-                })
-            });
-
-            c.bench_function(&format!("Concrete INTT: q:{q} n:{n}"), |b| {
-                b.iter(|| {
-                    concrete_table.inverse_transform_slice(black_box(&mut poly3));
-                })
+            c.bench_function(&format!("Uint32  INV: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[pool_idx % POOL_SIZE].clone();
+                        pool_idx += 1;
+                        p
+                    },
+                    |poly| uint32_table.inverse_transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
             });
         }
     }
 }
 
-criterion_group!(benches, criterion_benchmark);
+fn bench_u64(c: &mut Criterion) {
+    for &q in U64_PRIMES {
+        for &n in NS {
+            if (q - 1) % (2 * n as u64) != 0 {
+                continue;
+            }
+
+            let modulus = BarrettModulus::new(q);
+            let log_n = n.trailing_zeros();
+            let distr = Uniform::new(0, q).unwrap();
+
+            let u64_table = U64NttTable::new(log_n, modulus).unwrap();
+            let uint64_table = UintNttTable::<u64>::new(log_n, modulus).unwrap();
+            let hexl_table = HexlNttTable::new(log_n, modulus).unwrap();
+            let concrete_table = Concrete64Table::new(log_n, modulus).unwrap();
+
+            let pool = gen_input_pool_u64(&distr, n);
+            let mut idx = 0usize;
+
+            // Forward canonical
+            c.bench_function(&format!("U64Ntt   FWD: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| u64_table.transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+            c.bench_function(&format!("Uint64   FWD: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| uint64_table.transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+            c.bench_function(&format!("Hexl     FWD: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| hexl_table.transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+            c.bench_function(&format!("Concrete FWD: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| concrete_table.transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+
+            // Inverse canonical
+            c.bench_function(&format!("U64Ntt   INV: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| u64_table.inverse_transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+            c.bench_function(&format!("Uint64   INV: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| uint64_table.inverse_transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+            c.bench_function(&format!("Hexl     INV: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| hexl_table.inverse_transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+            c.bench_function(&format!("Concrete INV: q:{q} n:{n}"), |b| {
+                b.iter_batched_ref(
+                    || {
+                        let p = pool[idx % POOL_SIZE].clone();
+                        idx += 1;
+                        p
+                    },
+                    |poly| concrete_table.inverse_transform_slice(black_box(poly)),
+                    BatchSize::SmallInput,
+                )
+            });
+        }
+    }
+}
+
+criterion_group!(benches, bench_u32, bench_u64);
 criterion_main!(benches);

@@ -32,4 +32,18 @@ pub enum NttError<T> {
     /// Error that occurs when fails to generate the ntt table.
     #[error("Fail to generate the desired ntt table.")]
     NttTableErr,
+
+    /// Error that occurs when the modulus is too large for the selected
+    /// fast path (e.g. `q >= 2^30` for `U32NttTable` or `q >= 2^62` for
+    /// `U64NttTable`).
+    #[error(
+        "modulus {modulus} is too large for this NTT table (max {max_bits}-bit supported; \
+         use the generic `UintNttTable` as a fallback)"
+    )]
+    ModulusTooLarge {
+        /// The modulus value.
+        modulus: T,
+        /// The maximum supported bit-width for this table type.
+        max_bits: u32,
+    },
 }

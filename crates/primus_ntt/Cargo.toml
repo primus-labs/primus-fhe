@@ -11,6 +11,7 @@ primus_modulo = { path = "../primus_modulo" }
 primus_modulus = { path = "../primus_modulus" }
 primus_factor = { path = "../primus_factor" }
 primus_poly = { path = "../primus_poly" }
+primus_gcd = { path = "../primus_gcd" }
 
 thiserror = { workspace = true }
 rand = { workspace = true }
