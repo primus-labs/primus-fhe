@@ -27,11 +27,6 @@ pub(super) fn mul_mod_lazy(y: u64, w: u64, w_precon: u64, q: u64) -> u64 {
     w.wrapping_mul(y).wrapping_sub(q.wrapping_mul(qhat))
 }
 
-#[inline(always)]
-fn quotient_for(w: u64, q: u64) -> u64 {
-    (((w as u128) << 64) / q as u128) as u64
-}
-
 /// Harvey forward butterfly (radix-2).
 ///
 /// Assumes `*x` and `*y` are in `[0, 4q)`.
@@ -220,6 +215,8 @@ pub fn inverse_transform(
     two_q: u64,
     inv_n: u64,
     inv_n_precon: u64,
+    inv_n_w: u64,
+    inv_n_w_precon: u64,
     inv_roots: &[u64],
     inv_roots_precon: &[u64],
     input_mod_factor: u32,
@@ -332,12 +329,7 @@ pub fn inverse_transform(
         m >>= 1;
     }
 
-    // Final stage: multiply by inv_n and inv_n * last_w.
-    let last_w = w_iter.next().unwrap();
-
-    let inv_n_w = reduce_once(mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
-    let inv_n_w_precon = quotient_for(inv_n_w, q);
-
+    // Final stage: multiply by inv_n and inv_n_w (precomputed).
     let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
 
     for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {

@@ -42,6 +42,10 @@ pub struct U32NttTable {
     inv_root: u32,
     inv_n: u32,
     inv_n_precon: u32,
+    /// `inv_n * inv_roots[n-1] mod q` — precomputed for the inverse final stage.
+    inv_n_w: u32,
+    /// Shoup preconditioner for `inv_n_w`.
+    inv_n_w_precon: u32,
 
     /// Forward roots in bit-reversed order (size `n`).
     roots: AVec<u32>,
@@ -174,47 +178,45 @@ impl U32NttTable {
                 self.two_q,
                 self.inv_n,
                 self.inv_n_precon,
+                self.inv_n_w,
+                self.inv_n_w_precon,
                 &self.inv_roots,
                 &self.inv_roots_precon,
                 input_mod_factor,
                 output_mod_factor,
             ),
             #[cfg(target_arch = "x86_64")]
-            U32Backend::Avx2 => {
-                // SAFETY: Avx2 backend is only selected when
-                // avx2::HAS_AVX2 is true at construction time.
-                unsafe {
-                    avx2::inverse_transform(
-                        values,
-                        self.q,
-                        self.two_q,
-                        self.inv_n,
-                        self.inv_n_precon,
-                        &self.inv_roots,
-                        &self.inv_roots_precon,
-                        input_mod_factor,
-                        output_mod_factor,
-                    )
-                }
-            }
+            U32Backend::Avx2 => unsafe {
+                avx2::inverse_transform(
+                    values,
+                    self.q,
+                    self.two_q,
+                    self.inv_n,
+                    self.inv_n_precon,
+                    self.inv_n_w,
+                    self.inv_n_w_precon,
+                    &self.inv_roots,
+                    &self.inv_roots_precon,
+                    input_mod_factor,
+                    output_mod_factor,
+                )
+            },
             #[cfg(target_arch = "x86_64")]
-            U32Backend::Avx512 => {
-                // SAFETY: Avx512 backend is only selected when
-                // avx512::HAS_AVX512F is true at construction time.
-                unsafe {
-                    avx512::inverse_transform(
-                        values,
-                        self.q,
-                        self.two_q,
-                        self.inv_n,
-                        self.inv_n_precon,
-                        &self.inv_roots,
-                        &self.inv_roots_precon,
-                        input_mod_factor,
-                        output_mod_factor,
-                    )
-                }
-            }
+            U32Backend::Avx512 => unsafe {
+                avx512::inverse_transform(
+                    values,
+                    self.q,
+                    self.two_q,
+                    self.inv_n,
+                    self.inv_n_precon,
+                    self.inv_n_w,
+                    self.inv_n_w_precon,
+                    &self.inv_roots,
+                    &self.inv_roots_precon,
+                    input_mod_factor,
+                    output_mod_factor,
+                )
+            },
         }
     }
 }
@@ -292,6 +294,11 @@ impl NttTable for U32NttTable {
         let inv_n = mod_inv(n as u32, q);
         let inv_n_precon = ShoupFactor::<u32>::quotient_for(inv_n, q);
 
+        // Precompute inv_n_w = inv_n * inv_roots[n-1] mod q for the inverse final stage.
+        let last_w = unsafe { *inv_roots.get_unchecked(n - 1) };
+        let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
+        let inv_n_w_precon = (((inv_n_w as u64) << 32) / q as u64) as u32;
+
         #[cfg(target_arch = "x86_64")]
         let backend = if *avx512::HAS_AVX512F {
             U32Backend::Avx512
@@ -312,6 +319,8 @@ impl NttTable for U32NttTable {
             inv_root,
             inv_n,
             inv_n_precon,
+            inv_n_w,
+            inv_n_w_precon,
             roots,
             roots_precon,
             inv_roots,

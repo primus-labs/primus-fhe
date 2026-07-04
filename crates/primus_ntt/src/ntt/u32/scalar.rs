@@ -218,6 +218,8 @@ pub fn inverse_transform(
     two_q: u32,
     inv_n: u32,
     inv_n_precon: u32,
+    inv_n_w: u32,
+    inv_n_w_precon: u32,
     inv_roots: &[u32],
     inv_roots_precon: &[u32],
     input_mod_factor: u32,
@@ -325,14 +327,7 @@ pub fn inverse_transform(
         m >>= 1;
     }
 
-    // Final stage: multiply by inv_n and inv_n * last_w.
-    let last_w = unsafe { *inv_roots.get_unchecked(ri) };
-    // last_wp at same index is not needed for the final stage.
-
-    let inv_n_w = mul_mod_lazy(last_w, inv_n, inv_n_precon, q);
-    let inv_n_w = reduce_once(inv_n_w, q);
-    let inv_n_w_precon = (((inv_n_w as u64) << 32) / q as u64) as u32;
-
+    // Final stage: multiply by inv_n and inv_n_w (precomputed).
     let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
     for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
         let tx = reduce_once(x.wrapping_add(*y), two_q);

@@ -38,6 +38,10 @@ pub struct U64NttTable {
 
     inv_n: u64,
     inv_n_precon: u64,
+    /// `inv_n * inv_roots[n-1] mod q` — precomputed for the inverse final stage.
+    inv_n_w: u64,
+    /// Shoup preconditioner for `inv_n_w`.
+    inv_n_w_precon: u64,
 
     /// Forward roots in bit-reversed order (size `n`).
     roots: AVec<u64>,
@@ -155,29 +159,29 @@ impl U64NttTable {
                 self.two_q,
                 self.inv_n,
                 self.inv_n_precon,
+                self.inv_n_w,
+                self.inv_n_w_precon,
                 &self.inv_roots,
                 &self.inv_roots_precon,
                 input_mod_factor,
                 output_mod_factor,
             ),
             #[cfg(target_arch = "x86_64")]
-            U64Backend::Avx2 => {
-                // SAFETY: Avx2 backend is only selected when
-                // avx2::HAS_AVX2 is true at construction time.
-                unsafe {
-                    avx2::inverse_transform(
-                        values,
-                        self.q,
-                        self.two_q,
-                        self.inv_n,
-                        self.inv_n_precon,
-                        &self.inv_roots,
-                        &self.inv_roots_precon,
-                        input_mod_factor,
-                        output_mod_factor,
-                    )
-                }
-            }
+            U64Backend::Avx2 => unsafe {
+                avx2::inverse_transform(
+                    values,
+                    self.q,
+                    self.two_q,
+                    self.inv_n,
+                    self.inv_n_precon,
+                    self.inv_n_w,
+                    self.inv_n_w_precon,
+                    &self.inv_roots,
+                    &self.inv_roots_precon,
+                    input_mod_factor,
+                    output_mod_factor,
+                )
+            },
         }
     }
 }
@@ -255,6 +259,11 @@ impl NttTable for U64NttTable {
         let inv_n = mod_inv(n as u64, q);
         let inv_n_precon = ShoupFactor::<u64>::quotient_for(inv_n, q);
 
+        // Precompute inv_n_w = inv_n * inv_roots[n-1] mod q for the inverse final stage.
+        let last_w = unsafe { *inv_roots.get_unchecked(n - 1) };
+        let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
+        let inv_n_w_precon = ShoupFactor::<u64>::quotient_for(inv_n_w, q);
+
         Ok(Self {
             n,
             log_n,
@@ -264,6 +273,8 @@ impl NttTable for U64NttTable {
             inv_root,
             inv_n,
             inv_n_precon,
+            inv_n_w,
+            inv_n_w_precon,
             roots,
             roots_precon,
             inv_roots,

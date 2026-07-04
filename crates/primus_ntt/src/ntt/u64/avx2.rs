@@ -502,6 +502,8 @@ pub(crate) unsafe fn inverse_transform(
     two_q: u64,
     inv_n: u64,
     inv_n_precon: u64,
+    inv_n_w: u64,
+    inv_n_w_precon: u64,
     inv_roots: &[u64],
     inv_roots_precon: &[u64],
     input_mod_factor: u32,
@@ -517,6 +519,8 @@ pub(crate) unsafe fn inverse_transform(
             two_q,
             inv_n,
             inv_n_precon,
+            inv_n_w,
+            inv_n_w_precon,
             inv_roots,
             inv_roots_precon,
             input_mod_factor,
@@ -614,12 +618,7 @@ pub(crate) unsafe fn inverse_transform(
     }
 
     // --- Final stage: fused with inv_n multiply ---
-    let last_w = unsafe { *inv_roots.get_unchecked(ri) };
-
-    // Compute inv_n_w = inv_n * last_w (mod q) via scalar helpers.
-    let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
-    let inv_n_w_precon = (((inv_n_w as u128) << 64) / q as u128) as u64;
-
+    // --- Final stage: fused with inv_n multiply (inv_n_w precomputed) ---
     // --- AVX2 final stage: n/2 ≥ 8 (guaranteed since n ≥ 16) ---
     let v_inv_n = _mm256_set1_epi64x(inv_n as i64);
     let v_inv_n_w = _mm256_set1_epi64x(inv_n_w as i64);

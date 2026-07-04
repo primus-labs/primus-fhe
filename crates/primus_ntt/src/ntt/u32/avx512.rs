@@ -629,6 +629,8 @@ pub(crate) unsafe fn inverse_transform(
     two_q: u32,
     inv_n: u32,
     inv_n_precon: u32,
+    inv_n_w: u32,
+    inv_n_w_precon: u32,
     inv_roots: &[u32],
     inv_roots_precon: &[u32],
     input_mod_factor: u32,
@@ -644,6 +646,8 @@ pub(crate) unsafe fn inverse_transform(
             two_q,
             inv_n,
             inv_n_precon,
+            inv_n_w,
+            inv_n_w_precon,
             inv_roots,
             inv_roots_precon,
             input_mod_factor,
@@ -751,12 +755,7 @@ pub(crate) unsafe fn inverse_transform(
         m >>= 1;
     }
 
-    // --- Final stage: fused with inv_n multiply ---
-    let last_w = unsafe { *inv_roots.get_unchecked(ri) };
-
-    let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
-    let inv_n_w_precon = (((inv_n_w as u64) << 32) / q as u64) as u32;
-
+    // --- Final stage: fused with inv_n multiply (inv_n_w precomputed) ---
     // --- 512-bit final stage: n/2 ≥ 32 (guaranteed since n ≥ 64) ---
     let v_inv_n = _mm512_set1_epi32(inv_n as i32);
     let v_inv_n_w = _mm512_set1_epi32(inv_n_w as i32);
