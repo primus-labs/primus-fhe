@@ -57,6 +57,19 @@ pub struct U64NttTable {
     /// Bit-reversed index mapping (size `n`).
     reverse_lsbs: Vec<usize>,
 
+    /// AVX2 forward roots pre-expanded for T2/T1 vector loads (size ≈ n).
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_roots: AVec<u64>,
+    /// AVX2 forward precon pre-expanded for T2/T1 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_roots_precon: AVec<u64>,
+    /// AVX2 inverse roots pre-expanded for T2/T1 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_inv_roots: AVec<u64>,
+    /// AVX2 inverse precon pre-expanded for T2/T1 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_inv_roots_precon: AVec<u64>,
+
     #[allow(dead_code)]
     backend: U64Backend,
 }
@@ -70,6 +83,72 @@ fn mod_inv(a: u64, q: u64) -> u64 {
     let (inv, gcd) = u64::gcdinv(a, q);
     assert_eq!(gcd, 1, "a={a} is not invertible modulo q={q}");
     inv
+}
+
+#[cfg(target_arch = "x86_64")]
+/// Build pre-expanded root vectors for AVX2 T2/T1 stages (u64 lanes).
+///
+/// `inverse` controls traversal direction (see `build_avx2_roots_u32`).
+fn build_avx2_roots_u64(n: usize, roots: &[u64], inverse: bool) -> AVec<u64> {
+    // n < 16 → scalar fallback, no pre-expanded data needed.
+    if n < 16 {
+        return AVec::with_capacity(64, 0);
+    }
+    let mut out = AVec::with_capacity(64, (n / 4) * 4);
+    let mut ri = 1usize;
+    let (mut t, mut m) = if inverse {
+        (1usize, n >> 1)
+    } else {
+        (n >> 1, 1usize)
+    };
+    loop {
+        if t >= 4 {
+            ri += n / (2 * t); // T4: broadcast, skip
+        } else {
+            match t {
+                2 => {
+                    for _ in 0..(n / 8) {
+                        let w_a = roots[ri];
+                        let w_b = roots[ri + 1];
+                        ri += 2;
+                        out.push(w_a);
+                        out.push(w_a);
+                        out.push(w_b);
+                        out.push(w_b);
+                    }
+                }
+                1 => {
+                    for _ in 0..(n / 8) {
+                        let w0 = roots[ri];
+                        let w1 = roots[ri + 1];
+                        let w2 = roots[ri + 2];
+                        let w3 = roots[ri + 3];
+                        ri += 4;
+                        out.push(w3);
+                        out.push(w2);
+                        out.push(w1);
+                        out.push(w0);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        if inverse {
+            t <<= 1;
+            m >>= 1;
+        } else {
+            t >>= 1;
+            m <<= 1;
+        }
+        if inverse {
+            if m < 1 {
+                break;
+            }
+        } else if m >= n {
+            break;
+        }
+    }
+    out
 }
 
 impl U64NttTable {
@@ -215,6 +294,34 @@ impl NttTable for U64NttTable {
         let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
         let inv_n_w_precon = ShoupFactor::<u64>::quotient_for(inv_n_w, q);
 
+        // --- backend selector ---
+        #[cfg(target_arch = "x86_64")]
+        let backend = if *HAS_AVX2 {
+            U64Backend::Avx2
+        } else {
+            U64Backend::Scalar
+        };
+        #[cfg(not(target_arch = "x86_64"))]
+        let backend = U64Backend::Scalar;
+
+        // --- backend-specific pre-expanded root tables ---
+        #[cfg(target_arch = "x86_64")]
+        let (avx2_roots, avx2_roots_precon, avx2_inv_roots, avx2_inv_roots_precon) =
+            if matches!(backend, U64Backend::Avx2) {
+                let ar = build_avx2_roots_u64(n, &roots, false);
+                let arp = build_avx2_roots_u64(n, &roots_precon, false);
+                let air = build_avx2_roots_u64(n, &inv_roots, true);
+                let airp = build_avx2_roots_u64(n, &inv_roots_precon, true);
+                (ar, arp, air, airp)
+            } else {
+                (
+                    AVec::with_capacity(64, 0),
+                    AVec::with_capacity(64, 0),
+                    AVec::with_capacity(64, 0),
+                    AVec::with_capacity(64, 0),
+                )
+            };
+
         Ok(Self {
             n,
             log_n,
@@ -233,13 +340,14 @@ impl NttTable for U64NttTable {
             ordinal_roots,
             reverse_lsbs,
             #[cfg(target_arch = "x86_64")]
-            backend: if *HAS_AVX2 {
-                U64Backend::Avx2
-            } else {
-                U64Backend::Scalar
-            },
-            #[cfg(not(target_arch = "x86_64"))]
-            backend: U64Backend::Scalar,
+            avx2_roots,
+            #[cfg(target_arch = "x86_64")]
+            avx2_roots_precon,
+            #[cfg(target_arch = "x86_64")]
+            avx2_inv_roots,
+            #[cfg(target_arch = "x86_64")]
+            avx2_inv_roots_precon,
+            backend,
         })
     }
 

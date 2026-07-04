@@ -59,6 +59,31 @@ pub struct U32NttTable {
     /// Bit-reversed index mapping (size `n`).
     reverse_lsbs: Vec<usize>,
 
+    /// AVX2 forward roots pre-expanded for T4/T2 vector loads (size ≈ n).
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_roots: AVec<u32>,
+    /// AVX2 forward precon pre-expanded for T4/T2 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_roots_precon: AVec<u32>,
+    /// AVX2 inverse roots pre-expanded for T4/T2 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_inv_roots: AVec<u32>,
+    /// AVX2 inverse precon pre-expanded for T4/T2 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx2_inv_roots_precon: AVec<u32>,
+    /// AVX-512 forward roots pre-expanded for T8/T4/T2/T1 vector loads (size ≈ 2n).
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx512_roots: AVec<u32>,
+    /// AVX-512 forward precon pre-expanded for T8/T4/T2/T1 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx512_roots_precon: AVec<u32>,
+    /// AVX-512 inverse roots pre-expanded for T8/T4/T2/T1 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx512_inv_roots: AVec<u32>,
+    /// AVX-512 inverse precon pre-expanded for T8/T4/T2/T1 vector loads.
+    #[cfg(target_arch = "x86_64")]
+    pub(super) avx512_inv_roots_precon: AVec<u32>,
+
     backend: U32Backend,
 }
 
@@ -145,6 +170,145 @@ impl U32NttTable {
             },
         }
     }
+}
+
+#[cfg(target_arch = "x86_64")]
+/// Build pre-expanded root vectors for AVX2 T4/T2 stages.
+///
+/// `inverse` controls traversal direction:
+/// - `false` (forward): t decreases from `n/2` down to 1.
+/// - `true`  (inverse): t increases from 1 up to `n/2`.
+fn build_avx2_roots_u32(n: usize, roots: &[u32], inverse: bool) -> AVec<u32> {
+    // n < 32 → scalar fallback, no pre-expanded data needed.
+    if n < 32 {
+        return AVec::with_capacity(32, 0);
+    }
+    let mut out = AVec::with_capacity(32, (n / 8) * 8);
+    let mut ri = 1usize;
+    let (mut t, mut m) = if inverse {
+        (1usize, n >> 1)
+    } else {
+        (n >> 1, 1usize)
+    };
+    loop {
+        if t >= 8 {
+            ri += n / (2 * t); // T8: broadcast, skip
+        } else {
+            match t {
+                4 => {
+                    for _ in 0..(n / 16) {
+                        let w0 = roots[ri];
+                        let w1 = roots[ri + 1];
+                        ri += 2;
+                        for _ in 0..4 {
+                            out.push(w0);
+                        }
+                        for _ in 0..4 {
+                            out.push(w1);
+                        }
+                    }
+                }
+                2 => {
+                    for _ in 0..(n / 16) {
+                        let w0 = roots[ri];
+                        let w1 = roots[ri + 1];
+                        let w2 = roots[ri + 2];
+                        let w3 = roots[ri + 3];
+                        ri += 4;
+                        out.push(w0);
+                        out.push(w0);
+                        out.push(w2);
+                        out.push(w2);
+                        out.push(w1);
+                        out.push(w1);
+                        out.push(w3);
+                        out.push(w3);
+                    }
+                }
+                1 => {
+                    // T1: already uses _mm256_loadu_si256 from scalar roots
+                    ri += n / 2;
+                }
+                _ => unreachable!(),
+            }
+        }
+        if inverse {
+            t <<= 1;
+            m >>= 1;
+        } else {
+            t >>= 1;
+            m <<= 1;
+        }
+        if inverse {
+            if m < 1 {
+                break;
+            }
+        } else if m >= n {
+            break;
+        }
+    }
+    out
+}
+
+#[cfg(target_arch = "x86_64")]
+/// Build pre-expanded root vectors for AVX-512 T8/T4/T2/T1 stages.
+///
+/// `inverse` controls traversal direction (see `build_avx2_roots_u32`).
+fn build_avx512_roots_u32(n: usize, roots: &[u32], inverse: bool) -> AVec<u32> {
+    // n < 64 → scalar fallback, no pre-expanded data needed.
+    if n < 64 {
+        return AVec::with_capacity(64, 0);
+    }
+    let mut out = AVec::with_capacity(64, (n / 8) * 16);
+    let mut ri = 1usize;
+    let (mut t, mut m) = if inverse {
+        (1usize, n >> 1)
+    } else {
+        (n >> 1, 1usize)
+    };
+    loop {
+        if t >= 16 {
+            ri += n / (2 * t); // T16: broadcast, skip
+        } else if t == 8 {
+            for _ in 0..(n / 32) {
+                let w0 = roots[ri];
+                let w1 = roots[ri + 1];
+                ri += 2;
+                for _ in 0..8 {
+                    out.push(w0);
+                }
+                for _ in 0..8 {
+                    out.push(w1);
+                }
+            }
+        } else {
+            let num_w = 16 / t;
+            for _ in 0..(n / 32) {
+                for j in 0..num_w {
+                    let w = roots[ri + j];
+                    for _ in 0..t {
+                        out.push(w);
+                    }
+                }
+                ri += num_w;
+            }
+        }
+        if inverse {
+            t <<= 1;
+            m >>= 1;
+        } else {
+            t >>= 1;
+            m <<= 1;
+        }
+        if inverse {
+            if m < 1 {
+                break;
+            }
+        } else if m >= n {
+            break;
+        }
+    }
+    out
 }
 
 impl NttTable for U32NttTable {
@@ -235,6 +399,45 @@ impl NttTable for U32NttTable {
         #[cfg(not(target_arch = "x86_64"))]
         let backend = U32Backend::Scalar;
 
+        // --- backend-specific pre-expanded root tables ---
+        // Only build for the selected backend to save memory and init time.
+        #[cfg(target_arch = "x86_64")]
+        let use_avx2 = matches!(backend, U32Backend::Avx2 | U32Backend::Avx512);
+        #[cfg(target_arch = "x86_64")]
+        let use_avx512 = matches!(backend, U32Backend::Avx512);
+
+        #[cfg(target_arch = "x86_64")]
+        let (avx2_roots, avx2_roots_precon, avx2_inv_roots, avx2_inv_roots_precon) = if use_avx2 {
+            let ar = build_avx2_roots_u32(n, &roots, false);
+            let arp = build_avx2_roots_u32(n, &roots_precon, false);
+            let air = build_avx2_roots_u32(n, &inv_roots, true);
+            let airp = build_avx2_roots_u32(n, &inv_roots_precon, true);
+            (ar, arp, air, airp)
+        } else {
+            (
+                AVec::with_capacity(32, 0),
+                AVec::with_capacity(32, 0),
+                AVec::with_capacity(32, 0),
+                AVec::with_capacity(32, 0),
+            )
+        };
+        #[cfg(target_arch = "x86_64")]
+        let (avx512_roots, avx512_roots_precon, avx512_inv_roots, avx512_inv_roots_precon) =
+            if use_avx512 {
+                let ar = build_avx512_roots_u32(n, &roots, false);
+                let arp = build_avx512_roots_u32(n, &roots_precon, false);
+                let air = build_avx512_roots_u32(n, &inv_roots, true);
+                let airp = build_avx512_roots_u32(n, &inv_roots_precon, true);
+                (ar, arp, air, airp)
+            } else {
+                (
+                    AVec::with_capacity(64, 0),
+                    AVec::with_capacity(64, 0),
+                    AVec::with_capacity(64, 0),
+                    AVec::with_capacity(64, 0),
+                )
+            };
+
         Ok(Self {
             n,
             log_n,
@@ -252,6 +455,22 @@ impl NttTable for U32NttTable {
             inv_roots_precon,
             ordinal_roots,
             reverse_lsbs,
+            #[cfg(target_arch = "x86_64")]
+            avx2_roots,
+            #[cfg(target_arch = "x86_64")]
+            avx2_roots_precon,
+            #[cfg(target_arch = "x86_64")]
+            avx2_inv_roots,
+            #[cfg(target_arch = "x86_64")]
+            avx2_inv_roots_precon,
+            #[cfg(target_arch = "x86_64")]
+            avx512_roots,
+            #[cfg(target_arch = "x86_64")]
+            avx512_roots_precon,
+            #[cfg(target_arch = "x86_64")]
+            avx512_inv_roots,
+            #[cfg(target_arch = "x86_64")]
+            avx512_inv_roots_precon,
             backend,
         })
     }
@@ -623,5 +842,65 @@ mod tests {
                 "monomial mismatch, coeff={coeff}, degree={degree}"
             );
         }
+    }
+
+    /// Verify pre-expanded root layout matches the old lane patterns
+    /// (tests the builder directly, no SIMD hardware needed).
+    #[test]
+    fn test_builder_lane_order() {
+        // Use a small N=64 and a known identity-like root pattern.
+        // Each root = its bit-reversed index, modulo a dummy q.
+        let n = 64;
+        // dummy roots: roots[i] = i (for forward), inv_roots[i] = i + 100 (for inverse)
+        let roots: Vec<u32> = (0..n).map(|i| i as u32).collect();
+        let inv_roots: Vec<u32> = (0..n).map(|i| (i + 100) as u32).collect();
+
+        // Build AVX2 forward/inverse
+        let avx2_fwd = super::build_avx2_roots_u32(n, &roots, false);
+        let avx2_inv = super::build_avx2_roots_u32(n, &inv_roots, true);
+
+        // Basic sanity: non-empty and aligned
+        assert!(
+            !avx2_fwd.is_empty(),
+            "avx2 forward roots should be non-empty for n=64"
+        );
+        assert!(
+            avx2_fwd.len() % 8 == 0,
+            "avx2 output must be multiple of 8 u32s"
+        );
+
+        // For n=64, the forward traversal:
+        // T8 (t=32,16,8): ri goes from 1 to 8 (consumes roots[1..8])
+        // T4 (t=4): ri starts at 8, n/16=4 chunks. Chunk 0: [roots[8]×4, roots[9]×4]
+        assert_eq!(avx2_fwd[0], roots[8]);
+        assert_eq!(avx2_fwd[4], roots[9]);
+
+        // T2: after T4 (4 vectors × 8 u32 = 32 u32s), ri at 16.
+        // Chunk 0: [roots[16],roots[16], roots[18],roots[18], roots[17],roots[17], roots[19],roots[19]]
+        let t2_off = 4 * 8; // 4 T4 vectors × 8 u32 each
+        assert_eq!(avx2_fwd[t2_off], roots[16]);
+        assert_eq!(avx2_fwd[t2_off + 1], roots[16]); // w0 dup
+        assert_eq!(avx2_fwd[t2_off + 2], roots[18]); // w2 → lanes 3,2
+        assert_eq!(avx2_fwd[t2_off + 3], roots[18]);
+        assert_eq!(avx2_fwd[t2_off + 4], roots[17]); // w1 → lanes 5,4
+        assert_eq!(avx2_fwd[t2_off + 5], roots[17]);
+        assert_eq!(avx2_fwd[t2_off + 6], roots[19]); // w3 → lanes 7,6
+        assert_eq!(avx2_fwd[t2_off + 7], roots[19]);
+
+        // AVX2 inverse: T1 skipped (ri += n/2=32), T2 at ri=33.
+        // Chunk 0: [inv_roots[33]×2, inv_roots[35]×2, inv_roots[34]×2, inv_roots[36]×2]
+        assert_eq!(avx2_inv[0], inv_roots[33]);
+        assert_eq!(avx2_inv[2], inv_roots[35]);
+        assert_eq!(avx2_inv[4], inv_roots[34]);
+        assert_eq!(avx2_inv[6], inv_roots[36]);
+        assert_eq!(avx2_inv.len(), 64); // T2: 4 vec + T4: 4 vec × 8 u32 = 64 u32
+
+        // AVX512 forward: T16 (t=32,16) skip, ri=4. T8 at ri=4, 2 chunks.
+        // Chunk 0: [roots[4]×8, roots[5]×8]
+        let avx512_fwd = super::build_avx512_roots_u32(n, &roots, false);
+        assert!(!avx512_fwd.is_empty());
+        assert!(avx512_fwd.len() % 16 == 0);
+        assert_eq!(avx512_fwd[0], roots[4]);
+        assert_eq!(avx512_fwd[8], roots[5]);
     }
 }

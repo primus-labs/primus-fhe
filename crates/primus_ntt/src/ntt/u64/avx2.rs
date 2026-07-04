@@ -394,6 +394,8 @@ impl U64NttTable {
 
         let roots = self.roots.as_slice();
         let roots_precon = self.roots_precon.as_slice();
+        let avx2_roots = self.avx2_roots.as_slice();
+        let avx2_roots_precon = self.avx2_roots_precon.as_slice();
 
         let v_q = _mm256_set1_epi64x(q as i64);
         let v_two_q = _mm256_set1_epi64x(two_q as i64);
@@ -402,7 +404,8 @@ impl U64NttTable {
         let mut is_first_stage = true;
 
         // Direct index: avoid zip+map overhead.
-        let mut ri = 1usize; // skip roots[0] = 1
+        let mut ri = 1usize; // skip roots[0] = 1 (for T4 broadcast stages)
+        let mut avx_ri = 0usize; // index into pre-expanded arrays
         let mut t = n >> 1;
         let mut m = 1;
 
@@ -450,22 +453,17 @@ impl U64NttTable {
                         // SAFETY: n is a power of two ≥ 16, so chunking into 8 is valid.
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
                         for chunk in chunks {
-                            let w_a = unsafe { *roots.get_unchecked(ri) };
-                            let wp_a = unsafe { *roots_precon.get_unchecked(ri) };
-                            ri += 1;
-                            let w_b = unsafe { *roots.get_unchecked(ri) };
-                            let wp_b = unsafe { *roots_precon.get_unchecked(ri) };
-                            ri += 1;
-
-                            // W: [W_B, W_B | W_A, W_A] — lanes 3,2 use W_B; lanes 1,0 use W_A
-                            let v_w =
-                                _mm256_set_epi64x(w_b as i64, w_b as i64, w_a as i64, w_a as i64);
-                            let v_wp = _mm256_set_epi64x(
-                                wp_b as i64,
-                                wp_b as i64,
-                                wp_a as i64,
-                                wp_a as i64,
-                            );
+                            let v_w = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            let v_wp = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            avx_ri += 4;
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t2_load_xy(ptr, unsafe { ptr.add(1) });
@@ -482,17 +480,17 @@ impl U64NttTable {
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
                         if output_mod_factor == 1 {
                             for chunk in chunks {
-                                let v_w_raw = unsafe {
-                                    _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
-                                };
-                                let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
-                                let v_wp_raw = unsafe {
+                                let v_w = unsafe {
                                     _mm256_loadu_si256(
-                                        roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                        avx2_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
                                     )
                                 };
-                                let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
-                                ri += 4;
+                                let v_wp = unsafe {
+                                    _mm256_loadu_si256(
+                                        avx2_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                    )
+                                };
+                                avx_ri += 4;
 
                                 let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                                 let (v_x, v_y) = t1_load_xy(ptr);
@@ -509,17 +507,17 @@ impl U64NttTable {
                             }
                         } else {
                             for chunk in chunks {
-                                let v_w_raw = unsafe {
-                                    _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
-                                };
-                                let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
-                                let v_wp_raw = unsafe {
+                                let v_w = unsafe {
                                     _mm256_loadu_si256(
-                                        roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                        avx2_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
                                     )
                                 };
-                                let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
-                                ri += 4;
+                                let v_wp = unsafe {
+                                    _mm256_loadu_si256(
+                                        avx2_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                    )
+                                };
+                                avx_ri += 4;
 
                                 let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                                 let (v_x, v_y) = t1_load_xy(ptr);
@@ -587,11 +585,14 @@ impl U64NttTable {
         let inv_n_w_precon = self.inv_n_w_precon;
         let inv_roots = self.inv_roots.as_slice();
         let inv_roots_precon = self.inv_roots_precon.as_slice();
+        let avx2_inv_roots = self.avx2_inv_roots.as_slice();
+        let avx2_inv_roots_precon = self.avx2_inv_roots_precon.as_slice();
 
         let v_q = _mm256_set1_epi64x(q as i64);
         let v_two_q = _mm256_set1_epi64x(two_q as i64);
 
-        let mut ri = 1usize; // skip inv_roots[0] = 1
+        let mut ri = 1usize; // skip inv_roots[0] = 1 (for T4 broadcast stages)
+        let mut avx_ri = 0usize; // index into pre-expanded arrays
         let mut t = 1usize;
         let mut m = n >> 1;
 
@@ -627,17 +628,18 @@ impl U64NttTable {
                     1 => {
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
                         for chunk in chunks {
-                            let v_w_raw = unsafe {
-                                _mm256_loadu_si256(inv_roots.as_ptr().add(ri).cast::<__m256i>())
-                            };
-                            let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
-                            let v_wp_raw = unsafe {
+                            let v_w = unsafe {
                                 _mm256_loadu_si256(
-                                    inv_roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                    avx2_inv_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
                                 )
                             };
-                            let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
-                            ri += 4;
+                            let v_wp = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_inv_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            avx_ri += 4;
+                            ri += 4; // keep ri tracking scalar root position for T4+ broadcast
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t1_load_xy(ptr);
@@ -648,21 +650,18 @@ impl U64NttTable {
                     2 => {
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
                         for chunk in chunks {
-                            let w_a = unsafe { *inv_roots.get_unchecked(ri) };
-                            let wp_a = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                            ri += 1;
-                            let w_b = unsafe { *inv_roots.get_unchecked(ri) };
-                            let wp_b = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                            ri += 1;
-
-                            let v_w =
-                                _mm256_set_epi64x(w_b as i64, w_b as i64, w_a as i64, w_a as i64);
-                            let v_wp = _mm256_set_epi64x(
-                                wp_b as i64,
-                                wp_b as i64,
-                                wp_a as i64,
-                                wp_a as i64,
-                            );
+                            let v_w = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_inv_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            let v_wp = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_inv_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            avx_ri += 4;
+                            ri += 2; // keep ri tracking scalar root position for T4+ broadcast
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t2_load_xy(ptr, unsafe { ptr.add(1) });

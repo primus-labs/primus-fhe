@@ -362,6 +362,8 @@ impl U32NttTable {
 
         let roots = self.roots.as_slice();
         let roots_precon = self.roots_precon.as_slice();
+        let avx2_roots = self.avx2_roots.as_slice();
+        let avx2_roots_precon = self.avx2_roots_precon.as_slice();
 
         let v_q = _mm256_set1_epi32(q as i32);
         let v_two_q = _mm256_set1_epi32(two_q as i32);
@@ -369,7 +371,9 @@ impl U32NttTable {
         let skip_first_reduce_x = input_mod_factor <= 2;
         let mut is_first_stage = true;
 
-        let mut ri = 1usize; // skip roots[0] = 1
+        let mut ri = 1usize; // skip roots[0] = 1 (for T8 broadcast stages)
+        let mut avx_ri = 0usize; // index into pre-expanded arrays
+
         let mut t = n >> 1;
         let mut m = 1;
 
@@ -414,27 +418,18 @@ impl U32NttTable {
                     4 => {
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
                         for chunk in chunks {
-                            let w_a = unsafe { *roots.get_unchecked(ri) };
-                            let wp_a = unsafe { *roots_precon.get_unchecked(ri) };
-                            ri += 1;
-                            let w_b = unsafe { *roots.get_unchecked(ri) };
-                            let wp_b = unsafe { *roots_precon.get_unchecked(ri) };
-                            ri += 1;
-
-                            let v_w = _mm256_set_epi32(
-                                w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_a as i32,
-                                w_a as i32, w_a as i32, w_a as i32,
-                            );
-                            let v_wp = _mm256_set_epi32(
-                                wp_b as i32,
-                                wp_b as i32,
-                                wp_b as i32,
-                                wp_b as i32,
-                                wp_a as i32,
-                                wp_a as i32,
-                                wp_a as i32,
-                                wp_a as i32,
-                            );
+                            let v_w = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            let v_wp = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            avx_ri += 8;
+                            ri += 2; // keep ri tracking scalar root position for T1
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t4_load_xy(ptr, unsafe { ptr.add(1) });
@@ -449,23 +444,19 @@ impl U32NttTable {
                     2 => {
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
                         for chunk in chunks {
-                            let w0 = unsafe { *roots.get_unchecked(ri) };
-                            let wp0 = unsafe { *roots_precon.get_unchecked(ri) };
-                            let w1 = unsafe { *roots.get_unchecked(ri + 1) };
-                            let wp1 = unsafe { *roots_precon.get_unchecked(ri + 1) };
-                            let w2 = unsafe { *roots.get_unchecked(ri + 2) };
-                            let wp2 = unsafe { *roots_precon.get_unchecked(ri + 2) };
-                            let w3 = unsafe { *roots.get_unchecked(ri + 3) };
-                            let wp3 = unsafe { *roots_precon.get_unchecked(ri + 3) };
-                            ri += 4;
-                            let v_w = _mm256_set_epi32(
-                                w3 as i32, w3 as i32, w1 as i32, w1 as i32, w2 as i32, w2 as i32,
-                                w0 as i32, w0 as i32,
-                            );
-                            let v_wp = _mm256_set_epi32(
-                                wp3 as i32, wp3 as i32, wp1 as i32, wp1 as i32, wp2 as i32,
-                                wp2 as i32, wp0 as i32, wp0 as i32,
-                            );
+                            let v_w = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            let v_wp = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            avx_ri += 8;
+                            ri += 4; // keep ri tracking scalar root position for T1
+
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t2_load_xy(ptr);
                             let (v_x, v_y) = if reduce_x {
@@ -577,6 +568,8 @@ impl U32NttTable {
 
         let inv_roots = self.inv_roots.as_slice();
         let inv_roots_precon = self.inv_roots_precon.as_slice();
+        let avx2_inv_roots = self.avx2_inv_roots.as_slice();
+        let avx2_inv_roots_precon = self.avx2_inv_roots_precon.as_slice();
         let inv_n = self.inv_n;
         let inv_n_precon = self.inv_n_precon;
         let inv_n_w = self.inv_n_w;
@@ -585,7 +578,9 @@ impl U32NttTable {
         let v_q = _mm256_set1_epi32(q as i32);
         let v_two_q = _mm256_set1_epi32(two_q as i32);
 
-        let mut ri = 1usize; // skip inv_roots[0] = 1
+        let mut ri = 1usize; // skip inv_roots[0] = 1 (for T8 broadcast stages)
+        let mut avx_ri = 0usize; // index into pre-expanded arrays
+
         let mut t = 1usize;
         let mut m = n >> 1;
 
@@ -641,23 +636,18 @@ impl U32NttTable {
                     2 => {
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
                         for chunk in chunks {
-                            let w0 = unsafe { *inv_roots.get_unchecked(ri) };
-                            let wp0 = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                            let w1 = unsafe { *inv_roots.get_unchecked(ri + 1) };
-                            let wp1 = unsafe { *inv_roots_precon.get_unchecked(ri + 1) };
-                            let w2 = unsafe { *inv_roots.get_unchecked(ri + 2) };
-                            let wp2 = unsafe { *inv_roots_precon.get_unchecked(ri + 2) };
-                            let w3 = unsafe { *inv_roots.get_unchecked(ri + 3) };
-                            let wp3 = unsafe { *inv_roots_precon.get_unchecked(ri + 3) };
-                            ri += 4;
-                            let v_w = _mm256_set_epi32(
-                                w3 as i32, w3 as i32, w1 as i32, w1 as i32, w2 as i32, w2 as i32,
-                                w0 as i32, w0 as i32,
-                            );
-                            let v_wp = _mm256_set_epi32(
-                                wp3 as i32, wp3 as i32, wp1 as i32, wp1 as i32, wp2 as i32,
-                                wp2 as i32, wp0 as i32, wp0 as i32,
-                            );
+                            let v_w = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_inv_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            let v_wp = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_inv_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            avx_ri += 8;
+                            ri += 4; // keep ri tracking scalar root position for T8+ broadcast
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t2_load_xy(ptr);
                             let (v_x, v_y) = inv_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
@@ -667,28 +657,18 @@ impl U32NttTable {
                     4 => {
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
                         for chunk in chunks {
-                            let w_a = unsafe { *inv_roots.get_unchecked(ri) };
-                            let wp_a = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                            ri += 1;
-                            let w_b = unsafe { *inv_roots.get_unchecked(ri) };
-                            let wp_b = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                            ri += 1;
-
-                            let v_w = _mm256_set_epi32(
-                                w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_a as i32,
-                                w_a as i32, w_a as i32, w_a as i32,
-                            );
-                            let v_wp = _mm256_set_epi32(
-                                wp_b as i32,
-                                wp_b as i32,
-                                wp_b as i32,
-                                wp_b as i32,
-                                wp_a as i32,
-                                wp_a as i32,
-                                wp_a as i32,
-                                wp_a as i32,
-                            );
-
+                            let v_w = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_inv_roots.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            let v_wp = unsafe {
+                                _mm256_loadu_si256(
+                                    avx2_inv_roots_precon.as_ptr().add(avx_ri).cast::<__m256i>(),
+                                )
+                            };
+                            avx_ri += 8;
+                            ri += 2; // keep ri tracking scalar root position for T8+ broadcast
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t4_load_xy(ptr, unsafe { ptr.add(1) });
                             let (v_x, v_y) = inv_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
