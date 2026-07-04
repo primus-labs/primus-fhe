@@ -3,7 +3,7 @@
 //! Uses 512-bit vectors (16 × u32 lanes):
 //! - T16 (t ≥ 16): broadcast W, contiguous x/y loads.
 //! - T8  (t = 8): `permutex2var_epi32` deinterleave.
-//! - T4 / T2 / T1: scalar fallback for the remaining stages.
+//! - T4 / T2 / T1: `permutex2var_epi32` deinterleave (4/8/16 blocks per group).
 //!
 //! Requires `n ≥ 64` — polynomial lengths below that are handled by the
 //! scalar backend directly.
@@ -201,51 +201,258 @@ fn inv_butterfly_avx512(
 }
 
 // ---------------------------------------------------------------------------
-// Scalar fallback for a single NTT stage
+// T4 (t=4): 4-block deinterleave — 4 blocks → 2 × __m512i
+// ---------------------------------------------------------------------------
+//
+// Each block is [x₀..x₃ | y₀..y₃] (8 u32).  Process 4 blocks A,B,C,D:
+//   v0 = [xA..xA₃, yA₀..yA₃ | xB₀..xB₃, yB₀..yB₃]
+//   v1 = [xC..xC₃, yC₀..yC₃ | xD₀..xD₃, yD₀..yD₃]
+
+#[rustfmt::skip]
+const PERM_T4_X: [i32; 16] = [
+    0,  1,  2,  3,    // xA₀..xA₃ ← a  0..3
+    8,  9,  10, 11,   // xB₀..xB₃ ← a  8..11
+    16, 17, 18, 19,   // xC₀..xC₃ ← b  0..3
+    24, 25, 26, 27,   // xD₀..xD₃ ← b  8..11
+];
+
+#[rustfmt::skip]
+const PERM_T4_Y: [i32; 16] = [
+    4,  5,  6,  7,    // yA₀..yA₃ ← a  4..7
+    12, 13, 14, 15,   // yB₀..yB₃ ← a 12..15
+    20, 21, 22, 23,   // yC₀..yC₃ ← b  4..7
+    28, 29, 30, 31,   // yD₀..yD₃ ← b 12..15
+];
+
+#[rustfmt::skip]
+const PERM_T4_STORE_A: [i32; 16] = [
+    0,  1,  2,  3,    // xA₀..xA₃ ← v_x  0..3
+    16, 17, 18, 19,   // yA₀..yA₃ ← v_y  0..3
+    4,  5,  6,  7,    // xB₀..xB₃ ← v_x  4..7
+    20, 21, 22, 23,   // yB₀..yB₃ ← v_y  4..7
+];
+
+#[rustfmt::skip]
+const PERM_T4_STORE_B: [i32; 16] = [
+    8,  9,  10, 11,   // xC₀..xC₃ ← v_x  8..11
+    24, 25, 26, 27,   // yC₀..yC₃ ← v_y  8..11
+    12, 13, 14, 15,   // xD₀..xD₃ ← v_x 12..15
+    28, 29, 30, 31,   // yD₀..yD₃ ← v_y 12..15
+];
+
+// ---------------------------------------------------------------------------
+// T2 (t=2): 8-block deinterleave — 8 blocks → 2 × __m512i
+// ---------------------------------------------------------------------------
+//
+// Each block is [x₀,x₁ | y₀,y₁] (4 u32).  Process 8 blocks A..H:
+//   v0 = [xA₀,xA₁,yA₀,yA₁, xB₀,xB₁,yB₀,yB₁, xC₀,xC₁,yC₀,yC₁, xD₀,xD₁,yD₀,yD₁]
+//   v1 = [xE₀,xE₁,yE₀,yE₁, … xH₀,xH₁,yH₀,yH₁]
+
+#[rustfmt::skip]
+const PERM_T2_X: [i32; 16] = [
+    0,  1,              // xA₀,xA₁ ← a  0,1
+    4,  5,              // xB₀,xB₁ ← a  4,5
+    8,  9,              // xC₀,xC₁ ← a  8,9
+    12, 13,             // xD₀,xD₁ ← a 12,13
+    16, 17,             // xE₀,xE₁ ← b  0,1
+    20, 21,             // xF₀,xF₁ ← b  4,5
+    24, 25,             // xG₀,xG₁ ← b  8,9
+    28, 29,             // xH₀,xH₁ ← b 12,13
+];
+
+#[rustfmt::skip]
+const PERM_T2_Y: [i32; 16] = [
+    2,  3,              // yA₀,yA₁ ← a  2,3
+    6,  7,              // yB₀,yB₁ ← a  6,7
+    10, 11,             // yC₀,yC₁ ← a 10,11
+    14, 15,             // yD₀,yD₁ ← a 14,15
+    18, 19,             // yE₀,yE₁ ← b  2,3
+    22, 23,             // yF₀,yF₁ ← b  6,7
+    26, 27,             // yG₀,yG₁ ← b 10,11
+    30, 31,             // yH₀,yH₁ ← b 14,15
+];
+
+#[rustfmt::skip]
+const PERM_T2_STORE_A: [i32; 16] = [
+    0,  1,              // xA₀,xA₁ ← v_x  0,1
+    16, 17,             // yA₀,yA₁ ← v_y  0,1
+    2,  3,              // xB₀,xB₁ ← v_x  2,3
+    18, 19,             // yB₀,yB₁ ← v_y  2,3
+    4,  5,              // xC₀,xC₁ ← v_x  4,5
+    20, 21,             // yC₀,yC₁ ← v_y  4,5
+    6,  7,              // xD₀,xD₁ ← v_x  6,7
+    22, 23,             // yD₀,yD₁ ← v_y  6,7
+];
+
+#[rustfmt::skip]
+const PERM_T2_STORE_B: [i32; 16] = [
+    8,  9,              // xE₀,xE₁ ← v_x  8,9
+    24, 25,             // yE₀,yE₁ ← v_y  8,9
+    10, 11,             // xF₀,xF₁ ← v_x 10,11
+    26, 27,             // yF₀,yF₁ ← v_y 10,11
+    12, 13,             // xG₀,xG₁ ← v_x 12,13
+    28, 29,             // yG₀,yG₁ ← v_y 12,13
+    14, 15,             // xH₀,xH₁ ← v_x 14,15
+    30, 31,             // yH₀,yH₁ ← v_y 14,15
+];
+
+// ---------------------------------------------------------------------------
+// T1 (t=1): 16-block deinterleave — 16 blocks → 2 × __m512i
+// ---------------------------------------------------------------------------
+//
+// Each block is [x | y] (2 u32).  Process 16 blocks A..P:
+//   v0 = [xA,yA, xB,yB, … xH,yH]
+//   v1 = [xI,yI, xJ,yJ, … xP,yP]
+
+#[rustfmt::skip]
+const PERM_T1_X: [i32; 16] = [
+    0,  2,  4,  6,  8,  10, 12, 14,  // xA..xH ← a even lanes
+    16, 18, 20, 22, 24, 26, 28, 30,  // xI..xP ← b even lanes
+];
+
+#[rustfmt::skip]
+const PERM_T1_Y: [i32; 16] = [
+    1,  3,  5,  7,  9,  11, 13, 15,  // yA..yH ← a odd lanes
+    17, 19, 21, 23, 25, 27, 29, 31,  // yI..yP ← b odd lanes
+];
+
+#[rustfmt::skip]
+const PERM_T1_STORE_A: [i32; 16] = [
+    0, 16,  1, 17,  2, 18,  3, 19,
+    4, 20,  5, 21,  6, 22,  7, 23,
+];
+
+#[rustfmt::skip]
+const PERM_T1_STORE_B: [i32; 16] = [
+    8, 24,  9, 25, 10, 26, 11, 27,
+    12, 28, 13, 29, 14, 30, 15, 31,
+];
+
+// ---------------------------------------------------------------------------
+// W-vector expansion for deinterleave stages
 // ---------------------------------------------------------------------------
 
-/// Process one NTT stage with the scalar backend.  Used for the
-/// final t ∈ {4, 2, 1} stages where a 16-wide deinterleave is not yet
-/// implemented.
+/// Expand `num_w = 16/t` consecutive W values into a 16-lane vector,
+/// duplicating each value `t` times to match the deinterleaved lane order.
+#[target_feature(enable = "avx512f")]
 #[inline]
-fn scalar_stage_forward(
-    values: &mut [u32],
-    t: usize,
-    roots: &[u32],
-    roots_precon: &[u32],
-    ri: &mut usize,
-    q: u32,
-    two_q: u32,
-) {
-    for block in values.chunks_exact_mut(t * 2) {
-        let w = unsafe { *roots.get_unchecked(*ri) };
-        let wp = unsafe { *roots_precon.get_unchecked(*ri) };
-        *ri += 1;
-        let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
-        for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-            scalar::fwd_butterfly(x, y, w, wp, q, two_q);
+fn expand_w_16(w_ptr: *const u32, t: usize) -> __m512i {
+    // SAFETY: caller ensures w_ptr points to at least 16/t readable u32 values.
+    unsafe {
+        match t {
+            4 => {
+                let w0 = *w_ptr;
+                let w1 = *w_ptr.add(1);
+                let w2 = *w_ptr.add(2);
+                let w3 = *w_ptr.add(3);
+                _mm512_set_epi32(
+                    w3 as i32, w3 as i32, w3 as i32, w3 as i32, w2 as i32, w2 as i32, w2 as i32,
+                    w2 as i32, w1 as i32, w1 as i32, w1 as i32, w1 as i32, w0 as i32, w0 as i32,
+                    w0 as i32, w0 as i32,
+                )
+            }
+            2 => {
+                let w0 = *w_ptr;
+                let w1 = *w_ptr.add(1);
+                let w2 = *w_ptr.add(2);
+                let w3 = *w_ptr.add(3);
+                let w4 = *w_ptr.add(4);
+                let w5 = *w_ptr.add(5);
+                let w6 = *w_ptr.add(6);
+                let w7 = *w_ptr.add(7);
+                _mm512_set_epi32(
+                    w7 as i32, w7 as i32, w6 as i32, w6 as i32, w5 as i32, w5 as i32, w4 as i32,
+                    w4 as i32, w3 as i32, w3 as i32, w2 as i32, w2 as i32, w1 as i32, w1 as i32,
+                    w0 as i32, w0 as i32,
+                )
+            }
+            1 => _mm512_loadu_si512(w_ptr.cast::<__m512i>()),
+            _ => unreachable!(),
         }
     }
 }
 
-#[inline]
-fn scalar_stage_inverse(
-    values: &mut [u32],
-    t: usize,
-    inv_roots: &[u32],
-    inv_roots_precon: &[u32],
-    ri: &mut usize,
-    q: u32,
-    two_q: u32,
-) {
-    for block in values.chunks_exact_mut(t * 2) {
-        let w = unsafe { *inv_roots.get_unchecked(*ri) };
-        let wp = unsafe { *inv_roots_precon.get_unchecked(*ri) };
-        *ri += 1;
-        let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
-        for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-            scalar::inv_butterfly(x, y, w, wp, q, two_q);
+// ---------------------------------------------------------------------------
+// Generic deinterleave helpers
+// ---------------------------------------------------------------------------
+
+/// Pre-loaded permutation masks for one deinterleave stage.
+struct DeinterleaveMasks {
+    idx_x: __m512i,
+    idx_y: __m512i,
+    idx_sa: __m512i,
+    idx_sb: __m512i,
+}
+
+impl DeinterleaveMasks {
+    #[target_feature(enable = "avx512f")]
+    unsafe fn load(x: &[i32; 16], y: &[i32; 16], sa: &[i32; 16], sb: &[i32; 16]) -> Self {
+        unsafe {
+            Self {
+                idx_x: _mm512_loadu_si512(x.as_ptr().cast()),
+                idx_y: _mm512_loadu_si512(y.as_ptr().cast()),
+                idx_sa: _mm512_loadu_si512(sa.as_ptr().cast()),
+                idx_sb: _mm512_loadu_si512(sb.as_ptr().cast()),
+            }
         }
+    }
+
+    fn for_t(t: usize) -> Self {
+        unsafe {
+            match t {
+                4 => Self::load(&PERM_T4_X, &PERM_T4_Y, &PERM_T4_STORE_A, &PERM_T4_STORE_B),
+                2 => Self::load(&PERM_T2_X, &PERM_T2_Y, &PERM_T2_STORE_A, &PERM_T2_STORE_B),
+                1 => Self::load(&PERM_T1_X, &PERM_T1_Y, &PERM_T1_STORE_A, &PERM_T1_STORE_B),
+                _ => unreachable!(),
+            }
+        }
+    }
+}
+
+/// Load two `__m512i`, deinterleave, butterfly, re-interleave, store.
+#[target_feature(enable = "avx512f")]
+#[inline]
+fn deinterleave_fwd_stage(
+    ptr: *mut __m512i,
+    v_w: __m512i,
+    v_wp: __m512i,
+    v_q: __m512i,
+    v_two_q: __m512i,
+    masks: &DeinterleaveMasks,
+) {
+    unsafe {
+        let v_a = _mm512_loadu_si512(ptr);
+        let v_b = _mm512_loadu_si512(ptr.add(1));
+        let v_x = _mm512_permutex2var_epi32(v_a, masks.idx_x, v_b);
+        let v_y = _mm512_permutex2var_epi32(v_a, masks.idx_y, v_b);
+        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+        let a_out = _mm512_permutex2var_epi32(v_x, masks.idx_sa, v_y);
+        let b_out = _mm512_permutex2var_epi32(v_x, masks.idx_sb, v_y);
+        _mm512_storeu_si512(ptr, a_out);
+        _mm512_storeu_si512(ptr.add(1), b_out);
+    }
+}
+
+#[target_feature(enable = "avx512f")]
+#[inline]
+fn deinterleave_inv_stage(
+    ptr: *mut __m512i,
+    v_w: __m512i,
+    v_wp: __m512i,
+    v_q: __m512i,
+    v_two_q: __m512i,
+    masks: &DeinterleaveMasks,
+) {
+    unsafe {
+        let v_a = _mm512_loadu_si512(ptr);
+        let v_b = _mm512_loadu_si512(ptr.add(1));
+        let v_x = _mm512_permutex2var_epi32(v_a, masks.idx_x, v_b);
+        let v_y = _mm512_permutex2var_epi32(v_a, masks.idx_y, v_b);
+        let (v_x, v_y) = inv_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+        let a_out = _mm512_permutex2var_epi32(v_x, masks.idx_sa, v_y);
+        let b_out = _mm512_permutex2var_epi32(v_x, masks.idx_sb, v_y);
+        _mm512_storeu_si512(ptr, a_out);
+        _mm512_storeu_si512(ptr.add(1), b_out);
     }
 }
 
@@ -373,8 +580,19 @@ pub(crate) unsafe fn forward_transform(
                 t8_store_xy(v_x, v_y, ptr);
             }
         } else {
-            // --- Scalar fallback for t = 4, 2, 1 ---
-            scalar_stage_forward(values, t, roots, roots_precon, &mut ri, q, two_q);
+            // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
+            let num_w = 16 / t;
+            let masks = DeinterleaveMasks::for_t(t);
+
+            let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+            for chunk in chunks {
+                let v_w = unsafe { expand_w_16(roots.as_ptr().add(ri), t) };
+                let v_wp = unsafe { expand_w_16(roots_precon.as_ptr().add(ri), t) };
+                ri += num_w;
+
+                let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+            }
         }
         t >>= 1;
         m <<= 1;
@@ -518,8 +736,19 @@ pub(crate) unsafe fn inverse_transform(
                 t8_store_xy(v_x, v_y, ptr);
             }
         } else {
-            // --- Scalar fallback for t = 4, 2, 1 ---
-            scalar_stage_inverse(values, t, inv_roots, inv_roots_precon, &mut ri, q, two_q);
+            // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
+            let num_w = 16 / t;
+            let masks = DeinterleaveMasks::for_t(t);
+
+            let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+            for chunk in chunks {
+                let v_w = unsafe { expand_w_16(inv_roots.as_ptr().add(ri), t) };
+                let v_wp = unsafe { expand_w_16(inv_roots_precon.as_ptr().add(ri), t) };
+                ri += num_w;
+
+                let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                deinterleave_inv_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+            }
         }
         t <<= 1;
         m >>= 1;
