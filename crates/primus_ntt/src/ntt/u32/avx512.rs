@@ -78,49 +78,6 @@ const PERM_T8_B: [i32; 16] = [
     24, 25, 26, 27, 28, 29, 30, 31,
 ];
 
-/// Load 2 T8 blocks (32 u32) and deinterleave into x and y vectors.
-///
-/// T8 layout: each block is `[x₀..x₇ | y₀..y₇]` (16 u32 = 512 bits).
-/// Two consecutive blocks A, B produce:
-///
-/// ```text
-/// v_x = [x_A0..x_A7 | x_B0..x_B7]    (all 16 x's)
-/// v_y = [y_A0..y_A7 | y_B0..y_B7]    (all 16 y's)
-/// ```
-///
-/// W vector must be `[W_B × 8 | W_A × 8]`.
-#[target_feature(enable = "avx512f")]
-#[inline]
-fn t8_load_xy(ptr: *const __m512i) -> (__m512i, __m512i) {
-    // SAFETY: caller ensures ptr points to 2 consecutive __m512i.
-    let v_a = unsafe { _mm512_loadu_si512(ptr) };
-    let v_b = unsafe { _mm512_loadu_si512(ptr.add(1)) };
-
-    let idx_x = unsafe { _mm512_loadu_si512(PERM_T8_X.as_ptr().cast::<__m512i>()) };
-    let idx_y = unsafe { _mm512_loadu_si512(PERM_T8_Y.as_ptr().cast::<__m512i>()) };
-
-    let v_x = _mm512_permutex2var_epi32(v_a, idx_x, v_b);
-    let v_y = _mm512_permutex2var_epi32(v_a, idx_y, v_b);
-    (v_x, v_y)
-}
-
-/// Re-interleave x/y vectors back into two T8 blocks and store.
-#[target_feature(enable = "avx512f")]
-#[inline]
-fn t8_store_xy(v_x: __m512i, v_y: __m512i, ptr: *mut __m512i) {
-    let idx_a = unsafe { _mm512_loadu_si512(PERM_T8_A.as_ptr().cast::<__m512i>()) };
-    let idx_b = unsafe { _mm512_loadu_si512(PERM_T8_B.as_ptr().cast::<__m512i>()) };
-
-    let v_a = _mm512_permutex2var_epi32(v_x, idx_a, v_y);
-    let v_b = _mm512_permutex2var_epi32(v_x, idx_b, v_y);
-
-    // SAFETY: caller ensures ptr points to 2 writable __m512i.
-    unsafe {
-        _mm512_storeu_si512(ptr, v_a);
-        _mm512_storeu_si512(ptr.add(1), v_b);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Barrett-32 lazy multiply for 16 u32 lanes
 // ---------------------------------------------------------------------------
@@ -176,6 +133,26 @@ fn fwd_butterfly_avx512(
     let t = mul_mod_lazy_avx512(y, w, wp, q);
     let x_new = _mm512_add_epi32(x0, t);
     let y_new = _mm512_sub_epi32(_mm512_add_epi32(x0, two_q), t);
+    (x_new, y_new)
+}
+
+/// Forward butterfly variant that skips `reduce_once(x, two_q)`.
+///
+/// Only valid when the caller guarantees `x < 2q` in every lane.
+/// Used in the first stage when `input_mod_factor <= 2`.
+#[target_feature(enable = "avx512f")]
+#[inline]
+fn fwd_butterfly_avx512_no_reduce_x(
+    x: __m512i,
+    y: __m512i,
+    w: __m512i,
+    wp: __m512i,
+    q: __m512i,
+    two_q: __m512i,
+) -> (__m512i, __m512i) {
+    let t = mul_mod_lazy_avx512(y, w, wp, q);
+    let x_new = _mm512_add_epi32(x, t);
+    let y_new = _mm512_sub_epi32(_mm512_add_epi32(x, two_q), t);
     (x_new, y_new)
 }
 
@@ -337,6 +314,15 @@ fn expand_w_16(w_ptr: *const u32, t: usize) -> __m512i {
     // SAFETY: caller ensures w_ptr points to at least 16/t readable u32 values.
     unsafe {
         match t {
+            8 => {
+                let w0 = *w_ptr;
+                let w1 = *w_ptr.add(1);
+                _mm512_set_epi32(
+                    w1 as i32, w1 as i32, w1 as i32, w1 as i32, w1 as i32, w1 as i32, w1 as i32,
+                    w1 as i32, w0 as i32, w0 as i32, w0 as i32, w0 as i32, w0 as i32, w0 as i32,
+                    w0 as i32, w0 as i32,
+                )
+            }
             4 => {
                 let w0 = *w_ptr;
                 let w1 = *w_ptr.add(1);
@@ -397,6 +383,7 @@ impl DeinterleaveMasks {
     fn for_t(t: usize) -> Self {
         unsafe {
             match t {
+                8 => Self::load(&PERM_T8_X, &PERM_T8_Y, &PERM_T8_A, &PERM_T8_B),
                 4 => Self::load(&PERM_T4_X, &PERM_T4_Y, &PERM_T4_STORE_A, &PERM_T4_STORE_B),
                 2 => Self::load(&PERM_T2_X, &PERM_T2_Y, &PERM_T2_STORE_A, &PERM_T2_STORE_B),
                 1 => Self::load(&PERM_T1_X, &PERM_T1_Y, &PERM_T1_STORE_A, &PERM_T1_STORE_B),
@@ -406,7 +393,16 @@ impl DeinterleaveMasks {
     }
 }
 
-/// Load two `__m512i`, deinterleave, butterfly, re-interleave, store.
+/// Load two `__m512i`, deinterleave, butterfly, optionally reduce to `[0,q)`,
+/// then re-interleave and store.
+///
+/// When `reduce_output` is true, `reduce_twice_avx512` is applied to the
+/// butterfly output before re-interleaving — this fuses the canonical reduction
+/// for the final (t=1) stage.
+///
+/// When `reduce_x` is false, `fwd_butterfly_avx512_no_reduce_x` is used,
+/// skipping the `reduce_once(x, two_q)` step — valid only in the first stage
+/// when `input_mod_factor <= 2`.
 #[target_feature(enable = "avx512f")]
 #[inline]
 fn deinterleave_fwd_stage(
@@ -416,13 +412,27 @@ fn deinterleave_fwd_stage(
     v_q: __m512i,
     v_two_q: __m512i,
     masks: &DeinterleaveMasks,
+    reduce_output: bool,
+    reduce_x: bool,
 ) {
     unsafe {
         let v_a = _mm512_loadu_si512(ptr);
         let v_b = _mm512_loadu_si512(ptr.add(1));
         let v_x = _mm512_permutex2var_epi32(v_a, masks.idx_x, v_b);
         let v_y = _mm512_permutex2var_epi32(v_a, masks.idx_y, v_b);
-        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+        let (v_x, v_y) = if reduce_x {
+            fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+        } else {
+            fwd_butterfly_avx512_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+        };
+        let (v_x, v_y) = if reduce_output {
+            (
+                reduce_twice_avx512(v_x, v_q, v_two_q),
+                reduce_twice_avx512(v_y, v_q, v_two_q),
+            )
+        } else {
+            (v_x, v_y)
+        };
         let a_out = _mm512_permutex2var_epi32(v_x, masks.idx_sa, v_y);
         let b_out = _mm512_permutex2var_epi32(v_x, masks.idx_sb, v_y);
         _mm512_storeu_si512(ptr, a_out);
@@ -503,11 +513,17 @@ impl U32NttTable {
         let v_q = _mm512_set1_epi32(q as i32);
         let v_two_q = _mm512_set1_epi32(two_q as i32);
 
+        let skip_first_reduce_x = input_mod_factor <= 2;
+        let mut is_first_stage = true;
+
         let mut ri = 1usize; // skip roots[0] = 1
         let mut t = n >> 1;
         let mut m = 1;
 
         while m < n {
+            let reduce_x = !(is_first_stage && skip_first_reduce_x);
+            is_first_stage = false;
+
             if t >= 16 {
                 // --- AVX-512 path: t ≥ 16, process 16 butterflies at a time ---
                 for block in values.chunks_exact_mut(t * 2) {
@@ -526,7 +542,11 @@ impl U32NttTable {
                             unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
                         let v_y =
                             unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
-                        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                        let (v_x, v_y) = if reduce_x {
+                            fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                        } else {
+                            fwd_butterfly_avx512_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                        };
                         unsafe {
                             _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_x);
                             _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_y);
@@ -534,50 +554,22 @@ impl U32NttTable {
                     }
                 }
             } else if t == 8 {
-                // --- AVX-512 T8 path: 2-block deinterleave ---
+                // --- AVX-512 T8: 2-block deinterleave (masks hoisted to stage level) ---
+                let num_w = 2;
+                let masks = DeinterleaveMasks::for_t(8);
                 let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
                 for chunk in chunks {
-                    let w_a = unsafe { *roots.get_unchecked(ri) };
-                    let wp_a = unsafe { *roots_precon.get_unchecked(ri) };
-                    ri += 1;
-                    let w_b = unsafe { *roots.get_unchecked(ri) };
-                    let wp_b = unsafe { *roots_precon.get_unchecked(ri) };
-                    ri += 1;
-
-                    // W: [W_B × 8 | W_A × 8]
-                    let v_w = _mm512_set_epi32(
-                        w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32,
-                        w_b as i32, w_b as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                        w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                    );
-                    let v_wp = _mm512_set_epi32(
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                    );
-
+                    let v_w = unsafe { expand_w_16(roots.as_ptr().add(ri), 8) };
+                    let v_wp = unsafe { expand_w_16(roots_precon.as_ptr().add(ri), 8) };
+                    ri += num_w;
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    let (v_x, v_y) = t8_load_xy(ptr);
-                    let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                    t8_store_xy(v_x, v_y, ptr);
+                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks, false, reduce_x);
                 }
             } else {
                 // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
                 let num_w = 16 / t;
                 let masks = DeinterleaveMasks::for_t(t);
+                let reduce_output = t == 1 && output_mod_factor == 1;
 
                 let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
                 for chunk in chunks {
@@ -586,21 +578,20 @@ impl U32NttTable {
                     ri += num_w;
 
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                    deinterleave_fwd_stage(
+                        ptr,
+                        v_w,
+                        v_wp,
+                        v_q,
+                        v_two_q,
+                        &masks,
+                        reduce_output,
+                        reduce_x,
+                    );
                 }
             }
             t >>= 1;
             m <<= 1;
-        }
-
-        // Final canonical reduction: [0, 4q) → [0, q)
-        if output_mod_factor == 1 {
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
-            for chunk in chunks {
-                let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
-                let v = reduce_twice_avx512(v, v_q, v_two_q);
-                unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
-            }
         }
     }
 
@@ -684,45 +675,16 @@ impl U32NttTable {
                     }
                 }
             } else if t == 8 {
-                // --- AVX-512 T8 path: 2-block deinterleave ---
+                // --- AVX-512 T8: 2-block deinterleave (masks hoisted to stage level) ---
+                let num_w = 2;
+                let masks = DeinterleaveMasks::for_t(8);
                 let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
                 for chunk in chunks {
-                    let w_a = unsafe { *inv_roots.get_unchecked(ri) };
-                    let wp_a = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                    ri += 1;
-                    let w_b = unsafe { *inv_roots.get_unchecked(ri) };
-                    let wp_b = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                    ri += 1;
-
-                    // W: [W_B × 8 | W_A × 8]
-                    let v_w = _mm512_set_epi32(
-                        w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32,
-                        w_b as i32, w_b as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                        w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                    );
-                    let v_wp = _mm512_set_epi32(
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_b as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                        wp_a as i32,
-                    );
-
+                    let v_w = unsafe { expand_w_16(inv_roots.as_ptr().add(ri), 8) };
+                    let v_wp = unsafe { expand_w_16(inv_roots_precon.as_ptr().add(ri), 8) };
+                    ri += num_w;
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    let (v_x, v_y) = t8_load_xy(ptr);
-                    let (v_x, v_y) = inv_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                    t8_store_xy(v_x, v_y, ptr);
+                    deinterleave_inv_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
                 }
             } else {
                 // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
@@ -753,30 +715,45 @@ impl U32NttTable {
         let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
         let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
         let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
-        for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-            let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
-            let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
-
-            let v_sum = _mm512_add_epi32(v_x, v_y);
-            let v_tx = reduce_once_avx512(v_sum, v_two_q);
-            let v_ty = _mm512_sub_epi32(_mm512_add_epi32(v_x, v_two_q), v_y);
-
-            let v_new_x = mul_mod_lazy_avx512(v_tx, v_inv_n, v_inv_n_precon, v_q);
-            let v_new_y = mul_mod_lazy_avx512(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
-
-            unsafe {
-                _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_new_x);
-                _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_new_y);
-            }
-        }
-
-        // Final canonical reduction: [0, 2q) → [0, q)
         if output_mod_factor == 1 {
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
-            for chunk in chunks {
-                let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
-                let v = reduce_once_avx512(v, v_q);
-                unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
+            for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
+                let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
+
+                let v_sum = _mm512_add_epi32(v_x, v_y);
+                let v_tx = reduce_once_avx512(v_sum, v_two_q);
+                let v_ty = _mm512_sub_epi32(_mm512_add_epi32(v_x, v_two_q), v_y);
+
+                let v_new_x = reduce_once_avx512(
+                    mul_mod_lazy_avx512(v_tx, v_inv_n, v_inv_n_precon, v_q),
+                    v_q,
+                );
+                let v_new_y = reduce_once_avx512(
+                    mul_mod_lazy_avx512(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q),
+                    v_q,
+                );
+
+                unsafe {
+                    _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_new_x);
+                    _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_new_y);
+                }
+            }
+        } else {
+            for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
+                let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
+
+                let v_sum = _mm512_add_epi32(v_x, v_y);
+                let v_tx = reduce_once_avx512(v_sum, v_two_q);
+                let v_ty = _mm512_sub_epi32(_mm512_add_epi32(v_x, v_two_q), v_y);
+
+                let v_new_x = mul_mod_lazy_avx512(v_tx, v_inv_n, v_inv_n_precon, v_q);
+                let v_new_y = mul_mod_lazy_avx512(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
+
+                unsafe {
+                    _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_new_x);
+                    _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_new_y);
+                }
             }
         }
     }

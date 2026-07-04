@@ -286,7 +286,7 @@ impl NttTable for U32NttTable {
 
     fn transform_slice(&self, poly: &mut [u32]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 4, 1);
+        self.dispatch_forward(poly, 1, 1);
     }
 
     fn lazy_inverse_transform_slice(&self, values: &mut [u32]) {
@@ -296,7 +296,7 @@ impl NttTable for U32NttTable {
 
     fn inverse_transform_slice(&self, values: &mut [u32]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 2, 1);
+        self.dispatch_inverse(values, 1, 1);
     }
 
     fn transform_monomial(&self, coeff: u32, degree: usize, values: &mut [u32]) {
@@ -473,6 +473,28 @@ mod tests {
 
         for &v in &data {
             assert!(v < Q, "canonical inverse output {v} >= q");
+        }
+    }
+
+    /// Cross-path: `[0, 4q)` input via `lazy_transform_slice` + reduce
+    /// matches `[0, q)` input via `transform_slice` modulo `q`.
+    #[test]
+    fn test_lazy_vs_canonical_forward() {
+        let table = make_table(10, Q);
+        let mut rng = rand::rng();
+
+        let mut lazy_in: Vec<u32> = (0..N).map(|_| rng.random_range(0..4 * Q)).collect();
+        let mut canonical_in: Vec<u32> = lazy_in.iter().map(|&x| x % Q).collect();
+
+        table.lazy_transform_slice(&mut lazy_in);
+        table.transform_slice(&mut canonical_in);
+
+        for i in 0..N {
+            assert_eq!(
+                lazy_in[i] % Q,
+                canonical_in[i],
+                "lazy vs canonical forward mismatch at index {i}"
+            );
         }
     }
 

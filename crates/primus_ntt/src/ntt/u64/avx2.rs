@@ -298,6 +298,26 @@ fn fwd_butterfly_u64x4(
     (x_new, y_new)
 }
 
+/// Forward butterfly variant that skips `reduce_once(x, two_q)`.
+///
+/// Only valid when the caller guarantees `x < 2q` in every lane.
+/// Used in the first stage when `input_mod_factor <= 2`.
+#[target_feature(enable = "avx2")]
+#[inline]
+fn fwd_butterfly_u64x4_no_reduce_x(
+    x: __m256i,
+    y: __m256i,
+    w: __m256i,
+    wp: __m256i,
+    q: __m256i,
+    two_q: __m256i,
+) -> (__m256i, __m256i) {
+    let t = mul_mod_lazy_u64x4(y, w, wp, q);
+    let x_new = _mm256_add_epi64(x, t);
+    let y_new = _mm256_sub_epi64(_mm256_add_epi64(x, two_q), t);
+    (x_new, y_new)
+}
+
 /// Inverse Harvey butterfly on 4 u64 lanes.
 ///
 /// Input:  `x`, `y` each in `[0, 2q)`.
@@ -378,12 +398,18 @@ impl U64NttTable {
         let v_q = _mm256_set1_epi64x(q as i64);
         let v_two_q = _mm256_set1_epi64x(two_q as i64);
 
+        let skip_first_reduce_x = input_mod_factor <= 2;
+        let mut is_first_stage = true;
+
         // Direct index: avoid zip+map overhead.
         let mut ri = 1usize; // skip roots[0] = 1
         let mut t = n >> 1;
         let mut m = 1;
 
         while m < n {
+            let reduce_x = !(is_first_stage && skip_first_reduce_x);
+            is_first_stage = false;
+
             if t >= 4 {
                 // --- AVX2 path: t ≥ 4, process 4 butterflies per inner iteration ---
                 for block in values.chunks_exact_mut(t * 2) {
@@ -406,7 +432,11 @@ impl U64NttTable {
                             unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
                         let v_y =
                             unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-                        let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                        let (v_x, v_y) = if reduce_x {
+                            fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                        } else {
+                            fwd_butterfly_u64x4_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                        };
                         unsafe {
                             _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_x);
                             _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_y);
@@ -439,29 +469,69 @@ impl U64NttTable {
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t2_load_xy(ptr, unsafe { ptr.add(1) });
-                            let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                            let (v_x, v_y) = if reduce_x {
+                                fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                            } else {
+                                fwd_butterfly_u64x4_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                            };
                             t2_store_xy(v_x, v_y, ptr, unsafe { ptr.add(1) });
                         }
                     }
                     1 => {
                         // SAFETY: n is a power of two ≥ 16.
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
-                        for chunk in chunks {
-                            // Load 4 W values: [W0, W1, W2, W3], then reverse
-                            let v_w_raw = unsafe {
-                                _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
-                            };
-                            let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
-                            let v_wp_raw = unsafe {
-                                _mm256_loadu_si256(roots_precon.as_ptr().add(ri).cast::<__m256i>())
-                            };
-                            let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
-                            ri += 4;
+                        if output_mod_factor == 1 {
+                            for chunk in chunks {
+                                let v_w_raw = unsafe {
+                                    _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
+                                };
+                                let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
+                                let v_wp_raw = unsafe {
+                                    _mm256_loadu_si256(
+                                        roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                    )
+                                };
+                                let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
+                                ri += 4;
 
-                            let ptr = chunk.as_mut_ptr().cast::<__m256i>();
-                            let (v_x, v_y) = t1_load_xy(ptr);
-                            let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                            t1_store_xy(v_x, v_y, ptr);
+                                let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                                let (v_x, v_y) = t1_load_xy(ptr);
+                                let (v_x, v_y) = if reduce_x {
+                                    fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                                } else {
+                                    fwd_butterfly_u64x4_no_reduce_x(
+                                        v_x, v_y, v_w, v_wp, v_q, v_two_q,
+                                    )
+                                };
+                                let v_x = reduce_twice_u64x4(v_x, v_q, v_two_q);
+                                let v_y = reduce_twice_u64x4(v_y, v_q, v_two_q);
+                                t1_store_xy(v_x, v_y, ptr);
+                            }
+                        } else {
+                            for chunk in chunks {
+                                let v_w_raw = unsafe {
+                                    _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
+                                };
+                                let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
+                                let v_wp_raw = unsafe {
+                                    _mm256_loadu_si256(
+                                        roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                    )
+                                };
+                                let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
+                                ri += 4;
+
+                                let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                                let (v_x, v_y) = t1_load_xy(ptr);
+                                let (v_x, v_y) = if reduce_x {
+                                    fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                                } else {
+                                    fwd_butterfly_u64x4_no_reduce_x(
+                                        v_x, v_y, v_w, v_wp, v_q, v_two_q,
+                                    )
+                                };
+                                t1_store_xy(v_x, v_y, ptr);
+                            }
                         }
                     }
                     _ => unreachable!("t < 4 and t is a power of two => t ∈ {{1, 2}}"),
@@ -469,16 +539,6 @@ impl U64NttTable {
             }
             t >>= 1;
             m <<= 1;
-        }
-
-        // Final canonical reduction: [0, 4q) → [0, q)
-        if output_mod_factor == 1 {
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
-            for chunk in chunks {
-                let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
-                let v = reduce_twice_u64x4(v, v_q, v_two_q);
-                unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
-            }
         }
     }
 
@@ -617,7 +677,6 @@ impl U64NttTable {
             m >>= 1;
         }
 
-        // --- Final stage: fused with inv_n multiply ---
         // --- Final stage: fused with inv_n multiply (inv_n_w precomputed) ---
         // --- AVX2 final stage: n/2 ≥ 8 (guaranteed since n ≥ 16) ---
         let v_inv_n = _mm256_set1_epi64x(inv_n as i64);
@@ -628,30 +687,43 @@ impl U64NttTable {
         let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
         let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
         let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
-        for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-            let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
-            let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-
-            let v_sum = _mm256_add_epi64(v_x, v_y);
-            let v_tx = reduce_once_u64x4(v_sum, v_two_q);
-            let v_ty = _mm256_sub_epi64(_mm256_add_epi64(v_x, v_two_q), v_y);
-
-            let v_new_x = mul_mod_lazy_u64x4(v_tx, v_inv_n, v_inv_n_precon, v_q);
-            let v_new_y = mul_mod_lazy_u64x4(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
-
-            unsafe {
-                _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
-                _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
-            }
-        }
-
-        // Final canonical reduction: [0, 2q) → [0, q)
         if output_mod_factor == 1 {
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
-            for chunk in chunks {
-                let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
-                let v = reduce_once_u64x4(v, v_q);
-                unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
+            for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+                let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
+
+                let v_sum = _mm256_add_epi64(v_x, v_y);
+                let v_tx = reduce_once_u64x4(v_sum, v_two_q);
+                let v_ty = _mm256_sub_epi64(_mm256_add_epi64(v_x, v_two_q), v_y);
+
+                let v_new_x =
+                    reduce_once_u64x4(mul_mod_lazy_u64x4(v_tx, v_inv_n, v_inv_n_precon, v_q), v_q);
+                let v_new_y = reduce_once_u64x4(
+                    mul_mod_lazy_u64x4(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q),
+                    v_q,
+                );
+
+                unsafe {
+                    _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
+                    _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
+                }
+            }
+        } else {
+            for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+                let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
+
+                let v_sum = _mm256_add_epi64(v_x, v_y);
+                let v_tx = reduce_once_u64x4(v_sum, v_two_q);
+                let v_ty = _mm256_sub_epi64(_mm256_add_epi64(v_x, v_two_q), v_y);
+
+                let v_new_x = mul_mod_lazy_u64x4(v_tx, v_inv_n, v_inv_n_precon, v_q);
+                let v_new_y = mul_mod_lazy_u64x4(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
+
+                unsafe {
+                    _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
+                    _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
+                }
             }
         }
     }

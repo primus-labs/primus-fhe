@@ -73,7 +73,7 @@ pub trait DcrtTable: Sized + Send + Sync {
 
     /// Perform a fast number theory transform in place.
     ///
-    /// This function transforms a polynomial slice with coefficient in `[0, 4*modulus)`
+    /// This function transforms a polynomial slice with coefficient in `[0, modulus)`
     /// to a ntt polynomial slice with coefficient in `[0, modulus)`.
     ///
     /// # Arguments
@@ -93,7 +93,7 @@ pub trait DcrtTable: Sized + Send + Sync {
 
     /// Perform a fast inverse number theory transform in place.
     ///
-    /// This function transforms a ntt polynomial slice with coefficient in `[0, 2*modulus)`
+    /// This function transforms a ntt polynomial slice with coefficient in `[0, modulus)`
     /// to a polynomial slice with coefficient in `[0, modulus)`.
     ///
     /// # Arguments

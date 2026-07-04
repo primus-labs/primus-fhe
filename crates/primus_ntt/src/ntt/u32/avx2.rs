@@ -153,12 +153,7 @@ fn t2_store_xy(v_x: __m256i, v_y: __m256i, ptr: *mut __m256i) {
 /// W vector is `[W₇,W₆,W₅,W₄, W₃,W₂,W₁,W₀]` — same lane order.
 #[target_feature(enable = "avx2")]
 #[inline]
-fn t1_load_xy(ptr: *const __m256i) -> (__m256i, __m256i) {
-    // Select even positions (0,2,4,6) from each 128‑bit half
-    let idx_x = _mm256_set_epi32(6, 4, 6, 4, 6, 4, 2, 0);
-    // Select odd positions (1,3,5,7)
-    let idx_y = _mm256_set_epi32(7, 5, 7, 5, 7, 5, 3, 1);
-
+fn t1_load_xy(ptr: *const __m256i, idx_x: __m256i, idx_y: __m256i) -> (__m256i, __m256i) {
     // SAFETY: caller ensures ptr points to 2 consecutive __m256i.
     let v0 = unsafe { _mm256_loadu_si256(ptr) };
     let v1 = unsafe { _mm256_loadu_si256(ptr.add(1)) };
@@ -271,6 +266,26 @@ fn fwd_butterfly_avx2(
     (x_new, y_new)
 }
 
+/// Forward butterfly variant that skips `reduce_once(x, two_q)`.
+///
+/// Only valid when the caller guarantees `x < 2q` in every lane.
+/// Used in the first stage when `input_mod_factor <= 2`.
+#[target_feature(enable = "avx2")]
+#[inline]
+fn fwd_butterfly_avx2_no_reduce_x(
+    x: __m256i,
+    y: __m256i,
+    w: __m256i,
+    wp: __m256i,
+    q: __m256i,
+    two_q: __m256i,
+) -> (__m256i, __m256i) {
+    let t = mul_mod_lazy_avx2(y, w, wp, q);
+    let x_new = _mm256_add_epi32(x, t);
+    let y_new = _mm256_sub_epi32(_mm256_add_epi32(x, two_q), t);
+    (x_new, y_new)
+}
+
 /// Inverse Harvey butterfly on 8 u32 lanes.
 ///
 /// Input:  `x`, `y` each in `[0, 2q)`.
@@ -317,7 +332,6 @@ impl U32NttTable {
     /// - `values.len()` is a power of two and ≥ 32.
     /// - `roots.len() == values.len()` and `roots_precon.len() == values.len()`.
     /// - `q < 2^30`.
-    #[allow(clippy::too_many_arguments)]
     #[target_feature(enable = "avx2")]
     pub(crate) unsafe fn avx2_forward_transform(
         &self,
@@ -352,11 +366,17 @@ impl U32NttTable {
         let v_q = _mm256_set1_epi32(q as i32);
         let v_two_q = _mm256_set1_epi32(two_q as i32);
 
+        let skip_first_reduce_x = input_mod_factor <= 2;
+        let mut is_first_stage = true;
+
         let mut ri = 1usize; // skip roots[0] = 1
         let mut t = n >> 1;
         let mut m = 1;
 
         while m < n {
+            let reduce_x = !(is_first_stage && skip_first_reduce_x);
+            is_first_stage = false;
+
             if t >= 8 {
                 // --- AVX2 path: t ≥ 8, process 8 butterflies per inner iteration ---
                 for block in values.chunks_exact_mut(t * 2) {
@@ -377,7 +397,11 @@ impl U32NttTable {
                             unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
                         let v_y =
                             unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-                        let (v_x, v_y) = fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                        let (v_x, v_y) = if reduce_x {
+                            fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                        } else {
+                            fwd_butterfly_avx2_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                        };
                         unsafe {
                             _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_x);
                             _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_y);
@@ -414,7 +438,11 @@ impl U32NttTable {
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t4_load_xy(ptr, unsafe { ptr.add(1) });
-                            let (v_x, v_y) = fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                            let (v_x, v_y) = if reduce_x {
+                                fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                            } else {
+                                fwd_butterfly_avx2_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                            };
                             t4_store_xy(v_x, v_y, ptr, unsafe { ptr.add(1) });
                         }
                     }
@@ -440,24 +468,64 @@ impl U32NttTable {
                             );
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t2_load_xy(ptr);
-                            let (v_x, v_y) = fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                            let (v_x, v_y) = if reduce_x {
+                                fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                            } else {
+                                fwd_butterfly_avx2_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                            };
                             t2_store_xy(v_x, v_y, ptr);
                         }
                     }
                     1 => {
+                        let idx_x = _mm256_set_epi32(6, 4, 6, 4, 6, 4, 2, 0);
+                        let idx_y = _mm256_set_epi32(7, 5, 7, 5, 7, 5, 3, 1);
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
-                        for chunk in chunks {
-                            let v_w = unsafe {
-                                _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
-                            };
-                            let v_wp = unsafe {
-                                _mm256_loadu_si256(roots_precon.as_ptr().add(ri).cast::<__m256i>())
-                            };
-                            ri += 8;
-                            let ptr = chunk.as_mut_ptr().cast::<__m256i>();
-                            let (v_x, v_y) = t1_load_xy(ptr);
-                            let (v_x, v_y) = fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                            t1_store_xy(v_x, v_y, ptr);
+                        if output_mod_factor == 1 {
+                            for chunk in chunks {
+                                let v_w = unsafe {
+                                    _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
+                                };
+                                let v_wp = unsafe {
+                                    _mm256_loadu_si256(
+                                        roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                    )
+                                };
+                                ri += 8;
+                                let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                                let (v_x, v_y) = t1_load_xy(ptr, idx_x, idx_y);
+                                let (v_x, v_y) = if reduce_x {
+                                    fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                                } else {
+                                    fwd_butterfly_avx2_no_reduce_x(
+                                        v_x, v_y, v_w, v_wp, v_q, v_two_q,
+                                    )
+                                };
+                                let v_x = reduce_twice_avx2(v_x, v_q, v_two_q);
+                                let v_y = reduce_twice_avx2(v_y, v_q, v_two_q);
+                                t1_store_xy(v_x, v_y, ptr);
+                            }
+                        } else {
+                            for chunk in chunks {
+                                let v_w = unsafe {
+                                    _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
+                                };
+                                let v_wp = unsafe {
+                                    _mm256_loadu_si256(
+                                        roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                    )
+                                };
+                                ri += 8;
+                                let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                                let (v_x, v_y) = t1_load_xy(ptr, idx_x, idx_y);
+                                let (v_x, v_y) = if reduce_x {
+                                    fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
+                                } else {
+                                    fwd_butterfly_avx2_no_reduce_x(
+                                        v_x, v_y, v_w, v_wp, v_q, v_two_q,
+                                    )
+                                };
+                                t1_store_xy(v_x, v_y, ptr);
+                            }
                         }
                     }
                     _ => unreachable!("t < 8 and t is a power of two => t ∈ {{1, 2, 4}}"),
@@ -465,16 +533,6 @@ impl U32NttTable {
             }
             t >>= 1;
             m <<= 1;
-        }
-
-        // Final canonical reduction: [0, 4q) → [0, q)
-        if output_mod_factor == 1 {
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
-            for chunk in chunks {
-                let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
-                let v = reduce_twice_avx2(v, v_q, v_two_q);
-                unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
-            }
         }
     }
 
@@ -561,6 +619,8 @@ impl U32NttTable {
                 // --- t < 8 stages ---
                 match t {
                     1 => {
+                        let idx_x = _mm256_set_epi32(6, 4, 6, 4, 6, 4, 2, 0);
+                        let idx_y = _mm256_set_epi32(7, 5, 7, 5, 7, 5, 3, 1);
                         let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
                         for chunk in chunks {
                             let v_w = unsafe {
@@ -573,7 +633,7 @@ impl U32NttTable {
                             };
                             ri += 8;
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
-                            let (v_x, v_y) = t1_load_xy(ptr);
+                            let (v_x, v_y) = t1_load_xy(ptr, idx_x, idx_y);
                             let (v_x, v_y) = inv_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
                             t1_store_xy(v_x, v_y, ptr);
                         }
@@ -652,30 +712,43 @@ impl U32NttTable {
         let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
         let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<8>() };
         let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<8>() };
-        for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-            let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
-            let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-
-            let v_sum = _mm256_add_epi32(v_x, v_y);
-            let v_tx = reduce_once_avx2(v_sum, v_two_q);
-            let v_ty = _mm256_sub_epi32(_mm256_add_epi32(v_x, v_two_q), v_y);
-
-            let v_new_x = mul_mod_lazy_avx2(v_tx, v_inv_n, v_inv_n_precon, v_q);
-            let v_new_y = mul_mod_lazy_avx2(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
-
-            unsafe {
-                _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
-                _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
-            }
-        }
-
-        // Final canonical reduction: [0, 2q) → [0, q)
         if output_mod_factor == 1 {
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
-            for chunk in chunks {
-                let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
-                let v = reduce_once_avx2(v, v_q);
-                unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
+            for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+                let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
+
+                let v_sum = _mm256_add_epi32(v_x, v_y);
+                let v_tx = reduce_once_avx2(v_sum, v_two_q);
+                let v_ty = _mm256_sub_epi32(_mm256_add_epi32(v_x, v_two_q), v_y);
+
+                let v_new_x =
+                    reduce_once_avx2(mul_mod_lazy_avx2(v_tx, v_inv_n, v_inv_n_precon, v_q), v_q);
+                let v_new_y = reduce_once_avx2(
+                    mul_mod_lazy_avx2(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q),
+                    v_q,
+                );
+
+                unsafe {
+                    _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
+                    _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
+                }
+            }
+        } else {
+            for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+                let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
+
+                let v_sum = _mm256_add_epi32(v_x, v_y);
+                let v_tx = reduce_once_avx2(v_sum, v_two_q);
+                let v_ty = _mm256_sub_epi32(_mm256_add_epi32(v_x, v_two_q), v_y);
+
+                let v_new_x = mul_mod_lazy_avx2(v_tx, v_inv_n, v_inv_n_precon, v_q);
+                let v_new_y = mul_mod_lazy_avx2(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
+
+                unsafe {
+                    _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
+                    _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
+                }
             }
         }
     }

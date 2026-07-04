@@ -275,7 +275,7 @@ impl NttTable for U64NttTable {
     #[inline]
     fn transform_slice(&self, poly: &mut [u64]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 4, 1);
+        self.dispatch_forward(poly, 1, 1);
     }
 
     #[inline]
@@ -287,7 +287,7 @@ impl NttTable for U64NttTable {
     #[inline]
     fn inverse_transform_slice(&self, values: &mut [u64]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 2, 1);
+        self.dispatch_inverse(values, 1, 1);
     }
 
     fn transform_monomial(&self, coeff: u64, degree: usize, values: &mut [u64]) {
