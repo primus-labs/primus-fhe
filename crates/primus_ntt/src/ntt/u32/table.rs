@@ -9,6 +9,8 @@ use crate::{NttError, ntt::NttTable, reverse::ReverseLsbs, root::PrimitiveRoot};
 
 #[cfg(target_arch = "x86_64")]
 use super::avx2;
+#[cfg(target_arch = "x86_64")]
+use super::avx512;
 use super::scalar;
 
 /// Backend selector for `U32NttTable`.
@@ -18,6 +20,9 @@ enum U32Backend {
     /// AVX2 backend — available on x86_64 with `avx2` target feature.
     #[cfg(target_arch = "x86_64")]
     Avx2,
+    /// AVX-512 backend — available on x86_64 with `avx512f` target feature.
+    #[cfg(target_arch = "x86_64")]
+    Avx512,
 }
 
 /// Specialized NTT table for `u32` coefficients.
@@ -141,6 +146,22 @@ impl U32NttTable {
                     )
                 }
             }
+            #[cfg(target_arch = "x86_64")]
+            U32Backend::Avx512 => {
+                // SAFETY: Avx512 backend is only selected when
+                // avx512::HAS_AVX512F is true at construction time.
+                unsafe {
+                    avx512::forward_transform(
+                        values,
+                        self.q,
+                        self.two_q,
+                        &self.roots,
+                        &self.roots_precon,
+                        input_mod_factor,
+                        output_mod_factor,
+                    )
+                }
+            }
         }
     }
 
@@ -164,6 +185,24 @@ impl U32NttTable {
                 // avx2::HAS_AVX2 is true at construction time.
                 unsafe {
                     avx2::inverse_transform(
+                        values,
+                        self.q,
+                        self.two_q,
+                        self.inv_n,
+                        self.inv_n_precon,
+                        &self.inv_roots,
+                        &self.inv_roots_precon,
+                        input_mod_factor,
+                        output_mod_factor,
+                    )
+                }
+            }
+            #[cfg(target_arch = "x86_64")]
+            U32Backend::Avx512 => {
+                // SAFETY: Avx512 backend is only selected when
+                // avx512::HAS_AVX512F is true at construction time.
+                unsafe {
+                    avx512::inverse_transform(
                         values,
                         self.q,
                         self.two_q,
@@ -254,7 +293,9 @@ impl NttTable for U32NttTable {
         let inv_n_precon = ShoupFactor::<u32>::quotient_for(inv_n, q);
 
         #[cfg(target_arch = "x86_64")]
-        let backend = if *avx2::HAS_AVX2 {
+        let backend = if *avx512::HAS_AVX512F {
+            U32Backend::Avx512
+        } else if *avx2::HAS_AVX2 {
             U32Backend::Avx2
         } else {
             U32Backend::Scalar
