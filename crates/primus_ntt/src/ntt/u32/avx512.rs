@@ -600,14 +600,11 @@ pub(crate) unsafe fn forward_transform(
 
     // Final canonical reduction: [0, 4q) → [0, q)
     if output_mod_factor == 1 {
-        let (chunks, remainder) = values.as_chunks_mut::<16>();
+        let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
         for chunk in chunks {
             let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
             let v = reduce_twice_avx512(v, v_q, v_two_q);
             unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
-        }
-        for x in remainder {
-            *x = scalar::reduce_twice(*x, q, two_q);
         }
     }
 }
@@ -760,53 +757,39 @@ pub(crate) unsafe fn inverse_transform(
     let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
     let inv_n_w_precon = (((inv_n_w as u64) << 32) / q as u64) as u32;
 
-    if n >= 32 {
-        // --- AVX-512 final stage: n/2 ≥ 16, process 16 pairs at a time ---
-        let v_inv_n = _mm512_set1_epi32(inv_n as i32);
-        let v_inv_n_w = _mm512_set1_epi32(inv_n_w as i32);
-        let v_inv_n_precon = _mm512_set1_epi32(inv_n_precon as i32);
-        let v_inv_n_w_precon = _mm512_set1_epi32(inv_n_w_precon as i32);
+    // --- 512-bit final stage: n/2 ≥ 32 (guaranteed since n ≥ 64) ---
+    let v_inv_n = _mm512_set1_epi32(inv_n as i32);
+    let v_inv_n_w = _mm512_set1_epi32(inv_n_w as i32);
+    let v_inv_n_precon = _mm512_set1_epi32(inv_n_precon as i32);
+    let v_inv_n_w_precon = _mm512_set1_epi32(inv_n_w_precon as i32);
 
-        let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
-        let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
-        let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
-        for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-            let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
-            let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
+    let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
+    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
+    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
+    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+        let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
+        let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
 
-            let v_sum = _mm512_add_epi32(v_x, v_y);
-            let v_tx = reduce_once_avx512(v_sum, v_two_q);
-            let v_ty = _mm512_sub_epi32(_mm512_add_epi32(v_x, v_two_q), v_y);
+        let v_sum = _mm512_add_epi32(v_x, v_y);
+        let v_tx = reduce_once_avx512(v_sum, v_two_q);
+        let v_ty = _mm512_sub_epi32(_mm512_add_epi32(v_x, v_two_q), v_y);
 
-            let v_new_x = mul_mod_lazy_avx512(v_tx, v_inv_n, v_inv_n_precon, v_q);
-            let v_new_y = mul_mod_lazy_avx512(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
+        let v_new_x = mul_mod_lazy_avx512(v_tx, v_inv_n, v_inv_n_precon, v_q);
+        let v_new_y = mul_mod_lazy_avx512(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
 
-            unsafe {
-                _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_new_x);
-                _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_new_y);
-            }
-        }
-    } else {
-        // --- Scalar final stage for N < 32 ---
-        let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
-        for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-            let tx = scalar::reduce_once(x.wrapping_add(*y), two_q);
-            let ty = x.wrapping_add(two_q).wrapping_sub(*y);
-            *x = scalar::mul_mod_lazy(tx, inv_n, inv_n_precon, q);
-            *y = scalar::mul_mod_lazy(ty, inv_n_w, inv_n_w_precon, q);
+        unsafe {
+            _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_new_x);
+            _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_new_y);
         }
     }
 
     // Final canonical reduction: [0, 2q) → [0, q)
     if output_mod_factor == 1 {
-        let (chunks, remainder) = values.as_chunks_mut::<16>();
+        let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
         for chunk in chunks {
             let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
             let v = reduce_once_avx512(v, v_q);
             unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
-        }
-        for x in remainder {
-            *x = scalar::reduce_once(*x, q);
         }
     }
 }

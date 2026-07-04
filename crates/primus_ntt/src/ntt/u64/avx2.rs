@@ -473,14 +473,11 @@ pub(crate) unsafe fn forward_transform(
 
     // Final canonical reduction: [0, 4q) → [0, q)
     if output_mod_factor == 1 {
-        let (chunks, remainder) = values.as_chunks_mut::<4>();
+        let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
         for chunk in chunks {
             let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
             let v = reduce_twice_u64x4(v, v_q, v_two_q);
             unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
-        }
-        for x in remainder {
-            *x = scalar::reduce_twice(*x, q, two_q);
         }
     }
 }
@@ -623,56 +620,39 @@ pub(crate) unsafe fn inverse_transform(
     let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
     let inv_n_w_precon = (((inv_n_w as u128) << 64) / q as u128) as u64;
 
-    if n >= 8 {
-        // --- AVX2 final stage: n/2 ≥ 4, process 4 pairs at a time ---
-        let v_inv_n = _mm256_set1_epi64x(inv_n as i64);
-        let v_inv_n_w = _mm256_set1_epi64x(inv_n_w as i64);
-        let v_inv_n_precon = _mm256_set1_epi64x(inv_n_precon as i64);
-        let v_inv_n_w_precon = _mm256_set1_epi64x(inv_n_w_precon as i64);
+    // --- AVX2 final stage: n/2 ≥ 8 (guaranteed since n ≥ 16) ---
+    let v_inv_n = _mm256_set1_epi64x(inv_n as i64);
+    let v_inv_n_w = _mm256_set1_epi64x(inv_n_w as i64);
+    let v_inv_n_precon = _mm256_set1_epi64x(inv_n_precon as i64);
+    let v_inv_n_w_precon = _mm256_set1_epi64x(inv_n_w_precon as i64);
 
-        let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
-        let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
-        let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
-        for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-            let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
-            let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
+    let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
+    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
+    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
+    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+        let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+        let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
 
-            // tx = reduce_once(x + y, two_q)
-            let v_sum = _mm256_add_epi64(v_x, v_y);
-            let v_tx = reduce_once_u64x4(v_sum, v_two_q);
+        let v_sum = _mm256_add_epi64(v_x, v_y);
+        let v_tx = reduce_once_u64x4(v_sum, v_two_q);
+        let v_ty = _mm256_sub_epi64(_mm256_add_epi64(v_x, v_two_q), v_y);
 
-            // ty = x + two_q - y
-            let v_ty = _mm256_sub_epi64(_mm256_add_epi64(v_x, v_two_q), v_y);
+        let v_new_x = mul_mod_lazy_u64x4(v_tx, v_inv_n, v_inv_n_precon, v_q);
+        let v_new_y = mul_mod_lazy_u64x4(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
 
-            let v_new_x = mul_mod_lazy_u64x4(v_tx, v_inv_n, v_inv_n_precon, v_q);
-            let v_new_y = mul_mod_lazy_u64x4(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
-
-            unsafe {
-                _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
-                _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
-            }
-        }
-    } else {
-        // --- Scalar final stage for N < 8 ---
-        let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
-        for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-            let tx = scalar::reduce_once(x.wrapping_add(*y), two_q);
-            let ty = x.wrapping_add(two_q).wrapping_sub(*y);
-            *x = scalar::mul_mod_lazy(tx, inv_n, inv_n_precon, q);
-            *y = scalar::mul_mod_lazy(ty, inv_n_w, inv_n_w_precon, q);
+        unsafe {
+            _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
+            _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
         }
     }
 
     // Final canonical reduction: [0, 2q) → [0, q)
     if output_mod_factor == 1 {
-        let (chunks, remainder) = values.as_chunks_mut::<4>();
+        let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
         for chunk in chunks {
             let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
             let v = reduce_once_u64x4(v, v_q);
             unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
-        }
-        for x in remainder {
-            *x = scalar::reduce_once(*x, q);
         }
     }
 }
