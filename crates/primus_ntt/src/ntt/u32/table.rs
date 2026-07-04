@@ -1,16 +1,14 @@
 use aligned_vec::{AVec, avec};
 use primus_data::{DataMut, RawData};
-use primus_factor::{FactorBase, FactorMul, LazyFactorMul, ShoupFactor};
+use primus_factor::{FactorBase, FactorMul, ShoupFactor};
 use primus_gcd::Xgcd;
 use primus_poly::{NttPolynomial, Polynomial};
 use primus_reduce::FieldContext;
 
+#[cfg(target_arch = "x86_64")]
+use crate::constants::{HAS_AVX2, HAS_AVX512F};
 use crate::{NttError, ntt::NttTable, reverse::ReverseLsbs, root::PrimitiveRoot};
 
-#[cfg(target_arch = "x86_64")]
-use super::avx2;
-#[cfg(target_arch = "x86_64")]
-use super::avx512;
 use super::scalar;
 
 /// Backend selector for `U32NttTable`.
@@ -34,27 +32,27 @@ enum U32Backend {
 ///
 /// - `q < 2^30` — ensures lazy ranges `[0, 4q)` fit in `u32`.
 pub struct U32NttTable {
-    n: usize,
-    log_n: u32,
-    q: u32,
-    two_q: u32,
-    root: u32,
-    inv_root: u32,
-    inv_n: u32,
-    inv_n_precon: u32,
+    pub(super) n: usize,
+    pub(super) log_n: u32,
+    pub(super) q: u32,
+    pub(super) two_q: u32,
+    pub(super) root: u32,
+    pub(super) inv_root: u32,
+    pub(super) inv_n: u32,
+    pub(super) inv_n_precon: u32,
     /// `inv_n * inv_roots[n-1] mod q` — precomputed for the inverse final stage.
-    inv_n_w: u32,
+    pub(super) inv_n_w: u32,
     /// Shoup preconditioner for `inv_n_w`.
-    inv_n_w_precon: u32,
+    pub(super) inv_n_w_precon: u32,
 
     /// Forward roots in bit-reversed order (size `n`).
-    roots: AVec<u32>,
+    pub(super) roots: AVec<u32>,
     /// Barrett-32 preconditioners for `roots` (size `n`).
-    roots_precon: AVec<u32>,
+    pub(super) roots_precon: AVec<u32>,
     /// Inverse roots in bit-reversed order (size `n`).
-    inv_roots: AVec<u32>,
+    pub(super) inv_roots: AVec<u32>,
     /// Barrett-32 preconditioners for `inv_roots` (size `n`).
-    inv_roots_precon: AVec<u32>,
+    pub(super) inv_roots_precon: AVec<u32>,
 
     /// Ordinal powers: `[1, w, w^2, ..., w^(2n-1)]` (size `2n`).
     ordinal_roots: Vec<u32>,
@@ -62,16 +60,6 @@ pub struct U32NttTable {
     reverse_lsbs: Vec<usize>,
 
     backend: U32Backend,
-}
-
-/// Modular multiplication: `(a * b) mod q`.
-///
-/// Uses `ShoupFactor` for reduction. For repeated multiplication by the
-/// same value, precompute the `ShoupFactor` outside the loop (see
-/// `transform_monomial`).
-#[inline]
-fn mul_mod(a: u32, b: u32, q: u32) -> u32 {
-    ShoupFactor::<u32>::new(b, q).factor_mul_modulo(a, q)
 }
 
 /// Compute the modular inverse of `a` modulo `q`.
@@ -123,99 +111,37 @@ impl U32NttTable {
     }
 
     /// Dispatch forward transform to the selected backend.
+    #[inline]
     fn dispatch_forward(&self, values: &mut [u32], input_mod_factor: u32, output_mod_factor: u32) {
         match self.backend {
-            U32Backend::Scalar => scalar::forward_transform(
-                values,
-                self.q,
-                self.two_q,
-                &self.roots,
-                &self.roots_precon,
-                input_mod_factor,
-                output_mod_factor,
-            ),
-            #[cfg(target_arch = "x86_64")]
-            U32Backend::Avx2 => {
-                // SAFETY: Avx2 backend is only selected when
-                // avx2::HAS_AVX2 is true at construction time.
-                unsafe {
-                    avx2::forward_transform(
-                        values,
-                        self.q,
-                        self.two_q,
-                        &self.roots,
-                        &self.roots_precon,
-                        input_mod_factor,
-                        output_mod_factor,
-                    )
-                }
+            U32Backend::Scalar => {
+                self.scalar_forward_transform(values, input_mod_factor, output_mod_factor)
             }
             #[cfg(target_arch = "x86_64")]
-            U32Backend::Avx512 => {
-                // SAFETY: Avx512 backend is only selected when
-                // avx512::HAS_AVX512F is true at construction time.
-                unsafe {
-                    avx512::forward_transform(
-                        values,
-                        self.q,
-                        self.two_q,
-                        &self.roots,
-                        &self.roots_precon,
-                        input_mod_factor,
-                        output_mod_factor,
-                    )
-                }
-            }
+            U32Backend::Avx2 => unsafe {
+                self.avx2_forward_transform(values, input_mod_factor, output_mod_factor)
+            },
+            #[cfg(target_arch = "x86_64")]
+            U32Backend::Avx512 => unsafe {
+                self.avx512_forward_transform(values, input_mod_factor, output_mod_factor)
+            },
         }
     }
 
     /// Dispatch inverse transform to the selected backend.
+    #[inline]
     fn dispatch_inverse(&self, values: &mut [u32], input_mod_factor: u32, output_mod_factor: u32) {
         match self.backend {
-            U32Backend::Scalar => scalar::inverse_transform(
-                values,
-                self.q,
-                self.two_q,
-                self.inv_n,
-                self.inv_n_precon,
-                self.inv_n_w,
-                self.inv_n_w_precon,
-                &self.inv_roots,
-                &self.inv_roots_precon,
-                input_mod_factor,
-                output_mod_factor,
-            ),
+            U32Backend::Scalar => {
+                self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor)
+            }
             #[cfg(target_arch = "x86_64")]
             U32Backend::Avx2 => unsafe {
-                avx2::inverse_transform(
-                    values,
-                    self.q,
-                    self.two_q,
-                    self.inv_n,
-                    self.inv_n_precon,
-                    self.inv_n_w,
-                    self.inv_n_w_precon,
-                    &self.inv_roots,
-                    &self.inv_roots_precon,
-                    input_mod_factor,
-                    output_mod_factor,
-                )
+                self.avx2_inverse_transform(values, input_mod_factor, output_mod_factor)
             },
             #[cfg(target_arch = "x86_64")]
             U32Backend::Avx512 => unsafe {
-                avx512::inverse_transform(
-                    values,
-                    self.q,
-                    self.two_q,
-                    self.inv_n,
-                    self.inv_n_precon,
-                    self.inv_n_w,
-                    self.inv_n_w_precon,
-                    &self.inv_roots,
-                    &self.inv_roots_precon,
-                    input_mod_factor,
-                    output_mod_factor,
-                )
+                self.avx512_inverse_transform(values, input_mod_factor, output_mod_factor)
             },
         }
     }
@@ -251,13 +177,12 @@ impl NttTable for U32NttTable {
         ordinal_roots[1] = root;
         let mut power = root;
         for dst in &mut ordinal_roots[2..] {
-            power = root_sf.lazy_factor_mul_modulo(power, q);
-            power = scalar::reduce_once(power, q); // keep canonical for iteration
+            power = root_sf.factor_mul_modulo(power, q);
             *dst = power;
         }
 
         let inv_root = *ordinal_roots.last().unwrap();
-        debug_assert_eq!(mul_mod(root, inv_root, q), 1);
+        debug_assert_eq!(modulus.reduce_mul(root, inv_root), 1);
 
         // --- bit-reversed index mapping ---
         let reverse_lsbs: Vec<usize> = (0..n).map(|i| i.reverse_lsbs(log_n)).collect();
@@ -300,9 +225,9 @@ impl NttTable for U32NttTable {
         let inv_n_w_precon = (((inv_n_w as u64) << 32) / q as u64) as u32;
 
         #[cfg(target_arch = "x86_64")]
-        let backend = if *avx512::HAS_AVX512F {
+        let backend = if *HAS_AVX512F {
             U32Backend::Avx512
-        } else if *avx2::HAS_AVX2 {
+        } else if *HAS_AVX2 {
             U32Backend::Avx2
         } else {
             U32Backend::Scalar

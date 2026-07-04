@@ -28,7 +28,7 @@ pub use utils::CmpInt;
 
 /// Re-export from `crate::ntt::constants` so `dispatch` and module body
 /// code keep working without path changes.
-pub(super) use super::constants::{HAS_AVX512DQ, HAS_AVX512IFMA};
+pub(super) use crate::constants::{HAS_AVX512DQ, HAS_AVX512IFMA};
 
 /// Performs negacyclic forward and inverse number-theoretic transforms (NTT),
 /// commonly used in RLWE cryptography.

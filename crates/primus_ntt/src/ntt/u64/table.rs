@@ -1,14 +1,14 @@
 use aligned_vec::{AVec, avec};
 use primus_data::{DataMut, RawData};
-use primus_factor::{FactorBase, FactorMul, LazyFactorMul, ShoupFactor};
+use primus_factor::{FactorBase, FactorMul, ShoupFactor};
 use primus_gcd::Xgcd;
 use primus_poly::{NttPolynomial, Polynomial};
 use primus_reduce::FieldContext;
 
+#[cfg(target_arch = "x86_64")]
+use crate::constants::HAS_AVX2;
 use crate::{NttError, ntt::NttTable, reverse::ReverseLsbs, root::PrimitiveRoot};
 
-#[cfg(target_arch = "x86_64")]
-use super::avx2;
 use super::scalar;
 
 /// Backend selector for `U64NttTable`.
@@ -29,28 +29,28 @@ enum U64Backend {
 ///
 /// - `q < 2^62` — ensures lazy ranges `[0, 4q)` fit in `u64`.
 pub struct U64NttTable {
-    n: usize,
+    pub(super) n: usize,
     log_n: u32,
-    q: u64,
-    two_q: u64,
+    pub(super) q: u64,
+    pub(super) two_q: u64,
     root: u64,
     inv_root: u64,
 
-    inv_n: u64,
-    inv_n_precon: u64,
+    pub(super) inv_n: u64,
+    pub(super) inv_n_precon: u64,
     /// `inv_n * inv_roots[n-1] mod q` — precomputed for the inverse final stage.
-    inv_n_w: u64,
+    pub(super) inv_n_w: u64,
     /// Shoup preconditioner for `inv_n_w`.
-    inv_n_w_precon: u64,
+    pub(super) inv_n_w_precon: u64,
 
     /// Forward roots in bit-reversed order (size `n`).
-    roots: AVec<u64>,
+    pub(super) roots: AVec<u64>,
     /// Barrett-64 preconditioners for `roots` (size `n`).
-    roots_precon: AVec<u64>,
+    pub(super) roots_precon: AVec<u64>,
     /// Inverse roots in bit-reversed order (size `n`).
-    inv_roots: AVec<u64>,
+    pub(super) inv_roots: AVec<u64>,
     /// Barrett-64 preconditioners for `inv_roots` (size `n`).
-    inv_roots_precon: AVec<u64>,
+    pub(super) inv_roots_precon: AVec<u64>,
 
     /// Ordinal powers: `[1, w, w^2, ..., w^(2n-1)]` (size `2n`).
     ordinal_roots: Vec<u64>,
@@ -59,16 +59,6 @@ pub struct U64NttTable {
 
     #[allow(dead_code)]
     backend: U64Backend,
-}
-
-/// Modular multiplication: `(a * b) mod q`.
-///
-/// Uses `ShoupFactor` for reduction. For repeated multiplication by the
-/// same value, precompute the `ShoupFactor` outside the loop (see
-/// `transform_monomial`).
-#[inline]
-fn mul_mod(a: u64, b: u64, q: u64) -> u64 {
-    ShoupFactor::<u64>::new(b, q).factor_mul_modulo(a, q)
 }
 
 /// Compute the modular inverse of `a` modulo `q`.
@@ -122,30 +112,14 @@ impl U64NttTable {
     /// Dispatch forward transform to the selected backend.
     fn dispatch_forward(&self, values: &mut [u64], input_mod_factor: u32, output_mod_factor: u32) {
         match self.backend {
-            U64Backend::Scalar => scalar::forward_transform(
-                values,
-                self.q,
-                self.two_q,
-                &self.roots,
-                &self.roots_precon,
-                input_mod_factor,
-                output_mod_factor,
-            ),
+            U64Backend::Scalar => {
+                self.scalar_forward_transform(values, input_mod_factor, output_mod_factor)
+            }
             #[cfg(target_arch = "x86_64")]
             U64Backend::Avx2 => {
                 // SAFETY: Avx2 backend is only selected when
                 // avx2::HAS_AVX2 is true at construction time.
-                unsafe {
-                    avx2::forward_transform(
-                        values,
-                        self.q,
-                        self.two_q,
-                        &self.roots,
-                        &self.roots_precon,
-                        input_mod_factor,
-                        output_mod_factor,
-                    )
-                }
+                unsafe { self.avx2_forward_transform(values, input_mod_factor, output_mod_factor) }
             }
         }
     }
@@ -153,34 +127,12 @@ impl U64NttTable {
     /// Dispatch inverse transform to the selected backend.
     fn dispatch_inverse(&self, values: &mut [u64], input_mod_factor: u32, output_mod_factor: u32) {
         match self.backend {
-            U64Backend::Scalar => scalar::inverse_transform(
-                values,
-                self.q,
-                self.two_q,
-                self.inv_n,
-                self.inv_n_precon,
-                self.inv_n_w,
-                self.inv_n_w_precon,
-                &self.inv_roots,
-                &self.inv_roots_precon,
-                input_mod_factor,
-                output_mod_factor,
-            ),
+            U64Backend::Scalar => {
+                self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor)
+            }
             #[cfg(target_arch = "x86_64")]
             U64Backend::Avx2 => unsafe {
-                avx2::inverse_transform(
-                    values,
-                    self.q,
-                    self.two_q,
-                    self.inv_n,
-                    self.inv_n_precon,
-                    self.inv_n_w,
-                    self.inv_n_w_precon,
-                    &self.inv_roots,
-                    &self.inv_roots_precon,
-                    input_mod_factor,
-                    output_mod_factor,
-                )
+                self.avx2_inverse_transform(values, input_mod_factor, output_mod_factor)
             },
         }
     }
@@ -216,13 +168,12 @@ impl NttTable for U64NttTable {
         ordinal_roots[1] = root;
         let mut power = root;
         for dst in &mut ordinal_roots[2..] {
-            power = root_sf.lazy_factor_mul_modulo(power, q);
-            power = scalar::reduce_once(power, q); // keep canonical for iteration
+            power = root_sf.factor_mul_modulo(power, q);
             *dst = power;
         }
 
         let inv_root = *ordinal_roots.last().unwrap();
-        debug_assert_eq!(mul_mod(root, inv_root, q), 1);
+        debug_assert_eq!(modulus.reduce_mul(root, inv_root), 1);
 
         // --- bit-reversed index mapping ---
         let reverse_lsbs: Vec<usize> = (0..n).map(|i| i.reverse_lsbs(log_n)).collect();
@@ -282,7 +233,7 @@ impl NttTable for U64NttTable {
             ordinal_roots,
             reverse_lsbs,
             #[cfg(target_arch = "x86_64")]
-            backend: if *avx2::HAS_AVX2 {
+            backend: if *HAS_AVX2 {
                 U64Backend::Avx2
             } else {
                 U64Backend::Scalar
@@ -315,21 +266,25 @@ impl NttTable for U64NttTable {
         Polynomial::new(values.0)
     }
 
+    #[inline]
     fn lazy_transform_slice(&self, poly: &mut [u64]) {
         debug_assert_eq!(poly.len(), self.n);
         self.dispatch_forward(poly, 4, 4);
     }
 
+    #[inline]
     fn transform_slice(&self, poly: &mut [u64]) {
         debug_assert_eq!(poly.len(), self.n);
         self.dispatch_forward(poly, 4, 1);
     }
 
+    #[inline]
     fn lazy_inverse_transform_slice(&self, values: &mut [u64]) {
         debug_assert_eq!(values.len(), self.n);
         self.dispatch_inverse(values, 2, 2);
     }
 
+    #[inline]
     fn inverse_transform_slice(&self, values: &mut [u64]) {
         debug_assert_eq!(values.len(), self.n);
         self.dispatch_inverse(values, 2, 1);

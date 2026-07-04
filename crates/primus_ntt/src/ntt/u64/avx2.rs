@@ -24,11 +24,7 @@
 
 use core::arch::x86_64::*;
 
-use super::scalar;
-
-/// Re-export from `crate::ntt::constants` so existing `avx2::HAS_AVX2`
-/// paths keep working.
-pub use super::super::constants::HAS_AVX2;
+use super::U64NttTable;
 
 // ---------------------------------------------------------------------------
 // Reduction helpers
@@ -331,557 +327,331 @@ fn inv_butterfly_u64x4(
     (x_new, y_new)
 }
 
-// ---------------------------------------------------------------------------
-// Transform functions
-// ---------------------------------------------------------------------------
+impl U64NttTable {
+    // ---------------------------------------------------------------------------
+    // Transform functions
+    // ---------------------------------------------------------------------------
 
-/// Forward NTT (radix-2, Cooley-Tukey, in-place) — AVX2 only.
-///
-/// # Safety
-///
-/// The caller MUST ensure AVX2 is available at runtime
-/// (e.g. via [`HAS_AVX2`]).
-///
-/// # Preconditions (caller MUST uphold; not checked)
-///
-/// - `values.len()` is a power of two and ≥ 16.
-/// - `roots.len() == values.len()` and `roots_precon.len() == values.len()`.
-/// - `q < 2^62`.
-#[allow(clippy::too_many_arguments)]
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn forward_transform(
-    values: &mut [u64],
-    q: u64,
-    two_q: u64,
-    roots: &[u64],
-    roots_precon: &[u64],
-    input_mod_factor: u32,
-    output_mod_factor: u32,
-) {
-    debug_assert!(values.len().is_power_of_two());
-    let n = values.len();
+    /// Forward NTT (radix-2, Cooley-Tukey, in-place) — AVX2 only.
+    ///
+    /// # Safety
+    ///
+    /// The caller MUST ensure AVX2 is available at runtime
+    /// (e.g. via [`HAS_AVX2`]).
+    ///
+    /// # Preconditions (caller MUST uphold; not checked)
+    ///
+    /// - `values.len()` is a power of two and ≥ 16.
+    /// - `roots.len() == values.len()` and `roots_precon.len() == values.len()`.
+    /// - `q < 2^62`.
+    #[target_feature(enable = "avx2")]
+    pub(crate) unsafe fn avx2_forward_transform(
+        &self,
+        values: &mut [u64],
+        input_mod_factor: u32,
+        output_mod_factor: u32,
+    ) {
+        let n = self.n;
 
-    // Polynomial lengths below 16 are trivial — delegate to scalar.
-    if n < 16 {
-        return scalar::forward_transform(
-            values,
-            q,
-            two_q,
-            roots,
-            roots_precon,
-            input_mod_factor,
-            output_mod_factor,
+        // Polynomial lengths below 16 are trivial — delegate to scalar.
+        if n < 16 {
+            return self.scalar_forward_transform(values, input_mod_factor, output_mod_factor);
+        }
+
+        assert_eq!(values.len(), n);
+
+        debug_assert!(
+            matches!(input_mod_factor, 1 | 2 | 4),
+            "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
         );
-    }
-
-    debug_assert!(
-        matches!(input_mod_factor, 1 | 2 | 4),
-        "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
-    );
-    debug_assert!(
-        output_mod_factor == 1 || output_mod_factor == 4,
-        "output_mod_factor must be 1 or 4; got {output_mod_factor}"
-    );
-
-    let v_q = _mm256_set1_epi64x(q as i64);
-    let v_two_q = _mm256_set1_epi64x(two_q as i64);
-
-    // Direct index: avoid zip+map overhead.
-    let mut ri = 1usize; // skip roots[0] = 1
-    let mut t = n >> 1;
-    let mut m = 1;
-
-    while m < n {
-        if t >= 4 {
-            // --- AVX2 path: t ≥ 4, process 4 butterflies per inner iteration ---
-            for block in values.chunks_exact_mut(t * 2) {
-                // SAFETY: ri is always < roots.len().
-                let w = unsafe { *roots.get_unchecked(ri) };
-                let wp = unsafe { *roots_precon.get_unchecked(ri) };
-                ri += 1;
-
-                let v_w = _mm256_set1_epi64x(w as i64);
-                let v_wp = _mm256_set1_epi64x(wp as i64);
-
-                // SAFETY: block.len() == 2t, t ≥ 4, so split is valid.
-                let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
-
-                // SAFETY: xs.len() == ys.len() == t, t is a multiple of 4.
-                let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
-                let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
-                for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-                    let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
-                    let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-                    let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                    unsafe {
-                        _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_x);
-                        _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_y);
-                    }
-                }
-            }
-        } else {
-            // --- t < 4 stages (n ≥ 16 guaranteed, all AVX2) ---
-            match t {
-                2 => {
-                    // SAFETY: n is a power of two ≥ 16, so chunking into 8 is valid.
-                    let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
-                    for chunk in chunks {
-                        let w_a = unsafe { *roots.get_unchecked(ri) };
-                        let wp_a = unsafe { *roots_precon.get_unchecked(ri) };
-                        ri += 1;
-                        let w_b = unsafe { *roots.get_unchecked(ri) };
-                        let wp_b = unsafe { *roots_precon.get_unchecked(ri) };
-                        ri += 1;
-
-                        // W: [W_B, W_B | W_A, W_A] — lanes 3,2 use W_B; lanes 1,0 use W_A
-                        let v_w = _mm256_set_epi64x(w_b as i64, w_b as i64, w_a as i64, w_a as i64);
-                        let v_wp =
-                            _mm256_set_epi64x(wp_b as i64, wp_b as i64, wp_a as i64, wp_a as i64);
-
-                        let ptr = chunk.as_mut_ptr().cast::<__m256i>();
-                        let (v_x, v_y) = t2_load_xy(ptr, unsafe { ptr.add(1) });
-                        let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                        t2_store_xy(v_x, v_y, ptr, unsafe { ptr.add(1) });
-                    }
-                }
-                1 => {
-                    // SAFETY: n is a power of two ≥ 16.
-                    let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
-                    for chunk in chunks {
-                        // Load 4 W values: [W0, W1, W2, W3], then reverse
-                        let v_w_raw =
-                            unsafe { _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>()) };
-                        let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
-                        let v_wp_raw = unsafe {
-                            _mm256_loadu_si256(roots_precon.as_ptr().add(ri).cast::<__m256i>())
-                        };
-                        let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
-                        ri += 4;
-
-                        let ptr = chunk.as_mut_ptr().cast::<__m256i>();
-                        let (v_x, v_y) = t1_load_xy(ptr);
-                        let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                        t1_store_xy(v_x, v_y, ptr);
-                    }
-                }
-                _ => unreachable!("t < 4 and t is a power of two => t ∈ {{1, 2}}"),
-            }
-        }
-        t >>= 1;
-        m <<= 1;
-    }
-
-    // Final canonical reduction: [0, 4q) → [0, q)
-    if output_mod_factor == 1 {
-        let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
-        for chunk in chunks {
-            let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
-            let v = reduce_twice_u64x4(v, v_q, v_two_q);
-            unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
-        }
-    }
-}
-
-/// Inverse NTT (radix-2, Gentleman-Sande, in-place) — AVX2 only.
-///
-/// # Safety
-///
-/// The caller MUST ensure AVX2 is available at runtime
-/// (e.g. via [`HAS_AVX2`]).
-///
-/// # Preconditions (caller MUST uphold; not checked)
-///
-/// - `values.len()` is a power of two.
-/// - `inv_roots.len() == values.len()` and `inv_roots_precon.len() == values.len()`.
-/// - `q < 2^62`.
-#[allow(clippy::too_many_arguments)]
-#[target_feature(enable = "avx2")]
-pub(crate) unsafe fn inverse_transform(
-    values: &mut [u64],
-    q: u64,
-    two_q: u64,
-    inv_n: u64,
-    inv_n_precon: u64,
-    inv_n_w: u64,
-    inv_n_w_precon: u64,
-    inv_roots: &[u64],
-    inv_roots_precon: &[u64],
-    input_mod_factor: u32,
-    output_mod_factor: u32,
-) {
-    debug_assert!(values.len().is_power_of_two());
-    let n = values.len();
-
-    if n < 16 {
-        return scalar::inverse_transform(
-            values,
-            q,
-            two_q,
-            inv_n,
-            inv_n_precon,
-            inv_n_w,
-            inv_n_w_precon,
-            inv_roots,
-            inv_roots_precon,
-            input_mod_factor,
-            output_mod_factor,
+        debug_assert!(
+            output_mod_factor == 1 || output_mod_factor == 4,
+            "output_mod_factor must be 1 or 4; got {output_mod_factor}"
         );
-    }
 
-    debug_assert!(
-        input_mod_factor == 1 || input_mod_factor == 2,
-        "input_mod_factor must be 1 or 2; got {input_mod_factor}"
-    );
-    debug_assert!(
-        output_mod_factor == 1 || output_mod_factor == 2,
-        "output_mod_factor must be 1 or 2; got {output_mod_factor}"
-    );
+        let q = self.q;
+        let two_q = self.two_q;
 
-    let v_q = _mm256_set1_epi64x(q as i64);
-    let v_two_q = _mm256_set1_epi64x(two_q as i64);
+        let roots = self.roots.as_slice();
+        let roots_precon = self.roots_precon.as_slice();
 
-    let mut ri = 1usize; // skip inv_roots[0] = 1
-    let mut t = 1usize;
-    let mut m = n >> 1;
+        let v_q = _mm256_set1_epi64x(q as i64);
+        let v_two_q = _mm256_set1_epi64x(two_q as i64);
 
-    while m > 1 {
-        if t >= 4 {
-            // --- AVX2 path ---
-            for block in values.chunks_exact_mut(t * 2) {
-                let w = unsafe { *inv_roots.get_unchecked(ri) };
-                let wp = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                ri += 1;
+        // Direct index: avoid zip+map overhead.
+        let mut ri = 1usize; // skip roots[0] = 1
+        let mut t = n >> 1;
+        let mut m = 1;
 
-                let v_w = _mm256_set1_epi64x(w as i64);
-                let v_wp = _mm256_set1_epi64x(wp as i64);
+        while m < n {
+            if t >= 4 {
+                // --- AVX2 path: t ≥ 4, process 4 butterflies per inner iteration ---
+                for block in values.chunks_exact_mut(t * 2) {
+                    // SAFETY: ri is always < roots.len().
+                    let w = unsafe { *roots.get_unchecked(ri) };
+                    let wp = unsafe { *roots_precon.get_unchecked(ri) };
+                    ri += 1;
 
-                let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
-                let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
-                let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
-                for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-                    let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
-                    let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-                    let (v_x, v_y) = inv_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                    unsafe {
-                        _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_x);
-                        _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_y);
+                    let v_w = _mm256_set1_epi64x(w as i64);
+                    let v_wp = _mm256_set1_epi64x(wp as i64);
+
+                    // SAFETY: block.len() == 2t, t ≥ 4, so split is valid.
+                    let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
+
+                    // SAFETY: xs.len() == ys.len() == t, t is a multiple of 4.
+                    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
+                    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
+                    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                        let v_x =
+                            unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+                        let v_y =
+                            unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
+                        let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                        unsafe {
+                            _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_x);
+                            _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_y);
+                        }
                     }
                 }
-            }
-        } else {
-            // --- t < 4 stages ---
-            match t {
-                1 => {
-                    let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
-                    for chunk in chunks {
-                        let v_w_raw = unsafe {
-                            _mm256_loadu_si256(inv_roots.as_ptr().add(ri).cast::<__m256i>())
-                        };
-                        let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
-                        let v_wp_raw = unsafe {
-                            _mm256_loadu_si256(inv_roots_precon.as_ptr().add(ri).cast::<__m256i>())
-                        };
-                        let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
-                        ri += 4;
+            } else {
+                // --- t < 4 stages (n ≥ 16 guaranteed, all AVX2) ---
+                match t {
+                    2 => {
+                        // SAFETY: n is a power of two ≥ 16, so chunking into 8 is valid.
+                        let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
+                        for chunk in chunks {
+                            let w_a = unsafe { *roots.get_unchecked(ri) };
+                            let wp_a = unsafe { *roots_precon.get_unchecked(ri) };
+                            ri += 1;
+                            let w_b = unsafe { *roots.get_unchecked(ri) };
+                            let wp_b = unsafe { *roots_precon.get_unchecked(ri) };
+                            ri += 1;
 
-                        let ptr = chunk.as_mut_ptr().cast::<__m256i>();
-                        let (v_x, v_y) = t1_load_xy(ptr);
+                            // W: [W_B, W_B | W_A, W_A] — lanes 3,2 use W_B; lanes 1,0 use W_A
+                            let v_w =
+                                _mm256_set_epi64x(w_b as i64, w_b as i64, w_a as i64, w_a as i64);
+                            let v_wp = _mm256_set_epi64x(
+                                wp_b as i64,
+                                wp_b as i64,
+                                wp_a as i64,
+                                wp_a as i64,
+                            );
+
+                            let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                            let (v_x, v_y) = t2_load_xy(ptr, unsafe { ptr.add(1) });
+                            let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                            t2_store_xy(v_x, v_y, ptr, unsafe { ptr.add(1) });
+                        }
+                    }
+                    1 => {
+                        // SAFETY: n is a power of two ≥ 16.
+                        let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
+                        for chunk in chunks {
+                            // Load 4 W values: [W0, W1, W2, W3], then reverse
+                            let v_w_raw = unsafe {
+                                _mm256_loadu_si256(roots.as_ptr().add(ri).cast::<__m256i>())
+                            };
+                            let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
+                            let v_wp_raw = unsafe {
+                                _mm256_loadu_si256(roots_precon.as_ptr().add(ri).cast::<__m256i>())
+                            };
+                            let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
+                            ri += 4;
+
+                            let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                            let (v_x, v_y) = t1_load_xy(ptr);
+                            let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                            t1_store_xy(v_x, v_y, ptr);
+                        }
+                    }
+                    _ => unreachable!("t < 4 and t is a power of two => t ∈ {{1, 2}}"),
+                }
+            }
+            t >>= 1;
+            m <<= 1;
+        }
+
+        // Final canonical reduction: [0, 4q) → [0, q)
+        if output_mod_factor == 1 {
+            let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
+            for chunk in chunks {
+                let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
+                let v = reduce_twice_u64x4(v, v_q, v_two_q);
+                unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
+            }
+        }
+    }
+
+    /// Inverse NTT (radix-2, Gentleman-Sande, in-place) — AVX2 only.
+    ///
+    /// # Safety
+    ///
+    /// The caller MUST ensure AVX2 is available at runtime
+    /// (e.g. via [`HAS_AVX2`]).
+    ///
+    /// # Preconditions (caller MUST uphold; not checked)
+    ///
+    /// - `values.len()` is a power of two.
+    /// - `inv_roots.len() == values.len()` and `inv_roots_precon.len() == values.len()`.
+    /// - `q < 2^62`.
+    #[target_feature(enable = "avx2")]
+    pub(crate) unsafe fn avx2_inverse_transform(
+        &self,
+        values: &mut [u64],
+        input_mod_factor: u32,
+        output_mod_factor: u32,
+    ) {
+        let n = self.n;
+
+        if n < 16 {
+            return self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor);
+        }
+
+        assert_eq!(values.len(), n);
+
+        debug_assert!(
+            input_mod_factor == 1 || input_mod_factor == 2,
+            "input_mod_factor must be 1 or 2; got {input_mod_factor}"
+        );
+        debug_assert!(
+            output_mod_factor == 1 || output_mod_factor == 2,
+            "output_mod_factor must be 1 or 2; got {output_mod_factor}"
+        );
+
+        let q = self.q;
+        let two_q = self.two_q;
+
+        let inv_n = self.inv_n;
+        let inv_n_precon = self.inv_n_precon;
+        let inv_n_w = self.inv_n_w;
+        let inv_n_w_precon = self.inv_n_w_precon;
+        let inv_roots = self.inv_roots.as_slice();
+        let inv_roots_precon = self.inv_roots_precon.as_slice();
+
+        let v_q = _mm256_set1_epi64x(q as i64);
+        let v_two_q = _mm256_set1_epi64x(two_q as i64);
+
+        let mut ri = 1usize; // skip inv_roots[0] = 1
+        let mut t = 1usize;
+        let mut m = n >> 1;
+
+        while m > 1 {
+            if t >= 4 {
+                // --- AVX2 path ---
+                for block in values.chunks_exact_mut(t * 2) {
+                    let w = unsafe { *inv_roots.get_unchecked(ri) };
+                    let wp = unsafe { *inv_roots_precon.get_unchecked(ri) };
+                    ri += 1;
+
+                    let v_w = _mm256_set1_epi64x(w as i64);
+                    let v_wp = _mm256_set1_epi64x(wp as i64);
+
+                    let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
+                    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
+                    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
+                    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                        let v_x =
+                            unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+                        let v_y =
+                            unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
                         let (v_x, v_y) = inv_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                        t1_store_xy(v_x, v_y, ptr);
+                        unsafe {
+                            _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_x);
+                            _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_y);
+                        }
                     }
                 }
-                2 => {
-                    let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
-                    for chunk in chunks {
-                        let w_a = unsafe { *inv_roots.get_unchecked(ri) };
-                        let wp_a = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                        ri += 1;
-                        let w_b = unsafe { *inv_roots.get_unchecked(ri) };
-                        let wp_b = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                        ri += 1;
+            } else {
+                // --- t < 4 stages ---
+                match t {
+                    1 => {
+                        let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
+                        for chunk in chunks {
+                            let v_w_raw = unsafe {
+                                _mm256_loadu_si256(inv_roots.as_ptr().add(ri).cast::<__m256i>())
+                            };
+                            let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
+                            let v_wp_raw = unsafe {
+                                _mm256_loadu_si256(
+                                    inv_roots_precon.as_ptr().add(ri).cast::<__m256i>(),
+                                )
+                            };
+                            let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
+                            ri += 4;
 
-                        let v_w = _mm256_set_epi64x(w_b as i64, w_b as i64, w_a as i64, w_a as i64);
-                        let v_wp =
-                            _mm256_set_epi64x(wp_b as i64, wp_b as i64, wp_a as i64, wp_a as i64);
-
-                        let ptr = chunk.as_mut_ptr().cast::<__m256i>();
-                        let (v_x, v_y) = t2_load_xy(ptr, unsafe { ptr.add(1) });
-                        let (v_x, v_y) = inv_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                        t2_store_xy(v_x, v_y, ptr, unsafe { ptr.add(1) });
+                            let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                            let (v_x, v_y) = t1_load_xy(ptr);
+                            let (v_x, v_y) = inv_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                            t1_store_xy(v_x, v_y, ptr);
+                        }
                     }
+                    2 => {
+                        let chunks = unsafe { values.as_chunks_unchecked_mut::<8>() };
+                        for chunk in chunks {
+                            let w_a = unsafe { *inv_roots.get_unchecked(ri) };
+                            let wp_a = unsafe { *inv_roots_precon.get_unchecked(ri) };
+                            ri += 1;
+                            let w_b = unsafe { *inv_roots.get_unchecked(ri) };
+                            let wp_b = unsafe { *inv_roots_precon.get_unchecked(ri) };
+                            ri += 1;
+
+                            let v_w =
+                                _mm256_set_epi64x(w_b as i64, w_b as i64, w_a as i64, w_a as i64);
+                            let v_wp = _mm256_set_epi64x(
+                                wp_b as i64,
+                                wp_b as i64,
+                                wp_a as i64,
+                                wp_a as i64,
+                            );
+
+                            let ptr = chunk.as_mut_ptr().cast::<__m256i>();
+                            let (v_x, v_y) = t2_load_xy(ptr, unsafe { ptr.add(1) });
+                            let (v_x, v_y) = inv_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                            t2_store_xy(v_x, v_y, ptr, unsafe { ptr.add(1) });
+                        }
+                    }
+                    _ => unreachable!("t < 4 and t is a power of two => t ∈ {{1, 2}}"),
                 }
-                _ => unreachable!("t < 4 and t is a power of two => t ∈ {{1, 2}}"),
             }
-        }
-        t <<= 1;
-        m >>= 1;
-    }
-
-    // --- Final stage: fused with inv_n multiply ---
-    // --- Final stage: fused with inv_n multiply (inv_n_w precomputed) ---
-    // --- AVX2 final stage: n/2 ≥ 8 (guaranteed since n ≥ 16) ---
-    let v_inv_n = _mm256_set1_epi64x(inv_n as i64);
-    let v_inv_n_w = _mm256_set1_epi64x(inv_n_w as i64);
-    let v_inv_n_precon = _mm256_set1_epi64x(inv_n_precon as i64);
-    let v_inv_n_w_precon = _mm256_set1_epi64x(inv_n_w_precon as i64);
-
-    let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
-    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
-    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
-    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-        let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
-        let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-
-        let v_sum = _mm256_add_epi64(v_x, v_y);
-        let v_tx = reduce_once_u64x4(v_sum, v_two_q);
-        let v_ty = _mm256_sub_epi64(_mm256_add_epi64(v_x, v_two_q), v_y);
-
-        let v_new_x = mul_mod_lazy_u64x4(v_tx, v_inv_n, v_inv_n_precon, v_q);
-        let v_new_y = mul_mod_lazy_u64x4(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
-
-        unsafe {
-            _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
-            _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
-        }
-    }
-
-    // Final canonical reduction: [0, 2q) → [0, q)
-    if output_mod_factor == 1 {
-        let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
-        for chunk in chunks {
-            let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
-            let v = reduce_once_u64x4(v, v_q);
-            unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use primus_factor::ShoupFactor;
-
-    /// Verify T2 AVX2 forward butterfly vs scalar on 2 blocks with known W.
-    #[test]
-    fn test_t2_butterfly_against_scalar() {
-        if !*HAS_AVX2 {
-            return;
-        }
-        let q: u64 = 132120577;
-        let two_q = q << 1;
-
-        // 2 blocks × [x0, x1, y0, y1]: 8 values
-        let mut avx_buf = [10u64, 20, 30, 40, 50, 60, 70, 80];
-        let mut scalar_buf = avx_buf;
-
-        let ws = [1111u64, 2222];
-        let wps = [
-            ShoupFactor::<u64>::quotient_for(1111, q),
-            ShoupFactor::<u64>::quotient_for(2222, q),
-        ];
-
-        // AVX2: load, butterfly, store
-        unsafe {
-            let base = avx_buf.as_ptr().cast::<__m256i>();
-            let (v_x, v_y) = t2_load_xy(base, base.add(1));
-            let v_w = _mm256_set_epi64x(ws[1] as i64, ws[1] as i64, ws[0] as i64, ws[0] as i64);
-            let v_wp =
-                _mm256_set_epi64x(wps[1] as i64, wps[1] as i64, wps[0] as i64, wps[0] as i64);
-            let v_q = _mm256_set1_epi64x(q as i64);
-            let v_two_q = _mm256_set1_epi64x(two_q as i64);
-            let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-            let base_mut = avx_buf.as_mut_ptr().cast::<__m256i>();
-            t2_store_xy(v_x, v_y, base_mut, base_mut.add(1));
+            t <<= 1;
+            m >>= 1;
         }
 
-        // Scalar: apply butterfly per block in order 0, 1
-        for block_idx in 0..2 {
-            let i = block_idx * 4;
-            // SAFETY: disjoint indices within the slice.
-            let ptr = scalar_buf.as_mut_ptr();
+        // --- Final stage: fused with inv_n multiply ---
+        // --- Final stage: fused with inv_n multiply (inv_n_w precomputed) ---
+        // --- AVX2 final stage: n/2 ≥ 8 (guaranteed since n ≥ 16) ---
+        let v_inv_n = _mm256_set1_epi64x(inv_n as i64);
+        let v_inv_n_w = _mm256_set1_epi64x(inv_n_w as i64);
+        let v_inv_n_precon = _mm256_set1_epi64x(inv_n_precon as i64);
+        let v_inv_n_w_precon = _mm256_set1_epi64x(inv_n_w_precon as i64);
+
+        let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
+        let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<4>() };
+        let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<4>() };
+        for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+            let v_x = unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
+            let v_y = unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
+
+            let v_sum = _mm256_add_epi64(v_x, v_y);
+            let v_tx = reduce_once_u64x4(v_sum, v_two_q);
+            let v_ty = _mm256_sub_epi64(_mm256_add_epi64(v_x, v_two_q), v_y);
+
+            let v_new_x = mul_mod_lazy_u64x4(v_tx, v_inv_n, v_inv_n_precon, v_q);
+            let v_new_y = mul_mod_lazy_u64x4(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
+
             unsafe {
-                scalar::fwd_butterfly(
-                    &mut *ptr.add(i),
-                    &mut *ptr.add(i + 2),
-                    ws[block_idx],
-                    wps[block_idx],
-                    q,
-                    two_q,
-                );
-                scalar::fwd_butterfly(
-                    &mut *ptr.add(i + 1),
-                    &mut *ptr.add(i + 3),
-                    ws[block_idx],
-                    wps[block_idx],
-                    q,
-                    two_q,
-                );
+                _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_new_x);
+                _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_new_y);
             }
         }
 
-        for i in 0..8 {
-            assert_eq!(
-                avx_buf[i], scalar_buf[i],
-                "T2 butterfly mismatch at index {i}"
-            );
-        }
-    }
-
-    /// Verify T1 AVX2 forward butterfly vs scalar on 4 blocks with known W.
-    #[test]
-    fn test_t1_butterfly_against_scalar() {
-        if !*HAS_AVX2 {
-            return;
-        }
-        let q: u64 = 132120577;
-        let two_q = q << 1;
-
-        // 4 blocks × [x, y]: 8 values
-        let mut avx_buf = [1u64, 2, 3, 4, 5, 6, 7, 8];
-        let mut scalar_buf = avx_buf;
-
-        let w_vals = [100u64, 200, 300, 400];
-        let wp_vals: [u64; 4] = [
-            ShoupFactor::<u64>::quotient_for(100, q),
-            ShoupFactor::<u64>::quotient_for(200, q),
-            ShoupFactor::<u64>::quotient_for(300, q),
-            ShoupFactor::<u64>::quotient_for(400, q),
-        ];
-
-        // AVX2
-        unsafe {
-            let (v_x, v_y) = t1_load_xy(avx_buf.as_ptr().cast::<__m256i>());
-            // Load and reverse: [W0, W1, W2, W3] → [W3, W2, W1, W0]
-            let v_w_raw = _mm256_loadu_si256(w_vals.as_ptr().cast::<__m256i>());
-            let v_w = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_w_raw);
-            let v_wp_raw = _mm256_loadu_si256(wp_vals.as_ptr().cast::<__m256i>());
-            let v_wp = _mm256_permute4x64_epi64::<0b00_01_10_11>(v_wp_raw);
-            let v_q = _mm256_set1_epi64x(q as i64);
-            let v_two_q = _mm256_set1_epi64x(two_q as i64);
-            let (v_x, v_y) = fwd_butterfly_u64x4(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-            t1_store_xy(v_x, v_y, avx_buf.as_mut_ptr().cast::<__m256i>());
-        }
-
-        // Scalar
-        let ptr = scalar_buf.as_mut_ptr();
-        for block_idx in 0..4 {
-            unsafe {
-                scalar::fwd_butterfly(
-                    &mut *ptr.add(block_idx * 2),
-                    &mut *ptr.add(block_idx * 2 + 1),
-                    w_vals[block_idx],
-                    wp_vals[block_idx],
-                    q,
-                    two_q,
-                );
-            }
-        }
-
-        for i in 0..8 {
-            assert_eq!(
-                avx_buf[i], scalar_buf[i],
-                "T1 butterfly mismatch at index {i}"
-            );
-        }
-    }
-
-    /// Verify T2 load-store round-trip: reloaded data must match original.
-    #[test]
-    fn test_t2_load_store_roundtrip() {
-        if !*HAS_AVX2 {
-            return;
-        }
-        let original: [u64; 8] = [100, 200, 300, 400, 500, 600, 700, 800];
-        unsafe {
-            let mut buf = original;
-            let base = buf.as_ptr().cast::<__m256i>();
-            let (v_x, v_y) = t2_load_xy(base, base.add(1));
-            let base_mut = buf.as_mut_ptr().cast::<__m256i>();
-            t2_store_xy(v_x, v_y, base_mut, base_mut.add(1));
-            assert_eq!(buf, original, "T2 load-store roundtrip failed");
-        }
-    }
-
-    /// Verify T1 load-store round-trip.
-    #[test]
-    fn test_t1_load_store_roundtrip() {
-        if !*HAS_AVX2 {
-            return;
-        }
-        let original: [u64; 8] = [100, 200, 300, 400, 500, 600, 700, 800];
-        unsafe {
-            let mut buf = original;
-            let (v_x, v_y) = t1_load_xy(buf.as_ptr().cast::<__m256i>());
-            t1_store_xy(v_x, v_y, buf.as_mut_ptr().cast::<__m256i>());
-            assert_eq!(buf, original, "T1 load-store roundtrip failed");
-        }
-    }
-
-    /// Verify that `mul_mod_lazy_u64x4` matches scalar `mul_mod_lazy` for
-    /// non-broadcast twiddle values.
-    #[test]
-    fn test_mul_mod_lazy_u64x4() {
-        if !*HAS_AVX2 {
-            return;
-        }
-
-        let q: u64 = 132120577;
-
-        // 4 distinct (y, w, wp) triples — non-broadcast, exercises all lanes.
-        let ys = [100u64, 200, 300, 400];
-        let ws = [10u64, 20, 30, 40];
-        let wps: [u64; 4] = [
-            ShoupFactor::<u64>::quotient_for(10, q),
-            ShoupFactor::<u64>::quotient_for(20, q),
-            ShoupFactor::<u64>::quotient_for(30, q),
-            ShoupFactor::<u64>::quotient_for(40, q),
-        ];
-
-        unsafe {
-            let v_y = _mm256_loadu_si256(ys.as_ptr().cast::<__m256i>());
-            let v_w = _mm256_loadu_si256(ws.as_ptr().cast::<__m256i>());
-            let v_wp = _mm256_loadu_si256(wps.as_ptr().cast::<__m256i>());
-            let v_q = _mm256_set1_epi64x(q as i64);
-
-            let result = mul_mod_lazy_u64x4(v_y, v_w, v_wp, v_q);
-
-            let mut out = [0u64; 4];
-            _mm256_storeu_si256(out.as_mut_ptr().cast::<__m256i>(), result);
-
-            for i in 0..4 {
-                let expected = scalar::mul_mod_lazy(ys[i], ws[i], wps[i], q);
-                assert_eq!(
-                    out[i], expected,
-                    "lane {i}: y={} w={} wp={}",
-                    ys[i], ws[i], wps[i]
-                );
-            }
-        }
-    }
-
-    /// Verify `reduce_once_u64x4` matches scalar `reduce_once`.
-    #[test]
-    fn test_reduce_once_u64x4() {
-        if !*HAS_AVX2 {
-            return;
-        }
-
-        let q: u64 = 132120577;
-        let inputs = [0u64, q - 1, q, q + 1, 2 * q - 1, 2 * q - 1, q * 2 - 5, q];
-        let expected: [u64; 8] = inputs.map(|x| scalar::reduce_once(x, q));
-
-        // Test in two batches of 4
-        unsafe {
-            for batch in 0..2 {
-                let start = batch * 4;
-                let v = _mm256_loadu_si256(inputs[start..start + 4].as_ptr().cast::<__m256i>());
-                let v_q = _mm256_set1_epi64x(q as i64);
-                let result = reduce_once_u64x4(v, v_q);
-                let mut out = [0u64; 4];
-                _mm256_storeu_si256(out.as_mut_ptr().cast::<__m256i>(), result);
-                for i in 0..4 {
-                    assert_eq!(out[i], expected[start + i], "batch {batch} lane {i}");
-                }
+        // Final canonical reduction: [0, 2q) → [0, q)
+        if output_mod_factor == 1 {
+            let chunks = unsafe { values.as_chunks_unchecked_mut::<4>() };
+            for chunk in chunks {
+                let v = unsafe { _mm256_loadu_si256(chunk.as_mut_ptr().cast::<__m256i>()) };
+                let v = reduce_once_u64x4(v, v_q);
+                unsafe { _mm256_storeu_si256(chunk.as_mut_ptr().cast::<__m256i>(), v) };
             }
         }
     }

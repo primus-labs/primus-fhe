@@ -3,6 +3,7 @@
 //! All backends share these flags so that feature detection runs exactly
 //! once per flag, regardless of how many backends reference it.
 
+#[cfg(target_arch = "x86_64")]
 use std::sync::LazyLock;
 
 /// AVX2 available on this x86_64 CPU.

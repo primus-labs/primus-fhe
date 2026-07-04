@@ -16,10 +16,7 @@
 
 use core::arch::x86_64::*;
 
-use super::scalar;
-
-/// Re-export from `crate::ntt::constants` so existing paths keep working.
-pub use super::super::constants::HAS_AVX512F;
+use super::U32NttTable;
 
 // ---------------------------------------------------------------------------
 // Reduction helpers
@@ -456,464 +453,330 @@ fn deinterleave_inv_stage(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Transform functions
-// ---------------------------------------------------------------------------
+impl U32NttTable {
+    // ---------------------------------------------------------------------------
+    // Transform functions
+    // ---------------------------------------------------------------------------
 
-/// Forward NTT (radix-2, Cooley-Tukey, in-place) — AVX-512 only.
-///
-/// # Safety
-///
-/// The caller MUST ensure AVX-512F is available at runtime
-/// (e.g. via [`HAS_AVX512F`]).
-///
-/// # Preconditions (caller MUST uphold; not checked)
-///
-/// - `values.len()` is a power of two and ≥ 64.
-/// - `roots.len() == values.len()` and `roots_precon.len() == values.len()`.
-/// - `q < 2^30`.
-#[allow(clippy::too_many_arguments)]
-#[target_feature(enable = "avx512f")]
-pub(crate) unsafe fn forward_transform(
-    values: &mut [u32],
-    q: u32,
-    two_q: u32,
-    roots: &[u32],
-    roots_precon: &[u32],
-    input_mod_factor: u32,
-    output_mod_factor: u32,
-) {
-    debug_assert!(values.len().is_power_of_two());
-    let n = values.len();
+    /// Forward NTT (radix-2, Cooley-Tukey, in-place) — AVX-512 only.
+    ///
+    /// # Safety
+    ///
+    /// The caller MUST ensure AVX-512F is available at runtime
+    /// (e.g. via [`HAS_AVX512F`]).
+    ///
+    /// # Preconditions (caller MUST uphold; not checked)
+    ///
+    /// - `values.len()` is a power of two and ≥ 64.
+    /// - `roots.len() == values.len()` and `roots_precon.len() == values.len()`.
+    /// - `q < 2^30`.
+    #[target_feature(enable = "avx512f")]
+    pub(crate) unsafe fn avx512_forward_transform(
+        &self,
+        values: &mut [u32],
+        input_mod_factor: u32,
+        output_mod_factor: u32,
+    ) {
+        let n = self.n;
 
-    if n < 64 {
-        return scalar::forward_transform(
-            values,
-            q,
-            two_q,
-            roots,
-            roots_precon,
-            input_mod_factor,
-            output_mod_factor,
+        if n < 64 {
+            return self.scalar_forward_transform(values, input_mod_factor, output_mod_factor);
+        }
+
+        assert_eq!(values.len(), n);
+
+        debug_assert!(
+            matches!(input_mod_factor, 1 | 2 | 4),
+            "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
         );
-    }
+        debug_assert!(
+            output_mod_factor == 1 || output_mod_factor == 4,
+            "output_mod_factor must be 1 or 4; got {output_mod_factor}"
+        );
 
-    debug_assert!(
-        matches!(input_mod_factor, 1 | 2 | 4),
-        "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
-    );
-    debug_assert!(
-        output_mod_factor == 1 || output_mod_factor == 4,
-        "output_mod_factor must be 1 or 4; got {output_mod_factor}"
-    );
+        let q = self.q;
+        let two_q = self.two_q;
 
-    let v_q = _mm512_set1_epi32(q as i32);
-    let v_two_q = _mm512_set1_epi32(two_q as i32);
+        let roots = self.roots.as_slice();
+        let roots_precon = self.roots_precon.as_slice();
 
-    let mut ri = 1usize; // skip roots[0] = 1
-    let mut t = n >> 1;
-    let mut m = 1;
+        let v_q = _mm512_set1_epi32(q as i32);
+        let v_two_q = _mm512_set1_epi32(two_q as i32);
 
-    while m < n {
-        if t >= 16 {
-            // --- AVX-512 path: t ≥ 16, process 16 butterflies at a time ---
-            for block in values.chunks_exact_mut(t * 2) {
-                let w = unsafe { *roots.get_unchecked(ri) };
-                let wp = unsafe { *roots_precon.get_unchecked(ri) };
-                ri += 1;
+        let mut ri = 1usize; // skip roots[0] = 1
+        let mut t = n >> 1;
+        let mut m = 1;
 
-                let v_w = _mm512_set1_epi32(w as i32);
-                let v_wp = _mm512_set1_epi32(wp as i32);
+        while m < n {
+            if t >= 16 {
+                // --- AVX-512 path: t ≥ 16, process 16 butterflies at a time ---
+                for block in values.chunks_exact_mut(t * 2) {
+                    let w = unsafe { *roots.get_unchecked(ri) };
+                    let wp = unsafe { *roots_precon.get_unchecked(ri) };
+                    ri += 1;
 
-                let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
-                let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
-                let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
-                for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-                    let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
-                    let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
+                    let v_w = _mm512_set1_epi32(w as i32);
+                    let v_wp = _mm512_set1_epi32(wp as i32);
+
+                    let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
+                    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
+                    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
+                    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                        let v_x =
+                            unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
+                        let v_y =
+                            unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
+                        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                        unsafe {
+                            _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_x);
+                            _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_y);
+                        }
+                    }
+                }
+            } else if t == 8 {
+                // --- AVX-512 T8 path: 2-block deinterleave ---
+                let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                for chunk in chunks {
+                    let w_a = unsafe { *roots.get_unchecked(ri) };
+                    let wp_a = unsafe { *roots_precon.get_unchecked(ri) };
+                    ri += 1;
+                    let w_b = unsafe { *roots.get_unchecked(ri) };
+                    let wp_b = unsafe { *roots_precon.get_unchecked(ri) };
+                    ri += 1;
+
+                    // W: [W_B × 8 | W_A × 8]
+                    let v_w = _mm512_set_epi32(
+                        w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32,
+                        w_b as i32, w_b as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32,
+                        w_a as i32, w_a as i32, w_a as i32, w_a as i32,
+                    );
+                    let v_wp = _mm512_set_epi32(
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                    );
+
+                    let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                    let (v_x, v_y) = t8_load_xy(ptr);
                     let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                    unsafe {
-                        _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_x);
-                        _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_y);
-                    }
+                    t8_store_xy(v_x, v_y, ptr);
+                }
+            } else {
+                // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
+                let num_w = 16 / t;
+                let masks = DeinterleaveMasks::for_t(t);
+
+                let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                for chunk in chunks {
+                    let v_w = unsafe { expand_w_16(roots.as_ptr().add(ri), t) };
+                    let v_wp = unsafe { expand_w_16(roots_precon.as_ptr().add(ri), t) };
+                    ri += num_w;
+
+                    let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
                 }
             }
-        } else if t == 8 {
-            // --- AVX-512 T8 path: 2-block deinterleave ---
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+            t >>= 1;
+            m <<= 1;
+        }
+
+        // Final canonical reduction: [0, 4q) → [0, q)
+        if output_mod_factor == 1 {
+            let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
             for chunk in chunks {
-                let w_a = unsafe { *roots.get_unchecked(ri) };
-                let wp_a = unsafe { *roots_precon.get_unchecked(ri) };
-                ri += 1;
-                let w_b = unsafe { *roots.get_unchecked(ri) };
-                let wp_b = unsafe { *roots_precon.get_unchecked(ri) };
-                ri += 1;
-
-                // W: [W_B × 8 | W_A × 8]
-                let v_w = _mm512_set_epi32(
-                    w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32,
-                    w_b as i32, w_b as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                    w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                );
-                let v_wp = _mm512_set_epi32(
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                );
-
-                let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                let (v_x, v_y) = t8_load_xy(ptr);
-                let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                t8_store_xy(v_x, v_y, ptr);
-            }
-        } else {
-            // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
-            let num_w = 16 / t;
-            let masks = DeinterleaveMasks::for_t(t);
-
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
-            for chunk in chunks {
-                let v_w = unsafe { expand_w_16(roots.as_ptr().add(ri), t) };
-                let v_wp = unsafe { expand_w_16(roots_precon.as_ptr().add(ri), t) };
-                ri += num_w;
-
-                let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
+                let v = reduce_twice_avx512(v, v_q, v_two_q);
+                unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
             }
         }
-        t >>= 1;
-        m <<= 1;
     }
 
-    // Final canonical reduction: [0, 4q) → [0, q)
-    if output_mod_factor == 1 {
-        let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
-        for chunk in chunks {
-            let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
-            let v = reduce_twice_avx512(v, v_q, v_two_q);
-            unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
+    /// Inverse NTT (radix-2, Gentleman-Sande, in-place) — AVX-512 only.
+    ///
+    /// # Safety
+    ///
+    /// The caller MUST ensure AVX-512F is available at runtime
+    /// (e.g. via [`HAS_AVX512F`]).
+    ///
+    /// # Preconditions (caller MUST uphold; not checked)
+    ///
+    /// - `values.len()` is a power of two.
+    /// - `inv_roots.len() == values.len()` and `inv_roots_precon.len() == values.len()`.
+    /// - `q < 2^30`.
+    #[target_feature(enable = "avx512f")]
+    pub(crate) unsafe fn avx512_inverse_transform(
+        &self,
+        values: &mut [u32],
+        input_mod_factor: u32,
+        output_mod_factor: u32,
+    ) {
+        let n = self.n;
+
+        if n < 64 {
+            return self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor);
         }
-    }
-}
 
-/// Inverse NTT (radix-2, Gentleman-Sande, in-place) — AVX-512 only.
-///
-/// # Safety
-///
-/// The caller MUST ensure AVX-512F is available at runtime
-/// (e.g. via [`HAS_AVX512F`]).
-///
-/// # Preconditions (caller MUST uphold; not checked)
-///
-/// - `values.len()` is a power of two.
-/// - `inv_roots.len() == values.len()` and `inv_roots_precon.len() == values.len()`.
-/// - `q < 2^30`.
-#[allow(clippy::too_many_arguments)]
-#[target_feature(enable = "avx512f")]
-pub(crate) unsafe fn inverse_transform(
-    values: &mut [u32],
-    q: u32,
-    two_q: u32,
-    inv_n: u32,
-    inv_n_precon: u32,
-    inv_n_w: u32,
-    inv_n_w_precon: u32,
-    inv_roots: &[u32],
-    inv_roots_precon: &[u32],
-    input_mod_factor: u32,
-    output_mod_factor: u32,
-) {
-    debug_assert!(values.len().is_power_of_two());
-    let n = values.len();
+        assert_eq!(values.len(), n);
 
-    if n < 64 {
-        return scalar::inverse_transform(
-            values,
-            q,
-            two_q,
-            inv_n,
-            inv_n_precon,
-            inv_n_w,
-            inv_n_w_precon,
-            inv_roots,
-            inv_roots_precon,
-            input_mod_factor,
-            output_mod_factor,
+        debug_assert!(
+            input_mod_factor == 1 || input_mod_factor == 2,
+            "input_mod_factor must be 1 or 2; got {input_mod_factor}"
         );
-    }
+        debug_assert!(
+            output_mod_factor == 1 || output_mod_factor == 2,
+            "output_mod_factor must be 1 or 2; got {output_mod_factor}"
+        );
 
-    debug_assert!(
-        input_mod_factor == 1 || input_mod_factor == 2,
-        "input_mod_factor must be 1 or 2; got {input_mod_factor}"
-    );
-    debug_assert!(
-        output_mod_factor == 1 || output_mod_factor == 2,
-        "output_mod_factor must be 1 or 2; got {output_mod_factor}"
-    );
+        let q = self.q;
+        let two_q = self.two_q;
 
-    let v_q = _mm512_set1_epi32(q as i32);
-    let v_two_q = _mm512_set1_epi32(two_q as i32);
+        let inv_roots = self.inv_roots.as_slice();
+        let inv_roots_precon = self.inv_roots_precon.as_slice();
+        let inv_n = self.inv_n;
+        let inv_n_precon = self.inv_n_precon;
+        let inv_n_w = self.inv_n_w;
+        let inv_n_w_precon = self.inv_n_w_precon;
 
-    let mut ri = 1usize; // skip inv_roots[0] = 1
-    let mut t = 1usize;
-    let mut m = n >> 1;
+        let v_q = _mm512_set1_epi32(q as i32);
+        let v_two_q = _mm512_set1_epi32(two_q as i32);
 
-    while m > 1 {
-        if t >= 16 {
-            // --- AVX-512 path ---
-            for block in values.chunks_exact_mut(t * 2) {
-                let w = unsafe { *inv_roots.get_unchecked(ri) };
-                let wp = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                ri += 1;
+        let mut ri = 1usize; // skip inv_roots[0] = 1
+        let mut t = 1usize;
+        let mut m = n >> 1;
 
-                let v_w = _mm512_set1_epi32(w as i32);
-                let v_wp = _mm512_set1_epi32(wp as i32);
+        while m > 1 {
+            if t >= 16 {
+                // --- AVX-512 path ---
+                for block in values.chunks_exact_mut(t * 2) {
+                    let w = unsafe { *inv_roots.get_unchecked(ri) };
+                    let wp = unsafe { *inv_roots_precon.get_unchecked(ri) };
+                    ri += 1;
 
-                let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
-                let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
-                let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
-                for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-                    let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
-                    let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
-                    let (v_x, v_y) = inv_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                    unsafe {
-                        _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_x);
-                        _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_y);
+                    let v_w = _mm512_set1_epi32(w as i32);
+                    let v_wp = _mm512_set1_epi32(wp as i32);
+
+                    let (xs, ys) = unsafe { block.split_at_mut_unchecked(t) };
+                    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
+                    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
+                    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+                        let v_x =
+                            unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
+                        let v_y =
+                            unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
+                        let (v_x, v_y) = inv_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                        unsafe {
+                            _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_x);
+                            _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_y);
+                        }
                     }
                 }
+            } else if t == 8 {
+                // --- AVX-512 T8 path: 2-block deinterleave ---
+                let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                for chunk in chunks {
+                    let w_a = unsafe { *inv_roots.get_unchecked(ri) };
+                    let wp_a = unsafe { *inv_roots_precon.get_unchecked(ri) };
+                    ri += 1;
+                    let w_b = unsafe { *inv_roots.get_unchecked(ri) };
+                    let wp_b = unsafe { *inv_roots_precon.get_unchecked(ri) };
+                    ri += 1;
+
+                    // W: [W_B × 8 | W_A × 8]
+                    let v_w = _mm512_set_epi32(
+                        w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32,
+                        w_b as i32, w_b as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32,
+                        w_a as i32, w_a as i32, w_a as i32, w_a as i32,
+                    );
+                    let v_wp = _mm512_set_epi32(
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_b as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                        wp_a as i32,
+                    );
+
+                    let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                    let (v_x, v_y) = t8_load_xy(ptr);
+                    let (v_x, v_y) = inv_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+                    t8_store_xy(v_x, v_y, ptr);
+                }
+            } else {
+                // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
+                let num_w = 16 / t;
+                let masks = DeinterleaveMasks::for_t(t);
+
+                let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                for chunk in chunks {
+                    let v_w = unsafe { expand_w_16(inv_roots.as_ptr().add(ri), t) };
+                    let v_wp = unsafe { expand_w_16(inv_roots_precon.as_ptr().add(ri), t) };
+                    ri += num_w;
+
+                    let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                    deinterleave_inv_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                }
             }
-        } else if t == 8 {
-            // --- AVX-512 T8 path: 2-block deinterleave ---
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+            t <<= 1;
+            m >>= 1;
+        }
+
+        // --- Final stage: fused with inv_n multiply (inv_n_w precomputed) ---
+        // --- 512-bit final stage: n/2 ≥ 32 (guaranteed since n ≥ 64) ---
+        let v_inv_n = _mm512_set1_epi32(inv_n as i32);
+        let v_inv_n_w = _mm512_set1_epi32(inv_n_w as i32);
+        let v_inv_n_precon = _mm512_set1_epi32(inv_n_precon as i32);
+        let v_inv_n_w_precon = _mm512_set1_epi32(inv_n_w_precon as i32);
+
+        let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
+        let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
+        let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
+        for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
+            let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
+            let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
+
+            let v_sum = _mm512_add_epi32(v_x, v_y);
+            let v_tx = reduce_once_avx512(v_sum, v_two_q);
+            let v_ty = _mm512_sub_epi32(_mm512_add_epi32(v_x, v_two_q), v_y);
+
+            let v_new_x = mul_mod_lazy_avx512(v_tx, v_inv_n, v_inv_n_precon, v_q);
+            let v_new_y = mul_mod_lazy_avx512(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
+
+            unsafe {
+                _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_new_x);
+                _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_new_y);
+            }
+        }
+
+        // Final canonical reduction: [0, 2q) → [0, q)
+        if output_mod_factor == 1 {
+            let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
             for chunk in chunks {
-                let w_a = unsafe { *inv_roots.get_unchecked(ri) };
-                let wp_a = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                ri += 1;
-                let w_b = unsafe { *inv_roots.get_unchecked(ri) };
-                let wp_b = unsafe { *inv_roots_precon.get_unchecked(ri) };
-                ri += 1;
-
-                // W: [W_B × 8 | W_A × 8]
-                let v_w = _mm512_set_epi32(
-                    w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32,
-                    w_b as i32, w_b as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                    w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                );
-                let v_wp = _mm512_set_epi32(
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_b as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                    wp_a as i32,
-                );
-
-                let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                let (v_x, v_y) = t8_load_xy(ptr);
-                let (v_x, v_y) = inv_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-                t8_store_xy(v_x, v_y, ptr);
-            }
-        } else {
-            // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, 32 elements at a time ---
-            let num_w = 16 / t;
-            let masks = DeinterleaveMasks::for_t(t);
-
-            let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
-            for chunk in chunks {
-                let v_w = unsafe { expand_w_16(inv_roots.as_ptr().add(ri), t) };
-                let v_wp = unsafe { expand_w_16(inv_roots_precon.as_ptr().add(ri), t) };
-                ri += num_w;
-
-                let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                deinterleave_inv_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
-            }
-        }
-        t <<= 1;
-        m >>= 1;
-    }
-
-    // --- Final stage: fused with inv_n multiply (inv_n_w precomputed) ---
-    // --- 512-bit final stage: n/2 ≥ 32 (guaranteed since n ≥ 64) ---
-    let v_inv_n = _mm512_set1_epi32(inv_n as i32);
-    let v_inv_n_w = _mm512_set1_epi32(inv_n_w as i32);
-    let v_inv_n_precon = _mm512_set1_epi32(inv_n_precon as i32);
-    let v_inv_n_w_precon = _mm512_set1_epi32(inv_n_w_precon as i32);
-
-    let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
-    let xs_chunks = unsafe { xs.as_chunks_unchecked_mut::<16>() };
-    let ys_chunks = unsafe { ys.as_chunks_unchecked_mut::<16>() };
-    for (x_chunk, y_chunk) in xs_chunks.iter_mut().zip(ys_chunks) {
-        let v_x = unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
-        let v_y = unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
-
-        let v_sum = _mm512_add_epi32(v_x, v_y);
-        let v_tx = reduce_once_avx512(v_sum, v_two_q);
-        let v_ty = _mm512_sub_epi32(_mm512_add_epi32(v_x, v_two_q), v_y);
-
-        let v_new_x = mul_mod_lazy_avx512(v_tx, v_inv_n, v_inv_n_precon, v_q);
-        let v_new_y = mul_mod_lazy_avx512(v_ty, v_inv_n_w, v_inv_n_w_precon, v_q);
-
-        unsafe {
-            _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_new_x);
-            _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_new_y);
-        }
-    }
-
-    // Final canonical reduction: [0, 2q) → [0, q)
-    if output_mod_factor == 1 {
-        let chunks = unsafe { values.as_chunks_unchecked_mut::<16>() };
-        for chunk in chunks {
-            let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
-            let v = reduce_once_avx512(v, v_q);
-            unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use primus_factor::ShoupFactor;
-
-    /// Verify T8 AVX-512 forward butterfly vs scalar on 2 blocks with known W.
-    #[test]
-    fn test_t8_butterfly_against_scalar() {
-        if !*HAS_AVX512F {
-            return;
-        }
-        let q: u32 = 132120577;
-        let two_q = q << 1;
-
-        // 2 blocks × [x0..x7, y0..y7]: 32 values
-        let mut avx_buf = [
-            1u32, 2, 3, 4, 5, 6, 7, 8, // block A x's
-            101, 102, 103, 104, 105, 106, 107, 108, // block A y's
-            11, 12, 13, 14, 15, 16, 17, 18, // block B x's
-            201, 202, 203, 204, 205, 206, 207, 208, // block B y's
-        ];
-        let mut scalar_buf = avx_buf;
-
-        let w_a: u32 = 1111;
-        let wp_a = ShoupFactor::<u32>::quotient_for(w_a, q);
-        let w_b: u32 = 2222;
-        let wp_b = ShoupFactor::<u32>::quotient_for(w_b, q);
-
-        // AVX-512
-        unsafe {
-            let (v_x, v_y) = t8_load_xy(avx_buf.as_ptr().cast::<__m512i>());
-            let v_w = _mm512_set_epi32(
-                w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32, w_b as i32,
-                w_b as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32, w_a as i32,
-                w_a as i32, w_a as i32,
-            );
-            let v_wp = _mm512_set_epi32(
-                wp_b as i32,
-                wp_b as i32,
-                wp_b as i32,
-                wp_b as i32,
-                wp_b as i32,
-                wp_b as i32,
-                wp_b as i32,
-                wp_b as i32,
-                wp_a as i32,
-                wp_a as i32,
-                wp_a as i32,
-                wp_a as i32,
-                wp_a as i32,
-                wp_a as i32,
-                wp_a as i32,
-                wp_a as i32,
-            );
-            let v_q = _mm512_set1_epi32(q as i32);
-            let v_two_q = _mm512_set1_epi32(two_q as i32);
-            let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-            t8_store_xy(v_x, v_y, avx_buf.as_mut_ptr().cast::<__m512i>());
-        }
-
-        // Scalar: block A (indices 0..15), block B (indices 16..31)
-        for block_idx in 0..2 {
-            let off = block_idx * 16;
-            let w = if block_idx == 0 { w_a } else { w_b };
-            let wp = if block_idx == 0 { wp_a } else { wp_b };
-            for i in 0..8 {
-                let (xs, ys) = scalar_buf[off..off + 16].split_at_mut(8);
-                scalar::fwd_butterfly(&mut xs[i], &mut ys[i], w, wp, q, two_q);
-            }
-        }
-
-        for i in 0..32 {
-            assert_eq!(
-                avx_buf[i], scalar_buf[i],
-                "T8 butterfly mismatch at index {i}"
-            );
-        }
-    }
-
-    /// Verify T8 load-store round-trip.
-    #[test]
-    fn test_t8_load_store_roundtrip() {
-        if !*HAS_AVX512F {
-            return;
-        }
-        let original: [u32; 32] = core::array::from_fn(|i| (i * 10) as u32);
-        unsafe {
-            let mut buf = original;
-            let (v_x, v_y) = t8_load_xy(buf.as_ptr().cast::<__m512i>());
-            t8_store_xy(v_x, v_y, buf.as_mut_ptr().cast::<__m512i>());
-            assert_eq!(buf, original, "T8 load-store roundtrip failed");
-        }
-    }
-
-    /// Verify `mul_mod_lazy_avx512` matches scalar for 16 distinct values.
-    #[test]
-    fn test_mul_mod_lazy_avx512() {
-        if !*HAS_AVX512F {
-            return;
-        }
-
-        let q: u32 = 132120577;
-
-        let ys: [u32; 16] = core::array::from_fn(|i| (100 * (i + 1)) as u32);
-        let ws: [u32; 16] = core::array::from_fn(|i| (10 * (i + 1)) as u32);
-        let wps: [u32; 16] = ws.map(|v| ShoupFactor::<u32>::quotient_for(v, q));
-
-        unsafe {
-            let v_y = _mm512_loadu_si512(ys.as_ptr().cast::<__m512i>());
-            let v_w = _mm512_loadu_si512(ws.as_ptr().cast::<__m512i>());
-            let v_wp = _mm512_loadu_si512(wps.as_ptr().cast::<__m512i>());
-            let v_q = _mm512_set1_epi32(q as i32);
-
-            let result = mul_mod_lazy_avx512(v_y, v_w, v_wp, v_q);
-
-            let mut out = [0u32; 16];
-            _mm512_storeu_si512(out.as_mut_ptr().cast::<__m512i>(), result);
-
-            for i in 0..16 {
-                let expected = scalar::mul_mod_lazy(ys[i], ws[i], wps[i], q);
-                assert_eq!(out[i], expected, "lane {i}: y={} w={}", ys[i], ws[i]);
+                let v = unsafe { _mm512_loadu_si512(chunk.as_mut_ptr().cast::<__m512i>()) };
+                let v = reduce_once_avx512(v, v_q);
+                unsafe { _mm512_storeu_si512(chunk.as_mut_ptr().cast::<__m512i>(), v) };
             }
         }
     }

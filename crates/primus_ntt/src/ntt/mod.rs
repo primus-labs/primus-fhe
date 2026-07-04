@@ -6,7 +6,6 @@ use crate::{NttError, root::PrimitiveRoot};
 
 #[cfg(feature = "concrete-ntt")]
 mod concrete;
-mod constants;
 mod hexl;
 mod primitive;
 mod u32;
