@@ -114,7 +114,7 @@ impl U32NttTable {
     }
 
     /// Dispatch forward transform to the selected backend.
-    fn dispatch_forward(&self, values: &mut [u32], output_mod_factor: u32) {
+    fn dispatch_forward(&self, values: &mut [u32], input_mod_factor: u32, output_mod_factor: u32) {
         match self.backend {
             U32Backend::Scalar => scalar::forward_transform(
                 values,
@@ -122,6 +122,7 @@ impl U32NttTable {
                 self.two_q,
                 &self.roots,
                 &self.roots_precon,
+                input_mod_factor,
                 output_mod_factor,
             ),
             #[cfg(target_arch = "x86_64")]
@@ -135,6 +136,7 @@ impl U32NttTable {
                         self.two_q,
                         &self.roots,
                         &self.roots_precon,
+                        input_mod_factor,
                         output_mod_factor,
                     )
                 }
@@ -143,7 +145,7 @@ impl U32NttTable {
     }
 
     /// Dispatch inverse transform to the selected backend.
-    fn dispatch_inverse(&self, values: &mut [u32], output_mod_factor: u32) {
+    fn dispatch_inverse(&self, values: &mut [u32], input_mod_factor: u32, output_mod_factor: u32) {
         match self.backend {
             U32Backend::Scalar => scalar::inverse_transform(
                 values,
@@ -153,6 +155,7 @@ impl U32NttTable {
                 self.inv_n_precon,
                 &self.inv_roots,
                 &self.inv_roots_precon,
+                input_mod_factor,
                 output_mod_factor,
             ),
             #[cfg(target_arch = "x86_64")]
@@ -168,6 +171,7 @@ impl U32NttTable {
                         self.inv_n_precon,
                         &self.inv_roots,
                         &self.inv_roots_precon,
+                        input_mod_factor,
                         output_mod_factor,
                     )
                 }
@@ -302,22 +306,22 @@ impl NttTable for U32NttTable {
 
     fn lazy_transform_slice(&self, poly: &mut [u32]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 4);
+        self.dispatch_forward(poly, 4, 4);
     }
 
     fn transform_slice(&self, poly: &mut [u32]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 1);
+        self.dispatch_forward(poly, 4, 1);
     }
 
     fn lazy_inverse_transform_slice(&self, values: &mut [u32]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 2);
+        self.dispatch_inverse(values, 2, 2);
     }
 
     fn inverse_transform_slice(&self, values: &mut [u32]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 1);
+        self.dispatch_inverse(values, 2, 1);
     }
 
     fn transform_monomial(&self, coeff: u32, degree: usize, values: &mut [u32]) {

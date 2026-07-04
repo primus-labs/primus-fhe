@@ -37,7 +37,12 @@ pub(super) fn mul_mod_lazy(y: u32, w: u32, w_precon: u32, q: u32) -> u32 {
 /// Output: bit-reversed order.
 ///
 /// Note: uses Barrett lazy multiply with `q < 2^30` guarantee. The final
-/// reduction (when `output_mod_factor == 1`) brings `[0, 4q)` → `[0, q)`.
+/// reduction (when `output_mod_factor == 1`) brings `[0, 4q)` -> `[0, q)`.
+///
+/// `input_mod_factor`:
+/// - `1`: input in `[0, q)`
+/// - `2`: input in `[0, 2q)`
+/// - `4`: input in `[0, 4q)`
 ///
 /// `output_mod_factor`:
 /// - `4`: output in `[0, 4q)` (lazy)
@@ -49,8 +54,13 @@ pub fn forward_transform(
     two_q: u32,
     roots: &[u32],
     roots_precon: &[u32],
+    input_mod_factor: u32,
     output_mod_factor: u32,
 ) {
+    debug_assert!(
+        matches!(input_mod_factor, 1 | 2 | 4),
+        "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
+    );
     debug_assert!(
         output_mod_factor == 1 || output_mod_factor == 4,
         "output_mod_factor must be 1 or 4; got {output_mod_factor}"
@@ -194,6 +204,10 @@ pub(super) fn inv_butterfly(x: &mut u32, y: &mut u32, w: u32, wp: u32, q: u32, t
 ///
 /// Note: uses Barrett lazy multiply with `q < 2^30` guarantee.
 ///
+/// `input_mod_factor`:
+/// - `1`: input in `[0, q)`
+/// - `2`: input in `[0, 2q)`
+///
 /// `output_mod_factor`:
 /// - `2`: output in `[0, 2q)` (lazy)
 /// - `1`: output in `[0, q)` (canonical)
@@ -206,8 +220,13 @@ pub fn inverse_transform(
     inv_n_precon: u32,
     inv_roots: &[u32],
     inv_roots_precon: &[u32],
+    input_mod_factor: u32,
     output_mod_factor: u32,
 ) {
+    debug_assert!(
+        input_mod_factor == 1 || input_mod_factor == 2,
+        "input_mod_factor must be 1 or 2; got {input_mod_factor}"
+    );
     debug_assert!(
         output_mod_factor == 1 || output_mod_factor == 2,
         "output_mod_factor must be 1 or 2; got {output_mod_factor}"

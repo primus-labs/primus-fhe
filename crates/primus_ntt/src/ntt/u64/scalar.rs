@@ -1,5 +1,3 @@
-use primus_factor::{FactorBase, FactorMul, LazyFactorMul, ShoupFactor};
-
 /// Returns `x mod q`, assuming `x < 2 * q`.
 ///
 /// Branchless: `x.min(x.wrapping_sub(q))`.
@@ -18,6 +16,22 @@ pub fn reduce_twice(x: u64, q: u64, two_q: u64) -> u64 {
     reduce_once(reduce_once(x, two_q), q)
 }
 
+/// Plain Barrett lazy multiply for u64 with 64-bit shift.
+///
+/// Matches `ShoupFactor<u64>::lazy_factor_mul_modulo` without constructing a
+/// factor object in the hot path. The result is congruent to `y * w (mod q)`
+/// and stays in `[0, 2q)` for Harvey lazy operands when `q < 2^62`.
+#[inline(always)]
+pub(super) fn mul_mod_lazy(y: u64, w: u64, w_precon: u64, q: u64) -> u64 {
+    let qhat = ((y as u128).wrapping_mul(w_precon as u128) >> 64) as u64;
+    w.wrapping_mul(y).wrapping_sub(q.wrapping_mul(qhat))
+}
+
+#[inline(always)]
+fn quotient_for(w: u64, q: u64) -> u64 {
+    (((w as u128) << 64) / q as u128) as u64
+}
+
 /// Harvey forward butterfly (radix-2).
 ///
 /// Assumes `*x` and `*y` are in `[0, 4q)`.
@@ -26,8 +40,7 @@ pub fn reduce_twice(x: u64, q: u64, two_q: u64) -> u64 {
 #[inline(always)]
 pub fn fwd_butterfly(x: &mut u64, y: &mut u64, w: u64, w_precon: u64, q: u64, two_q: u64) {
     let tx = reduce_once(*x, two_q);
-    let sf = ShoupFactor::<u64>::from_raw(w, w_precon);
-    let t = sf.lazy_factor_mul_modulo(*y, q);
+    let t = mul_mod_lazy(*y, w, w_precon, q);
     *x = tx + t;
     *y = tx + two_q - t;
 }
@@ -42,8 +55,7 @@ pub fn inv_butterfly(x: &mut u64, y: &mut u64, w: u64, w_precon: u64, q: u64, tw
     let tx = *x + *y;
     let y_red = *x + two_q - *y;
     *x = reduce_once(tx, two_q);
-    let sf = ShoupFactor::<u64>::from_raw(w, w_precon);
-    *y = sf.lazy_factor_mul_modulo(y_red, q);
+    *y = mul_mod_lazy(y_red, w, w_precon, q);
 }
 
 /// Forward NTT (radix-2, Cooley-Tukey, in-place).
@@ -51,10 +63,14 @@ pub fn inv_butterfly(x: &mut u64, y: &mut u64, w: u64, w_precon: u64, q: u64, tw
 /// Input: normal order, coefficients in `[0, 4q)`.
 /// Output: bit-reversed order.
 ///
-/// Note: calls [`ShoupFactor::lazy_factor_mul_modulo`] with lazy operands
-/// (up to `4q`). The Barrett formula remains correct for inputs that exceed
-/// the documented `b < modulus` precondition, because `q < 2^62` guarantees
-/// all intermediate products fit in `u128`.
+/// Note: uses Barrett lazy multiply with lazy operands (up to `4q`).
+/// The Barrett formula remains correct because `q < 2^62` guarantees all
+/// intermediate products fit in `u128`.
+///
+/// `input_mod_factor`:
+/// - `1`: input in `[0, q)`
+/// - `2`: input in `[0, 2q)`
+/// - `4`: input in `[0, 4q)`
 ///
 /// `output_mod_factor`:
 /// - `4`: output in `[0, 4q)` (lazy)
@@ -66,8 +82,13 @@ pub fn forward_transform(
     two_q: u64,
     roots: &[u64],
     roots_precon: &[u64],
+    input_mod_factor: u32,
     output_mod_factor: u32,
 ) {
+    debug_assert!(
+        matches!(input_mod_factor, 1 | 2 | 4),
+        "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
+    );
     debug_assert!(
         output_mod_factor == 1 || output_mod_factor == 4,
         "output_mod_factor must be 1 or 4; got {output_mod_factor}"
@@ -185,6 +206,10 @@ pub fn forward_transform(
 ///
 /// The final stage fuses multiplication by `inv_n` for both halves.
 ///
+/// `input_mod_factor`:
+/// - `1`: input in `[0, q)`
+/// - `2`: input in `[0, 2q)`
+///
 /// `output_mod_factor`:
 /// - `2`: output in `[0, 2q)` (lazy)
 /// - `1`: output in `[0, q)` (canonical)
@@ -197,8 +222,13 @@ pub fn inverse_transform(
     inv_n_precon: u64,
     inv_roots: &[u64],
     inv_roots_precon: &[u64],
+    input_mod_factor: u32,
     output_mod_factor: u32,
 ) {
+    debug_assert!(
+        input_mod_factor == 1 || input_mod_factor == 2,
+        "input_mod_factor must be 1 or 2; got {input_mod_factor}"
+    );
     debug_assert!(
         output_mod_factor == 1 || output_mod_factor == 2,
         "output_mod_factor must be 1 or 2; got {output_mod_factor}"
@@ -305,17 +335,16 @@ pub fn inverse_transform(
     // Final stage: multiply by inv_n and inv_n * last_w.
     let last_w = w_iter.next().unwrap();
 
-    let inv_n_sf = ShoupFactor::<u64>::from_raw(inv_n, inv_n_precon);
-    let inv_n_w = inv_n_sf.factor_mul_modulo(last_w, q);
-    let inv_n_w_sf = ShoupFactor::<u64>::new(inv_n_w, q);
+    let inv_n_w = reduce_once(mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
+    let inv_n_w_precon = quotient_for(inv_n_w, q);
 
     let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
 
     for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
         let tx = reduce_once(x.wrapping_add(*y), two_q);
         let ty = x.wrapping_add(two_q).wrapping_sub(*y);
-        *x = inv_n_sf.lazy_factor_mul_modulo(tx, q);
-        *y = inv_n_w_sf.lazy_factor_mul_modulo(ty, q);
+        *x = mul_mod_lazy(tx, inv_n, inv_n_precon, q);
+        *y = mul_mod_lazy(ty, inv_n_w, inv_n_w_precon, q);
     }
 
     if output_mod_factor == 1 {

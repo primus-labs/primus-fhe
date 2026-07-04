@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use aligned_vec::AVec;
 use primus_data::{DataMut, RawData};
 use primus_factor::MultiplyFactor;
@@ -28,8 +26,9 @@ mod utils;
 
 pub use utils::CmpInt;
 
-static HAS_AVX512IFMA: LazyLock<bool> = LazyLock::new(|| is_x86_feature_detected!("avx512ifma"));
-static HAS_AVX512DQ: LazyLock<bool> = LazyLock::new(|| is_x86_feature_detected!("avx512dq"));
+/// Re-export from `crate::ntt::constants` so `dispatch` and module body
+/// code keep working without path changes.
+pub(super) use super::constants::{HAS_AVX512DQ, HAS_AVX512IFMA};
 
 /// Performs negacyclic forward and inverse number-theoretic transforms (NTT),
 /// commonly used in RLWE cryptography.

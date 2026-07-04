@@ -15,7 +15,7 @@ primus_gcd = { path = "../primus_gcd" }
 
 thiserror = { workspace = true }
 rand = { workspace = true }
-concrete-ntt = { git = "https://github.com/serendipity-crypto/concrete-ntt", branch = "sync_from_tfhe_ntt", optional = true }
+concrete-ntt = { git = "https://github.com/haofeiliang/concrete-ntt", branch = "sync_from_tfhe_ntt", optional = true }
 aligned-vec = "0.6.4"
 
 [dev-dependencies]
@@ -32,9 +32,25 @@ simd = [
 ]
 
 [[bench]]
-name = "ntt"
+name = "ntt_u32_scalar"
 harness = false
 
 [[bench]]
-name = "avx2_ntt"
+name = "ntt_u32_avx2"
+harness = false
+
+[[bench]]
+name = "ntt_u32_avx512"
+harness = false
+
+[[bench]]
+name = "ntt_u64_scalar"
+harness = false
+
+[[bench]]
+name = "ntt_u64_avx2"
+harness = false
+
+[[bench]]
+name = "ntt_u64_avx512"
 harness = false

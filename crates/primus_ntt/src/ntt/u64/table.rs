@@ -7,16 +7,17 @@ use primus_reduce::FieldContext;
 
 use crate::{NttError, ntt::NttTable, reverse::ReverseLsbs, root::PrimitiveRoot};
 
+#[cfg(target_arch = "x86_64")]
+use super::avx2;
 use super::scalar;
 
 /// Backend selector for `U64NttTable`.
-///
-/// Currently only scalar is implemented. AVX512 and NEON backends
-/// will be added in later phases. AVX2 for u64 is expected to remain
-/// scalar-fallback unless benchmarks prove otherwise.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum U64Backend {
     Scalar,
+    /// AVX2 backend — available on x86_64 with `avx2` target feature.
+    #[cfg(target_arch = "x86_64")]
+    Avx2,
 }
 
 /// Specialized NTT table for `u64` coefficients.
@@ -113,6 +114,72 @@ impl U64NttTable {
     pub fn inv_n(&self) -> u64 {
         self.inv_n
     }
+
+    /// Dispatch forward transform to the selected backend.
+    fn dispatch_forward(&self, values: &mut [u64], input_mod_factor: u32, output_mod_factor: u32) {
+        match self.backend {
+            U64Backend::Scalar => scalar::forward_transform(
+                values,
+                self.q,
+                self.two_q,
+                &self.roots,
+                &self.roots_precon,
+                input_mod_factor,
+                output_mod_factor,
+            ),
+            #[cfg(target_arch = "x86_64")]
+            U64Backend::Avx2 => {
+                // SAFETY: Avx2 backend is only selected when
+                // avx2::HAS_AVX2 is true at construction time.
+                unsafe {
+                    avx2::forward_transform(
+                        values,
+                        self.q,
+                        self.two_q,
+                        &self.roots,
+                        &self.roots_precon,
+                        input_mod_factor,
+                        output_mod_factor,
+                    )
+                }
+            }
+        }
+    }
+
+    /// Dispatch inverse transform to the selected backend.
+    fn dispatch_inverse(&self, values: &mut [u64], input_mod_factor: u32, output_mod_factor: u32) {
+        match self.backend {
+            U64Backend::Scalar => scalar::inverse_transform(
+                values,
+                self.q,
+                self.two_q,
+                self.inv_n,
+                self.inv_n_precon,
+                &self.inv_roots,
+                &self.inv_roots_precon,
+                input_mod_factor,
+                output_mod_factor,
+            ),
+            #[cfg(target_arch = "x86_64")]
+            U64Backend::Avx2 => {
+                // SAFETY: Avx2 backend is only selected when
+                // avx2::HAS_AVX2 is true at construction time.
+                unsafe {
+                    avx2::inverse_transform(
+                        values,
+                        self.q,
+                        self.two_q,
+                        self.inv_n,
+                        self.inv_n_precon,
+                        &self.inv_roots,
+                        &self.inv_roots_precon,
+                        input_mod_factor,
+                        output_mod_factor,
+                    )
+                }
+            }
+        }
+    }
 }
 
 impl NttTable for U64NttTable {
@@ -203,6 +270,13 @@ impl NttTable for U64NttTable {
             inv_roots_precon,
             ordinal_roots,
             reverse_lsbs,
+            #[cfg(target_arch = "x86_64")]
+            backend: if *avx2::HAS_AVX2 {
+                U64Backend::Avx2
+            } else {
+                U64Backend::Scalar
+            },
+            #[cfg(not(target_arch = "x86_64"))]
             backend: U64Backend::Scalar,
         })
     }
@@ -232,54 +306,22 @@ impl NttTable for U64NttTable {
 
     fn lazy_transform_slice(&self, poly: &mut [u64]) {
         debug_assert_eq!(poly.len(), self.n);
-        scalar::forward_transform(
-            poly,
-            self.q,
-            self.two_q,
-            &self.roots,
-            &self.roots_precon,
-            4, // output_mod_factor = 4 → [0, 4q)
-        );
+        self.dispatch_forward(poly, 4, 4);
     }
 
     fn transform_slice(&self, poly: &mut [u64]) {
         debug_assert_eq!(poly.len(), self.n);
-        scalar::forward_transform(
-            poly,
-            self.q,
-            self.two_q,
-            &self.roots,
-            &self.roots_precon,
-            1, // output_mod_factor = 1 → [0, q)
-        );
+        self.dispatch_forward(poly, 4, 1);
     }
 
     fn lazy_inverse_transform_slice(&self, values: &mut [u64]) {
         debug_assert_eq!(values.len(), self.n);
-        scalar::inverse_transform(
-            values,
-            self.q,
-            self.two_q,
-            self.inv_n,
-            self.inv_n_precon,
-            &self.inv_roots,
-            &self.inv_roots_precon,
-            2, // output_mod_factor = 2 → [0, 2q)
-        );
+        self.dispatch_inverse(values, 2, 2);
     }
 
     fn inverse_transform_slice(&self, values: &mut [u64]) {
         debug_assert_eq!(values.len(), self.n);
-        scalar::inverse_transform(
-            values,
-            self.q,
-            self.two_q,
-            self.inv_n,
-            self.inv_n_precon,
-            &self.inv_roots,
-            &self.inv_roots_precon,
-            1, // output_mod_factor = 1 → [0, q)
-        );
+        self.dispatch_inverse(values, 2, 1);
     }
 
     fn transform_monomial(&self, coeff: u64, degree: usize, values: &mut [u64]) {
