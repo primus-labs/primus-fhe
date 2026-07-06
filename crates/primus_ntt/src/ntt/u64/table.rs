@@ -40,24 +40,31 @@ pub struct U64NttTable {
     log_n: u32,
     pub(super) q: u64,
     pub(super) two_q: u64,
+    /// True when `q < 2^30` — enables Barrett-32 multiply in scalar paths.
+    pub(super) low_q: bool,
     root: u64,
     inv_root: u64,
 
     pub(super) inv_n: u64,
-    pub(super) inv_n_precon: u64,
+    pub(super) inv_n_precon32: u64,
+    pub(super) inv_n_precon64: u64,
     /// `inv_n * inv_roots[n-1] mod q` — precomputed for the inverse final stage.
     pub(super) inv_n_w: u64,
     /// Shoup preconditioner for `inv_n_w`.
-    pub(super) inv_n_w_precon: u64,
+    pub(super) inv_n_w_precon32: u64,
+    pub(super) inv_n_w_precon64: u64,
 
     /// Forward roots in bit-reversed order (size `n`).
     pub(super) roots: AVec<u64>,
+    /// Barrett-32 preconditioners for `roots` (scalar fast path, `q < 2^30`).
+    /// Always available — not gated by `target_arch`.
+    pub(super) roots_precon32: AVec<u64>,
     /// Barrett-64 preconditioners for `roots` (size `n`).
-    pub(super) roots_precon: AVec<u64>,
+    pub(super) roots_precon64: AVec<u64>,
     /// Inverse roots in bit-reversed order (size `n`).
     pub(super) inv_roots: AVec<u64>,
     /// Barrett-64 preconditioners for `inv_roots` (size `n`).
-    pub(super) inv_roots_precon: AVec<u64>,
+    pub(super) inv_roots_precon64: AVec<u64>,
 
     /// Ordinal powers: `[1, w, w^2, ..., w^(2n-1)]` (size `2n`).
     ordinal_roots: Vec<u64>,
@@ -92,9 +99,9 @@ pub struct U64NttTable {
     #[cfg(target_arch = "x86_64")]
     avx512_roots_precon64: AVec<u64>,
 
-    /// Barrett-32 preconditioners for `inv_roots` (DQ-32 inverse).
-    #[cfg(target_arch = "x86_64")]
-    inv_roots_precon32: AVec<u64>,
+    /// Barrett-32 preconditioners for `inv_roots` (scalar + DQ-32 inverse).
+    /// Always available — not gated by `target_arch`.
+    pub(super) inv_roots_precon32: AVec<u64>,
     /// Barrett-52 preconditioners for `inv_roots` (IFMA inverse).
     #[cfg(target_arch = "x86_64")]
     inv_roots_precon52: AVec<u64>,
@@ -272,12 +279,18 @@ impl U64NttTable {
                 };
             }
 
-            if matches!(self.backend, U64Backend::Avx2) {
+            // Skip AVX2 when q is small — scalar Barrett‑32 is faster than
+            // AVX2 Barrett‑64 for these primes.
+            if matches!(self.backend, U64Backend::Avx2) && !self.low_q {
                 return unsafe { self.avx2_forward_transform(values, output_mod_factor) };
             }
         }
 
-        self.scalar_forward_transform(values, output_mod_factor);
+        if self.low_q {
+            self.scalar_forward_transform::<32>(values, output_mod_factor);
+        } else {
+            self.scalar_forward_transform::<64>(values, output_mod_factor);
+        }
     }
 
     /// Dispatch inverse transform to the selected backend.
@@ -329,7 +342,7 @@ impl U64NttTable {
                             self.q,
                             self.inv_n,
                             &self.inv_roots,
-                            &self.inv_roots_precon,
+                            &self.inv_roots_precon64,
                             1,
                             output_mod_factor as u64,
                             0,
@@ -339,12 +352,16 @@ impl U64NttTable {
                 };
             }
 
-            if matches!(self.backend, U64Backend::Avx2) {
+            if matches!(self.backend, U64Backend::Avx2) && !self.low_q {
                 return unsafe { self.avx2_inverse_transform(values, output_mod_factor) };
             }
         }
 
-        self.scalar_inverse_transform(values, output_mod_factor);
+        if self.low_q {
+            self.scalar_inverse_transform::<32>(values, output_mod_factor);
+        } else {
+            self.scalar_inverse_transform::<64>(values, output_mod_factor);
+        }
     }
 }
 
@@ -370,6 +387,7 @@ impl NttTable for U64NttTable {
 
         let n = 1usize << log_n;
         let two_q = q << 1;
+        let low_q = q < (1u64 << 30);
 
         // --- ordinal roots: [1, w, w^2, ..., w^(2n-1)] ---
         let root_sf = ShoupFactor::<u64>::new(root, q);
@@ -403,13 +421,26 @@ impl NttTable for U64NttTable {
         }
 
         // --- Shoup preconditioners ---
-        let roots_precon = AVec::from_iter(
+        // Barrett-32 precons for the scalar fast path (q < 2^30).
+        // Barrett-32 precons for scalar fast path (and reused by AVX-512 DQ-32
+        // inverse).  Built unconditionally when q is small enough.
+        let roots_precon32 = if low_q {
+            super::avx512::precompute::build_barrett_vector(&roots, 32, q)
+        } else {
+            AVec::with_capacity(64, 0)
+        };
+        let inv_roots_precon32 = if low_q {
+            super::avx512::precompute::build_barrett_vector(&inv_roots, 32, q)
+        } else {
+            AVec::with_capacity(64, 0)
+        };
+        let roots_precon64 = AVec::from_iter(
             64,
             roots
                 .iter()
                 .map(|&w| ShoupFactor::<u64>::quotient_for(w, q)),
         );
-        let inv_roots_precon = AVec::from_iter(
+        let inv_roots_precon64 = AVec::from_iter(
             64,
             inv_roots
                 .iter()
@@ -418,12 +449,23 @@ impl NttTable for U64NttTable {
 
         // --- inv_n = n^{-1} mod q ---
         let inv_n = mod_inv(n as u64, q);
-        let inv_n_precon = ShoupFactor::<u64>::quotient_for(inv_n, q);
+        let inv_n_precon64 = ShoupFactor::<u64>::quotient_for(inv_n, q);
+        let inv_n_precon32 = if low_q {
+            (inv_n << 32).wrapping_div(q)
+        } else {
+            0
+        };
 
         // Precompute inv_n_w = inv_n * inv_roots[n-1] mod q for the inverse final stage.
         let last_w = unsafe { *inv_roots.get_unchecked(n - 1) };
-        let inv_n_w = scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon, q), q);
-        let inv_n_w_precon = ShoupFactor::<u64>::quotient_for(inv_n_w, q);
+        let inv_n_w =
+            scalar::reduce_once(scalar::mul_mod_lazy(last_w, inv_n, inv_n_precon64, q), q);
+        let inv_n_w_precon64 = ShoupFactor::<u64>::quotient_for(inv_n_w, q);
+        let inv_n_w_precon32 = if low_q {
+            (inv_n_w << 32).wrapping_div(q)
+        } else {
+            0
+        };
 
         // --- backend selector (best available) ---
         #[cfg(target_arch = "x86_64")]
@@ -450,9 +492,9 @@ impl NttTable for U64NttTable {
         let (avx2_roots, avx2_roots_precon, avx2_inv_roots, avx2_inv_roots_precon) = if use_avx2 {
             (
                 build_avx2_roots_u64(n, &roots, false),
-                build_avx2_roots_u64(n, &roots_precon, false),
+                build_avx2_roots_u64(n, &roots_precon64, false),
                 build_avx2_roots_u64(n, &inv_roots, true),
-                build_avx2_roots_u64(n, &inv_roots_precon, true),
+                build_avx2_roots_u64(n, &inv_roots_precon64, true),
             )
         } else {
             (
@@ -467,24 +509,23 @@ impl NttTable for U64NttTable {
         #[cfg(target_arch = "x86_64")]
         let use_avx512 = matches!(backend, U64Backend::Avx512Ifma | U64Backend::Avx512Dq);
         #[cfg(target_arch = "x86_64")]
+        // Reuse the scalar inv_roots_precon32 if already built; otherwise
+        // build it here for the AVX-512 DQ-32 inverse path.
         let (
             avx512_roots,
             avx512_roots_precon32,
             avx512_roots_precon52,
             avx512_roots_precon64,
-            inv_roots_precon32,
             inv_roots_precon52,
         ) = if use_avx512 {
             let ar = super::avx512::precompute::build_avx512_root_powers(n, &roots);
             let arp32 = super::avx512::precompute::build_barrett_vector(&ar, 32, q);
             let arp52 = super::avx512::precompute::build_barrett_vector(&ar, 52, q);
             let arp64 = super::avx512::precompute::build_barrett_vector(&ar, 64, q);
-            let irp32 = super::avx512::precompute::build_barrett_vector(&inv_roots, 32, q);
             let irp52 = super::avx512::precompute::build_barrett_vector(&inv_roots, 52, q);
-            (ar, arp32, arp52, arp64, irp32, irp52)
+            (ar, arp32, arp52, arp64, irp52)
         } else {
             (
-                AVec::with_capacity(64, 0),
                 AVec::with_capacity(64, 0),
                 AVec::with_capacity(64, 0),
                 AVec::with_capacity(64, 0),
@@ -498,16 +539,20 @@ impl NttTable for U64NttTable {
             log_n,
             q,
             two_q,
+            low_q,
             root,
             inv_root,
             inv_n,
-            inv_n_precon,
+            inv_n_precon32,
+            inv_n_precon64,
             inv_n_w,
-            inv_n_w_precon,
+            inv_n_w_precon32,
+            inv_n_w_precon64,
             roots,
-            roots_precon,
+            roots_precon32,
+            roots_precon64,
             inv_roots,
-            inv_roots_precon,
+            inv_roots_precon64,
             ordinal_roots,
             reverse_lsbs,
             #[cfg(target_arch = "x86_64")]
@@ -526,7 +571,6 @@ impl NttTable for U64NttTable {
             avx512_roots_precon52,
             #[cfg(target_arch = "x86_64")]
             avx512_roots_precon64,
-            #[cfg(target_arch = "x86_64")]
             inv_roots_precon32,
             #[cfg(target_arch = "x86_64")]
             inv_roots_precon52,
@@ -907,6 +951,41 @@ mod tests {
             u64_table.inverse_transform_slice(&mut data_u64);
             uint_table.inverse_transform_slice(&mut data_uint);
             assert_eq!(data_u64, data_uint, "inverse mismatch vs uint for q={q}");
+        }
+    }
+
+    /// Verify that Barrett-32 and Barrett-64 scalar paths produce identical
+    /// results for a low‑q prime.  This catches bugs in the `BIT_SHIFT`
+    /// const‑generic dispatch before any SIMD backend runs.
+    #[test]
+    fn test_bit_shift_consensus() {
+        let q = 132120577u64; // 27‑bit prime → low_q = true
+        let q_mod = <BarrettModulus<u64>>::new(q);
+        let table = U64NttTable::new(10, q_mod).unwrap();
+        let mut rng = rand::rng();
+
+        let n = table.n();
+        let mut data32: Vec<u64> = (0..n).map(|_| rng.random_range(0..q)).collect();
+        let mut data64 = data32.clone();
+
+        // Forward: both paths must agree modulo q
+        table.scalar_forward_transform::<32>(&mut data32, 1);
+        table.scalar_forward_transform::<64>(&mut data64, 1);
+        for i in 0..n {
+            assert_eq!(
+                data32[i], data64[i],
+                "forward BIT_SHIFT=32 vs 64 mismatch at index {i}"
+            );
+        }
+
+        // Inverse: both paths must agree modulo q
+        table.scalar_inverse_transform::<32>(&mut data32, 1);
+        table.scalar_inverse_transform::<64>(&mut data64, 1);
+        for i in 0..n {
+            assert_eq!(
+                data32[i], data64[i],
+                "inverse BIT_SHIFT=32 vs 64 mismatch at index {i}"
+            );
         }
     }
 }

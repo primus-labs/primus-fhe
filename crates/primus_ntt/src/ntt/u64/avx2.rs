@@ -359,7 +359,7 @@ impl U64NttTable {
         let two_q = self.two_q;
 
         let roots = self.roots.as_slice();
-        let roots_precon = self.roots_precon.as_slice();
+        let roots_precon = self.roots_precon64.as_slice();
         let avx2_roots = self.avx2_roots.as_slice();
         let avx2_roots_precon = self.avx2_roots_precon.as_slice();
 
@@ -508,11 +508,11 @@ impl U64NttTable {
         let two_q = self.two_q;
 
         let inv_n = self.inv_n;
-        let inv_n_precon = self.inv_n_precon;
+        let inv_n_precon = self.inv_n_precon64;
         let inv_n_w = self.inv_n_w;
-        let inv_n_w_precon = self.inv_n_w_precon;
+        let inv_n_w_precon = self.inv_n_w_precon64;
         let inv_roots = self.inv_roots.as_slice();
-        let inv_roots_precon = self.inv_roots_precon.as_slice();
+        let inv_roots_precon = self.inv_roots_precon64.as_slice();
         let avx2_inv_roots = self.avx2_inv_roots.as_slice();
         let avx2_inv_roots_precon = self.avx2_inv_roots_precon.as_slice();
 

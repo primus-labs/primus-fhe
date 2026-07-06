@@ -7,9 +7,9 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::{Concrete64Table, NttTable, U64NttTable, UintNttTable};
 use rand::distr::{Distribution, Uniform};
 
-const SCALAR_CASES: [(u64, usize); 1] = [(1125899906826241, 4096)];
-const AVX2_CASES: [(u64, usize); 1] = SCALAR_CASES;
-const AVX512_CASES: [(u64, usize); 1] = SCALAR_CASES;
+const SCALAR_CASES: [(u64, usize); 2] = [(1073692673, 4096), (1125899906826241, 4096)];
+const AVX2_CASES: [(u64, usize); 2] = SCALAR_CASES;
+const AVX512_CASES: [(u64, usize); 2] = SCALAR_CASES;
 const POOL_SIZE: usize = 16;
 
 pub fn quick_criterion() -> Criterion {

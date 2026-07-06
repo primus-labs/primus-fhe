@@ -1,11 +1,8 @@
 use super::U64NttTable;
 
 /// Returns `x mod q`, assuming `x < 2 * q`.
-///
-/// Branchless: `x.min(x.wrapping_sub(q))`.
 #[inline(always)]
 pub fn reduce_once(x: u64, q: u64) -> u64 {
-    debug_assert!(x < 2 * q);
     x.min(x.wrapping_sub(q))
 }
 
@@ -13,47 +10,77 @@ pub fn reduce_once(x: u64, q: u64) -> u64 {
 /// `two_q` must equal `2 * q`.
 #[inline(always)]
 pub fn reduce_twice(x: u64, q: u64, two_q: u64) -> u64 {
-    debug_assert_eq!(two_q, 2 * q);
-    debug_assert!(x < 4 * q);
     reduce_once(reduce_once(x, two_q), q)
 }
 
-/// Plain Barrett lazy multiply for u64 with 64-bit shift.
+// ── Barrett lazy multiplies ────────────────────────────────────────────────
+
+/// Barrett-32 lazy multiply for `q < 2^30`.
 ///
-/// Matches `ShoupFactor<u64>::lazy_factor_mul_modulo` without constructing a
-/// factor object in the hot path. The result is congruent to `y * w (mod q)`
-/// and stays in `[0, 2q)` for Harvey lazy operands when `q < 2^62`.
+/// Exactly mirrors the u32 scalar version: widen to 64 bits for the high-half
+/// multiply, then use native 32-bit wrapping arithmetic for the subtraction.
+/// Because `q < 2^30` ⇒ the true result always lies in `[0, 2q) ⊂ [0, 2^32)`,
+/// the wrapping subtraction never actually wraps.
+#[inline(always)]
+pub(super) fn mul_mod_lazy32(y: u64, w: u64, w_precon32: u64, q: u64) -> u64 {
+    let qhat = (y.wrapping_mul(w_precon32 as u64) >> 32) as u32;
+    (w as u32)
+        .wrapping_mul(y as u32)
+        .wrapping_sub((q as u32).wrapping_mul(qhat)) as u64
+}
+
+/// Barrett-64 lazy multiply for `q < 2^62`.
 #[inline(always)]
 pub(super) fn mul_mod_lazy(y: u64, w: u64, w_precon: u64, q: u64) -> u64 {
     let qhat = ((y as u128).wrapping_mul(w_precon as u128) >> 64) as u64;
     w.wrapping_mul(y).wrapping_sub(q.wrapping_mul(qhat))
 }
 
+// ── Harvey butterflies ─────────────────────────────────────────────────────
+
 /// Harvey forward butterfly (radix-2).
 ///
-/// Assumes `*x` and `*y` are in `[0, 4q)`.
-/// Output: `*x` and `*y` are in `[0, 4q)` such that
-/// `x' = x + W*y (mod q)`, `y' = x - W*y (mod q)`.
+/// `BIT_SHIFT` selects the Barrett width: 32 for `q < 2^30`, 64 otherwise.
 #[inline(always)]
-pub fn fwd_butterfly(x: &mut u64, y: &mut u64, w: u64, w_precon: u64, q: u64, two_q: u64) {
+fn fwd_butterfly<const BIT_SHIFT: u32>(
+    x: &mut u64,
+    y: &mut u64,
+    w: u64,
+    w_precon: u64,
+    q: u64,
+    two_q: u64,
+) {
     let tx = reduce_once(*x, two_q);
-    let t = mul_mod_lazy(*y, w, w_precon, q);
+    let t = if BIT_SHIFT == 32 {
+        mul_mod_lazy32(*y, w, w_precon, q)
+    } else {
+        mul_mod_lazy(*y, w, w_precon, q)
+    };
     *x = tx + t;
     *y = tx + two_q - t;
 }
 
 /// Harvey inverse butterfly (radix-2).
-///
-/// Assumes `*x` and `*y` are in `[0, 2q)`.
-/// Output: `*x` and `*y` are in `[0, 2q)` such that
-/// `x' = x + y (mod q)`, `y' = W * (x - y) (mod q)`.
 #[inline(always)]
-pub fn inv_butterfly(x: &mut u64, y: &mut u64, w: u64, w_precon: u64, q: u64, two_q: u64) {
+fn inv_butterfly<const BIT_SHIFT: u32>(
+    x: &mut u64,
+    y: &mut u64,
+    w: u64,
+    w_precon: u64,
+    q: u64,
+    two_q: u64,
+) {
     let tx = *x + *y;
     let y_red = *x + two_q - *y;
     *x = reduce_once(tx, two_q);
-    *y = mul_mod_lazy(y_red, w, w_precon, q);
+    *y = if BIT_SHIFT == 32 {
+        mul_mod_lazy32(y_red, w, w_precon, q)
+    } else {
+        mul_mod_lazy(y_red, w, w_precon, q)
+    };
 }
+
+// ── Forward / inverse transforms ───────────────────────────────────────────
 
 impl U64NttTable {
     /// Forward NTT (radix-2, Cooley-Tukey, in-place).
@@ -61,10 +88,12 @@ impl U64NttTable {
     /// Input: normal order, coefficients in `[0, 4q)`.
     /// Output: bit-reversed order.
     ///
-    /// `output_mod_factor`:
-    /// - `4`: output in `[0, 4q)` (lazy)
-    /// - `1`: output in `[0, q)` (canonical)
-    pub fn scalar_forward_transform(&self, values: &mut [u64], output_mod_factor: u32) {
+    /// `BIT_SHIFT` selects the Barrett width: 32 for `q < 2^30`, 64 otherwise.
+    pub fn scalar_forward_transform<const BIT_SHIFT: u32>(
+        &self,
+        values: &mut [u64],
+        output_mod_factor: u32,
+    ) {
         let n = self.n;
         assert_eq!(values.len(), n);
 
@@ -77,7 +106,11 @@ impl U64NttTable {
         let two_q = self.two_q;
 
         let roots = self.roots.as_slice();
-        let roots_precon = self.roots_precon.as_slice();
+        let roots_precon = if BIT_SHIFT == 32 {
+            self.roots_precon32.as_slice()
+        } else {
+            self.roots_precon64.as_slice()
+        };
 
         let mut ri = 1usize; // skip roots[0]
 
@@ -111,14 +144,14 @@ impl U64NttTable {
                             y7,
                         ] = chunk;
 
-                        fwd_butterfly(x0, y0, w, wp, q, two_q);
-                        fwd_butterfly(x1, y1, w, wp, q, two_q);
-                        fwd_butterfly(x2, y2, w, wp, q, two_q);
-                        fwd_butterfly(x3, y3, w, wp, q, two_q);
-                        fwd_butterfly(x4, y4, w, wp, q, two_q);
-                        fwd_butterfly(x5, y5, w, wp, q, two_q);
-                        fwd_butterfly(x6, y6, w, wp, q, two_q);
-                        fwd_butterfly(x7, y7, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x0, y0, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x1, y1, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x2, y2, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x3, y3, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x4, y4, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x5, y5, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x6, y6, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x7, y7, w, wp, q, two_q);
                     }
                 }
                 4 => {
@@ -130,10 +163,10 @@ impl U64NttTable {
 
                         let [x0, x1, x2, x3, y0, y1, y2, y3] = chunk;
 
-                        fwd_butterfly(x0, y0, w, wp, q, two_q);
-                        fwd_butterfly(x1, y1, w, wp, q, two_q);
-                        fwd_butterfly(x2, y2, w, wp, q, two_q);
-                        fwd_butterfly(x3, y3, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x0, y0, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x1, y1, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x2, y2, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x3, y3, w, wp, q, two_q);
                     }
                 }
                 2 => {
@@ -145,8 +178,8 @@ impl U64NttTable {
 
                         let [x0, x1, y0, y1] = chunk;
 
-                        fwd_butterfly(x0, y0, w, wp, q, two_q);
-                        fwd_butterfly(x1, y1, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x0, y0, w, wp, q, two_q);
+                        fwd_butterfly::<{ BIT_SHIFT }>(x1, y1, w, wp, q, two_q);
                     }
                 }
                 1 => {
@@ -157,7 +190,7 @@ impl U64NttTable {
                             let wp = unsafe { *roots_precon.get_unchecked(ri) };
                             ri += 1;
                             let [x, y] = chunk;
-                            fwd_butterfly(x, y, w, wp, q, two_q);
+                            fwd_butterfly::<{ BIT_SHIFT }>(x, y, w, wp, q, two_q);
                             *x = reduce_twice(*x, q, two_q);
                             *y = reduce_twice(*y, q, two_q);
                         }
@@ -167,7 +200,7 @@ impl U64NttTable {
                             let wp = unsafe { *roots_precon.get_unchecked(ri) };
                             ri += 1;
                             let [x, y] = chunk;
-                            fwd_butterfly(x, y, w, wp, q, two_q);
+                            fwd_butterfly::<{ BIT_SHIFT }>(x, y, w, wp, q, two_q);
                         }
                     }
                 }
@@ -178,7 +211,7 @@ impl U64NttTable {
                         ri += 1;
                         let (xs, ys) = chunk.split_at_mut(t);
                         for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-                            fwd_butterfly(x, y, w, wp, q, two_q);
+                            fwd_butterfly::<{ BIT_SHIFT }>(x, y, w, wp, q, two_q);
                         }
                     }
                 }
@@ -195,10 +228,12 @@ impl U64NttTable {
     ///
     /// The final stage fuses multiplication by `inv_n` for both halves.
     ///
-    /// `output_mod_factor`:
-    /// - `2`: output in `[0, 2q)` (lazy)
-    /// - `1`: output in `[0, q)` (canonical)
-    pub fn scalar_inverse_transform(&self, values: &mut [u64], output_mod_factor: u32) {
+    /// `BIT_SHIFT` selects Barrett-32 (32) or Barrett-64 (64) throughout.
+    pub fn scalar_inverse_transform<const BIT_SHIFT: u32>(
+        &self,
+        values: &mut [u64],
+        output_mod_factor: u32,
+    ) {
         let n = self.n;
         assert_eq!(values.len(), n);
 
@@ -211,11 +246,25 @@ impl U64NttTable {
         let two_q = self.two_q;
 
         let inv_n = self.inv_n;
-        let inv_n_precon = self.inv_n_precon;
         let inv_n_w = self.inv_n_w;
-        let inv_n_w_precon = self.inv_n_w_precon;
+
+        let inv_n_precon = if BIT_SHIFT == 32 {
+            self.inv_n_precon32
+        } else {
+            self.inv_n_precon64
+        };
+        let inv_n_w_precon = if BIT_SHIFT == 32 {
+            self.inv_n_w_precon32
+        } else {
+            self.inv_n_w_precon64
+        };
+
         let inv_roots = self.inv_roots.as_slice();
-        let inv_roots_precon = self.inv_roots_precon.as_slice();
+        let inv_roots_precon = if BIT_SHIFT == 32 {
+            self.inv_roots_precon32.as_slice()
+        } else {
+            self.inv_roots_precon64.as_slice()
+        };
 
         let mut ri = 1usize; // skip inv_roots[0]
         let mut t = 1usize;
@@ -231,7 +280,7 @@ impl U64NttTable {
 
                         let [x, y] = chunk;
 
-                        inv_butterfly(x, y, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x, y, w, wp, q, two_q);
                     }
                 }
                 2 => {
@@ -243,8 +292,8 @@ impl U64NttTable {
 
                         let [x0, x1, y0, y1] = chunk;
 
-                        inv_butterfly(x0, y0, w, wp, q, two_q);
-                        inv_butterfly(x1, y1, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x0, y0, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x1, y1, w, wp, q, two_q);
                     }
                 }
                 4 => {
@@ -256,10 +305,10 @@ impl U64NttTable {
 
                         let [x0, x1, x2, x3, y0, y1, y2, y3] = chunk;
 
-                        inv_butterfly(x0, y0, w, wp, q, two_q);
-                        inv_butterfly(x1, y1, w, wp, q, two_q);
-                        inv_butterfly(x2, y2, w, wp, q, two_q);
-                        inv_butterfly(x3, y3, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x0, y0, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x1, y1, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x2, y2, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x3, y3, w, wp, q, two_q);
                     }
                 }
                 8 => {
@@ -288,14 +337,14 @@ impl U64NttTable {
                             y7,
                         ] = chunk;
 
-                        inv_butterfly(x0, y0, w, wp, q, two_q);
-                        inv_butterfly(x1, y1, w, wp, q, two_q);
-                        inv_butterfly(x2, y2, w, wp, q, two_q);
-                        inv_butterfly(x3, y3, w, wp, q, two_q);
-                        inv_butterfly(x4, y4, w, wp, q, two_q);
-                        inv_butterfly(x5, y5, w, wp, q, two_q);
-                        inv_butterfly(x6, y6, w, wp, q, two_q);
-                        inv_butterfly(x7, y7, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x0, y0, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x1, y1, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x2, y2, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x3, y3, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x4, y4, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x5, y5, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x6, y6, w, wp, q, two_q);
+                        inv_butterfly::<{ BIT_SHIFT }>(x7, y7, w, wp, q, two_q);
                     }
                 }
                 _ => {
@@ -305,7 +354,7 @@ impl U64NttTable {
                         ri += 1;
                         let (xs, ys) = chunk.split_at_mut(t);
                         for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-                            inv_butterfly(x, y, w, wp, q, two_q);
+                            inv_butterfly::<{ BIT_SHIFT }>(x, y, w, wp, q, two_q);
                         }
                     }
                 }
@@ -317,19 +366,37 @@ impl U64NttTable {
         // Final stage: multiply by inv_n and inv_n_w (precomputed).
         let (xs, ys) = unsafe { values.split_at_mut_unchecked(n / 2) };
 
-        if output_mod_factor == 1 {
-            for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-                let tx = reduce_once(x.wrapping_add(*y), two_q);
-                let ty = x.wrapping_add(two_q).wrapping_sub(*y);
-                *x = reduce_once(mul_mod_lazy(tx, inv_n, inv_n_precon, q), q);
-                *y = reduce_once(mul_mod_lazy(ty, inv_n_w, inv_n_w_precon, q), q);
+        if BIT_SHIFT == 32 {
+            if output_mod_factor == 1 {
+                for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
+                    let tx = reduce_once(x.wrapping_add(*y), two_q);
+                    let ty = x.wrapping_add(two_q).wrapping_sub(*y);
+                    *x = reduce_once(mul_mod_lazy32(tx, inv_n, inv_n_precon, q), q);
+                    *y = reduce_once(mul_mod_lazy32(ty, inv_n_w, inv_n_w_precon, q), q);
+                }
+            } else {
+                for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
+                    let tx = reduce_once(x.wrapping_add(*y), two_q);
+                    let ty = x.wrapping_add(two_q).wrapping_sub(*y);
+                    *x = mul_mod_lazy32(tx, inv_n, inv_n_precon, q);
+                    *y = mul_mod_lazy32(ty, inv_n_w, inv_n_w_precon, q);
+                }
             }
         } else {
-            for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-                let tx = reduce_once(x.wrapping_add(*y), two_q);
-                let ty = x.wrapping_add(two_q).wrapping_sub(*y);
-                *x = mul_mod_lazy(tx, inv_n, inv_n_precon, q);
-                *y = mul_mod_lazy(ty, inv_n_w, inv_n_w_precon, q);
+            if output_mod_factor == 1 {
+                for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
+                    let tx = reduce_once(x.wrapping_add(*y), two_q);
+                    let ty = x.wrapping_add(two_q).wrapping_sub(*y);
+                    *x = reduce_once(mul_mod_lazy(tx, inv_n, inv_n_precon, q), q);
+                    *y = reduce_once(mul_mod_lazy(ty, inv_n_w, inv_n_w_precon, q), q);
+                }
+            } else {
+                for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
+                    let tx = reduce_once(x.wrapping_add(*y), two_q);
+                    let ty = x.wrapping_add(two_q).wrapping_sub(*y);
+                    *x = mul_mod_lazy(tx, inv_n, inv_n_precon, q);
+                    *y = mul_mod_lazy(ty, inv_n_w, inv_n_w_precon, q);
+                }
             }
         }
     }
