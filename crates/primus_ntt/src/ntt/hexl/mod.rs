@@ -16,13 +16,13 @@ use crate::{
 
 mod butterfly;
 mod dispatch;
-mod internal;
+pub(crate) mod internal;
 mod number_theory;
-mod precompute;
+pub(crate) mod precompute;
 pub(crate) mod scalar;
 mod stages;
-mod transform;
-mod utils;
+pub(crate) mod transform;
+pub(crate) mod utils;
 
 pub use utils::CmpInt;
 
