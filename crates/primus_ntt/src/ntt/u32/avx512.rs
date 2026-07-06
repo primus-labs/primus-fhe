@@ -136,26 +136,6 @@ fn fwd_butterfly_avx512(
     (x_new, y_new)
 }
 
-/// Forward butterfly variant that skips `reduce_once(x, two_q)`.
-///
-/// Only valid when the caller guarantees `x < 2q` in every lane.
-/// Used in the first stage when `input_mod_factor <= 2`.
-#[target_feature(enable = "avx512f")]
-#[inline]
-fn fwd_butterfly_avx512_no_reduce_x(
-    x: __m512i,
-    y: __m512i,
-    w: __m512i,
-    wp: __m512i,
-    q: __m512i,
-    two_q: __m512i,
-) -> (__m512i, __m512i) {
-    let t = mul_mod_lazy_avx512(y, w, wp, q);
-    let x_new = _mm512_add_epi32(x, t);
-    let y_new = _mm512_sub_epi32(_mm512_add_epi32(x, two_q), t);
-    (x_new, y_new)
-}
-
 /// Inverse Harvey butterfly on 16 u32 lanes.
 #[target_feature(enable = "avx512f")]
 #[inline]
@@ -346,10 +326,6 @@ impl DeinterleaveMasks {
 /// When `reduce_output` is true, `reduce_twice_avx512` is applied to the
 /// butterfly output before re-interleaving — this fuses the canonical reduction
 /// for the final (t=1) stage.
-///
-/// When `reduce_x` is false, `fwd_butterfly_avx512_no_reduce_x` is used,
-/// skipping the `reduce_once(x, two_q)` step — valid only in the first stage
-/// when `input_mod_factor <= 2`.
 #[target_feature(enable = "avx512f")]
 #[inline]
 fn deinterleave_fwd_stage(
@@ -360,18 +336,13 @@ fn deinterleave_fwd_stage(
     v_two_q: __m512i,
     masks: &DeinterleaveMasks,
     reduce_output: bool,
-    reduce_x: bool,
 ) {
     unsafe {
         let v_a = _mm512_loadu_si512(ptr);
         let v_b = _mm512_loadu_si512(ptr.add(1));
         let v_x = _mm512_permutex2var_epi32(v_a, masks.idx_x, v_b);
         let v_y = _mm512_permutex2var_epi32(v_a, masks.idx_y, v_b);
-        let (v_x, v_y) = if reduce_x {
-            fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-        } else {
-            fwd_butterfly_avx512_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-        };
+        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
         let (v_x, v_y) = if reduce_output {
             (
                 reduce_twice_avx512(v_x, v_q, v_two_q),
@@ -431,21 +402,16 @@ impl U32NttTable {
     pub(crate) unsafe fn avx512_forward_transform(
         &self,
         values: &mut [u32],
-        input_mod_factor: u32,
         output_mod_factor: u32,
     ) {
         let n = self.n;
 
         if n < 64 {
-            return self.scalar_forward_transform(values, input_mod_factor, output_mod_factor);
+            return self.scalar_forward_transform(values, output_mod_factor);
         }
 
         assert_eq!(values.len(), n);
 
-        debug_assert!(
-            matches!(input_mod_factor, 1 | 2 | 4),
-            "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
-        );
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 4,
             "output_mod_factor must be 1 or 4; got {output_mod_factor}"
@@ -462,9 +428,6 @@ impl U32NttTable {
         let v_q = _mm512_set1_epi32(q as i32);
         let v_two_q = _mm512_set1_epi32(two_q as i32);
 
-        let skip_first_reduce_x = input_mod_factor <= 2;
-        let mut is_first_stage = true;
-
         let mut ri = 1usize; // skip roots[0] = 1 (for T16 broadcast stages)
         let mut avx_ri = 0usize; // index into pre-expanded arrays
 
@@ -472,9 +435,6 @@ impl U32NttTable {
         let mut m = 1;
 
         while m < n {
-            let reduce_x = !(is_first_stage && skip_first_reduce_x);
-            is_first_stage = false;
-
             if t >= 16 {
                 // --- AVX-512 path: t ≥ 16, process 16 butterflies at a time ---
                 for block in values.chunks_exact_mut(t * 2) {
@@ -493,11 +453,7 @@ impl U32NttTable {
                             unsafe { _mm512_loadu_si512(x_chunk.as_mut_ptr().cast::<__m512i>()) };
                         let v_y =
                             unsafe { _mm512_loadu_si512(y_chunk.as_mut_ptr().cast::<__m512i>()) };
-                        let (v_x, v_y) = if reduce_x {
-                            fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                        } else {
-                            fwd_butterfly_avx512_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                        };
+                        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
                         unsafe {
                             _mm512_storeu_si512(x_chunk.as_mut_ptr().cast::<__m512i>(), v_x);
                             _mm512_storeu_si512(y_chunk.as_mut_ptr().cast::<__m512i>(), v_y);
@@ -519,7 +475,7 @@ impl U32NttTable {
                     };
                     avx_ri += 16;
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks, false, reduce_x);
+                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks, false);
                 }
             } else {
                 // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, pre-expanded vector load ---
@@ -539,16 +495,7 @@ impl U32NttTable {
                     avx_ri += 16;
 
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    deinterleave_fwd_stage(
-                        ptr,
-                        v_w,
-                        v_wp,
-                        v_q,
-                        v_two_q,
-                        &masks,
-                        reduce_output,
-                        reduce_x,
-                    );
+                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks, reduce_output);
                 }
             }
             t >>= 1;
@@ -572,21 +519,16 @@ impl U32NttTable {
     pub(crate) unsafe fn avx512_inverse_transform(
         &self,
         values: &mut [u32],
-        input_mod_factor: u32,
         output_mod_factor: u32,
     ) {
         let n = self.n;
 
         if n < 64 {
-            return self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor);
+            return self.scalar_inverse_transform(values, output_mod_factor);
         }
 
         assert_eq!(values.len(), n);
 
-        debug_assert!(
-            input_mod_factor == 1 || input_mod_factor == 2,
-            "input_mod_factor must be 1 or 2; got {input_mod_factor}"
-        );
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 2,
             "output_mod_factor must be 1 or 2; got {output_mod_factor}"

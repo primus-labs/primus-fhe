@@ -137,36 +137,28 @@ impl U32NttTable {
 
     /// Dispatch forward transform to the selected backend.
     #[inline]
-    fn dispatch_forward(&self, values: &mut [u32], input_mod_factor: u32, output_mod_factor: u32) {
+    fn dispatch_forward(&self, values: &mut [u32], output_mod_factor: u32) {
         match self.backend {
-            U32Backend::Scalar => {
-                self.scalar_forward_transform(values, input_mod_factor, output_mod_factor)
-            }
+            U32Backend::Scalar => self.scalar_forward_transform(values, output_mod_factor),
             #[cfg(target_arch = "x86_64")]
-            U32Backend::Avx2 => unsafe {
-                self.avx2_forward_transform(values, input_mod_factor, output_mod_factor)
-            },
+            U32Backend::Avx2 => unsafe { self.avx2_forward_transform(values, output_mod_factor) },
             #[cfg(target_arch = "x86_64")]
             U32Backend::Avx512 => unsafe {
-                self.avx512_forward_transform(values, input_mod_factor, output_mod_factor)
+                self.avx512_forward_transform(values, output_mod_factor)
             },
         }
     }
 
     /// Dispatch inverse transform to the selected backend.
     #[inline]
-    fn dispatch_inverse(&self, values: &mut [u32], input_mod_factor: u32, output_mod_factor: u32) {
+    fn dispatch_inverse(&self, values: &mut [u32], output_mod_factor: u32) {
         match self.backend {
-            U32Backend::Scalar => {
-                self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor)
-            }
+            U32Backend::Scalar => self.scalar_inverse_transform(values, output_mod_factor),
             #[cfg(target_arch = "x86_64")]
-            U32Backend::Avx2 => unsafe {
-                self.avx2_inverse_transform(values, input_mod_factor, output_mod_factor)
-            },
+            U32Backend::Avx2 => unsafe { self.avx2_inverse_transform(values, output_mod_factor) },
             #[cfg(target_arch = "x86_64")]
             U32Backend::Avx512 => unsafe {
-                self.avx512_inverse_transform(values, input_mod_factor, output_mod_factor)
+                self.avx512_inverse_transform(values, output_mod_factor)
             },
         }
     }
@@ -500,22 +492,22 @@ impl NttTable for U32NttTable {
 
     fn lazy_transform_slice(&self, poly: &mut [u32]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 4, 4);
+        self.dispatch_forward(poly, 4);
     }
 
     fn transform_slice(&self, poly: &mut [u32]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 1, 1);
+        self.dispatch_forward(poly, 1);
     }
 
     fn lazy_inverse_transform_slice(&self, values: &mut [u32]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 2, 2);
+        self.dispatch_inverse(values, 2);
     }
 
     fn inverse_transform_slice(&self, values: &mut [u32]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 1, 1);
+        self.dispatch_inverse(values, 1);
     }
 
     fn transform_monomial(&self, coeff: u32, degree: usize, values: &mut [u32]) {

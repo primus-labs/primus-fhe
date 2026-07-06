@@ -266,26 +266,6 @@ fn fwd_butterfly_avx2(
     (x_new, y_new)
 }
 
-/// Forward butterfly variant that skips `reduce_once(x, two_q)`.
-///
-/// Only valid when the caller guarantees `x < 2q` in every lane.
-/// Used in the first stage when `input_mod_factor <= 2`.
-#[target_feature(enable = "avx2")]
-#[inline]
-fn fwd_butterfly_avx2_no_reduce_x(
-    x: __m256i,
-    y: __m256i,
-    w: __m256i,
-    wp: __m256i,
-    q: __m256i,
-    two_q: __m256i,
-) -> (__m256i, __m256i) {
-    let t = mul_mod_lazy_avx2(y, w, wp, q);
-    let x_new = _mm256_add_epi32(x, t);
-    let y_new = _mm256_sub_epi32(_mm256_add_epi32(x, two_q), t);
-    (x_new, y_new)
-}
-
 /// Inverse Harvey butterfly on 8 u32 lanes.
 ///
 /// Input:  `x`, `y` each in `[0, 2q)`.
@@ -333,25 +313,16 @@ impl U32NttTable {
     /// - `roots.len() == values.len()` and `roots_precon.len() == values.len()`.
     /// - `q < 2^30`.
     #[target_feature(enable = "avx2")]
-    pub(crate) unsafe fn avx2_forward_transform(
-        &self,
-        values: &mut [u32],
-        input_mod_factor: u32,
-        output_mod_factor: u32,
-    ) {
+    pub(crate) unsafe fn avx2_forward_transform(&self, values: &mut [u32], output_mod_factor: u32) {
         let n = self.n;
 
         // Polynomial lengths below 32 are trivial — delegate to scalar.
         if self.n < 32 {
-            return self.scalar_forward_transform(values, input_mod_factor, output_mod_factor);
+            return self.scalar_forward_transform(values, output_mod_factor);
         }
 
         assert_eq!(values.len(), n);
 
-        debug_assert!(
-            matches!(input_mod_factor, 1 | 2 | 4),
-            "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
-        );
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 4,
             "output_mod_factor must be 1 or 4; got {output_mod_factor}"
@@ -368,9 +339,6 @@ impl U32NttTable {
         let v_q = _mm256_set1_epi32(q as i32);
         let v_two_q = _mm256_set1_epi32(two_q as i32);
 
-        let skip_first_reduce_x = input_mod_factor <= 2;
-        let mut is_first_stage = true;
-
         let mut ri = 1usize; // skip roots[0] = 1 (for T8 broadcast stages)
         let mut avx_ri = 0usize; // index into pre-expanded arrays
 
@@ -378,9 +346,6 @@ impl U32NttTable {
         let mut m = 1;
 
         while m < n {
-            let reduce_x = !(is_first_stage && skip_first_reduce_x);
-            is_first_stage = false;
-
             if t >= 8 {
                 // --- AVX2 path: t ≥ 8, process 8 butterflies per inner iteration ---
                 for block in values.chunks_exact_mut(t * 2) {
@@ -401,11 +366,7 @@ impl U32NttTable {
                             unsafe { _mm256_loadu_si256(x_chunk.as_mut_ptr().cast::<__m256i>()) };
                         let v_y =
                             unsafe { _mm256_loadu_si256(y_chunk.as_mut_ptr().cast::<__m256i>()) };
-                        let (v_x, v_y) = if reduce_x {
-                            fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                        } else {
-                            fwd_butterfly_avx2_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                        };
+                        let (v_x, v_y) = fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
                         unsafe {
                             _mm256_storeu_si256(x_chunk.as_mut_ptr().cast::<__m256i>(), v_x);
                             _mm256_storeu_si256(y_chunk.as_mut_ptr().cast::<__m256i>(), v_y);
@@ -433,11 +394,7 @@ impl U32NttTable {
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t4_load_xy(ptr, unsafe { ptr.add(1) });
-                            let (v_x, v_y) = if reduce_x {
-                                fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                            } else {
-                                fwd_butterfly_avx2_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                            };
+                            let (v_x, v_y) = fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
                             t4_store_xy(v_x, v_y, ptr, unsafe { ptr.add(1) });
                         }
                     }
@@ -459,11 +416,7 @@ impl U32NttTable {
 
                             let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                             let (v_x, v_y) = t2_load_xy(ptr);
-                            let (v_x, v_y) = if reduce_x {
-                                fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                            } else {
-                                fwd_butterfly_avx2_no_reduce_x(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                            };
+                            let (v_x, v_y) = fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
                             t2_store_xy(v_x, v_y, ptr);
                         }
                     }
@@ -484,13 +437,8 @@ impl U32NttTable {
                                 ri += 8;
                                 let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                                 let (v_x, v_y) = t1_load_xy(ptr, idx_x, idx_y);
-                                let (v_x, v_y) = if reduce_x {
-                                    fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                                } else {
-                                    fwd_butterfly_avx2_no_reduce_x(
-                                        v_x, v_y, v_w, v_wp, v_q, v_two_q,
-                                    )
-                                };
+                                let (v_x, v_y) =
+                                    fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
                                 let v_x = reduce_twice_avx2(v_x, v_q, v_two_q);
                                 let v_y = reduce_twice_avx2(v_y, v_q, v_two_q);
                                 t1_store_xy(v_x, v_y, ptr);
@@ -508,13 +456,8 @@ impl U32NttTable {
                                 ri += 8;
                                 let ptr = chunk.as_mut_ptr().cast::<__m256i>();
                                 let (v_x, v_y) = t1_load_xy(ptr, idx_x, idx_y);
-                                let (v_x, v_y) = if reduce_x {
-                                    fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q)
-                                } else {
-                                    fwd_butterfly_avx2_no_reduce_x(
-                                        v_x, v_y, v_w, v_wp, v_q, v_two_q,
-                                    )
-                                };
+                                let (v_x, v_y) =
+                                    fwd_butterfly_avx2(v_x, v_y, v_w, v_wp, v_q, v_two_q);
                                 t1_store_xy(v_x, v_y, ptr);
                             }
                         }
@@ -540,24 +483,15 @@ impl U32NttTable {
     /// - `inv_roots.len() == values.len()` and `inv_roots_precon.len() == values.len()`.
     /// - `q < 2^30`.
     #[target_feature(enable = "avx2")]
-    pub(crate) unsafe fn avx2_inverse_transform(
-        &self,
-        values: &mut [u32],
-        input_mod_factor: u32,
-        output_mod_factor: u32,
-    ) {
+    pub(crate) unsafe fn avx2_inverse_transform(&self, values: &mut [u32], output_mod_factor: u32) {
         let n = self.n;
 
         if n < 32 {
-            return self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor);
+            return self.scalar_inverse_transform(values, output_mod_factor);
         }
 
         assert_eq!(values.len(), n);
 
-        debug_assert!(
-            input_mod_factor == 1 || input_mod_factor == 2,
-            "input_mod_factor must be 1 or 2; got {input_mod_factor}"
-        );
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 2,
             "output_mod_factor must be 1 or 2; got {output_mod_factor}"

@@ -7,9 +7,9 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::{Concrete64Table, HexlNttTable, NttTable, U64NttTable, UintNttTable};
 use rand::distr::{Distribution, Uniform};
 
-const SCALAR_CASES: &[(u64, usize)] = &[(562949953392641, 1024)];
-const AVX2_CASES: &[(u64, usize)] = &[(536813569, 4096)];
-const AVX512_CASES: &[(u64, usize)] = &[(562949953392641, 1024)];
+const SCALAR_CASES: [(u64, usize); 1] = [(1125899906826241, 4096)];
+const AVX2_CASES: [(u64, usize); 1] = SCALAR_CASES;
+const AVX512_CASES: [(u64, usize); 1] = SCALAR_CASES;
 const POOL_SIZE: usize = 16;
 
 pub fn quick_criterion() -> Criterion {
@@ -80,7 +80,7 @@ fn prepare(q: u64, n: usize) -> (U64NttTable, Vec<Vec<u64>>) {
 }
 
 pub fn bench_scalar(c: &mut Criterion) {
-    for &(q, n) in SCALAR_CASES {
+    for (q, n) in SCALAR_CASES {
         if !(q - 1).is_multiple_of(2 * n as u64) {
             continue;
         }
@@ -89,6 +89,7 @@ pub fn bench_scalar(c: &mut Criterion) {
         let log_n = n.trailing_zeros();
         let (u64_table, pool) = prepare(q, n);
         let uint64_table = UintNttTable::<u64>::new(log_n, modulus).unwrap();
+        let hexl_table = HexlNttTable::new(log_n, modulus).unwrap();
         let mut pool_idx = 0usize;
 
         bench_forward(
@@ -102,6 +103,13 @@ pub fn bench_scalar(c: &mut Criterion) {
             c,
             format!("u64/scalar/Uint64 FWD q:{q} n:{n}"),
             &uint64_table,
+            &pool,
+            &mut pool_idx,
+        );
+        bench_forward(
+            c,
+            format!("u64/scalar/Hexl FWD q:{q} n:{n}"),
+            &hexl_table,
             &pool,
             &mut pool_idx,
         );
@@ -119,11 +127,18 @@ pub fn bench_scalar(c: &mut Criterion) {
             &pool,
             &mut pool_idx,
         );
+        bench_inverse(
+            c,
+            format!("u64/scalar/Hexl INV q:{q} n:{n}"),
+            &hexl_table,
+            &pool,
+            &mut pool_idx,
+        );
     }
 }
 
 pub fn bench_avx2(c: &mut Criterion) {
-    for &(q, n) in AVX2_CASES {
+    for (q, n) in AVX2_CASES {
         if !(q - 1).is_multiple_of(2 * n as u64) {
             continue;
         }
@@ -166,7 +181,7 @@ pub fn bench_avx2(c: &mut Criterion) {
 }
 
 pub fn bench_avx512(c: &mut Criterion) {
-    for &(q, n) in AVX512_CASES {
+    for (q, n) in AVX512_CASES {
         if !(q - 1).is_multiple_of(2 * n as u64) {
             continue;
         }

@@ -7,9 +7,9 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::{Concrete32Table, NttTable, U32NttTable, UintNttTable};
 use rand::distr::{Distribution, Uniform};
 
-const SCALAR_CASES: &[(u32, usize)] = &[(132120577, 1024)];
-const AVX2_CASES: &[(u32, usize)] = &[(536813569, 4096)];
-const AVX512_CASES: &[(u32, usize)] = &[(536813569, 4096)];
+const SCALAR_CASES: [(u32, usize); 1] = [(268369921, 4096)];
+const AVX2_CASES: [(u32, usize); 1] = SCALAR_CASES;
+const AVX512_CASES: [(u32, usize); 1] = SCALAR_CASES;
 const POOL_SIZE: usize = 16;
 
 pub fn quick_criterion() -> Criterion {
@@ -80,7 +80,7 @@ fn prepare(q: u32, n: usize) -> (U32NttTable, Vec<Vec<u32>>) {
 }
 
 pub fn bench_scalar(c: &mut Criterion) {
-    for &(q, n) in SCALAR_CASES {
+    for (q, n) in SCALAR_CASES {
         if !(q - 1).is_multiple_of(2 * n as u32) {
             continue;
         }
@@ -123,7 +123,7 @@ pub fn bench_scalar(c: &mut Criterion) {
 }
 
 pub fn bench_avx2(c: &mut Criterion) {
-    for &(q, n) in AVX2_CASES {
+    for (q, n) in AVX2_CASES {
         if !(q - 1).is_multiple_of(2 * n as u32) {
             continue;
         }
@@ -166,7 +166,7 @@ pub fn bench_avx2(c: &mut Criterion) {
 }
 
 pub fn bench_avx512(c: &mut Criterion) {
-    for &(q, n) in AVX512_CASES {
+    for (q, n) in AVX512_CASES {
         if !(q - 1).is_multiple_of(2 * n as u32) {
             continue;
         }

@@ -43,26 +43,6 @@ pub(super) fn fwd_butterfly(x: &mut u32, y: &mut u32, w: u32, wp: u32, q: u32, t
     *y = tx + two_q - t;
 }
 
-/// Forward butterfly variant that skips `reduce_once(x, two_q)`.
-///
-/// Only valid when the caller guarantees `*x < 2q` (i.e. input is in
-/// `[0, q)` or `[0, 2q)`).  Used in the first stage when
-/// `input_mod_factor <= 2`.
-#[inline(always)]
-pub(super) fn fwd_butterfly_no_reduce_x(
-    x: &mut u32,
-    y: &mut u32,
-    w: u32,
-    wp: u32,
-    q: u32,
-    two_q: u32,
-) {
-    let tx = *x;
-    let t = mul_mod_lazy(*y, w, wp, q);
-    *x = tx + t;
-    *y = tx + two_q - t;
-}
-
 /// Plain Harvey inverse butterfly — no ShoupFactor construction in the
 /// hot path.
 #[inline(always)]
@@ -79,30 +59,13 @@ impl U32NttTable {
     /// Input: normal order, coefficients in `[0, 4q)`.
     /// Output: bit-reversed order.
     ///
-    /// Note: uses Barrett lazy multiply with `q < 2^30` guarantee. The final
-    /// reduction (when `output_mod_factor == 1`) brings `[0, 4q)` -> `[0, q)`.
-    ///
-    /// `input_mod_factor`:
-    /// - `1`: input in `[0, q)`
-    /// - `2`: input in `[0, 2q)`
-    /// - `4`: input in `[0, 4q)`
-    ///
     /// `output_mod_factor`:
     /// - `4`: output in `[0, 4q)` (lazy)
     /// - `1`: output in `[0, q)` (canonical)
-    pub fn scalar_forward_transform(
-        &self,
-        values: &mut [u32],
-        input_mod_factor: u32,
-        output_mod_factor: u32,
-    ) {
+    pub fn scalar_forward_transform(&self, values: &mut [u32], output_mod_factor: u32) {
         let n = self.n;
         assert_eq!(values.len(), n);
 
-        debug_assert!(
-            matches!(input_mod_factor, 1 | 2 | 4),
-            "input_mod_factor must be 1, 2 or 4; got {input_mod_factor}"
-        );
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 4,
             "output_mod_factor must be 1 or 4; got {output_mod_factor}"
@@ -117,15 +80,9 @@ impl U32NttTable {
         // Direct index: avoid zip+map overhead. Equivalent to AoS access.
         let mut ri = 1usize; // skip roots[0]
 
-        let skip_first_reduce_x = input_mod_factor <= 2;
-        let mut is_first_stage = true;
-
         let mut t = n >> 1;
         let mut m = 1;
         while m < n {
-            let reduce_x = !(is_first_stage && skip_first_reduce_x);
-            is_first_stage = false;
-
             // SAFETY: ri + (n / (2*t)) stays within roots.len() = n.
             match t {
                 8 => unsafe {
@@ -154,25 +111,14 @@ impl U32NttTable {
                             y7,
                         ] = chunk;
 
-                        if reduce_x {
-                            fwd_butterfly(x0, y0, w, wp, q, two_q);
-                            fwd_butterfly(x1, y1, w, wp, q, two_q);
-                            fwd_butterfly(x2, y2, w, wp, q, two_q);
-                            fwd_butterfly(x3, y3, w, wp, q, two_q);
-                            fwd_butterfly(x4, y4, w, wp, q, two_q);
-                            fwd_butterfly(x5, y5, w, wp, q, two_q);
-                            fwd_butterfly(x6, y6, w, wp, q, two_q);
-                            fwd_butterfly(x7, y7, w, wp, q, two_q);
-                        } else {
-                            fwd_butterfly_no_reduce_x(x0, y0, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x1, y1, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x2, y2, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x3, y3, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x4, y4, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x5, y5, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x6, y6, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x7, y7, w, wp, q, two_q);
-                        }
+                        fwd_butterfly(x0, y0, w, wp, q, two_q);
+                        fwd_butterfly(x1, y1, w, wp, q, two_q);
+                        fwd_butterfly(x2, y2, w, wp, q, two_q);
+                        fwd_butterfly(x3, y3, w, wp, q, two_q);
+                        fwd_butterfly(x4, y4, w, wp, q, two_q);
+                        fwd_butterfly(x5, y5, w, wp, q, two_q);
+                        fwd_butterfly(x6, y6, w, wp, q, two_q);
+                        fwd_butterfly(x7, y7, w, wp, q, two_q);
                     }
                 },
                 4 => unsafe {
@@ -184,17 +130,10 @@ impl U32NttTable {
 
                         let [x0, x1, x2, x3, y0, y1, y2, y3] = chunk;
 
-                        if reduce_x {
-                            fwd_butterfly(x0, y0, w, wp, q, two_q);
-                            fwd_butterfly(x1, y1, w, wp, q, two_q);
-                            fwd_butterfly(x2, y2, w, wp, q, two_q);
-                            fwd_butterfly(x3, y3, w, wp, q, two_q);
-                        } else {
-                            fwd_butterfly_no_reduce_x(x0, y0, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x1, y1, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x2, y2, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x3, y3, w, wp, q, two_q);
-                        }
+                        fwd_butterfly(x0, y0, w, wp, q, two_q);
+                        fwd_butterfly(x1, y1, w, wp, q, two_q);
+                        fwd_butterfly(x2, y2, w, wp, q, two_q);
+                        fwd_butterfly(x3, y3, w, wp, q, two_q);
                     }
                 },
                 2 => unsafe {
@@ -206,13 +145,8 @@ impl U32NttTable {
 
                         let [x0, x1, y0, y1] = chunk;
 
-                        if reduce_x {
-                            fwd_butterfly(x0, y0, w, wp, q, two_q);
-                            fwd_butterfly(x1, y1, w, wp, q, two_q);
-                        } else {
-                            fwd_butterfly_no_reduce_x(x0, y0, w, wp, q, two_q);
-                            fwd_butterfly_no_reduce_x(x1, y1, w, wp, q, two_q);
-                        }
+                        fwd_butterfly(x0, y0, w, wp, q, two_q);
+                        fwd_butterfly(x1, y1, w, wp, q, two_q);
                     }
                 },
                 1 => unsafe {
@@ -223,11 +157,7 @@ impl U32NttTable {
                             let wp = *roots_precon.get_unchecked(ri);
                             ri += 1;
                             let [x, y] = chunk;
-                            if reduce_x {
-                                fwd_butterfly(x, y, w, wp, q, two_q);
-                            } else {
-                                fwd_butterfly_no_reduce_x(x, y, w, wp, q, two_q);
-                            }
+                            fwd_butterfly(x, y, w, wp, q, two_q);
                             *x = reduce_twice(*x, q, two_q);
                             *y = reduce_twice(*y, q, two_q);
                         }
@@ -237,11 +167,7 @@ impl U32NttTable {
                             let wp = *roots_precon.get_unchecked(ri);
                             ri += 1;
                             let [x, y] = chunk;
-                            if reduce_x {
-                                fwd_butterfly(x, y, w, wp, q, two_q);
-                            } else {
-                                fwd_butterfly_no_reduce_x(x, y, w, wp, q, two_q);
-                            }
+                            fwd_butterfly(x, y, w, wp, q, two_q);
                         }
                     }
                 },
@@ -251,14 +177,8 @@ impl U32NttTable {
                         let wp = unsafe { *roots_precon.get_unchecked(ri) };
                         ri += 1;
                         let (xs, ys) = chunk.split_at_mut(t);
-                        if reduce_x {
-                            for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-                                fwd_butterfly(x, y, w, wp, q, two_q);
-                            }
-                        } else {
-                            for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
-                                fwd_butterfly_no_reduce_x(x, y, w, wp, q, two_q);
-                            }
+                        for (x, y) in xs.iter_mut().zip(ys.iter_mut()) {
+                            fwd_butterfly(x, y, w, wp, q, two_q);
                         }
                     }
                 }
@@ -275,28 +195,13 @@ impl U32NttTable {
     ///
     /// The final stage fuses multiplication by `inv_n` for both halves.
     ///
-    /// Note: uses Barrett lazy multiply with `q < 2^30` guarantee.
-    ///
-    /// `input_mod_factor`:
-    /// - `1`: input in `[0, q)`
-    /// - `2`: input in `[0, 2q)`
-    ///
     /// `output_mod_factor`:
     /// - `2`: output in `[0, 2q)` (lazy)
     /// - `1`: output in `[0, q)` (canonical)
-    pub fn scalar_inverse_transform(
-        &self,
-        values: &mut [u32],
-        input_mod_factor: u32,
-        output_mod_factor: u32,
-    ) {
+    pub fn scalar_inverse_transform(&self, values: &mut [u32], output_mod_factor: u32) {
         let n = self.n;
         assert_eq!(values.len(), n);
 
-        debug_assert!(
-            input_mod_factor == 1 || input_mod_factor == 2,
-            "input_mod_factor must be 1 or 2; got {input_mod_factor}"
-        );
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 2,
             "output_mod_factor must be 1 or 2; got {output_mod_factor}"

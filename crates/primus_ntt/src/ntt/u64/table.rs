@@ -189,30 +189,24 @@ impl U64NttTable {
     }
 
     /// Dispatch forward transform to the selected backend.
-    fn dispatch_forward(&self, values: &mut [u64], input_mod_factor: u32, output_mod_factor: u32) {
+    fn dispatch_forward(&self, values: &mut [u64], output_mod_factor: u32) {
         match self.backend {
-            U64Backend::Scalar => {
-                self.scalar_forward_transform(values, input_mod_factor, output_mod_factor)
-            }
+            U64Backend::Scalar => self.scalar_forward_transform(values, output_mod_factor),
             #[cfg(target_arch = "x86_64")]
             U64Backend::Avx2 => {
                 // SAFETY: Avx2 backend is only selected when
                 // avx2::HAS_AVX2 is true at construction time.
-                unsafe { self.avx2_forward_transform(values, input_mod_factor, output_mod_factor) }
+                unsafe { self.avx2_forward_transform(values, output_mod_factor) }
             }
         }
     }
 
     /// Dispatch inverse transform to the selected backend.
-    fn dispatch_inverse(&self, values: &mut [u64], input_mod_factor: u32, output_mod_factor: u32) {
+    fn dispatch_inverse(&self, values: &mut [u64], output_mod_factor: u32) {
         match self.backend {
-            U64Backend::Scalar => {
-                self.scalar_inverse_transform(values, input_mod_factor, output_mod_factor)
-            }
+            U64Backend::Scalar => self.scalar_inverse_transform(values, output_mod_factor),
             #[cfg(target_arch = "x86_64")]
-            U64Backend::Avx2 => unsafe {
-                self.avx2_inverse_transform(values, input_mod_factor, output_mod_factor)
-            },
+            U64Backend::Avx2 => unsafe { self.avx2_inverse_transform(values, output_mod_factor) },
         }
     }
 }
@@ -377,25 +371,25 @@ impl NttTable for U64NttTable {
     #[inline]
     fn lazy_transform_slice(&self, poly: &mut [u64]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 4, 4);
+        self.dispatch_forward(poly, 4);
     }
 
     #[inline]
     fn transform_slice(&self, poly: &mut [u64]) {
         debug_assert_eq!(poly.len(), self.n);
-        self.dispatch_forward(poly, 1, 1);
+        self.dispatch_forward(poly, 1);
     }
 
     #[inline]
     fn lazy_inverse_transform_slice(&self, values: &mut [u64]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 2, 2);
+        self.dispatch_inverse(values, 2);
     }
 
     #[inline]
     fn inverse_transform_slice(&self, values: &mut [u64]) {
         debug_assert_eq!(values.len(), self.n);
-        self.dispatch_inverse(values, 1, 1);
+        self.dispatch_inverse(values, 1);
     }
 
     fn transform_monomial(&self, coeff: u64, degree: usize, values: &mut [u64]) {
