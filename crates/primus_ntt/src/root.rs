@@ -6,18 +6,28 @@ use rand::{distr::Uniform, prelude::*};
 
 use crate::NttError;
 
+/// Trait for finding primitive roots of unity modulo a prime.
+///
+/// A primitive `2^log_degree`-th root of unity `w` satisfies `w^(2^log_degree) ≡ 1 (mod q)`
+/// and `w^(2^(log_degree-1)) ≢ 1 (mod q)`.
 pub trait PrimitiveRoot
 where
     Self: FheUint,
 {
+    /// Returns `true` if `self` is a primitive `2^log_degree`-th root of unity
+    /// modulo `modulus`.
     fn is_primitive_root<M>(self, log_degree: u32, modulus: M) -> bool
     where
         M: FieldContext<Self>;
 
+    /// Finds a primitive `2^log_degree`-th root of unity modulo `modulus` by
+    /// random sampling (up to 200 attempts).
     fn try_primitive_root<M>(log_degree: u32, modulus: M) -> Result<Self, NttError<Self>>
     where
         M: FieldContext<Self>;
 
+    /// Finds the *minimal* primitive `2^log_degree`-th root of unity — the
+    /// smallest value among all such roots under the natural integer order.
     fn try_minimal_primitive_root<M>(log_degree: u32, modulus: M) -> Result<Self, NttError<Self>>
     where
         M: FieldContext<Self>;

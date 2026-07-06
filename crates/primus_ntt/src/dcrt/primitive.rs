@@ -7,6 +7,7 @@ use crate::{NttError, NttTable, UintNttTable};
 
 use super::DcrtTable;
 
+/// DCRT table backed by a `Vec<UintNttTable<T>>` — one NTT table per CRT limb.
 pub struct UintCrtNttTable<T: FheUint> {
     ntt_tables: Vec<UintNttTable<T>>,
     poly_length: usize,

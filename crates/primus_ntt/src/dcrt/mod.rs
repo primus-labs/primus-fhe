@@ -14,10 +14,15 @@ pub use concrete::prime32::CrtConcrete32Table;
 pub use concrete::prime64::CrtConcrete64Table;
 pub use primitive::UintCrtNttTable;
 
+/// Double-CRT (DCRT) table: a collection of NTT tables sharing the same
+/// polynomial length but operating over distinct prime moduli.
+///
+/// Used to compose/decompose polynomials in RNS form for HE operations.
 pub trait DcrtTable: Sized + Send + Sync {
     /// The value type.
     type ValueT: PrimitiveRoot;
 
+    /// The concrete NTT table type for each CRT limb.
     type NttTables: NttTable<ValueT = Self::ValueT>;
 
     /// Creates a new [`DcrtTable`].
@@ -31,10 +36,13 @@ pub trait DcrtTable: Sized + Send + Sync {
     /// Returns an iterator over the ntt tables.
     fn iter(&self) -> std::slice::Iter<'_, Self::NttTables>;
 
+    /// Returns the polynomial length `N` (same for every CRT limb).
     fn poly_length(&self) -> usize;
 
+    /// Returns the number of CRT limbs (distinct prime moduli).
     fn moduli_count(&self) -> usize;
 
+    /// Returns the total CRT polynomial length (`N × moduli_count`).
     fn crt_poly_length(&self) -> usize;
 
     /// Perform a fast number theory transform in place.
