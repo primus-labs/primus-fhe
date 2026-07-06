@@ -3,7 +3,10 @@ use core::arch::x86_64::*;
 use super::super::U32NttTable;
 use super::arithmetic::{mul_mod_lazy_avx512, reduce_once_avx512};
 use super::butterfly::{fwd_butterfly_avx512, inv_butterfly_avx512};
-use super::permute::{DeinterleaveMasks, deinterleave_fwd_stage, deinterleave_inv_stage};
+use super::permute::{
+    DeinterleaveMasks, deinterleave_fwd_stage, deinterleave_fwd_t8, deinterleave_inv_stage,
+    deinterleave_inv_t8,
+};
 
 impl U32NttTable {
     // ---------------------------------------------------------------------------
@@ -81,7 +84,6 @@ impl U32NttTable {
                 }
             } else if t == 8 {
                 // --- AVX-512 T8: pre-expanded vector load ---
-                let masks = DeinterleaveMasks::for_t(8);
                 let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
                 for chunk in chunks {
                     let v_w = unsafe {
@@ -94,27 +96,44 @@ impl U32NttTable {
                     };
                     avx_ri += 16;
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks, false);
+                    deinterleave_fwd_t8(ptr, v_w, v_wp, v_q, v_two_q);
                 }
             } else {
                 // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, pre-expanded vector load ---
                 let masks = DeinterleaveMasks::for_t(t);
-                let reduce_output = t == 1 && output_mod_factor == 1;
 
-                let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
-                for chunk in chunks {
-                    let v_w = unsafe {
-                        _mm512_loadu_si512(avx512_roots.as_ptr().add(avx_ri).cast::<__m512i>())
-                    };
-                    let v_wp = unsafe {
-                        _mm512_loadu_si512(
-                            avx512_roots_precon.as_ptr().add(avx_ri).cast::<__m512i>(),
-                        )
-                    };
-                    avx_ri += 16;
+                if t == 1 && output_mod_factor == 1 {
+                    let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                    for chunk in chunks {
+                        let v_w = unsafe {
+                            _mm512_loadu_si512(avx512_roots.as_ptr().add(avx_ri).cast::<__m512i>())
+                        };
+                        let v_wp = unsafe {
+                            _mm512_loadu_si512(
+                                avx512_roots_precon.as_ptr().add(avx_ri).cast::<__m512i>(),
+                            )
+                        };
+                        avx_ri += 16;
 
-                    let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    deinterleave_fwd_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks, reduce_output);
+                        let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                        deinterleave_fwd_stage::<true>(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                    }
+                } else {
+                    let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                    for chunk in chunks {
+                        let v_w = unsafe {
+                            _mm512_loadu_si512(avx512_roots.as_ptr().add(avx_ri).cast::<__m512i>())
+                        };
+                        let v_wp = unsafe {
+                            _mm512_loadu_si512(
+                                avx512_roots_precon.as_ptr().add(avx_ri).cast::<__m512i>(),
+                            )
+                        };
+                        avx_ri += 16;
+
+                        let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                        deinterleave_fwd_stage::<false>(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                    }
                 }
             }
             t >>= 1;
@@ -197,7 +216,6 @@ impl U32NttTable {
                 }
             } else if t == 8 {
                 // --- AVX-512 T8: pre-expanded vector load ---
-                let masks = DeinterleaveMasks::for_t(8);
                 let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
                 for chunk in chunks {
                     let v_w = unsafe {
@@ -214,7 +232,7 @@ impl U32NttTable {
                     avx_ri += 16;
                     ri += 2; // keep ri tracking scalar root position for T16+ broadcast
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
-                    deinterleave_inv_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                    deinterleave_inv_t8(ptr, v_w, v_wp, v_q, v_two_q);
                 }
             } else {
                 // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, pre-expanded vector load ---

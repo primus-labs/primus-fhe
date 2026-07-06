@@ -205,37 +205,80 @@ impl DeinterleaveMasks {
     }
 }
 
+#[target_feature(enable = "avx512f")]
+#[inline]
+pub(super) fn deinterleave_fwd_t8(
+    ptr: *mut __m512i,
+    v_w: __m512i,
+    v_wp: __m512i,
+    v_q: __m512i,
+    v_two_q: __m512i,
+) {
+    unsafe {
+        let v_a = _mm512_loadu_si512(ptr);
+        let v_b = _mm512_loadu_si512(ptr.add(1));
+
+        let v_x = _mm512_shuffle_i32x4::<0x44>(v_a, v_b);
+        let v_y = _mm512_shuffle_i32x4::<0xEE>(v_a, v_b);
+        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+
+        let a_out = _mm512_shuffle_i32x4::<0x44>(v_x, v_y);
+        let b_out = _mm512_shuffle_i32x4::<0xEE>(v_x, v_y);
+        _mm512_storeu_si512(ptr, a_out);
+        _mm512_storeu_si512(ptr.add(1), b_out);
+    }
+}
+
+#[target_feature(enable = "avx512f")]
+#[inline]
+pub(super) fn deinterleave_inv_t8(
+    ptr: *mut __m512i,
+    v_w: __m512i,
+    v_wp: __m512i,
+    v_q: __m512i,
+    v_two_q: __m512i,
+) {
+    unsafe {
+        let v_a = _mm512_loadu_si512(ptr);
+        let v_b = _mm512_loadu_si512(ptr.add(1));
+
+        let v_x = _mm512_shuffle_i32x4::<0x44>(v_a, v_b);
+        let v_y = _mm512_shuffle_i32x4::<0xEE>(v_a, v_b);
+        let (v_x, v_y) = inv_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+
+        let a_out = _mm512_shuffle_i32x4::<0x44>(v_x, v_y);
+        let b_out = _mm512_shuffle_i32x4::<0xEE>(v_x, v_y);
+        _mm512_storeu_si512(ptr, a_out);
+        _mm512_storeu_si512(ptr.add(1), b_out);
+    }
+}
+
 /// Load two `__m512i`, deinterleave, butterfly, optionally reduce to `[0,q)`,
 /// then re-interleave and store.
 ///
-/// When `reduce_output` is true, `reduce_twice_avx512` is applied to the
+/// When `REDUCE` is true, `reduce_twice_avx512` is applied to the
 /// butterfly output before re-interleaving — this fuses the canonical reduction
 /// for the final (t=1) stage.
 #[target_feature(enable = "avx512f")]
 #[inline]
-pub(super) fn deinterleave_fwd_stage(
+pub(super) fn deinterleave_fwd_stage<const REDUCE: bool>(
     ptr: *mut __m512i,
     v_w: __m512i,
     v_wp: __m512i,
     v_q: __m512i,
     v_two_q: __m512i,
     masks: &DeinterleaveMasks,
-    reduce_output: bool,
 ) {
     unsafe {
         let v_a = _mm512_loadu_si512(ptr);
         let v_b = _mm512_loadu_si512(ptr.add(1));
         let v_x = _mm512_permutex2var_epi32(v_a, masks.idx_x, v_b);
         let v_y = _mm512_permutex2var_epi32(v_a, masks.idx_y, v_b);
-        let (v_x, v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
-        let (v_x, v_y) = if reduce_output {
-            (
-                reduce_twice_avx512(v_x, v_q, v_two_q),
-                reduce_twice_avx512(v_y, v_q, v_two_q),
-            )
-        } else {
-            (v_x, v_y)
-        };
+        let (mut v_x, mut v_y) = fwd_butterfly_avx512(v_x, v_y, v_w, v_wp, v_q, v_two_q);
+        if REDUCE {
+            v_x = reduce_twice_avx512(v_x, v_q, v_two_q);
+            v_y = reduce_twice_avx512(v_y, v_q, v_two_q);
+        }
         let a_out = _mm512_permutex2var_epi32(v_x, masks.idx_sa, v_y);
         let b_out = _mm512_permutex2var_epi32(v_x, masks.idx_sb, v_y);
         _mm512_storeu_si512(ptr, a_out);
