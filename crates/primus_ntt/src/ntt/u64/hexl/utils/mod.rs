@@ -11,6 +11,7 @@ pub(super) use permute::*;
 /// 0=EQ, 1=LT, 2=LE, 3=FALSE, 4=NE, 5=NLT, 6=NLE, 7=TRUE.
 #[repr(i32)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 pub enum CmpInt {
     /// Equal
     Eq = 0,

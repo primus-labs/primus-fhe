@@ -405,11 +405,6 @@ impl U32NttTable {
         output_mod_factor: u32,
     ) {
         let n = self.n;
-
-        if n < 64 {
-            return self.scalar_forward_transform(values, output_mod_factor);
-        }
-
         assert_eq!(values.len(), n);
 
         debug_assert!(
@@ -522,11 +517,6 @@ impl U32NttTable {
         output_mod_factor: u32,
     ) {
         let n = self.n;
-
-        if n < 64 {
-            return self.scalar_inverse_transform(values, output_mod_factor);
-        }
-
         assert_eq!(values.len(), n);
 
         debug_assert!(

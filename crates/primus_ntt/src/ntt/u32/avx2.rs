@@ -315,12 +315,6 @@ impl U32NttTable {
     #[target_feature(enable = "avx2")]
     pub(crate) unsafe fn avx2_forward_transform(&self, values: &mut [u32], output_mod_factor: u32) {
         let n = self.n;
-
-        // Polynomial lengths below 32 are trivial — delegate to scalar.
-        if self.n < 32 {
-            return self.scalar_forward_transform(values, output_mod_factor);
-        }
-
         assert_eq!(values.len(), n);
 
         debug_assert!(
@@ -485,11 +479,6 @@ impl U32NttTable {
     #[target_feature(enable = "avx2")]
     pub(crate) unsafe fn avx2_inverse_transform(&self, values: &mut [u32], output_mod_factor: u32) {
         let n = self.n;
-
-        if n < 32 {
-            return self.scalar_inverse_transform(values, output_mod_factor);
-        }
-
         assert_eq!(values.len(), n);
 
         debug_assert!(

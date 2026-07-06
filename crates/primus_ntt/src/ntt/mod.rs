@@ -6,7 +6,6 @@ use crate::{NttError, root::PrimitiveRoot};
 
 #[cfg(feature = "concrete-ntt")]
 mod concrete;
-mod hexl;
 mod primitive;
 mod u32;
 mod u64;
@@ -15,7 +14,6 @@ mod u64;
 pub use concrete::prime32::Concrete32Table;
 #[cfg(feature = "concrete-ntt")]
 pub use concrete::prime64::Concrete64Table;
-pub use hexl::{CmpInt, HexlNttTable};
 pub use primitive::UintNttTable;
 pub use u32::U32NttTable;
 pub use u64::U64NttTable;

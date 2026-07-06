@@ -4,7 +4,7 @@ use std::{hint::black_box, time::Duration};
 
 use criterion::{BatchSize, Criterion};
 use primus_modulus::BarrettModulus;
-use primus_ntt::{Concrete64Table, HexlNttTable, NttTable, U64NttTable, UintNttTable};
+use primus_ntt::{Concrete64Table, NttTable, U64NttTable, UintNttTable};
 use rand::distr::{Distribution, Uniform};
 
 const SCALAR_CASES: [(u64, usize); 1] = [(1125899906826241, 4096)];
@@ -89,7 +89,6 @@ pub fn bench_scalar(c: &mut Criterion) {
         let log_n = n.trailing_zeros();
         let (u64_table, pool) = prepare(q, n);
         let uint64_table = UintNttTable::<u64>::new(log_n, modulus).unwrap();
-        let hexl_table = HexlNttTable::new(log_n, modulus).unwrap();
         let mut pool_idx = 0usize;
 
         bench_forward(
@@ -106,13 +105,6 @@ pub fn bench_scalar(c: &mut Criterion) {
             &pool,
             &mut pool_idx,
         );
-        bench_forward(
-            c,
-            format!("u64/scalar/Hexl FWD q:{q} n:{n}"),
-            &hexl_table,
-            &pool,
-            &mut pool_idx,
-        );
         bench_inverse(
             c,
             format!("u64/scalar/U64Ntt INV q:{q} n:{n}"),
@@ -124,13 +116,6 @@ pub fn bench_scalar(c: &mut Criterion) {
             c,
             format!("u64/scalar/Uint64 INV q:{q} n:{n}"),
             &uint64_table,
-            &pool,
-            &mut pool_idx,
-        );
-        bench_inverse(
-            c,
-            format!("u64/scalar/Hexl INV q:{q} n:{n}"),
-            &hexl_table,
             &pool,
             &mut pool_idx,
         );
@@ -189,7 +174,6 @@ pub fn bench_avx512(c: &mut Criterion) {
         let modulus = BarrettModulus::new(q);
         let log_n = n.trailing_zeros();
         let (u64_table, pool) = prepare(q, n);
-        let hexl_table = HexlNttTable::new(log_n, modulus).unwrap();
         let concrete64_table = Concrete64Table::new(log_n, modulus).unwrap();
         let mut pool_idx = 0usize;
 
@@ -197,13 +181,6 @@ pub fn bench_avx512(c: &mut Criterion) {
             c,
             format!("u64/avx512/U64Ntt FWD q:{q} n:{n}"),
             &u64_table,
-            &pool,
-            &mut pool_idx,
-        );
-        bench_forward(
-            c,
-            format!("u64/avx512/Hexl FWD q:{q} n:{n}"),
-            &hexl_table,
             &pool,
             &mut pool_idx,
         );
@@ -218,13 +195,6 @@ pub fn bench_avx512(c: &mut Criterion) {
             c,
             format!("u64/avx512/U64Ntt INV q:{q} n:{n}"),
             &u64_table,
-            &pool,
-            &mut pool_idx,
-        );
-        bench_inverse(
-            c,
-            format!("u64/avx512/Hexl INV q:{q} n:{n}"),
-            &hexl_table,
             &pool,
             &mut pool_idx,
         );

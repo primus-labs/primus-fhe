@@ -221,16 +221,13 @@ impl U64NttTable {
     /// Priority: IFMA → DQ → AVX2 → scalar.
     fn dispatch_forward(&self, values: &mut [u64], output_mod_factor: u32) {
         #[cfg(target_arch = "x86_64")]
-        {
-            use crate::ntt::hexl::{
+        if self.n >= 16 {
+            use super::hexl::{
                 internal::{IFMA_SHIFT_BITS, MAX_FWD_32_MODULUS, MAX_FWD_IFMA_MODULUS},
                 transform::forward_transform_to_bit_reverse_avx512,
             };
 
-            if matches!(self.backend, U64Backend::Avx512Ifma)
-                && self.q < MAX_FWD_IFMA_MODULUS
-                && self.n >= 16
-            {
+            if matches!(self.backend, U64Backend::Avx512Ifma) && self.q < MAX_FWD_IFMA_MODULUS {
                 return unsafe {
                     forward_transform_to_bit_reverse_avx512::<{ IFMA_SHIFT_BITS }>(
                         values,
@@ -245,8 +242,7 @@ impl U64NttTable {
                 };
             }
 
-            if matches!(self.backend, U64Backend::Avx512Dq | U64Backend::Avx512Ifma) && self.n >= 16
-            {
+            if matches!(self.backend, U64Backend::Avx512Dq | U64Backend::Avx512Ifma) {
                 return if self.q < MAX_FWD_32_MODULUS {
                     unsafe {
                         forward_transform_to_bit_reverse_avx512::<32>(
@@ -289,16 +285,13 @@ impl U64NttTable {
     /// Priority: IFMA → DQ → AVX2 → scalar.
     fn dispatch_inverse(&self, values: &mut [u64], output_mod_factor: u32) {
         #[cfg(target_arch = "x86_64")]
-        {
-            use crate::ntt::hexl::{
+        if self.n >= 16 {
+            use super::hexl::{
                 internal::{IFMA_SHIFT_BITS, MAX_INV_32_MODULUS, MAX_INV_IFMA_MODULUS},
                 transform::inverse_transform_from_bit_reverse_avx512,
             };
 
-            if matches!(self.backend, U64Backend::Avx512Ifma)
-                && self.q < MAX_INV_IFMA_MODULUS
-                && self.n >= 16
-            {
+            if matches!(self.backend, U64Backend::Avx512Ifma) && self.q < MAX_INV_IFMA_MODULUS {
                 return unsafe {
                     inverse_transform_from_bit_reverse_avx512::<{ IFMA_SHIFT_BITS }>(
                         values,
@@ -314,8 +307,7 @@ impl U64NttTable {
                 };
             }
 
-            if matches!(self.backend, U64Backend::Avx512Dq | U64Backend::Avx512Ifma) && self.n >= 16
-            {
+            if matches!(self.backend, U64Backend::Avx512Dq | U64Backend::Avx512Ifma) {
                 return if self.q < MAX_INV_32_MODULUS {
                     unsafe {
                         inverse_transform_from_bit_reverse_avx512::<32>(
@@ -483,12 +475,12 @@ impl NttTable for U64NttTable {
             inv_roots_precon32,
             inv_roots_precon52,
         ) = if use_avx512 {
-            let ar = crate::ntt::hexl::precompute::build_avx512_root_powers(n, &roots);
-            let arp32 = crate::ntt::hexl::precompute::build_barrett_vector(&ar, 32, q);
-            let arp52 = crate::ntt::hexl::precompute::build_barrett_vector(&ar, 52, q);
-            let arp64 = crate::ntt::hexl::precompute::build_barrett_vector(&ar, 64, q);
-            let irp32 = crate::ntt::hexl::precompute::build_barrett_vector(&inv_roots, 32, q);
-            let irp52 = crate::ntt::hexl::precompute::build_barrett_vector(&inv_roots, 52, q);
+            let ar = super::hexl::precompute::build_avx512_root_powers(n, &roots);
+            let arp32 = super::hexl::precompute::build_barrett_vector(&ar, 32, q);
+            let arp52 = super::hexl::precompute::build_barrett_vector(&ar, 52, q);
+            let arp64 = super::hexl::precompute::build_barrett_vector(&ar, 64, q);
+            let irp32 = super::hexl::precompute::build_barrett_vector(&inv_roots, 32, q);
+            let irp52 = super::hexl::precompute::build_barrett_vector(&inv_roots, 52, q);
             (ar, arp32, arp52, arp64, irp32, irp52)
         } else {
             (
@@ -855,34 +847,31 @@ mod tests {
         }
     }
 
-    /// Cross-check with `HexlNttTable` for all three Barrett regimes.
+    /// Cross-check against `UintNttTable` for three modulus sizes that
+    /// exercise different Barrett shift widths (32 / 52 / 64).
     #[test]
-    fn test_cross_check_against_hexl() {
-        use crate::ntt::HexlNttTable;
+    fn test_cross_check_barrett_regimes() {
+        use crate::ntt::UintNttTable;
 
         let test_moduli = [536813569u64, 562949953392641, 1152921504606830593];
         let n = 1024;
         let mut rng = rand::rng();
 
         for &q in &test_moduli {
-            // Skip if 2n doesn't divide q-1
             let q_mod = <BarrettModulus<u64>>::new(q);
             let u64_table = U64NttTable::new(10, q_mod).unwrap();
-            let hexl_table = HexlNttTable::new(10, q_mod).unwrap();
+            let uint_table = UintNttTable::<u64>::new(10, q_mod).unwrap();
 
             let mut data64: Vec<u64> = (0..n).map(|_| rng.random_range(0..q)).collect();
-            let mut data_hexl = data64.clone();
+            let mut data_uint = data64.clone();
 
             u64_table.transform_slice(&mut data64);
-            hexl_table.transform_slice(&mut data_hexl);
-            assert_eq!(data64, data_hexl, "forward mismatch vs hexl for q={q}");
+            uint_table.transform_slice(&mut data_uint);
+            assert_eq!(data64, data_uint, "forward mismatch for q={q}");
 
             u64_table.inverse_transform_slice(&mut data64);
-            hexl_table.inverse_transform_slice(&mut data_hexl);
-            assert_eq!(
-                data64, data_hexl,
-                "round-trip via inverse mismatch vs hexl for q={q}"
-            );
+            uint_table.inverse_transform_slice(&mut data_uint);
+            assert_eq!(data64, data_uint, "inverse mismatch for q={q}");
         }
     }
 
