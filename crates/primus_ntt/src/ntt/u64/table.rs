@@ -222,7 +222,7 @@ impl U64NttTable {
     fn dispatch_forward(&self, values: &mut [u64], output_mod_factor: u32) {
         #[cfg(target_arch = "x86_64")]
         if self.n >= 16 {
-            use super::hexl::{
+            use super::avx512::{
                 internal::{IFMA_SHIFT_BITS, MAX_FWD_32_MODULUS, MAX_FWD_IFMA_MODULUS},
                 transform::forward_transform_to_bit_reverse_avx512,
             };
@@ -286,7 +286,7 @@ impl U64NttTable {
     fn dispatch_inverse(&self, values: &mut [u64], output_mod_factor: u32) {
         #[cfg(target_arch = "x86_64")]
         if self.n >= 16 {
-            use super::hexl::{
+            use super::avx512::{
                 internal::{IFMA_SHIFT_BITS, MAX_INV_32_MODULUS, MAX_INV_IFMA_MODULUS},
                 transform::inverse_transform_from_bit_reverse_avx512,
             };
@@ -475,12 +475,12 @@ impl NttTable for U64NttTable {
             inv_roots_precon32,
             inv_roots_precon52,
         ) = if use_avx512 {
-            let ar = super::hexl::precompute::build_avx512_root_powers(n, &roots);
-            let arp32 = super::hexl::precompute::build_barrett_vector(&ar, 32, q);
-            let arp52 = super::hexl::precompute::build_barrett_vector(&ar, 52, q);
-            let arp64 = super::hexl::precompute::build_barrett_vector(&ar, 64, q);
-            let irp32 = super::hexl::precompute::build_barrett_vector(&inv_roots, 32, q);
-            let irp52 = super::hexl::precompute::build_barrett_vector(&inv_roots, 52, q);
+            let ar = super::avx512::precompute::build_avx512_root_powers(n, &roots);
+            let arp32 = super::avx512::precompute::build_barrett_vector(&ar, 32, q);
+            let arp52 = super::avx512::precompute::build_barrett_vector(&ar, 52, q);
+            let arp64 = super::avx512::precompute::build_barrett_vector(&ar, 64, q);
+            let irp32 = super::avx512::precompute::build_barrett_vector(&inv_roots, 32, q);
+            let irp52 = super::avx512::precompute::build_barrett_vector(&inv_roots, 52, q);
             (ar, arp32, arp52, arp64, irp32, irp52)
         } else {
             (
