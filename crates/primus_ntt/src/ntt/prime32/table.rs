@@ -31,6 +31,7 @@ enum U32Backend {
 /// # Constraints
 ///
 /// - `q < 2^30` — ensures lazy ranges `[0, 4q)` fit in `u32`.
+#[derive(Clone)]
 pub struct U32NttTable {
     pub(super) n: usize,
     pub(super) log_n: u32,

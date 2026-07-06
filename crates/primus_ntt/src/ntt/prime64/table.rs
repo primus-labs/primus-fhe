@@ -35,6 +35,7 @@ enum U64Backend {
 /// # Constraints
 ///
 /// - `q < 2^62` — ensures lazy ranges `[0, 4q)` fit in `u64`.
+#[derive(Clone)]
 pub struct U64NttTable {
     pub(super) n: usize,
     log_n: u32,

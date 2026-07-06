@@ -4,15 +4,13 @@ use primus_reduce::FieldContext;
 
 use crate::{NttError, NttTable, PrimitiveRoot};
 
-#[cfg(feature = "concrete-ntt")]
-mod concrete;
+mod prime32;
+mod prime64;
 mod primitive;
 
-#[cfg(feature = "concrete-ntt")]
-pub use concrete::prime32::CrtConcrete32Table;
-#[cfg(feature = "concrete-ntt")]
-pub use concrete::prime64::CrtConcrete64Table;
-pub use primitive::UintCrtNttTable;
+pub use prime32::U32DcrtTable;
+pub use prime64::U64DcrtTable;
+pub use primitive::UintDcrtTable;
 
 /// Double-CRT (DCRT) table: a collection of NTT tables sharing the same
 /// polynomial length but operating over distinct prime moduli.

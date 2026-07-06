@@ -4,19 +4,13 @@ use primus_reduce::FieldContext;
 
 use crate::{NttError, root::PrimitiveRoot};
 
-#[cfg(feature = "concrete-ntt")]
-mod concrete;
+mod prime32;
+mod prime64;
 mod primitive;
-mod u32;
-mod u64;
 
-#[cfg(feature = "concrete-ntt")]
-pub use concrete::prime32::Concrete32Table;
-#[cfg(feature = "concrete-ntt")]
-pub use concrete::prime64::Concrete64Table;
+pub use prime32::U32NttTable;
+pub use prime64::U64NttTable;
 pub use primitive::UintNttTable;
-pub use u32::U32NttTable;
-pub use u64::U64NttTable;
 
 /// An abstract for Number Theory Transform.
 pub trait NttTable: Sized + Send + Sync {
