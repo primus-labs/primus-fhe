@@ -34,16 +34,35 @@ pub(in crate::ntt::prime32) fn build_avx512_roots_u32(
                     out.push(w1);
                 }
             }
-        } else {
-            let num_w = 16 / t;
+        } else if t == 4 {
             for _ in 0..(n / 32) {
-                for j in 0..num_w {
+                for j in 0..4 {
                     let w = roots[ri + j];
-                    for _ in 0..t {
+                    for _ in 0..4 {
                         out.push(w);
                     }
                 }
-                ri += num_w;
+                ri += 4;
+            }
+        } else if t == 2 {
+            const T2_ROOT_ORDER: [usize; 8] = [0, 4, 1, 5, 2, 6, 3, 7];
+            for _ in 0..(n / 32) {
+                for j in T2_ROOT_ORDER {
+                    let w = roots[ri + j];
+                    out.push(w);
+                    out.push(w);
+                }
+                ri += 8;
+            }
+        } else {
+            debug_assert_eq!(t, 1);
+            const T1_ROOT_ORDER: [usize; 16] =
+                [0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15];
+            for _ in 0..(n / 32) {
+                for j in T1_ROOT_ORDER {
+                    out.push(roots[ri + j]);
+                }
+                ri += 16;
             }
         }
         if inverse {

@@ -315,4 +315,57 @@ fn test_builder_lane_order() {
     assert!(avx512_fwd.len() % 16 == 0);
     assert_eq!(avx512_fwd[0], roots[4]);
     assert_eq!(avx512_fwd[8], roots[5]);
+
+    // T4 starts after two T8 vectors. Chunk 0 keeps natural order:
+    // [w0×4, w1×4, w2×4, w3×4].
+    let avx512_t4_off = 2 * 16;
+    assert_eq!(avx512_fwd[avx512_t4_off], roots[8]);
+    assert_eq!(avx512_fwd[avx512_t4_off + 4], roots[9]);
+    assert_eq!(avx512_fwd[avx512_t4_off + 8], roots[10]);
+    assert_eq!(avx512_fwd[avx512_t4_off + 12], roots[11]);
+
+    // T2 follows T4. New unpack order is
+    // [w0,w0,w4,w4,w1,w1,w5,w5,w2,w2,w6,w6,w3,w3,w7,w7].
+    let avx512_t2_off = avx512_t4_off + 2 * 16;
+    assert_eq!(avx512_fwd[avx512_t2_off], roots[16]);
+    assert_eq!(avx512_fwd[avx512_t2_off + 2], roots[20]);
+    assert_eq!(avx512_fwd[avx512_t2_off + 4], roots[17]);
+    assert_eq!(avx512_fwd[avx512_t2_off + 6], roots[21]);
+    assert_eq!(avx512_fwd[avx512_t2_off + 8], roots[18]);
+    assert_eq!(avx512_fwd[avx512_t2_off + 10], roots[22]);
+    assert_eq!(avx512_fwd[avx512_t2_off + 12], roots[19]);
+    assert_eq!(avx512_fwd[avx512_t2_off + 14], roots[23]);
+
+    // T1 follows T2. New shuffle+unpack order is
+    // [w0,w1,w8,w9,w2,w3,w10,w11,w4,w5,w12,w13,w6,w7,w14,w15].
+    let avx512_t1_off = avx512_t2_off + 2 * 16;
+    assert_eq!(avx512_fwd[avx512_t1_off], roots[32]);
+    assert_eq!(avx512_fwd[avx512_t1_off + 1], roots[33]);
+    assert_eq!(avx512_fwd[avx512_t1_off + 2], roots[40]);
+    assert_eq!(avx512_fwd[avx512_t1_off + 3], roots[41]);
+    assert_eq!(avx512_fwd[avx512_t1_off + 4], roots[34]);
+    assert_eq!(avx512_fwd[avx512_t1_off + 5], roots[35]);
+    assert_eq!(avx512_fwd[avx512_t1_off + 6], roots[42]);
+    assert_eq!(avx512_fwd[avx512_t1_off + 7], roots[43]);
+    assert_eq!(avx512_fwd.len(), 128); // T8 + T4 + T2 + T1: 4 × 2 vec × 16 u32
+
+    // AVX512 inverse starts at T1, ri=1, with the same new T1 lane order.
+    let avx512_inv =
+        crate::ntt::prime32::avx512::precompute::build_avx512_roots_u32(n, &inv_roots, true);
+    assert_eq!(avx512_inv[0], inv_roots[1]);
+    assert_eq!(avx512_inv[1], inv_roots[2]);
+    assert_eq!(avx512_inv[2], inv_roots[9]);
+    assert_eq!(avx512_inv[3], inv_roots[10]);
+    assert_eq!(avx512_inv[4], inv_roots[3]);
+    assert_eq!(avx512_inv[5], inv_roots[4]);
+    assert_eq!(avx512_inv[6], inv_roots[11]);
+    assert_eq!(avx512_inv[7], inv_roots[12]);
+
+    // T2 follows two inverse T1 vectors. ri is 33.
+    let avx512_inv_t2_off = 2 * 16;
+    assert_eq!(avx512_inv[avx512_inv_t2_off], inv_roots[33]);
+    assert_eq!(avx512_inv[avx512_inv_t2_off + 2], inv_roots[37]);
+    assert_eq!(avx512_inv[avx512_inv_t2_off + 4], inv_roots[34]);
+    assert_eq!(avx512_inv[avx512_inv_t2_off + 6], inv_roots[38]);
+    assert_eq!(avx512_inv.len(), 128); // T1 + T2 + T4 + T8: 4 × 2 vec × 16 u32
 }
