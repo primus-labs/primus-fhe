@@ -21,7 +21,7 @@ pub(in crate::ntt::prime64) fn reduce_twice(x: u64, q: u64, two_q: u64) -> u64 {
 /// the wrapping subtraction never actually wraps.
 #[inline(always)]
 pub(in crate::ntt::prime64) fn mul_mod_lazy32(y: u64, w: u64, w_precon32: u64, q: u64) -> u64 {
-    let qhat = (y.wrapping_mul(w_precon32 as u64) >> 32) as u32;
+    let qhat = (y.wrapping_mul(w_precon32) >> 32) as u32;
     (w as u32)
         .wrapping_mul(y as u32)
         .wrapping_sub((q as u32).wrapping_mul(qhat)) as u64
