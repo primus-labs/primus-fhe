@@ -30,6 +30,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
       - run: cargo clippy --workspace -- -D warnings
 
   test-stable:
@@ -44,6 +46,8 @@ jobs:
         with:
           tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
       - run: cargo nextest run --workspace
 
   nightly:
@@ -60,6 +64,8 @@ jobs:
         with:
           tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
       - run: cargo +nightly clippy --workspace --all-features -- -D warnings
       - run: cargo +nightly nextest run --workspace --all-features
       - run: cargo +nightly doc --workspace --all-features --no-deps --document-private-items
