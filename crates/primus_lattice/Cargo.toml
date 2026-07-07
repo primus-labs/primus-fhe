@@ -1,0 +1,33 @@
+[package]
+name = "primus_lattice"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_data = { path = "../primus_data" }
+primus_integer = { path = "../primus_integer" }
+primus_reduce = { path = "../primus_reduce" }
+primus_modulo = { path = "../primus_modulo" }
+primus_factor = { path = "../primus_factor" }
+primus_distr = { path = "../primus_distr" }
+primus_poly = { path = "../primus_poly" }
+primus_ntt = { path = "../primus_ntt" }
+primus_rns = { path = "../primus_rns" }
+primus_decompose = { path = "../primus_decompose" }
+
+serde = { workspace = true }
+bytemuck = { workspace = true }
+rand = { workspace = true }
+paste = { workspace = true }
+itertools = { workspace = true }
+
+[features]
+default = []
+simd = [
+    "primus_integer/simd",
+    "primus_factor/simd",
+    "primus_poly/simd",
+    "primus_ntt/simd",
+    "primus_rns/simd",
+    "primus_decompose/simd",
+]
