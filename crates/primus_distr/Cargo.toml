@@ -16,7 +16,7 @@ rug = { version = "=1.30", optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-comfy-table = "7.1"
+comfy-table = { workspace = true }
 
 [features]
 high_precision = ["dep:rug"]

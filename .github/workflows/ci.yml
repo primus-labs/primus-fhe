@@ -22,17 +22,23 @@ jobs:
   clippy-stable:
     name: clippy (stable)
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_RUSTFLAGS: ""
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
       - run: cargo clippy --workspace -- -D warnings
 
   test-stable:
     name: test (stable)
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_RUSTFLAGS: ""
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -40,11 +46,15 @@ jobs:
         with:
           tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
       - run: cargo nextest run --workspace
 
   nightly:
     name: clippy + test + doc (nightly, all features)
     runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_RUSTFLAGS: ""
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
@@ -54,6 +64,8 @@ jobs:
         with:
           tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
       - run: cargo +nightly clippy --workspace --all-features -- -D warnings
       - run: cargo +nightly nextest run --workspace --all-features
       - run: cargo +nightly doc --workspace --all-features --no-deps --document-private-items
