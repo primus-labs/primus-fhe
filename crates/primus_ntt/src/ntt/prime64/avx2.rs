@@ -17,7 +17,7 @@
 //!
 //! All functions use `#[target_feature(enable = "avx2")]` and are only
 //! called after the public entry points verify runtime AVX2 support via
-//! [`HAS_AVX2`].  Internal helpers are safe `fn` (not `unsafe fn`)
+//! [`crate::constants::HAS_AVX2`].  Internal helpers are safe `fn` (not `unsafe fn`)
 //! because the `#[target_feature]` attribute ensures the right ISA is
 //! available; only operations that dereference raw pointers or call
 //! `_unchecked` slice methods need `unsafe {}` blocks.

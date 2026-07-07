@@ -16,7 +16,7 @@ impl U32NttTable {
     /// # Safety
     ///
     /// The caller MUST ensure AVX2 is available at runtime
-    /// (e.g. via [`HAS_AVX2`]).
+    /// (e.g. via [`crate::constants::HAS_AVX2`]).
     ///
     /// # Preconditions (caller MUST uphold; not checked)
     ///
@@ -182,7 +182,7 @@ impl U32NttTable {
     /// # Safety
     ///
     /// The caller MUST ensure AVX2 is available at runtime
-    /// (e.g. via [`HAS_AVX2`]).
+    /// (e.g. via [`crate::constants::HAS_AVX2`]).
     ///
     /// # Preconditions (caller MUST uphold; not checked)
     ///

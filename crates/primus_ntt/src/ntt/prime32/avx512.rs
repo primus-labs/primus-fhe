@@ -12,7 +12,7 @@
 //!
 //! All functions use `#[target_feature(enable = "avx512f")]` and are only
 //! called after the public entry points verify runtime AVX-512 support via
-//! [`HAS_AVX512F`].
+//! [`crate::constants::HAS_AVX512F`].
 
 mod arithmetic;
 mod butterfly;

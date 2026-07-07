@@ -20,7 +20,7 @@
 //! ([`CDTSampler`]) and a Ziggurat sampler ([`DiscreteZiggurat`]) based on
 //! the standard deviation (threshold: σ = 20).
 //! On Linux with the `high_precision` feature, a 256-bit CDT sampler
-//! ([`UnixCDTSampler`]) is also available.
+//! (`UnixCDTSampler`) is also available.
 //!
 //! # Batch sampling
 //!

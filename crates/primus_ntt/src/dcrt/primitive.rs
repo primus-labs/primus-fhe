@@ -44,13 +44,13 @@ impl<T: FheUint> DcrtTable for UintDcrtTable<T> {
         })
     }
 
-    /// Returns a reference to the ntt tables of this [`UintCrtNttTable<T>`].
+    /// Returns a reference to the ntt tables of this [`UintDcrtTable<T>`].
     #[inline]
     fn ntt_tables(&self) -> &[Self::NttTables] {
         &self.ntt_tables
     }
 
-    /// Returns an iterator over this [`UintCrtNttTable<T>`].
+    /// Returns an iterator over this [`UintDcrtTable<T>`].
     #[inline]
     fn iter(&self) -> std::slice::Iter<'_, Self::NttTables> {
         self.ntt_tables.iter()
