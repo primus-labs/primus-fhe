@@ -11,14 +11,12 @@ impl U32NttTable {
     /// - `4`: output in `[0, 4q)` (lazy)
     /// - `1`: output in `[0, q)` (canonical)
     pub fn scalar_forward_transform(&self, values: &mut [u32], output_mod_factor: u32) {
-        let n = self.n;
-        assert_eq!(values.len(), n);
-
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 4,
             "output_mod_factor must be 1 or 4; got {output_mod_factor}"
         );
 
+        let n = self.n;
         let q = self.q;
         let two_q = self.two_q;
 
@@ -147,14 +145,12 @@ impl U32NttTable {
     /// - `2`: output in `[0, 2q)` (lazy)
     /// - `1`: output in `[0, q)` (canonical)
     pub fn scalar_inverse_transform(&self, values: &mut [u32], output_mod_factor: u32) {
-        let n = self.n;
-        assert_eq!(values.len(), n);
-
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 2,
             "output_mod_factor must be 1 or 2; got {output_mod_factor}"
         );
 
+        let n = self.n;
         let q = self.q;
         let two_q = self.two_q;
 

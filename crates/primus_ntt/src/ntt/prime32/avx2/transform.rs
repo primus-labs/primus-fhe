@@ -25,14 +25,12 @@ impl U32NttTable {
     /// - `q < 2^30`.
     #[target_feature(enable = "avx2")]
     pub(crate) unsafe fn avx2_forward_transform(&self, values: &mut [u32], output_mod_factor: u32) {
-        let n = self.n;
-        assert_eq!(values.len(), n);
-
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 4,
             "output_mod_factor must be 1 or 4; got {output_mod_factor}"
         );
 
+        let n = self.n;
         let q = self.q;
         let two_q = self.two_q;
 
@@ -193,14 +191,12 @@ impl U32NttTable {
     /// - `q < 2^30`.
     #[target_feature(enable = "avx2")]
     pub(crate) unsafe fn avx2_inverse_transform(&self, values: &mut [u32], output_mod_factor: u32) {
-        let n = self.n;
-        assert_eq!(values.len(), n);
-
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 2,
             "output_mod_factor must be 1 or 2; got {output_mod_factor}"
         );
 
+        let n = self.n;
         let q = self.q;
         let two_q = self.two_q;
 
