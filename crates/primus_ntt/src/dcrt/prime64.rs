@@ -3,7 +3,10 @@ use primus_poly::{CrtPolynomial, DcrtPolynomial};
 
 use crate::{DcrtTable, NttTable, U64NttTable};
 
-/// Wrapping crt NTT for 64bit primes.
+/// Double-CRT (DCRT) table for 64-bit primes.
+///
+/// Wraps a `Vec<U64NttTable>` — one NTT table per CRT limb — and provides
+/// DCRT operations for composing/decomposing polynomials in RNS form.
 #[derive(Clone)]
 pub struct U64DcrtTable {
     ntt_tables: Vec<U64NttTable>,

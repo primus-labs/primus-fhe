@@ -22,6 +22,10 @@ where
 
     /// Finds a primitive `2^log_degree`-th root of unity modulo `modulus` by
     /// random sampling (up to 200 attempts).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `log_degree >= T::BITS`.
     fn try_primitive_root<M>(log_degree: u32, modulus: M) -> Result<Self, NttError<Self>>
     where
         M: FieldContext<Self>;

@@ -12,7 +12,7 @@ pub use prime32::U32NttTable;
 pub use prime64::U64NttTable;
 pub use primitive::UintNttTable;
 
-/// An abstract for Number Theory Transform.
+/// Abstract interface for Number Theory Transform (NTT).
 pub trait NttTable: Sized + Send + Sync {
     /// The value type.
     type ValueT: PrimitiveRoot;

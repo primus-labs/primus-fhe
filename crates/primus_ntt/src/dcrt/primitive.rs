@@ -15,8 +15,6 @@ pub struct UintDcrtTable<T: FheUint> {
     crt_poly_length: usize,
 }
 
-impl<T: FheUint> UintDcrtTable<T> {}
-
 impl<T: FheUint> DcrtTable for UintDcrtTable<T> {
     type ValueT = T;
 

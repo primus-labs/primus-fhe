@@ -39,6 +39,10 @@ pub(super) fn reduce_twice_u64x4(x: __m256i, q: __m256i, two_q: __m256i) -> __m2
 /// Returns `(lo, hi)` where `lo` and `hi` are the low and high 64 bits of
 /// the 128-bit products `a * b` for each of the 4 u64 lanes.
 ///
+/// This full reference implementation is not directly called — the callers use
+/// `widening_mul_hi_u64x4` and `widening_mul_lo_u64x4` instead, which each
+/// save 2–3 instructions by computing only the needed half.
+///
 /// Algorithm from <https://stackoverflow.com/a/28827013>: each 64-bit
 /// operand is split into two 32-bit halves, then 4 cross-products are
 /// computed via `_mm256_mul_epu32`.

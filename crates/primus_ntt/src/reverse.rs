@@ -1,8 +1,8 @@
-/// This trait mainly define a function that reverse
-/// some least significant bits of the `Self`.
+/// Defines a function that reverses the `bits` least-significant bits of `Self`
+/// and sets all other bits to zero.
 pub trait ReverseLsbs {
-    /// Reverse some least significant bits of the `Self`,
-    /// and set other bits to zero.
+    /// Reverses the `bits` least-significant bits of `self` and sets all
+    /// higher-order bits to zero.
     ///
     /// # Examples
     ///

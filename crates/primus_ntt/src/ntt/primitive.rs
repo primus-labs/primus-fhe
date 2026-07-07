@@ -45,65 +45,64 @@ pub struct UintNttTable<T: FheUint> {
     inv_root_powers: Vec<ShoupFactor<T>>,
     ordinal_root_powers: Vec<ShoupFactor<T>>,
     reverse_lsbs: Vec<usize>,
-    // pool: Pool<Vec<T>>,
 }
 
 impl<T: FheUint> UintNttTable<T> {
-    /// Returns the root of this [`ShoupFactor<T>`].
+    /// Returns the root of this [`UintNttTable<T>`].
     #[inline]
     pub fn root(&self) -> T {
         self.root
     }
 
-    /// Returns the inverse element of the root of this [`ShoupFactor<T>`].
+    /// Returns the inverse element of the root of this [`UintNttTable<T>`].
     #[inline]
     pub fn inv_root(&self) -> T {
         self.inv_root
     }
 
-    /// Returns the modulus of this [`ShoupFactor<T>`].
+    /// Returns the modulus of this [`UintNttTable<T>`].
     #[inline]
     pub fn modulus(&self) -> T {
         self.modulus
     }
 
-    /// Returns the log n of this [`ShoupFactor<T>`].
+    /// Returns the log n of this [`UintNttTable<T>`].
     #[inline]
     pub fn log_n(&self) -> u32 {
         self.log_n
     }
 
-    /// Returns the n of this [`ShoupFactor<T>`].
+    /// Returns the n of this [`UintNttTable<T>`].
     #[inline]
     pub fn n(&self) -> usize {
         self.n
     }
 
-    /// Returns the inverse element of the n of this [`ShoupFactor<T>`].
+    /// Returns the inverse element of the n of this [`UintNttTable<T>`].
     #[inline]
     pub fn inv_n(&self) -> ShoupFactor<T> {
         self.inv_n
     }
 
-    /// Returns a reference to the root powers of this [`ShoupFactor<T>`].
+    /// Returns a reference to the root powers of this [`UintNttTable<T>`].
     #[inline]
     pub fn root_powers(&self) -> &[ShoupFactor<T>] {
         &self.root_powers
     }
 
-    /// Returns a reference to the inverse elements of the root powers of this [`ShoupFactor<T>`].
+    /// Returns a reference to the inverse elements of the root powers of this [`UintNttTable<T>`].
     #[inline]
     pub fn inv_root_powers(&self) -> &[ShoupFactor<T>] {
         &self.inv_root_powers
     }
 
-    /// Returns a reference to the ordinal root powers of this [`ShoupFactor<T>`].
+    /// Returns a reference to the ordinal root powers of this [`UintNttTable<T>`].
     #[inline]
     pub fn ordinal_root_powers(&self) -> &[ShoupFactor<T>] {
         &self.ordinal_root_powers
     }
 
-    /// Returns a reference to the reverse lsbs of this [`ShoupFactor<T>`].
+    /// Returns a reference to the reverse lsbs of this [`UintNttTable<T>`].
     #[inline]
     pub fn reverse_lsbs(&self) -> &[usize] {
         &self.reverse_lsbs
@@ -170,8 +169,6 @@ impl<T: FheUint> NttTable for UintNttTable<T> {
 
         let inv_n = to_root_type(CompactModulus(modulus).reduce_inv(n_cast));
 
-        // let pool = Pool::new_with(2, || vec![ConstZero::ZERO; n]);
-
         Ok(Self {
             root,
             inv_root,
@@ -183,7 +180,6 @@ impl<T: FheUint> NttTable for UintNttTable<T> {
             inv_root_powers,
             ordinal_root_powers,
             reverse_lsbs,
-            // pool,
         })
     }
 

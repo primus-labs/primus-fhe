@@ -77,5 +77,3 @@ pub(in crate::ntt::prime64) fn inv_butterfly<const BIT_SHIFT: u32>(
         mul_mod_lazy(y_red, w, w_precon, q)
     };
 }
-
-// ── Forward / inverse transforms ───────────────────────────────────────────

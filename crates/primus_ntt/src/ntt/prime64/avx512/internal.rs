@@ -68,5 +68,6 @@ pub fn check_arguments(n: usize, modulus: u64) {
         "modulus should be less than 2^{MAX_MODULUS_BITS} got {modulus}",
     );
     debug_assert!(modulus % (2 * n as u64) == 1, "modulus mod 2n != 1",);
-    // TODO: check if modulus is prime
+    // FIXME: verifying primality at table construction time would catch
+    // invalid moduli early, but is currently deferred to the caller.
 }
