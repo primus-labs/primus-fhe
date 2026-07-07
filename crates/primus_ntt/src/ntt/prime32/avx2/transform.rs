@@ -1,6 +1,7 @@
 use core::arch::x86_64::*;
 
-use super::super::U32NttTable;
+use crate::U32NttTable;
+
 use super::arithmetic::{mul_mod_lazy_avx2, reduce_once_avx2, reduce_twice_avx2};
 use super::butterfly::{fwd_butterfly_avx2, inv_butterfly_avx2};
 use super::permute::{t1_load_xy, t1_store_xy, t2_load_xy, t2_store_xy, t4_load_xy, t4_store_xy};
