@@ -4,8 +4,8 @@ use super::super::U32NttTable;
 use super::arithmetic::{mul_mod_lazy_avx512, reduce_once_avx512};
 use super::butterfly::{fwd_butterfly_avx512, inv_butterfly_avx512};
 use super::permute::{
-    DeinterleaveMasks, deinterleave_fwd_stage, deinterleave_fwd_t8, deinterleave_inv_stage,
-    deinterleave_inv_t8,
+    DeinterleaveMasks, deinterleave_fwd_stage, deinterleave_fwd_t4, deinterleave_fwd_t8,
+    deinterleave_inv_stage, deinterleave_inv_t4, deinterleave_inv_t8,
 };
 
 impl U32NttTable {
@@ -98,8 +98,25 @@ impl U32NttTable {
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
                     deinterleave_fwd_t8(ptr, v_w, v_wp, v_q, v_two_q);
                 }
+            } else if t == 4 {
+                // --- AVX-512 T4: shuffle load, generic interleaved store ---
+                let masks = DeinterleaveMasks::for_t(4);
+                let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                for chunk in chunks {
+                    let v_w = unsafe {
+                        _mm512_loadu_si512(avx512_roots.as_ptr().add(avx_ri).cast::<__m512i>())
+                    };
+                    let v_wp = unsafe {
+                        _mm512_loadu_si512(
+                            avx512_roots_precon.as_ptr().add(avx_ri).cast::<__m512i>(),
+                        )
+                    };
+                    avx_ri += 16;
+                    let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                    deinterleave_fwd_t4(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                }
             } else {
-                // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, pre-expanded vector load ---
+                // --- AVX-512 deinterleave: t ∈ {2, 1}, pre-expanded vector load ---
                 let masks = DeinterleaveMasks::for_t(t);
 
                 if t == 1 && output_mod_factor == 1 {
@@ -230,13 +247,34 @@ impl U32NttTable {
                         )
                     };
                     avx_ri += 16;
-                    ri += 2; // keep ri tracking scalar root position for T16+ broadcast
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
                     deinterleave_inv_t8(ptr, v_w, v_wp, v_q, v_two_q);
                 }
+                ri += m; // keep ri tracking scalar root position for T16+ broadcast
+            } else if t == 4 {
+                // --- AVX-512 T4: shuffle load, generic interleaved store ---
+                let masks = DeinterleaveMasks::for_t(4);
+                let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
+                for chunk in chunks {
+                    let v_w = unsafe {
+                        _mm512_loadu_si512(avx512_inv_roots.as_ptr().add(avx_ri).cast::<__m512i>())
+                    };
+                    let v_wp = unsafe {
+                        _mm512_loadu_si512(
+                            avx512_inv_roots_precon
+                                .as_ptr()
+                                .add(avx_ri)
+                                .cast::<__m512i>(),
+                        )
+                    };
+                    avx_ri += 16;
+
+                    let ptr = chunk.as_mut_ptr().cast::<__m512i>();
+                    deinterleave_inv_t4(ptr, v_w, v_wp, v_q, v_two_q, &masks);
+                }
+                ri += m; // keep ri tracking scalar root position for T16+ broadcast
             } else {
-                // --- AVX-512 deinterleave: t ∈ {4, 2, 1}, pre-expanded vector load ---
-                let num_w = 16 / t;
+                // --- AVX-512 deinterleave: t ∈ {2, 1}, pre-expanded vector load ---
                 let masks = DeinterleaveMasks::for_t(t);
 
                 let chunks = unsafe { values.as_chunks_unchecked_mut::<32>() };
@@ -253,11 +291,11 @@ impl U32NttTable {
                         )
                     };
                     avx_ri += 16;
-                    ri += num_w; // keep ri tracking scalar root position for T16+ broadcast
 
                     let ptr = chunk.as_mut_ptr().cast::<__m512i>();
                     deinterleave_inv_stage(ptr, v_w, v_wp, v_q, v_two_q, &masks);
                 }
+                ri += m; // keep ri tracking scalar root position for T16+ broadcast
             }
             t <<= 1;
             m >>= 1;
