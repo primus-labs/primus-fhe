@@ -1,3 +1,9 @@
+//! TFHE external product in the Fourier domain.
+//!
+//! The external product multiplies a coefficient GLWE ciphertext by a
+//! Fourier-domain GGSW key using signed gadget decomposition, accumulation
+//! in the Fourier domain, and inverse FFT back to the coefficient domain.
+
 use num_complex::Complex64;
 use primus_data::{Data, DataMut, RawData};
 use primus_decompose::primitive::ApproxSignedBasis;

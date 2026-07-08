@@ -60,6 +60,7 @@ where
         (DcrtPolynomialIterMut::new(a, b.len()), DcrtPolynomial(b))
     }
 
+    /// Negates each DCRT polynomial component in place.
     pub fn neg_assign<M>(&mut self, dcrt_poly_len: usize, poly_length: usize, moduli: &[M])
     where
         M: FieldContext<T>,
@@ -70,6 +71,7 @@ where
             });
     }
 
+    /// Multiplies each DCRT polynomial component by `scalar_residue` in place.
     pub fn mul_scalar_assign<M>(
         &mut self,
         scalar_residue: &[T],
@@ -102,6 +104,7 @@ where
             });
     }
 
+    /// Performs `self += dcrt_glwe * dcrt_poly` in place.
     pub fn add_dcrt_glwe_mul_dcrt_polynomial_assign<M, A, B>(
         &mut self,
         dcrt_glwe: &DcrtGlwe<A>,
@@ -171,6 +174,7 @@ where
             });
     }
 
+    /// Performs `self += dcrt_glev * crt_poly` using the given decomposition basis and NTT table.
     pub fn add_dcrt_glev_mul_crt_poly_assign<M, Table, A, B>(
         &mut self,
         dcrt_glev: &DcrtGlev<A>,
@@ -250,6 +254,7 @@ where
             });
     }
 
+    /// Performs `self += dcrt_glev * big_uint_poly` using the given decomposition basis and NTT table.
     pub fn add_dcrt_glev_mul_big_uint_poly_assign<M, Table, A, B>(
         &mut self,
         dcrt_glev: &DcrtGlev<A>,
@@ -347,6 +352,7 @@ where
         (DcrtPolynomialIter::new(a, b.len()), DcrtPolynomial(b))
     }
 
+    /// Multiplies this DCRT GLWE by a Shoup factor and writes the result into `result`.
     pub fn mul_factor_to<F, A>(
         &self,
         scalar: &[F],

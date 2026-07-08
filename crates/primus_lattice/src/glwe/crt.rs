@@ -56,6 +56,7 @@ where
         (CrtPolynomialIterMut::new(a, b.len()), CrtPolynomial(b))
     }
 
+    /// Multiplies each CRT polynomial component by `scalar_residue` in place.
     pub fn mul_scalar_assign<M>(
         &mut self,
         scalar_residue: &[T],
@@ -131,6 +132,7 @@ where
         (CrtPolynomialIter::new(a, b.len()), CrtPolynomial(b))
     }
 
+    /// Multiplies this CRT GLWE by a scalar residue and writes the result into `result`.
     pub fn mul_scalar_to<M, A>(
         &self,
         scalar_residue: &[T],
@@ -149,6 +151,7 @@ where
             });
     }
 
+    /// Multiplies this CRT GLWE by a Shoup factor and writes the result into `result`.
     pub fn mul_factor_to<F, A>(
         &self,
         scalar: &[F],
@@ -193,6 +196,7 @@ where
         });
     }
 
+    /// Multiplies this CRT GLWE by a DCRT GGSW ciphertext, storing the result into `result`.
     pub fn mul_dcrt_ggsw_to<M, Table, A, B>(
         &self,
         dcrt_ggsw: &DcrtGgsw<A>,

@@ -30,6 +30,7 @@ where
     S: RawData<Elem = T> + DataMut,
     T: FheUint,
 {
+    /// Composes the CRT representation in `crt_glwe` into this BigUint GLWE.
     #[inline]
     pub fn compose_assign<A, M>(
         &mut self,

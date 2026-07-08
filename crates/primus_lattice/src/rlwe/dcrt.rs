@@ -7,6 +7,7 @@ use primus_reduce::FieldContext;
 
 use super::CrtRlwe;
 
+/// An owned DCRT-domain RLWE sample backed by a [`Vec<T>`].
 pub type DcrtRlweOwned<T> = DcrtRlwe<Vec<T>>;
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).

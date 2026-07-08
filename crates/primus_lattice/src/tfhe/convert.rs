@@ -1,3 +1,12 @@
+//! Coefficient ↔ Fourier domain conversion for GLWE, GLev, and GGSW
+//! ciphertexts.
+//!
+//! Each method iterates over the flat storage by polynomial-sized chunks
+//! and calls [`FftTable::forward_torus_slice`] or
+//! [`FftTable::inverse_torus_slice`] per chunk.
+//! The GLev/Ggsw variants chunk at the individual-polynomial level
+//! and do not need to know about sub-component boundaries.
+
 use num_complex::Complex64;
 use primus_data::{Data, DataMut, RawData};
 use primus_fft::{FftTable, TorusFftValue};

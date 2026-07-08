@@ -128,6 +128,7 @@ macro_rules! impl_zero {
 macro_rules! impl_iters {
     ($cipher:ident) => {
         paste::paste! {
+            #[doc = concat!("Immutable chunked iterator over [`", stringify!($cipher), "`] ciphertexts.")]
             pub struct [<$cipher Iter>]<'a, T>
             where
                 T: FheUint,
@@ -136,6 +137,7 @@ macro_rules! impl_iters {
             }
 
             impl<'a, T: FheUint> [<$cipher Iter>]<'a, T> {
+                #[doc = concat!("Creates an iterator yielding `", stringify!($cipher), "` chunks of `", stringify!([<$cipher:snake _len>]), "` elements each.")]
                 #[inline]
                 pub fn new(data:&'a [T], [<$cipher:snake _len>]:usize) -> Self{
                     Self {
@@ -157,6 +159,7 @@ macro_rules! impl_iters {
         }
 
         paste::paste! {
+            #[doc = concat!("Mutable chunked iterator over [`", stringify!($cipher), "`] ciphertexts.")]
             pub struct [<$cipher IterMut>]<'a, T>
             where
                 T: FheUint,
@@ -165,6 +168,7 @@ macro_rules! impl_iters {
             }
 
             impl<'a, T: FheUint> [<$cipher IterMut>]<'a, T> {
+                #[doc = concat!("Creates a mutable iterator yielding `", stringify!($cipher), "` chunks of `", stringify!([<$cipher:snake _len>]), "` elements each.")]
                 #[inline]
                 pub fn new(data:&'a mut [T], [<$cipher:snake _len>]:usize) -> Self{
                     Self {
@@ -195,6 +199,7 @@ macro_rules! impl_iter_sub_structure {
             T: FheUint,
         {
             paste::paste! {
+                #[doc = concat!("Returns an iterator over the `", stringify!($sub), "` sub-components of this `", stringify!($cipher), "`.")]
                 #[inline]
                 pub fn [<iter_ $sub:snake>]<'a>(&'a self, [<$sub:snake _len>]: usize) -> [<$sub Iter>]<'a, T> {
                     [<$sub Iter>] {
@@ -211,6 +216,7 @@ macro_rules! impl_iter_sub_structure {
             T: FheUint,
         {
             paste::paste! {
+                #[doc = concat!("Returns a mutable iterator over the `", stringify!($sub), "` sub-components of this `", stringify!($cipher), "`.")]
                 #[inline]
                 pub fn [<iter_ $sub:snake _mut>]<'a>(
                     &'a mut self,
@@ -230,6 +236,7 @@ macro_rules! impl_iter_sub_structure {
             T: FheUint,
         {
             paste::paste! {
+                #[doc = concat!("Returns an iterator over the `", stringify!($sub), "` sub-components of this `", stringify!($cipher), "`.")]
                 #[inline]
                 pub fn [<iter_ $sub_short>]<'a>(&'a self, [<$sub_short _len>]: usize) -> [<$sub Iter>]<'a, T> {
                     [<$sub Iter>] {
@@ -246,6 +253,7 @@ macro_rules! impl_iter_sub_structure {
             T: FheUint,
         {
             paste::paste! {
+                #[doc = concat!("Returns a mutable iterator over the `", stringify!($sub), "` sub-components of this `", stringify!($cipher), "`.")]
                 #[inline]
                 pub fn [<iter_ $sub_short _mut>]<'a>(
                     &'a mut self,
@@ -668,12 +676,22 @@ macro_rules! impl_crt_ntt {
 macro_rules! impl_fourier_iters {
     ($cipher:ident) => {
         paste::paste! {
+            #[doc = concat!(
+                "Immutable chunked iterator over [`",
+                stringify!($cipher),
+                "`] ciphertexts."
+            )]
             #[derive(Debug, Clone)]
             pub struct [<$cipher Iter>]<'a> {
                 iter: core::slice::ChunksExact<'a, num_complex::Complex64>,
             }
 
             impl<'a> [<$cipher Iter>]<'a> {
+                #[doc = concat!(
+                    "Creates an iterator yielding `",
+                    stringify!($cipher),
+                    "` chunks of `chunk_len` elements each."
+                )]
                 #[inline]
                 pub fn new(data: &'a [num_complex::Complex64], chunk_len: usize) -> Self {
                     Self {
@@ -701,12 +719,22 @@ macro_rules! impl_fourier_iters {
         }
 
         paste::paste! {
+            #[doc = concat!(
+                "Mutable chunked iterator over [`",
+                stringify!($cipher),
+                "`] ciphertexts."
+            )]
             #[derive(Debug)]
             pub struct [<$cipher IterMut>]<'a> {
                 iter: core::slice::ChunksExactMut<'a, num_complex::Complex64>,
             }
 
             impl<'a> [<$cipher IterMut>]<'a> {
+                #[doc = concat!(
+                    "Creates a mutable iterator yielding `",
+                    stringify!($cipher),
+                    "` chunks of `chunk_len` elements each."
+                )]
                 #[inline]
                 pub fn new(data: &'a mut [num_complex::Complex64], chunk_len: usize) -> Self {
                     Self {
@@ -740,7 +768,7 @@ macro_rules! impl_fourier_iters {
 macro_rules! impl_fourier_core {
     ($cipher:ident) => {
         paste::paste! {
-            /// Owned [`$cipher`] backed by a [`Vec`].
+            #[doc = concat!("Owned [`", stringify!($cipher), "`] backed by a [`Vec`].")]
             pub type [<$cipher Owned>] = $cipher<Vec<num_complex::Complex64>>;
         }
 

@@ -26,7 +26,7 @@ pub trait FftTable: Send + Sync {
     /// The relationship between `poly_length` and `fourier_length` depends on
     /// the backend:
     ///
-    /// - [`FullComplex64FftTable`] stores the full `N` complex values
+    /// - [`FullComplex64FftTable`](crate::complex64::FullComplex64FftTable) stores the full `N` complex values
     ///   (`fourier_length == poly_length`). This is the reference backend.
     /// - A future packed backend will exploit real-input symmetry to store only
     ///   `N / 2` complex values (`fourier_length == poly_length / 2`).

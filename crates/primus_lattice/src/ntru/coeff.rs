@@ -85,6 +85,7 @@ where
     S: RawData<Elem = T> + DataMut,
     T: FheUint,
 {
+    /// Multiplies each coefficient by `scalar` modulo `modulus` in place.
     #[inline]
     pub fn mul_scalar_assign<M>(&mut self, scalar: T, modulus: M)
     where
@@ -93,6 +94,7 @@ where
         ArrayBase(self.as_mut()).mul_scalar_assign(scalar, modulus);
     }
 
+    /// Multiplies each coefficient by a Shoup `factor` modulo `modulus` in place.
     #[inline]
     pub fn mul_factor_assign<F>(&mut self, factor: F, modulus: T)
     where

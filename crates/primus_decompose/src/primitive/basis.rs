@@ -379,7 +379,7 @@ impl<T: FheUint> ApproxSignedBasis<T> {
     /// Extract initial carry bits from `values` without copying or adjusting.
     ///
     /// This only supports power-of-two modulus (the common TFHE case).  For
-    /// non-power-of-two moduli, use [`init_value_carry_slice_to`] instead,
+    /// non-power-of-two moduli, use [`Self::init_value_carry_slice_to`] instead,
     /// which also computes adjusted values.
     ///
     /// # Panics

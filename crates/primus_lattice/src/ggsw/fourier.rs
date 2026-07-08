@@ -3,7 +3,8 @@ use primus_data::RawData;
 use crate::glev::fourier::{FourierGlevIter, FourierGlevIterMut};
 use num_complex::Complex64;
 
-/// Fourier-domain GGSW ciphertext — matrix of [`FourierGlev`], one per row.
+/// Fourier-domain GGSW ciphertext — matrix of
+/// [`crate::glev::fourier::FourierGlev`], one per row.
 ///
 /// ## Layout
 ///

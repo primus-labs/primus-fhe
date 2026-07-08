@@ -74,6 +74,7 @@ where
         Ntru::new(self.0)
     }
 
+    /// Multiplies each NTT coefficient by `scalar` modulo `modulus` in place.
     #[inline]
     pub fn mul_scalar_assign<M>(&mut self, scalar: T, modulus: M)
     where
@@ -92,6 +93,7 @@ where
         NttPolynomial(self.as_mut()).mul_assign(ntt_poly, modulus);
     }
 
+    /// Performs `self += ntt_ntru * ntt_poly` in place, all in the NTT domain.
     pub fn add_ntt_ntru_mul_ntt_polynomial_assign<M, A, B>(
         &mut self,
         ntt_ntru: &NttNtru<A>,

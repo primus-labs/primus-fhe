@@ -12,6 +12,7 @@ use crate::lwe::{Lwe, MultiMsgLwe};
 
 use super::NttRlwe;
 
+/// An owned RLWE sample backed by a [`Vec<T>`].
 pub type RlweOwned<T> = Rlwe<Vec<T>>;
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
@@ -132,6 +133,7 @@ where
         unsafe { self.0.split_at_mut_unchecked(mid) }
     }
 
+    /// Multiplies each coefficient of both `a` and `b` by `scalar` modulo `modulus` in place.
     #[inline]
     pub fn mul_scalar_assign<M>(&mut self, scalar: T, modulus: M)
     where
@@ -140,6 +142,7 @@ where
         ArrayBase(self.as_mut()).mul_scalar_assign(scalar, modulus);
     }
 
+    /// Multiplies each coefficient of both `a` and `b` by a Shoup `factor` modulo `modulus` in place.
     #[inline]
     pub fn mul_factor_assign<F>(&mut self, factor: F, modulus: T)
     where
@@ -223,7 +226,7 @@ where
         Lwe::new(unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(data) })
     }
 
-    /// Extract an LWE sample from RLWE.
+    /// Extracts a [`MultiMsgLwe`] with several encrypted messages from RLWE.
     #[inline]
     pub fn extract_first_few_lwe<M>(&self, count: usize, modulus: M) -> MultiMsgLwe<Vec<T>>
     where

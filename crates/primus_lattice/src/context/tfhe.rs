@@ -10,7 +10,8 @@ use primus_fft::TorusFftValue;
 ///
 /// `glwe_dimension` is the count of *mask* polynomials (`k`).  The
 /// accumulator is sized for `glwe_dimension + 1` polynomials (k mask
-/// + 1 body), matching the convention of [`Lwe::dimension()`].
+/// + 1 body), matching the convention of
+/// [`crate::lwe::Lwe::dimension()`].
 ///
 /// # Design note
 ///

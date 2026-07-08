@@ -9,7 +9,7 @@ use crate::glev::{DcrtGlevIter, DcrtGlevIterMut};
 
 use super::CrtGgsw;
 
-/// Represents a ciphertext in the Ring-GSW (Ring Learning With Errors) homomorphic encryption scheme.
+/// Represents a ciphertext in the General-GSW homomorphic encryption scheme.
 ///
 /// ## Structure of the `data`
 ///

@@ -6,6 +6,7 @@ use primus_reduce::FieldContext;
 
 use super::Rlwe;
 
+/// An owned NTT-domain RLWE sample backed by a [`Vec<T>`].
 pub type NttRlweOwned<T> = NttRlwe<Vec<T>>;
 
 /// A cryptographic structure for Ring Learning with Errors (RLWE).
@@ -65,6 +66,7 @@ where
         (NttPolynomial(a), NttPolynomial(b))
     }
 
+    /// Multiplies each NTT coefficient of both `a` and `b` by `scalar` modulo `modulus` in place.
     #[inline]
     pub fn mul_scalar_assign<M>(&mut self, scalar: T, modulus: M)
     where
@@ -87,6 +89,7 @@ where
         });
     }
 
+    /// Performs `self += ntt_rlwe * ntt_poly` in place, all in the NTT domain.
     pub fn add_ntt_rlwe_mul_ntt_polynomial_assign<M, A, B>(
         &mut self,
         ntt_rlwe: &NttRlwe<A>,

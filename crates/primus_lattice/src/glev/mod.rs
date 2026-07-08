@@ -3,6 +3,7 @@ mod ntt;
 
 mod crt;
 mod dcrt;
+/// Fourier-domain GLev ciphertexts.
 pub mod fourier;
 
 pub use coeff::{Glev, GlevIter, GlevIterMut};

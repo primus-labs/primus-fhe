@@ -173,6 +173,7 @@ where
         *self.0.as_slice().last().unwrap()
     }
 
+    /// Returns a reference to `a` and the value of `b` of this LWE sample.
     pub fn a_b(&self) -> (&[T], T) {
         let (b, a) = self.0.as_slice().split_last().unwrap();
         (a, *b)

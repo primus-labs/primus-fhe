@@ -24,7 +24,7 @@ pub type FourierPolynomialMut<'a> = FourierPolynomial<&'a mut [Complex64]>;
 ///
 /// Uses [`Complex64`] (interleaved double-precision complex numbers).
 /// Pointwise arithmetic kernels live in
-/// [`primus_fft::complex64::arithmetic`].
+/// `primus_fft::complex64::arithmetic`.
 ///
 /// # Storage polymorphism
 ///
