@@ -375,4 +375,33 @@ impl<T: FheUint> ApproxSignedBasis<T> {
             }
         }
     }
+
+    /// Extract initial carry bits from `values` without copying or adjusting.
+    ///
+    /// This only supports power-of-two modulus (the common TFHE case).  For
+    /// non-power-of-two moduli, use [`Self::init_value_carry_slice_to`] instead,
+    /// which also computes adjusted values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this basis was created for a non-power-of-two modulus (i.e.
+    /// any initialization mode other than [`ValueCarryInitMode::CarryOnly`]
+    /// or [`ValueCarryInitMode::Plain`]).
+    #[inline]
+    pub fn init_carry_slice(&self, values: &[T], carries: &mut [bool]) {
+        debug_assert_eq!(values.len(), carries.len());
+        match self.value_carry_init_mode {
+            ValueCarryInitMode::CarryOnly { mask } => {
+                values
+                    .iter()
+                    .zip(carries)
+                    .for_each(|(&v, c)| *c = !(v & mask).is_zero());
+            }
+            ValueCarryInitMode::Plain => carries.fill(false),
+            _ => panic!(
+                "init_carry_slice does not support non-power-of-two modulus \
+                 (mode requires value adjustment); use init_value_carry_slice_to instead"
+            ),
+        }
+    }
 }

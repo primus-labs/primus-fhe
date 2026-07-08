@@ -254,7 +254,7 @@ fn test_builder_lane_order() {
         "avx2 forward roots should be non-empty for n=64"
     );
     assert!(
-        avx2_fwd.len() % 8 == 0,
+        avx2_fwd.len().is_multiple_of(8),
         "avx2 output must be multiple of 8 u32s"
     );
 
@@ -312,7 +312,7 @@ fn test_builder_lane_order() {
     let avx512_fwd =
         crate::ntt::prime32::avx512::precompute::build_avx512_roots_u32(n, &roots, false);
     assert!(!avx512_fwd.is_empty());
-    assert!(avx512_fwd.len() % 16 == 0);
+    assert!(avx512_fwd.len().is_multiple_of(16));
     assert_eq!(avx512_fwd[0], roots[4]);
     assert_eq!(avx512_fwd[8], roots[5]);
 
