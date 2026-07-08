@@ -17,10 +17,10 @@ fn naive_negacyclic_convolve_u32(a: &[u32], b: &[u32]) -> Vec<u32> {
     // Use i64 to accumulate; the max magnitude in tests is small enough.
     let mut c = vec![0i64; n];
 
-    for i in 0..n {
-        let a_c = a[i] as i32 as i64;
-        for j in 0..n {
-            let b_c = b[j] as i32 as i64;
+    for (i, &ai) in a.iter().enumerate() {
+        let a_c = ai as i32 as i64;
+        for (j, &bj) in b.iter().enumerate() {
+            let b_c = bj as i32 as i64;
             let prod = a_c * b_c;
             let idx = i + j;
             if idx < n {
@@ -43,10 +43,10 @@ fn naive_cyclic_convolve_u32(a: &[u32], b: &[u32]) -> Vec<u32> {
     let n = a.len();
     let mut c = vec![0i64; n];
 
-    for i in 0..n {
-        let a_c = a[i] as i32 as i64;
-        for j in 0..n {
-            let b_c = b[j] as i32 as i64;
+    for (i, &ai) in a.iter().enumerate() {
+        let a_c = ai as i32 as i64;
+        for (j, &bj) in b.iter().enumerate() {
+            let b_c = bj as i32 as i64;
             let prod = a_c * b_c;
             let idx = (i + j) % n;
             c[idx] += prod;
@@ -151,8 +151,8 @@ fn monomial_mul_matches_negacyclic_rotation() {
 
     // Polynomial a(x) = 1 + 2*x + 3*x^2 + 4*x^3 + ...
     let mut a = vec![0u32; n];
-    for i in 0..4.min(n) {
-        a[i] = (i + 1) as i32 as u32;
+    for (i, ai) in a.iter_mut().enumerate().take(4.min(n)) {
+        *ai = (i + 1) as i32 as u32;
     }
 
     for d in [0, 1, 3, n - 1] {
@@ -167,13 +167,13 @@ fn monomial_mul_matches_negacyclic_rotation() {
         //   result[i + d] = a[i] if i + d < n
         //   result[i + d - n] = -a[i] if i + d >= n (sign flips on wrap)
         let mut expected = vec![0u32; n];
-        for i in 0..n {
-            if a[i] != 0 {
+        for (i, &ai) in a.iter().enumerate() {
+            if ai != 0 {
                 let idx = i + d;
                 if idx < n {
-                    expected[idx] = a[i];
+                    expected[idx] = ai;
                 } else {
-                    expected[idx - n] = 0u32.wrapping_sub(a[i]);
+                    expected[idx - n] = 0u32.wrapping_sub(ai);
                 }
             }
         }
@@ -192,14 +192,12 @@ fn zero_and_one_polynomials() {
     let n = table.poly_length();
 
     let a: Vec<u32> = (0..n)
-        .map(|i| {
-            (match i % 5 {
-                0 => 2,
-                1 => -1,
-                2 => 0,
-                3 => 1,
-                _ => -2,
-            }) as i32 as u32
+        .map(|i| match i % 5 {
+            0 => 2u32,
+            1 => (-1i32) as u32,
+            2 => 0,
+            3 => 1,
+            _ => (-2i32) as u32,
         })
         .collect();
 

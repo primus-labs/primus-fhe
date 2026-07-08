@@ -1,7 +1,7 @@
-use primus_data::RawData;
+use primus_data::{Data, RawData};
 
 use num_complex::Complex64;
-use primus_poly::{FourierPolynomialIter, FourierPolynomialIterMut};
+use primus_poly::{FourierPolynomial, FourierPolynomialIter, FourierPolynomialIterMut};
 
 /// Fourier-domain GLWE ciphertext.
 ///
@@ -53,5 +53,28 @@ where
     #[inline]
     pub fn a_b_mut_slices(&mut self, mid: usize) -> (&mut [Complex64], &mut [Complex64]) {
         self.0.split_at_mut(mid)
+    }
+
+    /// Performs `self += poly * rhs` for each component (pointwise FMA).
+    ///
+    /// This is the core operation in the TFHE external product hot loop:
+    /// the accumulator GLWE accumulates the product of a decomposed FFT
+    /// polynomial with a GGSW key GLWE.
+    #[inline]
+    pub fn add_mul_fourier_poly_assign<A, B>(
+        &mut self,
+        poly: &FourierPolynomial<A>,
+        rhs: &FourierGlwe<B>,
+    ) where
+        A: RawData<Elem = Complex64> + Data,
+        B: RawData<Elem = Complex64> + Data,
+    {
+        let flen = poly.fourier_length();
+        for (mut acc, key_poly) in self
+            .iter_fourier_poly_mut(flen)
+            .zip(rhs.iter_fourier_poly(flen))
+        {
+            acc.add_mul_assign(poly, &key_poly);
+        }
     }
 }

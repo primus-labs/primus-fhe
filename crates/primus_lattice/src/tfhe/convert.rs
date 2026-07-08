@@ -19,9 +19,6 @@ where
     T: TorusFftValue,
 {
     /// Writes this coefficient-domain GLWE into a Fourier-domain [`FourierGlwe`].
-    ///
-    /// Each coefficient polynomial (chunked by `fft.poly_length()`) is forward-
-    /// transformed into a Fourier polynomial (chunked by `fft.fourier_length()`).
     #[inline]
     pub fn write_fourier_form<Table, A>(&self, result: &mut FourierGlwe<A>, fft: &Table)
     where
@@ -29,11 +26,10 @@ where
         A: RawData<Elem = Complex64> + DataMut,
     {
         for (coeff, fourier) in self
-            .as_ref()
-            .chunks_exact(fft.poly_length())
-            .zip(result.as_mut().chunks_exact_mut(fft.fourier_length()))
+            .iter_poly(fft.poly_length())
+            .zip(result.iter_fourier_poly_mut(fft.fourier_length()))
         {
-            fft.forward_torus_slice(coeff, fourier);
+            fft.forward_torus_slice(coeff.0, fourier.0);
         }
     }
 }
@@ -91,9 +87,6 @@ where
     S: RawData<Elem = Complex64> + Data,
 {
     /// Writes this Fourier-domain GLWE back into a coefficient-domain [`Glwe`].
-    ///
-    /// Each Fourier polynomial (chunked by `fft.fourier_length()`) is inverse-
-    /// transformed into a coefficient polynomial (chunked by `fft.poly_length()`).
     #[inline]
     pub fn write_torus_form<Table, A, T>(&self, result: &mut Glwe<A>, fft: &Table)
     where
@@ -102,11 +95,10 @@ where
         T: TorusFftValue,
     {
         for (fourier, coeff) in self
-            .as_ref()
-            .chunks_exact(fft.fourier_length())
-            .zip(result.as_mut().chunks_exact_mut(fft.poly_length()))
+            .iter_fourier_poly(fft.fourier_length())
+            .zip(result.iter_poly_mut(fft.poly_length()))
         {
-            fft.inverse_torus_slice(fourier, coeff);
+            fft.inverse_torus_slice(fourier.0, coeff.0);
         }
     }
 }

@@ -9,6 +9,7 @@ where
 {
     /// Performs `self * rhs` (pointwise complex multiplication).
     #[inline]
+    #[allow(clippy::should_implement_trait)]
     pub fn mul<A>(mut self, rhs: &FourierPolynomial<A>) -> Self
     where
         A: RawData<Elem = Complex64> + Data,

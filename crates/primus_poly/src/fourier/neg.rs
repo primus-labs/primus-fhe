@@ -9,6 +9,7 @@ where
 {
     /// Performs the unary `-` operation (pointwise complex negation).
     #[inline]
+    #[allow(clippy::should_implement_trait)]
     pub fn neg(mut self) -> Self {
         self.neg_assign();
         self

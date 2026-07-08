@@ -4,6 +4,7 @@
 //! documentation of torus semantics — no new storage is created.
 
 pub mod convert;
+pub mod external_product;
 
 /// TFHE torus LWE ciphertext (coefficient domain).
 ///

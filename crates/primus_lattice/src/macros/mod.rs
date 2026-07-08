@@ -780,28 +780,36 @@ macro_rules! impl_fourier_core {
             pub fn set_zero(&mut self) {
                 self.0.fill(num_complex::Complex64::new(0.0, 0.0));
             }
-
-            /// Returns a mutable slice of all elements.
-            #[inline]
-            pub fn as_mut(&mut self) -> &mut [num_complex::Complex64] {
-                self.0.as_mut_slice()
-            }
         }
 
         impl<S> $cipher<S>
         where
             S: primus_data::RawData<Elem = num_complex::Complex64> + primus_data::Data,
         {
-            /// Returns a read-only slice of all elements.
-            #[inline]
-            pub fn as_ref(&self) -> &[num_complex::Complex64] {
-                self.0.as_slice()
-            }
-
             /// Returns the total byte count.
             #[inline]
             pub fn byte_count(&self) -> usize {
                 self.0.len() * core::mem::size_of::<num_complex::Complex64>()
+            }
+        }
+
+        impl<S> core::convert::AsRef<[num_complex::Complex64]> for $cipher<S>
+        where
+            S: primus_data::RawData<Elem = num_complex::Complex64> + primus_data::Data,
+        {
+            #[inline]
+            fn as_ref(&self) -> &[num_complex::Complex64] {
+                self.0.as_slice()
+            }
+        }
+
+        impl<S> core::convert::AsMut<[num_complex::Complex64]> for $cipher<S>
+        where
+            S: primus_data::RawData<Elem = num_complex::Complex64> + primus_data::DataMut,
+        {
+            #[inline]
+            fn as_mut(&mut self) -> &mut [num_complex::Complex64] {
+                self.0.as_mut_slice()
             }
         }
     };
