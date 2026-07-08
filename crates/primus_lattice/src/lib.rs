@@ -17,3 +17,5 @@ pub mod ggsw;
 pub mod rgsw;
 
 pub mod ntru;
+
+pub mod tfhe;
