@@ -1,7 +1,9 @@
-//! TFHE semantic type aliases.
+//! TFHE semantic type aliases and coefficient ↔ Fourier conversion.
 //!
 //! These reuse existing coefficient ciphertext containers and serve as
 //! documentation of torus semantics — no new storage is created.
+
+pub mod convert;
 
 /// TFHE torus LWE ciphertext (coefficient domain).
 ///
