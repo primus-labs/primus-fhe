@@ -7,6 +7,7 @@
 //! - [`BigUintPolynomial`]: polynomial with big integer coefficients.
 //! - [`CrtPolynomial`]: polynomial under Chinese Remainder Theorem decomposition.
 //! - [`DcrtPolynomial`]: double-CRT polynomial (CRT + NTT).
+//! - [`FourierPolynomial`]: polynomial in the Fourier domain (complex values).
 
 #![deny(missing_docs)]
 
@@ -18,6 +19,7 @@ mod array;
 mod big_uint_poly;
 mod crt;
 mod dcrt;
+mod fourier;
 mod ntt;
 mod poly;
 
@@ -27,6 +29,11 @@ pub use big_uint_poly::{BigUintPolynomial, BigUintPolynomialIter, BigUintPolynom
 
 pub use crt::{CrtPolynomial, CrtPolynomialIter, CrtPolynomialIterMut};
 pub use dcrt::{DcrtPolynomial, DcrtPolynomialIter, DcrtPolynomialIterMut};
+
+pub use fourier::{
+    FourierPolynomial, FourierPolynomialIter, FourierPolynomialIterMut, FourierPolynomialMut,
+    FourierPolynomialOwned, FourierPolynomialRef,
+};
 
 pub use ntt::{
     NttPolynomial, NttPolynomialIter, NttPolynomialIterMut, NttPolynomialMut, NttPolynomialOwned,

@@ -1,3 +1,4 @@
+use std::f64::consts::PI;
 use std::sync::Arc;
 
 use num_complex::Complex64;
@@ -58,18 +59,20 @@ impl FftTable for FullComplex64FftTable {
         let forward = planner.plan_fft_forward(n);
         let inverse = planner.plan_fft_inverse(n);
 
-        // Twist factors: psi^j where psi = exp(pi * i / N)
-        let angle = std::f64::consts::PI / n as f64;
-        let psi = Complex64::cis(angle);
-        let twist: Vec<Complex64> = std::iter::successors(Some(Complex64::new(1.0, 0.0)), |&z| {
-            Some(z * psi)
-        })
-        .take(n)
-        .collect();
+        // Twist factors: psi^j where psi = exp(pi * i / N).
+        // Using cis(PI * j / N) gives one rounding (the division) instead of
+        // two (pre-rounding PI/N, then multiplying by j).  The iterative
+        // z * psi approach is avoided because its round-off accumulates
+        // over O(N) steps.
+        let n_f64 = n as f64;
+        let twist: Vec<Complex64> = (0..n)
+            .map(|j| Complex64::cis(PI * j as f64 / n_f64))
+            .collect();
 
-        // Scaled inverse twist: conj(psi^j) / N
-        let inv_n = n as f64;
-        let inv_twist_scaled: Vec<Complex64> = twist.iter().map(|t| t.conj() / inv_n).collect();
+        // Scaled inverse twist: conj(psi^j) / N = cis(-PI * j / N) / N.
+        let inv_twist_scaled: Vec<Complex64> = (0..n)
+            .map(|j| Complex64::cis(-PI * j as f64 / n_f64) / n_f64)
+            .collect();
 
         Ok(Self {
             log_n,
@@ -124,5 +127,4 @@ impl FftTable for FullComplex64FftTable {
             output[j] = T::from_f64_wrapping_rounded(v.re);
         }
     }
-
 }

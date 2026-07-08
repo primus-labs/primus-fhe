@@ -1,6 +1,6 @@
 use num_complex::Complex64;
 use primus_fft::complex64::arithmetic;
-use primus_fft::{FullComplex64FftTable, FftTable};
+use primus_fft::{FftTable, FullComplex64FftTable};
 
 // ---------------------------------------------------------------------------
 // Helper: naive negacyclic convolution (X^N + 1)
@@ -178,10 +178,7 @@ fn monomial_mul_matches_negacyclic_rotation() {
             }
         }
 
-        assert_eq!(
-            result, expected,
-            "monomial multiplication failed for d={d}"
-        );
+        assert_eq!(result, expected, "monomial multiplication failed for d={d}");
     }
 }
 

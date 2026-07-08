@@ -1,5 +1,5 @@
 use num_complex::Complex64;
-use primus_fft::{FullComplex64FftTable, FftTable};
+use primus_fft::{FftTable, FullComplex64FftTable};
 
 /// Small centered coefficients should roundtrip exactly through
 /// forward + inverse transform for all N from 2 to 64.
