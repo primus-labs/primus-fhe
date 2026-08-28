@@ -1,3 +1,4 @@
+use num_traits::ConstZero;
 use primus_data::{Data, DataMut, RawData};
 use primus_factor::FactorSliceOps;
 use primus_integer::FheUint;
@@ -104,6 +105,8 @@ where
     T: FheUint,
 {
     /// A naive multiplication over polynomial.
+    ///
+    /// Performs `output = self * rhs` in `Z_modulus[X]/(X^N + 1)`.
     pub fn naive_mul_to<M, A, B>(&self, rhs: &Polynomial<A>, output: &mut Polynomial<B>, modulus: M)
     where
         M: Copy + ReduceSubAssign<T> + ReduceMul<T, Output = T> + ReduceMulAdd<T, Output = T>,
@@ -117,6 +120,11 @@ where
         let coeff_count = a.len();
         debug_assert_eq!(coeff_count, b.len());
         debug_assert_eq!(coeff_count, c.len());
+
+        // The loops below accumulate into `c`, so a caller-supplied buffer has
+        // to start from zero for this to be an assignment like the other `_to`
+        // methods.
+        c.fill(<T as ConstZero>::ZERO);
 
         for i in 0..coeff_count {
             for j in 0..=i {
@@ -151,5 +159,47 @@ where
         A: RawData<Elem = T> + DataMut,
     {
         factor.factor_mul_slice_to(self.as_ref(), output.as_mut(), modulus);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use primus_modulus::BarrettModulus;
+
+    const MODULUS: u64 = 132120577;
+
+    // (1 + 2X) * (3 + 4X) = 3 + 10X + 8X^2, and X^2 = -1 in Z[X]/(X^2 + 1),
+    // so the product is -5 + 10X.
+    fn operands() -> (Polynomial<Vec<u64>>, Polynomial<Vec<u64>>, [u64; 2]) {
+        (
+            Polynomial::new(vec![1u64, 2]),
+            Polynomial::new(vec![3u64, 4]),
+            [MODULUS - 5, 10],
+        )
+    }
+
+    #[test]
+    fn naive_mul_to_writes_the_product() {
+        let modulus = BarrettModulus::<u64>::new(MODULUS);
+        let (a, b, expected) = operands();
+
+        let mut output = Polynomial::<Vec<u64>>::zero(2);
+        a.naive_mul_to(&b, &mut output, modulus);
+
+        assert_eq!(output.as_ref(), expected.as_slice());
+    }
+
+    // The other `_to` methods assign, so an output buffer that already holds
+    // data must be overwritten rather than accumulated into.
+    #[test]
+    fn naive_mul_to_overwrites_a_dirty_output() {
+        let modulus = BarrettModulus::<u64>::new(MODULUS);
+        let (a, b, expected) = operands();
+
+        let mut output = Polynomial::new(vec![7u64, 9]);
+        a.naive_mul_to(&b, &mut output, modulus);
+
+        assert_eq!(output.as_ref(), expected.as_slice());
     }
 }
