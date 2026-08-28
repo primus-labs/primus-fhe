@@ -321,9 +321,9 @@ fn base_converter_slice_apis_match_scalar_and_exact_reference() {
         .collect();
     assert_eq!(pairs, expected_pairs);
 
-    // Keep exact conversion to small canonical values here. Wider edge coverage
-    // belongs with an algorithm review because the current implementation uses
-    // a floating correction term with parameter-sensitive behavior.
+    // Keep exact conversion to small canonical values here; the documented
+    // input bound is walked exhaustively by
+    // `exact_convert_array_is_exact_below_half_the_input_product`.
     let exact_output_base = rns_base(&[37]);
     let exact_converter = BaseConverter::new(&input_base, &exact_output_base);
     let exact_residues_by_value: Vec<_> = [0, 1, 2, 7, 16]
@@ -340,4 +340,48 @@ fn base_converter_slice_apis_match_scalar_and_exact_reference() {
         .map(|residues| residues[0] % exact_output_base.moduli()[0].value())
         .collect();
     assert_eq!(exact_out, expected_exact);
+}
+
+// exact_convert_array rebuilds each value from its residues with a rounded
+// floating-point correction term. That rounding only picks the right multiple
+// of the input product while the represented value stays below Q.div_ceil(2),
+// so walk that whole range for a few small bases instead of relying on a
+// handful of canonical values.
+#[test]
+fn exact_convert_array_is_exact_below_half_the_input_product() {
+    let cases: [(&[ValueT], ValueT); 4] = [
+        (&[3, 5, 7], 11),
+        (&[11, 13], 17),
+        (&[17, 19, 23], 37),
+        (&[5, 7, 11, 13], 17),
+    ];
+
+    for (input_moduli, output_modulus) in cases {
+        let input_base = rns_base(input_moduli);
+        let output_base = rns_base(&[output_modulus]);
+        let converter = BaseConverter::new(&input_base, &output_base);
+
+        let input_product: ValueT = input_moduli.iter().product();
+        let value_count = input_product.div_ceil(2) as usize;
+        let moduli_count = input_base.moduli_count();
+
+        // Modulus-major layout: chunk i holds every value's residue mod moduli[i].
+        let mut crt_in = vec![0; moduli_count * value_count];
+        for (modulus_index, &modulus) in input_moduli.iter().enumerate() {
+            for value in 0..value_count {
+                crt_in[modulus_index * value_count + value] = value as ValueT % modulus;
+            }
+        }
+
+        let mut converted = vec![ValueT::MAX; value_count];
+        converter.exact_convert_array(&crt_in, &mut converted, value_count);
+
+        let expected: Vec<_> = (0..value_count)
+            .map(|value| value as ValueT % output_modulus)
+            .collect();
+        assert_eq!(
+            converted, expected,
+            "input_moduli={input_moduli:?} output_modulus={output_modulus}"
+        );
+    }
 }

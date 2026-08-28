@@ -271,6 +271,14 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
     ///
     /// This uses the floating-point correction term common in exact RNS base
     /// conversion.
+    ///
+    /// # Correctness
+    ///
+    /// The correction term is rounded to the nearest integer, so the value `x`
+    /// represented by the input residues must satisfy `x < Q.div_ceil(2)`,
+    /// where `Q` is the product of the input moduli. From `Q.div_ceil(2)`
+    /// onwards the correction is one too large and the result is the centered
+    /// representative `(x - Q) mod p` rather than `x mod p`.
     pub fn exact_convert_array(
         &self,
         crt_poly_in: &[T],
