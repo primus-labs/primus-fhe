@@ -1,0 +1,121 @@
+[package]
+name = "primus_glwe"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+primus_shape = { path = "../primus_shape" }
+primus_data = { path = "../primus_data", features = ["aligned-vec"] }
+primus_decompose = { path = "../primus_decompose" }
+primus_distr = { path = "../primus_distr" }
+primus_factor = { path = "../primus_factor" }
+primus_fft = { path = "../primus_fft", optional = true }
+primus_encoding = { path = "../primus_encoding" }
+primus_integer = { path = "../primus_integer" }
+primus_lattice = { path = "../primus_lattice" }
+primus_lwe = { path = "../primus_lwe" }
+primus_modulus = { path = "../primus_modulus" }
+primus_ntt = { path = "../primus_ntt", optional = true }
+primus_poly = { path = "../primus_poly" }
+primus_reduce = { path = "../primus_reduce" }
+
+aligned-vec = "0.6.4"
+num-traits = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "encryption"
+harness = false
+required-features = ["ntt", "rustfft"]
+
+[[bench]]
+name = "primitives"
+harness = false
+required-features = ["ntt", "rustfft", "tfhe-fft"]
+
+[[bench]]
+name = "key_conversion"
+harness = false
+required-features = ["ntt", "rustfft"]
+
+# Targets declare the representations and concrete FFT engines they exercise.
+[[test]]
+name = "automorphism"
+required-features = ["ntt", "rustfft", "tfhe-fft"]
+
+[[test]]
+name = "boundaries"
+required-features = ["ntt", "rustfft"]
+
+[[test]]
+name = "cmux"
+required-features = ["ntt", "rustfft", "tfhe-fft"]
+
+[[test]]
+name = "constant_gadget"
+required-features = ["ntt", "rustfft", "tfhe-fft"]
+
+[[test]]
+name = "fourier_glwe_secret_key"
+required-features = ["rustfft"]
+
+[[test]]
+name = "gadget_generation"
+required-features = ["ntt", "rustfft"]
+
+[[test]]
+name = "glwe_key_switch"
+required-features = ["ntt", "rustfft"]
+
+[[test]]
+name = "packing_key_switch"
+required-features = ["ntt", "rustfft", "tfhe-fft"]
+
+[[test]]
+name = "scheme_switch"
+required-features = ["ntt", "rustfft", "tfhe-fft"]
+
+[[test]]
+name = "trace_packing"
+required-features = ["ntt", "rustfft", "tfhe-fft"]
+
+[[test]]
+name = "zeroize"
+required-features = ["ntt", "fourier"]
+
+[[test]]
+name = "split_trace"
+required-features = ["split-trace"]
+
+[[test]]
+name = "ntt_glwe_public_key"
+required-features = ["ntt"]
+
+[[test]]
+name = "ntt_glwe_secret_key"
+required-features = ["ntt"]
+
+[features]
+default = []
+ntt = ["dep:primus_ntt", "primus_lattice/ntt"]
+fourier = ["dep:primus_fft", "primus_lattice/fourier"]
+# Auxiliary NTT/CRT is used only for exact Split35 key generation.
+split-trace = ["fourier", "dep:primus_ntt"]
+rustfft = ["fourier", "primus_fft/rustfft"]
+tfhe-fft = ["fourier", "primus_fft/tfhe-fft"]
+simd = [
+    "primus_encoding/simd",
+    "primus_factor/simd",
+    "primus_integer/simd",
+    "primus_modulus/simd",
+    "primus_poly/simd",
+    "primus_ntt?/simd",
+    "primus_decompose/simd",
+    "primus_lattice/simd",
+    "primus_lwe/simd",
+]
