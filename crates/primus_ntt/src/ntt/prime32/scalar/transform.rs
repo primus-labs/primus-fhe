@@ -10,13 +10,20 @@ impl U32NttTable {
     /// `output_mod_factor`:
     /// - `4`: output in `[0, 4q)` (lazy)
     /// - `1`: output in `[0, q)` (canonical)
-    pub fn scalar_forward_transform(&self, values: &mut [u32], output_mod_factor: u32) {
+    /// # Safety
+    ///
+    /// `values` must contain exactly `self.poly_length.get()` coefficients.
+    pub(in crate::ntt::prime32) unsafe fn scalar_forward_transform_unchecked(
+        &self,
+        values: &mut [u32],
+        output_mod_factor: u32,
+    ) {
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 4,
             "output_mod_factor must be 1 or 4; got {output_mod_factor}"
         );
 
-        let n = self.n;
+        let n = self.poly_length.get();
         let q = self.q;
         let two_q = self.two_q;
 
@@ -144,13 +151,20 @@ impl U32NttTable {
     /// `output_mod_factor`:
     /// - `2`: output in `[0, 2q)` (lazy)
     /// - `1`: output in `[0, q)` (canonical)
-    pub fn scalar_inverse_transform(&self, values: &mut [u32], output_mod_factor: u32) {
+    /// # Safety
+    ///
+    /// `values` must contain exactly `self.poly_length.get()` coefficients.
+    pub(in crate::ntt::prime32) unsafe fn scalar_inverse_transform_unchecked(
+        &self,
+        values: &mut [u32],
+        output_mod_factor: u32,
+    ) {
         debug_assert!(
             output_mod_factor == 1 || output_mod_factor == 2,
             "output_mod_factor must be 1 or 2; got {output_mod_factor}"
         );
 
-        let n = self.n;
+        let n = self.poly_length.get();
         let q = self.q;
         let two_q = self.two_q;
 

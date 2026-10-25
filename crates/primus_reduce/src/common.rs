@@ -1,26 +1,23 @@
-use std::fmt::Debug;
+use primus_integer::FheUint;
 
-use primus_integer::UnsignedInteger;
-
-use super::Modulus;
 use super::prelude::*;
+use super::{ExplicitModulus, Modulus};
 
 /// A marker trait indicating the modulus can perform ring operations
-/// (reduce, add, sub, double, neg, mul, mul-add, square, exp, dot-product).
+/// (reduce, add, sub, double, neg, mul, mul-add, square, exp, dot-product),
+/// bounded signed encoding/dot products via [`EncodeSigned`] and
+/// [`ReduceDotProductSigned`], and modulus-switch preparation via
+/// [`PrepareModulusSwitch`].
 ///
 /// Granted automatically (blanket impl) when the type implements every
-/// listed `Reduce*` trait with `Output = T`.
-pub trait RingContext<T>:
-    Sized
-    + Debug
-    + Clone
-    + Copy
-    + Send
-    + Sync
-    + Modulus<ValueT = T>
+/// listed capability trait. Prepared conversions are separate concrete objects.
+pub trait RingContext<T: FheUint>:
+    Modulus<ValueT = T>
+    + PrepareModulusSwitch
+    + EncodeSigned<T>
     + Reduce<T, Output = T>
     + ReduceAssign<T>
-    + ReduceOnce<T>
+    + ReduceOnce<T, Output = T>
     + ReduceOnceAssign<T>
     + ReduceOnceSlice<T>
     + ReduceAdd<T, Output = T>
@@ -44,22 +41,19 @@ pub trait RingContext<T>:
     + ReduceSquare<T, Output = T>
     + ReduceSquareAssign<T>
     + ReduceExp<T>
-    + ReduceExpPowOf2<T>
-    + ReduceDotProduct<T, Output = T>
+    + ReduceExpPowerOf2<T>
+    + ReduceDotProduct<T>
+    + ReduceDotProductSigned<T>
 {
 }
 
-impl<T: UnsignedInteger, M> RingContext<T> for M where
-    M: Sized
-        + Debug
-        + Clone
-        + Copy
-        + Send
-        + Sync
-        + Modulus<ValueT = T>
+impl<T: FheUint, M> RingContext<T> for M where
+    M: Modulus<ValueT = T>
+        + PrepareModulusSwitch
+        + EncodeSigned<T>
         + Reduce<T, Output = T>
         + ReduceAssign<T>
-        + ReduceOnce<T>
+        + ReduceOnce<T, Output = T>
         + ReduceOnceAssign<T>
         + ReduceOnceSlice<T>
         + ReduceAdd<T, Output = T>
@@ -83,19 +77,27 @@ impl<T: UnsignedInteger, M> RingContext<T> for M where
         + ReduceSquare<T, Output = T>
         + ReduceSquareAssign<T>
         + ReduceExp<T>
-        + ReduceExpPowOf2<T>
-        + ReduceDotProduct<T, Output = T>
+        + ReduceExpPowerOf2<T>
+        + ReduceDotProduct<T>
+        + ReduceDotProductSigned<T>
 {
 }
 
-/// A marker trait indicating the modulus can perform field operations
-/// (ring + lazy reduce, multiplicative inverse, division).
+/// A marker trait indicating the modulus has an explicit value and can perform
+/// field operations (ring + lazy reduce, multiplicative inverse, division).
 ///
 /// Granted automatically (blanket impl) when the type already satisfies
-/// [`RingContext`] and additionally implements the listed
-/// `LazyReduce*` / inverse / division / slice traits.
-pub trait FieldContext<T>:
+/// [`RingContext`] and [`ExplicitModulus`], and additionally implements the
+/// listed `LazyReduce*` / inverse / division / slice traits.
+///
+/// This is a capability marker, not proof that the residues form a mathematical
+/// field. In particular, it does not guarantee that the modulus is prime or
+/// that every nonzero residue is invertible. Callers must validate any such
+/// algebraic requirements; inverse and division operations retain the failure
+/// behavior documented by their individual traits.
+pub trait FieldContext<T: FheUint>:
     RingContext<T>
+    + ExplicitModulus<ValueT = T>
     + LazyReduce<T, Output = T>
     + LazyReduceAssign<T>
     + LazyReduceSub<T, Output = T>
@@ -122,8 +124,9 @@ pub trait FieldContext<T>:
 {
 }
 
-impl<T: UnsignedInteger, M> FieldContext<T> for M where
+impl<T: FheUint, M> FieldContext<T> for M where
     M: RingContext<T>
+        + ExplicitModulus<ValueT = T>
         + LazyReduce<T, Output = T>
         + LazyReduceAssign<T>
         + LazyReduceSub<T, Output = T>

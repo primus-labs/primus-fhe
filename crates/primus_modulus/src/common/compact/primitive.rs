@@ -5,40 +5,43 @@ pub use crate::common::uint::{
     reduce_neg_assign, reduce_once, reduce_once_assign, try_reduce_inv,
 };
 
-/// Returns `(a + b) mod modulus` using compact-modulus bounds.
+/// Returns `(a + b) mod modulus`.
+#[must_use]
 #[inline(always)]
 pub fn reduce_add<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
     let sum = a + b;
     sum.min(sum.wrapping_sub(modulus))
 }
 
-/// Adds `b` to `a` in place modulo `modulus` using compact-modulus bounds.
+/// Adds `b` to `a` in place modulo `modulus`.
 #[inline(always)]
 pub fn reduce_add_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
     *a = reduce_add(modulus, *a, b);
 }
 
-/// Returns `(2 * value) mod modulus` using compact-modulus bounds.
+/// Returns `(2 * value) mod modulus`.
+#[must_use]
 #[inline(always)]
 pub fn reduce_double<T: UnsignedInteger>(modulus: T, value: T) -> T {
     let double = value.wrapping_shl(1);
     double.min(double.wrapping_sub(modulus))
 }
 
-/// Doubles `value` in place modulo `modulus` using compact-modulus bounds.
+/// Doubles `value` in place modulo `modulus`.
 #[inline(always)]
 pub fn reduce_double_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
     *value = reduce_double(modulus, *value);
 }
 
-/// Returns `(a - b) mod modulus` using compact-modulus bounds.
+/// Returns `(a - b) mod modulus`.
+#[must_use]
 #[inline(always)]
 pub fn reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
     let diff = a.wrapping_sub(b);
     diff.min(diff.wrapping_add(modulus))
 }
 
-/// Subtracts `b` from `a` in place modulo `modulus` using compact-modulus bounds.
+/// Subtracts `b` from `a` in place modulo `modulus`.
 #[inline(always)]
 pub fn reduce_sub_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
     let diff = a.wrapping_sub(b);
@@ -46,6 +49,7 @@ pub fn reduce_sub_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
 }
 
 /// Returns the lazy difference `a + modulus - b`.
+#[must_use]
 #[inline(always)]
 pub fn lazy_reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
     a + (modulus - b)

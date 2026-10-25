@@ -1,20 +1,21 @@
 use itertools::izip;
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 use primus_integer::{BigUint, FheUint};
 
 use super::BigUintPolynomial;
 
 impl<S, T> BigUintPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     /// Performs `self - rhs` according to `modulus`.
+    #[must_use]
     #[inline]
     pub fn sub<A, B>(mut self, rhs: &BigUintPolynomial<A>, modulus: &BigUint<B>) -> Self
     where
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
+        B: Data<Elem = T>,
     {
         self.sub_assign(rhs, modulus);
         self
@@ -24,8 +25,8 @@ where
     #[inline]
     pub fn sub_assign<A, B>(&mut self, rhs: &BigUintPolynomial<A>, modulus: &BigUint<B>)
     where
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
+        B: Data<Elem = T>,
     {
         debug_assert_eq!(self.len(), rhs.len());
         let value_len = modulus.len();
@@ -39,7 +40,7 @@ where
 
 impl<S, T> BigUintPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Performs `result = self - rhs` according to `modulus`.
@@ -50,9 +51,9 @@ where
         output: &mut BigUintPolynomial<B>,
         modulus: &BigUint<C>,
     ) where
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + DataMut,
-        C: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
+        B: DataMut<Elem = T>,
+        C: Data<Elem = T>,
     {
         debug_assert_eq!(self.len(), rhs.len());
         debug_assert_eq!(self.len(), output.len());
@@ -71,8 +72,8 @@ where
     #[inline]
     pub fn sub_rev_assign<A, C>(&self, rhs: &mut BigUintPolynomial<A>, modulus: &BigUint<C>)
     where
-        A: RawData<Elem = T> + DataMut,
-        C: RawData<Elem = T> + Data,
+        A: DataMut<Elem = T>,
+        C: Data<Elem = T>,
     {
         debug_assert_eq!(self.len(), rhs.len());
         let value_len = modulus.len();

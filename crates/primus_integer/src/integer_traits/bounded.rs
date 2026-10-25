@@ -1,8 +1,13 @@
-/// Numbers which have upper and lower bounds
+/// A type whose minimum and maximum representable values are available as
+/// associated constants.
+///
+/// This trait makes the inherent `MIN` and `MAX` constants of primitive
+/// integers available to generic code.
 pub trait ConstBounded {
-    /// The smallest finite number this type can represent
+    /// The smallest value representable by this type.
     const MIN: Self;
-    /// The largest finite number this type can represent
+
+    /// The largest value representable by this type.
     const MAX: Self;
 }
 

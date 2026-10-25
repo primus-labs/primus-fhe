@@ -1,9 +1,16 @@
-use primus_integer::UnsignedInteger;
+use primus_integer::{FheUint, UnsignedInteger};
 use primus_reduce::{ReduceError, prelude::*};
 
-use crate::common::compact;
+use crate::{UintModulus, common::compact};
 
 use super::CompactModulus;
+
+impl<T: FheUint> EncodeSigned<T> for CompactModulus<T> {
+    #[inline(always)]
+    fn encode_signed(self, value: T::SignedInteger) -> T {
+        UintModulus(self.0).encode_signed(value)
+    }
+}
 
 impl<T: UnsignedInteger> ReduceOnce<T> for CompactModulus<T> {
     type Output = T;

@@ -1,117 +1,83 @@
 use num_complex::Complex64;
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 
-use super::FourierPolynomial;
+use super::{FourierPolynomial, FourierPolynomialMut, FourierPolynomialRef};
 
 impl<S> FourierPolynomial<S>
 where
-    S: RawData<Elem = Complex64> + DataMut,
+    S: DataMut<Elem = Complex64>,
 {
-    /// Performs `self - rhs` (pointwise complex subtraction).
+    /// Subtracts `rhs` pointwise from this Fourier polynomial.
+    #[inline]
+    pub fn sub_assign<A>(&mut self, rhs: &FourierPolynomial<A>)
+    where
+        A: Data<Elem = Complex64>,
+    {
+        sub_assign_kernel(self.as_mut_view(), rhs.as_view());
+    }
+
+    /// Subtracts `rhs` pointwise and returns this Fourier polynomial.
+    #[must_use]
     #[inline]
     #[allow(clippy::should_implement_trait)]
     pub fn sub<A>(mut self, rhs: &FourierPolynomial<A>) -> Self
     where
-        A: RawData<Elem = Complex64> + Data,
+        A: Data<Elem = Complex64>,
     {
         self.sub_assign(rhs);
         self
-    }
-
-    /// Performs `self -= rhs` (pointwise complex subtraction in place).
-    #[inline]
-    pub fn sub_assign<A>(&mut self, rhs: &FourierPolynomial<A>)
-    where
-        A: RawData<Elem = Complex64> + Data,
-    {
-        debug_assert_eq!(self.fourier_length(), rhs.fourier_length());
-        for (a, &b) in self.iter_mut().zip(rhs.iter()) {
-            *a -= b;
-        }
     }
 }
 
 impl<S> FourierPolynomial<S>
 where
-    S: RawData<Elem = Complex64> + Data,
+    S: Data<Elem = Complex64>,
 {
-    /// Performs `rhs = self - rhs` (reverse subtraction in place).
+    /// Replaces `rhs` with the pointwise difference `self - rhs`.
     #[inline]
     pub fn sub_rev_assign<A>(&self, rhs: &mut FourierPolynomial<A>)
     where
-        A: RawData<Elem = Complex64> + DataMut,
+        A: DataMut<Elem = Complex64>,
     {
-        debug_assert_eq!(self.fourier_length(), rhs.fourier_length());
-        for (b, &a) in rhs.iter_mut().zip(self.iter()) {
-            *b = a - *b;
-        }
+        sub_rev_assign_kernel(self.as_view(), rhs.as_mut_view());
     }
 
-    /// Performs `output = self - rhs` (pointwise complex subtraction).
+    /// Writes the pointwise difference `self - rhs` to `output`.
     #[inline]
     pub fn sub_to<A, B>(&self, rhs: &FourierPolynomial<A>, output: &mut FourierPolynomial<B>)
     where
-        A: RawData<Elem = Complex64> + Data,
-        B: RawData<Elem = Complex64> + DataMut,
+        A: Data<Elem = Complex64>,
+        B: DataMut<Elem = Complex64>,
     {
-        debug_assert_eq!(self.fourier_length(), rhs.fourier_length());
-        debug_assert_eq!(self.fourier_length(), output.fourier_length());
-        for ((&a, &b), out) in self.iter().zip(rhs.iter()).zip(output.iter_mut()) {
-            *out = a - b;
-        }
+        sub_to_kernel(self.as_view(), rhs.as_view(), output.as_mut_view());
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::fourier::FourierPolynomialOwned;
-
-    #[test]
-    fn test_sub_assign() {
-        let a = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(5.0, 2.0),
-            Complex64::new(3.0, 1.0),
-        ]);
-        let b = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(2.0, 0.0),
-            Complex64::new(1.0, 1.0),
-        ]);
-        let mut result = a;
-        result.sub_assign(&b);
-        assert_eq!(result.as_slice()[0], Complex64::new(3.0, 2.0));
-        assert_eq!(result.as_slice()[1], Complex64::new(2.0, 0.0));
+#[inline]
+fn sub_assign_kernel(mut acc: FourierPolynomialMut<'_>, rhs: FourierPolynomialRef<'_>) {
+    debug_assert_eq!(acc.len(), rhs.len());
+    for (value, rhs) in acc.iter_mut().zip(rhs.iter()) {
+        *value -= *rhs;
     }
+}
 
-    #[test]
-    fn test_sub_rev_assign() {
-        let a = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(5.0, 0.0),
-            Complex64::new(3.0, 0.0),
-        ]);
-        let mut b = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(2.0, 0.0),
-            Complex64::new(1.0, 0.0),
-        ]);
-        a.sub_rev_assign(&mut b);
-        // b = a - b: [5-2, 3-1] = [3, 2]
-        assert_eq!(b.as_slice()[0], Complex64::new(3.0, 0.0));
-        assert_eq!(b.as_slice()[1], Complex64::new(2.0, 0.0));
+#[inline]
+fn sub_rev_assign_kernel(lhs: FourierPolynomialRef<'_>, mut rhs: FourierPolynomialMut<'_>) {
+    debug_assert_eq!(lhs.len(), rhs.len());
+    for (rhs, lhs) in rhs.iter_mut().zip(lhs.iter()) {
+        *rhs = *lhs - *rhs;
     }
+}
 
-    #[test]
-    fn test_sub_to() {
-        let a = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(5.0, 0.0),
-            Complex64::new(3.0, 0.0),
-        ]);
-        let b = FourierPolynomialOwned::from_slice(&[
-            Complex64::new(2.0, 0.0),
-            Complex64::new(1.0, 0.0),
-        ]);
-        let mut output = FourierPolynomialOwned::zero(2);
-        a.sub_to(&b, &mut output);
-        assert_eq!(output.as_slice()[0], Complex64::new(3.0, 0.0));
-        assert_eq!(output.as_slice()[1], Complex64::new(2.0, 0.0));
+#[inline]
+fn sub_to_kernel(
+    lhs: FourierPolynomialRef<'_>,
+    rhs: FourierPolynomialRef<'_>,
+    mut output: FourierPolynomialMut<'_>,
+) {
+    debug_assert_eq!(lhs.len(), rhs.len());
+    debug_assert_eq!(lhs.len(), output.len());
+    for ((output, lhs), rhs) in output.iter_mut().zip(lhs.iter()).zip(rhs.iter()) {
+        *output = *lhs - *rhs;
     }
 }

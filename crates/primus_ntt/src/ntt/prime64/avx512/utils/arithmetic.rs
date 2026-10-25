@@ -1,6 +1,10 @@
-use core::arch::x86_64::*;
+//! Arithmetic subset required by the HEXL-derived NTT kernels.
+//!
+//! The `_mm512_hexl_*` names are retained so each operation can be compared
+//! directly with `hexl/util/avx512-util.hpp`. Helpers from that header which
+//! are not used by the NTT have intentionally not been carried over.
 
-use super::CmpInt;
+use core::arch::x86_64::*;
 
 /// Returns lower NumBits bits from a 64-bit value
 #[target_feature(enable = "avx512f")]
@@ -67,7 +71,6 @@ pub fn _mm512_hexl_mulhi_epi_64(x: __m512i, y: __m512i) -> __m512i {
 #[target_feature(enable = "avx512f,avx512ifma")]
 #[inline]
 pub fn _mm512_hexl_mulhi_epi_52(x: __m512i, y: __m512i) -> __m512i {
-    // let zero = _mm512_set1_epi64(0);
     let zero = _mm512_setzero_si512();
     _mm512_madd52hi_epu64(zero, x, y)
 }
@@ -113,19 +116,6 @@ pub fn _mm512_hexl_mulhi_approx_epi_64(x: __m512i, y: __m512i) -> __m512i {
     _mm512_add_epi64(sum_hi, sum_mid2_hi)
 }
 
-/// Multiplies packed unsigned 52-bit integers in each 64-bit lane of `x` and `y`,
-/// producing an intermediate 104-bit result.
-///
-/// Returns the high 52-bit unsigned integer from the intermediate result,
-/// with approximation error at most 1.
-#[target_feature(enable = "avx512f,avx512ifma")]
-#[inline]
-pub fn _mm512_hexl_mulhi_approx_epi_52(x: __m512i, y: __m512i) -> __m512i {
-    // let zero = _mm512_set1_epi64(0);
-    let zero = _mm512_setzero_si512();
-    _mm512_madd52hi_epu64(zero, x, y)
-}
-
 /// Multiplies packed unsigned 64-bit integers in each 64-bit lane of `x` and `y`,
 /// producing an intermediate 128-bit result.
 ///
@@ -143,7 +133,6 @@ pub fn _mm512_hexl_mullo_epi_64(x: __m512i, y: __m512i) -> __m512i {
 #[target_feature(enable = "avx512f,avx512ifma")]
 #[inline]
 pub fn _mm512_hexl_mullo_epi_52(x: __m512i, y: __m512i) -> __m512i {
-    // let zero = _mm512_set1_epi64(0);
     let zero = _mm512_setzero_si512();
     _mm512_madd52lo_epu64(zero, x, y)
 }
@@ -188,63 +177,4 @@ pub fn _mm512_hexl_small_mod_epu64_2(x: __m512i, q: __m512i) -> __m512i {
 #[inline]
 pub fn _mm512_hexl_small_add_mod_epi64(x: __m512i, y: __m512i, q: __m512i) -> __m512i {
     _mm512_hexl_small_mod_epu64_2(_mm512_add_epi64(x, y), q)
-}
-
-/// Returns `(x - y) mod q`; assumes `0 < x, y < q`
-#[inline]
-#[target_feature(enable = "avx512f,avx512dq")]
-pub fn _mm512_hexl_small_sub_mod_epi64(x: __m512i, y: __m512i, q: __m512i) -> __m512i {
-    // diff = x - y
-    // return (diff < 0) ? (diff + q) : diff
-    let v_diff = _mm512_sub_epi64(x, y);
-    let sign_bits: __mmask8 = _mm512_movepi64_mask(v_diff);
-    _mm512_mask_add_epi64(v_diff, sign_bits, v_diff, q)
-}
-
-/// Compares packed unsigned 64-bit integers in `a` and `b` and returns an AVX-512 mask.
-#[inline]
-#[target_feature(enable = "avx512f,avx512dq")]
-pub fn _mm512_hexl_cmp_epu64_mask(a: __m512i, b: __m512i, cmp: CmpInt) -> __mmask8 {
-    match cmp {
-        CmpInt::Eq => _mm512_cmp_epu64_mask::<{ CmpInt::Eq as i32 }>(a, b),
-        CmpInt::Lt => _mm512_cmp_epu64_mask::<{ CmpInt::Lt as i32 }>(a, b),
-        CmpInt::Le => _mm512_cmp_epu64_mask::<{ CmpInt::Le as i32 }>(a, b),
-        CmpInt::False => _mm512_cmp_epu64_mask::<{ CmpInt::False as i32 }>(a, b),
-        CmpInt::Ne => _mm512_cmp_epu64_mask::<{ CmpInt::Ne as i32 }>(a, b),
-        CmpInt::Nlt => _mm512_cmp_epu64_mask::<{ CmpInt::Nlt as i32 }>(a, b),
-        CmpInt::Nle => _mm512_cmp_epu64_mask::<{ CmpInt::Nle as i32 }>(a, b),
-        CmpInt::True => _mm512_cmp_epu64_mask::<{ CmpInt::True as i32 }>(a, b),
-    }
-}
-
-/// Returns `c[i] = (a[i] CMP b[i]) ? match_value : 0` (per 64-bit lane, unsigned compare).
-#[inline]
-#[target_feature(enable = "avx512f,avx512dq")]
-pub fn _mm512_hexl_cmp_epi64(a: __m512i, b: __m512i, cmp: CmpInt, match_value: u64) -> __m512i {
-    let mask: __mmask8 = _mm512_hexl_cmp_epu64_mask(a, b, cmp);
-    let v = _mm_set1_epi64x(match_value as i64);
-
-    // Broadcast `v` to 512-bit and zero lanes where mask bit is 0.
-    _mm512_maskz_broadcastq_epi64(mask, v)
-}
-
-/// Returns `c[i] = (a[i] >= b[i]) ? match_value : 0` (per 64-bit lane, unsigned compare).
-#[inline]
-#[target_feature(enable = "avx512f,avx512dq")]
-pub fn _mm512_hexl_cmpge_epu64(a: __m512i, b: __m512i, match_value: u64) -> __m512i {
-    _mm512_hexl_cmp_epi64(a, b, CmpInt::Nlt, match_value)
-}
-
-/// Returns `c[i] = (a[i] < b[i]) ? match_value : 0` (per 64-bit lane, unsigned compare).
-#[inline]
-#[target_feature(enable = "avx512f,avx512dq")]
-pub fn _mm512_hexl_cmplt_epu64(a: __m512i, b: __m512i, match_value: u64) -> __m512i {
-    _mm512_hexl_cmp_epi64(a, b, CmpInt::Lt, match_value)
-}
-
-/// Returns `c[i] = (a[i] <= b[i]) ? match_value : 0` (per 64-bit lane, unsigned compare).
-#[inline]
-#[target_feature(enable = "avx512f,avx512dq")]
-pub fn _mm512_hexl_cmple_epu64(a: __m512i, b: __m512i, match_value: u64) -> __m512i {
-    _mm512_hexl_cmp_epi64(a, b, CmpInt::Le, match_value)
 }

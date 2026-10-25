@@ -9,23 +9,18 @@ use thiserror::Error;
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum ReduceError<T> {
     /// Error that occurs when the given value has no inverse element with the given modulus.
-    #[error("Value {value:?} has no inverse element with the modulus {modulus:?}!")]
+    #[error("value {value:?} has no inverse modulo {modulus:?}")]
     NoInverse {
         /// The value being inverted.
         value: T,
         /// The modulus.
         modulus: T,
     },
-    /// Error that occurs when a value at a specific index has no inverse element.
-    #[error(
-        "Value at index {index} ({value:?}) has no inverse element with the modulus {modulus:?}!"
-    )]
-    NoInverseAtIndex {
-        /// The zero-based index of the failing element.
-        index: usize,
+    /// Error that occurs when the given value has no inverse element with an
+    /// implicit native modulus that cannot be represented in `T`.
+    #[error("value {value:?} has no inverse modulo the implicit native modulus")]
+    NoInverseImplicitModulus {
         /// The value being inverted.
         value: T,
-        /// The modulus.
-        modulus: T,
     },
 }

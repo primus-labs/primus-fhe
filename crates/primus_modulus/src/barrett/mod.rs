@@ -5,6 +5,7 @@ use primus_reduce::ReduceOnce;
 
 use crate::integer::{DivRemScalar, UnsignedInteger};
 
+mod native;
 mod ops;
 mod slice;
 
@@ -13,41 +14,60 @@ mod slice;
 pub mod simd;
 
 #[cfg(feature = "simd")]
-pub use simd::{SimdBarrettModulus, simd_reduce_dot_product};
+pub use simd::{SimdBarrettModulus, simd_reduce_dot_product, simd_reduce_dot_product_signed};
 
-/// A modulus, using barrett reduction algorithm.
+/// A Barrett reduction context for an explicit unsigned-integer modulus.
 ///
-/// The struct stores the modulus number and some precomputed
-/// data. Here, `b` = 2^T::BITS
+/// For `B = 2^(T::BITS)`, the context stores the modulus and the reciprocal
+/// `µ = floor(B² / modulus)`. The modulus must satisfy
+/// `1 < modulus < 2^(T::BITS - 2)`; the two spare bits allow 16 products to be
+/// accumulated before reduction.
 ///
-/// It's efficient if many reductions are performed with a single modulus.
-#[derive(Debug, Clone, Copy)]
+/// Its [`ReduceDotProduct`](primus_reduce::ReduceDotProduct) implementation accepts
+/// operands below `2^(T::BITS - 2)`, even when they exceed this context's modulus.
+/// This includes canonical residues from any other valid Barrett context of the
+/// same coefficient type, as used by RNS base conversion. Both slice and iterator
+/// forms return a canonical residue; scalar and SIMD paths share this bound.
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct BarrettModulus<T: UnsignedInteger> {
-    /// the value to indicate the modulus
     value: T,
-    /// ratio `µ` = floor(b²/value)
     ratio: [T; 2],
 }
 
+impl<T: UnsignedInteger> PartialEq for BarrettModulus<T> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
 impl<T: UnsignedInteger> BarrettModulus<T> {
-    /// Creates a new [`BarrettModulus<T>`] with the given value.
+    /// Creates a [`BarrettModulus<T>`] for `value`.
     ///
     /// # Panics
     ///
-    /// Panics if `value ≤ 1` or if the bit-width of `value` is too large
-    /// (≥ `T::BITS - 1`).  For a fallible variant see [`try_new`](Self::try_new).
+    /// Panics unless `1 < value < 2^(T::BITS - 2)`. For a fallible variant, see
+    /// [`try_new`](Self::try_new).
+    #[must_use]
     pub fn new(value: T) -> Self {
-        assert!(value > T::ONE, "modulus can't be 0 or 1.");
+        assert!(
+            value > T::ONE,
+            "BarrettModulus::new: modulus must be greater than one"
+        );
         let leading_zeros = value.leading_zeros();
-        assert!(leading_zeros > 1, "modulus is too large.");
+        assert!(
+            leading_zeros > 1,
+            "BarrettModulus::new: modulus must be less than 2^(T::BITS - 2)"
+        );
         Self::new_unchecked(value)
     }
 
-    /// Creates a new [`BarrettModulus<T>`] without validating the modulus value.
+    /// Creates a [`BarrettModulus<T>`] without validating `value`.
     ///
     /// # Correctness
     ///
-    /// `value` must satisfy `1 < value < 2^(T::BITS - 1)`.
+    /// `value` must satisfy `1 < value < 2^(T::BITS - 2)`.
+    #[must_use]
     #[inline]
     pub fn new_unchecked(value: T) -> Self {
         let mut quotient = [T::ZERO; 3];
@@ -60,13 +80,20 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
 
     /// Creates a [`BarrettModulus<T>`] from precomputed parts.
     ///
-    /// The `ratio` must equal `floor(b² / value)` where `b = 2^T::BITS`.
+    /// # Correctness
+    ///
+    /// `value` must satisfy `1 < value < 2^(T::BITS - 2)`, and `ratio` must be
+    /// the little-endian limbs `[low, high]` of `floor(B² / value)`, where
+    /// `B = 2^(T::BITS)`.
+    #[must_use]
     #[inline]
     pub const fn from_parts(value: T, ratio: [T; 2]) -> Self {
         Self { value, ratio }
     }
 
-    /// Fallible constructor returning `None` if the value is out of range.
+    /// Creates a [`BarrettModulus<T>`] when `1 < value < 2^(T::BITS - 2)`, or
+    /// returns `None` otherwise.
+    #[must_use]
     #[inline]
     pub fn try_new(value: T) -> Option<Self> {
         if value <= T::ONE {
@@ -79,22 +106,22 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
         Some(Self::new_unchecked(value))
     }
 
-    /// Returns the value of this [`BarrettModulus<T>`].
+    /// Returns the modulus.
+    #[must_use]
     #[inline]
     pub const fn value(&self) -> T {
         self.value
     }
 
-    /// Returns the ratio of this [`BarrettModulus<T>`].
+    /// Returns the little-endian limbs `[low, high]` of the precomputed
+    /// reciprocal `floor(B² / modulus)`.
+    #[must_use]
     #[inline]
     pub const fn ratio(&self) -> [T; 2] {
         self.ratio
     }
 
-    /// Barrett reduction for a 2-limb value `(hi·B + lo)`.
-    ///
-    /// Step 1: `q = floor((hi·B + lo) · µ / B²)`
-    /// Step 2: `r = lo - q · modulus`
+    // Lazily reduces the two-limb value `hi * B + lo`.
     #[inline]
     fn lazy_reduce_wide(&self, lo: T, hi: T) -> T {
         //                        ratio[1]  ratio[0]
@@ -116,6 +143,9 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
         //             +--------+
         //             |   q₃   |
         //             +--------+
+
+        // Compute the quotient estimate from the upper limbs of
+        // `(hi * B + lo) * ratio`, including carries from the lower limbs.
         let ah = lo.widening_mul_hw(self.ratio[0]);
 
         let b = lo.carrying_mul(self.ratio[1], ah);
@@ -127,11 +157,12 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
 
         let q = d.wrapping_add(bch);
 
-        // Step 2.
+        // Subtract the estimated multiple modulo `B`.
         lo.wrapping_sub(q.wrapping_mul(self.value))
     }
 
     /// Reduces a 2-limb value `(hi * B + lo)` modulo this modulus.
+    #[must_use]
     #[inline]
     pub fn reduce_wide(&self, lo: T, hi: T) -> T {
         self.reduce_once(self.lazy_reduce_wide(lo, hi))
@@ -145,21 +176,61 @@ impl<T: UnsignedInteger> Display for BarrettModulus<T> {
     }
 }
 
+impl<T: FheUint> BarrettModulus<T> {
+    /// Internal support for `Barrett` derive's constant-modulus fallback.
+    /// Returns `false` without modifying `acc` when no native kernel is selected.
+    ///
+    /// # Panics
+    /// May panic if the slice lengths differ.
+    ///
+    /// # Correctness
+    /// Inherits the canonical-input requirements of
+    /// [`ReduceMulAddSlice::reduce_add_mul_slice_assign`](primus_reduce::ReduceMulAddSlice::reduce_add_mul_slice_assign).
+    #[doc(hidden)]
+    #[inline]
+    pub fn __try_derived_add_mul_slice_assign(self, acc: &mut [T], a: &[T], b: &[T]) -> bool {
+        native::try_add_mul::<T, true>(self, acc, a, b)
+    }
+
+    /// Internal support for `Barrett` derive's constant-modulus fallback.
+    /// Returns `false` without modifying `output` when no native kernel is selected.
+    ///
+    /// # Panics
+    /// May panic if the slice lengths differ.
+    ///
+    /// # Correctness
+    /// Inherits the canonical-input requirements of
+    /// [`ReduceMulAddSlice::reduce_mul_add_slice_to`](primus_reduce::ReduceMulAddSlice::reduce_mul_add_slice_to).
+    #[doc(hidden)]
+    #[inline]
+    pub fn __try_derived_mul_add_slice_to(
+        self,
+        a: &[T],
+        b: &[T],
+        c: &[T],
+        output: &mut [T],
+    ) -> bool {
+        native::try_mul_add_to::<T, true>(self, a, b, c, output)
+    }
+}
+
 impl<T: FheUint> primus_reduce::Modulus for BarrettModulus<T> {
     type ValueT = T;
 
     #[inline]
-    fn value(self) -> Option<Self::ValueT> {
+    fn explicit_value(self) -> Option<Self::ValueT> {
         Some(self.value)
-    }
-
-    #[inline(always)]
-    unsafe fn value_unchecked(self) -> Self::ValueT {
-        self.value
     }
 
     #[inline(always)]
     fn minus_one(self) -> Self::ValueT {
         self.value - T::ONE
+    }
+}
+
+impl<T: FheUint> primus_reduce::ExplicitModulus for BarrettModulus<T> {
+    #[inline(always)]
+    fn value(self) -> Self::ValueT {
+        self.value
     }
 }

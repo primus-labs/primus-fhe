@@ -5,17 +5,23 @@ use primus_integer::{ByteCount, FheUint, Size};
 mod add;
 mod mul;
 mod neg;
-mod random;
 mod sub;
 
-/// This structure is used to store polynomials with large integer coefficients.
+/// Raw modulus-major coefficient storage for a CRT polynomial.
 ///
-/// By the Chinese remainder theorem,
-/// a large integer can be decomposed into several remainders.
+/// A complete RNS polynomial contains one contiguous `N`-coefficient block per
+/// modulus, in the base's order. This wrapper stores neither `N` nor the base:
+/// empty, arbitrary-length and packed storage are allowed, and [`Self::len`]
+/// counts all stored residues. The owning boundary establishes the full layout.
 ///
-/// If all the coefficients of a polynomial are decomposed in the same way,
-/// several polynomials with relatively small coefficients can be obtained,
-/// and the latter has better performance in addition and subtraction computation.
+/// # Correctness
+///
+/// Component-wise arithmetic requires nonzero `poly_length` and equal input
+/// and output lengths of `poly_length * moduli.len()`. Moduli follow the stored
+/// block order. Per-component scalar/factor slices have one entry per modulus;
+/// per-point factors have the full storage length. Values must satisfy the
+/// selected reduction or factor operation's range contract. These conditions
+/// are established by the caller, not validated by the wrapper.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CrtPolynomial<S>(pub S)
 where
@@ -24,12 +30,15 @@ where
 
 impl_iters!(CrtPolynomial, crt_poly);
 
+impl_views!(CrtPolynomial);
+
 impl<S, T> CrtPolynomial<S>
 where
     S: RawData<Elem = T>,
     T: FheUint,
 {
-    /// Creates a new [`CrtPolynomial<T>`].
+    /// Creates a new [`CrtPolynomial<S>`] from CRT coefficient storage.
+    #[must_use]
     #[inline]
     pub fn new(polys: S) -> Self {
         Self(polys)
@@ -38,25 +47,20 @@ where
 
 impl<S, T> CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + DataOwned,
+    S: DataOwned<Elem = T>,
     T: FheUint,
 {
-    /// Creates a [`CrtPolynomial<T>`] with all coefficients equal to zero.
+    /// Creates a [`CrtPolynomial<S>`] with `len` zero residues.
+    #[must_use]
     #[inline]
-    pub fn zero(crt_poly_len: usize) -> Self {
-        Self(S::from_vec(vec![T::ZERO; crt_poly_len]))
-    }
-
-    /// Drop self, and return the underlying storage.
-    #[inline]
-    pub fn into_owned(self) -> S {
-        self.0
+    pub fn zero(len: usize) -> Self {
+        Self(S::from_vec(vec![T::ZERO; len]))
     }
 }
 
 impl<S, T> CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     /// Extracts a mutable slice of the entire vector.
@@ -67,7 +71,13 @@ where
         self.0.as_mut_slice()
     }
 
-    /// Returns an iterator that allows modifying each value or coefficient of the polynomial.
+    /// Returns complete mutable modulus blocks of `poly_length` coefficients.
+    ///
+    /// Any incomplete trailing block is omitted. Callers must establish the
+    /// total length and modulus count/order before using these blocks.
+    ///
+    /// # Panics
+    /// Panics if `poly_length` is zero.
     #[inline]
     pub fn iter_each_modulus_mut(
         &mut self,
@@ -86,7 +96,7 @@ where
     #[inline]
     pub fn copy_from<A>(&mut self, src: &CrtPolynomial<A>)
     where
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         self.0.copy_from_slice(src.0.as_slice());
     }
@@ -94,7 +104,7 @@ where
 
 impl<S, T> CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Extracts a slice containing the entire vector.
@@ -105,28 +115,43 @@ where
         self.0.as_slice()
     }
 
-    /// Returns an iterator that allows reading each value or coefficient of the polynomial.
+    /// Returns complete modulus blocks of `poly_length` coefficients.
+    ///
+    /// Any incomplete trailing block is omitted. Callers must establish the
+    /// total length and modulus count/order before using these blocks.
+    ///
+    /// # Panics
+    /// Panics if `poly_length` is zero.
     #[inline]
     pub fn iter_each_modulus(&self, poly_length: usize) -> std::slice::ChunksExact<'_, T> {
         self.0.chunks_exact(poly_length)
     }
 
     /// Returns `true` if `self` is equal to `0`.
+    #[must_use]
     #[inline]
     pub fn is_zero(&self) -> bool {
         self.0.iter().all(Zero::is_zero)
     }
 
     /// Returns the number of elements in the backing storage.
+    #[must_use]
     #[inline]
-    pub fn crt_poly_length(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    /// Returns whether the backing storage contains no CRT residues.
+    #[must_use]
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
 impl<S, T> Size for CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     #[inline]
@@ -137,7 +162,7 @@ where
 
 impl<S, T> AsRef<[T]> for CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     #[inline]
@@ -148,7 +173,7 @@ where
 
 impl<S, T> AsMut<[T]> for CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     #[inline]

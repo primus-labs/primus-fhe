@@ -1,4 +1,4 @@
-//! Generic unsigned-integer modular arithmetic helpers.
+//! Kernels for a representable unsigned-integer modulus greater than one.
 
 mod primitive;
 /// Slice-oriented helpers for unsigned-integer modular arithmetic.

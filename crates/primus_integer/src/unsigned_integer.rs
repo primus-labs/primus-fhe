@@ -21,9 +21,9 @@ use crate::{
 /// # Associated type
 ///
 /// [`SignedInteger`](UnsignedInteger::SignedInteger) is the matching signed
-/// type (e.g. `i64` for `u64`) and is used internally by algorithms such as
-/// [`Xgcd::xgcd`] that need signed intermediate
-/// cofactors.
+/// type with the same bit width (for example, `i64` for `u64`). It allows
+/// generic code to convert between unsigned residues and signed coefficients
+/// without naming a concrete primitive type.
 pub trait UnsignedInteger:
     Integer
     + num_traits::Unsigned
@@ -39,7 +39,13 @@ pub trait UnsignedInteger:
     + TryInto<usize, Error: Debug>
 {
     /// The matching signed type (e.g. `i64` for `u64`).
-    type SignedInteger: Integer;
+    type SignedInteger: super::SignedInteger<UnsignedInteger = Self>;
+
+    /// Returns the minimum number of bits required to represent `self`.
+    ///
+    /// Returns zero when `self` is zero.
+    #[must_use]
+    fn bit_width(self) -> u32;
 
     /// Returns `true` if and only if `self == 2^k` for some `k`.
     #[must_use]
@@ -52,12 +58,20 @@ pub trait UnsignedInteger:
     ///
     /// Performs a width-preserving bit-pattern cast (`value as Self`), so
     /// negative values become their two's-complement unsigned encoding (for
-    /// example `-1i64` maps to `u64::MAX`). This is the inverse of
-    /// [`wrapping_add_signed`](Self::wrapping_add_signed) when interpreting
-    /// the result modulo `2^BITS`.
+    /// example `-1i64` maps to `u64::MAX`). This is equivalent to
+    /// `Self::ZERO.wrapping_add_signed(value)` modulo `2^BITS`.
+    #[must_use]
     fn cast_from_signed(value: Self::SignedInteger) -> Self;
 
+    /// Reinterprets this unsigned value as its signed companion using `as`.
+    ///
+    /// Values with the high bit set become negative, preserving the underlying
+    /// two's-complement bit pattern.
+    #[must_use]
+    fn cast_to_signed(self) -> Self::SignedInteger;
+
     /// Wrapping (modular) addition with a signed integer. Computes `self + rhs`, wrapping around at the boundary of the type.
+    #[must_use]
     fn wrapping_add_signed(self, rhs: Self::SignedInteger) -> Self;
 }
 
@@ -67,8 +81,18 @@ macro_rules! impl_unsigned_integer {
             type SignedInteger = $i;
 
             #[inline]
+            fn bit_width(self) -> u32 {
+                <$t>::bit_width(self)
+            }
+
+            #[inline]
             fn cast_from_signed(value: Self::SignedInteger) -> Self {
                 value as $t
+            }
+
+            #[inline]
+            fn cast_to_signed(self) -> Self::SignedInteger {
+                self as $i
             }
 
             #[inline(always)]

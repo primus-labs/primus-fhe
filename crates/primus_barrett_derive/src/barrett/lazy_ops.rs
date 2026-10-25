@@ -11,7 +11,7 @@ pub(crate) fn lazy_ops(
     let [r0, r1] = ratio;
     quote! {
         impl #name {
-            /// Calculates `value (mod 2*modulus)`.
+            /// Returns a representative congruent to `value` modulo the modulus.
             #[inline]
             fn lazy_reduce_wide(self, lo: #ty, hi: #ty) -> #ty {
                 use ::primus_modulus::integer::{CarryingMul, WideningMul};
@@ -54,7 +54,7 @@ pub(crate) fn lazy_ops(
         impl ::primus_modulus::reduce::LazyReduce<#ty> for #name {
             type Output = #ty;
 
-            /// Calculates `value (mod 2*modulus)`.
+            /// Returns a representative congruent to `value` modulo the modulus.
             #[inline]
             fn lazy_reduce(self, value: #ty) -> #ty {
                 use ::primus_modulus::integer::{CarryingMul, WideningMul};
@@ -83,7 +83,7 @@ pub(crate) fn lazy_ops(
         impl ::primus_modulus::reduce::LazyReduce<[#ty; 2]> for #name {
             type Output = #ty;
 
-            /// Calculates `value (mod 2*modulus)`.
+            /// Returns a representative congruent to `value` modulo the modulus.
             #[inline]
             fn lazy_reduce(self, value: [#ty; 2]) -> Self::Output {
                 self.lazy_reduce_wide(value[0], value[1])
@@ -93,7 +93,7 @@ pub(crate) fn lazy_ops(
         impl ::primus_modulus::reduce::LazyReduce<(#ty, #ty)> for #name {
             type Output = #ty;
 
-            /// Calculates `value (mod 2*modulus)`.
+            /// Returns a representative congruent to `value` modulo the modulus.
             #[inline]
             fn lazy_reduce(self, value: (#ty, #ty)) -> Self::Output {
                 self.lazy_reduce_wide(value.0, value.1)
@@ -103,11 +103,15 @@ pub(crate) fn lazy_ops(
         impl ::primus_modulus::reduce::LazyReduce<&[#ty]> for #name {
             type Output = #ty;
 
-            /// Calculates `value (mod 2*modulus)` when value's length > 0.
+            /// Returns a lazy representative of a nonempty multi-limb value.
+            ///
+            /// # Panics
+            ///
+            /// Panics if `value` is empty.
             #[inline]
             fn lazy_reduce(self, value: &[#ty]) -> Self::Output {
                 match value {
-                    &[] => unreachable!(),
+                    &[] => panic!("Barrett reduction requires at least one limb"),
                     &[v] => {
                         if v < #modulus << 1u32 {
                             v
@@ -123,7 +127,7 @@ pub(crate) fn lazy_ops(
         }
 
         impl ::primus_modulus::reduce::LazyReduceAssign<#ty> for #name {
-            /// Calculates `value (mod 2*modulus)`.
+            /// Replaces `value` with a congruent representative in `[0, 2 * modulus)`.
             #[inline]
             fn lazy_reduce_assign(self, value: &mut #ty) {
                 use ::primus_modulus::reduce::LazyReduce;

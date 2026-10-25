@@ -37,102 +37,6 @@ impl<T: FheUint> ReduceNegSlice<T> for NativeModulus<T> {
     }
 }
 
-impl<T: FheUint> ReduceAddSlice<T> for NativeModulus<T> {
-    #[inline]
-    fn reduce_add_slice_assign(self, a: &mut [T], b: &[T]) {
-        debug_assert_eq!(a.len(), b.len());
-
-        let (a_chunks, a_rem) = T::simd_as_chunks_mut(a);
-        let (b_chunks, b_rem) = T::simd_as_chunks(b);
-
-        for (ac, bc) in a_chunks.iter_mut().zip(b_chunks) {
-            let av = T::SimdT::from_array(*ac);
-            let bv = T::SimdT::from_array(*bc);
-            *ac = (av + bv).to_array();
-        }
-
-        for (a, &b) in a_rem.iter_mut().zip(b_rem) {
-            *a = a.wrapping_add(b);
-        }
-    }
-
-    #[inline]
-    fn reduce_add_slice_to(self, a: &[T], b: &[T], output: &mut [T]) {
-        debug_assert_eq!(a.len(), b.len());
-        debug_assert_eq!(a.len(), output.len());
-
-        let (a_chunks, a_rem) = T::simd_as_chunks(a);
-        let (b_chunks, b_rem) = T::simd_as_chunks(b);
-        let (o_chunks, o_rem) = T::simd_as_chunks_mut(output);
-
-        for ((ac, bc), oc) in a_chunks.iter().zip(b_chunks).zip(o_chunks) {
-            let av = T::SimdT::from_array(*ac);
-            let bv = T::SimdT::from_array(*bc);
-            *oc = (av + bv).to_array();
-        }
-
-        for ((&a, &b), o) in a_rem.iter().zip(b_rem).zip(o_rem) {
-            *o = a.wrapping_add(b);
-        }
-    }
-}
-
-impl<T: FheUint> ReduceSubSlice<T> for NativeModulus<T> {
-    #[inline]
-    fn reduce_sub_slice_assign(self, a: &mut [T], b: &[T]) {
-        debug_assert_eq!(a.len(), b.len());
-
-        let (a_chunks, a_rem) = T::simd_as_chunks_mut(a);
-        let (b_chunks, b_rem) = T::simd_as_chunks(b);
-
-        for (ac, bc) in a_chunks.iter_mut().zip(b_chunks) {
-            let av = T::SimdT::from_array(*ac);
-            let bv = T::SimdT::from_array(*bc);
-            *ac = (av - bv).to_array();
-        }
-
-        for (a, &b) in a_rem.iter_mut().zip(b_rem) {
-            *a = a.wrapping_sub(b);
-        }
-    }
-    #[inline]
-    fn reduce_sub_slice_to(self, a: &[T], b: &[T], output: &mut [T]) {
-        debug_assert_eq!(a.len(), b.len());
-        debug_assert_eq!(a.len(), output.len());
-
-        let (a_chunks, a_rem) = T::simd_as_chunks(a);
-        let (b_chunks, b_rem) = T::simd_as_chunks(b);
-        let (o_chunks, o_rem) = T::simd_as_chunks_mut(output);
-
-        for ((ac, bc), oc) in a_chunks.iter().zip(b_chunks).zip(o_chunks) {
-            let av = T::SimdT::from_array(*ac);
-            let bv = T::SimdT::from_array(*bc);
-            *oc = (av - bv).to_array();
-        }
-
-        for ((&a, &b), o) in a_rem.iter().zip(b_rem).zip(o_rem) {
-            *o = a.wrapping_sub(b);
-        }
-    }
-    #[inline]
-    fn reduce_sub_slice_rev_assign(self, a: &[T], b: &mut [T]) {
-        debug_assert_eq!(a.len(), b.len());
-
-        let (a_chunks, a_rem) = T::simd_as_chunks(a);
-        let (b_chunks, b_rem) = T::simd_as_chunks_mut(b);
-
-        for (ac, bc) in a_chunks.iter().zip(b_chunks) {
-            let av = T::SimdT::from_array(*ac);
-            let bv = T::SimdT::from_array(*bc);
-            *bc = (av - bv).to_array();
-        }
-
-        for (&a, b) in a_rem.iter().zip(b_rem) {
-            *b = a.wrapping_sub(*b);
-        }
-    }
-}
-
 impl<T: FheUint> ReduceDoubleSlice<T> for NativeModulus<T> {
     #[inline]
     fn reduce_double_slice_assign(self, values: &mut [T]) {
@@ -166,11 +70,8 @@ impl<T: FheUint> ReduceDoubleSlice<T> for NativeModulus<T> {
 }
 
 impl<T: FheUint> ReduceDotProduct<T> for NativeModulus<T> {
-    type Output = T;
     #[inline]
-    fn reduce_dot_product(self, a: impl AsRef<[T]>, b: impl AsRef<[T]>) -> T {
-        let a = a.as_ref();
-        let b = b.as_ref();
+    fn reduce_dot_product(self, a: &[T], b: &[T]) -> T {
         assert_eq!(a.len(), b.len(), "reduce_dot_product: length mismatch");
 
         let (a_chunks, a_rem) = T::simd_as_chunks(a);

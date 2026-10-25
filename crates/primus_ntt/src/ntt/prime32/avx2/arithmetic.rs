@@ -1,8 +1,5 @@
 use core::arch::x86_64::*;
 
-// Reduction helpers
-// ---------------------------------------------------------------------------
-
 /// `x mod q` for `x < 2*q` on 8 u32 lanes.
 ///
 /// Uses `_mm256_min_epu32` to implement the same branchless unsigned-min
@@ -25,8 +22,6 @@ pub(super) fn reduce_twice_avx2(x: __m256i, q: __m256i, two_q: __m256i) -> __m25
     reduce_once_avx2(x, q) // -> [0, q)
 }
 
-// ---------------------------------------------------------------------------
-
 /// Barrett-32 lazy multiply for 8 u32 lanes.
 ///
 /// Computes `qhat = (y * wp) >> 32` then `t = w*y - q*qhat` (all modulo 2³²).
@@ -41,7 +36,7 @@ pub(super) fn reduce_twice_avx2(x: __m256i, q: __m256i, two_q: __m256i) -> __m25
 #[target_feature(enable = "avx2")]
 #[inline]
 pub(super) fn mul_mod_lazy_avx2(y: __m256i, w: __m256i, wp: __m256i, q: __m256i) -> __m256i {
-    // ---- Step 1: qhat = hi32(y * wp) ----
+    // Barrett quotient: qhat = hi32(y * wp).
     //
     // Even lanes (0,2,4,6) — _mm256_mul_epu32 naturally picks them up.
     let prod_wp_even = _mm256_mul_epu32(y, wp);
@@ -62,10 +57,8 @@ pub(super) fn mul_mod_lazy_avx2(y: __m256i, w: __m256i, wp: __m256i, q: __m256i)
     // Interleave even and odd qhat into one vector of 8 × u32.
     let qhat = _mm256_or_si256(qhat_even, qhat_odd);
 
-    // ---- Step 2: t = low32(w*y) - low32(q*qhat) ----
+    // Low-half correction: t = low32(w*y) - low32(q*qhat).
     let wy = _mm256_mullo_epi32(w, y);
     let q_qhat = _mm256_mullo_epi32(q, qhat);
     _mm256_sub_epi32(wy, q_qhat)
 }
-
-// ---------------------------------------------------------------------------

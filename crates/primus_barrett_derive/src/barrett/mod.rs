@@ -11,16 +11,19 @@ mod basic;
 mod lazy_ops;
 mod lazy_slice_ops;
 mod ops;
+mod slice_kernels;
 mod slice_ops;
 
+/// Validate the type and reciprocal range before computing constants or emitting arithmetic.
 #[inline]
 pub(super) fn derive(input: &BarrettModulusInput) -> Result<TokenStream> {
     let modulus = Modulus::from_syn(&input.value, &input.ty)?;
-    modulus.check_leading_zeros(&input.value)?;
+    modulus.validate_range(&input.value)?;
 
     Ok(impl_barrett(input, modulus))
 }
 
+/// Assemble implementations around one precomputed reciprocal; modulus has already been validated.
 fn impl_barrett(input: &BarrettModulusInput, modulus: Modulus) -> TokenStream {
     let vis = &input.vis;
 

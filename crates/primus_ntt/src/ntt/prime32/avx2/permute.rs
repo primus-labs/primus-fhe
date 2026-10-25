@@ -1,8 +1,5 @@
 use core::arch::x86_64::*;
 
-// T4 interleave helpers
-// ---------------------------------------------------------------------------
-
 /// Load x/y from two T4 blocks and deinterleave into dedicated x and y vectors.
 ///
 /// T4 layout: each block is `[x₀..x₃ | y₀..y₃]` (8 × u32 = 256 bits).
@@ -17,10 +14,10 @@ use core::arch::x86_64::*;
 /// `[W_b × 4 | W_a × 4]` to match this lane order.
 #[target_feature(enable = "avx2")]
 #[inline]
-pub(super) fn t4_load_xy(block_a: *const __m256i, block_b: *const __m256i) -> (__m256i, __m256i) {
-    // SAFETY: caller ensures pointers are valid.
-    let v_a = unsafe { _mm256_loadu_si256(block_a) };
-    let v_b = unsafe { _mm256_loadu_si256(block_b) };
+pub(super) fn t4_load_xy(block: &[u32; 16]) -> (__m256i, __m256i) {
+    let ptr = block.as_ptr().cast::<__m256i>();
+    let v_a = unsafe { _mm256_loadu_si256(ptr) };
+    let v_b = unsafe { _mm256_loadu_si256(ptr.add(1)) };
     let v_x = _mm256_permute2x128_si256::<0x20>(v_a, v_b);
     let v_y = _mm256_permute2x128_si256::<0x31>(v_a, v_b);
     (v_x, v_y)
@@ -29,24 +26,15 @@ pub(super) fn t4_load_xy(block_a: *const __m256i, block_b: *const __m256i) -> (_
 /// Re-interleave x/y vectors back into two T4 blocks and store.
 #[target_feature(enable = "avx2")]
 #[inline]
-pub(super) fn t4_store_xy(
-    v_x: __m256i,
-    v_y: __m256i,
-    block_a: *mut __m256i,
-    block_b: *mut __m256i,
-) {
+pub(super) fn t4_store_xy(v_x: __m256i, v_y: __m256i, block: &mut [u32; 16]) {
     let v_a = _mm256_permute2x128_si256::<0x20>(v_x, v_y);
     let v_b = _mm256_permute2x128_si256::<0x31>(v_x, v_y);
-    // SAFETY: caller ensures pointers are valid and writable.
+    let ptr = block.as_mut_ptr().cast::<__m256i>();
     unsafe {
-        _mm256_storeu_si256(block_a, v_a);
-        _mm256_storeu_si256(block_b, v_b);
+        _mm256_storeu_si256(ptr, v_a);
+        _mm256_storeu_si256(ptr.add(1), v_b);
     }
 }
-
-// ---------------------------------------------------------------------------
-// T2 (t=2) load / store
-// ---------------------------------------------------------------------------
 
 /// Load 4 T2 blocks (16 u32) and deinterleave into x and y vectors.
 ///
@@ -61,8 +49,8 @@ pub(super) fn t4_store_xy(
 /// W vector must be `[W₃,W₃,W₁,W₁, W₂,W₂,W₀,W₀]` (lanes 7..0).
 #[target_feature(enable = "avx2")]
 #[inline]
-pub(super) fn t2_load_xy(ptr: *const __m256i) -> (__m256i, __m256i) {
-    // SAFETY: caller ensures ptr points to 2 consecutive __m256i.
+pub(super) fn t2_load_xy(block: &[u32; 16]) -> (__m256i, __m256i) {
+    let ptr = block.as_ptr().cast::<__m256i>();
     let v0 = unsafe { _mm256_loadu_si256(ptr) };
     let v1 = unsafe { _mm256_loadu_si256(ptr.add(1)) };
     let v_x = _mm256_unpacklo_epi64(v0, v1);
@@ -72,20 +60,16 @@ pub(super) fn t2_load_xy(ptr: *const __m256i) -> (__m256i, __m256i) {
 
 #[target_feature(enable = "avx2")]
 #[inline]
-pub(super) fn t2_store_xy(v_x: __m256i, v_y: __m256i, ptr: *mut __m256i) {
+pub(super) fn t2_store_xy(v_x: __m256i, v_y: __m256i, block: &mut [u32; 16]) {
     let v0 = _mm256_unpacklo_epi64(v_x, v_y);
     let v1 = _mm256_unpackhi_epi64(v_x, v_y);
 
-    // SAFETY: caller ensures ptr points to 2 writable __m256i.
+    let ptr = block.as_mut_ptr().cast::<__m256i>();
     unsafe {
         _mm256_storeu_si256(ptr, v0);
         _mm256_storeu_si256(ptr.add(1), v1);
     }
 }
-
-// ---------------------------------------------------------------------------
-// T1 (t=1) load / store
-// ---------------------------------------------------------------------------
 
 /// Load 8 T1 blocks (16 u32) and deinterleave into x and y vectors.
 ///
@@ -101,8 +85,8 @@ pub(super) fn t2_store_xy(v_x: __m256i, v_y: __m256i, ptr: *mut __m256i) {
 /// `[W0,W1,W4,W5, W2,W3,W6,W7]`.
 #[target_feature(enable = "avx2")]
 #[inline]
-pub(super) fn t1_load_xy(ptr: *const __m256i) -> (__m256i, __m256i) {
-    // SAFETY: caller ensures ptr points to 2 consecutive __m256i.
+pub(super) fn t1_load_xy(block: &[u32; 16]) -> (__m256i, __m256i) {
+    let ptr = block.as_ptr().cast::<__m256i>();
     let v0 = unsafe { _mm256_loadu_si256(ptr) };
     let v1 = unsafe { _mm256_loadu_si256(ptr.add(1)) };
 
@@ -117,14 +101,14 @@ pub(super) fn t1_load_xy(ptr: *const __m256i) -> (__m256i, __m256i) {
 
 #[target_feature(enable = "avx2")]
 #[inline]
-pub(super) fn t1_store_xy(v_x: __m256i, v_y: __m256i, ptr: *mut __m256i) {
+pub(super) fn t1_store_xy(v_x: __m256i, v_y: __m256i, block: &mut [u32; 16]) {
     let s0 = _mm256_unpacklo_epi64(v_x, v_y);
     let s1 = _mm256_unpackhi_epi64(v_x, v_y);
 
     let v0 = _mm256_shuffle_epi32::<0xD8>(s0);
     let v1 = _mm256_shuffle_epi32::<0xD8>(s1);
 
-    // SAFETY: caller ensures ptr points to 2 writable __m256i.
+    let ptr = block.as_mut_ptr().cast::<__m256i>();
     unsafe {
         _mm256_storeu_si256(ptr, v0);
         _mm256_storeu_si256(ptr.add(1), v1);

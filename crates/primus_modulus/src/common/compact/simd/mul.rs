@@ -1,7 +1,7 @@
 //! SIMD slice kernels for compact modular multiplication helpers.
 
 use primus_integer::{SimdArray, SimdUnsignedInteger};
-use primus_reduce::{Modulus, prelude::*};
+use primus_reduce::{ExplicitModulus, prelude::*};
 
 use crate::common::compact;
 
@@ -134,14 +134,14 @@ where
 pub fn lazy_reduce_sub_mul_slice_assign<T, M, SM>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
     T: SimdUnsignedInteger,
-    M: Copy + Modulus<ValueT = T> + Into<SM> + LazyReduceMulAdd<T, Output = T>,
+    M: Copy + ExplicitModulus<ValueT = T> + Into<SM> + LazyReduceMulAdd<T, Output = T>,
     SM: Copy + LazyReduceMulAdd<T::SimdT, Output = T::SimdT>,
 {
     debug_assert_eq!(acc.len(), a.len());
     debug_assert_eq!(acc.len(), b.len());
 
     let sm: SM = modulus.into();
-    let m = unsafe { modulus.value_unchecked() };
+    let m = modulus.value();
     let mv = T::SimdT::splat(m);
 
     let (acc_chunks, acc_rem) = T::simd_as_chunks_mut(acc);
@@ -391,14 +391,14 @@ where
 pub fn reduce_sub_mul_slice_assign<T, M, SM>(modulus: M, acc: &mut [T], a: &[T], b: &[T])
 where
     T: SimdUnsignedInteger,
-    M: Copy + Modulus<ValueT = T> + Into<SM> + ReduceMulAdd<T, Output = T>,
+    M: Copy + ExplicitModulus<ValueT = T> + Into<SM> + ReduceMulAdd<T, Output = T>,
     SM: Copy + ReduceMulAdd<T::SimdT, Output = T::SimdT>,
 {
     debug_assert_eq!(acc.len(), a.len());
     debug_assert_eq!(acc.len(), b.len());
 
     let sm: SM = modulus.into();
-    let m = unsafe { modulus.value_unchecked() };
+    let m = modulus.value();
     let mv = T::SimdT::splat(m);
 
     let (acc_chunks, acc_rem) = T::simd_as_chunks_mut(acc);

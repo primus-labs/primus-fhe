@@ -1,5 +1,5 @@
 use itertools::izip;
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 use primus_factor::FactorSliceOps;
 use primus_integer::FheUint;
 use primus_reduce::{ReduceMulAddSlice, ReduceMulSlice, ReduceNegSlice};
@@ -8,10 +8,11 @@ use super::CrtPolynomial;
 
 impl<S, T> CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
-    /// Performs `self * scalar` according to `moduli`.
+    /// Performs `self * scalars` according to `moduli`.
+    #[must_use]
     #[inline]
     pub fn mul_scalar<M>(mut self, scalars: &[T], poly_length: usize, moduli: &[M]) -> Self
     where
@@ -21,7 +22,7 @@ where
         self
     }
 
-    /// Performs `self *= scalar` according to `moduli`.
+    /// Performs `self *= scalars` according to `moduli`.
     #[inline]
     pub fn mul_scalar_assign<M>(&mut self, scalars: &[T], poly_length: usize, moduli: &[M])
     where
@@ -32,7 +33,8 @@ where
         )
     }
 
-    /// Performs `self * scalar` according to `moduli`.
+    /// Performs `self * factors` according to `moduli`.
+    #[must_use]
     #[inline]
     pub fn mul_factor<F>(mut self, factors: &[F], poly_length: usize, moduli: &[T]) -> Self
     where
@@ -42,7 +44,7 @@ where
         self
     }
 
-    /// Performs `self *= scalar` according to `moduli`.
+    /// Performs `self *= factors` according to `moduli`.
     #[inline]
     pub fn mul_factor_assign<F>(&mut self, factors: &[F], poly_length: usize, moduli: &[T])
     where
@@ -52,7 +54,7 @@ where
             .for_each(|(poly, &factor, &modulus)| factor.factor_mul_slice_assign(poly, modulus))
     }
 
-    /// Performs `self += scalar * rhs` according to `moduli`.
+    /// Performs `self += scalars * rhs` according to `moduli`.
     #[inline]
     pub fn add_mul_scalar_assign<M, A>(
         &mut self,
@@ -62,7 +64,7 @@ where
         moduli: &[M],
     ) where
         M: Copy + ReduceMulAddSlice<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         izip!(
             self.iter_each_modulus_mut(poly_length),
@@ -75,7 +77,7 @@ where
         });
     }
 
-    /// Performs `self += scalar * rhs` according to `moduli`.
+    /// Performs `self += factors * rhs` according to `moduli`.
     #[inline]
     pub fn add_mul_factor_assign<F, A>(
         &mut self,
@@ -85,7 +87,7 @@ where
         moduli: &[T],
     ) where
         F: Copy + FactorSliceOps<T>,
-        A: RawData<Elem = T> + Data,
+        A: Data<Elem = T>,
     {
         izip!(
             self.iter_each_modulus_mut(poly_length),
@@ -99,41 +101,22 @@ where
     }
 
     /// Multiplies `self` by the monomial `X^r`, in place, for each modulus component.
+    ///
+    /// `r` must belong to `[0, 2N)`, where `N` is `poly_length`.
     pub fn mul_monomial_assign<M>(&mut self, r: usize, poly_length: usize, moduli: &[M])
     where
         M: Copy + ReduceNegSlice<T>,
     {
-        if r < poly_length {
-            let rotate = |poly: &mut [T], modulus: M| {
-                poly.rotate_right(r);
-                modulus.reduce_neg_slice_assign(&mut poly[0..r]);
-            };
-
-            self.iter_each_modulus_mut(poly_length)
-                .zip(moduli)
-                .for_each(|(poly, &modulus)| rotate(poly, modulus));
-        } else {
-            debug_assert!(r < poly_length * 2);
-            let r = r - poly_length;
-
-            let rotate = |poly: &mut [T], modulus: M| {
-                poly.rotate_right(r);
-                modulus.reduce_neg_slice_assign(&mut poly[r..]);
-            };
-
-            self.iter_each_modulus_mut(poly_length)
-                .zip(moduli)
-                .for_each(|(poly, &modulus)| rotate(poly, modulus));
-        }
+        mul_monomial_assign_kernel(self.as_mut_view(), r, poly_length, moduli);
     }
 }
 
 impl<S, T> CrtPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
-    /// Performs `result = self * scalar` according to `moduli`.
+    /// Performs `result = self * scalars` according to `moduli`.
     #[inline]
     pub fn mul_scalar_to<M, A>(
         &self,
@@ -143,7 +126,7 @@ where
         moduli: &[M],
     ) where
         M: Copy + ReduceMulSlice<T>,
-        A: RawData<Elem = T> + DataMut,
+        A: DataMut<Elem = T>,
     {
         izip!(
             self.iter_each_modulus(poly_length),
@@ -156,7 +139,7 @@ where
         })
     }
 
-    /// Performs `result = self * scalar` according to `moduli`.
+    /// Performs `result = self * factors` according to `moduli`.
     #[inline]
     pub fn mul_factor_to<F, A>(
         &self,
@@ -166,7 +149,7 @@ where
         moduli: &[T],
     ) where
         F: Copy + FactorSliceOps<T>,
-        A: RawData<Elem = T> + DataMut,
+        A: DataMut<Elem = T>,
     {
         izip!(
             self.iter_each_modulus(poly_length),
@@ -177,5 +160,42 @@ where
         .for_each(|(in_poly, out_poly, &factor, &modulus)| {
             factor.factor_mul_slice_to(in_poly, out_poly, modulus);
         })
+    }
+}
+
+// Select the negated interval once for the entire modulus-major polynomial;
+// each component uses its own modulus with the same coefficient rotation.
+fn mul_monomial_assign_kernel<T, M>(
+    mut polynomial: CrtPolynomial<&mut [T]>,
+    r: usize,
+    poly_length: usize,
+    moduli: &[M],
+) where
+    T: FheUint,
+    M: Copy + ReduceNegSlice<T>,
+{
+    if r < poly_length {
+        let rotate = |poly: &mut [T], modulus: M| {
+            poly.rotate_right(r);
+            modulus.reduce_neg_slice_assign(&mut poly[0..r]);
+        };
+
+        polynomial
+            .iter_each_modulus_mut(poly_length)
+            .zip(moduli)
+            .for_each(|(poly, &modulus)| rotate(poly, modulus));
+    } else {
+        debug_assert!(r < poly_length * 2);
+        let r = r - poly_length;
+
+        let rotate = |poly: &mut [T], modulus: M| {
+            poly.rotate_right(r);
+            modulus.reduce_neg_slice_assign(&mut poly[r..]);
+        };
+
+        polynomial
+            .iter_each_modulus_mut(poly_length)
+            .zip(moduli)
+            .for_each(|(poly, &modulus)| rotate(poly, modulus));
     }
 }

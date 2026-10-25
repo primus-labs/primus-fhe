@@ -3,7 +3,11 @@
 //! The crate centers on [`RNSBase`], which stores a pairwise-coprime modulus
 //! basis and the CRT precomputations needed for decomposition and composition.
 //! [`BaseConverter`] builds on two bases to convert residue vectors between
-//! them, including batched polynomial layouts used by `primus_poly`.
+//! them. Batched operations use flat slices with caller-owned output and scratch,
+//! without depending on polynomial container types.
+//!
+//! [`Residues`] represents one value under an ordered basis with owned or
+//! borrowed storage; it does not store or validate the basis.
 //!
 //! Layout conventions used by the public APIs:
 //!
@@ -19,11 +23,18 @@
 #![deny(missing_docs)]
 
 mod error;
+mod residue_factors;
+mod residues;
+
+pub use residue_factors::ResidueFactors;
+pub use residues::Residues;
 
 mod base;
 mod converter;
+pub mod hybrid;
 
-pub use error::RNSError;
+pub use error::RnsError;
 
 pub use base::RNSBase;
-pub use converter::BaseConverter;
+pub use converter::{BaseConverter, CorrectedConversionWorkspace};
+pub use hybrid::{HybridRNS, HybridRNSPartition, HybridRNSPartitioning};

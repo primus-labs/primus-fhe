@@ -2,6 +2,7 @@ use primus_integer::{DivWide, UnsignedInteger};
 
 use crate::{FactorBase, FactorMul, LazyFactorMul};
 
+mod native;
 mod slice;
 
 #[cfg(feature = "simd")]
@@ -26,13 +27,14 @@ pub struct ShoupFactor<T: UnsignedInteger> {
     quotient: T,
 }
 
-impl<T: UnsignedInteger> FactorBase<T> for ShoupFactor<T> {
-    /// Constructs a [`ShoupFactor<T>`].
+impl<T: UnsignedInteger> ShoupFactor<T> {
+    /// Constructs a [`ShoupFactor<T>`] for `value` modulo `modulus`.
     ///
     /// * `value` must be less than `modulus`.
     /// * `modulus` must be less than `2^(T::BITS - 1)`.
+    #[must_use]
     #[inline]
-    fn new(value: T, modulus: T) -> Self {
+    pub fn new(value: T, modulus: T) -> Self {
         debug_assert!(value < modulus);
 
         // Calculate the quotient of `value * 2^T::BITS / modulus`.
@@ -40,9 +42,7 @@ impl<T: UnsignedInteger> FactorBase<T> for ShoupFactor<T> {
 
         Self { value, quotient }
     }
-}
 
-impl<T: UnsignedInteger> ShoupFactor<T> {
     /// Constructs a [`ShoupFactor<T>`] from an already-computed value and
     /// quotient pair.
     ///
@@ -51,6 +51,7 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     ///
     /// This is useful when value and quotient are stored in separate
     /// structure-of-arrays layouts (e.g. for SIMD).
+    #[must_use]
     #[inline]
     pub const fn from_raw(value: T, quotient: T) -> Self {
         Self { value, quotient }
@@ -61,6 +62,7 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     ///
     /// This is equivalent to `ShoupFactor::new(value, modulus).quotient()`
     /// but avoids discarding the value field.
+    #[must_use]
     #[inline]
     pub fn quotient_for(value: T, modulus: T) -> T {
         DivWide::div_wide(T::ZERO, value, modulus)
@@ -89,24 +91,34 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     }
 
     /// Returns the value of this [`ShoupFactor<T>`].
+    #[must_use]
     #[inline]
     pub const fn value(self) -> T {
         self.value
     }
 
     /// Returns the quotient of this [`ShoupFactor<T>`].
+    #[must_use]
     #[inline]
     pub const fn quotient(self) -> T {
         self.quotient
     }
 }
 
+impl<T: UnsignedInteger> FactorBase<T> for ShoupFactor<T> {
+    #[inline]
+    fn new(value: T, modulus: T) -> Self {
+        Self::new(value, modulus)
+    }
+}
+
 impl<T: UnsignedInteger> LazyFactorMul<T> for ShoupFactor<T> {
-    /// Calculates `self.value() * b (mod 2 * modulus)`.
+    /// Calculates a lazy representative of `self.value() * b` modulo `modulus`.
     ///
-    /// `b` must be less than `modulus`, `modulus` must match the modulus used
-    /// to precompute `self.quotient()`, and `modulus` must be less than
-    /// `2^(T::BITS - 1)`. The result is in `[0, 2 * modulus)`.
+    /// `b` may be any value representable by `T`. `modulus` must match the
+    /// modulus used to precompute `self.quotient()` and must be less than
+    /// `2^(T::BITS - 1)`. The result is congruent to the product modulo
+    /// `modulus` and lies in `[0, 2 * modulus)`.
     ///
     /// # Proof
     ///
@@ -115,7 +127,8 @@ impl<T: UnsignedInteger> LazyFactorMul<T> for ShoupFactor<T> {
     ///
     /// By definition, `w' = floor(wB / p)`. Let `q = floor(w'x / B)`.
     ///
-    /// Then, `0 <= wB / p - w' < 1`, `0 <= w'x / B - q < 1`.
+    /// Then, `0 <= wB / p - w' < 1`, `0 <= w'x / B - q < 1`. Since `x` is
+    /// represented by `T`, `0 <= x < B`.
     ///
     /// Multiplying by `xp / B` and `p` respectively, and adding, yields
     ///
@@ -132,8 +145,8 @@ impl<T: UnsignedInteger> LazyFactorMul<T> for ShoupFactor<T> {
 impl<T: UnsignedInteger> FactorMul<T> for ShoupFactor<T> {
     /// Calculates `self.value() * b (mod modulus)`.
     ///
-    /// `b` must be less than `modulus`, `modulus` must match the modulus used
-    /// to precompute `self.quotient()`, and `modulus` must be less than
+    /// `b` may be any value representable by `T`. `modulus` must match the
+    /// modulus used to precompute `self.quotient()` and must be less than
     /// `2^(T::BITS - 1)`. The result is in `[0, modulus)`.
     #[inline]
     fn factor_mul_modulo(self, b: T, modulus: T) -> T {

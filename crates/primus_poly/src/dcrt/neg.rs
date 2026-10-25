@@ -1,5 +1,5 @@
 use itertools::izip;
-use primus_data::{Data, DataMut, RawData};
+use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
 use primus_reduce::ReduceNegSlice;
 
@@ -7,10 +7,11 @@ use super::DcrtPolynomial;
 
 impl<S, T> DcrtPolynomial<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
     /// Performs the unary `-` operation.
+    #[must_use]
     #[inline]
     pub fn neg<M>(mut self, poly_length: usize, moduli: &[M]) -> Self
     where
@@ -34,7 +35,7 @@ where
 
 impl<S, T> DcrtPolynomial<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     /// Performs the unary `-` operation.
@@ -42,7 +43,7 @@ where
     pub fn neg_to<M, A>(&self, output: &mut DcrtPolynomial<A>, poly_length: usize, moduli: &[M])
     where
         M: Copy + ReduceNegSlice<T>,
-        A: RawData<Elem = T> + DataMut,
+        A: DataMut<Elem = T>,
     {
         izip!(
             self.iter_each_modulus(poly_length),

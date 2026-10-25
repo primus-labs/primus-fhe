@@ -1,17 +1,17 @@
 // cargo r -r -p primus_distr --example check_gaussian
 //
-// Validates discrete Gaussian sampler implementations by checking:
+// Exploratory accuracy analysis for one discrete Gaussian sampler:
 // - Standard deviation accuracy across multiple sigma values
 // - Cumulative probability distribution P(|X| <= n*sigma) for n = 1..6
 // - Convolution property: sum of CHUNK_SIZE independent N(0, sigma^2)
 //   samples should follow N(0, CHUNK_SIZE * sigma^2)
 //
-// Edit main() to choose which sampler to validate (CDTSampler or
-// DiscreteZiggurat), or uncomment blocks to test side by side.
+// Results are descriptive and non-gating. Use the Criterion benchmarks for
+// sampler construction and throughput measurements.
 
 use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table, presets::UTF8_FULL};
-use primus_distr::stats;
-use rand::distr::Distribution;
+use primus_distr::{MIN_STANDARD_DEVIATION, stats};
+use rand::{SeedableRng, distr::Distribution, rngs::StdRng};
 
 type ValueT = u64;
 
@@ -113,7 +113,7 @@ fn report_cumulative_probs(sigma: f64, counts: &[usize], theoretical_probs: &[f6
 
     let mut table = Table::new();
     table
-        .load_preset(UTF8_FULL)
+        .load_style(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic);
 
     table.set_header(vec![
@@ -241,34 +241,63 @@ where
 // ---------------------------------------------------------------------------
 
 fn main() {
-    let mut rng = rand::rng();
+    let mut rng = StdRng::seed_from_u64(0x4348_4543_4b2d_4741);
 
     println!("\n{}", "═".repeat(80));
-    println!("Discrete Gaussian Sampler Validation");
+    println!("Discrete Gaussian Sampler Accuracy Analysis (non-gating)");
     println!("Samples per test: {}", N);
     println!("{}\n", "═".repeat(80));
 
     // ---- Choose sampler(s) to validate (edit / uncomment below) ----
 
-    // CDTSampler (f64 precision, portable; efficient for sigma <= 20):
+    // CDTSampler (f64 precision, portable; available while its support fits):
     {
-        let sigmas = [0.7, 0.8, 0.9, 1.0, 3.19, 10.0, 15.0, 20.0];
+        let sigmas = [
+            MIN_STANDARD_DEVIATION,
+            0.8,
+            0.9,
+            1.0,
+            3.19,
+            10.0,
+            15.0,
+            20.0,
+        ];
         for &sigma in &sigmas {
-            let distr = primus_distr::CDTSampler::<ValueT>::new(sigma, TAIL_CUT, Q - 1);
+            let distr = primus_distr::CDTSampler::<ValueT>::new(sigma, TAIL_CUT, Q - 1).unwrap();
             validate_sampler("CDTSampler", sigma, &distr, &mut rng);
         }
     }
+
+    // PreciseCDTSampler:
+    // #[cfg(feature = "high_precision")]
+    // {
+    //     let sigmas = [
+    //         MIN_STANDARD_DEVIATION,
+    //         0.8,
+    //         0.9,
+    //         1.0,
+    //         3.19,
+    //         10.0,
+    //         15.0,
+    //         20.0,
+    //     ];
+    //     for &sigma in &sigmas {
+    //         let distr =
+    //             primus_distr::PreciseCDTSampler::<ValueT>::new(sigma, TAIL_CUT, Q - 1).unwrap();
+    //         validate_sampler("PreciseCDTSampler", sigma, &distr, &mut rng);
+    //     }
+    // }
 
     // DiscreteZiggurat (large σ):
     // {
     //     let sigmas = [10.0, 20.0, 30.0, 40.0];
     //     for &sigma in &sigmas {
-    //         let distr = primus_distr::DiscreteZiggurat::<ValueT>::new(sigma, TAIL_CUT, Q - 1);
+    //         let distr = primus_distr::DiscreteZiggurat::<ValueT>::new(sigma, TAIL_CUT, Q - 1).unwrap();
     //         validate_sampler("DiscreteZiggurat", sigma, &distr, &mut rng);
     //     }
     // }
 
     println!("\n{}", "═".repeat(80));
-    println!("All tests completed!");
+    println!("Exploratory analysis completed (non-gating).");
     println!("{}", "═".repeat(80));
 }

@@ -2,21 +2,26 @@ mod primitive;
 #[cfg(feature = "simd")]
 mod simd;
 
-/// Widening mul operation trait.
+/// Widening multiplication for unsigned words.
 pub trait WideningMul: Sized {
-    /// Widening multiplication. Computes `self * rhs`, widening to a larger integer.
+    /// Calculates the complete product `self * rhs` without the possibility of
+    /// overflow.
     ///
-    /// The returned value is always exact and can never overflow.
+    /// This returns the low-order (wrapping) word and high-order (overflow)
+    /// word of the exact result as `(low, high)`. For word radix `B = 2^w`,
+    /// each scalar value or SIMD lane satisfies
+    /// `self * rhs = low + high * B`.
     ///
-    /// Note that this method is semantically equivalent to `carrying_mul` with a
-    /// carry of zero, with the latter instead returning a tuple denoting the low and
-    /// high parts of the result. Consider using it instead if you need
-    /// interoperability with other big int helper functions, or if this method isn't
-    /// available for a given type.
+    /// This is semantically equivalent to
+    /// [`CarryingMul::carrying_mul`](super::CarryingMul::carrying_mul) with a
+    /// zero carry-in.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn widening_mul(self, rhs: Self) -> (Self, Self);
 
-    /// Calculates the complete product `self` * `rhs` without the possibility to overflow.
+    /// Returns the high word of the exact product `self * rhs`.
     ///
-    /// This returns only the high-order (overflow) bits of the result.
+    /// This is the `high` component returned by [`Self::widening_mul`], or
+    /// equivalently `floor(self * rhs / 2^w)` for a `w`-bit word.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
     fn widening_mul_hw(self, rhs: Self) -> Self;
 }

@@ -1,28 +1,21 @@
 #![deny(missing_docs)]
-//! Torus negacyclic FFT transforms for `Z[X] / (X^N + 1)`.
+//! Negacyclic FFT wrappers for `Z[X] / (X^N + 1)`.
 //!
-//! Provides the [`FftTable`] trait and the [`FullComplex64FftTable`] reference
-//! backend backed by the `rustfft` crate. The forward transform centers torus
-//! coefficients, applies a negacyclic twist, and performs a standard complex
-//! FFT. The inverse applies an IFFT, untwists, and rounds back to the torus
-//! representation.
-//!
-//! # Backends
-//!
-//! - [`FullComplex64FftTable`]: stores the full `N` complex values
-//!   (`fourier_length == poly_length`). Simple and correct — suitable as a
-//!   reference and for testing.
-//! - A future `PackedComplex64FftTable` will exploit real-input conjugate
-//!   symmetry to store only `N / 2` complex values, matching the storage
-//!   convention of production TFHE implementations.
+//! The default build provides [`FftTable`], [`FftEngine`], and torus conversions.
+//! Enable `rustfft` or `tfhe-fft` for a bundled implementation; both may coexist.
 
-/// Interleaved `Complex64` FFT backend.
-pub mod complex64;
-mod error;
+#[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+mod automorphism;
 mod table;
 mod torus;
 
-pub use complex64::FullComplex64FftTable;
-pub use error::FftError;
-pub use table::FftTable;
+mod backend;
+
+pub use num_complex::Complex64;
+pub use table::{FftEngine, FftTable};
 pub use torus::TorusFftValue;
+
+#[cfg(feature = "rustfft")]
+pub use backend::{RustFftTable, RustFftWorkspace};
+#[cfg(feature = "tfhe-fft")]
+pub use backend::{TfheFftTable, TfheFftWorkspace};

@@ -1,3 +1,9 @@
+//! Harvey butterflies translated from HEXL's AVX-512 NTT kernels.
+//!
+//! The three `BIT_SHIFT` instantiations intentionally keep separate arithmetic
+//! blocks. They correspond to DQ-32, IFMA-52, and DQ-64 Barrett reduction and
+//! have different product and lazy-range behavior.
+
 use core::arch::x86_64::*;
 
 use super::utils::*;

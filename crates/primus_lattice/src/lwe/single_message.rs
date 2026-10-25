@@ -1,148 +1,84 @@
-use std::mem::MaybeUninit;
-
 use primus_data::{Data, DataMut, DataOwned, RawData};
-use primus_distr::DiscreteGaussian;
 use primus_integer::{FheUint, Size};
-use primus_reduce::{Modulus, prelude::*};
-use rand::distr::{Distribution, Uniform};
-use serde::{Deserialize, Serialize};
+use primus_reduce::prelude::*;
 
-/// Represents a cryptographic structure based on the Learning with Errors (LWE) problem.
-/// The LWE problem is a fundamental component in modern cryptography, often used to build
-/// secure cryptographic systems that are considered hard to crack by quantum computers.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// An LWE ciphertext with mask `a` followed by one scalar body `b`.
+///
+/// Storage has length `n + 1`; its phase under a length-`n` secret `s` is
+/// `b - <a, s>`. The body is required even for a zero-dimensional raw sample.
+///
+/// The optional `serde` feature serializes the backing storage `S` only.
+/// Deserialization does not validate the layout or supply parameter/key metadata.
+///
+/// # Correctness
+///
+/// The layout above is a caller-maintained contract. Raw construction and
+/// mutable storage access do not validate it; parameter and key metadata
+/// are not stored in this wrapper. See the [crate contracts](crate#correctness).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Lwe<S>(pub S)
 where
     S: RawData,
     <S as RawData>::Elem: FheUint;
 
-impl<S, T> Lwe<S>
-where
-    S: RawData<Elem = T> + DataOwned,
-    T: FheUint,
-{
-    /// Creates a new [`Lwe<S, T>`] from bytes `data`.
-    #[inline]
-    pub fn from_bytes(data: &[u8]) -> Self {
-        let converted_data: &[T] = bytemuck::cast_slice(data);
+impl_common!(Lwe);
+impl_iters!(Lwe);
+impl_bytes_io!(Lwe);
 
-        Self(DataOwned::from_slice(converted_data))
-    }
-}
+impl_basic_operation_single_modulus!(Lwe);
+impl_neg_single_modulus!(Lwe);
+impl_mul_scalar_single_modulus!(Lwe);
+impl_mul_factor_single_modulus!(Lwe);
 
 impl<S, T> Lwe<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataOwned<Elem = T>,
     T: FheUint,
 {
-    /// Creates a new [`Lwe<S, T>`] from bytes `data`.
-    #[inline]
-    pub fn read_bytes(&mut self, data: &[u8]) {
-        let converted_data: &[T] = bytemuck::cast_slice(data);
-
-        self.0.copy_from_slice(converted_data);
-    }
-}
-
-impl<S, T> Lwe<S>
-where
-    S: RawData<Elem = T> + Data,
-    T: FheUint,
-{
-    /// Converts [`Lwe<S, T>`] into bytes.
-    #[inline]
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let data: &[u8] = bytemuck::cast_slice(self.0.as_slice());
-        data.to_vec()
-    }
-
-    /// Converts [`Lwe<S, T>`] into bytes, stored in `data`.
-    #[inline]
-    pub fn write_bytes(&self, data: &mut [u8]) {
-        let src: &[u8] = bytemuck::cast_slice(self.0.as_slice());
-
-        assert_eq!(data.len(), src.len());
-
-        data.copy_from_slice(src);
-    }
-}
-
-impl<S, T> Lwe<S>
-where
-    S: RawData<Elem = T> + DataOwned,
-    T: FheUint,
-{
-    /// Creates a new [`Lwe<S, T>`].
-    #[inline]
-    pub fn new(data: S) -> Self {
-        Self(data)
-    }
-
-    /// Generates a [`Lwe<S, T>`] with all values are `0`.
+    /// Generates a [`Lwe`] with all values are `0`.
+    ///
+    /// # Correctness
+    ///
+    /// `dimension + 1` must fit in `usize`. This allocates zero storage; it does
+    /// not sample a randomized encryption.
+    #[must_use]
     #[inline]
     pub fn zero(dimension: usize) -> Self {
         Self(S::from_vec(vec![T::ZERO; dimension + 1]))
     }
 }
 
-impl<T> Lwe<Vec<T>>
-where
-    T: FheUint,
-{
-    /// Generate a [`Lwe<S, T>`] sample which encrypts `0`.
-    #[inline]
-    pub fn generate_random_zero_sample<M, R>(
-        secret_key: &[T],
-        modulus: M,
-        uniform: Uniform<T>,
-        gaussian: &DiscreteGaussian<T>,
-        rng: &mut R,
-    ) -> Self
-    where
-        M: Copy + Modulus<ValueT = T> + ReduceDotProduct<T, Output = T> + ReduceAdd<T, Output = T>,
-        R: rand::Rng + rand::CryptoRng,
-    {
-        let len = secret_key.len();
-
-        let mut data: Vec<MaybeUninit<T>> = Vec::with_capacity(len + 1);
-        unsafe {
-            data.set_len(len + 1);
-        }
-        data[0..len]
-            .iter_mut()
-            .zip(uniform.sample_iter(&mut *rng))
-            .for_each(|(x, y)| {
-                x.write(y);
-            });
-        data[len].write(gaussian.sample(rng));
-
-        let mut data = unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(data) };
-
-        let b = modulus.reduce_dot_product(&data[0..len], secret_key);
-        data[len] = modulus.reduce_add(b, data[len]);
-
-        Lwe(data)
-    }
-}
-
 impl<S, T> Lwe<S>
 where
-    S: RawData<Elem = T> + DataMut,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
-    /// Returns a mutable reference to the `a` of this [`Lwe<S, T>`].
+    /// Returns a mutable reference to the `a` of this [`Lwe`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
     #[inline]
     pub fn a_mut(&mut self) -> &mut [T] {
         self.0.as_mut_slice().split_last_mut().unwrap().1
     }
 
-    /// Returns a mutable reference to the `b` of this [`Lwe<S, T>`].
+    /// Returns a mutable reference to the `b` of this [`Lwe`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
     #[inline]
     pub fn b_mut(&mut self) -> &mut T {
         self.0.as_mut_slice().last_mut().unwrap()
     }
 
-    /// Returns mutable references to `a` and `b` of this [`Lwe<S, T>`].
+    /// Returns mutable references to `a` and `b` of this [`Lwe`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
     #[inline]
     pub fn a_b_mut(&mut self) -> (&mut [T], &mut T) {
         let (b, a) = self.0.as_mut_slice().split_last_mut().unwrap();
@@ -158,223 +94,145 @@ where
 
 impl<S, T> Lwe<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
-    /// Returns a reference to the `a` of this [`Lwe<S, T>`].
+    /// Returns a reference to the `a` of this [`Lwe`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
     #[inline]
     pub fn a(&self) -> &[T] {
         self.0.as_slice().split_last().unwrap().1
     }
 
-    /// Returns the `b` of this [`Lwe<S, T>`].
+    /// Returns the `b` of this [`Lwe`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
     #[inline]
     pub fn b(&self) -> T {
         *self.0.as_slice().last().unwrap()
     }
 
     /// Returns a reference to `a` and the value of `b` of this LWE sample.
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
     pub fn a_b(&self) -> (&[T], T) {
         let (b, a) = self.0.as_slice().split_last().unwrap();
         (a, *b)
     }
 
-    /// Returns the dimension of this [`Lwe<S, T>`].
+    /// Returns the dimension of this [`Lwe`].
+    ///
+    /// # Correctness
+    ///
+    /// Storage must contain at least the body element. Empty raw storage is not
+    /// a valid LWE ciphertext.
     #[inline]
     pub fn dimension(&self) -> usize {
         self.0.len() - 1
     }
-}
 
-impl<S, T> Lwe<S>
-where
-    S: RawData<Elem = T> + DataMut,
-    T: FheUint,
-{
-    /// Performs component-wise modular addition of two [`Lwe<S, T>`].
-    ///
-    /// # Attention
-    ///
-    /// In this function, `self` is not a reference.
-    /// If your `self` is a reference, you can use function `add_component_wise_ref`.
+    /// Returns the stored coefficient count, including the body.
+    /// For a valid ciphertext this is `dimension() + 1`, suitable for
+    /// [`super::LweIter::new`] and [`super::LweIterMut::new`].
+    #[must_use]
     #[inline]
-    pub fn add_component_wise<M, A>(mut self, rhs: &Lwe<A>, modulus: M) -> Self
-    where
-        M: Copy + ReduceAddSlice<T>,
-        A: RawData<Elem = T> + Data,
-    {
-        self.add_component_wise_assign(rhs, modulus);
-        self
-    }
-
-    /// Performs an in-place component-wise modular addition
-    /// on the `self` [`Lwe<S, T>`] with another `rhs` [`Lwe<S, T>`].
-    #[inline]
-    pub fn add_component_wise_assign<M, A>(&mut self, rhs: &Lwe<A>, modulus: M)
-    where
-        M: Copy + ReduceAddSlice<T>,
-        A: RawData<Elem = T> + Data,
-    {
-        modulus.reduce_add_slice_assign(self.0.as_mut_slice(), rhs.0.as_slice());
-    }
-
-    /// Performs component-wise modular subtraction of two [`Lwe<S, T>`].
-    ///
-    /// # Attention
-    ///
-    /// In this function, `self` is not a reference.
-    /// If your `self` is a reference, you can use function `sub_component_wise_ref`.
-    #[inline]
-    pub fn sub_component_wise<M, A>(mut self, rhs: &Lwe<A>, modulus: M) -> Self
-    where
-        M: Copy + ReduceSubSlice<T>,
-        A: RawData<Elem = T> + Data,
-    {
-        self.sub_component_wise_assign(rhs, modulus);
-        self
-    }
-
-    /// Performs an in-place component-wise modular subtraction
-    /// on the `self` [`Lwe<S, T>`] with another `rhs` [`Lwe<S, T>`].
-    #[inline]
-    pub fn sub_component_wise_assign<M, A>(&mut self, rhs: &Lwe<A>, modulus: M)
-    where
-        M: Copy + ReduceSubSlice<T>,
-        A: RawData<Elem = T> + Data,
-    {
-        modulus.reduce_sub_slice_assign(self.0.as_mut_slice(), rhs.0.as_slice());
-    }
-
-    /// Performs an in-place modular scalar multiplication
-    /// on the `self` [`Lwe<S, T>`] with scalar `T`.
-    #[inline]
-    pub fn mul_scalar_assign<M>(&mut self, scalar: T, modulus: M)
-    where
-        M: Copy + ReduceMulSlice<T>,
-    {
-        modulus.reduce_mul_scalar_slice_assign(self.0.as_mut_slice(), scalar);
-    }
-
-    /// Performs an in-place modular scalar multiplication
-    /// on the `rhs` [`Lwe<S, T>`] with `scalar` `T`,
-    /// then add to `self`.
-    #[inline]
-    pub fn add_mul_scalar_assign<M, A>(&mut self, rhs: &Lwe<A>, scalar: T, modulus: M)
-    where
-        M: Copy + ReduceMulAddSlice<T>,
-        A: RawData<Elem = T> + Data,
-    {
-        modulus.reduce_add_mul_scalar_slice_assign(self.0.as_mut_slice(), rhs.0.as_slice(), scalar);
-    }
-
-    /// Performs an negation on the `self` [`Lwe<S, T>`].
-    #[inline]
-    pub fn neg_assign<M>(&mut self, modulus: M)
-    where
-        M: Copy + ReduceNegSlice<T>,
-    {
-        modulus.reduce_neg_slice_assign(self.0.as_mut_slice());
+    pub fn lwe_len(&self) -> usize {
+        self.0.len()
     }
 }
 
 impl<S, T> Lwe<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: DataMut<Elem = T>,
     T: FheUint,
 {
-    /// Performs component-wise modular addition of two [`Lwe<S, T>`].
+    /// Consumes this ciphertext and negates it, reusing its backing storage.
     ///
-    /// # Attention
+    /// # Correctness
     ///
-    /// In this function, `self` is a reference.
-    /// If your `self` is not a reference, you can use function `add_component_wise`.
+    /// Coefficients must satisfy the input range required by `modulus`.
+    #[must_use]
     #[inline]
-    pub fn add_component_wise_ref<M, A, B>(&self, rhs: &Lwe<A>, modulus: M) -> Lwe<B>
-    where
-        M: Copy + ReduceAddSlice<T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + DataOwned,
-    {
-        let len = self.0.len();
-
-        debug_assert_eq!(self.0.len(), rhs.0.len());
-
-        let mut data: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
-        unsafe {
-            data.set_len(len);
-        }
-
-        modulus.reduce_add_slice_to(self.0.as_slice(), rhs.0.as_slice(), unsafe {
-            data.as_mut_slice().assume_init_mut()
-        });
-
-        let data = unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(data) };
-
-        Lwe::new(B::from_vec(data))
-    }
-
-    /// Performs component-wise modular subtraction of two [`Lwe<S, T>`].
-    ///
-    /// # Attention
-    ///
-    /// In this function, `self` is a reference.
-    /// If your `self` is not a reference, you can use function `sub_component_wise`.
-    #[inline]
-    pub fn sub_component_wise_ref<M, A, B>(&self, rhs: &Lwe<A>, modulus: M) -> Lwe<B>
-    where
-        M: Copy + ReduceSubSlice<T>,
-        A: RawData<Elem = T> + Data,
-        B: RawData<Elem = T> + DataOwned,
-    {
-        let len = self.0.len();
-
-        debug_assert_eq!(self.0.len(), rhs.0.len());
-
-        let mut data: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
-        unsafe {
-            data.set_len(len);
-        }
-
-        modulus.reduce_sub_slice_to(self.0.as_slice(), rhs.0.as_slice(), unsafe {
-            data.as_mut_slice().assume_init_mut()
-        });
-
-        let data = unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(data) };
-
-        Lwe::new(B::from_vec(data))
-    }
-
-    /// Performs a modular negation on the `self` [`Lwe<S, T>`].
-    #[inline]
-    pub fn neg<M, A>(&self, modulus: M) -> Lwe<A>
+    pub fn neg<M>(mut self, modulus: M) -> Self
     where
         M: Copy + ReduceNegSlice<T>,
-        A: RawData<Elem = T> + DataOwned,
     {
-        let len = self.0.len();
-
-        let mut data: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
-        unsafe {
-            data.set_len(len);
-        }
-
-        modulus.reduce_neg_slice_to(self.0.as_slice(), unsafe {
-            data.as_mut_slice().assume_init_mut()
-        });
-
-        let data = unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(data) };
-
-        Lwe::new(A::from_vec(data))
+        self.neg_assign(modulus);
+        self
     }
 }
 
 impl<S, T> Size for Lwe<S>
 where
-    S: RawData<Elem = T> + Data,
+    S: Data<Elem = T>,
     T: FheUint,
 {
     #[inline]
     fn byte_count(&self) -> usize {
         self.0.len() * T::BYTES
+    }
+}
+
+impl<S, T> Lwe<S>
+where
+    S: DataMut<Elem = T>,
+    T: FheUint,
+{
+    /// Adds an already encoded canonical plaintext to `b`, preserving the mask.
+    ///
+    /// # Correctness
+    ///
+    /// The plaintext must use the ciphertext modulus and scale; no encoding occurs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
+    #[inline]
+    pub fn add_plaintext_assign<M>(&mut self, plaintext: T, modulus: M)
+    where
+        M: ReduceAddAssign<T>,
+    {
+        modulus.reduce_add_assign(self.b_mut(), plaintext);
+    }
+
+    /// Subtracts an already encoded canonical plaintext from `b`, preserving the mask.
+    ///
+    /// # Correctness
+    ///
+    /// The plaintext must use the ciphertext modulus and scale; no encoding occurs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
+    #[inline]
+    pub fn sub_plaintext_assign<M>(&mut self, plaintext: T, modulus: M)
+    where
+        M: ReduceSubAssign<T>,
+    {
+        modulus.reduce_sub_assign(self.b_mut(), plaintext);
+    }
+
+    /// Overwrites the ciphertext with a zero mask and an already encoded body.
+    ///
+    /// # Correctness
+    ///
+    /// The plaintext must be canonical in the ciphertext modulus and scale.
+    /// This performs no encoding, random sampling or allocation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage is empty (the body is missing).
+    #[inline]
+    pub fn set_trivial(&mut self, plaintext: T) {
+        let (a, b) = self.a_b_mut();
+        a.fill(T::ZERO);
+        *b = plaintext;
     }
 }

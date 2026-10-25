@@ -2,17 +2,19 @@
 //!
 //! Uses 512-bit vectors (16 × u32 lanes):
 //! - T16 (t ≥ 16): broadcast W, contiguous x/y loads.
-//! - T8  (t = 8): `permutex2var_epi32` deinterleave.
-//! - T4 / T2 / T1: `permutex2var_epi32` deinterleave (4/8/16 blocks per group).
+//! - T8 / T4: `shuffle_i32x4` groups 128-bit halves.
+//! - T2: `unpacklo/hi_epi64` groups two-coefficient halves.
+//! - T1: `shuffle_epi32` plus `unpacklo/hi_epi64` separates adjacent pairs.
 //!
-//! Requires `n ≥ 64` — polynomial lengths below that are handled by the
+//! Requires `n ≥ 32` — polynomial lengths below that are handled by the
 //! scalar backend directly.
 //!
 //! # Safety
 //!
-//! All functions use `#[target_feature(enable = "avx512f")]` and are only
-//! called after the public entry points verify runtime AVX-512 support via
-//! [`crate::constants::HAS_AVX512F`].
+//! The table dispatcher calls the unsafe transform entry points only after
+//! checking `is_x86_feature_detected!("avx512f")` at table construction.
+//! Helpers inherit that target feature; their local unsafe blocks are limited to
+//! unchecked slicing and vector loads.
 
 mod arithmetic;
 mod butterfly;

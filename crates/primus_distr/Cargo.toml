@@ -9,17 +9,15 @@ primus_integer = { path = "../primus_integer" }
 thiserror = { workspace = true }
 num-traits = { workspace = true }
 rand = { workspace = true }
-itertools = { workspace = true }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-rug = { version = "=1.30", optional = true }
+dashu-float = { workspace = true, optional = true }
+dashu-int = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 comfy-table = { workspace = true }
 
 [features]
-high_precision = ["dep:rug"]
+high_precision = ["dep:dashu-float", "dep:dashu-int"]
 
 [[bench]]
 name = "sample_gaussian"
@@ -27,4 +25,8 @@ harness = false
 
 [[bench]]
 name = "gen_sampler"
+harness = false
+
+[[bench]]
+name = "sample_secret_key"
 harness = false

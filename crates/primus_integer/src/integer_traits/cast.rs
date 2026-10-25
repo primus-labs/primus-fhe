@@ -1,10 +1,13 @@
-/// Performs numeric cast by `as`.
-#[inline]
-pub fn as_cast<T: Copy + AsInto<U>, U: Copy>(value: T) -> U {
-    value.as_into()
-}
-
-/// A helper trait defines all `as` cast between all primitive integer types.
+/// Primitive integer types that support the crate's complete `as`-style cast interface.
+///
+/// This trait collects the conversion bounds needed by generic integer code. An
+/// implementing type can be constructed from `bool` and every primitive integer
+/// and floating-point type through [`AsFrom::as_from`], and converted into every
+/// primitive integer and floating-point type through [`AsInto::as_into`].
+///
+/// These conversions follow Rust's primitive `as` semantics. They are infallible,
+/// but may truncate, saturate, round, or otherwise lose information; they do not
+/// perform range checks.
 pub trait AsCast:
     AsFrom<bool>
     + AsFrom<i8>
@@ -46,15 +49,25 @@ macro_rules! impl_as_cast {
 
 impl_as_cast! {u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize}
 
-/// A trait to convert from type `T` by `as`.
+/// An `as`-style conversion from `T` into `Self`.
+///
+/// Unlike [`From`], this conversion may lose information.
+/// Primitive implementations have exactly the same behavior as Rust's `as`
+/// operator for the corresponding source and destination types.
 pub trait AsFrom<T: Copy>: Copy {
-    /// Convert `value` from type `T` into `Self` by `as`.
+    /// Converts `value` into `Self` using `as` semantics.
+    #[must_use]
     fn as_from(value: T) -> Self;
 }
 
-/// A trait to convert `self` into type `T` by `as`.
+/// An `as`-style conversion from `Self` into `T`.
+///
+/// Unlike [`Into`], this conversion may lose information.
+/// It is provided automatically whenever `T` implements [`AsFrom<Self>`], so new
+/// conversions should be defined by implementing [`AsFrom`] rather than this trait.
 pub trait AsInto<T: Copy>: Copy {
-    /// Convert `self` from type `Self` into `T` by `as`.
+    /// Converts `self` into `T` using `as` semantics.
+    #[must_use]
     fn as_into(self) -> T;
 }
 
@@ -76,14 +89,13 @@ impl<T: Copy> AsFrom<T> for T {
 }
 
 macro_rules! impl_as_from {
-    (@ $T: ty => $(#[$cfg:meta])* impl $U: ty ) => {
-        $(#[$cfg])*
+    ($T:ty => { $($U:ty),* }) => {$(
         impl AsFrom<$T> for $U {
-            #[inline] fn as_from(value: $T) -> $U { value as $U }
+            #[inline]
+            fn as_from(value: $T) -> $U {
+                value as $U
+            }
         }
-    };
-    ($T: ty => { $( $U: ty ),* } ) => {$(
-        impl_as_from!(@ $T => impl $U);
     )*};
 }
 

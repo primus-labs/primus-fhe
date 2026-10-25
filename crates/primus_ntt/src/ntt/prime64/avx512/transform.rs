@@ -1,14 +1,21 @@
+//! Top-level HEXL-style AVX-512 scheduling.
+//!
+//! The recursive state (`recursion_depth`, `recursion_half`) identifies a
+//! subtree of the global root tables. Leaves run breadth-first. The forward
+//! table has duplicated T4/T2 regions, so `compute_new_w_idx` translates a
+//! canonical stage index into that expanded layout; inverse roots keep their
+//! canonical scrambled order.
+
 use core::arch::x86_64::*;
 
-use primus_factor::MultiplyFactor;
-
+use super::super::table::InverseFinalScale;
 use super::internal::{check_arguments, max_fwd_modulus, max_inv_modulus};
 use super::stages::*;
 use super::utils::*;
 
-const BASE_NTT_SIZE: usize = 1024;
-
-// ── Forward Transform ─────────────────────────────────────────────────────
+// Covered explicitly by the benchmark matrix because it controls the
+// breadth-first/depth-first working-set boundary.
+const BASE_NTT_SIZE: usize = 2048;
 
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn forward_transform_to_bit_reverse_avx512<const BIT_SHIFT: u32>(
@@ -145,21 +152,24 @@ pub unsafe fn forward_transform_to_bit_reverse_avx512<const BIT_SHIFT: u32>(
             new_w_idx = compute_new_w_idx(w_idx);
             w = &root_of_unity_powers[new_w_idx..new_w_idx + m];
             w_precon = &precon_root_of_unity_powers[new_w_idx..new_w_idx + m];
-            fwd_t1::<BIT_SHIFT>(operand, v_neg_modulus, v_twice_mod, w, w_precon);
-        }
-
-        if output_mod_factor == 1 {
-            // n power of two at least 8 => n divisible by 8
-            unsafe {
-                for chunk in operand.as_chunks_unchecked_mut::<8>() {
-                    let mut v_x = _mm512_loadu_si512(chunk.as_ptr().cast());
-
-                    // Reduce from [0, 4q) to [0, q)
-                    v_x = _mm512_hexl_small_mod_epu64_2(v_x, v_twice_mod);
-                    v_x = _mm512_hexl_small_mod_epu64_2(v_x, v_modulus);
-
-                    _mm512_storeu_si512(chunk.as_mut_ptr().cast(), v_x);
-                }
+            if output_mod_factor == 1 {
+                fwd_t1::<BIT_SHIFT, true>(
+                    operand,
+                    v_modulus,
+                    v_neg_modulus,
+                    v_twice_mod,
+                    w,
+                    w_precon,
+                );
+            } else {
+                fwd_t1::<BIT_SHIFT, false>(
+                    operand,
+                    v_modulus,
+                    v_neg_modulus,
+                    v_twice_mod,
+                    w,
+                    w_precon,
+                );
             }
         }
     } else {
@@ -199,13 +209,11 @@ pub unsafe fn forward_transform_to_bit_reverse_avx512<const BIT_SHIFT: u32>(
     }
 }
 
-// ── Inverse Transform ─────────────────────────────────────────────────────
-
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn inverse_transform_from_bit_reverse_avx512<const BIT_SHIFT: u32>(
     operand: &mut [u64],
     modulus: u64,
-    inv_n: u64,
+    inverse_final_scale: &InverseFinalScale,
     inv_root_of_unity_powers: &[u64],
     precon_inv_root_of_unity_powers: &[u64],
     input_mod_factor: u64,
@@ -301,7 +309,7 @@ pub unsafe fn inverse_transform_from_bit_reverse_avx512<const BIT_SHIFT: u32>(
             inverse_transform_from_bit_reverse_avx512::<BIT_SHIFT>(
                 left,
                 modulus,
-                inv_n,
+                inverse_final_scale,
                 inv_root_of_unity_powers,
                 precon_inv_root_of_unity_powers,
                 input_mod_factor,
@@ -312,7 +320,7 @@ pub unsafe fn inverse_transform_from_bit_reverse_avx512<const BIT_SHIFT: u32>(
             inverse_transform_from_bit_reverse_avx512::<BIT_SHIFT>(
                 right,
                 modulus,
-                inv_n,
+                inverse_final_scale,
                 inv_root_of_unity_powers,
                 precon_inv_root_of_unity_powers,
                 input_mod_factor,
@@ -333,20 +341,15 @@ pub unsafe fn inverse_transform_from_bit_reverse_avx512<const BIT_SHIFT: u32>(
             let w = &inv_root_of_unity_powers[w_idx..w_idx + m];
             let w_precon = &precon_inv_root_of_unity_powers[w_idx..w_idx + m];
             inv_t8::<BIT_SHIFT>(operand, v_neg_modulus, v_twice_mod, t, w, w_precon);
-            w_idx_delta >>= 1;
-            w_idx += w_idx_delta;
         }
     }
 
     // Final loop through data
     if recursion_depth == 0 {
-        let w = inv_root_of_unity_powers[w_idx];
-        let mf_inv_n = MultiplyFactor::new(inv_n, BIT_SHIFT, modulus);
-        let inv_n_prime = mf_inv_n.quotient();
-
-        let inv_n_w = mf_inv_n.mul_modulo::<BIT_SHIFT>(w, modulus);
-        let mf_inv_n_w = MultiplyFactor::new(inv_n_w, BIT_SHIFT, modulus);
-        let inv_n_w_prime = mf_inv_n_w.quotient();
+        let inv_n = inverse_final_scale.inv_n;
+        let inv_n_prime = inverse_final_scale.inv_n_precon;
+        let inv_n_w = inverse_final_scale.inv_n_w;
+        let inv_n_w_prime = inverse_final_scale.inv_n_w_precon;
 
         unsafe {
             let (x, y) = operand.split_at_mut_unchecked(n / 2);

@@ -9,6 +9,7 @@ repository = "https://github.com/primus-labs/primus-fhe"
 
 [dev-dependencies]
 criterion = { workspace = true }
+dashu-int = { workspace = true }
 rand = { workspace = true }
 
 [[bench]]
