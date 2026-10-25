@@ -1,0 +1,44 @@
+{
+  "base": "590b3521fb31c802e1e1c5a2cfe82f96dd94fb70",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "features": [
+    "rustfft",
+    "tfhe-fft"
+  ],
+  "tested_source_sha256": {
+    "crates/primus_lattice/src/ntru/fourier/split.rs": "5abe98deede9ee72bdfe8d0e210385c120db8f265cfe4d9c87dcedd6594a3059",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/key.rs": "1655cb7f1c2e9aced2af12503756eb81c69abfe4dc6cd4bd57f23e10e2d055dc",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/one_hot.rs": "821ef2a2ceb8013791045c0e8343b96e9bea5938d61afa599ca3df3afc613076"
+  },
+  "final_source_sha256": {
+    "crates/primus_lattice/src/ntru/fourier/split.rs": "5abe98deede9ee72bdfe8d0e210385c120db8f265cfe4d9c87dcedd6594a3059",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/key.rs": "e6f5f7600dd73314ced97cc5dc66f4fd7b20e354610c040bd550e154376e52fc",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/one_hot.rs": "6da9bfe3702262ca1d0c6eb862581b57fb18830c96f4689e6452fe5d435b38ca"
+  },
+  "post_snapshot_changes": "Rustdoc and focused regression/README updates only; executable source compared equal after removing comment-only lines.",
+  "production_patch_sha256": "0278e851753d85b464e445063995a2c14b41b8e770df2dc2fca1ac6dbcd93ce5",
+  "lock_sha256": "16e796634146da92564d8ba767b90276bd65e4807d30eef6a3a963fea5603e9d",
+  "driver_sha256": "2eed5e36e1e84ba7e53315f82c2e64205757db00617f9797a288197de2003860",
+  "measurement_fft_source_sha256": "a8cb7370647af3523271ac11363f9b131af7eeedae7e83dcb5d18fb38564cb7d",
+  "ELF_sha256": {
+    "base": "2f62fc8d357b5f19291338dc3a969849c81b21f86255d55e4cfaa813b459020d",
+    "prod": "6d3e721bfde9a71d50660c6b9074d7dba2cdccff751a90387c93a4e30fc412a5"
+  },
+  "formal_processes": 48,
+  "followup_processes": 12,
+  "timing_samples": 7680,
+  "validation": "fmt, all-target check/clippy, lib/tests for lattice/Fourier/LUT with both FFTs; tfhe-fft-only all-target check; rustdoc with -D warnings; focused oracle/workflows pinned to CPU4 and CPU8.",
+  "cpu": "AMD Ryzen 9 9955HX3D",
+  "affinity": [
+    4,
+    8
+  ],
+  "frequency": "unlocked",
+  "fft_plan": "automatic, all measured TFHE-FFT tables selected Dif8/512",
+  "profiles": "Native64/N4096 Low and High; split40 BR/trace/SS; explicit PairedTrace; M16/d3/c4/o4; exact gadget bases listed in the guide",
+  "formal": "3 rounds AB/BA/AB, 3 warmups + 20 samples per workload, 48 independent processes",
+  "followup": "CPU4 tfhe-fft/High and rustfft/Low, 3 rounds AB/BA/AB, 3 warmups + 80 samples per workload, 12 processes; same ELF, separately reported, no removed samples",
+  "scope": "Public workflow driver; only temporary FFT-plan logging. No fixed plan, stage probe or benchmark feature in production.",
+  "replay_limit": "Source/driver/lock hashes identify the local replay archive; this metadata and process CSV alone are not a standalone replay kit.",
+  "storage": "Each one-hot/LUT evaluator: +131072 retained heap bytes and +16 inline bytes. Keys and ordinary CBS unchanged. All 240 online allocation windows zero."
+}

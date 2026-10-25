@@ -1,0 +1,2297 @@
+{
+  "date": "2026-10-12",
+  "scope": "Historical measurements; current benchmarks have simpler validation/setup. No new timing in this cleanup.",
+  "reproduction_limits": "Raw times, summary, source revisions and selected metadata retained here. Diagnostic sources, lockfiles, patches, fixtures and full build logs are local-only; this committed subset is not a self-contained source/build reproduction bundle. Primus HEAD alone is insufficient to reconstruct measured binaries.",
+  "sources": [
+    {
+      "id": "primus",
+      "url": "https://github.com/haofeiliang/primus-fhe",
+      "commit": "3ab35a14474f89bcc2289a062c21245360482a42",
+      "dirty_tracked": true
+    },
+    {
+      "id": "lightfhe-ntt",
+      "url": "https://github.com/LightFHE/NTT-based-circuit-bootstrapping",
+      "commit": "7681a6ac1eafe864c17e4e9a79cde51f337b6aa6",
+      "dirty_tracked": false
+    },
+    {
+      "id": "refined-cbs",
+      "url": "https://github.com/KAIST-CryptLab/refined-tfhe-lhe",
+      "commit": "9b0426e8e197020a4bf40776cc03641e6cf9b90e",
+      "dirty_tracked": false
+    },
+    {
+      "id": "tfhe-rs-artifact",
+      "url": "https://github.com/zama-ai/tfhe-rs",
+      "commit": "e1f5d36224ca88991b49e38fa6791ab18a9f63d1",
+      "dirty_tracked": false
+    },
+    {
+      "id": "tfhepp",
+      "url": "https://github.com/virtualsecureplatform/TFHEpp",
+      "commit": "2d2cf7cdc2d6a9181ceb90803038dad43b6ea5d6",
+      "dirty_tracked": false
+    },
+    {
+      "id": "mosfhet",
+      "url": "https://github.com/antoniocgj/MOSFHET",
+      "commit": "a6e7fbb47cd4451ebcc6693027e65a27d934a399",
+      "dirty_tracked": false
+    },
+    {
+      "id": "stirling-ebs",
+      "url": "https://github.com/Stirling75/Extended-BootStrapping",
+      "commit": "978cefcdac7dce20d00efb6e771127b7fd6e7f86",
+      "dirty_tracked": false
+    }
+  ],
+  "environment": {
+    "cpu": "AMD Ryzen 9 9955HX3D",
+    "affinity": 4,
+    "l3_mib": 96,
+    "online_threads": 1,
+    "primus_rust": "1.98.1 / LLVM 22.1.8",
+    "external_rust": "1.85.0-nightly (2025-01-01) / LLVM 19.1.6",
+    "cpp": "GCC 15.2.0",
+    "os": "Linux 7.0.0-34-generic",
+    "build_note": "Different libraries use different compilers, flags and FFT plans; see group metadata. No equal-DFR/security claim."
+  },
+  "statistic": "mean of three process means; pooled normalized-sample median; process-mean range, not confidence interval",
+  "sample_count": 9972,
+  "result_row_count": 124,
+  "case_count": 41,
+  "process_count": 114,
+  "groups": {
+    "glwe-cbs-paired": {
+      "measurement": {
+        "process_repeats": 3,
+        "samples_per_bit_boundary_process": 30,
+        "primus": "Criterion0.8.2, one CBS per b.iter, 1s warmup/3s target; ratio of total_ns/iterations per raw sample",
+        "external": "30 single-call steady_clock/Instant intervals after1s warmup; returned output remains live until after timestamp; original internal allocations included",
+        "aggregation": "arithmetic mean of three process means; ranges are min/max process means, not confidence or DFR bounds",
+        "gdb": "Only newly launched children; actual kernel/plan captured in validation or first warm-up. All active FFT/CBS probes disabled before samples; processes exited normally.",
+        "sampled_key_seed": 42,
+        "validation_seeds": [
+          42,
+          43,
+          44
+        ],
+        "core": "G1 core=complete (no input KS); refined core uses actual full-path scalar-KS output; Primus Fourier core unmeasured, no subtraction estimate",
+        "pbs": "not measured in this frozen CMUX2 CBS matrix; later PBS requires independent complete return boundary"
+      },
+      "limits": [
+        "functional implementation-cost comparisons only; no same-protocol/security/DFR equivalence",
+        "C++17 signed-left-shift UB restriction retained, GCC15.2 behavior only",
+        "finite t8 depth1 consumers; no deeper tree proof",
+        "CMUX1 failed/excluded; Primus CMUX3 unsupported; no substituted samples",
+        "author complete ownership/workspace/RSS not profiled; documented ciphertext payload only",
+        "no extrapolation to NTRU or EBS; no cross-library speedup ratio"
+      ]
+    },
+    "tfhepp-cbs-validation": {
+      "source": {
+        "url": "https://github.com/virtualsecureplatform/TFHEpp",
+        "commit": "2d2cf7cdc2d6a9181ceb90803038dad43b6ea5d6",
+        "clean": true,
+        "files": {
+          "CMakeLists.txt": "3fede1b69a8b6e679520fd1625303ec940f65c08572c0624122f2f4e4f489dd6",
+          "include/params.hpp": "71207a0cfe75db1c8fa7a19346ebddddd087c397555bc87e45603b7a8e64203c",
+          "include/params/blockbinary.hpp": "2af6387556d135d29aa61ec2ca400d45c0765d7944f0e0e8e405fe33df9e9e5e",
+          "include/params/128bit.hpp": "cfdd3e0f853ff411983ad079976a9c4424dc01ccc3e165719e299d51e3ebc730",
+          "include/utils.hpp": "2e4facb02b844102b5bc07e7b4669bcbb07736cc6d7a2bcb1957df31c61e339c",
+          "include/BLAKE3PRNG.hpp": "35cb8233a874c63e844b19fcd24eef3ba112914396c35149331e8ace68979141",
+          "include/mulfft.hpp": "543307f1a9558b623ca9ba06e09c0118d5e0a01d19b16983e8673ca69f69a959",
+          "include/tfhe/key.hpp": "cd5558a69f89877b752916ca40753c4a189722e78ed515e0c066a97668b06ba0",
+          "include/tfhe/evalkeygens.hpp": "5f8e9861a416347ce813127734ee39fb8fddfaad3173fa77b065c00c75a121fa",
+          "include/tfhe/cloudkey.hpp": "a54dfb037b4edabae62e62c241827795cbdf196e3c5d321889194c78d5221c70",
+          "include/tfhe/circuitbootstrapping.hpp": "a07f0b0c6f396f5d05096afa29557d13c549ae02920fd9603d420447b4130314",
+          "include/tfhe/gatebootstrapping.hpp": "1e4e19ac964f396b71efcae0823e7c5c004f95b6c6a1f2cad075ed3c9a39ac1a",
+          "include/tfhe/keyswitch.hpp": "eb9b976e0c7ac09b9626023f0fbb537e679d3fdc71431fa1e120da8633df4281",
+          "include/tfhe/trgsw.hpp": "d6a2f2026c94bf92fdb10e2d3345a0b189b6aa33a37df86c5e42765e6e1b5062",
+          "test/tfhe/circuitbootstrapping.cpp": "fe2b8773600df228a83f0b06d3a8f5b9644f4c59a7592d6328a644159ea62c8e",
+          "test/tfhe/annihilatecircuitbootstrapping.cpp": "27a58358242546602e50fba47d81a44989187381530ffbb6860203e460719c60",
+          "thirdparties/spqlios-intl/fft_processor_spqlios_intl.cpp": "5b569e3635a30c3db578fe06caa151ced95fe5d3b1982d9e844cefe8c4f40796",
+          "thirdparties/spqlios-intl/CMakeLists.txt": "659d0a0f0f7d094e91022767a534bcf5e01cd2d4abf283fcc32eb7096269b1ba"
+        },
+        "submodule_status": [
+          "-45fca051328b6709985ba015217e0925ecc9297c benchmark/google-benchmark",
+          " f9dfef61705d350627e8239c5c7aafda343e994e thirdparties/AES (v7.7.0)",
+          " 77b257eee7da5cd608eaf6be8343d3a4c9776af2 thirdparties/BLAKE3 (1.8.6)",
+          " 446347f21b209f3921c65ece70027c366cbe1693 thirdparties/ascon-c (v1.3.0-15-g446347f)",
+          " 22a1b369f39be918ca79206a83c4facd759f9105 thirdparties/cereal (v1.3.2-18-g22a1b369)",
+          "-ae2c3693ec3aad824ebfa10dac61bbb01b3f03aa thirdparties/concrete-fft",
+          "-64a6b6c40f91b052be1ba0f89d4683c24c1a4136 thirdparties/concrete-ntt",
+          "-66940b64e94daffa1f25d4f3e2f96b1ea98ebdb6 thirdparties/hexl/hexl",
+          "-53b8857dc98150968c55a71c2b79e56d134e8911 thirdparties/spqlios-arithmetic"
+        ]
+      },
+      "build": {
+        "release_flags": "-O3 (no NDEBUG: original assert gates active)",
+        "upstream_flags": "-march=native -O3 -g -funroll-loops -Wall -Wextra -pedantic -Wno-sign-compare -fopenmp; LTO auto",
+        "use_avx512": true,
+        "use_spqlios_intl": true,
+        "use_hexl": false,
+        "use_key_bundle": false,
+        "use_ternary_cmux": false,
+        "patches": [],
+        "adapter": "include definition headers without extern-template wrappers; instantiate sampled templates in seeded TU; preserve original algorithms/params"
+      },
+      "dispatch": {
+        "fft_butterfly": "AVX2 Stockham radix-4, actual online gdb calls and YMM instructions",
+        "torus64_trace_conversion": "AVX512, actual online gdb ZMM instructions in execute_direct_torus64",
+        "torus64_fused_add": "AVX2 in source; LTO line breakpoint maps to TLS initialization, not an independent runtime proof",
+        "fd_multi": "AVX512F intrinsic branch selected by march=native and interleaved format; not separately runtime traced",
+        "unused_fft": "stockham_r4_from AVX512 template is not invoked by the selected intl_fft_from/intl_ifft wrappers",
+        "hexl": "disabled; these are native-torus Fourier CBS paths"
+      },
+      "boundary": {
+        "core": "actual full-input KS output -> final consumable Fourier TRGSW",
+        "complete": "encrypted +/-mu lvl1 TLWE -> input scalar KS -> core -> final Fourier TRGSW",
+        "excludes": [
+          "keygen",
+          "input encryption",
+          "input fixture KS for core",
+          "oracles",
+          "output hash",
+          "consumer"
+        ],
+        "online_costs_preserved": true,
+        "measurement": "one request per timed sample; warmup one outside timer; 12 samples/bit/boundary/process, 3 serial independent processes, fixed fixture; 576 total",
+        "comparison": "unpaired external reference, not formal cross-library same-parameter speedup",
+        "core_complete_check": "FNV1a64 fingerprints of final Fourier output equal for all 48 unique CBS fixtures; no bytewise comparison claim"
+      },
+      "consumer": {
+        "t": 8,
+        "coefficients": "mix64(i XOR (0x1000+r)) AND 3, r=0,1",
+        "encoding": "m*2^(word_bits-3)",
+        "candidate": "normal encryption using upstream ring sigma and nonzero random masks",
+        "checks": "independent wrapping schoolbook b-sum(a*s); unsigned nearest t8 decoder; ext=bit*P0, CMux=Pbit; direct GSW baseline",
+        "row_expected": "mask=-bit*g_l*s_j; body=bit*g_l*delta0",
+        "probes": "one gadget digit at X^(N-1) for each row; residual diagnostics without acceptance threshold",
+        "limitations": [
+          "no DFR or security transfer",
+          "not arbitrary gadget precision or consumption depth proof",
+          "row/probe residual CSV mismatch=0 is placeholder, not budget pass",
+          "maximum residual location not exported; max magnitude and RMS available",
+          "mask/body unequal gadget and DD paths not executed"
+        ]
+      },
+      "groups": [
+        {
+          "case": "tfhepp-block-ordinary-original",
+          "upstream_parameter_file": "include/params/blockbinary.hpp",
+          "parameter_change": false,
+          "small": {
+            "n": 630,
+            "word_bits": 16,
+            "normalized_sigma": 9.25119974676756e-05,
+            "coefficient_sigma": 6.062866266041588,
+            "secret": "block-binary ell=2, uniform empty/position0/position1"
+          },
+          "ring_parameter_cards": [
+            {
+              "role": "br",
+              "N": "1024",
+              "k": "2",
+              "word_bits": "64",
+              "mask_L": "4",
+              "mask_logB": "10",
+              "body_L": "4",
+              "body_logB": "10",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            },
+            {
+              "role": "output",
+              "N": "1024",
+              "k": "1",
+              "word_bits": "32",
+              "mask_L": "4",
+              "mask_logB": "6",
+              "body_L": "4",
+              "body_logB": "6",
+              "normalized_sigma": "3.42338787018368969e-08",
+              "coefficient_sigma": "147.033389439620407"
+            }
+          ],
+          "input": {
+            "word_bits": 32,
+            "dimension": 1024,
+            "normalized_sigma": 3.42338787018369e-08,
+            "encoding": "bit0=-2^29; bit1=+2^29",
+            "secret": "lvl1 independent uniform ternary",
+            "ks": "IdentityKeySwitch",
+            "ks_levels": 5,
+            "ks_base_log": 2,
+            "ks_normalized_sigma": 9.25119974676756e-05
+          },
+          "private_ks": {
+            "levels": 8,
+            "base_log": 3,
+            "normalized_sigma": 3.42338787018369e-08
+          },
+          "payload_bytes": {
+            "bsk_bytes": 185794560,
+            "input_ks_bytes": 12922880,
+            "output_bytes": 131072,
+            "private_ks_bytes": 1074266112
+          },
+          "max_process_rss_kib": 1270080,
+          "validation": {
+            "keys": 3,
+            "cbs_outputs": 12,
+            "row_records": 96,
+            "probe_records": 96,
+            "consumer_records": 48,
+            "consumer_coefficient_mismatches": 0,
+            "seed42_replay_equal": {
+              "metadata": true,
+              "parameters": true,
+              "residuals": true
+            },
+            "minimum_gadget_weight": 256,
+            "max_row_abs_residual": 78756,
+            "maximum_row_rms": 18486.281150131814,
+            "budget": "unproved; no universal g/2 criterion; depth-one t8 only",
+            "core_complete_output_hash_equal": true
+          },
+          "timings": [
+            {
+              "bit": 0,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 42.8529455,
+              "process_medians_ms": [
+                41.375735,
+                42.8995185,
+                42.924551
+              ]
+            },
+            {
+              "bit": 0,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 43.0993715,
+              "process_medians_ms": [
+                41.7880805,
+                43.2006685,
+                43.1092655
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 42.858651,
+              "process_medians_ms": [
+                41.707598,
+                42.9750515,
+                42.894679
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 43.254535,
+              "process_medians_ms": [
+                41.866599,
+                43.394626,
+                43.2686115
+              ]
+            }
+          ]
+        },
+        {
+          "case": "tfhepp-block-annihilate-original",
+          "upstream_parameter_file": "include/params/blockbinary.hpp",
+          "parameter_change": false,
+          "small": {
+            "n": 630,
+            "word_bits": 16,
+            "normalized_sigma": 9.25119974676756e-05,
+            "coefficient_sigma": 6.062866266041588,
+            "secret": "block-binary ell=2, uniform empty/position0/position1"
+          },
+          "ring_parameter_cards": [
+            {
+              "role": "br",
+              "N": "1024",
+              "k": "2",
+              "word_bits": "64",
+              "mask_L": "4",
+              "mask_logB": "10",
+              "body_L": "4",
+              "body_logB": "10",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            },
+            {
+              "role": "output",
+              "N": "1024",
+              "k": "2",
+              "word_bits": "64",
+              "mask_L": "4",
+              "mask_logB": "10",
+              "body_L": "4",
+              "body_logB": "10",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            },
+            {
+              "role": "annihilate_ss",
+              "N": "1024",
+              "k": "2",
+              "word_bits": "64",
+              "mask_L": "5",
+              "mask_logB": "9",
+              "body_L": "5",
+              "body_logB": "9",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            }
+          ],
+          "input": {
+            "word_bits": 32,
+            "dimension": 1024,
+            "normalized_sigma": 3.42338787018369e-08,
+            "encoding": "bit0=-2^29; bit1=+2^29",
+            "secret": "lvl1 subset: shares first 630 coefficients with lvl0",
+            "ks": "SubsetIdentityKeySwitch",
+            "ks_levels": 5,
+            "ks_base_log": 2,
+            "ks_normalized_sigma": 9.25119974676756e-05
+          },
+          "private_ks": null,
+          "payload_bytes": {
+            "bsk_bytes": 185794560,
+            "input_ks_bytes": 4972280,
+            "output_bytes": 294912,
+            "ah_bytes": 2457600,
+            "ss_bytes": 737280
+          },
+          "max_process_rss_kib": 218520,
+          "validation": {
+            "keys": 3,
+            "cbs_outputs": 12,
+            "row_records": 144,
+            "probe_records": 144,
+            "consumer_records": 48,
+            "consumer_coefficient_mismatches": 0,
+            "seed42_replay_equal": {
+              "metadata": true,
+              "parameters": true,
+              "residuals": true
+            },
+            "minimum_gadget_weight": 16777216,
+            "max_row_abs_residual": 466239960150,
+            "maximum_row_rms": 215607414372.8893,
+            "budget": "unproved; no universal g/2 criterion; depth-one t8 only",
+            "core_complete_output_hash_equal": true
+          },
+          "timings": [
+            {
+              "bit": 0,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 9.233117,
+              "process_medians_ms": [
+                9.3897085,
+                9.1622375,
+                9.1593725
+              ]
+            },
+            {
+              "bit": 0,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 9.296842,
+              "process_medians_ms": [
+                9.474774,
+                9.2424495,
+                9.229876
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 9.2065215,
+              "process_medians_ms": [
+                9.397603,
+                9.153045,
+                9.143317
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 9.340194,
+              "process_medians_ms": [
+                9.476357,
+                9.2649115,
+                9.217943
+              ]
+            }
+          ]
+        },
+        {
+          "case": "tfhepp-dense-ordinary-original",
+          "upstream_parameter_file": "include/params/128bit.hpp",
+          "parameter_change": false,
+          "small": {
+            "n": 630,
+            "word_bits": 16,
+            "normalized_sigma": 9.25119974676756e-05,
+            "coefficient_sigma": 6.062866266041588,
+            "secret": "iid uniform binary"
+          },
+          "ring_parameter_cards": [
+            {
+              "role": "br",
+              "N": "2048",
+              "k": "1",
+              "word_bits": "64",
+              "mask_L": "4",
+              "mask_logB": "9",
+              "body_L": "4",
+              "body_logB": "9",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            },
+            {
+              "role": "output",
+              "N": "1024",
+              "k": "1",
+              "word_bits": "32",
+              "mask_L": "3",
+              "mask_logB": "6",
+              "body_L": "3",
+              "body_logB": "6",
+              "normalized_sigma": "2.98023223876953125e-08",
+              "coefficient_sigma": "128"
+            }
+          ],
+          "input": {
+            "word_bits": 32,
+            "dimension": 1024,
+            "normalized_sigma": 2.9802322387695312e-08,
+            "encoding": "bit0=-2^29; bit1=+2^29",
+            "secret": "lvl1 independent uniform ternary",
+            "ks": "IdentityKeySwitch",
+            "ks_levels": 7,
+            "ks_base_log": 2,
+            "ks_normalized_sigma": 9.25119974676756e-05
+          },
+          "private_ks": {
+            "levels": 8,
+            "base_log": 3,
+            "normalized_sigma": 2.9802322387695312e-08
+          },
+          "payload_bytes": {
+            "bsk_bytes": 165150720,
+            "input_ks_bytes": 18092032,
+            "output_bytes": 98304,
+            "private_ks_bytes": 1074266112
+          },
+          "max_process_rss_kib": 1238088,
+          "validation": {
+            "keys": 3,
+            "cbs_outputs": 12,
+            "row_records": 72,
+            "probe_records": 72,
+            "consumer_records": 48,
+            "consumer_coefficient_mismatches": 0,
+            "seed42_replay_equal": {
+              "metadata": true,
+              "parameters": true,
+              "residuals": true
+            },
+            "minimum_gadget_weight": 16384,
+            "max_row_abs_residual": 76107,
+            "maximum_row_rms": 16635.705395763907,
+            "budget": "unproved; no universal g/2 criterion; depth-one t8 only",
+            "core_complete_output_hash_equal": true
+          },
+          "timings": [
+            {
+              "bit": 0,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 40.5953485,
+              "process_medians_ms": [
+                40.8052505,
+                40.5985345,
+                39.6243405
+              ]
+            },
+            {
+              "bit": 0,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 40.9668765,
+              "process_medians_ms": [
+                41.039965,
+                40.869227,
+                40.1944395
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 40.655908,
+              "process_medians_ms": [
+                40.700768,
+                40.6039695,
+                40.0595195
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 40.9684495,
+              "process_medians_ms": [
+                41.072942,
+                40.6685975,
+                44.0037685
+              ]
+            }
+          ]
+        },
+        {
+          "case": "tfhepp-dense-annihilate-original",
+          "upstream_parameter_file": "include/params/128bit.hpp",
+          "parameter_change": false,
+          "small": {
+            "n": 630,
+            "word_bits": 16,
+            "normalized_sigma": 9.25119974676756e-05,
+            "coefficient_sigma": 6.062866266041588,
+            "secret": "iid uniform binary"
+          },
+          "ring_parameter_cards": [
+            {
+              "role": "br",
+              "N": "2048",
+              "k": "1",
+              "word_bits": "64",
+              "mask_L": "4",
+              "mask_logB": "9",
+              "body_L": "4",
+              "body_logB": "9",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            },
+            {
+              "role": "output",
+              "N": "2048",
+              "k": "1",
+              "word_bits": "64",
+              "mask_L": "4",
+              "mask_logB": "9",
+              "body_L": "4",
+              "body_logB": "9",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            },
+            {
+              "role": "annihilate_ss",
+              "N": "2048",
+              "k": "1",
+              "word_bits": "64",
+              "mask_L": "5",
+              "mask_logB": "9",
+              "body_L": "5",
+              "body_logB": "9",
+              "normalized_sigma": "4.44089209850062616e-16",
+              "coefficient_sigma": "8192"
+            }
+          ],
+          "input": {
+            "word_bits": 32,
+            "dimension": 1024,
+            "normalized_sigma": 2.9802322387695312e-08,
+            "encoding": "bit0=-2^29; bit1=+2^29",
+            "secret": "lvl1 subset: shares first 630 coefficients with lvl0",
+            "ks": "SubsetIdentityKeySwitch",
+            "ks_levels": 7,
+            "ks_base_log": 2,
+            "ks_normalized_sigma": 9.25119974676756e-05
+          },
+          "private_ks": null,
+          "payload_bytes": {
+            "bsk_bytes": 165150720,
+            "input_ks_bytes": 6961192,
+            "output_bytes": 262144,
+            "ah_bytes": 1802240,
+            "ss_bytes": 327680
+          },
+          "max_process_rss_kib": 182396,
+          "validation": {
+            "keys": 3,
+            "cbs_outputs": 12,
+            "row_records": 96,
+            "probe_records": 96,
+            "consumer_records": 48,
+            "consumer_coefficient_mismatches": 0,
+            "seed42_replay_equal": {
+              "metadata": true,
+              "parameters": true,
+              "residuals": true
+            },
+            "minimum_gadget_weight": 268435456,
+            "max_row_abs_residual": 451021156996,
+            "maximum_row_rms": 159618652873.64468,
+            "budget": "unproved; no universal g/2 criterion; depth-one t8 only",
+            "core_complete_output_hash_equal": true
+          },
+          "timings": [
+            {
+              "bit": 0,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 16.37439,
+              "process_medians_ms": [
+                16.452438,
+                16.3226825,
+                16.4189095
+              ]
+            },
+            {
+              "bit": 0,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 16.1017745,
+              "process_medians_ms": [
+                16.092421,
+                16.095152,
+                16.118701
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "core",
+              "sample_count": 36,
+              "pooled_median_ms": 15.936476,
+              "process_medians_ms": [
+                15.903338,
+                15.945954,
+                15.95413
+              ]
+            },
+            {
+              "bit": 1,
+              "boundary": "complete",
+              "sample_count": 36,
+              "pooled_median_ms": 16.0942855,
+              "process_medians_ms": [
+                16.1315455,
+                16.060116,
+                16.0751035
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "mosfhet-cbs-validation": {
+      "source": {
+        "url": "https://github.com/antoniocgj/MOSFHET",
+        "commit": "a6e7fbb47cd4451ebcc6693027e65a27d934a399",
+        "original_source_sha256": {
+          "Makefile": "16d12daf092e93bba638080baab0ddf7d33d5ec4a956fce5daefc1e2d621a396",
+          "Makefile.def": "179a5d52f243bc3f6f208783e973dc36b1df4a06654dbb629dea6d48be15623a",
+          "test/benchmark.c": "0632f89ea279dc8a9be886ddd4cedca66e75d5e714e22dba94e46ed49803c660",
+          "test/tests.c": "d2287a20540c39c32889e56546598e46abc0df7d97d99287ddf8d8e989b5fdd9",
+          "src/bootstrap.c": "f2026e1b2bef06f04907dcbc1b2e0513e687863de29f81479faf82d19ed2f589",
+          "src/keyswitch.c": "20722d12503ffcad16061458b95ed695b003916537c8d991669869ef5a57d984",
+          "src/trlwe_compressed_vaes.c": "c3723353375ce9784bb91b5250972e58d521691ff42b999e76a6ea47e1b14efa",
+          "src/rnd/aes_rng.c": "85742b968e53b864e9ee8a5ce29e5d5b06254d8017154ed94fcd0e59b5791767",
+          "src/fft/spqlios/spqlios-fft-avx512.s": "45c667f40915b7399b02f3fd8f3b694f68d1c04cc1b93bbc2cdbefecf5d5ebf9",
+          "src/fft/spqlios/spqlios-ifft-avx512.s": "92bcabc24355c5a716c0c47395bbf1aeae1a964038fb636d826f298f9ddef741",
+          "src/fft/spqlios/fft_processor_spqlios.c": "034ba361e758841dcab932792a0a2a8c254f63f2088c2720c6d79f395d138f10"
+        },
+        "patch": "entropy.patch: RDRAND entropy -> SHAKE256(domain,seed,counter); AES/VAES cache/Gaussian/arithmetic unchanged",
+        "mathematical_or_index_patch": false
+      },
+      "parameters": {
+        "profile": "benchmark SET_4, Torus64",
+        "small_lwe_dimension": 632,
+        "poly_length": 2048,
+        "glwe_dimension": 1,
+        "ciphertext_modulus": "2^64 native for all ciphertexts",
+        "small_secret": "independent dense binary",
+        "ring_secret": "dense binary",
+        "extracted_secret": "exact ring coefficients, n=2048",
+        "input_normalized_sigma": 3.0517578125e-05,
+        "input_coefficient_sigma": 562949953421312,
+        "ring_normalized_sigma": 5.684341886080802e-14,
+        "ring_coefficient_sigma": 1048576,
+        "sampler": "upstream untruncated Box-Muller cos/sqrt/log; torus conversion truncates toward zero",
+        "input_messages": [
+          "0",
+          "2^62 (1/4)"
+        ],
+        "original_benchmark_input": "1/8, not used for our correctness/timing fixtures",
+        "bsk": {
+          "levels": 4,
+          "base_log": 9,
+          "unfolding": 1
+        },
+        "output": {
+          "levels": 4,
+          "base_log": 9,
+          "rows": 8,
+          "gadget_weights": [
+            36028797018963968,
+            70368744177664,
+            137438953472,
+            268435456
+          ],
+          "endpoint": "Fourier f64 TRGSW"
+        },
+        "generic_private_ks": {
+          "levels": 8,
+          "base_log": 4,
+          "unsigned_digit_range": [
+            0,
+            15
+          ],
+          "precomputed_nonzero_multiples": 15,
+          "include_b": true
+        },
+        "packing_ks": {
+          "levels": 8,
+          "base_log": 4,
+          "unsigned_digit_range": [
+            0,
+            15
+          ],
+          "precomputed_nonzero_multiples": 15,
+          "include_b": false
+        },
+        "ring_private_ks": {
+          "levels": 10,
+          "base_log": 4,
+          "number_of_keys": 2,
+          "only_variant": "ring_private"
+        },
+        "input_ks": "none; fresh small LWE input",
+        "ordinary_bsk_output_level_coupling": false,
+        "mvb_variant_preconditions": "BSK L=output L=4, 2L divides N; k=1"
+      },
+      "boundary": {
+        "start": "fresh encrypted small LWE632",
+        "end": "consumable Fourier TRGSW64/f64, all 8 rows",
+        "measured": "upstream circuit_bootstrap[,_2,_3] + trgsw_to_DFT",
+        "input_key_switch_included": false,
+        "unrelated_keygen_encryption_validation_hashes_timed": false,
+        "online_allocations_preserved": true,
+        "output_allocation": "preallocated coefficient/Fourier outputs, as output construction is setup",
+        "altered_workspace_version": false,
+        "upstream_benchmark_endpoint": "coefficient TRGSW; default CBS macro disabled"
+      },
+      "groups": [
+        {
+          "variant": "ordinary",
+          "outputs": 12,
+          "row_records": 96,
+          "probe_records": 96,
+          "consumer_records": 24,
+          "consumer_coefficient_mismatches": 0,
+          "max_row_residual": 1009751099544,
+          "max_lowest_row_residual": 598963120784,
+          "max_consumer_residual": 24499418927726592,
+          "timings": [
+            {
+              "bit": 0,
+              "samples": 36,
+              "median_ms": 206.1702805805,
+              "process_medians_ms": [
+                219.0393934725,
+                205.959599931,
+                205.06150054300002
+              ],
+              "fingerprint_values": [
+                "c4f246507f301aa7"
+              ]
+            },
+            {
+              "bit": 1,
+              "samples": 36,
+              "median_ms": 206.3130030875,
+              "process_medians_ms": [
+                206.52709994449998,
+                206.83398004650002,
+                205.718904035
+              ],
+              "fingerprint_values": [
+                "4f852974740abf3f"
+              ]
+            }
+          ]
+        },
+        {
+          "variant": "multi_value",
+          "outputs": 12,
+          "row_records": 96,
+          "probe_records": 96,
+          "consumer_records": 24,
+          "consumer_coefficient_mismatches": 0,
+          "max_row_residual": 1208078390400,
+          "max_lowest_row_residual": 938243920016,
+          "max_consumer_residual": 27705370072317952,
+          "timings": [
+            {
+              "bit": 0,
+              "samples": 36,
+              "median_ms": 153.80691410949998,
+              "process_medians_ms": [
+                154.5747194905,
+                153.553157928,
+                153.3595498185
+              ],
+              "fingerprint_values": [
+                "ccff554c26ec788f"
+              ]
+            },
+            {
+              "bit": 1,
+              "samples": 36,
+              "median_ms": 153.1609069785,
+              "process_medians_ms": [
+                153.3518400975,
+                153.28051638800002,
+                152.85182755900001
+              ],
+              "fingerprint_values": [
+                "d4fca47030920ea2"
+              ]
+            }
+          ]
+        },
+        {
+          "variant": "ring_private",
+          "outputs": 12,
+          "row_records": 96,
+          "probe_records": 96,
+          "consumer_records": 24,
+          "consumer_coefficient_mismatches": 0,
+          "max_row_residual": 1357861413768,
+          "max_lowest_row_residual": 1094324928840,
+          "max_consumer_residual": 28587515970481160,
+          "timings": [
+            {
+              "bit": 0,
+              "samples": 36,
+              "median_ms": 80.8378803775,
+              "process_medians_ms": [
+                81.07302151600001,
+                80.81863448,
+                80.2043670555
+              ],
+              "fingerprint_values": [
+                "7531533527473cee"
+              ]
+            },
+            {
+              "bit": 1,
+              "samples": 36,
+              "median_ms": 80.409411457,
+              "process_medians_ms": [
+                81.11184986800001,
+                80.397719517,
+                79.97128949500001
+              ],
+              "fingerprint_values": [
+                "963355ad54608226"
+              ]
+            }
+          ]
+        },
+        {
+          "variant": "direct_gsw",
+          "outputs": 12,
+          "row_records": 96,
+          "probe_records": 96,
+          "consumer_records": 24,
+          "consumer_coefficient_mismatches": 0,
+          "max_row_residual": 4778928,
+          "max_lowest_row_residual": 4756628,
+          "max_consumer_residual": 81896669184,
+          "timings": []
+        }
+      ],
+      "limitations": [
+        "single-party reference, no Primus cross-library speedup",
+        "different input/secret/output/KS conventions and noise budgets require a separate mapping",
+        "all lowest CBS-row residual maxima exceed lowest gadget weight; t8 depth-one success is not full 36bit precision",
+        "no security or DFR assessment, deeper consumers or unequal _2/_3 levels not tested",
+        "entropy patch is diagnostic-only; original sampler code preserved, no production randomness claim"
+      ]
+    },
+    "ntru-bootstrap-primitives": {
+      "artifact": {
+        "binary": "/home/lhf/codes/primus-fhe/target/release/deps/bootstrap_primitives-69a8d74d12cc0924",
+        "binary_sha256": "5de9efe44a02e446dddc4de38f2a6918e43af334b6fa033fcfde43bd20d93329",
+        "bench_source_sha256": "df6b1e99ad1f1c332e7cd8b80a693c478ec2572c569eacc607a4c322d269b252",
+        "diagnostic_binary_sha256": "bd6522cd57c77974a39748e680f3cb980a397ed8ad203f67ba111f035705bc63",
+        "diagnostic_source_sha256": "adcd4d32e3fdcd8259a5650c54e333d78ef9688af7d8057311e2e1d6f7c450c0",
+        "head": "3ab35a14474f89bcc2289a062c21245360482a42"
+      },
+      "parameters": {
+        "external_lwe": {
+          "n": 1024,
+          "q": 4503599627370496,
+          "secret": "fixed-weight binary",
+          "h": 128,
+          "input_and_ks_sigma": 858993459.2,
+          "input_message_modulus": 32,
+          "output_message_modulus": 32
+        },
+        "N": 4096,
+        "blind_rotation": "classic",
+        "ntt": {
+          "Q": 1125899906826241,
+          "sigma_f": 1,
+          "sigma_g": 1,
+          "output_scales": {
+            "low_prec": [
+              1073741824,
+              1099511627776
+            ],
+            "high_prec": [
+              8589934592
+            ]
+          }
+        },
+        "fourier": {
+          "Q": "18446744073709551616",
+          "sigma_f": 1.5,
+          "sigma_g": 1.5,
+          "output_scales": {
+            "low_prec": [
+              17592186044416,
+              18014398509481984
+            ],
+            "high_prec": [
+              140737488355328
+            ]
+          }
+        },
+        "decompositions_L_base_log": {
+          "low_prec": {
+            "br": [
+              4,
+              10
+            ],
+            "trace": [
+              6,
+              7
+            ],
+            "ss": [
+              6,
+              8
+            ],
+            "output": [
+              2,
+              10
+            ],
+            "ks": [
+              6,
+              3
+            ]
+          },
+          "high_prec": {
+            "br": [
+              9,
+              5
+            ],
+            "trace": [
+              15,
+              3
+            ],
+            "ss": [
+              6,
+              8
+            ],
+            "output": [
+              1,
+              17
+            ],
+            "ks": [
+              9,
+              2
+            ]
+          }
+        }
+      },
+      "sampling": {
+        "seed": 42,
+        "rounds": 3,
+        "processes": 18,
+        "samples_per_operation_per_process": 30,
+        "operations_per_process": 5,
+        "raw_samples": 2700,
+        "warmup_seconds": 1,
+        "target_measurement_seconds": 3,
+        "mode": "Flat",
+        "unit": "one request",
+        "excluded": "sampling-incomplete first process interrupted by internal GDB breakpoint; no results used",
+        "timings": [
+          {
+            "engine": "ntt",
+            "profile": "low_prec",
+            "operation": "pbs_complete",
+            "mean_ns": 30011771.416666668,
+            "min_process_mean_ns": 29924452.991666667,
+            "max_process_mean_ns": 30055918.766666666
+          },
+          {
+            "engine": "ntt",
+            "profile": "low_prec",
+            "operation": "cbs_to_ngsw/bit0",
+            "mean_ns": 23753115.32,
+            "min_process_mean_ns": 23746874.566666666,
+            "max_process_mean_ns": 23762096.186666667
+          },
+          {
+            "engine": "ntt",
+            "profile": "low_prec",
+            "operation": "cbs_to_ngsw/bit1",
+            "mean_ns": 23725718.622222222,
+            "min_process_mean_ns": 23651919.38,
+            "max_process_mean_ns": 23807827.38
+          },
+          {
+            "engine": "ntt",
+            "profile": "low_prec",
+            "operation": "cmux_prepared/bit0",
+            "mean_ns": 11296.137296276136,
+            "min_process_mean_ns": 11273.890890833996,
+            "max_process_mean_ns": 11311.562719647804
+          },
+          {
+            "engine": "ntt",
+            "profile": "low_prec",
+            "operation": "cmux_prepared/bit1",
+            "mean_ns": 11305.714498338832,
+            "min_process_mean_ns": 11283.898204749461,
+            "max_process_mean_ns": 11319.56073002127
+          },
+          {
+            "engine": "ntt",
+            "profile": "high_prec",
+            "operation": "pbs_complete",
+            "mean_ns": 57596823.12777778,
+            "min_process_mean_ns": 57553118.18333333,
+            "max_process_mean_ns": 57659486.31666667
+          },
+          {
+            "engine": "ntt",
+            "profile": "high_prec",
+            "operation": "cbs_to_ngsw/bit0",
+            "mean_ns": 50040676.3,
+            "min_process_mean_ns": 49846633.31666667,
+            "max_process_mean_ns": 50270767.65
+          },
+          {
+            "engine": "ntt",
+            "profile": "high_prec",
+            "operation": "cbs_to_ngsw/bit1",
+            "mean_ns": 50017465.16666667,
+            "min_process_mean_ns": 49811759.06666667,
+            "max_process_mean_ns": 50303732.233333334
+          },
+          {
+            "engine": "ntt",
+            "profile": "high_prec",
+            "operation": "cmux_prepared/bit0",
+            "mean_ns": 7886.910929308319,
+            "min_process_mean_ns": 7871.018565968103,
+            "max_process_mean_ns": 7901.955700325733
+          },
+          {
+            "engine": "ntt",
+            "profile": "high_prec",
+            "operation": "cmux_prepared/bit1",
+            "mean_ns": 7888.690246617824,
+            "min_process_mean_ns": 7870.311691877195,
+            "max_process_mean_ns": 7909.054877014419
+          },
+          {
+            "engine": "rustfft",
+            "profile": "low_prec",
+            "operation": "pbs_complete",
+            "mean_ns": 29717938.730555557,
+            "min_process_mean_ns": 29668742.133333333,
+            "max_process_mean_ns": 29754026.183333334
+          },
+          {
+            "engine": "rustfft",
+            "profile": "low_prec",
+            "operation": "cbs_to_ngsw/bit0",
+            "mean_ns": 26367366.930555556,
+            "min_process_mean_ns": 25928066.925,
+            "max_process_mean_ns": 27090123.208333332
+          },
+          {
+            "engine": "rustfft",
+            "profile": "low_prec",
+            "operation": "cbs_to_ngsw/bit1",
+            "mean_ns": 26080796.797222223,
+            "min_process_mean_ns": 25971557.366666667,
+            "max_process_mean_ns": 26170669.758333333
+          },
+          {
+            "engine": "rustfft",
+            "profile": "low_prec",
+            "operation": "cmux_prepared/bit0",
+            "mean_ns": 12820.531248724288,
+            "min_process_mean_ns": 12806.123458055697,
+            "max_process_mean_ns": 12839.402984371654
+          },
+          {
+            "engine": "rustfft",
+            "profile": "low_prec",
+            "operation": "cmux_prepared/bit1",
+            "mean_ns": 12815.06337760432,
+            "min_process_mean_ns": 12796.627667562609,
+            "max_process_mean_ns": 12836.075502781343
+          },
+          {
+            "engine": "rustfft",
+            "profile": "high_prec",
+            "operation": "pbs_complete",
+            "mean_ns": 56960979.072222225,
+            "min_process_mean_ns": 56858054.583333336,
+            "max_process_mean_ns": 57130540.38333333
+          },
+          {
+            "engine": "rustfft",
+            "profile": "high_prec",
+            "operation": "cbs_to_ngsw/bit0",
+            "mean_ns": 52024854.983333334,
+            "min_process_mean_ns": 51714258.81666667,
+            "max_process_mean_ns": 52576026.916666664
+          },
+          {
+            "engine": "rustfft",
+            "profile": "high_prec",
+            "operation": "cbs_to_ngsw/bit1",
+            "mean_ns": 51793567.87222222,
+            "min_process_mean_ns": 51702698.31666667,
+            "max_process_mean_ns": 51922750.15
+          },
+          {
+            "engine": "rustfft",
+            "profile": "high_prec",
+            "operation": "cmux_prepared/bit0",
+            "mean_ns": 9128.444540291515,
+            "min_process_mean_ns": 9099.083806576871,
+            "max_process_mean_ns": 9154.51252249779
+          },
+          {
+            "engine": "rustfft",
+            "profile": "high_prec",
+            "operation": "cmux_prepared/bit1",
+            "mean_ns": 9136.909289178897,
+            "min_process_mean_ns": 9131.00649686568,
+            "max_process_mean_ns": 9147.712173382173
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "low_prec",
+            "operation": "pbs_complete",
+            "mean_ns": 24008760.96,
+            "min_process_mean_ns": 23975830.733333334,
+            "max_process_mean_ns": 24038824.586666666
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "low_prec",
+            "operation": "cbs_to_ngsw/bit0",
+            "mean_ns": 19770957.068518516,
+            "min_process_mean_ns": 19722508.46111111,
+            "max_process_mean_ns": 19803007.655555554
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "low_prec",
+            "operation": "cbs_to_ngsw/bit1",
+            "mean_ns": 19861207.81925926,
+            "min_process_mean_ns": 19797178.733333334,
+            "max_process_mean_ns": 19943154.97777778
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "low_prec",
+            "operation": "cmux_prepared/bit0",
+            "mean_ns": 9048.922417194271,
+            "min_process_mean_ns": 9042.837093459073,
+            "max_process_mean_ns": 9058.465061078858
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "low_prec",
+            "operation": "cmux_prepared/bit1",
+            "mean_ns": 9050.16514519799,
+            "min_process_mean_ns": 9044.288117018386,
+            "max_process_mean_ns": 9060.33092515278
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "high_prec",
+            "operation": "pbs_complete",
+            "mean_ns": 45697556.22962963,
+            "min_process_mean_ns": 45683891.666666664,
+            "max_process_mean_ns": 45715847.88888889
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "high_prec",
+            "operation": "cbs_to_ngsw/bit0",
+            "mean_ns": 40751310.18148148,
+            "min_process_mean_ns": 40725771.688888885,
+            "max_process_mean_ns": 40779587.52222222
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "high_prec",
+            "operation": "cbs_to_ngsw/bit1",
+            "mean_ns": 40859459.53333333,
+            "min_process_mean_ns": 40741553.86666667,
+            "max_process_mean_ns": 41094973.07777778
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "high_prec",
+            "operation": "cmux_prepared/bit0",
+            "mean_ns": 6668.927586976733,
+            "min_process_mean_ns": 6668.345406281932,
+            "max_process_mean_ns": 6669.661126654232
+          },
+          {
+            "engine": "tfhe-fft",
+            "profile": "high_prec",
+            "operation": "cmux_prepared/bit1",
+            "mean_ns": 6669.047276069048,
+            "min_process_mean_ns": 6657.78263717169,
+            "max_process_mean_ns": 6680.0455276426555
+          }
+        ],
+        "superseded_measurements": "before-feature-gating retains the complete earlier matrix; final table uses the rebuilt feature-gated target only"
+      },
+      "limits": [
+        "not Boolean-tuned configurations",
+        "no security/DFR claim",
+        "no cross-library equivalent-security speedup",
+        "no high-precision complete LUT or one-hot validation here",
+        "no formal sparse timing",
+        "private workspace and online allocations not separately measured"
+      ]
+    },
+    "ntru-lut-comparison": {
+      "artifact": {
+        "binary": "/home/lhf/codes/primus-fhe/target/release/deps/lookup_evaluate-d9c3bc3e88cf5217",
+        "binary_sha256": "7c671576e06f5d94d052b903ab276b18cfc620634ded96e47377cc6a1a8111c3",
+        "bench_source_sha256": "d32bf2c3a0e874a4ab5a39b1c8de01f3c3a020844fa7560eb7263fd4af527461",
+        "diagnostic_binary_sha256": "ac4ac32af971d4a1a42d281328468a4b4ebc8a5c8be2269525adec2b37bceed2",
+        "diagnostic_source_sha256": "2be43ee850d894b33c4168db11230bf8d8c44b3984f1d8fb6c047681fafceaa6",
+        "head": "3ab35a14474f89bcc2289a062c21245360482a42"
+      },
+      "parameters": {
+        "external_lwe": {
+          "n": 1024,
+          "q": 4503599627370496,
+          "secret": "fixed-weight binary",
+          "h": 128,
+          "input_and_ks_sigma": 858993459.2,
+          "input_message_modulus": 32,
+          "output_message_modulus": 32
+        },
+        "N": 4096,
+        "blind_rotation": "classic",
+        "ntt": {
+          "Q": 1125899906826241,
+          "sigma_f": 1,
+          "sigma_g": 1,
+          "output_scales": {
+            "low_prec": [
+              1073741824,
+              1099511627776
+            ],
+            "high_prec": [
+              8589934592
+            ]
+          }
+        },
+        "fourier": {
+          "Q": "18446744073709551616",
+          "sigma_f": 1.5,
+          "sigma_g": 1.5,
+          "output_scales": {
+            "low_prec": [
+              17592186044416,
+              18014398509481984
+            ],
+            "high_prec": [
+              140737488355328
+            ]
+          }
+        },
+        "decompositions_L_base_log": {
+          "low_prec": {
+            "br": [
+              4,
+              10
+            ],
+            "trace": [
+              6,
+              7
+            ],
+            "ss": [
+              6,
+              8
+            ],
+            "output": [
+              2,
+              10
+            ],
+            "ks": [
+              6,
+              3
+            ]
+          },
+          "high_prec": {
+            "br": [
+              9,
+              5
+            ],
+            "trace": [
+              15,
+              3
+            ],
+            "ss": [
+              6,
+              8
+            ],
+            "output": [
+              1,
+              17
+            ],
+            "ks": [
+              9,
+              2
+            ]
+          }
+        },
+        "input_message_modulus": 32,
+        "output_message_modulus": 32
+      },
+      "lookup": {
+        "M": 16,
+        "d": 3,
+        "c": [
+          4,
+          5,
+          6
+        ],
+        "o": 4,
+        "input_bits": [
+          16,
+          20,
+          24
+        ],
+        "output_bits": 16,
+        "full_selection_tree": true,
+        "deduplication": false,
+        "mapping": "mix64(x XOR 202) & 65535",
+        "mapping_sha256_u16_le": {
+          "4": "526d06f92fd81c2edf4e669645cd01bda05109073e0fd975de3b42b7408cf3c4",
+          "5": "eaf8cff447f0706b39566038027e0f3d0eab51cb6cd5a46d8fe80104373ff3f2",
+          "6": "aba8277cd14581feb59fe89fd9a12154dc1757ef586ce159ab2ceb58f040ac5d"
+        },
+        "logical_counts_source_audited_not_instrumented": [
+          {
+            "chunks": 4,
+            "blind_rotations": 4,
+            "nlev_selectors": 16,
+            "generated_ngsw_selectors": 45,
+            "constant_projections_low": 122,
+            "constant_projections_high": 61,
+            "retained_high_ngsw": 0,
+            "retained_aggregated_ngsw": 3,
+            "public_polynomials_per_output": 16,
+            "first_layer_lifts": 4,
+            "encrypted_cmux_nodes": 0,
+            "rotation_products": 12,
+            "lwe_returns": 4
+          },
+          {
+            "chunks": 5,
+            "blind_rotations": 5,
+            "nlev_selectors": 16,
+            "generated_ngsw_selectors": 60,
+            "constant_projections_low": 152,
+            "constant_projections_high": 76,
+            "retained_high_ngsw": 15,
+            "retained_aggregated_ngsw": 3,
+            "public_polynomials_per_output": 256,
+            "first_layer_lifts": 64,
+            "encrypted_cmux_nodes": 4,
+            "rotation_products": 12,
+            "lwe_returns": 4
+          },
+          {
+            "chunks": 6,
+            "blind_rotations": 6,
+            "nlev_selectors": 16,
+            "generated_ngsw_selectors": 75,
+            "constant_projections_low": 182,
+            "constant_projections_high": 91,
+            "retained_high_ngsw": 30,
+            "retained_aggregated_ngsw": 3,
+            "public_polynomials_per_output": 4096,
+            "first_layer_lifts": 1024,
+            "encrypted_cmux_nodes": 68,
+            "rotation_products": 12,
+            "lwe_returns": 4
+          }
+        ]
+      },
+      "sampling": {
+        "seed": 42,
+        "input_seed": 1042,
+        "input": "0xabcdef & ((1 << (4*c))-1)",
+        "input_sha256_matches_diagnostic": true,
+        "rounds": 3,
+        "processes": 54,
+        "operations_per_process": 3,
+        "samples_per_operation_per_process": 30,
+        "raw_samples": 4860,
+        "warmup_seconds": 1,
+        "target_measurement_seconds": 3,
+        "mode": "Flat",
+        "unit": "one request returning four chunks",
+        "threads": 1,
+        "cpu": 4,
+        "correctness_processes_completed_before_sampling": true,
+        "all_probe_breakpoints_deleted_before_timing": true,
+        "timings": [
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "complete",
+            "mean_ns": 161263637.55555555,
+            "min_process_mean_ns": 160759702.63333333,
+            "max_process_mean_ns": 161988495.56666666
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "prepare_controls",
+            "mean_ns": 138609616.97777778,
+            "min_process_mean_ns": 137732113.86666667,
+            "max_process_mean_ns": 139087258.3
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "lookup_prepared",
+            "mean_ns": 20396903.14666667,
+            "min_process_mean_ns": 20255627.733333334,
+            "max_process_mean_ns": 20621420.44
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "complete",
+            "mean_ns": 204731304.83333334,
+            "min_process_mean_ns": 203881794.06666666,
+            "max_process_mean_ns": 205680484.5
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "prepare_controls",
+            "mean_ns": 173752914.38888887,
+            "min_process_mean_ns": 173141087.23333332,
+            "max_process_mean_ns": 174290201.7
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "lookup_prepared",
+            "mean_ns": 30532427.66111111,
+            "min_process_mean_ns": 29958462.775,
+            "max_process_mean_ns": 31343932.316666666
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "complete",
+            "mean_ns": 385910636.9111111,
+            "min_process_mean_ns": 384101439.3,
+            "max_process_mean_ns": 387435527.4
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "prepare_controls",
+            "mean_ns": 208766596.24444446,
+            "min_process_mean_ns": 207440648.96666667,
+            "max_process_mean_ns": 209434868.5
+          },
+          {
+            "engine": "ntt",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "lookup_prepared",
+            "mean_ns": 174917436.45555556,
+            "min_process_mean_ns": 173910670.43333334,
+            "max_process_mean_ns": 176174221.8
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "complete",
+            "mean_ns": 275659008.5,
+            "min_process_mean_ns": 275298473.2,
+            "max_process_mean_ns": 275919906.9
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "prepare_controls",
+            "mean_ns": 244082954.37777779,
+            "min_process_mean_ns": 243078213.3,
+            "max_process_mean_ns": 244637478.3
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "lookup_prepared",
+            "mean_ns": 30167879.594444446,
+            "min_process_mean_ns": 30000062.683333334,
+            "max_process_mean_ns": 30412943.941666666
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "complete",
+            "mean_ns": 342464427.15555555,
+            "min_process_mean_ns": 340200392.96666664,
+            "max_process_mean_ns": 344637413.7
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "prepare_controls",
+            "mean_ns": 303910801.48888886,
+            "min_process_mean_ns": 301971129.9,
+            "max_process_mean_ns": 305945560.23333335
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "lookup_prepared",
+            "mean_ns": 36386577.574074075,
+            "min_process_mean_ns": 36218419.93333334,
+            "max_process_mean_ns": 36536420.4
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "complete",
+            "mean_ns": 484181399.73333335,
+            "min_process_mean_ns": 481916975.3666667,
+            "max_process_mean_ns": 486667852.06666666
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "prepare_controls",
+            "mean_ns": 366539620.0222222,
+            "min_process_mean_ns": 363576291.56666666,
+            "max_process_mean_ns": 369969761.3
+          },
+          {
+            "engine": "ntt",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "lookup_prepared",
+            "mean_ns": 119954398.5,
+            "min_process_mean_ns": 118821339.9,
+            "max_process_mean_ns": 121392511.6
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "complete",
+            "mean_ns": 164714460.68888888,
+            "min_process_mean_ns": 164446795.73333332,
+            "max_process_mean_ns": 165036226.16666666
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "prepare_controls",
+            "mean_ns": 148062501.41111112,
+            "min_process_mean_ns": 147674647.13333333,
+            "max_process_mean_ns": 148562277.5
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "lookup_prepared",
+            "mean_ns": 12792236.944444444,
+            "min_process_mean_ns": 12764539.375,
+            "max_process_mean_ns": 12812579.020833334
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "complete",
+            "mean_ns": 212549404.91111112,
+            "min_process_mean_ns": 210906565.43333334,
+            "max_process_mean_ns": 215146658.2
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "prepare_controls",
+            "mean_ns": 185120632.92222223,
+            "min_process_mean_ns": 184898786.93333334,
+            "max_process_mean_ns": 185276281.53333333
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "lookup_prepared",
+            "mean_ns": 23118798.071111113,
+            "min_process_mean_ns": 23048824.873333335,
+            "max_process_mean_ns": 23159360.34
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "complete",
+            "mean_ns": 394575054.14444447,
+            "min_process_mean_ns": 393650103.26666665,
+            "max_process_mean_ns": 395052534.03333336
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "prepare_controls",
+            "mean_ns": 221180262.0,
+            "min_process_mean_ns": 220656768.93333334,
+            "max_process_mean_ns": 221522782.7
+          },
+          {
+            "engine": "rustfft",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "lookup_prepared",
+            "mean_ns": 171141206.07777777,
+            "min_process_mean_ns": 170999784.26666668,
+            "max_process_mean_ns": 171278641.5
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "complete",
+            "mean_ns": 271927081.40000004,
+            "min_process_mean_ns": 271835128.6666667,
+            "max_process_mean_ns": 272061947.8
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "prepare_controls",
+            "mean_ns": 252376752.04444444,
+            "min_process_mean_ns": 251833042.86666667,
+            "max_process_mean_ns": 252982311.73333332
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "lookup_prepared",
+            "mean_ns": 17726812.081481483,
+            "min_process_mean_ns": 17696439.633333333,
+            "max_process_mean_ns": 17761891.472222224
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "complete",
+            "mean_ns": 341704204.04444444,
+            "min_process_mean_ns": 341132965.6333333,
+            "max_process_mean_ns": 342114306.6333333
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "prepare_controls",
+            "mean_ns": 315452218.4666667,
+            "min_process_mean_ns": 314968402.8666667,
+            "max_process_mean_ns": 315823516.8666667
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "lookup_prepared",
+            "mean_ns": 23172301.9,
+            "min_process_mean_ns": 23100224.846666668,
+            "max_process_mean_ns": 23264860.606666666
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "complete",
+            "mean_ns": 484132839.2111111,
+            "min_process_mean_ns": 483212303.43333334,
+            "max_process_mean_ns": 484745335.3333333
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "prepare_controls",
+            "mean_ns": 377782870.4111111,
+            "min_process_mean_ns": 376554469.3333333,
+            "max_process_mean_ns": 379242898.2
+          },
+          {
+            "engine": "rustfft",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "lookup_prepared",
+            "mean_ns": 106146150.35555555,
+            "min_process_mean_ns": 106045066.1,
+            "max_process_mean_ns": 106206371.4
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "complete",
+            "mean_ns": 125899558.23333333,
+            "min_process_mean_ns": 125616909.23333333,
+            "max_process_mean_ns": 126105097.96666667
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "prepare_controls",
+            "mean_ns": 109302399.81111111,
+            "min_process_mean_ns": 109111157.96666667,
+            "max_process_mean_ns": 109559022.96666667
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 4,
+            "operation": "lookup_prepared",
+            "mean_ns": 12701248.523611112,
+            "min_process_mean_ns": 12616812.091666667,
+            "max_process_mean_ns": 12840625.716666667
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "complete",
+            "mean_ns": 160153735.06666666,
+            "min_process_mean_ns": 159675583.96666667,
+            "max_process_mean_ns": 160718586.43333334
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "prepare_controls",
+            "mean_ns": 137176793.37777779,
+            "min_process_mean_ns": 136037313.1,
+            "max_process_mean_ns": 139216174.03333333
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 5,
+            "operation": "lookup_prepared",
+            "mean_ns": 19733200.398518518,
+            "min_process_mean_ns": 19693747.2,
+            "max_process_mean_ns": 19760917.506666668
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "complete",
+            "mean_ns": 293502314.2888889,
+            "min_process_mean_ns": 292699806.6,
+            "max_process_mean_ns": 294277664.2
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "prepare_controls",
+            "mean_ns": 163605613.68888888,
+            "min_process_mean_ns": 163488617.63333333,
+            "max_process_mean_ns": 163673117.53333333
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "low_prec",
+            "chunks": 6,
+            "operation": "lookup_prepared",
+            "mean_ns": 125330821.73333333,
+            "min_process_mean_ns": 124755271.93333334,
+            "max_process_mean_ns": 125830407.73333333
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "complete",
+            "mean_ns": 212644834.2,
+            "min_process_mean_ns": 212177156.2,
+            "max_process_mean_ns": 213190145.26666668
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "prepare_controls",
+            "mean_ns": 194004614.05555555,
+            "min_process_mean_ns": 193598051.76666668,
+            "max_process_mean_ns": 194355477.8
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 4,
+            "operation": "lookup_prepared",
+            "mean_ns": 17082012.483333334,
+            "min_process_mean_ns": 17037258.661111113,
+            "max_process_mean_ns": 17135053.316666666
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "complete",
+            "mean_ns": 264795713.45555556,
+            "min_process_mean_ns": 264044168.36666667,
+            "max_process_mean_ns": 265202928.83333334
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "prepare_controls",
+            "mean_ns": 242458277.04444444,
+            "min_process_mean_ns": 240998622.1,
+            "max_process_mean_ns": 244880671.33333334
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 5,
+            "operation": "lookup_prepared",
+            "mean_ns": 22464305.02222222,
+            "min_process_mean_ns": 22222964.086666666,
+            "max_process_mean_ns": 22736684.53333333
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "complete",
+            "mean_ns": 371104315.42222226,
+            "min_process_mean_ns": 369953261.6333333,
+            "max_process_mean_ns": 371919405.03333336
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "prepare_controls",
+            "mean_ns": 289231280.34444445,
+            "min_process_mean_ns": 287886118.3666667,
+            "max_process_mean_ns": 290253979.2
+          },
+          {
+            "engine": "tfhe-fft",
+            "precision": "high_prec",
+            "chunks": 6,
+            "operation": "lookup_prepared",
+            "mean_ns": 82645639.46111111,
+            "min_process_mean_ns": 80999224.05,
+            "max_process_mean_ns": 83660184.28333333
+          }
+        ]
+      },
+      "limits": [
+        "finite vectors, not full 24-bit domain",
+        "no security/DFR proof",
+        "Low conservative input support bound remains outside guard",
+        "no isolated private selector phase or per-stage error attribution",
+        "not an equivalent-security external EBS comparison",
+        "lookup_create retains its historical mapping; its timing is not measured here",
+        "same timed ciphertext and retained material, not varying-input throughput or cold key/table load"
+      ]
+    },
+    "bootstrap-functional-comparison": {
+      "artifacts": {
+        "primus": {
+          "binary": "/home/lhf/codes/primus-fhe/target/release/deps/lookup_ebs8-66ae2a62063428c5",
+          "binary_sha256": "7168b68a7686fc77c34a9f9825e54e5dffa58fbc8b1f1a83acf90069acac5113",
+          "head": "3ab35a14474f89bcc2289a062c21245360482a42",
+          "bench_source_sha256": "89839f08383a1ff53060b3a3f3770184546762ce88cdf8f87936206044251152",
+          "lock_sha256": "f93b1339282574e001ef3489825259561e94347baaffc7b8405d27efcd62ac10"
+        },
+        "ly23": {
+          "binary": "/tmp/primus-bootstrap-comparison/target/release/ly23-complete-timing",
+          "binary_sha256": "5d2355ea6152be3489a55481f0aa5bf3a2f93bc4ad5af91301c02b8856a3b6ca",
+          "upstream_head": "e1f5d36224ca88991b49e38fa6791ab18a9f63d1",
+          "adapter_source_sha256": "cf7ed7edc9748afd6915914bb6cabca7629613aebe6905054a935c61083ebfb8",
+          "lock_sha256": "74e8f04bc874e29fe3bddc4ec16c4c2dd7317c7e0030acd1101489df67f6134a"
+        }
+      },
+      "parameters": [
+        {
+          "id": "ly23-low",
+          "input_bits": 8,
+          "output_bits": 4,
+          "input_lwe_count": 1,
+          "output_lwe_count": 1,
+          "q": "2^64",
+          "Q": "2^64",
+          "n": 1024,
+          "h": 128,
+          "N": 4096,
+          "k": 1,
+          "eta": 4,
+          "box_width": 64,
+          "input_sigma_normalized": "3.2*2^-24",
+          "ring_sigma_coefficient": 1.5,
+          "BR_L_logB": [
+            4,
+            10
+          ],
+          "KS_L_logB": [
+            6,
+            3
+          ],
+          "BSK_bytes": 536870912,
+          "KSK_bytes": 201523200,
+          "accumulator_bytes": 262144
+        },
+        {
+          "id": "ly23-high",
+          "input_bits": 8,
+          "output_bits": 4,
+          "input_lwe_count": 1,
+          "output_lwe_count": 1,
+          "q": "2^64",
+          "Q": "2^64",
+          "n": 1024,
+          "h": 128,
+          "N": 4096,
+          "k": 1,
+          "eta": 4,
+          "box_width": 64,
+          "input_sigma_normalized": "3.2*2^-24",
+          "ring_sigma_coefficient": 1.5,
+          "BR_L_logB": [
+            9,
+            5
+          ],
+          "KS_L_logB": [
+            9,
+            2
+          ],
+          "BSK_bytes": 1207959552,
+          "KSK_bytes": 302284800,
+          "accumulator_bytes": 262144
+        },
+        {
+          "id": "primus-ntt-low",
+          "input_bits": 8,
+          "output_bits": 4,
+          "input_lwe_count": 2,
+          "output_lwe_count": 1,
+          "M": 16,
+          "c": 2,
+          "d": 2,
+          "o": 1,
+          "N": 4096,
+          "n": 1024,
+          "h": 128,
+          "q": "2^52",
+          "Q": "2^50-16383",
+          "sigma_f_g": 1,
+          "input_KS_sigma_coefficient": "3.2*2^28",
+          "BR_L_logB": [
+            4,
+            10
+          ],
+          "KS_L_logB": [
+            6,
+            3
+          ],
+          "trace_L_logB": [
+            6,
+            7
+          ],
+          "SS_L_logB": [
+            6,
+            8
+          ],
+          "selector_L_logB": [
+            2,
+            10
+          ],
+          "plaintext_modulus": 32,
+          "algorithm": "classic",
+          "polynomial_payload_bytes": 32768
+        },
+        {
+          "id": "primus-fourier-low",
+          "input_bits": 8,
+          "output_bits": 4,
+          "input_lwe_count": 2,
+          "output_lwe_count": 1,
+          "M": 16,
+          "c": 2,
+          "d": 2,
+          "o": 1,
+          "N": 4096,
+          "n": 1024,
+          "h": 128,
+          "q": "2^52",
+          "Q": "2^64",
+          "sigma_f_g": 1.5,
+          "input_KS_sigma_coefficient": "3.2*2^28",
+          "BR_L_logB": [
+            4,
+            10
+          ],
+          "KS_L_logB": [
+            6,
+            3
+          ],
+          "trace_L_logB": [
+            6,
+            7
+          ],
+          "SS_L_logB": [
+            6,
+            8
+          ],
+          "selector_L_logB": [
+            2,
+            10
+          ],
+          "plaintext_modulus": 32,
+          "algorithm": "classic",
+          "polynomial_payload_bytes": 32768
+        }
+      ],
+      "function": "((13*x) XOR (x >> 2)) & 15",
+      "geometry": {
+        "input_bits": 8,
+        "output_bits": 4,
+        "first": 0,
+        "last": 255
+      },
+      "sampling": {
+        "cpu": 4,
+        "online_threads": 1,
+        "rounds": 3,
+        "orders": [
+          [
+            "ly23-low",
+            "primus-ntt-low",
+            "primus-fourier-low",
+            "ly23-high"
+          ],
+          [
+            "ly23-high",
+            "primus-fourier-low",
+            "primus-ntt-low",
+            "ly23-low"
+          ],
+          [
+            "primus-ntt-low",
+            "ly23-low",
+            "ly23-high",
+            "primus-fourier-low"
+          ]
+        ],
+        "key_seed": 42,
+        "input_seed": 1042,
+        "input": 171,
+        "expected_output": 5,
+        "warmup_seconds": 1,
+        "samples_per_process": 30,
+        "processes": 12,
+        "raw_samples": 360,
+        "primus": "Criterion Flat target3s, normalize by actual iterations; one request per iteration",
+        "ly23": "one complete bootstrap_ly23 + return KS per Instant sample",
+        "all_breakpoints_removed_before_sampling": true,
+        "retained_probe_failure": "before process start; no samples, unchanged artifact; valid first LY23 run retained",
+        "timings": [
+          {
+            "case": "ly23-low",
+            "mean_ms": 143.74503375555557,
+            "min_process_mean_ms": 142.8212902666667,
+            "max_process_mean_ms": 144.6040053,
+            "input_sha256": "e2db65265168069afed1119ce9c13d570f706c6800aaa4fc90e75d287b1127e2",
+            "max_validation_residual": 5192190480171857,
+            "half_spacing": 288230376151711744,
+            "max_validation_fraction": 0.018014029435394822,
+            "max_measured_fixture_fraction": 0.00253954590434639,
+            "actual_callback_symbols": [
+              "_ZN12concrete_fft6fn_ptr28_$u7b$$u7b$closure$u7d$$u7d$17he10a602efa19e6f1E"
+            ],
+            "observed_zmm": true,
+            "observed_ifma": false
+          },
+          {
+            "case": "primus-ntt-low",
+            "mean_ms": 74.72492724444444,
+            "min_process_mean_ms": 74.65552588333334,
+            "max_process_mean_ms": 74.85991558333333,
+            "input_sha256": "48574b02b7d7ce129839d776aee4ac6396efbd1e4ff11a4875bf57272aa08838",
+            "max_validation_residual": 4892779206721,
+            "half_spacing": 70368744177664,
+            "max_validation_fraction": 0.06953057446027344,
+            "max_measured_fixture_fraction": 0.028025719853900455,
+            "actual_callback_symbols": [
+              "_RINvNtNtNtNtCs1I5Xnlrrrsy_10primus_ntt3ntt7prime646avx5126stages14fwd_t8_inplaceKm34_Kb0_EBa_"
+            ],
+            "observed_zmm": true,
+            "observed_ifma": true
+          },
+          {
+            "case": "primus-fourier-low",
+            "mean_ms": 60.200871927777776,
+            "min_process_mean_ms": 60.059819299999994,
+            "max_process_mean_ms": 60.33270268333333,
+            "input_sha256": "48574b02b7d7ce129839d776aee4ac6396efbd1e4ff11a4875bf57272aa08838",
+            "max_validation_residual": 2812850033746,
+            "half_spacing": 70368744177664,
+            "max_validation_fraction": 0.03997300316521546,
+            "max_measured_fixture_fraction": 0.017333108535794395,
+            "actual_callback_symbols": [
+              "_RNCINvCslpmQtg9NYqL_8tfhe_fft6fn_ptrKb0_INtNtB4_4dif84Dif8INtNtB4_3nat9SuccessorIBV_IBV_IBV_IBV_IBV_IBV_IBV_NtBX_4ZeroEEEEEEEEENtNtB4_8fft_simd5c64x4NtNtNtCs2VzKnRd3ZhP_4pulp3x862v42V4E0B4_"
+            ],
+            "observed_zmm": true,
+            "observed_ifma": false
+          },
+          {
+            "case": "ly23-high",
+            "mean_ms": 285.9558011666667,
+            "min_process_mean_ms": 285.49641,
+            "max_process_mean_ms": 286.5527831,
+            "input_sha256": "e2db65265168069afed1119ce9c13d570f706c6800aaa4fc90e75d287b1127e2",
+            "max_validation_residual": 3580511441116141,
+            "half_spacing": 288230376151711744,
+            "max_validation_fraction": 0.012422394505815438,
+            "max_measured_fixture_fraction": 0.00048072710981059835,
+            "actual_callback_symbols": [
+              "_ZN12concrete_fft6fn_ptr28_$u7b$$u7b$closure$u7d$$u7d$17he10a602efa19e6f1E"
+            ],
+            "observed_zmm": true,
+            "observed_ifma": false
+          }
+        ]
+      },
+      "limits": [
+        "no common security/DFR proof",
+        "single LWE vs two chunk input protocols differ",
+        "NTT vs Fourier Q and ring samplers differ",
+        "new request has no high-chunk selection tree; not the wide LUT case",
+        "LowPrec conservative one-hot support bound unresolved",
+        "no new allocation/RSS measurement",
+        "historical CBS consume depth1 t8 only; named gadget bits are not certified precision",
+        "no cross-library speedup ratios"
+      ]
+    }
+  },
+  "files": {
+    "bootstrap-comparison-summary.csv": {
+      "sha256": "297c13438d797447632d07692fe03d19caead6529c9bd94bd07c09d5b6b40f8a",
+      "bytes": 17522
+    },
+    "bootstrap-primitive-reference.csv": {
+      "sha256": "0ad11a9bf420919ac6cea16da9eb6495436ff308db210564dfb406c1b30ab535",
+      "bytes": 19954
+    },
+    "ebs8-samples.csv": {
+      "sha256": "46ff91c5310dd1be7a45d5bbc3b5ed497c96d397e64369f3642a7a731ace34b5",
+      "bytes": 16406
+    },
+    "glwe-cbs-paired-samples.csv": {
+      "sha256": "8b3cfea9812182eb270d4a4d3855d9e1dc848cc01bcdd76fba414f884174b2ac",
+      "bytes": 78938
+    },
+    "mosfhet-cbs-samples.csv": {
+      "sha256": "44df1994362daf6e7d0cd708c47a92f76fa089149b551fabb5e1dc9b369eae23",
+      "bytes": 12414
+    },
+    "ntru-bootstrap-samples.csv": {
+      "sha256": "b011823b6e2d99bb9808c7292382a7a1a9f12cb34b5f0d935f29978aa5c15364",
+      "bytes": 191938
+    },
+    "ntru-lut-samples.csv": {
+      "sha256": "99e15738e746780bf11f8b1d37f2fbf803138f1c68ef6bf47590c74ba066ee88",
+      "bytes": 322581
+    },
+    "tfhepp-cbs-samples.csv": {
+      "sha256": "be85f4c09e4045c76496720b7aa83f8d3eaf9f435992660ea4eef590482eb347",
+      "bytes": 54387
+    }
+  }
+}

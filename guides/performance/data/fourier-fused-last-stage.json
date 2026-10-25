@@ -1,0 +1,102 @@
+{
+  "date": "2026-10-19",
+  "base_revision": "64ef5a150ae36578b273b530015ed092ec8fe6be",
+  "production_patch_sha256": "ba97fc73f3c2c57114a7cba6f78cff996c0d132bca5285e46304cb1e7a296c54",
+  "measurement_patch_sha256": "5c22e56ce22455f733da88c8e195e374f2f04a5388ab7e12f899352be07b5507",
+  "cpu": "AMD Ryzen 9 9955HX3D, CPU4 / CPU8, frequency not locked",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "features": "default + tfhe-fft; repository target-cpu=native",
+  "reconstruction_limit": "Stage harness and full replay archive remain local. Public benchmarks exercise complete consumers but do not expose isolated projection. CSV contains process estimates/CI, not raw samples.",
+  "elf": {
+    "onehot": "d1e13eb901983f2adf768f63c1569aac7a621d09b88717e383d9788a8152db1e",
+    "cbs": "1f01660f327f5416ccb5715056e47a6d4fc31fc7571e395a573294c010d93a38",
+    "lut": "1d39e65d5ead46e678fab86edfb6482d677ce2ee7d644fa2488406c3514997a2"
+  },
+  "verification": {
+    "formal_processes": 144,
+    "criterion_records": 192,
+    "equal_input_and_plan_pairs": 24,
+    "projection_pairs": 24,
+    "plans": {
+      "FFT_PLAN N=4096 (Dif8, 512)": 72
+    },
+    "source_and_elf_unchanged": true,
+    "replay_source_byte_exact": true,
+    "final_library_changes_only_comments_and_must_use": true,
+    "diagnostic_replay_byte_exact": true,
+    "diagnostic_processes": 16,
+    "online_allocation_free_windows": 640
+  },
+  "parameters": {
+    "N": 4096,
+    "Q": "2^64",
+    "lwe_n": 1024,
+    "lwe_h": 128,
+    "lwe_q": "2^52",
+    "lwe_sigma": "3.2*2^28",
+    "sigma_f": 1.5,
+    "sigma_g": 1.5,
+    "low_bits": 40,
+    "low_L_logB": {
+      "BR": [
+        3,
+        16
+      ],
+      "trace": [
+        5,
+        11
+      ],
+      "SS": [
+        5,
+        11
+      ],
+      "output": [
+        1,
+        19
+      ]
+    },
+    "high_L_logB": {
+      "BR": [
+        4,
+        13
+      ],
+      "trace": [
+        4,
+        13
+      ],
+      "SS": [
+        4,
+        14
+      ],
+      "output": [
+        1,
+        20
+      ]
+    },
+    "KS": [
+      9,
+      2
+    ]
+  },
+  "sampling": {
+    "rounds": 3,
+    "samples_per_record": 20,
+    "warmup_s": 0.3,
+    "measurement_target_s": 1.2,
+    "seed": 42
+  },
+  "measured_production_source_sha256": {
+    "crates/primus_tfhe_ntru_ntt/src/circuit_bootstrap/key.rs": "9ee66d066b6808e59e9da5ba59072c6fa79ff1cf0403980b0d0ccad589fba342",
+    "crates/primus_tfhe_ntru_ntt/src/circuit_bootstrap/evaluator.rs": "3bbcfca64dca2abb791005de823c3e003b050fe63fed09a59a70648513052d1f",
+    "crates/primus_tfhe_ntru_ntt/src/circuit_bootstrap/one_hot.rs": "c809e178fa9feb6300a7a92ea837d6e4e6c0b0f15e8f5eacf200b8eb05e83299",
+    "crates/primus_ntru/src/split.rs": "fd9296fb47a96c0c5dee27a8a915ca3b812ec1a72e6b4936bac1e5a80e4d7705",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/key.rs": "365cd81536223ed23c13043d54021a02b6a9d5f11c567e9b7cb9d32f5f3aa3cc",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/evaluator.rs": "69209ebdc23b0675b343de2241f4e04dc77c2545d792a6c244e1dec1c574363c",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/one_hot.rs": "c2945dc0169a2e3c21362c69956b2d2838800d209fda749ace520ff5b5c78e2b",
+    "crates/primus_tfhe_glwe_fourier/src/circuit_bootstrap/key.rs": "2c1dbf7bacbdb1df1e1aa7ada0b9cee1545b1a0a674ea1e985df01790d6e5a10",
+    "crates/primus_tfhe_glwe_fourier/src/circuit_bootstrap/evaluator.rs": "534af2ed768c983e398306beeb01cb7efa17bb627501d656071ceb4a39666b5b",
+    "crates/primus_tfhe_glwe_ntt/src/circuit_bootstrap/key.rs": "2a192ce5d1754c0eec23c5ca16fe96a7f5ca5f4e85a198684a14e362360bc714",
+    "crates/primus_tfhe_glwe_ntt/src/circuit_bootstrap/evaluator.rs": "e6ba8b00e95b2c1a0fbb586c9bcb2d45ae0b953a394d96fa7eecbc980b3c3640",
+    "crates/primus_lattice/src/ntru/fourier/split.rs": "e7138e672cd71c07c4573c0609e9aae39a7fddaa4879b8ca3fdf67bf6f759d9c"
+  }
+}

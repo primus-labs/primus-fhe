@@ -1,0 +1,575 @@
+{
+  "date": "2026-10-12",
+  "scope": "Fresh paired complete PBS4 and EBS8; no production algorithm changes. Finite correctness gates do not establish security or DFR.",
+  "primus_revision": "354d1db8e2c75b10b5c47c93140ef0d606339b27",
+  "primus_dirty_scope": "Three benchmark files identified by SHA-256 below; library source unchanged.",
+  "external_repository": "https://github.com/zama-ai/tfhe-rs",
+  "external_revision": "e1f5d36224ca88991b49e38fa6791ab18a9f63d1",
+  "environment": {
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)\n",
+    "external_rustc": "rustc 1.85.0-nightly (d117b7f21 2024-12-31)\nbinary: rustc\ncommit-hash: d117b7f211835282b3b177dc64245fff0327c04c\ncommit-date: 2024-12-31\nhost: x86_64-unknown-linux-gnu\nrelease: 1.85.0-nightly\nLLVM version: 19.1.6\n",
+    "external_revision": "e1f5d36224ca88991b49e38fa6791ab18a9f63d1\n",
+    "cpu4_cache": "98304K",
+    "cpu4_smt": "4,20",
+    "rustflags": "[build]\nrustflags = [\"-C\", \"target-cpu=native\", \"-A\", \"linker-messages\"]\n",
+    "features": {
+      "glwe_ntt": "default",
+      "glwe_fourier": "default rustfft + tfhe-fft",
+      "ntru_lut": "default ntt,rustfft + tfhe-fft",
+      "external": "default-features=false; x86_64-unix,nightly-avx512; patched pulp 0.18.21"
+    }
+  },
+  "cpu_model": "AMD Ryzen 9 9955HX3D",
+  "cpu_affinity": [
+    4
+  ],
+  "online_threads": 1,
+  "background_isolation": "CPU affinity only; SMT sibling 20 and other system work were not isolated.",
+  "source_hashes": {
+    "/home/lhf/codes/primus-fhe/crates/primus_tfhe_glwe_fourier/benches/pbs.rs": "0b6d3be0ada3b2b491763185e4512fa0bcc8dfc63d256551dcb7c8f9869015af",
+    "/home/lhf/codes/primus-fhe/crates/primus_tfhe_glwe_ntt/benches/pbs.rs": "c6962c26e03d39b00418b3966795bfc45d87a27b788339882658400a0085d56e",
+    "/home/lhf/codes/primus-fhe/crates/primus_tfhe_ntru_lut/benches/lookup_ebs8.rs": "5c93e93acc826a96beff9287100d60c3bcdd4e7da2b5cb45ce612fdb7d79e3d5",
+    "/home/lhf/codes/primus-fhe/Cargo.lock": "f93b1339282574e001ef3489825259561e94347baaffc7b8405d27efcd62ac10",
+    "/tmp/primus-bootstrap-7-0b/Cargo.lock": "6ea896427756583a143d023d6d2504eb04b5a1b4bc7faf2120719c8901449ec5",
+    "/tmp/primus-bootstrap-7-0b/Cargo.toml": "ec57e871d48e0e658f8def676136af4e439bb3e0a579ad85e737571676c1c7f2",
+    "/tmp/primus-bootstrap-7-0b/src/main.rs": "930bf1c13318824e466161ee27973c5577d2baf02213b0037b4afc150ffd6569"
+  },
+  "binary_sha256": {
+    "/tmp/primus-bootstrap-comparison/target/release/primus-bootstrap-comparison": "4a42cfbc021433d91cd199cc24908b038c90b3ea62857d74fb7408295ffa3ce7",
+    "/home/lhf/codes/primus-fhe/target/release/deps/pbs-25bd658865d5d9d4": "51c603bc3cfe13998f228ec8c623b7fb0c4387d4669100635b185f2fc1d0c5ce",
+    "/home/lhf/codes/primus-fhe/target/release/deps/pbs-352453e6905139a6": "035032df9695e66dbaacbf52306de938886358694c2d1b90ce4f606fc9213f67",
+    "/home/lhf/codes/primus-fhe/target/release/deps/lookup_ebs8-66ae2a62063428c5": "1ff40399400d8c6b77ab80df8d3e60a885386dc825538737dd73cef3ffdba551"
+  },
+  "sampling": "3 interleaved independent processes; middle round reversed; 30 samples/process. Primus Criterion Flat, 1s warmup, 3s target; external Instant 3 warmups/30 calls. Each Criterion iteration is one request. Divide total_ns by iterations. Report mean of process means; all samples retained.",
+  "seed_protocol": "key=42; measured input stream=1042, reset after validation; PBS input13->10, EBS171->5. Seeds do not imply identical keys/ciphertexts across libraries.",
+  "function": "((13*x) ^ (x>>2)) & 15",
+  "parameters": {
+    "shared": {
+      "small_lwe_n": 1024,
+      "small_secret": "exact binary h128",
+      "ring_N": 4096,
+      "algorithm": "classic",
+      "BR_L_b": {
+        "low": [
+          4,
+          10
+        ],
+        "high": [
+          9,
+          5
+        ]
+      },
+      "KS_L_b": {
+        "low": [
+          6,
+          3
+        ],
+        "high": [
+          9,
+          2
+        ]
+      }
+    },
+    "glwe_pbs": {
+      "glwe_k": 1,
+      "ring_secret": "independent dense binary",
+      "ring_sigma_coefficient": 1.5,
+      "input_and_output": "one padded4 LWE; same small secret",
+      "fourier_modulus": "2^64",
+      "fourier_input_and_KS_sigma": "3.2*2^40",
+      "ntt_modulus": 1125899906826241,
+      "ntt_input_and_KS_sigma": "3.2*Q50/2^24",
+      "return": "Primus ring KS then compact extraction; external extraction then scalar KS"
+    },
+    "ntru_ebs": {
+      "input": "two q52 padded4 LWEs",
+      "output": "one q52 padded4 LWE",
+      "input_and_KS_sigma": "3.2*2^28",
+      "ntt_ring_modulus": 1125899906826241,
+      "ntt_sigma_f_g": 1.0,
+      "fourier_ring_modulus": "2^64",
+      "fourier_sigma_f_g": 1.5,
+      "Trace_L_b": {
+        "low": [
+          6,
+          7
+        ],
+        "high": [
+          15,
+          3
+        ]
+      },
+      "SS_L_b": [
+        6,
+        8
+      ],
+      "selector_L_b": {
+        "low": [
+          2,
+          10
+        ],
+        "high": [
+          1,
+          17
+        ]
+      },
+      "geometry": "M16/c2/d2/o1; no high-chunk selection tree",
+      "return": "Q-to-q then independent-secret scalar KS"
+    },
+    "ly23_ebs": {
+      "ring": "same GLWE parameters as external PBS",
+      "input": "one native64 padded8 LWE",
+      "output": "one native64 padded4 LWE",
+      "extension_factor": 4,
+      "box_size": 64,
+      "external_products": 4096
+    }
+  },
+  "validation": "All PBS cases: all16. Primus EBS High: separate full256 diagnostic then 8 representative inputs per timing process. Primus Low: 8 inputs/process. External EBS Low/High: separate full256 then 8/process. Independent full phase-distance checks include padding and measured fixture; masks nonzero. Same fixed key seed; no DFR inference.",
+  "storage": {
+    "glwe_primus": {
+      "key_bytes": {
+        "low": 537264128.0,
+        "high": 1208549376.0
+      },
+      "evaluator_buffer_bytes_excluding_fft": 466944,
+      "formula": "BSK=n*(k+1)^2*Lbr*N*8; ring KSK=k*(k+1)*Lks*N*8; evaluator=3 GLWEs+2*(2 polynomials+GLWE+N bools)"
+    },
+    "ntru_ntt": {
+      "key_bytes": {
+        "low": 338296832.0,
+        "high": 610369536.0
+      },
+      "evaluator_buffer_bytes": {
+        "low": 2658312,
+        "high": 2232328
+      },
+      "formula": "key=BSK+NTRU-to-LWE KSK+12 trace keys+SS; evaluator=(Lbr+18*Lout+41)*N*8+N bools+8, including one-hot LUT and rotation constants"
+    },
+    "ntru_fourier": {
+      "key_bytes": {
+        "low": 338296832.0,
+        "high": 610369536.0
+      },
+      "evaluator_buffer_bytes_excluding_fft": {
+        "low": 3051648,
+        "high": 2592896
+      },
+      "formula": "NTT equivalent bytes + Lout*N*8 gadget_one + batch workspace instead of scalar return; eight extracted and output LWEs, one conversion polynomial; FFT excluded"
+    },
+    "external": {
+      "key_bytes": {
+        "low": 738394112.0,
+        "high": 1510244352.0
+      },
+      "scratch_request_bytes": {
+        "pbs": 368767,
+        "ebs": 2662527
+      }
+    },
+    "exclusions": "Logical allocated element lengths only; containers, alignment slack, allocator rounding, context transform plans/tables, borrowed key metadata, input/output buffers and separately compiled public LUT excluded. Primus Fourier additionally excludes its engine values and FFT scratch. Not allocator measurements or peak RSS."
+  },
+  "results": {
+    "pbs-external-low": {
+      "mean_ms": 44.95737466666667,
+      "run_mean_ms_range": [
+        44.592872666666665,
+        45.4252357
+      ],
+      "peak_rss_mib_range": [
+        1028.59375,
+        1028.99609375
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 44.592872666666665,
+          "peak_rss_mib": 1028.59375
+        },
+        {
+          "run": 2,
+          "mean_ms": 45.4252357,
+          "peak_rss_mib": 1028.94921875
+        },
+        {
+          "run": 3,
+          "mean_ms": 44.85401563333333,
+          "peak_rss_mib": 1028.99609375
+        }
+      ]
+    },
+    "pbs-ntt-q50-derived-low": {
+      "mean_ms": 65.9486803611111,
+      "run_mean_ms_range": [
+        64.40825815,
+        66.74841056666666
+      ],
+      "peak_rss_mib_range": [
+        524.6328125,
+        527.0625
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 66.68937236666666,
+          "peak_rss_mib": 524.6328125
+        },
+        {
+          "run": 2,
+          "mean_ms": 66.74841056666666,
+          "peak_rss_mib": 527.0078125
+        },
+        {
+          "run": 3,
+          "mean_ms": 64.40825815,
+          "peak_rss_mib": 527.0625
+        }
+      ]
+    },
+    "pbs-rustfft-low": {
+      "mean_ms": 65.80480587222222,
+      "run_mean_ms_range": [
+        65.64473686666666,
+        66.04627643333333
+      ],
+      "peak_rss_mib_range": [
+        525.06640625,
+        527.98828125
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 66.04627643333333,
+          "peak_rss_mib": 525.06640625
+        },
+        {
+          "run": 2,
+          "mean_ms": 65.72340431666667,
+          "peak_rss_mib": 527.875
+        },
+        {
+          "run": 3,
+          "mean_ms": 65.64473686666666,
+          "peak_rss_mib": 527.98828125
+        }
+      ]
+    },
+    "pbs-tfhe-fft-low": {
+      "mean_ms": 52.86375652222222,
+      "run_mean_ms_range": [
+        52.733291799999996,
+        53.04656543333333
+      ],
+      "peak_rss_mib_range": [
+        525.53125,
+        529.01953125
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 52.81141233333334,
+          "peak_rss_mib": 525.53125
+        },
+        {
+          "run": 2,
+          "mean_ms": 52.733291799999996,
+          "peak_rss_mib": 528.87890625
+        },
+        {
+          "run": 3,
+          "mean_ms": 53.04656543333333,
+          "peak_rss_mib": 529.01953125
+        }
+      ]
+    },
+    "pbs-external-high": {
+      "mean_ms": 87.22322654444444,
+      "run_mean_ms_range": [
+        85.30291303333333,
+        89.8626865
+      ],
+      "peak_rss_mib_range": [
+        2308.90234375,
+        2309.0
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 89.8626865,
+          "peak_rss_mib": 2308.99609375
+        },
+        {
+          "run": 2,
+          "mean_ms": 86.5040801,
+          "peak_rss_mib": 2309.0
+        },
+        {
+          "run": 3,
+          "mean_ms": 85.30291303333333,
+          "peak_rss_mib": 2308.90234375
+        }
+      ]
+    },
+    "pbs-ntt-q50-derived-high": {
+      "mean_ms": 136.24750177777779,
+      "run_mean_ms_range": [
+        133.6968013,
+        137.74049259999998
+      ],
+      "peak_rss_mib_range": [
+        1164.67578125,
+        1167.39453125
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 137.30521143333334,
+          "peak_rss_mib": 1164.67578125
+        },
+        {
+          "run": 2,
+          "mean_ms": 137.74049259999998,
+          "peak_rss_mib": 1167.39453125
+        },
+        {
+          "run": 3,
+          "mean_ms": 133.6968013,
+          "peak_rss_mib": 1167.19140625
+        }
+      ]
+    },
+    "pbs-rustfft-high": {
+      "mean_ms": 129.93447501111112,
+      "run_mean_ms_range": [
+        124.95512740000001,
+        132.75413286666665
+      ],
+      "peak_rss_mib_range": [
+        1165.57421875,
+        1168.0234375
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 124.95512740000001,
+          "peak_rss_mib": 1165.57421875
+        },
+        {
+          "run": 2,
+          "mean_ms": 132.75413286666665,
+          "peak_rss_mib": 1168.0234375
+        },
+        {
+          "run": 3,
+          "mean_ms": 132.09416476666667,
+          "peak_rss_mib": 1168.015625
+        }
+      ]
+    },
+    "pbs-tfhe-fft-high": {
+      "mean_ms": 103.85906,
+      "run_mean_ms_range": [
+        98.49148843333333,
+        107.14649693333334
+      ],
+      "peak_rss_mib_range": [
+        1165.86328125,
+        1169.09765625
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 107.14649693333334,
+          "peak_rss_mib": 1165.86328125
+        },
+        {
+          "run": 2,
+          "mean_ms": 105.93919463333334,
+          "peak_rss_mib": 1168.94921875
+        },
+        {
+          "run": 3,
+          "mean_ms": 98.49148843333333,
+          "peak_rss_mib": 1169.09765625
+        }
+      ]
+    },
+    "ebs-external-low": {
+      "mean_ms": 142.04969904444445,
+      "run_mean_ms_range": [
+        141.739071,
+        142.4522378
+      ],
+      "peak_rss_mib_range": [
+        1028.90625,
+        1029.05859375
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 142.4522378,
+          "peak_rss_mib": 1028.93359375
+        },
+        {
+          "run": 2,
+          "mean_ms": 141.739071,
+          "peak_rss_mib": 1028.90625
+        },
+        {
+          "run": 3,
+          "mean_ms": 141.95778833333335,
+          "peak_rss_mib": 1029.05859375
+        }
+      ]
+    },
+    "ebs-ntt-low": {
+      "mean_ms": 75.30137918333332,
+      "run_mean_ms_range": [
+        75.08399943333333,
+        75.49781408333332
+      ],
+      "peak_rss_mib_range": [
+        336.90625,
+        339.84765625
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 75.32232403333333,
+          "peak_rss_mib": 336.90625
+        },
+        {
+          "run": 2,
+          "mean_ms": 75.49781408333332,
+          "peak_rss_mib": 339.609375
+        },
+        {
+          "run": 3,
+          "mean_ms": 75.08399943333333,
+          "peak_rss_mib": 339.84765625
+        }
+      ]
+    },
+    "ebs-tfhe-fft-low": {
+      "mean_ms": 60.07699901111111,
+      "run_mean_ms_range": [
+        59.93589108333334,
+        60.34704763333333
+      ],
+      "peak_rss_mib_range": [
+        338.92578125,
+        342.15234375
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 60.34704763333333,
+          "peak_rss_mib": 338.92578125
+        },
+        {
+          "run": 2,
+          "mean_ms": 59.93589108333334,
+          "peak_rss_mib": 342.15234375
+        },
+        {
+          "run": 3,
+          "mean_ms": 59.94805831666667,
+          "peak_rss_mib": 342.00390625
+        }
+      ]
+    },
+    "ebs-external-high": {
+      "mean_ms": 284.9494090777778,
+      "run_mean_ms_range": [
+        281.19478176666667,
+        287.8240332666667
+      ],
+      "peak_rss_mib_range": [
+        2308.98828125,
+        2309.00390625
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 285.8294122,
+          "peak_rss_mib": 2308.98828125
+        },
+        {
+          "run": 2,
+          "mean_ms": 287.8240332666667,
+          "peak_rss_mib": 2308.99609375
+        },
+        {
+          "run": 3,
+          "mean_ms": 281.19478176666667,
+          "peak_rss_mib": 2309.00390625
+        }
+      ]
+    },
+    "ebs-ntt-high": {
+      "mean_ms": 129.7576791888889,
+      "run_mean_ms_range": [
+        128.91124613333335,
+        130.413811
+      ],
+      "peak_rss_mib_range": [
+        595.9140625,
+        599.09765625
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 130.413811,
+          "peak_rss_mib": 595.9140625
+        },
+        {
+          "run": 2,
+          "mean_ms": 128.91124613333335,
+          "peak_rss_mib": 599.09765625
+        },
+        {
+          "run": 3,
+          "mean_ms": 129.94798043333333,
+          "peak_rss_mib": 598.98046875
+        }
+      ]
+    },
+    "ebs-tfhe-fft-high": {
+      "mean_ms": 101.4466277111111,
+      "run_mean_ms_range": [
+        100.03050533333332,
+        102.49611156666666
+      ],
+      "peak_rss_mib_range": [
+        598.1796875,
+        601.1640625
+      ],
+      "runs": [
+        {
+          "run": 1,
+          "mean_ms": 101.81326623333334,
+          "peak_rss_mib": 598.1796875
+        },
+        {
+          "run": 2,
+          "mean_ms": 102.49611156666666,
+          "peak_rss_mib": 601.15234375
+        },
+        {
+          "run": 3,
+          "mean_ms": 100.03050533333332,
+          "peak_rss_mib": 601.1640625
+        }
+      ]
+    }
+  },
+  "raw_samples": {
+    "path": "bootstrap-pbs-ebs-extension-samples.csv",
+    "sha256": "12e370041451b3ff47ba1edb94cc051f6cfb536d9f8e157e4138cef7e279bb11",
+    "rows": 1260
+  },
+  "reproduction_limits": "Build locks, complete logs, external adapter, compatibility patch, local full-domain diagnostic and retained EBS/external fixtures are local-only. Committed files support statistical audit, not standalone rebuild of external binaries. Benchmark sources and source/binary hashes identify current Primus measurements.",
+  "local_evidence_archive_sha256": "4c6c4f0e414379effa1f370937b1e802d823f2803ec0b0a44e077120ef06c289",
+  "local_evidence_files": 298
+}

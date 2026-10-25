@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-19",
+  "base_commit": "6702a304c8a8c6dafa775597e31a28f194a270ad",
+  "candidate_patch_sha256": "8f7981c40435ecf6a7f398c7b5f822f0c6a3ed64a4e9355fee445b549fefbfda",
+  "measurement_patch_sha256": "504e550de22550947adc59adeae0da284646752f9d47ac5e206c9e5b8074dd88",
+  "lock_sha256": "16e796634146da92564d8ba767b90276bd65e4807d30eef6a3a963fea5603e9d",
+  "numerical_source_sha256": {
+    "crates/primus_lattice/src/ntru/fourier/split.rs": "3d7467d2bfacfa815a78ed963b066f2d32c81968ba69e8ea273e56f860e921ac",
+    "crates/primus_tfhe_ntru_fourier/src/circuit_bootstrap/key.rs": "f18c69060bc4a82a4df7f4c84d8531f501280de4842a7db74280dc5143e37212",
+    "crates/primus_tfhe_ntru_fourier/src/context.rs": "55ba9384b98894ba318cb831c591a9b602697651362a2e72a1530eeebb0badca"
+  },
+  "elf_sha256": {
+    "onehot": "d3f863b5b8ca40b9f09132cc4e6659ee787a3341d13c16fe5c69b811a63e136f",
+    "cbs": "7f33226e79a333d3ea46567e7b4e8c72f36482c4f709dca20da114448790ba64",
+    "lut": "2f79fe2b455386e186286d86a055edb6cb5e47b0f75a783fc1980fc369c8d637"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "cpu": "Model name:                              AMD Ryzen 9 9955HX3D 16-Core Processor",
+  "cpu_affinity": [
+    4,
+    8
+  ],
+  "frequency_locked": false,
+  "build": "cargo bench -p primus_tfhe_ntru_lut --features tfhe-fft --bench lookup_one_hot --bench lookup_evaluate --bench bootstrap_primitives --no-run",
+  "sampling": {
+    "rounds": 3,
+    "samples": 20,
+    "warmup_seconds": 0.2,
+    "target_seconds": 0.8,
+    "automatic_fft_plan": true,
+    "order": "separate/r2/paired; reversed in round 2"
+  },
+  "workloads": {
+    "projection": "15 real BR selector inputs: complete trace+SS, ordinary output FFT included; BR and selector rotations excluded",
+    "onehot": "complete NGSW-only one-hot, including BR, rotation and 15 projections"
+  },
+  "parameters": {
+    "ring_n": [
+      4096,
+      2048
+    ],
+    "n2048": "sensitivity diagnostic only, not a secure parameter set",
+    "ring_modulus": "2^64",
+    "split_low_bits": [
+      40,
+      40,
+      40
+    ],
+    "f_sigma": 1.5,
+    "g_sigma": 1.5,
+    "input_n": 1024,
+    "input_h": 128,
+    "input_q": "2^52",
+    "input_sigma": "3.2*2^28",
+    "ks": [
+      9,
+      2
+    ],
+    "gadget_order": "(level_count, log2_base)",
+    "low": {
+      "BR": [
+        3,
+        16
+      ],
+      "trace": [
+        5,
+        11
+      ],
+      "SS": [
+        5,
+        11
+      ],
+      "output": [
+        1,
+        19
+      ]
+    },
+    "high": {
+      "BR": [
+        4,
+        13
+      ],
+      "trace": [
+        4,
+        13
+      ],
+      "SS": [
+        4,
+        14
+      ],
+      "output": [
+        1,
+        20
+      ]
+    }
+  },
+  "fixture": "Same ELF/table/base keys/BR input within each process. Private measurement dispatch, an R2 cross clone and maximum scratch exist only in the local copy. No fixed FFT plan or diagnostic API in production.",
+  "validation": {
+    "large_correctness_processes": 40,
+    "formal_processes": 48,
+    "formal_estimates": 288,
+    "online_zero_allocation_cbs_windows": 48,
+    "small_tests": "integer convolution, even/odd rings, multirow CBS-to-CMux, trace40/SS35, LUT return and binding"
+  },
+  "storage_payload": [
+    {
+      "n": 4096,
+      "profile": "low_prec",
+      "pairs": 5,
+      "terminal_radix": 4,
+      "extra_key_vs_separate_bytes": 6490224,
+      "extra_key_vs_r2_bytes": 6129656,
+      "separate_workspace_bytes": 98304,
+      "r2_workspace_bytes": 163840,
+      "paired_workspace_bytes": 294912
+    },
+    {
+      "n": 4096,
+      "profile": "high_prec",
+      "pairs": 5,
+      "terminal_radix": 4,
+      "extra_key_vs_separate_bytes": 5310144,
+      "extra_key_vs_r2_bytes": 5015136,
+      "separate_workspace_bytes": 98304,
+      "r2_workspace_bytes": 163840,
+      "paired_workspace_bytes": 294912
+    },
+    {
+      "n": 2048,
+      "profile": "low_prec",
+      "pairs": 4,
+      "terminal_radix": 8,
+      "extra_key_vs_separate_bytes": 3426536,
+      "extra_key_vs_r2_bytes": 3246192,
+      "separate_workspace_bytes": 49152,
+      "r2_workspace_bytes": 81920,
+      "paired_workspace_bytes": 278528
+    },
+    {
+      "n": 2048,
+      "profile": "high_prec",
+      "pairs": 4,
+      "terminal_radix": 8,
+      "extra_key_vs_separate_bytes": 2803488,
+      "extra_key_vs_r2_bytes": 2655936,
+      "separate_workspace_bytes": 49152,
+      "r2_workspace_bytes": 81920,
+      "paired_workspace_bytes": 278528
+    }
+  ],
+  "storage_exclusions": "Vec/enum headers, allocator overhead, shared BR/FFT/EP/split, key-generation peak and RSS",
+  "limits": "No security or DFR certification; shared-key errors need a joint budget. N2048 TFHE-FFT whole one-hot does not improve reliably.",
+  "replay": "Full candidate/measurement patches and raw sample archive retained locally; public targets do not expose isolated projection. CSV retains all rounds, including regressions."
+}

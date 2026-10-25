@@ -1,0 +1,519 @@
+{
+  "date": "2026-10-13",
+  "scope": "Retained q/Q + MSB + ordinary/Split35 production CBS, versus LightFHE CMUX2 and refined CMUX2/CMUX3; no numerical kernel changes",
+  "source_commit": "5fc1a932159fa0821e9880f292d4dbb15865fa47",
+  "sources": [
+    {
+      "name": "Primus",
+      "commit": "5fc1a932159fa0821e9880f292d4dbb15865fa47",
+      "patch": "Comments only in cbs_identity; measured executable algorithm/fixtures identical to HEAD"
+    },
+    {
+      "name": "LightFHE NTT",
+      "commit": "7681a6ac1eafe864c17e4e9a79cde51f337b6aa6",
+      "variants": [
+        "original",
+        "corrected Gaussian cutoff expression"
+      ],
+      "build": "GCC15.2 Release/native, OpenMP1, OpenFHE Native NTT, no HEXL; frozen earlier binaries and shared-library hashes verified"
+    },
+    {
+      "name": "refined-tfhe-lhe",
+      "commit": "9b0426e8e197020a4bf40776cc03641e6cf9b90e",
+      "build": "monothread + nightly-avx512, TFHE0.5.4, concrete-fft0.4.1, old pinned dependencies and pulp pointer compatibility patch; new local timing/consumer adapter, no upstream arithmetic change"
+    }
+  ],
+  "artifacts": {
+    "source_commit": "5fc1a932159fa0821e9880f292d4dbb15865fa47",
+    "artifacts": {
+      "light-corrected": "b3c8bed2c0d22fa4b54b8b0c47a5ec58fba25aebfa96a17b6754f1b2157820ef",
+      "primus-fourier": "1e64500a000c0fb04f5965de62cc5a93224adf36e71124cff339ab59e349789e",
+      "light-original": "fd870b44b03610f9ad194be851ec5780836c82646ae3d7becee5435979519718",
+      "refined": "2d3ec40370d5450ecedcb5cafaf646d359b5c92b060335a548ecab412e4b9d66",
+      "primus-ntt": "6966027476970bebe9f1c63d287689999d376110639f815db71479855d645747"
+    },
+    "dynamic_libraries": {
+      "/tmp/primus-bootstrap-2a-ntt/build/lib/libOPENFHEcore.so": "5c566d7631efc3cadc182ba6026c2d3b1113226509b0e02a85b0001457bda01f",
+      "/tmp/primus-bootstrap-2a-ntt/build/lib/libOPENFHEbinfhe.so": "68ac43a17045407a4632cf4a34c9d7b7a538a17cbc253ecd57eb6480292e6ad9",
+      "/tmp/primus-bootstrap-2a-ntt-corrected/build/lib/libOPENFHEcore.so": "7ae539fb30db381010476a6a5e5d6b9900bb3e13653b17a368c20adec1b1e5a1",
+      "/tmp/primus-bootstrap-2a-ntt-corrected/build/lib/libOPENFHEbinfhe.so": "dfecdb75e20de9d79cdf3b141f7388c6f47a8986cddbf8743493d764087e60c6"
+    },
+    "bench_sources": {
+      "crates/primus_tfhe_glwe_fourier/benches/cbs_identity.rs": "8ec92ad3638822e288840c9217c8b8bceb84be76a2e14dd06fa97cdf6b2ab117",
+      "crates/primus_tfhe_glwe_ntt/benches/cbs_identity.rs": "70d3b4aee559355b9fa75d91703112426f63af57d17073c1e3f4114242f8291b"
+    },
+    "adapter_sha256": "c9f3482c780d8b4e7f7ae1858ce4de53e6bd28d059956255b208b2d727760a53",
+    "adapter_lock_sha256": "49187dea76cd700b713203400c9f011d4c18f80c34f657e269b2c081a3cc9c1e",
+    "cargo_lock_sha256": "3279a68063452e9b1a02be86219dd6bcfb5fd87b17e09e253a5d0553c4f7daee",
+    "primus_toolchain": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "external_toolchain": "rustc 1.85.0-nightly (d117b7f21 2024-12-31)\nbinary: rustc\ncommit-hash: d117b7f211835282b3b177dc64245fff0327c04c\ncommit-date: 2024-12-31\nhost: x86_64-unknown-linux-gnu\nrelease: 1.85.0-nightly\nLLVM version: 19.1.6\n",
+    "scope_sha256": "eb8710108fcb322a51b77ec4320ce02d329091e7f46fb82ab3c374e27ea4eccf"
+  },
+  "methodology": {
+    "cpu": "AMD Ryzen 9 9955HX3D, CPU4, 96MiB L3",
+    "threads": 1,
+    "processes": 27,
+    "rounds": 3,
+    "samples": 1320,
+    "order": "forward, reversed, rotate G2 before G1",
+    "primus": "Criterion0.8.2 Flat 20 samples, warmup0.5s, measurement1.5s, one request per iteration",
+    "external": "30 samples, one call per sample, warmup1s, Instant/steady_clock",
+    "aggregation": "mean of three process means; min/max are process means, not CI",
+    "build_overlap": false,
+    "cpu8": "not rerun: no production/shared hot-path modification; B3/E3 separate CPU8 evidence preserved",
+    "fft_plan": "TFHE-FFT/concrete-fft runtime planner, independent processes not guaranteed bit-identical",
+    "rss": "entire process peak including keygen, diagnostic and all registered bench setup, not online scratch",
+    "untimed": "top-level buffer preparation, keygen, encryption, all decryption/oracle checks",
+    "online_allocations": "external library internal allocations remain timed; no allocator instrumentation in these timings",
+    "output_lifetime": "LightFHE new returned output remains alive beyond timestamp; Primus/refined reuse top-level output storage",
+    "affinity_limit": "CPU4 pinned; SMT sibling20 and unrelated background load not isolated"
+  },
+  "parameters": {
+    "word": "u64",
+    "method": "classic binary",
+    "ring_rank": 1,
+    "ring_degree": 2048,
+    "output": [
+      4,
+      4
+    ],
+    "pairing": "Within Primus ordinary/split35 pairs: same declared parameters and seeds, only trace representation changes. Across libraries: derived protocols and independent RNG streams.",
+    "g1": {
+      "input_dimension": 571,
+      "q": 1024,
+      "Q": 18014398509404161,
+      "order": "BootstrapKeyswitch, CBS has no input KS",
+      "sigma_input": 3.2,
+      "sigma_ring": 3.2,
+      "sigma_auxiliary_ks": 3.2,
+      "br": [
+        2,
+        17
+      ],
+      "trace": [
+        3,
+        13
+      ],
+      "ss": [
+        2,
+        19
+      ],
+      "ks": [
+        6,
+        8
+      ]
+    },
+    "g2": {
+      "input_dimension": 636,
+      "external_dimension": 2048,
+      "q": "2^64",
+      "Q": "2^64",
+      "order": "KeyswitchBootstrap: Primus ring KS, refined scalar KS; no modulus switch",
+      "alpha": 9.25119974676756e-05,
+      "beta": 9.25119974676756e-16,
+      "external_sigma": "beta * Q",
+      "ring_sigma": "beta * Q",
+      "ks_sigma": "alpha * Q",
+      "br": [
+        2,
+        15
+      ],
+      "trace": [
+        6,
+        7
+      ],
+      "ss": [
+        2,
+        17
+      ],
+      "ks": [
+        5,
+        2
+      ]
+    },
+    "msb": "Rounded t2: bit 1 at q_external/2",
+    "function": "F(bit)=bit",
+    "consumer": "t8, encrypted polynomial messages[i]=((i>>r)+i/7+r)&3; r=0,1",
+    "external_consumer": "G2 uses the same plaintext polynomial formula as Primus; G1 frozen author validation uses mix64(i XOR (0x1000+r)) & 3, also t8/depth1",
+    "ntt_author_weights": "centered-Q digits; floor(Q/B^l); LUT uses 2*floor(g/2), differs from Primus power-of-two weights",
+    "input": "MSB t2 for every newly timed group, G1 q1024, G2 native64",
+    "trace": "G1: author forward /N, Primus normalized reverse. G2: ordinary or unsigned low35/high29 split trace; BR/SS remain ordinary. Refined forward trace and Primus reverse trace still differ.",
+    "sampling": "LightFHE original sigma3.2 cutoff +/-4, corrected +/-39; Primus sigma3.2 discrete CDT +/-38; G2 refined rounded continuous Gaussian vs Primus truncated discrete Ziggurat.",
+    "input_ks": "G1 none. G2 refined scalar 2048->636; Primus inverse extraction->ring KS->compact extraction (q=Q). Same L,b is not same noise distribution.",
+    "return": "rank1 N2048, four-level full transformed GGSW (L,b)=(4,4); cbs_cmux adds encrypted t8 depth1 consumer; no scalar LWE return KS",
+    "classification": "All cross-library comparisons are derived, not matched protocols. Within Primus precision pairs match declared parameters, consumer and seeds; auto-selected FFT plans may differ.",
+    "gadget_tuple": "(level_count, base_log)",
+    "primus_seeds": {
+      "key": 42,
+      "input": 1042,
+      "candidates": 2042
+    },
+    "external_seeds": "Key seeds42/43/44, timer uses42; input/candidate randomness follows each author adapter sequence, not Primus input1042/candidate2042 streams"
+  },
+  "summary": [
+    {
+      "case": "G1-light-corrected",
+      "operation": "cbs",
+      "bit": 0,
+      "process_means_ms": [
+        82.7940695,
+        83.2715572,
+        82.74240333333333
+      ],
+      "mean_ms": 82.93601001111111,
+      "min_ms": 82.74240333333333,
+      "max_ms": 83.2715572
+    },
+    {
+      "case": "G1-light-corrected",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        81.15567053333334,
+        81.16165466666668,
+        81.0646716
+      ],
+      "mean_ms": 81.12733226666667,
+      "min_ms": 81.0646716,
+      "max_ms": 81.16165466666668
+    },
+    {
+      "case": "G1-light-original",
+      "operation": "cbs",
+      "bit": 0,
+      "process_means_ms": [
+        82.1502862,
+        82.28469386666666,
+        82.24735826666667
+      ],
+      "mean_ms": 82.2274461111111,
+      "min_ms": 82.1502862,
+      "max_ms": 82.28469386666666
+    },
+    {
+      "case": "G1-light-original",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        82.10957596666667,
+        82.04343723333334,
+        82.10924036666665
+      ],
+      "mean_ms": 82.08741785555556,
+      "min_ms": 82.04343723333334,
+      "max_ms": 82.10957596666667
+    },
+    {
+      "case": "G1-primus-ntt",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        13.034065558333333,
+        13.2112785,
+        13.126770741666666
+      ],
+      "mean_ms": 13.124038266666666,
+      "min_ms": 13.034065558333333,
+      "max_ms": 13.2112785
+    },
+    {
+      "case": "G1-primus-ntt",
+      "operation": "cbs_cmux",
+      "bit": 1,
+      "process_means_ms": [
+        13.085971858333334,
+        13.190632341666667,
+        13.139863941666666
+      ],
+      "mean_ms": 13.138822713888889,
+      "min_ms": 13.085971858333334,
+      "max_ms": 13.190632341666667
+    },
+    {
+      "case": "G2-primus-rustfft-ordinary",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        10.40169696875,
+        10.5168741125,
+        10.529523043749998
+      ],
+      "mean_ms": 10.482698041666666,
+      "min_ms": 10.40169696875,
+      "max_ms": 10.529523043749998
+    },
+    {
+      "case": "G2-primus-rustfft-ordinary",
+      "operation": "cbs_cmux",
+      "bit": 1,
+      "process_means_ms": [
+        10.4218256875,
+        10.49848931875,
+        10.544047128571428
+      ],
+      "mean_ms": 10.488120711607143,
+      "min_ms": 10.4218256875,
+      "max_ms": 10.544047128571428
+    },
+    {
+      "case": "G2-primus-rustfft-split35",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        10.80904128125,
+        10.808857785714286,
+        10.850013185714285
+      ],
+      "mean_ms": 10.822637417559523,
+      "min_ms": 10.808857785714286,
+      "max_ms": 10.850013185714285
+    },
+    {
+      "case": "G2-primus-rustfft-split35",
+      "operation": "cbs_cmux",
+      "bit": 1,
+      "process_means_ms": [
+        10.829465335714286,
+        10.818735692857143,
+        10.874724707142859
+      ],
+      "mean_ms": 10.840975245238095,
+      "min_ms": 10.818735692857143,
+      "max_ms": 10.874724707142859
+    },
+    {
+      "case": "G2-primus-tfhe-fft-ordinary",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        8.03866404,
+        8.019226985,
+        8.03033031
+      ],
+      "mean_ms": 8.029407111666666,
+      "min_ms": 8.019226985,
+      "max_ms": 8.03866404
+    },
+    {
+      "case": "G2-primus-tfhe-fft-ordinary",
+      "operation": "cbs_cmux",
+      "bit": 1,
+      "process_means_ms": [
+        8.032364575,
+        8.49776685,
+        8.03516802
+      ],
+      "mean_ms": 8.188433148333333,
+      "min_ms": 8.032364575,
+      "max_ms": 8.49776685
+    },
+    {
+      "case": "G2-primus-tfhe-fft-split35",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        8.399345394444445,
+        8.3779045,
+        8.359222305555557
+      ],
+      "mean_ms": 8.378824066666667,
+      "min_ms": 8.359222305555557,
+      "max_ms": 8.399345394444445
+    },
+    {
+      "case": "G2-primus-tfhe-fft-split35",
+      "operation": "cbs_cmux",
+      "bit": 1,
+      "process_means_ms": [
+        8.393863416666665,
+        8.41128598888889,
+        8.396475394444446
+      ],
+      "mean_ms": 8.4005416,
+      "min_ms": 8.393863416666665,
+      "max_ms": 8.41128598888889
+    },
+    {
+      "case": "G2-refined-ordinary",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        8.697674333333334,
+        8.811593333333334,
+        8.693447533333334
+      ],
+      "mean_ms": 8.7342384,
+      "min_ms": 8.693447533333334,
+      "max_ms": 8.811593333333334
+    },
+    {
+      "case": "G2-refined-ordinary",
+      "operation": "cbs_cmux",
+      "bit": 1,
+      "process_means_ms": [
+        8.725683400000001,
+        8.764588,
+        8.6532508
+      ],
+      "mean_ms": 8.7145074,
+      "min_ms": 8.6532508,
+      "max_ms": 8.764588
+    },
+    {
+      "case": "G2-refined-split35",
+      "operation": "cbs",
+      "bit": 1,
+      "process_means_ms": [
+        9.105511933333334,
+        9.234603,
+        9.099689066666667
+      ],
+      "mean_ms": 9.146601333333333,
+      "min_ms": 9.099689066666667,
+      "max_ms": 9.234603
+    },
+    {
+      "case": "G2-refined-split35",
+      "operation": "cbs_cmux",
+      "bit": 1,
+      "process_means_ms": [
+        9.253882066666666,
+        9.275344333333335,
+        9.1217573
+      ],
+      "mean_ms": 9.216994566666667,
+      "min_ms": 9.1217573,
+      "max_ms": 9.275344333333335
+    }
+  ],
+  "resources": {
+    "G1-light-original": {
+      "key_payload_bytes": 75988992,
+      "key_pair_heap_bytes": null,
+      "evaluator_heap_bytes": null,
+      "process_peak_rss_kib_range": [
+        280816,
+        280944
+      ],
+      "source": "Source parameter card ciphertext payload only, not complete ownership or allocator heap",
+      "workspace_limit": "No persistent complete evaluator heap accounting; internal allocations included in timing"
+    },
+    "G1-light-corrected": {
+      "key_payload_bytes": 75988992,
+      "key_pair_heap_bytes": null,
+      "evaluator_heap_bytes": null,
+      "process_peak_rss_kib_range": [
+        280896,
+        281144
+      ],
+      "source": "Source parameter card ciphertext payload only, not complete ownership or allocator heap",
+      "workspace_limit": "No persistent complete evaluator heap accounting; internal allocations included in timing"
+    },
+    "G1-primus-ntt": {
+      "key_payload_bytes": null,
+      "key_pair_heap_bytes": 76449256,
+      "evaluator_heap_bytes": 430208,
+      "process_peak_rss_kib_range": [
+        88416,
+        88616
+      ],
+      "source": "B3 same production source, requested heap including client+complete server and CBS program",
+      "workspace_limit": "Excludes caller inputs/outputs, borrowed context and keys; zero online allocations previously checked in B3, not reinstrumented here"
+    },
+    "G2-refined-ordinary": {
+      "key_payload_bytes": 137838592,
+      "key_pair_heap_bytes": null,
+      "evaluator_heap_bytes": null,
+      "process_peak_rss_kib_range": [
+        167640,
+        167916
+      ],
+      "source": "Source parameter card ciphertext payload only, not complete ownership or allocator heap",
+      "workspace_limit": "No persistent complete evaluator heap accounting; internal allocations included in timing"
+    },
+    "G2-primus-rustfft-ordinary": {
+      "key_payload_bytes": null,
+      "key_pair_heap_bytes": 86108704,
+      "evaluator_heap_bytes": 568424,
+      "process_peak_rss_kib_range": [
+        98960,
+        99100
+      ],
+      "source": "B3 same production source, requested heap including client+complete server and CBS program",
+      "workspace_limit": "Excludes caller inputs/outputs, borrowed context and keys; zero online allocations previously checked in B3, not reinstrumented here"
+    },
+    "G2-primus-tfhe-fft-ordinary": {
+      "key_payload_bytes": null,
+      "key_pair_heap_bytes": 86108704,
+      "evaluator_heap_bytes": 568424,
+      "process_peak_rss_kib_range": [
+        99748,
+        99844
+      ],
+      "source": "B3 same production source, requested heap including client+complete server and CBS program",
+      "workspace_limit": "Excludes caller inputs/outputs, borrowed context and keys; zero online allocations previously checked in B3, not reinstrumented here"
+    },
+    "G2-refined-split35": {
+      "key_payload_bytes": 140001280,
+      "key_pair_heap_bytes": null,
+      "evaluator_heap_bytes": null,
+      "process_peak_rss_kib_range": [
+        167804,
+        167908
+      ],
+      "source": "Source parameter card ciphertext payload only, not complete ownership or allocator heap",
+      "workspace_limit": "No persistent complete evaluator heap accounting; internal allocations included in timing"
+    },
+    "G2-primus-rustfft-split35": {
+      "key_payload_bytes": null,
+      "key_pair_heap_bytes": 88087336,
+      "evaluator_heap_bytes": 617576,
+      "process_peak_rss_kib_range": [
+        101592,
+        101668
+      ],
+      "source": "B3 same production source, requested heap including client+complete server and CBS program",
+      "workspace_limit": "Excludes caller inputs/outputs, borrowed context and keys; zero online allocations previously checked in B3, not reinstrumented here"
+    },
+    "G2-primus-tfhe-fft-split35": {
+      "key_payload_bytes": null,
+      "key_pair_heap_bytes": 88087000,
+      "evaluator_heap_bytes": 617576,
+      "process_peak_rss_kib_range": [
+        101968,
+        102164
+      ],
+      "source": "B3 same production source, requested heap including client+complete server and CBS program",
+      "workspace_limit": "Excludes caller inputs/outputs, borrowed context and keys; zero online allocations previously checked in B3, not reinstrumented here"
+    }
+  },
+  "validation": {
+    "all_processes_exit_success": true,
+    "primus": "Both bits t8 CMux gate before timing, measured output checked after timing; prior B3 all-row diagnostics retained",
+    "lightfhe": "Each process three keys 42/43/44 x four inputs; full rows, 48 consumers and digit oracle checked; every timed GGSW equals previously consumed output",
+    "refined": "Each process three keys 42/43/44 x four inputs; full 96 row records, 48 real consumers plus two measured-output consumer checks; any mismatch panics",
+    "interpretation": "Repeated processes repeat fixed fixtures, not new independent security/DFR evidence; historical g/16 budget caveats remain"
+  },
+  "decisions": {
+    "scalar_ks": "C3 deferred; no top-level production API, no production time substituted from prototype",
+    "light_ss": "D3 deferred; only general SS measured in production",
+    "ordinary_trace": "default unchanged; lower precision sufficient only for tested use, not a universal error proof",
+    "split_trace": "explicit precision option, extra trace keys and workspace; CMUX3 gadget group usable for fixed consumers",
+    "parameters": "All remain experimental; caller-configurable full-request failure budget, no fixed target or security/DFR certification",
+    "unmatched": [
+      "CMUX1 real-consumer failure: no timings",
+      "TFHEpp/MOSFHET private/packing CBS: no Primus same algorithm",
+      "external NTRU CBS: no runnable matched implementation",
+      "external 16/20/24-bit high-precision LUT: no verified same protocol"
+    ]
+  },
+  "limits": [
+    "No cross-library equal security/DFR or algorithm-only speedup claim",
+    "G1 C++17 signed-left-shift undefined behavior remains a portability limitation",
+    "G2 ring/scalar KS, forward/reverse trace, centered LUT guard intervals and samplers differ",
+    "Complete external workspace/retained heap not instrumented; null means unavailable, not zero",
+    "Local source/lock/patch/binary archives retained outside committed subset; JSON+CSV support statistical recheck, not self-contained historical build reproduction",
+    "Only bit1 timed for Primus/refined; both bits consumed; G1 bit0 raw timing also retained",
+    "Independent CBS and CBS+CMux sample means cannot be subtracted as a CMux stage time"
+  ]
+}
