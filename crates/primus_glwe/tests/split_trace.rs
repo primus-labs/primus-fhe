@@ -3,7 +3,7 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_glwe::{
-    GlevParameters, GlweDimension, GlweSecretKey, GlweSize, SecretKeyDistr,
+    FourierGlweEncryptor, GlevParameters, GlweDimension, GlweSecretKey, GlweSize, SecretKeyDistr,
     SplitFourierGlweTraceKey,
 };
 use primus_lattice::glwe::{Glwe, GlweIter};
@@ -31,11 +31,16 @@ fn rejects_before_sampling<T: TorusFftValue, Table: FftTable>(
     fft: &mut FftEngine<'_, Table>,
 ) {
     let params = parameters(key.glwe_size());
+    // A declared Gaussian bound permits coefficient 2 during exact setup, so
+    // the split boundary itself must still enforce its narrower precision domain.
+    let setup_params =
+        primus_glwe::GlweEncryptionParameters::new(NativeModulus::new(), key.distr(), 0.7);
+    let mut encryptor = FourierGlweEncryptor::try_new(key, &setup_params).unwrap();
     let mut rng = StdRng::seed_from_u64(104);
     let mut untouched = StdRng::seed_from_u64(104);
     assert!(
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            SplitFourierGlweTraceKey::generate(key, &params, fft, &mut rng)
+            SplitFourierGlweTraceKey::generate(&mut encryptor, &params, fft, &mut rng)
         }))
         .is_err()
     );
@@ -68,7 +73,9 @@ fn check<Table: FftTable>() {
     let table = Table::new(length);
     let mut fft = FftEngine::new(&table);
     let mut rng = StdRng::seed_from_u64(103);
-    let trace = SplitFourierGlweTraceKey::generate(&key, &params, &mut fft, &mut rng);
+    let mut encryptor =
+        FourierGlweEncryptor::try_new(&key, params.encryption_parameters()).unwrap();
+    let trace = SplitFourierGlweTraceKey::generate(&mut encryptor, &params, &mut fft, &mut rng);
     let mut workspace = trace.new_workspace();
     let mut input = Glwe::<Vec<u64>>::zero(2 * n);
     for (i, a) in input.as_mut()[..n].iter_mut().enumerate() {
@@ -115,7 +122,7 @@ fn check<Table: FftTable>() {
         );
         assert!(output.iter().all(|&x| x == 7));
     }
-    let bad = GlweSecretKey::new(vec![2; n], size, SecretKeyDistr::UniformTernary);
+    let bad = GlweSecretKey::new(vec![2; n], size, SecretKeyDistr::gaussian(1.0));
     rejects_before_sampling::<u64, _>(&bad, &mut fft);
     let narrow = GlweSecretKey::new(vec![0; n], size, SecretKeyDistr::UniformTernary);
     rejects_before_sampling::<u32, _>(&narrow, &mut fft);

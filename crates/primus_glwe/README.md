@@ -147,7 +147,7 @@ Evaluation keys retain their layouts and decomposition bases. Construct the matc
 | `expand_coefficients_to` | All N coefficients as constants |
 | `expand_partial_coefficients_to(input, count, ...)` | First `count` constants, assuming a zero message tail |
 
-With `split-trace`, `SplitFourierGlweTraceKey::generate` provides extra-precision prefix projection for native u64, rank-one secrets with coefficients in `{-1,0,1}`. Allocate its matching workspace with `key.new_workspace()`. Exact coefficient key generation uses auxiliary NTT/CRT, while evaluation retains only low35/high29 Fourier spectra. Trace payload and inverse transforms double; this is an explicit precision/cost tradeoff, not a noise-budget guarantee. See the [split trace contract](src/trace/split.rs).
+With `split-trace`, `SplitFourierGlweTraceKey::generate` reuses a prepared `FourierGlweEncryptor` and provides extra-precision prefix projection for native u64, rank-one secrets with coefficients in `{-1,0,1}`. Allocate its matching workspace with `key.new_workspace()`. Exact coefficient key generation uses auxiliary NTT/CRT, while evaluation retains only low35/high29 Fourier spectra. Trace payload and inverse transforms double; this is an explicit precision/cost tradeoff, not a noise-budget guarantee. See the [split trace contract](src/trace/split.rs).
 
 Partial trace accepts a power-of-two `r` in `1..=N`, retaining equally spaced positions in one GLWE. `r=N` copies the input; `r=1` is full trace. Reverse trace normalizes before each automorphism/addition: NTT multiplies by `2^-1 mod q`, while Fourier uses unsigned coefficient `floor(x/2)`. The NTT field operation does not inherit the torus RevHomTrace noise bound.
 

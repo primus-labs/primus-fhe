@@ -1,9 +1,6 @@
 //! Split(35) coefficient automorphisms owned by the split trace implementation.
-use crate::secret_key::exact::ExactSecretProduct;
-
-use crate::{GlevParameters, GlweSecretKey};
+use crate::{FourierGlweEncryptor, GlevParameters};
 use aligned_vec::{ABox, avec};
-use num_traits::ConstZero;
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
 use primus_integer::SignedInteger;
@@ -14,7 +11,6 @@ use primus_lattice::{
 };
 use primus_modulus::NativeModulus;
 use primus_poly::{CoeffAutomorphismPermutation, FourierPolynomial};
-use zeroize::Zeroizing;
 
 /// Two spectra of one exact native key: c = low + 2^35*high (mod 2^64).
 #[derive(Clone)]
@@ -53,22 +49,20 @@ impl<T: TorusFftValue> SplitGlweAutomorphismWorkspace<T> {
 }
 impl SplitGlweAutomorphismKey {
     /// Generates one positive transformed-secret key. Outer trace generation
-    /// validates resources once and shares exact convolution setup across degrees.
+    /// validates resources once. Both scratch slices have length N and are
+    /// completely overwritten; the owner erases them after all degrees finish.
     pub(super) fn generate<T: TorusFftValue, Table: FftTable, R: rand::Rng + rand::CryptoRng>(
         degree: usize,
-        secret: &GlweSecretKey<T>,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         parameters: &GlevParameters<T, NativeModulus<T>>,
-        product: &mut ExactSecretProduct<'_, T>,
+        transformed: &mut [T::SignedInteger],
+        limb: &mut [T],
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
     ) -> Self {
         let n = parameters.poly_length().get();
         let permutation = CoeffAutomorphismPermutation::new(degree, parameters.poly_length());
-        let mut transformed = Zeroizing::new(vec![T::SignedInteger::ZERO; n]);
-        permutation.apply_signed_to::<T>(secret.as_slice(), &mut transformed);
-        let mut mask = vec![T::ZERO; n];
-        let mut body = vec![T::ZERO; n];
-        let mut limb = vec![T::ZERO; n];
+        permutation.apply_signed_to::<T>(encryptor.coefficient_secret().as_slice(), transformed);
         let mut low = FourierGlev::zero(parameters.fourier_glev_len());
         let mut high = FourierGlev::zero(parameters.fourier_glev_len());
         for ((weight, mut low_row), mut high_row) in parameters
@@ -77,37 +71,28 @@ impl SplitGlweAutomorphismKey {
             .zip(low.iter_glwe_mut(parameters.glwe_size().fourier_glwe_len()))
             .zip(high.iter_glwe_mut(parameters.glwe_size().fourier_glwe_len()))
         {
-            // Preserve ordinary gadget encryption's noise/mask sampling order.
-            primus_distr::sample_gaussian_values_to(
-                &mut body,
-                parameters.encryption_parameters().noise_distribution(),
-                rng,
-            );
-            primus_distr::sample_uniform_values_to(
-                &mut mask,
-                &parameters
-                    .encryption_parameters()
-                    .cipher_modulus_uniform_distr(),
-                rng,
-            );
-            product.add_product_assign(&mask, 0, &mut body);
-            for (b, &s) in body.iter_mut().zip(transformed.iter()) {
-                *b = b.wrapping_add(weight.wrapping_mul(s.cast_to_unsigned()));
-            }
-            for ((input, mut low_poly), mut high_poly) in [&mask, &body]
-                .into_iter()
+            // Exact native addition commutes with the mask product: adding the
+            // message before that product preserves the previous coefficients
+            // and noise->mask RNG order. Split only the completed row.
+            let row = encryptor.sample_row(parameters.encryption_parameters(), rng, |body| {
+                for (b, &s) in body.iter_mut().zip(transformed.iter()) {
+                    *b = b.wrapping_add(weight.wrapping_mul(s.cast_to_unsigned()));
+                }
+            });
+            for ((input, mut low_poly), mut high_poly) in row
+                .iter_poly(n)
                 .zip(low_row.iter_fourier_poly_mut(n / 2))
                 .zip(high_row.iter_fourier_poly_mut(n / 2))
             {
-                for (out, &v) in limb.iter_mut().zip(input) {
+                for (out, &v) in limb.iter_mut().zip(input.as_ref()) {
                     *out = v & ((T::ONE << 35u32) - T::ONE);
                 }
-                fft.forward_as_torus(&limb, low_poly.as_mut());
-                for (out, &v) in limb.iter_mut().zip(input) {
+                fft.forward_as_torus(limb, low_poly.as_mut());
+                for (out, &v) in limb.iter_mut().zip(input.as_ref()) {
                     *out = v >> 35u32;
                 }
                 // Both segments retain the same torus scale, 2^-64.
-                fft.forward_as_torus(&limb, high_poly.as_mut());
+                fft.forward_as_torus(limb, high_poly.as_mut());
             }
         }
         Self {
@@ -167,6 +152,152 @@ mod tests {
     use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
     use primus_lattice::GlweDimension;
     use primus_shape::PolyLength;
+
+    /// Reproduce the former Split35 sampling/addition order with an independent
+    /// native gather convolution, rather than calling the shared CRT kernel.
+    fn reference_row(
+        secret: &[i64],
+        params: &crate::GlweEncryptionParameters<u64, NativeModulus<u64>>,
+        message: &[u64],
+        rng: &mut rand::rngs::StdRng,
+    ) -> Vec<u64> {
+        let n = secret.len();
+        let mut row = vec![0u64; 2 * n];
+        let (mask, body) = row.split_at_mut(n);
+        primus_distr::sample_gaussian_values_to(body, params.noise_distribution(), rng);
+        primus_distr::sample_uniform_values_to(mask, &params.cipher_modulus_uniform_distr(), rng);
+        for (degree, b) in body.iter_mut().enumerate() {
+            for (j, &s) in secret.iter().enumerate() {
+                let i = (degree + n - j) & (n - 1);
+                let product = mask[i].wrapping_mul(s as u64);
+                *b = if i + j < n {
+                    b.wrapping_add(product)
+                } else {
+                    b.wrapping_sub(product)
+                };
+            }
+            *b = b.wrapping_add(message[degree]);
+        }
+        row
+    }
+
+    /// Inspect private limbs without adding raw-key or diagnostic public APIs.
+    /// Rebinding length/secret creates a fresh setup; ordinary rows before/after
+    /// the trace exercise overwriting the same buffer and continuing its RNG.
+    fn shared_rows<Table: FftTable>() {
+        use crate::{GlweSecretKey, SecretKeyDistr, SplitFourierGlweTraceKey};
+        use primus_decompose::DecompositionConfig;
+        use primus_lattice::glev::Glev;
+        use rand::{Rng, SeedableRng, rngs::StdRng};
+
+        for n in [32, 64] {
+            let length = PolyLength::new(n);
+            let params = GlevParameters::try_new(
+                GlweSize::new(GlweDimension::new(1), length),
+                NativeModulus::new(),
+                SecretKeyDistr::UniformTernary,
+                DecompositionConfig {
+                    log_basis: DecompositionBaseLog::new(7),
+                    level_count: Some(DecompositionLevelCount::new(6)),
+                },
+                0.7,
+            )
+            .unwrap();
+            let secret: Vec<i64> = (0..n).map(|i| [-1, 0, 1][(i + n / 32) % 3]).collect();
+            let key = GlweSecretKey::new(
+                secret.clone(),
+                params.glwe_size(),
+                SecretKeyDistr::UniformTernary,
+            );
+            let mut encryptor =
+                FourierGlweEncryptor::try_new(&key, params.encryption_parameters()).unwrap();
+            let table = Table::new(length);
+            let mut fft = FftEngine::new(&table);
+            let mut rng = StdRng::seed_from_u64(105);
+            let mut reference_rng = StdRng::seed_from_u64(105);
+            let zero = vec![0u64; n];
+            let expected = reference_row(
+                &secret,
+                params.encryption_parameters(),
+                &zero,
+                &mut reference_rng,
+            );
+            assert_eq!(
+                encryptor
+                    .sample_row(params.encryption_parameters(), &mut rng, |_| {})
+                    .as_ref(),
+                expected
+            );
+            let trace =
+                SplitFourierGlweTraceKey::generate(&mut encryptor, &params, &mut fft, &mut rng);
+            assert_eq!(trace.keys.len(), length.log_n() as usize);
+            for (key, shift) in trace.keys.iter().zip((1..=length.log_n()).rev()) {
+                // Independent signed automorphism; all destination coefficients
+                // are overwritten because the odd degree permutes the ring.
+                let degree = (1 << shift) + 1;
+                let mut transformed = vec![0u64; n];
+                for (i, &s) in secret.iter().enumerate() {
+                    let exponent = (i * degree) & (2 * n - 1);
+                    transformed[exponent & (n - 1)] = if exponent < n {
+                        s as u64
+                    } else {
+                        (s as u64).wrapping_neg()
+                    };
+                }
+                let mut coefficients = Vec::new();
+                for weight in params.basis().scalar_iter() {
+                    let message: Vec<_> =
+                        transformed.iter().map(|s| s.wrapping_mul(weight)).collect();
+                    coefficients.extend(reference_row(
+                        &secret,
+                        params.encryption_parameters(),
+                        &message,
+                        &mut reference_rng,
+                    ));
+                }
+                let mut reconstructed = vec![0u64; coefficients.len()];
+                for (spectrum, shift, mask) in
+                    [(&key.low, 0, (1u64 << 35) - 1), (&key.high, 35, u64::MAX)]
+                {
+                    let expected: Vec<_> =
+                        coefficients.iter().map(|v| (v >> shift) & mask).collect();
+                    let native = Glev::new(expected.as_slice());
+                    let mut expected_spectrum =
+                        FourierGlev::<Vec<Complex64>>::zero(params.fourier_glev_len());
+                    native.write_fourier_form(&mut expected_spectrum, &mut fft);
+                    assert_eq!(spectrum.as_ref(), expected_spectrum.as_ref());
+                    let mut actual = Glev::new(vec![0u64; coefficients.len()]);
+                    spectrum.write_torus_form(&mut actual, &mut fft);
+                    assert_eq!(actual.as_ref(), expected);
+                    for (out, &limb) in reconstructed.iter_mut().zip(actual.as_ref()) {
+                        *out = out.wrapping_add(limb << shift);
+                    }
+                }
+                assert_eq!(reconstructed, coefficients);
+            }
+            let expected = reference_row(
+                &secret,
+                params.encryption_parameters(),
+                &zero,
+                &mut reference_rng,
+            );
+            assert_eq!(
+                encryptor
+                    .sample_row(params.encryption_parameters(), &mut rng, |_| {})
+                    .as_ref(),
+                expected
+            );
+            assert_eq!(rng.next_u64(), reference_rng.next_u64());
+        }
+    }
+
+    #[test]
+    fn shared_setup_preserves_split_rows_limbs_and_rng() {
+        #[cfg(feature = "rustfft")]
+        shared_rows::<primus_fft::RustFftTable>();
+        #[cfg(feature = "tfhe-fft")]
+        shared_rows::<primus_fft::TfheFftTable>();
+    }
 
     /// Synthetic key coefficients isolate signed digits, low35 carries, native
     /// sign/wrap and body addition from keygen noise. Oracle uses integer products.

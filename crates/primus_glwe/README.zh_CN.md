@@ -147,7 +147,7 @@ NTT 还提供 `encrypt_message_coeff_to`、`decrypt_phase_coeff_to` 和 `decrypt
 | `expand_coefficients_to` | 全部 N 个系数各自作为常数 |
 | `expand_partial_coefficients_to(input, count, ...)` | 前 `count` 个常数，要求消息尾部为零 |
 
-启用 `split-trace` 后，`SplitFourierGlweTraceKey::generate` 为 native u64、rank-1 且系数在 `{-1,0,1}` 的秘密提供高精度前缀投影；用 `key.new_workspace()` 分配匹配空间。精确系数密钥生成使用辅助 NTT/CRT，在线只保留 low35/high29 Fourier 谱。Trace payload 和逆变换次数翻倍，这是显式的精度/成本取舍，不是噪声余量保证。完整契约见 [split trace](src/trace/split.rs)。
+启用 `split-trace` 后，`SplitFourierGlweTraceKey::generate` 复用已准备的 `FourierGlweEncryptor`，为 native u64、rank-1 且系数在 `{-1,0,1}` 的秘密提供高精度前缀投影；用 `key.new_workspace()` 分配匹配空间。精确系数密钥生成使用辅助 NTT/CRT，在线只保留 low35/high29 Fourier 谱。Trace payload 和逆变换次数翻倍，这是显式的精度/成本取舍，不是噪声余量保证。完整契约见 [split trace](src/trace/split.rs)。
 
 部分 trace 接收 `1..=N` 内的二次幂 `r`，在一个 GLWE 中保留等间距位置。`r=N` 复制输入，`r=1` 为完整 trace。Reverse trace 在每次自同构及相加前归一化：NTT 乘 `2^-1 mod q`，Fourier 对无符号系数做 `floor(x/2)`。NTT 域运算不能直接继承环面 RevHomTrace 的噪声界。
 

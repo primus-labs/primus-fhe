@@ -281,12 +281,14 @@ impl<'key, T: TorusFftValue> FourierGlweEncryptor<'key, T> {
     /// Preserves noise -> one message addition -> masks in component order.
     /// Only exact modular products enter the body. The caller validated all
     /// external buffers; this kernel does not allocate or convert through FFT.
-    pub(super) fn sample_row<R: rand::Rng + rand::CryptoRng>(
+    /// The returned complete native row borrows setup scratch until its next use;
+    /// ordinary and split conversion consume the same canonical representation.
+    pub(crate) fn sample_row<R: rand::Rng + rand::CryptoRng>(
         &mut self,
         params: &GlweEncryptionParameters<T, NativeModulus<T>>,
         rng: &mut R,
         add_message: impl FnOnce(&mut [T]),
-    ) {
+    ) -> GlweCiphertext<&[T]> {
         let n = self.poly_length().get();
         let (mask, body) = self.row.split_at_mut(self.secret.glwe_size().mask_len());
         primus_distr::sample_gaussian_values_to(body, params.noise_distribution(), rng);
@@ -296,6 +298,7 @@ impl<'key, T: TorusFftValue> FourierGlweEncryptor<'key, T> {
             primus_distr::sample_uniform_values_to(polynomial, &uniform, rng);
             self.product.add_product_assign(polynomial, component, body);
         }
+        GlweCiphertext::new(self.row.as_slice())
     }
 
     /// Transforms final canonical native components after every diagonal addition.

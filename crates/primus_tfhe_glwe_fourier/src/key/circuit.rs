@@ -164,7 +164,6 @@ where
             rng,
         )?;
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_accumulator(
-            client.glwe_secret_key(),
             &mut encryptor,
             operation.gadget().clone(),
             rng,

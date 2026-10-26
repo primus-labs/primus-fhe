@@ -130,18 +130,12 @@ where
         )
         .map_err(crate::error::glwe_encryption_error)?;
 
-        Ok(self.generate_circuit_bootstrap_key_with_accumulator(
-            accumulator_secret,
-            &mut encryptor,
-            parameters,
-            rng,
-        ))
+        Ok(self.generate_circuit_bootstrap_key_with_accumulator(&mut encryptor, parameters, rng))
     }
 
     /// Uses the accumulator encryption setup already prepared for ordinary PBS key generation.
     pub(crate) fn generate_circuit_bootstrap_key_with_accumulator<R>(
         &mut self,
-        _accumulator_secret: &GlweSecretKey<T>,
         encryptor: &mut FourierGlweEncryptor<'_, T>,
         parameters: CbsGadgetParameters<T>,
         rng: &mut R,
@@ -162,7 +156,7 @@ where
             #[cfg(feature = "split-trace")]
             FourierTracePrecision::Split35 => {
                 CbsTraceKey::Split35(SplitFourierGlweTraceKey::generate(
-                    _accumulator_secret,
+                    encryptor,
                     parameters.trace(),
                     &mut self.fft,
                     rng,

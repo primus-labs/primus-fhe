@@ -1,16 +1,18 @@
 //! Split Fourier trace with exact coefficient key generation.
 mod automorphism;
 
+use num_traits::ConstZero;
 use primus_data::Data;
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_lattice::glwe::Glwe;
 use primus_modulus::NativeModulus;
 
-use crate::secret_key::exact::ExactSecretProduct;
 use automorphism::{SplitGlweAutomorphismKey, SplitGlweAutomorphismWorkspace};
+use primus_integer::SignedInteger;
+use zeroize::Zeroizing;
 
-use crate::{GlevParameters, GlweSecretKey, GlweSize};
+use crate::{FourierGlweEncryptor, GlevParameters, GlweSize};
 
 /// Split(35) native-u64 trace keys for rank-one binary/ternary ring secrets.
 ///
@@ -35,9 +37,10 @@ pub struct SplitFourierGlweTraceWorkspace<T: TorusFftValue> {
     automorphism: SplitGlweAutomorphismWorkspace<T>,
 }
 impl<T: TorusFftValue> SplitFourierGlweTraceKey<T> {
-    /// Generates exact coefficient keys using auxiliary NTT/centered CRT and
-    /// retains only their split Fourier spectra. Auxiliary moduli do not change
-    /// the native ciphertext modulus. No ordinary Fourier key is generated.
+    /// Reuses the prepared encryptor's exact native rows, retaining only split
+    /// Fourier spectra. No ordinary Fourier key or second product cache is built.
+    /// One permuted-secret and one limb buffer are reused across all degrees
+    /// and erased on drop/unwind; each row uses these parameters' noise and basis.
     ///
     /// # Panics
     /// Panics before sampling unless T has 64 bits, rank is one, all secret
@@ -49,7 +52,7 @@ impl<T: TorusFftValue> SplitFourierGlweTraceKey<T> {
     /// Fourier error, but does not certify the complete request's noise margin.
     #[must_use]
     pub fn generate<Table: FftTable, R: rand::Rng + rand::CryptoRng>(
-        secret: &GlweSecretKey<T>,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         parameters: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
@@ -57,26 +60,31 @@ impl<T: TorusFftValue> SplitFourierGlweTraceKey<T> {
         let size = parameters.glwe_size();
         assert_eq!(T::BITS, 64, "split35 requires a 64-bit native torus");
         assert_eq!(size.dimension().get(), 1, "split35 requires GLWE rank one");
-        assert_eq!(
-            secret.glwe_size(),
-            size,
-            "split trace secret layout mismatch"
+        encryptor.assert_gadget_compatible(parameters, fft);
+        // Preparation establishes exact-product capacity, not split precision.
+        // Imported secrets can have a wider public bound; enforce this narrower
+        // numerical domain once here, before allocating or sampling any rows.
+        let small_secret = encryptor
+            .coefficient_secret()
+            .as_slice()
+            .iter()
+            .fold(true, |valid, &s| valid & (s.unsigned_abs() <= T::ONE));
+        assert!(
+            small_secret,
+            "split35 requires secret coefficients in -1..=1"
         );
-        assert_eq!(
-            fft.poly_length(),
-            size.poly_length(),
-            "split trace FFT length mismatch"
-        );
-        let mut product = ExactSecretProduct::try_new(secret, T::ONE)
-            .expect("split35 requires secret coefficients in -1..=1");
+        let mut transformed =
+            Zeroizing::new(vec![T::SignedInteger::ZERO; size.poly_length().get()]);
+        let mut limb = Zeroizing::new(vec![T::ZERO; size.poly_length().get()]);
         let keys = (1..=size.poly_length().log_n())
             .rev()
             .map(|shift| {
                 SplitGlweAutomorphismKey::generate(
                     (1 << shift) + 1,
-                    secret,
+                    encryptor,
                     parameters,
-                    &mut product,
+                    &mut transformed,
+                    &mut limb,
                     fft,
                     rng,
                 )
