@@ -13,12 +13,12 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     FourierGgswCiphertext, FourierGlevCiphertext, FourierGlweDecryptWorkspace,
-    FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace, FourierGlweSecretKey,
-    GlevParameters, GlweCiphertext, GlweParameters, NttGgswCiphertext, NttGlevCiphertext,
-    NttGlweGadgetEncryptWorkspace, NttGlwePublicEncryptWorkspace, NttGlwePublicKey,
-    NttGlweSecretKey, SecretKeyDistr,
+    FourierGlweSecretKey, GlevParameters, GlweCiphertext, GlweParameters, NttGgswCiphertext,
+    NttGlevCiphertext, NttGlweGadgetEncryptWorkspace, NttGlwePublicEncryptWorkspace,
+    NttGlwePublicKey, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_modulus::{BarrettModulus, NativeModulus};
@@ -232,13 +232,16 @@ fn fourier_encryption(c: &mut Criterion) {
         );
         let table = RustFftTable::new(poly_length);
         let mut fft = FftEngine::new(&table);
-        let (_, sk) = FourierGlweSecretKey::generate_pair(
+        let sk_coefficients = primus_glwe::GlweSecretKey::generate(
             params.size(),
-            params.encryption_parameters(),
-            &mut fft,
+            (params.encryption_parameters()).secret_key_sampler(),
             &mut rng,
         );
-        let mut encrypt_workspace = FourierGlweEncryptWorkspace::new(poly_length);
+        let sk_decrypt = FourierGlweSecretKey::from_coeff_secret_key(&sk_coefficients, &mut fft);
+        let mut sk =
+            FourierGlweEncryptor::try_new(&sk_coefficients, params.encryption_parameters())
+                .unwrap();
+
         let mut decrypt_workspace = FourierGlweDecryptWorkspace::new(poly_length);
         let mut ciphertext = sk.encrypt_message(
             &message,
@@ -246,9 +249,8 @@ fn fourier_encryption(c: &mut Criterion) {
             PlaintextEmbedding::Unsigned,
             &mut fft,
             &mut rng,
-            &mut encrypt_workspace,
         );
-        sk.decrypt_message_to(
+        sk_decrypt.decrypt_message_to(
             &ciphertext,
             &mut plaintext,
             &params,
@@ -264,7 +266,7 @@ fn fourier_encryption(c: &mut Criterion) {
                 level_count: Some(DecompositionLevelCount::new(LEVELS)),
             },
         );
-        let mut gadget_workspace = FourierGlweGadgetEncryptWorkspace::new(gadget.size());
+
         let mut glev = FourierGlevCiphertext::<Vec<_>>::zero(gadget.fourier_glev_len());
         let mut ggsw = FourierGgswCiphertext::<Vec<_>>::zero(gadget.fourier_ggsw_len());
         let mut group = c.benchmark_group(format!("glwe/fourier/k{dimension}_n{n}"));
@@ -277,14 +279,13 @@ fn fourier_encryption(c: &mut Criterion) {
                     PlaintextEmbedding::Unsigned,
                     &mut fft,
                     &mut rng,
-                    &mut encrypt_workspace,
                 );
                 black_box(ciphertext.as_ref());
             })
         });
         group.bench_function("decrypt_to", |b| {
             b.iter(|| {
-                sk.decrypt_message_to(
+                sk_decrypt.decrypt_message_to(
                     black_box(&decrypt_input),
                     &mut plaintext,
                     black_box(&params),
@@ -298,14 +299,7 @@ fn fourier_encryption(c: &mut Criterion) {
             format!("encrypt_glev_to/log_base{LOG_BASE}_levels{LEVELS}"),
             |b| {
                 b.iter(|| {
-                    sk.encrypt_glev_to(
-                        black_box(&message),
-                        &mut glev,
-                        &gadget,
-                        &mut fft,
-                        &mut rng,
-                        &mut gadget_workspace,
-                    );
+                    sk.encrypt_glev_to(black_box(&message), &mut glev, &gadget, &mut fft, &mut rng);
                     black_box(glev.as_ref());
                 })
             },
@@ -314,14 +308,7 @@ fn fourier_encryption(c: &mut Criterion) {
             format!("encrypt_ggsw_to/log_base{LOG_BASE}_levels{LEVELS}"),
             |b| {
                 b.iter(|| {
-                    sk.encrypt_ggsw_to(
-                        black_box(&message),
-                        &mut ggsw,
-                        &gadget,
-                        &mut fft,
-                        &mut rng,
-                        &mut gadget_workspace,
-                    );
+                    sk.encrypt_ggsw_to(black_box(&message), &mut ggsw, &gadget, &mut fft, &mut rng);
                     black_box(ggsw.as_ref());
                 })
             },
@@ -340,7 +327,6 @@ fn fourier_encryption(c: &mut Criterion) {
                     &gadget,
                     &mut fft,
                     &mut rng,
-                    &mut gadget_workspace,
                 );
                 black_box(&batch);
             })

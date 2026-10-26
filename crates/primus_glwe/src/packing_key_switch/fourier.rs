@@ -11,10 +11,7 @@ use primus_poly::{FourierPolynomial, Polynomial};
 use primus_reduce::ReduceAddAssign;
 use zeroize::Zeroizing;
 
-use crate::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlweKeySwitchingWorkspace, FourierGlweSecretKey,
-    GlevParameters,
-};
+use crate::{FourierGlweEncryptor, FourierGlweKeySwitchingWorkspace, GlevParameters};
 
 /// Fourier GLev encryptions of an independent input LWE secret's scalar coefficients.
 ///
@@ -34,28 +31,27 @@ impl<T: TorusFftValue> FourierLwePackingKeySwitchingKey<T> {
     ///
     /// # Correctness
     ///
-    /// The input secret uses native-torus coefficients. The output secret must
-    /// have been constructed with the supplied FFT table instance.
+    /// The input secret uses native-torus coefficients. Evaluation must use
+    /// the FFT table instance supplied during generation.
     ///
     /// # Panics
     ///
     /// Panics before sampling if the input dimension is zero, storage length
-    /// overflows, or the output key, FFT or workspace do not match `params`.
+    /// overflows, or the output key or FFT do not match `params`.
     pub fn generate<Table, R>(
         input_secret_key: LweSecretKeyRef<'_, T>,
-        output_secret_key: &FourierGlweSecretKey,
+        output_encryptor: &mut FourierGlweEncryptor<'_, T>,
         params: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        workspace: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self
     where
         Table: FftTable,
         R: rand::Rng + rand::CryptoRng,
     {
         let input_dimension = LweDimension::new(input_secret_key.dimension());
-        output_secret_key.assert_gadget_compatible(params, fft);
-        workspace.assert_glev_compatible(params.size());
+        output_encryptor.assert_gadget_compatible(params, fft);
+
         let length = input_dimension
             .get()
             .checked_mul(params.fourier_glev_len())
@@ -65,13 +61,12 @@ impl<T: TorusFftValue> FourierLwePackingKeySwitchingKey<T> {
         let mut entries = data.chunks_exact_mut(params.fourier_glev_len());
         super::for_each_secret(input_secret_key, params.cipher_modulus(), |secret| {
             message[0] = secret;
-            output_secret_key.encrypt_glev_kernel_to(
+            output_encryptor.encrypt_glev_kernel_to(
                 Polynomial::new(message.as_slice()),
                 FourierGlev::new(entries.next().expect("one GLev per secret coefficient")),
                 params,
                 fft,
                 rng,
-                workspace,
             );
         });
         Self {

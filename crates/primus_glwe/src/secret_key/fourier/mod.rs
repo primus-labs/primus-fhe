@@ -1,15 +1,14 @@
-//! Native-torus Fourier-domain GLWE secret key with encryption and decryption.
+//! Native-torus Fourier decryption keys and exact coefficient encryptors.
 
 use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
 use primus_integer::SignedInteger;
 use primus_lattice::GlweDimension;
 use primus_lattice::GlweSize;
-use primus_modulus::NativeModulus;
 use primus_poly::FourierPolynomialIter;
 use primus_shape::PolyLength;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::{GlweEncryptionParameters, SecretKeyDistr};
+use crate::SecretKeyDistr;
 
 use super::GlweSecretKey;
 
@@ -19,11 +18,10 @@ mod encrypt;
 mod gadget;
 mod message;
 mod workspace;
-pub use workspace::{
-    FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace,
-};
+pub use encrypt::{FourierGlweEncryptor, FourierGlweEncryptorError};
+pub use workspace::FourierGlweDecryptWorkspace;
 
-/// A native-torus GLWE secret key represented in the Fourier domain.
+/// A native-torus GLWE decryption secret represented in the Fourier domain.
 ///
 /// Each coefficient-domain secret polynomial is transformed with
 /// [`FftTable::forward_as_integer`]. Ciphertext polynomials use torus-scaled
@@ -59,27 +57,6 @@ impl Drop for FourierGlweSecretKey {
 }
 
 impl FourierGlweSecretKey {
-    /// Wraps integer-scaled Fourier secret polynomials.
-    /// The values must follow this type's representation contract and the
-    /// recorded distribution; raw construction does not check those properties.
-    /// Rejected storage is erased when layout validation unwinds.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `key.len()` differs from `size.fourier_mask_len()`.
-    #[inline]
-    #[must_use]
-    pub fn new(key: Vec<Complex64>, size: GlweSize, distr: SecretKeyDistr) -> Self {
-        // Establish the erasing owner before validation can unwind.
-        let secret = Self { key, size, distr };
-        assert_eq!(
-            secret.key.len(),
-            size.fourier_mask_len(),
-            "FOURIER secret key layout mismatch"
-        );
-        secret
-    }
-
     /// Returns the coefficient-domain GLWE layout.
     #[inline]
     #[must_use]
@@ -133,11 +110,11 @@ impl FourierGlweSecretKey {
         assert_eq!(size.poly_length().get(), fft.poly_length().get());
 
         let fourier_length = fft.fourier_length();
-        let mut key = Self::new(
-            vec![Complex64::default(); size.fourier_mask_len()],
+        let mut key = Self {
+            key: vec![Complex64::default(); size.fourier_mask_len()],
             size,
-            secret_key.distr(),
-        );
+            distr: secret_key.distr(),
+        };
         let mut native_coefficients = Zeroizing::new(vec![T::ZERO; size.poly_length().get()]);
         for (coefficients, fourier) in secret_key
             .iter()
@@ -153,37 +130,5 @@ impl FourierGlweSecretKey {
         }
 
         key
-    }
-
-    /// Samples one signed coefficient key and returns it with its Fourier form.
-    /// The layout comes from `size`; no plaintext codec is needed.
-    /// Fixed weights apply to the complete `k * N` coefficient key. Both
-    /// representations and conversion scratch are erased on drop, including
-    /// unwinding during generation. Keep using the same FFT table instance.
-    ///
-    /// # Panics
-    ///
-    /// Panics before sampling if the FFT length differs from `size`.
-    /// Inherits [`GlweSecretKey::generate`]'s sampling conditions.
-    #[must_use]
-    pub fn generate_pair<T, R, Table>(
-        size: GlweSize,
-        params: &GlweEncryptionParameters<T, NativeModulus<T>>,
-        fft: &mut FftEngine<'_, Table>,
-        rng: &mut R,
-    ) -> (GlweSecretKey<T>, Self)
-    where
-        R: rand::Rng + rand::CryptoRng,
-        Table: FftTable,
-        T: TorusFftValue,
-    {
-        assert_eq!(
-            fft.poly_length().get(),
-            size.poly_length().get(),
-            "FFT polynomial length mismatch"
-        );
-        let coefficients = GlweSecretKey::generate(size, params.secret_key_sampler(), rng);
-        let key = Self::from_coeff_secret_key(&coefficients, fft);
-        (coefficients, key)
     }
 }

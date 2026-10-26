@@ -1,7 +1,7 @@
 //! CBS material composed with the ordinary BR and KS server key.
 
 use primus_fft::{FftTable, TorusFftValue};
-use primus_glwe::FourierGlweSecretKey;
+use primus_glwe::FourierGlweEncryptor;
 use primus_reduce::RingContext;
 
 use crate::{
@@ -91,12 +91,18 @@ where
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         let sparse_layout = self.prepare_blind_rotation()?;
         let client = ClientKey::generate(self.context.parameters(), rng);
-        let transformed =
-            FourierGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), &mut self.fft);
-        let server = self.generate_circuit_server_with_main(
+        let encryptor = FourierGlweEncryptor::try_new(
+            client.glwe_secret_key(),
+            self.context
+                .parameters()
+                .blind_rotation_params()
+                .encryption_parameters(),
+        )
+        .map_err(crate::error::glwe_encryption_error)?;
+        let server = self.generate_circuit_server_with_accumulator(
             operation,
             &client,
-            transformed,
+            encryptor,
             sparse_layout,
             rng,
         )?;
@@ -120,39 +126,55 @@ where
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         client.check_compatible(self.context.parameters())?;
         let sparse_layout = self.prepare_blind_rotation()?;
-        let transformed =
-            FourierGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), &mut self.fft);
-        self.generate_circuit_server_with_main(operation, client, transformed, sparse_layout, rng)
+        let encryptor = FourierGlweEncryptor::try_new(
+            client.glwe_secret_key(),
+            self.context
+                .parameters()
+                .blind_rotation_params()
+                .encryption_parameters(),
+        )
+        .map_err(crate::error::glwe_encryption_error)?;
+        self.generate_circuit_server_with_accumulator(
+            operation,
+            client,
+            encryptor,
+            sparse_layout,
+            rng,
+        )
     }
 
     /// The context owns this complete CBS operation; client compatibility and sparse
-    /// geometry are already established. Share one ring transform between BR and
-    /// CBS, then release it before transforming the padded small secret for KS.
-    fn generate_circuit_server_with_main<R>(
+    /// geometry are already established. Share one coefficient encryption setup between BR and
+    /// CBS, then release it before preparing the padded small secret for KS.
+    fn generate_circuit_server_with_accumulator<R>(
         &mut self,
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
-        transformed: FourierGlweSecretKey,
+        mut encryptor: FourierGlweEncryptor<'_, T>,
         sparse_layout: Option<crate::sparse::SparseKeyLayout>,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError>
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let blind_rotation =
-            self.generate_blind_rotation_key_with_main(client, &transformed, sparse_layout, rng)?;
-        let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_main(
+        let blind_rotation = self.generate_blind_rotation_key_with_accumulator(
+            client,
+            &mut encryptor,
+            sparse_layout,
+            rng,
+        )?;
+        let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_accumulator(
             client.glwe_secret_key(),
-            &transformed,
+            &mut encryptor,
             operation.gadget().clone(),
             rng,
         );
-        drop(transformed);
+        drop(encryptor);
         let key = self.generate_glwe_key_switching_key(
             operation.pbs_parameters().glwe_key_switching(),
             client,
             rng,
-        );
+        )?;
         Ok(CircuitBootstrapServerKey::new(
             ServerKey::new(blind_rotation, key),
             circuit_bootstrap,

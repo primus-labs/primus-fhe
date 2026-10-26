@@ -2,6 +2,7 @@
 
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_encoding::PlaintextEmbedding;
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     GlevParameters, GlweParameters, GlweSecretKey, NttGlweGadgetEncryptWorkspace,
     NttGlweSchemeSwitchKey, NttGlweSecretKey, SecretKeyDistr,
@@ -152,10 +153,7 @@ fn ntt_scheme_switch_produces_an_external_product_control() {
 fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
     use common::{K, N, assert_phase, encrypt, message, secret};
     use primus_fft::FftEngine;
-    use primus_glwe::{
-        FourierGlweGadgetEncryptWorkspace, FourierGlweSchemeSwitchKey, FourierGlweSecretKey,
-        GlweSize,
-    };
+    use primus_glwe::{FourierGlweSchemeSwitchKey, GlweSize};
     use primus_lattice::{
         ggsw::{FourierGgsw, Ggsw},
         glev::Glev,
@@ -189,16 +187,14 @@ fn fourier_scheme_switch<Table: primus_fft::FftTable>() {
         },
     );
     let coeff = GlweSecretKey::<u64>::new(secret(), params.size(), SecretKeyDistr::UniformTernary);
-    let sk = FourierGlweSecretKey::from_coeff_secret_key(&coeff, &mut fft);
+    let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x534348454d45);
     let key = FourierGlweSchemeSwitchKey::generate(
-        &coeff,
-        &sk,
+        &mut sk,
         output_params.size(),
         &key_params,
         &mut fft,
         &mut rng,
-        &mut FourierGlweGadgetEncryptWorkspace::new(key_params.size()),
     );
     // Build GLev(X^(N-1)) with an independent coefficient-domain encryption oracle.
     let mut input = Glev::new(vec![0; output_params.glev_len()]);

@@ -10,9 +10,9 @@
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlweKeySwitchingWorkspace,
-    FourierGlweSchemeSwitchKey, FourierGlweSecretKey, FourierLwePackingKeySwitchingKey,
+    FourierGlweKeySwitchingWorkspace, FourierGlweSchemeSwitchKey, FourierLwePackingKeySwitchingKey,
     GlevParameters, GlweParameters, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingWorkspace,
     NttGlweSchemeSwitchKey, NttGlweSecretKey, NttLwePackingKeySwitchingKey, SecretKeyDistr,
 };
@@ -194,12 +194,12 @@ fn fourier_conversion(c: &mut Criterion) {
             3.2,
         );
         let size = params.size();
-        let (coeff, sk) = FourierGlweSecretKey::generate_pair(
+        let coeff = primus_glwe::GlweSecretKey::generate(
             params.size(),
-            params.encryption_parameters(),
-            &mut fft,
+            (params.encryption_parameters()).secret_key_sampler(),
             &mut rng,
         );
+        let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
         let glev = GlevParameters::with_glwe_params(
             &params,
             DecompositionConfig {
@@ -207,19 +207,13 @@ fn fourier_conversion(c: &mut Criterion) {
                 level_count: Some(DecompositionLevelCount::new(3)),
             },
         );
-        let mut gadget = FourierGlweGadgetEncryptWorkspace::new(glev.size());
+
         let source = params
             .secret_key_sampler()
             .sample_signed(INPUT_DIMENSION, &mut rng);
         let source = LweSecretKeyRef::Signed(&source);
-        let key = FourierLwePackingKeySwitchingKey::generate(
-            source,
-            &sk,
-            &glev,
-            &mut fft,
-            &mut rng,
-            &mut gadget,
-        );
+        let key =
+            FourierLwePackingKeySwitchingKey::generate(source, &mut sk, &glev, &mut fft, &mut rng);
         let mut workspace = FourierGlweKeySwitchingWorkspace::new(size);
         let mut output = Glwe::new(vec![0; size.glwe_len()]);
         let mut batch = vec![0; n * (INPUT_DIMENSION + 1)];
@@ -260,11 +254,10 @@ fn fourier_conversion(c: &mut Criterion) {
         );
         let key = FourierLwePackingKeySwitchingKey::generate(
             source,
-            &sk,
+            &mut sk,
             &small_glev,
             &mut fft,
             &mut rng,
-            &mut gadget,
         );
         let input = &batch[..INPUT_DIMENSION + 1];
         group.throughput(Throughput::Elements(1));
@@ -276,20 +269,13 @@ fn fourier_conversion(c: &mut Criterion) {
         });
         drop(key);
 
-        let key = FourierGlweSchemeSwitchKey::generate(
-            &coeff,
-            &sk,
-            glev.size(),
-            &glev,
-            &mut fft,
-            &mut rng,
-            &mut gadget,
-        );
+        let key =
+            FourierGlweSchemeSwitchKey::generate(&mut sk, glev.size(), &glev, &mut fft, &mut rng);
         let mut workspace = FourierGlweExternalProductWorkspace::new(glev.size());
         let mut message = Polynomial::new(vec![0; n]);
         message.as_mut()[0] = 1;
         let mut input = FourierGlev::<Vec<_>>::zero(glev.fourier_glev_len());
-        sk.encrypt_glev_to(&message, &mut input, &glev, &mut fft, &mut rng, &mut gadget);
+        sk.encrypt_glev_to(&message, &mut input, &glev, &mut fft, &mut rng);
         let mut coeff_input = Glev::new(vec![0u64; glev.glev_len()]);
         input.write_torus_form(&mut coeff_input, &mut fft);
         let input = coeff_input;

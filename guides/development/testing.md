@@ -38,7 +38,7 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 | `primus_fft` | 默认不启用 FFT 引擎；用 `rustfft`、`tfhe-fft` 或两者 |
 | `primus_lattice`、`primus_glwe`、`primus_ntru` | 按需选择 `ntt`、`rustfft`、`tfhe-fft`；FFT 引擎 feature 同时启用 Fourier 能力 |
 | 两个 TFHE Fourier 后端 | 默认 RustFFT；加 `--features tfhe-fft` 启用双引擎；用 `--no-default-features --features tfhe-fft` 单选 TFHE-FFT |
-| GLWE Split35 trace | 低层 `primus_glwe` 需显式添加 `split-trace`；GLWE Fourier 后端默认启用此能力，ordinary 仍是默认表示。关闭后端默认 features 后按需添加 `split-trace`，普通 Fourier 消费者不依赖 NTT |
+| GLWE Split35 trace | 低层 `primus_glwe` 需显式添加 `split-trace`；GLWE Fourier 后端默认启用此能力，ordinary 仍是默认表示。关闭后端默认 features 后按需添加 `split-trace`；GLWE Fourier 本身包含系数建钥用的内部辅助 NTT/CRT 依赖，不启用 NTT GLWE API |
 
 稳定工具链上的其他可选功能包括 `primus_data/aligned-vec`、integer/lattice 的 `serde`、`primus_modulus/derive`、`primus_distr/high_precision` 及 lattice/encoding 的 `rns`。独立包验证须显式选择需要的功能，不能依赖其他 workspace 消费者合并 features。
 

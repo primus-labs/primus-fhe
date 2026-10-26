@@ -1,10 +1,10 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_fft::{FftEngine, FftTable, RustFftTable, TfheFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlweKeySwitchingWorkspace, FourierGlweSecretKey,
-    FourierLwePackingKeySwitchingKey, GlevParameters, GlweParameters, GlweSecretKey, GlweSize,
-    NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingWorkspace, NttGlweSecretKey,
-    NttLwePackingKeySwitchingKey, SecretKeyDistr,
+    FourierGlweKeySwitchingWorkspace, FourierLwePackingKeySwitchingKey, GlevParameters,
+    GlweParameters, GlweSecretKey, GlweSize, NttGlweGadgetEncryptWorkspace,
+    NttGlweKeySwitchingWorkspace, NttGlweSecretKey, NttLwePackingKeySwitchingKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{glwe::Glwe, lwe::Lwe};
@@ -179,16 +179,15 @@ fn fourier_packing<Table: FftTable>(log_basis: u32, levels: usize) {
         },
     );
     let coeff = GlweSecretKey::<u64>::new(secret(), params.size(), SecretKeyDistr::UniformTernary);
-    let sk = FourierGlweSecretKey::from_coeff_secret_key(&coeff, &mut fft);
+    let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x5041434b);
     let encoded = INPUT_SECRET.map(|x| x as u64);
     let key = FourierLwePackingKeySwitchingKey::generate(
         LweSecretKeyRef::Encoded(&encoded),
-        &sk,
+        &mut sk,
         &glev,
         &mut fft,
         &mut rng,
-        &mut FourierGlweGadgetEncryptWorkspace::new(glev.size()),
     );
     let batch = inputs(
         1u128 << 64,

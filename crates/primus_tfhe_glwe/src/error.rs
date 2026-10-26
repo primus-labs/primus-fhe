@@ -113,6 +113,10 @@ pub enum TfheKeyError {
     /// The GLWE secret-key distribution does not match the parameters.
     #[error("GLWE secret-key distribution mismatch")]
     GlweSecretKeyDistributionMismatch,
+
+    /// A ring-secret coefficient exceeds its declared encryption support.
+    #[error("GLWE secret coefficient exceeds its declared support")]
+    InvalidGlweSecretKeyCoefficient,
 }
 
 /// A failure to construct a family client.

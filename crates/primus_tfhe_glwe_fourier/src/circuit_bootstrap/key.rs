@@ -2,7 +2,7 @@ use primus_fft::{FftTable, TorusFftValue};
 #[cfg(feature = "split-trace")]
 use primus_glwe::SplitFourierGlweTraceKey;
 use primus_glwe::{
-    FourierGlweSchemeSwitchKey, FourierGlweSecretKey, FourierGlweTraceKey, GlweSecretKey,
+    FourierGlweEncryptor, FourierGlweSchemeSwitchKey, FourierGlweTraceKey, GlweSecretKey,
 };
 use primus_reduce::RingContext;
 
@@ -96,7 +96,7 @@ where
     LM: RingContext<T>,
     Table: FftTable,
 {
-    /// Generates CBS keys from only the accumulator secret, reusing Fourier workspace.
+    /// Generates CBS keys from only the accumulator secret, reusing exact encryption setup.
     ///
     /// Rejects incompatible circuit parameters or accumulator secrets before sampling.
     ///
@@ -121,22 +121,28 @@ where
         }
         tfhe.check_accumulator_secret_key(accumulator_secret)?;
 
-        let fourier_secret =
-            FourierGlweSecretKey::from_coeff_secret_key(accumulator_secret, &mut self.fft);
-
-        Ok(self.generate_circuit_bootstrap_key_with_main(
+        let mut encryptor = FourierGlweEncryptor::try_new(
             accumulator_secret,
-            &fourier_secret,
+            self.context
+                .parameters()
+                .blind_rotation_params()
+                .encryption_parameters(),
+        )
+        .map_err(crate::error::glwe_encryption_error)?;
+
+        Ok(self.generate_circuit_bootstrap_key_with_accumulator(
+            accumulator_secret,
+            &mut encryptor,
             parameters,
             rng,
         ))
     }
 
-    /// Uses the accumulator transform already prepared for ordinary PBS key generation.
-    pub(crate) fn generate_circuit_bootstrap_key_with_main<R>(
+    /// Uses the accumulator encryption setup already prepared for ordinary PBS key generation.
+    pub(crate) fn generate_circuit_bootstrap_key_with_accumulator<R>(
         &mut self,
-        accumulator_secret: &GlweSecretKey<T>,
-        fourier_secret: &FourierGlweSecretKey,
+        _accumulator_secret: &GlweSecretKey<T>,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         parameters: CbsGadgetParameters<T>,
         rng: &mut R,
     ) -> CircuitBootstrapKey<T>
@@ -150,21 +156,13 @@ where
                 parameters.fourier_trace_precision()
             });
         let trace = match precision {
-            FourierTracePrecision::Ordinary => {
-                self.gadget.resize(parameters.trace().size());
-                CbsTraceKey::Ordinary(FourierGlweTraceKey::generate(
-                    accumulator_secret,
-                    fourier_secret,
-                    parameters.trace(),
-                    &mut self.fft,
-                    rng,
-                    &mut self.gadget,
-                ))
-            }
+            FourierTracePrecision::Ordinary => CbsTraceKey::Ordinary(
+                FourierGlweTraceKey::generate(encryptor, parameters.trace(), &mut self.fft, rng),
+            ),
             #[cfg(feature = "split-trace")]
             FourierTracePrecision::Split35 => {
                 CbsTraceKey::Split35(SplitFourierGlweTraceKey::generate(
-                    accumulator_secret,
+                    _accumulator_secret,
                     parameters.trace(),
                     &mut self.fft,
                     rng,
@@ -177,15 +175,12 @@ where
             }
         };
 
-        self.gadget.resize(parameters.scheme_switch().size());
         let scheme_switch = FourierGlweSchemeSwitchKey::generate(
-            accumulator_secret,
-            fourier_secret,
+            encryptor,
             parameters.output_size(),
             parameters.scheme_switch(),
             &mut self.fft,
             rng,
-            &mut self.gadget,
         );
 
         CircuitBootstrapKey {

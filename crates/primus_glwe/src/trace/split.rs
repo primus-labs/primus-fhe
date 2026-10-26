@@ -1,16 +1,14 @@
 //! Split Fourier trace with exact coefficient key generation.
 mod automorphism;
-mod exact;
 
 use primus_data::Data;
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
-use primus_integer::AsInto;
 use primus_lattice::glwe::Glwe;
 use primus_modulus::NativeModulus;
 
+use crate::secret_key::exact::ExactSecretProduct;
 use automorphism::{SplitGlweAutomorphismKey, SplitGlweAutomorphismWorkspace};
-use exact::ExactSecretProduct;
 
 use crate::{GlevParameters, GlweSecretKey, GlweSize};
 
@@ -69,14 +67,8 @@ impl<T: TorusFftValue> SplitFourierGlweTraceKey<T> {
             size.poly_length(),
             "split trace FFT length mismatch"
         );
-        assert!(
-            secret.as_slice().iter().all(|&s| {
-                let v: i64 = s.as_into();
-                (-1..=1).contains(&v)
-            }),
-            "split35 requires secret coefficients in -1..=1"
-        );
-        let mut product = ExactSecretProduct::new::<T>(secret.as_slice(), size.poly_length());
+        let mut product = ExactSecretProduct::try_new(secret, T::ONE)
+            .expect("split35 requires secret coefficients in -1..=1");
         let keys = (1..=size.poly_length().log_n())
             .rev()
             .map(|shift| {

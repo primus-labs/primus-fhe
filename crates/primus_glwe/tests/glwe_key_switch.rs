@@ -3,12 +3,12 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace,
-    FourierGlweKeySwitchingKey, FourierGlweKeySwitchingWorkspace, FourierGlweSecretKey,
-    GlevParameters, GlweKeySwitchingParameters, GlweParameters, GlweSecretKey,
-    NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey, NttGlweKeySwitchingWorkspace,
-    NttGlweSecretKey, SecretKeyDistr,
+    FourierGlweDecryptWorkspace, FourierGlweKeySwitchingKey, FourierGlweKeySwitchingWorkspace,
+    FourierGlweSecretKey, GlevParameters, GlweKeySwitchingParameters, GlweParameters,
+    GlweSecretKey, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
+    NttGlweKeySwitchingWorkspace, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::glwe::{FourierGlweOwned, Glwe, NttGlwe};
@@ -144,16 +144,18 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
         SecretKeyDistr::UniformBinary,
         0.7,
     );
-    let (input_coeff_key, input_key) = FourierGlweSecretKey::generate_pair(
+    let input_coeff_key = primus_glwe::GlweSecretKey::generate(
         input_params.size(),
-        input_params.encryption_parameters(),
-        &mut fft,
+        (input_params.encryption_parameters()).secret_key_sampler(),
         &mut rng,
     );
+    let mut input_key =
+        FourierGlweEncryptor::try_new(&input_coeff_key, input_params.encryption_parameters())
+            .unwrap();
     let message_values = plaintext();
     let message = Polynomial::new(message_values.clone());
     let mut encrypted = FourierGlweOwned::zero(input_params.fourier_glwe_len());
-    let mut glwe_encrypt_workspace = FourierGlweEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+
     input_key.encrypt_message_to(
         &message,
         &mut encrypted,
@@ -161,7 +163,6 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
         PlaintextEmbedding::Unsigned,
         &mut fft,
         &mut rng,
-        &mut glwe_encrypt_workspace,
     );
     let mut input: Glwe<Vec<u32>> = Glwe::zero(input_params.glwe_len());
     encrypted.write_torus_form(&mut input, &mut fft);
@@ -189,7 +190,11 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
         } else {
             generated_output_key
         };
-        let output_key = FourierGlweSecretKey::from_coeff_secret_key(&output_coeff_key, &mut fft);
+        let mut output_key =
+            FourierGlweEncryptor::try_new(&output_coeff_key, output_params.encryption_parameters())
+                .unwrap();
+        let output_key_decrypt =
+            FourierGlweSecretKey::from_coeff_secret_key(&output_coeff_key, &mut fft);
         let glev = GlevParameters::with_glwe_params(
             &output_params,
             DecompositionConfig {
@@ -198,15 +203,13 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
             },
         );
         let parameters = GlweKeySwitchingParameters::new(GlweDimension::new(INPUT_DIMENSION), glev);
-        let mut encrypt_workspace =
-            FourierGlweGadgetEncryptWorkspace::new(parameters.output().size());
+
         let key = FourierGlweKeySwitchingKey::generate(
             &input_coeff_key,
-            &output_key,
+            &mut output_key,
             &parameters,
             &mut fft,
             &mut rng,
-            &mut encrypt_workspace,
         );
 
         let mut workspace = FourierGlweKeySwitchingWorkspace::new(parameters.output().glwe_size());
@@ -219,7 +222,7 @@ fn fourier_glwe_key_switches_for_equal_and_smaller_output_dimensions() {
         switched.write_fourier_form(&mut switched_fourier, &mut fft);
         let mut decrypt_workspace = FourierGlweDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
         assert_eq!(
-            output_key
+            output_key_decrypt
                 .decrypt_message(
                     &switched_fourier,
                     &output_params,

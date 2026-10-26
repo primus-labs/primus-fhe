@@ -2,7 +2,7 @@
 
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
-use primus_glwe::{FourierGlweGadgetEncryptWorkspace, FourierGlweSecretKey, GlevParameters};
+use primus_glwe::{FourierGlweEncryptor, GlevParameters};
 use primus_lattice::LweDimension;
 use primus_lattice::{
     GadgetSize,
@@ -75,9 +75,9 @@ impl<T: TorusFftValue> FourierGlweBootstrappingKey<T> {
     }
 
     /// Generates a Fourier bootstrapping key encrypting binary coefficients or ternary
-    /// selector pairs under `output_secret_key`.
+    /// selector pairs under `output_encryptor`.
     ///
-    /// Inherits [`FourierGlweSecretKey::encrypt_ggsw_constant_batch_to`]'s FFT
+    /// Inherits [`FourierGlweEncryptor::encrypt_ggsw_constant_batch_to`]'s FFT
     /// representation and workspace requirements.
     ///
     /// # Panics
@@ -90,11 +90,10 @@ impl<T: TorusFftValue> FourierGlweBootstrappingKey<T> {
     pub(crate) fn generate_fourier<LM, Table, R>(
         input_secret_key: &LweSecretKey<T>,
         input_parameters: &LweEncryptionParameters<T, LM>,
-        output_secret_key: &FourierGlweSecretKey,
+        output_encryptor: &mut FourierGlweEncryptor<'_, T>,
         parameters: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        context: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self
     where
         LM: RingContext<T>,
@@ -165,8 +164,8 @@ impl<T: TorusFftValue> FourierGlweBootstrappingKey<T> {
             .checked_mul(ggsw_len)
             .expect("Fourier bootstrapping-key length overflow");
         let mut data = vec![Complex64::default(); total_len];
-        output_secret_key
-            .encrypt_ggsw_constant_batch_to(plaintexts, &mut data, parameters, fft, rng, context);
+        output_encryptor
+            .encrypt_ggsw_constant_batch_to(plaintexts, &mut data, parameters, fft, rng);
 
         Self {
             data,

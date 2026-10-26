@@ -3,10 +3,10 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace,
-    FourierGlweSecretKey, GlevParameters, GlweParameters, NttGlweGadgetEncryptWorkspace,
-    NttGlweSecretKey, SecretKeyDistr,
+    FourierGlweDecryptWorkspace, FourierGlweSecretKey, GlevParameters, GlweParameters,
+    NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{
@@ -54,15 +54,21 @@ fn check_fourier_cmux<Table: FftTable>() {
             level_count: None,
         },
     );
-    let (_, secret_key) = FourierGlweSecretKey::generate_pair(
+    let secret_key_coefficients = primus_glwe::GlweSecretKey::generate(
         glwe_params.size(),
-        glwe_params.encryption_parameters(),
-        &mut fft,
+        (glwe_params.encryption_parameters()).secret_key_sampler(),
         &mut rng,
     );
-    let mut encrypt_workspace = FourierGlweEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+    let secret_key_decrypt =
+        FourierGlweSecretKey::from_coeff_secret_key(&secret_key_coefficients, &mut fft);
+    let mut secret_key = FourierGlweEncryptor::try_new(
+        &secret_key_coefficients,
+        glwe_params.encryption_parameters(),
+    )
+    .unwrap();
+
     let mut decrypt_workspace = FourierGlweDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
-    let mut gadget_workspace = FourierGlweGadgetEncryptWorkspace::new(params.size());
+
     let mut cmux_workspace = FourierGlweExternalProductWorkspace::new(params.size());
 
     let messages = [plaintext(1), plaintext(7), plaintext(12)];
@@ -77,7 +83,6 @@ fn check_fourier_cmux<Table: FftTable>() {
             PlaintextEmbedding::Unsigned,
             &mut fft,
             &mut rng,
-            &mut encrypt_workspace,
         );
         fourier.write_torus_form(ciphertext, &mut fft);
     }
@@ -113,7 +118,6 @@ fn check_fourier_cmux<Table: FftTable>() {
             &params,
             &mut fft,
             &mut rng,
-            &mut gadget_workspace,
         );
 
         if control_count == 1 {
@@ -146,7 +150,7 @@ fn check_fourier_cmux<Table: FftTable>() {
         let mut output_fourier = FourierGlweOwned::zero(params.fourier_glwe_len());
         output.write_fourier_form(&mut output_fourier, &mut fft);
         assert_eq!(
-            secret_key
+            secret_key_decrypt
                 .decrypt_message(
                     &output_fourier,
                     &glwe_params,
@@ -393,12 +397,12 @@ fn check_fourier_ternary_cmux<Table: FftTable>() {
     );
     let secret = secret();
     let coeff_key = GlweSecretKey::<u64>::new(secret.clone(), glwe.size(), glwe.secret_key_distr());
-    let key = FourierGlweSecretKey::from_coeff_secret_key(&coeff_key, &mut fft);
+    let mut key = FourierGlweEncryptor::try_new(&coeff_key, glwe.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(51);
     let input = encrypt(&message(Q), &secret, Q, &mut rng);
     let input_phase = phase(input.as_ref(), &secret, Q);
     let mut controls = vec![Complex64::default(); 2 * params.fourier_ggsw_len()];
-    let mut encrypt_workspace = FourierGlweGadgetEncryptWorkspace::new(params.size());
+
     let mut workspace = FourierGlweTernaryCmuxWorkspace::new(params.size());
     let mut output = Glwe::new(vec![u64::MAX; params.glwe_len()]);
     for selector in [1isize, -1, 0] {
@@ -408,7 +412,6 @@ fn check_fourier_ternary_cmux<Table: FftTable>() {
             &params,
             &mut fft,
             &mut rng,
-            &mut encrypt_workspace,
         );
         let (positive, negative) = controls.split_at(params.fourier_ggsw_len());
         // Sign/wrap boundaries and an interior shift; zero follows dirty scratch.

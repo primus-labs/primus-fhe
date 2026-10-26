@@ -1,9 +1,8 @@
 //! Native-torus automorphisms using Fourier key switching.
 
 use crate::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlweKeySwitchingKey,
-    FourierGlweKeySwitchingWorkspace, FourierGlweSecretKey, GlevParameters, GlweSecretKey,
-    GlweSize,
+    FourierGlweEncryptor, FourierGlweKeySwitchingKey, FourierGlweKeySwitchingWorkspace,
+    GlevParameters, GlweSecretKey, GlweSize,
 };
 use num_traits::ConstZero;
 use primus_data::{Data, DataMut};
@@ -43,64 +42,51 @@ impl<T: TorusFftValue> FourierGlweAutomorphismKey<T> {
     /// Generates an automorphism key.
     ///
     /// # Correctness
-    /// Both secrets must represent the same key. The Fourier secret must have
-    /// been constructed with the supplied FFT table instance.
+    /// Evaluation must use the FFT table instance supplied during generation.
     /// Coefficients negated by the automorphism must have representable signed
     /// negations, as required by [`CoeffAutomorphismPermutation::apply_signed_to`].
     ///
     /// # Panics
     /// Panics if degree is not odd and below `2N`, or key, parameter, FFT
-    /// and gadget workspace layouts differ. Checks precede sampling.
+    /// layouts differ. Checks precede sampling.
     #[must_use]
     pub fn generate<Table: FftTable, R: rand::Rng + rand::CryptoRng>(
         degree: usize,
-        secret: &GlweSecretKey<T>,
-        fourier_secret: &FourierGlweSecretKey,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         params: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        workspace: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self {
-        fourier_secret.assert_gadget_compatible(params, fft);
-        workspace.assert_glev_compatible(params.size());
-        assert_eq!(
-            secret.glwe_size(),
-            params.glwe_size(),
-            "automorphism secret layout mismatch"
-        );
+        encryptor.assert_gadget_compatible(params, fft);
 
-        Self::generate_kernel(degree, secret, fourier_secret, params, fft, rng, workspace)
+        Self::generate_kernel(degree, encryptor, params, fft, rng)
     }
 
-    /// Generates after the caller checks both secret layouts, FFT and GLev
-    /// workspace against `params`. The permutation still validates `degree`.
+    /// Caller checked the target layout and FFT against `params`; the
+    /// permutation still validates the odd automorphism degree.
     pub(crate) fn generate_kernel<Table: FftTable, R: rand::Rng + rand::CryptoRng>(
         degree: usize,
-        secret: &GlweSecretKey<T>,
-        fourier_secret: &FourierGlweSecretKey,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         params: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        workspace: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self {
+        let secret = encryptor.coefficient_secret();
         let size = secret.glwe_size();
         let permutation = CoeffAutomorphismPermutation::new(degree, size.poly_length());
-        let mut transformed = vec![T::SignedInteger::ZERO; size.mask_len()];
+        let mut transformed = GlweSecretKey::new(
+            vec![T::SignedInteger::ZERO; size.mask_len()],
+            size,
+            secret.distr(),
+        );
         for (input, output) in secret
             .iter()
-            .zip(transformed.chunks_exact_mut(size.poly_length().get()))
+            .zip(transformed.key.chunks_exact_mut(size.poly_length().get()))
         {
             permutation.apply_signed_to::<T>(input, output);
         }
-        let transformed = GlweSecretKey::new(transformed, size, secret.distr());
-        let key_switching = FourierGlweKeySwitchingKey::generate_kernel(
-            &transformed,
-            fourier_secret,
-            params,
-            fft,
-            rng,
-            workspace,
-        );
+        let key_switching =
+            FourierGlweKeySwitchingKey::generate_kernel(&transformed, encryptor, params, fft, rng);
         Self {
             fourier_permutation: fft.table().automorphism_map(degree),
             degree,

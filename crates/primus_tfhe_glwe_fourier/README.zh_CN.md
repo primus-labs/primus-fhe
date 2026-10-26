@@ -75,7 +75,7 @@ Sparse BR 须在 `config.method` 中显式选择 `BlindRotationMethod::Sparse`�
 
 ## Features
 
-默认启用 RustFFT 和 `split-trace`，默认 trace 表示仍为 ordinary。`split-trace` 增加 Split35 能力及其精确密钥生成所需的辅助 NTT/CRT；关闭它即可去掉这项依赖，普通 Fourier 运算不需要 NTT。可选 `simd` 启用依赖中的 nightly SIMD 算术，不选择 FFT 引擎。
+默认启用 RustFFT 和 `split-trace`，默认 trace 表示仍为 ordinary。`split-trace` 增加 Split35 能力。底层 GLWE Fourier feature 包含系数建钥使用的内部辅助 NTT/CRT 依赖，与 trace 表示的选择无关。可选 `simd` 启用依赖中的 nightly SIMD 算术，不选择 FFT 引擎。
 
 | Cargo 参数 | 可用引擎 | Trace 能力 |
 | --- | --- | --- |

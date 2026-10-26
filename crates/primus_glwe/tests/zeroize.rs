@@ -12,10 +12,7 @@ use std::{
 };
 
 use primus_distr::SecretKeySampler;
-use primus_fft::Complex64;
-use primus_glwe::{
-    FourierGlweSecretKey, GlweSecretKey, GlweSize, NttGlweSecretKey, SecretKeyDistr,
-};
+use primus_glwe::{GlweSecretKey, GlweSize, NttGlweSecretKey, SecretKeyDistr};
 use rand::{TryCryptoRng, TryRng};
 
 struct ObservingAllocator;
@@ -170,23 +167,25 @@ fn secret_storage_is_erased_on_drop_and_unwind() {
         )
     });
 
-    let mut fourier = vec![Complex64::new(1.0, 1.0); 2 * size.fourier_mask_len()];
-    let data = fourier.as_ptr().cast();
-    let len = size_of_val(fourier.as_slice());
-    fourier.truncate(size.fourier_mask_len());
-    assert_erased_on_drop(
-        FourierGlweSecretKey::new(fourier, size, SecretKeyDistr::UniformBinary),
-        data,
-        len,
-    );
-
-    let mut invalid_fourier = vec![Complex64::new(1.0, 1.0); 2 * size.fourier_mask_len()];
-    let data = invalid_fourier.as_ptr().cast();
-    let len = size_of_val(invalid_fourier.as_slice());
-    invalid_fourier.truncate(size.fourier_mask_len() - 1);
-    assert_erased_on_rejection(data, len, || {
-        FourierGlweSecretKey::new(invalid_fourier, size, SecretKeyDistr::UniformBinary)
-    });
+    #[cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+    {
+        #[cfg(feature = "rustfft")]
+        type Table = primus_fft::RustFftTable;
+        #[cfg(not(feature = "rustfft"))]
+        type Table = primus_fft::TfheFftTable;
+        use primus_fft::FftTable;
+        let table = Table::new(size.poly_length());
+        let mut fft = primus_fft::FftEngine::new(&table);
+        let coefficients = GlweSecretKey::<u32>::new(
+            vec![1; size.mask_len()],
+            size,
+            SecretKeyDistr::UniformBinary,
+        );
+        let key = primus_glwe::FourierGlweSecretKey::from_coeff_secret_key(&coefficients, &mut fft);
+        let data = key.iter().next().unwrap().as_ref().as_ptr().cast();
+        let len = size.fourier_mask_len() * size_of::<primus_fft::Complex64>();
+        assert_erased_on_drop(key, data, len);
+    }
 
     let sampler = SecretKeySampler::<u32>::new(SecretKeyDistr::UniformBinary);
     let size = GlweSize::new(GlweDimension::new(1), PolyLength::new(64));

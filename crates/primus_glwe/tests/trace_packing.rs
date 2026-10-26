@@ -1,10 +1,11 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlwePackingWorkspace, FourierGlweSecretKey,
-    FourierGlweTraceKey, FourierGlweTraceWorkspace, GlevParameters, GlweParameters, GlweSecretKey,
-    GlweSize, NttGlweGadgetEncryptWorkspace, NttGlwePackingWorkspace, NttGlweSecretKey,
-    NttGlweTraceKey, NttGlweTraceWorkspace, SecretKeyDistr,
+    FourierGlwePackingWorkspace, FourierGlweTraceKey, FourierGlweTraceWorkspace, GlevParameters,
+    GlweParameters, GlweSecretKey, GlweSize, NttGlweGadgetEncryptWorkspace,
+    NttGlwePackingWorkspace, NttGlweSecretKey, NttGlweTraceKey, NttGlweTraceWorkspace,
+    SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{glwe::Glwe, lwe::Lwe};
@@ -330,10 +331,10 @@ fn fourier_trace_projection_and_packing_backend<Table: FftTable>() {
     );
     let s = secret();
     let coeff = GlweSecretKey::<u64>::new(s.clone(), size, SecretKeyDistr::UniformTernary);
-    let sk = FourierGlweSecretKey::from_coeff_secret_key(&coeff, &mut fft);
+    let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x5452414345);
-    let mut gadget = FourierGlweGadgetEncryptWorkspace::new(glev.size());
-    let key = FourierGlweTraceKey::generate(&coeff, &sk, &glev, &mut fft, &mut rng, &mut gadget);
+
+    let key = FourierGlweTraceKey::generate(&mut sk, &glev, &mut fft, &mut rng);
     let mut workspace = FourierGlweTraceWorkspace::new(size);
     let m = message(q);
     let input = encrypt(&m, &s, q, &mut rng);

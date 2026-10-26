@@ -4,8 +4,8 @@ use primus_data::{Data, DataMut};
 use primus_encoding::{PlaintextEmbedding, ScaledCodec};
 use primus_fft::{Complex64, FftEngine, FftTable, TorusFftValue};
 use primus_glwe::{
-    FourierGlweCiphertext, FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace,
-    FourierGlweSecretKey, GlweCiphertext, GlweParameters, GlweSecretKey,
+    FourierGlweCiphertext, FourierGlweDecryptWorkspace, FourierGlweEncryptor, FourierGlweSecretKey,
+    GlweCiphertext, GlweParameters, GlweSecretKey,
 };
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
@@ -15,8 +15,8 @@ use crate::{TfheClientError, TfheContext};
 
 /// Prepared private-key client for the accumulator GLWE domain.
 ///
-/// Owns one transformed accumulator secret and reusable conversion workspace,
-/// borrowing the transform context and owning independently bound message parameters.
+/// Borrows the context and coefficient secret, owning exact encryption setup,
+/// a Fourier decryption cache and independently bound message parameters.
 /// Ciphertexts use coefficient representation and the accumulator secret, which
 /// differs from the external LWE domain used by [`crate::Encryptor`].
 /// Construction prepares all buffers; `encrypt_to` and `decrypt_to` do not allocate.
@@ -31,7 +31,7 @@ where
     secret: FourierGlweSecretKey,
     transformed: FourierGlweCiphertext<Vec<Complex64>>,
     fft: FftEngine<'a, Table>,
-    encrypt: FourierGlweEncryptWorkspace<T>,
+    encrypt: FourierGlweEncryptor<'a, T>,
     decrypt: FourierGlweDecryptWorkspace,
 }
 
@@ -45,7 +45,7 @@ where
     /// Rejects an incompatible key or codec modulus before preparing the secret.
     pub fn try_new(
         context: &'a TfheContext<T, Table, LM>,
-        secret_key: &GlweSecretKey<T>,
+        secret_key: &'a GlweSecretKey<T>,
         codec: ScaledCodec<T, NativeModulus<T>>,
     ) -> Result<Self, TfheClientError> {
         context
@@ -54,6 +54,8 @@ where
         let parameters =
             GlweParameters::try_from_glev(context.parameters().blind_rotation_params(), codec)
                 .map_err(|_| crate::ClientError::CodecModulusMismatch)?;
+        let encrypt = FourierGlweEncryptor::try_new(secret_key, parameters.encryption_parameters())
+            .map_err(crate::error::glwe_encryption_error)?;
         let mut fft = context.new_fft_engine();
         let secret = FourierGlweSecretKey::from_coeff_secret_key(secret_key, &mut fft);
         Ok(Self {
@@ -61,7 +63,7 @@ where
             secret,
             transformed: FourierGlweCiphertext::zero(parameters.size().fourier_glwe_len()),
             fft,
-            encrypt: FourierGlweEncryptWorkspace::new(parameters.poly_length()),
+            encrypt,
             decrypt: FourierGlweDecryptWorkspace::new(parameters.poly_length()),
             parameters,
         })
@@ -85,30 +87,22 @@ where
     ///
     /// # Panics
     /// Panics before sampling if message or output length is wrong. A plaintext-range
-    /// or RNG panic may consume randomness and modify scratch; transform panics may
-    /// partially write output. See
-    /// [`FourierGlweSecretKey::encrypt_message_to`].
+    /// or RNG panic may consume randomness and modify scratch, leaving output
+    /// untouched. No FFT is performed. See
+    /// [`FourierGlweEncryptor::encrypt_message_coeff_to`].
     pub fn encrypt_to<R, S>(&mut self, message: &[T], output: &mut GlweCiphertext<S>, rng: &mut R)
     where
         R: rand::Rng + rand::CryptoRng,
         S: DataMut<Elem = T>,
     {
         let parameters = &self.parameters;
-        assert_eq!(
-            (message.len(), output.as_ref().len()),
-            (parameters.poly_length().get(), parameters.glwe_len()),
-            "accumulator encryption layout mismatch"
-        );
-        self.secret.encrypt_message_to(
+        self.encrypt.encrypt_message_coeff_to(
             &Polynomial::new(message),
-            &mut self.transformed,
+            output,
             parameters,
             PlaintextEmbedding::Unsigned,
-            &mut self.fft,
             rng,
-            &mut self.encrypt,
         );
-        self.transformed.write_torus_form(output, &mut self.fft);
     }
 
     /// Allocates and decodes all N coefficients. Inherits [`Self::decrypt_to`]'s contracts.
@@ -161,11 +155,11 @@ where
     /// Builds Scaled encoding at ring Q for `t_ring`, independently of the
     /// external LWE input/output message moduli and CBS gadget scales.
     /// Inherits [`crate::AccumulatorClient::try_new`]'s contracts and errors.
-    pub fn accumulator_client(
-        &self,
-        secret_key: &GlweSecretKey<T>,
+    pub fn accumulator_client<'a>(
+        &'a self,
+        secret_key: &'a GlweSecretKey<T>,
         t_ring: T,
-    ) -> Result<crate::AccumulatorClient<'_, T, Table, LM>, crate::TfheClientError> {
+    ) -> Result<crate::AccumulatorClient<'a, T, Table, LM>, crate::TfheClientError> {
         let codec = ScaledCodec::try_new(t_ring, self.parameters().ring_modulus())
             .map_err(crate::ClientError::from)?;
         crate::AccumulatorClient::try_new(self, secret_key, codec)

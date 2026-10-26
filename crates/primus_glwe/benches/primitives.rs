@@ -11,9 +11,9 @@ use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace, FourierGlweEncryptWorkspace,
-    FourierGlweGadgetEncryptWorkspace, FourierGlwePackingWorkspace, FourierGlweSecretKey,
+    FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace, FourierGlwePackingWorkspace,
     FourierGlweTraceKey, FourierGlweTraceWorkspace, GlevParameters, GlweParameters,
     NttGlweGadgetEncryptWorkspace, NttGlwePackingWorkspace, NttGlweSecretKey, NttGlweTraceKey,
     NttGlweTraceWorkspace, SecretKeyDistr,
@@ -198,12 +198,12 @@ fn fourier_primitives(c: &mut Criterion) {
             3.2,
         );
         let size = params.size();
-        let (coeff, sk) = FourierGlweSecretKey::generate_pair(
+        let coeff = primus_glwe::GlweSecretKey::generate(
             params.size(),
-            params.encryption_parameters(),
-            &mut fft,
+            (params.encryption_parameters()).secret_key_sampler(),
             &mut rng,
         );
+        let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
         let glev = GlevParameters::with_glwe_params(
             &params,
             DecompositionConfig {
@@ -211,19 +211,17 @@ fn fourier_primitives(c: &mut Criterion) {
                 level_count: Some(DecompositionLevelCount::new(3)),
             },
         );
-        let mut gadget = FourierGlweGadgetEncryptWorkspace::new(glev.size());
-        let key =
-            FourierGlweTraceKey::generate(&coeff, &sk, &glev, &mut fft, &mut rng, &mut gadget);
+
+        let key = FourierGlweTraceKey::generate(&mut sk, &glev, &mut fft, &mut rng);
         let mut trace = FourierGlweTraceWorkspace::new(size);
         let message = Polynomial::new((0..n).map(|i| (i % 16) as u64).collect::<Vec<_>>());
-        let mut encryption = FourierGlweEncryptWorkspace::new(poly_length);
+
         let encrypted = sk.encrypt_message(
             &message,
             &params,
             PlaintextEmbedding::Unsigned,
             &mut fft,
             &mut rng,
-            &mut encryption,
         );
         let mut input = Glwe::new(vec![0u64; size.glwe_len()]);
         encrypted.write_torus_form(&mut input, &mut fft);
@@ -257,7 +255,6 @@ fn fourier_primitives(c: &mut Criterion) {
                 PlaintextEmbedding::Unsigned,
                 &mut fft,
                 &mut rng,
-                &mut encryption,
             );
             let mut partial_input = Glwe::new(vec![0u64; size.glwe_len()]);
             encrypted.write_torus_form(&mut partial_input, &mut fft);
@@ -339,12 +336,12 @@ fn fourier_automorphism_backend<Table: FftTable>(c: &mut Criterion, backend: &st
             SecretKeyDistr::UniformBinary,
             3.2,
         );
-        let (coeff, sk) = FourierGlweSecretKey::generate_pair(
+        let coeff = primus_glwe::GlweSecretKey::generate(
             params.size(),
-            params.encryption_parameters(),
-            &mut fft,
+            (params.encryption_parameters()).secret_key_sampler(),
             &mut rng,
         );
+        let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
         let glev = GlevParameters::with_glwe_params(
             &params,
             DecompositionConfig {
@@ -352,26 +349,17 @@ fn fourier_automorphism_backend<Table: FftTable>(c: &mut Criterion, backend: &st
                 level_count: Some(DecompositionLevelCount::new(3)),
             },
         );
-        let mut gadget = FourierGlweGadgetEncryptWorkspace::new(glev.size());
-        let key = FourierGlweAutomorphismKey::generate(
-            3,
-            &coeff,
-            &sk,
-            &glev,
-            &mut fft,
-            &mut rng,
-            &mut gadget,
-        );
+
+        let key = FourierGlweAutomorphismKey::generate(3, &mut sk, &glev, &mut fft, &mut rng);
         let mut workspace = FourierGlweAutomorphismWorkspace::new(params.size());
         let message = Polynomial::new((0..n).map(|i| (i % 16) as u64).collect::<Vec<_>>());
-        let mut encryption = FourierGlweEncryptWorkspace::new(poly_length);
+
         let input = sk.encrypt_message(
             &message,
             &params,
             PlaintextEmbedding::Unsigned,
             &mut fft,
             &mut rng,
-            &mut encryption,
         );
         let mut output = input.clone();
         let mut group = c.benchmark_group(format!("glwe/automorphism/{backend}/k{k}_n{n}"));

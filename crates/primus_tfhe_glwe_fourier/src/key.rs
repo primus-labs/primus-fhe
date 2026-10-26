@@ -5,10 +5,7 @@ mod circuit;
 pub use circuit::CircuitBootstrapServerKey;
 
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
-use primus_glwe::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlweKeySwitchingKey, FourierGlweSecretKey,
-    SecretKeyDistr,
-};
+use primus_glwe::{FourierGlweEncryptor, FourierGlweKeySwitchingKey, SecretKeyDistr};
 use primus_modulus::NativeModulus;
 use primus_tfhe_glwe::ClientKey;
 
@@ -131,7 +128,6 @@ where
 {
     pub(crate) context: &'a TfheContext<T, Table, LM>,
     pub(crate) fft: FftEngine<'a, Table>,
-    pub(crate) gadget: FourierGlweGadgetEncryptWorkspace<T>,
 }
 
 impl<'a, T, Table, LM> KeyGenerator<'a, T, Table, LM>
@@ -140,13 +136,11 @@ where
     LM: RingContext<T>,
     Table: FftTable,
 {
-    /// Creates a key generator with reusable Fourier scratch.
+    /// Creates a key generator with reusable FFT scratch.
     pub fn new(context: &'a TfheContext<T, Table, LM>) -> Self {
-        let blind_rotation_ggsw = context.parameters().blind_rotation_params();
         Self {
             context,
             fft: context.new_fft_engine(),
-            gadget: FourierGlweGadgetEncryptWorkspace::new(blind_rotation_ggsw.size()),
         }
     }
 
@@ -157,8 +151,8 @@ where
     ///
     /// # Correctness
     /// Independently generated components must share the actual secrets and this
-    /// context's transform representation. Imported accumulator coefficients inherit
-    /// [`FourierGlweSecretKey::from_coeff_secret_key`]'s numerical requirements.
+    /// context's transform representation. Imported accumulator coefficients must
+    /// fit the configured sampler support; ordinary FFT error remains budgeted.
     /// Sparse matching is not constant-time; see [`SparseGlweBootstrappingKey`]
     /// for the conditional-distribution and security requirements.
     ///
@@ -173,11 +167,20 @@ where
     ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
         client_key.check_compatible(self.context.parameters())?;
         let sparse_layout = self.prepare_blind_rotation()?;
-        let transformed = FourierGlweSecretKey::from_coeff_secret_key(
+        let mut encryptor = FourierGlweEncryptor::try_new(
             client_key.glwe_secret_key(),
-            &mut self.fft,
-        );
-        self.generate_blind_rotation_key_with_main(client_key, &transformed, sparse_layout, rng)
+            self.context
+                .parameters()
+                .blind_rotation_params()
+                .encryption_parameters(),
+        )
+        .map_err(crate::error::glwe_encryption_error)?;
+        self.generate_blind_rotation_key_with_accumulator(
+            client_key,
+            &mut encryptor,
+            sparse_layout,
+            rng,
+        )
     }
 
     /// Generates ring KS material from the accumulator to the padded small secret.
@@ -199,7 +202,7 @@ where
             .evaluation()
             .check_key_switching_parameters(key_switching)?;
         client_key.check_compatible(self.context.parameters())?;
-        Ok(self.generate_glwe_key_switching_key(key_switching, client_key, rng))
+        self.generate_glwe_key_switching_key(key_switching, client_key, rng)
     }
 
     /// Generates the configured BR and KS pair.
@@ -217,12 +220,16 @@ where
     {
         let sparse_layout = self.prepare_blind_rotation()?;
         let client_key = ClientKey::generate(self.context.parameters(), rng);
-        let transformed = FourierGlweSecretKey::from_coeff_secret_key(
+        let encryptor = FourierGlweEncryptor::try_new(
             client_key.glwe_secret_key(),
-            &mut self.fft,
-        );
+            self.context
+                .parameters()
+                .blind_rotation_params()
+                .encryption_parameters(),
+        )
+        .map_err(crate::error::glwe_encryption_error)?;
         let server_key =
-            self.generate_server_key_with_main(&client_key, transformed, sparse_layout, rng)?;
+            self.generate_server_key_with_accumulator(&client_key, encryptor, sparse_layout, rng)?;
         Ok((client_key, server_key))
     }
 
@@ -242,19 +249,23 @@ where
     {
         client_key.check_compatible(self.context.parameters())?;
         let sparse_layout = self.prepare_blind_rotation()?;
-        let transformed = FourierGlweSecretKey::from_coeff_secret_key(
+        let encryptor = FourierGlweEncryptor::try_new(
             client_key.glwe_secret_key(),
-            &mut self.fft,
-        );
-        self.generate_server_key_with_main(client_key, transformed, sparse_layout, rng)
+            self.context
+                .parameters()
+                .blind_rotation_params()
+                .encryption_parameters(),
+        )
+        .map_err(crate::error::glwe_encryption_error)?;
+        self.generate_server_key_with_accumulator(client_key, encryptor, sparse_layout, rng)
     }
 
     /// Encrypts selected BR controls after key compatibility and layout preparation.
-    /// The borrowed accumulator representation can also be reused by paired CBS generation.
-    fn generate_blind_rotation_key_with_main<R>(
+    /// The borrowed accumulator encryption setup can also be reused by paired CBS generation.
+    fn generate_blind_rotation_key_with_accumulator<R>(
         &mut self,
         client_key: &ClientKey<T>,
-        main_glwe_secret_key: &FourierGlweSecretKey,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         sparse_layout: Option<crate::sparse::SparseKeyLayout>,
         rng: &mut R,
     ) -> Result<BlindRotationKey<T>, KeyGenerationError>
@@ -263,53 +274,48 @@ where
     {
         let parameters = self.context.parameters();
         let blind_rotation_ggsw = parameters.blind_rotation_params();
-        self.gadget.resize(blind_rotation_ggsw.size());
+
         Ok(match sparse_layout {
             None => BlindRotationKey::Classic(FourierGlweBootstrappingKey::generate_fourier(
                 client_key.small_lwe_secret_key(),
                 parameters.small_lwe(),
-                main_glwe_secret_key,
+                encryptor,
                 blind_rotation_ggsw,
                 &mut self.fft,
                 rng,
-                &mut self.gadget,
             )),
             Some(layout) => BlindRotationKey::Sparse({
                 let prepared = self.prepare_sparse_map(client_key, layout, rng)?;
-                self.generate_sparse_bootstrapping_key_with_main(
-                    prepared,
-                    main_glwe_secret_key,
-                    rng,
-                )
+                self.generate_sparse_bootstrapping_key_with_accumulator(prepared, encryptor, rng)
             }),
         })
     }
 
-    /// Consumes the accepted accumulator transform for BR, then releases it before
+    /// Consumes the accepted accumulator encryption setup for BR, then releases it before
     /// allocating KS rows. The caller established client compatibility by sampling or
-    /// validation and prepared this transform with the context's table.
-    fn generate_server_key_with_main<R>(
+    /// validation and prepared exact products for the accepted target.
+    fn generate_server_key_with_accumulator<R>(
         &mut self,
         client_key: &ClientKey<T>,
-        main_glwe_secret_key: FourierGlweSecretKey,
+        mut encryptor: FourierGlweEncryptor<'_, T>,
         sparse_layout: Option<crate::sparse::SparseKeyLayout>,
         rng: &mut R,
     ) -> Result<ServerKey<T>, KeyGenerationError>
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let blind_rotation_key = self.generate_blind_rotation_key_with_main(
+        let blind_rotation_key = self.generate_blind_rotation_key_with_accumulator(
             client_key,
-            &main_glwe_secret_key,
+            &mut encryptor,
             sparse_layout,
             rng,
         )?;
-        drop(main_glwe_secret_key);
+        drop(encryptor);
         let glwe_key_switching_key = self.generate_glwe_key_switching_key(
             self.context.parameters().glwe_key_switching(),
             client_key,
             rng,
-        );
+        )?;
         Ok(ServerKey {
             blind_rotation_key,
             glwe_key_switching_key,
@@ -322,25 +328,25 @@ where
         key_switching: &GlweKeySwitchingParameters<T>,
         client_key: &ClientKey<T>,
         rng: &mut R,
-    ) -> FourierGlweKeySwitchingKey<T>
+    ) -> Result<FourierGlweKeySwitchingKey<T>, KeyGenerationError>
     where
         R: rand::Rng + rand::CryptoRng,
     {
         let parameters = self.context.parameters();
         let padded_small_glwe_secret_key = client_key.padded_small_glwe_secret_key(parameters);
-        let padded_small_glwe_secret_key = FourierGlweSecretKey::from_coeff_secret_key(
+        let mut target = FourierGlweEncryptor::try_new(
             &padded_small_glwe_secret_key,
-            &mut self.fft,
-        );
-        self.gadget.resize(key_switching.output_size());
-        FourierGlweKeySwitchingKey::generate(
+            key_switching.output().encryption_parameters(),
+        )
+        .map_err(crate::error::glwe_encryption_error)?;
+
+        Ok(FourierGlweKeySwitchingKey::generate(
             client_key.glwe_secret_key(),
-            &padded_small_glwe_secret_key,
+            &mut target,
             key_switching,
             &mut self.fft,
             rng,
-            &mut self.gadget,
-        )
+        ))
     }
 
     /// Validates the configured sparse geometry before sampling any secrets or rows.

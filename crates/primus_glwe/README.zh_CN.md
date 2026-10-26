@@ -83,10 +83,11 @@ assert_eq!(decoded, message.as_ref());
 | --- | --- |
 | `GlweSecretKey<T>` | 有符号系数；采样及求值密钥生成 |
 | `NttGlweSecretKey<T>` | 模 `q` 的规范 NTT 剩余类；NTT 加解密 |
-| `FourierGlweSecretKey` | 按整数尺度变换的 Fourier 私钥；原生环面加解密 |
+| `FourierGlweSecretKey` | 按整数尺度变换的 Fourier 解密私钥 |
+| `FourierGlweEncryptor` | 借用系数私钥，准备精确 native 加密和建钥 |
 | `NttGlwePublicKey<S>` | NTT 零加密；公钥加密 |
 
-所选后端的 `generate_pair` 同时返回系数私钥和变换私钥。传入普通参数的 `size()` 或 gadget 参数的 `glwe_size()`，以及 `encryption_parameters()`。转换已有私钥用 `from_coeff_secret_key`。
+NTT 的 `generate_pair` 同时返回系数私钥和变换私钥。Fourier 先用参数的 sampler 生成 `GlweSecretKey`，再调用 `FourierGlweEncryptor::try_new(&secret, params.encryption_parameters())`。需要解密时才另用 `FourierGlweSecretKey::from_coeff_secret_key(&secret, fft)`。Encryptor 借用系数私钥，使用期间须保持私钥存活。
 
 后续操作须保持构造时的表示：相同模数和长度不能证明 NTT 根、求值顺序或秘密身份相同。`NttGlweSecretKey::new` 检查导入布局，规范剩余类、分布和变换来源由调用方保证。公钥原始字节使用本机字节序，不包含参数元数据。私钥缓冲区析构时擦除；显式清零后应丢弃私钥。
 
@@ -104,7 +105,7 @@ assert_eq!(decoded, message.as_ref());
 
 消息方法使用 `GlweParameters`；encoded/零加密和公钥生成使用 `GlweEncryptionParameters`。`Unsigned` 与 `Centered` 均接收 `[0, t)` 中的规范剩余类，centered 的 `t-1` 表示 `-1`；两者使用相同解码器。解码结果保留系数类型 `T`。
 
-NTT 私钥运算不需要工作区。Fourier 加解密使用 `FourierGlweEncryptWorkspace<T>` / `FourierGlweDecryptWorkspace`；NTT 公钥加密使用 `NttGlwePublicEncryptWorkspace<T>`。用多项式长度构造并复用；它们析构时擦除自身的秘密中间量，调用方持有的明文和相位输出另行管理生命周期。
+NTT 私钥运算不需要工作区。Fourier 加密复用准备好的 encryptor，无需额外传工作区；解密使用 `FourierGlweDecryptWorkspace`。NTT 公钥加密使用 `NttGlwePublicEncryptWorkspace<T>`。复用这些资源，调用方持有的明文和相位输出按自身生命周期擦除。Encryptor 只在准备时检查声明的 sampler 支持，拥有析构时擦除的精确乘积缓存和一行系数缓冲。导入任意系数可用 `FourierGlweEncryptor::from_coeff_secret_key`，采用完整 signed 字宽界；u64 此时使用成本较高的 O(kN²) schoolbook 乘法。
 
 NTT 还提供 `encrypt_message_coeff_to`、`decrypt_phase_coeff_to` 和 `decrypt_message_coeff_to`，用于系数密文。最后一个参数是无需预先清零的 N 元素 scratch 切片。加密后其中保留秘密相关乘积，宜使用 `zeroize::Zeroizing<Vec<T>>` 等可擦除的拥有者。
 
@@ -114,9 +115,9 @@ NTT 还提供 `encrypt_message_coeff_to`、`decrypt_phase_coeff_to` 和 `decrypt
 
 ## Gadget 密文
 
-`encrypt_glev_to` 和 `encrypt_ggsw_to` 对系数域环多项式应用 gadget 缩放，不做普通明文编码。GGSW 控制位是常数多项式 `0` 或 `1`。从 `GadgetSize` 构造 gadget 工作区：GLev 需要匹配多项式长度，GGSW 还需匹配层数。
+`encrypt_glev_to` 和 `encrypt_ggsw_to` 对系数域环多项式应用 gadget 缩放，不做普通明文编码。GGSW 控制位是常数多项式 `0` 或 `1`。NTT 从 `GadgetSize` 构造 gadget 工作区：GLev 需要匹配多项式长度，GGSW 还需匹配层数。Fourier 在不同 gadget 基与层数间复用同一 encryptor，行对角项在 native 环中完成后才 FFT。
 
-`encrypt_ggsw_constant_batch_to` 写入连续的变换域 GGSW：NTT 为 `input.len() * params.ggsw_len()` 个剩余类，Fourier 为 `input.len() * params.fourier_ggsw_len()` 个复数。NTT 常数须是模 q 的规范剩余类，Fourier 常数使用原生环值。两后端也提供 `encrypt_ggsw_constant_batch_coeff_to` 写入系数输出，其 scratch 要求见方法文档。
+`encrypt_ggsw_constant_batch_to` 写入连续的变换域 GGSW：NTT 为 `input.len() * params.ggsw_len()` 个剩余类，Fourier 为 `input.len() * params.fourier_ggsw_len()` 个复数。NTT 常数须是模 q 的规范剩余类，Fourier 常数使用原生环值。两后端也提供 `encrypt_ggsw_constant_batch_coeff_to` 写入系数输出；Fourier 直接写出精确 native 行，不需要 FFT scratch 或 inverse 舍入。`encrypt_message_coeff_to` 同样可直接写出普通系数密文。
 
 ## 求值原语
 
@@ -126,11 +127,11 @@ NTT 还提供 `encrypt_message_coeff_to`、`decrypt_phase_coeff_to` 和 `decrypt
 | `NttGlweAutomorphismKey` / `FourierGlweAutomorphismKey` | 对 `[1, 2N)` 中奇数 `d` 应用 `X -> X^d`，返回到原秘密下 |
 | `NttGlweSchemeSwitchKey` / `FourierGlweSchemeSwitchKey` | 同一秘密下，将系数 GLev 转为变换域 GGSW |
 
-用 `GlweKeySwitchingParameters::new(input_dimension, output_glev)` 准备完整参数，再传给两个 key-switching key 的 `generate` 方法。输入秘密须匹配声明的维数和多项式长度；`output_glev` 提供目标布局、分解基及密钥行加密噪声。
+用 `GlweKeySwitchingParameters::new(input_dimension, output_glev)` 准备完整参数，再传给两个 key-switching key 的 `generate` 方法。输入秘密须匹配声明的维数和多项式长度；`output_glev` 提供目标布局、分解基及密钥行加密噪声。Fourier 生成时传入目标准备态，不再分别传变换私钥和 gadget 工作区。
 
 求值密钥持有布局及分解基，匹配的工作区构造一次即可复用。自同构提供系数域 `apply_to` 和变换域 `apply_ntt_to` / `apply_fourier_to`；直接 Fourier 输出的舍入可能不同于系数往返路径。
 
-[Scheme switching](src/scheme_switch) 生成时需要相互匹配的系数及变换私钥。输出 gadget 缩放继承输入 GLev；`key_basis()` 控制分解，可以不同于输出基。传入的外积工作区须匹配 `key.key_size()`。
+[Scheme switching](src/scheme_switch) 在 NTT 生成时使用相互匹配的系数及变换私钥，Fourier 生成时只传一个目标准备态。Fourier 自同构和 trace 生成同样只接收准备态，内部从目标秘密派生所需明文。输出 gadget 缩放继承输入 GLev；`key_basis()` 控制分解，可以不同于输出基。传入的外积工作区须匹配 `key.key_size()`。
 
 ## Trace、投影与展开
 
@@ -169,7 +170,7 @@ Trace packing 使用 [RevHomTrace](https://github.com/Stirling75/RevHomTrace/blo
 
 ## Features
 
-默认 features 为空。`ntt` 启用 NTT 运算；`fourier` 启用普通 Fourier API，不选择 FFT engine，也不引入 NTT 依赖。使用 `rustfft` 或 `tfhe-fft` 同时启用 Fourier 及具体 engine，两者可共存。另加 `split-trace` 启用 Split35 密钥及其辅助 NTT/CRT 密钥生成，例如 `--features rustfft,split-trace`；它启用 Fourier，但不启用 NTT GLWE API。`simd` 只转发给已启用的算术依赖，不启用变换后端。
+默认 features 为空。`ntt` 启用 NTT 运算；`fourier` 启用普通 Fourier API 及系数建钥使用的内部辅助 NTT/CRT 依赖，不选择 FFT engine，也不启用 NTT GLWE API。使用 `rustfft` 或 `tfhe-fft` 同时启用 Fourier 及具体 engine，两者可共存。另加 `split-trace` 启用 Split35 密钥，例如 `--features rustfft,split-trace`。`simd` 只转发给已启用的算术依赖，不启用变换后端。
 
 测试、示例和基准声明 `required-features`；缺少时 Cargo 会跳过整个 target。按相应运行命令选择 features。
 

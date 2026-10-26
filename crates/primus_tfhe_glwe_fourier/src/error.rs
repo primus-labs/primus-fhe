@@ -26,3 +26,15 @@ pub enum TfheContextError {
         actual: usize,
     },
 }
+
+/// Maps backend-specific preparation failures to the shared secret boundary.
+pub(crate) fn glwe_encryption_error(error: primus_glwe::FourierGlweEncryptorError) -> TfheKeyError {
+    match error {
+        primus_glwe::FourierGlweEncryptorError::SecretDistributionMismatch => {
+            TfheKeyError::GlweSecretKeyDistributionMismatch
+        }
+        primus_glwe::FourierGlweEncryptorError::SecretMagnitudeTooLarge => {
+            TfheKeyError::InvalidGlweSecretKeyCoefficient
+        }
+    }
+}

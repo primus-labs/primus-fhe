@@ -1,6 +1,5 @@
 use primus_fft::{Complex64, FftTable, TorusFftValue};
-use primus_glwe::{FourierGlweSecretKey, SecretKeyDistr};
-use primus_lattice::ggsw::FourierGgsw;
+use primus_glwe::{FourierGlweEncryptor, SecretKeyDistr};
 use primus_modulus::NativeModulus;
 use primus_reduce::RingContext;
 use primus_tfhe::sparse::BucketMap;
@@ -129,11 +128,13 @@ where
         })
     }
 
-    /// Consumes the checked map and reuses the secret transform shared with optional CBS generation.
-    pub(crate) fn generate_sparse_bootstrapping_key_with_main<R: rand::Rng + rand::CryptoRng>(
+    /// Consumes the checked map and reuses the exact secret products shared with optional CBS generation.
+    pub(crate) fn generate_sparse_bootstrapping_key_with_accumulator<
+        R: rand::Rng + rand::CryptoRng,
+    >(
         &mut self,
         prepared: PreparedSparseMap,
-        output_key: &FourierGlweSecretKey,
+        output_encryptor: &mut FourierGlweEncryptor<'_, T>,
         rng: &mut R,
     ) -> SparseGlweBootstrappingKey<T, NativeModulus<T>> {
         let PreparedSparseMap {
@@ -143,10 +144,9 @@ where
             data_len,
         } = prepared;
         let parameters = self.context.parameters();
-        let size = parameters.blind_rotation_params().size();
 
         // Flatten the private selectors in final bucket order, including each
-        // dummy. One batch reuses level transforms across consecutive zeros;
+        // dummy. One batch reuses exact secret products;
         // fresh randomness and the original ciphertext order are preserved.
         let mut selectors = Zeroizing::new(Vec::with_capacity(
             map.input_indices().len() + selected_input_indices.len(),
@@ -169,18 +169,10 @@ where
         }
         drop(selected_input_indices);
         let gadget = parameters.blind_rotation_params();
-        self.gadget.resize(size);
+
         let mut data = vec![T::ZERO; data_len];
-        let mut transformed = FourierGgsw::<Vec<Complex64>>::zero(size.fourier_ggsw_len());
-        output_key.encrypt_ggsw_constant_batch_coeff_to(
-            &selectors,
-            &mut data,
-            gadget,
-            &mut self.fft,
-            rng,
-            &mut self.gadget,
-            transformed.as_mut(),
-        );
+
+        output_encryptor.encrypt_ggsw_constant_batch_coeff_to(&selectors, &mut data, gadget, rng);
         drop(selectors);
 
         SparseGlweBootstrappingKey::try_new(

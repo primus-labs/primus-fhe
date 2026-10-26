@@ -14,9 +14,7 @@ use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
 use zeroize::Zeroizing;
 
-use crate::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlweSecretKey, GlevParameters, GlweSecretKey,
-};
+use crate::{FourierGlweEncryptor, GlevParameters};
 
 /// Fourier GGSW encryptions of the negated GLWE secret polynomials.
 ///
@@ -35,34 +33,26 @@ impl<T: TorusFftValue> FourierGlweSchemeSwitchKey<T> {
     ///
     /// # Correctness
     ///
-    /// Both secret keys must represent the same secret. The Fourier key must
-    /// have been constructed with the supplied FFT table instance.
+    /// Evaluation must use the FFT table instance supplied during generation.
     ///
     /// # Panics
     ///
-    /// Panics before sampling if key/output layouts, FFT length or gadget
-    /// workspace do not match `key_parameters`, or key storage length overflows.
+    /// Panics before sampling if key/output layouts or FFT length do not match `key_parameters`, or key storage length overflows.
     pub fn generate<Table, R>(
-        secret_key: &GlweSecretKey<T>,
-        fourier_secret_key: &FourierGlweSecretKey,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         output_size: GadgetSize,
         key_parameters: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        workspace: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self
     where
         Table: FftTable,
         R: rand::Rng + rand::CryptoRng,
     {
-        fourier_secret_key.assert_gadget_compatible(key_parameters, fft);
-        workspace.assert_ggsw_compatible(key_parameters.size());
+        let secret_key = encryptor.coefficient_secret();
+        encryptor.assert_gadget_compatible(key_parameters, fft);
+
         let key_size = key_parameters.size();
-        assert_eq!(
-            secret_key.glwe_size(),
-            key_size.glwe_size(),
-            "scheme-switch secret layout mismatch"
-        );
         assert_eq!(
             output_size.glwe_size(),
             key_size.glwe_size(),
@@ -84,13 +74,12 @@ impl<T: TorusFftValue> FourierGlweSchemeSwitchKey<T> {
             for (output, &value) in negated_secret.iter_mut().zip(secret) {
                 *output = value.cast_to_unsigned().wrapping_neg();
             }
-            fourier_secret_key.encrypt_ggsw_kernel_to(
+            encryptor.encrypt_ggsw_kernel_to(
                 Polynomial::new(negated_secret.as_slice()),
                 FourierGgsw::new(entry),
                 key_parameters,
                 fft,
                 rng,
-                workspace,
             );
         }
         Self {

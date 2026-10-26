@@ -2,9 +2,10 @@
 
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable, TfheFftTable, TorusFftValue};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGgswCiphertext, FourierGlweGadgetEncryptWorkspace, FourierGlweSecretKey, GlevParameters,
-    GlweParameters, NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
+    FourierGgswCiphertext, GlevParameters, GlweParameters, NttGlweGadgetEncryptWorkspace,
+    NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::FheUint;
 use primus_lattice::GlweDimension;
@@ -188,15 +189,16 @@ fn check_fourier_batch<T: TorusFftValue, Table: FftTable>() {
     let table = Table::new(PolyLength::new(n));
     let mut fft = FftEngine::new(&table);
     let mut rng = StdRng::seed_from_u64(42);
-    let (_, key) = FourierGlweSecretKey::generate_pair(
+    let key_coefficients = primus_glwe::GlweSecretKey::generate(
         glwe.size(),
-        glwe.encryption_parameters(),
-        &mut fft,
+        (glwe.encryption_parameters()).secret_key_sampler(),
         &mut rng,
     );
-    let mut workspace = FourierGlweGadgetEncryptWorkspace::new(params.size());
+    let mut key =
+        FourierGlweEncryptor::try_new(&key_coefficients, glwe.encryption_parameters()).unwrap();
+
     let sentinel = Complex64::new(7.0, 9.0);
-    // Repeated constants reuse prepared levels; transitions must refresh them.
+    // Repeated constants still require independently sampled rows.
     let constants = [
         T::ZERO,
         T::ZERO,
@@ -224,10 +226,9 @@ fn check_fourier_batch<T: TorusFftValue, Table: FftTable>() {
                 &params,
                 &mut fft,
                 &mut reference_rng,
-                &mut workspace,
             );
         }
-        // A preceding nonconstant encryption leaves a nonzero workspace tail.
+        // A preceding nonconstant encryption must not contaminate constant diagonals.
         if let Some(block) = actual.chunks_exact_mut(params.fourier_ggsw_len()).next() {
             message.as_mut().fill(T::ONE);
             key.encrypt_ggsw_to(
@@ -236,119 +237,64 @@ fn check_fourier_batch<T: TorusFftValue, Table: FftTable>() {
                 &params,
                 &mut fft,
                 &mut rng,
-                &mut workspace,
             );
         }
-        key.encrypt_ggsw_constant_batch_to(
-            input,
-            &mut actual,
-            &params,
-            &mut fft,
-            &mut actual_rng,
-            &mut workspace,
-        );
+        key.encrypt_ggsw_constant_batch_to(input, &mut actual, &params, &mut fft, &mut actual_rng);
         assert_eq!(actual, expected);
         let next_random = reference_rng.next_u64();
         assert_eq!(actual_rng.next_u64(), next_random);
 
         let mut coefficients = vec![T::MAX; input.len() * params.ggsw_len()];
         let mut coefficient_rng = StdRng::seed_from_u64(43);
-        let mut scratch = vec![sentinel; params.fourier_ggsw_len()];
         key.encrypt_ggsw_constant_batch_coeff_to(
             input,
             &mut coefficients,
             &params,
-            &mut fft,
             &mut coefficient_rng,
-            &mut workspace,
-            &mut scratch,
         );
-        let mut expected_coefficients = vec![T::ZERO; params.ggsw_len()];
+        let mut transformed =
+            FourierGgswCiphertext::<Vec<Complex64>>::zero(params.fourier_ggsw_len());
         for (fourier, coefficients) in expected
             .chunks_exact(params.fourier_ggsw_len())
             .zip(coefficients.chunks_exact(params.ggsw_len()))
         {
-            FourierGgswCiphertext::new(fourier).write_torus_form(
-                &mut Ggsw::new(expected_coefficients.as_mut_slice()),
-                &mut fft,
-            );
-            assert_eq!(coefficients, expected_coefficients);
+            Ggsw::new(coefficients).write_fourier_form(&mut transformed, &mut fft);
+            assert_eq!(fourier, transformed.as_ref());
         }
         assert_eq!(coefficient_rng.next_u64(), next_random);
     }
-    let wrong_levels = GlevParameters::with_glwe_params(
-        &glwe,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(3),
-            level_count: Some(DecompositionLevelCount::new(2)),
-        },
-    );
-    for (input, len, size) in [
-        (
-            &constants[..1],
-            params.fourier_ggsw_len() + 1,
-            params.size(),
-        ),
-        (&[][..], 0, wrong_levels.size()),
-    ] {
+    for len in [params.fourier_ggsw_len() - 1, params.fourier_ggsw_len() + 1] {
         let mut output = vec![sentinel; len];
-        let mut workspace = FourierGlweGadgetEncryptWorkspace::new(size);
         let mut rng = StdRng::seed_from_u64(44);
         let mut expected_rng = StdRng::seed_from_u64(44);
         assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                key.encrypt_ggsw_constant_batch_to(
-                    input,
-                    &mut output,
-                    &params,
-                    &mut fft,
-                    &mut rng,
-                    &mut workspace,
-                );
-            }))
+            catch_unwind(AssertUnwindSafe(|| key.encrypt_ggsw_constant_batch_to(
+                &constants[..1],
+                &mut output,
+                &params,
+                &mut fft,
+                &mut rng
+            )))
             .is_err()
         );
         assert!(output.iter().all(|&value| value == sentinel));
         assert_eq!(rng.next_u64(), expected_rng.next_u64());
     }
-    for (len, scratch_len, size) in [
-        (
-            params.ggsw_len() + 1,
-            params.fourier_ggsw_len(),
-            params.size(),
-        ),
-        (
-            params.ggsw_len(),
-            params.fourier_ggsw_len() - 1,
-            params.size(),
-        ),
-        (
-            params.ggsw_len(),
-            params.fourier_ggsw_len(),
-            wrong_levels.size(),
-        ),
-    ] {
+    for len in [params.ggsw_len() - 1, params.ggsw_len() + 1] {
         let mut output = vec![T::MAX; len];
-        let mut scratch = vec![sentinel; scratch_len];
-        let mut workspace = FourierGlweGadgetEncryptWorkspace::new(size);
         let mut rng = StdRng::seed_from_u64(44);
         let mut expected_rng = StdRng::seed_from_u64(44);
         assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                key.encrypt_ggsw_constant_batch_coeff_to(
+            catch_unwind(AssertUnwindSafe(|| key
+                .encrypt_ggsw_constant_batch_coeff_to(
                     &constants[..1],
                     &mut output,
                     &params,
-                    &mut fft,
-                    &mut rng,
-                    &mut workspace,
-                    &mut scratch,
-                );
-            }))
+                    &mut rng
+                )))
             .is_err()
         );
         assert!(output.iter().all(|&value| value == T::MAX));
-        assert!(scratch.iter().all(|&value| value == sentinel));
         assert_eq!(rng.next_u64(), expected_rng.next_u64());
     }
 }

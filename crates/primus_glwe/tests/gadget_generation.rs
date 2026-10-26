@@ -4,10 +4,11 @@ use primus_decompose::{DecompositionBaseLog, primitive::ApproxSignedBasis};
 use primus_encoding::PlaintextEmbedding;
 use primus_encoding::ScaledCodec;
 use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace,
-    FourierGlweSecretKey, GlevParameters, GlweEncryptionParameters, GlweParameters, GlweSecretKey,
-    GlweSize, NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
+    FourierGlweDecryptWorkspace, FourierGlweSecretKey, GlevParameters, GlweEncryptionParameters,
+    GlweParameters, GlweSecretKey, GlweSize, NttGlweGadgetEncryptWorkspace, NttGlweSecretKey,
+    SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{
@@ -75,8 +76,11 @@ fn fourier_gadget_phases_and_external_product() {
     let params = GlevParameters::try_from_parts(size, Arc::clone(&inner), basis).unwrap();
     let coeff_secret_key =
         GlweSecretKey::<u32>::generate(size, inner.secret_key_sampler(), &mut rng);
-    let secret_key = FourierGlweSecretKey::from_coeff_secret_key(&coeff_secret_key, &mut fft);
-    let mut gadget_workspace = FourierGlweGadgetEncryptWorkspace::new(params.size());
+    let mut secret_key =
+        FourierGlweEncryptor::try_new(&coeff_secret_key, params.encryption_parameters()).unwrap();
+    let secret_key_decrypt =
+        FourierGlweSecretKey::from_coeff_secret_key(&coeff_secret_key, &mut fft);
+
     let mut decrypt_workspace = FourierGlweDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
 
     let mut raw_message = vec![0u32; POLY_LENGTH];
@@ -89,7 +93,6 @@ fn fourier_gadget_phases_and_external_product() {
         &params,
         &mut fft,
         &mut rng,
-        &mut gadget_workspace,
     );
 
     for (scalar, glwe) in params
@@ -98,7 +101,7 @@ fn fourier_gadget_phases_and_external_product() {
         .zip(glev.iter_glwe(params.fourier_glwe_len()))
     {
         let mut phase = PolynomialOwned::zero(POLY_LENGTH);
-        secret_key.decrypt_phase_to(&glwe, &mut phase, &mut fft, &mut decrypt_workspace);
+        secret_key_decrypt.decrypt_phase_to(&glwe, &mut phase, &mut fft, &mut decrypt_workspace);
         assert!(native_distance(phase.as_ref()[0], scalar) <= 8);
         assert!(
             phase.as_ref()[1..]
@@ -119,7 +122,6 @@ fn fourier_gadget_phases_and_external_product() {
         &params,
         &mut fft,
         &mut rng,
-        &mut gadget_workspace,
     );
     for (row, glev) in ggsw.iter_glev(params.fourier_glev_len()).enumerate() {
         for (scalar, glwe) in params
@@ -128,7 +130,12 @@ fn fourier_gadget_phases_and_external_product() {
             .zip(glev.iter_glwe(params.fourier_glwe_len()))
         {
             let mut phase = PolynomialOwned::zero(POLY_LENGTH);
-            secret_key.decrypt_phase_to(&glwe, &mut phase, &mut fft, &mut decrypt_workspace);
+            secret_key_decrypt.decrypt_phase_to(
+                &glwe,
+                &mut phase,
+                &mut fft,
+                &mut decrypt_workspace,
+            );
             let expected = expected_ggsw_phase(
                 ring_message.as_ref(),
                 coeff_secret_key.iter().nth(row),
@@ -156,11 +163,10 @@ fn fourier_gadget_phases_and_external_product() {
         &params,
         &mut fft,
         &mut rng,
-        &mut gadget_workspace,
     );
 
     let mut input_fourier = FourierGlweOwned::zero(params.fourier_glwe_len());
-    let mut glwe_workspace = FourierGlweEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+
     // Only the ordinary ciphertext in the external product needs t = 16.
     let glwe_params =
         GlweParameters::try_from_parts(size, inner, ScaledCodec::new(16u32, NativeModulus::new()))
@@ -172,7 +178,6 @@ fn fourier_gadget_phases_and_external_product() {
         PlaintextEmbedding::Unsigned,
         &mut fft,
         &mut rng,
-        &mut glwe_workspace,
     );
     let mut input: TorusGlwe<Vec<u32>> = TorusGlwe::zero(params.glwe_len());
     input_fourier.write_torus_form(&mut input, &mut fft);
@@ -193,7 +198,7 @@ fn fourier_gadget_phases_and_external_product() {
     expected[0] = (16 - plaintext_values[POLY_LENGTH - 1]) % 16;
     expected[1..].copy_from_slice(&plaintext_values[..POLY_LENGTH - 1]);
     assert_eq!(
-        secret_key
+        secret_key_decrypt
             .decrypt_message(
                 &output_fourier,
                 &glwe_params,

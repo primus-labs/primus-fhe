@@ -103,9 +103,9 @@ required-features = ["ntt"]
 [features]
 default = []
 ntt = ["dep:primus_ntt", "primus_lattice/ntt"]
-fourier = ["dep:primus_fft", "primus_lattice/fourier"]
-# Auxiliary NTT/CRT is used only for exact Split35 key generation.
-split-trace = ["fourier", "dep:primus_ntt"]
+# Auxiliary NTT/CRT stays internal to exact coefficient key generation.
+fourier = ["dep:primus_fft", "dep:primus_ntt", "primus_lattice/fourier"]
+split-trace = ["fourier"]
 rustfft = ["fourier", "primus_fft/rustfft"]
 tfhe-fft = ["fourier", "primus_fft/tfhe-fft"]
 simd = [

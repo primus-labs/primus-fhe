@@ -2,6 +2,8 @@
 
 mod coeff;
 #[cfg(feature = "fourier")]
+pub(crate) mod exact;
+#[cfg(feature = "fourier")]
 mod fourier;
 #[cfg(feature = "ntt")]
 mod ntt;
@@ -9,7 +11,7 @@ mod ntt;
 pub use coeff::GlweSecretKey;
 #[cfg(feature = "fourier")]
 pub use fourier::{
-    FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace,
+    FourierGlweDecryptWorkspace, FourierGlweEncryptor, FourierGlweEncryptorError,
     FourierGlweSecretKey,
 };
 #[cfg(feature = "ntt")]

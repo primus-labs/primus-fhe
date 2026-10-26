@@ -1,9 +1,8 @@
 //! Trace keys for coefficient-domain native-torus ciphertexts.
 
 use crate::{
-    FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace,
-    FourierGlweGadgetEncryptWorkspace, FourierGlweSecretKey, GlevParameters, GlweSecretKey,
-    GlweSize,
+    FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace, FourierGlweEncryptor,
+    GlevParameters, GlweSize,
 };
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
@@ -38,36 +37,27 @@ impl<T: TorusFftValue> FourierGlweTraceKey<T> {
     /// layout and FFT requirements of [`FourierGlweAutomorphismKey::generate`].
     ///
     /// # Panics
-    /// Panics if key, parameter, FFT or gadget workspace layouts differ.
+    /// Panics if key, parameter or FFT layouts differ.
     /// Shared compatibility checks precede sampling any automorphism key.
     #[must_use]
     pub fn generate<Table: FftTable, R: rand::Rng + rand::CryptoRng>(
-        secret: &GlweSecretKey<T>,
-        fourier_secret: &FourierGlweSecretKey,
+        encryptor: &mut FourierGlweEncryptor<'_, T>,
         params: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        workspace: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self {
-        fourier_secret.assert_gadget_compatible(params, fft);
-        workspace.assert_glev_compatible(params.size());
-        let glwe_size = secret.glwe_size();
-        assert_eq!(
-            glwe_size,
-            params.glwe_size(),
-            "trace secret layout mismatch"
-        );
+        encryptor.assert_gadget_compatible(params, fft);
+
+        let glwe_size = encryptor.glwe_size();
         let automorphism_keys = (1..=glwe_size.poly_length().log_n())
             .rev()
             .map(|shift| {
                 FourierGlweAutomorphismKey::generate_kernel(
                     (1 << shift) + 1,
-                    secret,
-                    fourier_secret,
+                    encryptor,
                     params,
                     fft,
                     rng,
-                    workspace,
                 )
             })
             .collect();

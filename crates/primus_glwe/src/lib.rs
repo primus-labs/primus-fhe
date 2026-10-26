@@ -5,8 +5,9 @@
 //! enable the corresponding keys, encryption/evaluation APIs and workspaces.
 //! `fourier` is generic over an FFT table; `rustfft` / `tfhe-fft` also enable
 //! `fourier` and select a concrete engine. These features can be combined.
-//! `split-trace` enables Split35 Fourier trace keys and auxiliary NTT/CRT for
-//! their exact key generation. Ordinary Fourier needs no NTT dependency.
+//! `fourier` also enables the internal auxiliary NTT/CRT dependency for exact
+//! coefficient key generation; it does not enable the NTT GLWE API.
+//! `split-trace` adds Split35 Fourier trace keys.
 //! `simd` propagates to active arithmetic dependencies without enabling a backend.
 //!
 //! Message operations use `encrypt_message[_to]` / `decrypt_message[_to]` and
@@ -71,7 +72,7 @@ pub use scheme_switch::NttGlweSchemeSwitchKey;
 pub use secret_key::GlweSecretKey;
 #[cfg(feature = "fourier")]
 pub use secret_key::{
-    FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace,
+    FourierGlweDecryptWorkspace, FourierGlweEncryptor, FourierGlweEncryptorError,
     FourierGlweSecretKey,
 };
 #[cfg(feature = "ntt")]

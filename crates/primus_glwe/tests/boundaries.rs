@@ -8,14 +8,12 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable};
 use primus_glwe::{
-    FourierGgswCiphertext, FourierGlevCiphertext, FourierGlweAutomorphismKey,
-    FourierGlweCiphertext, FourierGlweEncryptWorkspace, FourierGlweGadgetEncryptWorkspace,
-    FourierGlweKeySwitchingKey, FourierGlweSecretKey, FourierGlweTraceKey, GadgetSize,
-    GlevParameters, GlweCiphertext, GlweEncryptionParameters, GlweKeySwitchingParameters,
-    GlweParameters, GlweSecretKey, GlweSize, GlweSizeError, NttGgswCiphertext, NttGlevCiphertext,
-    NttGlweCiphertext, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
-    NttGlweKeySwitchingWorkspace, NttGlwePublicEncryptWorkspace, NttGlwePublicKey,
-    NttGlweSecretKey, SecretKeyDistr,
+    FourierGlweAutomorphismKey, FourierGlweCiphertext, FourierGlweEncryptor,
+    FourierGlweKeySwitchingKey, FourierGlweTraceKey, GadgetSize, GlevParameters, GlweCiphertext,
+    GlweEncryptionParameters, GlweKeySwitchingParameters, GlweParameters, GlweSecretKey, GlweSize,
+    GlweSizeError, NttGgswCiphertext, NttGlevCiphertext, NttGlweCiphertext,
+    NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey, NttGlweKeySwitchingWorkspace,
+    NttGlwePublicEncryptWorkspace, NttGlwePublicKey, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_modulus::{BarrettModulus, NativeModulus};
 use primus_ntt::{NttTable, UintNttTable};
@@ -212,7 +210,7 @@ fn independent_parameter_parts_check_secret_weight_and_codec_domain() {
 }
 
 #[test]
-fn secret_generation_rejects_incompatible_tables_before_sampling() {
+fn ntt_secret_generation_rejects_incompatible_tables_before_sampling() {
     let size = GlweSize::new(GlweDimension::new(1), PolyLength::new(N));
     let modulus = BarrettModulus::new(257u32);
     let params = GlweEncryptionParameters::new(modulus, SecretKeyDistr::UniformBinary, 0.7);
@@ -230,31 +228,14 @@ fn secret_generation_rejects_incompatible_tables_before_sampling() {
         );
         assert_eq!(rng.next_u64(), expected_rng.next_u64());
     }
-
-    let params = GlweEncryptionParameters::new(
-        NativeModulus::<u32>::new(),
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
-    let table = RustFftTable::new(PolyLength::new(N * 2));
-    let mut fft = FftEngine::new(&table);
-    let mut rng = StdRng::seed_from_u64(42);
-    let mut expected_rng = StdRng::seed_from_u64(42);
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| {
-            let _ = FourierGlweSecretKey::generate_pair(size, &params, &mut fft, &mut rng);
-        }))
-        .is_err()
-    );
-    assert_eq!(rng.next_u64(), expected_rng.next_u64());
 }
 
 // KS may change dimension; automorphism and trace must return to the same layout.
 // Every public constructor must reject its own incompatible resources before RNG use.
 fn check_fourier_evaluation_key_generation_boundaries<Table: FftTable>() {
-    let poly_length = PolyLength::new(32);
-    let size = GlweSize::new(GlweDimension::new(2), poly_length);
-    let small_size = GlweSize::new(GlweDimension::new(1), poly_length);
+    let length = PolyLength::new(32);
+    let size = GlweSize::new(GlweDimension::new(2), length);
+    let small_size = GlweSize::new(GlweDimension::new(1), length);
     let long_size = GlweSize::new(GlweDimension::new(2), PolyLength::new(64));
     let distr = SecretKeyDistr::UniformTernary;
     let params = GlevParameters::try_new(
@@ -268,28 +249,26 @@ fn check_fourier_evaluation_key_generation_boundaries<Table: FftTable>() {
         0.7,
     )
     .unwrap();
-    let key_switching = GlweKeySwitchingParameters::new(size.dimension(), params.clone());
-    let long_gadget = GadgetSize::new(long_size, params.basis().level_count());
-    let secret = |size: GlweSize| GlweSecretKey::new(vec![1; size.mask_len()], size, distr);
-    let small_secret = secret(small_size);
-    let long_secret = secret(long_size);
-    let secret = secret(size);
-    let table = Table::new(poly_length);
+    let ks = GlweKeySwitchingParameters::new(size.dimension(), params.clone());
+    let make_secret = |size: GlweSize| GlweSecretKey::new(vec![1; size.mask_len()], size, distr);
+    let secret = make_secret(size);
+    let small = make_secret(small_size);
+    let long = make_secret(long_size);
+    let table = Table::new(length);
     let long_table = Table::new(long_size.poly_length());
-    let mut fft = FftEngine::new(&table);
-    let fourier_secret = FourierGlweSecretKey::from_coeff_secret_key(&secret, &mut fft);
-    let small_fourier = FourierGlweSecretKey::from_coeff_secret_key(&small_secret, &mut fft);
-
-    for (input, output, table, workspace_size) in [
-        (&long_secret, &fourier_secret, &table, params.size()),
-        (&secret, &small_fourier, &table, params.size()),
-        (&secret, &fourier_secret, &long_table, params.size()),
-        (&secret, &fourier_secret, &table, long_gadget),
-        (&small_secret, &fourier_secret, &table, params.size()),
-    ] {
-        for operation in 0..3 {
-            let mut fft = FftEngine::new(table);
-            let mut workspace = FourierGlweGadgetEncryptWorkspace::new(workspace_size);
+    for operation in 0..3 {
+        // Only KS has an independent source key. All three reject wrong target
+        // layouts and FFT lengths before consuming any encryption randomness.
+        for case in 0..if operation == 0 { 4 } else { 2 } {
+            let target = if case == 0 { &small } else { &secret };
+            let input = match case {
+                2 => &long,
+                3 => &small,
+                _ => &secret,
+            };
+            let mut encryptor =
+                FourierGlweEncryptor::try_new(target, params.encryption_parameters()).unwrap();
+            let mut fft = FftEngine::new(if case == 1 { &long_table } else { &table });
             let mut rng = StdRng::seed_from_u64(42);
             let mut expected_rng = StdRng::seed_from_u64(42);
             assert!(
@@ -297,32 +276,27 @@ fn check_fourier_evaluation_key_generation_boundaries<Table: FftTable>() {
                     0 => {
                         let _ = FourierGlweKeySwitchingKey::generate(
                             input,
-                            output,
-                            &key_switching,
+                            &mut encryptor,
+                            &ks,
                             &mut fft,
                             &mut rng,
-                            &mut workspace,
                         );
                     }
                     1 => {
                         let _ = FourierGlweAutomorphismKey::generate(
                             3,
-                            input,
-                            output,
+                            &mut encryptor,
                             &params,
                             &mut fft,
                             &mut rng,
-                            &mut workspace,
                         );
                     }
                     _ => {
                         let _ = FourierGlweTraceKey::generate(
-                            input,
-                            output,
+                            &mut encryptor,
                             &params,
                             &mut fft,
                             &mut rng,
-                            &mut workspace,
                         );
                     }
                 }))
@@ -370,13 +344,14 @@ fn fourier_encryption_rejects_incomplete_and_excess_masks_before_writes() {
     let table = RustFftTable::new(PolyLength::new(N));
     let mut fft = FftEngine::new(&table);
     let mut rng = StdRng::seed_from_u64(42);
-    let (_, key) = FourierGlweSecretKey::generate_pair(
+    let key_coefficients = primus_glwe::GlweSecretKey::generate(
         params.size(),
-        params.encryption_parameters(),
-        &mut fft,
+        (params.encryption_parameters()).secret_key_sampler(),
         &mut rng,
     );
-    let mut workspace = FourierGlweEncryptWorkspace::new(PolyLength::new(N));
+    let mut key =
+        FourierGlweEncryptor::try_new(&key_coefficients, params.encryption_parameters()).unwrap();
+
     let message = Polynomial::new(vec![3u32; N]);
     let sentinel = Complex64::new(7.0, 9.0);
 
@@ -393,7 +368,6 @@ fn fourier_encryption_rejects_incomplete_and_excess_masks_before_writes() {
                     PlaintextEmbedding::Unsigned,
                     &mut fft,
                     &mut rng,
-                    &mut workspace,
                 );
             }))
             .is_err()
@@ -679,10 +653,10 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
 }
 
 #[test]
-fn only_ggsw_requires_matching_workspace_levels_in_both_domains() {
+fn only_ntt_ggsw_requires_matching_workspace_levels() {
     let mut rng = StdRng::seed_from_u64(42);
     let modulus = BarrettModulus::new(132_120_577u32);
-    let ntt_params = GlweParameters::new(
+    let params = GlweParameters::new(
         GlweDimension::new(1),
         PolyLength::new(N),
         16,
@@ -690,103 +664,41 @@ fn only_ggsw_requires_matching_workspace_levels_in_both_domains() {
         SecretKeyDistr::UniformBinary,
         0.7,
     );
-    let fourier_params = GlweParameters::new(
-        GlweDimension::new(1),
-        PolyLength::new(N),
-        16u32,
-        NativeModulus::new(),
-        SecretKeyDistr::UniformBinary,
-        0.7,
-    );
-    let ntt_gadget = GlevParameters::with_glwe_params(
-        &ntt_params,
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(8),
-            level_count: Some(DecompositionLevelCount::new(3)),
-        },
-    );
-    let fourier_gadget = GlevParameters::with_glwe_params(
-        &fourier_params,
+    let gadget = GlevParameters::with_glwe_params(
+        &params,
         DecompositionConfig {
             log_basis: DecompositionBaseLog::new(8),
             level_count: Some(DecompositionLevelCount::new(3)),
         },
     );
     let ntt = UintNttTable::new(PolyLength::new(N), modulus).unwrap();
-    let table = RustFftTable::new(PolyLength::new(N));
-    let mut fft = FftEngine::new(&table);
-    let (_, ntt_key) = NttGlweSecretKey::generate_pair(
-        ntt_params.size(),
-        ntt_params.encryption_parameters(),
+    let (_, key) = NttGlweSecretKey::generate_pair(
+        params.size(),
+        params.encryption_parameters(),
         &ntt,
         &mut rng,
     );
-    let (_, fourier_key) = FourierGlweSecretKey::generate_pair(
-        fourier_params.size(),
-        fourier_params.encryption_parameters(),
-        &mut fft,
-        &mut rng,
-    );
     let message = Polynomial::new(vec![1u32; N]);
-
     for levels in [1, 4] {
-        let size = GadgetSize::new(ntt_params.size(), DecompositionLevelCount::new(levels));
-        let mut ntt_workspace = NttGlweGadgetEncryptWorkspace::new(size);
-        let mut fourier_workspace = FourierGlweGadgetEncryptWorkspace::new(size);
-        let mut ntt_glev = NttGlevCiphertext::<Vec<u32>>::zero(ntt_gadget.glev_len());
-        let mut fourier_glev =
-            FourierGlevCiphertext::<Vec<Complex64>>::zero(fourier_gadget.fourier_glev_len());
-        ntt_key.encrypt_glev_to(
-            &message,
-            &mut ntt_glev,
-            &ntt_gadget,
-            &ntt,
-            &mut rng,
-            &mut ntt_workspace,
-        );
-        fourier_key.encrypt_glev_to(
-            &message,
-            &mut fourier_glev,
-            &fourier_gadget,
-            &mut fft,
-            &mut rng,
-            &mut fourier_workspace,
-        );
-        let mut ntt_output = NttGgswCiphertext::new(vec![7u32; ntt_gadget.ggsw_len()]);
-        let sentinel = Complex64::new(7.0, 9.0);
-        let mut fourier_output =
-            FourierGgswCiphertext::new(vec![sentinel; fourier_gadget.fourier_ggsw_len()]);
+        let mut workspace = NttGlweGadgetEncryptWorkspace::new(GadgetSize::new(
+            params.size(),
+            DecompositionLevelCount::new(levels),
+        ));
+        let mut glev = NttGlevCiphertext::<Vec<u32>>::zero(gadget.glev_len());
+        key.encrypt_glev_to(&message, &mut glev, &gadget, &ntt, &mut rng, &mut workspace);
+        let mut output = NttGgswCiphertext::new(vec![7u32; gadget.ggsw_len()]);
         assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                ntt_key.encrypt_ggsw_to(
-                    &message,
-                    &mut ntt_output,
-                    &ntt_gadget,
-                    &ntt,
-                    &mut rng,
-                    &mut ntt_workspace,
-                );
-            }))
+            catch_unwind(AssertUnwindSafe(|| key.encrypt_ggsw_to(
+                &message,
+                &mut output,
+                &gadget,
+                &ntt,
+                &mut rng,
+                &mut workspace
+            )))
             .is_err()
         );
-        assert_eq!(ntt_output.as_ref(), vec![7u32; ntt_gadget.ggsw_len()]);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                fourier_key.encrypt_ggsw_to(
-                    &message,
-                    &mut fourier_output,
-                    &fourier_gadget,
-                    &mut fft,
-                    &mut rng,
-                    &mut fourier_workspace,
-                );
-            }))
-            .is_err()
-        );
-        assert_eq!(
-            fourier_output.as_ref(),
-            vec![sentinel; fourier_gadget.fourier_ggsw_len()]
-        );
+        assert_eq!(output.as_ref(), vec![7u32; gadget.ggsw_len()]);
     }
 }
 

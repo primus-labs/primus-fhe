@@ -17,10 +17,7 @@ use primus_reduce::ReduceAddSlice;
 use primus_shape::PolyLength;
 use zeroize::Zeroizing;
 
-use crate::{
-    FourierGlweGadgetEncryptWorkspace, FourierGlweSecretKey, GlevParameters,
-    GlweKeySwitchingParameters, GlweSecretKey,
-};
+use crate::{FourierGlweEncryptor, GlevParameters, GlweKeySwitchingParameters, GlweSecretKey};
 
 /// A Fourier-domain GLWE key-switching key for the native torus modulus.
 #[derive(Clone)]
@@ -38,20 +35,19 @@ impl<T: TorusFftValue> FourierGlweKeySwitchingKey<T> {
     ///
     /// # Correctness
     ///
-    /// `output_secret_key` must have been constructed with the supplied FFT table instance.
+    /// Evaluation must use the FFT table instance supplied during generation.
     ///
     /// # Panics
     ///
-    /// Panics if input/output key layouts, FFT or gadget workspace do not match
+    /// Panics if input/output key layouts, FFT do not match
     /// `parameters`. Compatibility checks precede sampling.
     #[must_use]
     pub fn generate<Table, R>(
         input_secret_key: &GlweSecretKey<T>,
-        output_secret_key: &FourierGlweSecretKey,
+        output_encryptor: &mut FourierGlweEncryptor<'_, T>,
         parameters: &GlweKeySwitchingParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        workspace: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self
     where
         Table: FftTable,
@@ -63,30 +59,20 @@ impl<T: TorusFftValue> FourierGlweKeySwitchingKey<T> {
             "input GLWE secret layout mismatch"
         );
         let output = parameters.output();
-        output_secret_key.assert_gadget_compatible(output, fft);
-        workspace.assert_glev_compatible(output.size());
+        output_encryptor.assert_gadget_compatible(output, fft);
 
-        Self::generate_kernel(
-            input_secret_key,
-            output_secret_key,
-            output,
-            fft,
-            rng,
-            workspace,
-        )
+        Self::generate_kernel(input_secret_key, output_encryptor, output, fft, rng)
     }
 
-    /// Generates after the caller checks input polynomial length, output key,
-    /// FFT and GLev workspace against `parameters`.
+    /// Caller checked the source layout, target and FFT against `parameters`.
     /// Automorphism also uses this path without preparing a separate KSK owner;
     /// the combined storage length is checked here for both callers.
     pub(crate) fn generate_kernel<Table, R>(
         input_secret_key: &GlweSecretKey<T>,
-        output_secret_key: &FourierGlweSecretKey,
+        output_encryptor: &mut FourierGlweEncryptor<'_, T>,
         parameters: &GlevParameters<T, NativeModulus<T>>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
-        workspace: &mut FourierGlweGadgetEncryptWorkspace<T>,
     ) -> Self
     where
         Table: FftTable,
@@ -119,13 +105,12 @@ impl<T: TorusFftValue> FourierGlweKeySwitchingKey<T> {
                 .for_each(|(output, &coefficient)| {
                     *output = coefficient.cast_to_unsigned();
                 });
-            output_secret_key.encrypt_glev_kernel_to(
+            output_encryptor.encrypt_glev_kernel_to(
                 Polynomial::new(encoded_secret.as_slice()),
                 FourierGlev::new(entry),
                 output,
                 fft,
                 rng,
-                workspace,
             );
         }
 

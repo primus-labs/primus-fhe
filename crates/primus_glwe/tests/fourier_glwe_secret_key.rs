@@ -2,9 +2,10 @@
 
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, RustFftTable, TorusFftValue};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweCiphertext, FourierGlweDecryptWorkspace, FourierGlweEncryptWorkspace,
-    FourierGlweSecretKey, GlweParameters, GlweSecretKey, SecretKeyDistr,
+    FourierGlweCiphertext, FourierGlweDecryptWorkspace, FourierGlweSecretKey, GlweParameters,
+    GlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::FheUint;
 use primus_lattice::GlweDimension;
@@ -46,25 +47,16 @@ where
             secret_key_distr,
             0.7,
         );
-        // Splitting layout from sampling state must preserve all k*N samples
-        // and the RNG stream before transformation.
-        let seed = rng.next_u64();
-        rng = StdRng::seed_from_u64(seed);
-        let mut expected_rng = StdRng::seed_from_u64(seed);
-        let expected_coefficients = GlweSecretKey::generate(
+        let coefficients = GlweSecretKey::generate(
             params.size(),
-            params.secret_key_sampler(),
-            &mut expected_rng,
-        );
-        let (coefficients, secret_key) = FourierGlweSecretKey::generate_pair(
-            params.size(),
-            params.encryption_parameters(),
-            &mut fft,
+            (params.encryption_parameters()).secret_key_sampler(),
             &mut rng,
         );
-        assert_eq!(coefficients.as_slice(), expected_coefficients.as_slice());
-        assert_eq!(rng.next_u64(), expected_rng.next_u64());
-        let mut encrypt_workspace = FourierGlweEncryptWorkspace::new(PolyLength::new(POLY_LENGTH));
+        let secret_key_decrypt =
+            FourierGlweSecretKey::from_coeff_secret_key(&coefficients, &mut fft);
+        let mut secret_key =
+            FourierGlweEncryptor::try_new(&coefficients, params.encryption_parameters()).unwrap();
+
         let mut decrypt_workspace = FourierGlweDecryptWorkspace::new(PolyLength::new(POLY_LENGTH));
 
         let mut cipher = FourierGlweCiphertext::<Vec<_>>::zero(params.fourier_glwe_len());
@@ -74,10 +66,9 @@ where
             params.encryption_parameters(),
             &mut fft,
             &mut rng,
-            &mut encrypt_workspace,
         );
         assert_eq!(
-            secret_key
+            secret_key_decrypt
                 .decrypt_message(&cipher, &params, &mut fft, &mut decrypt_workspace)
                 .as_ref(),
             vec![T::ZERO; POLY_LENGTH]
@@ -99,7 +90,6 @@ where
                 embedding,
                 &mut fft,
                 &mut expected_rng,
-                &mut encrypt_workspace,
             );
             secret_key.encrypt_encoded_to(
                 &Polynomial::new(encoded),
@@ -107,12 +97,11 @@ where
                 params.encryption_parameters(),
                 &mut fft,
                 &mut rng,
-                &mut encrypt_workspace,
             );
             assert_eq!(cipher.as_ref(), expected.as_ref());
             assert_eq!(rng.next_u64(), expected_rng.next_u64());
             assert_eq!(
-                secret_key
+                secret_key_decrypt
                     .decrypt_message(&cipher, &params, &mut fft, &mut decrypt_workspace)
                     .as_ref(),
                 messages

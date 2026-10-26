@@ -75,7 +75,7 @@ Keep the context, keys and compiled programs across requests. `_to` methods reus
 
 ## Features
 
-RustFFT and `split-trace` are enabled by default; ordinary trace remains the default representation. `split-trace` adds Split35 and auxiliary NTT/CRT for its exact key generation. Disabling it removes that dependency; ordinary Fourier operations need no NTT. Optional `simd` enables nightly SIMD arithmetic in dependencies without selecting an FFT engine.
+RustFFT and `split-trace` are enabled by default; ordinary trace remains the default representation. `split-trace` adds Split35. The underlying GLWE Fourier feature includes the internal auxiliary NTT/CRT dependency for coefficient key generation, independently of the trace representation. Optional `simd` enables nightly SIMD arithmetic in dependencies without selecting an FFT engine.
 
 | Cargo flags | Available engines | Trace capability |
 | --- | --- | --- |

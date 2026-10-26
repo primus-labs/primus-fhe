@@ -1,5 +1,5 @@
 //! Split(35) coefficient automorphisms owned by the split trace implementation.
-use super::exact::ExactSecretProduct;
+use crate::secret_key::exact::ExactSecretProduct;
 
 use crate::{GlevParameters, GlweSecretKey};
 use aligned_vec::{ABox, avec};
@@ -58,7 +58,7 @@ impl SplitGlweAutomorphismKey {
         degree: usize,
         secret: &GlweSecretKey<T>,
         parameters: &GlevParameters<T, NativeModulus<T>>,
-        product: &mut ExactSecretProduct,
+        product: &mut ExactSecretProduct<'_, T>,
         fft: &mut FftEngine<'_, Table>,
         rng: &mut R,
     ) -> Self {
@@ -68,7 +68,6 @@ impl SplitGlweAutomorphismKey {
         permutation.apply_signed_to::<T>(secret.as_slice(), &mut transformed);
         let mut mask = vec![T::ZERO; n];
         let mut body = vec![T::ZERO; n];
-        let mut convolution = Zeroizing::new(vec![T::ZERO; n]);
         let mut limb = vec![T::ZERO; n];
         let mut low = FourierGlev::zero(parameters.fourier_glev_len());
         let mut high = FourierGlev::zero(parameters.fourier_glev_len());
@@ -91,15 +90,9 @@ impl SplitGlweAutomorphismKey {
                     .cipher_modulus_uniform_distr(),
                 rng,
             );
-            product.apply(&mask, &mut convolution);
-            for ((b, &p), &s) in body
-                .iter_mut()
-                .zip(convolution.iter())
-                .zip(transformed.iter())
-            {
-                *b = b
-                    .wrapping_add(p)
-                    .wrapping_add(weight.wrapping_mul(s.cast_to_unsigned()));
+            product.add_product_assign(&mask, 0, &mut body);
+            for (b, &s) in body.iter_mut().zip(transformed.iter()) {
+                *b = b.wrapping_add(weight.wrapping_mul(s.cast_to_unsigned()));
             }
             for ((input, mut low_poly), mut high_poly) in [&mask, &body]
                 .into_iter()

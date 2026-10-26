@@ -3,9 +3,9 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_encoding::PlaintextEmbedding;
 use primus_fft::{FftEngine, FftTable, RustFftTable};
+use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
-    FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace,
-    FourierGlweGadgetEncryptWorkspace, FourierGlweSecretKey, GlevParameters, GlweParameters,
+    FourierGlweAutomorphismKey, FourierGlweAutomorphismWorkspace, GlevParameters, GlweParameters,
     GlweSecretKey, GlweSize, NttGlweAutomorphismKey, NttGlweAutomorphismWorkspace,
     NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
 };
@@ -165,9 +165,9 @@ fn fourier_automorphism_input<Table: FftTable>() {
     );
     let s = secret();
     let coeff = GlweSecretKey::<u64>::new(s.clone(), size, SecretKeyDistr::UniformTernary);
-    let sk = FourierGlweSecretKey::from_coeff_secret_key(&coeff, &mut fft);
+    let mut sk = FourierGlweEncryptor::try_new(&coeff, params.encryption_parameters()).unwrap();
     let mut rng = StdRng::seed_from_u64(0x4646544155544f);
-    let mut gadget = FourierGlweGadgetEncryptWorkspace::new(glev.size());
+
     let mut workspace = FourierGlweAutomorphismWorkspace::new(size);
     let q = 1u128 << 64;
     let m = message(q);
@@ -177,15 +177,7 @@ fn fourier_automorphism_input<Table: FftTable>() {
     let mut fourier_output = fourier_input.clone();
     let mut output = Glwe::new(vec![0; size.glwe_len()]);
     for degree in [1, 3, N + 1, 2 * N - 1] {
-        let key = FourierGlweAutomorphismKey::generate(
-            degree,
-            &coeff,
-            &sk,
-            &glev,
-            &mut fft,
-            &mut rng,
-            &mut gadget,
-        );
+        let key = FourierGlweAutomorphismKey::generate(degree, &mut sk, &glev, &mut fft, &mut rng);
         let mut expected = vec![0; N];
         for (i, &value) in m.iter().enumerate() {
             let dest = i * degree % (2 * N);
