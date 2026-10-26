@@ -8,6 +8,8 @@ GLWE CBS 的 q1024/MSB、ordinary/split 新比较见[本批元数据](data/boots
 GLWE PBS 与 EBS8 Low/High 见[对应元数据](data/bootstrap-pbs-ebs-extension.json)。其他组保留历史数据，源码版本和测量条件见[基线元数据](data/bootstrap-comparison-baseline.json)。适配器、补丁、fixture 和完整诊断材料不随仓库提交，也不保证另有本地归档；
 本页与 CSV 可用于比较和复核统计，但不足以独立重建旧二进制。当前基准已精简验证流程，不能当作历史源码快照。
 
+本页 Primus **GLWE Fourier** 数据早于精确系数建钥修复，使用了旧的未约简频域建钥表示；不能作为修复后基线或参数/安全认证。历史排名保留原值，当前修复成本见[独立测量](fourier-glwe-keygen.md)。此限制不自动适用于外部库或 NTT/NTRU 数据。
+
 | 想比较的算法／请求 | 阅读位置 | 配对程度 |
 | --- | --- | --- |
 | GLWE：BR＋trace＋scheme switch CBS | [G1 NTT、G2 Fourier](#glwe-trace-cbs) | 模数、消息中心和分解层数/基数匹配；采样、trace、SS 或 KS 仍不同，属于派生协议 |

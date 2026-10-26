@@ -2,7 +2,9 @@
 //!
 //! RustFFT and `split-trace` are enabled by default; ordinary trace remains the
 //! default representation. Use `--no-default-features --features tfhe-fft` for
-//! TFHE-FFT without Split35/auxiliary NTT, or add `split-trace` for that capability.
+//! TFHE-FFT without Split35, or add `split-trace` for that trace representation.
+//! Both representations use internal auxiliary NTT/CRT for exact coefficient key
+//! generation; online evaluation remains Fourier.
 //! Use `--features tfhe-fft` to keep defaults and enable both FFT engines.
 //!
 //! # Start here

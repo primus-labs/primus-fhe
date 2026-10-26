@@ -1,7 +1,9 @@
 //! Native u32/u64 encodings and full k*N secret sampling with reused workspaces.
 
+#![cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
+
 use primus_encoding::PlaintextEmbedding;
-use primus_fft::{FftEngine, FftTable, RustFftTable, TorusFftValue};
+use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_glwe::FourierGlweEncryptor;
 use primus_glwe::{
     FourierGlweCiphertext, FourierGlweDecryptWorkspace, FourierGlweSecretKey, GlweParameters,
@@ -34,6 +36,7 @@ where
 
     for secret_key_distr in [
         SecretKeyDistr::UniformBinary,
+        SecretKeyDistr::UniformTernary,
         SecretKeyDistr::SparseTernary,
         SecretKeyDistr::gaussian(3.2),
         // A weight greater than N must be sampled over all k*N coefficients.
@@ -112,14 +115,16 @@ where
 
 #[test]
 fn fourier_glwe_secret_key_roundtrip_u32() {
-    assert_roundtrip::<u32, RustFftTable>();
+    #[cfg(feature = "rustfft")]
+    assert_roundtrip::<u32, primus_fft::RustFftTable>();
     #[cfg(feature = "tfhe-fft")]
     assert_roundtrip::<u32, primus_fft::TfheFftTable>();
 }
 
 #[test]
 fn fourier_glwe_secret_key_roundtrip_u64() {
-    assert_roundtrip::<u64, RustFftTable>();
+    #[cfg(feature = "rustfft")]
+    assert_roundtrip::<u64, primus_fft::RustFftTable>();
     #[cfg(feature = "tfhe-fft")]
     assert_roundtrip::<u64, primus_fft::TfheFftTable>();
 }

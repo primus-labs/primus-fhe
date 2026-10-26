@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-26",
+  "revisions": {
+    "before": "f65199ccf81bafeb4915d82596ee81c9c160222e",
+    "after": "5b005d2ec572ba5891ef1cf6767e3c9ce96e0daf"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "features": "default (rustfft, split-trace) + tfhe-fft; no simd",
+  "cpu": "AMD Ryzen 9 9955HX3D; CPU4: 96 MiB L3, sibling20; CPU8: 32 MiB L3, sibling24; sequential pinned processes",
+  "automatic_fft_plans": true,
+  "lock_sha256": "1ba86560e8d3a581d2abd8bc6534f1b88815017de352c834994ea3af3d52b817",
+  "timing_elf_sha256": {
+    "before": {
+      "cbs": "e759aa59f5dfb4b6ea015e64bf790336d3b7114c9023980275540e2998760cea",
+      "cbs_identity": "21e1a0256382611240f6b5181460b3e80e49d54b547b943c37eb0c5eb2de5817",
+      "domains_rust": "cee1d2bbc183288ea90dcba06cdcabe9e25e50e17b128bc1c6b4b06199d65450",
+      "modulus_domains": "4b005945ceaa7bb11fe2a1e8dce17b8e2899b3cce0a73ddb7ac7d318e538bba7",
+      "pbs": "36fee8a13072241096ddb3b4d5f0306b4eff011f0561c65d3c3496d3135391e2"
+    },
+    "after": {
+      "cbs": "9e43ff727fea0785e475cf56405d64e4a9144b1e7823d05771ef29ac906036d9",
+      "cbs_identity": "d5573f2e35d252acd9bae8a7de5c28c889de7af99d00511cc4f8ae59016c94f0",
+      "domains_rust": "abe65b984f2a5d5e45cbd7b27dc4c5742a6331cc4c0a316ddbb49b27162cd69b",
+      "modulus_domains": "1492b4e37d02706a387cb06f370407d58b8f8c2cc4b8db9d69263b689640c18a",
+      "pbs": "5d856cfe0af4ef87246c7e25dab58cd505ad3d766fa89221bb5e257c7cb96ca7"
+    }
+  },
+  "timing_elf_exact_rebuild_verified": true,
+  "source_benches": [
+    "crates/primus_tfhe_glwe_fourier/benches/pbs.rs",
+    "crates/primus_tfhe_glwe_fourier/benches/cbs.rs",
+    "crates/primus_tfhe_glwe_fourier/benches/cbs_identity.rs",
+    "crates/primus_tfhe_glwe_fourier/benches/modulus_domains.rs"
+  ],
+  "temporary_changes": [
+    "per-case selectors before setup",
+    "F-D64 alternate PBS order",
+    "RustFFT clone of modulus_domains",
+    "setup-only keygen phase timers",
+    "separate allocation-diagnostic build; never used for latency"
+  ],
+  "statistics": {
+    "online": "20 Criterion samples, 0.5 s warmup, 2 s measurement. One process mean unless process_samples=3, then median of three process means. Min/max columns are process means. CI columns belong only to the median-selected process, not a joint interval.",
+    "keygen": "Median of 3 fresh-process observations, or 5 for rechecked cases. Client sampling, allocation, row generation and temporary drop included. Context/FFT planning, RNG construction and retained key drop excluded.",
+    "memory": "Independent GlobalAlloc diagnostic. keygen_peak_extra_bytes is simultaneous requested heap above call entry; allocator internals excluded. evaluator_bytes excludes inputs, outputs and LUT. setup_rss_kib is process VmHWM when keygen returns, not isolated keygen heap.",
+    "correctness": "Fixed-seed workflow checks before/after timing; not a DFR/security certificate."
+  },
+  "plan_probe": [
+    {
+      "variant": "before",
+      "repeat": 1,
+      "elf_sha256": "5474efacb382662bddd2f11f95639c64533c9a310523b59f11d342465437d337",
+      "plan": [
+        "size=1024 algo=(Dif4, 1024)"
+      ],
+      "mean_ms": 13.033765569319671
+    },
+    {
+      "variant": "before",
+      "repeat": 2,
+      "elf_sha256": "5474efacb382662bddd2f11f95639c64533c9a310523b59f11d342465437d337",
+      "plan": [
+        "size=1024 algo=(Dif4, 1024)"
+      ],
+      "mean_ms": 13.07102135122897
+    },
+    {
+      "variant": "after",
+      "repeat": 1,
+      "elf_sha256": "016cc10c68bc9c80b5100097ba2ef8a586eb0837227bcb4cc1df3c5a9de4c4fb",
+      "plan": [
+        "size=1024 algo=(Dif4, 1024)"
+      ],
+      "mean_ms": 13.112216842239198
+    },
+    {
+      "variant": "after",
+      "repeat": 2,
+      "elf_sha256": "016cc10c68bc9c80b5100097ba2ef8a586eb0837227bcb4cc1df3c5a9de4c4fb",
+      "plan": [
+        "size=1024 algo=(Dif4, 1024)"
+      ],
+      "mean_ms": 13.123649055105252
+    }
+  ],
+  "replay_limit": "Compact historical evidence. Temporary drivers, raw samples and binaries are not distributed here; current benches do not exactly reconstruct this timed matrix. SHA256 identifiers are provenance, not download links."
+}

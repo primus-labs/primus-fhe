@@ -62,7 +62,7 @@ required-features = ["ntt", "rustfft", "tfhe-fft"]
 
 [[test]]
 name = "fourier_glwe_secret_key"
-required-features = ["rustfft"]
+required-features = ["fourier"]
 
 [[test]]
 name = "gadget_generation"

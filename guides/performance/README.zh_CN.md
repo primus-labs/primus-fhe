@@ -15,6 +15,7 @@
 | [Sparse 算术](sparse-arithmetic.md) | 分派边界、聚合证据和可复用的多输入批处理内核。 |
 | [OMR 调度](../../../primus_omr/guides/performance/omr-scheduling.md) | 独立应用的检测/检索吞吐、worker 调度与工作区开销。 |
 | [Sparse 布局与批处理](sparse-layout-and-batching.md) | 四输入调度、旋转描述所有权、tile/流式/布局反例；旧裁剪 LUT 不代表当前完整树。 |
+| [Fourier GLWE 建钥](fourier-glwe-keygen.md) | 精确native行修复成本、在线存储不变及旧表示测量的使用边界。 |
 | [Fourier 首项覆盖](fourier-first-write.md) | 保留清零后累加的依据；54 组有效构建配对包含不利结果及 FFT plan 不一致记录。 |
 
 ## 阅读与复测

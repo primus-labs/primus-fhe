@@ -113,6 +113,8 @@ Encoded NTT inputs must be canonical coefficients in `[0, q)`. Match key, parame
 
 For [phase-error diagnostics](../primus_encoding/README.md#phase-error-diagnostics), compare the phase with the **expected message** encoded using the actual codec and embedding. Decoding and re-encoding is not an independent reference.
 
+Fourier key generation completes each row and gadget diagonal exactly in the native ring before floating-point conversion; ordinary u64 conversion error still needs a noise budget. Regenerate material produced by the former unreduced Fourier-product path. If it was disclosed, replace the affected secrets: converting published rows cannot undo disclosure. See `FourierGlweEncryptor` rustdoc for exact support and preparation contracts.
+
 ## Gadget ciphertexts
 
 `encrypt_glev_to` and `encrypt_ggsw_to` apply gadget scaling to coefficient-domain ring polynomials without ordinary plaintext encoding. A GGSW control bit is the constant polynomial `0` or `1`. For NTT, construct the gadget workspace from `GadgetSize`: GLev needs its polynomial length; GGSW also needs its level count. Fourier reuses the same encryptor across gadget bases and level counts, completing native row diagonals before FFT.

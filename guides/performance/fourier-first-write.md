@@ -10,6 +10,11 @@ The candidate implementation and temporary benchmark were removed. Later torus
 conversion and interleaved-FMA changes are outside this historical comparison;
 these results are not a measurement of today's full Fourier pipeline.
 
+The GLWE Fourier rows also predate the exact coefficient key-generation repair
+and used the former unreduced representation. They are not a repaired-key baseline
+or a parameter/security validation. See the [repair measurements](fourier-glwe-keygen.md);
+this caveat does not reclassify NTRU measurements.
+
 ## Measurement scope
 
 - Base commit: `494246cfd92a67d2f5854c62b55fa0c75fd97a6d`. F1 changes only GGSW

@@ -55,7 +55,9 @@ CBS 输入使用 `cbs_encryptor`（或 `cbs_public_encryptor`），两种输入�
 
 CBS 示例用 `cbs.into_parts()` 和 `Evaluator::try_from_resources` 转交已有缓冲区，CBS/CMux 执行时借用 `evaluator.bootstrap_resources_mut()`。`return_ring_at_to` 返回指定系数，再用 `context.ring_return_decryptor(secret, t_ring)` 按候选环密文的消息模数解码。BR→KS 返回 q 下的小秘密 LWE；KS→BR 在 Q 下直接提取到环秘密。纯环工作流仍可保留自带资源的 CBS evaluator，无需返回 scratch。
 
-启用 `split-trace`（默认开启）后，需要额外的 trace 精度时，在 `TfheContext::try_from_cbs_config(config)` 前设置 `config.fourier_trace_precision = FourierTracePrecision::Split35`。选择保存在 `CbsParameters` 中；绑定已准备参数使用可返回错误的 `TfheContext::try_from_cbs_parameters`。首版支持 native u64、rank-1 binary/ternary 环秘密，普通 trace 保持默认。Split 使 trace key payload 和逆变换次数翻倍，并采用精确系数密钥生成；它不修复不足的 BR/SS 分解，也不证明失败概率。同一个 CBS 示例可加 `-- --split-trace`，加密、谓词和 CMux 流程不变。独立组合通过 `circuit_bootstrap::CbsTraceKey` 区分对应的 GLWE trace 表示。
+启用 `split-trace`（默认开启）后，需要额外的 trace 精度时，在 `TfheContext::try_from_cbs_config(config)` 前设置 `config.fourier_trace_precision = FourierTracePrecision::Split35`。选择保存在 `CbsParameters` 中；绑定已准备参数使用可返回错误的 `TfheContext::try_from_cbs_parameters`。首版支持 native u64、rank-1 binary/ternary 环秘密，普通 trace 保持默认。ordinary 和 Split35 均使用精确系数密钥生成。Split 使 trace key payload 和逆变换次数翻倍；它不修复不足的 BR/SS 分解，也不证明失败概率。同一个 CBS 示例可加 `-- --split-trace`，加密、谓词和 CMux 流程不变。独立组合通过 `circuit_bootstrap::CbsTraceKey` 区分对应的 GLWE trace 表示。
+
+升级时须重新生成旧版未约简 Fourier 路径的求值材料；已公开过此类材料的秘密也应更换。具体表示与噪声限制见 [GLWE 加密契约](../primus_glwe/README.zh_CN.md#加密与解密)，修复前后成本见[建钥性能](../../guides/performance/fourier-glwe-keygen.md)。
 
 ## 参数与表示
 

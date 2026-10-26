@@ -61,6 +61,8 @@ Client secrets stay with the client. Evaluation/public keys and request cipherte
 
 For advanced TFHE composition, `ServerKey` carries BR/KS material; `CircuitBootstrapServerKey` combines it with the circuit key. Ordinary PBS owns its full return path, whereas CBS/one-hot produces ring or gadget ciphertexts and can use resources without ordinary return scratch. GLWE KS→BR still needs its input KS during CBS. See the [GLWE](../../crates/primus_tfhe_glwe/README.md) and [NTRU](../../crates/primus_tfhe_ntru/README.md) family workflows and [ciphertext domains](bootstrapping-contracts.md#ciphertext-domains-and-return).
 
+Fourier GLWE evaluation-key generation borrows the coefficient secret through `FourierGlweEncryptor`. Reuse its exact native preparation for material under the same target; a KS target needs its own preparation. Only completed native rows (including gadget diagonals) are converted to ordinary or Split35 spectra. Conversion error remains part of the noise budget. The [GLWE encryption contract](../../crates/primus_glwe/README.md#encryption-and-decryption) covers imported secrets and replacement of old material; these requirements are independent of the trace precision setting.
+
 ## Reusing workspaces
 
 | Role | Meaning |

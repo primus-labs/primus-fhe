@@ -113,6 +113,8 @@ NTT 还提供 `encrypt_message_coeff_to`、`decrypt_phase_coeff_to` 和 `decrypt
 
 做[相位误差诊断](../primus_encoding/README.zh_CN.md#相位误差诊断)时，用实际 codec 和 embedding 编码**预期消息**，再与相位比较。先解码再重新编码不能提供独立参考。
 
+Fourier 建钥先在 native 环中精确完成每行及 gadget 对角项，再进行浮点变换；ordinary u64 的转换误差仍须纳入噪声预算。旧版未约简频域乘积路径生成的材料必须重新生成；若相关材料已公开，应更换受影响的秘密，事后转换不能撤销泄露。精确支持范围及准备方式见 `FourierGlweEncryptor` 的 rustdoc。
+
 ## Gadget 密文
 
 `encrypt_glev_to` 和 `encrypt_ggsw_to` 对系数域环多项式应用 gadget 缩放，不做普通明文编码。GGSW 控制位是常数多项式 `0` 或 `1`。NTT 从 `GadgetSize` 构造 gadget 工作区：GLev 需要匹配多项式长度，GGSW 还需匹配层数。Fourier 在不同 gadget 基与层数间复用同一 encryptor，行对角项在 native 环中完成后才 FFT。

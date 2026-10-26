@@ -16,6 +16,7 @@ Current configuration and commands belong to the [development guide](../developm
 | [Sparse arithmetic](sparse-arithmetic.md) | Dispatch bounds, aggregation evidence and reusable input-batch kernels. |
 | [OMR scheduling](../../../primus_omr/guides/performance/omr-scheduling.md) | Independent application: detection/retrieval throughput, worker scheduling and workspace costs. |
 | [Sparse layout/batching](sparse-layout-and-batching.md) | Four-input schedule, descriptor ownership, tile/streaming/layout counterexamples; old pruned-LUT results are not current-tree evidence. |
+| [Fourier GLWE key generation](fourier-glwe-keygen.md) | Exact native-row repair costs, unchanged online storage, and limits of pre-repair results. |
 | [Fourier first write](fourier-first-write.md) | Why clear-then-accumulate remains; all 54 build-valid pairs include adverse and FFT-plan-mismatched results. |
 
 ## Reading and remeasuring

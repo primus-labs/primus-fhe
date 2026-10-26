@@ -206,8 +206,9 @@ where
     }
 
     /// Generates the configured BR and KS pair.
-    /// Validates sparse geometry before sampling the client. Reuses prepared KS
-    /// state and retries only public maps, keeping the same client secrets.
+    /// Validates sparse geometry before sampling the client. Shares accumulator
+    /// preparation across BR rows, then prepares the separate KS target. Sparse
+    /// matching retries only public maps, keeping the same client secrets.
     ///
     /// # Correctness
     /// Inherits [`Self::try_generate_server_key`]'s noise and representation contracts.
