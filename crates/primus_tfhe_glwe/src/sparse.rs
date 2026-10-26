@@ -20,8 +20,8 @@ use crate::SparseBootstrappingKeyError;
 /// Generation retains only the public mapping and ciphertexts, never the support
 /// or matching. Input modulus q is retained as numerical metadata; the accumulator uses `M`. NTT backends
 /// use explicit residues and Fourier backends use native-torus coefficients.
-/// These domains are not interchangeable. Fourier generation recovers ciphertexts
-/// from the transform domain and retains the associated rounding error.
+/// These domains are not interchangeable. Fourier generation constructs exact
+/// native coefficient rows directly; rounding starts when evaluation transforms them.
 ///
 /// Successful mapping conditions the joint distribution of the public map and
 /// secret. Fixed-weight security and complete PBS noise bounds need independent

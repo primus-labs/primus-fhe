@@ -583,12 +583,14 @@ fn circuit_selection_with_trace<T: TorusFftValue, Table: FftTable, LM>(
     assert!(control.as_ref().iter().all(|v| *v == Default::default()));
 }
 
-#[cfg(feature = "rustfft")]
 #[test]
-fn rustfft_u32_classic_chain() {
+fn u32_binary_classic_chain() {
     let mut config = config(BlindRotationMethod::Classic);
     config.small_lwe.secret_key_distr = SecretKeyDistr::UniformBinary;
+    #[cfg(feature = "rustfft")]
     chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
+    #[cfg(feature = "tfhe-fft")]
+    chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
 }
 
 #[cfg(feature = "rustfft")]
@@ -1123,4 +1125,223 @@ fn ring_return_phase_and_layout_boundaries() {
             ring_return_phase::<primus_fft::TfheFftTable, _>(split, dimension);
         }
     }
+}
+
+/// Independent native schoolbook phase, including negacyclic wrap signs. This
+/// inspects stored key rows without using the Fourier decryption implementation.
+fn native_material_phase(ciphertext: &[u64], secret: &[i64], n: usize) -> Vec<u64> {
+    let (mask, body) = ciphertext.split_at(secret.len());
+    let mut phase = body.to_vec();
+    for (a, s) in primus_poly::PolynomialIter::new(mask, n).zip(secret.chunks_exact(n)) {
+        for (degree, value) in phase.iter_mut().enumerate() {
+            for (j, &s) in s.iter().enumerate() {
+                let i = (degree + n - j) & (n - 1);
+                let product = a.as_ref()[i].wrapping_mul(s as u64);
+                *value = if i + j < n {
+                    value.wrapping_sub(product)
+                } else {
+                    value.wrapping_add(product)
+                };
+            }
+        }
+    }
+    phase
+}
+
+/// Check every row/level against the inferred body-row bit. A native sparse
+/// row has only sampled noise; an inverse-transformed classic row also has FFT
+/// error. The separate exact-encryption tests check canonical spectra directly.
+fn material_selector(
+    ggsw: primus_lattice::ggsw::Ggsw<&[u64]>,
+    parameters: &primus_glwe::GlevParameters<u64, NativeModulus<u64>>,
+    secret: &[i64],
+    error_bound: u64,
+) -> u64 {
+    let n = parameters.poly_length().get();
+    let k = secret.len() / n;
+    let body = ggsw.iter_glev(parameters.glev_len()).nth(k).unwrap();
+    let row = body.iter_glwe(parameters.glwe_len()).next().unwrap();
+    let scalar = parameters.basis().scalar_iter().next().unwrap();
+    let phase = native_material_phase(row.as_ref(), secret, n);
+    let bit =
+        u64::from(phase_error_magnitude(phase[0], scalar, NativeModulus::new()) <= error_bound);
+    for (r, glev) in ggsw.iter_glev(parameters.glev_len()).enumerate() {
+        for (row, scalar) in glev
+            .iter_glwe(parameters.glwe_len())
+            .zip(parameters.basis().scalar_iter())
+        {
+            let phase = native_material_phase(row.as_ref(), secret, n);
+            for (i, actual) in phase.into_iter().enumerate() {
+                let expected = if r < k {
+                    scalar
+                        .wrapping_mul(bit)
+                        .wrapping_mul(secret[r * n + i] as u64)
+                        .wrapping_neg()
+                } else if i == 0 {
+                    scalar * bit
+                } else {
+                    0
+                };
+                assert!(
+                    phase_error_magnitude(actual, expected, NativeModulus::new()) <= error_bound
+                );
+            }
+        }
+    }
+    bit
+}
+
+/// Inspect the actual CBS bundle even when a return path does not consume its
+/// KSK. Distinct q/Q, signed Z and signed/padded s make a target swap observable.
+fn check_bundle_material<Table: FftTable>() {
+    use primus_lattice::ggsw::Ggsw;
+    use primus_lattice::glev::FourierGlevIter;
+    use primus_tfhe_glwe_fourier::{ClientKey, KeyGenerator, key::BlindRotationKey};
+
+    // Fixed N32/u64 fixture allowance for canonical FFT/inverse rounding plus
+    // small sampled noise; much smaller than the least gadget weight 2^56.
+    // This is a material-binding regression threshold, not a DFR estimate.
+    const FOURIER_ERROR: u64 = 1 << 24;
+    let decomposition = DecompositionConfig {
+        log_basis: DecompositionBaseLog::new(4),
+        level_count: Some(DecompositionLevelCount::new(2)),
+    };
+    for method in [BlindRotationMethod::Classic, SPARSE] {
+        for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
+            let mut pbs = two_domain_config::<u64>(method, order);
+            pbs.bsk_poly_length = PolyLength::new(32);
+            pbs.bsk_gadget.decomposition = decomposition;
+            pbs.key_switching.decomposition = decomposition;
+            pbs.key_switching.noise_standard_deviation = 2.5;
+            let context = TfheContext::<u64, Table, _>::try_from_cbs_config(CbsConfig {
+                pbs,
+                gadget: CbsGadgetConfig {
+                    trace: decomposition,
+                    scheme_switch: decomposition,
+                    output: decomposition,
+                },
+                input_encoding: CbsInputEncoding::Padded,
+                fourier_trace_precision: primus_tfhe_glwe_fourier::FourierTracePrecision::Ordinary,
+            })
+            .unwrap();
+            let parameters = context.parameters();
+            let br = parameters.blind_rotation_params();
+            let small = if method == SPARSE {
+                vec![1, 0, 1, 0, 0, 1, 0, 0]
+            } else {
+                vec![1023, 0, 1, 1023, 1, 0, 0, 1]
+            };
+            let ring: Vec<i64> = (0..br.glwe_size().mask_len())
+                .map(|i| (i % 3) as i64 - 1)
+                .collect();
+            let client = ClientKey::new(
+                primus_lwe::LweSecretKey::new(
+                    small.clone(),
+                    pbs.small_lwe.secret_key_distr,
+                    parameters.small_lwe().cipher_modulus(),
+                ),
+                primus_glwe::GlweSecretKey::new(ring.clone(), br.glwe_size(), pbs.bsk_secret_distr),
+                order,
+            );
+            let mut rng = StdRng::seed_from_u64(117);
+            let server = KeyGenerator::new(&context)
+                .try_generate_circuit_bootstrap_server_key(&client, &mut rng)
+                .unwrap();
+            let mut fft = context.new_fft_engine();
+            match server.server_key().blind_rotation_key() {
+                BlindRotationKey::Classic(key) => {
+                    assert_eq!(key.size(), br.size());
+                    assert_eq!(key.basis(), br.basis());
+                    assert_eq!(
+                        key.as_slice().len(),
+                        2 * small.len() * br.fourier_ggsw_len()
+                    );
+                    let mut native = Ggsw::new(vec![0u64; br.ggsw_len()]);
+                    for ((positive, negative), &s) in
+                        key.iter_ternary_controls().unwrap().zip(&small)
+                    {
+                        for (control, expected) in [
+                            (positive, u64::from(s == 1)),
+                            (negative, u64::from(s == 1023)),
+                        ] {
+                            control.write_torus_form(&mut native, &mut fft);
+                            assert_eq!(
+                                material_selector(native.as_view(), br, &ring, FOURIER_ERROR),
+                                expected
+                            );
+                        }
+                    }
+                }
+                BlindRotationKey::Sparse(key) => {
+                    let mut selected = vec![0u64; small.len()];
+                    let mut dummy_count = 0;
+                    assert_eq!(key.size(), br.size());
+                    assert_eq!(key.basis(), br.basis());
+                    for bucket in 0..key.bucket_count() {
+                        let (indices, controls) = key.bucket(bucket);
+                        assert_eq!(controls.len(), indices.len() + 1);
+                        let mut bucket_sum = 0;
+                        for (entry, control) in controls.enumerate() {
+                            // sigma=0.7 has truncated support floor(12*sigma)=8;
+                            // coefficient key generation adds no FFT rounding.
+                            let bit = material_selector(control, br, &ring, 8);
+                            bucket_sum += bit;
+                            if entry < indices.len() {
+                                selected[indices[entry]] += bit;
+                            } else {
+                                dummy_count += bit;
+                            }
+                        }
+                        assert_eq!(bucket_sum, 1);
+                    }
+                    assert_eq!(selected, small);
+                    assert_eq!(
+                        dummy_count,
+                        (key.bucket_count() - key.hamming_weight()) as u64
+                    );
+                }
+            }
+            let ks = server.server_key().glwe_key_switching_key();
+            let output = parameters.glwe_key_switching().output();
+            assert_eq!(ks.output_size(), output.size());
+            assert_eq!(ks.basis(), output.basis());
+            assert_eq!(
+                ks.as_slice().len(),
+                br.glwe_size().dimension().get() * output.fourier_glev_len()
+            );
+            // Build the target independently, including explicit-q signed decode
+            // and zero padding; do not ask the key-generation helper for s_pad.
+            let mut target = vec![0i64; output.glwe_size().mask_len()];
+            for (dst, &s) in target.iter_mut().zip(&small) {
+                *dst = if s == 1023 { -1 } else { s as i64 };
+            }
+            let mut native = primus_glwe::GlweCiphertext::new(vec![0u64; output.glwe_len()]);
+            for (glev, source) in FourierGlevIter::new(ks.as_slice(), output.fourier_glev_len())
+                .zip(client.glwe_secret_key().iter())
+            {
+                for (row, scalar) in glev
+                    .iter_glwe(output.fourier_glwe_len())
+                    .zip(output.basis().scalar_iter())
+                {
+                    row.write_torus_form(&mut native, &mut fft);
+                    let phase = native_material_phase(native.as_ref(), &target, 32);
+                    for (actual, &s) in phase.into_iter().zip(source) {
+                        let expected = scalar.wrapping_mul(s as u64);
+                        assert!(
+                            phase_error_magnitude(actual, expected, NativeModulus::new())
+                                <= FOURIER_ERROR
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn bundle_material_binds_selectors_dummies_and_padded_ks_target() {
+    #[cfg(feature = "rustfft")]
+    check_bundle_material::<primus_fft::RustFftTable>();
+    #[cfg(feature = "tfhe-fft")]
+    check_bundle_material::<primus_fft::TfheFftTable>();
 }
