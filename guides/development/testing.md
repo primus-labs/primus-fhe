@@ -63,7 +63,7 @@ Cargo 会跳过缺少 `required-features` 的 target，测试内部也可能按 
 
 依赖或 feature 边界变化时，可在 workspace 外的临时 Cargo 包复用一个相关 example，只声明它直接使用的普通依赖与选定后端。用独立 `[workspace]` 隔离，并通过 `cargo tree -e normal,features` 核对依赖、执行示例验证结果；不要带入 dev-dependencies。`--lib --no-default-features` 编译与独立消费者验证分别检查库自身和实际组合。
 
-SIMD feature 使用 nightly；`primus_ntt` 的 x86 intrinsic 分派另外受 CPU 能力控制，不要求 Cargo `simd`。本机通过只代表实际选中的内核，不代表其他 CPU 或架构也执行过。
+SIMD feature 使用 nightly；`primus_ntt` 的 x86 intrinsic 分派另外受 CPU 能力控制，不要求 Cargo `simd`。NTT 私有差分测试会逐一选择硬件支持的后端，避免自动分派遮住 AVX2 等路径。Fourier 复数 FMA 使用编译时 `avx512f` 条件，既有舍入测试覆盖向量块和标量尾部；未启用该条件时，完整长度走标量循环。未满足硬件或编译条件的分支不能计为已执行，本机通过不代表其他 CPU 或架构也验证过。
 
 ## 测试与示例的职责
 

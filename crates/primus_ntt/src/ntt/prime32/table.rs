@@ -330,31 +330,36 @@ mod tests {
     use crate::UintNttTable;
     use primus_modulus::BarrettModulus;
 
-    #[test]
-    fn scalar_kernel_matches_generic_at_the_supported_minimum() {
-        let modulus = BarrettModulus::new(1_073_692_673u32);
-        let length = PolyLength::new(32);
-        let table = U32NttTable::new(length, modulus).unwrap();
+    // Compare each direction independently: a matching forward/inverse mistake
+    // must not cancel in a round trip. Guarded subslices protect both boundaries.
+    fn check_kernel(table: &U32NttTable) {
+        let length = table.poly_length;
+        let modulus = BarrettModulus::new(table.q);
         let reference = UintNttTable::<u32>::new(length, modulus).unwrap();
         for (inverse, output_factor) in [(false, 1), (false, 4), (true, 1), (true, 2)] {
-            let bound = if inverse { 2 * table.q } else { 4 * table.q };
-            let mut actual: Vec<_> = (0..length.get())
-                .map(|i| [0, table.q - 1, table.q, bound - 1 - i as u32][i % 4])
-                .collect();
-            let mut expected: Vec<_> = actual.iter().map(|&value| value % table.q).collect();
-            // Call scalar directly: runtime dispatch may always select SIMD on
-            // the test host. The checked table owns all scalar preconditioners.
-            // SAFETY: the input has exactly N coefficients in the kernel's lazy range.
-            unsafe {
-                if inverse {
-                    table.scalar_inverse_transform_unchecked(&mut actual, output_factor);
-                } else {
-                    table.scalar_forward_transform_unchecked(&mut actual, output_factor);
-                }
+            let q = table.q;
+            let bound = output_factor * q;
+            let mut guarded = vec![u32::MAX; length.get() + 2];
+            let actual = &mut guarded[1..length.get() + 1];
+            for (i, value) in actual.iter_mut().enumerate() {
+                *value = [
+                    0,
+                    q - 1,
+                    q,
+                    2 * q - 1,
+                    2 * q,
+                    3 * q,
+                    bound - 1,
+                    17 * i as u32 + 31,
+                ][i & 7]
+                    % bound;
             }
+            let mut expected: Vec<_> = actual.iter().map(|&value| value % table.q).collect();
             if inverse {
+                table.dispatch_inverse(actual, output_factor);
                 reference.inverse_transform_slice(&mut expected);
             } else {
+                table.dispatch_forward(actual, output_factor);
                 reference.transform_slice(&mut expected);
             }
             assert!(actual.iter().all(|&value| value < output_factor * table.q));
@@ -363,8 +368,60 @@ mod tests {
                     .iter()
                     .map(|value| value % table.q)
                     .collect::<Vec<_>>(),
-                expected
+                expected,
+                "N={}, inverse={inverse}, output_factor={output_factor}",
+                length.get()
             );
+            assert_eq!(
+                (guarded[0], guarded[length.get() + 1]),
+                (u32::MAX, u32::MAX)
+            );
+        }
+    }
+
+    #[test]
+    fn scalar_kernel_matches_generic_boundaries() {
+        for n in [32, 64] {
+            let table = U32NttTable::new(PolyLength::new(n), BarrettModulus::new(1_073_692_673u32))
+                .unwrap();
+            #[cfg(target_arch = "x86_64")]
+            let table = U32NttTable {
+                backend: U32Backend::Scalar,
+                ..table
+            };
+            check_kernel(&table);
+        }
+    }
+
+    // Automatic selection hides AVX2 on AVX-512 hosts. Build the packed roots
+    // for the explicitly selected backend, and enter it only on eligible CPUs.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn native_backends_match_generic_boundaries() {
+        // N=32 is the minimum SIMD block; N=64 adds another broadcast stage
+        // and multiple vectors per block. There is no recursive u32 schedule.
+        for n in [32, 64] {
+            let mut table =
+                U32NttTable::new(PolyLength::new(n), BarrettModulus::new(1_073_692_673u32))
+                    .unwrap();
+            if is_x86_feature_detected!("avx2") {
+                table.avx2_roots = build_avx2_roots_u32(n, &table.roots, false);
+                table.avx2_roots_precon = build_avx2_roots_u32(n, &table.roots_precon, false);
+                table.avx2_inv_roots = build_avx2_roots_u32(n, &table.inv_roots, true);
+                table.avx2_inv_roots_precon =
+                    build_avx2_roots_u32(n, &table.inv_roots_precon, true);
+                table.backend = U32Backend::Avx2;
+                check_kernel(&table);
+            }
+            if is_x86_feature_detected!("avx512f") {
+                table.avx512_roots = build_avx512_roots_u32(n, &table.roots, false);
+                table.avx512_roots_precon = build_avx512_roots_u32(n, &table.roots_precon, false);
+                table.avx512_inv_roots = build_avx512_roots_u32(n, &table.inv_roots, true);
+                table.avx512_inv_roots_precon =
+                    build_avx512_roots_u32(n, &table.inv_roots_precon, true);
+                table.backend = U32Backend::Avx512;
+                check_kernel(&table);
+            }
         }
     }
 }
