@@ -135,6 +135,8 @@ Evaluation keys retain their layouts and decomposition bases. Construct the matc
 
 [Scheme switching](src/scheme_switch) uses matching coefficient/transformed secrets for NTT generation, or one target encryptor for Fourier generation. Fourier automorphism and trace generation also take only the prepared target, deriving their secret messages internally. Output gadget scaling is inherited from the input GLev; `key_basis()` controls decomposition and may differ from the output basis. Supply an external-product workspace matching `key.key_size()`.
 
+Rank-one NTT scheme switching stores only a square `GLev(s²)` and computes each mask row as `sum D(a) GLev(s²) + (b,0)`, reusing the transformed body row. Higher ranks and Fourier retain the full `GGSW(-s_i)` products. The square construction removes body decomposition and its key-error terms; input-error propagation and square-secret residuals remain, so it does not guarantee lower noise for every input. Trace and scheme switching remain separate operations.
+
 ## Trace, projection and expansion
 
 `NttGlweTraceKey` and `FourierGlweTraceKey` operate on coefficient ciphertexts. Let `M` be the input message; target messages below omit evaluation noise.

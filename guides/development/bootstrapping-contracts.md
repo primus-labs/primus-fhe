@@ -116,6 +116,8 @@ For CMux consumption, F must be bit-valued over the entire programmed domain. Ca
 
 NTRU scheme-switch material binds the complete output basis. GLWE material binds output layout and supports a different output basis only through the evaluator's checked compatibility entry. Neither check proves actual secret or transform identity. See [GLWE CBS](../../crates/primus_tfhe_glwe/README.md#boolean-and-cbs) and [NTRU CBS](../../crates/primus_tfhe_ntru/README.md#cbs-and-examples).
 
+Rank-one GLWE NTT scheme switching uses only `GLev(s²)`: with phase `b−as`, its mask row is `sum D(a)GLev(s²)+(b,0)` and its body row retains the input. The exact correction uses the final body, including any post-trace offset. Compared with a full `GGSW(-s)` product, this removes body decomposition and its key-error terms, while retaining shared input error multiplied by `−s` and square-secret decomposition residuals. It does not imply lower error for every input or an independently sampled body error. Higher ranks and Fourier retain full products. The implementation and boundary contract belong to [`NttGlweSchemeSwitchKey`](../../crates/primus_glwe/src/scheme_switch/ntt.rs).
+
 ## Normalized reverse trace
 
 Let `N=2^ell`, `sigma_d(P)=P(X^d)` and let `Pi_r` retain coefficients at positions divisible by N/r, for `r=2^h`. Reverse trace visits degrees `d_k=2^k+1` in ascending order, k=h+1,...,ell: halve the current coefficient ciphertext, apply automorphism with key switching, then add the two results. It preserves ring size. Full trace has r=1; r=N copies the input.
