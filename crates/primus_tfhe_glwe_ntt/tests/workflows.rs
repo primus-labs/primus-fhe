@@ -14,9 +14,9 @@ use primus_shape::PolyLength;
 use primus_tfhe::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_tfhe_glwe_ntt::circuit_bootstrap::{CbsGadgetParameters, CircuitBootstrapEvaluator};
 use primus_tfhe_glwe_ntt::{
-    BlindRotationMethod, BooleanGate, CbsConfig, CbsGadgetConfig, CbsInputEncoding,
-    DecompositionConfig, GadgetEncryptionConfig, LweConfig, ModulusConfig, PbsConfig,
-    PbsMessageConfig, PbsOrder, TfheContext,
+    BivariateLookupTable, BlindRotationMethod, BooleanGate, CbsConfig, CbsGadgetConfig,
+    CbsInputEncoding, DecompositionConfig, GadgetEncryptionConfig, LweConfig, ModulusConfig,
+    PbsConfig, PbsMessageConfig, PbsOrder, TfheContext,
 };
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -159,6 +159,66 @@ fn boolean_gate_truth_tables() {
                 decryptor.decrypt(output.as_view()).unwrap(),
                 if condition { a } else { b },
                 "mux({condition}, {a}, {b})"
+            );
+        }
+    }
+}
+
+/// Non-power-of-two packing, asymmetric domains and independent output encoding
+/// must survive the complete PBS/KS chain, not just LUT compilation.
+#[test]
+fn bivariate_lookup_packs_and_evaluates_all_input_pairs() {
+    let mut config = config::<u64>(BlindRotationMethod::Classic);
+    config.messages = PbsMessageConfig::new(12).with_output_modulus(11);
+    let context = TfheContext::<u64, U64NttTable>::try_from_pbs_config(config).unwrap();
+    let mut rng = StdRng::seed_from_u64(105);
+
+    // Client: both inputs use the same external secret and unsigned t_in=12.
+    let (client, server) = context.try_generate_keys(&mut rng).unwrap();
+    let secret = client.external_lwe_secret_key();
+    let encryptor = context.encryptor(secret).unwrap();
+    let decryptor = context.pbs_decryptor(secret).unwrap();
+    let mut lhs = context.allocate_lwe_ciphertext();
+    let mut rhs = context.allocate_lwe_ciphertext();
+
+    // Server: z=x+3*y fills the front half 0..6. Six distinct outputs, including
+    // 10, exercise pair order and the full output domain independently of input padding.
+    let parameters = context.parameters();
+    let codecs = parameters
+        .messages()
+        .try_rounded_codecs(parameters.external_modulus(), parameters.ring_modulus())
+        .unwrap();
+    let function = |x: usize, y: usize| (x * x + x * y + 3 * y + 1) as u64;
+    let lookup_table = BivariateLookupTable::try_new(
+        3,
+        2,
+        config.bsk_poly_length,
+        codecs.input_codec(),
+        codecs.lut_output_codec(),
+        function,
+    )
+    .unwrap();
+    let mut evaluator = context.evaluator(&server).unwrap();
+    let mut packed = context.allocate_lwe_ciphertext();
+    let mut output = context.allocate_lwe_ciphertext();
+    for x in 0..3 {
+        for y in 0..2 {
+            encryptor
+                .encrypt_padded_to(x as u64, lhs.as_mut_view(), &mut rng)
+                .unwrap();
+            encryptor
+                .encrypt_padded_to(y as u64, rhs.as_mut_view(), &mut rng)
+                .unwrap();
+            lookup_table.pack_to(lhs.as_view(), rhs.as_view(), packed.as_mut_view());
+            evaluator.apply_lookup_table_to(
+                packed.as_view(),
+                lookup_table.lookup_table(),
+                output.as_mut_view(),
+            );
+            assert_eq!(
+                decryptor.decrypt(output.as_view()).unwrap(),
+                function(x, y),
+                "bivariate input ({x}, {y})"
             );
         }
     }
