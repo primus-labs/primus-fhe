@@ -95,6 +95,10 @@ impl CoeffAutomorphismPermutation {
     /// particular, a negated coefficient cannot be the signed minimum. This
     /// precondition is not checked. Use [`Self::apply_to`] on encoded residues
     /// when the full signed range must be supported.
+    ///
+    /// # Panics
+    /// Debug builds check both lengths. The identity branch panics if the
+    /// lengths differ; other shape violations are not guaranteed to panic.
     #[inline]
     pub fn apply_signed_to<T: FheUint>(
         &self,

@@ -45,7 +45,7 @@ Factors deliberately do not store their modulus. The caller must pass the same m
 - `ShoupFactor<T>` requires `value < modulus` and `modulus < 2^(T::BITS - 1)`.
 - `MultiplyFactor` requires canonical operands, `bit_shift` equal to 32, 52, or 64, and `modulus < 2^(bit_shift - 2)`. The const `BIT_SHIFT` used by multiplication must equal the runtime `bit_shift` used during construction.
 - Lazy operations return a representative in `[0, 2 * modulus)`; canonical operations return a value in `[0, modulus)`.
-- Slice inputs and accumulators are canonical. Out-of-place and fused operations require their slices to have equal lengths.
+- Shoup scalar and slice multiplicands may use the full word range; fused accumulators and addends must be canonical. Out-of-place and fused operations require their slices to have equal lengths.
 - Raw constructors require the value, quotient, and later modulus to agree exactly.
 
 Some low-level contracts are diagnosed only by `debug_assert*!`. Release callers must validate them at an appropriate boundary before entering repeated arithmetic kernels.

@@ -10,8 +10,9 @@
 //! - T2 (t = 2): `permute2x128` deinterleave.
 //! - T1 (t = 1): `unpacklo/hi_epi64` + `permute4x64` deinterleave.
 //!
-//! Requires `n ≥ 16` — polynomial lengths below that are handled by the
-//! scalar backend directly.
+//! The packed stages require a power-of-two `n ≥ 16`. `PolyLength` establishes
+//! the stronger `n ≥ 32` bound at table construction; there is no dispatch to
+//! the scalar backend for smaller lengths.
 //!
 //! # Safety
 //!

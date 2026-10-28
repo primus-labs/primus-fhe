@@ -285,6 +285,9 @@ pub trait TryReduceInv<T> {
     ///
     /// - `value < modulus`
     ///
+    /// This input range remains a caller obligation; the fallible return type
+    /// does not make out-of-range residues a supported input.
+    ///
     /// # Errors
     ///
     /// Returns [`ReduceError::NoInverse`] for an explicit modulus, or

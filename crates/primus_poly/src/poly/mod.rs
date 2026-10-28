@@ -23,6 +23,14 @@ pub type PolynomialMut<'a, T> = Polynomial<&'a mut [T]>;
 /// This wrapper stores no ring length or modulus. Empty, arbitrary-length and
 /// packed storage are allowed; [`Self::len`] counts all stored coefficients.
 /// Callers establish the single-polynomial or batch layout before arithmetic.
+///
+/// # Correctness
+///
+/// Arithmetic requires equal input and output lengths and a common coefficient
+/// modulus. Values must satisfy the selected reduction or factor operation's
+/// range contract. Method-specific ring lengths and exponent bounds also apply.
+/// The wrapper does not validate these conditions; zipped operations can leave
+/// unmatched tails untouched when lengths differ.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Polynomial<S>(pub S)
 where

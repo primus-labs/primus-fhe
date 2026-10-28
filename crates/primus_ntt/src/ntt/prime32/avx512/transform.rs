@@ -33,7 +33,7 @@ impl U32NttTable {
     ///
     /// # Preconditions (caller MUST uphold; not checked)
     ///
-    /// - `values.len()` is a power of two and >= 32.
+    /// - `values.len() == self.poly_length.get()`; this is a power of two >= 32.
     /// - `roots.len() == values.len()` and `roots_precon.len() == values.len()`.
     /// - `q < 2^30`.
     #[target_feature(enable = "avx512f")]
@@ -165,7 +165,7 @@ impl U32NttTable {
     ///
     /// # Preconditions (caller MUST uphold; not checked)
     ///
-    /// - `values.len()` is a power of two and >= 32.
+    /// - `values.len() == self.poly_length.get()`; this is a power of two >= 32.
     /// - `inv_roots.len() == values.len()` and `inv_roots_precon.len() == values.len()`.
     /// - `q < 2^30`.
     #[target_feature(enable = "avx512f")]

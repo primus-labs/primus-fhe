@@ -12,7 +12,9 @@ mod slice;
 /// # Correctness
 ///
 /// Keep `1 < value < 2^(T::BITS - 2)`, including after direct construction or
-/// field updates. The two spare high bits are required by the compact kernels.
+/// field updates. The two spare high bits are the context's common bound;
+/// individual [`common::compact`](crate::common::compact) helpers may accept a
+/// wider modulus range under their own operand and headroom contracts.
 /// Arithmetic methods rely on this invariant and their operand range contracts;
 /// they do not generally recheck the modulus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

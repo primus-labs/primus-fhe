@@ -26,6 +26,9 @@ mod sub;
 /// per-point factors have the full storage length. Values must satisfy the
 /// selected reduction or factor operation's range contract. These conditions
 /// are established by the caller, not validated by the wrapper.
+/// Each component must also use compatible NTT roots, evaluation order and
+/// normalization across operands. Matching lengths and moduli alone do not
+/// establish transform compatibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DcrtPolynomial<S>(pub S)
 where

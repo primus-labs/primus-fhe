@@ -59,7 +59,8 @@ where
 /// the scalar path.
 ///
 /// The factor must have been precomputed for the `modulus` supplied to each
-/// call. Input slice elements are expected to be canonical.
+/// call. Inputs follow the concrete factor's scalar range contract:
+/// [`ShoupFactor`](crate::ShoupFactor) accepts full-width multiplicands.
 pub trait LazyFactorSliceOps<T> {
     /// Calculates a lazy representative of `factor * value` modulo `modulus`
     /// for each element in-place.
@@ -81,7 +82,10 @@ pub trait LazyFactorSliceOps<T> {
 /// `simd` feature is enabled. Callers keep the normal scalar slice layout.
 ///
 /// The factor must have been precomputed for the `modulus` supplied to each
-/// call. Input and accumulator slice elements are expected to be canonical.
+/// call. Multiplicands follow the concrete factor's scalar range contract:
+/// [`ShoupFactor`](crate::ShoupFactor) accepts full-width values in `values`,
+/// `input` and `rhs`. Accumulators and addends must be canonical. All participating
+/// slices must have equal lengths; shape diagnostics are debug-only.
 pub trait FactorSliceOps<T>: LazyFactorSliceOps<T> {
     /// Calculates `factor * value (mod modulus)` for each element in-place.
     fn factor_mul_slice_assign(self, values: &mut [T], modulus: T);

@@ -6,6 +6,10 @@ pub use crate::common::uint::{
 };
 
 /// Returns `(a + b) mod modulus`.
+///
+/// # Correctness
+/// `a, b < modulus` and `a + b < 2^T::BITS`. The latter follows from
+/// `2 * modulus <= 2^T::BITS`. These are mathematical bounds, not wrapping sums.
 #[must_use]
 #[inline(always)]
 pub fn reduce_add<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
@@ -14,12 +18,16 @@ pub fn reduce_add<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
 }
 
 /// Adds `b` to `a` in place modulo `modulus`.
+/// Inherits [`reduce_add`]'s input and headroom requirements.
 #[inline(always)]
 pub fn reduce_add_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
     *a = reduce_add(modulus, *a, b);
 }
 
 /// Returns `(2 * value) mod modulus`.
+///
+/// # Correctness
+/// `value < modulus` and `2 * value < 2^T::BITS`.
 #[must_use]
 #[inline(always)]
 pub fn reduce_double<T: UnsignedInteger>(modulus: T, value: T) -> T {
@@ -28,12 +36,16 @@ pub fn reduce_double<T: UnsignedInteger>(modulus: T, value: T) -> T {
 }
 
 /// Doubles `value` in place modulo `modulus`.
+/// Inherits [`reduce_double`]'s input and headroom requirements.
 #[inline(always)]
 pub fn reduce_double_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
     *value = reduce_double(modulus, *value);
 }
 
 /// Returns `(a - b) mod modulus`.
+///
+/// # Correctness
+/// `a, b < modulus` and `2 * modulus <= 2^T::BITS`.
 #[must_use]
 #[inline(always)]
 pub fn reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
@@ -42,6 +54,7 @@ pub fn reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
 }
 
 /// Subtracts `b` from `a` in place modulo `modulus`.
+/// Inherits [`reduce_sub`]'s input and headroom requirements.
 #[inline(always)]
 pub fn reduce_sub_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
     let diff = a.wrapping_sub(b);
@@ -49,6 +62,10 @@ pub fn reduce_sub_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
 }
 
 /// Returns the lazy difference `a + modulus - b`.
+///
+/// # Correctness
+/// `a, b < modulus` and `2 * modulus <= 2^T::BITS`. The result is in
+/// `[0, 2 * modulus)` and need not be canonical.
 #[must_use]
 #[inline(always)]
 pub fn lazy_reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
@@ -56,6 +73,7 @@ pub fn lazy_reduce_sub<T: UnsignedInteger>(modulus: T, a: T, b: T) -> T {
 }
 
 /// Replaces `a` with the lazy difference `a + modulus - b`.
+/// Inherits [`lazy_reduce_sub`]'s input and headroom requirements.
 #[inline(always)]
 pub fn lazy_reduce_sub_assign<T: UnsignedInteger>(modulus: T, a: &mut T, b: T) {
     *a += modulus - b;

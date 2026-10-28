@@ -45,7 +45,7 @@ Factor 有意不保存模数。调用方必须在后续每次运算中传入构�
 - `ShoupFactor<T>` 要求 `value < modulus` 且 `modulus < 2^(T::BITS - 1)`。
 - `MultiplyFactor` 要求 operand 为规范剩余类，`bit_shift` 为 32、52 或 64，并且 `modulus < 2^(bit_shift - 2)`。乘法使用的 const `BIT_SHIFT` 必须等于构造时传入的 runtime `bit_shift`。
 - 惰性运算返回 `[0, 2 * modulus)` 中的代表元；规范运算返回 `[0, modulus)` 中的值。
-- 切片输入和累加器必须是规范剩余类。非原地和融合运算要求相关切片等长。
+- Shoup 标量和切片的被乘数可使用完整字宽；融合运算的累加器和加数必须是规范剩余类。非原地和融合运算要求相关切片等长。
 - 使用 raw 构造器时，value、quotient 和后续运算使用的 modulus 必须严格匹配。
 
 部分底层契约只通过 `debug_assert*!` 诊断。release 调用方必须在进入重复算术内核前，于适当边界完成验证。

@@ -3,6 +3,11 @@ use primus_integer::UnsignedInteger;
 use primus_reduce::ReduceError;
 
 /// Reduces `value` by subtracting `modulus` at most once.
+///
+/// # Correctness
+/// `value < 2 * modulus` is required for a canonical result. The input and
+/// modulus must be representable; the mathematical bound `2 * modulus` need
+/// not itself fit in `T`.
 #[must_use]
 #[inline(always)]
 pub fn reduce_once<T: UnsignedInteger>(modulus: T, value: T) -> T {
@@ -10,6 +15,7 @@ pub fn reduce_once<T: UnsignedInteger>(modulus: T, value: T) -> T {
 }
 
 /// Reduces `value` in place by subtracting `modulus` at most once.
+/// Inherits [`reduce_once`]'s input range.
 #[inline(always)]
 pub fn reduce_once_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
     *value = reduce_once(modulus, *value);
@@ -110,6 +116,11 @@ pub fn reduce_inv_assign<T: UnsignedInteger>(modulus: T, value: &mut T) {
 }
 
 /// Attempts to return the multiplicative inverse of `value` modulo `modulus`.
+///
+/// # Correctness
+/// `1 < modulus` and `value < modulus`. A non-invertible value returns
+/// [`ReduceError::NoInverse`]; violating the input range is not an error case
+/// promised by this function.
 #[inline(always)]
 pub fn try_reduce_inv<T: UnsignedInteger>(modulus: T, value: T) -> Result<T, ReduceError<T>> {
     debug_assert!(modulus > value);

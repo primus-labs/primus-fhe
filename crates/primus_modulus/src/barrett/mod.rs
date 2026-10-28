@@ -28,6 +28,13 @@ pub use simd::{SimdBarrettModulus, simd_reduce_dot_product, simd_reduce_dot_prod
 /// This includes canonical residues from any other valid Barrett context of the
 /// same coefficient type, as used by RNS base conversion. Both slice and iterator
 /// forms return a canonical residue; scalar and SIMD paths share this bound.
+///
+/// Scalar [`Reduce`](primus_reduce::Reduce) and
+/// [`LazyReduce`](primus_reduce::LazyReduce) accept any word, any two-limb
+/// array `[lo, hi]` or tuple `(lo, hi)`, and any nonempty little-endian limb
+/// slice. Limbs need not be below the modulus. Canonical reduction returns
+/// `[0, q)`; lazy reduction returns `[0, 2q)`. This wider reduction domain does
+/// not relax the separate operand contracts of modular add/sub/multiply.
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct BarrettModulus<T: UnsignedInteger> {
     value: T,
@@ -162,6 +169,7 @@ impl<T: UnsignedInteger> BarrettModulus<T> {
     }
 
     /// Reduces a 2-limb value `(hi * B + lo)` modulo this modulus.
+    /// Both limbs may use the full word range. The result is canonical.
     #[must_use]
     #[inline]
     pub fn reduce_wide(&self, lo: T, hi: T) -> T {

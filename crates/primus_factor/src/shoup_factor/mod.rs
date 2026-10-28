@@ -19,6 +19,15 @@ pub use simd::SimdShoupFactor;
 ///
 /// The modulus must be less than `2^(T::BITS - 1)` so the lazy range fits in
 /// one word.
+///
+/// # Correctness
+///
+/// The fixed multiplier must satisfy `value < modulus`. Modulus headroom and
+/// agreement with the precomputed quotient are caller obligations, not checked
+/// invariants of this storage type. Scalar and slice multiplication accept any
+/// multiplicand representable by `T`; fused slice accumulators and addends must
+/// be canonical. Lazy products lie in `[0, 2 * modulus)`, canonical products in
+/// `[0, modulus)`.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ShoupFactor<T: UnsignedInteger> {
     /// Fixed multiplier represented by this factor.
@@ -47,7 +56,8 @@ impl<T: UnsignedInteger> ShoupFactor<T> {
     /// quotient pair.
     ///
     /// The caller must ensure that `quotient == floor(value * 2^T::BITS /
-    /// modulus)` for the intended modulus. No division is performed.
+    /// modulus)` for the intended modulus, with the value and modulus bounds
+    /// of [`Self::new`]. No division or validation is performed.
     ///
     /// This is useful when value and quotient are stored in separate
     /// structure-of-arrays layouts (e.g. for SIMD).

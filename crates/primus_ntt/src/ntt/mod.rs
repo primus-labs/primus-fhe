@@ -20,6 +20,11 @@ pub use primitive::UintNttTable;
 /// bit-reversed evaluations. Inverse transforms restore coefficient order and
 /// include inverse-length normalization. Slices carry no representation or
 /// table identity; callers must preserve the originating table's convention.
+/// For the table's primitive `2N`-th root `w`, output position `j` represents
+/// evaluation at `w^(2 * bit_reverse(j) + 1)`, reversing exactly `log2(N)` bits.
+/// Forward transforms are unnormalized; inverses include multiplication by
+/// `N^-1 mod q`. Pointwise products therefore represent negacyclic products
+/// without an additional scale factor.
 ///
 /// # Slice length contract
 ///
@@ -27,6 +32,13 @@ pub use primitive::UintNttTable;
 /// coefficients. [`Self::poly_length`] returns a [`PolyLength`], which establishes
 /// the supported power-of-two geometry. Implementations must enforce the exact
 /// slice length in release builds before writes or unchecked transform kernels.
+///
+/// # Correctness
+///
+/// Coefficients and evaluations must satisfy each method's stated residue
+/// range for the table's modulus. Inverse inputs must also use this table's
+/// roots, order and normalization. Slice length checks do not validate these
+/// mathematical or representation requirements.
 pub trait NttTable: Sized + Send + Sync {
     /// The value type.
     type ValueT: FheUint;

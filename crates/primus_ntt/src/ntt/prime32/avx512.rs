@@ -6,8 +6,9 @@
 //! - T2: `unpacklo/hi_epi64` groups two-coefficient halves.
 //! - T1: `shuffle_epi32` plus `unpacklo/hi_epi64` separates adjacent pairs.
 //!
-//! Requires `n ≥ 32` — polynomial lengths below that are handled by the
-//! scalar backend directly.
+//! Requires a power-of-two `n ≥ 32`, established by `PolyLength` at table
+//! construction. Smaller lengths are unsupported, rather than dispatched to
+//! the scalar backend.
 //!
 //! # Safety
 //!

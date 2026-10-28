@@ -135,7 +135,11 @@ where
 
     /// Multiplies `self` by the monomial `X^r` in the ring `Z_modulus[X]/(X^N + 1)`, in place.
     ///
-    /// `r` must belong to `[0, 2N)`.
+    /// # Correctness
+    ///
+    /// `N` must be nonzero and `r` must belong to `[0, 2N)`. Unlike
+    /// [`Self::mul_monomial_to`], this operation supports arbitrary `N`.
+    /// Coefficients satisfy [`ReduceNegSlice`]'s canonical-input contract.
     pub fn mul_monomial_assign<M>(&mut self, r: usize, modulus: M)
     where
         M: Copy + ReduceNegSlice<T>,
@@ -151,7 +155,13 @@ where
 {
     /// Multiplies `self` by `X^exponent` in `Z_q[X]/(X^N + 1)` and writes the result.
     ///
-    /// `exponent` must belong to `[0, 2N)`.
+    /// # Correctness
+    ///
+    /// Input and output must each contain exactly `N` coefficients, where `N`
+    /// is a nonzero power of two. `exponent` must belong to `[0, 2N)` and input
+    /// coefficients must be canonical for `modulus`. Output is overwritten with
+    /// canonical coefficients. Shape and exponent checks are debug diagnostics;
+    /// violating these requirements need not panic in release builds.
     #[inline]
     pub fn mul_monomial_to<M, A>(&self, exponent: usize, output: &mut Polynomial<A>, modulus: M)
     where
@@ -163,8 +173,13 @@ where
 
     /// Computes `output = self * (X^exponent - 1)` in `Z_q[X]/(X^N + 1)`.
     ///
-    /// `exponent` must belong to `[0, 2N)`. Rotation and subtraction are
-    /// fused into one coefficient pass.
+    /// Rotation and subtraction are fused into one coefficient pass.
+    ///
+    /// # Correctness
+    ///
+    /// Inherits the nonzero power-of-two length, exact output length, exponent
+    /// and canonical-input requirements of [`Self::mul_monomial_to`]. Output is
+    /// completely overwritten with canonical coefficients.
     #[inline]
     pub fn mul_monomial_sub_one_to<M, A>(
         &self,

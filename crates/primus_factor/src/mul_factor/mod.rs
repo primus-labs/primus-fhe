@@ -12,9 +12,15 @@ impl MultiplyFactor {
     /// This is useful when modular multiplications of the form `(x * operand) mod modulus`
     /// are performed many times with the same `modulus` and `operand`.
     ///
-    /// Note: passing `operand = 1` can be used to precompute a scaled quotient for
-    /// multiplications of the form `(x * y) mod modulus`, where only the `modulus`
-    /// is reused across calls.
+    /// # Correctness
+    ///
+    /// Subsequent multiplication requires `modulus < 2^(bit_shift - 2)`.
+    /// Neither the modulus nor `bit_shift` is stored: each multiplication must
+    /// supply the same modulus and the same shift as its const `BIT_SHIFT`.
+    ///
+    /// # Panics
+    ///
+    /// Panics unless `operand < modulus` and `bit_shift` is 32, 52 or 64.
     #[must_use]
     pub fn new(operand: u64, bit_shift: u32, modulus: u64) -> Self {
         assert!(

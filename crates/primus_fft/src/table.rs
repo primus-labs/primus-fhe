@@ -13,6 +13,23 @@ use crate::TorusFftValue;
 /// Table identity is a caller contract: workspace length or capacity checks
 /// cannot establish where a workspace or Fourier values originated.
 ///
+/// # Representation and normalization
+///
+/// The bundled backends pack `a[j] + i*a[j + H]`, where `H = N/2`, apply the
+/// twist `exp(i*pi*j/N)`, and perform an unnormalized length-`H` forward FFT.
+/// In natural frequency order, bin `k` evaluates the real polynomial at
+/// `exp(i*pi*(1 - 4*k)/N)`. RustFFT stores these bins in natural order;
+/// TFHE-FFT permutes them according to its selected plan. Use
+/// [`Self::automorphism_map`] rather than assuming either storage order.
+///
+/// The inverse includes the inverse twist and `1/H` normalization before
+/// unpacking. Torus conversion scales coefficients by `2^-T::BITS` on input
+/// and by `2^T::BITS` on output; integer conversion uses signed values without
+/// this scaling. Thus pointwise multiplication of an integer spectrum by a
+/// torus spectrum has torus scale. Multiplying two torus spectra introduces
+/// another factor of `2^-T::BITS`. Floating-point conversion and transforms
+/// introduce rounding error; they are not exact modular arithmetic.
+///
 /// # Correctness
 /// Every transform workspace must originate from the exact receiving table
 /// instance. Fourier inputs must also use that table's ordering and scale.

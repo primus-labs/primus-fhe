@@ -23,6 +23,15 @@ pub type NttPolynomialMut<'a, T> = NttPolynomial<&'a mut [T]>;
 /// This wrapper stores no ring length, modulus or transform identity. Empty,
 /// arbitrary-length and packed storage are allowed; [`Self::len`] counts all
 /// stored evaluations. Callers establish the complete layout before arithmetic.
+///
+/// # Correctness
+///
+/// Pointwise arithmetic requires equal input and output lengths, a common
+/// modulus, and compatible NTT roots, evaluation order and normalization.
+/// Values must satisfy the selected reduction or factor operation's input
+/// ranges; lazy transform output is not automatically canonical. The wrapper
+/// does not validate these conditions, and zipped loops can leave unmatched
+/// tails untouched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NttPolynomial<S>(pub S)
 where
