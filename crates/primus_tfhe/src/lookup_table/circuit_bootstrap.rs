@@ -194,6 +194,9 @@ impl<T: FheUint> CircuitBootstrapLookupTable<T> {
     /// Checks N, input q, ring Q and the exact gadget basis. Binding must also
     /// check the operation's supported/configured [`Self::input_encoding`].
     /// This does not establish ciphertext encoding, secret identity or noise.
+    /// In particular it does not compare the default message modulus of a
+    /// context: inputs must use [`Self::input_plaintext_modulus`] and this
+    /// program's encoding, which may intentionally differ from that default.
     #[must_use]
     pub fn is_compatible(
         &self,

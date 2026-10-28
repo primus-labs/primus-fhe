@@ -66,6 +66,10 @@ where
     /// Input residues must be canonical in this instance's `Q || P` order.
     /// The P-to-Q conversion requirements of
     /// [`approx_convert_p_to_q_to`](Self::approx_convert_p_to_q_to) apply.
+    /// The approximate lift is not an exact rounded division: any omitted
+    /// multiple of `P` becomes an integer correction after multiplication by
+    /// `P^-1`. The caller must include that contribution in the scheme's error
+    /// budget; this method does not establish a noise or decryption bound.
     pub fn approx_mod_down_q_assign(
         &self,
         polynomial_mod_qp: &mut [T],

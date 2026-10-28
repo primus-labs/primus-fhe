@@ -46,6 +46,14 @@ impl<T: FheUint> ClientKey<T> {
     }
 
     /// Creates a client key from its LWE and coefficient-domain GLWE keys.
+    ///
+    /// # Correctness
+    ///
+    /// This only groups the secrets and PBS order. Imported coefficients retain
+    /// their owning key types' numerical and distribution contracts. Later
+    /// [`Self::check_compatible`] checks do not validate GLWE coefficient
+    /// magnitudes or the actual secret pairing with separately generated
+    /// server material.
     #[must_use]
     #[inline]
     pub fn new(
@@ -183,7 +191,7 @@ impl<T: FheUint> ClientKey<T> {
         parameters.check_accumulator_secret_key(&self.glwe_secret_key)
     }
 
-    /// Decomposes this client key into its two secret keys.
+    /// Returns the two secret keys and the PBS order defining their external role.
     #[must_use]
     #[inline]
     pub fn into_parts(self) -> (LweSecretKey<T>, GlweSecretKey<T>, PbsOrder) {

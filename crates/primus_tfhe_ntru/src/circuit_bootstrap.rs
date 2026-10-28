@@ -67,6 +67,13 @@ impl<T: FheUint, M: RingContext<T>> CbsGadgetParameters<T, M> {
 
     /// Checks the accumulator ring, modulus and output layout independently of input encoding.
     /// The output layout is derived from the TFHE accumulator and `output_basis`.
+    ///
+    /// # Correctness
+    ///
+    /// Independently supplied trace and scheme-switch parameters must be used
+    /// with the same actual NTRU secret and transform representation as BR.
+    /// Matching dimensions, moduli or distribution labels do not establish
+    /// that pairing or a usable CBS noise/security budget.
     pub fn try_new<LM: RingContext<T>>(
         tfhe: &PbsParameters<T, M, LM>,
         output_basis: ApproxSignedBasis<T>,

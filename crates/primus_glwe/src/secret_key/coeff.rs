@@ -12,6 +12,14 @@ use crate::SecretKeyDistr;
 
 /// A GLWE secret key stored as signed coefficient polynomials.
 /// Signed coefficients are securely erased when the key is dropped.
+///
+/// # Correctness
+///
+/// Imported distribution metadata does not prove coefficient support or fixed
+/// weight. Explicit-modulus conversion requires each coefficient's unsigned
+/// magnitude to be below that modulus, as in [`primus_reduce::EncodeSigned`].
+/// A key valid for one modulus is not automatically valid for another; a
+/// shape or distribution-label check does not establish this bound.
 #[derive(Clone)]
 pub struct GlweSecretKey<T: FheUint> {
     pub(crate) key: Vec<T::SignedInteger>,

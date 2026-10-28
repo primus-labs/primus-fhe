@@ -37,7 +37,8 @@ impl<T: FheUint, M: RingContext<T>> CbsGadgetParameters<T, M> {
     /// Reuses the accumulator's validated layout and sampler state without preparing
     /// new samplers. All key rows use its fresh encryption noise and independent RNG draws.
     /// The derived components already share one domain; only new gadget layouts are checked.
-    /// Returns basis or layout errors. Program capacity is checked at evaluation binding.
+    /// Returns basis or layout errors. Program capacity is checked at compilation;
+    /// evaluation binding checks the compiled program against the chosen domain.
     /// The direct [`Self::try_new`] constructor also accepts prepared bases and
     /// independently constructed key parameters.
     ///
@@ -70,6 +71,13 @@ impl<T: FheUint, M: RingContext<T>> CbsGadgetParameters<T, M> {
     ///
     /// Returns an error if bases or key layouts use another accumulator domain,
     /// or the output layout overflows. No message codec is required.
+    ///
+    /// # Correctness
+    ///
+    /// Independently supplied trace and scheme-switch parameters must describe
+    /// key rows generated under the actual accumulator secret and transform
+    /// representation. This constructor checks modulus/layout, not equality of
+    /// distribution labels, coefficient support, secret identity or noise budgets.
     pub fn try_new<LM: RingContext<T>>(
         tfhe: &PbsParameters<T, M, LM>,
         output_basis: ApproxSignedBasis<T>,

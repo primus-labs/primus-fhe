@@ -59,7 +59,8 @@ where
     /// Compiles the packed LUT and allocates projection buffers for this context.
     /// Common BR resources are supplied only for online calls and must come from
     /// the same context. A CBS-enabled context must match the key's configured
-    /// projection and gadgets; a PBS-only context uses the supplied key's strategy.
+    /// precision, projection and gadgets. A PBS-only context accepts only
+    /// ordinary-precision CBS material; split material requires a CBS-enabled context.
     ///
     /// # Correctness
     /// The circuit key must share the context's intended accumulator secret and

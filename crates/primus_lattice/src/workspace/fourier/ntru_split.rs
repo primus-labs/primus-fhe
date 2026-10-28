@@ -10,7 +10,8 @@ pub struct FourierNtruSplitWorkspace<T: TorusFftValue> {
     pub(crate) high_product: Box<[T]>,
 }
 impl<T: TorusFftValue> FourierNtruSplitWorkspace<T> {
-    /// Allocates one extra spectrum and one coefficient product (64 KiB at N=4096).
+    /// Allocates one extra spectrum of `N/2` complex values and one product of
+    /// `N` coefficients (64 KiB for `u64`, 48 KiB for `u32`, at N=4096).
     #[must_use]
     pub fn new(n: PolyLength) -> Self {
         Self {
