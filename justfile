@@ -10,7 +10,9 @@ ci: default test-doc
   cargo check -p 'primus_tfhe*_ntt' -p primus_glwe_rns --lib --no-default-features
   cargo check -p 'primus_tfhe*_fourier' --lib --no-default-features --features rustfft
   cargo check -p primus_encoding --lib --no-default-features
-  cargo check -p primus_modulus -p primus_distr --lib --features primus_modulus/derive,primus_distr/high_precision
+  cargo check -p primus_modulus --all-targets --features derive
+  cargo nextest run -p primus_modulus --lib --tests --features derive -E 'binary(derives)'
+  cargo check -p primus_distr --lib --features high_precision
 
 # Separate toolchain/job. Build strict rustdoc only once, with all features.
 ci-nightly: simd

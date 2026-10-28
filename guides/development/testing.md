@@ -16,7 +16,7 @@
 | `just simd [package]` | nightly、all-features 的 Clippy 与普通测试 |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者选择 NTT 和双 FFT，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
-| `just ci` | 在 `just` 之上执行 doctest 和可选依赖隔离编译 |
+| `just ci` | 在 `just` 之上执行 doctest、可选依赖隔离编译和 Barrett derive 回归 |
 | `just ci-nightly` | workspace 全 features 的 Clippy、普通测试、doctest、严格 private rustdoc 和 SIMD-only 编译 |
 
 上表可选的 `package` 默认为 `*`，也接受包名或加引号的 Cargo glob。单独调用 `check`、`lint`、`test` 时，`features` 默认空字符串，即只使用各包的默认 features；它们不会自动选择 `just` 的 NTT/双 FFT 组合。例如：
@@ -41,6 +41,17 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 | GLWE Split35 trace | 低层 `primus_glwe` 需显式添加 `split-trace`；GLWE Fourier 后端默认启用此能力，ordinary 仍是默认表示。关闭后端默认 features 后按需添加 `split-trace`；GLWE Fourier 本身包含系数建钥用的内部辅助 NTT/CRT 依赖，不启用 NTT GLWE API |
 
 稳定工具链上的其他可选功能包括 `primus_data/aligned-vec`、integer/lattice 的 `serde`、`primus_modulus/derive`、`primus_distr/high_precision` 及 lattice/encoding 的 `rns`。独立包验证须显式选择需要的功能，不能依赖其他 workspace 消费者合并 features。
+
+`just ci` 对 `primus_modulus --features derive` 做 all-targets 编译，并单独运行
+`derives` 测试目标；不启用 Cargo `simd`，与 nightly 的 portable-SIMD 派生路径分开覆盖。
+该过滤不会重跑 modulus 的其他数值测试。只复现这项回归时使用：
+
+```sh
+cargo nextest run -p primus_modulus --lib --tests --features derive -E 'binary(derives)'
+```
+
+workspace 的普通 `just` 已因 `primus_glwe_rns` 的依赖启用 `primus_lattice/rns`
+和 `primus_encoding/rns`，包含相关条件测试；单独选择这两个包时仍需显式启用 `rns`。
 
 ```sh
 cargo nextest run -p primus_fft --lib --tests --features rustfft,tfhe-fft
