@@ -67,6 +67,8 @@ assert!(samples[poly_length..].iter().all(|&x| x < moduli[1]));
 
 截断 support 能放入 magnitude 上限为 255 的 portable CDT 表时，facade 选择 CDT backend；否则选择 Ziggurat backend。需要直接指定 tail cut 或 backend 时，应显式构造 `*CDTSampler` 或 `*Ziggurat`。
 
+显式构造 Ziggurat 时，若层表超出所请求的截断 support，会返回错误；较短的 tail 可能出现这种情况。这是 Ziggurat backend 的限制，不改变 CDT sampler 支持的 tail 范围。
+
 `DiscreteGaussian::new(sigma, modulus_minus_one)` 返回 `[0, modulus_minus_one]` 中的值。逻辑负样本 `-x` 编码为 `modulus_minus_one - x + 1`。`SignedDiscreteGaussian::new(sigma)` 则直接返回正值、 零和负值。
 
 ## 批量采样

@@ -18,6 +18,8 @@ impl<T: FheUint> DiscreteZiggurat<T> {
     ///
     /// Returns an error when the parameters are invalid, the modulus cannot
     /// encode the support, or Ziggurat setup cannot represent the distribution.
+    /// In particular, rejects layer tables that extend beyond the requested
+    /// support `max(1, floor(std_dev * tail_cut))`, which can occur for short tails.
     pub fn new(std_dev: f64, tail_cut: f64, modulus_minus_one: T) -> Result<Self, GaussianError> {
         let parameters = GaussianParameters::new(std_dev, tail_cut)?;
         Self::from_parameters(parameters, modulus_minus_one)

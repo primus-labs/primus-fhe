@@ -142,6 +142,21 @@ impl<T: FheInt> ZigguratMagnitudeSampler<T> {
 
             x.push(maximum_magnitude);
             y.push(0.0);
+
+            // Convergence does not ensure that inner layers fit a short tail.
+            // Check the integer proposal endpoints before converting to T;
+            // output adapters already established that the declared M fits T.
+            if x.iter().any(|&endpoint| {
+                !endpoint.is_finite()
+                    || endpoint < 0.0
+                    || endpoint as u64 > parameters.maximum_magnitude()
+            }) {
+                return Err(GaussianError::ZigguratConstructionFailed {
+                    standard_deviation,
+                    tail_cut: parameters.tail_cut(),
+                });
+            }
+
             // Zero is shared by both signs. Account for both that duplication
             // and any first-layer height above or below the target PDF at zero.
             let zero_acceptance = Bernoulli::new(0.5 / y[0])

@@ -67,6 +67,8 @@ The `DiscreteGaussian` and `SignedDiscreteGaussian` facades use a default tail c
 
 The facades select the portable CDT backend when the truncated support fits its 255-magnitude table and otherwise use the Ziggurat backend. Construct an explicit `*CDTSampler` or `*Ziggurat` when the tail cut or backend must be chosen directly.
 
+Explicit Ziggurat construction returns an error if its layer table extends beyond the requested truncated support; this can occur for short tails. This backend restriction does not change the tail range supported by CDT samplers.
+
 `DiscreteGaussian::new(sigma, modulus_minus_one)` returns values in `[0, modulus_minus_one]`. A negative logical sample `-x` is encoded as `modulus_minus_one - x + 1`. `SignedDiscreteGaussian::new(sigma)` instead returns positive, zero, and negative values directly.
 
 ## Batch sampling

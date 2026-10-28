@@ -20,6 +20,8 @@ impl<T: FheInt + SignedInteger> SignedDiscreteZiggurat<T> {
     ///
     /// Returns an error when the parameters are invalid, `T` cannot represent
     /// the signed support, or Ziggurat setup cannot represent the distribution.
+    /// In particular, rejects layer tables that extend beyond the requested
+    /// support `max(1, floor(std_dev * tail_cut))`, which can occur for short tails.
     pub fn new(std_dev: f64, tail_cut: f64) -> Result<Self, GaussianError> {
         let parameters = GaussianParameters::new(std_dev, tail_cut)?;
         Self::from_parameters(parameters)
