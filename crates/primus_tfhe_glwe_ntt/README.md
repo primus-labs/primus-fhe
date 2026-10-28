@@ -26,7 +26,9 @@ let config = experimental::CLASSIC_PBS_U64;
 let context = TfheContext::<u64, Table>::try_from_pbs_config(config)?;
 ```
 
-Start with an operation config from [experimental](src/experimental.rs). `PbsConfig` contains BR/KS, PBS order and input/output messages; `CbsConfig` adds CBS gadgets, input encoding and trace precision and uses `TfheContext::try_from_cbs_config`. NTT requires `fourier_trace_precision: FourierTracePrecision::Ordinary`; Split35 is rejected during parameter preparation. These are arithmetic teaching fixtures with **unassessed security and failure probability**. Numerical choices and noise roles are described in the [family guide](../primus_tfhe_glwe/README.md#experimental-paired-parameters).
+Start with an operation config from [experimental](src/experimental.rs). `PbsConfig` contains BR/KS, PBS order and input/output messages; `CbsConfig` adds CBS gadgets, input encoding and trace precision and uses `TfheContext::try_from_cbs_config`. NTT requires `fourier_trace_precision: FourierTracePrecision::Ordinary`; Split35 is rejected during parameter preparation. These are arithmetic teaching fixtures, **not certified security or failure-probability presets**. Numerical choices and noise roles are described in the [family guide](../primus_tfhe_glwe/README.md#experimental-paired-parameters).
+
+`CLASSIC_CBS_U64` uses n866/N2048 with independent binary secrets, two BR levels and three trace/SS levels. Its return KS uses the small-LWE deviation, distinct from the ring-row deviation. See the [parameter directory](../../guides/development/tfhe-parameters.md#noise-by-key-role) for the tested consumer and assessment limits.
 
 Padded CBS examples use the t8 teaching config; the MSB example explicitly selects `CbsInputEncoding::MsbBoolean` (t=2). The benchmark-local LightFHE G1 comparison uses a different input/consumer contract and is not a drop-in replacement; see [candidate scope](../../guides/performance/bootstrap-functional-comparison.md).
 

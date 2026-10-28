@@ -26,7 +26,9 @@ let config = experimental::CLASSIC_PBS_U64;
 let context = TfheContext::<u64, Table>::try_from_pbs_config(config)?;
 ```
 
-从 [experimental](src/experimental.rs) 选择操作配置。`PbsConfig` 包含 BR/KS、PBS 顺序及输入输出消息；`CbsConfig` 添加 CBS gadget、输入编码和 trace 精度，使用 `TfheContext::try_from_cbs_config`。NTT 必须设置 `fourier_trace_precision: FourierTracePrecision::Ordinary`，参数准备会拒绝 Split35。这些算术教学参数的**安全性及失败概率尚未评估**，数值选择与噪声角色见[家族指南](../primus_tfhe_glwe/README.zh_CN.md#实验配套参数)。
+从 [experimental](src/experimental.rs) 选择操作配置。`PbsConfig` 包含 BR/KS、PBS 顺序及输入输出消息；`CbsConfig` 添加 CBS gadget、输入编码和 trace 精度，使用 `TfheContext::try_from_cbs_config`。NTT 必须设置 `fourier_trace_precision: FourierTracePrecision::Ordinary`，参数准备会拒绝 Split35。这些是算术教学参数，**不是经过安全性或失败概率认证的预设**，数值选择与噪声角色见[家族指南](../primus_tfhe_glwe/README.zh_CN.md#实验配套参数)。
+
+`CLASSIC_CBS_U64` 使用 n866/N2048、独立 binary 秘密、两层 BR 和三层 trace/SS。返回 KS 使用小 LWE 的标准差，与环密钥行的标准差不同。已测消费者及评估边界见[参数目录](../../guides/development/tfhe-parameters.md#noise-by-key-role)。
 
 Padded CBS 示例使用 t8 教学配置；MSB 示例显式选择 `CbsInputEncoding::MsbBoolean`（t=2）。基准内的 LightFHE G1 比较参数采用不同输入和消费契约，不能直接替换。候选范围见[参数筛选说明](../../guides/performance/bootstrap-functional-comparison.md)。
 

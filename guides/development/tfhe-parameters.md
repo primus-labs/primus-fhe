@@ -1,6 +1,6 @@
 # TFHE experimental parameter directory
 
-These configurations are experimental examples and benchmark fixtures, not certified parameter sets. Teaching fixtures have no assessed security or complete decryption-failure probability. Successful construction and sampled known-result checks do not certify either property. Equal dimensions across backends do not establish equivalent security, precision or work.
+These configurations are experimental examples and benchmark fixtures, not certified parameter sets. Conditional model screening, successful construction and sampled known-result checks do not certify security or complete decryption-failure probability. Equal dimensions across backends do not establish equivalent security, precision or work.
 
 The current sources below own the numerical choices. Operation contracts belong to the [bootstrapping guide](bootstrapping-contracts.md); execution commands belong to the [testing guide](testing.md). This directory does not prescribe ordinary-test sizes.
 
@@ -50,7 +50,8 @@ For the u64 configs, n denotes the small BR-control dimension in GLWE and the in
 | --- | --- | --- | --- |
 | GLWE classic PBS / Boolean | 866 / 2048 | Uniform binary | Uniform binary |
 | GLWE sparse PBS / ManyLUT / MVB / sparse CBS | 728 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
-| GLWE classic CBS | 800 / 1024 | Uniform binary | Uniform ternary |
+| GLWE NTT classic CBS | 866 / 2048 | Uniform binary | Uniform binary |
+| GLWE Fourier classic CBS | 800 / 1024 | Uniform binary | Uniform ternary |
 | NTRU classic PBS / Boolean | 866 / 2048 | Uniform binary | Sparse ternary |
 | NTRU sparse PBS / ManyLUT / MVB | 728 / 1024 | Fixed-weight binary, h=32 | Sparse ternary |
 | NTRU classic CBS | 800 / 1024 | Uniform binary | Sparse ternary |
@@ -75,6 +76,29 @@ is centered and truncated at inclusive magnitude `max(1,floor(12σ))`; σ is its
 sampler parameter, not the measured noise of an evaluated ciphertext. Models must
 also account for accepted-key conditioning and shared evaluation-key errors.
 
+The NTT `CLASSIC_CBS_U64` uses q=Q50, rank one and independently sampled
+binary secrets. Its padded t8 predicate `[m>=2]` was checked with a Scaled t8
+CMux consumer and an LWE return. Other consumers need their own noise analysis.
+
+| NTT classic CBS role | Coefficient-unit σ | `(log₂B,L)` |
+| --- | ---: | --- |
+| Fresh small LWE | 2303762004.9811506 | — |
+| BSK | 6.4 | (15,2) |
+| Binary reverse trace | 6.4 | (12,3) |
+| Rank-one square SS | 6.4 | (12,3) |
+| Output GGSW | Inherited evaluated noise | (8,2) |
+| Return ring KS | 2303762004.9811506 | (3,5) |
+
+The return target is the n866 secret padded with 1182 public zeros, not a fresh
+2048-dimensional secret. A public BSK subset supplies 1732 independent scalar
+LWE equations under the ideal independent-mask/error model. Limited classical
+BDGL16/GSA estimates exceed 128 bits for that subset and a known-message fresh
+oracle scenario; they do **not** certify the full public material. In particular,
+correlated ring equations and the trace/SS/KS key-dependent messages require
+separate treatment. The evaluated-noise model is conditional on captured data
+and residual assumptions; complete request DFR remains unknown. These statements
+do not apply to the unchanged Fourier or sparse CBS fixtures.
+
 ## Decomposition by operation
 
 A `DecompositionConfig` fixes `log_basis` and optionally `level_count`. With
@@ -98,7 +122,7 @@ The crate-local benchmarks consume the operation configs but measure the followi
 | `pbs` | Dense classic u32/u64, fixed-weight classic u64 and fixed-weight sparse u64; one PBS of `F(x)=(3x+1) mod 16` at Rounded 32→32. The fixed pair shares the sparse config's numerical choices and changes only BR method. |
 | `many_lut` | `CLASSIC_MANY_LUT_U64`: one two-output PBS returning grade and flag; no subsequent code-combining addition. |
 | `mvb` | `CLASSIC_THRESHOLD_MVB_U64`: one factorized request returning all 17 threshold flags. |
-| `cbs` | `CLASSIC_CBS_U64`: predicate [m>=2], CMux over two nonconstant encrypted candidates at t_ring=8, and coefficient 1 returned as LWE; no extra ring addition. The `predicate_cmux_return` workload includes return cost and is not the former `predicate_cmux` measurement. |
+| `cbs` | `CLASSIC_CBS_U64`: predicate [m>=2], CMux over two nonconstant encrypted candidates at t_ring=8, and coefficient 1 returned as LWE; no extra ring addition. NTT names include `n866_N2048` to separate the revised config from old n800/N1024 results. The `predicate_cmux_return` workload includes return cost and is not the former `predicate_cmux` measurement. |
 | GLWE `cbs_identity` | Benchmark-local G1 NTT / G2 Fourier comparison configs; padded/MSB identity CBS, with separate CBS-only and CBS＋CMux cases. Fourier ordinary/Split35 select the trace representation. |
 | GLWE `modulus_domains` | Benchmark-local q=Q/q1024, both PBS orders; NTT and TFHE-FFT. |
 | `one_hot` | NTRU `CLASSIC_ONE_HOT_U64`: three nonzero NGSWs and four-way CMux at t_ring=8. |

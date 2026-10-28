@@ -9,7 +9,7 @@ Backend-independent GLWE-TFHE parameters and LWE clients. Choose [NTT](../primus
 
 ## Experimental paired parameters
 
-Start with the concrete backend's `experimental::*_U64` operation config. These are teaching fixtures without assessed security or failure probability; see [parameter conditions](../../guides/development/tfhe-parameters.md#scope-of-paired-parameter-entries).
+Start with the concrete backend's `experimental::*_U64` operation config. These are teaching fixtures, not certified security or failure-probability presets; see [parameter conditions](../../guides/development/tfhe-parameters.md#scope-of-paired-parameter-entries).
 
 | Config | Purpose |
 | --- | --- |

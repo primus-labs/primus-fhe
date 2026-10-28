@@ -1,7 +1,8 @@
 //! Experimental u64 GLWE operation configs for this Q50 NTT backend.
 //!
-//! These reproduce teaching workloads recorded on 2026-10-08 at revision
-//! `9a80c506`; security and decryption-failure probability are unassessed.
+//! These are teaching workloads, not certified security or failure-probability
+//! presets. Classic CBS uses independently sampled binary secrets at n866/N2048;
+//! other entries retain their earlier teaching choices.
 //! Configs contain numerical choices; parameter constructors build sampling state once.
 //! Functions, lane/factor geometry and complete noise budgets belong to the operation.
 
@@ -59,8 +60,12 @@ pub const CLASSIC_THRESHOLD_MVB_U64: PbsConfig<u64> = fixed(
     PbsOrder::KeyswitchBootstrap,
 );
 
-/// Classic NTT CBS, n800/N1024, direct small-LWE input t=8, two output levels.
-/// Teaching F=[m>=2] controls CMux; the consumer chooses its ring message modulus.
+/// Classic NTT CBS, n866/N2048, independent binary secrets, padded input t=8.
+///
+/// BR uses (log₂B,L)=(15,2), trace/SS (12,3), output (8,2), return KS (3,5).
+/// Fresh and KS rows share the small-LWE deviation; BR/trace/SS rows use 6.4.
+/// The tested consumer is F=[m>=2] followed by CMux at Scaled t_ring=8 and an
+/// LWE return. Conditional model screening is not a complete security/DFR claim.
 pub const CLASSIC_CBS_U64: CbsConfig<u64> =
     circuit(ModulusConfig::Explicit(Q50), Q50 as f64, false);
 
@@ -150,36 +155,30 @@ const fn circuit(
     let blind_rotation = if sparse {
         fixed(modulus, q, SPARSE, 8, 8, PbsOrder::BootstrapKeyswitch)
     } else {
-        PbsConfig {
-            small_lwe: LweConfig {
-                dimension: LweDimension::new(800),
-                cipher_modulus: modulus,
-                secret_key_distr: SecretKeyDistr::UniformBinary,
-                noise_standard_deviation: ALPHA * q,
-            },
-            ring_modulus: modulus,
-            bsk_dimension: GlweDimension::new(1),
-            bsk_poly_length: PolyLength::new(1024),
-            bsk_secret_distr: SecretKeyDistr::UniformTernary,
-            bsk_gadget: GadgetEncryptionConfig {
-                decomposition: decomposition(8),
-                noise_standard_deviation: 6.4,
-            },
-            method: BlindRotationMethod::Classic,
-            key_switching: GadgetEncryptionConfig {
-                decomposition: decomposition(8),
-                noise_standard_deviation: 6.4,
-            },
-            messages: primus_tfhe::PbsMessageConfig::new(2),
-            order: PbsOrder::BootstrapKeyswitch,
+        let mut pbs = dense(modulus, q);
+        pbs.bsk_gadget.decomposition = DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(15),
+            level_count: Some(DecompositionLevelCount::new(2)),
+        };
+        // The return target has n random coefficients and a public zero tail.
+        // Its row noise is chosen independently from the BSK's ring noise.
+        pbs.key_switching.noise_standard_deviation = pbs.small_lwe.noise_standard_deviation;
+        pbs
+    };
+    let projection = if sparse {
+        decomposition(8)
+    } else {
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(12),
+            level_count: Some(DecompositionLevelCount::new(3)),
         }
     };
     CbsConfig {
         fourier_trace_precision: primus_tfhe_glwe::FourierTracePrecision::Ordinary,
         input_encoding: primus_tfhe::CbsInputEncoding::Padded,
         gadget: CbsGadgetConfig {
-            trace: decomposition(8),
-            scheme_switch: decomposition(8),
+            trace: projection,
+            scheme_switch: projection,
             output: DecompositionConfig {
                 log_basis: DecompositionBaseLog::new(8),
                 level_count: Some(DecompositionLevelCount::new(2)),

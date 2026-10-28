@@ -13,6 +13,8 @@ Rank1 NTT SS 只保存 `GLev(s²)`，以 `sum D(a)GLev(s²)+(b,0)` 生成 mask �
 运行时源码指纹（按路径排序的SHA256映射再散列）：`564810acebf948d776afabdcda686a8859e8c7a0dfa2a19cb79bd0f3a7cb9879`。
 两个测量ELF：原实现 `d05bb59916c4e111`，候选 `681640f13d427e8b`。
 这是历史测量，不是后续HEAD认证或独立重建承诺；参数未随算术迁入调整。
+之后 NTT `CLASSIC_CBS_U64` 已改用 n866/N2048 binary 环秘密及不同 gadget/KS 噪声；
+下表保留原 n800/N1024 参数与结果，不能用当前预设重放。当前值见[参数目录](../development/tfhe-parameters.md#noise-by-key-role)。
 
 | 项目 | classic | g1 |
 | --- | --- | --- |

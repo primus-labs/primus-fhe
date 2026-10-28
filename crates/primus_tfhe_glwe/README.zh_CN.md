@@ -9,7 +9,7 @@
 
 ## 实验配套参数
 
-从具体后端的 `experimental::*_U64` 操作配置开始。这些教学参数未评估安全性或失败概率，详见[参数条件](../../guides/development/tfhe-parameters.md#scope-of-paired-parameter-entries)。
+从具体后端的 `experimental::*_U64` 操作配置开始。这些教学参数不是经过安全性或失败概率认证的预设，详见[参数条件](../../guides/development/tfhe-parameters.md#scope-of-paired-parameter-entries)。
 
 | 配置 | 用途 |
 | --- | --- |

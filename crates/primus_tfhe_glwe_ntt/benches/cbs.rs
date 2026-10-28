@@ -2,16 +2,16 @@
 //! Parameters and comparison limits: guides/development/testing.md#tfhe-benchmarks
 //! One iteration is one server request. Setup and correctness checks are untimed.
 
+use std::hint::black_box;
+
 use criterion::{Criterion, Throughput};
 use primus_ntt::U64NttTable as Table;
 use primus_tfhe_glwe_ntt::{Evaluator, TfheContext, experimental};
 use rand::{SeedableRng, rngs::StdRng};
-use std::hint::black_box;
 
 type Word = u64;
 
 fn benchmark(c: &mut Criterion) {
-    let engine = "ntt";
     let config = experimental::CLASSIC_CBS_U64;
     let context = TfheContext::<Word, Table>::try_from_cbs_config(config).unwrap();
     // Client: keys, inputs and candidate ciphertexts are all prepared outside timing.
@@ -71,7 +71,12 @@ fn benchmark(c: &mut Criterion) {
             messages[usize::from(message >= 2)][index]
         );
     }
-    let mut group = c.benchmark_group(format!("cbs/glwe/{engine}"));
+    // Keep the revised geometry separate from the former n800/N1024 results.
+    let mut group = c.benchmark_group(format!(
+        "cbs/glwe/ntt/n{}_N{}",
+        config.pbs.small_lwe.dimension.get(),
+        n
+    ));
     group.throughput(Throughput::Elements(1)); // Complete requests, not output count.
     group.bench_function("predicate_cmux_return/u64", |b| {
         b.iter(|| {
