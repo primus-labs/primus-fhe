@@ -1,10 +1,10 @@
-use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
-use primus_lattice::GlweDimension;
 use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_decompose::primitive::ApproxSignedBasis;
+use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_fft::{FftEngine, FftTable, RustFftTable, TfheFftTable, TorusFftValue};
+use primus_lattice::GlweDimension;
 use primus_lattice::{
     GadgetSize, GlweSize,
     ggsw::{FourierGgswOwned, Ggsw},

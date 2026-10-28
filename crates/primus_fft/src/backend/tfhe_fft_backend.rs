@@ -1,9 +1,9 @@
-use primus_shape::PolyLength;
 use std::{f64::consts::PI, time::Duration};
 
 use aligned_vec::{ABox, AVec, CACHELINE_ALIGN, avec};
 use dyn_stack::{PodBuffer, PodStack};
 use num_complex::Complex64;
+use primus_shape::PolyLength;
 use tfhe_fft::unordered::{Method, Plan};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -61,6 +61,7 @@ impl TfheFftTable {
     ) {
         assert_eq!(input.len(), self.poly_length.get());
         assert_eq!(output.len(), self.poly_length.fourier_poly_len());
+
         let (first, second) = input.split_at(self.poly_length.fourier_poly_len());
         for (((output, &re), &im), &twist) in output
             .iter_mut()
@@ -70,6 +71,7 @@ impl TfheFftTable {
         {
             *output = Complex64::new(convert(re), convert(im)) * twist;
         }
+
         self.plan.fwd(output, PodStack::new(&mut workspace.memory));
     }
 }
@@ -80,7 +82,9 @@ impl FftTable for TfheFftTable {
     fn new(poly_length: PolyLength) -> Self {
         let n = poly_length.get();
         let h = poly_length.fourier_poly_len();
+
         let plan = Plan::new(h, Method::Measure(Duration::from_millis(10)));
+
         let twist = AVec::from_iter(
             CACHELINE_ALIGN,
             (0..h).map(|j| Complex64::cis(PI * j as f64 / n as f64)),
@@ -91,6 +95,7 @@ impl FftTable for TfheFftTable {
             (0..h).map(|j| Complex64::cis(-PI * j as f64 / n as f64) / h as f64),
         )
         .into_boxed_slice();
+
         Self {
             poly_length,
             plan,
@@ -138,6 +143,7 @@ impl FftTable for TfheFftTable {
     ) {
         self.forward_with(input, output, TorusFftValue::into_torus_f64, workspace);
     }
+
     fn forward_as_integer<T: TorusFftValue>(
         &self,
         input: &[T],
@@ -146,6 +152,7 @@ impl FftTable for TfheFftTable {
     ) {
         self.forward_with(input, output, TorusFftValue::into_signed_f64, workspace);
     }
+
     fn backward_as_torus<T: TorusFftValue>(
         &self,
         input: &[Complex64],
@@ -154,8 +161,10 @@ impl FftTable for TfheFftTable {
     ) {
         assert_eq!(input.len(), self.poly_length.fourier_poly_len());
         assert_eq!(output.len(), self.poly_length.get());
+
         workspace.values.copy_from_slice(input);
         let TfheFftWorkspace { values, memory } = workspace;
+
         self.plan.inv(values, PodStack::new(memory));
         let (first, second) = output.split_at_mut(self.poly_length.fourier_poly_len());
         for ((&value, &inverse_twist), (first, second)) in values
