@@ -459,6 +459,51 @@ fn tfhe_fft_u64_sparse_cbs() {
     circuit_selection::<u64, primus_fft::TfheFftTable>(config);
 }
 
+/// The shared Fourier binding must reject another ring before allocating an evaluator.
+#[test]
+fn default_cbs_rejects_mixed_ring_material() {
+    use primus_tfhe_ntru_fourier::{CircuitBootstrapServerKey, TfheEvaluationError};
+    // Engine selection does not change the binding check; exercise it once.
+    #[cfg(feature = "rustfft")]
+    type Table = primus_fft::RustFftTable;
+    #[cfg(all(not(feature = "rustfft"), feature = "tfhe-fft"))]
+    type Table = primus_fft::TfheFftTable;
+    type Context = TfheContext<u32, Table, PowOf2Modulus<u32>>;
+    let pbs = config(BlindRotationMethod::Classic);
+    let gadget = CbsGadgetConfig {
+        trace: decomposition(),
+        scheme_switch: decomposition(),
+        output: decomposition(),
+    };
+    let context = Context::try_from_pbs_config(pbs)
+        .unwrap()
+        .try_with_circuit_bootstrap(gadget)
+        .unwrap();
+    let mut other_pbs = pbs;
+    other_pbs.bsk_poly_length = PolyLength::new(64);
+    let other = Context::try_from_pbs_config(other_pbs)
+        .unwrap()
+        .try_with_circuit_bootstrap(gadget)
+        .unwrap();
+    let mut rng = StdRng::seed_from_u64(108);
+    let (_, server) = context
+        .try_generate_circuit_bootstrap_keys(&mut rng)
+        .unwrap();
+    let (_, other_server) = other.try_generate_circuit_bootstrap_keys(&mut rng).unwrap();
+
+    // Keep q, native Q, precision and gadgets identical; change only trace/SS N.
+    let (server, _) = server.into_parts();
+    let (_, circuit) = other_server.into_parts();
+    let mixed = CircuitBootstrapServerKey::new(server, circuit);
+    assert!(matches!(
+        context.circuit_bootstrap_evaluator_with_lookup_table(
+            &mixed,
+            context.compile_cbs_identity().unwrap(),
+        ),
+        Err(TfheEvaluationError::IncompatibleCircuitBootstrapParameters)
+    ));
+}
+
 /// Keygen rejects incompatible imports before sampling, including f that cannot
 /// be represented at return q or inverted at Q. Error paths leave scratch reusable.
 fn check_key_generation_boundaries<Table: FftTable>() {

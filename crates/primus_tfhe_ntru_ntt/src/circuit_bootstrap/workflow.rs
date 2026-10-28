@@ -150,8 +150,9 @@ where
     }
 
     /// Moves a public CBS program into the default workflow without cloning it.
-    /// Checks its input encoding, gadget basis and ring against the retained CBS
-    /// configuration, and binds the complete server key's input/BR resources.
+    /// Checks the circuit key's ring and configured projection/gadgets, the
+    /// program's input encoding and basis, and the server key's input/BR binding
+    /// before allocating online resources.
     /// Explicit message/basis combinations remain available through
     /// [`CircuitBootstrapEvaluator`]'s per-call resource interfaces.
     ///
@@ -172,9 +173,7 @@ where
             return Err(TfheEvaluationError::IncompatibleCircuitBootstrapLookupTable);
         }
         let circuit_key = server_key.circuit_bootstrap_key();
-        if !circuit_key.is_compatible(parameters) {
-            return Err(TfheEvaluationError::IncompatibleCircuitBootstrapKey);
-        }
+        circuit_key.check_parameters(self)?;
         if lookup_table.input_encoding() != primus_tfhe::CbsInputEncoding::Padded
             || !lookup_table.is_compatible(
                 self.parameters().poly_length(),

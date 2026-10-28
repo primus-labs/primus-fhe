@@ -560,6 +560,47 @@ fn u32_sparse_cbs() {
     circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::PairedTrace);
 }
 
+/// Equal gadget bases do not make CBS material from another ring compatible.
+#[test]
+fn default_cbs_rejects_mixed_ring_material() {
+    use primus_tfhe_ntru_ntt::{CircuitBootstrapServerKey, TfheEvaluationError};
+
+    type Context = TfheContext<u32, U32NttTable, PowOf2Modulus<u32>>;
+    let pbs = config(BlindRotationMethod::Classic);
+    let gadget = CbsGadgetConfig {
+        trace: decomposition(),
+        scheme_switch: decomposition(),
+        output: decomposition(),
+    };
+    let context = Context::try_from_pbs_config(pbs)
+        .unwrap()
+        .try_with_circuit_bootstrap(gadget)
+        .unwrap();
+    let mut other_pbs = pbs;
+    other_pbs.bsk_poly_length = PolyLength::new(64);
+    let other = Context::try_from_pbs_config(other_pbs)
+        .unwrap()
+        .try_with_circuit_bootstrap(gadget)
+        .unwrap();
+    let mut rng = StdRng::seed_from_u64(108);
+    let (_, server) = context
+        .try_generate_circuit_bootstrap_keys(&mut rng)
+        .unwrap();
+    let (_, other_server) = other.try_generate_circuit_bootstrap_keys(&mut rng).unwrap();
+
+    // BR/KS and the program match this context; only trace/SS use another N.
+    let (server, _) = server.into_parts();
+    let (_, circuit) = other_server.into_parts();
+    let mixed = CircuitBootstrapServerKey::new(server, circuit);
+    assert!(matches!(
+        context.circuit_bootstrap_evaluator_with_lookup_table(
+            &mixed,
+            context.compile_cbs_identity().unwrap(),
+        ),
+        Err(TfheEvaluationError::IncompatibleCircuitBootstrapParameters)
+    ));
+}
+
 /// Keygen rejects incompatible imports before sampling, including f that cannot
 /// be represented at return q or inverted at Q. Error paths leave scratch reusable.
 #[test]
