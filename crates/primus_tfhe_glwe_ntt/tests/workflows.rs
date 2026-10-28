@@ -14,9 +14,9 @@ use primus_shape::PolyLength;
 use primus_tfhe::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_tfhe_glwe_ntt::circuit_bootstrap::{CbsGadgetParameters, CircuitBootstrapEvaluator};
 use primus_tfhe_glwe_ntt::{
-    BlindRotationMethod, CbsConfig, CbsGadgetConfig, CbsInputEncoding, DecompositionConfig,
-    GadgetEncryptionConfig, LweConfig, ModulusConfig, PbsConfig, PbsMessageConfig, PbsOrder,
-    TfheContext,
+    BlindRotationMethod, BooleanGate, CbsConfig, CbsGadgetConfig, CbsInputEncoding,
+    DecompositionConfig, GadgetEncryptionConfig, LweConfig, ModulusConfig, PbsConfig,
+    PbsMessageConfig, PbsOrder, TfheContext,
 };
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -91,6 +91,76 @@ fn config<T: FheUint>(method: BlindRotationMethod) -> PbsConfig<T> {
             noise_standard_deviation: 1.0,
         },
         messages: PbsMessageConfig::new(T::as_from(8)),
+    }
+}
+
+/// Exercise the shared Boolean affine preprocessing and signed gate LUTs through
+/// real PBS/KS. A single key and workspace serve every gate at external t=4.
+#[test]
+fn boolean_gate_truth_tables() {
+    let mut config = config::<u64>(BlindRotationMethod::Classic);
+    config.messages = PbsMessageConfig::new(4);
+    let context = TfheContext::<u64, U64NttTable>::try_from_pbs_config(config).unwrap();
+    let mut rng = StdRng::seed_from_u64(100);
+
+    // Client: independent fresh inputs use the same external Boolean encoding.
+    let (client, server) = context.try_generate_keys(&mut rng).unwrap();
+    let secret = client.external_lwe_secret_key();
+    let encryptor = context.boolean_encryptor(secret).unwrap();
+    let decryptor = context.boolean_decryptor(secret).unwrap();
+    let mut lhs = context.allocate_lwe_ciphertext();
+    let mut rhs = context.allocate_lwe_ciphertext();
+    let conditions = [false, true].map(|value| encryptor.encrypt(value, &mut rng).unwrap());
+
+    // Server: reuse gate LUTs, intermediate storage and output across operations.
+    let mut evaluator = context.boolean_evaluator(&server).unwrap();
+    let mut output = context.allocate_lwe_ciphertext();
+    for (value, input) in [false, true].into_iter().zip(&conditions) {
+        evaluator.not_to(input.as_view(), output.as_mut_view());
+        assert_eq!(decryptor.decrypt(output.as_view()).unwrap(), !value);
+    }
+
+    // Ordinary Boolean truth tables, ordered as (00, 01, 10, 11), form an oracle
+    // independent of the evaluator's internal LUT scales and affine transforms.
+    let gates = [
+        (BooleanGate::And, [false, false, false, true]),
+        (BooleanGate::Nand, [true, true, true, false]),
+        (BooleanGate::Or, [false, true, true, true]),
+        (BooleanGate::Nor, [true, false, false, false]),
+        (BooleanGate::Xor, [false, true, true, false]),
+        (BooleanGate::Xnor, [true, false, false, true]),
+    ];
+    for (index, (a, b)) in [(false, false), (false, true), (true, false), (true, true)]
+        .into_iter()
+        .enumerate()
+    {
+        encryptor
+            .encrypt_to(a, lhs.as_mut_view(), &mut rng)
+            .unwrap();
+        encryptor
+            .encrypt_to(b, rhs.as_mut_view(), &mut rng)
+            .unwrap();
+        for (gate, expected) in gates {
+            evaluator.evaluate_binary_to(gate, lhs.as_view(), rhs.as_view(), output.as_mut_view());
+            assert_eq!(
+                decryptor.decrypt(output.as_view()).unwrap(),
+                expected[index],
+                "{gate:?}({a}, {b})"
+            );
+        }
+        for (condition, input) in [false, true].into_iter().zip(&conditions) {
+            evaluator.mux_to(
+                input.as_view(),
+                lhs.as_view(),
+                rhs.as_view(),
+                output.as_mut_view(),
+            );
+            assert_eq!(
+                decryptor.decrypt(output.as_view()).unwrap(),
+                if condition { a } else { b },
+                "mux({condition}, {a}, {b})"
+            );
+        }
     }
 }
 
