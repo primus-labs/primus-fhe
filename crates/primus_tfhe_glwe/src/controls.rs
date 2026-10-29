@@ -18,7 +18,7 @@ pub(crate) enum BlindRotationControlsError {
 
 /// Coefficient-domain GGSW controls and their common blind-rotation layout.
 ///
-/// The owning key determines how selectors and independent dummy controls are
+/// The owning key determines how selectors and any independent dummy controls are
 /// grouped. This storage retains no public bucket map or secret assignment.
 /// NTT uses explicit canonical residues and Fourier uses exact native-torus
 /// coefficients; their representations are not interchangeable.

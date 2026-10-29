@@ -47,7 +47,7 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
     /// Prepares the common domain and ring KS from numerical choices.
     /// Checks binary/ternary controls, n <= kN and representability of 2N before
     /// returning the prepared state. Input and accumulator secrets are independent.
-    /// The Block method currently requires an at-most-one block-binary distribution.
+    /// The Block method additionally requires a block-binary control distribution.
     pub fn try_from_config(config: PbsConfig<T, M, LM>) -> Result<Self, TfheParameterError>
     where
         M: TryFrom<ModulusConfig<M>, Error = ModulusConfigError>,
@@ -61,13 +61,7 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
             return Err(TfheParameterError::UnsupportedInputLweSecretKey);
         }
         if config.method == BlindRotationMethod::Block
-            && !matches!(
-                distribution,
-                SecretKeyDistr::BlockBinary {
-                    occupancy: crate::BlockOccupancy::AtMostOne,
-                    ..
-                }
-            )
+            && !matches!(distribution, SecretKeyDistr::BlockBinary { .. })
         {
             return Err(TfheParameterError::InvalidBlockSecretDistribution);
         }

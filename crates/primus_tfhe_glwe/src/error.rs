@@ -27,8 +27,8 @@ pub enum TfheParameterError {
     #[error("TFHE bootstrapping requires a binary or ternary input LWE secret key")]
     UnsupportedInputLweSecretKey,
 
-    /// Direct block controls currently require the at-most-one block-binary distribution.
-    #[error("block blind rotation requires an at-most-one block-binary input LWE secret")]
+    /// Direct block controls require a block-binary input distribution.
+    #[error("block blind rotation requires a block-binary input LWE secret")]
     InvalidBlockSecretDistribution,
 
     /// The rotation domain `2N` cannot be represented by the input coefficient type.
@@ -213,8 +213,8 @@ pub enum KeyGenerationError {
 /// Failure to bind or generate direct block-binary bootstrapping controls.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BlockBootstrappingKeyError {
-    /// Direct blocks currently require the at-most-one block-binary distribution.
-    #[error("block bootstrapping requires an at-most-one block-binary small-LWE secret")]
+    /// Direct blocks require a block-binary input distribution.
+    #[error("block bootstrapping requires a block-binary small-LWE secret")]
     UnsupportedSecretDistribution,
     /// The logical secret must contain complete, nonempty-width blocks.
     #[error("input dimension {dimension} must be a positive multiple of block size {block_size}")]
@@ -224,7 +224,7 @@ pub enum BlockBootstrappingKeyError {
         /// Number of logical input positions per block.
         block_size: usize,
     },
-    /// Actual coefficients are not binary or a block contains two ones.
+    /// Actual coefficients are not binary or violate the declared block occupancy.
     #[error("small-LWE coefficients violate the declared block-binary support")]
     InvalidSecretCoefficients,
     /// The prepared rotation modulus switch requires 2N to fit T.
@@ -233,10 +233,10 @@ pub enum BlockBootstrappingKeyError {
     /// Control counts or coefficient storage exceed addressable allocation sizes.
     #[error("block GGSW storage size overflow")]
     StorageSizeOverflow,
-    /// Storage must contain all bit controls and one dummy per block.
+    /// Storage must contain all bit controls and, for AtMostOne, one dummy per block.
     #[error("block coefficient storage length mismatch: expected {expected}, got {actual}")]
     StorageLengthMismatch {
-        /// Required coefficient count, including all dummies.
+        /// Required coefficient count, including dummies when the law requires them.
         expected: usize,
         /// Supplied coefficient count.
         actual: usize,

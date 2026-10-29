@@ -258,8 +258,8 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
     }
 }
 
-/// Adds all rotated bit controls to an aggregate already initialized from its
-/// independently encrypted dummy. Complete coefficient layouts are established
+/// Adds all rotated bit controls to an aggregate already initialized to zero
+/// or its independently encrypted dummy. Complete coefficient layouts are established
 /// by the owning key; every control contributes, including zero exponents.
 /// Pairing preserves Sparse's native wrapping order while loading/storing each
 /// aggregate coefficient only once per pair.

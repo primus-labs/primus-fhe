@@ -420,8 +420,9 @@ fn check_ciphertexts<T: FheUint, A: Data<Elem = T>, C: Data<Elem = T>>(
 
 /// Each lane owns its exponents, aggregate and external-product scratch. Sparse
 /// buckets supply indexed controls; blocks supply contiguous ranges. Every group
-/// ends with its encrypted dummy and has one selector per index. Typed wrappers
-/// establish those layouts before this allocation-free kernel is entered.
+/// has one selector per index and an optional trailing dummy. Sparse and
+/// AtMostOne always provide one full dummy; ExactlyOne provides none. Typed
+/// wrappers establish these complete layouts before entering the kernel.
 ///
 /// Only source-group traversal is interleaved; each input's dependent group chain,
 /// 16 KiB tile schedule and arithmetic/reduction boundaries remain unchanged.
@@ -461,8 +462,13 @@ pub(crate) fn blind_rotate_groups_batch_kernel<
         let count = indices.len();
         let (selections, dummy) = ciphertexts.split_at(count * size.ggsw_len());
         for lane in lanes.iter_mut() {
-            // Overwrite the previous group's NTT values, including empty groups.
-            lane.aggregate.copy_from_slice(dummy);
+            // The public group layout determines initialization, never secret
+            // occupancy. No-dummy groups must erase the previous NTT values too.
+            if dummy.is_empty() {
+                lane.aggregate.fill(T::ZERO);
+            } else {
+                lane.aggregate.copy_from_slice(dummy);
+            }
         }
         let use_groups = T::BITS == 64
             && count >= 4

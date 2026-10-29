@@ -19,8 +19,7 @@ fn decomposition(base: u32) -> DecompositionConfig {
     }
 }
 
-/// Logical blocks do not contain ring-KS padding, and every stored block has
-/// exactly one final dummy after its w bit controls.
+/// Stored groups follow the declared law; public ring-KS padding is not a block.
 #[test]
 fn block_control_storage_binds_complete_logical_groups() {
     use primus_tfhe_glwe::{BlockBootstrappingKeyError, BlockGlweBootstrappingKey};
@@ -28,47 +27,72 @@ fn block_control_storage_binds_complete_logical_groups() {
     let parameters = PbsParameters::try_from_config(config(PbsOrder::BootstrapKeyswitch)).unwrap();
     let gadget = parameters.blind_rotation_params();
     let ggsw_len = gadget.ggsw_len();
-    let data: Vec<u32> = (0..8 * ggsw_len).map(|index| index as u32).collect();
-    let key = BlockGlweBootstrappingKey::try_new(
-        data.clone(),
-        LweDimension::new(6),
-        3,
-        gadget,
-        NativeModulus::<u32>::new(),
-    )
-    .unwrap();
-    assert_eq!(key.block_count(), 2);
-    assert_eq!(key.controls().input_dimension(), LweDimension::new(6));
-    for block_index in 0..2 {
-        let (range, controls) = key.block_data(block_index);
-        assert_eq!(range, 3 * block_index..3 * (block_index + 1));
-        assert_eq!(
-            controls,
-            &data[4 * block_index * ggsw_len..4 * (block_index + 1) * ggsw_len]
-        );
-    }
-    for block_size in [0, 4] {
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        let count = 3 + usize::from(occupancy == BlockOccupancy::AtMostOne);
+        let data: Vec<u32> = (0..2 * count * ggsw_len)
+            .map(|index| index as u32)
+            .collect();
+        let key = BlockGlweBootstrappingKey::try_new(
+            data.clone(),
+            LweDimension::new(6),
+            3,
+            occupancy,
+            gadget,
+            NativeModulus::<u32>::new(),
+        )
+        .unwrap();
+        assert_eq!(key.occupancy(), occupancy);
+        assert_eq!(key.block_count(), 2);
+        assert_eq!(key.controls().input_dimension(), LweDimension::new(6));
+        for block_index in 0..2 {
+            let (range, controls) = key.block_data(block_index);
+            assert_eq!(range, 3 * block_index..3 * (block_index + 1));
+            assert_eq!(
+                controls,
+                &data[count * block_index * ggsw_len..count * (block_index + 1) * ggsw_len]
+            );
+        }
+        for block_size in [0, 4] {
+            assert!(matches!(
+                BlockGlweBootstrappingKey::try_new(
+                    data.clone(),
+                    LweDimension::new(6),
+                    block_size,
+                    occupancy,
+                    gadget,
+                    NativeModulus::<u32>::new(),
+                ),
+                Err(BlockBootstrappingKeyError::InvalidBlockGeometry { .. })
+            ));
+        }
         assert!(matches!(
             BlockGlweBootstrappingKey::try_new(
-                data.clone(),
+                vec![0; data.len() - 1],
                 LweDimension::new(6),
-                block_size,
+                3,
+                occupancy,
                 gadget,
                 NativeModulus::<u32>::new(),
             ),
-            Err(BlockBootstrappingKeyError::InvalidBlockGeometry { .. })
+            Err(BlockBootstrappingKeyError::StorageLengthMismatch { .. })
+        ));
+        let other = if occupancy == BlockOccupancy::AtMostOne {
+            BlockOccupancy::ExactlyOne
+        } else {
+            BlockOccupancy::AtMostOne
+        };
+        assert!(matches!(
+            BlockGlweBootstrappingKey::try_new(
+                data,
+                LweDimension::new(6),
+                3,
+                other,
+                gadget,
+                NativeModulus::<u32>::new(),
+            ),
+            Err(BlockBootstrappingKeyError::StorageLengthMismatch { .. })
         ));
     }
-    assert!(matches!(
-        BlockGlweBootstrappingKey::try_new(
-            vec![0; data.len() - 1],
-            LweDimension::new(6),
-            3,
-            gadget,
-            NativeModulus::<u32>::new(),
-        ),
-        Err(BlockBootstrappingKeyError::StorageLengthMismatch { .. })
-    ));
 }
 
 /// Precision is an operation choice even without a compiled Fourier backend.
@@ -288,14 +312,6 @@ fn block_controls_validate_imports_and_preserve_public_zero_padding() {
             };
             for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
                 cfg.method = method;
-                // Direct Block still uses the dummy layout until the backend steps.
-                if method == BlindRotationMethod::Block && occupancy == BlockOccupancy::ExactlyOne {
-                    assert!(matches!(
-                        PbsParameters::try_from_config(cfg),
-                        Err(TfheParameterError::InvalidBlockSecretDistribution)
-                    ));
-                    continue;
-                }
                 let parameters = PbsParameters::try_from_config(cfg).unwrap();
                 let mut rng = StdRng::seed_from_u64(109);
                 let generated = ClientKey::generate(&parameters, &mut rng);

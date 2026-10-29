@@ -5,9 +5,7 @@ mod circuit;
 pub use circuit::CircuitBootstrapServerKey;
 
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
-use primus_glwe::{
-    BlockOccupancy, FourierGlweEncryptor, FourierGlweKeySwitchingKey, SecretKeyDistr,
-};
+use primus_glwe::{FourierGlweEncryptor, FourierGlweKeySwitchingKey, SecretKeyDistr};
 use primus_modulus::NativeModulus;
 use primus_tfhe_glwe::ClientKey;
 
@@ -27,7 +25,7 @@ pub enum BlindRotationKey<T: TorusFftValue> {
     Classic(FourierGlweBootstrappingKey<T>),
     /// Bucketed selections for a fixed-weight binary input secret.
     Sparse(SparseGlweBootstrappingKey<T, NativeModulus<T>>),
-    /// Contiguous block-binary controls with an independent dummy per block.
+    /// Contiguous block-binary controls, with dummies only for AtMostOne.
     Block(BlockGlweBootstrappingKey<T, NativeModulus<T>>),
 }
 
@@ -68,7 +66,7 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                 key.controls().input_modulus_value(),
                 SecretKeyDistr::BlockBinary {
                     block_size: key.block_size(),
-                    occupancy: BlockOccupancy::AtMostOne,
+                    occupancy: key.occupancy(),
                 },
                 key.controls().size(),
                 key.controls().basis(),

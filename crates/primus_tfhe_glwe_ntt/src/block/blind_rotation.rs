@@ -1,6 +1,7 @@
 //! Direct contiguous-block aggregation and NTT blind rotation.
 
 use primus_data::{Data, DataMut};
+use primus_glwe::BlockOccupancy;
 use primus_integer::FheUint;
 use primus_lattice::{
     ggsw::Ggsw, glwe::Glwe, lwe::Lwe, workspace::NttGlweExternalProductWorkspace,
@@ -47,9 +48,9 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
     /// Blind-rotates an encoded LUT, overwriting a coefficient-domain GLWE output.
     ///
     /// Initializes X^(-R(b))*LUT, then processes every public block using
-    /// GGSW(1-sum(s_i)) + sum(X^R(a_i)*GGSW(s_i)). An empty secret block still
-    /// consumes its encrypted dummy and zero selectors. No key switching or
-    /// sample extraction is performed; evaluation reuses this workspace.
+    /// sum(X^R(a_i)*GGSW(s_i)), plus GGSW(1-sum(s_i)) only for AtMostOne.
+    /// All bit controls, including encrypted zeros, participate in either mode.
+    /// No key switching or sample extraction is performed; evaluation reuses scratch.
     ///
     /// # Correctness
     ///
@@ -147,16 +148,22 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
         mask.fill(T::ZERO);
         lookup_table.mul_monomial_to(initial_exponent, &mut Polynomial(body), modulus);
 
+        let controls_per_block =
+            key.block_size() + usize::from(key.occupancy() == BlockOccupancy::AtMostOne);
         let mut output_is_current = true;
         for (exponents, ciphertexts) in input_exponents.chunks_exact(key.block_size()).zip(
             controls
                 .as_slice()
-                .chunks_exact((key.block_size() + 1) * size.ggsw_len()),
+                .chunks_exact(controls_per_block * size.ggsw_len()),
         ) {
             let (selections, dummy) = ciphertexts.split_at(key.block_size() * size.ggsw_len());
-            // The dummy overwrites the previous block's NTT representation. Its
-            // independent encryption also covers all-zero secret blocks.
-            aggregate.copy_from_slice(dummy);
+            // Always overwrite the previous block's NTT representation. The
+            // validated layout has either one full dummy or no dummy at all.
+            if dummy.is_empty() {
+                aggregate.fill(T::ZERO);
+            } else {
+                aggregate.copy_from_slice(dummy);
+            }
             aggregate_controls_assign(
                 exponents.iter().copied(),
                 selections,
@@ -206,8 +213,9 @@ pub struct BlockGlweBlindRotationBatchWorkspace<T: FheUint> {
 
 impl<T: FheUint> BlockGlweBlindRotationBatchWorkspace<T> {
     /// Allocates four lanes for this control geometry. Keys with the same input
-    /// dimension and gadget size can reuse them, including different block widths;
-    /// missing cached rotation descriptors use on-demand addressing.
+    /// dimension and gadget size can reuse them across block widths and occupancy
+    /// modes: only scratch is retained, while each call uses the key's layout.
+    /// Missing cached rotation descriptors use on-demand addressing.
     #[must_use]
     pub fn new(key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
         Self {
@@ -306,14 +314,15 @@ impl<T: FheUint> BlockGlweBlindRotationBatchWorkspace<T> {
 }
 
 /// Consecutive logical blocks directly describe the control order. Every group
-/// includes its independently encrypted dummy as the final GGSW; no map is built.
+/// includes a final independently encrypted dummy only for AtMostOne.
 fn blocks<T: FheUint>(
     key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>,
 ) -> impl Iterator<Item = (core::ops::Range<usize>, &[T])> {
     let width = key.block_size();
+    let count = width + usize::from(key.occupancy() == BlockOccupancy::AtMostOne);
     key.controls()
         .as_slice()
-        .chunks_exact((width + 1) * key.controls().size().ggsw_len())
+        .chunks_exact(count * key.controls().size().ggsw_len())
         .enumerate()
         .map(move |(block, controls)| (block * width..(block + 1) * width, controls))
 }

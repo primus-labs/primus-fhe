@@ -751,15 +751,21 @@ fn q1024_sparse_returns_and_cbs() {
 /// program as the other methods; q differs from the native ring modulus.
 #[test]
 fn u32_block_pbs_and_batches() {
-    let config = two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
-    #[cfg(feature = "rustfft")]
-    chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
-    #[cfg(feature = "tfhe-fft")]
-    chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
-    #[cfg(feature = "rustfft")]
-    many_lut_and_mvb::<u32, primus_fft::RustFftTable, _>(config);
-    #[cfg(feature = "tfhe-fft")]
-    many_lut_and_mvb::<u32, primus_fft::TfheFftTable, _>(config);
+    let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        #[cfg(feature = "rustfft")]
+        chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
+        #[cfg(feature = "tfhe-fft")]
+        chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
+        #[cfg(feature = "rustfft")]
+        many_lut_and_mvb::<u32, primus_fft::RustFftTable, _>(config);
+        #[cfg(feature = "tfhe-fft")]
+        many_lut_and_mvb::<u32, primus_fft::TfheFftTable, _>(config);
+    }
 }
 
 /// KS-before-BR prepares the direct-block input, then CBS controls encrypted
@@ -769,14 +775,16 @@ fn u32_block_pbs_and_batches() {
 fn u64_block_cbs_and_returns() {
     let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::KeyswitchBootstrap);
     config.small_lwe.dimension = LweDimension::new(10);
-    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-        block_size: 5,
-        occupancy: BlockOccupancy::AtMostOne,
-    };
-    #[cfg(feature = "rustfft")]
-    circuit_selection::<u64, primus_fft::RustFftTable, _>(config);
-    #[cfg(feature = "tfhe-fft")]
-    circuit_selection::<u64, primus_fft::TfheFftTable, _>(config);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 5,
+            occupancy,
+        };
+        #[cfg(feature = "rustfft")]
+        circuit_selection::<u64, primus_fft::RustFftTable, _>(config);
+        #[cfg(feature = "tfhe-fft")]
+        circuit_selection::<u64, primus_fft::TfheFftTable, _>(config);
+    }
 }
 
 /// Imported keys and raw quantizers must agree with the declared input domain.
@@ -803,6 +811,20 @@ fn input_domain_binding<Table: FftTable>() {
             wrong_context.evaluator(&server),
             Err(TfheEvaluationError::IncompatibleBlindRotationKey)
         ));
+
+        if method == BlindRotationMethod::Block {
+            // Same dimensions/moduli, different joint secret law and row layout.
+            let mut other = config;
+            other.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                block_size: 3,
+                occupancy: BlockOccupancy::ExactlyOne,
+            };
+            let other = TfheContext::<u32, Table, _>::try_from_pbs_config(other).unwrap();
+            assert!(matches!(
+                other.evaluator(&server),
+                Err(TfheEvaluationError::IncompatibleBlindRotationKey)
+            ));
+        }
 
         let input = context.allocate_lwe_ciphertext();
         let lut = Polynomial::new(vec![0u32; 128]);
@@ -1340,13 +1362,20 @@ fn check_bundle_material<Table: FftTable>() {
         log_basis: DecompositionBaseLog::new(4),
         level_count: Some(DecompositionLevelCount::new(2)),
     };
-    for method in [
-        BlindRotationMethod::Classic,
-        SPARSE,
-        BlindRotationMethod::Block,
+    for (method, occupancy) in [
+        (BlindRotationMethod::Classic, BlockOccupancy::AtMostOne),
+        (SPARSE, BlockOccupancy::AtMostOne),
+        (BlindRotationMethod::Block, BlockOccupancy::AtMostOne),
+        (BlindRotationMethod::Block, BlockOccupancy::ExactlyOne),
     ] {
         for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
             let mut pbs = two_domain_config::<u64>(method, order);
+            if method == BlindRotationMethod::Block {
+                pbs.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                    block_size: 3,
+                    occupancy,
+                };
+            }
             pbs.bsk_poly_length = PolyLength::new(32);
             pbs.bsk_gadget.decomposition = decomposition;
             pbs.key_switching.decomposition = decomposition;
@@ -1367,8 +1396,15 @@ fn check_bundle_material<Table: FftTable>() {
             let small = if method == SPARSE {
                 vec![1, 0, 1, 0, 0, 1, 0, 0]
             } else if method == BlindRotationMethod::Block {
-                // One selected block followed by an empty block.
-                vec![0, 1, 0, 0, 0, 0]
+                // Keep the optional empty block only in the AtMostOne fixture.
+                vec![
+                    0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    u64::from(occupancy == BlockOccupancy::ExactlyOne),
+                ]
             } else {
                 vec![1023, 0, 1, 1023, 1, 0, 0, 1]
             };
@@ -1417,13 +1453,15 @@ fn check_bundle_material<Table: FftTable>() {
                     assert_eq!(key.controls().size(), br.size());
                     assert_eq!(key.controls().basis(), br.basis());
                     assert_eq!(key.block_count(), 2);
+                    assert_eq!(key.occupancy(), occupancy);
                     for block in 0..key.block_count() {
                         let (indices, data) = key.block_data(block);
                         let controls = primus_lattice::ggsw::GgswIter::new(data, br.ggsw_len());
-                        assert_eq!(controls.len(), indices.len() + 1);
+                        let has_dummy = occupancy == BlockOccupancy::AtMostOne;
+                        assert_eq!(controls.len(), indices.len() + usize::from(has_dummy));
                         let bits = &small[indices];
                         let dummy = 1 - bits.iter().sum::<u64>();
-                        let expected = bits.iter().copied().chain(std::iter::once(dummy));
+                        let expected = bits.iter().copied().chain(has_dummy.then_some(dummy));
                         for (control, bit) in controls.zip(expected) {
                             // Exact native key rows retain only sampled noise:
                             // no forward/inverse Fourier roundtrip may create them.
@@ -1546,84 +1584,96 @@ fn check_block_raw_rotation<T: TorusFftValue, Table: FftTable>() {
         (5, &[0, 0, 0, 0, 1, 0, 1, 0, 0, 0]),
     ];
     let n = 32;
-    for (case, &(block_size, secret)) in secrets.iter().enumerate() {
-        let mut config =
-            two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
-        config.small_lwe.dimension = LweDimension::new(secret.len());
-        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-            block_size,
-            occupancy: BlockOccupancy::AtMostOne,
-        };
-        config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
-        config.bsk_dimension = GlweDimension::new(1);
-        config.bsk_poly_length = PolyLength::new(n);
-        let context = TfheContext::<T, Table, _>::try_from_pbs_config(config).unwrap();
-        let mut rng = StdRng::seed_from_u64(530 + case as u64);
-        let generated = ClientKey::generate(context.parameters(), &mut rng);
-        let client = ClientKey::new(
-            primus_lwe::LweSecretKey::new(
-                secret.iter().map(|&s| T::as_from(s)).collect(),
-                config.small_lwe.secret_key_distr,
-                context.parameters().small_lwe().cipher_modulus(),
-            ),
-            generated.glwe_secret_key().clone(),
-            config.order,
-        );
-        let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
-            .try_generate_blind_rotation_key(&client, &mut rng)
-            .unwrap()
-        else {
-            panic!("expected direct block key");
-        };
-        let mut workspace = BlockGlweBlindRotationWorkspace::new(&key);
-        let rotation =
-            RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 2 * n, 1);
-        let modulus = NativeModulus::new();
-        let scalar = T::ONE << (T::BITS - 7);
-        let lut = Polynomial::new(
-            (0..n)
-                .map(|i| T::as_from((i * i + i / 3 + 5) % 8) * scalar)
-                .collect::<Vec<_>>(),
-        );
-        let mut input: primus_lattice::lwe::Lwe<Vec<T>> =
-            primus_lattice::lwe::Lwe::zero(secret.len());
-        let mut output = context.allocate_accumulator_ciphertext();
-        let mut fft = context.new_fft_engine();
-        for (pattern, body) in [13, 0, n, 2 * n - 1].into_iter().enumerate() {
-            let mut selected_sum = 0;
-            for (i, (value, &s)) in input.a_mut().iter_mut().zip(secret).enumerate() {
-                let exponent = if pattern == 0 {
-                    0
-                } else {
-                    [0, n, 2 * n - 1][(i + pattern) % 3]
-                };
-                *value = T::as_from(exponent);
-                selected_sum += exponent * usize::from(s);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        for (case, &(block_size, secret)) in secrets.iter().enumerate() {
+            if occupancy == BlockOccupancy::ExactlyOne
+                && secret
+                    .chunks_exact(block_size)
+                    .any(|block| block.iter().sum::<u8>() != 1)
+            {
+                continue;
             }
-            *input.b_mut() = T::as_from(body);
-            workspace.blind_rotate_lookup_table_to(
-                &key,
-                &input,
-                &lut,
-                &rotation,
-                &mut output,
-                &mut fft,
+            let mut config =
+                two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
+            config.small_lwe.dimension = LweDimension::new(secret.len());
+            config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                block_size,
+                occupancy,
+            };
+            config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
+            config.bsk_dimension = GlweDimension::new(1);
+            config.bsk_poly_length = PolyLength::new(n);
+            let context = TfheContext::<T, Table, _>::try_from_pbs_config(config).unwrap();
+            let mut rng = StdRng::seed_from_u64(530 + case as u64);
+            let generated = ClientKey::generate(context.parameters(), &mut rng);
+            let client = ClientKey::new(
+                primus_lwe::LweSecretKey::new(
+                    secret.iter().map(|&s| T::as_from(s)).collect(),
+                    config.small_lwe.secret_key_distr,
+                    context.parameters().small_lwe().cipher_modulus(),
+                ),
+                generated.glwe_secret_key().clone(),
+                config.order,
             );
-            let phase =
-                native_material_phase(output.as_ref(), client.glwe_secret_key().as_slice(), n);
-            let exponent = (selected_sum + 2 * n - body) & (2 * n - 1);
-            for (i, &value) in lut.as_ref().iter().enumerate() {
-                let destination = i + exponent;
-                let expected = if destination & n == 0 {
-                    value
-                } else {
-                    modulus.reduce_neg(value)
-                };
-                assert!(
-                    phase_error_magnitude(phase[destination & (n - 1)], expected, modulus)
-                        <= scalar >> 4u32,
-                    "secret {secret:?}, pattern {pattern}, coefficient {i}"
+            let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
+                .try_generate_blind_rotation_key(&client, &mut rng)
+                .unwrap()
+            else {
+                panic!("expected direct block key");
+            };
+            let mut workspace = BlockGlweBlindRotationWorkspace::new(&key);
+            let rotation = RotationModulusSwitch::new(
+                context.parameters().small_lwe().cipher_modulus(),
+                2 * n,
+                1,
+            );
+            let modulus = NativeModulus::new();
+            let scalar = T::ONE << (T::BITS - 7);
+            let lut = Polynomial::new(
+                (0..n)
+                    .map(|i| T::as_from((i * i + i / 3 + 5) % 8) * scalar)
+                    .collect::<Vec<_>>(),
+            );
+            let mut input: primus_lattice::lwe::Lwe<Vec<T>> =
+                primus_lattice::lwe::Lwe::zero(secret.len());
+            let mut output = context.allocate_accumulator_ciphertext();
+            let mut fft = context.new_fft_engine();
+            for (pattern, body) in [13, 0, n, 2 * n - 1].into_iter().enumerate() {
+                let mut selected_sum = 0;
+                for (i, (value, &s)) in input.a_mut().iter_mut().zip(secret).enumerate() {
+                    let exponent = if pattern == 0 {
+                        0
+                    } else {
+                        [0, n, 2 * n - 1][(i + pattern) % 3]
+                    };
+                    *value = T::as_from(exponent);
+                    selected_sum += exponent * usize::from(s);
+                }
+                *input.b_mut() = T::as_from(body);
+                workspace.blind_rotate_lookup_table_to(
+                    &key,
+                    &input,
+                    &lut,
+                    &rotation,
+                    &mut output,
+                    &mut fft,
                 );
+                let phase =
+                    native_material_phase(output.as_ref(), client.glwe_secret_key().as_slice(), n);
+                let exponent = (selected_sum + 2 * n - body) & (2 * n - 1);
+                for (i, &value) in lut.as_ref().iter().enumerate() {
+                    let destination = i + exponent;
+                    let expected = if destination & n == 0 {
+                        value
+                    } else {
+                        modulus.reduce_neg(value)
+                    };
+                    assert!(
+                        phase_error_magnitude(phase[destination & (n - 1)], expected, modulus)
+                            <= scalar >> 4u32,
+                        "secret {secret:?}, pattern {pattern}, coefficient {i}"
+                    );
+                }
             }
         }
     }

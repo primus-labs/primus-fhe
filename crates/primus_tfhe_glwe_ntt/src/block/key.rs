@@ -19,6 +19,7 @@ use crate::KeyGenerationError;
 /// Neither sampled occupancy nor a persistent input-index table is retained.
 pub(crate) struct BlockKeyLayout {
     block_size: usize,
+    occupancy: BlockOccupancy,
     data_len: usize,
 }
 
@@ -32,7 +33,7 @@ impl BlockKeyLayout {
         use BlockBootstrappingKeyError as Error;
         let SecretKeyDistr::BlockBinary {
             block_size,
-            occupancy: BlockOccupancy::AtMostOne,
+            occupancy,
         } = distribution
         else {
             return Err(Error::UnsupportedSecretDistribution.into());
@@ -48,7 +49,9 @@ impl BlockKeyLayout {
             return Err(Error::RotationDomainTooLarge.into());
         }
         let control_count = dimension
-            .checked_add(dimension / block_size)
+            .checked_add(
+                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
+            )
             .ok_or(Error::StorageSizeOverflow)?;
         let data_len = control_count
             .checked_mul(parameters.ggsw_len())
@@ -56,6 +59,7 @@ impl BlockKeyLayout {
         Layout::array::<T>(data_len).map_err(|_| Error::StorageSizeOverflow)?;
         Ok(Self {
             block_size,
+            occupancy,
             data_len,
         })
     }
@@ -79,6 +83,7 @@ where
     // Inspect every logical coefficient, without revealing the first invalid
     // position through an early return. Public geometry was checked by layout.
     let mut invalid = false;
+    let require_one = layout.occupancy == BlockOccupancy::ExactlyOne;
     for block in input.as_ref().chunks_exact(layout.block_size) {
         let mut occupied = false;
         for &coefficient in block {
@@ -86,6 +91,7 @@ where
             invalid |= (coefficient > T::ONE) | (occupied & selected);
             occupied |= selected;
         }
+        invalid |= require_one & !occupied;
     }
     if invalid {
         return Err(BlockBootstrappingKeyError::InvalidSecretCoefficients.into());
@@ -94,7 +100,7 @@ where
 }
 
 /// Shares the exact encryption kernel with independently imported BR secrets.
-/// The owning ClientKey boundary has already checked 0/1 and at-most-one per
+/// The owning ClientKey boundary has already checked 0/1 and occupancy per
 /// logical block; the input/layout distributions and dimensions must agree.
 /// Only the n logical coefficients are encrypted, excluding ring-KS zero tails.
 pub(crate) fn generate_validated_with_layout<T: FheUint, Table, R>(
@@ -112,10 +118,11 @@ where
 {
     let BlockKeyLayout {
         block_size,
+        occupancy,
         data_len,
     } = layout;
     let mut data = vec![T::ZERO; data_len];
-    let controls_per_block = block_size + 1;
+    let controls_per_block = block_size + usize::from(occupancy == BlockOccupancy::AtMostOne);
     let block_len = controls_per_block * parameters.ggsw_len();
     let mut constants = Zeroizing::new(vec![T::ZERO; controls_per_block]);
     for (block, output) in input
@@ -128,9 +135,11 @@ where
             *constant = coefficient;
             occupied |= coefficient == T::ONE;
         }
-        constants[block_size] = if occupied { T::ZERO } else { T::ONE };
-        // Encrypt the dummy as an ordinary independent GGSW. Deriving it from
-        // the bit ciphertexts would correlate its row errors with their sum.
+        if occupancy == BlockOccupancy::AtMostOne {
+            constants[block_size] = if occupied { T::ZERO } else { T::ONE };
+        }
+        // When present, the dummy is an independent GGSW, not a subtraction
+        // of the bit ciphertexts. ExactlyOne encrypts only the w constants.
         output_key.encrypt_ggsw_constant_batch_coeff_to(
             &constants, output, parameters, ntt, rng, workspace,
         );
@@ -142,6 +151,7 @@ where
             data,
             dimension,
             block_size,
+            occupancy,
             parameters,
             NativeModulus::<T>::new(),
         )?)
@@ -150,6 +160,7 @@ where
             data,
             dimension,
             block_size,
+            occupancy,
             parameters,
             UintModulus::new(input.cipher_modulus_minus_one() + T::ONE),
         )?)

@@ -49,9 +49,9 @@ Classic binary/ternary 和 sparse fixed-weight binary 均支持两种顺序下�
 
 两后端共享 `GlweBlindRotationControls<T, M>` 系数控制及数值布局，`SparseGlweBootstrappingKey` 在其上保留公开 bucket map 和固定重量。分配原始 BR 工作区时，通过 `key.controls()` 借用控制材料。NTT 使用 Barrett 剩余类，Fourier 使用 Native 系数，不能互换。优先用 context/key-generator 工厂和普通 evaluator；存储及导入契约见 [sparse 密钥类型](src/sparse.rs)。
 
-两个 GLWE 后端也支持在 `SecretKeyDistr::BlockBinary { block_size, occupancy: BlockOccupancy::AtMostOne }` 下设置 `config.method = BlindRotationMethod::Block`。它按连续块处理，无映射或 matching；每块保存 bit 控制和独立加密的空块 dummy。两种 PBS 顺序、ManyLUT、MVB 和 CBS 沿用相同 context/evaluator 工厂。Fourier 先在 native 系数域精确聚合，再使用普通 FFT 和外积；trace 精度仍独立选择。导入布局与数学前提见 [block 材料契约](src/block.rs)。
+两个 GLWE 后端也支持在 `SecretKeyDistr::BlockBinary { block_size, occupancy }` 下设置 `config.method = BlindRotationMethod::Block`。它按连续块处理，无映射或 matching；`BlockOccupancy::AtMostOne` 在每块 bit 控制后保存独立加密的空块 dummy；`ExactlyOne` 仅保存 bit 控制，要求每块恰好一个 `1`。两种 PBS 顺序、ManyLUT、MVB 和 CBS 沿用相同 context/evaluator 工厂。Fourier 先在 native 系数域精确聚合，再使用普通 FFT 和外积；trace 精度仍独立选择。导入布局与数学前提见 [block 材料契约](src/block.rs)。
 
-采样器和 Classic BR 可使用 `ExactlyOne` 秘密。直接 Block BR 当前仅接受 `AtMostOne`，其材料仍包含每块一个 dummy。
+两种模式都可使用 Classic BR。密钥绑定实际秘密分布；纯 scratch 在输入维数与 gadget 布局相同时可跨模式复用。
 
 ## 客户端与 LUT
 

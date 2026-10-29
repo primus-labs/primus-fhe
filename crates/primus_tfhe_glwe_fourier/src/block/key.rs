@@ -16,6 +16,7 @@ use crate::{ClientKey, KeyGenerationError, KeyGenerator, block::BlockGlweBootstr
 /// Actual occupancy and input-index tables are not retained.
 pub(crate) struct BlockKeyLayout {
     block_size: usize,
+    occupancy: BlockOccupancy,
     data_len: usize,
 }
 
@@ -29,7 +30,7 @@ impl BlockKeyLayout {
         use BlockBootstrappingKeyError as Error;
         let SecretKeyDistr::BlockBinary {
             block_size,
-            occupancy: BlockOccupancy::AtMostOne,
+            occupancy,
         } = distribution
         else {
             return Err(Error::UnsupportedSecretDistribution.into());
@@ -45,7 +46,9 @@ impl BlockKeyLayout {
             return Err(Error::RotationDomainTooLarge.into());
         }
         let control_count = dimension
-            .checked_add(dimension / block_size)
+            .checked_add(
+                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
+            )
             .ok_or(Error::StorageSizeOverflow)?;
         let data_len = control_count
             .checked_mul(parameters.ggsw_len())
@@ -55,6 +58,7 @@ impl BlockKeyLayout {
             .map_err(|_| Error::StorageSizeOverflow)?;
         Ok(Self {
             block_size,
+            occupancy,
             data_len,
         })
     }
@@ -80,11 +84,12 @@ where
     {
         let BlockKeyLayout {
             block_size,
+            occupancy,
             data_len,
         } = layout;
         let parameters = self.context.parameters();
         let gadget = parameters.blind_rotation_params();
-        let controls_per_block = block_size + 1;
+        let controls_per_block = block_size + usize::from(occupancy == BlockOccupancy::AtMostOne);
         let block_len = controls_per_block * gadget.ggsw_len();
         let mut data = vec![T::ZERO; data_len];
         let mut constants = Zeroizing::new(vec![T::ZERO; controls_per_block]);
@@ -99,9 +104,11 @@ where
                 *constant = coefficient;
                 occupied |= coefficient == T::ONE;
             }
-            constants[block_size] = if occupied { T::ZERO } else { T::ONE };
-            // The dummy is a fresh encryption, not a ciphertext subtraction of
-            // the bit controls: its row errors must be independent of their sum.
+            if occupancy == BlockOccupancy::AtMostOne {
+                constants[block_size] = if occupied { T::ZERO } else { T::ONE };
+            }
+            // When present, the dummy has fresh row errors independent of the
+            // bit controls. ExactlyOne has no extra constant or RNG draws.
             // Reuse the exact auxiliary-NTT/CRT products, then retain torus rows.
             encryptor.encrypt_ggsw_constant_batch_coeff_to(&constants, output, gadget, rng);
         }
@@ -109,6 +116,7 @@ where
             data,
             LweDimension::new(client.small_lwe_secret_key().dimension()),
             block_size,
+            occupancy,
             gadget,
             parameters.small_lwe().cipher_modulus(),
         )?)

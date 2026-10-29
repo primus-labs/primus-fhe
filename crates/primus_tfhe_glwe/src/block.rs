@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use primus_glwe::GgswParameters;
+use primus_glwe::{BlockOccupancy, GgswParameters};
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
 use primus_reduce::{Modulus, RingContext};
@@ -12,13 +12,15 @@ use crate::{BlockBootstrappingKeyError, GlweBlindRotationControls};
 /// Coefficient GGSWs for a block-binary input secret, with no bucket map.
 ///
 /// Logical input positions are contiguous, equally sized blocks. Each block
-/// stores its `w` bit controls followed by an independently encrypted dummy
-/// `d = 1 - sum(s_i)`. Thus an empty block selects the identity rotation.
+/// stores its `w` bit controls. [`BlockOccupancy::AtMostOne`] adds an independently
+/// encrypted dummy `d = 1 - sum(s_i)` so an empty block selects the identity;
+/// [`BlockOccupancy::ExactlyOne`] has no dummy.
 /// Only the public geometry and ciphertexts are retained; neither actual block
 /// occupancy nor the sampled total Hamming weight is recorded.
 pub struct BlockGlweBootstrappingKey<T: FheUint, M: RingContext<T>> {
     controls: GlweBlindRotationControls<T, M>,
     block_size: usize,
+    occupancy: BlockOccupancy,
 }
 
 impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
@@ -26,19 +28,21 @@ impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
     /// or transforming their storage. Public ring-KS zero padding is excluded.
     ///
     /// # Correctness
-    /// Each block must contain GGSWs of its binary coefficients followed by
-    /// an independently encrypted `1 - sum(s_i)`, under one accumulator secret.
-    /// Every block has at most one `1`. Coefficients are canonical under the
-    /// parameter modulus, with the same gadget scales and level order.
+    /// Each block must contain GGSWs of its binary coefficients under one
+    /// accumulator secret and satisfy the declared occupancy. AtMostOne adds
+    /// an independently encrypted `1 - sum(s_i)` last; ExactlyOne has no dummy.
+    /// Coefficients are canonical under the parameter modulus, with the same
+    /// gadget scales and level order.
     ///
     /// # Errors
     /// Rejects zero or incomplete block sizes, an unrepresentable rotation
     /// domain, overflowing storage, or a coefficient count different from
-    /// `(n + n / w) * ggsw_len`.
+    /// `(n + δ * n / w) * ggsw_len`, where δ is one only for AtMostOne.
     pub fn try_new<LM: Modulus<ValueT = T>>(
         data: Vec<T>,
         input_dimension: LweDimension,
         block_size: usize,
+        occupancy: BlockOccupancy,
         parameters: &GgswParameters<T, M>,
         input_modulus: LM,
     ) -> Result<Self, BlockBootstrappingKeyError> {
@@ -51,7 +55,9 @@ impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
             });
         }
         let control_count = dimension
-            .checked_add(dimension / block_size)
+            .checked_add(
+                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
+            )
             .ok_or(Error::StorageSizeOverflow)?;
         let controls = GlweBlindRotationControls::try_new(
             data,
@@ -75,6 +81,7 @@ impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
         Ok(Self {
             controls,
             block_size,
+            occupancy,
         })
     }
 
@@ -92,7 +99,14 @@ impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
         self.block_size
     }
 
-    /// Returns the number of public blocks, including empty secret blocks.
+    /// Returns the declared secret law, which determines whether a dummy is stored.
+    #[must_use]
+    #[inline]
+    pub fn occupancy(&self) -> BlockOccupancy {
+        self.occupancy
+    }
+
+    /// Returns the number of complete logical input blocks.
     #[must_use]
     #[inline]
     pub fn block_count(&self) -> usize {
@@ -100,7 +114,8 @@ impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
     }
 
     /// Borrows a block's logical input range and contiguous coefficient GGSWs.
-    /// The final GGSW is the independent dummy and has no input position.
+    /// Only AtMostOne includes an independent dummy as the final GGSW,
+    /// without a corresponding input position. ExactlyOne contains w GGSWs.
     ///
     /// # Panics
     /// Panics if `block_index >= self.block_count()`.
@@ -111,12 +126,12 @@ impl<T: FheUint, M: RingContext<T>> BlockGlweBootstrappingKey<T, M> {
             "block index out of bounds"
         );
         let start = block_index * self.block_size;
-        let control_start = block_index * (self.block_size + 1);
+        let count = self.block_size + usize::from(self.occupancy == BlockOccupancy::AtMostOne);
+        let control_start = block_index * count;
         let ggsw_len = self.controls.size().ggsw_len();
         (
             start..start + self.block_size,
-            &self.controls.as_slice()
-                [control_start * ggsw_len..(control_start + self.block_size + 1) * ggsw_len],
+            &self.controls.as_slice()[control_start * ggsw_len..(control_start + count) * ggsw_len],
         )
     }
 }

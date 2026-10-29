@@ -4,8 +4,8 @@ mod circuit;
 pub use circuit::CircuitBootstrapServerKey;
 
 use primus_glwe::{
-    BlockOccupancy, GgswParameters, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
-    NttGlweSecretKey, SecretKeyDistr,
+    GgswParameters, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey, NttGlweSecretKey,
+    SecretKeyDistr,
 };
 use primus_integer::FheUint;
 use primus_lwe::LweSecretKey;
@@ -30,7 +30,7 @@ pub enum BlindRotationKey<T: FheUint> {
     Classic(NttGlweBootstrappingKey<T>),
     /// Bucketed selections for a fixed-weight binary input secret.
     Sparse(SparseGlweBootstrappingKey<T, BarrettModulus<T>>),
-    /// Contiguous block-binary controls with an independent dummy per block.
+    /// Contiguous block-binary controls, with dummies only for AtMostOne.
     Block(BlockGlweBootstrappingKey<T, BarrettModulus<T>>),
 }
 
@@ -187,7 +187,7 @@ impl<T: FheUint> BlindRotationKey<T> {
                 if parameters.small_lwe().secret_key_distr()
                     != (SecretKeyDistr::BlockBinary {
                         block_size: key.block_size(),
-                        occupancy: BlockOccupancy::AtMostOne,
+                        occupancy: key.occupancy(),
                     })
                 {
                     return false;

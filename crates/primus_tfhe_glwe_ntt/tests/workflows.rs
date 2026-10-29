@@ -855,9 +855,15 @@ fn q1024_sparse_returns_and_cbs() {
 /// then factorized MVB. Input q differs from the ring modulus.
 #[test]
 fn u32_block_pbs_and_batches() {
-    let config = two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
-    chained_pbs::<u32, U32NttTable, _>(config);
-    many_lut_and_mvb::<u32, U32NttTable, _>(config);
+    let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        chained_pbs::<u32, U32NttTable, _>(config);
+        many_lut_and_mvb::<u32, U32NttTable, _>(config);
+    }
 }
 
 /// The other PBS order prepares input with ring KS, then consumes direct-block
@@ -866,11 +872,13 @@ fn u32_block_pbs_and_batches() {
 fn u64_block_cbs_and_returns() {
     let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::KeyswitchBootstrap);
     config.small_lwe.dimension = LweDimension::new(10);
-    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-        block_size: 5,
-        occupancy: BlockOccupancy::AtMostOne,
-    };
-    circuit_selection::<u64, U64NttTable, _>(config, CbsInputEncoding::Padded);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 5,
+            occupancy,
+        };
+        circuit_selection::<u64, U64NttTable, _>(config, CbsInputEncoding::Padded);
+    }
 }
 
 /// The same reducer type may hold distinct q/Q values. Reject the Boolean
@@ -917,6 +925,20 @@ fn input_domain_binding_precedes_output_writes() {
             wrong_context.evaluator(&server),
             Err(TfheEvaluationError::IncompatibleBlindRotationKey)
         ));
+
+        if method == BlindRotationMethod::Block {
+            // Same dimensions/moduli, different joint secret law and row layout.
+            let mut other = config;
+            other.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                block_size: 3,
+                occupancy: BlockOccupancy::ExactlyOne,
+            };
+            let other = TfheContext::<u32, U32NttTable, _>::try_from_pbs_config(other).unwrap();
+            assert!(matches!(
+                other.evaluator(&server),
+                Err(TfheEvaluationError::IncompatibleBlindRotationKey)
+            ));
+        }
 
         let input = context.allocate_lwe_ciphertext();
         let lut = Polynomial::new(vec![0u32; 128]);
@@ -1393,22 +1415,24 @@ fn check_sparse_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(q: T, buc
 /// four/pair/single source groups and both sides of the four-source word bound.
 #[test]
 fn block_batch_matches_single_inputs() {
-    for (q, width, blocks) in [
-        (67_104_769u32, 3, 3),
-        (998_244_353, 5, 2),
-        (67_104_769, 7, 3),
-    ] {
-        check_block_batch::<u32, U32NttTable>(q, width, blocks);
-    }
-    // rank=2 and full base-16 decomposition give 3,744/4,608 coefficients
-    // for Q50/Q61: both exceed one u64 16 KiB tile (2,048 coefficients).
-    // Q61 has insufficient headroom for four unreduced sources; Q16 fits one tile.
-    for (q, width, blocks) in [
-        (65_537u64, 3, 2),
-        (1_125_899_906_826_241, 5, 3),
-        (2_305_843_009_213_692_737, 7, 2),
-    ] {
-        check_block_batch::<u64, U64NttTable>(q, width, blocks);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        for (q, width, blocks) in [
+            (67_104_769u32, 3, 3),
+            (998_244_353, 5, 2),
+            (67_104_769, 7, 3),
+        ] {
+            check_block_batch::<u32, U32NttTable>(q, width, blocks, occupancy);
+        }
+        // rank=2 and full base-16 decomposition give 3,744/4,608 coefficients
+        // for Q50/Q61: both exceed one u64 16 KiB tile (2,048 coefficients).
+        // Q61 has insufficient headroom for four unreduced sources; Q16 fits one tile.
+        for (q, width, blocks) in [
+            (65_537u64, 3, 2),
+            (1_125_899_906_826_241, 5, 3),
+            (2_305_843_009_213_692_737, 7, 2),
+        ] {
+            check_block_batch::<u64, U64NttTable>(q, width, blocks, occupancy);
+        }
     }
 }
 
@@ -1416,6 +1440,7 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     q: T,
     block_size: usize,
     block_count: usize,
+    occupancy: BlockOccupancy,
 ) {
     use primus_tfhe::rotation::RotationModulusSwitch;
     use primus_tfhe_glwe_ntt::{
@@ -1429,7 +1454,7 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     config.small_lwe.dimension = LweDimension::new(block_size * block_count);
     config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
         block_size,
-        occupancy: BlockOccupancy::AtMostOne,
+        occupancy,
     };
     config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
     config.bsk_poly_length = PolyLength::new(n);
@@ -1497,7 +1522,11 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         let mut narrow_config = config;
         narrow_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
             block_size: 3,
-            occupancy: BlockOccupancy::AtMostOne,
+            occupancy: if occupancy == BlockOccupancy::AtMostOne {
+                BlockOccupancy::ExactlyOne
+            } else {
+                BlockOccupancy::AtMostOne
+            },
         };
         let narrow_context = TfheContext::<T, Table>::try_from_pbs_config(narrow_config).unwrap();
         let narrow_client = ClientKey::generate(narrow_context.parameters(), &mut rng);
@@ -1605,47 +1634,60 @@ fn check_block_raw_rotation<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         (5, &[0, 0, 0, 0, 1, 0, 1, 0, 0, 0]),
     ];
     let n = 32;
-    for (case, &(block_size, secret)) in secrets.iter().enumerate() {
-        let mut config =
-            two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
-        config.small_lwe.dimension = LweDimension::new(secret.len());
-        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-            block_size,
-            occupancy: BlockOccupancy::AtMostOne,
-        };
-        config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
-        config.ring_modulus = ModulusConfig::Explicit(ring_modulus_value);
-        config.bsk_dimension = GlweDimension::new(1);
-        config.bsk_poly_length = PolyLength::new(n);
-        let context = TfheContext::<T, Table, _>::try_from_pbs_config(config).unwrap();
-        let mut rng = StdRng::seed_from_u64(530 + case as u64);
-        let generated = ClientKey::generate(context.parameters(), &mut rng);
-        let client = ClientKey::new(
-            primus_lwe::LweSecretKey::new(
-                secret.iter().map(|&s| T::as_from(s)).collect(),
-                config.small_lwe.secret_key_distr,
-                context.parameters().small_lwe().cipher_modulus(),
-            ),
-            generated.glwe_secret_key().clone(),
-            config.order,
-        );
-        let transformed =
-            NttGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), context.table());
-        if case == 4 {
-            use rand::Rng;
-
-            // Standalone BR-key generation owns the same support check even
-            // without ClientKey binding. Reject before consuming row randomness.
-            let invalid = primus_lwe::LweSecretKey::new(
-                [1, 1, 0, 0, 0, 0].map(T::as_from).to_vec(),
-                config.small_lwe.secret_key_distr,
-                context.parameters().small_lwe().cipher_modulus(),
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        for (case, &(block_size, secret)) in secrets.iter().enumerate() {
+            if occupancy == BlockOccupancy::ExactlyOne
+                && secret
+                    .chunks_exact(block_size)
+                    .any(|block| block.iter().sum::<u8>() != 1)
+            {
+                continue;
+            }
+            let mut config =
+                two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
+            config.small_lwe.dimension = LweDimension::new(secret.len());
+            config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                block_size,
+                occupancy,
+            };
+            config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
+            config.ring_modulus = ModulusConfig::Explicit(ring_modulus_value);
+            config.bsk_dimension = GlweDimension::new(1);
+            config.bsk_poly_length = PolyLength::new(n);
+            let context = TfheContext::<T, Table, _>::try_from_pbs_config(config).unwrap();
+            let mut rng = StdRng::seed_from_u64(530 + case as u64);
+            let generated = ClientKey::generate(context.parameters(), &mut rng);
+            let client = ClientKey::new(
+                primus_lwe::LweSecretKey::new(
+                    secret.iter().map(|&s| T::as_from(s)).collect(),
+                    config.small_lwe.secret_key_distr,
+                    context.parameters().small_lwe().cipher_modulus(),
+                ),
+                generated.glwe_secret_key().clone(),
+                config.order,
             );
-            let parameters = context.parameters().blind_rotation_params();
-            let mut encryption = primus_glwe::NttGlweGadgetEncryptWorkspace::new(parameters.size());
-            let mut invalid_rng = StdRng::seed_from_u64(540);
-            let mut untouched = StdRng::seed_from_u64(540);
-            assert_eq!(
+            let transformed =
+                NttGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), context.table());
+            if case == 4 || (occupancy == BlockOccupancy::ExactlyOne && case == 7) {
+                use rand::Rng;
+
+                // Standalone BR-key generation owns the same support check even
+                // without ClientKey binding. Reject before consuming row randomness.
+                let invalid = primus_lwe::LweSecretKey::new(
+                    if occupancy == BlockOccupancy::ExactlyOne {
+                        [0, 0, 0, 0, 1, 0].map(T::as_from).to_vec()
+                    } else {
+                        [1, 1, 0, 0, 0, 0].map(T::as_from).to_vec()
+                    },
+                    config.small_lwe.secret_key_distr,
+                    context.parameters().small_lwe().cipher_modulus(),
+                );
+                let parameters = context.parameters().blind_rotation_params();
+                let mut encryption =
+                    primus_glwe::NttGlweGadgetEncryptWorkspace::new(parameters.size());
+                let mut invalid_rng = StdRng::seed_from_u64(540);
+                let mut untouched = StdRng::seed_from_u64(540);
+                assert_eq!(
                 BlindRotationKey::try_generate(
                     &invalid,
                     &transformed,
@@ -1662,77 +1704,102 @@ fn check_block_raw_rotation<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
                     )
                 )
             );
-            assert_eq!(invalid_rng.next_u64(), untouched.next_u64());
-        }
-        let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
-            .try_generate_blind_rotation_key(&client, &mut rng)
-            .unwrap()
-        else {
-            panic!("expected direct block key");
-        };
-        let mut workspace = BlockGlweBlindRotationWorkspace::new(&key);
-        let rotation =
-            RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 2 * n, 1);
-        let modulus = context.parameters().ring_modulus();
-        let scalar = ring_modulus_value / T::as_from(128);
-        let lut = Polynomial::new(
-            (0..n)
-                .map(|i| T::as_from((i * i + i / 3 + 5) % 8) * scalar)
-                .collect::<Vec<_>>(),
-        );
-        let mut input: primus_lattice::lwe::Lwe<Vec<T>> =
-            primus_lattice::lwe::Lwe::zero(secret.len());
-        let mut output = context.allocate_accumulator_ciphertext();
-        let mut phase = Polynomial::new(vec![T::ZERO; n]);
-        let mut scratch = vec![T::ZERO; n];
-        for (pattern, body) in [13, 0, n, 2 * n - 1].into_iter().enumerate() {
-            let mut selected_sum = 0;
-            for (i, (value, &s)) in input.a_mut().iter_mut().zip(secret).enumerate() {
-                let exponent = if pattern == 0 {
-                    0
-                } else {
-                    [0, n, 2 * n - 1][(i + pattern) % 3]
-                };
-                *value = T::as_from(exponent);
-                selected_sum += exponent * usize::from(s);
+                assert_eq!(invalid_rng.next_u64(), untouched.next_u64());
             }
-            *input.b_mut() = T::as_from(body);
-            workspace.blind_rotate_lookup_table_to(
-                &key,
-                &input,
-                &lut,
-                &rotation,
-                &mut output,
-                context.table(),
-            );
-            assert!(
-                output
-                    .as_ref()
-                    .iter()
-                    .all(|&value| value < ring_modulus_value)
-            );
-            transformed.decrypt_phase_coeff_to(
-                &output,
-                &mut phase,
-                modulus,
-                context.table(),
-                &mut scratch,
-            );
-            let exponent = (selected_sum + 2 * n - body) % (2 * n);
-            for (i, &value) in lut.as_ref().iter().enumerate() {
-                let destination = i + exponent;
-                let expected = if (destination / n) % 2 == 0 {
-                    value
-                } else {
-                    modulus.reduce_neg(value)
-                };
-                // This deterministic full-decomposition fixture has wide spacing
-                // to distinguish a wrong rotation/sign from sampled row noise.
-                assert!(
-                    phase_error_magnitude(phase.as_ref()[destination % n], expected, modulus)
-                        <= scalar >> 4u32,
-                    "secret {secret:?}, pattern {pattern}, coefficient {i}"
+            let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
+                .try_generate_blind_rotation_key(&client, &mut rng)
+                .unwrap()
+            else {
+                panic!("expected direct block key");
+            };
+            if occupancy == BlockOccupancy::ExactlyOne && case == 7 {
+                use rand::Rng;
+                // A flat bit-only replay proves no hidden dummy encryption or
+                // RNG consumption occurs between the two logical blocks.
+                let mut expected_key_rng = StdRng::seed_from_u64(530 + case as u64);
+                let _ = ClientKey::generate(context.parameters(), &mut expected_key_rng);
+                let parameters = context.parameters().blind_rotation_params();
+                let mut expected = vec![T::ZERO; secret.len() * parameters.ggsw_len()];
+                let mut encryption =
+                    primus_glwe::NttGlweGadgetEncryptWorkspace::new(parameters.size());
+                transformed.encrypt_ggsw_constant_batch_coeff_to(
+                    client.small_lwe_secret_key().as_ref(),
+                    &mut expected,
+                    parameters,
+                    context.table(),
+                    &mut expected_key_rng,
+                    &mut encryption,
                 );
+                assert_eq!(key.controls().as_slice(), expected);
+                assert_eq!(rng.next_u64(), expected_key_rng.next_u64());
+            }
+            let mut workspace = BlockGlweBlindRotationWorkspace::new(&key);
+            let rotation = RotationModulusSwitch::new(
+                context.parameters().small_lwe().cipher_modulus(),
+                2 * n,
+                1,
+            );
+            let modulus = context.parameters().ring_modulus();
+            let scalar = ring_modulus_value / T::as_from(128);
+            let lut = Polynomial::new(
+                (0..n)
+                    .map(|i| T::as_from((i * i + i / 3 + 5) % 8) * scalar)
+                    .collect::<Vec<_>>(),
+            );
+            let mut input: primus_lattice::lwe::Lwe<Vec<T>> =
+                primus_lattice::lwe::Lwe::zero(secret.len());
+            let mut output = context.allocate_accumulator_ciphertext();
+            let mut phase = Polynomial::new(vec![T::ZERO; n]);
+            let mut scratch = vec![T::ZERO; n];
+            for (pattern, body) in [13, 0, n, 2 * n - 1].into_iter().enumerate() {
+                let mut selected_sum = 0;
+                for (i, (value, &s)) in input.a_mut().iter_mut().zip(secret).enumerate() {
+                    let exponent = if pattern == 0 {
+                        0
+                    } else {
+                        [0, n, 2 * n - 1][(i + pattern) % 3]
+                    };
+                    *value = T::as_from(exponent);
+                    selected_sum += exponent * usize::from(s);
+                }
+                *input.b_mut() = T::as_from(body);
+                workspace.blind_rotate_lookup_table_to(
+                    &key,
+                    &input,
+                    &lut,
+                    &rotation,
+                    &mut output,
+                    context.table(),
+                );
+                assert!(
+                    output
+                        .as_ref()
+                        .iter()
+                        .all(|&value| value < ring_modulus_value)
+                );
+                transformed.decrypt_phase_coeff_to(
+                    &output,
+                    &mut phase,
+                    modulus,
+                    context.table(),
+                    &mut scratch,
+                );
+                let exponent = (selected_sum + 2 * n - body) % (2 * n);
+                for (i, &value) in lut.as_ref().iter().enumerate() {
+                    let destination = i + exponent;
+                    let expected = if (destination / n) % 2 == 0 {
+                        value
+                    } else {
+                        modulus.reduce_neg(value)
+                    };
+                    // This deterministic full-decomposition fixture has wide spacing
+                    // to distinguish a wrong rotation/sign from sampled row noise.
+                    assert!(
+                        phase_error_magnitude(phase.as_ref()[destination % n], expected, modulus)
+                            <= scalar >> 4u32,
+                        "secret {secret:?}, pattern {pattern}, coefficient {i}"
+                    );
+                }
             }
         }
     }

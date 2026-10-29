@@ -2,6 +2,7 @@
 
 use primus_data::{Data, DataMut};
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
+use primus_glwe::BlockOccupancy;
 use primus_lattice::{glwe::TorusGlwe, lwe::Lwe, workspace::FourierGlweExternalProductWorkspace};
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
@@ -40,8 +41,8 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
     /// Blind-rotates an encoded LUT into a native coefficient GLWE ciphertext.
     ///
     /// Initializes X^(-R(b))*LUT, then processes every block using
-    /// GGSW(1-sum(s_i)) + sum(X^R(a_i)*GGSW(s_i)). Empty secret blocks still
-    /// consume their independently encrypted dummy and zero selectors. The
+    /// sum(X^R(a_i)*GGSW(s_i)), plus GGSW(1-sum(s_i)) only for AtMostOne.
+    /// All encrypted-zero selectors participate in either mode. The
     /// output is overwritten without key switching or sample extraction.
     ///
     /// # Correctness
@@ -146,16 +147,22 @@ impl<T: TorusFftValue> BlockGlweBlindRotationWorkspace<T> {
         mask.fill(T::ZERO);
         lookup_table.mul_monomial_to(initial_exponent, &mut Polynomial(body), modulus);
 
+        let controls_per_block =
+            key.block_size() + usize::from(key.occupancy() == BlockOccupancy::AtMostOne);
         let mut output_is_current = true;
         for (exponents, ciphertexts) in input_exponents.chunks_exact(key.block_size()).zip(
             controls
                 .as_slice()
-                .chunks_exact((key.block_size() + 1) * size.ggsw_len()),
+                .chunks_exact(controls_per_block * size.ggsw_len()),
         ) {
             let (selections, dummy) = ciphertexts.split_at(key.block_size() * size.ggsw_len());
-            // Start every block from its independently encrypted dummy. In
-            // particular, an empty secret block is an encrypted identity.
-            aggregate.as_mut().copy_from_slice(dummy);
+            // ExactlyOne has no dummy; encrypted-zero selectors still take
+            // part in the full aggregate. Overwrite dirty scratch in either mode.
+            if dummy.is_empty() {
+                aggregate.as_mut().fill(T::ZERO);
+            } else {
+                aggregate.as_mut().copy_from_slice(dummy);
+            }
             aggregate_controls_assign(exponents.iter().copied(), selections, aggregate, n, modulus);
             // Native wrapping is exact; only the completed aggregate is lifted
             // at normalized torus scale and transformed with ordinary FFT.
