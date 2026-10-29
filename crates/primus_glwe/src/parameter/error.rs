@@ -20,6 +20,11 @@ pub enum GlweParameterError {
     /// Invalid secret sampling configuration, weight or output modulus.
     #[error(transparent)]
     SecretKey(#[from] SecretKeySamplerError),
+    /// Following the recipient joint secret law is supported only for rank one.
+    #[error(
+        "following the recipient secret requires GLWE rank one; specify a length-N ephemeral distribution"
+    )]
+    EphemeralFollowingRequiresRankOne,
     /// Invalid coefficient-domain Gaussian noise.
     #[error("invalid GLWE noise distribution")]
     Noise(#[from] GaussianError),

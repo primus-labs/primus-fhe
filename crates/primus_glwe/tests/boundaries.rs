@@ -409,6 +409,9 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
     let public_key =
         NttGlwePublicKey::generate(&key, params.encryption_parameters(), &table, &mut rng);
     let message = Polynomial::new(vec![3u32; N]);
+    let ephemeral = params
+        .try_ephemeral_sampler(Some(SecretKeyDistr::SparseTernary))
+        .unwrap();
     let mut workspace = NttGlwePublicEncryptWorkspace::new(PolyLength::new(N));
 
     let mut gadget_workspace = NttGlweGadgetEncryptWorkspace::new(gadget.size());
@@ -525,6 +528,7 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
                         &message,
                         &mut output,
                         &params,
+                        &ephemeral,
                         PlaintextEmbedding::Unsigned,
                         &wrong_table,
                         &mut rng,
@@ -578,6 +582,7 @@ fn ntt_operations_reject_incompatible_domains_and_workspace_before_writes() {
                     &message,
                     &mut output,
                     &params,
+                    &ephemeral,
                     PlaintextEmbedding::Unsigned,
                     &table,
                     &mut rng,
