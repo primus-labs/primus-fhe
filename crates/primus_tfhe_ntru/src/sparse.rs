@@ -67,7 +67,16 @@ impl<T: FheUint> SparseNtruBootstrappingKey<T> {
             LweDimension::new(dimension),
             control_count,
             parameters,
-        )?;
+        )
+        .map_err(|error| match error {
+            crate::controls::BlindRotationControlsError::StorageSizeOverflow => {
+                Error::StorageSizeOverflow
+            }
+            crate::controls::BlindRotationControlsError::StorageLengthMismatch {
+                expected,
+                actual,
+            } => Error::StorageLengthMismatch { expected, actual },
+        })?;
         Ok(Self {
             controls,
             map,

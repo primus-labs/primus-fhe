@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-NTRU-based TFHE with an explicit field modulus and NTT. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with classic binary/ternary or sparse fixed-weight binary blind rotation. External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
+NTRU-based TFHE with an explicit field modulus and NTT. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with classic binary/ternary, sparse fixed-weight binary or direct block-binary blind rotation. External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
 
 ## Quick start
 
@@ -106,6 +106,10 @@ let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
 ```
 
 Generate the complete CBS bundle through `try_generate_circuit_bootstrap_keys` and use the same CBS/one-hot evaluator factories. A working PBS configuration alone does not establish CBS output precision or CMux noise margin.
+
+## Block blind rotation
+
+Set `config.method = BlindRotationMethod::Block` and `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }` (under `config.pbs` for CBS). The logical LWE dimension must be a nonzero multiple of the positive block width. Blocks may be empty; no matching or repeated controls are used. Generate keys and evaluate PBS, ManyLUT, MVB, CBS and one-hot through the same context factories. Each block encrypts every bit plus an independent dummy; the first block lifts through NLEV even when all exponents are zero, and later blocks use NGSW with the same external-product arithmetic. The shared single-input workspace allocates once and retains no occupancy information. The sparse pair API remains specific to bucket keys. Presets remain unchanged; block noise and security need their own assessment.
 
 ## One-hot CBS
 

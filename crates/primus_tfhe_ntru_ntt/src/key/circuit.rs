@@ -73,7 +73,7 @@ where
     /// it before preparing KS. Sparse matching retries only the public map.
     ///
     /// # Errors
-    /// Missing CBS state and invalid sparse choices precede secret sampling.
+    /// Missing CBS state and invalid grouping geometry precede secret sampling.
     /// Propagates secret-generation, return-domain and matching failures.
     ///
     /// # Correctness
@@ -88,15 +88,10 @@ where
             .context
             .cbs_parameters()
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let (client, transformed) = self.generate_client_key_with_main(rng)?;
-        let server = self.generate_circuit_server_with_main(
-            operation,
-            &client,
-            transformed,
-            sparse_layout,
-            rng,
-        )?;
+        let server =
+            self.generate_circuit_server_with_main(operation, &client, transformed, layout, rng)?;
         Ok((client, server))
     }
 
@@ -128,20 +123,15 @@ where
         if let Some(parameters) = public_lift {
             self.check_public_lift_parameters(parameters)?;
         }
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let (client, transformed) = self.generate_client_key_with_main(rng)?;
         // Retain the accepted representation until every ring key has been generated;
         // do not convert f or compute its inverse again solely for the extra lift.
         let lift = public_lift.map(|parameters| {
             self.generate_public_lift_from_transformed(&transformed, parameters, rng)
         });
-        let server = self.generate_circuit_server_with_main(
-            operation,
-            &client,
-            transformed,
-            sparse_layout,
-            rng,
-        )?;
+        let server =
+            self.generate_circuit_server_with_main(operation, &client, transformed, layout, rng)?;
         Ok((client, server, lift))
     }
 
@@ -158,7 +148,7 @@ where
             .cbs_parameters()
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         client.check_compatible(self.context.parameters())?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let transformed = NttNtruSecretKey::try_from_coeff_secret_key(
             client.accumulator_ntru_secret_key(),
             self.context
@@ -167,11 +157,11 @@ where
                 .cipher_modulus(),
             self.context.table(),
         )?;
-        self.generate_circuit_server_with_main(operation, client, transformed, sparse_layout, rng)
+        self.generate_circuit_server_with_main(operation, client, transformed, layout, rng)
     }
 
     /// The context owns this complete CBS operation; client compatibility, the
-    /// external-q magnitude bound and sparse geometry are already established.
+    /// external-q magnitude bound and grouping geometry are already established.
     /// Share the accepted transform and inverse across BR/CBS, then release them
     /// before allocating coefficient-domain Q→q return-key rows.
     fn generate_circuit_server_with_main<R: rand::Rng + rand::CryptoRng>(
@@ -179,11 +169,11 @@ where
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
         transformed: NttNtruSecretKey<T>,
-        sparse_layout: Option<crate::sparse::SparseKeyLayout>,
+        layout: super::BlindRotationLayout,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError> {
         let blind_rotation =
-            self.generate_blind_rotation_key_with_main(client, &transformed, sparse_layout, rng)?;
+            self.generate_blind_rotation_key_with_main(client, &transformed, layout, rng)?;
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_main(
             client.accumulator_ntru_secret_key(),
             &transformed,

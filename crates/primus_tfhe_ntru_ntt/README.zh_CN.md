@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-基于显式域模数和 NTT 的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 classic binary/ternary 或 sparse fixed-weight binary 盲旋转。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
+基于显式域模数和 NTT 的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 classic binary/ternary、sparse fixed-weight binary 或直接 block binary 盲旋转。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
 
 ## 快速开始
 
@@ -106,6 +106,10 @@ let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
 ```
 
 随后用 `try_generate_circuit_bootstrap_keys` 生成完整 CBS 组合，使用相同的 CBS/one-hot evaluator 工厂。PBS 配置可用，不代表 CBS 输出精度或 CMux 噪声余量充分。
+
+## Block 盲旋转
+
+设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`（CBS 位于 `config.pbs` 内）。逻辑 LWE 维数须是正块宽的非零整数倍。允许空块，无需 matching 或重复控制。建钥以及 PBS、ManyLUT、MVB、CBS 和 one-hot 沿用相同 context 工厂。每块加密全部 bit 及独立 dummy；首块即使所有指数为零也通过 NLEV 完成提升，后续 NGSW 复用相同外积算术。单输入共享工作区只在构造时分配，不保存占用信息。Sparse pair API 仍仅用于桶密钥。预设不变，block 的噪声与安全成本须单独评估。
 
 ## One-hot CBS
 

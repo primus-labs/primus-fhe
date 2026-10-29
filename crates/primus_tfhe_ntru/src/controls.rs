@@ -6,7 +6,11 @@ use primus_integer::FheUint;
 use primus_lattice::LweDimension;
 use primus_ntru::NlevParameters;
 
-use crate::SparseBootstrappingKeyError;
+/// Allocation failures mapped by each grouped-control owner to its public error.
+pub(crate) enum BlindRotationControlsError {
+    StorageSizeOverflow,
+    StorageLengthMismatch { expected: usize, actual: usize },
+}
 
 /// Coefficient controls shared by grouped NTRU blind-rotation layouts.
 ///
@@ -30,8 +34,8 @@ impl<T: FheUint> NtruBlindRotationControls<T> {
         input_dimension: LweDimension,
         control_count: usize,
         parameters: &NlevParameters<T, M>,
-    ) -> Result<Self, SparseBootstrappingKeyError> {
-        use SparseBootstrappingKeyError as Error;
+    ) -> Result<Self, BlindRotationControlsError> {
+        use BlindRotationControlsError as Error;
         let control_len = parameters.nlev_len();
         let expected = control_count
             .checked_mul(control_len)

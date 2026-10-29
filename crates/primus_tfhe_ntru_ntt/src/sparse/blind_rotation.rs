@@ -1,4 +1,4 @@
-//! Bucket aggregation and reusable sparse blind-rotation workspace.
+//! Shared coefficient aggregation and reusable sparse blind-rotation workspace.
 
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_integer::FheUint;
@@ -73,15 +73,34 @@ pub(crate) fn rotate_buckets<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     modulus: BarrettModulus<T>,
     ntt: &Table,
 ) {
-    let n = ntt.poly_length().get();
-    // Start with public P in current. Bucket 0 uses NLEV[H_0] to lift P;
-    // buckets >= 1 actually hold NGSW[H_j] = NLEV[f*H_j] and act on ciphertexts.
-    // NLEV and NGSW external products have identical arithmetic, so all buckets
-    // share this NLEV product call without a first-bucket branch.
-    core::mem::swap(current, scratch);
-    for bucket in 0..key.bucket_count() {
+    let groups = (0..key.bucket_count()).map(|bucket| {
         let (indices, data) = key.bucket_data(bucket);
-        aggregate_bucket(
+        (indices.iter().copied(), data)
+    });
+    rotate_groups(groups, workspace, current, scratch, basis, modulus, ntt);
+}
+
+/// The first group's NLEV aggregate lifts public P; later groups actually hold
+/// NGSW[H] = NLEV[f*H] and act on ciphertexts. Their product arithmetic agrees,
+/// so bucket and direct-block layouts share this loop without a first-group
+/// branch. Every group is consumed, including encrypted zero/dummy controls.
+pub(crate) fn rotate_groups<'a, T, Table, I>(
+    groups: impl Iterator<Item = (I, &'a [T])>,
+    workspace: &mut AggregationWorkspace<T>,
+    current: &mut Ntru<Vec<T>>,
+    scratch: &mut Ntru<Vec<T>>,
+    basis: &ApproxSignedBasis<T>,
+    modulus: BarrettModulus<T>,
+    ntt: &Table,
+) where
+    T: FheUint,
+    Table: MonomialNttTable<ValueT = T>,
+    I: ExactSizeIterator<Item = usize>,
+{
+    let n = ntt.poly_length().get();
+    core::mem::swap(current, scratch);
+    for (indices, data) in groups {
+        aggregate_controls(
             indices,
             data,
             [(
@@ -120,8 +139,8 @@ pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T
     let n = ntt.poly_length().get();
     for bucket in 0..key.bucket_count() {
         let (indices, data) = key.bucket_data(bucket);
-        aggregate_bucket(
-            indices,
+        aggregate_controls(
+            indices.iter().copied(),
             data,
             [
                 (
@@ -156,7 +175,9 @@ pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T
     }
 }
 
-/// Starts from the encrypted dummy and adds every selector in key order. Pairing
+/// Starts from the encrypted dummy and adds every selector in key order. The
+/// iterator selects coordinates from each input's complete exponent slice;
+/// sparse buckets supply public indices and direct blocks supply a range. Pairing
 /// shares an accumulator traversal without skipping zero exponents or encrypted
 /// zeros; an odd final selector uses the single-product kernel. For u64, pairs
 /// retain [0,2q) residues until one final normalization before NTT; other widths
@@ -164,8 +185,8 @@ pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T
 /// sized controls and canonical source residues.
 /// Instantiated only for one input or the fixed two-input window.
 #[inline]
-fn aggregate_bucket<T: FheUint, const INPUTS: usize>(
-    indices: &[usize],
+fn aggregate_controls<T: FheUint, const INPUTS: usize>(
+    indices: impl ExactSizeIterator<Item = usize>,
     data: &[T],
     mut inputs: [(&[usize], Nlev<&mut [T]>); INPUTS],
     poly_length: usize,
@@ -173,12 +194,13 @@ fn aggregate_bucket<T: FheUint, const INPUTS: usize>(
 ) {
     let control_len = inputs[0].1.as_ref().len();
     let (selections, dummy) = data.split_at(data.len() - control_len);
+    debug_assert_eq!(selections.len(), indices.len() * control_len);
     for (_, aggregate) in &mut inputs {
         aggregate.as_mut().copy_from_slice(dummy);
     }
-    let mut controls = indices.iter().zip(NlevIter::new(selections, control_len));
-    while let Some((&first_index, first)) = controls.next() {
-        if let Some((&second_index, second)) = controls.next() {
+    let mut controls = indices.zip(NlevIter::new(selections, control_len));
+    while let Some((first_index, first)) = controls.next() {
+        if let Some((second_index, second)) = controls.next() {
             for (exponents, aggregate) in &mut inputs {
                 let exponent = exponents[first_index];
                 if T::BITS == 64 {

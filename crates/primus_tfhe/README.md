@@ -39,6 +39,7 @@ ManyLUT and MVB compute **several functions of one input**. ManyLUT trades rotat
 | GLWE block binary | Both PBS orders | Yes | Yes | Not provided |
 | NTRU classic binary/ternary | Yes | Yes | Yes | Yes |
 | NTRU sparse fixed-weight binary | Yes | Yes | Yes | Yes |
+| NTRU NTT block binary | Yes | Yes | Yes | One-hot; LUT integration pending |
 
 All four backends provide secret-key and LWE public-key clients. Fourier supports RustFFT and TFHE-FFT with Native ring moduli only. Example configurations are arithmetic teaching fixtures, without assessed security or failure probability. NTRU's external LWE secret is independent of its ring secret; only the ring secret undergoes invertibility and Fourier inverse-stability screening.
 
@@ -46,7 +47,7 @@ All four backends provide secret-key and LWE public-key clients. Fourier support
 
 All backends re-export `BlindRotationMethod` and select it in `config.method`; changing a secret distribution alone does not select a different algorithm. `Classic` supports binary/ternary, including fixed-weight distributions. Explicit `Sparse { copy_count, bucket_count }` requires fixed-weight binary with `0<h<n`; sparse ternary is unsupported. Matching failure returns an error after retrying the public map, without changing the client secret or falling back to classic.
 
-`SecretKeyDistr::BlockBinary { block_size }` samples each consecutive block uniformly from the zero block and its single-`1` states. The logical key length must be a nonzero multiple of the block size; its total weight is random. `Classic` can use this distribution. `Block` selects direct block aggregation on GLWE NTT and Fourier. The two NTRU backends return `UnsupportedBlindRotationMethod` at key generation. Each block processes all bit controls and an independently encrypted empty-block dummy; block secrets need their own noise and security assessment. GLWE ring-KS retains the logical LWE prefix followed by public zeros; the padded ring length need not be divisible by the block size.
+`SecretKeyDistr::BlockBinary { block_size }` samples each consecutive block uniformly from the zero block and its single-`1` states. The logical key length must be a nonzero multiple of the block size; its total weight is random. `Classic` can use this distribution. `Block` selects direct block aggregation on both GLWE backends and NTRU NTT. NTRU Fourier returns `UnsupportedBlindRotationMethod` at key generation. Each block processes all bit controls and an independently encrypted empty-block dummy; block secrets need their own noise and security assessment. GLWE ring-KS retains the logical LWE prefix followed by public zeros; the padded ring length need not be divisible by the block size.
 
 For ordinary PBS, construct `TfheContext::try_from_pbs_config(config)` and call `context.try_generate_keys(rng)` for `(ClientKey, ServerKey)`. For CBS or NTRU one-hot, use the CBS factory:
 

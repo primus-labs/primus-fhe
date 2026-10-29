@@ -56,6 +56,7 @@
 
 #![deny(missing_docs)]
 
+mod block;
 mod circuit_bootstrap;
 mod client;
 mod config;
@@ -67,12 +68,13 @@ mod one_hot;
 mod parameters;
 mod sparse;
 
+pub use block::BlockNtruBootstrappingKey;
 pub use circuit_bootstrap::CbsGadgetParameters;
 pub use config::{CbsConfig, PbsConfig};
 pub use controls::NtruBlindRotationControls;
 pub use error::{
-    CircuitBootstrapParameterError, KeyGenerationError, SparseBootstrappingKeyError,
-    TfheClientError, TfheKeyError, TfheParameterError,
+    BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
+    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
 };
 pub use key::ClientKey;
 pub use one_hot::{NlevSelectors, OneHotBootstrapError, OneHotLookupTable};

@@ -89,7 +89,7 @@ where
 
 /// Reusable workspace for fixed-scale factorized MVB.
 ///
-/// Lifts and blind-rotates V using the selected classic or sparse PBS key at
+/// Lifts and blind-rotates V using the selected PBS key at
 /// rotation step one, then multiplies each public factor. Each product is
 /// independently converted Q→q and extracted, then small LWE tiles share key
 /// switching to the external secret.

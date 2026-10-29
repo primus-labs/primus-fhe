@@ -5,12 +5,13 @@ use primus_ntt::MonomialNttTable;
 use primus_poly::Polynomial;
 
 use crate::{
+    block::{BlockNtruBootstrappingKey, rotate_blocks},
     context::EvaluationContext,
     key::{BlindRotationKey, BootstrappingControls, ClassicControls},
     sparse::{AggregationWorkspace, SparseNtruBootstrappingKey, rotate_buckets},
 };
 
-/// Borrowed classic controls or sparse key with owned BR buffers and product scratch.
+/// Borrowed BR controls with owned buffers and matching product scratch.
 /// The outer bootstrap resources provide the context/table binding; this set
 /// keeps the selected controls and their matching buffers together.
 pub(crate) struct BlindRotationResources<'a, T: FheUint> {
@@ -36,6 +37,10 @@ impl<'a, T: FheUint> BlindRotationResources<'a, T> {
                     key,
                     scratch: AggregationWorkspace::new(parameters.blind_rotation(), key.controls()),
                 },
+                BootstrappingControls::Block(key) => RotationState::Block {
+                    key,
+                    scratch: AggregationWorkspace::new(parameters.blind_rotation(), key.controls()),
+                },
                 BootstrappingControls::Classic(controls) => {
                     let scratch = NttNtruCmuxWorkspace::new(
                         poly_length,
@@ -53,10 +58,14 @@ impl<'a, T: FheUint> BlindRotationResources<'a, T> {
 }
 
 /// Borrowed BR material and owned scratch selected for one control layout.
-/// The variant keeps sparse keys or classic control views paired with their buffers.
+/// The variant keeps grouped keys or classic control views paired with their buffers.
 pub(crate) enum RotationState<'a, T: FheUint> {
     Sparse {
         key: &'a SparseNtruBootstrappingKey<T>,
+        scratch: AggregationWorkspace<T>,
+    },
+    Block {
+        key: &'a BlockNtruBootstrappingKey<T>,
         scratch: AggregationWorkspace<T>,
     },
     Binary {
@@ -72,7 +81,9 @@ pub(crate) enum RotationState<'a, T: FheUint> {
 impl<'a, T: FheUint> RotationState<'a, T> {
     pub(crate) fn external_product(&mut self) -> &mut NttNtruExternalProductWorkspace<T> {
         match self {
-            Self::Sparse { scratch, .. } => &mut scratch.external_product,
+            Self::Sparse { scratch, .. } | Self::Block { scratch, .. } => {
+                &mut scratch.external_product
+            }
             Self::Binary { scratch, .. } => scratch.external_product_workspace(),
             Self::Ternary { scratch, .. } => scratch.external_product_workspace(),
         }
@@ -122,6 +133,18 @@ pub(crate) fn blind_rotate_lookup_table_to<T, Table>(
         RotationState::Sparse { key, scratch } => {
             modulus_switch.exponent_slice_to(input.a(), &mut scratch.exponents);
             rotate_buckets(
+                key,
+                scratch,
+                &mut resources.current,
+                &mut resources.scratch,
+                basis,
+                modulus,
+                ntt,
+            );
+        }
+        RotationState::Block { key, scratch } => {
+            modulus_switch.exponent_slice_to(input.a(), &mut scratch.exponents);
+            rotate_blocks(
                 key,
                 scratch,
                 &mut resources.current,

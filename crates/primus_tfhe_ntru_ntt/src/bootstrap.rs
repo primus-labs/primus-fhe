@@ -36,7 +36,7 @@ where
     Table: MonomialNttTable<ValueT = T>,
 {
     /// Allocates shared BR/coefficient/external-product storage after checking the BR key.
-    /// Includes classic or sparse scratch, but no return, CBS projection or MVB buffers.
+    /// Includes the selected BR method's scratch, but no return, CBS projection or MVB buffers.
     ///
     /// # Correctness
     /// The key must use this context's NTT representation and intended secrets;
@@ -71,7 +71,7 @@ where
 
     /// Rejects a different context before scratch/output writes. Prepared CBS,
     /// one-hot and MVB state depends on the context, not individual BR controls.
-    /// Classic/sparse resources may be interchanged only when actual secrets
+    /// Resources for different BR methods may be interchanged only when actual secrets
     /// match; pointer equality does not establish that secret identity.
     pub(crate) fn check_context(&self, context: crate::context::EvaluationContext<'_, T, Table>) {
         assert!(

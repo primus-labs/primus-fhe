@@ -28,7 +28,8 @@ fn decomposition() -> DecompositionConfig {
 }
 
 /// Keep rounding and transform error far below the test message spacing.
-/// Sparse needs fixed-weight binary secrets; classic cases select binary/ternary below.
+/// Sparse needs fixed-weight binary secrets; direct blocks select their own
+/// distribution below, and classic cases also exercise binary/ternary inputs.
 fn config<T: FheUint>(method: BlindRotationMethod) -> PbsConfig<T, PowOf2Modulus<T>> {
     let modulus = ModulusConfig::Explicit(T::as_from(if T::BITS == 32 {
         998_244_353u64
@@ -78,6 +79,10 @@ fn chained_pbs<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     assert_eq!(
         blind_rotation.sparse_bootstrapping_key().is_some(),
         matches!(config.method, BlindRotationMethod::Sparse { .. }),
+    );
+    assert_eq!(
+        blind_rotation.block_bootstrapping_key().is_some(),
+        config.method == BlindRotationMethod::Block,
     );
     let key_switching = context
         .parameters()
@@ -442,6 +447,42 @@ fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
             one_hot.one_hot_to(input.as_view(), &mut nlev, &mut full);
             assert_eq!(nlev, standalone);
             assert_eq!(&full[one_hot.ngsw_selector_len()..], selectors);
+            // Consume coefficient NLEV output as a public-polynomial lift, not
+            // only as a byte-comparison oracle for the dual entry points.
+            let scalar = basis.scalar_iter().next().unwrap();
+            let polynomial = Polynomial::new(
+                (0..n)
+                    .map(|i| if i % 3 == 0 { scalar } else { T::ZERO })
+                    .collect::<Vec<_>>(),
+            );
+            let mut product = primus_ntru::NttNtruExternalProductWorkspace::new(
+                context.parameters().poly_length(),
+            );
+            for selector in [0, m] {
+                let control = one_hot.nlev_selectors(&nlev).selector(selector).unwrap();
+                let transformed_control =
+                    primus_lattice::nlev::Nlev::new(control.as_ref().to_vec())
+                        .into_ntt_form(context.table());
+                transformed_control.external_product_to(
+                    &polynomial,
+                    &mut selected,
+                    basis,
+                    modulus,
+                    context.table(),
+                    &mut product,
+                );
+                selected.write_ntt_form(&mut transformed_probe, context.table());
+                transformed.decrypt_phase_to(
+                    &transformed_probe,
+                    &mut phase,
+                    modulus,
+                    context.table(),
+                );
+                for (&actual, &value) in phase.as_ref().iter().zip(polynomial.as_ref()) {
+                    let expected = if selector == m { value } else { T::ZERO };
+                    assert!(phase_error_magnitude(actual, expected, modulus) <= scalar >> 4u32);
+                }
+            }
             ordinary_outputs = Some((nlev, full.clone()));
             one_hot.cmux_k_to(
                 one_hot.nonzero_ngsw_selectors(&selectors),
@@ -563,6 +604,29 @@ fn u64_classic_cbs() {
 fn u32_sparse_cbs() {
     let config = config(SPARSE);
     circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::PairedTrace);
+}
+
+/// Direct blocks retain independent q/Q, ordinary PBS, changing interleaved
+/// strides and factorized returns without a sparse bucket map.
+#[test]
+fn u32_block_pbs_and_batches() {
+    let mut config = config(BlindRotationMethod::Block);
+    config.external_lwe.dimension = LweDimension::new(6);
+    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    chained_pbs::<u32, U32NttTable>(config);
+    many_lut_and_mvb::<u32, U32NttTable>(config);
+}
+
+/// Wider odd blocks exercise paired aggregation plus its trailing selector.
+/// Consume ordinary and one-hot controls, then return real CMux results to LWE.
+#[test]
+fn u64_block_workflows() {
+    let mut config = config(BlindRotationMethod::Block);
+    config.external_lwe.dimension = LweDimension::new(10);
+    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 5 };
+    chained_pbs::<u64, U64NttTable>(config);
+    many_lut_and_mvb::<u64, U64NttTable>(config);
+    circuit_selection::<u64, U64NttTable>(config, NtruProjectionMethod::PairedTrace);
 }
 
 /// Equal gadget bases do not make CBS material from another ring compatible.
@@ -696,7 +760,7 @@ fn key_generation_boundaries() {
         Err(KeyGenerationError::IncompatiblePublicLiftParameters)
     ));
 
-    // Unsupported methods must not sample secrets or evaluation-key rows.
+    // Imported direct-block support is checked before sampling any key rows.
     let mut block_config = config;
     block_config.method = BlindRotationMethod::Block;
     block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
@@ -709,18 +773,30 @@ fn key_generation_boundaries() {
         })
         .unwrap();
     let mut block_generator = KeyGenerator::new(&block_context);
+    let mut invalid_support = vec![0; 8];
+    invalid_support[..2].fill(1);
+    let invalid_block_client = ClientKey::new(
+        primus_lwe::LweSecretKey::new(
+            invalid_support,
+            block_config.external_lwe.secret_key_distr,
+            block_context.parameters().external_lwe().cipher_modulus(),
+        ),
+        imported(8, 1).accumulator_ntru_secret_key().clone(),
+    );
     assert_eq!(
-        block_generator.try_generate(&mut rng).err(),
-        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
-            BlindRotationMethod::Block,
+        block_generator
+            .try_generate_blind_rotation_key(&invalid_block_client, &mut rng)
+            .err(),
+        Some(KeyGenerationError::ClientKey(
+            TfheKeyError::InvalidClientSecretKeyBlock,
         ))
     );
     assert_eq!(
         block_generator
-            .try_generate_circuit_bootstrap_keys(&mut rng)
+            .try_generate_circuit_bootstrap_server_key(&invalid_block_client, &mut rng)
             .err(),
-        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
-            BlindRotationMethod::Block,
+        Some(KeyGenerationError::ClientKey(
+            TfheKeyError::InvalidClientSecretKeyBlock,
         ))
     );
 
