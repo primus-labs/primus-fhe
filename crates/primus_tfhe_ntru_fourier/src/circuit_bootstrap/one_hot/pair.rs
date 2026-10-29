@@ -54,7 +54,7 @@ where
     Table: FftTable,
 {
     /// Allocates a second input's aggregate, current and exponents for
-    /// [`Self::with_sparse_pair`]. Returns `None` for classic resources.
+    /// [`Self::with_sparse_pair`]. Returns `None` for classic or block resources.
     /// Shared transform, projection and external-product scratch is not duplicated.
     ///
     /// # Panics

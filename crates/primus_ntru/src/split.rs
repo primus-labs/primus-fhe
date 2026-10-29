@@ -1,11 +1,12 @@
-//! Exact native coefficient preparation for split Fourier evaluation material.
+//! Exact native coefficient preparation for Fourier evaluation material.
 //! Ordinary Fourier encryption remains unchanged. These keys satisfy exact native
-//! row phase equations before the two FFT conversions; they are not obtained by
+//! row phase equations before any optional ordinary or split FFT conversion;
+//! they are not obtained by
 //! inverse-transforming an approximate ordinary Fourier key.
 use crate::{NlevParameters, NtruError, NtruSecretKey};
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_integer::AsInto;
-use primus_lattice::ntru::FourierNtruSplitGadget;
+use primus_lattice::{nlev::Nlev, ntru::FourierNtruSplitGadget};
 use primus_modulus::NativeModulus;
 use primus_poly::CoeffAutomorphismPermutation;
 use zeroize::Zeroizing;
@@ -27,7 +28,7 @@ impl<T: TorusFftValue> NativeNtruGadgetGenerator<T> {
     /// # Panics
     /// Requires u64 and a supported power-of-two secret length.
     pub fn try_new(secret: &NtruSecretKey<T>) -> Result<Self, NtruError> {
-        assert_eq!(T::BITS, 64, "split key generation requires u64");
+        assert_eq!(T::BITS, 64, "exact native key generation requires u64");
         let n = primus_shape::PolyLength::new(secret.poly_length());
         let f = Zeroizing::new(
             secret
@@ -87,6 +88,45 @@ impl<T: TorusFftValue> NativeNtruGadgetGenerator<T> {
             message[0] = T::ONE;
         }
         self.encrypt(&message, lift, parameters, low_bits, fft, rng)
+    }
+    /// Writes exact native coefficient rows of `NLEV[bit]` (`lift = true`) or
+    /// `NGSW[bit]` (`lift = false`), without a Fourier round trip.
+    ///
+    /// Every row draws independent noise. Its exact phase is `g*bit + e` for
+    /// NLEV or `g*f*bit + e` for NGSW, modulo `2^64`. Coefficients are native
+    /// residues; conversion to an online Fourier representation is the caller's
+    /// responsibility.
+    ///
+    /// # Correctness
+    /// Inherits [`Self::try_new`]'s accepted-secret contract. The supplied
+    /// parameters must describe the same secret and its intended noise budget.
+    ///
+    /// # Panics
+    /// Panics if the parameter ring length differs from the secret or `output`
+    /// does not contain exactly `parameters.nlev_len()` coefficients.
+    pub fn encrypt_bit_coeff_to<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        bit: bool,
+        lift: bool,
+        mut output: Nlev<&mut [T]>,
+        parameters: &NlevParameters<T, NativeModulus<T>>,
+        rng: &mut R,
+    ) {
+        assert_eq!(
+            parameters.poly_length().get(),
+            self.secret.len(),
+            "native gadget generation domain mismatch"
+        );
+        assert_eq!(
+            output.as_ref().len(),
+            parameters.nlev_len(),
+            "native gadget output length mismatch"
+        );
+        let mut message = Zeroizing::new(vec![T::ZERO; self.secret.len()]);
+        if bit {
+            message[0] = T::ONE;
+        }
+        self.encrypt_coefficients(&message, lift, output.as_mut(), parameters, rng);
     }
     /// Creates `NLEV[sigma_degree(f)]` for a reverse-trace automorphism.
     /// The input ciphertext is permuted before this product; output is under f.
@@ -173,6 +213,20 @@ impl<T: TorusFftValue> NativeNtruGadgetGenerator<T> {
         let n = self.secret.len();
         assert_eq!(p.poly_length().get(), n, "split generation domain mismatch");
         let mut rows = Zeroizing::new(vec![T::ZERO; p.nlev_len()]);
+        self.encrypt_coefficients(message, lift, &mut rows, p, rng);
+        FourierNtruSplitGadget::from_coefficients(&rows, p.basis(), low_bits, fft)
+    }
+    /// Shared exact row formula. Owning entry points established complete lengths;
+    /// keep the original row/noise order for existing split key generation.
+    fn encrypt_coefficients<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        message: &[T],
+        lift: bool,
+        rows: &mut [T],
+        p: &NlevParameters<T, NativeModulus<T>>,
+        rng: &mut R,
+    ) {
+        let n = self.secret.len();
         let mut noise = Zeroizing::new(vec![T::ZERO; n]);
         for (g, row) in p.basis().scalar_iter().zip(rows.chunks_exact_mut(n)) {
             primus_distr::sample_gaussian_values_to(
@@ -194,7 +248,6 @@ impl<T: TorusFftValue> NativeNtruGadgetGenerator<T> {
                 }
             }
         }
-        FourierNtruSplitGadget::from_coefficients(&rows, p.basis(), low_bits, fft)
     }
 }
 

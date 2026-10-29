@@ -198,17 +198,17 @@ Both RustFFT and TFHE-FFT have the same supported combinations.
 
 | Backend / ring word | BR algorithm | BR precision | Trace / SS precision | Projection | Outputs |
 | --- | --- | --- | --- | --- | --- |
-| NTT, u32/u64 | Classic binary/ternary, sparse binary | `Ordinary` config marker | `Ordinary` config markers | All four strategies | NLEV, NGSW, dual |
+| NTT, u32/u64 | Classic binary/ternary, sparse binary, block binary | `Ordinary` config marker | `Ordinary` config markers | All four strategies | NLEV, NGSW, dual |
 | Fourier, native u32 | Classic binary/ternary, sparse binary | Ordinary | Ordinary / Ordinary | Separate | NLEV, NGSW, dual |
-| Fourier, native u64 | Classic binary/ternary, sparse binary | Ordinary | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
+| Fourier, native u64 | Classic binary/ternary, sparse binary, block binary | Ordinary | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
 | Fourier, native u64 | Classic binary | Split | Independently Ordinary or Split | Separate | NLEV, NGSW, dual |
-| Fourier, native u64 | Classic binary/ternary, sparse binary | Ordinary | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
+| Fourier, native u64 | Classic binary/ternary, sparse binary, block binary | Ordinary | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
 | Fourier, native u64 | Classic binary | Split | Split / Split | FusedLastStage or PairedTrace | NGSW fused; NLEV/dual separate |
 
 The four NTT strategies are `Separate`, `FusedLastStage`, `FusedLastThreeStages`
 and `PairedTrace`. NTT arithmetic does not use FFT precision; its context rejects
 non-Ordinary markers. Fourier rejects `FusedLastThreeStages`, fusion without
-split trace and SS, split u32, and split ternary/sparse BR. It does not silently
+split trace and SS, split u32, and split ternary/sparse/block BR. It does not silently
 fall back. Fourier ring Q is native; the external LWE modulus is independently chosen.
 Each row still requires the usual shape, secret-distribution, gadget and input
 guard contracts. NLEV-only and dual outputs always execute separate trace/SS,
@@ -224,7 +224,11 @@ full-request decryption-failure bound. Small-ring unequal-width tests are not
 large-parameter recommendations.
 
 Split stages generate exact native coefficient keys before transforming the two
-limbs; Ordinary stages retain direct Fourier generation. Only the selected
+limbs. Ordinary Block BR also generates exact native coefficient rows and
+aggregates them before an ordinary FFT; other Ordinary stages retain their
+existing direct Fourier generation. Block key generation currently requires
+u64, even though classic and sparse ordinary BR retain their word-width support.
+Only the selected
 representation is stored. This does not establish equivalence of their key
 error distributions. SS reconstructs coefficients before returning ordinary
 Fourier NGSW controls; BR-internal CMux follows the BR precision. Consumer

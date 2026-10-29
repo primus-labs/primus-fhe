@@ -28,7 +28,7 @@ fn decomposition() -> DecompositionConfig {
 }
 
 /// Keep rounding and transform error far below the test message spacing.
-/// Sparse needs fixed-weight binary secrets; classic cases select binary/ternary below.
+/// Sparse needs fixed-weight binary secrets; classic/block cases select their distributions below.
 fn config<T: TorusFftValue>(method: BlindRotationMethod) -> PbsConfig<T, PowOf2Modulus<T>> {
     let modulus = ModulusConfig::Native;
     // The independent external LWE secret may have even weight.
@@ -72,6 +72,10 @@ fn chained_pbs<T: TorusFftValue, Table: FftTable>(config: PbsConfig<T, PowOf2Mod
     assert_eq!(
         blind_rotation.sparse_bootstrapping_key().is_some(),
         matches!(config.method, BlindRotationMethod::Sparse { .. }),
+    );
+    assert_eq!(
+        blind_rotation.block_bootstrapping_key().is_some(),
+        config.method == BlindRotationMethod::Block,
     );
     let key_switching = context
         .parameters()
@@ -411,6 +415,63 @@ fn circuit_selection<T: TorusFftValue, Table: FftTable>(pbs: PbsConfig<T, PowOf2
         );
         ring_client.decrypt_to(&selected, &mut decoded);
         assert_eq!(decoded, messages[m], "one-hot input {m}");
+        if context.parameters().blind_rotation_method() == BlindRotationMethod::Block && m == 3 {
+            // Both dual entry points retain the same coefficient NLEV controls.
+            // Consume them as a public-polynomial lift instead of only comparing bytes.
+            let mut standalone = one_hot.allocate_nlev_output();
+            let mut nlev = one_hot.allocate_nlev_output();
+            let mut full = one_hot.allocate_ngsw_output();
+            one_hot.one_hot_nlev_to(input.as_view(), &mut standalone);
+            one_hot.one_hot_nlev_and_nonzero_ngsw_to(input.as_view(), &mut nlev, &mut selectors);
+            assert_eq!(nlev, standalone);
+            one_hot.one_hot_to(input.as_view(), &mut nlev, &mut full);
+            assert_eq!(nlev, standalone);
+            assert_eq!(&full[one_hot.ngsw_selector_len()..], selectors);
+            let scalar = basis.scalar_iter().next().unwrap();
+            let polynomial = Polynomial::new(
+                (0..n)
+                    .map(|i| if i % 3 == 0 { scalar } else { T::ZERO })
+                    .collect::<Vec<_>>(),
+            );
+            let mut product = primus_ntru::FourierNtruExternalProductWorkspace::new(
+                context.parameters().poly_length(),
+            );
+            let mut transformed_control = primus_lattice::nlev::FourierNlev::new(vec![
+                primus_fft::Complex64::default();
+                basis.level_count().get() * n / 2
+            ]);
+            for selector in [0, m] {
+                let control = one_hot.nlev_selectors(&nlev).selector(selector).unwrap();
+                control.write_fourier_form(&mut transformed_control, &mut fft);
+                transformed_control.external_product_to(
+                    &polynomial,
+                    &mut selected,
+                    basis,
+                    &mut fft,
+                    &mut product,
+                );
+                selected.write_fourier_form(&mut transformed_probe, &mut fft);
+                transformed.decrypt_phase_to(
+                    &transformed_probe,
+                    &mut phase,
+                    &mut fft,
+                    &mut decrypt_workspace,
+                );
+                for (&actual, &value) in phase.as_ref().iter().zip(polynomial.as_ref()) {
+                    let expected = if selector == m { value } else { T::ZERO };
+                    assert!(phase_error_magnitude(actual, expected, modulus) <= scalar >> 4u32);
+                }
+            }
+            // Consume the dual NGSW result after the NLEV lift dirtied all scratch.
+            one_hot.cmux_k_to(
+                one_hot.nonzero_ngsw_selectors(&selectors),
+                candidates[0].as_view(),
+                &candidates[1..],
+                selected.as_mut_view(),
+            );
+            ring_client.decrypt_to(&selected, &mut decoded);
+            assert_eq!(decoded, messages[m], "dual one-hot input {m}");
+        }
     }
 }
 
@@ -467,6 +528,173 @@ fn tfhe_fft_u64_sparse_batches() {
 fn tfhe_fft_u64_sparse_cbs() {
     let config = config(SPARSE);
     circuit_selection::<u64, primus_fft::TfheFftTable>(config);
+}
+
+/// The direct-block ordinary path consumes independent q/Q, unequal message
+/// spaces, interleaved lanes, and CBS controls all the way back to LWE.
+#[test]
+fn u64_block_workflows() {
+    let mut pbs = config(BlindRotationMethod::Block);
+    pbs.external_lwe.dimension = LweDimension::new(10);
+    pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 5 };
+    #[cfg(feature = "rustfft")]
+    {
+        chained_pbs::<u64, primus_fft::RustFftTable>(pbs);
+        many_lut_and_mvb::<u64, primus_fft::RustFftTable>(pbs);
+        circuit_selection::<u64, primus_fft::RustFftTable>(pbs);
+    }
+    #[cfg(feature = "tfhe-fft")]
+    {
+        chained_pbs::<u64, primus_fft::TfheFftTable>(pbs);
+        many_lut_and_mvb::<u64, primus_fft::TfheFftTable>(pbs);
+        circuit_selection::<u64, primus_fft::TfheFftTable>(pbs);
+    }
+}
+
+/// Exact schoolbook native phase of a stored coefficient row. This oracle
+/// deliberately avoids FFT inversion so a rounded reconstruction cannot hide here.
+fn native_phase(ciphertext: &[u64], secret: &[i64]) -> Vec<u64> {
+    let n = secret.len();
+    let mut output = vec![0u64; n];
+    for (i, &coefficient) in ciphertext.iter().enumerate() {
+        for (j, &secret) in secret.iter().enumerate() {
+            let product = coefficient.wrapping_mul(secret as u64);
+            if i + j < n {
+                output[i + j] = output[i + j].wrapping_add(product);
+            } else {
+                output[i + j - n] = output[i + j - n].wrapping_sub(product);
+            }
+        }
+    }
+    output
+}
+
+/// Empty first blocks still carry NLEV lift rows; later blocks carry NGSW.
+/// Check exact coefficient phases and reject malformed imported support pre-RNG.
+fn check_block_coefficients<Table: FftTable>() {
+    use primus_tfhe_ntru_fourier::{ClientKey, KeyGenerationError, KeyGenerator, TfheKeyError};
+    use rand::Rng;
+
+    let mut pbs = config::<u64>(BlindRotationMethod::Block);
+    pbs.external_lwe.dimension = LweDimension::new(6);
+    pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    pbs.bsk_poly_length = PolyLength::new(32);
+    let gadget = CbsGadgetConfig {
+        trace: decomposition(),
+        scheme_switch: decomposition(),
+        output: decomposition(),
+    };
+    let context = TfheContext::<u64, Table, _>::try_from_pbs_config(pbs)
+        .unwrap()
+        .try_with_circuit_bootstrap(gadget)
+        .unwrap();
+    let mut generator = KeyGenerator::new(&context);
+    let mut f = vec![0i64; 32];
+    f[..3].fill(1);
+    let client = |support| {
+        ClientKey::new(
+            primus_lwe::LweSecretKey::new(
+                support,
+                pbs.external_lwe.secret_key_distr,
+                context.parameters().external_lwe().cipher_modulus(),
+            ),
+            primus_ntru::NtruSecretKey::new(f.clone(), pbs.bsk_secret_distr),
+        )
+    };
+    let mut rng = StdRng::seed_from_u64(0xB30);
+    let mut untouched = StdRng::seed_from_u64(0xB30);
+    let invalid = client(vec![1, 1, 0, 0, 0, 0]);
+    let expected = Some(KeyGenerationError::ClientKey(
+        TfheKeyError::InvalidClientSecretKeyBlock,
+    ));
+    assert_eq!(
+        generator
+            .try_generate_blind_rotation_key(&invalid, &mut rng)
+            .err(),
+        expected
+    );
+    assert_eq!(
+        generator.try_generate_server_key(&invalid, &mut rng).err(),
+        expected
+    );
+    assert_eq!(
+        generator
+            .try_generate_circuit_bootstrap_server_key(&invalid, &mut rng)
+            .err(),
+        expected
+    );
+    assert_eq!(rng.next_u64(), untouched.next_u64());
+
+    let scalar = context
+        .parameters()
+        .blind_rotation()
+        .basis()
+        .scalar_iter()
+        .next()
+        .unwrap();
+    let control_len = context.parameters().blind_rotation().nlev_len();
+    for support in [vec![0, 0, 0, 0, 1, 0], vec![0; 6]] {
+        let client = client(support.clone());
+        let key = generator
+            .try_generate_blind_rotation_key(&client, &mut rng)
+            .unwrap();
+        let block = key.block_bootstrapping_key().unwrap();
+        assert!(key.sparse_bootstrapping_key().is_none());
+        assert_eq!(block.block_count(), 2);
+        for block_index in 0..2 {
+            let (range, coefficients) = block.block_data(block_index);
+            let occupied = support[range.clone()].iter().copied().sum::<u64>();
+            for (row, bit) in coefficients.chunks_exact(control_len).zip(
+                support[range]
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(1 - occupied)),
+            ) {
+                let phase = native_phase(&row[..32], &f);
+                for (i, actual) in phase.into_iter().enumerate() {
+                    let message = if block_index == 0 {
+                        u64::from(i == 0)
+                    } else {
+                        f[i] as u64
+                    };
+                    let expected = scalar.wrapping_mul(bit).wrapping_mul(message);
+                    // sigma=0.7 has truncated support below this fixed margin.
+                    // A Fourier ciphertext round trip has far larger phase error.
+                    assert!(
+                        actual
+                            .wrapping_sub(expected)
+                            .min(expected.wrapping_sub(actual))
+                            <= 16
+                    );
+                }
+            }
+        }
+    }
+
+    // Split trace/SS are independent capabilities. Split BR remains unsupported
+    // for Block and must never silently fall back to ordinary precision.
+    let split_br = primus_tfhe_ntru_fourier::CbsConfig {
+        pbs,
+        gadget,
+        projection: primus_tfhe_ntru_fourier::NtruProjectionMethod::Separate,
+        fourier_precision: primus_tfhe_ntru_fourier::FourierCbsPrecision {
+            blind_rotation: primus_tfhe_ntru_fourier::FourierPrecision::Split { low_bits: 40 },
+            trace: primus_tfhe_ntru_fourier::FourierPrecision::Ordinary,
+            scheme_switch: primus_tfhe_ntru_fourier::FourierPrecision::Ordinary,
+        },
+    };
+    assert!(matches!(
+        TfheContext::<u64, Table, _>::try_from_cbs_config(split_br),
+        Err(primus_tfhe_ntru_fourier::TfheContextError::UnsupportedSplitBlindRotation)
+    ));
+}
+
+#[test]
+fn block_coefficient_phases_and_key_boundaries() {
+    #[cfg(feature = "rustfft")]
+    check_block_coefficients::<primus_fft::RustFftTable>();
+    #[cfg(feature = "tfhe-fft")]
+    check_block_coefficients::<primus_fft::TfheFftTable>();
 }
 
 /// The shared Fourier binding must reject another ring before allocating an evaluator.
@@ -602,7 +830,8 @@ fn check_key_generation_boundaries<Table: FftTable>() {
         Err(KeyGenerationError::IncompatiblePublicLiftParameters)
     ));
 
-    // Unsupported methods must not sample secrets or evaluation-key rows.
+    // The exact-native block writer currently supports only u64. Reject u32
+    // before sampling client secrets or evaluation-key rows.
     let mut block_config = config;
     block_config.method = BlindRotationMethod::Block;
     block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
@@ -617,16 +846,16 @@ fn check_key_generation_boundaries<Table: FftTable>() {
     let mut block_generator = KeyGenerator::new(&block_context);
     assert_eq!(
         block_generator.try_generate(&mut rng).err(),
-        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
-            BlindRotationMethod::Block,
+        Some(KeyGenerationError::BlockBootstrapping(
+            primus_tfhe_ntru::BlockBootstrappingKeyError::UnsupportedFourierWordSize { bits: 32 },
         ))
     );
     assert_eq!(
         block_generator
             .try_generate_circuit_bootstrap_keys(&mut rng)
             .err(),
-        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
-            BlindRotationMethod::Block,
+        Some(KeyGenerationError::BlockBootstrapping(
+            primus_tfhe_ntru::BlockBootstrappingKeyError::UnsupportedFourierWordSize { bits: 32 },
         ))
     );
 
@@ -753,17 +982,38 @@ fn split_cbs_and_pbs<Table: FftTable>() {
         CbsConfig, FourierCbsPrecision, FourierPrecision as P, NtruProjectionMethod,
     };
     // Both logN parities, multirow output and unequal trace/SS limb widths.
-    for (all, projection, n, message_modulus, levels) in [
-        (false, Separate, 128, 8, 3),
-        (true, Separate, 128, 8, 3),
-        (false, FusedLastStage, 128, 8, 3),
-        (true, FusedLastStage, 128, 8, 3),
-        (false, PairedTrace, 64, 8, 3),
-        (true, PairedTrace, 128, 8, 3),
+    for (all, projection, n, message_modulus, levels, method) in [
+        (false, Separate, 128, 8, 3, BlindRotationMethod::Classic),
+        (true, Separate, 128, 8, 3, BlindRotationMethod::Classic),
+        (
+            false,
+            FusedLastStage,
+            128,
+            8,
+            3,
+            BlindRotationMethod::Classic,
+        ),
+        (
+            true,
+            FusedLastStage,
+            128,
+            8,
+            3,
+            BlindRotationMethod::Classic,
+        ),
+        (false, PairedTrace, 64, 8, 3, BlindRotationMethod::Classic),
+        (true, PairedTrace, 128, 8, 3, BlindRotationMethod::Classic),
         // M=2, L=1: nonzero output has one target and must retain its old route.
-        (true, PairedTrace, 64, 4, 1),
+        (true, PairedTrace, 64, 4, 1, BlindRotationMethod::Classic),
+        // Direct Block BR stays ordinary while trace and SS use independent split widths.
+        (false, PairedTrace, 128, 8, 3, BlindRotationMethod::Block),
     ] {
-        let mut pbs_config = config::<u64>(BlindRotationMethod::Classic);
+        let mut pbs_config = config::<u64>(method);
+        if method == BlindRotationMethod::Block {
+            pbs_config.external_lwe.dimension = LweDimension::new(10);
+            pbs_config.external_lwe.secret_key_distr =
+                SecretKeyDistr::BlockBinary { block_size: 5 };
+        }
         pbs_config.bsk_poly_length = PolyLength::new(n);
         pbs_config.messages = primus_tfhe_ntru_fourier::PbsMessageConfig::new(message_modulus);
         let last_message = message_modulus / 2 - 1;

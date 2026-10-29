@@ -72,15 +72,33 @@ pub(crate) fn rotate_buckets<T: TorusFftValue, Table: FftTable>(
     basis: &ApproxSignedBasis<T>,
     fft: &mut FftEngine<'_, Table>,
 ) {
-    let n = fft.poly_length().get();
-    // Start with public P in current. Bucket 0 uses NLEV[H_0] to lift P;
-    // buckets >= 1 actually hold NGSW[H_j] = NLEV[f*H_j] and act on ciphertexts.
-    // NLEV and NGSW external products have identical arithmetic, so all buckets
-    // share this NLEV product call without a first-bucket branch.
-    core::mem::swap(current, scratch);
-    for bucket in 0..key.bucket_count() {
+    let groups = (0..key.bucket_count()).map(|bucket| {
         let (indices, data) = key.bucket_data(bucket);
-        aggregate_bucket(
+        (indices.iter().copied(), data)
+    });
+    rotate_groups(groups, workspace, current, scratch, basis, fft);
+}
+
+/// The first group's NLEV aggregate lifts public P; subsequent groups hold
+/// NGSW[H] = NLEV[f*H] and act on ciphertexts. Their product arithmetic agrees,
+/// so sparse buckets and direct blocks share this loop without a first-group
+/// branch. Every encrypted selector and dummy contributes, including zeros.
+pub(crate) fn rotate_groups<'a, T, Table, I>(
+    groups: impl Iterator<Item = (I, &'a [T])>,
+    workspace: &mut AggregationWorkspace<T>,
+    current: &mut Ntru<Vec<T>>,
+    scratch: &mut Ntru<Vec<T>>,
+    basis: &ApproxSignedBasis<T>,
+    fft: &mut FftEngine<'_, Table>,
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+    I: ExactSizeIterator<Item = usize>,
+{
+    let n = fft.poly_length().get();
+    core::mem::swap(current, scratch);
+    for (indices, data) in groups {
+        aggregate_controls(
             indices,
             data,
             [(
@@ -117,8 +135,8 @@ pub(crate) fn rotate_buckets_pair<T: TorusFftValue, Table: FftTable>(
     let n = fft.poly_length().get();
     for bucket in 0..key.bucket_count() {
         let (indices, data) = key.bucket_data(bucket);
-        aggregate_bucket(
-            indices,
+        aggregate_controls(
+            indices.iter().copied(),
             data,
             [
                 (
@@ -152,15 +170,17 @@ pub(crate) fn rotate_buckets_pair<T: TorusFftValue, Table: FftTable>(
     }
 }
 
-/// Starts from the encrypted dummy and adds every selector in key order. For
+/// Starts from the encrypted dummy and adds every selector in key order. The
+/// iterator selects coordinates from each input's complete exponent slice;
+/// sparse buckets supply public indices and direct blocks supply a range. For
 /// u64, four controls share a coefficient traversal; u32 retains the pair path.
 /// Remaining controls use pairs and a possible single tail. No zero exponent
 /// or encrypted zero is skipped. The key/workspace establish complete, equally
 /// sized controls, and native wrapping preserves the coefficient representation.
 /// Instantiated only for one input or the fixed two-input window.
 #[inline]
-fn aggregate_bucket<T: TorusFftValue, const INPUTS: usize>(
-    indices: &[usize],
+fn aggregate_controls<T: TorusFftValue, const INPUTS: usize>(
+    mut indices: impl ExactSizeIterator<Item = usize>,
     data: &[T],
     mut inputs: [(&[usize], Nlev<&mut [T]>); INPUTS],
     poly_length: usize,
@@ -168,15 +188,17 @@ fn aggregate_bucket<T: TorusFftValue, const INPUTS: usize>(
     let modulus = NativeModulus::new();
     let control_len = inputs[0].1.as_ref().len();
     let (selections, dummy) = data.split_at(data.len() - control_len);
+    debug_assert_eq!(selections.len(), indices.len() * control_len);
     for (_, aggregate) in &mut inputs {
         aggregate.as_mut().copy_from_slice(dummy);
     }
     let mut controls = NlevIter::new(selections, control_len);
-    let processed = if T::BITS == 64 {
-        let (groups, _) = indices.as_chunks::<4>();
-        for indices in groups {
+    if T::BITS == 64 {
+        for _ in 0..indices.len() / 4 {
+            let indices: [usize; 4] =
+                core::array::from_fn(|_| indices.next().expect("complete control indices"));
             let sources: [Nlev<&[T]>; 4] =
-                core::array::from_fn(|_| controls.next().expect("complete sparse controls"));
+                core::array::from_fn(|_| controls.next().expect("complete grouped controls"));
             for (exponents, aggregate) in &mut inputs {
                 super::aggregation::add_four_rotations_assign(
                     aggregate.as_mut(),
@@ -186,18 +208,15 @@ fn aggregate_bucket<T: TorusFftValue, const INPUTS: usize>(
                 );
             }
         }
-        4 * groups.len()
-    } else {
-        0
-    };
+    }
     // Finish the u64 tail (0..3 controls); u32 uses this pair/single loop for
-    // the whole bucket.
-    let mut controls = indices[processed..].iter().zip(controls);
-    while let Some((&first_index, first)) = controls.next() {
+    // the whole group. Preserve source order and per-lane wrapping arithmetic.
+    let mut controls = indices.zip(controls);
+    while let Some((first_index, first)) = controls.next() {
         let second = controls.next();
         for (exponents, aggregate) in &mut inputs {
             let exponent = exponents[first_index];
-            if let Some((&second_index, ref second)) = second {
+            if let Some((second_index, ref second)) = second {
                 aggregate.add_mul_monomial_pair_assign(
                     &first,
                     exponent,

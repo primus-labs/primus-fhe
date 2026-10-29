@@ -190,6 +190,13 @@ pub enum SparseBootstrappingKeyError {
 /// Failure to bind or generate direct block-binary NTRU controls.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BlockBootstrappingKeyError {
+    /// Exact native coefficient preparation currently requires u64.
+    #[error("Fourier block bootstrapping requires u64, got {bits}-bit coefficients")]
+    UnsupportedFourierWordSize {
+        /// Supplied coefficient word width.
+        bits: u32,
+    },
+
     /// Direct block controls require a block-binary external secret.
     #[error("block bootstrapping requires a block-binary external secret")]
     UnsupportedSecretDistribution,

@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-基于原生环面和 Fourier 变换的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 classic binary/ternary 或 sparse fixed-weight binary 盲旋转。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
+基于原生环面和 Fourier 变换的 NTRU TFHE 后端，提供 PBS、ManyLUT、分解式 MVB、Boolean 门、CBS 和 one-hot，支持 classic binary/ternary、sparse fixed-weight binary 或直接 block binary 盲旋转（Block 目前要求 u64 和 ordinary BR）。外部 LWE 与环秘密独立，见[操作指南](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [NTRU 参数/密钥域](../primus_tfhe_ntru/README.zh_CN.md)。
 
 ## 快速开始
 
@@ -92,6 +92,12 @@ let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
 ```
 
 随后用 `try_generate_circuit_bootstrap_keys` 生成完整 CBS 组合，使用相同的 CBS/one-hot evaluator 工厂。PBS 配置可用，不代表 CBS 输出精度或 CMux 噪声余量充分。
+
+## Block 盲旋转
+
+设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`（CBS 位于 `config.pbs` 内）。使用 u64，逻辑维数须能被正块宽整除，允许空块。精确 native 生成器直接生成全部 bit 控制与独立 dummy 的系数行：首块 NLEV 提升公开 LUT，后续 NGSW 旋转密文。Native 聚合在模 2^64 下精确，ordinary FFT/外积仍引入数值误差。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂与工作区。
+
+Trace、SS 精度仍独立选择，可配合已有 split trace/SS 及相应投影策略。Block split BR 目前明确拒绝，因此现有全 split LUT 预设尚不能直接切换到 Block。u32 Block 建钥在消耗随机数前返回不支持字宽的错误。Sparse pair API 仍仅用于桶密钥。默认值与预设不变，block 的安全成本与完整 DFR 尚未评估。
 
 ## One-hot CBS
 
@@ -183,8 +189,8 @@ let config = CbsConfig {
 调用方无需提供 limb 缓冲或 scratch。若只实验 split trace，保留 `Separate`，仅设置
 `config.fourier_precision.trace`。高精度查表使用 `HighPrecLutConfig.one_hot`。
 
-Split 要求 native u64，目前 split BR 只支持 classic binary；普通 binary/ternary/sparse
-BR 可搭配 split trace 或 SS。`FusedLastStage` 和 `PairedTrace` 均要求 split trace、SS，
+Split 要求 native u64，目前 split BR 只支持 classic binary；普通 binary/ternary/sparse BR 及普通 u64 Block BR
+可搭配 split trace 或 SS。`FusedLastStage` 和 `PairedTrace` 均要求 split trace、SS，
 两者位宽可以不同。这些策略只融合 NGSW 输出；NLEV/dual 保留独立 trace/SS，精度仍按配置。
 SS 输出供 CMux 使用的普通 Fourier 控制。见[支持矩阵及数值限制](../../guides/development/bootstrapping-contracts.md#ntru-cbs-precision-and-projection-support)。
 

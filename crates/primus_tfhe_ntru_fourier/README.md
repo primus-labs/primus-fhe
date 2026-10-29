@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-NTRU-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with classic binary/ternary or sparse fixed-weight binary blind rotation. External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
+NTRU-based TFHE with the native torus and Fourier transforms. Provides PBS, ManyLUT, factorized MVB, Boolean gates, CBS and one-hot with classic binary/ternary, sparse fixed-weight binary or direct block-binary blind rotation (Block currently requires u64 and ordinary BR). External LWE and ring secrets are independent; see the [operation guide](../primus_tfhe/README.md#choosing-an-operation) and [NTRU parameter/key domains](../primus_tfhe_ntru/README.md).
 
 ## Quick start
 
@@ -92,6 +92,12 @@ let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
 ```
 
 Generate the complete CBS bundle through `try_generate_circuit_bootstrap_keys` and use the same CBS/one-hot evaluator factories. A working PBS configuration alone does not establish CBS output precision or CMux noise margin.
+
+## Block blind rotation
+
+Set `config.method = BlindRotationMethod::Block` and `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }` (under `config.pbs` for CBS). Use u64 and a logical dimension divisible by that positive block width; blocks may be empty. The exact native generator writes every bit control and independently encrypted dummy directly in coefficient form: first-block NLEV lifts the public LUT, later NGSW rotates the ciphertext. Native aggregation is exact modulo 2^64; ordinary FFT/external products still add numerical error. PBS, ManyLUT, MVB, CBS and single-input one-hot use the existing factories and workspace.
+
+Trace and SS precision remain independent, including split trace/SS with the supported projection strategies. Split Block BR is currently rejected; existing all-split LUT presets cannot be switched to Block yet. u32 Block key generation returns an unsupported-word-size error before consuming randomness. Sparse pair APIs remain specific to bucket keys. Defaults and presets are unchanged; block security and complete DFR are unassessed.
 
 ## One-hot CBS
 
@@ -185,7 +191,7 @@ trace-only split experiment, keep `Separate` and set only
 `config.fourier_precision.trace`. Lookup uses `HighPrecLutConfig.one_hot`.
 
 Split requires native u64; split BR currently supports classic binary only.
-Ordinary binary/ternary/sparse BR may accompany split trace or SS.
+Ordinary binary/ternary/sparse BR, and ordinary u64 Block BR, may accompany split trace or SS.
 `FusedLastStage` and `PairedTrace` both require split trace and SS, whose widths
 may differ. These strategies fuse only NGSW output; NLEV/dual retain separate
 trace/SS at the configured precision. SS outputs ordinary Fourier controls for
