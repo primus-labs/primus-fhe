@@ -7,7 +7,7 @@ use primus_poly::Polynomial;
 use crate::{
     context::EvaluationContext,
     key::{BlindRotationKey, BootstrappingControls, ClassicControls},
-    sparse::{SparseNtruBootstrappingKey, SparseWorkspace, rotate_buckets},
+    sparse::{AggregationWorkspace, SparseNtruBootstrappingKey, rotate_buckets},
 };
 
 /// Borrowed classic controls or sparse key with owned BR buffers and product scratch.
@@ -34,10 +34,7 @@ impl<'a, T: FheUint> BlindRotationResources<'a, T> {
             rotation: match blind_rotation_key.bootstrapping_controls() {
                 BootstrappingControls::Sparse(key) => RotationState::Sparse {
                     key,
-                    scratch: SparseWorkspace::new(
-                        parameters.blind_rotation(),
-                        parameters.external_lwe_dimension(),
-                    ),
+                    scratch: AggregationWorkspace::new(parameters.blind_rotation(), key.controls()),
                 },
                 BootstrappingControls::Classic(controls) => {
                     let scratch = NttNtruCmuxWorkspace::new(
@@ -60,7 +57,7 @@ impl<'a, T: FheUint> BlindRotationResources<'a, T> {
 pub(crate) enum RotationState<'a, T: FheUint> {
     Sparse {
         key: &'a SparseNtruBootstrappingKey<T>,
-        scratch: SparseWorkspace<T>,
+        scratch: AggregationWorkspace<T>,
     },
     Binary {
         controls: ClassicControls<'a, T>,

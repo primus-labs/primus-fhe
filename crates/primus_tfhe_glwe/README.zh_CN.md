@@ -47,7 +47,7 @@
 
 Classic binary/ternary 和 sparse fixed-weight binary 均支持两种顺序下的 PBS、ManyLUT、MVB 和 CBS。Sparse 须显式设置 `config.method = BlindRotationMethod::Sparse { copy_count, bucket_count }`，遵循[共享选择规则](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
 
-两后端共享 `SparseGlweBootstrappingKey<T, M>` 系数存储，NTT 使用 Barrett 剩余类，Fourier 使用 Native 系数，不能互换。优先用 context/key-generator 工厂和普通 evaluator；存储及导入契约见 [sparse 密钥类型](src/sparse.rs)。
+两后端共享 `GlweBlindRotationControls<T, M>` 系数控制及数值布局，`SparseGlweBootstrappingKey` 在其上保留公开 bucket map 和固定重量。分配原始 BR 工作区时，通过 `key.controls()` 借用控制材料。NTT 使用 Barrett 剩余类，Fourier 使用 Native 系数，不能互换。优先用 context/key-generator 工厂和普通 evaluator；存储及导入契约见 [sparse 密钥类型](src/sparse.rs)。
 
 ## 客户端与 LUT
 

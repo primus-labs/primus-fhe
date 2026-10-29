@@ -183,7 +183,7 @@ where
                 },
                 BlindRotationKey::Sparse(key) => BlindRotationResources::Sparse {
                     key,
-                    scratch: SparseGlweBlindRotationWorkspace::new(key),
+                    scratch: SparseGlweBlindRotationWorkspace::new(key.controls()),
                 },
             },
             ordinary_rotation: RotationModulusSwitch::new(

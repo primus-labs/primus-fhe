@@ -47,7 +47,7 @@ Raw GLWE blind-rotation calls take a separately prepared `RotationModulusSwitch<
 
 Classic binary/ternary and sparse fixed-weight binary work with both orders, including PBS, ManyLUT, MVB and CBS. Select `config.method = BlindRotationMethod::Sparse { copy_count, bucket_count }` explicitly; the [shared selection rules](../primus_tfhe/README.md#selecting-blind-rotation) apply.
 
-The backends share `SparseGlweBootstrappingKey<T, M>` coefficient storage, using Barrett residues for NTT and Native coefficients for Fourier. Those representations are not interchangeable. Prefer context/key-generator factories and ordinary evaluators; storage and import contracts are on the [sparse key type](src/sparse.rs).
+The backends share `GlweBlindRotationControls<T, M>` for coefficient controls and their numerical layout; `SparseGlweBootstrappingKey` adds the public bucket map and fixed weight. Borrow the controls with `key.controls()` when allocating a raw BR workspace. NTT uses Barrett residues and Fourier uses Native coefficients, so those representations are not interchangeable. Prefer context/key-generator factories and ordinary evaluators; storage and import contracts are on the [sparse key type](src/sparse.rs).
 
 ## Clients and LUTs
 

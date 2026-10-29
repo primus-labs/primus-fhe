@@ -760,7 +760,7 @@ fn input_domain_binding<Table: FftTable>() {
                     BlindRotationKey::Sparse(key) => {
                         let mut workspace =
                             primus_tfhe_glwe_fourier::sparse::SparseGlweBlindRotationWorkspace::new(
-                                key,
+                                key.controls(),
                             );
                         workspace.blind_rotate_lookup_table_to(
                             key,
@@ -1313,8 +1313,8 @@ fn check_bundle_material<Table: FftTable>() {
                 BlindRotationKey::Sparse(key) => {
                     let mut selected = vec![0u64; small.len()];
                     let mut dummy_count = 0;
-                    assert_eq!(key.size(), br.size());
-                    assert_eq!(key.basis(), br.basis());
+                    assert_eq!(key.controls().size(), br.size());
+                    assert_eq!(key.controls().basis(), br.basis());
                     for bucket in 0..key.bucket_count() {
                         let (indices, controls) = key.bucket(bucket);
                         assert_eq!(controls.len(), indices.len() + 1);

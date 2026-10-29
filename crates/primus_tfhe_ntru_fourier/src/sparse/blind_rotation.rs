@@ -10,24 +10,26 @@ use primus_lwe::LweDimension;
 use primus_modulus::NativeModulus;
 use primus_ntru::{FourierNtruExternalProductWorkspace, NlevParameters};
 use primus_poly::Polynomial;
+use primus_tfhe_ntru::NtruBlindRotationControls;
 
 use super::SparseNtruBootstrappingKey;
 
-pub(crate) struct SparseWorkspace<T: TorusFftValue> {
+/// Reusable aggregate and product scratch, independent of bucket geometry.
+pub(crate) struct AggregationWorkspace<T: TorusFftValue> {
     pub(crate) exponents: Vec<usize>,
     aggregate: Vec<T>,
     transformed: Vec<Complex64>,
     pub(crate) external_product: FourierNtruExternalProductWorkspace<T>,
 }
 
-impl<T: TorusFftValue> SparseWorkspace<T> {
+impl<T: TorusFftValue> AggregationWorkspace<T> {
     pub(crate) fn new(
         parameters: &NlevParameters<T, NativeModulus<T>>,
-        input_dimension: LweDimension,
+        controls: &NtruBlindRotationControls<T>,
     ) -> Self {
         Self {
-            exponents: vec![0; input_dimension.get()],
-            aggregate: vec![T::ZERO; parameters.nlev_len()],
+            exponents: vec![0; controls.input_dimension().get()],
+            aggregate: vec![T::ZERO; controls.control_len()],
             transformed: vec![Complex64::ZERO; parameters.fourier_nlev_len()],
             external_product: FourierNtruExternalProductWorkspace::new(parameters.poly_length()),
         }
@@ -64,7 +66,7 @@ impl<T: TorusFftValue> SparseBlindRotationPairWorkspace<T> {
 /// NGSW controls. Final output stays in `current`, even with just one bucket.
 pub(crate) fn rotate_buckets<T: TorusFftValue, Table: FftTable>(
     key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut SparseWorkspace<T>,
+    workspace: &mut AggregationWorkspace<T>,
     current: &mut Ntru<Vec<T>>,
     scratch: &mut Ntru<Vec<T>>,
     basis: &ApproxSignedBasis<T>,
@@ -105,7 +107,7 @@ pub(crate) fn rotate_buckets<T: TorusFftValue, Table: FftTable>(
 /// transforms and external products then reuse the original shared scratch.
 pub(crate) fn rotate_buckets_pair<T: TorusFftValue, Table: FftTable>(
     key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut SparseWorkspace<T>,
+    workspace: &mut AggregationWorkspace<T>,
     second: &mut SparseBlindRotationPairWorkspace<T>,
     buffers: [&mut Ntru<Vec<T>>; 2],
     basis: &ApproxSignedBasis<T>,

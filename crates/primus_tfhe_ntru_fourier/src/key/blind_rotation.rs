@@ -128,7 +128,7 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                 }
                 Controls::Sparse(key) => {
                     key.input_dimension() == parameters.external_lwe_dimension()
-                        && key.control_len() == parameters.blind_rotation().nlev_len()
+                        && key.controls().control_len() == parameters.blind_rotation().nlev_len()
                 }
             }
     }

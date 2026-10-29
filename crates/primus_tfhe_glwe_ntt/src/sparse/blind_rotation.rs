@@ -10,6 +10,7 @@ use primus_ntt::NttTable;
 use primus_poly::Polynomial;
 use primus_reduce::ReduceOnceSlice;
 use primus_tfhe::rotation::RotationModulusSwitch;
+use primus_tfhe_glwe::GlweBlindRotationControls;
 
 use super::SparseGlweBootstrappingKey;
 
@@ -35,21 +36,21 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
         self.external_product.with_rebound(size, operation)
     }
 
-    /// Allocates scratch for the key's input dimension and gadget layout.
+    /// Allocates scratch for the controls' input dimension and gadget layout.
     /// It can be reused with other sparse keys of the same dimensions and layout.
     #[must_use]
-    pub fn new(key: &SparseGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
-        let size = key.size();
+    pub fn new(controls: &GlweBlindRotationControls<T, BarrettModulus<T>>) -> Self {
+        let size = controls.size();
         let tile_len = super::aggregation::tile_len::<T>(size.glwe_size().poly_length().get());
         Self {
-            input_exponents: vec![0; key.input_dimension().get()],
+            input_exponents: vec![0; controls.input_dimension().get()],
             // A bucket contains each input index at most once. Dimension-based
             // capacity preserves reuse with different keys of the same layout.
             // u32 and single-tile layouts compute addresses on demand, with no plans.
             rotation_groups: vec![
                 super::aggregation::FourRotations::default();
                 if T::BITS == 64 && size.ggsw_len() > tile_len {
-                    key.input_dimension().get() / 4
+                    controls.input_dimension().get() / 4
                 } else {
                     0
                 }
@@ -74,8 +75,8 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
     /// # Correctness
     ///
     /// The input must use this key's small-LWE secret and canonical residues at
-    /// [`SparseGlweBootstrappingKey::input_modulus_value`] (q). LUT coefficients use
-    /// [`SparseGlweBootstrappingKey::ring_modulus`] (Q). The LUT has `N` encoded
+    /// [`GlweBlindRotationControls::input_modulus_value`] (q). LUT coefficients use
+    /// [`GlweBlindRotationControls::ring_modulus`] (Q). The LUT has `N` encoded
     /// coefficients; the caller is responsible for its encoding and noise margin.
     /// This raw operation performs neither key switching nor sample extraction.
     ///
@@ -103,11 +104,11 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
             1,
             "ordinary blind rotation requires step one"
         );
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
-        let modulus = key.ring_modulus();
+        let modulus = key.controls().ring_modulus();
         assert!(
-            modulus_switch.is_compatible(key.input_modulus_value(), 2 * poly_length),
+            modulus_switch.is_compatible(key.controls().input_modulus_value(), 2 * poly_length),
             "sparse blind-rotation quantizer domain mismatch"
         );
         assert_eq!(
@@ -159,9 +160,9 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
     ) where
         Table: NttTable<ValueT = T>,
     {
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
-        let modulus = key.ring_modulus();
+        let modulus = key.controls().ring_modulus();
         let SparseGlweBlindRotationWorkspace {
             input_exponents,
             rotation_groups,
@@ -300,7 +301,7 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
                 aggregate_ntt.external_product_to(
                     &output,
                     scratch,
-                    key.basis(),
+                    key.controls().basis(),
                     modulus,
                     ntt,
                     external_product,
@@ -309,7 +310,7 @@ impl<T: FheUint> SparseGlweBlindRotationWorkspace<T> {
                 aggregate_ntt.external_product_to(
                     scratch,
                     &mut output,
-                    key.basis(),
+                    key.controls().basis(),
                     modulus,
                     ntt,
                     external_product,
@@ -339,12 +340,12 @@ pub struct SparseGlweBlindRotationBatchWorkspace<T: FheUint> {
 }
 
 impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
-    /// Allocates four independent lanes for this key's layout.
+    /// Allocates four independent lanes for this control layout.
     #[must_use]
-    pub fn new(key: &SparseGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
+    pub fn new(controls: &GlweBlindRotationControls<T, BarrettModulus<T>>) -> Self {
         Self {
             lanes: (0..4)
-                .map(|_| SparseGlweBlindRotationWorkspace::new(key))
+                .map(|_| SparseGlweBlindRotationWorkspace::new(controls))
                 .collect(),
         }
     }
@@ -378,7 +379,7 @@ impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
                 self.lanes[0].input_exponents.len(),
                 self.lanes[0].external_product.size()
             ),
-            (key.input_dimension().get(), key.size()),
+            (key.input_dimension().get(), key.controls().size()),
             "sparse blind-rotation workspace layout mismatch"
         );
         check_ciphertexts(key, inputs, outputs);
@@ -434,14 +435,14 @@ fn check_lookup_table<T: FheUint, Table: NttTable<ValueT = T>>(
     modulus_switch: &RotationModulusSwitch<T>,
     ntt: &Table,
 ) {
-    let n = key.size().glwe_size().poly_length().get();
+    let n = key.controls().size().glwe_size().poly_length().get();
     assert_eq!(
         modulus_switch.rotation_step(),
         1,
         "ordinary blind rotation requires step one"
     );
     assert!(
-        modulus_switch.is_compatible(key.input_modulus_value(), 2 * n),
+        modulus_switch.is_compatible(key.controls().input_modulus_value(), 2 * n),
         "sparse blind-rotation quantizer domain mismatch"
     );
     assert_eq!(
@@ -456,7 +457,7 @@ fn check_lookup_table<T: FheUint, Table: NttTable<ValueT = T>>(
     );
     assert_eq!(
         ntt.modulus(),
-        key.ring_modulus().value(),
+        key.controls().ring_modulus().value(),
         "sparse blind-rotation NTT modulus mismatch"
     );
 }
@@ -480,7 +481,7 @@ fn check_ciphertexts<T: FheUint, A: Data<Elem = T>, C: Data<Elem = T>>(
     assert!(
         outputs
             .iter()
-            .all(|output| output.as_ref().len() == key.size().glwe_len()),
+            .all(|output| output.as_ref().len() == key.controls().size().glwe_len()),
         "sparse blind-rotation output layout mismatch"
     );
 }
@@ -497,9 +498,9 @@ fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANE
     mut outputs: [Glwe<&mut [T]>; LANES],
     ntt: &Table,
 ) {
-    let size = key.size();
+    let size = key.controls().size();
     let n = size.glwe_size().poly_length().get();
-    let modulus = key.ring_modulus();
+    let modulus = key.controls().ring_modulus();
     for ((lane, input), output) in lanes.iter_mut().zip(inputs).zip(&mut outputs) {
         modulus_switch.exponent_slice_to(input.a(), &mut lane.input_exponents);
         let exponent = modulus_switch.exponent(input.b()).wrapping_neg() & (2 * n - 1);
@@ -555,7 +556,7 @@ fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANE
                 aggregate_ntt.external_product_to(
                     output,
                     &mut lane.scratch,
-                    key.basis(),
+                    key.controls().basis(),
                     modulus,
                     ntt,
                     &mut lane.external_product,
@@ -564,7 +565,7 @@ fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANE
                 aggregate_ntt.external_product_to(
                     &lane.scratch,
                     output,
-                    key.basis(),
+                    key.controls().basis(),
                     modulus,
                     ntt,
                     &mut lane.external_product,

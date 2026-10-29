@@ -58,6 +58,7 @@
 mod circuit_bootstrap;
 mod client;
 mod config;
+mod controls;
 mod error;
 mod key;
 mod lookup_table;
@@ -69,6 +70,7 @@ use primus_lwe::LweSecretKey;
 
 pub use circuit_bootstrap::CbsGadgetParameters;
 pub use config::{CbsConfig, FourierTracePrecision, PbsConfig};
+pub use controls::GlweBlindRotationControls;
 pub use error::{
     CircuitBootstrapParameterError, KeyGenerationError, SparseBootstrappingKeyError,
     TfheClientError, TfheKeyError, TfheParameterError,

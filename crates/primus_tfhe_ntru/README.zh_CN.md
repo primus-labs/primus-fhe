@@ -40,7 +40,7 @@ BR 和 KS 分别使用 `GadgetEncryptionConfig { decomposition, noise_standard_d
 
 Classic binary/ternary 和 sparse fixed-weight binary 支持 PBS、ManyLUT、Boolean、MVB、CBS 和 one-hot。Sparse 须通过 `config.method` 显式选择，`SparseTernary` 秘密分布本身不会选择桶聚合。外部固定重量可以为偶数，仍须满足[共享 sparse 限制](../primus_tfhe/README.zh_CN.md#选择盲旋转算法)。
 
-两后端共享 `SparseNtruBootstrappingKey<T>` 系数存储，首桶为提升用 NLev 控制，后续桶为加密旋转用 NGSW 控制。NTT 剩余类和 Native 系数仍是不同表示。优先用 context/key-generator 工厂，原始存储契约见 [sparse 密钥类型](src/sparse.rs)，提升推导见[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
+两后端共享 `NtruBlindRotationControls<T>` 系数存储。`SparseNtruBootstrappingKey<T>` 额外持有公开桶映射和声明重量，`controls()` 借用通用存储。首组为提升用 NLev 控制，后续组为加密旋转用 NGSW 控制。NTT 剩余类和 Native 系数仍是不同表示。优先用 context/key-generator 工厂；参见[系数存储契约](src/controls.rs)、[sparse 分组契约](src/sparse.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
 
 ## 客户端与 LUT
 

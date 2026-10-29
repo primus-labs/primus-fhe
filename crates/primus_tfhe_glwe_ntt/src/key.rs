@@ -134,10 +134,10 @@ impl<T: FheUint> BlindRotationKey<T> {
                 }
                 (
                     key.input_dimension(),
-                    key.input_modulus_value(),
-                    key.size(),
-                    key.basis(),
-                    key.cipher_modulus(),
+                    key.controls().input_modulus_value(),
+                    key.controls().size(),
+                    key.controls().basis(),
+                    key.controls().cipher_modulus(),
                 )
             }
         };

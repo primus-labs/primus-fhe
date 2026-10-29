@@ -43,12 +43,12 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
             ),
             Self::Sparse(key) => (
                 key.input_dimension(),
-                key.input_modulus_value(),
+                key.controls().input_modulus_value(),
                 SecretKeyDistr::FixedHammingWeightBinary {
                     hamming_weight: key.hamming_weight(),
                 },
-                key.size(),
-                key.basis(),
+                key.controls().size(),
+                key.controls().basis(),
             ),
         };
         dimension == (parameters.small_lwe().dimension())

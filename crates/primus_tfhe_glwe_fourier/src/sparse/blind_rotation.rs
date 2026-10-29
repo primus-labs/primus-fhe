@@ -11,6 +11,7 @@ use primus_lattice::{
 use primus_modulus::NativeModulus;
 use primus_poly::Polynomial;
 use primus_tfhe::rotation::RotationModulusSwitch;
+use primus_tfhe_glwe::GlweBlindRotationControls;
 
 use super::SparseGlweBootstrappingKey;
 
@@ -36,13 +37,13 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
         self.external_product.with_rebound(size, operation)
     }
 
-    /// Allocates scratch for this key's input dimension and gadget layout.
+    /// Allocates scratch for the controls' input dimension and gadget layout.
     /// Reusable with other sparse keys of the same dimensions and layout.
     #[must_use]
-    pub fn new(key: &SparseGlweBootstrappingKey<T, NativeModulus<T>>) -> Self {
-        let size = key.size();
+    pub fn new(controls: &GlweBlindRotationControls<T, NativeModulus<T>>) -> Self {
+        let size = controls.size();
         Self {
-            input_exponents: vec![0; key.input_dimension().get()],
+            input_exponents: vec![0; controls.input_dimension().get()],
             aggregate: Ggsw::zero(size.ggsw_len()),
             transformed: FourierGgsw::zero(size.fourier_ggsw_len()),
             scratch: TorusGlwe::zero(size.glwe_len()),
@@ -125,10 +126,10 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
         B: Data<Elem = T>,
         C: DataMut<Elem = T>,
     {
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
         assert!(
-            modulus_switch.is_compatible(key.input_modulus_value(), 2 * poly_length),
+            modulus_switch.is_compatible(key.controls().input_modulus_value(), 2 * poly_length),
             "sparse blind-rotation quantizer domain mismatch"
         );
         assert_eq!(
@@ -173,9 +174,9 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
     ) where
         Table: FftTable,
     {
-        let size = key.size();
+        let size = key.controls().size();
         let poly_length = size.glwe_size().poly_length().get();
-        let modulus = key.ring_modulus();
+        let modulus = key.controls().ring_modulus();
         let SparseGlweBlindRotationWorkspace {
             input_exponents,
             aggregate,
@@ -234,7 +235,7 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
                 transformed.external_product_to(
                     &output,
                     scratch,
-                    key.basis(),
+                    key.controls().basis(),
                     fft,
                     external_product,
                 );
@@ -242,7 +243,7 @@ impl<T: TorusFftValue> SparseGlweBlindRotationWorkspace<T> {
                 transformed.external_product_to(
                     scratch,
                     &mut output,
-                    key.basis(),
+                    key.controls().basis(),
                     fft,
                     external_product,
                 );

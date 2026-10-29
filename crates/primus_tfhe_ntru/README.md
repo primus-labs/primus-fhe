@@ -40,7 +40,7 @@ Ordinary PBS follows f,Q blind rotation → coefficient-wise nearest Q→q round
 
 Classic binary/ternary and sparse fixed-weight binary support PBS, ManyLUT, Boolean, MVB, CBS and one-hot. Select sparse explicitly through `config.method`; the `SparseTernary` secret distribution alone does not select bucket aggregation. External fixed weights may be even; [shared sparse restrictions](../primus_tfhe/README.md#selecting-blind-rotation) still apply.
 
-Both backends share `SparseNtruBootstrappingKey<T>` coefficient storage. Its first bucket contains NLev controls for lifting; later buckets contain NGSW controls for encrypted rotation. NTT residues and Native coefficients remain distinct representations. Prefer context/key-generator factories; raw storage contracts are on the [sparse key type](src/sparse.rs), and the [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting) explain lifting.
+Both backends share `NtruBlindRotationControls<T>` coefficient storage. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. NTT residues and native coefficients remain distinct representations. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
 
 ## Clients and LUTs
 

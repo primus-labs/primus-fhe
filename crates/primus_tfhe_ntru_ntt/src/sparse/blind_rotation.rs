@@ -12,23 +12,25 @@ use primus_ntru::{NlevParameters, NttNtruExternalProductWorkspace};
 use primus_ntt::MonomialNttTable;
 use primus_poly::Polynomial;
 use primus_reduce::ReduceOnceSlice;
+use primus_tfhe_ntru::NtruBlindRotationControls;
 
 use super::SparseNtruBootstrappingKey;
 
-pub(crate) struct SparseWorkspace<T: FheUint> {
+/// Reusable aggregate and product scratch, independent of bucket geometry.
+pub(crate) struct AggregationWorkspace<T: FheUint> {
     pub(crate) exponents: Vec<usize>,
     aggregate: Vec<T>,
     pub(crate) external_product: NttNtruExternalProductWorkspace<T>,
 }
 
-impl<T: FheUint> SparseWorkspace<T> {
+impl<T: FheUint> AggregationWorkspace<T> {
     pub(crate) fn new(
         parameters: &NlevParameters<T, BarrettModulus<T>>,
-        input_dimension: LweDimension,
+        controls: &NtruBlindRotationControls<T>,
     ) -> Self {
         Self {
-            exponents: vec![0; input_dimension.get()],
-            aggregate: vec![T::ZERO; parameters.nlev_len()],
+            exponents: vec![0; controls.input_dimension().get()],
+            aggregate: vec![T::ZERO; controls.control_len()],
             external_product: NttNtruExternalProductWorkspace::new(parameters.poly_length()),
         }
     }
@@ -64,7 +66,7 @@ impl<T: FheUint> SparseBlindRotationPairWorkspace<T> {
 /// NGSW controls. Final output stays in `current`, even with just one bucket.
 pub(crate) fn rotate_buckets<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut SparseWorkspace<T>,
+    workspace: &mut AggregationWorkspace<T>,
     current: &mut Ntru<Vec<T>>,
     scratch: &mut Ntru<Vec<T>>,
     basis: &ApproxSignedBasis<T>,
@@ -107,7 +109,7 @@ pub(crate) fn rotate_buckets<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
 /// transforms and external products then reuse the original shared scratch.
 pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     key: &SparseNtruBootstrappingKey<T>,
-    workspace: &mut SparseWorkspace<T>,
+    workspace: &mut AggregationWorkspace<T>,
     second: &mut SparseBlindRotationPairWorkspace<T>,
     buffers: [&mut Ntru<Vec<T>>; 2],
     basis: &ApproxSignedBasis<T>,

@@ -892,7 +892,7 @@ fn input_domain_binding_precedes_output_writes() {
                     BlindRotationKey::Sparse(key) => {
                         let mut workspace =
                             primus_tfhe_glwe_ntt::sparse::SparseGlweBlindRotationWorkspace::new(
-                                key,
+                                key.controls(),
                             );
                         workspace.blind_rotate_lookup_table_to(
                             key,
@@ -1229,8 +1229,8 @@ fn check_sparse_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(q: T, buc
     else {
         panic!("expected sparse key")
     };
-    let mut single = SparseGlweBlindRotationWorkspace::new(&key);
-    let mut batch = SparseGlweBlindRotationBatchWorkspace::new(&key);
+    let mut single = SparseGlweBlindRotationWorkspace::new(key.controls());
+    let mut batch = SparseGlweBlindRotationBatchWorkspace::new(key.controls());
     let rotation =
         RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 64, 1);
     // Arbitrary canonical inputs and a nonconstant LUT expose rotation/lane errors

@@ -41,9 +41,9 @@ impl<'a, T: TorusFftValue> BlindRotationResources<'a, T> {
                 },
                 BootstrappingControls::Sparse(key) => RotationState::Sparse {
                     key,
-                    scratch: crate::sparse::SparseWorkspace::new(
+                    scratch: crate::sparse::AggregationWorkspace::new(
                         parameters.blind_rotation(),
-                        parameters.external_lwe_dimension(),
+                        key.controls(),
                     ),
                 },
                 BootstrappingControls::Classic(controls) => {
@@ -72,7 +72,7 @@ pub(crate) enum RotationState<'a, T: TorusFftValue> {
     },
     Sparse {
         key: &'a crate::sparse::SparseNtruBootstrappingKey<T>,
-        scratch: crate::sparse::SparseWorkspace<T>,
+        scratch: crate::sparse::AggregationWorkspace<T>,
     },
     Binary {
         controls: ClassicControls<'a>,

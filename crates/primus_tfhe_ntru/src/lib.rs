@@ -10,8 +10,9 @@
 //! It also provides a [`LookupTableCompiler`] for Rounded LUTs. [`ClientKey`] owns the
 //! complete setup secrets; [`Encryptor`] and [`Decryptor`] borrow only the external
 //! message secret and bind its codec. Choose the NTT/Fourier
-//! backend for transform tables, key generation and evaluators. Shared sparse
-//! coefficient storage is provided by [`SparseNtruBootstrappingKey`].
+//! backend for transform tables, key generation and evaluators. Shared grouped
+//! coefficient storage is provided by [`NtruBlindRotationControls`];
+//! [`SparseNtruBootstrappingKey`] adds the sparse bucket map and public weight.
 //! Concrete backends provide experimental u64 operation/message configurations.
 //! This family supplies the shared numerical configuration types and sampling state.
 //! [`KeyGenerationError`] and [`TfheClientError`] report key generation and family
@@ -58,6 +59,7 @@
 mod circuit_bootstrap;
 mod client;
 mod config;
+mod controls;
 mod error;
 mod key;
 mod lookup_table;
@@ -67,6 +69,7 @@ mod sparse;
 
 pub use circuit_bootstrap::CbsGadgetParameters;
 pub use config::{CbsConfig, PbsConfig};
+pub use controls::NtruBlindRotationControls;
 pub use error::{
     CircuitBootstrapParameterError, KeyGenerationError, SparseBootstrappingKeyError,
     TfheClientError, TfheKeyError, TfheParameterError,

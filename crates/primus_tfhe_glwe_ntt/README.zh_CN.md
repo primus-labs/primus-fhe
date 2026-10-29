@@ -72,7 +72,7 @@ CBS 示例用 `cbs.into_parts()` 和 `Evaluator::try_from_resources` 转交已�
 
 Sparse BR 须在 `config.method` 中显式选择 `BlindRotationMethod::Sparse`；仅使用固定重量秘密仍可运行 classic BR。Sparse 要求 binary 重量 `0<h<n`、`copy_count>=1`、`bucket_count>=max(copy_count,h)`。两种顺序均支持 PBS、ManyLUT、MVB 和 CBS。PBS 配置可用，不代表 CBS 输出精度或 CMux 噪声余量充分。
 
-对于共享 sparse 密钥和 LUT 的独立 u32 或 u64 输入，`sparse::SparseGlweBlindRotationBatchWorkspace::new(key)` 预分配四份互不重叠的工作区。`blind_rotate_lookup_table_many_to` 无分配地写入调用方提供的配对 coefficient GLWE 输出切片，在单线程中按四输入交错处理，剩余输入依次按两输入、一输入处理；单输入保留普通内核。输入顺序与各条密文结果保持不变；调用方可自行选择将环输出相加或分别返回。此原始操作不包含 KS/提取。单输入应用仍使用 `SparseGlweBlindRotationWorkspace`。
+对于共享 sparse 密钥和 LUT 的独立 u32 或 u64 输入，`sparse::SparseGlweBlindRotationBatchWorkspace::new(key.controls())` 预分配四份互不重叠的工作区。`blind_rotate_lookup_table_many_to` 无分配地写入调用方提供的配对 coefficient GLWE 输出切片，在单线程中按四输入交错处理，剩余输入依次按两输入、一输入处理；单输入保留普通内核。输入顺序与各条密文结果保持不变；调用方可自行选择将环输出相加或分别返回。此原始操作不包含 KS/提取。单输入应用仍使用 `SparseGlweBlindRotationWorkspace`。
 
 重复请求保留 context、密钥和已编译程序，`_to` 方法复用 evaluator scratch 及调用方输出；并发请求需要独立的可变 evaluator。MVB 程序保持与其 context 绑定。`KeyGenerator::try_generate_blind_rotation_key(client, rng)` 根据 context 的 `config.method` 仅生成 BR 材料；独立组件须使用相同的实际秘密和变换表示。独立材料组合及逐调用借用契约见 [KeyGenerator](src/key.rs)、[Evaluator](src/evaluator.rs) 和 [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs)，默认流程无需手工组合资源。借用资源执行 CBS 时，先编译程序，再通过 `CircuitBootstrapEvaluator::try_new` 绑定所选 gadget 参数与 circuit key。
 

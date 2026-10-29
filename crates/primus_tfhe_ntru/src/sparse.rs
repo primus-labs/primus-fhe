@@ -4,9 +4,8 @@ use primus_integer::FheUint;
 use primus_lattice::LweDimension;
 use primus_ntru::NlevParameters;
 use primus_tfhe::sparse::BucketMap;
-use std::alloc::Layout;
 
-use crate::SparseBootstrappingKeyError;
+use crate::{NtruBlindRotationControls, SparseBootstrappingKeyError};
 
 /// Coefficient selectors and public buckets for a fixed-weight binary client.
 /// Bucket zero uses NLEV bits for public-LUT lifting; later buckets use NGSW bits.
@@ -23,11 +22,9 @@ use crate::SparseBootstrappingKeyError;
 /// map is conditioned on successful matching to the fixed external secret.
 /// These conditions need independent security analysis; no failure rate is certified.
 pub struct SparseNtruBootstrappingKey<T: FheUint> {
-    data: Vec<T>,
+    controls: NtruBlindRotationControls<T>,
     map: BucketMap,
-    input_dimension: LweDimension,
     hamming_weight: usize,
-    control_len: usize,
 }
 
 impl<T: FheUint> SparseNtruBootstrappingKey<T> {
@@ -60,39 +57,34 @@ impl<T: FheUint> SparseNtruBootstrappingKey<T> {
         if hamming_weight > map.bucket_count() {
             return Err(primus_tfhe::sparse::BucketMapError::InvalidBucketParameters.into());
         }
-        let control_len = parameters.nlev_len();
-        let expected = map
+        let control_count = map
             .input_indices()
             .len()
             .checked_add(map.bucket_count())
-            .and_then(|count| count.checked_mul(control_len))
             .ok_or(Error::StorageSizeOverflow)?;
-        Layout::array::<T>(expected).map_err(|_| Error::StorageSizeOverflow)?;
-        if data.len() != expected {
-            return Err(Error::StorageLengthMismatch {
-                expected,
-                actual: data.len(),
-            });
-        }
-        Ok(Self {
+        let controls = NtruBlindRotationControls::try_new(
             data,
+            LweDimension::new(dimension),
+            control_count,
+            parameters,
+        )?;
+        Ok(Self {
+            controls,
             map,
-            input_dimension: LweDimension::new(dimension),
             hamming_weight,
-            control_len,
         })
     }
 
-    /// Returns N*L coefficient values per NLEV or NGSW control.
+    /// Borrows the coefficient controls independently of the bucket map.
     #[must_use]
-    pub fn control_len(&self) -> usize {
-        self.control_len
+    pub fn controls(&self) -> &NtruBlindRotationControls<T> {
+        &self.controls
     }
 
     /// Returns the external LWE dimension.
     #[must_use]
     pub fn input_dimension(&self) -> LweDimension {
-        self.input_dimension
+        self.controls.input_dimension()
     }
 
     /// Returns the declared number of nonzero binary input coefficients.
@@ -113,13 +105,6 @@ impl<T: FheUint> SparseNtruBootstrappingKey<T> {
         self.map.bucket_count()
     }
 
-    /// Returns `[bucket][entry...,dummy][level][coefficient]` storage.
-    /// Bucket zero contains NLEV controls; later buckets contain NGSW controls.
-    #[must_use]
-    pub fn as_slice(&self) -> &[T] {
-        &self.data
-    }
-
     /// Borrows raw coefficient controls for aggregation, with a dummy last.
     /// Bucket zero is NLEV and later buckets are NGSW; their coefficient layouts
     /// agree, so aggregation can consume the same contiguous view.
@@ -134,9 +119,11 @@ impl<T: FheUint> SparseNtruBootstrappingKey<T> {
         );
         let start = self.map.bucket_offsets()[bucket];
         let end = self.map.bucket_offsets()[bucket + 1];
+        let control_len = self.controls.control_len();
         (
             &self.map.input_indices()[start..end],
-            &self.data[(start + bucket) * self.control_len..(end + bucket + 1) * self.control_len],
+            &self.controls.as_slice()
+                [(start + bucket) * control_len..(end + bucket + 1) * control_len],
         )
     }
 }
