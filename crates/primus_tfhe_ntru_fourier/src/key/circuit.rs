@@ -177,21 +177,13 @@ where
         } else {
             None
         };
-        let blind_rotation = match operation.fourier_precision().blind_rotation {
-            crate::FourierPrecision::Ordinary => self.generate_blind_rotation_key_with_main(
-                client,
-                &transformed,
-                layout,
-                generator.as_ref(),
-                rng,
-            )?,
-            crate::FourierPrecision::Split { low_bits } => self.generate_split_blind_rotation_key(
-                client,
-                generator.as_ref().expect("split inverse prepared"),
-                low_bits,
-                rng,
-            ),
-        };
+        let blind_rotation = self.generate_blind_rotation_key_with_main(
+            client,
+            &transformed,
+            layout,
+            generator.as_ref(),
+            rng,
+        )?;
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_main(
             client.accumulator_ntru_secret_key(),
             &transformed,

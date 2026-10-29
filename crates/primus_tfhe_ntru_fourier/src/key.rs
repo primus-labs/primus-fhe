@@ -190,13 +190,28 @@ where
         exact: Option<&primus_ntru::split::NativeNtruGadgetGenerator<T>>,
         rng: &mut R,
     ) -> Result<BlindRotationKey<T>, KeyGenerationError> {
-        if let crate::FourierPrecision::Split { low_bits } = self.context.br_precision() {
-            let generator = primus_ntru::split::NativeNtruGadgetGenerator::try_new(
+        // Block controls stay exact coefficients in both modes. Classic split
+        // transforms each row at key generation. Both can share the inverse
+        // already prepared by CBS; standalone BR prepares it only once.
+        let needs_exact = matches!(layout, BlindRotationLayout::Block(_))
+            || self.context.br_precision() != crate::FourierPrecision::Ordinary;
+        let owned = if exact.is_none() && needs_exact {
+            Some(primus_ntru::split::NativeNtruGadgetGenerator::try_new(
                 client_key.accumulator_ntru_secret_key(),
-            )?;
-            return Ok(
-                self.generate_split_blind_rotation_key(client_key, &generator, low_bits, rng)
-            );
+            )?)
+        } else {
+            None
+        };
+        let exact = exact.or(owned.as_ref());
+        if let (crate::FourierPrecision::Split { low_bits }, BlindRotationLayout::Classic) =
+            (self.context.br_precision(), &layout)
+        {
+            return Ok(self.generate_split_blind_rotation_key(
+                client_key,
+                exact.expect("split inverse prepared"),
+                low_bits,
+                rng,
+            ));
         }
         Ok(match layout {
             BlindRotationLayout::Classic => self
@@ -212,23 +227,13 @@ where
                     layout,
                     rng,
                 )?,
-            BlindRotationLayout::Block(layout) => {
-                // CBS may already own this exact inverse for split trace/SS.
-                // Standalone BR creates it once, after the ordinary Fourier
-                // acceptance policy has accepted the same accumulator secret.
-                let owned;
-                let generator = if let Some(generator) = exact {
-                    generator
-                } else {
-                    owned = primus_ntru::split::NativeNtruGadgetGenerator::try_new(
-                        client_key.accumulator_ntru_secret_key(),
-                    )?;
-                    &owned
-                };
-                self.generate_block_blind_rotation_key_with_main(
-                    client_key, generator, layout, rng,
-                )?
-            }
+            BlindRotationLayout::Block(layout) => self
+                .generate_block_blind_rotation_key_with_main(
+                    client_key,
+                    exact.expect("block inverse prepared"),
+                    layout,
+                    rng,
+                )?,
         })
     }
 

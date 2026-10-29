@@ -81,7 +81,7 @@ pub(crate) fn rotate_buckets<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
 }
 
 /// The first group's NLEV aggregate lifts public P; later groups actually hold
-/// NGSW[H] = NLEV[f*H] and act on ciphertexts. Their product arithmetic agrees,
+/// `NGSW[H] = NLEV[f*H]` and act on ciphertexts. Their product arithmetic agrees,
 /// so bucket and direct-block layouts share this loop without a first-group
 /// branch. Every group is consumed, including encrypted zero/dummy controls.
 pub(crate) fn rotate_groups<'a, T, Table, I>(

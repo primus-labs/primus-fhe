@@ -110,7 +110,9 @@ where
             gadget,
         )?;
         Ok(crate::key::BlindRotationKey::from_block(
-            parameters, controls,
+            parameters,
+            controls,
+            self.context.br_precision(),
         ))
     }
 }

@@ -19,6 +19,26 @@ pub struct FourierNtruSplitGadget<T: TorusFftValue> {
     n: PolyLength,
 }
 impl<T: TorusFftValue> FourierNtruSplitGadget<T> {
+    /// Allocates zeroed limb spectra for reusable split gadget material.
+    ///
+    /// # Panics
+    /// Requires native u64 and `low_bits` in `1..64`.
+    #[must_use]
+    pub fn zero(n: PolyLength, basis: &ApproxSignedBasis<T>, low_bits: u32) -> Self {
+        assert!(
+            T::BITS == 64 && basis.modulus().is_none() && (1..64).contains(&low_bits),
+            "split NTRU requires native u64 and 0 < low_bits < 64"
+        );
+        let spectrum_len = n.fourier_poly_len() * basis.level_count().get();
+        Self {
+            low: vec![Complex64::default(); spectrum_len],
+            high: vec![Complex64::default(); spectrum_len],
+            basis: basis.clone(),
+            low_bits,
+            n,
+        }
+    }
+
     /// Transforms exact native coefficient rows in decomposition order.
     /// Both limbs use the same FFT table and normalized torus scale.
     ///
@@ -35,45 +55,78 @@ impl<T: TorusFftValue> FourierNtruSplitGadget<T> {
         low_bits: u32,
         fft: &mut FftEngine<'_, Table>,
     ) -> Self {
-        assert!(
-            T::BITS == 64 && basis.modulus().is_none() && (1..64).contains(&low_bits),
-            "split NTRU requires native u64 and 0 < low_bits < 64"
-        );
         let n = fft.poly_length();
         assert_eq!(
             coefficients.len(),
             n.get() * basis.level_count().get(),
             "split gadget coefficient length mismatch"
         );
-        let mut result = Self {
-            low: vec![Complex64::default(); coefficients.len() / 2],
-            high: vec![Complex64::default(); coefficients.len() / 2],
-            basis: basis.clone(),
-            low_bits,
-            n,
-        };
+        let mut result = Self::zero(n, basis, low_bits);
         let mut limb = vec![T::ZERO; n.get()];
-        let mask = (T::ONE << low_bits) - T::ONE;
-        for ((row, mut low), mut high) in PolynomialIter::new(coefficients, n.get())
+        result.fill_from_coefficients(coefficients, fft, &mut limb);
+        result
+    }
+
+    /// Replaces both limb spectra from exact native coefficient rows without
+    /// allocating. The ordinary workspace's dead decomposition buffer holds one
+    /// coefficient limb and is overwritten; its previous contents are irrelevant.
+    /// Later external products initialize their digits and carries again; no
+    /// previous product or accumulator is read by this conversion.
+    ///
+    /// # Panics
+    /// Checks the complete `N * L` coefficient length, FFT length and workspace
+    /// length before changing either spectra or workspace coefficients.
+    ///
+    /// # Correctness
+    /// Inherits [`Self::from_coefficients`]'s representation and precision contract.
+    pub fn set_from_coefficients<Table: FftTable>(
+        &mut self,
+        coefficients: &[T],
+        fft: &mut FftEngine<'_, Table>,
+        workspace: &mut FourierNtruExternalProductWorkspace<T>,
+    ) {
+        assert_eq!(
+            coefficients.len(),
+            self.n.get() * self.basis.level_count().get(),
+            "split gadget coefficient length mismatch"
+        );
+        assert_eq!(fft.poly_length(), self.n, "split gadget FFT mismatch");
+        assert_eq!(
+            workspace.poly_length(),
+            self.n,
+            "split gadget workspace mismatch"
+        );
+        self.fill_from_coefficients(coefficients, fft, workspace.as_mut().decomposed_poly);
+    }
+
+    // Public entry points establish the native split and complete row
+    // layout. Keep the mask/shift conversion shared with online control refills.
+    fn fill_from_coefficients<Table: FftTable>(
+        &mut self,
+        coefficients: &[T],
+        fft: &mut FftEngine<'_, Table>,
+        limb: &mut [T],
+    ) {
+        let mask = (T::ONE << self.low_bits) - T::ONE;
+        for ((row, mut low), mut high) in PolynomialIter::new(coefficients, self.n.get())
             .zip(FourierPolynomialIterMut::new(
-                &mut result.low,
-                n.fourier_poly_len(),
+                &mut self.low,
+                self.n.fourier_poly_len(),
             ))
             .zip(FourierPolynomialIterMut::new(
-                &mut result.high,
-                n.fourier_poly_len(),
+                &mut self.high,
+                self.n.fourier_poly_len(),
             ))
         {
             for (v, &x) in limb.iter_mut().zip(row.as_ref()) {
                 *v = x & mask;
             }
-            fft.forward_as_torus(&limb, low.as_mut());
+            fft.forward_as_torus(limb, low.as_mut());
             for (v, &x) in limb.iter_mut().zip(row.as_ref()) {
-                *v = x >> low_bits;
+                *v = x >> self.low_bits;
             }
-            fft.forward_as_torus(&limb, high.as_mut());
+            fft.forward_as_torus(limb, high.as_mut());
         }
-        result
     }
     /// Returns the limb split bound to this material.
     #[must_use]

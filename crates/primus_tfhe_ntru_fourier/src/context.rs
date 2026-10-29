@@ -95,7 +95,10 @@ where
         let domain = parameters.pbs_parameters();
         if precision.blind_rotation != crate::FourierPrecision::Ordinary
             && (!domain.external_lwe().secret_key_distr().is_binary()
-                || domain.blind_rotation_method() != crate::BlindRotationMethod::Classic)
+                || !matches!(
+                    domain.blind_rotation_method(),
+                    crate::BlindRotationMethod::Classic | crate::BlindRotationMethod::Block
+                ))
         {
             return Err(TfheContextError::UnsupportedSplitBlindRotation);
         }

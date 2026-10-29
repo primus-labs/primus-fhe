@@ -27,7 +27,11 @@ pub(super) enum Controls<T: TorusFftValue> {
         data: Vec<Complex64>,
     },
     Sparse(SparseNtruBootstrappingKey<T>),
-    Block(BlockNtruBootstrappingKey<T>),
+    // The same exact coefficient controls serve either online transform mode.
+    Block {
+        key: BlockNtruBootstrappingKey<T>,
+        precision: crate::FourierPrecision,
+    },
     Split(SplitControls<T>),
 }
 
@@ -35,18 +39,23 @@ pub(super) enum Controls<T: TorusFftValue> {
 pub(crate) enum BootstrappingControls<'a, T: TorusFftValue> {
     Classic(ClassicControls<'a>),
     Sparse(&'a SparseNtruBootstrappingKey<T>),
-    Block(&'a BlockNtruBootstrappingKey<T>),
+    Block {
+        key: &'a BlockNtruBootstrappingKey<T>,
+        precision: crate::FourierPrecision,
+    },
     Split(&'a SplitControls<T>),
 }
 
 impl<T: TorusFftValue> BlindRotationKey<T> {
-    /// Returns the actual BR representation, including its limb width.
+    /// Returns the selected BR arithmetic, including its limb width.
+    /// Block keys retain exact coefficients; this binds their online transform.
     #[must_use]
     pub fn precision(&self) -> crate::FourierPrecision {
         match &self.controls {
             Controls::Split(key) => crate::FourierPrecision::Split {
                 low_bits: key.initializer.low_bits(),
             },
+            Controls::Block { precision, .. } => *precision,
             _ => crate::FourierPrecision::Ordinary,
         }
     }
@@ -54,7 +63,7 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
     #[must_use]
     pub fn sparse_bootstrapping_key(&self) -> Option<&SparseNtruBootstrappingKey<T>> {
         match &self.controls {
-            Controls::Classic { .. } | Controls::Block(_) | Controls::Split(_) => None,
+            Controls::Classic { .. } | Controls::Block { .. } | Controls::Split(_) => None,
             Controls::Sparse(key) => Some(key),
         }
     }
@@ -63,7 +72,7 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
     #[must_use]
     pub fn block_bootstrapping_key(&self) -> Option<&BlockNtruBootstrappingKey<T>> {
         match &self.controls {
-            Controls::Block(key) => Some(key),
+            Controls::Block { key, .. } => Some(key),
             Controls::Classic { .. } | Controls::Sparse(_) | Controls::Split(_) => None,
         }
     }
@@ -75,7 +84,7 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
         match self.bootstrapping_controls() {
             BootstrappingControls::Classic(controls) => Some(controls),
             BootstrappingControls::Sparse(_)
-            | BootstrappingControls::Block(_)
+            | BootstrappingControls::Block { .. }
             | BootstrappingControls::Split(_) => None,
         }
     }
@@ -87,7 +96,10 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                 ClassicControls::new(initializer, data, self.input_distribution.is_binary()),
             ),
             Controls::Sparse(key) => BootstrappingControls::Sparse(key),
-            Controls::Block(key) => BootstrappingControls::Block(key),
+            Controls::Block { key, precision } => BootstrappingControls::Block {
+                key,
+                precision: *precision,
+            },
             Controls::Split(key) => BootstrappingControls::Split(key),
         }
     }
@@ -108,10 +120,14 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
     pub(crate) fn from_block<LM: primus_reduce::RingContext<T>>(
         parameters: &PbsParameters<T, LM>,
         controls: BlockNtruBootstrappingKey<T>,
+        precision: crate::FourierPrecision,
     ) -> Self {
         Self {
             blind_rotation_basis: parameters.blind_rotation().basis().clone(),
-            controls: Controls::Block(controls),
+            controls: Controls::Block {
+                key: controls,
+                precision,
+            },
             input_distribution: parameters.external_lwe().secret_key_distr(),
         }
     }
@@ -152,7 +168,7 @@ impl<T: TorusFftValue> BlindRotationKey<T> {
                         && key.initializer.basis() == parameters.blind_rotation().basis()
                         && key.initializer.poly_length() == parameters.poly_length()
                 }
-                Controls::Block(key) => {
+                Controls::Block { key, .. } => {
                     T::BITS == 64
                         && self.input_distribution
                             == SecretKeyDistr::BlockBinary {

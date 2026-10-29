@@ -3,9 +3,12 @@
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
 use primus_lattice::ntru::Ntru;
+use primus_ntru::FourierNtruSplitWorkspace;
 
 use super::BlockNtruBootstrappingKey;
-use crate::sparse::{AggregationWorkspace, rotate_groups};
+use crate::sparse::{
+    AggregationWorkspace, SplitAggregationWorkspace, rotate_groups, rotate_groups_split,
+};
 
 /// Consumes every block, including empty blocks and zero exponents. `scratch`
 /// initially contains the public rotated LUT. The first block's NLEV aggregate
@@ -22,17 +25,40 @@ pub(crate) fn rotate_blocks<T: TorusFftValue, Table: FftTable>(
     basis: &ApproxSignedBasis<T>,
     fft: &mut FftEngine<'_, Table>,
 ) {
+    rotate_groups(blocks(key), workspace, current, scratch, basis, fft);
+}
+
+/// Preserves exact native aggregation, then canonically re-splits each complete
+/// aggregate before its product. This includes the compulsory first-block lift;
+/// no exponent, encrypted selector or dummy is omitted. Split precision belongs
+/// to the aggregate workspace and remains independent of trace/SS precision.
+pub(crate) fn rotate_blocks_split<T: TorusFftValue, Table: FftTable>(
+    key: &BlockNtruBootstrappingKey<T>,
+    workspace: &mut SplitAggregationWorkspace<T>,
+    current: &mut Ntru<Vec<T>>,
+    scratch: &mut Ntru<Vec<T>>,
+    fft: &mut FftEngine<'_, Table>,
+    split: &mut FourierNtruSplitWorkspace<T>,
+) {
+    rotate_groups_split(blocks(key), workspace, current, scratch, fft, split);
+}
+
+/// Direct controls and masks share contiguous, equally sized block order. The
+/// complete key geometry was validated at construction, so no index table is
+/// needed and chunking never discards a partial block.
+fn blocks<T: TorusFftValue>(
+    key: &BlockNtruBootstrappingKey<T>,
+) -> impl Iterator<Item = (core::ops::Range<usize>, &[T])> {
     let block_size = key.block_size();
     let controls = key.controls();
-    let groups = controls
+    controls
         .as_slice()
         .chunks_exact((block_size + 1) * controls.control_len())
         .enumerate()
-        .map(|(block, data)| {
+        .map(move |(block, data)| {
             let start = block * block_size;
             (start..start + block_size, data)
-        });
-    rotate_groups(groups, workspace, current, scratch, basis, fft);
+        })
 }
 
 #[cfg(all(test, any(feature = "rustfft", feature = "tfhe-fft")))]
@@ -47,13 +73,30 @@ mod tests {
 
     use super::*;
 
+    /// The oracle exercises either production aggregate representation while
+    /// keeping the integer fixture and expected phase independent of it.
+    enum OracleWorkspace<T: TorusFftValue> {
+        Ordinary(AggregationWorkspace<T>),
+        Split(SplitAggregationWorkspace<T>),
+    }
+
+    impl<T: TorusFftValue> OracleWorkspace<T> {
+        fn exponents(&mut self) -> &mut [usize] {
+            match self {
+                Self::Ordinary(workspace) => &mut workspace.exponents,
+                Self::Split(workspace) => &mut workspace.exponents,
+            }
+        }
+    }
+
     /// Noiseless constant odd f distinguishes first-block NLEV[g/f] from later
     /// NGSW[g]. The integer oracle independently rotates the LUT and compares
     /// f*c with its expected native-torus phase. Full base-16 decomposition
     /// removes gadget truncation. The absolute phase tolerances (32 for u32,
     /// 2^20 for u64) cover only these N=32, at-most-three-block FFT fixtures;
-    /// they are neither a general Fourier error bound nor a DFR claim.
-    fn block_rotation_oracle<T: TorusFftValue, Table: FftTable>() {
+    /// they are neither a general Fourier error bound nor a DFR claim. Split
+    /// fixtures use the same bound and reuse dirty buffers between rotations.
+    fn block_rotation_oracle<T: TorusFftValue, Table: FftTable>(split_bits: Option<u32>) {
         let n = 32;
         let modulus = NativeModulus::<T>::new();
         let table = Table::new(PolyLength::new(n));
@@ -135,9 +178,23 @@ mod tests {
                         &parameters,
                     )
                     .unwrap();
-                    let mut workspace = AggregationWorkspace::new(&parameters, key.controls());
+                    let mut workspace = if let Some(low_bits) = split_bits {
+                        OracleWorkspace::Split(AggregationWorkspace::new_split(
+                            &parameters,
+                            key.controls(),
+                            low_bits,
+                        ))
+                    } else {
+                        OracleWorkspace::Ordinary(AggregationWorkspace::new(
+                            &parameters,
+                            key.controls(),
+                        ))
+                    };
+                    let mut split = split_bits
+                        .map(|_| FourierNtruSplitWorkspace::new(parameters.poly_length()));
                     for nonzero_exponents in [false, true] {
-                        for (i, exponent) in workspace.exponents.iter_mut().enumerate() {
+                        let exponents = workspace.exponents();
+                        for (i, exponent) in exponents.iter_mut().enumerate() {
                             *exponent = if nonzero_exponents {
                                 [0, n, 2 * n - 1][i % 3]
                             } else {
@@ -148,22 +205,30 @@ mod tests {
                             .iter()
                             .enumerate()
                             .filter_map(|(block, &position)| {
-                                position.map(|position| {
-                                    workspace.exponents[block * block_size + position]
-                                })
+                                position.map(|position| exponents[block * block_size + position])
                             })
                             .sum();
                         for b in [0, n, 2 * n - 1] {
                             let mut scratch = Ntru::new(rotate(b.wrapping_neg() & (2 * n - 1)));
-                            let mut current = Ntru::zero(n);
-                            rotate_blocks(
-                                &key,
-                                &mut workspace,
-                                &mut current,
-                                &mut scratch,
-                                parameters.basis(),
-                                &mut fft,
-                            );
+                            let mut current = Ntru::new(vec![T::MAX; n]);
+                            match &mut workspace {
+                                OracleWorkspace::Ordinary(workspace) => rotate_blocks(
+                                    &key,
+                                    workspace,
+                                    &mut current,
+                                    &mut scratch,
+                                    parameters.basis(),
+                                    &mut fft,
+                                ),
+                                OracleWorkspace::Split(workspace) => rotate_blocks_split(
+                                    &key,
+                                    workspace,
+                                    &mut current,
+                                    &mut scratch,
+                                    &mut fft,
+                                    split.as_mut().unwrap(),
+                                ),
+                            }
                             let expected = rotate(mask_rotation.wrapping_sub(b) & (2 * n - 1));
                             for (&actual, expected) in current.as_ref().iter().zip(expected) {
                                 let phase = actual.wrapping_mul(secret);
@@ -173,7 +238,7 @@ mod tests {
                                 let distance: u128 = distance.as_into();
                                 assert!(
                                     distance <= error_bound,
-                                    "ordinary FFT phase error {distance} exceeds fixture bound {error_bound}"
+                                    "FFT phase error {distance} exceeds fixture bound {error_bound}"
                                 );
                             }
                         }
@@ -187,13 +252,23 @@ mod tests {
     fn block_lifting_matches_integer_oracle() {
         #[cfg(feature = "rustfft")]
         {
-            block_rotation_oracle::<u32, primus_fft::RustFftTable>();
-            block_rotation_oracle::<u64, primus_fft::RustFftTable>();
+            block_rotation_oracle::<u32, primus_fft::RustFftTable>(None);
+            block_rotation_oracle::<u64, primus_fft::RustFftTable>(None);
         }
         #[cfg(feature = "tfhe-fft")]
         {
-            block_rotation_oracle::<u32, primus_fft::TfheFftTable>();
-            block_rotation_oracle::<u64, primus_fft::TfheFftTable>();
+            block_rotation_oracle::<u32, primus_fft::TfheFftTable>(None);
+            block_rotation_oracle::<u64, primus_fft::TfheFftTable>(None);
+        }
+    }
+
+    #[test]
+    fn split_block_lifting_matches_integer_oracle() {
+        for low_bits in [35, 40] {
+            #[cfg(feature = "rustfft")]
+            block_rotation_oracle::<u64, primus_fft::RustFftTable>(Some(low_bits));
+            #[cfg(feature = "tfhe-fft")]
+            block_rotation_oracle::<u64, primus_fft::TfheFftTable>(Some(low_bits));
         }
     }
 }

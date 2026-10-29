@@ -7,9 +7,9 @@ pub use primus_tfhe_ntru::{
 /// Failure to prepare NTRU operation state or bind it to a Fourier table.
 #[derive(Debug, thiserror::Error)]
 pub enum TfheContextError {
-    /// Split BR currently has a complete consumer validation only for classic binary.
+    /// Split BR supports classic binary and direct block binary controls.
     #[error(
-        "split blind rotation currently requires classic binary; ordinary BR supports trace/SS split independently"
+        "split blind rotation requires classic binary or block binary; ordinary BR supports trace/SS split independently"
     )]
     UnsupportedSplitBlindRotation,
     /// Unsupported strategy or precision pairing; FusedLastStage and PairedTrace require split trace and SS.

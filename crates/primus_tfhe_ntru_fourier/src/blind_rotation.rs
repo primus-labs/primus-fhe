@@ -46,12 +46,22 @@ impl<'a, T: TorusFftValue> BlindRotationResources<'a, T> {
                         key.controls(),
                     ),
                 },
-                BootstrappingControls::Block(key) => RotationState::Block {
-                    key,
-                    scratch: crate::sparse::AggregationWorkspace::new(
-                        parameters.blind_rotation(),
-                        key.controls(),
-                    ),
+                BootstrappingControls::Block { key, precision } => match precision {
+                    crate::FourierPrecision::Ordinary => RotationState::Block {
+                        key,
+                        scratch: crate::sparse::AggregationWorkspace::new(
+                            parameters.blind_rotation(),
+                            key.controls(),
+                        ),
+                    },
+                    crate::FourierPrecision::Split { low_bits } => RotationState::BlockSplit {
+                        key,
+                        scratch: crate::sparse::AggregationWorkspace::new_split(
+                            parameters.blind_rotation(),
+                            key.controls(),
+                            low_bits,
+                        ),
+                    },
                 },
                 BootstrappingControls::Classic(controls) => {
                     let scratch = primus_ntru::FourierNtruCmuxWorkspace::new(
@@ -85,6 +95,10 @@ pub(crate) enum RotationState<'a, T: TorusFftValue> {
         key: &'a crate::block::BlockNtruBootstrappingKey<T>,
         scratch: crate::sparse::AggregationWorkspace<T>,
     },
+    BlockSplit {
+        key: &'a crate::block::BlockNtruBootstrappingKey<T>,
+        scratch: crate::sparse::SplitAggregationWorkspace<T>,
+    },
     Binary {
         controls: ClassicControls<'a>,
         scratch: primus_ntru::FourierNtruCmuxWorkspace<T>,
@@ -104,6 +118,7 @@ impl<'a, T: TorusFftValue> RotationState<'a, T> {
             Self::Sparse { scratch, .. } | Self::Block { scratch, .. } => {
                 &mut scratch.external_product
             }
+            Self::BlockSplit { scratch, .. } => &mut scratch.external_product,
             Self::Binary { scratch, .. } => scratch.external_product_workspace(),
             Self::Ternary { scratch, .. } => scratch.external_product_workspace(),
         }
@@ -218,6 +233,21 @@ pub(crate) fn blind_rotate_lookup_table_to<T, Table>(
                 &mut resources.scratch,
                 basis,
                 fft,
+            );
+        }
+        RotationState::BlockSplit { key, scratch } => {
+            modulus_switch.exponent_slice_to(input.a(), &mut scratch.exponents);
+            let extension = resources
+                .split
+                .as_mut()
+                .expect("split BR extension established at construction");
+            crate::block::rotate_blocks_split(
+                key,
+                scratch,
+                &mut resources.current,
+                &mut resources.scratch,
+                fft,
+                extension,
             );
         }
         RotationState::Binary {

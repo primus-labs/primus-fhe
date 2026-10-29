@@ -138,8 +138,16 @@ fn many_lut_and_mvb<T: TorusFftValue, Table: FftTable>(mut config: PbsConfig<T, 
     // use different defaults to detect accidental fallback to config messages.
     config.messages = PbsMessageConfig::new(T::as_from(16));
     let context = TfheContext::<T, Table, _>::try_from_pbs_config(config).unwrap();
+    check_many_lut_and_mvb(&context);
+}
+
+/// Consume the same public programs from PBS-only and split-CBS contexts.
+/// This checks that the BR precision selected for CBS also owns strided PBS/MVB.
+fn check_many_lut_and_mvb<T: TorusFftValue, Table: FftTable>(
+    context: &TfheContext<T, Table, PowOf2Modulus<T>>,
+) {
     let mut rng = StdRng::seed_from_u64(102);
-    // Client: override the default 16→16 with 8→4; outputs use different encodings.
+    // Client: programs explicitly use 8→4; outputs use different encodings.
     let (client, server) = context.try_generate_keys(&mut rng).unwrap();
     let secret = client.external_lwe_secret_key();
     let messages = PbsMessageConfig::new(T::as_from(8)).with_output_modulus(T::as_from(4));
@@ -671,8 +679,9 @@ fn check_block_coefficients<Table: FftTable>() {
         }
     }
 
-    // Split trace/SS are independent capabilities. Split BR remains unsupported
-    // for Block and must never silently fall back to ordinary precision.
+    // Precision changes only the online transform, not the exact coefficient
+    // material or fresh encryption coins. Equality here is a representation
+    // regression check; it does not certify Fourier error or a parameter DFR.
     let split_br = primus_tfhe_ntru_fourier::CbsConfig {
         pbs,
         gadget,
@@ -683,10 +692,76 @@ fn check_block_coefficients<Table: FftTable>() {
             scheme_switch: primus_tfhe_ntru_fourier::FourierPrecision::Ordinary,
         },
     };
+    let split_context = TfheContext::<u64, Table, _>::try_from_cbs_config(split_br).unwrap();
+    let mut split_generator = KeyGenerator::new(&split_context);
+    let client = client(vec![0, 0, 0, 0, 1, 0]);
+    let mut ordinary_rng = StdRng::seed_from_u64(0xB3C);
+    let mut split_rng = StdRng::seed_from_u64(0xB3C);
+    let ordinary_key = generator
+        .try_generate_blind_rotation_key(&client, &mut ordinary_rng)
+        .unwrap();
+    let split_key = split_generator
+        .try_generate_blind_rotation_key(&client, &mut split_rng)
+        .unwrap();
+    assert_eq!(
+        ordinary_key
+            .block_bootstrapping_key()
+            .unwrap()
+            .controls()
+            .as_slice(),
+        split_key
+            .block_bootstrapping_key()
+            .unwrap()
+            .controls()
+            .as_slice(),
+    );
+    assert_eq!(ordinary_rng.next_u64(), split_rng.next_u64());
+
+    // Identical coefficient payloads still bind to distinct online precision.
+    // Bootstrap resources validate that binding before allocating any buffers.
+    use primus_tfhe_ntru_fourier::{
+        FourierPrecision, TfheEvaluationError, bootstrap::BootstrapResources,
+    };
+    assert_eq!(ordinary_key.precision(), FourierPrecision::Ordinary);
+    assert_eq!(
+        split_key.precision(),
+        FourierPrecision::Split { low_bits: 40 }
+    );
+    assert!(BootstrapResources::try_new(&context, &ordinary_key).is_ok());
+    assert!(BootstrapResources::try_new(&split_context, &split_key).is_ok());
     assert!(matches!(
-        TfheContext::<u64, Table, _>::try_from_cbs_config(split_br),
-        Err(primus_tfhe_ntru_fourier::TfheContextError::UnsupportedSplitBlindRotation)
+        BootstrapResources::try_new(&context, &split_key),
+        Err(TfheEvaluationError::IncompatibleBlindRotationKey)
     ));
+    assert!(matches!(
+        BootstrapResources::try_new(&split_context, &ordinary_key),
+        Err(TfheEvaluationError::IncompatibleBlindRotationKey)
+    ));
+    let mut other_split = split_br;
+    other_split.fourier_precision.blind_rotation = FourierPrecision::Split { low_bits: 35 };
+    let other_split = TfheContext::<u64, Table, _>::try_from_cbs_config(other_split).unwrap();
+    assert!(matches!(
+        BootstrapResources::try_new(&other_split, &split_key),
+        Err(TfheEvaluationError::IncompatibleBlindRotationKey)
+    ));
+
+    // Supporting direct binary blocks does not broaden the unrelated sparse
+    // and classic ternary algorithms' split capabilities.
+    for (method, secret_key_distr) in [
+        (
+            SPARSE,
+            SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 2 },
+        ),
+        (BlindRotationMethod::Classic, SecretKeyDistr::UniformTernary),
+    ] {
+        let mut unsupported = split_br;
+        unsupported.pbs.method = method;
+        unsupported.pbs.external_lwe.secret_key_distr = secret_key_distr;
+        assert!(matches!(
+            TfheContext::<u64, Table, _>::try_from_cbs_config(unsupported),
+            Err(primus_tfhe_ntru_fourier::TfheContextError::UnsupportedSplitBlindRotation)
+        ));
+    }
 }
 
 #[test]
@@ -1005,8 +1080,11 @@ fn split_cbs_and_pbs<Table: FftTable>() {
         (true, PairedTrace, 128, 8, 3, BlindRotationMethod::Classic),
         // M=2, L=1: nonzero output has one target and must retain its old route.
         (true, PairedTrace, 64, 4, 1, BlindRotationMethod::Classic),
-        // Direct Block BR stays ordinary while trace and SS use independent split widths.
+        // Block BR owns its precision independently of trace/SS. The split
+        // cases consume both the simple and shared projection schedules.
         (false, PairedTrace, 128, 8, 3, BlindRotationMethod::Block),
+        (true, Separate, 128, 8, 3, BlindRotationMethod::Block),
+        (true, PairedTrace, 128, 8, 3, BlindRotationMethod::Block),
     ] {
         let mut pbs_config = config::<u64>(method);
         if method == BlindRotationMethod::Block {
@@ -1043,6 +1121,11 @@ fn split_cbs_and_pbs<Table: FftTable>() {
             },
         };
         let context = TfheContext::<u64, Table, _>::try_from_cbs_config(c).unwrap();
+        if all && method == BlindRotationMethod::Block && projection == Separate {
+            // This path uses q != native Q and the same split BR with an
+            // interleaved stride of four and the MVB factor-lift schedule.
+            check_many_lut_and_mvb(&context);
+        }
         let mut rng = StdRng::seed_from_u64(414);
         let (client, server) = context
             .try_generate_circuit_bootstrap_keys(&mut rng)
@@ -1133,6 +1216,50 @@ fn split_cbs_and_pbs<Table: FftTable>() {
                 // Switching to dual must bypass the shared path. Its NGSW
                 // controls still select correctly, though their noise differs.
                 one_hot.one_hot_nlev_and_nonzero_ngsw_to(input.as_view(), &mut nlev, &mut nonzero);
+                if method == BlindRotationMethod::Block {
+                    // NLEV remains coefficient-form even when BR is split.
+                    // Schoolbook decryption checks every level/selector without
+                    // using an FFT round trip as its own numerical oracle.
+                    let mut standalone = one_hot.allocate_nlev_output();
+                    one_hot.one_hot_nlev_to(input.as_view(), &mut standalone);
+                    assert_eq!(standalone, nlev);
+                    let basis = context.cbs_parameters().unwrap().gadget().output_basis();
+                    for (selector, control) in one_hot.nlev_selectors(&nlev).iter() {
+                        for (row, scalar) in control.iter_ntru(n).zip(basis.scalar_iter()) {
+                            let phase = native_phase(
+                                row.as_ref(),
+                                client.accumulator_ntru_secret_key().as_slice(),
+                            );
+                            for (i, actual) in phase.into_iter().enumerate() {
+                                let expected = if selector as u64 == m && i == 0 {
+                                    scalar
+                                } else {
+                                    0
+                                };
+                                assert!(
+                                    actual
+                                        .wrapping_sub(expected)
+                                        .min(expected.wrapping_sub(actual))
+                                        <= scalar >> 4u32
+                                );
+                            }
+                        }
+                    }
+                    // The all-selector dual entry point preserves the same
+                    // coefficient controls and its NGSW outputs remain usable.
+                    one_hot.one_hot_to(input.as_view(), &mut nlev, &mut full);
+                    assert_eq!(standalone, nlev);
+                    for (r, control) in one_hot.ngsw_selectors(&full).iter() {
+                        one_hot.cmux_to(
+                            control,
+                            candidates[0].as_view(),
+                            candidates[1].as_view(),
+                            selected.as_mut_view(),
+                        );
+                        ring.decrypt_to(&selected, &mut decoded);
+                        assert_eq!(decoded, messages[usize::from(r as u64 == m)]);
+                    }
+                }
                 for (r, control) in one_hot.nonzero_ngsw_selectors(&nonzero).iter() {
                     one_hot.cmux_to(
                         control,

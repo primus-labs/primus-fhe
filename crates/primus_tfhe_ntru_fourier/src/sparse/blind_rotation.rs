@@ -8,17 +8,20 @@ use primus_lattice::{
 };
 use primus_lwe::LweDimension;
 use primus_modulus::NativeModulus;
-use primus_ntru::{FourierNtruExternalProductWorkspace, NlevParameters};
+use primus_ntru::{
+    FourierNtruExternalProductWorkspace, FourierNtruSplitGadget, FourierNtruSplitWorkspace,
+    NlevParameters,
+};
 use primus_poly::Polynomial;
 use primus_tfhe_ntru::NtruBlindRotationControls;
 
 use super::SparseNtruBootstrappingKey;
 
 /// Reusable aggregate and product scratch, independent of bucket geometry.
-pub(crate) struct AggregationWorkspace<T: TorusFftValue> {
+pub(crate) struct AggregationWorkspace<T: TorusFftValue, Transformed = Vec<Complex64>> {
     pub(crate) exponents: Vec<usize>,
     aggregate: Vec<T>,
-    transformed: Vec<Complex64>,
+    transformed: Transformed,
     pub(crate) external_product: FourierNtruExternalProductWorkspace<T>,
 }
 
@@ -27,14 +30,50 @@ impl<T: TorusFftValue> AggregationWorkspace<T> {
         parameters: &NlevParameters<T, NativeModulus<T>>,
         controls: &NtruBlindRotationControls<T>,
     ) -> Self {
+        Self::with_transformed(
+            parameters,
+            controls,
+            vec![Complex64::ZERO; parameters.fourier_nlev_len()],
+        )
+    }
+}
+
+impl<T: TorusFftValue> AggregationWorkspace<T, FourierNtruSplitGadget<T>> {
+    /// Allocates only the selected two-limb aggregate representation. Exact
+    /// native coefficients and product scratch are shared with the ordinary
+    /// layout; no permanent per-control Fourier material is retained.
+    pub(crate) fn new_split(
+        parameters: &NlevParameters<T, NativeModulus<T>>,
+        controls: &NtruBlindRotationControls<T>,
+        low_bits: u32,
+    ) -> Self {
+        Self::with_transformed(
+            parameters,
+            controls,
+            FourierNtruSplitGadget::zero(parameters.poly_length(), parameters.basis(), low_bits),
+        )
+    }
+}
+
+impl<T: TorusFftValue, Transformed> AggregationWorkspace<T, Transformed> {
+    /// Common geometry owns one coefficient aggregate and one product workspace;
+    /// the caller supplies exactly the Fourier representation used online.
+    fn with_transformed(
+        parameters: &NlevParameters<T, NativeModulus<T>>,
+        controls: &NtruBlindRotationControls<T>,
+        transformed: Transformed,
+    ) -> Self {
         Self {
             exponents: vec![0; controls.input_dimension().get()],
             aggregate: vec![T::ZERO; controls.control_len()],
-            transformed: vec![Complex64::ZERO; parameters.fourier_nlev_len()],
+            transformed,
             external_product: FourierNtruExternalProductWorkspace::new(parameters.poly_length()),
         }
     }
 }
+
+/// Split payload for direct-block rotation; sparse controls retain ordinary FFT.
+pub(crate) type SplitAggregationWorkspace<T> = AggregationWorkspace<T, FourierNtruSplitGadget<T>>;
 
 /// Additional state for a second sparse blind-rotation input.
 /// Allocate through [`crate::circuit_bootstrap::OneHotCircuitBootstrapEvaluator::new_sparse_pair_workspace`].
@@ -80,7 +119,7 @@ pub(crate) fn rotate_buckets<T: TorusFftValue, Table: FftTable>(
 }
 
 /// The first group's NLEV aggregate lifts public P; subsequent groups hold
-/// NGSW[H] = NLEV[f*H] and act on ciphertexts. Their product arithmetic agrees,
+/// `NGSW[H] = NLEV[f*H]` and act on ciphertexts. Their product arithmetic agrees,
 /// so sparse buckets and direct blocks share this loop without a first-group
 /// branch. Every encrypted selector and dummy contributes, including zeros.
 pub(crate) fn rotate_groups<'a, T, Table, I>(
@@ -115,6 +154,53 @@ pub(crate) fn rotate_groups<'a, T, Table, I>(
             basis,
             fft,
             &mut workspace.external_product,
+        );
+        core::mem::swap(current, scratch);
+    }
+}
+
+/// Exact native aggregation precedes canonical limb splitting. In particular,
+/// negacyclic signs and wrapping carries are applied before extracting low/high
+/// bits; rotating or adding already split spectra would miss limb carries.
+/// The first NLEV aggregate always lifts the public LUT, even for an empty block
+/// or zero exponents. Later NGSW aggregates use the same two-limb product. Product
+/// digits are dead while refreshing the gadget and are overwritten by the next
+/// decomposition; no additional coefficient scratch is required.
+pub(crate) fn rotate_groups_split<'a, T, Table, I>(
+    groups: impl Iterator<Item = (I, &'a [T])>,
+    workspace: &mut SplitAggregationWorkspace<T>,
+    current: &mut Ntru<Vec<T>>,
+    scratch: &mut Ntru<Vec<T>>,
+    fft: &mut FftEngine<'_, Table>,
+    split: &mut FourierNtruSplitWorkspace<T>,
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+    I: ExactSizeIterator<Item = usize>,
+{
+    let n = fft.poly_length().get();
+    core::mem::swap(current, scratch);
+    for (indices, data) in groups {
+        aggregate_controls(
+            indices,
+            data,
+            [(
+                &workspace.exponents,
+                Nlev::new(workspace.aggregate.as_mut_slice()),
+            )],
+            n,
+        );
+        workspace.transformed.set_from_coefficients(
+            &workspace.aggregate,
+            fft,
+            &mut workspace.external_product,
+        );
+        workspace.transformed.external_product_to(
+            current.as_ref(),
+            scratch.as_mut(),
+            fft,
+            &mut workspace.external_product,
+            split,
         );
         core::mem::swap(current, scratch);
     }

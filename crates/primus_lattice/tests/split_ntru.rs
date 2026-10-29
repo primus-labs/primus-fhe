@@ -2,12 +2,180 @@
 #![cfg(any(feature = "rustfft", feature = "tfhe-fft"))]
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
-use primus_fft::{FftEngine, FftTable};
+use primus_fft::{Complex64, FftEngine, FftTable};
 use primus_lattice::{
     ntru::FourierNtruSplitGadget,
     workspace::{FourierNtruExternalProductWorkspace, FourierNtruSplitWorkspace},
 };
+use primus_poly::FourierPolynomial;
 use primus_shape::PolyLength;
+
+// Independent limb construction for one selected row. The inverse roundings
+// stay separate: a one-unit high-limb error becomes 2^bits after recombination.
+// At extreme splits this reference checks the representation/rounding order,
+// not an unsupported claim that floating-point convolution is always exact.
+fn split_row_reference<Table: FftTable>(
+    row: &[u64],
+    digits: &[u64],
+    bits: u32,
+    fft: &mut FftEngine<'_, Table>,
+) -> Vec<u64> {
+    let half_n = row.len() / 2;
+    let mask = (1u64 << bits) - 1;
+    let mut digit_fft = vec![Complex64::default(); half_n];
+    fft.forward_as_integer(digits, &mut digit_fft);
+    let mut rounded = Vec::new();
+    for limb in [
+        row.iter().map(|&value| value & mask).collect::<Vec<_>>(),
+        row.iter().map(|&value| value >> bits).collect(),
+    ] {
+        let mut spectrum = vec![Complex64::default(); half_n];
+        let mut accumulator = vec![Complex64::default(); half_n];
+        let mut output = vec![0u64; row.len()];
+        fft.forward_as_torus(&limb, &mut spectrum);
+        FourierPolynomial(&mut accumulator).add_mul_assign(
+            &FourierPolynomial(&digit_fft),
+            &FourierPolynomial(&spectrum),
+        );
+        fft.backward_as_torus(&accumulator, &mut output);
+        rounded.push(output);
+    }
+    rounded[0]
+        .iter()
+        .zip(&rounded[1])
+        .map(|(&low, &high)| low.wrapping_add(high << bits))
+        .collect()
+}
+
+fn reusable_material<Table: FftTable>() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let n = PolyLength::new(32);
+    let table = Table::new(n);
+    let other_table = Table::new(PolyLength::new(64));
+    let mut fft = FftEngine::new(&table);
+    let mut other_fft = FftEngine::new(&other_table);
+    let basis = ApproxSignedBasis::<u64>::try_from((
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(4),
+            level_count: Some(DecompositionLevelCount::new(16)),
+        },
+        None,
+    ))
+    .unwrap();
+    let mut ordinary = FourierNtruExternalProductWorkspace::new(n);
+    let mut wrong_workspace = FourierNtruExternalProductWorkspace::new(PolyLength::new(64));
+    let mut split = FourierNtruSplitWorkspace::new(n);
+    let digits: Vec<_> = (0..n.get())
+        .map(|index| u64::from(index == 0 || index == n.get() - 1))
+        .collect();
+    let mut output = vec![u64::MAX; n.get()];
+    for bits in [1, 35, 40, 63] {
+        let mut key = FourierNtruSplitGadget::zero(n, &basis, bits);
+        key.external_product_to(&digits, &mut output, &mut fft, &mut ordinary, &mut split);
+        assert_eq!(output, vec![0; n.get()]);
+
+        // Refill after previous external products have dirtied every scratch
+        // buffer. Low/high carry boundaries and native wrapping are explicit.
+        let mask = (1u64 << bits) - 1;
+        let values = [0, 1, mask, mask + 1, u64::MAX, 1u64 << 63];
+        for offset in [0, 3] {
+            let rows: Vec<_> = (0..n.get() * 16)
+                .map(|index| values[(index / 3 + index / n.get() + offset) % values.len()])
+                .collect();
+            key.set_from_coefficients(&rows, &mut fft, &mut ordinary);
+            let constructed =
+                FourierNtruSplitGadget::from_coefficients(&rows, &basis, bits, &mut fft);
+            for level in [0, 7, 15] {
+                let scalar = basis.scalar_iter().nth(level).unwrap();
+                let input: Vec<_> = digits.iter().map(|&digit| digit * scalar).collect();
+                key.external_product_to(&input, &mut output, &mut fft, &mut ordinary, &mut split);
+                let expected = split_row_reference(
+                    &rows[level * n.get()..(level + 1) * n.get()],
+                    &digits,
+                    bits,
+                    &mut fft,
+                );
+                assert_eq!(output, expected);
+                let mut from_output = vec![0; n.get()];
+                constructed.external_product_to(
+                    &input,
+                    &mut from_output,
+                    &mut fft,
+                    &mut ordinary,
+                    &mut split,
+                );
+                assert_eq!(from_output, expected);
+            }
+
+            // All public shape failures precede spectrum writes. A later valid
+            // product must still consume the complete previous material.
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| {
+                    key.set_from_coefficients(&rows[..rows.len() - 1], &mut fft, &mut ordinary);
+                }))
+                .is_err()
+            );
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| {
+                    key.set_from_coefficients(&rows, &mut other_fft, &mut ordinary);
+                }))
+                .is_err()
+            );
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| {
+                    key.set_from_coefficients(&rows, &mut fft, &mut wrong_workspace);
+                }))
+                .is_err()
+            );
+            key.external_product_to(&digits, &mut output, &mut fft, &mut ordinary, &mut split);
+            assert_eq!(
+                output,
+                split_row_reference(&rows[..n.get()], &digits, bits, &mut fft)
+            );
+        }
+
+        // Small exact coefficients stay far inside the limb precision budget;
+        // this checks the real negacyclic product independently of the FFTs.
+        let rows: Vec<_> = (0..n.get() * 16)
+            .map(|index| (index % 101) as u64)
+            .collect();
+        key.set_from_coefficients(&rows, &mut fft, &mut ordinary);
+        key.external_product_to(&digits, &mut output, &mut fft, &mut ordinary, &mut split);
+        assert_eq!(output, product(&rows[..n.get()], &digits));
+    }
+}
+
+#[cfg(feature = "rustfft")]
+#[test]
+fn rustfft_reusable_material() {
+    reusable_material::<primus_fft::RustFftTable>();
+}
+
+#[cfg(feature = "tfhe-fft")]
+#[test]
+fn tfhe_fft_reusable_material() {
+    reusable_material::<primus_fft::TfheFftTable>();
+}
+
+#[test]
+fn split_zero_rejects_unsupported_representation() {
+    let n = PolyLength::new(32);
+    let config = DecompositionConfig {
+        log_basis: DecompositionBaseLog::new(4),
+        level_count: Some(DecompositionLevelCount::new(4)),
+    };
+    let native = ApproxSignedBasis::<u64>::try_from((config, None)).unwrap();
+    let non_native = ApproxSignedBasis::<u64>::try_from((config, Some(1 << 40))).unwrap();
+    let narrow = ApproxSignedBasis::<u32>::try_from((config, None)).unwrap();
+    for bits in [0, 64] {
+        assert!(
+            std::panic::catch_unwind(|| FourierNtruSplitGadget::zero(n, &native, bits)).is_err()
+        );
+    }
+    assert!(std::panic::catch_unwind(|| FourierNtruSplitGadget::zero(n, &non_native, 35)).is_err());
+    assert!(std::panic::catch_unwind(|| FourierNtruSplitGadget::zero(n, &narrow, 16)).is_err());
+}
 
 fn boundaries<Table: FftTable>() {
     let n = PolyLength::new(32);
