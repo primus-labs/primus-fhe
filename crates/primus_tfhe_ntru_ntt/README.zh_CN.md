@@ -109,7 +109,7 @@ let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
 
 ## Block 盲旋转
 
-设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`（CBS 位于 `config.pbs` 内）。逻辑 LWE 维数须是正块宽的非零整数倍。允许空块，无需 matching 或重复控制。建钥以及 PBS、ManyLUT、MVB、CBS 和 one-hot 沿用相同 context 工厂。每块加密全部 bit 及独立 dummy；首块即使所有指数为零也通过 NLEV 完成提升，后续 NGSW 复用相同外积算术。单输入共享工作区只在构造时分配，不保存占用信息。Sparse pair API 仍仅用于桶密钥。预设不变，block 的噪声与安全成本须单独评估。
+设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`（CBS 位于 `config.pbs` 内）。逻辑 LWE 维数须是正块宽的非零整数倍。允许空块，无需 matching 或重复控制。建钥以及 PBS、ManyLUT、MVB、CBS 和 one-hot 沿用相同 context 工厂。每块加密全部 bit 及独立 dummy；首块即使所有指数为零也通过 NLEV 完成提升，后续 NGSW 复用相同外积算术。单输入共享工作区只在构造时分配，不保存占用信息。One-hot 的 `new_pair_workspace` / `with_pair` 共享 Sparse 和 Block 的分组 BR 遍历；classic 资源不提供 pair 工作区，保留单输入调用。预设不变，block 的噪声与安全成本须单独评估。
 
 ## One-hot CBS
 

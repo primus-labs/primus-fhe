@@ -97,7 +97,7 @@ let context = TfheContext::<u64, Table, _>::try_from_cbs_config(config)?;
 
 设置 `config.method = BlindRotationMethod::Block` 和 `config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`（CBS 位于 `config.pbs` 内）。使用 u64，逻辑维数须能被正块宽整除，允许空块。精确 native 生成器直接生成全部 bit 控制与独立 dummy 的系数行：首块 NLEV 提升公开 LUT，后续 NGSW 旋转密文。Native 聚合在模 2^64 下精确。Split BR 在每块聚合后拆分并变换，先处理负循环符号和进位，再取高低位。Ordinary 和 split 外积都需要数值误差预算。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂与工作区。
 
-通过 `CbsConfig.fourier_precision.blind_rotation` 选择 BR 精度；仅 PBS 的 context 使用 ordinary BR。Trace、SS 精度仍独立选择，可配合已有 split trace/SS 及相应投影策略。只分配选中的聚合频谱，split 转换复用外积 scratch。独立高精度 LUT 的接入另行处理。u32 Block 建钥在消耗随机数前返回不支持字宽的错误。Sparse pair API 仍仅用于桶密钥。默认值与预设不变，block 的安全成本与完整 DFR 尚未评估。
+通过 `CbsConfig.fourier_precision.blind_rotation` 选择 BR 精度；仅 PBS 的 context 使用 ordinary BR。Trace、SS 精度仍独立选择，可配合已有 split trace/SS 及相应投影策略。只分配选中的聚合频谱，split 转换复用外积 scratch。独立高精度 LUT 的接入另行处理。u32 Block 建钥在消耗随机数前返回不支持字宽的错误。One-hot 的 `new_pair_workspace` / `with_pair` 支持 Sparse 和 Block（含 split Block BR）；classic 资源不提供 pair 工作区。默认值与预设不变，block 的安全成本与完整 DFR 尚未评估。
 
 ## One-hot CBS
 

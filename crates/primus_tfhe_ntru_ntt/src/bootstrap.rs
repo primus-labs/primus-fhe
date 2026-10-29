@@ -2,6 +2,10 @@
 //! Standalone resources omit the ordinary PBS output-return stage.
 
 use primus_integer::FheUint;
+use primus_lattice::ntru::Ntru;
+use primus_lwe::LweDimension;
+use primus_modulus::BarrettModulus;
+use primus_ntru::NlevParameters;
 use primus_ntt::MonomialNttTable;
 use primus_poly::Polynomial;
 use primus_tfhe::TfheEvaluationError;
@@ -11,6 +15,31 @@ use crate::{
     blind_rotation::{BlindRotationResources, blind_rotate_lookup_table_to},
     key::BlindRotationKey,
 };
+
+/// Additional state for a second grouped blind-rotation input.
+/// Allocate through [`crate::circuit_bootstrap::OneHotCircuitBootstrapEvaluator::new_pair_workspace`].
+/// Sparse buckets and direct blocks share this geometry-independent storage:
+/// input exponents, an L*N coefficient aggregate and one N-coefficient accumulator.
+/// The original resources provide shared transform/product scratch. Reuse across
+/// grouped methods or block widths requires matching input dimension and NLEV size.
+pub struct BlindRotationPairWorkspace<T: FheUint> {
+    pub(crate) exponents: Vec<usize>,
+    pub(crate) aggregate: Vec<T>,
+    pub(crate) current: Ntru<Vec<T>>,
+}
+
+impl<T: FheUint> BlindRotationPairWorkspace<T> {
+    pub(crate) fn new(
+        parameters: &NlevParameters<T, BarrettModulus<T>>,
+        input_dimension: LweDimension,
+    ) -> Self {
+        Self {
+            exponents: vec![0; input_dimension.get()],
+            aggregate: vec![T::ZERO; parameters.nlev_len()],
+            current: Ntru::zero(parameters.poly_length().get()),
+        }
+    }
+}
 
 /// Shared NTT blind-rotation, coefficient and external-product resources.
 ///

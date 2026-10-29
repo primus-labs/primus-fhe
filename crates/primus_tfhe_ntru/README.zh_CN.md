@@ -42,7 +42,7 @@ Classic binary/ternary 和 sparse fixed-weight binary 支持 PBS、ManyLUT、Boo
 
 两后端共享 `NtruBlindRotationControls<T>` 系数存储。`SparseNtruBootstrappingKey<T>` 额外持有公开桶映射和声明重量，`controls()` 借用通用存储。首组为提升用 NLev 控制，后续组为加密旋转用 NGSW 控制。NTT 剩余类和 Native 系数仍是不同表示。优先用 context/key-generator 工厂；参见[系数存储契约](src/controls.rs)、[sparse 分组契约](src/sparse.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
 
-两个 NTRU 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size }`。连续块中至多一个 `1`，允许空块。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存 bit 控制及独立加密的 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTRU Fourier 要求 u64，使用精确 native 系数建钥，支持 ordinary 或 split BR；trace、SS 精度保持独立。Block 批量、应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
+两个 NTRU 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size }`。连续块中至多一个 `1`，允许空块。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存 bit 控制及独立加密的 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTRU Fourier 要求 u64，使用精确 native 系数建钥，支持 ordinary 或 split BR；trace、SS 精度保持独立。两后端支持分组 BR 的 scoped one-hot pair；应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
 
 ## 客户端与 LUT
 
@@ -78,6 +78,19 @@ NTT reverse trace 使用模逆元，Fourier 使用原生整数减半及额外 FF
 | 完整 NGSW selectors | `allocate_ngsw_output` / `one_hot_ngsw_to` |
 | 仅非零 NGSW 分支 | `allocate_nonzero_ngsw_output` / `one_hot_nonzero_ngsw_to` |
 | 两种表示 | `one_hot_to`，或用 `one_hot_nlev_and_nonzero_ngsw_to` 生成完整 NLev 加非零 NGSW |
+
+对于 Sparse 和 Block BR，可将拥有工作区的 one-hot evaluator 通过 `into_parts` 拆开，
+再调用 `new_pair_workspace(&resources)` 和 `with_pair`。额外的
+`bootstrap::BlindRotationPairWorkspace` 仅保存第二条输入的指数、系数 aggregate 和 accumulator；
+变换、外积 scratch 和 selector 缓冲串行复用。回调按输入 0、1 的顺序消费，须在下一条输入复用缓冲前完成。
+支持 NLEV-only、非零 NGSW-only 和双输出投影。Classic 返回 `None`，此时每条输入都走单输入方法；
+奇数条的最后一条也走单输入路径。Pair 输入仍共享密钥误差。
+
+公开查表多项式在没有 CMux 选表层执行首次提升时（`c=d`）需要 `NLEV[1]`。
+分组 BR 没有独立的 classic initializer，应通过
+`KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` 或
+`try_generate_public_lift_key` 请求独立材料，不从首组 bit/dummy 控制相加派生。
+Lift 保留自身生成参数，并引入自身的分解和加密误差；Fourier split BR 的公开提升仍使用 ordinary Fourier 材料。
 
 完整输出覆盖 δ_r(m)，r=0..M-1；紧凑 NGSW 的位置 r-1 对应 r=1..M-1，m=0 时这些目标 bit 均为零。`cmux_k_to` 以 C0 为默认项消费非零控制。NLev 输出为 Q 下系数表示，用于公开多项式提升前须变换；NGSW 使用后端变换表示供 CMux 消费。
 

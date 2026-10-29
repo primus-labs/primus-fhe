@@ -245,7 +245,6 @@ fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     pbs: PbsConfig<T, PowOf2Modulus<T>>,
     projection: NtruProjectionMethod,
 ) -> (Vec<T>, Vec<T>) {
-    let sparse = pbs.method == SPARSE;
     let context = TfheContext::<T, Table, _>::try_from_cbs_config(CbsConfig {
         pbs,
         projection,
@@ -262,12 +261,35 @@ fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     .unwrap();
     // Secret/BR/ordinary trace/SS generation precedes strategy-specific material.
     // Fix its seed, and keep input encryption independent of extra key RNG draws.
-    let mut rng = StdRng::seed_from_u64(103);
+    let seed = if pbs.method == BlindRotationMethod::Block {
+        if T::BITS == 32 { 100 } else { 106 }
+    } else {
+        103
+    };
+    let mut rng = StdRng::seed_from_u64(seed);
     let mut input_rng = StdRng::seed_from_u64(104);
     // Client: encrypt nonconstant candidate polynomials under the ring secret.
-    let (client, server) = context
-        .try_generate_circuit_bootstrap_keys(&mut rng)
-        .unwrap();
+    let (client, server, public_lift) = if pbs.method == BlindRotationMethod::Block && T::BITS == 64
+    {
+        primus_tfhe_ntru_ntt::KeyGenerator::new(&context)
+            .try_generate_circuit_bootstrap_keys_with_public_lift(
+                Some(context.parameters().blind_rotation()),
+                &mut rng,
+            )
+            .unwrap()
+    } else {
+        let (client, server) = context
+            .try_generate_circuit_bootstrap_keys(&mut rng)
+            .unwrap();
+        (client, server, None)
+    };
+    if let SecretKeyDistr::BlockBinary { block_size } = pbs.external_lwe.secret_key_distr {
+        assert!(
+            client.external_lwe_secret_key().as_ref()[..block_size]
+                .iter()
+                .all(|&s| s == T::ZERO)
+        );
+    }
     let encryptor = context.encryptor(client.external_lwe_secret_key()).unwrap();
     let mut ring_client = context
         .accumulator_client(client.accumulator_ntru_secret_key(), T::as_from(8))
@@ -330,6 +352,38 @@ fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         primus_ntru::NttNtruSecretKey::try_from_coeff_secret_key(secret, modulus, context.table())
             .unwrap();
     let mut transformed_probe = primus_lattice::ntru::NttNtru::new(vec![T::ZERO; n]);
+    if let Some(lift) = public_lift {
+        // An empty first block must not become a public initializer. The extra
+        // material independently encrypts one, with its own BR decomposition.
+        assert!(
+            server
+                .server_key()
+                .blind_rotation_key()
+                .classic_controls()
+                .is_none()
+        );
+        let scalar = basis.scalar_iter().next().unwrap();
+        let polynomial = Polynomial::new(
+            (0..n)
+                .map(|i| if i % 3 == 0 { scalar } else { T::ZERO })
+                .collect::<Vec<_>>(),
+        );
+        let mut product =
+            primus_ntru::NttNtruExternalProductWorkspace::new(context.parameters().poly_length());
+        lift.external_product_to(
+            &polynomial,
+            &mut selected,
+            context.parameters().blind_rotation().basis(),
+            modulus,
+            context.table(),
+            &mut product,
+        );
+        selected.write_ntt_form(&mut transformed_probe, context.table());
+        transformed.decrypt_phase_to(&transformed_probe, &mut phase, modulus, context.table());
+        for (&actual, &expected) in phase.as_ref().iter().zip(polynomial.as_ref()) {
+            assert!(phase_error_magnitude(actual, expected, modulus) <= scalar >> 4u32);
+        }
+    }
     for m in [0, 3, 1, 2] {
         encryptor
             .encrypt_padded_to(T::as_from(m), input.as_mut_view(), &mut input_rng)
@@ -494,32 +548,49 @@ fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
             assert_eq!(decoded, messages[m], "dual one-hot input {m}");
         }
     }
-    if sparse {
-        // Paired BR callbacks must preserve the owning evaluator's strategy and
-        // the NLEV/dual exception. Compare against single-input calls byte-for-byte.
-        let mut inputs = [input.clone(), input];
-        for (message, input) in [0, 3].into_iter().zip(&mut inputs) {
-            encryptor
-                .encrypt_padded_to(T::as_from(message), input.as_mut_view(), &mut input_rng)
-                .unwrap();
-        }
-        assert_sparse_pair_matches_single(one_hot, [inputs[0].as_view(), inputs[1].as_view()]);
+    // Three inputs exercise a pair and a single tail; classic has no pair workspace.
+    let mut inputs = [input.clone(), input.clone(), input];
+    for (message, input) in [0, 3, 1].into_iter().zip(&mut inputs) {
+        encryptor
+            .encrypt_padded_to(T::as_from(message), input.as_mut_view(), &mut input_rng)
+            .unwrap();
     }
+    assert_pair_matches_single(
+        one_hot,
+        inputs.each_ref().map(|input| input.as_view()),
+        context.parameters().blind_rotation_method() != BlindRotationMethod::Classic,
+    );
     ordinary_outputs.unwrap()
 }
 
-/// Scoped pair callbacks reuse the same projection owner, strategy and dirty buffers.
-fn assert_sparse_pair_matches_single<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+/// Pair callbacks and odd single tails preserve projection strategy and dirty-buffer reuse.
+fn assert_pair_matches_single<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     one_hot: primus_tfhe_ntru_ntt::OneHotEvaluator<'_, T, Table>,
-    inputs: [primus_tfhe_ntru_ntt::Lwe<&[T]>; 2],
+    inputs: [primus_tfhe_ntru_ntt::Lwe<&[T]>; 3],
+    has_pair: bool,
 ) {
     let (mut operation, mut resources) = one_hot.into_parts();
-    let mut pair = operation.new_sparse_pair_workspace(&resources).unwrap();
+    let mut pair = operation.new_pair_workspace(&resources);
+    assert_eq!(pair.is_some(), has_pair);
     let mut nlev = operation.allocate_nlev_output();
     let mut ngsw = operation.allocate_nonzero_ngsw_output();
-    let mut expected_nlev = [nlev.clone(), nlev.clone()];
-    let mut expected_ngsw = [ngsw.clone(), ngsw.clone()];
-    // Reuse dirty buffers across NGSW-only, NLEV-only and dual calls.
+    let mut expected_nlev = [nlev.clone(), nlev.clone(), nlev.clone()];
+    let mut expected_ngsw = [ngsw.clone(), ngsw.clone(), ngsw.clone()];
+    // An unwinding consumer must not leave the borrowed accumulator swapped out.
+    if let Some(pair) = &mut pair {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            operation.with_pair(
+                [inputs[0].as_view(), inputs[1].as_view()],
+                pair,
+                &mut resources,
+                |_, projection| {
+                    projection.project_to(None, Some(ngsw.as_mut_slice()));
+                    panic!("intentional projection consumer failure");
+                },
+            );
+        }));
+        assert!(result.is_err());
+    }
     for (with_nlev, with_ngsw) in [(false, true), (true, false), (true, true)] {
         for (i, input) in inputs.iter().enumerate() {
             match (with_nlev, with_ngsw) {
@@ -541,23 +612,52 @@ fn assert_sparse_pair_matches_single<T: FheUint, Table: MonomialNttTable<ValueT 
                 ),
             }
         }
-        operation.with_sparse_pair(
-            [inputs[0].as_view(), inputs[1].as_view()],
-            &mut pair,
-            &mut resources,
-            |i, projection| {
-                projection.project_to(
-                    with_nlev.then_some(nlev.as_mut_slice()),
-                    with_ngsw.then_some(ngsw.as_mut_slice()),
-                );
-                if with_nlev {
-                    assert_eq!(nlev, expected_nlev[i]);
+        let first_single = if let Some(pair) = &mut pair {
+            let mut visited = 0;
+            operation.with_pair(
+                [inputs[0].as_view(), inputs[1].as_view()],
+                pair,
+                &mut resources,
+                |i, projection| {
+                    assert_eq!(i, visited);
+                    visited += 1;
+                    projection.project_to(
+                        with_nlev.then_some(nlev.as_mut_slice()),
+                        with_ngsw.then_some(ngsw.as_mut_slice()),
+                    );
+                    if with_nlev {
+                        assert_eq!(nlev, expected_nlev[i]);
+                    }
+                    if with_ngsw {
+                        assert_eq!(ngsw, expected_ngsw[i]);
+                    }
+                },
+            );
+            assert_eq!(visited, 2);
+            2
+        } else {
+            0
+        };
+        for (i, input) in inputs.iter().enumerate().skip(first_single) {
+            match (with_nlev, with_ngsw) {
+                (true, true) => operation.one_hot_nlev_and_nonzero_ngsw_to(
+                    input.as_view(),
+                    &mut nlev,
+                    &mut ngsw,
+                    &mut resources,
+                ),
+                (true, false) => {
+                    operation.one_hot_nlev_to(input.as_view(), &mut nlev, &mut resources)
                 }
-                if with_ngsw {
-                    assert_eq!(ngsw, expected_ngsw[i]);
-                }
-            },
-        );
+                _ => operation.one_hot_nonzero_ngsw_to(input.as_view(), &mut ngsw, &mut resources),
+            }
+            if with_nlev {
+                assert_eq!(nlev, expected_nlev[i]);
+            }
+            if with_ngsw {
+                assert_eq!(ngsw, expected_ngsw[i]);
+            }
+        }
     }
 }
 
@@ -615,6 +715,7 @@ fn u32_block_pbs_and_batches() {
     config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
     chained_pbs::<u32, U32NttTable>(config);
     many_lut_and_mvb::<u32, U32NttTable>(config);
+    circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::Separate);
 }
 
 /// Wider odd blocks exercise paired aggregation plus its trailing selector.

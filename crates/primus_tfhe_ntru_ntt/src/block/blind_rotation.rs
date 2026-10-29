@@ -1,5 +1,7 @@
 //! Direct block aggregation with compulsory first-block public-LUT lifting.
 
+use std::ops::Range;
+
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_integer::FheUint;
 use primus_lattice::ntru::Ntru;
@@ -7,7 +9,10 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::MonomialNttTable;
 
 use super::BlockNtruBootstrappingKey;
-use crate::sparse::{AggregationWorkspace, rotate_groups};
+use crate::{
+    bootstrap::BlindRotationPairWorkspace,
+    sparse::{AggregationWorkspace, rotate_groups, rotate_groups_pair},
+};
 
 /// Consumes every block, including empty blocks and zero exponents. `scratch`
 /// initially contains the public rotated LUT. The first block's NLEV aggregate
@@ -24,17 +29,56 @@ pub(crate) fn rotate_blocks<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     modulus: BarrettModulus<T>,
     ntt: &Table,
 ) {
+    rotate_groups(
+        block_groups(key),
+        workspace,
+        current,
+        scratch,
+        basis,
+        modulus,
+        ntt,
+    );
+}
+
+/// Visits each contiguous block for both inputs without bucket maps or replicated
+/// controls. Both current buffers hold the public LUT rotation on entry, so the
+/// entire first block must be consumed for both NLEV lifts, including empty blocks.
+/// The owning evaluator established key, exponent and workspace compatibility.
+pub(crate) fn rotate_blocks_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+    key: &BlockNtruBootstrappingKey<T>,
+    workspace: &mut AggregationWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
+    buffers: [&mut Ntru<Vec<T>>; 2],
+    basis: &ApproxSignedBasis<T>,
+    modulus: BarrettModulus<T>,
+    ntt: &Table,
+) {
+    rotate_groups_pair(
+        block_groups(key),
+        workspace,
+        second,
+        buffers,
+        basis,
+        modulus,
+        ntt,
+    );
+}
+
+/// Exposes complete bit-plus-dummy groups and their contiguous input coordinates;
+/// no persistent index map is needed for the direct-block layout.
+fn block_groups<T: FheUint>(
+    key: &BlockNtruBootstrappingKey<T>,
+) -> impl Iterator<Item = (Range<usize>, &[T])> {
     let block_size = key.block_size();
     let controls = key.controls();
-    let groups = controls
+    controls
         .as_slice()
         .chunks_exact((block_size + 1) * controls.control_len())
         .enumerate()
-        .map(|(block, data)| {
+        .map(move |(block, data)| {
             let start = block * block_size;
             (start..start + block_size, data)
-        });
-    rotate_groups(groups, workspace, current, scratch, basis, modulus, ntt);
+        })
 }
 
 #[cfg(test)]

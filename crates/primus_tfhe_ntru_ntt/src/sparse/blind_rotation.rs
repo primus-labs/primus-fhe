@@ -6,7 +6,6 @@ use primus_lattice::{
     nlev::{Nlev, NlevIter},
     ntru::Ntru,
 };
-use primus_lwe::LweDimension;
 use primus_modulus::BarrettModulus;
 use primus_ntru::{NlevParameters, NttNtruExternalProductWorkspace};
 use primus_ntt::MonomialNttTable;
@@ -15,6 +14,7 @@ use primus_reduce::ReduceOnceSlice;
 use primus_tfhe_ntru::NtruBlindRotationControls;
 
 use super::SparseNtruBootstrappingKey;
+use crate::bootstrap::BlindRotationPairWorkspace;
 
 /// Reusable aggregate and product scratch, independent of bucket geometry.
 pub(crate) struct AggregationWorkspace<T: FheUint> {
@@ -32,29 +32,6 @@ impl<T: FheUint> AggregationWorkspace<T> {
             exponents: vec![0; controls.input_dimension().get()],
             aggregate: vec![T::ZERO; controls.control_len()],
             external_product: NttNtruExternalProductWorkspace::new(parameters.poly_length()),
-        }
-    }
-}
-
-/// Additional state for a second sparse blind-rotation input.
-/// Allocate through [`crate::circuit_bootstrap::OneHotCircuitBootstrapEvaluator::new_sparse_pair_workspace`].
-/// Retains only exponents, an L*N coefficient aggregate and one N-coefficient
-/// accumulator; the original resources provide shared transform/product scratch.
-pub struct SparseBlindRotationPairWorkspace<T: FheUint> {
-    pub(crate) exponents: Vec<usize>,
-    pub(crate) aggregate: Vec<T>,
-    pub(crate) current: Ntru<Vec<T>>,
-}
-
-impl<T: FheUint> SparseBlindRotationPairWorkspace<T> {
-    pub(crate) fn new(
-        parameters: &NlevParameters<T, BarrettModulus<T>>,
-        input_dimension: LweDimension,
-    ) -> Self {
-        Self {
-            exponents: vec![0; input_dimension.get()],
-            aggregate: vec![T::ZERO; parameters.nlev_len()],
-            current: Ntru::zero(parameters.poly_length().get()),
         }
     }
 }
@@ -129,18 +106,43 @@ pub(crate) fn rotate_groups<'a, T, Table, I>(
 pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     key: &SparseNtruBootstrappingKey<T>,
     workspace: &mut AggregationWorkspace<T>,
-    second: &mut SparseBlindRotationPairWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
     buffers: [&mut Ntru<Vec<T>>; 2],
     basis: &ApproxSignedBasis<T>,
     modulus: BarrettModulus<T>,
     ntt: &Table,
 ) {
+    let groups = (0..key.bucket_count()).map(|bucket| {
+        let (indices, data) = key.bucket_data(bucket);
+        (indices.iter().copied(), data)
+    });
+    rotate_groups_pair(groups, workspace, second, buffers, basis, modulus, ntt);
+}
+
+/// Aggregates each group's controls for both inputs before advancing, preserving
+/// each input's control order. Both current buffers initially hold independent
+/// public LUT rotations: the complete first group, including its dummy, lifts
+/// each through NLEV; later NGSW groups use the same external-product arithmetic.
+/// Transform/product scratch is shared serially, with final results in the two
+/// current buffers. The caller established all key, exponent and buffer geometry.
+pub(crate) fn rotate_groups_pair<'a, T, Table, I>(
+    groups: impl Iterator<Item = (I, &'a [T])>,
+    workspace: &mut AggregationWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
+    buffers: [&mut Ntru<Vec<T>>; 2],
+    basis: &ApproxSignedBasis<T>,
+    modulus: BarrettModulus<T>,
+    ntt: &Table,
+) where
+    T: FheUint,
+    Table: MonomialNttTable<ValueT = T>,
+    I: ExactSizeIterator<Item = usize>,
+{
     let [current, scratch] = buffers;
     let n = ntt.poly_length().get();
-    for bucket in 0..key.bucket_count() {
-        let (indices, data) = key.bucket_data(bucket);
+    for (indices, data) in groups {
         aggregate_controls(
-            indices.iter().copied(),
+            indices,
             data,
             [
                 (
@@ -155,8 +157,6 @@ pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T
             n,
             modulus,
         );
-        // Bucket zero lifts both public LUTs with NLEV. Later NGSW controls
-        // use the same external-product arithmetic, preserving every bucket.
         for (aggregate, current) in [
             (&mut workspace.aggregate, &mut *current),
             (&mut second.aggregate, &mut second.current),

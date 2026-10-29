@@ -6,7 +6,6 @@ use primus_lattice::{
     nlev::{FourierNlev, Nlev, NlevIter},
     ntru::Ntru,
 };
-use primus_lwe::LweDimension;
 use primus_modulus::NativeModulus;
 use primus_ntru::{
     FourierNtruExternalProductWorkspace, FourierNtruSplitGadget, FourierNtruSplitWorkspace,
@@ -16,6 +15,7 @@ use primus_poly::Polynomial;
 use primus_tfhe_ntru::NtruBlindRotationControls;
 
 use super::SparseNtruBootstrappingKey;
+use crate::bootstrap::BlindRotationPairWorkspace;
 
 /// Reusable aggregate and product scratch, independent of bucket geometry.
 pub(crate) struct AggregationWorkspace<T: TorusFftValue, Transformed = Vec<Complex64>> {
@@ -74,29 +74,6 @@ impl<T: TorusFftValue, Transformed> AggregationWorkspace<T, Transformed> {
 
 /// Split payload for direct-block rotation; sparse controls retain ordinary FFT.
 pub(crate) type SplitAggregationWorkspace<T> = AggregationWorkspace<T, FourierNtruSplitGadget<T>>;
-
-/// Additional state for a second sparse blind-rotation input.
-/// Allocate through [`crate::circuit_bootstrap::OneHotCircuitBootstrapEvaluator::new_sparse_pair_workspace`].
-/// Retains only exponents, an L*N coefficient aggregate and one N-coefficient
-/// accumulator; the original resources provide shared transform/product scratch.
-pub struct SparseBlindRotationPairWorkspace<T: TorusFftValue> {
-    pub(crate) exponents: Vec<usize>,
-    pub(crate) aggregate: Vec<T>,
-    pub(crate) current: Ntru<Vec<T>>,
-}
-
-impl<T: TorusFftValue> SparseBlindRotationPairWorkspace<T> {
-    pub(crate) fn new(
-        parameters: &NlevParameters<T, NativeModulus<T>>,
-        input_dimension: LweDimension,
-    ) -> Self {
-        Self {
-            exponents: vec![0; input_dimension.get()],
-            aggregate: vec![T::ZERO; parameters.nlev_len()],
-            current: Ntru::zero(parameters.poly_length().get()),
-        }
-    }
-}
 
 /// The evaluator established key/workspace/table compatibility and quantized every mask.
 /// Every bucket is processed, including empty ones and zero exponents; its encrypted
@@ -212,17 +189,40 @@ pub(crate) fn rotate_groups_split<'a, T, Table, I>(
 pub(crate) fn rotate_buckets_pair<T: TorusFftValue, Table: FftTable>(
     key: &SparseNtruBootstrappingKey<T>,
     workspace: &mut AggregationWorkspace<T>,
-    second: &mut SparseBlindRotationPairWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
     buffers: [&mut Ntru<Vec<T>>; 2],
     basis: &ApproxSignedBasis<T>,
     fft: &mut FftEngine<'_, Table>,
 ) {
+    let groups = (0..key.bucket_count()).map(|bucket| {
+        let (indices, data) = key.bucket_data(bucket);
+        (indices.iter().copied(), data)
+    });
+    rotate_groups_pair(groups, workspace, second, buffers, basis, fft);
+}
+
+/// Aggregates a control group for both inputs before advancing, preserving
+/// source order and each input's compulsory first-group public-LUT lift. Both
+/// current buffers contain their rotated public LUT on entry. Ordinary transforms
+/// and products run serially through one shared workspace; final results remain
+/// in the two current buffers, regardless of the number of groups.
+pub(crate) fn rotate_groups_pair<'a, T, Table, I>(
+    groups: impl Iterator<Item = (I, &'a [T])>,
+    workspace: &mut AggregationWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
+    buffers: [&mut Ntru<Vec<T>>; 2],
+    basis: &ApproxSignedBasis<T>,
+    fft: &mut FftEngine<'_, Table>,
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+    I: ExactSizeIterator<Item = usize>,
+{
     let [current, scratch] = buffers;
     let n = fft.poly_length().get();
-    for bucket in 0..key.bucket_count() {
-        let (indices, data) = key.bucket_data(bucket);
+    for (indices, data) in groups {
         aggregate_controls(
-            indices.iter().copied(),
+            indices,
             data,
             [
                 (
@@ -236,8 +236,7 @@ pub(crate) fn rotate_buckets_pair<T: TorusFftValue, Table: FftTable>(
             ],
             n,
         );
-        // Bucket zero lifts both public LUTs with NLEV. Later NGSW controls
-        // use the same external-product arithmetic, preserving every bucket.
+        // First-group NLEV and later NGSW use the same product arithmetic.
         for (aggregate, current) in [
             (&mut workspace.aggregate, &mut *current),
             (&mut second.aggregate, &mut second.current),
@@ -250,6 +249,62 @@ pub(crate) fn rotate_buckets_pair<T: TorusFftValue, Table: FftTable>(
                 basis,
                 fft,
                 &mut workspace.external_product,
+            );
+            core::mem::swap(current, scratch);
+        }
+    }
+}
+
+/// Both native aggregates are complete before either is split. Each lane then
+/// overwrites the same low/high spectra and independently recovers its product
+/// before the other lane reuses those buffers. Native wrapping carries and
+/// negacyclic signs therefore precede canonical limb extraction, exactly as in
+/// single-input split BR. No second spectra or split/product workspace is kept.
+pub(crate) fn rotate_groups_split_pair<'a, T, Table, I>(
+    groups: impl Iterator<Item = (I, &'a [T])>,
+    workspace: &mut SplitAggregationWorkspace<T>,
+    second: &mut BlindRotationPairWorkspace<T>,
+    buffers: [&mut Ntru<Vec<T>>; 2],
+    fft: &mut FftEngine<'_, Table>,
+    split: &mut FourierNtruSplitWorkspace<T>,
+) where
+    T: TorusFftValue,
+    Table: FftTable,
+    I: ExactSizeIterator<Item = usize>,
+{
+    let [current, scratch] = buffers;
+    let n = fft.poly_length().get();
+    for (indices, data) in groups {
+        aggregate_controls(
+            indices,
+            data,
+            [
+                (
+                    &workspace.exponents,
+                    Nlev::new(workspace.aggregate.as_mut_slice()),
+                ),
+                (
+                    &second.exponents,
+                    Nlev::new(second.aggregate.as_mut_slice()),
+                ),
+            ],
+            n,
+        );
+        for (aggregate, current) in [
+            (&workspace.aggregate, &mut *current),
+            (&second.aggregate, &mut second.current),
+        ] {
+            workspace.transformed.set_from_coefficients(
+                aggregate,
+                fft,
+                &mut workspace.external_product,
+            );
+            workspace.transformed.external_product_to(
+                current.as_ref(),
+                scratch.as_mut(),
+                fft,
+                &mut workspace.external_product,
+                split,
             );
             core::mem::swap(current, scratch);
         }

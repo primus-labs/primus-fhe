@@ -240,7 +240,11 @@ fn assert_ngsw_phase<T: primus_integer::FheUint, M: primus_reduce::RingContext<T
 /// Consume the bootstrapped predicate in CMux, then check every coefficient.
 fn circuit_selection<T: TorusFftValue, Table: FftTable>(pbs: PbsConfig<T, PowOf2Modulus<T>>) {
     let context = TfheContext::<T, Table, _>::try_from_pbs_config(pbs).unwrap();
-    let mut rng = StdRng::seed_from_u64(103);
+    let mut rng = StdRng::seed_from_u64(if pbs.method == BlindRotationMethod::Block {
+        106
+    } else {
+        103
+    });
     // PBS-only setup rejects CBS key generation until the gadgets are added.
     assert!(matches!(
         context.try_generate_circuit_bootstrap_keys(&mut rng),
@@ -260,6 +264,13 @@ fn circuit_selection<T: TorusFftValue, Table: FftTable>(pbs: PbsConfig<T, PowOf2
     let (client, server) = context
         .try_generate_circuit_bootstrap_keys(&mut rng)
         .unwrap();
+    if let SecretKeyDistr::BlockBinary { block_size } = pbs.external_lwe.secret_key_distr {
+        assert!(
+            client.external_lwe_secret_key().as_ref()[..block_size]
+                .iter()
+                .all(|&s| s == T::ZERO)
+        );
+    }
     let encryptor = context.encryptor(client.external_lwe_secret_key()).unwrap();
     let mut ring_client = context
         .accumulator_client(client.accumulator_ntru_secret_key(), T::as_from(8))
@@ -479,6 +490,115 @@ fn circuit_selection<T: TorusFftValue, Table: FftTable>(pbs: PbsConfig<T, PowOf2
             );
             ring_client.decrypt_to(&selected, &mut decoded);
             assert_eq!(decoded, messages[m], "dual one-hot input {m}");
+        }
+    }
+    let mut inputs = [input.clone(), input.clone(), input];
+    for (message, input) in [0, 3, 1].into_iter().zip(&mut inputs) {
+        encryptor
+            .encrypt_padded_to(T::as_from(message), input.as_mut_view(), &mut rng)
+            .unwrap();
+    }
+    assert_pair_matches_single(
+        one_hot,
+        inputs.each_ref().map(|input| input.as_view()),
+        context.parameters().blind_rotation_method() != BlindRotationMethod::Classic,
+    );
+}
+
+/// Pair callbacks and odd single tails preserve projection strategy and dirty-buffer reuse.
+fn assert_pair_matches_single<T: TorusFftValue, Table: FftTable>(
+    one_hot: primus_tfhe_ntru_fourier::OneHotEvaluator<'_, T, Table>,
+    inputs: [primus_tfhe_ntru_fourier::Lwe<&[T]>; 3],
+    has_pair: bool,
+) {
+    let (mut operation, mut resources) = one_hot.into_parts();
+    let mut pair = operation.new_pair_workspace(&resources);
+    assert_eq!(pair.is_some(), has_pair);
+    let mut nlev = operation.allocate_nlev_output();
+    let mut ngsw = operation.allocate_nonzero_ngsw_output();
+    let mut expected_nlev = [nlev.clone(), nlev.clone(), nlev.clone()];
+    let mut expected_ngsw = [ngsw.clone(), ngsw.clone(), ngsw.clone()];
+    // An unwinding consumer must not leave the borrowed accumulator swapped out.
+    if let Some(pair) = &mut pair {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            operation.with_pair(
+                [inputs[0].as_view(), inputs[1].as_view()],
+                pair,
+                &mut resources,
+                |_, projection| {
+                    projection.project_to(None, Some(ngsw.as_mut_slice()));
+                    panic!("intentional projection consumer failure");
+                },
+            );
+        }));
+        assert!(result.is_err());
+    }
+    for (with_nlev, with_ngsw) in [(false, true), (true, false), (true, true)] {
+        for (i, input) in inputs.iter().enumerate() {
+            match (with_nlev, with_ngsw) {
+                (true, true) => operation.one_hot_nlev_and_nonzero_ngsw_to(
+                    input.as_view(),
+                    &mut expected_nlev[i],
+                    &mut expected_ngsw[i],
+                    &mut resources,
+                ),
+                (true, false) => operation.one_hot_nlev_to(
+                    input.as_view(),
+                    &mut expected_nlev[i],
+                    &mut resources,
+                ),
+                _ => operation.one_hot_nonzero_ngsw_to(
+                    input.as_view(),
+                    &mut expected_ngsw[i],
+                    &mut resources,
+                ),
+            }
+        }
+        let first_single = if let Some(pair) = &mut pair {
+            let mut visited = 0;
+            operation.with_pair(
+                [inputs[0].as_view(), inputs[1].as_view()],
+                pair,
+                &mut resources,
+                |i, projection| {
+                    assert_eq!(i, visited);
+                    visited += 1;
+                    projection.project_to(
+                        with_nlev.then_some(nlev.as_mut_slice()),
+                        with_ngsw.then_some(ngsw.as_mut_slice()),
+                    );
+                    if with_nlev {
+                        assert_eq!(nlev, expected_nlev[i]);
+                    }
+                    if with_ngsw {
+                        assert_eq!(ngsw, expected_ngsw[i]);
+                    }
+                },
+            );
+            assert_eq!(visited, 2);
+            2
+        } else {
+            0
+        };
+        for (i, input) in inputs.iter().enumerate().skip(first_single) {
+            match (with_nlev, with_ngsw) {
+                (true, true) => operation.one_hot_nlev_and_nonzero_ngsw_to(
+                    input.as_view(),
+                    &mut nlev,
+                    &mut ngsw,
+                    &mut resources,
+                ),
+                (true, false) => {
+                    operation.one_hot_nlev_to(input.as_view(), &mut nlev, &mut resources)
+                }
+                _ => operation.one_hot_nonzero_ngsw_to(input.as_view(), &mut ngsw, &mut resources),
+            }
+            if with_nlev {
+                assert_eq!(nlev, expected_nlev[i]);
+            }
+            if with_ngsw {
+                assert_eq!(ngsw, expected_ngsw[i]);
+            }
         }
     }
 }
@@ -1051,6 +1171,49 @@ fn fourier_rejects_unsupported_projection() {
 /// A CBS context's split BSK also serves ordinary PBS. Trace-only and all-split
 /// outputs are consumed as ordinary Fourier controls over nonconstant ring data.
 /// Fused trace/SS use different limb widths and still return ordinary controls.
+/// The separately sampled ordinary NLEV[1] lifts public polynomials even when
+/// the selected BR uses split spectra and its first block's secret is all zero.
+fn assert_public_lift<Table: FftTable>(
+    context: &TfheContext<u64, Table, PowOf2Modulus<u64>>,
+    secret: &primus_ntru::NtruSecretKey<u64>,
+    lift: &primus_lattice::nlev::FourierNlev<Vec<primus_fft::Complex64>>,
+) {
+    let n = context.parameters().poly_length().get();
+    let scalar = context
+        .cbs_parameters()
+        .unwrap()
+        .gadget()
+        .output_basis()
+        .scalar_iter()
+        .next()
+        .unwrap();
+    let polynomial = Polynomial::new(
+        (0..n)
+            .map(|i| if i % 3 == 0 { scalar } else { 0 })
+            .collect::<Vec<_>>(),
+    );
+    let mut fft = context.new_fft_engine();
+    let mut product =
+        primus_ntru::FourierNtruExternalProductWorkspace::new(context.parameters().poly_length());
+    let mut output = context.allocate_accumulator_ciphertext();
+    lift.external_product_to(
+        &polynomial,
+        &mut output,
+        context.parameters().blind_rotation().basis(),
+        &mut fft,
+        &mut product,
+    );
+    let phase = native_phase(output.as_ref(), secret.as_slice());
+    for (&actual, &expected) in phase.iter().zip(polynomial.as_ref()) {
+        assert!(
+            actual
+                .wrapping_sub(expected)
+                .min(expected.wrapping_sub(actual))
+                <= scalar >> 4u32
+        );
+    }
+}
+
 fn split_cbs_and_pbs<Table: FftTable>() {
     use NtruProjectionMethod::{FusedLastStage, PairedTrace, Separate};
     use primus_tfhe_ntru_fourier::{
@@ -1126,10 +1289,36 @@ fn split_cbs_and_pbs<Table: FftTable>() {
             // interleaved stride of four and the MVB factor-lift schedule.
             check_many_lut_and_mvb(&context);
         }
-        let mut rng = StdRng::seed_from_u64(414);
-        let (client, server) = context
-            .try_generate_circuit_bootstrap_keys(&mut rng)
+        let mut rng = StdRng::seed_from_u64(if method == BlindRotationMethod::Block {
+            106
+        } else {
+            414
+        });
+        let public_lift_requested =
+            method == BlindRotationMethod::Block && (!all || projection == Separate);
+        let (client, server, public_lift) = primus_tfhe_ntru_fourier::KeyGenerator::new(&context)
+            .try_generate_circuit_bootstrap_keys_with_public_lift(
+                public_lift_requested.then_some(context.parameters().blind_rotation()),
+                &mut rng,
+            )
             .unwrap();
+        if method == BlindRotationMethod::Block {
+            assert!(
+                client.external_lwe_secret_key().as_ref()[..5]
+                    .iter()
+                    .all(|&s| s == 0)
+            );
+        }
+        if let Some(lift) = public_lift {
+            assert!(
+                server
+                    .server_key()
+                    .blind_rotation_key()
+                    .classic_controls()
+                    .is_none()
+            );
+            assert_public_lift(&context, client.accumulator_ntru_secret_key(), &lift);
+        }
         let encryptor = context.encryptor(client.external_lwe_secret_key()).unwrap();
         let mut ring = context
             .accumulator_client(client.accumulator_ntru_secret_key(), 8)
@@ -1272,6 +1461,17 @@ fn split_cbs_and_pbs<Table: FftTable>() {
                 }
             }
         }
+        let mut inputs = [input.clone(), input.clone(), input];
+        for (m, input) in [0, last_message, 1].into_iter().zip(&mut inputs) {
+            encryptor
+                .encrypt_padded_to(m, input.as_mut_view(), &mut rng)
+                .unwrap();
+        }
+        assert_pair_matches_single(
+            context.one_hot_evaluator(&server).unwrap(),
+            inputs.each_ref().map(|input| input.as_view()),
+            method != BlindRotationMethod::Classic,
+        );
     }
 }
 #[cfg(feature = "rustfft")]

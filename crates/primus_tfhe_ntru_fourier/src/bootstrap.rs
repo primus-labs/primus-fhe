@@ -2,6 +2,10 @@
 //! Standalone resources omit the ordinary PBS output-return stage.
 
 use primus_fft::{FftEngine, FftTable, TorusFftValue};
+use primus_lattice::ntru::Ntru;
+use primus_lwe::LweDimension;
+use primus_modulus::NativeModulus;
+use primus_ntru::NlevParameters;
 use primus_poly::Polynomial;
 use primus_tfhe::TfheEvaluationError;
 
@@ -10,6 +14,30 @@ use crate::{
     blind_rotation::{BlindRotationResources, blind_rotate_lookup_table_to},
     key::BlindRotationKey,
 };
+
+/// Additional state for a second grouped blind-rotation input.
+/// Allocate through [`crate::circuit_bootstrap::OneHotCircuitBootstrapEvaluator::new_pair_workspace`].
+/// Only exponents, an L*N native coefficient aggregate and an N-coefficient
+/// accumulator are retained; both inputs share the original resources' Fourier,
+/// split-recovery and external-product scratch.
+pub struct BlindRotationPairWorkspace<T: TorusFftValue> {
+    pub(crate) exponents: Vec<usize>,
+    pub(crate) aggregate: Vec<T>,
+    pub(crate) current: Ntru<Vec<T>>,
+}
+
+impl<T: TorusFftValue> BlindRotationPairWorkspace<T> {
+    pub(crate) fn new(
+        parameters: &NlevParameters<T, NativeModulus<T>>,
+        input_dimension: LweDimension,
+    ) -> Self {
+        Self {
+            exponents: vec![0; input_dimension.get()],
+            aggregate: vec![T::ZERO; parameters.nlev_len()],
+            current: Ntru::zero(parameters.poly_length().get()),
+        }
+    }
+}
 
 /// Shared Fourier blind-rotation, coefficient, FFT and external-product resources.
 ///

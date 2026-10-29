@@ -46,7 +46,7 @@ pub(crate) fn rotate_blocks_split<T: TorusFftValue, Table: FftTable>(
 /// Direct controls and masks share contiguous, equally sized block order. The
 /// complete key geometry was validated at construction, so no index table is
 /// needed and chunking never discards a partial block.
-fn blocks<T: TorusFftValue>(
+pub(crate) fn blocks<T: TorusFftValue>(
     key: &BlockNtruBootstrappingKey<T>,
 ) -> impl Iterator<Item = (core::ops::Range<usize>, &[T])> {
     let block_size = key.block_size();
@@ -85,6 +85,27 @@ mod tests {
             match self {
                 Self::Ordinary(workspace) => &mut workspace.exponents,
                 Self::Split(workspace) => &mut workspace.exponents,
+            }
+        }
+
+        /// Exercises each production single-input representation for the same
+        /// integer fixture; pair results below must retain its exact arithmetic.
+        fn rotate<Table: FftTable>(
+            &mut self,
+            key: &BlockNtruBootstrappingKey<T>,
+            current: &mut Ntru<Vec<T>>,
+            scratch: &mut Ntru<Vec<T>>,
+            basis: &ApproxSignedBasis<T>,
+            fft: &mut FftEngine<'_, Table>,
+            split: Option<&mut FourierNtruSplitWorkspace<T>>,
+        ) {
+            match self {
+                Self::Ordinary(workspace) => {
+                    rotate_blocks(key, workspace, current, scratch, basis, fft);
+                }
+                Self::Split(workspace) => {
+                    rotate_blocks_split(key, workspace, current, scratch, fft, split.unwrap());
+                }
             }
         }
     }
@@ -132,9 +153,9 @@ mod tests {
         for secret in [T::ZERO.wrapping_sub(T::ONE), T::as_from(3)] {
             let inverse = modulus.try_reduce_inv(secret).unwrap();
             for (dimension, block_size) in [(3, 3), (6, 3), (10, 5), (21, 7)] {
-                let blocks = dimension / block_size;
+                let block_count = dimension / block_size;
                 for selection_pattern in 0..4 {
-                    let selected: Vec<_> = (0..blocks)
+                    let selected: Vec<_> = (0..block_count)
                         .map(|block| match selection_pattern {
                             0 => None,
                             1 if block != 0 => Some(block_size - 1),
@@ -144,7 +165,7 @@ mod tests {
                         })
                         .collect();
                     let control_len = parameters.nlev_len();
-                    let mut data = vec![T::ZERO; (dimension + blocks) * control_len];
+                    let mut data = vec![T::ZERO; (dimension + block_count) * control_len];
                     for (block, controls) in data
                         .chunks_exact_mut((block_size + 1) * control_len)
                         .enumerate()
@@ -192,6 +213,10 @@ mod tests {
                     };
                     let mut split = split_bits
                         .map(|_| FourierNtruSplitWorkspace::new(parameters.poly_length()));
+                    let mut second = crate::bootstrap::BlindRotationPairWorkspace::new(
+                        &parameters,
+                        LweDimension::new(dimension),
+                    );
                     for nonzero_exponents in [false, true] {
                         let exponents = workspace.exponents();
                         for (i, exponent) in exponents.iter_mut().enumerate() {
@@ -211,24 +236,14 @@ mod tests {
                         for b in [0, n, 2 * n - 1] {
                             let mut scratch = Ntru::new(rotate(b.wrapping_neg() & (2 * n - 1)));
                             let mut current = Ntru::new(vec![T::MAX; n]);
-                            match &mut workspace {
-                                OracleWorkspace::Ordinary(workspace) => rotate_blocks(
-                                    &key,
-                                    workspace,
-                                    &mut current,
-                                    &mut scratch,
-                                    parameters.basis(),
-                                    &mut fft,
-                                ),
-                                OracleWorkspace::Split(workspace) => rotate_blocks_split(
-                                    &key,
-                                    workspace,
-                                    &mut current,
-                                    &mut scratch,
-                                    &mut fft,
-                                    split.as_mut().unwrap(),
-                                ),
-                            }
+                            workspace.rotate(
+                                &key,
+                                &mut current,
+                                &mut scratch,
+                                parameters.basis(),
+                                &mut fft,
+                                split.as_mut(),
+                            );
                             let expected = rotate(mask_rotation.wrapping_sub(b) & (2 * n - 1));
                             for (&actual, expected) in current.as_ref().iter().zip(expected) {
                                 let phase = actual.wrapping_mul(secret);
@@ -241,6 +256,60 @@ mod tests {
                                     "FFT phase error {distance} exceeds fixture bound {error_bound}"
                                 );
                             }
+                            let first_output = current.as_ref().to_vec();
+                            let first_exponents = workspace.exponents().to_vec();
+                            // A distinct second rotation catches lane mixups;
+                            // dirty pair/product buffers persist across cases.
+                            for (i, exponent) in second.exponents.iter_mut().enumerate() {
+                                *exponent = [2 * n - 1, n, 0][i % 3];
+                            }
+                            let second_body = (b + n / 2) & (2 * n - 1);
+                            workspace.exponents().copy_from_slice(&second.exponents);
+                            scratch
+                                .as_mut()
+                                .copy_from_slice(&rotate(second_body.wrapping_neg() & (2 * n - 1)));
+                            workspace.rotate(
+                                &key,
+                                &mut current,
+                                &mut scratch,
+                                parameters.basis(),
+                                &mut fft,
+                                split.as_mut(),
+                            );
+                            let second_output = current.as_ref().to_vec();
+                            workspace.exponents().copy_from_slice(&first_exponents);
+                            current
+                                .as_mut()
+                                .copy_from_slice(&rotate(b.wrapping_neg() & (2 * n - 1)));
+                            second
+                                .current
+                                .as_mut()
+                                .copy_from_slice(&rotate(second_body.wrapping_neg() & (2 * n - 1)));
+                            let buffers = [&mut current, &mut scratch];
+                            match &mut workspace {
+                                OracleWorkspace::Ordinary(workspace) => {
+                                    crate::sparse::rotate_groups_pair(
+                                        blocks(&key),
+                                        workspace,
+                                        &mut second,
+                                        buffers,
+                                        parameters.basis(),
+                                        &mut fft,
+                                    );
+                                }
+                                OracleWorkspace::Split(workspace) => {
+                                    crate::sparse::rotate_groups_split_pair(
+                                        blocks(&key),
+                                        workspace,
+                                        &mut second,
+                                        buffers,
+                                        &mut fft,
+                                        split.as_mut().unwrap(),
+                                    );
+                                }
+                            }
+                            assert_eq!(current.as_ref(), first_output);
+                            assert_eq!(second.current.as_ref(), second_output);
                         }
                     }
                 }

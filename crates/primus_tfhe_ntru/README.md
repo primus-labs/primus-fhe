@@ -42,7 +42,7 @@ Classic binary/ternary and sparse fixed-weight binary support PBS, ManyLUT, Bool
 
 Both backends share `NtruBlindRotationControls<T>` coefficient storage. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. NTT residues and native coefficients remain distinct representations. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
 
-Both NTRU backends also support `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size }`. Each contiguous block has at most one `1`, including the empty state. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores its bit controls and an independently encrypted dummy. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. NTRU Fourier requires u64, using exact native coefficient generation for ordinary or split BR; trace and SS precision remain independent. Block batch/application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
+Both NTRU backends also support `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size }`. Each contiguous block has at most one `1`, including the empty state. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores its bit controls and an independently encrypted dummy. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. NTRU Fourier requires u64, using exact native coefficient generation for ordinary or split BR; trace and SS precision remain independent. Both backends support scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
 
 ## Clients and LUTs
 
@@ -78,6 +78,23 @@ NTT reverse trace uses modular inverses; Fourier uses native integer halving wit
 | All NGSW selectors | `allocate_ngsw_output` / `one_hot_ngsw_to` |
 | Nonzero NGSW branches only | `allocate_nonzero_ngsw_output` / `one_hot_nonzero_ngsw_to` |
 | Both representations | `one_hot_to`, or `one_hot_nlev_and_nonzero_ngsw_to` for full NLev plus nonzero NGSW |
+
+For Sparse and Block BR, split an owning one-hot evaluator with `into_parts`,
+then call `new_pair_workspace(&resources)` and `with_pair`. The additional
+`bootstrap::BlindRotationPairWorkspace` owns only the second input's exponents,
+coefficient aggregate and accumulator; transforms, product scratch and selector
+buffers are reused serially. The callback consumes input 0 then 1 before those
+buffers are reused. NLEV-only, nonzero NGSW-only and dual projection are supported.
+Classic returns `None`; consume every input through the single-input methods,
+which also handle an odd final input. Paired inputs still share key errors.
+
+Public lookup lifting needs `NLEV[1]` when no CMux selection layer performs the
+first lift (`c=d`). Grouped BR has no independent classic initializer: request
+`KeyGenerator::try_generate_circuit_bootstrap_keys_with_public_lift` or
+`try_generate_public_lift_key`. Do not derive this material by summing the
+first group's bit/dummy controls. The lift retains its own generation parameters
+and adds its own decomposition/encryption error; Fourier split BR still uses
+ordinary Fourier material for this public lift.
 
 Full output covers δ_r(m), r=0..M-1. Compact NGSW slot r-1 represents r=1..M-1; m=0 makes all those target bits zero. `cmux_k_to` consumes these nonzero controls with C0 as default. NLev output is in coefficient form at Q and must be transformed before public lifting; NGSW is in the backend's transform representation for CMux.
 

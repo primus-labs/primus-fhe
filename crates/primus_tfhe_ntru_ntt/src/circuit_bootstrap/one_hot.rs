@@ -21,7 +21,7 @@ pub use pair::OneHotProjection;
 mod selectors;
 pub use selectors::NttNgswSelectors;
 
-/// One-hot extension of CBS for classic binary/ternary and sparse binary BR.
+/// One-hot extension of CBS for classic, sparse and block BR.
 ///
 /// Input uses unsigned Rounded encoding with t=2*M, M=2^tau, tau>=1.
 /// Full-output methods materialize all M selectors, including r=0;
@@ -66,7 +66,7 @@ where
     /// # Correctness
     /// The circuit key must share the context's intended accumulator secret and
     /// NTT representation; compatibility checks do not establish these identities.
-    /// Switching between classic and sparse resources must preserve both secrets.
+    /// Switching between classic and grouped resources must preserve both secrets.
     pub fn try_new<LM: primus_reduce::RingContext<T>>(
         context: &'a TfheContext<T, Table, LM>,
         circuit_key: &'a CircuitBootstrapKey<T>,

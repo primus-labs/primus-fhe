@@ -95,7 +95,7 @@ where
     }
 
     /// Generates configured CBS/return keys and optional independent `NLEV[1]`.
-    /// Sparse lookup requests this lift when all input chunks select coefficients;
+    /// Sparse or Block lookup requests this lift when all input chunks select coefficients;
     /// ordinary classic reuses its initializer, while split classic also needs this
     /// independent ordinary lift. Lift metadata is checked before sampling.
     /// Reuses the accepted ring transform and inverse across all generated material.
