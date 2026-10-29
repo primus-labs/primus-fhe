@@ -38,6 +38,9 @@
 //!   [`CbsEvaluator`], producing accumulator-secret gadget controls for CMUX.
 //! - [`sparse`]: fixed-weight binary bucket material; choose [`BlindRotationMethod::Sparse`]
 //!   in the operation config, then use [`KeyGenerator::try_generate_server_key`].
+//! - [`block`]: direct contiguous block-binary controls; choose [`BlindRotationMethod::Block`]
+//!   with a block-binary small-LWE secret. Aggregation is exact in native coefficients;
+//!   online FFT and external products use ordinary Fourier precision.
 //!
 //! [`Evaluator`] owns common [`bootstrap::BootstrapResources`] and the ordinary return stage.
 //! Default [`CbsEvaluator`] owns its input/BR resources; low-level
@@ -83,6 +86,7 @@ use primus_modulus::NativeModulus;
 
 mod accumulator;
 pub mod blind_rotation;
+pub mod block;
 pub mod bootstrap;
 pub mod bootstrapping_key;
 pub mod circuit_bootstrap;
@@ -98,9 +102,9 @@ pub mod sparse;
 pub mod boolean;
 
 pub use error::{
-    CircuitBootstrapParameterError, KeyGenerationError, LookupTableError,
-    SparseBootstrappingKeyError, TfheClientError, TfheContextError, TfheEvaluationError,
-    TfheKeyError, TfheParameterError,
+    BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
+    LookupTableError, SparseBootstrappingKeyError, TfheClientError, TfheContextError,
+    TfheEvaluationError, TfheKeyError, TfheParameterError,
 };
 
 pub use accumulator::AccumulatorClient;

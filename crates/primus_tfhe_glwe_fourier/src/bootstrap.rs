@@ -13,6 +13,7 @@ use primus_tfhe_glwe::PbsOrder;
 use crate::{
     GlweKeySwitchingParameters, Lwe, ServerKey, TfheContext,
     blind_rotation::FourierGlweBlindRotationWorkspace,
+    block::{BlockGlweBlindRotationWorkspace, BlockGlweBootstrappingKey},
     bootstrapping_key::FourierGlweBootstrappingKey,
     key::BlindRotationKey,
     sparse::{SparseGlweBlindRotationWorkspace, SparseGlweBootstrappingKey},
@@ -74,7 +75,7 @@ impl<'a, T: TorusFftValue> KeySwitchingResources<'a, T> {
 }
 
 /// Borrowed BR key paired with the selected algorithm's owned scratch.
-/// Only classic or sparse storage is allocated; no key data is copied.
+/// Only the selected algorithm's storage is allocated; no key data is copied.
 enum BlindRotationResources<'a, T: TorusFftValue> {
     Classic {
         key: &'a FourierGlweBootstrappingKey<T>,
@@ -83,6 +84,10 @@ enum BlindRotationResources<'a, T: TorusFftValue> {
     Sparse {
         key: &'a SparseGlweBootstrappingKey<T, NativeModulus<T>>,
         scratch: SparseGlweBlindRotationWorkspace<T>,
+    },
+    Block {
+        key: &'a BlockGlweBootstrappingKey<T, NativeModulus<T>>,
+        scratch: BlockGlweBlindRotationWorkspace<T>,
     },
 }
 
@@ -182,6 +187,10 @@ where
                     key,
                     scratch: SparseGlweBlindRotationWorkspace::new(key.controls()),
                 },
+                BlindRotationKey::Block(key) => BlindRotationResources::Block {
+                    key,
+                    scratch: BlockGlweBlindRotationWorkspace::new(key),
+                },
             },
             ordinary_rotation: RotationModulusSwitch::new(
                 parameters.small_lwe().cipher_modulus(),
@@ -250,6 +259,9 @@ where
             BlindRotationResources::Sparse { scratch, .. } => {
                 scratch.with_external_product(size, operation)
             }
+            BlindRotationResources::Block { scratch, .. } => {
+                scratch.with_external_product(size, operation)
+            }
         }
     }
 
@@ -297,6 +309,15 @@ where
                     scratch,
                 ),
             BlindRotationResources::Sparse { key, scratch } => scratch
+                .blind_rotate_interleaved_lookup_table_kernel_to(
+                    key,
+                    small_lwe,
+                    lookup_table.as_view(),
+                    &modulus_switch,
+                    self.accumulator.as_mut_view(),
+                    &mut self.fft,
+                ),
+            BlindRotationResources::Block { key, scratch } => scratch
                 .blind_rotate_interleaved_lookup_table_kernel_to(
                     key,
                     small_lwe,

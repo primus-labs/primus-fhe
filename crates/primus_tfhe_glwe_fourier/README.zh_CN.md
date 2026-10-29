@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-基于原生环面和 Fourier 变换的 GLWE TFHE 后端。提供 PBS、ManyLUT、分解式 MVB、Boolean 门和 CBS，两种 PBS 顺序均支持 classic binary/ternary 或 sparse fixed-weight binary 盲旋转。见[操作与编码选择](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [GLWE 参数/密钥域](../primus_tfhe_glwe/README.zh_CN.md)。
+基于原生环面和 Fourier 变换的 GLWE TFHE 后端。提供 PBS、ManyLUT、分解式 MVB、Boolean 门和 CBS，两种 PBS 顺序均支持 classic binary/ternary、sparse fixed-weight binary 或直接 block binary 盲旋转。见[操作与编码选择](../primus_tfhe/README.zh_CN.md#选择同态操作)和 [GLWE 参数/密钥域](../primus_tfhe_glwe/README.zh_CN.md)。
 
 ## 快速开始
 
@@ -72,6 +72,8 @@ CBS 示例用 `cbs.into_parts()` 和 `Evaluator::try_from_resources` 转交已�
 分解式 MVB 要求实际 Scaled 输出尺度 `round(2^BITS/t_out)` 为偶数；奇数尺度返回 `LookupTableError::OddFactorizationScale`。因子按有符号整数变换，不做环面缩放；须预算其放大和 FFT 误差。见 [MVB 契约](../primus_tfhe/README.zh_CN.md#固定尺度分解式-mvb)。
 
 Sparse BR 须在 `config.method` 中显式选择 `BlindRotationMethod::Sparse`；仅使用固定重量秘密仍可运行 classic BR。Sparse 要求 binary 重量 `0<h<n`、`copy_count>=1`、`bucket_count>=max(copy_count,h)`。两种顺序均支持 PBS、ManyLUT、MVB 和 CBS。PBS 配置可用，不代表 CBS 输出精度或 CMux 噪声余量充分。
+
+直接 block BR 设置 `config.method = BlindRotationMethod::Block` 和 `config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size }`，完整连续块允许全零。两种 PBS 顺序、ManyLUT、MVB 和 CBS 沿用相同工厂。每块 bit 控制及独立加密的 dummy 均精确生成在 native 系数域，聚合后才做普通 FFT。Trace 精度保持独立选择；本路径不为 BR 或 SS 增加 Split35。原始单输入 BR 使用 `block::BlockGlweBlindRotationWorkspace::new(key)` 及 `blind_rotate_lookup_table_to`。预设保持不变，block 的噪声与安全成本须单独评估。
 
 重复请求保留 context、密钥和已编译程序，`_to` 方法复用 evaluator scratch 及调用方输出；并发请求需要独立的可变 evaluator。MVB 程序保持与其 context 绑定。`KeyGenerator::try_generate_blind_rotation_key(client, rng)` 根据 context 的 `config.method` 仅生成 BR 材料；独立组件须使用相同的实际秘密和变换表示。独立材料组合及逐调用借用契约见 [KeyGenerator](src/key.rs)、[Evaluator](src/evaluator.rs) 和 [CircuitBootstrapEvaluator](src/circuit_bootstrap/evaluator.rs)，默认流程无需手工组合资源。借用资源执行 CBS 时，先编译程序，再通过 `CircuitBootstrapEvaluator::try_new` 绑定所选 gadget 参数与 circuit key。
 

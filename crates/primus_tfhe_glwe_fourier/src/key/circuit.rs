@@ -72,7 +72,7 @@ where
     /// it before preparing KS. Sparse matching retries only the public map.
     ///
     /// # Errors
-    /// Missing CBS state and invalid sparse choices precede secret sampling.
+    /// Missing CBS state and invalid grouped geometry precede secret sampling.
     /// Propagates secret-generation, return-domain and matching failures.
     ///
     /// # Correctness
@@ -89,7 +89,7 @@ where
             .context
             .cbs_parameters()
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let client = ClientKey::generate(self.context.parameters(), rng);
         let encryptor = FourierGlweEncryptor::try_new(
             client.glwe_secret_key(),
@@ -99,13 +99,8 @@ where
                 .encryption_parameters(),
         )
         .map_err(crate::error::glwe_encryption_error)?;
-        let server = self.generate_circuit_server_with_accumulator(
-            operation,
-            &client,
-            encryptor,
-            sparse_layout,
-            rng,
-        )?;
+        let server = self
+            .generate_circuit_server_with_accumulator(operation, &client, encryptor, layout, rng)?;
         Ok((client, server))
     }
 
@@ -125,7 +120,7 @@ where
             .cbs_parameters()
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         client.check_compatible(self.context.parameters())?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let encryptor = FourierGlweEncryptor::try_new(
             client.glwe_secret_key(),
             self.context
@@ -134,16 +129,10 @@ where
                 .encryption_parameters(),
         )
         .map_err(crate::error::glwe_encryption_error)?;
-        self.generate_circuit_server_with_accumulator(
-            operation,
-            client,
-            encryptor,
-            sparse_layout,
-            rng,
-        )
+        self.generate_circuit_server_with_accumulator(operation, client, encryptor, layout, rng)
     }
 
-    /// The context owns this complete CBS operation; client compatibility and sparse
+    /// The context owns this complete CBS operation; client compatibility and grouped
     /// geometry are already established. Share one coefficient encryption setup between BR and
     /// CBS, then release it before preparing the padded small secret for KS.
     fn generate_circuit_server_with_accumulator<R>(
@@ -151,18 +140,14 @@ where
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
         mut encryptor: FourierGlweEncryptor<'_, T>,
-        sparse_layout: Option<crate::sparse::SparseKeyLayout>,
+        layout: super::BlindRotationLayout,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError>
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let blind_rotation = self.generate_blind_rotation_key_with_accumulator(
-            client,
-            &mut encryptor,
-            sparse_layout,
-            rng,
-        )?;
+        let blind_rotation =
+            self.generate_blind_rotation_key_with_accumulator(client, &mut encryptor, layout, rng)?;
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_accumulator(
             &mut encryptor,
             operation.gadget().clone(),
