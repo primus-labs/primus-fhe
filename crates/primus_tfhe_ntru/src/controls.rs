@@ -14,7 +14,7 @@ pub(crate) enum BlindRotationControlsError {
 
 /// Coefficient controls shared by grouped NTRU blind-rotation layouts.
 ///
-/// The grouping owner specifies the selectors and final dummy in each group.
+/// The grouping owner specifies the selectors and optional final dummy in each group.
 /// The first group contains NLEV controls for public-LUT lifting; later groups
 /// contain NGSW controls. Their coefficient layouts agree. The backend BR owner
 /// binds the common basis and modulus; NTT residues and native-torus coefficients
@@ -66,7 +66,7 @@ impl<T: FheUint> NtruBlindRotationControls<T> {
         self.control_len
     }
 
-    /// Returns `[group][selector...,dummy][level][coefficient]` storage.
+    /// Returns `[group][selector...,optional dummy][level][coefficient]` storage.
     #[must_use]
     pub fn as_slice(&self) -> &[T] {
         &self.data

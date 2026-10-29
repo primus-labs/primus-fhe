@@ -64,16 +64,18 @@ pub(crate) fn rotate_blocks_pair<T: FheUint, Table: MonomialNttTable<ValueT = T>
     );
 }
 
-/// Exposes complete bit-plus-dummy groups and their contiguous input coordinates;
-/// no persistent index map is needed for the direct-block layout.
+/// Exposes each complete bit group, any mode-required dummy and its contiguous
+/// input coordinates; the direct-block layout needs no persistent index map.
 fn block_groups<T: FheUint>(
     key: &BlockNtruBootstrappingKey<T>,
 ) -> impl Iterator<Item = (Range<usize>, &[T])> {
     let block_size = key.block_size();
     let controls = key.controls();
+    let controls_per_block =
+        block_size + usize::from(key.occupancy() == primus_ntru::BlockOccupancy::AtMostOne);
     controls
         .as_slice()
-        .chunks_exact((block_size + 1) * controls.control_len())
+        .chunks_exact(controls_per_block * controls.control_len())
         .enumerate()
         .map(move |(block, data)| {
             let start = block * block_size;
@@ -96,7 +98,10 @@ mod tests {
     /// A noise-free constant secret f=3 separates first-block NLEV weights g/3
     /// from later NGSW weights g. The independent integer oracle checks the phase
     /// rather than sharing production monomial multiplication or decomposition.
-    fn block_rotation_oracle<T: FheUint, Table: MonomialNttTable<ValueT = T>>(q: u64) {
+    fn block_rotation_oracle<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+        q: u64,
+        occupancy: primus_ntru::BlockOccupancy,
+    ) {
         let n = 32;
         let modulus = BarrettModulus::new(T::as_from(q));
         let table = Table::new(PolyLength::new(n), modulus).unwrap();
@@ -126,20 +131,32 @@ mod tests {
 
         for (dimension, block_size) in [(3, 3), (6, 3), (10, 5)] {
             let blocks = dimension / block_size;
-            for selection_pattern in 0..4 {
+            let has_dummy = occupancy == primus_ntru::BlockOccupancy::AtMostOne;
+            let controls_per_block = block_size + usize::from(has_dummy);
+            for selection_pattern in 0..if has_dummy { 4 } else { 2 } {
                 let selected: Vec<_> = (0..blocks)
-                    .map(|block| match selection_pattern {
-                        0 => None,
-                        1 if block != 0 => Some(block_size - 1),
-                        2 if block == 0 => Some(0),
-                        3 => Some(block_size - 1),
-                        _ => None,
+                    .map(|block| {
+                        if !has_dummy {
+                            Some(if selection_pattern == 0 {
+                                0
+                            } else {
+                                block_size - 1
+                            })
+                        } else {
+                            match selection_pattern {
+                                0 => None,
+                                1 if block != 0 => Some(block_size - 1),
+                                2 if block == 0 => Some(0),
+                                3 => Some(block_size - 1),
+                                _ => None,
+                            }
+                        }
                     })
                     .collect();
                 let control_len = parameters.nlev_len();
-                let mut data = vec![T::ZERO; (dimension + blocks) * control_len];
+                let mut data = vec![T::ZERO; blocks * controls_per_block * control_len];
                 for (block, controls) in data
-                    .chunks_exact_mut((block_size + 1) * control_len)
+                    .chunks_exact_mut(controls_per_block * control_len)
                     .enumerate()
                 {
                     for (position, control) in controls.chunks_exact_mut(control_len).enumerate() {
@@ -166,6 +183,7 @@ mod tests {
                     data,
                     primus_lwe::LweDimension::new(dimension),
                     block_size,
+                    occupancy,
                     &parameters,
                 )
                 .unwrap();
@@ -221,7 +239,12 @@ mod tests {
 
     #[test]
     fn block_lifting_matches_integer_oracle() {
-        block_rotation_oracle::<u32, U32NttTable>(998_244_353);
-        block_rotation_oracle::<u64, U64NttTable>(1_125_899_906_826_241);
+        for occupancy in [
+            primus_ntru::BlockOccupancy::AtMostOne,
+            primus_ntru::BlockOccupancy::ExactlyOne,
+        ] {
+            block_rotation_oracle::<u32, U32NttTable>(998_244_353, occupancy);
+            block_rotation_oracle::<u64, U64NttTable>(1_125_899_906_826_241, occupancy);
+        }
     }
 }

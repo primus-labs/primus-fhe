@@ -40,8 +40,8 @@ pub enum TfheParameterError {
     /// The external LWE distribution must be binary or ternary.
     #[error("NTRU TFHE requires a binary or ternary client secret-key distribution")]
     UnsupportedClientSecretKeyDistribution,
-    /// Direct block controls currently require the at-most-one block-binary distribution.
-    #[error("block blind rotation requires an at-most-one block-binary external LWE secret")]
+    /// Direct block controls require a block-binary distribution.
+    #[error("block blind rotation requires a block-binary external LWE secret")]
     InvalidBlockSecretDistribution,
 }
 
@@ -197,8 +197,8 @@ pub enum BlockBootstrappingKeyError {
         bits: u32,
     },
 
-    /// Direct block controls currently require an at-most-one block-binary secret.
-    #[error("block bootstrapping requires an at-most-one block-binary external secret")]
+    /// Direct block controls require a block-binary secret.
+    #[error("block bootstrapping requires a block-binary external secret")]
     UnsupportedSecretDistribution,
     /// The logical dimension must consist of complete nonempty blocks.
     #[error("invalid block geometry: dimension {dimension}, block size {block_size}")]
@@ -211,10 +211,10 @@ pub enum BlockBootstrappingKeyError {
     /// Complete control storage cannot be represented or allocated.
     #[error("block control storage size overflow")]
     StorageSizeOverflow,
-    /// Every logical bit and every block dummy must have a complete control.
+    /// Every logical bit and each mode-required dummy must have a complete control.
     #[error("block coefficient storage length mismatch: expected {expected}, got {actual}")]
     StorageLengthMismatch {
-        /// Required coefficient count, including all dummy controls.
+        /// Required coefficient count, including any required dummy controls.
         expected: usize,
         /// Supplied coefficient count.
         actual: usize,

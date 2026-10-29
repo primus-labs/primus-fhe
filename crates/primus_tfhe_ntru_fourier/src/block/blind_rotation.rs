@@ -51,9 +51,11 @@ pub(crate) fn blocks<T: TorusFftValue>(
 ) -> impl Iterator<Item = (core::ops::Range<usize>, &[T])> {
     let block_size = key.block_size();
     let controls = key.controls();
+    let controls_per_block =
+        block_size + usize::from(key.occupancy() == primus_ntru::BlockOccupancy::AtMostOne);
     controls
         .as_slice()
-        .chunks_exact((block_size + 1) * controls.control_len())
+        .chunks_exact(controls_per_block * controls.control_len())
         .enumerate()
         .map(move |(block, data)| {
             let start = block * block_size;
@@ -117,7 +119,10 @@ mod tests {
     /// 2^20 for u64) cover only these N=32, at-most-three-block FFT fixtures;
     /// they are neither a general Fourier error bound nor a DFR claim. Split
     /// fixtures use the same bound and reuse dirty buffers between rotations.
-    fn block_rotation_oracle<T: TorusFftValue, Table: FftTable>(split_bits: Option<u32>) {
+    fn block_rotation_oracle<T: TorusFftValue, Table: FftTable>(
+        split_bits: Option<u32>,
+        occupancy: primus_ntru::BlockOccupancy,
+    ) {
         let n = 32;
         let modulus = NativeModulus::<T>::new();
         let table = Table::new(PolyLength::new(n));
@@ -154,20 +159,32 @@ mod tests {
             let inverse = modulus.try_reduce_inv(secret).unwrap();
             for (dimension, block_size) in [(3, 3), (6, 3), (10, 5), (21, 7)] {
                 let block_count = dimension / block_size;
-                for selection_pattern in 0..4 {
+                let has_dummy = occupancy == primus_ntru::BlockOccupancy::AtMostOne;
+                let controls_per_block = block_size + usize::from(has_dummy);
+                for selection_pattern in 0..if has_dummy { 4 } else { 2 } {
                     let selected: Vec<_> = (0..block_count)
-                        .map(|block| match selection_pattern {
-                            0 => None,
-                            1 if block != 0 => Some(block_size - 1),
-                            2 if block == 0 => Some(0),
-                            3 => Some(block_size - 1),
-                            _ => None,
+                        .map(|block| {
+                            if !has_dummy {
+                                Some(if selection_pattern == 0 {
+                                    0
+                                } else {
+                                    block_size - 1
+                                })
+                            } else {
+                                match selection_pattern {
+                                    0 => None,
+                                    1 if block != 0 => Some(block_size - 1),
+                                    2 if block == 0 => Some(0),
+                                    3 => Some(block_size - 1),
+                                    _ => None,
+                                }
+                            }
                         })
                         .collect();
                     let control_len = parameters.nlev_len();
-                    let mut data = vec![T::ZERO; (dimension + block_count) * control_len];
+                    let mut data = vec![T::ZERO; block_count * controls_per_block * control_len];
                     for (block, controls) in data
-                        .chunks_exact_mut((block_size + 1) * control_len)
+                        .chunks_exact_mut(controls_per_block * control_len)
                         .enumerate()
                     {
                         for (position, control) in
@@ -196,6 +213,7 @@ mod tests {
                         data,
                         LweDimension::new(dimension),
                         block_size,
+                        occupancy,
                         &parameters,
                     )
                     .unwrap();
@@ -321,13 +339,29 @@ mod tests {
     fn block_lifting_matches_integer_oracle() {
         #[cfg(feature = "rustfft")]
         {
-            block_rotation_oracle::<u32, primus_fft::RustFftTable>(None);
-            block_rotation_oracle::<u64, primus_fft::RustFftTable>(None);
+            block_rotation_oracle::<u32, primus_fft::RustFftTable>(
+                None,
+                primus_ntru::BlockOccupancy::AtMostOne,
+            );
+            for occupancy in [
+                primus_ntru::BlockOccupancy::AtMostOne,
+                primus_ntru::BlockOccupancy::ExactlyOne,
+            ] {
+                block_rotation_oracle::<u64, primus_fft::RustFftTable>(None, occupancy);
+            }
         }
         #[cfg(feature = "tfhe-fft")]
         {
-            block_rotation_oracle::<u32, primus_fft::TfheFftTable>(None);
-            block_rotation_oracle::<u64, primus_fft::TfheFftTable>(None);
+            block_rotation_oracle::<u32, primus_fft::TfheFftTable>(
+                None,
+                primus_ntru::BlockOccupancy::AtMostOne,
+            );
+            for occupancy in [
+                primus_ntru::BlockOccupancy::AtMostOne,
+                primus_ntru::BlockOccupancy::ExactlyOne,
+            ] {
+                block_rotation_oracle::<u64, primus_fft::TfheFftTable>(None, occupancy);
+            }
         }
     }
 
@@ -335,9 +369,19 @@ mod tests {
     fn split_block_lifting_matches_integer_oracle() {
         for low_bits in [35, 40] {
             #[cfg(feature = "rustfft")]
-            block_rotation_oracle::<u64, primus_fft::RustFftTable>(Some(low_bits));
+            for occupancy in [
+                primus_ntru::BlockOccupancy::AtMostOne,
+                primus_ntru::BlockOccupancy::ExactlyOne,
+            ] {
+                block_rotation_oracle::<u64, primus_fft::RustFftTable>(Some(low_bits), occupancy);
+            }
             #[cfg(feature = "tfhe-fft")]
-            block_rotation_oracle::<u64, primus_fft::TfheFftTable>(Some(low_bits));
+            for occupancy in [
+                primus_ntru::BlockOccupancy::AtMostOne,
+                primus_ntru::BlockOccupancy::ExactlyOne,
+            ] {
+                block_rotation_oracle::<u64, primus_fft::TfheFftTable>(Some(low_bits), occupancy);
+            }
         }
     }
 }

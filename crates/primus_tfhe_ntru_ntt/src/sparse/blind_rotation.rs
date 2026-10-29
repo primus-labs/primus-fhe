@@ -121,7 +121,7 @@ pub(crate) fn rotate_buckets_pair<T: FheUint, Table: MonomialNttTable<ValueT = T
 
 /// Aggregates each group's controls for both inputs before advancing, preserving
 /// each input's control order. Both current buffers initially hold independent
-/// public LUT rotations: the complete first group, including its dummy, lifts
+/// public LUT rotations: the complete first group, including any dummy, lifts
 /// each through NLEV; later NGSW groups use the same external-product arithmetic.
 /// Transform/product scratch is shared serially, with final results in the two
 /// current buffers. The caller established all key, exponent and buffer geometry.
@@ -175,8 +175,8 @@ pub(crate) fn rotate_groups_pair<'a, T, Table, I>(
     }
 }
 
-/// Starts from the encrypted dummy and adds every selector in key order. The
-/// iterator selects coordinates from each input's complete exponent slice;
+/// Starts from the encrypted dummy when present, otherwise clears the aggregate,
+/// then adds every selector in key order. The iterator selects coordinates from each input's complete exponent slice;
 /// sparse buckets supply public indices and direct blocks supply a range. Pairing
 /// shares an accumulator traversal without skipping zero exponents or encrypted
 /// zeros; an odd final selector uses the single-product kernel. For u64, pairs
@@ -193,10 +193,16 @@ fn aggregate_controls<T: FheUint, const INPUTS: usize>(
     modulus: BarrettModulus<T>,
 ) {
     let control_len = inputs[0].1.as_ref().len();
-    let (selections, dummy) = data.split_at(data.len() - control_len);
-    debug_assert_eq!(selections.len(), indices.len() * control_len);
+    // The owner supplies w bit controls and either one complete dummy or none.
+    // An empty slice denotes absence; it is never treated as a ciphertext.
+    let (selections, dummy) = data.split_at(indices.len() * control_len);
+    debug_assert!(dummy.is_empty() || dummy.len() == control_len);
     for (_, aggregate) in &mut inputs {
-        aggregate.as_mut().copy_from_slice(dummy);
+        if dummy.is_empty() {
+            aggregate.as_mut().fill(T::ZERO);
+        } else {
+            aggregate.as_mut().copy_from_slice(dummy);
+        }
     }
     let mut controls = indices.zip(NlevIter::new(selections, control_len));
     while let Some((first_index, first)) = controls.next() {

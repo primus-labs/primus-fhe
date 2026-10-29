@@ -17,6 +17,7 @@ use crate::{ClientKey, KeyGenerationError, KeyGenerator};
 /// No support assignment, sampled occupancy or index table is retained.
 pub(crate) struct BlockKeyLayout {
     block_size: usize,
+    occupancy: BlockOccupancy,
     data_len: usize,
 }
 
@@ -30,7 +31,7 @@ impl BlockKeyLayout {
         use BlockBootstrappingKeyError as Error;
         let SecretKeyDistr::BlockBinary {
             block_size,
-            occupancy: BlockOccupancy::AtMostOne,
+            occupancy,
         } = distribution
         else {
             return Err(Error::UnsupportedSecretDistribution.into());
@@ -43,12 +44,15 @@ impl BlockKeyLayout {
             .into());
         }
         let data_len = dimension
-            .checked_add(dimension / block_size)
+            .checked_add(
+                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
+            )
             .and_then(|count| count.checked_mul(parameters.nlev_len()))
             .ok_or(Error::StorageSizeOverflow)?;
         Layout::array::<T>(data_len).map_err(|_| Error::StorageSizeOverflow)?;
         Ok(Self {
             block_size,
+            occupancy,
             data_len,
         })
     }
@@ -60,9 +64,9 @@ where
     Table: MonomialNttTable<ValueT = T>,
     LM: primus_reduce::RingContext<T>,
 {
-    /// Encrypts every bit and independent dummy using the accepted f transform
-    /// and inverse. Sampling or the ClientKey boundary already established 0/1
-    /// coefficients and at most one `1` per logical block; do not rescan them.
+    /// Encrypts every bit and any required dummy using the accepted f transform
+    /// and inverse. Sampling or the ClientKey boundary established 0/1 and the
+    /// declared occupancy; no secret-dependent control is omitted or rescanned.
     pub(crate) fn generate_block_blind_rotation_key_with_main<R: rand::Rng + rand::CryptoRng>(
         &mut self,
         client: &ClientKey<T>,
@@ -72,19 +76,22 @@ where
     ) -> Result<crate::key::BlindRotationKey<T>, KeyGenerationError> {
         let BlockKeyLayout {
             block_size,
+            occupancy,
             data_len,
         } = layout;
         let parameters = self.context.parameters();
         let gadget = parameters.blind_rotation();
         let control_len = gadget.nlev_len();
         let ntt = self.context.table();
+        let has_dummy = occupancy == BlockOccupancy::AtMostOne;
+        let controls_per_block = block_size + usize::from(has_dummy);
         let mut data = vec![T::ZERO; data_len];
-        let mut constants = Zeroizing::new(vec![T::SignedInteger::ZERO; block_size + 1]);
+        let mut constants = Zeroizing::new(vec![T::SignedInteger::ZERO; controls_per_block]);
         for (block_index, (block, output)) in client
             .external_lwe_secret_key()
             .as_ref()
             .chunks_exact(block_size)
-            .zip(data.chunks_exact_mut((block_size + 1) * control_len))
+            .zip(data.chunks_exact_mut(controls_per_block * control_len))
             .enumerate()
         {
             let mut occupied = false;
@@ -97,14 +104,16 @@ where
                 };
                 occupied |= selected;
             }
-            constants[block_size] = if occupied {
-                T::SignedInteger::ZERO
-            } else {
-                T::SignedInteger::ONE
-            };
-            // The first *whole block* uses NLEV, including an independently
-            // encrypted dummy. It lifts the public LUT even for an empty block
-            // or zero input exponent. Every later block has NGSW controls.
+            if has_dummy {
+                constants[block_size] = if occupied {
+                    T::SignedInteger::ZERO
+                } else {
+                    T::SignedInteger::ONE
+                };
+            }
+            // The first *whole block* uses NLEV, with a dummy only for AtMostOne.
+            // Its public-LUT lift is compulsory even when every exponent is zero.
+            // Every later block has NGSW controls, with the same product layout.
             if block_index == 0 {
                 for (&bit, row) in constants.iter().zip(output.chunks_exact_mut(control_len)) {
                     accumulator_ntt.encrypt_nlev_constant_to(
@@ -134,6 +143,7 @@ where
             data,
             parameters.external_lwe_dimension(),
             block_size,
+            occupancy,
             gadget,
         )?;
         Ok(crate::key::BlindRotationKey::from_block(

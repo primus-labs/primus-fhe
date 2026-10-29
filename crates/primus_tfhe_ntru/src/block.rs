@@ -4,21 +4,23 @@ use std::ops::Range;
 
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
-use primus_ntru::NlevParameters;
+use primus_ntru::{BlockOccupancy, NlevParameters};
 use primus_reduce::RingContext;
 
 use crate::{BlockBootstrappingKeyError, NtruBlindRotationControls};
 
 /// Coefficient controls for complete logical blocks, without a bucket map.
 ///
-/// Each block stores its `w` binary coefficients and an independently encrypted
-/// dummy `d = 1 - sum(s_i)`. The first block uses NLEV controls to lift a public
-/// LUT; later blocks use NGSW controls. Both occupy the same `N*L` coefficient
-/// layout. All-zero blocks and an all-zero external secret are valid.
-/// Only public geometry and ciphertexts remain; no occupancy or total weight is stored.
+/// Each block stores its `w` binary controls. `AtMostOne` additionally stores an
+/// independently encrypted dummy `d = 1 - sum(s_i)`; `ExactlyOne` has no dummy.
+/// The first whole block uses NLEV controls to lift a public LUT; later blocks
+/// use NGSW controls. Both occupy the same `N*L` coefficient layout. Only public
+/// geometry, the declared occupancy mode and ciphertexts remain; sampled support
+/// and total weight are not retained.
 pub struct BlockNtruBootstrappingKey<T: FheUint> {
     controls: NtruBlindRotationControls<T>,
     block_size: usize,
+    occupancy: BlockOccupancy,
 }
 
 impl<T: FheUint> BlockNtruBootstrappingKey<T> {
@@ -26,20 +28,22 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
     /// copying, transforming or scanning ciphertext coefficients.
     ///
     /// # Correctness
-    /// Each block has at most one secret `1`. The bit controls and final dummy
-    /// must independently encrypt these values under the same accumulator secret,
-    /// modulus and gadget scales. Every first-block control is NLEV; all later
+    /// Each block obeys `occupancy`. All bit controls and, for `AtMostOne`, the
+    /// final dummy independently encrypt these values under the same accumulator
+    /// secret, modulus and gadget scales. Every first-block control is NLEV; all later
     /// controls are NGSW. Coefficients must be canonical under that modulus.
     /// The backend BR owner must retain the same basis and modulus. Coefficient
     /// payloads recovered from Fourier representations retain their rounding error.
     ///
     /// # Errors
     /// Rejects zero or incomplete blocks, overflowing storage, or a coefficient
-    /// count different from `(n + n / w) * nlev_len`.
+    /// count different from `(n + δ * n / w) * nlev_len`, where δ is one only
+    /// for `AtMostOne`.
     pub fn try_new<M: RingContext<T>>(
         data: Vec<T>,
         input_dimension: LweDimension,
         block_size: usize,
+        occupancy: BlockOccupancy,
         parameters: &NlevParameters<T, M>,
     ) -> Result<Self, BlockBootstrappingKeyError> {
         use BlockBootstrappingKeyError as Error;
@@ -51,7 +55,9 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
             });
         }
         let control_count = dimension
-            .checked_add(dimension / block_size)
+            .checked_add(
+                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
+            )
             .ok_or(Error::StorageSizeOverflow)?;
         let controls =
             NtruBlindRotationControls::try_new(data, input_dimension, control_count, parameters)
@@ -67,6 +73,7 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
         Ok(Self {
             controls,
             block_size,
+            occupancy,
         })
     }
 
@@ -82,6 +89,12 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
         self.block_size
     }
 
+    /// Returns the declared occupancy mode that determines the control layout.
+    #[must_use]
+    pub fn occupancy(&self) -> BlockOccupancy {
+        self.occupancy
+    }
+
     /// Returns the public block count, including empty secret blocks.
     #[must_use]
     pub fn block_count(&self) -> usize {
@@ -89,7 +102,7 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
     }
 
     /// Borrows a block's logical input range and contiguous coefficient controls.
-    /// The final control is its dummy and has no input position.
+    /// Only `AtMostOne` has a final dummy control with no input position.
     ///
     /// # Panics
     /// Panics if `block_index >= self.block_count()`.
@@ -100,12 +113,14 @@ impl<T: FheUint> BlockNtruBootstrappingKey<T> {
             "block index out of bounds"
         );
         let start = block_index * self.block_size;
-        let control_start = block_index * (self.block_size + 1);
+        let controls_per_block =
+            self.block_size + usize::from(self.occupancy == BlockOccupancy::AtMostOne);
+        let control_start = block_index * controls_per_block;
         let control_len = self.controls.control_len();
         (
             start..start + self.block_size,
             &self.controls.as_slice()
-                [control_start * control_len..(control_start + self.block_size + 1) * control_len],
+                [control_start * control_len..(control_start + controls_per_block) * control_len],
         )
     }
 }

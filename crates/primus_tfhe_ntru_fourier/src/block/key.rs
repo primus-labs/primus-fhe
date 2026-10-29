@@ -17,6 +17,7 @@ use crate::{ClientKey, KeyGenerationError, KeyGenerator};
 /// No support assignment, sampled occupancy or index table is retained.
 pub(crate) struct BlockKeyLayout {
     block_size: usize,
+    occupancy: BlockOccupancy,
     data_len: usize,
 }
 
@@ -33,7 +34,7 @@ impl BlockKeyLayout {
         }
         let SecretKeyDistr::BlockBinary {
             block_size,
-            occupancy: BlockOccupancy::AtMostOne,
+            occupancy,
         } = distribution
         else {
             return Err(Error::UnsupportedSecretDistribution.into());
@@ -46,12 +47,15 @@ impl BlockKeyLayout {
             .into());
         }
         let data_len = dimension
-            .checked_add(dimension / block_size)
+            .checked_add(
+                usize::from(occupancy == BlockOccupancy::AtMostOne) * (dimension / block_size),
+            )
             .and_then(|count| count.checked_mul(parameters.nlev_len()))
             .ok_or(Error::StorageSizeOverflow)?;
         Layout::array::<T>(data_len).map_err(|_| Error::StorageSizeOverflow)?;
         Ok(Self {
             block_size,
+            occupancy,
             data_len,
         })
     }
@@ -63,7 +67,7 @@ where
     Table: FftTable,
     LM: primus_reduce::RingContext<T>,
 {
-    /// Writes independently encrypted bits and dummies from the accepted secret's
+    /// Writes all bits and any mode-required dummy from the accepted secret's
     /// exact inverse. Sampling or ClientKey validation established occupancy.
     /// No approximate Fourier ciphertext is converted back to coefficients.
     pub(crate) fn generate_block_blind_rotation_key_with_main<R: rand::Rng + rand::CryptoRng>(
@@ -75,17 +79,20 @@ where
     ) -> Result<crate::key::BlindRotationKey<T>, KeyGenerationError> {
         let BlockKeyLayout {
             block_size,
+            occupancy,
             data_len,
         } = layout;
         let parameters = self.context.parameters();
         let gadget = parameters.blind_rotation();
         let control_len = gadget.nlev_len();
+        let has_dummy = occupancy == BlockOccupancy::AtMostOne;
+        let controls_per_block = block_size + usize::from(has_dummy);
         let mut data = vec![T::ZERO; data_len];
         for (block_index, (block, output)) in client
             .external_lwe_secret_key()
             .as_ref()
             .chunks_exact(block_size)
-            .zip(data.chunks_exact_mut((block_size + 1) * control_len))
+            .zip(data.chunks_exact_mut(controls_per_block * control_len))
             .enumerate()
         {
             let occupied = block
@@ -94,12 +101,12 @@ where
             for (bit, coefficients) in block
                 .iter()
                 .map(|&bit| bit == T::ONE)
-                .chain(std::iter::once(!occupied))
+                .chain(has_dummy.then_some(!occupied))
                 .zip(output.chunks_exact_mut(control_len))
             {
-                // The first whole block is NLEV, even for an empty block or
-                // zero rotation: its independently encrypted dummy still lifts
-                // the public LUT. Every following block instead uses NGSW.
+                // The first whole block is NLEV, even when all exponents vanish:
+                // all bit controls (and the optional dummy) lift the public LUT.
+                // Every following block instead uses NGSW.
                 generator.encrypt_bit_coeff_to(
                     bit,
                     block_index == 0,
@@ -113,6 +120,7 @@ where
             data,
             parameters.external_lwe_dimension(),
             block_size,
+            occupancy,
             gadget,
         )?;
         Ok(crate::key::BlindRotationKey::from_block(

@@ -84,6 +84,34 @@ fn chained_pbs<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         blind_rotation.block_bootstrapping_key().is_some(),
         config.method == BlindRotationMethod::Block,
     );
+    if let SecretKeyDistr::BlockBinary {
+        block_size,
+        occupancy,
+    } = config.external_lwe.secret_key_distr
+        && config.method == BlindRotationMethod::Block
+    {
+        assert_eq!(
+            blind_rotation
+                .block_bootstrapping_key()
+                .unwrap()
+                .occupancy(),
+            occupancy
+        );
+        let mut other = config;
+        other.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: if occupancy == BlockOccupancy::AtMostOne {
+                BlockOccupancy::ExactlyOne
+            } else {
+                BlockOccupancy::AtMostOne
+            },
+        };
+        let other = TfheContext::<T, Table, _>::try_from_pbs_config(other).unwrap();
+        assert!(matches!(
+            primus_tfhe_ntru_ntt::bootstrap::BootstrapResources::try_new(&other, &blind_rotation),
+            Err(primus_tfhe_ntru_ntt::TfheEvaluationError::IncompatibleBlindRotationKey)
+        ));
+    }
     let key_switching = context
         .parameters()
         .try_generate_lwe_return_key(&client, &mut rng)
@@ -719,30 +747,34 @@ fn u32_sparse_cbs() {
 /// strides and factorized returns without a sparse bucket map.
 #[test]
 fn u32_block_pbs_and_batches() {
-    let mut config = config(BlindRotationMethod::Block);
-    config.external_lwe.dimension = LweDimension::new(6);
-    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-        block_size: 3,
-        occupancy: BlockOccupancy::AtMostOne,
-    };
-    chained_pbs::<u32, U32NttTable>(config);
-    many_lut_and_mvb::<u32, U32NttTable>(config);
-    circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::Separate);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        let mut config = config(BlindRotationMethod::Block);
+        config.external_lwe.dimension = LweDimension::new(6);
+        config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        chained_pbs::<u32, U32NttTable>(config);
+        many_lut_and_mvb::<u32, U32NttTable>(config);
+        circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::Separate);
+    }
 }
 
 /// Wider odd blocks exercise paired aggregation plus its trailing selector.
 /// Consume ordinary and one-hot controls, then return real CMux results to LWE.
 #[test]
 fn u64_block_workflows() {
-    let mut config = config(BlindRotationMethod::Block);
-    config.external_lwe.dimension = LweDimension::new(10);
-    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-        block_size: 5,
-        occupancy: BlockOccupancy::AtMostOne,
-    };
-    chained_pbs::<u64, U64NttTable>(config);
-    many_lut_and_mvb::<u64, U64NttTable>(config);
-    circuit_selection::<u64, U64NttTable>(config, NtruProjectionMethod::PairedTrace);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        let mut config = config(BlindRotationMethod::Block);
+        config.external_lwe.dimension = LweDimension::new(10);
+        config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 5,
+            occupancy,
+        };
+        chained_pbs::<u64, U64NttTable>(config);
+        many_lut_and_mvb::<u64, U64NttTable>(config);
+        circuit_selection::<u64, U64NttTable>(config, NtruProjectionMethod::PairedTrace);
+    }
 }
 
 /// Equal gadget bases do not make CBS material from another ring compatible.

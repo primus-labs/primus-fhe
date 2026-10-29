@@ -42,9 +42,7 @@ Classic binary/ternary and sparse fixed-weight binary support PBS, ManyLUT, Bool
 
 Both backends share `NtruBlindRotationControls<T>` coefficient storage. `SparseNtruBootstrappingKey<T>` adds the public bucket map and declared weight; `controls()` borrows the common storage. Its first group contains NLev controls for lifting; later groups contain NGSW controls for encrypted rotation. NTT residues and native coefficients remain distinct representations. Prefer context/key-generator factories; see the [coefficient storage contract](src/controls.rs), [sparse grouping contract](src/sparse.rs) and [first-lift derivation](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting).
 
-Both NTRU backends also support `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy: BlockOccupancy::AtMostOne }`. Each contiguous block has at most one `1`, including the empty state. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores its bit controls and an independently encrypted dummy. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. NTRU Fourier requires u64, using exact native coefficient generation for ordinary or split BR; trace and SS precision remain independent. Both backends support scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
-
-`ExactlyOne` secrets are available through the sampler and Classic BR. Direct Block BR currently accepts only `AtMostOne`; its material includes a dummy for each block.
+Both NTRU backends also support `BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy }`. Choose `BlockOccupancy::AtMostOne` for optional empty blocks or `ExactlyOne` for one `1` in every block. `BlockNtruBootstrappingKey<T>` reuses the coefficient controls without a bucket map; every block stores all bit controls, plus an independently encrypted dummy only for `AtMostOne`. The first block is NLEV and must lift even an unrotated public LUT; later blocks are NGSW. PBS, ManyLUT, MVB, CBS and single-input one-hot keep their existing factories. NTRU Fourier requires u64, using exact native coefficient generation for ordinary or split BR; trace and SS precision remain independent. Both backends support scoped one-hot pairs for grouped BR; application integration and noise/security assessment are separate work. See the [block material contract](src/block.rs).
 
 ## Clients and LUTs
 
@@ -72,7 +70,7 @@ NTT reverse trace uses modular inverses; Fourier uses native integer halving wit
 
 ## One-hot CBS
 
-`context.one_hot_evaluator(&server)?` uses the same CBS bundle with classic binary/ternary or sparse fixed-weight binary BR. Require t=2M, M=2^tau with tau>=1; encrypt `0..M` with `encrypt_padded`. For L output levels, let `W=next_power_of_two(L)` and require `2MW<=N`.
+`context.one_hot_evaluator(&server)?` uses the same CBS bundle with classic binary/ternary, sparse fixed-weight binary or direct Block BR. Require t=2M, M=2^tau with tau>=1; encrypt `0..M` with `encrypt_padded`. For L output levels, let `W=next_power_of_two(L)` and require `2MW<=N`.
 
 | Output | Allocation / evaluation |
 | --- | --- |

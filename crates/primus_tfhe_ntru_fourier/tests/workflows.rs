@@ -4,9 +4,10 @@
 
 use primus_encoding::phase_error_magnitude;
 use primus_fft::{FftTable, TorusFftValue};
+use primus_lattice::nlev::{NlevIter, NlevIterMut};
 use primus_modulus::PowOf2Modulus;
 use primus_ntru::{BlockOccupancy, LweDimension, SecretKeyDistr};
-use primus_poly::Polynomial;
+use primus_poly::{Polynomial, PolynomialIter};
 use primus_shape::PolyLength;
 use primus_tfhe::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_tfhe_ntru_fourier::{
@@ -77,6 +78,37 @@ fn chained_pbs<T: TorusFftValue, Table: FftTable>(config: PbsConfig<T, PowOf2Mod
         blind_rotation.block_bootstrapping_key().is_some(),
         config.method == BlindRotationMethod::Block,
     );
+    if let SecretKeyDistr::BlockBinary {
+        block_size,
+        occupancy,
+    } = config.external_lwe.secret_key_distr
+        && config.method == BlindRotationMethod::Block
+    {
+        assert_eq!(
+            blind_rotation
+                .block_bootstrapping_key()
+                .unwrap()
+                .occupancy(),
+            occupancy
+        );
+        let mut other = config;
+        other.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: if occupancy == BlockOccupancy::AtMostOne {
+                BlockOccupancy::ExactlyOne
+            } else {
+                BlockOccupancy::AtMostOne
+            },
+        };
+        let other = TfheContext::<T, Table, _>::try_from_pbs_config(other).unwrap();
+        assert!(matches!(
+            primus_tfhe_ntru_fourier::bootstrap::BootstrapResources::try_new(
+                &other,
+                &blind_rotation
+            ),
+            Err(primus_tfhe_ntru_fourier::TfheEvaluationError::IncompatibleBlindRotationKey)
+        ));
+    }
     let key_switching = context
         .parameters()
         .try_generate_lwe_return_key(&client, &mut rng)
@@ -671,23 +703,25 @@ fn tfhe_fft_u64_sparse_cbs() {
 /// spaces, interleaved lanes, and CBS controls all the way back to LWE.
 #[test]
 fn u64_block_workflows() {
-    let mut pbs = config(BlindRotationMethod::Block);
-    pbs.external_lwe.dimension = LweDimension::new(10);
-    pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
-        block_size: 5,
-        occupancy: BlockOccupancy::AtMostOne,
-    };
-    #[cfg(feature = "rustfft")]
-    {
-        chained_pbs::<u64, primus_fft::RustFftTable>(pbs);
-        many_lut_and_mvb::<u64, primus_fft::RustFftTable>(pbs);
-        circuit_selection::<u64, primus_fft::RustFftTable>(pbs);
-    }
-    #[cfg(feature = "tfhe-fft")]
-    {
-        chained_pbs::<u64, primus_fft::TfheFftTable>(pbs);
-        many_lut_and_mvb::<u64, primus_fft::TfheFftTable>(pbs);
-        circuit_selection::<u64, primus_fft::TfheFftTable>(pbs);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        let mut pbs = config(BlindRotationMethod::Block);
+        pbs.external_lwe.dimension = LweDimension::new(10);
+        pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 5,
+            occupancy,
+        };
+        #[cfg(feature = "rustfft")]
+        {
+            chained_pbs::<u64, primus_fft::RustFftTable>(pbs);
+            many_lut_and_mvb::<u64, primus_fft::RustFftTable>(pbs);
+            circuit_selection::<u64, primus_fft::RustFftTable>(pbs);
+        }
+        #[cfg(feature = "tfhe-fft")]
+        {
+            chained_pbs::<u64, primus_fft::TfheFftTable>(pbs);
+            many_lut_and_mvb::<u64, primus_fft::TfheFftTable>(pbs);
+            circuit_selection::<u64, primus_fft::TfheFftTable>(pbs);
+        }
     }
 }
 
@@ -711,7 +745,7 @@ fn native_phase(ciphertext: &[u64], secret: &[i64]) -> Vec<u64> {
 
 /// Empty first blocks still carry NLEV lift rows; later blocks carry NGSW.
 /// Check exact coefficient phases and reject malformed imported support pre-RNG.
-fn check_block_coefficients<Table: FftTable>() {
+fn check_block_coefficients<Table: FftTable>(occupancy: BlockOccupancy) {
     use primus_tfhe_ntru_fourier::{ClientKey, KeyGenerationError, KeyGenerator, TfheKeyError};
     use rand::Rng;
 
@@ -719,7 +753,7 @@ fn check_block_coefficients<Table: FftTable>() {
     pbs.external_lwe.dimension = LweDimension::new(6);
     pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
         block_size: 3,
-        occupancy: BlockOccupancy::AtMostOne,
+        occupancy,
     };
     pbs.bsk_poly_length = PolyLength::new(32);
     let gadget = CbsGadgetConfig {
@@ -768,15 +802,14 @@ fn check_block_coefficients<Table: FftTable>() {
     );
     assert_eq!(rng.next_u64(), untouched.next_u64());
 
-    let scalar = context
-        .parameters()
-        .blind_rotation()
-        .basis()
-        .scalar_iter()
-        .next()
-        .unwrap();
     let control_len = context.parameters().blind_rotation().nlev_len();
-    for support in [vec![0, 0, 0, 0, 1, 0], vec![0; 6]] {
+    let has_dummy = occupancy == BlockOccupancy::AtMostOne;
+    let supports = if has_dummy {
+        [vec![0, 0, 0, 0, 1, 0], vec![0; 6]]
+    } else {
+        [vec![1, 0, 0, 0, 1, 0], vec![0, 0, 1, 0, 0, 1]]
+    };
+    for support in supports {
         let client = client(support.clone());
         let key = generator
             .try_generate_blind_rotation_key(&client, &mut rng)
@@ -787,28 +820,32 @@ fn check_block_coefficients<Table: FftTable>() {
         for block_index in 0..2 {
             let (range, coefficients) = block.block_data(block_index);
             let occupied = support[range.clone()].iter().copied().sum::<u64>();
-            for (row, bit) in coefficients.chunks_exact(control_len).zip(
+            for (row, bit) in NlevIter::new(coefficients, control_len).zip(
                 support[range]
                     .iter()
                     .copied()
-                    .chain(std::iter::once(1 - occupied)),
+                    .chain(has_dummy.then_some(1 - occupied)),
             ) {
-                let phase = native_phase(&row[..32], &f);
-                for (i, actual) in phase.into_iter().enumerate() {
-                    let message = if block_index == 0 {
-                        u64::from(i == 0)
-                    } else {
-                        f[i] as u64
-                    };
-                    let expected = scalar.wrapping_mul(bit).wrapping_mul(message);
-                    // sigma=0.7 has truncated support below this fixed margin.
-                    // A Fourier ciphertext round trip has far larger phase error.
-                    assert!(
-                        actual
-                            .wrapping_sub(expected)
-                            .min(expected.wrapping_sub(actual))
-                            <= 16
-                    );
+                for (polynomial, scalar) in PolynomialIter::new(row.as_ref(), 32)
+                    .zip(context.parameters().blind_rotation().basis().scalar_iter())
+                {
+                    let phase = native_phase(polynomial.as_ref(), &f);
+                    for (i, actual) in phase.into_iter().enumerate() {
+                        let message = if block_index == 0 {
+                            u64::from(i == 0)
+                        } else {
+                            f[i] as u64
+                        };
+                        let expected = scalar.wrapping_mul(bit).wrapping_mul(message);
+                        // sigma=0.7 has truncated support below this fixed margin.
+                        // A Fourier ciphertext round trip has far larger phase error.
+                        assert!(
+                            actual
+                                .wrapping_sub(expected)
+                                .min(expected.wrapping_sub(actual))
+                                <= 16
+                        );
+                    }
                 }
             }
         }
@@ -829,7 +866,7 @@ fn check_block_coefficients<Table: FftTable>() {
     };
     let split_context = TfheContext::<u64, Table, _>::try_from_cbs_config(split_br).unwrap();
     let mut split_generator = KeyGenerator::new(&split_context);
-    let client = client(vec![0, 0, 0, 0, 1, 0]);
+    let client = client(vec![1, 0, 0, 0, 1, 0]);
     let mut ordinary_rng = StdRng::seed_from_u64(0xB3C);
     let mut split_rng = StdRng::seed_from_u64(0xB3C);
     let ordinary_key = generator
@@ -850,7 +887,40 @@ fn check_block_coefficients<Table: FftTable>() {
             .controls()
             .as_slice(),
     );
-    assert_eq!(ordinary_rng.next_u64(), split_rng.next_u64());
+    let next_ordinary = ordinary_rng.next_u64();
+    assert_eq!(next_ordinary, split_rng.next_u64());
+    if occupancy == BlockOccupancy::ExactlyOne {
+        let exact = primus_ntru::split::NativeNtruGadgetGenerator::try_new(
+            client.accumulator_ntru_secret_key(),
+        )
+        .unwrap();
+        let mut reference = vec![0; 6 * control_len];
+        let mut replay = StdRng::seed_from_u64(0xB3C);
+        for (i, (&bit, coefficients)) in client
+            .external_lwe_secret_key()
+            .as_ref()
+            .iter()
+            .zip(NlevIterMut::new(&mut reference, control_len))
+            .enumerate()
+        {
+            exact.encrypt_bit_coeff_to(
+                bit == 1,
+                i < 3,
+                coefficients,
+                context.parameters().blind_rotation(),
+                &mut replay,
+            );
+        }
+        assert_eq!(
+            ordinary_key
+                .block_bootstrapping_key()
+                .unwrap()
+                .controls()
+                .as_slice(),
+            reference
+        );
+        assert_eq!(replay.next_u64(), next_ordinary);
+    }
 
     // Identical coefficient payloads still bind to distinct online precision.
     // Bootstrap resources validate that binding before allocating any buffers.
@@ -901,10 +971,12 @@ fn check_block_coefficients<Table: FftTable>() {
 
 #[test]
 fn block_coefficient_phases_and_key_boundaries() {
-    #[cfg(feature = "rustfft")]
-    check_block_coefficients::<primus_fft::RustFftTable>();
-    #[cfg(feature = "tfhe-fft")]
-    check_block_coefficients::<primus_fft::TfheFftTable>();
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        #[cfg(feature = "rustfft")]
+        check_block_coefficients::<primus_fft::RustFftTable>(occupancy);
+        #[cfg(feature = "tfhe-fft")]
+        check_block_coefficients::<primus_fft::TfheFftTable>(occupancy);
+    }
 }
 
 /// The shared Fourier binding must reject another ring before allocating an evaluator.
@@ -1238,41 +1310,63 @@ fn split_cbs_and_pbs<Table: FftTable>() {
         CbsConfig, FourierCbsPrecision, FourierPrecision as P, NtruProjectionMethod,
     };
     // Both logN parities, multirow output and unequal trace/SS limb widths.
-    for (all, projection, n, message_modulus, levels, method) in [
-        (false, Separate, 128, 8, 3, BlindRotationMethod::Classic),
-        (true, Separate, 128, 8, 3, BlindRotationMethod::Classic),
-        (
-            false,
-            FusedLastStage,
-            128,
-            8,
-            3,
-            BlindRotationMethod::Classic,
-        ),
-        (
-            true,
-            FusedLastStage,
-            128,
-            8,
-            3,
-            BlindRotationMethod::Classic,
-        ),
-        (false, PairedTrace, 64, 8, 3, BlindRotationMethod::Classic),
-        (true, PairedTrace, 128, 8, 3, BlindRotationMethod::Classic),
+    for (all, projection, n, message_modulus, levels, occupancy) in [
+        (false, Separate, 128, 8, 3, None),
+        (true, Separate, 128, 8, 3, None),
+        (false, FusedLastStage, 128, 8, 3, None),
+        (true, FusedLastStage, 128, 8, 3, None),
+        (false, PairedTrace, 64, 8, 3, None),
+        (true, PairedTrace, 128, 8, 3, None),
         // M=2, L=1: nonzero output has one target and must retain its old route.
-        (true, PairedTrace, 64, 4, 1, BlindRotationMethod::Classic),
+        (true, PairedTrace, 64, 4, 1, None),
         // Block BR owns its precision independently of trace/SS. The split
         // cases consume both the simple and shared projection schedules.
-        (false, PairedTrace, 128, 8, 3, BlindRotationMethod::Block),
-        (true, Separate, 128, 8, 3, BlindRotationMethod::Block),
-        (true, PairedTrace, 128, 8, 3, BlindRotationMethod::Block),
+        (
+            false,
+            PairedTrace,
+            128,
+            8,
+            3,
+            Some(BlockOccupancy::AtMostOne),
+        ),
+        (true, Separate, 128, 8, 3, Some(BlockOccupancy::AtMostOne)),
+        (
+            true,
+            PairedTrace,
+            128,
+            8,
+            3,
+            Some(BlockOccupancy::AtMostOne),
+        ),
+        (
+            false,
+            PairedTrace,
+            128,
+            8,
+            3,
+            Some(BlockOccupancy::ExactlyOne),
+        ),
+        (true, Separate, 128, 8, 3, Some(BlockOccupancy::ExactlyOne)),
+        (
+            true,
+            PairedTrace,
+            128,
+            8,
+            3,
+            Some(BlockOccupancy::ExactlyOne),
+        ),
     ] {
+        let method = if occupancy.is_some() {
+            BlindRotationMethod::Block
+        } else {
+            BlindRotationMethod::Classic
+        };
         let mut pbs_config = config::<u64>(method);
-        if method == BlindRotationMethod::Block {
+        if let Some(occupancy) = occupancy {
             pbs_config.external_lwe.dimension = LweDimension::new(10);
             pbs_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
                 block_size: 5,
-                occupancy: BlockOccupancy::AtMostOne,
+                occupancy,
             };
         }
         pbs_config.bsk_poly_length = PolyLength::new(n);
@@ -1322,7 +1416,7 @@ fn split_cbs_and_pbs<Table: FftTable>() {
                 &mut rng,
             )
             .unwrap();
-        if method == BlindRotationMethod::Block {
+        if occupancy == Some(BlockOccupancy::AtMostOne) {
             assert!(
                 client.external_lwe_secret_key().as_ref()[..5]
                     .iter()

@@ -311,8 +311,8 @@ pub(crate) fn rotate_groups_split_pair<'a, T, Table, I>(
     }
 }
 
-/// Starts from the encrypted dummy and adds every selector in key order. The
-/// iterator selects coordinates from each input's complete exponent slice;
+/// Starts from the encrypted dummy when present, otherwise clears the aggregate,
+/// then adds every selector in key order. The iterator selects coordinates from each input's complete exponent slice;
 /// sparse buckets supply public indices and direct blocks supply a range. For
 /// u64, four controls share a coefficient traversal; u32 retains the pair path.
 /// Remaining controls use pairs and a possible single tail. No zero exponent
@@ -328,10 +328,16 @@ fn aggregate_controls<T: TorusFftValue, const INPUTS: usize>(
 ) {
     let modulus = NativeModulus::new();
     let control_len = inputs[0].1.as_ref().len();
-    let (selections, dummy) = data.split_at(data.len() - control_len);
-    debug_assert_eq!(selections.len(), indices.len() * control_len);
+    // The owner supplies w bit controls and either one complete dummy or none.
+    // An empty slice denotes absence; it is never treated as a ciphertext.
+    let (selections, dummy) = data.split_at(indices.len() * control_len);
+    debug_assert!(dummy.is_empty() || dummy.len() == control_len);
     for (_, aggregate) in &mut inputs {
-        aggregate.as_mut().copy_from_slice(dummy);
+        if dummy.is_empty() {
+            aggregate.as_mut().fill(T::ZERO);
+        } else {
+            aggregate.as_mut().copy_from_slice(dummy);
+        }
     }
     let mut controls = NlevIter::new(selections, control_len);
     if T::BITS == 64 {
