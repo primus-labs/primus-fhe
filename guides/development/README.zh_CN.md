@@ -26,13 +26,15 @@
 
 阅读目标库的示例后，按组合需求选择以下专题。精确布局、检查和 scratch 契约仍以 rustdoc 为准。
 
+导航提供中英双语，下表标明专题正文语言；外部工具使用其各自的语言入口。
+
 | 主题 | 指南 |
 | --- | --- |
-| 数值域、表示、借用、phase 与可复用状态 | [跨库组合](composition.md) |
-| 旋转舍入、q/Q 返回、CBS 精度/投影支持、Fourier 预算与 one-hot 误差条件 | [自举数值契约](bootstrapping-contracts.md) |
-| 当前实验配置及其证据边界 | [TFHE 参数目录](tfhe-parameters.md) |
+| 数值域、表示、借用、phase 与可复用状态 | [跨库组合](composition.md)（English） |
+| 旋转舍入、q/Q 返回、CBS 精度/投影支持、Fourier 预算与 one-hot 误差条件 | [自举数值契约](bootstrapping-contracts.md)（English） |
+| 当前实验配置及其证据边界 | [TFHE 参数目录](tfhe-parameters.md)（English） |
 | 离线 NTRU CBS 噪声场景与 gadget 筛选 | [参数分析工具](../../../primus_high_prec_lut/tools/parameter_selection/ntru_cbs/README.zh_CN.md) |
-| 测试、示例、feature 与 benchmark 命令 | [测试指南](testing.md) |
+| 测试、示例、feature 与 benchmark 命令 | [测试指南](testing.md)（中文） |
 
 性能取舍与测量见[性能指南](../performance/README.zh_CN.md)，开发规范见 [AGENTS.md](../../AGENTS.md)。
 

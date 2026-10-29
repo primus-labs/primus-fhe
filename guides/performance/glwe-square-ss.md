@@ -1,6 +1,6 @@
 # GLWE NTT rank1 平方 scheme switching
 
-[性能导航](README.zh_CN.md) · [密钥及噪声契约](../../crates/primus_glwe/src/scheme_switch/ntt.rs)
+[English navigation](README.md) · [中文导航](README.zh_CN.md) · [密钥及噪声契约](../../crates/primus_glwe/src/scheme_switch/ntt.rs)
 
 Rank1 NTT SS 只保存 `GLev(s²)`，以 `sum D(a)GLev(s²)+(b,0)` 生成 mask 行，
 并复用输入 body 行的NTT。Rank>1和Fourier保持完整GGSW外积；trace仍独立执行。

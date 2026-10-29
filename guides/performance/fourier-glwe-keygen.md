@@ -1,12 +1,14 @@
 # Fourier GLWE 精确建钥：成本与使用边界
 
+[English navigation](README.md) · [中文导航](README.zh_CN.md)
+
 2026-10-26，`f65199cc`（旧错误表示）→ `5b005d2e`（精确系数建钥）。参数不变，比较两个 FFT 引擎及 CPU4/CPU8。**修复应保留；旧路径不能因建钥更快而恢复。**
 
 ## 表示与适用范围
 
-普通加密、GLev/GGSW、classic/sparse BSK、ring/packing KSK、AK/trace 和 SSK 都先完成 native 系数行及 gadget 对角项，再转换。Split35 trace 复用同一精确准备；online 表示不变。低层接口及旧材料更换要求见 [GLWE 加密契约](../../crates/primus_glwe/README.zh_CN.md#加密与解密)。
+普通加密、GLev/GGSW、classic/sparse BSK、ring/packing KSK、AK/trace 和 SSK 都先完成 native 系数行及 gadget 对角项，再转换。Split35 trace 复用同一精确准备；online 表示不变。旧未约简材料须重建，若曾公开则需更换受影响秘密；事后转换不能撤销泄露，见 [GLWE 加密契约](../../crates/primus_glwe/README.zh_CN.md#加密与解密)。
 
-精确系数乘积不等于无损 Fourier 表示。ordinary u64 的浮点转换误差仍影响最终相位；Split35 仅用于当前支持的 trace，不自动修复 BR/SS 精度。既有小参数 oracle 覆盖 native 行和公开频谱；本页的实际参数完整工作流检查只是有限样本，不证明安全成本或 DFR。
+精确系数乘积不等于无损 Fourier 表示。ordinary u64 的浮点转换误差仍影响最终相位；Split35 仅用于当前支持的 trace，不自动修复 BR/SS 精度。本页实际参数检查只是有限样本，不证明安全成本或 DFR；共享误差、真实消费者和未知FFT界的条件见[Fourier数值预算](../development/bootstrapping-contracts.md#glwe-fourier-error-budgets)。
 
 ## 参数与测量口径
 

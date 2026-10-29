@@ -26,13 +26,15 @@ Choose the lowest-level crate that owns your operation. For complete TFHE applic
 
 After the relevant crate's example, read only the topics your composition needs. Exact layouts, checks and scratch contracts remain in rustdoc.
 
+The index is bilingual; the topic language is shown below. External tools maintain their own language entry points.
+
 | Topic | Guide |
 | --- | --- |
-| Domains, representations, borrowing, phases and reusable state | [Composing libraries](composition.md) |
-| Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) |
-| Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) |
+| Domains, representations, borrowing, phases and reusable state | [Composing libraries](composition.md) (English) |
+| Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) (English) |
+| Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) (English) |
 | Offline NTRU CBS noise scenarios and gadget search | [Parameter analysis tool](../../../primus_high_prec_lut/tools/parameter_selection/ntru_cbs/README.md) |
-| Tests, examples, features and benchmark commands | [Testing guide](testing.md) |
+| Tests, examples, features and benchmark commands | [Testing guide](testing.md) (中文) |
 
 Performance decisions and measurements are in the [performance guide](../performance/README.md). Contributor rules are in [AGENTS.md](../../AGENTS.md).
 

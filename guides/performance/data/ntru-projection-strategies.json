@@ -1536,11 +1536,6 @@
       ]
     }
   },
-  "raw_samples": {
-    "file": "ntru-projection-strategies.csv",
-    "rows": 1800,
-    "sha256": "ffd280aad7890d88ca4c21fa91243ff3c7d5f63a1938e7e03b6d8cd35d3ea830"
-  },
   "reproduction_limit": "Temporary local-only material access and measurement/validation targets; harness and frozen input vectors are not distributed. These samples and metadata do not provide a standalone stage benchmark. No production arithmetic changes or fixed transform plans.",
   "memory_contract": {
     "measured_commit": "f44a85029bb294456f6e02c36f7233dd265bde7c",
@@ -1551,5 +1546,12 @@
     "struct_bytes": "inline projection key, not included in retained heap",
     "cross_cpu_exact": true,
     "functional_validation": "32 runs: 2 profiles x 4 methods x 2 CPUs x seeds 42/43; all passed; 5216 online allocation intervals reported zero; not a DFR estimate"
+  },
+  "retired_raw_samples": {
+    "file": "ntru-projection-strategies.csv",
+    "rows": 1800,
+    "sha256": "ffd280aad7890d88ca4c21fa91243ff3c7d5f63a1938e7e03b6d8cd35d3ea830",
+    "retired_at_revision": "c6a6fcbe8dce15be5df83215611f39bdeda181ba",
+    "recovery": "git show <revision>:guides/performance/data/ntru-projection-strategies.csv"
   }
 }
