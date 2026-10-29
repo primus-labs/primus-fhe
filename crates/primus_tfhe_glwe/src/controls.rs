@@ -8,7 +8,13 @@ use primus_integer::FheUint;
 use primus_lattice::{GadgetSize, LweDimension};
 use primus_reduce::{Modulus, RingContext};
 
-use crate::SparseBootstrappingKeyError;
+/// Allocation/layout failures shared by coefficient control owners. Owners map
+/// these into their public error so block material does not expose bucket terms.
+pub(crate) enum BlindRotationControlsError {
+    RotationDomainTooLarge,
+    StorageSizeOverflow,
+    StorageLengthMismatch { expected: usize, actual: usize },
+}
 
 /// Coefficient-domain GGSW controls and their common blind-rotation layout.
 ///
@@ -34,8 +40,8 @@ impl<T: FheUint, M: RingContext<T>> GlweBlindRotationControls<T, M> {
         control_count: usize,
         parameters: &GgswParameters<T, M>,
         input_modulus: LM,
-    ) -> Result<Self, SparseBootstrappingKeyError> {
-        use SparseBootstrappingKeyError as Error;
+    ) -> Result<Self, BlindRotationControlsError> {
+        use BlindRotationControlsError as Error;
         let size = parameters.size();
         let two_n = 2 * size.glwe_size().poly_length().get();
         if T::try_from(two_n).is_err() {

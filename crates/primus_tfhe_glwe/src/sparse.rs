@@ -72,7 +72,19 @@ impl<T: FheUint, M: RingContext<T>> SparseGlweBootstrappingKey<T, M> {
             control_count,
             parameters,
             input_modulus,
-        )?;
+        )
+        .map_err(|error| match error {
+            crate::controls::BlindRotationControlsError::RotationDomainTooLarge => {
+                Error::RotationDomainTooLarge
+            }
+            crate::controls::BlindRotationControlsError::StorageSizeOverflow => {
+                Error::StorageSizeOverflow
+            }
+            crate::controls::BlindRotationControlsError::StorageLengthMismatch {
+                expected,
+                actual,
+            } => Error::StorageLengthMismatch { expected, actual },
+        })?;
         Ok(Self {
             controls,
             map,

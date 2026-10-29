@@ -1,8 +1,9 @@
 //! Sparse key generation and blind rotation for the NTT backend.
 
-mod aggregation;
+pub(crate) mod aggregation;
 mod blind_rotation;
 mod key;
+pub(crate) use blind_rotation::ControlAggregationWorkspace;
 pub(crate) use key::{SparseKeyLayout, generate_with_layout};
 
 pub use blind_rotation::{SparseGlweBlindRotationBatchWorkspace, SparseGlweBlindRotationWorkspace};

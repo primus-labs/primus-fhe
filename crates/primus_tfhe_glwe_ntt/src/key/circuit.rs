@@ -87,17 +87,12 @@ where
             .context
             .cbs_parameters()
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let client = ClientKey::generate(self.context.parameters(), rng);
         let transformed =
             NttGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), self.context.table());
-        let server = self.generate_circuit_server_with_main(
-            operation,
-            &client,
-            transformed,
-            sparse_layout,
-            rng,
-        )?;
+        let server =
+            self.generate_circuit_server_with_main(operation, &client, transformed, layout, rng)?;
         Ok((client, server))
     }
 
@@ -114,10 +109,10 @@ where
             .cbs_parameters()
             .ok_or(KeyGenerationError::MissingCircuitBootstrapParameters)?;
         client.check_compatible(self.context.parameters())?;
-        let sparse_layout = self.prepare_blind_rotation()?;
+        let layout = self.prepare_blind_rotation()?;
         let transformed =
             NttGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), self.context.table());
-        self.generate_circuit_server_with_main(operation, client, transformed, sparse_layout, rng)
+        self.generate_circuit_server_with_main(operation, client, transformed, layout, rng)
     }
 
     /// The context owns this complete CBS operation; client compatibility and sparse
@@ -128,11 +123,11 @@ where
         operation: &CbsParameters<T, LM>,
         client: &ClientKey<T>,
         transformed: NttGlweSecretKey<T>,
-        sparse_layout: Option<crate::sparse::SparseKeyLayout>,
+        layout: super::BlindRotationLayout,
         rng: &mut R,
     ) -> Result<CircuitBootstrapServerKey<T>, KeyGenerationError> {
         let blind_rotation =
-            self.generate_blind_rotation_key_with_main(client, &transformed, sparse_layout, rng)?;
+            self.generate_blind_rotation_key_with_main(client, &transformed, layout, rng)?;
         let circuit_bootstrap = self.generate_circuit_bootstrap_key_with_main(
             client.glwe_secret_key(),
             &transformed,

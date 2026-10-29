@@ -55,6 +55,7 @@
 
 #![deny(missing_docs)]
 
+mod block;
 mod circuit_bootstrap;
 mod client;
 mod config;
@@ -68,12 +69,13 @@ mod sparse;
 use primus_glwe::{GgswParameters, GlevParameters, GlweKeySwitchingParameters, GlweSecretKey};
 use primus_lwe::LweSecretKey;
 
+pub use block::BlockGlweBootstrappingKey;
 pub use circuit_bootstrap::CbsGadgetParameters;
 pub use config::{CbsConfig, FourierTracePrecision, PbsConfig};
 pub use controls::GlweBlindRotationControls;
 pub use error::{
-    CircuitBootstrapParameterError, KeyGenerationError, SparseBootstrappingKeyError,
-    TfheClientError, TfheKeyError, TfheParameterError,
+    BlockBootstrappingKeyError, CircuitBootstrapParameterError, KeyGenerationError,
+    SparseBootstrappingKeyError, TfheClientError, TfheKeyError, TfheParameterError,
 };
 pub use key::{ClientKey, ExternalLweSecretKey};
 pub use parameters::{CbsParameters, PbsEvaluationParameters, PbsOrder, PbsParameters};

@@ -1,0 +1,11 @@
+//! Direct blind rotation for contiguous block-binary LWE secrets.
+//!
+//! Each block contributes its bit controls and an independently encrypted
+//! dummy, followed by one external product. No bucket map or matching is used.
+
+mod blind_rotation;
+mod key;
+
+pub use blind_rotation::BlockGlweBlindRotationWorkspace;
+pub(crate) use key::{BlockKeyLayout, generate_validated_with_layout, generate_with_layout};
+pub use primus_tfhe_glwe::BlockGlweBootstrappingKey;

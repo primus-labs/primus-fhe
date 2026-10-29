@@ -61,17 +61,26 @@ fn decomposition() -> DecompositionConfig {
 }
 
 /// Keep rounding and transform error far below the test message spacing.
-/// Sparse needs fixed-weight binary secrets; classic cases select binary/ternary below.
+/// Sparse uses fixed weight; direct Block uses two non-power-of-two blocks.
+/// Classic cases select binary/ternary below.
 fn config<T: FheUint>(method: BlindRotationMethod) -> PbsConfig<T> {
     let modulus = ModulusConfig::Explicit(T::as_from(if T::BITS == 32 {
         998_244_353u64
     } else {
         1_125_899_906_826_241u64
     }));
-    let secret = SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 3 };
+    let secret = if method == BlindRotationMethod::Block {
+        SecretKeyDistr::BlockBinary { block_size: 3 }
+    } else {
+        SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 3 }
+    };
     PbsConfig {
         small_lwe: LweConfig {
-            dimension: LweDimension::new(8),
+            dimension: LweDimension::new(if method == BlindRotationMethod::Block {
+                6
+            } else {
+                8
+            }),
             cipher_modulus: modulus,
             secret_key_distr: secret,
             noise_standard_deviation: 1.0,
@@ -246,6 +255,13 @@ where
             primus_tfhe_glwe_ntt::key::BlindRotationKey::Sparse(_)
         ),
         matches!(config.method, BlindRotationMethod::Sparse { .. }),
+    );
+    assert_eq!(
+        matches!(
+            blind_rotation,
+            primus_tfhe_glwe_ntt::key::BlindRotationKey::Block(_)
+        ),
+        config.method == BlindRotationMethod::Block,
     );
     let key_switching = generator
         .try_generate_glwe_key_switching_key(
@@ -827,6 +843,25 @@ fn q1024_sparse_returns_and_cbs() {
     }
 }
 
+/// Consume direct blocks through ordinary PBS and changing ManyLUT strides,
+/// then factorized MVB. Input q differs from the ring modulus.
+#[test]
+fn u32_block_pbs_and_batches() {
+    let config = two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
+    chained_pbs::<u32, U32NttTable, _>(config);
+    many_lut_and_mvb::<u32, U32NttTable, _>(config);
+}
+
+/// The other PBS order prepares input with ring KS, then consumes direct-block
+/// CBS controls in encrypted CMux and coefficient-indexed LWE returns.
+#[test]
+fn u64_block_cbs_and_returns() {
+    let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::KeyswitchBootstrap);
+    config.small_lwe.dimension = LweDimension::new(10);
+    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 5 };
+    circuit_selection::<u64, U64NttTable, _>(config, CbsInputEncoding::Padded);
+}
+
 /// The same reducer type may hold distinct q/Q values. Reject the Boolean
 /// affine wrapper even in KS→BR, where its external modulus happens to be Q.
 #[test]
@@ -853,7 +888,11 @@ fn input_domain_binding_precedes_output_writes() {
     use primus_tfhe::rotation::RotationModulusSwitch;
     use primus_tfhe_glwe_ntt::key::BlindRotationKey;
 
-    for method in [BlindRotationMethod::Classic, SPARSE] {
+    for method in [
+        BlindRotationMethod::Classic,
+        SPARSE,
+        BlindRotationMethod::Block,
+    ] {
         let config = two_domain_config::<u32>(method, PbsOrder::BootstrapKeyswitch);
         let context = TfheContext::<u32, U32NttTable, _>::try_from_pbs_config(config).unwrap();
         let mut rng = StdRng::seed_from_u64(114);
@@ -894,6 +933,18 @@ fn input_domain_binding_precedes_output_writes() {
                             primus_tfhe_glwe_ntt::sparse::SparseGlweBlindRotationWorkspace::new(
                                 key.controls(),
                             );
+                        workspace.blind_rotate_lookup_table_to(
+                            key,
+                            &input,
+                            &lut,
+                            &rotation,
+                            &mut output,
+                            context.table(),
+                        );
+                    }
+                    BlindRotationKey::Block(key) => {
+                        let mut workspace =
+                            primus_tfhe_glwe_ntt::block::BlockGlweBlindRotationWorkspace::new(key);
                         workspace.blind_rotate_lookup_table_to(
                             key,
                             &input,
@@ -969,7 +1020,7 @@ fn key_generation_boundaries() {
     ));
     drop(generator);
 
-    // Unsupported methods must not sample secrets or evaluation-key rows.
+    // Imported block coefficients must be checked before sampling any key rows.
     let mut block_config = config;
     block_config.method = BlindRotationMethod::Block;
     block_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
@@ -981,18 +1032,31 @@ fn key_generation_boundaries() {
     })
     .unwrap();
     let mut block_generator = KeyGenerator::new(&block_context);
+    let mut invalid_coefficients = vec![0; block_config.small_lwe.dimension.get()];
+    invalid_coefficients[..2].fill(1);
+    let invalid_block = ClientKey::new(
+        primus_lwe::LweSecretKey::new(
+            invalid_coefficients,
+            block_config.small_lwe.secret_key_distr,
+            block_context.parameters().small_lwe().cipher_modulus(),
+        ),
+        client.glwe_secret_key().clone(),
+        block_config.order,
+    );
     assert_eq!(
-        block_generator.try_generate(&mut key_rng).err(),
-        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
-            BlindRotationMethod::Block,
+        block_generator
+            .try_generate_server_key(&invalid_block, &mut key_rng)
+            .err(),
+        Some(KeyGenerationError::ClientKey(
+            primus_tfhe_glwe_ntt::TfheKeyError::InvalidLweSecretKeyBlock,
         ))
     );
     assert_eq!(
         block_generator
-            .try_generate_circuit_bootstrap_keys(&mut key_rng)
+            .try_generate_circuit_bootstrap_server_key(&invalid_block, &mut key_rng)
             .err(),
-        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
-            BlindRotationMethod::Block,
+        Some(KeyGenerationError::ClientKey(
+            primus_tfhe_glwe_ntt::TfheKeyError::InvalidLweSecretKeyBlock,
         ))
     );
 
@@ -1308,4 +1372,166 @@ fn check_sparse_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(q: T, buc
             .iter()
             .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
     );
+}
+
+/// Raw block BR is checked against integer negacyclic rotation, independently
+/// of LUT compilation or message decoding. q=2N makes every input an exact
+/// exponent, including 0, N and 2N-1; both words keep canonical output at Q.
+#[test]
+fn block_raw_rotation_matches_integer_oracle() {
+    check_block_raw_rotation::<u32, U32NttTable>(67_104_769);
+    check_block_raw_rotation::<u64, U64NttTable>(1_125_899_906_826_241);
+}
+
+fn check_block_raw_rotation<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+    ring_modulus_value: T,
+) {
+    use primus_tfhe::rotation::RotationModulusSwitch;
+    use primus_tfhe_glwe_ntt::{
+        ClientKey, KeyGenerator, block::BlockGlweBlindRotationWorkspace, key::BlindRotationKey,
+    };
+
+    // Include a single empty block and every singleton position, then multiple
+    // blocks with an empty first/last block and an entirely zero logical secret.
+    let secrets: &[(usize, &[u8])] = &[
+        (3, &[0, 0, 0]),
+        (3, &[1, 0, 0]),
+        (3, &[0, 1, 0]),
+        (3, &[0, 0, 1]),
+        (3, &[0, 0, 0, 0, 0, 0]),
+        (3, &[0, 0, 0, 0, 1, 0]),
+        (3, &[0, 0, 1, 0, 0, 0]),
+        (3, &[0, 1, 0, 1, 0, 0]),
+        // Four-source aggregation and its one-source tail use this wider block.
+        (5, &[0, 0, 0, 0, 1, 0, 1, 0, 0, 0]),
+    ];
+    let n = 32;
+    for (case, &(block_size, secret)) in secrets.iter().enumerate() {
+        let mut config =
+            two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
+        config.small_lwe.dimension = LweDimension::new(secret.len());
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size };
+        config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
+        config.ring_modulus = ModulusConfig::Explicit(ring_modulus_value);
+        config.bsk_dimension = GlweDimension::new(1);
+        config.bsk_poly_length = PolyLength::new(n);
+        let context = TfheContext::<T, Table, _>::try_from_pbs_config(config).unwrap();
+        let mut rng = StdRng::seed_from_u64(530 + case as u64);
+        let generated = ClientKey::generate(context.parameters(), &mut rng);
+        let client = ClientKey::new(
+            primus_lwe::LweSecretKey::new(
+                secret.iter().map(|&s| T::as_from(s)).collect(),
+                config.small_lwe.secret_key_distr,
+                context.parameters().small_lwe().cipher_modulus(),
+            ),
+            generated.glwe_secret_key().clone(),
+            config.order,
+        );
+        let transformed =
+            NttGlweSecretKey::from_coeff_secret_key(client.glwe_secret_key(), context.table());
+        if case == 4 {
+            use rand::Rng;
+
+            // Standalone BR-key generation owns the same support check even
+            // without ClientKey binding. Reject before consuming row randomness.
+            let invalid = primus_lwe::LweSecretKey::new(
+                [1, 1, 0, 0, 0, 0].map(T::as_from).to_vec(),
+                config.small_lwe.secret_key_distr,
+                context.parameters().small_lwe().cipher_modulus(),
+            );
+            let parameters = context.parameters().blind_rotation_params();
+            let mut encryption = primus_glwe::NttGlweGadgetEncryptWorkspace::new(parameters.size());
+            let mut invalid_rng = StdRng::seed_from_u64(540);
+            let mut untouched = StdRng::seed_from_u64(540);
+            assert_eq!(
+                BlindRotationKey::try_generate(
+                    &invalid,
+                    &transformed,
+                    parameters,
+                    BlindRotationMethod::Block,
+                    context.table(),
+                    &mut invalid_rng,
+                    &mut encryption,
+                )
+                .err(),
+                Some(
+                    primus_tfhe_glwe_ntt::KeyGenerationError::BlockBootstrapping(
+                        primus_tfhe_glwe_ntt::BlockBootstrappingKeyError::InvalidSecretCoefficients,
+                    )
+                )
+            );
+            assert_eq!(invalid_rng.next_u64(), untouched.next_u64());
+        }
+        let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
+            .try_generate_blind_rotation_key(&client, &mut rng)
+            .unwrap()
+        else {
+            panic!("expected direct block key");
+        };
+        let mut workspace = BlockGlweBlindRotationWorkspace::new(&key);
+        let rotation =
+            RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 2 * n, 1);
+        let modulus = context.parameters().ring_modulus();
+        let scalar = ring_modulus_value / T::as_from(128);
+        let lut = Polynomial::new(
+            (0..n)
+                .map(|i| T::as_from((i * i + i / 3 + 5) % 8) * scalar)
+                .collect::<Vec<_>>(),
+        );
+        let mut input: primus_lattice::lwe::Lwe<Vec<T>> =
+            primus_lattice::lwe::Lwe::zero(secret.len());
+        let mut output = context.allocate_accumulator_ciphertext();
+        let mut phase = Polynomial::new(vec![T::ZERO; n]);
+        let mut scratch = vec![T::ZERO; n];
+        for (pattern, body) in [13, 0, n, 2 * n - 1].into_iter().enumerate() {
+            let mut selected_sum = 0;
+            for (i, (value, &s)) in input.a_mut().iter_mut().zip(secret).enumerate() {
+                let exponent = if pattern == 0 {
+                    0
+                } else {
+                    [0, n, 2 * n - 1][(i + pattern) % 3]
+                };
+                *value = T::as_from(exponent);
+                selected_sum += exponent * usize::from(s);
+            }
+            *input.b_mut() = T::as_from(body);
+            workspace.blind_rotate_lookup_table_to(
+                &key,
+                &input,
+                &lut,
+                &rotation,
+                &mut output,
+                context.table(),
+            );
+            assert!(
+                output
+                    .as_ref()
+                    .iter()
+                    .all(|&value| value < ring_modulus_value)
+            );
+            transformed.decrypt_phase_coeff_to(
+                &output,
+                &mut phase,
+                modulus,
+                context.table(),
+                &mut scratch,
+            );
+            let exponent = (selected_sum + 2 * n - body) % (2 * n);
+            for (i, &value) in lut.as_ref().iter().enumerate() {
+                let destination = i + exponent;
+                let expected = if (destination / n) % 2 == 0 {
+                    value
+                } else {
+                    modulus.reduce_neg(value)
+                };
+                // This deterministic full-decomposition fixture has wide spacing
+                // to distinguish a wrong rotation/sign from sampled row noise.
+                assert!(
+                    phase_error_magnitude(phase.as_ref()[destination % n], expected, modulus)
+                        <= scalar >> 4u32,
+                    "secret {secret:?}, pattern {pattern}, coefficient {i}"
+                );
+            }
+        }
+    }
 }

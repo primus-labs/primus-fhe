@@ -49,6 +49,8 @@ Classic binary/ternary 和 sparse fixed-weight binary 均支持两种顺序下�
 
 两后端共享 `GlweBlindRotationControls<T, M>` 系数控制及数值布局，`SparseGlweBootstrappingKey` 在其上保留公开 bucket map 和固定重量。分配原始 BR 工作区时，通过 `key.controls()` 借用控制材料。NTT 使用 Barrett 剩余类，Fourier 使用 Native 系数，不能互换。优先用 context/key-generator 工厂和普通 evaluator；存储及导入契约见 [sparse 密钥类型](src/sparse.rs)。
 
+GLWE NTT 也支持在 `SecretKeyDistr::BlockBinary { block_size }` 下设置 `config.method = BlindRotationMethod::Block`。它按连续块处理，无映射或 matching；每块保存 bit 控制和独立加密的空块 dummy。两种 PBS 顺序、ManyLUT、MVB 和 CBS 沿用相同 context/evaluator 工厂。Fourier 尚不支持此 BR 方法。导入布局与数学前提见 [block 材料契约](src/block.rs)。
+
 ## 客户端与 LUT
 
 普通 PBS 通过 `context.try_generate_keys(rng)` 返回配套 client/server 密钥。外部秘密传给 `context.encryptor`、`pbs_decryptor` 或 `mvb_decryptor`；公钥输入用 `public_encryptor`。它们从 `config.messages` 派生编码，无需 LUT 或手工 codec。`pbs_lookup_table_compiler()` 和 `compile_mvb_fn` 使用相同选择，家族 `PbsParameters` 也提供无需变换表的客户端工厂；其 `pbs_lookup_table_compiler(messages)` 和 `compile_mvb_fn(messages, ...)` 分别准备普通 LUT 编译器和系数域 MVB 程序，支持同类型或异构 reducer。

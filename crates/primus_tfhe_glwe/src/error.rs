@@ -202,9 +202,45 @@ pub enum KeyGenerationError {
     /// Sparse blind-rotation key generation failed.
     #[error(transparent)]
     SparseBootstrapping(#[from] SparseBootstrappingKeyError),
+    /// Direct block-binary control generation failed.
+    #[error(transparent)]
+    BlockBootstrapping(#[from] BlockBootstrappingKeyError),
     /// Prepared CBS parameters belong to another accumulator domain.
     #[error("circuit-bootstrap parameters do not match this TFHE context")]
     IncompatibleCircuitBootstrapParameters,
+}
+
+/// Failure to bind or generate direct block-binary bootstrapping controls.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum BlockBootstrappingKeyError {
+    /// Direct blocks require the block-binary input distribution.
+    #[error("block bootstrapping requires a block-binary small-LWE secret")]
+    UnsupportedSecretDistribution,
+    /// The logical secret must contain complete, nonempty-width blocks.
+    #[error("input dimension {dimension} must be a positive multiple of block size {block_size}")]
+    InvalidBlockGeometry {
+        /// Logical small-LWE dimension, excluding any public zero tail.
+        dimension: usize,
+        /// Number of logical input positions per block.
+        block_size: usize,
+    },
+    /// Actual coefficients are not binary or a block contains two ones.
+    #[error("small-LWE coefficients violate the declared block-binary support")]
+    InvalidSecretCoefficients,
+    /// The prepared rotation modulus switch requires 2N to fit T.
+    #[error("rotation domain must fit the input coefficient type")]
+    RotationDomainTooLarge,
+    /// Control counts or coefficient storage exceed addressable allocation sizes.
+    #[error("block GGSW storage size overflow")]
+    StorageSizeOverflow,
+    /// Storage must contain all bit controls and one dummy per block.
+    #[error("block coefficient storage length mismatch: expected {expected}, got {actual}")]
+    StorageLengthMismatch {
+        /// Required coefficient count, including all dummies.
+        expected: usize,
+        /// Supplied coefficient count.
+        actual: usize,
+    },
 }
 
 /// Failure to construct an experimental sparse bootstrapping key.

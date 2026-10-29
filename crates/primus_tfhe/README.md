@@ -36,6 +36,7 @@ ManyLUT and MVB compute **several functions of one input**. ManyLUT trades rotat
 | --- | --- | --- | --- | --- |
 | GLWE classic binary/ternary | Both PBS orders | Yes | Yes | Not provided |
 | GLWE sparse fixed-weight binary | Both PBS orders | Yes | Yes | Not provided |
+| GLWE NTT block binary | Both PBS orders | Yes | Yes | Not provided |
 | NTRU classic binary/ternary | Yes | Yes | Yes | Yes |
 | NTRU sparse fixed-weight binary | Yes | Yes | Yes | Yes |
 
@@ -45,7 +46,7 @@ All four backends provide secret-key and LWE public-key clients. Fourier support
 
 All backends re-export `BlindRotationMethod` and select it in `config.method`; changing a secret distribution alone does not select a different algorithm. `Classic` supports binary/ternary, including fixed-weight distributions. Explicit `Sparse { copy_count, bucket_count }` requires fixed-weight binary with `0<h<n`; sparse ternary is unsupported. Matching failure returns an error after retrying the public map, without changing the client secret or falling back to classic.
 
-`SecretKeyDistr::BlockBinary { block_size }` samples each consecutive block uniformly from the zero block and its single-`1` states. The logical key length must be a nonzero multiple of the block size; its total weight is random. `Classic` can use this distribution. `Block` selects direct block aggregation, but currently returns `UnsupportedBlindRotationMethod` at key generation on all four backends. GLWE ring-KS retains the logical LWE prefix followed by public zeros; the padded ring length need not be divisible by the block size.
+`SecretKeyDistr::BlockBinary { block_size }` samples each consecutive block uniformly from the zero block and its single-`1` states. The logical key length must be a nonzero multiple of the block size; its total weight is random. `Classic` can use this distribution. `Block` selects direct block aggregation on GLWE NTT. The other three backends return `UnsupportedBlindRotationMethod` at key generation. Each block processes all bit controls and an independently encrypted empty-block dummy; block secrets need their own noise and security assessment. GLWE ring-KS retains the logical LWE prefix followed by public zeros; the padded ring length need not be divisible by the block size.
 
 For ordinary PBS, construct `TfheContext::try_from_pbs_config(config)` and call `context.try_generate_keys(rng)` for `(ClientKey, ServerKey)`. For CBS or NTRU one-hot, use the CBS factory:
 
