@@ -32,7 +32,8 @@
 //! - [`sparse`]: fixed-weight binary bucket material; choose [`BlindRotationMethod::Sparse`]
 //!   in the operation config, then use [`KeyGenerator::try_generate_server_key`].
 //! - [`block`]: contiguous block-binary controls with independently encrypted
-//!   empty-block dummies; choose [`BlindRotationMethod::Block`] with a matching secret distribution.
+//!   empty-block dummies, single-input and bounded batch workspaces; choose
+//!   [`BlindRotationMethod::Block`] with a matching secret distribution.
 //!
 //! [`Evaluator`] owns common [`bootstrap::BootstrapResources`] and the ordinary return stage.
 //! Default [`CbsEvaluator`] owns its input/BR resources; low-level

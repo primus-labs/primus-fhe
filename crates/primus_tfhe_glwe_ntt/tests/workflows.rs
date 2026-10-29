@@ -1374,6 +1374,185 @@ fn check_sparse_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(q: T, buc
     );
 }
 
+/// Direct blocks retain the single-input ciphertext, including each lane's
+/// canonical reduction and odd/even final-buffer placement. The layouts cover
+/// four/pair/single source groups and both sides of the four-source word bound.
+#[test]
+fn block_batch_matches_single_inputs() {
+    for (q, width, blocks) in [
+        (67_104_769u32, 3, 3),
+        (998_244_353, 5, 2),
+        (67_104_769, 7, 3),
+    ] {
+        check_block_batch::<u32, U32NttTable>(q, width, blocks);
+    }
+    // rank=2 and full base-16 decomposition give 3,744/4,608 coefficients
+    // for Q50/Q61: both exceed one u64 16 KiB tile (2,048 coefficients).
+    // Q61 has insufficient headroom for four unreduced sources; Q16 fits one tile.
+    for (q, width, blocks) in [
+        (65_537u64, 3, 2),
+        (1_125_899_906_826_241, 5, 3),
+        (2_305_843_009_213_692_737, 7, 2),
+    ] {
+        check_block_batch::<u64, U64NttTable>(q, width, blocks);
+    }
+}
+
+fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+    q: T,
+    block_size: usize,
+    block_count: usize,
+) {
+    use primus_tfhe::rotation::RotationModulusSwitch;
+    use primus_tfhe_glwe_ntt::{
+        ClientKey, KeyGenerator,
+        block::{BlockGlweBlindRotationBatchWorkspace, BlockGlweBlindRotationWorkspace},
+        key::BlindRotationKey,
+    };
+
+    let n = 32;
+    let mut config = config::<T>(BlindRotationMethod::Block);
+    config.small_lwe.dimension = LweDimension::new(block_size * block_count);
+    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size };
+    config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
+    config.bsk_poly_length = PolyLength::new(n);
+    config.ring_modulus = ModulusConfig::Explicit(q);
+    let context = TfheContext::<T, Table>::try_from_pbs_config(config).unwrap();
+    let mut rng = StdRng::seed_from_u64(561 + block_size as u64);
+    let client = ClientKey::generate(context.parameters(), &mut rng);
+    let BlindRotationKey::Block(key) = KeyGenerator::new(&context)
+        .try_generate_blind_rotation_key(&client, &mut rng)
+        .unwrap()
+    else {
+        panic!("expected direct block key");
+    };
+    let mut single = BlockGlweBlindRotationWorkspace::new(&key);
+    let mut batch = BlockGlweBlindRotationBatchWorkspace::new(&key);
+    let rotation =
+        RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 2 * n, 1);
+    let inputs: Vec<_> = (0..9)
+        .map(|lane| {
+            let mut input = context.allocate_lwe_ciphertext();
+            for (i, value) in input.as_mut().iter_mut().enumerate() {
+                // Exact exponents include zero, the negacyclic sign boundary,
+                // and the last residue; neighbouring lanes have different rotations.
+                *value = T::as_from([0, n, 2 * n - 1, 13][(i + lane) % 4]);
+            }
+            *input.b_mut() = T::as_from(5 * lane);
+            input
+        })
+        .collect();
+    let lut = Polynomial::new((0..n).map(|i| T::as_from(i * 37)).collect::<Vec<_>>());
+    let mut expected = vec![context.allocate_accumulator_ciphertext(); inputs.len()];
+    let mut actual = expected.clone();
+    for (input, output) in inputs.iter().zip(&mut expected) {
+        single.blind_rotate_lookup_table_to(&key, input, &lut, &rotation, output, context.table());
+    }
+    for count in [9, 0, 4, 1, 5, 3, 2, 7, 9] {
+        for output in &mut actual {
+            output.as_mut().fill(T::ONE);
+        }
+        batch.blind_rotate_lookup_table_many_to(
+            &key,
+            &inputs[..count],
+            &lut,
+            &rotation,
+            &mut actual[..count],
+            context.table(),
+        );
+        for (got, want) in actual[..count].iter().zip(&expected) {
+            assert_eq!(
+                got.as_ref(),
+                want.as_ref(),
+                "width={block_size}, count={count}"
+            );
+        }
+        assert!(
+            actual[count..]
+                .iter()
+                .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
+        );
+    }
+    if T::BITS == 64 && block_size == 5 {
+        // Cache capacity is optional: a workspace allocated for narrower blocks
+        // has the same numerical layout, but no four-rotation descriptors. It
+        // must still evaluate this key correctly using on-demand addressing.
+        let mut narrow_config = config;
+        narrow_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+        let narrow_context = TfheContext::<T, Table>::try_from_pbs_config(narrow_config).unwrap();
+        let narrow_client = ClientKey::generate(narrow_context.parameters(), &mut rng);
+        let BlindRotationKey::Block(narrow_key) = KeyGenerator::new(&narrow_context)
+            .try_generate_blind_rotation_key(&narrow_client, &mut rng)
+            .unwrap()
+        else {
+            panic!("expected narrower block key");
+        };
+        let mut narrow = BlockGlweBlindRotationBatchWorkspace::new(&narrow_key);
+        narrow.blind_rotate_lookup_table_many_to(
+            &key,
+            &inputs,
+            &lut,
+            &rotation,
+            &mut actual,
+            context.table(),
+        );
+        for (got, want) in actual.iter().zip(&expected) {
+            assert_eq!(got.as_ref(), want.as_ref());
+        }
+    }
+    // Check transactional layout rejection once, using a late malformed entry
+    // so validation cannot be interleaved with writes to preceding lanes.
+    if T::BITS == 64 && block_size == 7 {
+        let mut foreign_config = config;
+        foreign_config.small_lwe.dimension = LweDimension::new(block_size * (block_count + 1));
+        let foreign_context = TfheContext::<T, Table>::try_from_pbs_config(foreign_config).unwrap();
+        let foreign_client = ClientKey::generate(foreign_context.parameters(), &mut rng);
+        let BlindRotationKey::Block(foreign_key) = KeyGenerator::new(&foreign_context)
+            .try_generate_blind_rotation_key(&foreign_client, &mut rng)
+            .unwrap()
+        else {
+            panic!("expected foreign block key");
+        };
+        let mut foreign = BlockGlweBlindRotationBatchWorkspace::new(&foreign_key);
+        for invalid in 0..4 {
+            let mut inputs = inputs.clone();
+            let mut outputs = expected.clone();
+            for output in &mut outputs {
+                output.as_mut().fill(T::ONE);
+            }
+            match invalid {
+                0 => inputs[8] = primus_lattice::lwe::Lwe::new(vec![T::ONE; 2]),
+                1 => outputs[8] = primus_lattice::glwe::Glwe::new(vec![T::ONE; 1]),
+                2 => {
+                    outputs.pop();
+                }
+                _ => {}
+            }
+            let workspace = if invalid == 3 {
+                &mut foreign
+            } else {
+                &mut batch
+            };
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                workspace.blind_rotate_lookup_table_many_to(
+                    &key,
+                    &inputs,
+                    &lut,
+                    &rotation,
+                    &mut outputs,
+                    context.table(),
+                );
+            }));
+            assert!(result.is_err(), "invalid boundary case {invalid}");
+            assert!(
+                outputs
+                    .iter()
+                    .all(|ct| ct.as_ref().iter().all(|&x| x == T::ONE))
+            );
+        }
+    }
+}
+
 /// Raw block BR is checked against integer negacyclic rotation, independently
 /// of LUT compilation or message decoding. q=2N makes every input an exact
 /// exponent, including 0, N and 2N-1; both words keep canonical output at Q.

@@ -314,9 +314,13 @@ impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
         let (input_groups, input_tail) = inputs.as_chunks::<4>();
         let (output_groups, output_tail) = outputs.as_chunks_mut::<4>();
         for (inputs, outputs) in input_groups.iter().zip(output_groups) {
-            blind_rotate_batch_kernel(
-                lanes.each_mut(),
-                key,
+            blind_rotate_groups_batch_kernel(
+                lanes.each_mut().map(|lane| &mut lane.inner),
+                key.controls(),
+                (0..key.bucket_count()).map(|bucket| {
+                    let (indices, data) = key.bucket_data(bucket);
+                    (indices.iter().copied(), data)
+                }),
                 inputs.each_ref().map(Lwe::as_view),
                 lookup_table.as_view(),
                 modulus_switch,
@@ -328,9 +332,13 @@ impl<T: FheUint> SparseGlweBlindRotationBatchWorkspace<T> {
         let (output_pairs, output_tail) = output_tail.as_chunks_mut::<2>();
         let (lane_pairs, _) = lanes.as_chunks_mut::<2>();
         for (inputs, outputs) in input_pairs.iter().zip(output_pairs) {
-            blind_rotate_batch_kernel(
-                lane_pairs[0].each_mut(),
-                key,
+            blind_rotate_groups_batch_kernel(
+                lane_pairs[0].each_mut().map(|lane| &mut lane.inner),
+                key.controls(),
+                (0..key.bucket_count()).map(|bucket| {
+                    let (indices, data) = key.bucket_data(bucket);
+                    (indices.iter().copied(), data)
+                }),
                 inputs.each_ref().map(Lwe::as_view),
                 lookup_table.as_view(),
                 modulus_switch,
@@ -410,90 +418,104 @@ fn check_ciphertexts<T: FheUint, A: Data<Elem = T>, C: Data<Elem = T>>(
     );
 }
 
-/// Each lane owns its exponents, aggregate and EP scratch. Only the source-group
-/// traversal is interleaved; the dependent bucket chain stays ordered per input.
-/// This path is used only for batches; the original single-input loop stays separate.
-fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANES: usize>(
-    mut lanes: [&mut SparseGlweBlindRotationWorkspace<T>; LANES],
-    key: &SparseGlweBootstrappingKey<T, BarrettModulus<T>>,
+/// Each lane owns its exponents, aggregate and external-product scratch. Sparse
+/// buckets supply indexed controls; blocks supply contiguous ranges. Every group
+/// ends with its encrypted dummy and has one selector per index. Typed wrappers
+/// establish those layouts before this allocation-free kernel is entered.
+///
+/// Only source-group traversal is interleaved; each input's dependent group chain,
+/// 16 KiB tile schedule and arithmetic/reduction boundaries remain unchanged.
+/// Single-input evaluation retains its original kernel.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "keep control geometry, group traversal and per-lane resources explicit"
+)]
+pub(crate) fn blind_rotate_groups_batch_kernel<
+    'a,
+    T: FheUint,
+    Table: NttTable<ValueT = T>,
+    I: ExactSizeIterator<Item = usize> + Clone,
+    const LANES: usize,
+>(
+    mut lanes: [&mut ControlAggregationWorkspace<T>; LANES],
+    controls: &GlweBlindRotationControls<T, BarrettModulus<T>>,
+    groups: impl Iterator<Item = (I, &'a [T])>,
     inputs: [Lwe<&[T]>; LANES],
     lookup_table: Polynomial<&[T]>,
     modulus_switch: &RotationModulusSwitch<T>,
     mut outputs: [Glwe<&mut [T]>; LANES],
     ntt: &Table,
 ) {
-    let size = key.controls().size();
+    let size = controls.size();
     let n = size.glwe_size().poly_length().get();
-    let modulus = key.controls().ring_modulus();
+    let modulus = controls.ring_modulus();
     for ((lane, input), output) in lanes.iter_mut().zip(inputs).zip(&mut outputs) {
-        modulus_switch.exponent_slice_to(input.a(), &mut lane.inner.input_exponents);
+        modulus_switch.exponent_slice_to(input.a(), &mut lane.input_exponents);
         let exponent = modulus_switch.exponent(input.b()).wrapping_neg() & (2 * n - 1);
         let (mask, body) = output.a_b_mut_slices(n);
         mask.fill(T::ZERO);
         lookup_table.mul_monomial_to(exponent, &mut Polynomial(body), modulus);
     }
     let mut output_is_current = true;
-    for bucket in 0..key.bucket_count() {
-        let (indices, ciphertexts) = key.bucket_data(bucket);
-        let (selections, dummy) = ciphertexts.split_at(indices.len() * size.ggsw_len());
+    for (indices, ciphertexts) in groups {
+        let count = indices.len();
+        let (selections, dummy) = ciphertexts.split_at(count * size.ggsw_len());
         for lane in lanes.iter_mut() {
-            // Overwrite the previous bucket's NTT values, including empty buckets.
-            lane.inner.aggregate.copy_from_slice(dummy);
+            // Overwrite the previous group's NTT values, including empty groups.
+            lane.aggregate.copy_from_slice(dummy);
         }
         let use_groups = T::BITS == 64
-            && indices.len() >= 4
-            && indices.len() <= super::aggregation::max_group_len(modulus.value());
+            && count >= 4
+            && count <= super::aggregation::max_group_len(modulus.value());
         for lane in lanes.iter_mut() {
-            if use_groups && !lane.inner.rotation_groups.is_empty() {
-                for (plan, indices) in lane
-                    .inner
-                    .rotation_groups
-                    .iter_mut()
-                    .zip(indices.as_chunks::<4>().0)
-                {
+            if use_groups && !lane.rotation_groups.is_empty() {
+                let mut indices = indices.clone();
+                for plan in lane.rotation_groups.iter_mut().take(count / 4) {
                     *plan = super::aggregation::FourRotations::new(
-                        indices.map(|i| lane.inner.input_exponents[i]),
+                        std::array::from_fn(|_| {
+                            lane.input_exponents[indices.next().expect("control index")]
+                        }),
                         n,
                     );
                 }
             }
         }
-        super::aggregation::aggregate_bucket_many(
+        super::aggregation::aggregate_controls_many_assign(
             indices,
             selections,
             &mut lanes
                 .each_mut()
                 .map(|lane| super::aggregation::AggregationLane {
-                    prepared: &lane.inner.rotation_groups[..if use_groups {
-                        lane.inner.rotation_groups.len().min(indices.len() / 4)
+                    prepared: &lane.rotation_groups[..if use_groups {
+                        lane.rotation_groups.len().min(count / 4)
                     } else {
                         0
                     }],
-                    exponents: &lane.inner.input_exponents,
-                    coefficients: &mut lane.inner.aggregate,
+                    exponents: &lane.input_exponents,
+                    coefficients: &mut lane.aggregate,
                 }),
             size,
             modulus,
         );
         for (lane, output) in lanes.iter_mut().zip(&mut outputs) {
-            let aggregate_ntt = Ggsw::new(lane.inner.aggregate.as_mut_slice()).into_ntt_form(ntt);
+            let aggregate_ntt = Ggsw::new(lane.aggregate.as_mut_slice()).into_ntt_form(ntt);
             if output_is_current {
                 aggregate_ntt.external_product_to(
                     output,
-                    &mut lane.inner.scratch,
-                    key.controls().basis(),
+                    &mut lane.scratch,
+                    controls.basis(),
                     modulus,
                     ntt,
-                    &mut lane.inner.external_product,
+                    &mut lane.external_product,
                 );
             } else {
                 aggregate_ntt.external_product_to(
-                    &lane.inner.scratch,
+                    &lane.scratch,
                     output,
-                    key.controls().basis(),
+                    controls.basis(),
                     modulus,
                     ntt,
-                    &mut lane.inner.external_product,
+                    &mut lane.external_product,
                 );
             }
         }
@@ -501,7 +523,7 @@ fn blind_rotate_batch_kernel<T: FheUint, Table: NttTable<ValueT = T>, const LANE
     }
     if !output_is_current {
         for (lane, output) in lanes.iter().zip(&mut outputs) {
-            output.as_mut().copy_from_slice(lane.inner.scratch.as_ref());
+            output.as_mut().copy_from_slice(lane.scratch.as_ref());
         }
     }
 }

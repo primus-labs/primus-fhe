@@ -3,7 +3,7 @@
 pub(crate) mod aggregation;
 mod blind_rotation;
 mod key;
-pub(crate) use blind_rotation::ControlAggregationWorkspace;
+pub(crate) use blind_rotation::{ControlAggregationWorkspace, blind_rotate_groups_batch_kernel};
 pub(crate) use key::{SparseKeyLayout, generate_with_layout};
 
 pub use blind_rotation::{SparseGlweBlindRotationBatchWorkspace, SparseGlweBlindRotationWorkspace};

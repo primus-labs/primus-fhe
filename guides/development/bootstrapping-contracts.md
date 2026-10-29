@@ -58,6 +58,17 @@ The independently encrypted dummy represents one minus the sum of that bucket's 
 
 Retrying the public map until matching succeeds conditions the published map on the fixed secret admitting a matching. It reduces generation failure without removing that correlation. Only the independent NTRU ring secret is conditioned on invertibility and, for Fourier, inverse stability; the external fixed-weight secret may have even weight. Conditioned secret/map distributions and evaluation-key KDM/circular-security assumptions require separate analysis. Matching, rejection sampling and inverse preparation have no constant-time guarantee.
 
+GLWE NTT raw sparse and block BR also accept independent input batches. Their
+four-lane workspaces share read-only key tiles on one thread; each lane retains
+its own exponents, aggregate, accumulator and external-product scratch. Groups
+of four and two use the same per-chain control order and arithmetic as single
+calls; a one-input tail runs the original single kernel. Complete batch layouts
+are checked before any output write, and evaluation allocates no memory. Outputs
+remain separate coefficient-domain GLWE ciphertexts: summing, KS and extraction
+belong to the caller. Shared physical key errors remain correlated between lanes.
+See the [block workspace](../../crates/primus_tfhe_glwe_ntt/src/block/blind_rotation.rs)
+and [sparse workspace](../../crates/primus_tfhe_glwe_ntt/src/sparse/blind_rotation.rs).
+
 ### Matching and error dependencies
 
 For an independent initial map H, fixed-weight support S and matching event A,
