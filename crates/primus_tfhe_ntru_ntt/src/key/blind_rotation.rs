@@ -3,7 +3,7 @@
 use primus_decompose::primitive::ApproxSignedBasis;
 use primus_integer::FheUint;
 use primus_lattice::nlev::NttNlev;
-use primus_ntru::SecretKeyDistr;
+use primus_ntru::{BlockOccupancy, SecretKeyDistr};
 
 use super::ClassicControls;
 use crate::{PbsParameters, block::BlockNtruBootstrappingKey, sparse::SparseNtruBootstrappingKey};
@@ -140,6 +140,7 @@ impl<T: FheUint> BlindRotationKey<T> {
                     self.input_distribution
                         == SecretKeyDistr::BlockBinary {
                             block_size: key.block_size(),
+                            occupancy: BlockOccupancy::AtMostOne,
                         }
                         && key.controls().input_dimension() == parameters.external_lwe_dimension()
                         && key.controls().control_len() == parameters.blind_rotation().nlev_len()

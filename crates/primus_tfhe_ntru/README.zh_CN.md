@@ -42,7 +42,9 @@ Classic binary/ternary 和 sparse fixed-weight binary 支持 PBS、ManyLUT、Boo
 
 两后端共享 `NtruBlindRotationControls<T>` 系数存储。`SparseNtruBootstrappingKey<T>` 额外持有公开桶映射和声明重量，`controls()` 借用通用存储。首组为提升用 NLev 控制，后续组为加密旋转用 NGSW 控制。NTT 剩余类和 Native 系数仍是不同表示。优先用 context/key-generator 工厂；参见[系数存储契约](src/controls.rs)、[sparse 分组契约](src/sparse.rs)和[首次提升推导](../../guides/development/bootstrapping-contracts.md#ntru-first-lifting)。
 
-两个 NTRU 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size }`。连续块中至多一个 `1`，允许空块。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存 bit 控制及独立加密的 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTRU Fourier 要求 u64，使用精确 native 系数建钥，支持 ordinary 或 split BR；trace、SS 精度保持独立。两后端支持分组 BR 的 scoped one-hot pair；应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
+两个 NTRU 后端也支持 `BlindRotationMethod::Block` 与 `SecretKeyDistr::BlockBinary { block_size, occupancy: BlockOccupancy::AtMostOne }`。连续块中至多一个 `1`，允许空块。`BlockNtruBootstrappingKey<T>` 复用系数控制，不持有桶映射；每块保存 bit 控制及独立加密的 dummy。首块使用 NLEV，即使公开 LUT 不旋转也必须提升；后续块使用 NGSW。PBS、ManyLUT、MVB、CBS 和单输入 one-hot 沿用现有工厂。NTRU Fourier 要求 u64，使用精确 native 系数建钥，支持 ordinary 或 split BR；trace、SS 精度保持独立。两后端支持分组 BR 的 scoped one-hot pair；应用接入及噪声/安全评估分别处理。见 [block 材料契约](src/block.rs)。
+
+采样器和 Classic BR 可使用 `ExactlyOne` 秘密。直接 Block BR 当前仅接受 `AtMostOne`，其材料仍包含每块一个 dummy。
 
 ## 客户端与 LUT
 

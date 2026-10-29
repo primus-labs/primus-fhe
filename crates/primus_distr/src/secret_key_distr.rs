@@ -1,3 +1,13 @@
+/// Uniform categorical choices in each independent block-binary secret block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockOccupancy {
+    /// Choose uniformly from the all-zero block and all one-hot vectors.
+    AtMostOne,
+    /// Choose uniformly from the one-hot vectors, excluding the all-zero block.
+    /// For block size one the secret is deterministically all ones.
+    ExactlyOne,
+}
+
 /// Distribution used to sample secret-key coefficients.
 ///
 /// Individual cryptosystems may support only a subset of these distributions.
@@ -27,16 +37,19 @@ pub enum SecretKeyDistr {
         /// Exact number of coefficients equal to `1`.
         hamming_weight: usize,
     },
-    /// Independent consecutive blocks, uniform over the all-zero block and
-    /// the `block_size` vectors containing exactly one `1`.
+    /// Independent consecutive blocks with uniformly chosen one-hot positions,
+    /// optionally including the all-zero block according to `occupancy`.
     ///
-    /// This is not a fixed-Hamming-weight distribution. A complete logical key
+    /// This is not the uniform global fixed-Hamming-weight distribution, even
+    /// when every block is occupied. A complete logical key
     /// must be nonempty and contain only full blocks; the block size need not
     /// be a power of two. Sampler construction checks that `block_size > 0`
-    /// and `block_size + 1` fits in `usize`.
+    /// and the number of categorical states fits in `usize`.
     BlockBinary {
         /// Number of consecutive coefficients in each block.
         block_size: usize,
+        /// Whether every block must contain a `1` or may also be all zero.
+        occupancy: BlockOccupancy,
     },
     /// Exactly `hamming_weight` uniformly selected nonzero positions, with
     /// independent uniform signs. Positive and negative counts are not fixed.

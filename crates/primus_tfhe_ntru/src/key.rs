@@ -1,5 +1,5 @@
 use primus_integer::{FheUint, SignedInteger};
-use primus_ntru::NtruSecretKey;
+use primus_ntru::{BlockOccupancy, NtruSecretKey};
 use primus_reduce::RingContext;
 
 use crate::{LweKeySwitchingParameters, PbsParameters, TfheKeyError};
@@ -53,7 +53,7 @@ impl<T: FheUint> ClientKey<T> {
     /// Checks the full setup bundle before generating PBS/CBS or return material.
     /// Validates shapes, the recorded LWE modulus, distribution labels and canonical
     /// binary/ternary external residues before borrowing raw key views. Block-binary
-    /// secrets must have at most one `1` per block.
+    /// secrets must satisfy their declared per-block occupancy.
     /// Accumulator coefficients must have magnitude below an explicit external q.
     /// Accumulator invertibility is checked by the backend when preparing its secret.
     pub fn check_compatible<M: RingContext<T>, LM: RingContext<T>>(
@@ -202,11 +202,16 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
         if key.dimension() != external.dimension().get() {
             return Err(TfheKeyError::ExternalLweDimensionMismatch);
         }
-        if let primus_ntru::SecretKeyDistr::BlockBinary { block_size } = key.distr() {
+        if let primus_ntru::SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy,
+        } = key.distr()
+        {
             // The checked logical dimension consists of complete blocks; no
             // public ring padding belongs to this imported external secret.
             let mut invalid_coefficient = false;
             let mut invalid_block = false;
+            let require_one = occupancy == BlockOccupancy::ExactlyOne;
             for block in key.as_ref().chunks_exact(block_size) {
                 let mut occupied = false;
                 for &coefficient in block {
@@ -215,6 +220,7 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
                     invalid_block |= occupied & selected;
                     occupied |= selected;
                 }
+                invalid_block |= require_one & !occupied;
             }
             if invalid_coefficient {
                 return Err(TfheKeyError::InvalidClientSecretKeyCoefficient);

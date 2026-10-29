@@ -5,7 +5,7 @@
 use primus_encoding::phase_error_magnitude;
 use primus_fft::{FftTable, TorusFftValue};
 use primus_modulus::PowOf2Modulus;
-use primus_ntru::{LweDimension, SecretKeyDistr};
+use primus_ntru::{BlockOccupancy, LweDimension, SecretKeyDistr};
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use primus_tfhe::{DecompositionBaseLog, DecompositionLevelCount};
@@ -264,7 +264,11 @@ fn circuit_selection<T: TorusFftValue, Table: FftTable>(pbs: PbsConfig<T, PowOf2
     let (client, server) = context
         .try_generate_circuit_bootstrap_keys(&mut rng)
         .unwrap();
-    if let SecretKeyDistr::BlockBinary { block_size } = pbs.external_lwe.secret_key_distr {
+    if let SecretKeyDistr::BlockBinary {
+        block_size,
+        occupancy: BlockOccupancy::AtMostOne,
+    } = pbs.external_lwe.secret_key_distr
+    {
         assert!(
             client.external_lwe_secret_key().as_ref()[..block_size]
                 .iter()
@@ -614,11 +618,16 @@ fn u32_classic_chain() {
 
     // Classic controls also consume correlated block-binary secrets unchanged.
     config.external_lwe.dimension = LweDimension::new(6);
-    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
-    #[cfg(feature = "rustfft")]
-    chained_pbs::<u32, primus_fft::RustFftTable>(config);
-    #[cfg(feature = "tfhe-fft")]
-    chained_pbs::<u32, primus_fft::TfheFftTable>(config);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        #[cfg(feature = "rustfft")]
+        chained_pbs::<u32, primus_fft::RustFftTable>(config);
+        #[cfg(feature = "tfhe-fft")]
+        chained_pbs::<u32, primus_fft::TfheFftTable>(config);
+    }
 }
 
 #[cfg(feature = "rustfft")]
@@ -664,7 +673,10 @@ fn tfhe_fft_u64_sparse_cbs() {
 fn u64_block_workflows() {
     let mut pbs = config(BlindRotationMethod::Block);
     pbs.external_lwe.dimension = LweDimension::new(10);
-    pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 5 };
+    pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 5,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     #[cfg(feature = "rustfft")]
     {
         chained_pbs::<u64, primus_fft::RustFftTable>(pbs);
@@ -705,7 +717,10 @@ fn check_block_coefficients<Table: FftTable>() {
 
     let mut pbs = config::<u64>(BlindRotationMethod::Block);
     pbs.external_lwe.dimension = LweDimension::new(6);
-    pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    pbs.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 3,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     pbs.bsk_poly_length = PolyLength::new(32);
     let gadget = CbsGadgetConfig {
         trace: decomposition(),
@@ -1029,7 +1044,10 @@ fn check_key_generation_boundaries<Table: FftTable>() {
     // before sampling client secrets or evaluation-key rows.
     let mut block_config = config;
     block_config.method = BlindRotationMethod::Block;
-    block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
+    block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 2,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     let block_context = TfheContext::<u32, Table, _>::try_from_pbs_config(block_config)
         .unwrap()
         .try_with_circuit_bootstrap(CbsGadgetConfig {
@@ -1252,8 +1270,10 @@ fn split_cbs_and_pbs<Table: FftTable>() {
         let mut pbs_config = config::<u64>(method);
         if method == BlindRotationMethod::Block {
             pbs_config.external_lwe.dimension = LweDimension::new(10);
-            pbs_config.external_lwe.secret_key_distr =
-                SecretKeyDistr::BlockBinary { block_size: 5 };
+            pbs_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                block_size: 5,
+                occupancy: BlockOccupancy::AtMostOne,
+            };
         }
         pbs_config.bsk_poly_length = PolyLength::new(n);
         pbs_config.messages = primus_tfhe_ntru_fourier::PbsMessageConfig::new(message_modulus);

@@ -49,7 +49,9 @@ Classic binary/ternary and sparse fixed-weight binary work with both orders, inc
 
 The backends share `GlweBlindRotationControls<T, M>` for coefficient controls and their numerical layout; `SparseGlweBootstrappingKey` adds the public bucket map and fixed weight. Borrow the controls with `key.controls()` when allocating a raw BR workspace. NTT uses Barrett residues and Fourier uses Native coefficients, so those representations are not interchangeable. Prefer context/key-generator factories and ordinary evaluators; storage and import contracts are on the [sparse key type](src/sparse.rs).
 
-Both GLWE backends also accept `config.method = BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size }`. It uses contiguous blocks without mapping or matching; each block stores its bit controls and an independently encrypted empty-block dummy. Both PBS orders, ManyLUT, MVB and CBS use the same context/evaluator factories. Fourier uses exact native coefficient aggregation followed by ordinary FFT and external products; trace precision remains independent. The [block material contract](src/block.rs) describes import layout and mathematical requirements.
+Both GLWE backends also accept `config.method = BlindRotationMethod::Block` with `SecretKeyDistr::BlockBinary { block_size, occupancy: BlockOccupancy::AtMostOne }`. It uses contiguous blocks without mapping or matching; each block stores its bit controls and an independently encrypted empty-block dummy. Both PBS orders, ManyLUT, MVB and CBS use the same context/evaluator factories. Fourier uses exact native coefficient aggregation followed by ordinary FFT and external products; trace precision remains independent. The [block material contract](src/block.rs) describes import layout and mathematical requirements.
+
+`ExactlyOne` secrets are available through the sampler and Classic BR. Direct Block BR currently accepts only `AtMostOne`; its material includes a dummy for each block.
 
 ## Clients and LUTs
 

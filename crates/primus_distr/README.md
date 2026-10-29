@@ -32,7 +32,9 @@ The scalar sampler types above implement `rand::distr::Distribution`. Batch help
 
 Weights apply to the complete logical key. Constructors reject excessive weights and sum overflow, but do not retain the length; sampling checks the actual output length before writing or drawing randomness.
 
-`BlockBinary { block_size: w }` samples consecutive independent blocks uniformly from the all-zero block and the `w` one-hot vectors. Thus each state has probability `1/(w+1)`; the total Hamming weight is random. The size `w` must be positive with `w+1` representable in `usize`, but need not be a power of two. The complete key length must be a positive multiple of `w`; `validate_length` and sampling reject empty keys and incomplete blocks before writing or drawing randomness.
+`BlockBinary { block_size: w, occupancy }` samples independent consecutive blocks. With `BlockOccupancy::AtMostOne`, each block chooses uniformly from zero and its `w` one-hot vectors; total weight is random. With `ExactlyOne`, it chooses uniformly from only the one-hot vectors; total weight is the block count. Neither is the uniform global fixed-weight distribution.
+
+The size `w` must be positive but need not be a power of two; `AtMostOne` additionally requires `w+1` to fit `usize`. Complete key length must be a positive multiple of `w`. `validate_length` and sampling reject empty keys and incomplete blocks before writing or drawing randomness. `ExactlyOne` at `w=1` is deterministically all ones, not a secure secret choice.
 
 Prepare `SecretKeySampler<T>` with `try_new(distribution)` (fallible) or `new(distribution)` (panicking). Use `sample_signed` / `sample_signed_to` for `T::SignedInteger` output, or `sample_encoded` / `sample_encoded_to` for canonical residues. The `_to` methods overwrite caller storage without allocating.
 

@@ -74,7 +74,7 @@ pub type MultiMsgLweCiphertext<T> = primus_lattice::lwe::MultiMsgLwe<Vec<T>>;
 pub use config::{LweConfig, LweConfigError};
 pub use key_switch::{LweKeySwitchingKey, LweKeySwitchingParameters};
 pub use parameter::{LweEncryptionParameters, LweParameterError, LweParameters};
-pub use primus_distr::SecretKeyDistr;
+pub use primus_distr::{BlockOccupancy, SecretKeyDistr};
 pub use primus_lattice::{LweDimension, LweDimensionError};
 pub use public_key::LwePublicKey;
 pub use secret_key::{LweSecretKey, LweSecretKeyRef};

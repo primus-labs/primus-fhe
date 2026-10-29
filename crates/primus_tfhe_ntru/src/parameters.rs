@@ -33,7 +33,7 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
     /// Prepares the common q/Q domain and return state from numerical choices.
     /// External controls must be binary or ternary and 2N must fit T. Ring
     /// invertibility, sparse-map feasibility and the joint noise budget are separate.
-    /// The Block method additionally requires a block-binary external distribution.
+    /// The Block method currently requires an at-most-one block-binary distribution.
     pub fn try_from_config(config: crate::PbsConfig<T, M, LM>) -> Result<Self, TfheParameterError>
     where
         M: TryFrom<primus_tfhe::ModulusConfig<M>, Error = primus_tfhe::ModulusConfigError>,
@@ -46,7 +46,13 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
             return Err(TfheParameterError::UnsupportedClientSecretKeyDistribution);
         }
         if config.method == BlindRotationMethod::Block
-            && !matches!(distr, SecretKeyDistr::BlockBinary { .. })
+            && !matches!(
+                distr,
+                SecretKeyDistr::BlockBinary {
+                    occupancy: primus_ntru::BlockOccupancy::AtMostOne,
+                    ..
+                }
+            )
         {
             return Err(TfheParameterError::InvalidBlockSecretDistribution);
         }

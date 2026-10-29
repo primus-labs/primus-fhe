@@ -2,7 +2,7 @@
 //! n=8/N=128 are arithmetic regression parameters, not security profiles.
 
 use primus_encoding::phase_error_magnitude;
-use primus_glwe::{GlweDimension, NttGlweSecretKey, SecretKeyDistr};
+use primus_glwe::{BlockOccupancy, GlweDimension, NttGlweSecretKey, SecretKeyDistr};
 use primus_integer::FheUint;
 use primus_lwe::LweDimension;
 use primus_modulus::{BarrettModulus, PowOf2Modulus};
@@ -70,7 +70,10 @@ fn config<T: FheUint>(method: BlindRotationMethod) -> PbsConfig<T> {
         1_125_899_906_826_241u64
     }));
     let secret = if method == BlindRotationMethod::Block {
-        SecretKeyDistr::BlockBinary { block_size: 3 }
+        SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy: BlockOccupancy::AtMostOne,
+        }
     } else {
         SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 3 }
     };
@@ -740,10 +743,15 @@ fn u32_classic_chain() {
 
     // The logical block width need not divide the padded ring-KS target length.
     config.small_lwe.dimension = LweDimension::new(6);
-    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
-    for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
-        config.order = order;
-        chained_pbs::<u32, U32NttTable, _>(config);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
+            config.order = order;
+            chained_pbs::<u32, U32NttTable, _>(config);
+        }
     }
 }
 
@@ -858,7 +866,10 @@ fn u32_block_pbs_and_batches() {
 fn u64_block_cbs_and_returns() {
     let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::KeyswitchBootstrap);
     config.small_lwe.dimension = LweDimension::new(10);
-    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 5 };
+    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 5,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     circuit_selection::<u64, U64NttTable, _>(config, CbsInputEncoding::Padded);
 }
 
@@ -1023,7 +1034,10 @@ fn key_generation_boundaries() {
     // Imported block coefficients must be checked before sampling any key rows.
     let mut block_config = config;
     block_config.method = BlindRotationMethod::Block;
-    block_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
+    block_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 2,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     let block_context = TfheContext::<u32, Table>::try_from_cbs_config(CbsConfig {
         fourier_trace_precision: primus_tfhe_glwe::FourierTracePrecision::Ordinary,
         pbs: block_config,
@@ -1413,7 +1427,10 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     let n = 32;
     let mut config = config::<T>(BlindRotationMethod::Block);
     config.small_lwe.dimension = LweDimension::new(block_size * block_count);
-    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size };
+    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
     config.bsk_poly_length = PolyLength::new(n);
     config.ring_modulus = ModulusConfig::Explicit(q);
@@ -1478,7 +1495,10 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         // has the same numerical layout, but no four-rotation descriptors. It
         // must still evaluate this key correctly using on-demand addressing.
         let mut narrow_config = config;
-        narrow_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+        narrow_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy: BlockOccupancy::AtMostOne,
+        };
         let narrow_context = TfheContext::<T, Table>::try_from_pbs_config(narrow_config).unwrap();
         let narrow_client = ClientKey::generate(narrow_context.parameters(), &mut rng);
         let BlindRotationKey::Block(narrow_key) = KeyGenerator::new(&narrow_context)
@@ -1589,7 +1609,10 @@ fn check_block_raw_rotation<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         let mut config =
             two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
         config.small_lwe.dimension = LweDimension::new(secret.len());
-        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size };
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: BlockOccupancy::AtMostOne,
+        };
         config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
         config.ring_modulus = ModulusConfig::Explicit(ring_modulus_value);
         config.bsk_dimension = GlweDimension::new(1);

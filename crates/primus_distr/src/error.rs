@@ -17,7 +17,7 @@ pub enum SecretKeySamplerError {
     },
     /// The block size is zero or its number of categorical states overflows.
     #[error(
-        "block-binary block size must be positive and leave room for one zero state, got {block_size}"
+        "block-binary block size {block_size} must be positive with representable category count"
     )]
     InvalidBlockSize {
         /// Requested number of coefficients per block.

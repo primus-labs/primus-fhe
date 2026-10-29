@@ -1,4 +1,5 @@
 use num_traits::{ConstOne, ConstZero};
+use primus_glwe::BlockOccupancy;
 use primus_integer::FheUint;
 use primus_lattice::{GlweDimension, GlweSize};
 use primus_reduce::RingContext;
@@ -172,7 +173,7 @@ impl<T: FheUint> ClientKey<T> {
     /// The owning small-LWE modulus is checked before creating any raw key view.
     ///
     /// Imported small-LWE coefficients must be `0/1`, or also `q-1` for ternary
-    /// distributions. Block-binary secrets must have at most one `1` per block.
+    /// distributions. Block-binary secrets must satisfy their declared occupancy.
     /// This does not validate fixed weights or the accumulator's
     /// coefficient magnitudes; transform backends retain their range contracts.
     pub fn check_compatible<M, LM>(
@@ -223,11 +224,16 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
         if key.distr() != self.small_lwe().secret_key_distr() {
             return Err(TfheKeyError::LweSecretKeyDistributionMismatch);
         }
-        if let crate::SecretKeyDistr::BlockBinary { block_size } = key.distr() {
+        if let crate::SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy,
+        } = key.distr()
+        {
             // Parameters established n % block_size == 0. Check coefficients
             // and occupancy in one full scan, without stopping on secret data.
             let mut invalid_coefficient = false;
             let mut invalid_block = false;
+            let require_one = occupancy == BlockOccupancy::ExactlyOne;
             for block in key.as_ref().chunks_exact(block_size) {
                 let mut occupied = false;
                 for &coefficient in block {
@@ -236,6 +242,7 @@ impl<T: FheUint, M: RingContext<T>, LM: RingContext<T>> PbsParameters<T, M, LM> 
                     invalid_block |= occupied & selected;
                     occupied |= selected;
                 }
+                invalid_block |= require_one & !occupied;
             }
             if invalid_coefficient {
                 return Err(TfheKeyError::InvalidLweSecretKeyCoefficient);

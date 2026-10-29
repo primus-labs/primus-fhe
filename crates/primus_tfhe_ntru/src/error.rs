@@ -40,8 +40,8 @@ pub enum TfheParameterError {
     /// The external LWE distribution must be binary or ternary.
     #[error("NTRU TFHE requires a binary or ternary client secret-key distribution")]
     UnsupportedClientSecretKeyDistribution,
-    /// Direct block controls require the block-binary external distribution.
-    #[error("block blind rotation requires a block-binary external LWE secret")]
+    /// Direct block controls currently require the at-most-one block-binary distribution.
+    #[error("block blind rotation requires an at-most-one block-binary external LWE secret")]
     InvalidBlockSecretDistribution,
 }
 
@@ -60,8 +60,8 @@ pub enum TfheKeyError {
     /// An external LWE coefficient is outside the declared binary or ternary domain.
     #[error("NTRU TFHE client coefficients do not match their binary or ternary domain")]
     InvalidClientSecretKeyCoefficient,
-    /// A block-binary external secret contains more than one `1` in a block.
-    #[error("external LWE secret block contains more than one nonzero coefficient")]
+    /// A block-binary external secret violates its declared per-block occupancy.
+    #[error("external LWE secret block violates its declared occupancy")]
     InvalidClientSecretKeyBlock,
     /// The external secret has the wrong LWE dimension.
     #[error("NTRU client key has the wrong external LWE dimension")]
@@ -197,8 +197,8 @@ pub enum BlockBootstrappingKeyError {
         bits: u32,
     },
 
-    /// Direct block controls require a block-binary external secret.
-    #[error("block bootstrapping requires a block-binary external secret")]
+    /// Direct block controls currently require an at-most-one block-binary secret.
+    #[error("block bootstrapping requires an at-most-one block-binary external secret")]
     UnsupportedSecretDistribution,
     /// The logical dimension must consist of complete nonempty blocks.
     #[error("invalid block geometry: dimension {dimension}, block size {block_size}")]

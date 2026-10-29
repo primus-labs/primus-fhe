@@ -8,7 +8,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_fft::{Complex64, FftEngine, FftTable, RustFftTable};
 use primus_glwe::{
-    FourierGlweAutomorphismKey, FourierGlweCiphertext, FourierGlweEncryptor,
+    BlockOccupancy, FourierGlweAutomorphismKey, FourierGlweCiphertext, FourierGlweEncryptor,
     FourierGlweKeySwitchingKey, FourierGlweTraceKey, GadgetSize, GlevParameters, GlweCiphertext,
     GlweEncryptionParameters, GlweKeySwitchingParameters, GlweParameters, GlweSecretKey, GlweSize,
     GlweSizeError, NttGgswCiphertext, NttGlevCiphertext, NttGlweCiphertext,
@@ -828,7 +828,10 @@ fn padded_lwe_gadget_parameters_validate_logical_prefix_and_full_layout() {
     let size = GlweSize::new(GlweDimension::new(1), PolyLength::new(32));
     let inner = Arc::new(GlweEncryptionParameters::new(
         NativeModulus::<u32>::new(),
-        SecretKeyDistr::BlockBinary { block_size: 3 },
+        SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy: BlockOccupancy::AtMostOne,
+        },
         0.7,
     ));
     let basis = ApproxSignedBasis::new(None, DecompositionBaseLog::new(3), None);

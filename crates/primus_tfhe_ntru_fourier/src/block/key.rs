@@ -5,7 +5,9 @@ use std::alloc::Layout;
 use primus_fft::{FftTable, TorusFftValue};
 use primus_lattice::nlev::Nlev;
 use primus_modulus::NativeModulus;
-use primus_ntru::{NlevParameters, SecretKeyDistr, split::NativeNtruGadgetGenerator};
+use primus_ntru::{
+    BlockOccupancy, NlevParameters, SecretKeyDistr, split::NativeNtruGadgetGenerator,
+};
 use primus_tfhe_ntru::BlockBootstrappingKeyError;
 
 use super::BlockNtruBootstrappingKey;
@@ -29,7 +31,11 @@ impl BlockKeyLayout {
         if T::BITS != 64 {
             return Err(Error::UnsupportedFourierWordSize { bits: T::BITS }.into());
         }
-        let SecretKeyDistr::BlockBinary { block_size } = distribution else {
+        let SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: BlockOccupancy::AtMostOne,
+        } = distribution
+        else {
             return Err(Error::UnsupportedSecretDistribution.into());
         };
         if dimension == 0 || block_size == 0 || !dimension.is_multiple_of(block_size) {

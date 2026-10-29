@@ -3,7 +3,7 @@
 use std::alloc::Layout;
 
 use primus_glwe::{
-    GgswParameters, NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
+    BlockOccupancy, GgswParameters, NttGlweGadgetEncryptWorkspace, NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::FheUint;
 use primus_lattice::LweDimension;
@@ -30,7 +30,11 @@ impl BlockKeyLayout {
         parameters: &GgswParameters<T, BarrettModulus<T>>,
     ) -> Result<Self, KeyGenerationError> {
         use BlockBootstrappingKeyError as Error;
-        let SecretKeyDistr::BlockBinary { block_size } = distribution else {
+        let SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: BlockOccupancy::AtMostOne,
+        } = distribution
+        else {
             return Err(Error::UnsupportedSecretDistribution.into());
         };
         if dimension == 0 || block_size == 0 || !dimension.is_multiple_of(block_size) {

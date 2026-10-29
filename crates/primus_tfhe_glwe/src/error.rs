@@ -27,8 +27,8 @@ pub enum TfheParameterError {
     #[error("TFHE bootstrapping requires a binary or ternary input LWE secret key")]
     UnsupportedInputLweSecretKey,
 
-    /// Direct block controls require the block-binary input distribution.
-    #[error("block blind rotation requires a block-binary input LWE secret")]
+    /// Direct block controls currently require the at-most-one block-binary distribution.
+    #[error("block blind rotation requires an at-most-one block-binary input LWE secret")]
     InvalidBlockSecretDistribution,
 
     /// The rotation domain `2N` cannot be represented by the input coefficient type.
@@ -96,8 +96,8 @@ pub enum TfheKeyError {
     #[error("small-LWE secret coefficient is outside its declared binary or ternary support")]
     InvalidLweSecretKeyCoefficient,
 
-    /// A block-binary small secret contains more than one `1` in a block.
-    #[error("small-LWE secret block contains more than one nonzero coefficient")]
+    /// A block-binary small secret violates its declared per-block occupancy.
+    #[error("small-LWE secret block violates its declared occupancy")]
     InvalidLweSecretKeyBlock,
 
     /// The GLWE secret key has the wrong dimension.
@@ -213,8 +213,8 @@ pub enum KeyGenerationError {
 /// Failure to bind or generate direct block-binary bootstrapping controls.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BlockBootstrappingKeyError {
-    /// Direct blocks require the block-binary input distribution.
-    #[error("block bootstrapping requires a block-binary small-LWE secret")]
+    /// Direct blocks currently require the at-most-one block-binary distribution.
+    #[error("block bootstrapping requires an at-most-one block-binary small-LWE secret")]
     UnsupportedSecretDistribution,
     /// The logical secret must contain complete, nonempty-width blocks.
     #[error("input dimension {dimension} must be a positive multiple of block size {block_size}")]

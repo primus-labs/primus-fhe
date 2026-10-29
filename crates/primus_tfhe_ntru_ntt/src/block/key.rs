@@ -5,7 +5,7 @@ use std::alloc::Layout;
 use num_traits::{ConstOne, ConstZero};
 use primus_integer::FheUint;
 use primus_lattice::nlev::NttNlev;
-use primus_ntru::{NttNtruSecretKey, SecretKeyDistr};
+use primus_ntru::{BlockOccupancy, NttNtruSecretKey, SecretKeyDistr};
 use primus_ntt::MonomialNttTable;
 use primus_tfhe_ntru::BlockBootstrappingKeyError;
 use zeroize::Zeroizing;
@@ -28,7 +28,11 @@ impl BlockKeyLayout {
         parameters: &primus_ntru::NlevParameters<T, M>,
     ) -> Result<Self, KeyGenerationError> {
         use BlockBootstrappingKeyError as Error;
-        let SecretKeyDistr::BlockBinary { block_size } = distribution else {
+        let SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: BlockOccupancy::AtMostOne,
+        } = distribution
+        else {
             return Err(Error::UnsupportedSecretDistribution.into());
         };
         if dimension == 0 || block_size == 0 || !dimension.is_multiple_of(block_size) {

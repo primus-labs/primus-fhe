@@ -3,7 +3,8 @@ use primus_integer::{AsInto, FheInt, FheUint};
 use rand::distr::{Bernoulli, Distribution, Uniform};
 
 use crate::{
-    SecretKeyDistr, SecretKeySamplerError, SignedDiscreteGaussian, ternary::TernarySampler,
+    BlockOccupancy, SecretKeyDistr, SecretKeySamplerError, SignedDiscreteGaussian,
+    ternary::TernarySampler,
 };
 
 /// Prepared whole-key sampling with shared signed and modular output paths.
@@ -80,9 +81,12 @@ impl<T: FheUint> SecretKeySampler<T> {
             SecretKeyDistr::FixedHammingWeightBinary { hamming_weight } => {
                 SamplingMethod::FixedHammingWeightBinary { hamming_weight }
             }
-            SecretKeyDistr::BlockBinary { block_size } => {
+            SecretKeyDistr::BlockBinary {
+                block_size,
+                occupancy,
+            } => {
                 let category_count = block_size
-                    .checked_add(1)
+                    .checked_add(usize::from(occupancy == BlockOccupancy::AtMostOne))
                     .filter(|_| block_size != 0)
                     .ok_or(SecretKeySamplerError::InvalidBlockSize { block_size })?;
                 SamplingMethod::BlockBinary {
@@ -310,8 +314,8 @@ impl<T: FheUint> SecretKeySampler<T> {
                 for block in output.chunks_exact_mut(*block_size) {
                     block.fill(U::ZERO);
                     let position = category.sample(rng);
-                    // The final category is the all-zero block; it is not
-                    // rejected or resampled even when the whole key is zero.
+                    // Only AtMostOne has the extra all-zero category. Never
+                    // reject or resample it, even when the whole key is zero.
                     if position < *block_size {
                         block[position] = U::ONE;
                     }

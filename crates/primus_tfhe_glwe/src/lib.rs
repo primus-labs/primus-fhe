@@ -90,7 +90,7 @@ pub use primus_tfhe::{
     PbsMessageConfig, ProgrammableBootstrap, ProgrammableBootstrapInterleaved, TfheEvaluationError,
 };
 
-pub use primus_glwe::SecretKeyDistr;
+pub use primus_glwe::{BlockOccupancy, SecretKeyDistr};
 
 /// LWE public key used by the public-key client encryptor.
 pub use primus_lwe::LwePublicKey;

@@ -4,7 +4,7 @@
 use primus_encoding::phase_error_magnitude;
 use primus_integer::FheUint;
 use primus_modulus::PowOf2Modulus;
-use primus_ntru::{LweDimension, SecretKeyDistr};
+use primus_ntru::{BlockOccupancy, LweDimension, SecretKeyDistr};
 use primus_ntt::{MonomialNttTable, U32NttTable, U64NttTable};
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
@@ -283,7 +283,11 @@ fn circuit_selection<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
             .unwrap();
         (client, server, None)
     };
-    if let SecretKeyDistr::BlockBinary { block_size } = pbs.external_lwe.secret_key_distr {
+    if let SecretKeyDistr::BlockBinary {
+        block_size,
+        occupancy: BlockOccupancy::AtMostOne,
+    } = pbs.external_lwe.secret_key_distr
+    {
         assert!(
             client.external_lwe_secret_key().as_ref()[..block_size]
                 .iter()
@@ -669,8 +673,13 @@ fn u32_classic_chain() {
 
     // Classic controls also consume correlated block-binary secrets unchanged.
     config.external_lwe.dimension = LweDimension::new(6);
-    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
-    chained_pbs::<u32, U32NttTable>(config);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        chained_pbs::<u32, U32NttTable>(config);
+    }
 }
 
 #[test]
@@ -712,7 +721,10 @@ fn u32_sparse_cbs() {
 fn u32_block_pbs_and_batches() {
     let mut config = config(BlindRotationMethod::Block);
     config.external_lwe.dimension = LweDimension::new(6);
-    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 3,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     chained_pbs::<u32, U32NttTable>(config);
     many_lut_and_mvb::<u32, U32NttTable>(config);
     circuit_selection::<u32, U32NttTable>(config, NtruProjectionMethod::Separate);
@@ -724,7 +736,10 @@ fn u32_block_pbs_and_batches() {
 fn u64_block_workflows() {
     let mut config = config(BlindRotationMethod::Block);
     config.external_lwe.dimension = LweDimension::new(10);
-    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 5 };
+    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 5,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     chained_pbs::<u64, U64NttTable>(config);
     many_lut_and_mvb::<u64, U64NttTable>(config);
     circuit_selection::<u64, U64NttTable>(config, NtruProjectionMethod::PairedTrace);
@@ -864,7 +879,10 @@ fn key_generation_boundaries() {
     // Imported direct-block support is checked before sampling any key rows.
     let mut block_config = config;
     block_config.method = BlindRotationMethod::Block;
-    block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
+    block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 2,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     let block_context = TfheContext::<u32, Table, _>::try_from_pbs_config(block_config)
         .unwrap()
         .try_with_circuit_bootstrap(CbsGadgetConfig {

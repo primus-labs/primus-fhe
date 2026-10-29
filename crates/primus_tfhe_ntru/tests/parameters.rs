@@ -4,7 +4,7 @@ use primus_decompose::primitive::ApproxSignedBasis;
 use primus_encoding::RoundedCodec;
 use primus_lwe::{LweDimension, LweSecretKey};
 use primus_modulus::{BarrettModulus, PowOf2Modulus};
-use primus_ntru::{NtruSecretKey, SecretKeyDistr};
+use primus_ntru::{BlockOccupancy, NtruSecretKey, SecretKeyDistr};
 use primus_shape::PolyLength;
 use primus_tfhe::{BlindRotationMethod, DecompositionBaseLog, DecompositionLevelCount};
 use primus_tfhe_ntru::{
@@ -266,43 +266,80 @@ fn return_generation_rejects_incompatible_secrets_before_sampling() {
 fn block_controls_validate_imports_before_return_key_sampling() {
     let mut cfg = config();
     cfg.external_lwe.dimension = LweDimension::new(6);
-    cfg.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
-    for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
-        cfg.method = method;
-        let parameters = PbsParameters::try_from_config(cfg).unwrap();
-        for (coefficients, expected) in [
-            (vec![0; 6], Ok(())),
-            (vec![0, 0, 0, 0, 1, 0], Ok(())),
-            (
-                vec![1, 1, 0, 0, 0, 0],
-                Err(TfheKeyError::InvalidClientSecretKeyBlock),
-            ),
-            (
-                vec![2, 0, 0, 0, 0, 0],
-                Err(TfheKeyError::InvalidClientSecretKeyCoefficient),
-            ),
-        ] {
-            let mut f = vec![0; parameters.poly_length().get()];
-            f[0] = 1;
-            let client = ClientKey::new(
-                LweSecretKey::new(
-                    coefficients,
-                    cfg.external_lwe.secret_key_distr,
-                    parameters.external_lwe().cipher_modulus(),
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        cfg.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
+            cfg.method = method;
+            // Direct Block still uses the dummy layout until the backend steps.
+            if method == BlindRotationMethod::Block && occupancy == BlockOccupancy::ExactlyOne {
+                assert!(matches!(
+                    PbsParameters::try_from_config(cfg),
+                    Err(TfheParameterError::InvalidBlockSecretDistribution)
+                ));
+                continue;
+            }
+            let parameters = PbsParameters::try_from_config(cfg).unwrap();
+            let empty_block = if occupancy == BlockOccupancy::ExactlyOne {
+                Err(TfheKeyError::InvalidClientSecretKeyBlock)
+            } else {
+                Ok(())
+            };
+            for (coefficients, expected) in [
+                (vec![0; 6], empty_block.clone()),
+                (vec![0, 0, 0, 0, 1, 0], empty_block.clone()),
+                (vec![0, 1, 0, 0, 0, 1], Ok(())),
+                (
+                    vec![1, 1, 0, 0, 0, 0],
+                    Err(TfheKeyError::InvalidClientSecretKeyBlock),
                 ),
-                NtruSecretKey::new(f, cfg.bsk_secret_distr),
-            );
-            assert_eq!(client.check_compatible(&parameters), expected);
-            let mut rng = StdRng::seed_from_u64(79);
-            let mut untouched = StdRng::seed_from_u64(79);
-            let result = parameters.try_generate_lwe_return_key(&client, &mut rng);
-            match expected {
-                Ok(()) => assert!(result.is_ok()),
-                Err(expected) => {
-                    assert!(
-                        matches!(result, Err(KeyGenerationError::ClientKey(error)) if error == expected)
+                (
+                    vec![2, 0, 0, 0, 0, 0],
+                    Err(TfheKeyError::InvalidClientSecretKeyCoefficient),
+                ),
+            ] {
+                let mut f = vec![0; parameters.poly_length().get()];
+                f[0] = 1;
+                let check_distribution = coefficients == [0, 1, 0, 0, 0, 1];
+                let client = ClientKey::new(
+                    LweSecretKey::new(
+                        coefficients,
+                        cfg.external_lwe.secret_key_distr,
+                        parameters.external_lwe().cipher_modulus(),
+                    ),
+                    NtruSecretKey::new(f, cfg.bsk_secret_distr),
+                );
+                assert_eq!(client.check_compatible(&parameters), expected);
+                if check_distribution {
+                    let mut other = cfg;
+                    other.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+                        block_size: 3,
+                        occupancy: if occupancy == BlockOccupancy::AtMostOne {
+                            BlockOccupancy::ExactlyOne
+                        } else {
+                            BlockOccupancy::AtMostOne
+                        },
+                    };
+                    other.method = BlindRotationMethod::Classic;
+                    let other = PbsParameters::try_from_config(other).unwrap();
+                    assert_eq!(
+                        client.check_compatible(&other),
+                        Err(TfheKeyError::ClientSecretKeyDistributionMismatch)
                     );
-                    assert_eq!(rng.next_u64(), untouched.next_u64());
+                }
+                let mut rng = StdRng::seed_from_u64(79);
+                let mut untouched = StdRng::seed_from_u64(79);
+                let result = parameters.try_generate_lwe_return_key(&client, &mut rng);
+                match expected {
+                    Ok(()) => assert!(result.is_ok()),
+                    Err(expected) => {
+                        assert!(
+                            matches!(result, Err(KeyGenerationError::ClientKey(error)) if error == expected)
+                        );
+                        assert_eq!(rng.next_u64(), untouched.next_u64());
+                    }
                 }
             }
         }

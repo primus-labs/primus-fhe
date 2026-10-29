@@ -75,7 +75,7 @@ pub use signed_discrete_gaussian::{
 };
 
 mod secret_key_distr;
-pub use secret_key_distr::SecretKeyDistr;
+pub use secret_key_distr::{BlockOccupancy, SecretKeyDistr};
 
 mod secret_key_sampler;
 pub use secret_key_sampler::SecretKeySampler;

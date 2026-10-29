@@ -4,8 +4,8 @@ mod circuit;
 pub use circuit::CircuitBootstrapServerKey;
 
 use primus_glwe::{
-    GgswParameters, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey, NttGlweSecretKey,
-    SecretKeyDistr,
+    BlockOccupancy, GgswParameters, NttGlweGadgetEncryptWorkspace, NttGlweKeySwitchingKey,
+    NttGlweSecretKey, SecretKeyDistr,
 };
 use primus_integer::FheUint;
 use primus_lwe::LweSecretKey;
@@ -187,6 +187,7 @@ impl<T: FheUint> BlindRotationKey<T> {
                 if parameters.small_lwe().secret_key_distr()
                     != (SecretKeyDistr::BlockBinary {
                         block_size: key.block_size(),
+                        occupancy: BlockOccupancy::AtMostOne,
                     })
                 {
                     return false;

@@ -5,7 +5,8 @@
 use primus_encoding::phase_error_magnitude;
 use primus_fft::{FftTable, TorusFftValue};
 use primus_glwe::{
-    FourierGlweDecryptWorkspace, FourierGlweSecretKey, GlweDimension, SecretKeyDistr,
+    BlockOccupancy, FourierGlweDecryptWorkspace, FourierGlweSecretKey, GlweDimension,
+    SecretKeyDistr,
 };
 use primus_lattice::glwe::FourierGlwe;
 use primus_lwe::LweDimension;
@@ -42,7 +43,10 @@ fn decomposition() -> DecompositionConfig {
 fn config<T: TorusFftValue>(method: BlindRotationMethod) -> PbsConfig<T> {
     let modulus = ModulusConfig::Native;
     let secret = if method == BlindRotationMethod::Block {
-        SecretKeyDistr::BlockBinary { block_size: 3 }
+        SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy: BlockOccupancy::AtMostOne,
+        }
     } else {
         SecretKeyDistr::FixedHammingWeightBinary { hamming_weight: 3 }
     };
@@ -616,13 +620,18 @@ fn u32_binary_classic_chain() {
 
     // The logical block width need not divide the padded ring-KS target length.
     config.small_lwe.dimension = LweDimension::new(6);
-    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
-    for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
-        config.order = order;
-        #[cfg(feature = "rustfft")]
-        chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
-        #[cfg(feature = "tfhe-fft")]
-        chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        };
+        for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
+            config.order = order;
+            #[cfg(feature = "rustfft")]
+            chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
+            #[cfg(feature = "tfhe-fft")]
+            chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
+        }
     }
 }
 
@@ -760,7 +769,10 @@ fn u32_block_pbs_and_batches() {
 fn u64_block_cbs_and_returns() {
     let mut config = two_domain_config(BlindRotationMethod::Block, PbsOrder::KeyswitchBootstrap);
     config.small_lwe.dimension = LweDimension::new(10);
-    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 5 };
+    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 5,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     #[cfg(feature = "rustfft")]
     circuit_selection::<u64, primus_fft::RustFftTable, _>(config);
     #[cfg(feature = "tfhe-fft")]
@@ -1009,7 +1021,10 @@ fn check_key_generation_boundaries<Table: FftTable>() {
     // Imported block coefficients must be checked before sampling key rows.
     let mut block_config = config;
     block_config.method = BlindRotationMethod::Block;
-    block_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
+    block_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+        block_size: 2,
+        occupancy: BlockOccupancy::AtMostOne,
+    };
     let block_context = TfheContext::<u32, Table>::try_from_cbs_config(CbsConfig {
         fourier_trace_precision: primus_tfhe_glwe::FourierTracePrecision::Ordinary,
         pbs: block_config,
@@ -1535,7 +1550,10 @@ fn check_block_raw_rotation<T: TorusFftValue, Table: FftTable>() {
         let mut config =
             two_domain_config(BlindRotationMethod::Block, PbsOrder::BootstrapKeyswitch);
         config.small_lwe.dimension = LweDimension::new(secret.len());
-        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size };
+        config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: BlockOccupancy::AtMostOne,
+        };
         config.small_lwe.cipher_modulus = ModulusConfig::Explicit(T::as_from(2 * n));
         config.bsk_dimension = GlweDimension::new(1);
         config.bsk_poly_length = PolyLength::new(n);

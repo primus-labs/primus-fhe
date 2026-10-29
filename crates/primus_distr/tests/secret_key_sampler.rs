@@ -1,42 +1,55 @@
 use num_traits::{ConstOne, ConstZero};
-use primus_distr::{DiscreteGaussian, SecretKeyDistr, SecretKeySampler};
+use primus_distr::{BlockOccupancy, DiscreteGaussian, SecretKeyDistr, SecretKeySampler};
 use primus_integer::{AsInto, FheUint};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
-/// One draw selects a one-hot position or the zero state; both representations
+/// One draw selects a one-hot position or the optional zero state; both representations
 /// overwrite prefilled storage and consume exactly those same categorical draws.
 #[test]
 fn block_binary_matches_categorical_oracle() {
     use rand::distr::{Distribution, Uniform};
 
     fn check<T: FheUint>() {
-        for block_size in [1, 3] {
-            let distr = SecretKeyDistr::BlockBinary { block_size };
+        for (block_size, occupancy) in [
+            (1, BlockOccupancy::AtMostOne),
+            (3, BlockOccupancy::AtMostOne),
+            (1, BlockOccupancy::ExactlyOne),
+            (3, BlockOccupancy::ExactlyOne),
+        ] {
+            let distr = SecretKeyDistr::BlockBinary {
+                block_size,
+                occupancy,
+            };
             assert!(distr.is_binary());
             let sampler = SecretKeySampler::<T>::new(distr);
             let length = 24 * block_size;
             assert_eq!(sampler.validate_length(length), Ok(()));
             let mut oracle_rng = StdRng::seed_from_u64(204);
-            let categories = Uniform::new(0, block_size + 1).unwrap();
+            let categories = Uniform::new(
+                0,
+                block_size + usize::from(occupancy == BlockOccupancy::AtMostOne),
+            )
+            .unwrap();
             let positions: Vec<_> = (0..24)
                 .map(|_| categories.sample(&mut oracle_rng))
                 .collect();
-            assert!(
-                positions.contains(&block_size),
-                "seed covers an empty block"
-            );
-            // Start at a known zero-state draw: a whole all-zero key is valid
-            // and must not be rejected or replaced by another draw.
-            let mut empty_rng = StdRng::seed_from_u64(204);
-            for _ in 0..positions.iter().position(|&i| i == block_size).unwrap() {
-                let _ = categories.sample(&mut empty_rng);
+            if occupancy == BlockOccupancy::AtMostOne {
+                assert!(
+                    positions.contains(&block_size),
+                    "seed covers an empty block"
+                );
+                // Replay an empty block: do not reject even an all-zero key.
+                let mut empty_rng = StdRng::seed_from_u64(204);
+                for _ in 0..positions.iter().position(|&i| i == block_size).unwrap() {
+                    let _ = categories.sample(&mut empty_rng);
+                }
+                let empty_key = sampler.sample_signed(block_size, &mut empty_rng);
+                assert!(
+                    empty_key
+                        .iter()
+                        .all(|&value| value == T::SignedInteger::ZERO)
+                );
             }
-            let empty_key = sampler.sample_signed(block_size, &mut empty_rng);
-            assert!(
-                empty_key
-                    .iter()
-                    .all(|&value| value == T::SignedInteger::ZERO)
-            );
             let expected: Vec<_> = positions
                 .iter()
                 .flat_map(|&position| (0..block_size).map(move |i| usize::from(i == position)))
@@ -47,6 +60,13 @@ fn block_binary_matches_categorical_oracle() {
             sampler.sample_signed_to(&mut signed, &mut signed_rng);
             let actual: Vec<usize> = signed.iter().map(|&value| value.as_into()).collect();
             assert_eq!(actual, expected);
+            if occupancy == BlockOccupancy::ExactlyOne {
+                assert!(
+                    actual
+                        .chunks_exact(block_size)
+                        .all(|block| block.iter().sum::<usize>() == 1)
+                );
+            }
             let expected_next = oracle_rng.next_u64();
             assert_eq!(signed_rng.next_u64(), expected_next);
 
@@ -71,41 +91,58 @@ fn block_binary_rejects_invalid_size_and_incomplete_keys() {
 
     use primus_distr::SecretKeySamplerError;
 
-    for block_size in [0, usize::MAX] {
+    for (block_size, occupancy) in [
+        (0, BlockOccupancy::AtMostOne),
+        (usize::MAX, BlockOccupancy::AtMostOne),
+        (0, BlockOccupancy::ExactlyOne),
+    ] {
         assert!(matches!(
-            SecretKeySampler::<u32>::try_new(SecretKeyDistr::BlockBinary { block_size }),
+            SecretKeySampler::<u32>::try_new(SecretKeyDistr::BlockBinary { block_size, occupancy }),
             Err(SecretKeySamplerError::InvalidBlockSize { block_size: actual })
                 if actual == block_size
         ));
     }
-    let sampler = SecretKeySampler::<u32>::new(SecretKeyDistr::BlockBinary { block_size: 3 });
-    for length in [0, 1, 2, 4] {
-        assert_eq!(
-            sampler.validate_length(length),
-            Err(SecretKeySamplerError::InvalidBlockLength {
-                length,
-                block_size: 3,
-            })
-        );
-        let mut signed = vec![19; length];
-        let mut encoded = vec![19; length];
-        let mut rng = StdRng::seed_from_u64(205);
-        let mut expected_rng = StdRng::seed_from_u64(205);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                sampler.sample_signed_to(&mut signed, &mut rng)
-            }))
-            .is_err()
-        );
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                sampler.sample_encoded_to(&mut encoded, u32::MAX, &mut rng)
-            }))
-            .is_err()
-        );
-        assert_eq!(signed, vec![19; length]);
-        assert_eq!(encoded, vec![19; length]);
-        assert_eq!(rng.next_u64(), expected_rng.next_u64());
+    // ExactlyOne does not reserve an extra categorical state.
+    assert!(
+        SecretKeySampler::<u32>::try_new(SecretKeyDistr::BlockBinary {
+            block_size: usize::MAX,
+            occupancy: BlockOccupancy::ExactlyOne,
+        })
+        .is_ok()
+    );
+    for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
+        let sampler = SecretKeySampler::<u32>::new(SecretKeyDistr::BlockBinary {
+            block_size: 3,
+            occupancy,
+        });
+        for length in [0, 1, 2, 4] {
+            assert_eq!(
+                sampler.validate_length(length),
+                Err(SecretKeySamplerError::InvalidBlockLength {
+                    length,
+                    block_size: 3,
+                })
+            );
+            let mut signed = vec![19; length];
+            let mut encoded = vec![19; length];
+            let mut rng = StdRng::seed_from_u64(205);
+            let mut expected_rng = StdRng::seed_from_u64(205);
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| {
+                    sampler.sample_signed_to(&mut signed, &mut rng)
+                }))
+                .is_err()
+            );
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| {
+                    sampler.sample_encoded_to(&mut encoded, u32::MAX, &mut rng)
+                }))
+                .is_err()
+            );
+            assert_eq!(signed, vec![19; length]);
+            assert_eq!(encoded, vec![19; length]);
+            assert_eq!(rng.next_u64(), expected_rng.next_u64());
+        }
     }
 }
 

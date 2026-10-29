@@ -3,7 +3,7 @@
 use std::alloc::Layout;
 
 use primus_fft::{Complex64, FftTable, TorusFftValue};
-use primus_glwe::{FourierGlweEncryptor, GgswParameters, SecretKeyDistr};
+use primus_glwe::{BlockOccupancy, FourierGlweEncryptor, GgswParameters, SecretKeyDistr};
 use primus_lattice::LweDimension;
 use primus_modulus::NativeModulus;
 use primus_reduce::RingContext;
@@ -27,7 +27,11 @@ impl BlockKeyLayout {
         parameters: &GgswParameters<T, NativeModulus<T>>,
     ) -> Result<Self, KeyGenerationError> {
         use BlockBootstrappingKeyError as Error;
-        let SecretKeyDistr::BlockBinary { block_size } = distribution else {
+        let SecretKeyDistr::BlockBinary {
+            block_size,
+            occupancy: BlockOccupancy::AtMostOne,
+        } = distribution
+        else {
             return Err(Error::UnsupportedSecretDistribution.into());
         };
         if dimension == 0 || block_size == 0 || !dimension.is_multiple_of(block_size) {
