@@ -29,7 +29,7 @@
 | 主题 | 指南 |
 | --- | --- |
 | 数值域、表示、借用、phase 与可复用状态 | [跨库组合](composition.md) |
-| 旋转舍入、q/Q 返回、CBS 精度/投影支持与 one-hot 误差条件 | [自举数值契约](bootstrapping-contracts.md) |
+| 旋转舍入、q/Q 返回、CBS 精度/投影支持、Fourier 预算与 one-hot 误差条件 | [自举数值契约](bootstrapping-contracts.md) |
 | 当前实验配置及其证据边界 | [TFHE 参数目录](tfhe-parameters.md) |
 | 离线 NTRU CBS 噪声场景与 gadget 筛选 | [参数分析工具](../../../primus_high_prec_lut/tools/parameter_selection/ntru_cbs/README.zh_CN.md) |
 | 测试、示例、feature 与 benchmark 命令 | [测试指南](testing.md) |

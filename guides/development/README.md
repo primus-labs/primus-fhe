@@ -29,7 +29,7 @@ After the relevant crate's example, read only the topics your composition needs.
 | Topic | Guide |
 | --- | --- |
 | Domains, representations, borrowing, phases and reusable state | [Composing libraries](composition.md) |
-| Rotation rounding, q/Q returns, CBS precision/projection support and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) |
+| Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) |
 | Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) |
 | Offline NTRU CBS noise scenarios and gadget search | [Parameter analysis tool](../../../primus_high_prec_lut/tools/parameter_selection/ntru_cbs/README.md) |
 | Tests, examples, features and benchmark commands | [Testing guide](testing.md) |

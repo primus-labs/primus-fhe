@@ -118,6 +118,40 @@ NTRU scheme-switch material binds the complete output basis. GLWE material binds
 
 Rank-one GLWE NTT scheme switching uses only `GLev(s²)`: with phase `b−as`, its mask row is `sum D(a)GLev(s²)+(b,0)` and its body row retains the input. The exact correction uses the final body, including any post-trace offset. Compared with a full `GGSW(-s)` product, this removes body decomposition and its key-error terms, while retaining shared input error multiplied by `−s` and square-secret decomposition residuals. It does not imply lower error for every input or an independently sampled body error. Higher ranks and Fourier retain full products. The implementation and boundary contract belong to [`NttGlweSchemeSwitchKey`](../../crates/primus_glwe/src/scheme_switch/ntt.rs).
 
+### GLWE Fourier error budgets
+
+[Exact coefficient key generation](../performance/fourier-glwe-keygen.md) does
+not make stored Fourier rows or online products exact. Keep sampling error,
+decomposition residuals, native floor corrections and floating-point error
+separate. Bounds depend on the actual engine, plan, tables and operand ranges;
+a roundtrip test or observed maximum is not a forward/inverse error bound.
+
+Full Fourier SS returns frequency-domain GGSW rows without an inverse transform
+or integer rounding. Its projection errors are shared across mask/body rows.
+When CMux consumes the control, combine each lane's source weights as
+`W_l=d_body,l-sum_i d_mask,i,l*s_i` before estimating its error. Propagate stored
+spectrum errors once, including their cross terms with consumer digit-transform
+errors. Retain component-wise spectrum bounds for these terms; a phase bound
+alone is insufficient. Add inverse-transform and integer-recovery error where
+the consumer actually performs them, not at an artificial SS recovery boundary.
+
+GLWE Split35 affects trace only. Low 35 bits and high 29 bits come from the same
+exact native row, use the same `2^-64` torus scale and share digit transforms.
+Recover each limb separately before wrapping reconstruction. Their integer
+error radii combine as `E_low+2^35*E_high`; one high-limb error is amplified by
+`2^35`. Do not assume independent limbs or round their combined real error only
+once. Split35 does not cover ordinary BR, SS, CMux or client decryption, nor does
+it remove the [native floor corrections](#normalized-reverse-trace).
+
+Budget the actual input KS/MS, candidate ciphertexts and return path. Full-ring
+Fourier client decryption adds its own transforms, products and recovery error;
+an integer LWE decoder does not. Count the positions actually decoded, rather
+than GGSW rows. Under a common condition G, a full-request bound needs valid
+input/decoder event bounds and `P[not G]`; a union bound does not require
+independence but cannot supply missing bounds. Unknown FFT envelopes or shared
+source tails remain unknown. Conditional estimates or finite successful tests
+alone do not certify full-request DFR (decryption failure rate) or security cost.
+
 ## Normalized reverse trace
 
 Let `N=2^ell`, `sigma_d(P)=P(X^d)` and let `Pi_r` retain coefficients at positions divisible by N/r, for `r=2^h`. Reverse trace visits degrees `d_k=2^k+1` in ascending order, k=h+1,...,ell: halve the current coefficient ciphertext, apply automorphism with key switching, then add the two results. It preserves ring size. Full trace has r=1; r=N copies the input.

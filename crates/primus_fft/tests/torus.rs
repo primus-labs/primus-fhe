@@ -1,4 +1,21 @@
 #[test]
+fn forward_torus_conversion_signed_endpoints() {
+    use primus_fft::TorusFftValue;
+
+    for (input, expected) in [
+        (0, 0.0),
+        ((1u64 << 63) - 1, 0.5),
+        (1u64 << 63, -0.5),
+        (u64::MAX, -u64::TORUS_SCALE),
+    ] {
+        assert_eq!(input.into_torus_f64(), expected);
+    }
+    // All centered u32 integers convert exactly, so its positive endpoint
+    // remains one coefficient unit below +0.5.
+    assert_eq!(((1u32 << 31) - 1).into_torus_f64(), 0.5 - u32::TORUS_SCALE);
+}
+
+#[test]
 fn u64_torus_conversion_preserves_round_saturate_and_wrap() {
     use primus_fft::TorusFftValue;
     check_torus_conversion::<u64>(
