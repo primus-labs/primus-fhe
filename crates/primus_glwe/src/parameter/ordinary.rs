@@ -114,6 +114,10 @@ where
 
     /// Binds an ordinary message codec to an existing gadget's GLWE domain.
     /// Shares prepared samplers; the gadget basis is neither copied nor retained.
+    /// Inherits the gadget's secret domain, including a logical LWE prefix and
+    /// public zero tail when built with
+    /// [`super::GlevParameters::try_from_padded_lwe_parts`]. Such a key must be
+    /// supplied with that padding, rather than sampled over the full mask length.
     ///
     /// # Errors
     /// Rejects a codec with another ciphertext modulus.
@@ -124,7 +128,7 @@ where
         if plaintext_codec.ciphertext_modulus() != gadget.cipher_modulus() {
             return Err(GlweParameterError::CodecModulusMismatch);
         }
-        // The gadget already checked fixed secret weights against this layout.
+        // The gadget already established its secret domain for this layout.
         Ok(Self::from_matching_parts(
             gadget.glwe_size(),
             Arc::clone(&gadget.encryption_parameters),

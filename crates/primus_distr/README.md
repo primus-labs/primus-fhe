@@ -22,7 +22,7 @@ The scalar sampler types above implement `rand::distr::Distribution`. Batch help
 
 ## Secret-key distribution parameters
 
-`SecretKeyDistr` describes a complete binary, ternary, fixed-weight or Gaussian key; it is not a scalar sampler. Use `binary(one_probability)` or `ternary(negative_one_probability, one_probability)` for custom probabilities. Each probability must be finite and in `[0, 1]`, and the ternary sum must not exceed one. Cryptosystems choose which variants they support.
+`SecretKeyDistr` describes a complete binary, ternary, fixed-weight, block-binary or Gaussian key; it is not a scalar sampler. Use `binary(one_probability)` or `ternary(negative_one_probability, one_probability)` for custom probabilities. Each probability must be finite and in `[0, 1]`, and the ternary sum must not exceed one. Cryptosystems choose which variants they support.
 
 | Constructor | Distribution |
 | --- | --- |
@@ -31,6 +31,8 @@ The scalar sampler types above implement `rand::distr::Distribution`. Batch help
 | `fixed_composition_ternary(length, negative_weight, positive_weight)` | Exact separate counts of negative and positive ones |
 
 Weights apply to the complete logical key. Constructors reject excessive weights and sum overflow, but do not retain the length; sampling checks the actual output length before writing or drawing randomness.
+
+`BlockBinary { block_size: w }` samples consecutive independent blocks uniformly from the all-zero block and the `w` one-hot vectors. Thus each state has probability `1/(w+1)`; the total Hamming weight is random. The size `w` must be positive with `w+1` representable in `usize`, but need not be a power of two. The complete key length must be a positive multiple of `w`; `validate_length` and sampling reject empty keys and incomplete blocks before writing or drawing randomness.
 
 Prepare `SecretKeySampler<T>` with `try_new(distribution)` (fallible) or `new(distribution)` (panicking). Use `sample_signed` / `sample_signed_to` for `T::SignedInteger` output, or `sample_encoded` / `sample_encoded_to` for canonical residues. The `_to` methods overwrite caller storage without allocating.
 

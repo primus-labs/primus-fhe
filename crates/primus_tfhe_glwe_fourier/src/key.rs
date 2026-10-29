@@ -350,13 +350,18 @@ where
         ))
     }
 
-    /// Validates the configured sparse geometry before sampling any secrets or rows.
+    /// Checks the selected BR capability and sparse geometry before sampling secrets or rows.
     /// `None` denotes classic BR; matching for sparse BR later keeps the same secret.
     fn prepare_blind_rotation(
         &self,
     ) -> Result<Option<crate::sparse::SparseKeyLayout>, KeyGenerationError> {
         Ok(match self.context.parameters().blind_rotation_method() {
             BlindRotationMethod::Classic => None,
+            BlindRotationMethod::Block => {
+                return Err(KeyGenerationError::UnsupportedBlindRotationMethod(
+                    BlindRotationMethod::Block,
+                ));
+            }
             BlindRotationMethod::Sparse {
                 copy_count,
                 bucket_count,

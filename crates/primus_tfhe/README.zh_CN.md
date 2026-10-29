@@ -45,6 +45,8 @@ ManyLUT 和 MVB 计算**同一个输入的多个函数**。ManyLUT 用旋转分�
 
 四后端均导出 `BlindRotationMethod`，通过 `config.method` 选择；仅改变秘密分布不会切换算法。`Classic` 支持 binary/ternary，包括固定重量分布。显式的 `Sparse { copy_count, bucket_count }` 要求 fixed-weight binary 且 `0<h<n`，不支持 sparse ternary。公开映射重试后匹配仍失败时返回错误，不更改客户端秘密或回退到 classic。
 
+`SecretKeyDistr::BlockBinary { block_size }` 对每个连续块均匀选择空块或一个位置为 `1` 的状态。逻辑密钥长度必须是块宽的非零整数倍，总重量是随机的。`Classic` 可使用此分布。`Block` 选择直接按块聚合，但当前四后端均在建钥时返回 `UnsupportedBlindRotationMethod`。GLWE ring-KS 保留逻辑 LWE 前缀并补公开零尾，不要求填充后的环长度也能被块宽整除。
+
 普通 PBS 先构造 `TfheContext::try_from_pbs_config(config)`，再调用 `context.try_generate_keys(rng)` 得到 `(ClientKey, ServerKey)`。CBS 或 NTRU one-hot 使用 CBS 工厂：
 
 ```rust,ignore

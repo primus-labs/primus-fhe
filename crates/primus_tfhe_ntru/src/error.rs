@@ -40,6 +40,9 @@ pub enum TfheParameterError {
     /// The external LWE distribution must be binary or ternary.
     #[error("NTRU TFHE requires a binary or ternary client secret-key distribution")]
     UnsupportedClientSecretKeyDistribution,
+    /// Direct block controls require the block-binary external distribution.
+    #[error("block blind rotation requires a block-binary external LWE secret")]
+    InvalidBlockSecretDistribution,
 }
 
 /// An incompatibility between NTRU client keys and TFHE parameters.
@@ -57,6 +60,9 @@ pub enum TfheKeyError {
     /// An external LWE coefficient is outside the declared binary or ternary domain.
     #[error("NTRU TFHE client coefficients do not match their binary or ternary domain")]
     InvalidClientSecretKeyCoefficient,
+    /// A block-binary external secret contains more than one `1` in a block.
+    #[error("external LWE secret block contains more than one nonzero coefficient")]
+    InvalidClientSecretKeyBlock,
     /// The external secret has the wrong LWE dimension.
     #[error("NTRU client key has the wrong external LWE dimension")]
     ExternalLweDimensionMismatch,
@@ -123,6 +129,9 @@ pub enum CircuitBootstrapParameterError {
 /// Failure to generate classic, sparse or circuit-bootstrap keys for this TFHE family.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum KeyGenerationError {
+    /// The selected blind-rotation method is not supported by this backend.
+    #[error("unsupported blind-rotation method: {0:?}")]
+    UnsupportedBlindRotationMethod(primus_tfhe::BlindRotationMethod),
     /// The context has no complete ring-output CBS configuration.
     #[error("context has no circuit-bootstrap parameters")]
     MissingCircuitBootstrapParameters,

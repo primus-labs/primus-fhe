@@ -20,9 +20,10 @@ pub struct GadgetEncryptionConfig<D = DecompositionConfig> {
 
 /// Blind-rotation algorithm used for fresh paired keys or an existing client.
 ///
-/// This choice does not change the secret distribution in TFHE parameters. A fixed-weight
-/// binary secret can use either algorithm; selecting sparse with an unsupported distribution
-/// is an error, never a request to resample the secret or fall back to classic.
+/// This choice does not change the secret distribution in TFHE parameters. Classic
+/// accepts binary and ternary distributions; sparse requires fixed-weight binary,
+/// and block requires a block-binary secret. An unsupported distribution or backend
+/// capability is an error, never a request to resample or fall back to classic.
 /// Backend key generation validates bucket geometry against the actual secret and ciphertext
 /// layout. This algorithm choice carries no encryption parameters, keys, return policy,
 /// CBS material or runtime scratch.
@@ -38,6 +39,10 @@ pub enum BlindRotationMethod {
         /// Number of buckets; must be at least `max(copy_count, h)`.
         bucket_count: usize,
     },
+    /// Contiguous equal-sized blocks with at most one `1` per block.
+    /// The block width is owned by the input secret distribution; all-zero
+    /// blocks are valid. Backend key generation must support this method.
+    Block,
 }
 
 /// Independent decompositions for circuit-bootstrap output, trace and scheme switching.

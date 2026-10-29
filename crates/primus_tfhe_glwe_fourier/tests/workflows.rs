@@ -591,6 +591,17 @@ fn u32_binary_classic_chain() {
     chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
     #[cfg(feature = "tfhe-fft")]
     chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
+
+    // The logical block width need not divide the padded ring-KS target length.
+    config.small_lwe.dimension = LweDimension::new(6);
+    config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    for order in [PbsOrder::BootstrapKeyswitch, PbsOrder::KeyswitchBootstrap] {
+        config.order = order;
+        #[cfg(feature = "rustfft")]
+        chained_pbs::<u32, primus_fft::RustFftTable, _>(config);
+        #[cfg(feature = "tfhe-fft")]
+        chained_pbs::<u32, primus_fft::TfheFftTable, _>(config);
+    }
 }
 
 #[cfg(feature = "rustfft")]
@@ -925,6 +936,33 @@ fn check_key_generation_boundaries<Table: FftTable>() {
         Err(KeyGenerationError::MissingCircuitBootstrapParameters)
     ));
     drop(generator);
+
+    // Unsupported methods must not sample secrets or evaluation-key rows.
+    let mut block_config = config;
+    block_config.method = BlindRotationMethod::Block;
+    block_config.small_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
+    let block_context = TfheContext::<u32, Table>::try_from_cbs_config(CbsConfig {
+        fourier_trace_precision: primus_tfhe_glwe::FourierTracePrecision::Ordinary,
+        pbs: block_config,
+        gadget,
+        input_encoding: CbsInputEncoding::Padded,
+    })
+    .unwrap();
+    let mut block_generator = KeyGenerator::new(&block_context);
+    assert_eq!(
+        block_generator.try_generate(&mut key_rng).err(),
+        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
+            BlindRotationMethod::Block,
+        ))
+    );
+    assert_eq!(
+        block_generator
+            .try_generate_circuit_bootstrap_keys(&mut key_rng)
+            .err(),
+        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
+            BlindRotationMethod::Block,
+        ))
+    );
 
     // Public sparse geometry must be checked before either PBS or CBS samples a client.
     let mut invalid_config = config;

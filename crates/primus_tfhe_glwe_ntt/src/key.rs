@@ -43,7 +43,8 @@ impl<T: FheUint> BlindRotationKey<T> {
     /// those of [`SparseGlweBootstrappingKey`].
     ///
     /// # Errors
-    /// Returns sparse geometry, support or matching errors without a partial key.
+    /// Rejects unsupported methods before sampling. Returns sparse geometry,
+    /// support or matching errors without a partial key.
     ///
     /// # Panics
     /// Panics on invalid classic secret coefficients/distribution, target key,
@@ -63,6 +64,9 @@ impl<T: FheUint> BlindRotationKey<T> {
     {
         let layout = match method {
             BlindRotationMethod::Classic => None,
+            BlindRotationMethod::Block => {
+                return Err(KeyGenerationError::UnsupportedBlindRotationMethod(method));
+            }
             BlindRotationMethod::Sparse {
                 copy_count,
                 bucket_count,
@@ -403,13 +407,18 @@ where
         )
     }
 
-    /// Validates the configured sparse geometry before sampling any secrets or rows.
+    /// Checks the selected BR capability and sparse geometry before sampling secrets or rows.
     /// `None` denotes classic BR; matching for sparse BR later keeps the same secret.
     fn prepare_blind_rotation(
         &self,
     ) -> Result<Option<crate::sparse::SparseKeyLayout>, KeyGenerationError> {
         Ok(match self.context.parameters().blind_rotation_method() {
             BlindRotationMethod::Classic => None,
+            BlindRotationMethod::Block => {
+                return Err(KeyGenerationError::UnsupportedBlindRotationMethod(
+                    BlindRotationMethod::Block,
+                ));
+            }
             BlindRotationMethod::Sparse {
                 copy_count,
                 bucket_count,

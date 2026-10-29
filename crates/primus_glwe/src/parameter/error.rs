@@ -37,6 +37,14 @@ pub enum GlevParameterError {
     /// The basis and GLWE ciphertext use different moduli.
     #[error("GLev decomposition basis must match the GLWE ciphertext modulus")]
     BasisModulusMismatch,
+    /// The logical LWE prefix does not fit the padded GLWE mask.
+    #[error("logical secret dimension {logical_dimension} exceeds padded GLWE capacity {capacity}")]
+    PaddedSecretDimensionExceedsCapacity {
+        /// Number of coefficients in the unpadded LWE secret.
+        logical_dimension: usize,
+        /// Number of coefficients available in the GLWE mask.
+        capacity: usize,
+    },
     /// The gadget layout cannot be represented by `usize` lengths.
     #[error(transparent)]
     InvalidSize(#[from] GlweSizeError),

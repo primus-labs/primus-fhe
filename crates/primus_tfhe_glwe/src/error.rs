@@ -27,6 +27,10 @@ pub enum TfheParameterError {
     #[error("TFHE bootstrapping requires a binary or ternary input LWE secret key")]
     UnsupportedInputLweSecretKey,
 
+    /// Direct block controls require the block-binary input distribution.
+    #[error("block blind rotation requires a block-binary input LWE secret")]
+    InvalidBlockSecretDistribution,
+
     /// The rotation domain `2N` cannot be represented by the input coefficient type.
     #[error("rotation domain must fit the input coefficient type")]
     RotationDomainTooLarge,
@@ -91,6 +95,10 @@ pub enum TfheKeyError {
     /// A small-LWE coefficient lies outside the declared binary/ternary domain.
     #[error("small-LWE secret coefficient is outside its declared binary or ternary support")]
     InvalidLweSecretKeyCoefficient,
+
+    /// A block-binary small secret contains more than one `1` in a block.
+    #[error("small-LWE secret block contains more than one nonzero coefficient")]
+    InvalidLweSecretKeyBlock,
 
     /// The GLWE secret key has the wrong dimension.
     #[error("GLWE secret-key dimension mismatch: expected {expected}, got {actual}")]
@@ -178,6 +186,9 @@ pub enum CircuitBootstrapParameterError {
 /// Failure to generate ordinary or circuit-bootstrap keys for this TFHE family.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum KeyGenerationError {
+    /// The selected blind-rotation method is not supported by this backend.
+    #[error("unsupported blind-rotation method: {0:?}")]
+    UnsupportedBlindRotationMethod(primus_tfhe::BlindRotationMethod),
     /// The context has no complete ring-output CBS configuration.
     #[error("context has no circuit-bootstrap parameters")]
     MissingCircuitBootstrapParameters,

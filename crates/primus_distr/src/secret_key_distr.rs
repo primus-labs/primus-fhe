@@ -27,6 +27,17 @@ pub enum SecretKeyDistr {
         /// Exact number of coefficients equal to `1`.
         hamming_weight: usize,
     },
+    /// Independent consecutive blocks, uniform over the all-zero block and
+    /// the `block_size` vectors containing exactly one `1`.
+    ///
+    /// This is not a fixed-Hamming-weight distribution. A complete logical key
+    /// must be nonempty and contain only full blocks; the block size need not
+    /// be a power of two. Sampler construction checks that `block_size > 0`
+    /// and `block_size + 1` fits in `usize`.
+    BlockBinary {
+        /// Number of consecutive coefficients in each block.
+        block_size: usize,
+    },
     /// Exactly `hamming_weight` uniformly selected nonzero positions, with
     /// independent uniform signs. Positive and negative counts are not fixed.
     FixedHammingWeightTernary {
@@ -159,7 +170,10 @@ impl SecretKeyDistr {
     pub const fn is_binary(self) -> bool {
         matches!(
             self,
-            Self::UniformBinary | Self::Binary { .. } | Self::FixedHammingWeightBinary { .. }
+            Self::UniformBinary
+                | Self::Binary { .. }
+                | Self::FixedHammingWeightBinary { .. }
+                | Self::BlockBinary { .. }
         )
     }
 

@@ -11,7 +11,7 @@ use primus_tfhe_ntru::{
     CbsConfig, CbsGadgetConfig, CbsGadgetParameters, CbsParameters, CircuitBootstrapParameterError,
     ClientKey, DecompositionConfig, GadgetEncryptionConfig, KeyGenerationError, LookupTableError,
     LweConfig, ModulusConfig, OneHotBootstrapError, OneHotLookupTable, PbsConfig, PbsMessageConfig,
-    PbsParameters, TfheKeyError,
+    PbsParameters, TfheKeyError, TfheParameterError,
 };
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -184,6 +184,9 @@ fn return_generation_rejects_incompatible_secrets_before_sampling() {
                 f_distr = SecretKeyDistr::UniformTernary
             }
             TfheKeyError::AccumulatorSecretOutsideLweModulus => f[0] = 1024,
+            TfheKeyError::InvalidClientSecretKeyBlock => {
+                panic!("block occupancy has a separate distribution-aware case")
+            }
         }
         let client = ClientKey::new(
             LweSecretKey::new(s, s_distr, PowOf2Modulus::new(q)),
@@ -209,6 +212,60 @@ fn return_generation_rejects_incompatible_secrets_before_sampling() {
             assert_eq!(rng.next_u64(), untouched.next_u64());
         }
     }
+}
+
+/// Imported logical blocks are checked before generating any return rows.
+#[test]
+fn block_controls_validate_imports_before_return_key_sampling() {
+    let mut cfg = config();
+    cfg.external_lwe.dimension = LweDimension::new(6);
+    cfg.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    for method in [BlindRotationMethod::Classic, BlindRotationMethod::Block] {
+        cfg.method = method;
+        let parameters = PbsParameters::try_from_config(cfg).unwrap();
+        for (coefficients, expected) in [
+            (vec![0; 6], Ok(())),
+            (vec![0, 0, 0, 0, 1, 0], Ok(())),
+            (
+                vec![1, 1, 0, 0, 0, 0],
+                Err(TfheKeyError::InvalidClientSecretKeyBlock),
+            ),
+            (
+                vec![2, 0, 0, 0, 0, 0],
+                Err(TfheKeyError::InvalidClientSecretKeyCoefficient),
+            ),
+        ] {
+            let mut f = vec![0; parameters.poly_length().get()];
+            f[0] = 1;
+            let client = ClientKey::new(
+                LweSecretKey::new(
+                    coefficients,
+                    cfg.external_lwe.secret_key_distr,
+                    parameters.external_lwe().cipher_modulus(),
+                ),
+                NtruSecretKey::new(f, cfg.bsk_secret_distr),
+            );
+            assert_eq!(client.check_compatible(&parameters), expected);
+            let mut rng = StdRng::seed_from_u64(79);
+            let mut untouched = StdRng::seed_from_u64(79);
+            let result = parameters.try_generate_lwe_return_key(&client, &mut rng);
+            match expected {
+                Ok(()) => assert!(result.is_ok()),
+                Err(expected) => {
+                    assert!(
+                        matches!(result, Err(KeyGenerationError::ClientKey(error)) if error == expected)
+                    );
+                    assert_eq!(rng.next_u64(), untouched.next_u64());
+                }
+            }
+        }
+    }
+    let mut wrong_distribution = config();
+    wrong_distribution.method = BlindRotationMethod::Block;
+    assert!(matches!(
+        PbsParameters::try_from_config(wrong_distribution),
+        Err(TfheParameterError::InvalidBlockSecretDistribution)
+    ));
 }
 
 #[test]

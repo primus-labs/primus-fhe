@@ -525,6 +525,11 @@ fn u32_classic_chain() {
     let mut config = config(BlindRotationMethod::Classic);
     config.external_lwe.secret_key_distr = SecretKeyDistr::UniformBinary;
     chained_pbs::<u32, U32NttTable>(config);
+
+    // Classic controls also consume correlated block-binary secrets unchanged.
+    config.external_lwe.dimension = LweDimension::new(6);
+    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    chained_pbs::<u32, U32NttTable>(config);
 }
 
 #[test]
@@ -690,6 +695,34 @@ fn key_generation_boundaries() {
         ),
         Err(KeyGenerationError::IncompatiblePublicLiftParameters)
     ));
+
+    // Unsupported methods must not sample secrets or evaluation-key rows.
+    let mut block_config = config;
+    block_config.method = BlindRotationMethod::Block;
+    block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
+    let block_context = TfheContext::<u32, Table, _>::try_from_pbs_config(block_config)
+        .unwrap()
+        .try_with_circuit_bootstrap(CbsGadgetConfig {
+            trace: decomposition(),
+            scheme_switch: decomposition(),
+            output: decomposition(),
+        })
+        .unwrap();
+    let mut block_generator = KeyGenerator::new(&block_context);
+    assert_eq!(
+        block_generator.try_generate(&mut rng).err(),
+        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
+            BlindRotationMethod::Block,
+        ))
+    );
+    assert_eq!(
+        block_generator
+            .try_generate_circuit_bootstrap_keys(&mut rng)
+            .err(),
+        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
+            BlindRotationMethod::Block,
+        ))
+    );
 
     // Sparse preflight must also precede client generation in both complete paths.
     let mut invalid_config = config;

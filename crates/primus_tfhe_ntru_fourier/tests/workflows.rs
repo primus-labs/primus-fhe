@@ -414,12 +414,22 @@ fn circuit_selection<T: TorusFftValue, Table: FftTable>(pbs: PbsConfig<T, PowOf2
     }
 }
 
-#[cfg(feature = "rustfft")]
 #[test]
-fn rustfft_u32_classic_chain() {
+fn u32_classic_chain() {
     let mut config = config(BlindRotationMethod::Classic);
     config.external_lwe.secret_key_distr = SecretKeyDistr::UniformBinary;
+    #[cfg(feature = "rustfft")]
     chained_pbs::<u32, primus_fft::RustFftTable>(config);
+    #[cfg(feature = "tfhe-fft")]
+    chained_pbs::<u32, primus_fft::TfheFftTable>(config);
+
+    // Classic controls also consume correlated block-binary secrets unchanged.
+    config.external_lwe.dimension = LweDimension::new(6);
+    config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 3 };
+    #[cfg(feature = "rustfft")]
+    chained_pbs::<u32, primus_fft::RustFftTable>(config);
+    #[cfg(feature = "tfhe-fft")]
+    chained_pbs::<u32, primus_fft::TfheFftTable>(config);
 }
 
 #[cfg(feature = "rustfft")]
@@ -591,6 +601,34 @@ fn check_key_generation_boundaries<Table: FftTable>() {
         ),
         Err(KeyGenerationError::IncompatiblePublicLiftParameters)
     ));
+
+    // Unsupported methods must not sample secrets or evaluation-key rows.
+    let mut block_config = config;
+    block_config.method = BlindRotationMethod::Block;
+    block_config.external_lwe.secret_key_distr = SecretKeyDistr::BlockBinary { block_size: 2 };
+    let block_context = TfheContext::<u32, Table, _>::try_from_pbs_config(block_config)
+        .unwrap()
+        .try_with_circuit_bootstrap(CbsGadgetConfig {
+            trace: decomposition(),
+            scheme_switch: decomposition(),
+            output: decomposition(),
+        })
+        .unwrap();
+    let mut block_generator = KeyGenerator::new(&block_context);
+    assert_eq!(
+        block_generator.try_generate(&mut rng).err(),
+        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
+            BlindRotationMethod::Block,
+        ))
+    );
+    assert_eq!(
+        block_generator
+            .try_generate_circuit_bootstrap_keys(&mut rng)
+            .err(),
+        Some(KeyGenerationError::UnsupportedBlindRotationMethod(
+            BlindRotationMethod::Block,
+        ))
+    );
 
     // Sparse preflight must also precede client generation in both complete paths.
     let mut invalid_config = config;
