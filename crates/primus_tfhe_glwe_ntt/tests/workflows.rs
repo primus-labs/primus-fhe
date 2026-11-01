@@ -1412,7 +1412,7 @@ fn check_sparse_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(q: T, buc
 
 /// Direct blocks retain the single-input ciphertext, including each lane's
 /// canonical reduction and odd/even final-buffer placement. The layouts cover
-/// four/pair/single source groups and both sides of the four-source word bound.
+/// 16/8/4/2/1 lane groups and both sides of the four-source word bound.
 #[test]
 fn block_batch_matches_single_inputs() {
     for occupancy in [BlockOccupancy::AtMostOne, BlockOccupancy::ExactlyOne] {
@@ -1421,7 +1421,8 @@ fn block_batch_matches_single_inputs() {
             (998_244_353, 5, 2),
             (67_104_769, 7, 3),
         ] {
-            check_block_batch::<u32, U32NttTable>(q, width, blocks, occupancy);
+            check_block_batch::<u32, U32NttTable, 4>(q, width, blocks, occupancy);
+            check_block_batch::<u32, U32NttTable, 16>(q, width, blocks, occupancy);
         }
         // rank=2 and full base-16 decomposition give 3,744/4,608 coefficients
         // for Q50/Q61: both exceed one u64 16 KiB tile (2,048 coefficients).
@@ -1431,12 +1432,13 @@ fn block_batch_matches_single_inputs() {
             (1_125_899_906_826_241, 5, 3),
             (2_305_843_009_213_692_737, 7, 2),
         ] {
-            check_block_batch::<u64, U64NttTable>(q, width, blocks, occupancy);
+            check_block_batch::<u64, U64NttTable, 4>(q, width, blocks, occupancy);
+            check_block_batch::<u64, U64NttTable, 16>(q, width, blocks, occupancy);
         }
     }
 }
 
-fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
+fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>, const LANES: usize>(
     q: T,
     block_size: usize,
     block_count: usize,
@@ -1469,10 +1471,10 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         panic!("expected direct block key");
     };
     let mut single = BlockGlweBlindRotationWorkspace::new(&key);
-    let mut batch = BlockGlweBlindRotationBatchWorkspace::new(&key);
+    let mut batch = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(&key);
     let rotation =
         RotationModulusSwitch::new(context.parameters().small_lwe().cipher_modulus(), 2 * n, 1);
-    let inputs: Vec<_> = (0..9)
+    let inputs: Vec<_> = (0..17)
         .map(|lane| {
             let mut input = context.allocate_lwe_ciphertext();
             for (i, value) in input.as_mut().iter_mut().enumerate() {
@@ -1480,7 +1482,7 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
                 // and the last residue; neighbouring lanes have different rotations.
                 *value = T::as_from([0, n, 2 * n - 1, 13][(i + lane) % 4]);
             }
-            *input.b_mut() = T::as_from(5 * lane);
+            *input.b_mut() = T::as_from((5 * lane) & (2 * n - 1));
             input
         })
         .collect();
@@ -1490,7 +1492,9 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
     for (input, output) in inputs.iter().zip(&mut expected) {
         single.blind_rotate_lookup_table_to(&key, input, &lut, &rotation, output, context.table());
     }
-    for count in [9, 0, 4, 1, 5, 3, 2, 7, 9] {
+    // Ascending and descending sizes reuse dirty lanes after full and partial
+    // batches, covering every 16/8/4/2/1 tail and no-write zero-length call.
+    for count in (0..=17).chain((0..=17).rev()) {
         for output in &mut actual {
             output.as_mut().fill(T::ONE);
         }
@@ -1506,7 +1510,7 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
             assert_eq!(
                 got.as_ref(),
                 want.as_ref(),
-                "width={block_size}, count={count}"
+                "capacity={LANES}, block_size={block_size}, count={count}"
             );
         }
         assert!(
@@ -1536,7 +1540,7 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         else {
             panic!("expected narrower block key");
         };
-        let mut narrow = BlockGlweBlindRotationBatchWorkspace::new(&narrow_key);
+        let mut narrow = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(&narrow_key);
         narrow.blind_rotate_lookup_table_many_to(
             &key,
             &inputs,
@@ -1562,7 +1566,7 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
         else {
             panic!("expected foreign block key");
         };
-        let mut foreign = BlockGlweBlindRotationBatchWorkspace::new(&foreign_key);
+        let mut foreign = BlockGlweBlindRotationBatchWorkspace::<T, LANES>::new(&foreign_key);
         for invalid in 0..4 {
             let mut inputs = inputs.clone();
             let mut outputs = expected.clone();
@@ -1570,8 +1574,8 @@ fn check_block_batch<T: FheUint, Table: MonomialNttTable<ValueT = T>>(
                 output.as_mut().fill(T::ONE);
             }
             match invalid {
-                0 => inputs[8] = primus_lattice::lwe::Lwe::new(vec![T::ONE; 2]),
-                1 => outputs[8] = primus_lattice::glwe::Glwe::new(vec![T::ONE; 1]),
+                0 => inputs[16] = primus_lattice::lwe::Lwe::new(vec![T::ONE; 2]),
+                1 => outputs[16] = primus_lattice::glwe::Glwe::new(vec![T::ONE; 1]),
                 2 => {
                     outputs.pop();
                 }

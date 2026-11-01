@@ -200,24 +200,32 @@ impl<T: FheUint> BlockGlweBlindRotationWorkspace<T> {
     }
 }
 
-/// Batched block BR sharing read-only key tiles across four independent chains.
+/// Batched block BR sharing read-only key tiles across independent chains.
 ///
-/// Allocates four lanes once. Each owns exponents, aggregate, accumulator and
-/// product scratch; inputs share one key and LUT. Evaluation consumes groups of
-/// four, then two, then the original single-input kernel for a short tail. Each
-/// chain preserves its block/NTT/product order and equals a single-input call.
-/// This operation neither sums inputs nor performs KS or extraction.
-pub struct BlockGlweBlindRotationBatchWorkspace<T: FheUint> {
-    lanes: Box<[BlockGlweBlindRotationWorkspace<T>; 4]>,
+/// Allocates `LANES` lanes once, with capacities four (the default) or sixteen.
+/// Each lane owns exponents, aggregate, accumulator and product scratch; inputs
+/// share one key and LUT. Sixteen-lane batches use 16/8/4/2/1 groups; the default
+/// uses 4/2/1. Each chain preserves its block/NTT/product order and equals a
+/// single-input call. This operation neither sums inputs nor performs KS or
+/// extraction. Capacity changes scratch size, not the key or arithmetic.
+pub struct BlockGlweBlindRotationBatchWorkspace<T: FheUint, const LANES: usize = 4> {
+    lanes: Box<[BlockGlweBlindRotationWorkspace<T>; LANES]>,
 }
 
-impl<T: FheUint> BlockGlweBlindRotationBatchWorkspace<T> {
-    /// Allocates four lanes for this control geometry. Keys with the same input
+impl<T: FheUint, const LANES: usize> BlockGlweBlindRotationBatchWorkspace<T, LANES> {
+    /// Allocates `LANES` lanes for this control geometry. Keys with the same input
     /// dimension and gadget size can reuse them across block widths and occupancy
     /// modes: only scratch is retained, while each call uses the key's layout.
     /// Missing cached rotation descriptors use on-demand addressing.
+    ///
+    /// # Panics
+    /// Panics if `LANES` is neither four nor sixteen.
     #[must_use]
     pub fn new(key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>) -> Self {
+        assert!(
+            LANES == 4 || LANES == 16,
+            "block blind-rotation batch capacity must be four or sixteen"
+        );
         Self {
             lanes: Box::new(std::array::from_fn(|_| {
                 BlockGlweBlindRotationWorkspace::new(key)
@@ -252,7 +260,7 @@ impl<T: FheUint> BlockGlweBlindRotationBatchWorkspace<T> {
     {
         check_lookup_table(key, lookup_table.as_view(), modulus_switch, ntt);
         // Lanes have no independent mutation/rebinding path. One shape check
-        // covers all four, while every caller-owned ciphertext is checked below.
+        // covers every private lane; caller-owned ciphertexts are checked below.
         self.lanes[0].check_layout(key);
         assert_eq!(
             inputs.len(),
@@ -271,34 +279,32 @@ impl<T: FheUint> BlockGlweBlindRotationBatchWorkspace<T> {
                 .all(|output| output.as_ref().len() == key.controls().size().glwe_len()),
             "block blind-rotation output layout mismatch"
         );
+        let (inputs, outputs) = if LANES == 16 {
+            let (groups, input_tail) = inputs.as_chunks::<16>();
+            let (output_groups, output_tail) = outputs.as_chunks_mut::<16>();
+            for (inputs, outputs) in groups.iter().zip(output_groups) {
+                self.blind_rotate_group_to(key, inputs, lookup_table, modulus_switch, outputs, ntt);
+            }
+            // A short tail still shares the key across eight chains, rather
+            // than restarting two four-lane traversals.
+            let (groups, input_tail) = input_tail.as_chunks::<8>();
+            let (output_groups, output_tail) = output_tail.as_chunks_mut::<8>();
+            for (inputs, outputs) in groups.iter().zip(output_groups) {
+                self.blind_rotate_group_to(key, inputs, lookup_table, modulus_switch, outputs, ntt);
+            }
+            (input_tail, output_tail)
+        } else {
+            (inputs, outputs)
+        };
         let (input_groups, input_tail) = inputs.as_chunks::<4>();
         let (output_groups, output_tail) = outputs.as_chunks_mut::<4>();
         for (inputs, outputs) in input_groups.iter().zip(output_groups) {
-            blind_rotate_groups_batch_kernel(
-                self.lanes.each_mut().map(|lane| &mut lane.inner),
-                key.controls(),
-                blocks(key),
-                inputs.each_ref().map(Lwe::as_view),
-                lookup_table.as_view(),
-                modulus_switch,
-                outputs.each_mut().map(Glwe::as_mut_view),
-                ntt,
-            );
+            self.blind_rotate_group_to(key, inputs, lookup_table, modulus_switch, outputs, ntt);
         }
         let (input_pairs, input_tail) = input_tail.as_chunks::<2>();
         let (output_pairs, output_tail) = output_tail.as_chunks_mut::<2>();
         for (inputs, outputs) in input_pairs.iter().zip(output_pairs) {
-            let [first, second, ..] = self.lanes.as_mut();
-            blind_rotate_groups_batch_kernel(
-                [&mut first.inner, &mut second.inner],
-                key.controls(),
-                blocks(key),
-                inputs.each_ref().map(Lwe::as_view),
-                lookup_table.as_view(),
-                modulus_switch,
-                outputs.each_mut().map(Glwe::as_mut_view),
-                ntt,
-            );
+            self.blind_rotate_group_to(key, inputs, lookup_table, modulus_switch, outputs, ntt);
         }
         for (input, output) in input_tail.iter().zip(output_tail) {
             self.lanes[0].blind_rotate_interleaved_lookup_table_kernel_to(
@@ -310,6 +316,39 @@ impl<T: FheUint> BlockGlweBlindRotationBatchWorkspace<T> {
                 ntt,
             );
         }
+    }
+
+    /// The public boundary has validated all buffers. A group borrows the first
+    /// ACTIVE private lanes; construction and dispatch establish ACTIVE <= LANES.
+    fn blind_rotate_group_to<Table, A, B, C, const ACTIVE: usize>(
+        &mut self,
+        key: &BlockGlweBootstrappingKey<T, BarrettModulus<T>>,
+        inputs: &[Lwe<A>; ACTIVE],
+        lookup_table: &Polynomial<B>,
+        modulus_switch: &RotationModulusSwitch<T>,
+        outputs: &mut [Glwe<C>; ACTIVE],
+        ntt: &Table,
+    ) where
+        Table: NttTable<ValueT = T>,
+        A: Data<Elem = T>,
+        B: Data<Elem = T>,
+        C: DataMut<Elem = T>,
+    {
+        let lanes = self
+            .lanes
+            .as_mut_slice()
+            .first_chunk_mut::<ACTIVE>()
+            .expect("block batch group exceeds its allocated lanes");
+        blind_rotate_groups_batch_kernel(
+            lanes.each_mut().map(|lane| &mut lane.inner),
+            key.controls(),
+            blocks(key),
+            inputs.each_ref().map(Lwe::as_view),
+            lookup_table.as_view(),
+            modulus_switch,
+            outputs.each_mut().map(Glwe::as_mut_view),
+            ntt,
+        );
     }
 }
 
