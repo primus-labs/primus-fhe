@@ -1,6 +1,6 @@
 //! Ordinary CRT GLWE parameters and BFV plaintext scaling/recovery.
 
-use primus_distr::{SecretKeySampler, SignedDiscreteGaussian};
+use primus_distr::{ErrorSampler, SecretKeySampler};
 use primus_encoding::PlaintextEmbedding;
 use primus_factor::ShoupFactor;
 use primus_integer::{BigUint, FheUint};
@@ -219,11 +219,12 @@ where
     }
 
     /// Returns a reference to the noise distribution of this [`CrtGlweParameters<T, M>`].
-    pub fn noise_distribution(&self) -> &SignedDiscreteGaussian<T::SignedInteger> {
+    pub fn noise_distribution(&self) -> &ErrorSampler<T> {
         &self.encryption_parameters.noise_distribution
     }
 
-    /// Returns the noise standard deviation of this [`CrtGlweParameters<T, M>`].
+    /// Returns the Gaussian scale or the exact CBD standard deviation sqrt(eta/2).
+    /// Equal values do not identify the distribution; inspect [`Self::noise_distribution`].
     pub fn noise_standard_deviation(&self) -> f64 {
         self.encryption_parameters
             .noise_distribution

@@ -7,8 +7,8 @@ mod gadget;
 mod ordinary;
 
 pub use core::CrtGlweEncryptionParameters;
-pub use domain::{DcrtGadgetDomain, HybridRnsKeySwitchDomain, RnsDomainError};
-pub use error::{CrtGlevParametersError, CrtGlweParametersError};
+pub use domain::{DcrtGadgetDomain, DcrtGlweDomain, HybridRnsKeySwitchDomain, RnsDomainError};
+pub use error::{CrtGlevParametersError, CrtGlweEncryptionParametersError, CrtGlweParametersError};
 pub use gadget::{CrtGgswParameters, CrtGlevParameters};
 pub use ordinary::CrtGlweParameters;
 

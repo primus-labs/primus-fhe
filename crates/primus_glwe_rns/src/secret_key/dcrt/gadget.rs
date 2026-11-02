@@ -79,11 +79,9 @@ where
 
         let (a, mut b) = output.a_b_mut(parameters.rns_poly_len());
 
-        primus_distr::sample_crt_gaussian_values_to(
+        parameters.encryption_parameters().sample_noise_to(
             b.as_mut(),
-            poly_length,
             parameters.cipher_moduli_value(),
-            parameters.noise_distribution(),
             &mut *rng,
         );
 
@@ -146,11 +144,9 @@ where
 
         let (a, mut b) = output.a_b_mut(parameters.rns_poly_len());
 
-        primus_distr::sample_crt_gaussian_values_to(
+        parameters.encryption_parameters().sample_noise_to(
             b.as_mut(),
-            poly_length,
             parameters.cipher_moduli_value(),
-            parameters.noise_distribution(),
             &mut *rng,
         );
 

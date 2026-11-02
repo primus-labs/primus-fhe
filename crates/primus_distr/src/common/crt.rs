@@ -1,5 +1,4 @@
-use num_traits::ConstZero;
-use primus_integer::{FheInt, FheUint, SignedInteger, UnsignedInteger};
+use primus_integer::{FheInt, FheUint, UnsignedInteger};
 use rand::distr::{Distribution, Uniform};
 
 use super::sample_uniform_binary_values_to;
@@ -227,22 +226,12 @@ pub fn sample_crt_gaussian_values_to<T, R>(
         return;
     }
 
-    for coefficient in 0..length {
-        let sample = gaussian.sample(rng);
-        if sample >= <<T as UnsignedInteger>::SignedInteger as ConstZero>::ZERO {
-            let residue: T = sample.cast_to_unsigned();
-            for value in result.iter_mut().skip(coefficient).step_by(length) {
-                *value = residue;
-            }
-        } else {
-            for (value, &modulus) in result
-                .iter_mut()
-                .skip(coefficient)
-                .step_by(length)
-                .zip(moduli)
-            {
-                *value = <T as UnsignedInteger>::wrapping_add_signed(modulus, sample);
-            }
+    match gaussian {
+        SignedDiscreteGaussian::Cdt(sampler) => {
+            crate::error_sampler::sample_crt_kernel(result, length, moduli, sampler, rng);
+        }
+        SignedDiscreteGaussian::Ziggurat(sampler) => {
+            crate::error_sampler::sample_crt_kernel(result, length, moduli, sampler, rng);
         }
     }
 }

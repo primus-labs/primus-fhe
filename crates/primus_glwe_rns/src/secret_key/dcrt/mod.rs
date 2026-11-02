@@ -4,6 +4,7 @@ mod conversion;
 mod decrypt;
 mod encrypt;
 mod gadget;
+mod raw;
 mod workspace;
 
 use primus_integer::FheUint;
@@ -16,6 +17,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::parameter::{validate_dcrt_table, validate_glwe_size, validate_moduli};
 use crate::{CrtGlweParameters, DcrtGadgetDomain, RnsDomainError, SecretKeyDistr};
 
+pub use raw::DcrtGlweRawSecretKeyContext;
 pub use workspace::DcrtGlweDecryptWorkspace;
 
 /// A GLWE secret key represented in NTT form for every ordered RNS modulus.

@@ -1,20 +1,20 @@
 //! Immutable layout and sampling precomputation shared by RNS parameter roles.
 
-use primus_distr::{SecretKeySampler, SignedDiscreteGaussian};
+use primus_distr::{ErrorDistribution, ErrorSampler, SecretKeySampler};
 use primus_integer::{BigUint, FheUint};
 use primus_lattice::RnsGlweSize;
 use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 use rand::distr::Uniform;
 
-use super::{CrtGlweParametersError, RnsDomainError, validate_moduli};
+use super::{CrtGlweEncryptionParametersError, RnsDomainError, validate_moduli};
 use crate::SecretKeyDistr;
 
 /// Layout and sampling state shared by ordinary and gadget parameters.
 ///
 /// Base-dependent caches follow the immutable ordered base owned by each outer
 /// type: the ordinary codec or the gadget base. No second RNSBase is stored here.
-/// Arc sharing retains the same prepared Gaussian tables and secret sampler when
+/// Arc sharing retains the same prepared error and secret samplers when
 /// gadget parameters are derived, instead of cloning those precomputations.
 pub struct CrtGlweEncryptionParameters<T: FheUint> {
     pub(super) size: RnsGlweSize,
@@ -22,7 +22,7 @@ pub struct CrtGlweEncryptionParameters<T: FheUint> {
     pub(super) cipher_moduli_minus_one: Vec<T>,
     pub(super) cipher_moduli_uniform_distr: Vec<Uniform<T>>,
     pub(super) secret_key_sampler: SecretKeySampler<T>,
-    pub(super) noise_distribution: SignedDiscreteGaussian<T::SignedInteger>,
+    pub(super) noise_distribution: ErrorSampler<T>,
 }
 
 impl<T: FheUint> CrtGlweEncryptionParameters<T> {
@@ -54,7 +54,33 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
         base_q: &RNSBase<T, M>,
         secret_key_distr: SecretKeyDistr,
         noise_standard_deviation: f64,
-    ) -> Result<Self, CrtGlweParametersError<T>> {
+    ) -> Result<Self, CrtGlweEncryptionParametersError<T>> {
+        Self::try_with_error_distribution(
+            size,
+            base_q,
+            secret_key_distr,
+            ErrorDistribution::Gaussian {
+                standard_deviation: noise_standard_deviation,
+            },
+        )
+    }
+
+    /// Prepares the complete key and an explicit integer error distribution.
+    ///
+    /// Error coefficients are sampled once across the RNS basis, before any
+    /// scheme-specific scaling. CBD is its exact binomial law, not a Gaussian
+    /// chosen to have a similar standard deviation. The same ordered-base,
+    /// fixed-weight and magnitude conditions as [`Self::try_new`] apply.
+    ///
+    /// # Errors
+    /// Rejects an incompatible layout/base, invalid secret/error distribution,
+    /// fixed weights exceeding kN, or support that does not fit every modulus.
+    pub fn try_with_error_distribution<M: FieldContext<T>>(
+        size: RnsGlweSize,
+        base_q: &RNSBase<T, M>,
+        secret_key_distr: SecretKeyDistr,
+        error_distribution: ErrorDistribution,
+    ) -> Result<Self, CrtGlweEncryptionParametersError<T>> {
         if size.moduli_count() != base_q.moduli_count() {
             return Err(RnsDomainError::ModuliCountMismatch {
                 expected: size.moduli_count(),
@@ -64,18 +90,11 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
         }
         let secret_key_sampler = SecretKeySampler::try_new(secret_key_distr)?;
         secret_key_sampler.validate_length(size.glwe_size().mask_len())?;
-        let noise_distribution = SignedDiscreteGaussian::new(noise_standard_deviation)?;
-        let maximum_magnitude = noise_distribution.maximum_magnitude();
+        let noise_distribution = ErrorSampler::try_new(error_distribution)?;
         for modulus in base_q.moduli() {
             let modulus_minus_one = modulus.minus_one();
             secret_key_sampler.validate_modulus(modulus_minus_one)?;
-            if u128::from(maximum_magnitude) > modulus_minus_one.as_into() {
-                return Err(primus_distr::GaussianError::ModulusTooSmall {
-                    maximum_magnitude,
-                    modulus_minus_one: modulus_minus_one.as_into(),
-                }
-                .into());
-            }
+            noise_distribution.validate_modulus(modulus_minus_one)?;
         }
 
         let mut cipher_modulus_minus_one = BigUint(base_q.moduli_product().0.to_vec());
@@ -133,8 +152,29 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
     /// Returns coefficient-unit noise shared across all RNS limbs.
     #[must_use]
     #[inline]
-    pub fn noise_distribution(&self) -> &SignedDiscreteGaussian<T::SignedInteger> {
+    pub fn noise_distribution(&self) -> &ErrorSampler<T> {
         &self.noise_distribution
+    }
+
+    /// Samples coefficient noise into an exact modulus-major RNS polynomial.
+    ///
+    /// The coefficient count is this core's N. `moduli` may be its Q basis or
+    /// an auxiliary expanded basis such as QP; every limb receives the same
+    /// logical signed sample. This method checks output shape and support, not
+    /// the basis identity bound by an encryption/evaluation domain.
+    ///
+    /// # Panics
+    /// Inherits [`ErrorSampler::sample_crt_to`]'s layout and modulus checks.
+    /// Validation precedes writes and random sampling; an RNG panic can leave
+    /// partially written output.
+    pub fn sample_noise_to<R: rand::Rng + rand::CryptoRng + ?Sized>(
+        &self,
+        output: &mut [T],
+        moduli: &[T],
+        rng: &mut R,
+    ) {
+        self.noise_distribution
+            .sample_crt_to(output, self.size.poly_length().get(), moduli, rng);
     }
 
     /// Rechecks only the base-to-cache pairing when assembling independently

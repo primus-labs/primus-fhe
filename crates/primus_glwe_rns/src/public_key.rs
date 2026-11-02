@@ -85,13 +85,7 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
 
         let (a, mut b) = data.a_b_mut(size.rns_poly_len());
 
-        primus_distr::sample_crt_gaussian_values_to(
-            b.0,
-            poly_length,
-            &moduli_value,
-            params.noise_distribution(),
-            rng,
-        );
+        params.sample_noise_to(b.0, &moduli_value, rng);
 
         table.transform_slice(b.0);
 
@@ -200,11 +194,9 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
             .zip(self.key.iter_dcrt_poly(rns_poly_len))
             .enumerate()
             .for_each(|(i, (mut ai, pk_ai))| {
-                primus_distr::sample_crt_gaussian_values_to(
+                params.encryption_parameters().sample_noise_to(
                     ai.0,
-                    poly_length,
                     params.cipher_moduli_value(),
-                    params.noise_distribution(),
                     rng,
                 );
 
@@ -266,11 +258,9 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
                     .zip(self.key.iter_dcrt_poly(dcrt_poly_len))
                     .enumerate()
                     .for_each(|(i, (mut ai, pk_ai))| {
-                        primus_distr::sample_crt_gaussian_values_to(
+                        params.encryption_parameters().sample_noise_to(
                             ai.0,
-                            poly_length,
                             params.cipher_moduli_value(),
-                            params.noise_distribution(),
                             rng,
                         );
 

@@ -101,58 +101,36 @@ where
     fn encrypt_kernel_to<R>(
         &self,
         message: DcrtEncryptionMessage<'_, T>,
-        mut output: DcrtGlweCiphertext<&mut [T]>,
+        output: DcrtGlweCiphertext<&mut [T]>,
         rng: &mut R,
     ) where
         R: rand::Rng + rand::CryptoRng,
     {
         let parameters = self.parameters;
-        let table = self.table;
         let poly_length = parameters.poly_length().get();
-        let rns_poly_len = parameters.rns_poly_len();
-        let moduli = parameters.cipher_moduli();
-        let uniform_distrs = parameters.cipher_moduli_uniform_distr();
-        let (a, mut b) = output.a_b_mut(rns_poly_len);
-
-        primus_distr::sample_crt_gaussian_values_to(
-            b.as_mut(),
-            poly_length,
-            parameters.cipher_moduli_value(),
-            parameters.noise_distribution(),
+        super::raw::encrypt_kernel_to(
+            self.key,
+            parameters.encryption_parameters(),
+            parameters.base_q(),
+            self.table,
+            output,
             rng,
-        );
-        match message {
-            DcrtEncryptionMessage::PlaintextCrt(message) => {
-                CrtPolynomial(b.as_mut()).add_mul_factor_assign(
+            |body| match message {
+                DcrtEncryptionMessage::PlaintextCrt(message) => body.add_mul_factor_assign(
                     &message,
                     parameters.delta_factor_mod_q().as_ref(),
                     poly_length,
                     parameters.cipher_moduli_value(),
-                );
-            }
-            DcrtEncryptionMessage::Plaintext {
-                polynomial,
-                embedding,
-            } => {
-                parameters.codec().add_encode_coeffs_assign(
-                    &polynomial,
-                    &mut CrtPolynomial(b.as_mut()),
+                ),
+                DcrtEncryptionMessage::Plaintext {
+                    polynomial,
                     embedding,
-                );
-            }
-            DcrtEncryptionMessage::Zero => {}
-        }
-        table.transform_slice(b.as_mut());
-
-        self.key.iter_dcrt_poly().zip(a).for_each(|(si, mut ai)| {
-            primus_distr::sample_crt_uniform_values_to(
-                ai.as_mut(),
-                poly_length,
-                uniform_distrs,
-                rng,
-            );
-            b.add_mul_assign(&ai, &si, poly_length, moduli);
-        });
+                } => parameters
+                    .codec()
+                    .add_encode_coeffs_assign(&polynomial, body, embedding),
+                DcrtEncryptionMessage::Zero => {}
+            },
+        );
     }
 }
 

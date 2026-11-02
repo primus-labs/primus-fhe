@@ -49,6 +49,11 @@ mod ternary;
 mod discrete_gaussian;
 mod signed_discrete_gaussian;
 
+mod centered_binomial;
+mod error_sampler;
+pub use centered_binomial::{CenteredBinomial, CenteredBinomialError};
+pub use error_sampler::{ErrorDistribution, ErrorSampler, ErrorSamplerError};
+
 pub mod stats;
 
 pub use error::{GaussianError, SecretKeySamplerError};

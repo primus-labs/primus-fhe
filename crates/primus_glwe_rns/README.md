@@ -5,16 +5,40 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-GLWE encryption and evaluation over an ordered RNS basis, with CRT coefficient and DCRT NTT representations. It supplies BFV-scaled encryption, gadget products, automorphism, trace, expansion and key switching as building blocks, not a complete BFV/BGV/CKKS scheme.
+GLWE encryption and evaluation over an ordered RNS basis, with CRT coefficient and DCRT NTT representations. It supplies codec-free phase encryption, BFV coefficient encryption, gadget products, automorphism, trace, expansion and key switching as building blocks, not a complete BFV/BGV/CKKS scheme.
 
-## Recommended workflow
+## Codec-free raw workflow
+
+Use raw encryption when the caller owns the encoded phase. It needs no plaintext modulus, BFV scale, decoding modulus gamma or gadget basis:
+
+1. Prepare an ordered `RNSBase`, a matching `DcrtTable` and `RnsGlweSize`.
+2. Construct `CrtGlweEncryptionParameters`. `try_new` selects Gaussian noise; `try_with_error_distribution` also accepts exact `ErrorDistribution::CenteredBinomial { eta }` from `primus_distr`. Use eta=1 for CBD1 and eta=21 for CBD21. Gaussian noise with a similar standard deviation is a different distribution.
+3. Bind these resources with `DcrtGlweDomain::try_new(&parameters, &base, &table)`, convert a signed `GlweSecretKey` to DCRT, then call `key.try_bind_raw(&domain)` once.
+4. Reuse caller-owned ciphertext and polynomial outputs with the returned `DcrtGlweRawSecretKeyContext`. The binding borrows resources without cloning the key; raw operations allocate no scratch.
+
+| Raw context method | Result |
+| --- | --- |
+| `encrypt_encoded_crt_to` | Adds the supplied canonical CRT coefficients directly to coefficient noise; output DCRT phase is encoded input plus noise, with no implicit scale |
+| `encrypt_zeros_to` | Fresh zero encryption in the same DCRT layout |
+| `phase_to` | Full DCRT phase `b - sum(a_i*s_i)` |
+| `partial_phase_to` | DCRT contribution `-sum(a_i*s_i)`, without the body b |
+
+Sum partial phases under additive secret shares and add b **exactly once**. One full phase plus the other partial phases gives the same result. These are raw arithmetic operations: opening privacy noise, authorized outputs and one-use/retry rules belong to the calling protocol. Phase output remains in NTT form; inverse transformation and any decoding are explicit caller operations.
+
+Domain/key binding checks geometry and ordered moduli. Raw methods reject incorrect complete buffer lengths before writes or sampling; canonical residues, transform identity, actual secret identity and message semantics remain caller obligations. The [raw encryption example](examples/raw_encryption.rs) shows a complete u64 workflow, storage reuse and the body/share relation:
+
+```sh
+cargo run -p primus_glwe_rns --example raw_encryption
+```
+
+## BFV coefficient workflow
 
 1. Choose ordered, pairwise-coprime NTT primes and construct one `DcrtTable`. Each prime must satisfy the [NTT constraints](../primus_ntt/README.md#construction-constraints).
 2. Construct `CrtGlweParameters` with dimension k, polynomial length N, plaintext modulus t, auxiliary decoding modulus gamma, ordered ciphertext moduli, secret distribution and noise. Use `try_new` to handle invalid configurations; its [`BfvRnsCodec`](../primus_encoding/README.md#bfv-rns) supplies scaling and recovery checks.
 3. Generate a signed coefficient `GlweSecretKey` and convert it with `DcrtGlweSecretKey::from_coeff_secret_key`. Bind it once with `try_bind(&parameters, &table)`, then use the returned `DcrtGlweSecretKeyContext`.
 4. Allocate ciphertexts using parameter length accessors. Reuse output and `DcrtGlweDecryptWorkspace`; `decrypt_to` also reuses caller plaintext output.
 
-The small parameters below demonstrate coefficient encryption and storage reuse, not security. The snippet requires `primus_glwe_rns`, `primus_lattice`, `primus_modulus`, `primus_ntt`, `primus_poly` and `rand` as direct dependencies:
+The small parameters below demonstrate coefficient encryption and storage reuse, not security. The snippet requires `primus_glwe_rns`, `primus_lattice`, `primus_modulus`, `primus_ntt`, `primus_poly`, `primus_shape` and `rand` as direct dependencies:
 
 ```rust
 use primus_glwe_rns::{
@@ -50,9 +74,9 @@ assert_eq!(decoded.as_ref(), message.as_ref());
 
 ## Encoding and representation
 
-Let `Q = product_i q_i`. Ordinary encryption applies BFV scaling `floor(Q/t)`; gadget encryption uses its own basis without BFV scaling.
+Let `Q = product_i q_i`. BFV message methods below apply scaling `floor(Q/t)`; raw encoded-phase encryption applies none, while gadget encryption uses its own basis.
 
-| Secret-key context method | Input or result |
+| BFV secret-key context method | Input or result |
 | --- | --- |
 | `encrypt_to` / `encrypt_centered_to` | N canonical messages in `[0,t)`, using unsigned / centered lifting |
 | `encrypt_plaintext_crt_to` | Unscaled plaintext lifts reduced into each `[0,q_i)`; applies BFV scaling |
@@ -70,9 +94,10 @@ With m moduli, ordinary ciphertext storage contains `(k+1)*m*N` elements in `[co
 | --- | --- |
 | `CrtGlweParameters` | Ordinary BFV encryption/decryption, including t, gamma and recovery conditions |
 | `CrtGlweEncryptionParameters` | Layout, ordered moduli and samplers; no plaintext codec |
+| `DcrtGlweDomain` | Checked codec-free binding of sampling parameters, ordered RNS base and DCRT table |
 | `CrtGlevParameters` | Encryption parameters and gadget decomposition under product modulus Q; no BFV scaling |
 
-Use `GlweDimension` and [PolyLength](../primus_shape/README.md#polynomial-length) for dimensions and ring length, and `DecompositionBaseLog` / `DecompositionLevelCount` for decomposition. Reuse these checked values across parameters, sizes and tables. Fixed secret weights apply to the complete kN signed key, not separately per polynomial or RNS limb. Secret and noise magnitudes must fit below every q_i; noise deviation is in coefficient units.
+Use `GlweDimension` and [PolyLength](../primus_shape/README.md#polynomial-length) for dimensions and ring length, and `DecompositionBaseLog` / `DecompositionLevelCount` for decomposition. Reuse these checked values across parameters, sizes and tables. Fixed secret weights apply to the complete kN signed key, not separately per polynomial or RNS limb. Secret and noise magnitudes must fit below every q_i. Noise is sampled once per coefficient as an integer and lifted consistently across all RNS limbs. `CrtGlweEncryptionParametersError` reports codec-free domain/sampling failures; BFV recovery errors remain on `CrtGlweParametersError`.
 
 Given ordinary parameters, `CrtGlevParameters::try_with_glwe_params` derives gadget parameters in the same ordered basis. Gadget-only construction needs no t or gamma; see [`CrtGlevParameters::try_from_parts`](src/parameter/gadget.rs). The decomposition basis must match Q and its fixed-width limb representation, with radix strictly smaller than every q_i. Prepare separate encryption parameters when key roles require different noise distributions.
 

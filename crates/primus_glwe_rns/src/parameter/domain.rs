@@ -6,7 +6,7 @@ use primus_reduce::FieldContext;
 use primus_rns::{HybridRNS, RNSBase};
 use primus_shape::PolyLength;
 
-use super::CrtGlevParameters;
+use super::{CrtGlevParameters, CrtGlweEncryptionParameters};
 
 /// An incompatibility between RNS parameters, keys, layouts or transform tables.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -69,6 +69,71 @@ pub enum RnsDomainError<T: FheUint> {
         /// Maximum Q moduli per partition supplied by the domain.
         actual: usize,
     },
+}
+
+/// A codec-free binding of GLWE sampling state, an ordered basis and NTT tables.
+///
+/// Construction checks geometry and numerical modulus order. It does not prove
+/// primality, matching NTT roots/evaluation conventions, actual secret identity
+/// or a scheme's noise/recovery condition.
+pub struct DcrtGlweDomain<'a, T, M, Table>
+where
+    T: FheUint,
+    M: FieldContext<T>,
+    Table: NttTable<ValueT = T>,
+{
+    parameters: &'a CrtGlweEncryptionParameters<T>,
+    rns_base: &'a RNSBase<T, M>,
+    table: &'a DcrtTable<Table>,
+}
+
+impl<'a, T, M, Table> DcrtGlweDomain<'a, T, M, Table>
+where
+    T: FheUint,
+    M: FieldContext<T>,
+    Table: NttTable<ValueT = T>,
+{
+    /// Binds compatible sampling, basis and transform resources without a codec.
+    ///
+    /// # Errors
+    /// Rejects a different polynomial length, modulus count or ordered basis.
+    pub fn try_new(
+        parameters: &'a CrtGlweEncryptionParameters<T>,
+        rns_base: &'a RNSBase<T, M>,
+        table: &'a DcrtTable<Table>,
+    ) -> Result<Self, RnsDomainError<T>> {
+        parameters.validate_base(rns_base)?;
+        validate_dcrt_table(parameters.size().poly_length(), rns_base.moduli(), table)?;
+        Ok(Self {
+            parameters,
+            rns_base,
+            table,
+        })
+    }
+
+    /// Returns the prepared codec-free encryption sampling state.
+    #[must_use]
+    pub fn parameters(&self) -> &'a CrtGlweEncryptionParameters<T> {
+        self.parameters
+    }
+
+    /// Returns the complete GLWE geometry and RNS storage lengths.
+    #[must_use]
+    pub fn size(&self) -> RnsGlweSize {
+        self.parameters.size()
+    }
+
+    /// Returns the bound ordered coefficient basis.
+    #[must_use]
+    pub fn rns_base(&self) -> &'a RNSBase<T, M> {
+        self.rns_base
+    }
+
+    /// Returns the matching ordered transform tables.
+    #[must_use]
+    pub fn table(&self) -> &'a DcrtTable<Table> {
+        self.table
+    }
 }
 
 /// A checked, read-only binding of RNS gadget parameters and a DCRT table.

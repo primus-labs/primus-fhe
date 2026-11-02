@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-`primus_distr` 为 [Primus FHE](../../README.zh_CN.md) 提供离散概率分布与批量采样 helper，覆盖 binary/ternary secret、中心离散 Gaussian 噪声、模表示与有符号表示、 CRT 批量布局以及统计诊断。
+`primus_distr` 为 [Primus FHE](../../README.zh_CN.md) 提供离散概率分布与批量采样 helper，覆盖 binary/ternary secret、精确 centered-binomial 和离散 Gaussian 误差、模表示与有符号表示、CRT 批量布局以及统计诊断。
 
 > [!WARNING]
 > 本 crate 属于实验性的 Primus FHE workspace。其 API、采样算法和数值契约尚不稳定， 可能随时发生不兼容修改。
@@ -15,10 +15,30 @@
 | `SparseTernaryDistr<T>` | 以 `1/2`、`1/4`、`1/4` 的概率从 `{0, 1, -1}` 采样；`-1` 的表示由调用方提供 |
 | `DiscreteGaussian<T>` | 将中心 Gaussian 样本编码为调用方所给模数下的规范无符号 residue |
 | `SignedDiscreteGaussian<T>` | 使用有符号整数类型直接表示中心 Gaussian 样本 |
+| `CenteredBinomial<T>` | 两个独立 Binomial(eta, 1/2) 随机变量的精确差，输出有符号整数 |
 | `CDTSampler<T>` / `SignedCDTSampler<T>` | 显式选择的 portable 64-bit cumulative-distribution-table backend |
 | `DiscreteZiggurat<T>` / `SignedDiscreteZiggurat<T>` | 用于较大 support 的显式离散 Ziggurat backend |
 
 上表中的标量 sampler 类型均实现 `rand::distr::Distribution`。批量 helper 要求 RNG 同时实现 `rand::Rng` 与 `rand::CryptoRng`。
+
+## 误差分布
+
+`ErrorDistribution` 显式选择 `Gaussian { standard_deviation }` 或 `CenteredBinomial { eta }`；`ErrorSampler<T>::try_new` 准备 `T::SignedInteger` 有符号输出与 `T` 规范 CRT 输出。Secret 与 ephemeral-key 分布仍是独立角色。
+
+CBD eta 的范围为 `1..=32`，包括精确 CBD1 与 CBD21。每个系数是两个独立 eta 位串 Hamming weight 的差，支持集为 `[-eta, eta]`，方差为 `eta/2`。每个系数消耗一个 u64，未使用的高位丢弃。方差相同不表示 CBD 与 Gaussian 可互换；Gaussian 继续使用既有截断采样器与 scale。
+
+`sample_signed_to` 和 `sample_crt_to` 无分配地覆盖调用方存储。CRT 批次每个系数只采样一个整数，然后在各模数下编码同一整数。公开 CRT 入口在写入或消耗随机数前检查完整输出长度与各模数的支持范围；空输出不消耗随机数。`maximum_magnitude`、`distribution` 与 `validate_modulus` 提供准备后的数学契约；`standard_deviation` 返回 Gaussian scale 或 CBD 的精确值 `sqrt(eta/2)`。
+
+```rust
+use primus_distr::{ErrorDistribution, ErrorSampler};
+use rand::{SeedableRng, rngs::StdRng};
+
+let error = ErrorSampler::<u64>::try_new(
+    ErrorDistribution::CenteredBinomial { eta: 21 },
+).unwrap();
+let mut coefficients = [0; 16]; // N=8，两个 modulus-major limb
+error.sample_crt_to(&mut coefficients, 8, &[97, 193], &mut StdRng::seed_from_u64(7));
+```
 
 ## 私钥分布参数
 
