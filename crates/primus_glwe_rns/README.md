@@ -72,6 +72,26 @@ let decoded = context.decrypt(&ciphertext, &mut workspace);
 assert_eq!(decoded.as_ref(), message.as_ref());
 ```
 
+## Prepared public encryption
+
+Generate `DcrtGlwePublicKey` once from codec-free sampling parameters. Each binding below borrows the key and prepares one owned ephemeral workspace; encryption methods take `&mut self`:
+
+| Binding | Prepared encryptor | Input |
+| --- | --- | --- |
+| `public_key.try_bind_raw(&domain)` | `DcrtGlweRawPublicKeyEncryptor` | Already-encoded CRT phase, or zero; no implicit scale |
+| `public_key.try_bind(&parameters, &table)` | `DcrtGlwePublicKeyContext` | Unscaled CRT plaintext; applies BFV delta |
+| `public_key.try_bind_gadget(&gadget_domain)` | `DcrtGgswEncryptor` | Monomial coefficient residues and degree; applies gadget weights |
+
+Reuse caller output with `encrypt_encoded_crt_to`, `encrypt_zeros_to`, `encrypt_plaintext_crt_to` or `encrypt_monomial_ggsw_to`. Prepared `_to` calls overwrite the complete DCRT output without allocating. The allocating `encrypt_plaintext_crt` and `encrypt_monomial_ggsw` conveniences allocate only their result. CRT message or gadget-monomial injection is fused with coefficient noise before the component's existing NTT; these inputs are not DCRT polynomials.
+
+`workspace()` reports the retained scratch geometry. `workspace_mut().zeroize()` explicitly erases ephemeral values while retaining the allocation for reuse; import `zeroize::Zeroize` to call it. Scratch is also erased on drop. Its last values otherwise remain until overwritten. Caller-owned ciphertext outputs are separate and are not erased by workspace cleanup. Output, residue-count, degree and workspace-shape checks precede sampling and writes; canonical residues and the intended key/NTT domain remain caller contracts.
+
+The [public encryption example](examples/public_encryption.rs) composes raw, BFV and gadget modes, reuses outputs and explicitly erases scratch:
+
+```sh
+cargo run -p primus_glwe_rns --example public_encryption
+```
+
 ## Encoding and representation
 
 Let `Q = product_i q_i`. BFV message methods below apply scaling `floor(Q/t)`; raw encoded-phase encryption applies none, while gadget encryption uses its own basis.
@@ -84,7 +104,7 @@ Let `Q = product_i q_i`. BFV message methods below apply scaling `floor(Q/t)`; r
 | `phase_to` | DCRT phase, without coefficient recovery or decoding |
 | `decrypt` / `decrypt_to` | Decoded coefficient polynomial; allocate / reuse plaintext output |
 
-Encryption overwrites DCRT output. **Do not pass already-scaled codec output to `encrypt_plaintext_crt_to`**: it would apply the scale twice. `DcrtGlwePublicKeyContext::encrypt_plaintext_crt` allocates public encryption of the same unscaled CRT lifts; its noise includes additional public-key contributions.
+Encryption overwrites DCRT output. **Do not pass already-scaled codec output to `encrypt_plaintext_crt_to`**: it would apply the scale twice. The public context's method accepts the same unscaled CRT lifts; its noise includes additional public-key contributions.
 
 With m moduli, ordinary ciphertext storage contains `(k+1)*m*N` elements in `[component][modulus][coefficient/evaluation]` order. Gadget storage adds outer row/level dimensions. CRT and DCRT share a shape but have different arithmetic. Use `RnsGlweSize` / `RnsGadgetSize` and semantic iterators; keep the modulus order throughout. See [ciphertext layouts](../primus_lattice/README.md#storage-and-layout).
 
@@ -107,7 +127,7 @@ Ordinary parameter construction uses the sampler's maximum noise magnitude with 
 
 Bind ordinary secret/public keys with `try_bind(&parameters, &table)`. For gadget work, construct `DcrtGadgetDomain::try_new(&gadget, &table)` and use `try_bind_gadget(&domain)`: a secret key returns `DcrtGlevEncryptor`, while a public key returns `DcrtGgswEncryptor`. GLev's `encrypt_crt_to` / `encrypt_dcrt_to` accept coefficient / NTT messages and apply gadget weights. GGSW's `encrypt_monomial_ggsw` / `encrypt_monomial_ggsw_to` allocate / reuse output.
 
-The client generates public/evaluation keys and supplies them to the server. Public-key and key-switch generation use codec-free `encryption_parameters()`. Construct an evaluator once from its key and domain, then reuse its owned scratch for online calls. Binding checks resource layouts, ordered bases and applicable decomposition parameters; input/output layouts, canonical residues, NTT roots/order, secret identity and sufficient noise margins remain caller obligations.
+The client generates public/evaluation keys and supplies them to the server. Public-key and key-switch generation use codec-free `encryption_parameters()`. Construct an evaluator once from its key and domain, then reuse its owned scratch for online calls. Binding checks resource layouts, ordered bases and applicable decomposition parameters. Evaluator and prepared public/gadget encryption methods check complete input/output lengths before writes. Canonical residues, NTT roots/order, secret identity and sufficient noise margins remain caller obligations.
 
 For example, continuing the encryption workflow above (also add `primus_decompose` as a dependency):
 
@@ -125,10 +145,10 @@ evaluator.automorphism_to(&ciphertext, &mut output);
 
 `CrtGlweAutoEvaluator` uses coefficient ciphertexts; `DcrtGlweAutoEvaluator` uses NTT ciphertexts. Both evaluate under the original secret.
 
-| Key-switch evaluator | Domain |
-| --- | --- |
-| `DcrtGlweKeySwitchEvaluator` | `DcrtGadgetDomain` over ordered Q with matching gadget layout and radix |
-| `HybridRnsGlweKeySwitchEvaluator` | `HybridRnsKeySwitchDomain` over ordered QP with matching N, Q/P boundary and partition width |
+| Key-switch evaluator | Input → output | Domain |
+| --- | --- | --- |
+| `DcrtGlweKeySwitchEvaluator` | CRT Q → DCRT Q | `DcrtGadgetDomain` over ordered Q with matching gadget layout and radix |
+| `HybridRnsGlweKeySwitchEvaluator` | DCRT Q → DCRT Q | `HybridRnsKeySwitchDomain` over ordered QP with matching N, Q/P boundary and partition width |
 
 Both provide `try_new(&key, &domain)` and online `key_switch_to(&input, &mut output)`. Hybrid key generation takes its key noise from the input encryption parameters and checks its support against every QP modulus; both secrets' magnitudes must also fit every QP modulus. Partitioning and ModUp/ModDown contracts are in [`primus_rns`](../primus_rns/README.md#hybrid-rns).
 
@@ -141,15 +161,16 @@ These evaluators borrow the key and gadget domain and own reusable scratch. Inpu
 | `CrtGlweTraceEvaluator` / `DcrtGlweTraceEvaluator`, `trace_to` | Constant `N*m[0]` |
 | `DcrtGlweRevTraceEvaluator`, `trace_to` | Constant `m[0]` |
 | CRT/DCRT `expand_coefficients_to` | Exactly N outputs, output j targeting constant `m[j]` |
-| CRT/DCRT `expand_partial_coefficients_to` | A power-of-two count in `1..=N`, targeting the first coefficients as constants when the message tail is zero |
+| CRT/DCRT `expand_partial_coefficients_to` | Power-of-two count d in `1..=N`; output j targets `sum_k m[j+k*d] * X^(k*d)` |
+| CRT/DCRT `expand_supported_coefficients_to` | Any count k in `1..=N`; output j targets constant `m[j]` when plaintext degree is less than k |
 
 Reverse trace multiplies by `2^-1 mod q_i` before each automorphism/addition. It preserves Q and ring length; this is modular division, not modulus switching or rounded halving. The full sequence projects input message and input error onto the constant coefficient, but later key-switch errors may survive at nonconstant positions. The native-torus variance bound does not follow from the absence of rounding; see the [phase and error contract](src/dcrt/rev_trace.rs).
 
-Expansion has no extra count factor. For partial expansion to produce constants, **plaintext** coefficients beyond the requested prefix must be zero; otherwise they remain at higher powers of X. Ciphertext/noise tails need not vanish, and ring length remains N. Full layouts and representation requirements are documented on the [CRT](src/crt/expand_coeff/evaluator.rs) and [DCRT](src/dcrt/expand_coeff/evaluator.rs) evaluators.
+Expansion has no extra count factor. Partial expansion retains higher **plaintext** coefficients in their residue classes; Relect's block-factor accumulator uses this behavior. Supported expansion instead requires the protocol or caller to guarantee that the plaintext degree is less than k, which the encrypted input cannot establish at runtime. It normalizes with `next_power_of_two(k)^-1 mod Q` and evaluates k−1 automorphisms, doubling already-scalar leaves instead of evaluating padded branches. Ciphertext/noise tails need not vanish, and ring length remains N. Full layouts and representation requirements are documented on the [CRT](src/crt/expand_coeff/evaluator.rs) and [DCRT](src/dcrt/expand_coeff/evaluator.rs) evaluators.
 
-Use `*GlweExpandCoeffEvaluator::new(&key, &domain)` for serial expansion or `*GlweExpandCoeffParallelEvaluator::new(&key, &domain, worker_count)` for a preallocated parallel pool. Serial evaluation needs one workspace; parallel evaluation reserves one per worker. Repeated calls reuse arithmetic scratch.
+Use `*GlweExpandCoeffEvaluator::new(&key, &domain)` for serial expansion or `*GlweExpandCoeffParallelEvaluator::new(&key, &domain, worker_count)` for a preallocated scratch budget. Serial evaluation needs one workspace; parallel evaluation reserves `worker_count` workspaces. Repeated calls reuse arithmetic scratch.
 
-Parallel calls use Rayon. Initialize its pool before evaluation and choose a positive `worker_count` covering the maximum simultaneous workers; for a custom pool, use its `current_num_threads()`. Calls borrow the evaluator mutably. An undersized scratch pool can panic **after partial output writes**; complete usage conditions are on the evaluator methods.
+Parallel calls use the caller's Rayon pool and divide each level into at most `worker_count` scratch-bearing jobs. This positive budget may be smaller or larger than the pool's thread count; no inner thread pool is created. Initialize the caller pool before evaluation and borrow the evaluator mutably. Complete input/output lengths and counts are checked before writes. Complete numerical and resource contracts are on the evaluator methods.
 
 ## Features and further reading
 

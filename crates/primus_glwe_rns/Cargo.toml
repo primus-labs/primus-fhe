@@ -45,6 +45,10 @@ harness = false
 name = "key_switching"
 harness = false
 
+[[bench]]
+name = "public_encryption"
+harness = false
+
 [features]
 default = []
 simd = [

@@ -148,6 +148,9 @@ where
 ///
 /// In debug builds, this function checks that `poly_length` is nonzero and
 /// that `result.len()` equals `poly_length * uniform_distrs.len()`.
+// Keep the sampling loop together: inlining this batch into a larger caller
+// can instead outline `Uniform::sample`, adding a call for every coefficient.
+#[inline(never)]
 pub fn sample_crt_uniform_values_to<T, R>(
     result: &mut [T],
     poly_length: usize,

@@ -72,6 +72,26 @@ let decoded = context.decrypt(&ciphertext, &mut workspace);
 assert_eq!(decoded.as_ref(), message.as_ref());
 ```
 
+## 公钥加密与预分配资源
+
+使用无 codec 的采样参数生成一次 `DcrtGlwePublicKey`。下列绑定借用密钥，并各自准备一份拥有型 ephemeral 工作区；加密方法均接收 `&mut self`：
+
+| 绑定 | Prepared encryptor | 输入 |
+| --- | --- | --- |
+| `public_key.try_bind_raw(&domain)` | `DcrtGlweRawPublicKeyEncryptor` | 已编码 CRT phase 或零，不隐式缩放 |
+| `public_key.try_bind(&parameters, &table)` | `DcrtGlwePublicKeyContext` | 未缩放 CRT plaintext，施加 BFV delta |
+| `public_key.try_bind_gadget(&gadget_domain)` | `DcrtGgswEncryptor` | Monomial 系数剩余类和次数，施加 gadget 权重 |
+
+通过 `encrypt_encoded_crt_to`、`encrypt_zeros_to`、`encrypt_plaintext_crt_to` 或 `encrypt_monomial_ggsw_to` 复用调用方输出。Prepared `_to` 调用完整覆盖 DCRT 输出，不分配内存；便利方法 `encrypt_plaintext_crt` 和 `encrypt_monomial_ggsw` 仅分配返回的结果。CRT message 或 gadget monomial 与系数噪声融合，在该 component 原有的一次 NTT 前注入；这些输入不是 DCRT 多项式。
+
+`workspace()` 提供保留 scratch 的布局；导入 `zeroize::Zeroize` 后，`workspace_mut().zeroize()` 可显式擦除 ephemeral 值并保留内存供复用，drop 也会擦除。否则最后的值一直保留到下次覆盖。调用方的密文输出独立于工作区，不由工作区清理擦除。输出、系数剩余类数量、次数和工作区形状的检查均在采样与写入前执行；规范剩余类和实际 key/NTT domain 仍由调用方保证。
+
+[公钥加密示例](examples/public_encryption.rs) 组合 raw、BFV 和 gadget 模式，复用输出并显式擦除 scratch：
+
+```sh
+cargo run -p primus_glwe_rns --example public_encryption
+```
+
 ## 编码与表示
 
 设 `Q = product_i q_i`。下列 BFV message 方法施加缩放 `floor(Q/t)`；raw encoded-phase 加密不缩放，gadget 加密使用自己的分解基。
@@ -84,7 +104,7 @@ assert_eq!(decoded.as_ref(), message.as_ref());
 | `phase_to` | DCRT 相位，不恢复系数或解码 |
 | `decrypt` / `decrypt_to` | 解码后的系数多项式；分配 / 复用明文输出 |
 
-加密覆盖 DCRT 输出。**不要将 codec 已缩放的输出传给 `encrypt_plaintext_crt_to`**，否则会重复缩放。`DcrtGlwePublicKeyContext::encrypt_plaintext_crt` 对同样的未缩放 CRT 提升进行公钥加密并分配输出，其噪声包含额外的公钥贡献。
+加密覆盖 DCRT 输出。**不要将 codec 已缩放的输出传给 `encrypt_plaintext_crt_to`**，否则会重复缩放。公钥 context 的同名方法接受相同的未缩放 CRT 提升，其噪声包含额外的公钥贡献。
 
 m 个模数下，普通密文包含 `(k+1)*m*N` 个元素，顺序为 `[component][modulus][coefficient/evaluation]`；gadget 在外层增加 row/level。CRT 与 DCRT 形状相同，算术含义不同。使用 `RnsGlweSize` / `RnsGadgetSize` 及语义迭代器，始终保持模数顺序。见[密文布局](../primus_lattice/README.zh_CN.md#存储与布局)。
 
@@ -107,7 +127,7 @@ m 个模数下，普通密文包含 `(k+1)*m*N` 个元素，顺序为 `[componen
 
 普通私钥/公钥使用 `try_bind(&parameters, &table)`。Gadget 使用 `DcrtGadgetDomain::try_new(&gadget, &table)`，再调用 `try_bind_gadget(&domain)`：私钥返回 `DcrtGlevEncryptor`，公钥返回 `DcrtGgswEncryptor`。GLev 的 `encrypt_crt_to` / `encrypt_dcrt_to` 接收系数 / NTT 消息并施加 gadget 权重；GGSW 的 `encrypt_monomial_ggsw` / `encrypt_monomial_ggsw_to` 分别分配 / 复用输出。
 
-Client 生成公钥及求值密钥并交给 server。公钥和 key-switch 密钥生成使用无 codec 的 `encryption_parameters()`。从密钥及 domain 构造一次 evaluator，在线调用复用其自身 scratch。绑定检查资源布局、有序基及相应分解参数；输入输出布局、规范剩余类、NTT 根/顺序、秘密身份和足够的噪声余量仍由调用方保证。
+Client 生成公钥及求值密钥并交给 server。公钥和 key-switch 密钥生成使用无 codec 的 `encryption_parameters()`。从密钥及 domain 构造一次 evaluator，在线调用复用其自身 scratch。绑定检查资源布局、有序基及相应分解参数。Evaluator 和 prepared 公钥/gadget 加密方法在写入前检查完整输入输出长度；规范剩余类、NTT 根/顺序、秘密身份和足够的噪声余量仍由调用方保证。
 
 例如，接着上述加密流程使用（另需直接依赖 `primus_decompose`）：
 
@@ -125,10 +145,10 @@ evaluator.automorphism_to(&ciphertext, &mut output);
 
 `CrtGlweAutoEvaluator` 使用系数密文，`DcrtGlweAutoEvaluator` 使用 NTT 密文，两者均返回原秘密下的结果。
 
-| Key-switch evaluator | Domain |
-| --- | --- |
-| `DcrtGlweKeySwitchEvaluator` | 有序 Q 上的 `DcrtGadgetDomain`，gadget 布局及 radix 匹配 |
-| `HybridRnsGlweKeySwitchEvaluator` | 有序 QP 上的 `HybridRnsKeySwitchDomain`，N、Q/P 分界及分区宽度匹配 |
+| Key-switch evaluator | 输入 → 输出 | Domain |
+| --- | --- | --- |
+| `DcrtGlweKeySwitchEvaluator` | CRT Q → DCRT Q | 有序 Q 上的 `DcrtGadgetDomain`，gadget 布局及 radix 匹配 |
+| `HybridRnsGlweKeySwitchEvaluator` | DCRT Q → DCRT Q | 有序 QP 上的 `HybridRnsKeySwitchDomain`，N、Q/P 分界及分区宽度匹配 |
 
 两者均提供 `try_new(&key, &domain)`，在线调用为 `key_switch_to(&input, &mut output)`。Hybrid 密钥生成从输入加密参数取得密钥噪声，检查其支持范围是否适用于每个 QP 模数；两个秘密的幅度也必须小于每个 QP 模数。分区及 ModUp/ModDown 契约见 [`primus_rns`](../primus_rns/README.zh_CN.md#hybrid-rns)。
 
@@ -141,15 +161,16 @@ evaluator.automorphism_to(&ciphertext, &mut output);
 | `CrtGlweTraceEvaluator` / `DcrtGlweTraceEvaluator`，`trace_to` | 常数 `N*m[0]` |
 | `DcrtGlweRevTraceEvaluator`，`trace_to` | 常数 `m[0]` |
 | CRT/DCRT 的 `expand_coefficients_to` | 恰好 N 个输出，第 j 个目标为常数 `m[j]` |
-| CRT/DCRT 的 `expand_partial_coefficients_to` | 数量为 `1..=N` 内二次幂，消息尾部为零时目标为前缀各系数对应的常数 |
+| CRT/DCRT 的 `expand_partial_coefficients_to` | 数量 d 为 `1..=N` 内二次幂，输出 j 目标为 `sum_k m[j+k*d] * X^(k*d)` |
+| CRT/DCRT 的 `expand_supported_coefficients_to` | 任意数量 k 在 `1..=N` 内；明文次数小于 k 时，输出 j 目标为常数 `m[j]` |
 
 Reverse trace 在每次自同构及相加前乘 `2^-1 mod q_i`，保持 Q 和环长度；这是模除法，不是 modulus switch 或舍入减半。完整序列将输入消息和输入误差投影到常数项，但较晚引入的 key-switch 误差可能留在非常数位置。不能从无舍入推出 native-torus 方差界，详见[相位与误差契约](src/dcrt/rev_trace.rs)。
 
-展开没有额外的 count 倍数。部分展开要得到常数，被省略的**明文**系数必须为零，否则它们仍保留在 X 的高次项中。密文和噪声尾部无需为零，环长度仍为 N。完整布局与表示条件见 [CRT](src/crt/expand_coeff/evaluator.rs) 和 [DCRT](src/dcrt/expand_coeff/evaluator.rs) evaluator。
+展开没有额外的 count 倍数。Partial 展开将较高的**明文**系数保留在相应剩余类中，Relect 的 block-factor accumulator 需要此行为。Supported 展开则要求协议或调用方保证明文次数小于 k，无法在运行时从密文检查该条件。它按 `next_power_of_two(k)^-1 mod Q` 归一化，只计算 k−1 次自同构；已是 scalar 的叶子直接加倍，避免求值 padding 分支。密文和噪声尾部无需为零，环长度仍为 N。完整布局与表示条件见 [CRT](src/crt/expand_coeff/evaluator.rs) 和 [DCRT](src/dcrt/expand_coeff/evaluator.rs) evaluator。
 
-串行展开使用 `*GlweExpandCoeffEvaluator::new(&key, &domain)`，预分配并行池使用 `*GlweExpandCoeffParallelEvaluator::new(&key, &domain, worker_count)`。串行求值只需一份工作区，并行求值为每个 worker 预留一份；重复调用复用算术 scratch。
+串行展开使用 `*GlweExpandCoeffEvaluator::new(&key, &domain)`，预分配 scratch 预算使用 `*GlweExpandCoeffParallelEvaluator::new(&key, &domain, worker_count)`。串行求值只需一份工作区，并行求值保留 `worker_count` 份工作区；重复调用复用算术 scratch。
 
-并行调用使用 Rayon。求值前初始化线程池，选择正数 `worker_count`，覆盖最多同时工作的 worker 数；自定义池可用其 `current_num_threads()`。调用可变借用 evaluator；scratch 池容量不足可能**在部分输出写入后 panic**。完整使用条件见 evaluator 方法。
+并行调用使用调用方 Rayon pool，每层最多分成 `worker_count` 个占用 scratch 的作业。此正数预算可小于或大于 pool 线程数，不创建内部线程池。求值前初始化调用方 pool，调用时可变借用 evaluator。完整输入/输出长度和数量均在写入前检查；具体数值及资源契约见 evaluator 方法。
 
 ## Feature 与进一步阅读
 

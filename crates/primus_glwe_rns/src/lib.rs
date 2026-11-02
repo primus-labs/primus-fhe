@@ -43,7 +43,10 @@ pub use parameter::{
 pub use primus_encoding::BfvRnsCodec;
 pub use primus_glwe::{GlweSecretKey, SecretKeyDistr};
 pub use primus_lattice::{RnsGadgetSize, RnsGlweSize};
-pub use public_key::{DcrtGgswEncryptor, DcrtGlwePublicKey, DcrtGlwePublicKeyContext};
+pub use public_key::{
+    DcrtGgswEncryptor, DcrtGlwePublicKey, DcrtGlwePublicKeyContext, DcrtGlwePublicKeyWorkspace,
+    DcrtGlweRawPublicKeyEncryptor,
+};
 pub use secret_key::{
     DcrtGlevEncryptor, DcrtGlweDecryptWorkspace, DcrtGlweRawSecretKeyContext, DcrtGlweSecretKey,
     DcrtGlweSecretKeyContext,

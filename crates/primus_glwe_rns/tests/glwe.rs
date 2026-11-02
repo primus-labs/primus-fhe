@@ -172,7 +172,7 @@ fn public_encrypt_accepts_unscaled_crt_plaintexts() {
                 .collect::<Vec<_>>(),
         );
         let lifted = decompose_message(&message, &params);
-        let public_context = public.try_bind(&params, &table).unwrap();
+        let mut public_context = public.try_bind(&params, &table).unwrap();
         let ciphertext = public_context.encrypt_plaintext_crt(&lifted.as_view(), &mut rng);
         let secret_context = secret.try_bind(&params, &table).unwrap();
         assert_eq!(secret_context.decrypt(&ciphertext, &mut workspace), message);

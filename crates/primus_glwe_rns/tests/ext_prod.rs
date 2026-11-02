@@ -81,7 +81,7 @@ fn test_external_product() {
     let c1 = c1.into_coeff_form(&table);
 
     let gadget_domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
-    let ggsw_encryptor = pk.try_bind_gadget(&gadget_domain).unwrap();
+    let mut ggsw_encryptor = pk.try_bind_gadget(&gadget_domain).unwrap();
 
     // Identity, one-position shift and sign-wrapping boundary.
     for degree in [0, 1, poly_length - 1] {

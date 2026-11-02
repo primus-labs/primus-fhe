@@ -356,13 +356,16 @@ where
     ///
     /// # Correctness
     /// Input/output use the key's complete layouts, input secret and NTT representation.
+    ///
+    /// # Panics
+    /// Panics before writes if either ciphertext has an incorrect complete length.
     pub fn key_switch_to<A: Data<Elem = T>, B: DataMut<Elem = T>>(
         &mut self,
         input: &DcrtGlweCiphertext<A>,
         output: &mut DcrtGlweCiphertext<B>,
     ) {
-        debug_assert_eq!(input.as_ref().len(), self.key.input_size.rns_glwe_len());
-        debug_assert_eq!(output.as_ref().len(), self.key.output_size.rns_glwe_len());
+        assert_eq!(input.as_ref().len(), self.key.input_size.rns_glwe_len());
+        assert_eq!(output.as_ref().len(), self.key.output_size.rns_glwe_len());
         self.key.key_switch_kernel_to(
             input.as_view(),
             output.as_mut_view(),

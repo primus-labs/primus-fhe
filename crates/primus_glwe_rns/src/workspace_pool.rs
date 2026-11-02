@@ -6,19 +6,31 @@ use std::sync::Mutex;
 /// Numerical layout and representation belong to the concrete workspace owner.
 pub(crate) struct WorkspacePool<W> {
     workspaces: Mutex<Vec<W>>,
+    capacity: usize,
 }
 
 impl<W> WorkspacePool<W> {
     pub(crate) fn new(workspaces: Vec<W>) -> Self {
+        let capacity = workspaces.len();
         Self {
             workspaces: Mutex::new(workspaces),
+            capacity,
         }
+    }
+
+    /// Maximum number of independent jobs that may borrow scratch concurrently.
+    pub(crate) fn capacity(&self) -> usize {
+        self.capacity
     }
 
     /// Moves one prepared workspace into a guard without allocating; capacity
     /// must cover parallel demand. Drop returns it even if a worker unwinds.
     pub(crate) fn acquire(&self) -> WorkspaceGuard<'_, W> {
-        let workspace = self.workspaces.lock().unwrap().pop().expect(
+        // Drop the mutex guard before reporting exhaustion. A panic while the
+        // mutex is held would poison it and could make a live worker's Drop
+        // panic again while unwinding.
+        let workspace = { self.workspaces.lock().unwrap().pop() };
+        let workspace = workspace.expect(
             "coefficient expansion workspace pool capacity is smaller than its parallel demand",
         );
         WorkspaceGuard {
@@ -71,5 +83,16 @@ mod tests {
         let mut guard = pool.acquire();
         assert_eq!(guard.workspace_mut().as_ptr(), allocation);
         assert_eq!(guard.workspace_mut()[0], 17);
+    }
+
+    #[test]
+    fn exhaustion_does_not_poison_live_guards() {
+        let pool = WorkspacePool::new(vec![vec![0u32; 8]]);
+        let mut live = pool.acquire();
+        let allocation = live.workspace_mut().as_ptr();
+        assert!(std::panic::catch_unwind(|| pool.acquire()).is_err());
+        drop(live);
+        let mut recovered = pool.acquire();
+        assert_eq!(recovered.workspace_mut().as_ptr(), allocation);
     }
 }
