@@ -177,9 +177,13 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
             .sample_crt_to(output, self.size.poly_length().get(), moduli, rng);
     }
 
-    /// Rechecks only the base-to-cache pairing when assembling independently
-    /// prepared parts. Product equality alone cannot establish sampler order.
-    pub(crate) fn validate_base<M: FieldContext<T>>(
+    /// Rechecks the ordered base-to-sampler pairing when composing prepared parts.
+    /// Product equality alone cannot establish sampler order. This does not
+    /// establish any plaintext recovery condition or transform identity.
+    ///
+    /// # Errors
+    /// Returns [`RnsDomainError`] if the modulus count or order differs.
+    pub fn validate_base<M: FieldContext<T>>(
         &self,
         base_q: &RNSBase<T, M>,
     ) -> Result<(), RnsDomainError<T>> {

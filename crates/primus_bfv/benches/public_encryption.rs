@@ -1,20 +1,20 @@
-//! Run: cargo bench -p primus_glwe_rns --bench public_encryption
-//! Smoke: cargo bench -p primus_glwe_rns --bench public_encryption -- --test
+//! Run: cargo bench -p primus_bfv --bench public_encryption
+//! Smoke: cargo bench -p primus_bfv --bench public_encryption -- --test
 //!
 //! Each iteration encrypts once with prepared key/context/output/scratch.
 //! Fixed diagnostic parameters exercise 50-bit limbs, not a security preset.
 
+use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvPublicKeyEncryptor, BfvSecretKeyContext};
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use primus_decompose::DecompositionBaseLog;
 use primus_encoding::PlaintextEmbedding;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweParameters, DcrtGadgetDomain, DcrtGlweCiphertext,
-    DcrtGlweDecryptWorkspace, DcrtGlweDomain, DcrtGlwePublicKey, DcrtGlweSecretKey, GlweSecretKey,
-    SecretKeyDistr,
+    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlwePublicKey, DcrtGlweSecretKey,
+    GlweSecretKey, SecretKeyDistr,
 };
-use primus_lattice::{GlweDimension, ggsw::DcrtGgsw, workspace::DcrtGlevMulWorkspace};
+use primus_lattice::{ggsw::DcrtGgsw, workspace::DcrtGlevMulWorkspace};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, Polynomial};
@@ -29,8 +29,7 @@ fn bench_public_encryption(c: &mut Criterion) {
     const SEED: u64 = 0x5353_4c45_0000_0001;
     let moduli = [1_125_899_906_826_241_u64, 1_125_899_906_629_633].map(BarrettModulus::new);
     let table = U64DcrtTable::new(PolyLength::new(N), &moduli).unwrap();
-    let parameters = CrtGlweParameters::new(
-        GlweDimension::new(1),
+    let parameters = BfvParameters::new(
         PolyLength::new(N),
         BarrettModulus::new(T),
         BarrettModulus::new(2_199_023_190_017),
@@ -38,8 +37,7 @@ fn bench_public_encryption(c: &mut Criterion) {
         SecretKeyDistr::SparseTernary,
         3.2,
     );
-    let gadget =
-        CrtGlevParameters::with_glwe_params(&parameters, DecompositionBaseLog::new(20), None);
+    let gadget = parameters.gadget_parameters(DecompositionBaseLog::new(20), None);
     let raw_domain = DcrtGlweDomain::try_new(
         parameters.encryption_parameters(),
         parameters.base_q(),
@@ -61,7 +59,7 @@ fn bench_public_encryption(c: &mut Criterion) {
         &table,
         &mut setup_rng,
     );
-    let mut ordinary = public.try_bind(&parameters, &table).unwrap();
+    let mut ordinary = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
     let mut raw = public.try_bind_raw(&raw_domain).unwrap();
     let mut monomial = public.try_bind_gadget(&gadget_domain).unwrap();
     let mut ordinary_rng = StdRng::seed_from_u64(SEED ^ 1);
@@ -85,8 +83,8 @@ fn bench_public_encryption(c: &mut Criterion) {
     let coefficient = Residues([1_u64, 1]);
 
     // Validate the same public workflows before any Criterion observation.
-    let secret_context = secret.try_bind(&parameters, &table).unwrap();
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(parameters.size());
+    let secret_context = BfvSecretKeyContext::try_new(&secret, &parameters, &table).unwrap();
+    let mut decrypt_workspace = BfvDecryptWorkspace::new(&parameters);
     ordinary.encrypt_plaintext_crt_to(&plaintext, &mut ordinary_output, &mut ordinary_rng);
     assert_eq!(
         secret_context.decrypt(&ordinary_output, &mut decrypt_workspace),

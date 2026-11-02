@@ -1,276 +1,81 @@
-//! CRT/DCRT trace and reverse trace, including modular-inverse normalization.
+//! Raw CRT/DCRT trace checks the integer projection and its modular normalization.
+mod support;
+
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweParameters, CrtGlweTraceEvaluator, CrtGlweTraceKey, DcrtGadgetDomain,
-    DcrtGlweCiphertext, DcrtGlweDecryptWorkspace, DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey,
-    DcrtGlweSecretKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlweTraceEvaluator, CrtGlweTraceKey, DcrtGadgetDomain, DcrtGlweCiphertext,
+    DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator,
+    DcrtGlweTraceKey, GlweSecretKey, SecretKeyDistr,
 };
-use primus_lattice::GlweDimension;
-use primus_lattice::glwe::CrtGlwe;
+use primus_lattice::{GlweDimension, glwe::CrtGlwe};
 use primus_modulus::BarrettModulus;
 use primus_ntt::UintDcrtTable;
-use primus_poly::Polynomial;
-use primus_reduce::prelude::*;
+use primus_reduce::ReduceInv;
+use primus_rns::Residues;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
-/// Test GLWE trace in the coefficient (CRT) domain.
-///
-/// Trace decrypts the constant coefficient m₀ of a ciphertext:
-///   Trace(c) → Enc(N · m₀),  where N = n.
-///
-/// Multiplying the input ciphertext by N⁻¹ before the trace recovers
-/// the original m₀ directly (without the N factor).
-/// Both variants are verified.
 #[test]
-fn test_crt_glwe_trace() {
-    type ValueT = u64;
-
-    let dimension = 2;
-    let poly_length = PolyLength::new(32);
-    let n = poly_length.get();
-
-    let t: ValueT = 12_288; // Even, divisible by N, and not a power of two.
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
-
-    let gamma: ValueT = 2199023190017;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
-    let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
-    let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
-    let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
-
-    let mut rng = StdRng::seed_from_u64(42);
-
-    let glwe_params = CrtGlweParameters::new(
-        GlweDimension::new(dimension),
-        poly_length,
-        mod_t,
-        mod_gamma,
-        &moduli,
-        SecretKeyDistr::SparseTernary,
-        3.20,
-    );
-
-    let rns_poly_len = glwe_params.rns_poly_len();
-    let rns_glwe_len = glwe_params.rns_glwe_len();
-    let base_q = glwe_params.base_q();
-
-    let sk = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
-        &mut rng,
-    );
-    let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
-
-    let glev_params =
-        CrtGlevParameters::with_glwe_params(&glwe_params, DecompositionBaseLog::new(20), None);
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
-
-    let trace_key = CrtGlweTraceKey::new(&domain, &sk, &dcrt_sk, &mut rng);
-
-    let input1: Polynomial<Vec<ValueT>> = Polynomial::random(n, mod_t, &mut rng);
-    let mut c1: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut c2: CrtGlwe<Vec<ValueT>> = CrtGlwe::zero(rns_glwe_len);
-    let mut evaluator = CrtGlweTraceEvaluator::new(&trace_key, &domain);
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
-
-    let dcrt_sk_context = dcrt_sk.try_bind(&glwe_params, &table).unwrap();
-    dcrt_sk_context.encrypt_to(&input1, &mut c1, &mut rng);
-
-    let mut c1 = c1.into_coeff_form(&table);
-
-    evaluator.trace_to(&c1.as_view(), &mut c2.as_mut_view());
-
-    let c2 = c2.into_ntt_form(&table);
-
-    let trace_msg = dcrt_sk_context.decrypt(&c2, &mut decrypt_workspace);
-
-    // trace_msg[0] = N · input1[0]  (mod t)
-    assert_eq!(mod_t.reduce_mul(input1[0], n as ValueT), trace_msg[0]);
-    // Other coefficients are zero.
-    assert!(trace_msg[1..].iter().all(|&v| v == 0));
-
-    let scalar_residue = base_q
-        .wrapping_decompose(n as ValueT, t)
-        .iter()
-        .zip(moduli.iter())
-        .map(|(&n, m)| m.reduce_inv(n))
-        .collect::<Vec<_>>();
-
-    c1.mul_scalar_assign(
-        &primus_rns::Residues(scalar_residue.as_slice()),
+fn trace_and_reverse_trace_match_raw_phase_projection() {
+    let n = PolyLength::new(32);
+    let moduli = [1125899906826241u64, 1125899906629633].map(BarrettModulus::new);
+    let values = moduli.map(|q| q.value());
+    let parameters = support::RawParameters::new(
+        GlweDimension::new(2),
         n,
-        rns_poly_len,
-        &moduli,
-    );
-
-    let mut c2: CrtGlwe<Vec<ValueT>> = CrtGlwe::new(c2.0);
-
-    evaluator.trace_to(&c1.as_view(), &mut c2.as_mut_view());
-
-    let c2 = c2.into_ntt_form(&table);
-
-    let trace_msg = dcrt_sk_context.decrypt(&c2, &mut decrypt_workspace);
-
-    assert_eq!(input1[0], trace_msg[0]);
-    assert!(trace_msg[1..].iter().all(|&v| v == 0));
-}
-
-/// Test GLWE trace in the NTT (DCRT) domain.
-///
-/// Same as [`test_crt_glwe_trace`] but the ciphertext stays in NTT domain.
-#[test]
-fn test_dcrt_glwe_trace() {
-    type ValueT = u64;
-
-    let dimension = 2;
-    let poly_length = PolyLength::new(32);
-    let n = poly_length.get();
-
-    let t: ValueT = 12_288; // Even, divisible by N, and not a power of two.
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
-
-    let gamma: ValueT = 2199023190017;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
-    let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
-    let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
-    let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
-
-    let mut rng = StdRng::seed_from_u64(42);
-
-    let glwe_params = CrtGlweParameters::new(
-        GlweDimension::new(dimension),
-        poly_length,
-        mod_t,
-        mod_gamma,
         &moduli,
         SecretKeyDistr::SparseTernary,
-        3.20,
+        3.2,
     );
-
-    let rns_poly_len = glwe_params.rns_poly_len();
-    let rns_glwe_len = glwe_params.rns_glwe_len();
-    let base_q = glwe_params.base_q();
-
-    let sk = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
-        &mut rng,
-    );
-    let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
-
-    let glev_params =
-        CrtGlevParameters::with_glwe_params(&glwe_params, DecompositionBaseLog::new(20), None);
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
-
-    let trace_key = DcrtGlweTraceKey::new(&domain, &dcrt_sk, &mut rng);
-
-    let input1: Polynomial<Vec<ValueT>> = Polynomial::random(n, mod_t, &mut rng);
-    let mut c1: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut c2: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut evaluator = DcrtGlweTraceEvaluator::new(&trace_key, &domain);
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
-
-    let dcrt_sk_context = dcrt_sk.try_bind(&glwe_params, &table).unwrap();
-    dcrt_sk_context.encrypt_to(&input1, &mut c1, &mut rng);
-
-    evaluator.trace_to(&c1.as_view(), &mut c2.as_mut_view());
-
-    let trace_msg = dcrt_sk_context.decrypt(&c2, &mut decrypt_workspace);
-
-    assert_eq!(mod_t.reduce_mul(input1[0], n as ValueT), trace_msg[0]);
-    assert!(trace_msg[1..].iter().all(|&v| v == 0));
-
-    let scalar_residue = base_q
-        .wrapping_decompose(n as ValueT, t)
-        .iter()
-        .zip(moduli.iter())
-        .map(|(&n, m)| m.reduce_inv(n))
-        .collect::<Vec<_>>();
-
-    c1.mul_scalar_assign(
-        &primus_rns::Residues(scalar_residue.as_slice()),
-        n,
-        rns_poly_len,
-        &moduli,
-    );
-
-    evaluator.trace_to(&c1, &mut c2);
-
-    let trace_msg = dcrt_sk_context.decrypt(&c2, &mut decrypt_workspace);
-
-    assert_eq!(input1[0], trace_msg[0]);
-    assert!(trace_msg[1..].iter().all(|&v| v == 0));
-}
-
-/// Test reverse-homomorphic trace in the NTT (DCRT) domain.
-///
-/// RevHomTrace directly produces an encryption of m₀ (without the N factor),
-/// unlike the standard trace which produces N · m₀.
-#[test]
-fn test_dcrt_glwe_rev_trace() {
-    type ValueT = u64;
-
-    let dimension = 2;
-    let poly_length = PolyLength::new(32);
-    let n = poly_length.get();
-
-    let t: ValueT = 12_288; // Even, divisible by N, and not a power of two.
-    let mod_t = <BarrettModulus<ValueT>>::new(t);
-
-    let gamma: ValueT = 2199023190017;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
-    let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
-    let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
-    let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
-
+    let table = UintDcrtTable::new(n, &moduli).unwrap();
     let mut rng = StdRng::seed_from_u64(42);
-
-    let glwe_params = CrtGlweParameters::new(
-        GlweDimension::new(dimension),
-        poly_length,
-        mod_t,
-        mod_gamma,
-        &moduli,
-        SecretKeyDistr::SparseTernary,
-        3.20,
-    );
-
-    let rns_glwe_len = glwe_params.rns_glwe_len();
-
-    let sk = GlweSecretKey::generate(
-        glwe_params.size().glwe_size(),
-        glwe_params.secret_key_sampler(),
+    let secret = GlweSecretKey::generate(
+        parameters.glwe_size(),
+        parameters.secret_key_sampler(),
         &mut rng,
     );
-    let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
-
-    let glev_params =
-        CrtGlevParameters::with_glwe_params(&glwe_params, DecompositionBaseLog::new(20), None);
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
-
-    let rev_trace_key = DcrtGlweRevTraceKey::new(&domain, &dcrt_sk, &mut rng);
-
-    let input1: Polynomial<Vec<ValueT>> = Polynomial::random(n, mod_t, &mut rng);
-    let mut c1: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut c2: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut evaluator = DcrtGlweRevTraceEvaluator::new(&rev_trace_key, &domain);
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
-
-    let dcrt_sk_context = dcrt_sk.try_bind(&glwe_params, &table).unwrap();
-    dcrt_sk_context.encrypt_to(&input1, &mut c1, &mut rng);
-
-    evaluator.trace_to(&c1.as_view(), &mut c2.as_mut_view());
-
-    let first = c2.as_ref().to_vec();
-    evaluator.trace_to(&c1, &mut c2);
-    assert_eq!(c2.as_ref(), first);
-
-    let trace_msg = dcrt_sk_context.decrypt(&c2, &mut decrypt_workspace);
-
-    assert_eq!(input1[0], trace_msg[0]);
-    assert!(trace_msg[1..].iter().all(|&v| v == 0));
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
+    let raw_domain = parameters.domain(&table);
+    let context = key.try_bind_raw(&raw_domain).unwrap();
+    let gadget = parameters.gadget(DecompositionBaseLog::new(20), None);
+    let domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
+    let crt_key = CrtGlweTraceKey::new(&domain, &secret, &key, &mut rng);
+    let dcrt_key = DcrtGlweTraceKey::new(&domain, &key, &mut rng);
+    let rev_key = DcrtGlweRevTraceKey::new(&domain, &key, &mut rng);
+    let mut crt = CrtGlweTraceEvaluator::new(&crt_key, &domain);
+    let mut dcrt = DcrtGlweTraceEvaluator::new(&dcrt_key, &domain);
+    let mut reverse = DcrtGlweRevTraceEvaluator::new(&rev_key, &domain);
+    let message: Vec<_> = (0..n.get()).map(|i| (i % 9) as i128 + 1).collect();
+    let mut input = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+    context.encrypt_encoded_crt_to(
+        &support::encode_probe(&message, &values),
+        &mut input,
+        &mut rng,
+    );
+    let mut crt_output = CrtGlwe::<Vec<u64>>::zero(parameters.rns_glwe_len());
+    let mut output = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+    let e = i128::from(parameters.core.noise_distribution().maximum_magnitude());
+    let bound = n.get() as i128 * (e + support::switch_error_bound(&gadget, 2 * n.get() as i128));
+    let inverses = Residues(values.map(|q| BarrettModulus::new(q).reduce_inv(n.get() as u64)));
+    for normalized in [false, true] {
+        let mut input = input.clone();
+        if normalized {
+            input.mul_scalar_assign(&inverses, n.get(), parameters.rns_poly_len(), &moduli);
+        }
+        let coefficients = input.clone().into_coeff_form(&table);
+        let mut expected = vec![0; n.get()];
+        expected[0] = message[0] * if normalized { 1 } else { n.get() as i128 };
+        crt.trace_to(&coefficients.as_view(), &mut crt_output.as_mut_view());
+        crt_output.write_ntt_form(&mut output, &table);
+        support::assert_probe_phase(&key, &parameters, &table, &output, &expected, bound);
+        dcrt.trace_to(&input.as_view(), &mut output.as_mut_view());
+        support::assert_probe_phase(&key, &parameters, &table, &output, &expected, bound);
+    }
+    reverse.trace_to(&input.as_view(), &mut output.as_mut_view());
+    let saved = output.as_ref().to_vec();
+    reverse.trace_to(&input, &mut output);
+    assert_eq!(saved, output.as_ref());
+    let mut expected = vec![0; n.get()];
+    expected[0] = message[0];
+    support::assert_probe_phase(&key, &parameters, &table, &output, &expected, bound);
 }

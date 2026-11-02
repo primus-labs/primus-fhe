@@ -7,7 +7,7 @@ use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 
 use super::{DcrtGlwePublicKey, DcrtGlwePublicKeyWorkspace};
-use crate::{CrtGlweEncryptionParameters, CrtGlweParameters, DcrtGlweDomain, RnsDomainError};
+use crate::{CrtGlweEncryptionParameters, DcrtGlweDomain, RnsDomainError};
 
 /// Resources numerically checked once before an encryptor allocates its scratch.
 pub(super) struct PublicEncryptionResources<'a, T, M, Table>
@@ -94,109 +94,6 @@ where
     }
 }
 
-/// A prepared ordinary BFV public encryptor with reusable ephemeral storage.
-///
-/// Construct with [`DcrtGlwePublicKey::try_bind`]. Inputs use unscaled CRT
-/// plaintext lifts. Key/table compatibility does not prove actual secret or
-/// transform identity, or an evaluated/public-encryption noise margin.
-pub struct DcrtGlwePublicKeyContext<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    pub(super) resources: PublicEncryptionResources<'a, T, M, Table>,
-    pub(super) parameters: &'a CrtGlweParameters<T, M>,
-    pub(super) workspace: DcrtGlwePublicKeyWorkspace<T>,
-}
-
-impl<T, M, Table> DcrtGlwePublicKeyContext<'_, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    /// Returns the retained scratch geometry and erasure contract.
-    #[must_use]
-    pub fn workspace(&self) -> &DcrtGlwePublicKeyWorkspace<T> {
-        &self.workspace
-    }
-
-    /// Borrows scratch for explicit erasure without releasing its allocation.
-    pub fn workspace_mut(&mut self) -> &mut DcrtGlwePublicKeyWorkspace<T> {
-        &mut self.workspace
-    }
-
-    /// Encrypts unscaled CRT plaintext lifts, allocating only the result.
-    /// Applies floor(Q/t) scaling, following [`Self::encrypt_plaintext_crt_to`].
-    ///
-    /// # Panics
-    /// Inherits that method's input and workspace checks.
-    #[must_use]
-    pub fn encrypt_plaintext_crt<R, A>(
-        &mut self,
-        message: &CrtPolynomial<A>,
-        rng: &mut R,
-    ) -> DcrtGlwe<Vec<T>>
-    where
-        R: rand::Rng + rand::CryptoRng,
-        A: Data<Elem = T>,
-    {
-        let mut output = DcrtGlwe::zero(self.resources.size().rns_glwe_len());
-        self.encrypt_plaintext_crt_to(message, &mut output, rng);
-        output
-    }
-
-    /// Encrypts one unscaled coefficient-domain CRT plaintext without allocating.
-    ///
-    /// Applies floor(Q/t) scaling before the body's single NTT. Already-scaled
-    /// codec output would be scaled twice. Input residues are canonical under
-    /// the parameter basis; the complete DCRT output is overwritten.
-    ///
-    /// # Correctness
-    /// Inputs must use the bound basis and intended plaintext lifts. This
-    /// method does not certify a public-encryption noise or recovery margin.
-    ///
-    /// # Panics
-    /// Panics before writes/sampling if input/output/workspace lengths or shape
-    /// differ. RNG/transform panics can leave partial output and scratch.
-    pub fn encrypt_plaintext_crt_to<R, A, B>(
-        &mut self,
-        message: &CrtPolynomial<A>,
-        output: &mut DcrtGlwe<B>,
-        rng: &mut R,
-    ) where
-        R: rand::Rng + rand::CryptoRng,
-        A: Data<Elem = T>,
-        B: DataMut<Elem = T>,
-    {
-        let parameters = self.parameters;
-        let size = self.resources.size();
-        assert_eq!(
-            message.as_ref().len(),
-            size.rns_poly_len(),
-            "CRT plaintext length mismatch"
-        );
-        self.resources
-            .assert_output(output.as_ref().len(), &self.workspace);
-        self.resources.encrypt_to(
-            output.as_mut_view(),
-            self.workspace.as_mut_slice(),
-            rng,
-            |index, polynomial| {
-                if index == size.dimension().get() {
-                    polynomial.add_mul_factor_assign(
-                        message,
-                        parameters.delta_factor_mod_q().as_ref(),
-                        size.poly_length().get(),
-                        parameters.cipher_moduli_value(),
-                    );
-                }
-            },
-        );
-    }
-}
-
 /// Prepared codec-free public encryption of zero or already-encoded CRT phases.
 ///
 /// This owns only one reusable ephemeral polynomial and borrows the public key,
@@ -217,6 +114,43 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
+    /// Encrypts with a coefficient-noise injection for each GLWE component.
+    ///
+    /// Calls `inject_component(index, polynomial)` once for each component in
+    /// mask-then-body order, immediately after its coefficient noise is sampled
+    /// and before its single NTT. The body index is the GLWE dimension. This
+    /// allows schemes to fuse encoding or noise scaling without another buffer
+    /// or transform. A fresh ephemeral is sampled first; output and retained
+    /// scratch are overwritten. The kernel allocates nothing; callback costs
+    /// belong to its caller.
+    ///
+    /// # Correctness
+    /// Each callback must leave canonical coefficients in the bound ordered Q
+    /// basis. The caller owns message/noise semantics and their recovery bound;
+    /// the primitive retains phase `b - sum(a_i*s_i)`.
+    ///
+    /// # Panics
+    /// Validates complete output and workspace layouts before sampling or
+    /// callbacks. An RNG, callback or transform panic may leave partial buffers.
+    pub fn encrypt_with_components_to<R, A>(
+        &mut self,
+        output: &mut DcrtGlwe<A>,
+        rng: &mut R,
+        inject_component: impl FnMut(usize, &mut CrtPolynomial<&mut [T]>),
+    ) where
+        R: rand::Rng + rand::CryptoRng,
+        A: DataMut<Elem = T>,
+    {
+        self.resources
+            .assert_output(output.as_ref().len(), &self.workspace);
+        self.resources.encrypt_to(
+            output.as_mut_view(),
+            self.workspace.as_mut_slice(),
+            rng,
+            inject_component,
+        );
+    }
+
     /// Returns the retained scratch geometry and erasure contract.
     #[must_use]
     pub fn workspace(&self) -> &DcrtGlwePublicKeyWorkspace<T> {

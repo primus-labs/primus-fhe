@@ -16,26 +16,6 @@ pub enum CrtGlweEncryptionParametersError<T: FheUint> {
     ErrorSampler(#[from] primus_distr::ErrorSamplerError),
 }
 
-/// Invalid ordinary CRT GLWE parameters, including BFV encoding and recovery.
-#[derive(Debug, thiserror::Error)]
-pub enum CrtGlweParametersError<T: FheUint> {
-    /// Invalid ring geometry or an unrepresentable RNS storage length.
-    #[error(transparent)]
-    Layout(#[from] GlweSizeError),
-    /// The ciphertext moduli do not define an RNS basis.
-    #[error("invalid ciphertext RNS basis")]
-    RnsBase(#[from] primus_rns::RnsError),
-    /// Layout or codec base does not match the prepared sampler domain.
-    #[error(transparent)]
-    Domain(#[from] super::RnsDomainError<T>),
-    /// Invalid BFV moduli or insufficient fresh private-key plaintext recovery margin.
-    #[error(transparent)]
-    Encoding(#[from] primus_encoding::BfvRnsCodecError<T>),
-    /// Codec-free secret/error sampling preparation failed.
-    #[error(transparent)]
-    Encryption(#[from] CrtGlweEncryptionParametersError<T>),
-}
-
 /// An invalid decomposition basis or layout for CRT GLev/GGSW parameters.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CrtGlevParametersError<T: FheUint> {

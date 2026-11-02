@@ -11,6 +11,7 @@ Primus FHE is an experimental Rust workspace for fully homomorphic encryption. I
 
 - **Evaluate encrypted functions:** choose PBS, ManyLUT, MVB, CBS or Boolean gates in the [TFHE operation and encoding guide](crates/primus_tfhe/README.md), then select a backend below.
 - **Use encryption primitives:** start with [LWE](crates/primus_lwe/README.md), [GLWE](crates/primus_glwe/README.md), [NTRU](crates/primus_ntru/README.md) or [RNS GLWE](crates/primus_glwe_rns/README.md).
+- **Encrypt BFV coefficients:** use [primus_bfv](crates/primus_bfv/README.md) for rank-one u64 parameters, coefficient encryption and recovery.
 - **Compose lower-level components:** the [library usage guide](guides/development/README.md) covers arithmetic domains, storage, iterators, transform representations and workspaces.
 
 Run a complete encryption → lookup → decryption example from the repository root:
@@ -43,9 +44,10 @@ See the [capability table](crates/primus_tfhe/README.md#crate-map-and-capabiliti
 | Sampling and encoding | [primus_distr](crates/primus_distr/README.md): secret/noise distributions; [primus_encoding](crates/primus_encoding/README.md): Rounded, Scaled, and BFV RNS coefficient codecs |
 | Ciphertext representations | [primus_lattice](crates/primus_lattice/README.md): storage, arithmetic, extraction, gadget products, CMUX, and reusable workspaces |
 | Encryption and evaluation | [primus_lwe](crates/primus_lwe/README.md), [primus_glwe](crates/primus_glwe/README.md), [primus_ntru](crates/primus_ntru/README.md): keys and scheme primitives; [primus_glwe_rns](crates/primus_glwe_rns/README.md): CRT/DCRT GLWE and hybrid-RNS key switching |
+| BFV coefficient workflow | [primus_bfv](crates/primus_bfv/README.md): BFV parameters, message scaling, secret/public coefficient encryption and recovery over raw RNS GLWE |
 | TFHE | [primus_tfhe](crates/primus_tfhe/README.md): shared external LWE clients, LUTs, PBS traits, and Boolean evaluation; the two family crates and four backends above bind parameters, keys, and execution |
 
-RNS and encoding components are building blocks; complete BFV, BGV and CKKS application backends are not implemented.
+The current BFV API supports coefficient encryption and recovery. Complete leveled BFV evaluation, BGV and CKKS application backends are not implemented.
 
 Application libraries live in separate sibling repositories: [primus_omr](../primus_omr/README.md) provides clue detection, board encoding and message recovery; [primus_high_prec_lut](../primus_high_prec_lut/README.md) provides high-precision lookup over independently encrypted chunks. Run their examples, tests and benchmarks from their own repository roots. They are not workspace members.
 

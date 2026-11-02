@@ -1,9 +1,9 @@
 //! Classic and hybrid switching retain wide Q, independent keys and auxiliary-modulus checks.
+mod support;
 
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweParameters, DcrtGadgetDomain, DcrtGlweCiphertext,
-    DcrtGlweDecryptWorkspace, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
+    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
     DcrtGlweSecretKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
     HybridRnsGlweKeySwitchingKey, HybridRnsKeySwitchDomain, SecretKeyDistr,
 };
@@ -23,11 +23,9 @@ fn hybrid_generation_rejects_input_secret_layout_before_sampling() {
     let table = UintDcrtTable::new(PolyLength::new(32), &[q[0], p[0]]).unwrap();
     let hybrid = primus_rns::HybridRNS::new(&q, &p, 1).unwrap();
     let domain = HybridRnsKeySwitchDomain::try_new(&hybrid, &table).unwrap();
-    let parameters = CrtGlweParameters::new(
+    let parameters = support::RawParameters::new(
         GlweDimension::new(2),
         PolyLength::new(32),
-        BarrettModulus::new(3),
-        BarrettModulus::new(101),
         &q,
         SecretKeyDistr::UniformBinary,
         1.0,
@@ -69,7 +67,7 @@ fn hybrid_generation_rejects_input_secret_layout_before_sampling() {
 
 #[test]
 fn hybrid_noise_support_must_fit_auxiliary_moduli() {
-    // Q accommodates fresh plaintext recovery; P isolates the support boundary.
+    // Q accommodates the sampler support; P isolates the auxiliary support boundary.
     let q = [3329u64].map(BarrettModulus::new);
     let p = [257u64].map(BarrettModulus::new);
     let qp = [q[0], p[0]];
@@ -78,11 +76,9 @@ fn hybrid_noise_support_must_fit_auxiliary_moduli() {
     let domain = HybridRnsKeySwitchDomain::try_new(&hybrid, &table).unwrap();
     let mut rng = StdRng::seed_from_u64(0x5150);
     for (sigma, valid) in [(21.375, true), (21.4375, false), (21.5, false)] {
-        let params = CrtGlweParameters::new(
+        let params = support::RawParameters::new(
             GlweDimension::new(1),
             PolyLength::new(32),
-            BarrettModulus::new(3),
-            BarrettModulus::new(101),
             &q,
             SecretKeyDistr::UniformBinary,
             sigma,
@@ -111,7 +107,7 @@ fn hybrid_noise_support_must_fit_auxiliary_moduli() {
 }
 
 /// Test RNS-based GLWE key switching end-to-end:
-/// encrypt under sk_1 → key-switch → decrypt under sk_2 → assert same plaintext.
+/// encrypt a phase probe under sk_1 → switch → inspect phase under sk_2.
 #[test]
 fn test_rns_glwe_ksk() {
     type ValueT = u64;
@@ -122,9 +118,6 @@ fn test_rns_glwe_ksk() {
     let t: ValueT = 12289;
     let mod_t = <BarrettModulus<ValueT>>::new(t);
 
-    let gamma: ValueT = 2305843009213554689;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
     // Two 50-bit RNS moduli: Q = q₀ · q₁
     let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
     let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
@@ -132,11 +125,9 @@ fn test_rns_glwe_ksk() {
 
     let mut rng = StdRng::seed_from_u64(0x005e_ed4b_534b);
 
-    let glwe_params = CrtGlweParameters::new(
+    let glwe_params = support::RawParameters::new(
         GlweDimension::new(dimension),
         poly_length,
-        mod_t,
-        mod_gamma,
         &moduli,
         SecretKeyDistr::SparseTernary,
         3.20,
@@ -158,8 +149,7 @@ fn test_rns_glwe_ksk() {
     );
     let dcrt_sk_2 = DcrtGlweSecretKey::from_coeff_secret_key(&sk_2, &table);
 
-    let glev_params =
-        CrtGlevParameters::with_glwe_params(&glwe_params, DecompositionBaseLog::new(20), None);
+    let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
     let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
 
     let key_switching_key = DcrtGlweKeySwitchingKey::generate(
@@ -174,25 +164,28 @@ fn test_rns_glwe_ksk() {
     let mut c1: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut c2: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut ksk_evaluator = DcrtGlweKeySwitchEvaluator::new(&key_switching_key, &domain);
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
 
-    let dcrt_sk_1_context = dcrt_sk_1.try_bind(&glwe_params, &table).unwrap();
-    dcrt_sk_1_context.encrypt_to(&input, &mut c1, &mut rng);
+    let raw_domain = glwe_params.domain(&table);
+    let dcrt_sk_1_context = dcrt_sk_1.try_bind_raw(&raw_domain).unwrap();
+    dcrt_sk_1_context.encrypt_encoded_crt_to(
+        &support::unsigned_probe(input.as_ref(), &glwe_params),
+        &mut c1,
+        &mut rng,
+    );
 
     // Requires conversion to coefficient domain first.
     let c1 = c1.into_coeff_form(&table);
 
     ksk_evaluator.key_switch_to(&c1.as_view(), &mut c2.as_mut_view());
 
-    let dcrt_sk_2_context = dcrt_sk_2.try_bind(&glwe_params, &table).unwrap();
-    let output = dcrt_sk_2_context.decrypt(&c2, &mut decrypt_workspace);
-
-    assert_eq!(input.as_ref(), output.as_ref());
+    let expected: Vec<_> = input.iter().map(|&value| i128::from(value)).collect();
+    let bound = i128::from(glwe_params.core.noise_distribution().maximum_magnitude())
+        + support::switch_error_bound(&glev_params, dimension as i128 * poly_length.get() as i128);
+    support::assert_probe_phase(&dcrt_sk_2, &glwe_params, &table, &c2, &expected, bound);
 }
 
 /// Test hybrid RNS gadget GLWE key switching end-to-end:
-/// encrypt under sk_1 → hybrid key-switch → decrypt under sk_2 → assert same
-/// plaintext.
+/// encrypt a phase probe under sk_1 → hybrid switch → inspect phase under sk_2.
 #[test]
 fn test_rns_glwe_ksk_hybrid() {
     type ValueT = u64;
@@ -203,12 +196,10 @@ fn test_rns_glwe_ksk_hybrid() {
     let t: ValueT = 12289;
     let mod_t = <BarrettModulus<ValueT>>::new(t);
 
-    let gamma: ValueT = 2305843009213554689;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
-    // Three 50-bit Q moduli + one 50-bit P modulus.
+    // Three Q limbs retain an uneven partition; two P limbs keep the
+    // complete integer error below each q, so the raw phase is directly testable.
     let q_values: [ValueT; 3] = [1125899906826241, 1125899906629633, 1125899906031617];
-    let p_values: [ValueT; 1] = [1125899905036289];
+    let p_values: [ValueT; 2] = [1125899905036289, 1125899904679937];
     let q_moduli = q_values.map(<BarrettModulus<ValueT>>::new);
     let p_moduli = p_values.map(<BarrettModulus<ValueT>>::new);
 
@@ -219,11 +210,9 @@ fn test_rns_glwe_ksk_hybrid() {
 
     let mut rng = StdRng::seed_from_u64(42);
 
-    let glwe_params = CrtGlweParameters::new(
+    let glwe_params = support::RawParameters::new(
         GlweDimension::new(dimension),
         poly_length,
-        mod_t,
-        mod_gamma,
         &q_moduli,
         SecretKeyDistr::SparseTernary,
         3.20,
@@ -261,22 +250,52 @@ fn test_rns_glwe_ksk_hybrid() {
     let mut c1: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut c2: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
 
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
-
-    let dcrt_sk_1_context = dcrt_sk_1.try_bind(&glwe_params, &q_table).unwrap();
-    dcrt_sk_1_context.encrypt_to(&input, &mut c1, &mut rng);
+    let raw_domain = glwe_params.domain(&q_table);
+    let dcrt_sk_1_context = dcrt_sk_1.try_bind_raw(&raw_domain).unwrap();
+    dcrt_sk_1_context.encrypt_encoded_crt_to(
+        &support::unsigned_probe(input.as_ref(), &glwe_params),
+        &mut c1,
+        &mut rng,
+    );
 
     let mut hybrid_evaluator =
         HybridRnsGlweKeySwitchEvaluator::new(&key_switching_key, &hybrid_domain);
 
     hybrid_evaluator.key_switch_to(&c1.as_view(), &mut c2.as_mut_view());
 
-    let dcrt_sk_2_context = dcrt_sk_2.try_bind(&glwe_params, &q_table).unwrap();
-    let output = dcrt_sk_2_context.decrypt(&c2, &mut decrypt_workspace);
+    let expected: Vec<_> = input.iter().map(|&value| i128::from(value)).collect();
+    let p_product = u128::from(p_values[0]) * u128::from(p_values[1]);
+    // Approximate ModUp uses the unreduced CRT sum, not a centered digit:
+    // an r-prime partition lifts to [0, r*Qi). Here r<=2 and Qi<2P, so
+    // each digit is <4P. Bound its error contribution after division by P.
+    // Approximate ModDown likewise subtracts an unreduced P-basis CRT lift
+    // in [0, |P|*P), rather than an exact rounded remainder. Include this
+    // correction once for the body and once times the output secret L1.
+    assert!(u128::from(q_values[0]) * u128::from(q_values[1]) < 2 * p_product);
+    let e = i128::from(glwe_params.core.noise_distribution().maximum_magnitude());
+    let secret_l1 = dimension as i128 * poly_length.get() as i128;
+    let bound = e
+        + 4 * secret_l1 * decomposition_count as i128 * e
+        + p_values.len() as i128 * (1 + secret_l1);
+    support::assert_probe_phase(&dcrt_sk_2, &glwe_params, &q_table, &c2, &expected, bound);
+}
 
-    assert_eq!(
-        input.as_ref(),
-        output.as_ref(),
-        "hybrid KSK decryption mismatch"
+#[test]
+fn phase_oracle_rejects_a_noiseless_probe_that_aliases_in_each_limb() {
+    let moduli = [1125899906826241u64, 1125899906629633];
+    // A wrong integer value of 1024 has small, but different, residues under
+    // both primes close to 2^50. Independent distance checks would accept it
+    // as a noisy encryption of zero; no common small integer error exists.
+    let wrong_phase: Vec<_> = moduli
+        .iter()
+        .map(|&q| (1024 * support::PROBE_SCALE % i128::from(q)) as u64)
+        .collect();
+    assert_eq!(wrong_phase, [65_532, 851_964]);
+    support::assert_phase_residues(&[123, 123], &moduli, &[0], 1_000_000);
+    assert!(
+        std::panic::catch_unwind(|| {
+            support::assert_phase_residues(&wrong_phase, &moduli, &[0], 1_000_000)
+        })
+        .is_err()
     );
 }

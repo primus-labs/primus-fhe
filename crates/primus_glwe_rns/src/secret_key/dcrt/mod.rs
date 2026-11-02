@@ -1,24 +1,20 @@
 //! DCRT secret ownership and numerical resource bindings.
 
 mod conversion;
-mod decrypt;
-mod encrypt;
 mod gadget;
 mod raw;
-mod workspace;
 
 use primus_integer::FheUint;
 use primus_lattice::RnsGlweSize;
-use primus_ntt::{DcrtTable, NttTable};
+use primus_ntt::NttTable;
 use primus_poly::DcrtPolynomialIter;
 use primus_reduce::FieldContext;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::parameter::{validate_dcrt_table, validate_glwe_size, validate_moduli};
-use crate::{CrtGlweParameters, DcrtGadgetDomain, RnsDomainError, SecretKeyDistr};
+use crate::parameter::{validate_glwe_size, validate_moduli};
+use crate::{DcrtGadgetDomain, RnsDomainError, SecretKeyDistr};
 
 pub use raw::DcrtGlweRawSecretKeyContext;
-pub use workspace::DcrtGlweDecryptWorkspace;
 
 /// A GLWE secret key represented in NTT form for every ordered RNS modulus.
 /// Key storage is securely erased on drop.
@@ -69,31 +65,6 @@ impl<T: FheUint> DcrtGlweSecretKey<T> {
         DcrtPolynomialIter::new(self.key.as_slice(), self.size.rns_poly_len())
     }
 
-    /// Binds this key to ordinary parameters and their ordered DCRT table.
-    ///
-    /// Checks numerical domains and key layout once. Matching moduli do not
-    /// prove that a different table uses the same NTT representation.
-    ///
-    /// # Errors
-    /// Returns [`RnsDomainError`] for an incompatible layout or ordered basis.
-    pub fn try_bind<'a, M, Table>(
-        &'a self,
-        parameters: &'a CrtGlweParameters<T, M>,
-        table: &'a DcrtTable<Table>,
-    ) -> Result<DcrtGlweSecretKeyContext<'a, T, M, Table>, RnsDomainError<T>>
-    where
-        M: FieldContext<T>,
-        Table: NttTable<ValueT = T>,
-    {
-        validate_dcrt_table(parameters.poly_length(), parameters.cipher_moduli(), table)?;
-        self.validate_parameters(parameters.size(), parameters.cipher_moduli())?;
-        Ok(DcrtGlweSecretKeyContext {
-            key: self,
-            parameters,
-            table,
-        })
-    }
-
     /// Binds this key to a checked gadget domain before encrypting GLev entries.
     ///
     /// # Errors
@@ -125,22 +96,6 @@ impl<T: FheUint> DcrtGlweSecretKey<T> {
             moduli.iter().map(|m| m.value()),
         )
     }
-}
-
-/// A read-only binding of a DCRT secret key, ordinary parameters and table.
-///
-/// Numerical compatibility is checked by [`DcrtGlweSecretKey::try_bind`].
-/// Ciphertext/message layouts, canonical residues and NTT identity remain
-/// caller contracts; the binding does not identify the secret of an input ciphertext.
-pub struct DcrtGlweSecretKeyContext<'a, T, M, Table>
-where
-    T: FheUint,
-    M: FieldContext<T>,
-    Table: NttTable<ValueT = T>,
-{
-    key: &'a DcrtGlweSecretKey<T>,
-    parameters: &'a CrtGlweParameters<T, M>,
-    table: &'a DcrtTable<Table>,
 }
 
 /// A secret key bound to one checked GLev encryption domain.

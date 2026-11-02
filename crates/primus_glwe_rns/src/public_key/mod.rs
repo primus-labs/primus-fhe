@@ -4,7 +4,7 @@ mod encryption;
 mod gadget;
 mod workspace;
 
-pub use encryption::{DcrtGlwePublicKeyContext, DcrtGlweRawPublicKeyEncryptor};
+pub use encryption::DcrtGlweRawPublicKeyEncryptor;
 pub use gadget::DcrtGgswEncryptor;
 pub use workspace::DcrtGlwePublicKeyWorkspace;
 
@@ -16,8 +16,8 @@ use primus_rns::RNSBase;
 
 use crate::parameter::{validate_glwe_size, validate_moduli};
 use crate::{
-    CrtGlweEncryptionParameters, CrtGlweParameters, DcrtGadgetDomain, DcrtGlweDomain,
-    DcrtGlweSecretKey, RnsDomainError,
+    CrtGlweEncryptionParameters, DcrtGadgetDomain, DcrtGlweDomain, DcrtGlweSecretKey,
+    RnsDomainError,
 };
 
 use encryption::PublicEncryptionResources;
@@ -101,43 +101,13 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
         }
     }
 
-    /// Binds ordinary BFV parameters and allocates one reusable ephemeral polynomial.
-    ///
-    /// Repeated encryption borrows this context mutably. Independent concurrent
-    /// calls need separate contexts/workspaces; the key and table remain shared.
-    ///
-    /// # Errors
-    /// Returns [`RnsDomainError`] for an incompatible layout or ordered basis.
-    pub fn try_bind<'a, M, Table>(
-        &'a self,
-        parameters: &'a CrtGlweParameters<T, M>,
-        table: &'a DcrtTable<Table>,
-    ) -> Result<DcrtGlwePublicKeyContext<'a, T, M, Table>, RnsDomainError<T>>
-    where
-        M: FieldContext<T>,
-        Table: NttTable<ValueT = T>,
-    {
-        let resources = PublicEncryptionResources::try_new(
-            self,
-            parameters.encryption_parameters(),
-            parameters.base_q(),
-            table,
-        )?;
-        let workspace = DcrtGlwePublicKeyWorkspace::new(resources.size());
-        Ok(DcrtGlwePublicKeyContext {
-            resources,
-            parameters,
-            workspace,
-        })
-    }
-
     /// Binds a codec-free domain and allocates one reusable ephemeral polynomial.
     ///
     /// # Errors
     /// Returns [`RnsDomainError`] if the key layout or ordered basis differs.
     pub fn try_bind_raw<'a, M, Table>(
         &'a self,
-        domain: &'a DcrtGlweDomain<'a, T, M, Table>,
+        domain: &DcrtGlweDomain<'a, T, M, Table>,
     ) -> Result<DcrtGlweRawPublicKeyEncryptor<'a, T, M, Table>, RnsDomainError<T>>
     where
         M: FieldContext<T>,

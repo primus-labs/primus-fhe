@@ -388,17 +388,19 @@ struct HybridRnsGlweKeySwitchingWorkspace<T: FheUint> {
 
 #[cfg(test)]
 mod tests {
-    use primus_lattice::GlweDimension;
     use primus_lattice::glwe::DcrtGlwe;
+    use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
     use primus_modulus::BarrettModulus;
     use primus_ntt::UintDcrtTable;
-    use primus_poly::Polynomial;
+    use primus_poly::CrtPolynomial;
+    use primus_rns::RNSBase;
     use primus_shape::PolyLength;
     use rand::{SeedableRng, rngs::StdRng};
 
     use super::*;
     use crate::{
-        CrtGlweParameters, DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+        CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlweSecretKey,
+        GlweSecretKey, SecretKeyDistr,
     };
 
     #[test]
@@ -408,23 +410,19 @@ mod tests {
         let dimension = 2;
         // Small ring; three Q limbs retain wide arithmetic and an uneven partition.
         let poly_length = PolyLength::new(32);
-        let plaintext_modulus = BarrettModulus::new(12289);
-        let gamma = BarrettModulus::new(2305843009213554689);
         let q_moduli =
             [1125899906826241, 1125899906629633, 1125899906031617].map(BarrettModulus::new);
         let p_moduli = [1125899905036289].map(BarrettModulus::new);
         let qp_moduli: Vec<_> = q_moduli.iter().chain(&p_moduli).copied().collect();
         let q_table = UintDcrtTable::new(poly_length, &q_moduli).unwrap();
         let qp_table = UintDcrtTable::new(poly_length, &qp_moduli).unwrap();
-        let parameters = CrtGlweParameters::new(
-            GlweDimension::new(dimension),
-            poly_length,
-            plaintext_modulus,
-            gamma,
-            &q_moduli,
-            SecretKeyDistr::SparseTernary,
-            3.20,
+        let base = RNSBase::new(&q_moduli).unwrap();
+        let size = RnsGlweSize::new(
+            GlweSize::new(GlweDimension::new(dimension), poly_length),
+            base.moduli_count(),
         );
+        let parameters =
+            CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
         let hybrid = HybridRNS::new(&q_moduli, &p_moduli, 2).unwrap();
         let domain = HybridRnsKeySwitchDomain::try_new(&hybrid, &qp_table).unwrap();
         let mut rng = StdRng::seed_from_u64(0x4859_4252_4944);
@@ -441,22 +439,24 @@ mod tests {
         let input_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&input_key, &q_table);
         let switching_key = HybridRnsGlweKeySwitchingKey::generate(
             &input_key,
-            parameters.encryption_parameters(),
+            &parameters,
             &output_key,
             &domain,
             &mut rng,
         );
 
-        let plaintext: Polynomial<Vec<Value>> =
-            Polynomial::random(poly_length.get(), plaintext_modulus, &mut rng);
-        let mut input: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(parameters.rns_glwe_len());
-        let input_dcrt_key_context = input_dcrt_key.try_bind(&parameters, &q_table).unwrap();
-        input_dcrt_key_context.encrypt_to(&plaintext, &mut input, &mut rng);
+        let encoded = CrtPolynomial::new(
+            (0..size.rns_poly_len())
+                .map(|i| (i % 17) as Value)
+                .collect::<Vec<_>>(),
+        );
+        let mut input: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
+        let raw_domain = DcrtGlweDomain::try_new(&parameters, &base, &q_table).unwrap();
+        let context = input_dcrt_key.try_bind_raw(&raw_domain).unwrap();
+        context.encrypt_encoded_crt_to(&encoded, &mut input, &mut rng);
         let input_coeff = input.clone().into_coeff_form(&q_table);
-        let mut from_ntt: DcrtGlwe<Vec<Value>> =
-            DcrtGlweCiphertext::zero(parameters.rns_glwe_len());
-        let mut from_coeff: DcrtGlwe<Vec<Value>> =
-            DcrtGlweCiphertext::zero(parameters.rns_glwe_len());
+        let mut from_ntt: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
+        let mut from_coeff: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(size.rns_glwe_len());
         let mut ntt_evaluator = HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &domain);
         let mut coeff_evaluator = HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &domain);
 

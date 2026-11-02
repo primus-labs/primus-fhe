@@ -16,7 +16,8 @@ Choose the lowest-level crate that owns your operation. For complete TFHE applic
 | Ciphertext layouts and arithmetic | [primus_lattice](../../crates/primus_lattice/README.md) |
 | Messages, encoding and phase diagnostics | [primus_encoding](../../crates/primus_encoding/README.md) |
 | Standalone encryption and key switching | [LWE](../../crates/primus_lwe/README.md), [GLWE](../../crates/primus_glwe/README.md), [NTRU](../../crates/primus_ntru/README.md) |
-| RNS conversion and BFV-style GLWE | [primus_rns](../../crates/primus_rns/README.md), [primus_glwe_rns](../../crates/primus_glwe_rns/README.md) |
+| RNS conversion, raw GLWE and gadget evaluation | [primus_rns](../../crates/primus_rns/README.md), [primus_glwe_rns](../../crates/primus_glwe_rns/README.md) |
+| BFV coefficient encryption and recovery | [primus_bfv](../../crates/primus_bfv/README.md) |
 | PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) or [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.md) |
 | One-hot selectors | [NTRU CBS and one-hot](../../crates/primus_tfhe_ntru/README.md#one-hot-cbs), then the backend examples |
 | Functions on encrypted multi-chunk integers | [High-precision lookup](../../../primus_high_prec_lut/README.md) |

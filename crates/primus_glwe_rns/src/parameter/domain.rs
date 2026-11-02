@@ -87,6 +87,27 @@ where
     table: &'a DcrtTable<Table>,
 }
 
+// A domain contains only shared references. Copying a checked binding never
+// clones a table, basis or sampling state, and needs no Clone bound on them.
+impl<T, M, Table> Copy for DcrtGlweDomain<'_, T, M, Table>
+where
+    T: FheUint,
+    M: FieldContext<T>,
+    Table: NttTable<ValueT = T>,
+{
+}
+
+impl<T, M, Table> Clone for DcrtGlweDomain<'_, T, M, Table>
+where
+    T: FheUint,
+    M: FieldContext<T>,
+    Table: NttTable<ValueT = T>,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
 impl<'a, T, M, Table> DcrtGlweDomain<'a, T, M, Table>
 where
     T: FheUint,

@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 primus_shape = { path = "../primus_shape" }
-primus_encoding = { path = "../primus_encoding", features = ["rns"] }
 primus_data = { path = "../primus_data" }
 primus_decompose = { path = "../primus_decompose" }
 primus_distr = { path = "../primus_distr" }
@@ -41,18 +40,9 @@ harness = false
 name = "expand_coeff"
 harness = false
 
-[[bench]]
-name = "key_switching"
-harness = false
-
-[[bench]]
-name = "public_encryption"
-harness = false
-
 [features]
 default = []
 simd = [
-    "primus_encoding/simd",
     "primus_glwe/simd",
     "primus_integer/simd",
     "primus_modulus/simd",

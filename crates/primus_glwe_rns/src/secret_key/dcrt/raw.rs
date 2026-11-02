@@ -23,7 +23,7 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a DcrtGlweSecretKey<T>,
-    domain: &'a DcrtGlweDomain<'a, T, M, Table>,
+    domain: DcrtGlweDomain<'a, T, M, Table>,
 }
 
 impl<T: FheUint> DcrtGlweSecretKey<T> {
@@ -35,14 +35,17 @@ impl<T: FheUint> DcrtGlweSecretKey<T> {
     /// the secret and table must use the same roots and evaluation order.
     pub fn try_bind_raw<'a, M, Table>(
         &'a self,
-        domain: &'a DcrtGlweDomain<'a, T, M, Table>,
+        domain: &DcrtGlweDomain<'a, T, M, Table>,
     ) -> Result<DcrtGlweRawSecretKeyContext<'a, T, M, Table>, RnsDomainError<T>>
     where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
         self.validate_parameters(domain.size(), domain.rns_base().moduli())?;
-        Ok(DcrtGlweRawSecretKeyContext { key: self, domain })
+        Ok(DcrtGlweRawSecretKeyContext {
+            key: self,
+            domain: *domain,
+        })
     }
 }
 
@@ -52,6 +55,44 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
+    /// Encrypts with a caller-supplied coefficient-body injection, without scratch.
+    ///
+    /// After sampling coefficient noise, calls `inject_body` exactly once on the
+    /// complete CRT body and then performs its one forward NTT. This lets a
+    /// scheme fuse encoding into that buffer without an intermediate polynomial.
+    /// Uniform DCRT masks and their secret products are generated afterward;
+    /// the complete output is overwritten, with phase `b - sum(a_i*s_i)`.
+    /// The primitive allocates nothing; callback costs belong to its caller.
+    ///
+    /// # Correctness
+    /// The callback must leave canonical coefficients in the bound ordered Q
+    /// basis. It owns all message scaling and any modification to phase noise;
+    /// the raw primitive establishes no scheme recovery or security bound.
+    ///
+    /// # Panics
+    /// Checks the full output length before sampling or invoking the callback.
+    /// An RNG, callback or transform panic may leave partial output.
+    pub fn encrypt_with_body_to<R, A>(
+        &self,
+        output: &mut DcrtGlweCiphertext<A>,
+        rng: &mut R,
+        inject_body: impl FnOnce(&mut CrtPolynomial<&mut [T]>),
+    ) where
+        R: rand::Rng + rand::CryptoRng,
+        A: DataMut<Elem = T>,
+    {
+        self.assert_output_length(output.as_ref().len());
+        encrypt_kernel_to(
+            self.key,
+            self.domain.parameters(),
+            self.domain.rns_base(),
+            self.domain.table(),
+            output.as_mut_view(),
+            rng,
+            inject_body,
+        );
+    }
+
     /// Encrypts zero, overwriting the complete output in DCRT form.
     ///
     /// No plaintext or gadget scale is applied. One coefficient noise sample is

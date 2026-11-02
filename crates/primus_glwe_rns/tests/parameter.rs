@@ -1,9 +1,10 @@
+mod support;
+
 use primus_decompose::{ApproxSignedBasisError, big_integer::BigUintApproxSignedBasis};
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
-    BfvRnsCodec, CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweEncryptionParametersError, CrtGlweParameters, CrtGlweParametersError, DcrtGadgetDomain,
-    RnsDomainError, SecretKeyDistr,
+    CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
+    CrtGlweEncryptionParametersError, DcrtGadgetDomain, RnsDomainError, SecretKeyDistr,
 };
 use primus_integer::BigUint;
 use primus_lattice::{GlweDimension, GlweSize, GlweSizeError, RnsGlweSize};
@@ -140,14 +141,12 @@ fn explicit_error_distributions_keep_codec_free_bounds_and_auxiliary_bases() {
 }
 
 #[test]
-fn ordinary_sampling_errors_retain_their_real_source() {
+fn sampling_errors_retain_their_real_source() {
     use std::error::Error;
-    let error = CrtGlweParameters::try_new(
-        GlweDimension::new(1),
-        PolyLength::new(32),
-        BarrettModulus::new(3_u32),
-        BarrettModulus::new(101),
-        &[BarrettModulus::new(97)],
+    let base = RNSBase::new(&[BarrettModulus::new(97_u32)]).unwrap();
+    let error = CrtGlweEncryptionParameters::try_new(
+        RnsGlweSize::new(GlweSize::new(GlweDimension::new(1), PolyLength::new(32)), 1),
+        &base,
         SecretKeyDistr::SparseTernary,
         f64::NAN,
     )
@@ -155,8 +154,8 @@ fn ordinary_sampling_errors_retain_their_real_source() {
     .expect("NaN scale must fail sampling preparation");
     assert!(matches!(
         &error,
-        CrtGlweParametersError::Encryption(CrtGlweEncryptionParametersError::ErrorSampler(
-            primus_distr::ErrorSamplerError::Gaussian(_)
+        CrtGlweEncryptionParametersError::ErrorSampler(primus_distr::ErrorSamplerError::Gaussian(
+            _
         ))
     ));
     let mut current: &(dyn Error + 'static) = &error;
@@ -171,72 +170,6 @@ fn ordinary_sampling_errors_retain_their_real_source() {
         found,
         "Gaussian construction reason must remain in the source chain"
     );
-}
-
-// Every noise support fits q=97; only the joint BFV recovery margin varies.
-#[test]
-fn fresh_private_key_recovery_uses_complete_noise_support() {
-    use primus_encoding::{BfvRnsCodecError, PlaintextEmbedding};
-    let moduli = [97u32].map(BarrettModulus::new);
-    for (gamma, sigma, magnitude, valid) in [
-        (13, 1.0, 12, true),
-        (13, 1.25, 15, false),
-        (101, 1.25, 15, true),
-        (101, 1.375, 16, false),
-    ] {
-        assert_eq!(
-            primus_distr::SignedDiscreteGaussian::<i32>::new(sigma)
-                .unwrap()
-                .maximum_magnitude(),
-            u64::from(magnitude)
-        );
-        let base_q = RNSBase::new(&moduli).unwrap();
-        let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(1), PolyLength::new(32)), 1);
-        let inner = Arc::new(CrtGlweEncryptionParameters::new(
-            size,
-            &base_q,
-            SecretKeyDistr::UniformBinary,
-            sigma,
-        ));
-        let basis = BigUintApproxSignedBasis::new(
-            base_q.moduli_product(),
-            DecompositionBaseLog::new(3),
-            None,
-        );
-        // Gadget construction has no t/gamma recovery condition.
-        let gadget =
-            CrtGlevParameters::try_from_parts(Arc::clone(&inner), base_q.clone(), basis).unwrap();
-        assert!(std::ptr::eq(gadget.encryption_parameters(), inner.as_ref()));
-        let codec = BfvRnsCodec::new(BarrettModulus::new(3), base_q, BarrettModulus::new(gamma));
-        // Both an independent codec binding and internally created parts must
-        // check joint BFV recovery, even when their ordered Q is already known.
-        for result in [
-            CrtGlweParameters::try_from_parts(inner, codec),
-            CrtGlweParameters::try_new(
-                GlweDimension::new(1),
-                PolyLength::new(32),
-                BarrettModulus::new(3),
-                BarrettModulus::new(gamma),
-                &moduli,
-                SecretKeyDistr::UniformBinary,
-                sigma,
-            ),
-        ] {
-            if valid {
-                assert!(result.is_ok());
-            } else {
-                assert!(matches!(
-                    result,
-                    Err(CrtGlweParametersError::Encoding(
-                        BfvRnsCodecError::InsufficientNoiseRecovery {
-                            maximum_noise_magnitude,
-                            embedding: PlaintextEmbedding::Unsigned,
-                        }
-                    )) if maximum_noise_magnitude == magnitude
-                ));
-            }
-        }
-    }
 }
 
 // The logical key has kN=64 coefficients, despite 128 stored RNS residues.
@@ -305,68 +238,40 @@ fn fixed_secret_weights_are_checked_against_the_complete_logical_key() {
     }
 }
 
-// RNS construction and BFV preparation retain their own error roles.
-// Secret/noise sources are covered by the two support-bound tests above.
-#[test]
-fn ordinary_parameters_report_base_and_encoding_errors() {
-    use primus_encoding::BfvRnsCodecError;
-    use primus_rns::RnsError;
-    let moduli = [97u64, 17].map(BarrettModulus::new);
-    let construct = |n, gamma, moduli: &[BarrettModulus<u64>]| {
-        CrtGlweParameters::try_new(
-            GlweDimension::new(1),
-            PolyLength::new(n),
-            BarrettModulus::new(3),
-            BarrettModulus::new(gamma),
-            moduli,
-            SecretKeyDistr::UniformBinary,
-            1.0,
-        )
-    };
-    assert!(matches!(
-        construct(32, 101, &[]),
-        Err(CrtGlweParametersError::RnsBase(RnsError::EmptyBase))
-    ));
-    assert!(matches!(
-        construct(32, 101, &[moduli[0]; 2]),
-        Err(CrtGlweParametersError::RnsBase(RnsError::NonCoprimeModuli))
-    ));
-    assert!(matches!(
-        construct(32, 7, &moduli),
-        Err(CrtGlweParametersError::Encoding(
-            BfvRnsCodecError::AuxiliaryModulusTooSmall {
-                gamma: 7,
-                lower_bound: 8
-            }
-        ))
-    ));
-}
-
 #[test]
 fn gadget_parameters_check_basis_and_composed_lengths() {
     // The restrictive modulus is deliberately not the first one.
     let moduli = [97u64, 17].map(BarrettModulus::new);
-    let glwe = CrtGlweParameters::new(
+    let glwe = support::RawParameters::new(
         GlweDimension::new(1),
         PolyLength::new(32),
-        BarrettModulus::new(3),
-        BarrettModulus::new(101),
         &moduli,
         SecretKeyDistr::UniformTernary,
         1.0,
     );
     assert!(
-        CrtGlevParameters::try_with_glwe_params(&glwe, DecompositionBaseLog::new(4), None).is_ok()
+        CrtGlevParameters::try_new(
+            Arc::clone(&glwe.core),
+            glwe.base.clone(),
+            DecompositionBaseLog::new(4),
+            None
+        )
+        .is_ok()
     );
     for log_basis in [5, 6] {
         assert!(matches!(
-            CrtGlevParameters::try_with_glwe_params(&glwe, DecompositionBaseLog::new(log_basis), None),
+            CrtGlevParameters::try_new(Arc::clone(&glwe.core), glwe.base.clone(), DecompositionBaseLog::new(log_basis), None),
             Err(CrtGlevParametersError::BasisNotSmallerThanModulus { basis, modulus: 17, index: 1 })
                 if basis == 1 << log_basis
         ));
     }
     assert!(matches!(
-        CrtGlevParameters::try_with_glwe_params(&glwe, DecompositionBaseLog::new(64), None),
+        CrtGlevParameters::try_new(
+            Arc::clone(&glwe.core),
+            glwe.base.clone(),
+            DecompositionBaseLog::new(64),
+            None
+        ),
         Err(CrtGlevParametersError::InvalidDecomposition(
             ApproxSignedBasisError::InvalidLogBasis { .. }
         ))
@@ -374,17 +279,20 @@ fn gadget_parameters_check_basis_and_composed_lengths() {
 
     // Parameters store sizes without allocating ciphertexts. This ordinary
     // RNS layout fits, while its two-level gadget storage does not.
-    let large_layout = CrtGlweParameters::new(
+    let large_layout = support::RawParameters::new(
         GlweDimension::new(usize::MAX / 64 - 1),
         PolyLength::new(32),
-        BarrettModulus::new(3),
-        BarrettModulus::new(101),
         &moduli,
         SecretKeyDistr::UniformTernary,
         1.0,
     );
     assert!(matches!(
-        CrtGlevParameters::try_with_glwe_params(&large_layout, DecompositionBaseLog::new(4), None),
+        CrtGlevParameters::try_new(
+            Arc::clone(&large_layout.core),
+            large_layout.base.clone(),
+            DecompositionBaseLog::new(4),
+            None
+        ),
         Err(CrtGlevParametersError::Layout(
             GlweSizeError::LengthOverflow("RNS GLev ciphertext")
         ))
@@ -421,7 +329,7 @@ fn prepared_parts_require_the_same_ordered_base_and_product() {
     };
 
     // Equal products, equal limb counts and valid individual bases do not prove
-    // that their samplers/codec/decomposition buffers use the same ordered Q.
+    // that their samplers/decomposition buffers use the same ordered Q.
     for values in [&[17, 97][..], &[97, 19], &[97]] {
         let foreign = RNSBase::new(
             &values
@@ -435,11 +343,6 @@ fn prepared_parts_require_the_same_ordered_base_and_product() {
             CrtGlevParameters::try_from_parts(Arc::clone(&inner), foreign.clone(), basis()),
             Err(CrtGlevParametersError::Domain(_))
         ));
-        let codec = BfvRnsCodec::new(BarrettModulus::new(3), foreign, BarrettModulus::new(101));
-        assert!(matches!(
-            CrtGlweParameters::try_from_parts(Arc::clone(&inner), codec),
-            Err(CrtGlweParametersError::Domain(_))
-        ));
     }
     for modulus in [&[97 * 17 + 1][..], &[97 * 17, 1]] {
         let foreign_basis =
@@ -452,25 +355,20 @@ fn prepared_parts_require_the_same_ordered_base_and_product() {
 
     let gadget =
         CrtGlevParameters::try_from_parts(Arc::clone(&inner), base_q.clone(), basis()).unwrap();
-    let codec = BfvRnsCodec::new(BarrettModulus::new(3), base_q, BarrettModulus::new(101));
-    let ordinary = CrtGlweParameters::try_from_parts(inner, codec).unwrap();
-    let derived =
-        CrtGlevParameters::with_glwe_params(&ordinary, DecompositionBaseLog::new(3), None);
+    let derived = CrtGlevParameters::new(
+        Arc::clone(&inner),
+        base_q.clone(),
+        DecompositionBaseLog::new(3),
+        None,
+    );
     for params in [&gadget, &derived, &gadget.clone()] {
+        assert!(std::ptr::eq(inner.as_ref(), params.encryption_parameters()));
         assert!(std::ptr::eq(
-            ordinary.encryption_parameters(),
-            params.encryption_parameters()
+            base_q.moduli_product().0,
+            params.base_q().moduli_product().0
         ));
         assert!(std::ptr::eq(
-            ordinary.base_q().moduli_product().0,
-            params.base_q().moduli_product().0,
-        ));
-        assert!(std::ptr::eq(
-            ordinary.cipher_moduli_value(),
-            params.cipher_moduli_value(),
-        ));
-        assert!(std::ptr::eq(
-            ordinary.noise_distribution(),
+            inner.noise_distribution(),
             params.noise_distribution()
         ));
     }
@@ -480,11 +378,9 @@ fn prepared_parts_require_the_same_ordered_base_and_product() {
 fn cached_weights_and_centered_digits_follow_rns_order() {
     let moduli = [134_215_681u32, 134_176_769];
     let q: u64 = moduli.iter().map(|&modulus| u64::from(modulus)).product();
-    let glwe = CrtGlweParameters::new(
+    let glwe = support::RawParameters::new(
         GlweDimension::new(1),
         PolyLength::new(32),
-        BarrettModulus::new(3),
-        BarrettModulus::new(101),
         &moduli.map(BarrettModulus::new),
         SecretKeyDistr::UniformTernary,
         1.0,
@@ -497,8 +393,7 @@ fn cached_weights_and_centered_digits_follow_rns_order() {
         .collect();
     let count = values.len() / 2;
     for (log_basis, retained) in [(3, None), (5, Some(2))] {
-        let params = CrtGlevParameters::with_glwe_params(
-            &glwe,
+        let params = glwe.gadget(
             DecompositionBaseLog::new(log_basis),
             retained.map(DecompositionLevelCount::new),
         );
@@ -551,17 +446,14 @@ fn cached_weights_and_centered_digits_follow_rns_order() {
 fn domain_rejects_modulus_order_mismatch() {
     let moduli_values = [1_125_899_906_826_241u64, 1_125_899_906_629_633];
     let moduli = moduli_values.map(BarrettModulus::new);
-    let crt_glwe = CrtGlweParameters::new(
+    let crt_glwe = support::RawParameters::new(
         GlweDimension::new(1),
         PolyLength::new(32),
-        BarrettModulus::new(12_289),
-        BarrettModulus::new(2_199_023_190_017),
         &moduli,
         SecretKeyDistr::SparseTernary,
         3.2,
     );
-    let crt_gadget =
-        CrtGlevParameters::with_glwe_params(&crt_glwe, DecompositionBaseLog::new(20), None);
+    let crt_gadget = crt_glwe.gadget(DecompositionBaseLog::new(20), None);
     let reversed = [moduli[1], moduli[0]];
     let wrong_order_table = UintDcrtTable::new(PolyLength::new(32), &reversed).unwrap();
     assert!(matches!(

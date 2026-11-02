@@ -12,7 +12,7 @@ use primus_shape::PolyLength;
 use rand::distr::Uniform;
 use std::sync::Arc;
 
-use super::{CrtGlevParametersError, CrtGlweParameters, core::CrtGlweEncryptionParameters};
+use super::{CrtGlevParametersError, core::CrtGlweEncryptionParameters};
 use crate::SecretKeyDistr;
 
 /// CRT GLev/GGSW parameters for gadget encryption under the product modulus Q.
@@ -39,50 +39,41 @@ where
     T: FheUint,
     M: FieldContext<T>,
 {
-    /// Creates a new [`CrtGlevParameters<T, M>`] from matching GLWE parameters.
+    /// Prepares gadget decomposition from codec-free sampling state and its Q base.
+    /// The radix, retained levels and ordered base obey [`Self::try_new`].
     ///
     /// # Panics
-    ///
-    /// Panics if [`Self::try_with_glwe_params`] rejects the decomposition parameters.
+    /// Panics if [`Self::try_new`] rejects the supplied parameters.
     #[must_use]
-    #[inline]
-    pub fn with_glwe_params(
-        glwe_params: &CrtGlweParameters<T, M>,
+    pub fn new(
+        encryption_parameters: Arc<CrtGlweEncryptionParameters<T>>,
+        base_q: RNSBase<T, M>,
         log_basis: DecompositionBaseLog,
         level_count: Option<DecompositionLevelCount>,
     ) -> Self {
-        Self::try_with_glwe_params(glwe_params, log_basis, level_count)
+        Self::try_new(encryption_parameters, base_q, log_basis, level_count)
             .unwrap_or_else(|error| panic!("failed to construct CRT GLev parameters: {error}"))
     }
 
-    /// Creates a [`CrtGlevParameters<T, M>`] with checked decomposition and layout.
-    /// It uses the ordered RNS base owned by `glwe_params`.
-    /// The sampler/base pairing is inherited; the new radix and gadget layout
-    /// are still validated before computing level weights.
+    /// Checks an ordered sampling/base pairing and prepares its decomposition.
     ///
-    /// The radix `2^log_basis` must be strictly smaller than every RNS modulus,
-    /// as required by the fast centered lift used by CRT/DCRT gadget products.
+    /// No plaintext codec is created. Sampling state is shared; the ordered base
+    /// is moved. The radix must be strictly smaller than every q_i, as required
+    /// by the fast centered lift used by gadget products.
     ///
     /// # Errors
-    ///
-    /// Returns [`CrtGlevParametersError`] if decomposition construction fails,
-    /// a modulus does not satisfy the centered-lift precondition, or a derived
-    /// gadget storage length overflows.
-    pub fn try_with_glwe_params(
-        glwe_params: &CrtGlweParameters<T, M>,
+    /// Returns [`CrtGlevParametersError`] for a mismatched ordered base, invalid
+    /// decomposition, unsupported radix or overflowing complete gadget layout.
+    pub fn try_new(
+        encryption_parameters: Arc<CrtGlweEncryptionParameters<T>>,
+        base_q: RNSBase<T, M>,
         log_basis: DecompositionBaseLog,
         level_count: Option<DecompositionLevelCount>,
     ) -> Result<Self, CrtGlevParametersError<T>> {
-        let basis = BigUintApproxSignedBasis::try_new(
-            glwe_params.cipher_modulus(),
-            log_basis,
-            level_count,
-        )?;
-        Self::try_from_matching_parts(
-            Arc::clone(&glwe_params.encryption_parameters),
-            glwe_params.base_q().clone(),
-            basis,
-        )
+        encryption_parameters.validate_base(&base_q)?;
+        let basis =
+            BigUintApproxSignedBasis::try_new(base_q.moduli_product(), log_basis, level_count)?;
+        Self::try_from_matching_parts(encryption_parameters, base_q, basis)
     }
 
     /// Binds prepared layout/samplers, an owned ordered base and decomposition,

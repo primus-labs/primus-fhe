@@ -1,10 +1,11 @@
 //! Compare sequential and two-worker expansion on the same keys and ciphertexts.
 //! N=32 retains a multi-level tree; two ~50-bit limbs retain wide CRT arithmetic.
+mod support;
+
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffKey,
-    CrtGlweExpandCoeffParallelEvaluator, CrtGlweParameters, DcrtGadgetDomain, DcrtGlweCiphertext,
-    DcrtGlweDecryptWorkspace, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
+    CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator,
+    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
     DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
@@ -32,20 +33,15 @@ fn crt_expansion_matches_parallel_and_plaintext() {
     let t: ValueT = 12289;
     let mod_t = <BarrettModulus<ValueT>>::new(t);
 
-    let gamma: ValueT = 2199023190017;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
     let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
     let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
     let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
 
     let mut rng = StdRng::seed_from_u64(42);
 
-    let glwe_params = CrtGlweParameters::new(
+    let glwe_params = support::RawParameters::new(
         GlweDimension::new(dimension),
         poly_length,
-        mod_t,
-        mod_gamma,
         &moduli,
         SecretKeyDistr::SparseTernary,
         3.20,
@@ -60,8 +56,7 @@ fn crt_expansion_matches_parallel_and_plaintext() {
     );
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
-    let glev_params =
-        CrtGlevParameters::with_glwe_params(&glwe_params, DecompositionBaseLog::new(20), None);
+    let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
     let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
 
     let expand_key = CrtGlweExpandCoeffKey::new(&domain, &sk, &dcrt_sk, &mut rng);
@@ -78,11 +73,16 @@ fn crt_expansion_matches_parallel_and_plaintext() {
         .num_threads(2)
         .build()
         .unwrap();
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
     let mut transformed = DcrtGlweCiphertext::<Vec<ValueT>>::zero(rns_glwe_len);
 
-    let dcrt_sk_context = dcrt_sk.try_bind(&glwe_params, &table).unwrap();
-    dcrt_sk_context.encrypt_to(&input1, &mut c1, &mut rng);
+    let raw_domain = glwe_params.domain(&table);
+    let dcrt_sk_context = dcrt_sk.try_bind_raw(&raw_domain).unwrap();
+    let bound = support::tree_error_bound(&glev_params);
+    dcrt_sk_context.encrypt_encoded_crt_to(
+        &support::unsigned_probe(input1.as_ref(), &glwe_params),
+        &mut c1,
+        &mut rng,
+    );
 
     // Requires conversion to coefficient domain first.
     let c1 = c1.into_coeff_form(&table);
@@ -151,23 +151,25 @@ fn crt_expansion_matches_parallel_and_plaintext() {
         assert_eq!(parallel.as_ref(), full.as_ref());
     }
 
-    // Each output decrypts to (m_i, 0, …, 0)
+    // Each output phase approximates (m_i, 0, …, 0)
     for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
         cipher.write_ntt_form(&mut transformed, &table);
-        let m_dec = dcrt_sk_context.decrypt(&transformed, &mut decrypt_workspace);
-        assert_eq!(input, m_dec[0]);
-        assert!(m_dec[1..].iter().all(|&v| v == 0));
+        support::assert_scalar_probe(&dcrt_sk, &glwe_params, &table, &transformed, input, bound);
     }
 
     // Wraps back to DCRT domain, zeros out high coefficients, re-encrypts.
     let mut c1 = DcrtGlweCiphertext::new(c1.0);
 
-    // Partial expansion assumes the omitted coefficients are zero. Reuse dirty
+    // This case has zero omitted coefficients; the nonzero-tail case is below. Reuse dirty
     // output buffers and both workspaces from the full expansion.
     for retained in [n / 2, 1] {
         input1[retained..].fill(0);
 
-        dcrt_sk_context.encrypt_to(&input1, &mut c1, &mut rng);
+        dcrt_sk_context.encrypt_encoded_crt_to(
+            &support::unsigned_probe(input1.as_ref(), &glwe_params),
+            &mut c1,
+            &mut rng,
+        );
 
         let crt_input = c1.clone().into_coeff_form(&table);
 
@@ -184,9 +186,14 @@ fn crt_expansion_matches_parallel_and_plaintext() {
 
         for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
             cipher.write_ntt_form(&mut transformed, &table);
-            let m_dec = dcrt_sk_context.decrypt(&transformed, &mut decrypt_workspace);
-            assert_eq!(input, m_dec[0]);
-            assert!(m_dec[1..].iter().all(|&v| v == 0));
+            support::assert_scalar_probe(
+                &dcrt_sk,
+                &glwe_params,
+                &table,
+                &transformed,
+                input,
+                bound,
+            );
         }
     }
 }
@@ -206,20 +213,15 @@ fn dcrt_expansion_matches_parallel_and_plaintext() {
     let t: ValueT = 12289;
     let mod_t = <BarrettModulus<ValueT>>::new(t);
 
-    let gamma: ValueT = 2199023190017;
-    let mod_gamma = <BarrettModulus<ValueT>>::new(gamma);
-
     let moduli_values: [ValueT; _] = [1125899906826241, 1125899906629633];
     let moduli = moduli_values.map(<BarrettModulus<ValueT>>::new);
     let table = UintDcrtTable::new(poly_length, &moduli).unwrap();
 
     let mut rng = StdRng::seed_from_u64(42);
 
-    let glwe_params = CrtGlweParameters::new(
+    let glwe_params = support::RawParameters::new(
         GlweDimension::new(dimension),
         poly_length,
-        mod_t,
-        mod_gamma,
         &moduli,
         SecretKeyDistr::SparseTernary,
         3.20,
@@ -234,8 +236,7 @@ fn dcrt_expansion_matches_parallel_and_plaintext() {
     );
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
-    let glev_params =
-        CrtGlevParameters::with_glwe_params(&glwe_params, DecompositionBaseLog::new(20), None);
+    let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
     let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
 
     let expand_key = DcrtGlweExpandCoeffKey::new(&domain, &dcrt_sk, &mut rng);
@@ -253,10 +254,15 @@ fn dcrt_expansion_matches_parallel_and_plaintext() {
         .num_threads(2)
         .build()
         .unwrap();
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
 
-    let dcrt_sk_context = dcrt_sk.try_bind(&glwe_params, &table).unwrap();
-    dcrt_sk_context.encrypt_to(&input1, &mut c1, &mut rng);
+    let raw_domain = glwe_params.domain(&table);
+    let dcrt_sk_context = dcrt_sk.try_bind_raw(&raw_domain).unwrap();
+    let bound = support::tree_error_bound(&glev_params);
+    dcrt_sk_context.encrypt_encoded_crt_to(
+        &support::unsigned_probe(input1.as_ref(), &glwe_params),
+        &mut c1,
+        &mut rng,
+    );
 
     // Full expansion rejects even a valid partial count; partial expansion
     // rejects zero, non-powers of two and powers of two above N.
@@ -322,19 +328,21 @@ fn dcrt_expansion_matches_parallel_and_plaintext() {
         assert_eq!(parallel.as_ref(), full.as_ref());
     }
 
-    // Results are already in NTT domain — decrypt directly.
+    // Results are already in NTT domain; inspect their raw phase.
     for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
-        let m_dec = dcrt_sk_context.decrypt(cipher, &mut decrypt_workspace);
-        assert_eq!(input, m_dec[0]);
-        assert!(m_dec[1..].iter().all(|&v| v == 0));
+        support::assert_scalar_probe(&dcrt_sk, &glwe_params, &table, cipher, input, bound);
     }
 
-    // Partial expansion assumes the omitted coefficients are zero. Reuse dirty
+    // This case has zero omitted coefficients; the nonzero-tail case is below. Reuse dirty
     // output buffers and both workspaces from the full expansion.
     for retained in [n / 2, 1] {
         input1[retained..].fill(0);
 
-        dcrt_sk_context.encrypt_to(&input1, &mut c1, &mut rng);
+        dcrt_sk_context.encrypt_encoded_crt_to(
+            &support::unsigned_probe(input1.as_ref(), &glwe_params),
+            &mut c1,
+            &mut rng,
+        );
 
         c_expand.truncate(retained);
         parallel_output.truncate(retained);
@@ -348,9 +356,7 @@ fn dcrt_expansion_matches_parallel_and_plaintext() {
         }
 
         for (cipher, &input) in c_expand.iter().zip(input1.iter()) {
-            let m_dec = dcrt_sk_context.decrypt(cipher, &mut decrypt_workspace);
-            assert_eq!(input, m_dec[0]);
-            assert!(m_dec[1..].iter().all(|&v| v == 0));
+            support::assert_scalar_probe(&dcrt_sk, &glwe_params, &table, cipher, input, bound);
         }
     }
 }
@@ -420,11 +426,9 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
 
     let n = PolyLength::new(32);
     let moduli = [1125899906826241u64, 1125899906629633].map(BarrettModulus::new);
-    let parameters = CrtGlweParameters::new(
+    let parameters = support::RawParameters::new(
         GlweDimension::new(2),
         n,
-        BarrettModulus::new(12289),
-        BarrettModulus::new(2199023190017),
         &moduli,
         SecretKeyDistr::SparseTernary,
         3.2,
@@ -443,9 +447,10 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         &mut rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    let context = key.try_bind(&parameters, &table).unwrap();
-    let gadget =
-        CrtGlevParameters::with_glwe_params(&parameters, DecompositionBaseLog::new(20), None);
+    let raw_domain = parameters.domain(&table);
+    let context = key.try_bind_raw(&raw_domain).unwrap();
+    let gadget = parameters.gadget(DecompositionBaseLog::new(20), None);
+    let bound = support::tree_error_bound(&gadget);
     let domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
     let dcrt_key = DcrtGlweExpandCoeffKey::new(&domain, &key, &mut rng);
     let crt_key = CrtGlweExpandCoeffKey::new(&domain, &secret, &key, &mut rng);
@@ -460,7 +465,6 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         .unwrap();
     let length = parameters.rns_glwe_len();
     let mut ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(length);
-    let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(parameters.size());
     let mut transformed = DcrtGlweCiphertext::<Vec<u64>>::zero(length);
     let mut one_auto_work = None;
     let mut one_crt_auto_work = None;
@@ -473,7 +477,11 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         for (index, coefficient) in message[..count].iter_mut().enumerate() {
             *coefficient = (17 * index + 3) as u64;
         }
-        context.encrypt_to(&message, &mut ciphertext, &mut rng);
+        context.encrypt_encoded_crt_to(
+            &support::unsigned_probe(message.as_ref(), &parameters),
+            &mut ciphertext,
+            &mut rng,
+        );
         let crt_input = ciphertext.clone().into_coeff_form(&table);
         let mut output = vec![DcrtGlweCiphertext::new(vec![1u64; length]); count];
         let mut other = output.clone();
@@ -497,9 +505,7 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
             }
         }
         for (index, leaf) in output.iter().enumerate() {
-            let decoded = context.decrypt(leaf, &mut decrypt_workspace);
-            assert_eq!(decoded[0], message[index]);
-            assert!(decoded[1..].iter().all(|&value| value == 0));
+            support::assert_scalar_probe(&key, &parameters, &table, leaf, message[index], bound);
         }
         let mut crt_output = vec![CrtGlwe::new(vec![1u64; length]); count];
         let mut crt_other = crt_output.clone();
@@ -521,9 +527,14 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         for (index, (leaf, parallel)) in crt_output.iter().zip(&crt_other).enumerate() {
             assert_eq!(leaf.as_ref(), parallel.as_ref());
             leaf.write_ntt_form(&mut transformed, &table);
-            let decoded = context.decrypt(&transformed, &mut decrypt_workspace);
-            assert_eq!(decoded[0], message[index]);
-            assert!(decoded[1..].iter().all(|&value| value == 0));
+            support::assert_scalar_probe(
+                &key,
+                &parameters,
+                &table,
+                &transformed,
+                message[index],
+                bound,
+            );
         }
     }
 
@@ -534,7 +545,11 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
             .map(|index| (index + 1) as u64)
             .collect::<Vec<_>>(),
     );
-    context.encrypt_to(&message, &mut ciphertext, &mut rng);
+    context.encrypt_encoded_crt_to(
+        &support::unsigned_probe(message.as_ref(), &parameters),
+        &mut ciphertext,
+        &mut rng,
+    );
     let crt_input = ciphertext.clone().into_coeff_form(&table);
     for count in [1, 2, 4, 8, 16] {
         let mut output = vec![DcrtGlweCiphertext::<Vec<u64>>::zero(length); count];
@@ -546,11 +561,29 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
             for source in (index..n.get()).step_by(count) {
                 expected[source - index] = message[source];
             }
-            let decoded = context.decrypt(&output[index], &mut decrypt_workspace);
-            assert_eq!(decoded.as_ref(), expected);
+            support::assert_probe_phase(
+                &key,
+                &parameters,
+                &table,
+                &output[index],
+                &expected
+                    .iter()
+                    .map(|&value| i128::from(value))
+                    .collect::<Vec<_>>(),
+                bound,
+            );
             crt_output[index].write_ntt_form(&mut transformed, &table);
-            let decoded = context.decrypt(&transformed, &mut decrypt_workspace);
-            assert_eq!(decoded.as_ref(), expected);
+            support::assert_probe_phase(
+                &key,
+                &parameters,
+                &table,
+                &transformed,
+                &expected
+                    .iter()
+                    .map(|&value| i128::from(value))
+                    .collect::<Vec<_>>(),
+                bound,
+            );
         }
     }
 

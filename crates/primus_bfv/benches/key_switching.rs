@@ -1,14 +1,13 @@
+use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext};
 use primus_shape::PolyLength;
-// cargo bench -p primus_glwe_rns --bench key_switching
+// cargo bench -p primus_bfv --bench key_switching
 
 use primus_decompose::DecompositionBaseLog;
-use primus_lattice::GlweDimension;
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweParameters, DcrtGadgetDomain, DcrtGlweCiphertext,
-    DcrtGlweDecryptWorkspace, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
+    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
     DcrtGlweSecretKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
     HybridRnsGlweKeySwitchingKey, HybridRnsKeySwitchDomain, SecretKeyDistr,
 };
@@ -22,7 +21,6 @@ use rand::{SeedableRng, rngs::StdRng};
 fn bench_key_switching(c: &mut Criterion) {
     type Value = u64;
 
-    const DIMENSION: usize = 1;
     const PLAINTEXT_MODULUS: Value = 2;
     const GAMMA: Value = 2_305_843_009_213_554_689;
     const Q_VALUES: [Value; 2] = [1_125_899_906_826_241, 1_125_899_906_629_633];
@@ -45,8 +43,7 @@ fn bench_key_switching(c: &mut Criterion) {
         let q_table = U64DcrtTable::new(poly_length, &q_moduli).unwrap();
         let qp_table = U64DcrtTable::new(poly_length, &qp_moduli).unwrap();
 
-        let glwe_params = CrtGlweParameters::new(
-            GlweDimension::new(DIMENSION),
+        let glwe_params = BfvParameters::new(
             poly_length,
             mod_t,
             mod_gamma,
@@ -67,11 +64,8 @@ fn bench_key_switching(c: &mut Criterion) {
         );
         let output_dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&output_sk, &q_table);
 
-        let glev_params = CrtGlevParameters::with_glwe_params(
-            &glwe_params,
-            DecompositionBaseLog::new(DECOMPOSITION_BASE_LOG),
-            None,
-        );
+        let glev_params =
+            glwe_params.gadget_parameters(DecompositionBaseLog::new(DECOMPOSITION_BASE_LOG), None);
         let dcrt_domain = DcrtGadgetDomain::try_new(&glev_params, &q_table).unwrap();
 
         // Key generation is intentionally outside the timed region.
@@ -85,7 +79,8 @@ fn bench_key_switching(c: &mut Criterion) {
         let rns_glwe_len = glwe_params.rns_glwe_len();
         let input: Polynomial<Vec<Value>> = Polynomial::random(poly_length.get(), mod_t, &mut rng);
         let mut input_ciphertext: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-        let input_dcrt_sk_context = input_dcrt_sk.try_bind(&glwe_params, &q_table).unwrap();
+        let input_dcrt_sk_context =
+            BfvSecretKeyContext::try_new(&input_dcrt_sk, &glwe_params, &q_table).unwrap();
         input_dcrt_sk_context.encrypt_to(&input, &mut input_ciphertext, &mut rng);
         let input_coeff = input_ciphertext.clone().into_coeff_form(&q_table);
 
@@ -93,8 +88,9 @@ fn bench_key_switching(c: &mut Criterion) {
         let mut crt_evaluator = DcrtGlweKeySwitchEvaluator::new(&crt_ksk, &dcrt_domain);
         // Validate the CRT path before measuring it.
         crt_evaluator.key_switch_to(&input_coeff, &mut crt_output);
-        let mut decrypt_workspace = DcrtGlweDecryptWorkspace::new(glwe_params.size());
-        let output_dcrt_sk_context = output_dcrt_sk.try_bind(&glwe_params, &q_table).unwrap();
+        let mut decrypt_workspace = BfvDecryptWorkspace::new(&glwe_params);
+        let output_dcrt_sk_context =
+            BfvSecretKeyContext::try_new(&output_dcrt_sk, &glwe_params, &q_table).unwrap();
         assert_eq!(
             output_dcrt_sk_context.decrypt(&crt_output, &mut decrypt_workspace),
             input,

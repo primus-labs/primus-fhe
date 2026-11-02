@@ -16,7 +16,8 @@
 | 密文布局与算术 | [primus_lattice](../../crates/primus_lattice/README.zh_CN.md) |
 | 消息、编码与 phase 诊断 | [primus_encoding](../../crates/primus_encoding/README.zh_CN.md) |
 | 独立加密与 key switch | [LWE](../../crates/primus_lwe/README.zh_CN.md)、[GLWE](../../crates/primus_glwe/README.zh_CN.md)、[NTRU](../../crates/primus_ntru/README.zh_CN.md) |
-| RNS 转换与 BFV 风格 GLWE | [primus_rns](../../crates/primus_rns/README.zh_CN.md)、[primus_glwe_rns](../../crates/primus_glwe_rns/README.zh_CN.md) |
+| RNS 转换、raw GLWE 与 gadget 求值 | [primus_rns](../../crates/primus_rns/README.zh_CN.md)、[primus_glwe_rns](../../crates/primus_glwe_rns/README.zh_CN.md) |
+| BFV 系数加密与恢复 | [primus_bfv](../../crates/primus_bfv/README.zh_CN.md) |
 | PBS、ManyLUT、MVB、CBS 与 Boolean 门 | [运算选择](../../crates/primus_tfhe/README.zh_CN.md)，然后阅读 [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.zh_CN.md)、[GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.zh_CN.md)、[NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.zh_CN.md) 或 [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.zh_CN.md) |
 | One-hot selectors | [NTRU CBS 与 one-hot](../../crates/primus_tfhe_ntru/README.zh_CN.md#one-hot-cbs)，然后阅读后端示例 |
 | 加密多 chunk 整数上的函数 | [高精度查表](../../../primus_high_prec_lut/README.zh_CN.md) |

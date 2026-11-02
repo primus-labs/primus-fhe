@@ -50,8 +50,8 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 cargo nextest run -p primus_modulus --lib --tests --features derive -E 'binary(derives)'
 ```
 
-workspace 的普通 `just` 已因 `primus_glwe_rns` 的依赖启用 `primus_lattice/rns`
-和 `primus_encoding/rns`，包含相关条件测试；单独选择这两个包时仍需显式启用 `rns`。
+workspace 的普通 `just` 已因 raw `primus_glwe_rns` 的依赖启用 `primus_lattice/rns`，
+并因 `primus_bfv` 的依赖启用 `primus_encoding/rns`，包含相关条件测试；单独选择这两个包时仍需显式启用 `rns`。BFV 系数工作流与无 codec 的 raw GLWE 分别在所属 crate 验证，不能以 workspace feature 合并替代各自的独立依赖检查。
 
 ```sh
 cargo nextest run -p primus_fft --lib --tests --features rustfft,tfhe-fft

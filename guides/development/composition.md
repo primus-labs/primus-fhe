@@ -51,7 +51,7 @@ Ordinary GLWE/NTRU parameters combine encryption parameters with a message codec
 
 Match encryption to the compiled input domain and decoding to the output domain. Input and output message moduli may differ; feeding a result into another operation requires its encoding to fit that next input domain. TFHE factories supply these choices for their configured operation; manual composition must preserve them explicitly. In particular, Scaled MVB output is not automatically Rounded PBS input. See [TFHE encoding choices](../../crates/primus_tfhe/README.md#choosing-the-output-encoding).
 
-RNS BFV uses its own scaling and recovery workflow: `encrypt_plaintext_crt_to` takes unscaled CRT lifts, so passing already-scaled codec output would apply the scale twice. `CrtGlweParameters` checks the codec's recovery bound using the noise sampler's maximum magnitude for fresh private-key encryption. Public-key encryption and evaluated ciphertexts need bounds for their complete phase error. Follow the [RNS GLWE encoding guide](../../crates/primus_glwe_rns/README.md#encoding-and-representation), rather than copying the single-modulus flow unchanged.
+RNS BFV scaling and recovery are owned by [primus_bfv](../../crates/primus_bfv/README.md). Its `encrypt_plaintext_crt_to` takes unscaled CRT lifts, so passing already-scaled codec output would apply the scale twice. `BfvParameters` checks the codec's recovery bound using the noise sampler's maximum magnitude for fresh private-key encryption. Public-key encryption and evaluated ciphertexts need bounds for their complete phase error. Raw [RNS GLWE](../../crates/primus_glwe_rns/README.md#encoding-and-representation) instead encrypts an already-encoded CRT phase without implicit scaling and leaves decoding to its caller.
 
 ## Bind material before evaluation
 
@@ -76,7 +76,7 @@ Allocate scratch outside the repeated operation and obey each method's overwrite
 
 Serial CBS/one-hot and other operations can borrow compatible TFHE resources between calls. Preserve the context and BR-key pairing when borrowing resources from an ordinary PBS evaluator: its retained return material still depends on that pairing. A Fourier engine must remain paired with its table. Keep owners alive for borrowed bindings, and give concurrent requests independent mutable state. Equal scratch lengths alone neither justify merging buffers nor establish a performance gain; live data dependencies and complete-request measurements decide reuse.
 
-Do not treat an error or panic as a transaction rollback. Some operations validate before writing; others can leave partial outputs. Only rely on a recovery or retry guarantee when the API documents it. RNS parallel coefficient expansion, for example, needs a sufficiently sized preallocated workspace pool; an undersized pool can fail after partial output writes. See [RNS evaluation resources](../../crates/primus_glwe_rns/README.md#evaluation-resources).
+Do not treat an error or panic as a transaction rollback. Some operations validate before writing; others can leave partial outputs. Only rely on a recovery or retry guarantee when the API documents it. RNS parallel coefficient expansion validates complete input/output layouts before writes and divides work according to a positive preallocated scratch budget. That budget may be smaller than the caller's Rayon thread count; it is not a one-workspace-per-thread requirement. See [RNS evaluation resources](../../crates/primus_glwe_rns/README.md#evaluation-resources).
 
 ### NTRU return streams
 

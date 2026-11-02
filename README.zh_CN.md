@@ -11,6 +11,7 @@ Primus FHE 是实验性的 Rust 全同态加密 workspace，提供算术与格�
 
 - **计算密文函数：** 从 [TFHE 操作与编码指南](crates/primus_tfhe/README.zh_CN.md) 选择 PBS、ManyLUT、MVB、CBS 或 Boolean 门，再选择下方后端。
 - **直接使用加密原语：** 阅读 [LWE](crates/primus_lwe/README.zh_CN.md)、[GLWE](crates/primus_glwe/README.zh_CN.md)、[NTRU](crates/primus_ntru/README.zh_CN.md) 或 [RNS GLWE](crates/primus_glwe_rns/README.zh_CN.md)。
+- **加密 BFV 系数：** 使用 [primus_bfv](crates/primus_bfv/README.zh_CN.md) 构造秩一 u64 参数、加密系数并恢复消息。
 - **组合底层组件：** [库使用导航](guides/development/README.zh_CN.md) 介绍算术域、存储、迭代器、变换表示与工作区。
 
 在仓库根目录运行一个完整的加密 → 查表 → 解密示例：
@@ -43,9 +44,10 @@ Classic 与 sparse 的操作覆盖见[能力表](crates/primus_tfhe/README.zh_CN
 | 采样与编码 | [primus_distr](crates/primus_distr/README.zh_CN.md)：私钥/噪声分布；[primus_encoding](crates/primus_encoding/README.zh_CN.md)：Rounded、Scaled 和 BFV RNS 系数编码 |
 | 密文表示 | [primus_lattice](crates/primus_lattice/README.zh_CN.md)：存储、算术、提取、gadget 乘法、CMUX 和可复用工作区 |
 | 加密与求值 | [primus_lwe](crates/primus_lwe/README.zh_CN.md)、[primus_glwe](crates/primus_glwe/README.zh_CN.md)、[primus_ntru](crates/primus_ntru/README.zh_CN.md)：密钥与方案原语；[primus_glwe_rns](crates/primus_glwe_rns/README.zh_CN.md)：CRT/DCRT GLWE 和 hybrid-RNS 密钥切换 |
+| BFV 系数流程 | [primus_bfv](crates/primus_bfv/README.zh_CN.md)：BFV 参数、消息缩放、私钥/公钥系数加密与恢复，使用 raw RNS GLWE |
 | TFHE | [primus_tfhe](crates/primus_tfhe/README.zh_CN.md)：共享外部 LWE 客户端、LUT、PBS trait 和 Boolean 求值；上方两个家族 crate 与四个后端负责绑定参数、密钥和执行过程 |
 
-RNS 与编码组件是构建模块，目前没有完整的 BFV、BGV 或 CKKS 应用后端。
+当前 BFV API 支持系数加密与恢复；完整 leveled BFV 求值、BGV 和 CKKS 应用后端尚未实现。
 
 应用库位于同级独立仓库：[primus_omr](../primus_omr/README.zh_CN.md) 提供 clue 检测、board 编码和消息恢复；[primus_high_prec_lut](../primus_high_prec_lut/README.zh_CN.md) 对多个独立加密的 chunk 执行高精度查表。它们不是本 workspace 的成员，示例、测试和基准请在各自仓库根目录运行。
 

@@ -2,8 +2,8 @@
 //!
 //! [`CrtGlweEncryptionParameters`] prepares layout and sampling without plaintext
 //! encoding. Bind it with [`DcrtGlweDomain`] for raw encryption and phase shares.
-//! [`CrtGlweParameters`] binds it to a BFV codec; [`CrtGlevParameters`] binds it
-//! to an ordered RNS base and gadget decomposition instead.
+//! [`CrtGlevParameters`] binds it to an ordered RNS base and gadget
+//! decomposition. Message encoding and recovery belong to scheme crates.
 
 #![deny(missing_docs)]
 
@@ -37,17 +37,12 @@ pub use key_switch::{
 };
 pub use parameter::{
     CrtGgswParameters, CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweEncryptionParametersError, CrtGlweParameters, CrtGlweParametersError, DcrtGadgetDomain,
-    DcrtGlweDomain, HybridRnsKeySwitchDomain, RnsDomainError,
+    CrtGlweEncryptionParametersError, DcrtGadgetDomain, DcrtGlweDomain, HybridRnsKeySwitchDomain,
+    RnsDomainError,
 };
-pub use primus_encoding::BfvRnsCodec;
 pub use primus_glwe::{GlweSecretKey, SecretKeyDistr};
 pub use primus_lattice::{RnsGadgetSize, RnsGlweSize};
 pub use public_key::{
-    DcrtGgswEncryptor, DcrtGlwePublicKey, DcrtGlwePublicKeyContext, DcrtGlwePublicKeyWorkspace,
-    DcrtGlweRawPublicKeyEncryptor,
+    DcrtGgswEncryptor, DcrtGlwePublicKey, DcrtGlwePublicKeyWorkspace, DcrtGlweRawPublicKeyEncryptor,
 };
-pub use secret_key::{
-    DcrtGlevEncryptor, DcrtGlweDecryptWorkspace, DcrtGlweRawSecretKeyContext, DcrtGlweSecretKey,
-    DcrtGlweSecretKeyContext,
-};
+pub use secret_key::{DcrtGlevEncryptor, DcrtGlweRawSecretKeyContext, DcrtGlweSecretKey};

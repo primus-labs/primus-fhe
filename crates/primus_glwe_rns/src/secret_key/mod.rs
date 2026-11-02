@@ -6,10 +6,7 @@ use primus_integer::FheUint;
 use primus_modulus::UintModulus;
 use primus_reduce::EncodeSigned;
 
-pub use dcrt::{
-    DcrtGlevEncryptor, DcrtGlweDecryptWorkspace, DcrtGlweRawSecretKeyContext, DcrtGlweSecretKey,
-    DcrtGlweSecretKeyContext,
-};
+pub use dcrt::{DcrtGlevEncryptor, DcrtGlweRawSecretKeyContext, DcrtGlweSecretKey};
 
 /// Encodes one signed secret polynomial without scaling or general reduction.
 /// The caller establishes EncodeSigned's magnitude bound for this modulus;
