@@ -1,7 +1,7 @@
 //! Prepared coefficient operations retain their full-ring allocations.
 use primus_bgv::{
     BgvAutomorphism, BgvClient, BgvContext, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch,
-    BgvParameters, BgvRelinearizer, PlaintextEmbedding,
+    BgvMultiplication, BgvParameters, PlaintextEmbedding,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
@@ -73,7 +73,6 @@ fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
     let negative_one = Polynomial(negative_one);
     let embedding = PlaintextEmbedding::Centered;
     let mut evaluator = BgvEvaluator::new(&context, 0);
-    let evaluator1 = BgvEvaluator::new(&context, 1);
     let mut recipient = BgvClient::generate(&context, &mut rng);
     let config = DecompositionConfig {
         log_basis: DecompositionBaseLog::new(8),
@@ -85,14 +84,12 @@ fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
     let switch_key = recipient
         .key_switching_key(&client, 1, config, &mut rng)
         .unwrap();
-    let mut relin0 = BgvRelinearizer::try_new(&context, 0, &relin_key0).unwrap();
-    let mut relin1 = BgvRelinearizer::try_new(&context, 1, &relin_key1).unwrap();
+    let mut multiplication0 = BgvMultiplication::try_new(&context, &relin_key0).unwrap();
+    let mut multiplication1 = BgvMultiplication::try_new(&context, &relin_key1).unwrap();
     let mut automorphism = BgvAutomorphism::try_new(&context, 1, &auto_key).unwrap();
     let mut key_switcher = BgvKeySwitcher::try_new(&context, 1, &switch_key).unwrap();
     let mut drop0 = BgvModulusSwitch::new(&context, 0);
     let mut drop1 = BgvModulusSwitch::new(&context, 1);
-    let mut tensor0 = context.new_quadratic_ciphertext(0);
-    let mut tensor1 = context.new_quadratic_ciphertext(1);
     let mut squared0 = context.new_ciphertext(0);
     let mut reduced1 = context.new_ciphertext(1);
     let mut squared1 = context.new_ciphertext(1);
@@ -120,11 +117,10 @@ fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
     evaluator.mul_plain_to(&evaluated, &negative_one, &mut combined, embedding);
     evaluator.mul_plain_assign(&mut combined, &negative_one, embedding);
     client.decrypt_to(&combined, 0, &mut output);
-    evaluator.mul_to(&combined, &combined, &mut tensor0);
-    relin0.relinearize_to(&tensor0, &mut squared0);
+    multiplication0.multiply_to(&combined, &combined, &mut squared0);
     drop0.switch_to(&squared0, &mut reduced1);
-    evaluator1.square_to(&reduced1, &mut tensor1);
-    relin1.relinearize_to(&tensor1, &mut squared1);
+    multiplication1.square_to(&reduced1, &mut squared1);
+    multiplication1.square_assign(&mut reduced1);
     automorphism.apply_to(&squared1, &mut rotated1);
     key_switcher.switch_to(&rotated1, &mut switched1);
     drop1.switch_to(&switched1, &mut reduced2);
@@ -132,6 +128,7 @@ fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
     ACTIVE.with(|enabled| enabled.set(false));
     let count = ALLOCATIONS.with(Cell::get);
     assert_eq!(count, 0);
+    assert_eq!(reduced1.as_ref(), squared1.as_ref());
     let expected: Vec<_> = input
         .as_ref()
         .iter()

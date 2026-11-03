@@ -1,10 +1,10 @@
 //! Independent DFT/CRT phases and integer signed-digit residuals for BGV keys.
 
-use dashu_int::IBig;
-use primus_bgv::{
+use crate::{
     BgvAutomorphism, BgvCiphertext, BgvClient, BgvContext, BgvKeySwitcher, BgvParameters,
     BgvQuadraticCiphertext, BgvRelinearizer,
 };
+use dashu_int::IBig;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig, DecompositionLevelCount};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
@@ -366,9 +366,9 @@ fn exact_and_truncated_switch_keys_preserve_p_and_match_integer_residuals() {
                 let key = target_client
                     .key_switching_key(&source_client, level, config, &mut rng)
                     .unwrap();
-                assert_eq!(key.level(), level);
+                assert_eq!(key.key.level, level);
                 let row_errors = errors(
-                    key.ciphertexts(),
+                    key.key.ciphertexts(),
                     &source_big,
                     &target_big,
                     count,
@@ -459,7 +459,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
         let mut rng = StdRng::seed_from_u64(0x10b6_a070 + level as u64);
         let key = client.relinearization_key(level, config, &mut rng).unwrap();
         let row_errors = errors(
-            key.ciphertexts(),
+            key.key.ciphertexts(),
             &secret_squared,
             &secret_big,
             count,
@@ -497,10 +497,9 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
             let key = client
                 .automorphism_key(level, exponent, config, &mut rng)
                 .unwrap();
-            assert_eq!(key.exponent(), exponent);
             let transformed_secret = automorphism(&secret_big, exponent);
             let row_errors = errors(
-                key.ciphertexts(),
+                key.key.ciphertexts(),
                 &transformed_secret,
                 &secret_big,
                 count,

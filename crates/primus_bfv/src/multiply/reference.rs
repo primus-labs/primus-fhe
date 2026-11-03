@@ -19,7 +19,7 @@ use super::{add_words_assign, cmp_words, half, mul_scalar_to, shift_left, sub_wo
 /// the default multiplier does not allocate this reference's extra buffers.
 /// All online calls allocate nothing. Input/level/noise contracts are identical
 /// to [`super::BfvMultiplier`]'s; Q must be odd.
-pub struct BfvReferenceMultiplier<'a> {
+pub(super) struct BfvReferenceMultiplier<'a> {
     context: &'a BfvContext,
     level: usize,
     half_q: Vec<u64>,

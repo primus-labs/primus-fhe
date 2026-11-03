@@ -4,6 +4,7 @@ use primus_data::{Data, DataMut};
 use primus_glwe_rns::{DcrtGlwePublicKeyWorkspace, RnsDomainError};
 use primus_lattice::RnsGlweSize;
 use primus_poly::{DcrtPolynomial, Polynomial};
+use zeroize::Zeroize;
 
 /// A mismatched BGV public-key basis, geometry or plaintext scale.
 #[derive(Debug, thiserror::Error)]
@@ -43,11 +44,6 @@ impl BgvPublicKey {
             moduli: context.parameters().base_q().moduli_values().to_vec(),
             p: context.parameters().plain_modulus().value(),
         }
-    }
-    /// Borrows the persistent native public zero encryption.
-    #[must_use]
-    pub fn ciphertext(&self) -> BgvCiphertext<&[u64]> {
-        self.ciphertext.as_view()
     }
     fn validate(&self, context: &BgvContext) -> Result<(), BgvPublicKeyError> {
         let parameters = context.parameters();
@@ -111,14 +107,34 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
             workspace: DcrtGlwePublicKeyWorkspace::new(context.parameters().size()),
         })
     }
-    /// Borrows the retained workspace and its explicit erasure contract.
+    /// Encrypts coefficients, allocating only the returned level-zero ciphertext.
+    /// See [`Self::encrypt_to`] for the input, phase and failure contracts.
     #[must_use]
-    pub fn workspace(&self) -> &DcrtGlwePublicKeyWorkspace<u64> {
-        &self.workspace
+    pub fn encrypt<R, A>(&mut self, input: &Polynomial<A>, rng: &mut R) -> BgvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = self.context.new_ciphertext(0);
+        self.encrypt_to(input, &mut output, rng);
+        output
     }
-    /// Borrows scratch for explicit secure erasure without releasing allocation.
-    pub fn workspace_mut(&mut self) -> &mut DcrtGlwePublicKeyWorkspace<u64> {
-        &mut self.workspace
+
+    /// Encrypts centered lifts, allocating only the returned ciphertext.
+    /// See [`Self::encrypt_centered_to`] for the input and phase contracts.
+    #[must_use]
+    pub fn encrypt_centered<R, A>(
+        &mut self,
+        input: &Polynomial<A>,
+        rng: &mut R,
+    ) -> BgvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = self.context.new_ciphertext(0);
+        self.encrypt_centered_to(input, &mut output, rng);
+        output
     }
     /// Encrypts N canonical coefficients with unsigned lifts, allocating nothing.
     ///
@@ -127,8 +143,7 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
     /// # Correctness
     /// Public error must remain in the centered Q recovery interval.
     /// # Panics
-    /// Rejects incorrect complete lengths, replaced workspace geometry and
-    /// noncanonical plaintext before RNG
+    /// Rejects incorrect complete lengths and noncanonical plaintext before RNG
     /// or writes. RNG/transform failure may partially write scratch and output.
     pub fn encrypt_to<R, A, B>(
         &mut self,
@@ -195,3 +210,13 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
         c1.add_mul_assign(&ephemeral, &pk1, n, parameters.base_q().moduli());
     }
 }
+
+impl Zeroize for BgvPublicKeyEncryptor<'_> {
+    /// Erases the ephemeral while retaining its complete prepared allocation.
+    fn zeroize(&mut self) {
+        self.workspace.zeroize();
+    }
+}
+
+#[cfg(test)]
+mod tests;

@@ -1,7 +1,8 @@
-//! BFV consumes the same subring batching encoder as BGV.
-use primus_bfv::{
-    BfvClient, BfvContext, BfvEvaluator, BfvModulusSwitch, BfvParameters, PlaintextEmbedding,
-};
+//! Public BFV slot multiplication followed by one encrypted row rotation.
+//! Run: cargo run -p primus_bfv --example slots --features batching
+
+use primus_bfv::{BfvAutomorphism, BfvClient, BfvContext, BfvMultiplication, BfvParameters};
+use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -10,72 +11,51 @@ use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    const N: usize = 128;
-    const SLOTS: usize = 32;
-    const ACTIVE: usize = 13;
+    const N: usize = 32;
     const P: u64 = 193;
-    let moduli = [1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new);
-    let context = BfvContext::try_with_levels(
-        BfvParameters::try_coefficients(
-            PolyLength::new(N),
-            BarrettModulus::new(P),
-            &moduli,
-            SecretKeyDistr::SparseTernary,
-            0.849,
-        )?,
-        2,
-    )?;
-    let batching = BatchingEncoder::try_new(PolyLength::new(SLOTS), BarrettModulus::new(P))?;
-    let values = (0..ACTIVE)
-        .map(|i| (7 * i as u64 + 1) % P)
-        .collect::<Vec<_>>();
-    let offsets = vec![7; ACTIVE];
-    let factors = (0..SLOTS).map(|i| 1 + i as u64 % 5).collect::<Vec<_>>();
-    let mut small = vec![0; SLOTS];
-    let mut input = Polynomial::<Vec<u64>>::zero(N);
-    let mut addend = Polynomial::<Vec<u64>>::zero(N);
-    let mut multiplier = Polynomial::<Vec<u64>>::zero(N);
-    batching.encode_to(&values, &mut small);
-    batching.embed_to(&small, input.as_mut());
-    batching.encode_to(&offsets, &mut small);
-    batching.embed_to(&small, addend.as_mut());
-    batching.encode_to(&factors, &mut small);
-    batching.embed_to(&small, multiplier.as_mut());
-    let mut rng = StdRng::seed_from_u64(0x09bf_5107);
+    // n=N: coefficients go directly into the plaintext polynomial.
+    // These small functional parameters are not a security preset.
+    let context = BfvContext::try_new(BfvParameters::try_coefficients(
+        PolyLength::new(N),
+        BarrettModulus::new(P),
+        &[1_125_899_906_826_241, 1_125_899_906_629_633].map(BarrettModulus::new),
+        SecretKeyDistr::SparseTernary,
+        0.849,
+    )?)?;
+    let batching = BatchingEncoder::try_new(PolyLength::new(N), BarrettModulus::new(P))?;
+    let config = DecompositionConfig {
+        log_basis: DecompositionBaseLog::new(8),
+        level_count: None,
+    };
+    let mut rng = StdRng::seed_from_u64(0x12bf_5107);
     let mut client = BfvClient::generate(&context, &mut rng);
-    assert_eq!(client.secret_key().rns_glwe_size().poly_length().get(), N);
     let public_key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
-    let mut ciphertext = context.new_ciphertext(0);
-    let mut output = context.new_ciphertext(0);
-    encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
-    let mut evaluator = BfvEvaluator::new(&context, 0);
-    evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
-    evaluator.mul_plain_to(
-        &ciphertext,
-        &multiplier,
-        &mut output,
-        PlaintextEmbedding::Centered,
-    );
-    let mut reduced = context.new_ciphertext(1);
-    BfvModulusSwitch::new(&context, 0).switch_to(&output, &mut reduced);
-    let decoded = client.decrypt(&reduced, 1);
-    batching.extract_to(decoded.as_ref(), &mut small);
-    let mut slots = vec![0; SLOTS];
-    let mut scratch = vec![0; SLOTS];
-    batching.decode_to(&small, &mut slots, &mut scratch);
-    for i in 0..SLOTS {
-        assert_eq!(
-            slots[i],
-            if i < ACTIVE {
-                (values[i] + offsets[i]) * factors[i] % P
-            } else {
-                0
-            }
-        );
-    }
-    println!(
-        "Validated shared BFV slots: {ACTIVE}/{SLOTS} active slots, full secret/ciphertext N={N}, exact prime drop and zero padding."
-    );
+    let relin_key = client.relinearization_key(0, config, &mut rng)?;
+    let rotation_key =
+        client.automorphism_key(0, batching.rotation_exponent(1), config, &mut rng)?;
+    let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
+    let mut rotation = BfvAutomorphism::try_new(&context, 0, &rotation_key)?;
+
+    let values: Vec<_> = (1..=N as u64).collect();
+    let mut message = Polynomial::<Vec<u64>>::zero(N);
+    let mut factor = Polynomial::<Vec<u64>>::zero(N);
+    batching.encode_to(&values, message.as_mut());
+    batching.encode_to(&[3; N], factor.as_mut());
+    let encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
+    let encrypted_factor = encryptor.encrypt_centered(&factor, &mut rng);
+    let mut product = context.new_ciphertext(0);
+    let mut rotated = context.new_ciphertext(0);
+    multiplication.multiply_to(&encrypted_message, &encrypted_factor, &mut product);
+    rotation.apply_to(&product, &mut rotated);
+    let recovered = client.decrypt(&rotated, 0);
+    let mut slots = vec![0; N];
+    batching.decode_to(recovered.as_ref(), &mut slots, &mut vec![0; N]);
+    let half = N / 2;
+    let expected: Vec<_> = (0..N)
+        .map(|i| 3 * values[(i / half) * half + (i % half + 1) % half] % P)
+        .collect();
+    assert_eq!(slots, expected);
+    println!("BFV: multiply 32 slots by 3, then rotate each row left by one");
     Ok(())
 }

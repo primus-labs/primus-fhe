@@ -184,6 +184,7 @@ impl NativeEvaluationKey {
         )
     }
 
+    #[cfg(test)]
     fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BgvCiphertext<&[u64]>> {
         self.columns
             .chunks_exact(self.size.rns_glwe_size().rns_glwe_len())
@@ -201,19 +202,8 @@ pub struct BgvRelinearizationKey {
 impl BgvRelinearizationKey {
     /// Returns the level for which these columns were generated.
     #[must_use]
-    pub fn level(&self) -> usize {
+    pub(crate) fn level(&self) -> usize {
         self.key.level
-    }
-
-    /// Returns the actual signed decomposition and its circular residual bound.
-    #[must_use]
-    pub fn basis(&self) -> &BigUintApproxSignedBasis<u64> {
-        &self.key.basis
-    }
-
-    /// Borrows native public columns in increasing retained decomposition order.
-    pub fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BgvCiphertext<&[u64]>> {
-        self.key.ciphertexts()
     }
 }
 
@@ -222,55 +212,10 @@ pub struct BgvKeySwitchingKey {
     key: NativeEvaluationKey,
 }
 
-impl BgvKeySwitchingKey {
-    /// Returns the level for which these columns were generated.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.key.level
-    }
-
-    /// Returns the actual signed decomposition and its circular residual bound.
-    #[must_use]
-    pub fn basis(&self) -> &BigUintApproxSignedBasis<u64> {
-        &self.key.basis
-    }
-
-    /// Borrows native public columns in increasing retained decomposition order.
-    pub fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BgvCiphertext<&[u64]>> {
-        self.key.ciphertexts()
-    }
-}
-
 /// Public p-scaled columns encrypting σ(s) under s for one odd automorphism.
 pub struct BgvAutomorphismKey {
     key: NativeEvaluationKey,
-    exponent: usize,
     permutation: NttAutomorphismPermutation,
-}
-
-impl BgvAutomorphismKey {
-    /// Returns the level for which these columns were generated.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.key.level
-    }
-
-    /// Returns k for the substitution X -> X^k.
-    #[must_use]
-    pub fn exponent(&self) -> usize {
-        self.exponent
-    }
-
-    /// Returns the actual signed decomposition and its circular residual bound.
-    #[must_use]
-    pub fn basis(&self) -> &BigUintApproxSignedBasis<u64> {
-        &self.key.basis
-    }
-
-    /// Borrows native public columns in increasing retained decomposition order.
-    pub fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BgvCiphertext<&[u64]>> {
-        self.key.ciphertexts()
-    }
 }
 
 impl BgvClient<'_> {
@@ -340,7 +285,6 @@ impl BgvClient<'_> {
         }
         Ok(BgvAutomorphismKey {
             key: key.encrypt(self, &transformed, rng),
-            exponent,
             permutation,
         })
     }
@@ -667,3 +611,6 @@ fn validate_numeric_context(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

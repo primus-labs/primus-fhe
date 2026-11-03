@@ -55,3 +55,7 @@ required-features = ["batching"]
 [[example]]
 name = "leveled_slots"
 required-features = ["batching"]
+
+[[example]]
+name = "subring_slots"
+required-features = ["batching"]

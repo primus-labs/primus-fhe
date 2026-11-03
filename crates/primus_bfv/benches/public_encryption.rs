@@ -74,10 +74,6 @@ fn bench_public_encryption(c: &mut Criterion) {
     for (index, coefficient) in message.as_mut().iter_mut().take(8).enumerate() {
         *coefficient = index as u64 + 1;
     }
-    let mut plaintext = CrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
-    parameters
-        .base_q()
-        .wrapping_decompose_small_values_to(message.as_ref(), plaintext.as_mut(), T);
     let mut encoded = CrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
     parameters
         .codec()
@@ -89,7 +85,7 @@ fn bench_public_encryption(c: &mut Criterion) {
 
     // Validate the same public workflows before any Criterion observation.
     let mut decrypt_workspace = BfvDecryptWorkspace::new(&parameters);
-    ordinary.encrypt_plaintext_lift_crt_to(&plaintext, &mut ordinary_output, &mut ordinary_rng);
+    ordinary.encrypt_to(&message, &mut ordinary_output, &mut ordinary_rng);
     assert_eq!(
         secret_context.decrypt(&ordinary_output, &mut decrypt_workspace),
         message,
@@ -129,10 +125,10 @@ fn bench_public_encryption(c: &mut Criterion) {
     );
 
     let mut group = c.benchmark_group("public_encryption/N1024/u64/rank1");
-    group.bench_function("ordinary_to", |b| {
+    group.bench_function("ordinary_coefficients_to", |b| {
         b.iter(|| {
-            ordinary.encrypt_plaintext_lift_crt_to(
-                black_box(&plaintext),
+            ordinary.encrypt_to(
+                black_box(&message),
                 black_box(&mut ordinary_output),
                 &mut ordinary_rng,
             );

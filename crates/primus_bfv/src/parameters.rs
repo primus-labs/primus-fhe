@@ -144,7 +144,7 @@ impl BfvParameters {
             secret_key_distr,
             error_distribution,
         )?;
-        Self::from_matching_parts(Arc::new(sampling), codec)
+        Self::try_from_parts(Arc::new(sampling), codec)
     }
 
     /// Combines independently prepared codec-free state and the unique codec.
@@ -152,7 +152,7 @@ impl BfvParameters {
     /// # Errors
     /// Rejects non-rank-one geometry, a different ordered Q basis or insufficient
     /// fresh private recovery margin. No samplers or base tables are rebuilt.
-    pub fn try_from_parts(
+    fn try_from_parts(
         encryption_parameters: Arc<CrtGlweEncryptionParameters<u64>>,
         codec: BfvRnsCodec<u64, BarrettModulus<u64>>,
     ) -> Result<Self, BfvParametersError> {
@@ -165,13 +165,6 @@ impl BfvParameters {
             .into());
         }
         encryption_parameters.validate_base(codec.base_q())?;
-        Self::from_matching_parts(encryption_parameters, codec)
-    }
-
-    fn from_matching_parts(
-        encryption_parameters: Arc<CrtGlweEncryptionParameters<u64>>,
-        codec: BfvRnsCodec<u64, BarrettModulus<u64>>,
-    ) -> Result<Self, BfvParametersError> {
         codec.validate_noise_bound(
             encryption_parameters
                 .noise_distribution()
@@ -272,3 +265,6 @@ impl BfvParameters {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

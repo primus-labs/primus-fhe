@@ -9,7 +9,7 @@ use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
-use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
+use primus_poly::{CrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 use std::{
@@ -113,7 +113,6 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         .encode_coeffs_to(&input, &mut encoded, PlaintextEmbedding::Unsigned);
     let mut raw = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
     let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
-    let mut phase = DcrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
     let mut output = Polynomial::<Vec<u64>>::zero(32);
 
     assert_eq!(
@@ -140,7 +139,6 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         observe(|| ciphertext.set_from_raw_glwe(&raw, &parameters)).1,
         0
     );
-    assert_eq!(observe(|| context.phase_to(&ciphertext, &mut phase)).1, 0);
     assert_eq!(
         observe(|| context.decrypt_to(&ciphertext, &mut output, &mut workspace)).1,
         0
@@ -149,10 +147,6 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
     let (decrypted, count) = observe(|| context.decrypt(&ciphertext, &mut workspace));
     assert_eq!(count, 1);
     assert_eq!(decrypted, input);
-    assert_eq!(
-        observe(|| context.encrypt_zeros_to(&mut ciphertext, &mut rng)).1,
-        0
-    );
     assert_eq!(
         observe(|| encryptor.encrypt_to(&input, &mut ciphertext, &mut rng)).1,
         0
@@ -169,7 +163,13 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         observe(|| encryptor.encrypt_encoded_crt_to(&encoded, &mut ciphertext, &mut rng)).1,
         0
     );
-    assert_eq!(observe(|| encryptor.workspace_mut().zeroize()).1, 0);
+    assert_eq!(observe(|| encryptor.zeroize()).1, 0);
+    let (fresh, count) = observe(|| encryptor.encrypt(&input, &mut rng));
+    assert_eq!(count, 1);
+    assert_eq!(context.decrypt(&fresh, &mut workspace), input);
+    let (fresh, count) = observe(|| encryptor.encrypt_centered(&input, &mut rng));
+    assert_eq!(count, 1);
+    assert_eq!(context.decrypt(&fresh, &mut workspace), input);
     let (ciphertext, count) = observe(|| encryptor.encrypt_plaintext_lift_crt(&crt, &mut rng));
     assert_eq!(count, 1);
     assert_eq!(context.decrypt(&ciphertext, &mut workspace), input);
@@ -303,8 +303,6 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
     ];
     let mut multiplier0 = primus_bfv::BfvMultiplier::try_new(&context, 0, &auxiliary).unwrap();
     let mut multiplier1 = primus_bfv::BfvMultiplier::try_new(&context, 1, &auxiliary).unwrap();
-    let mut reference = primus_bfv::BfvReferenceMultiplier::new(&context, 0);
-    let mut raw = multiplier0.new_raw_tensor();
     let mut recipient = BfvClient::generate(&context, &mut rng);
     let config = DecompositionConfig {
         log_basis: DecompositionBaseLog::new(8),
@@ -318,6 +316,16 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
         .unwrap();
     let mut relin0 = BfvRelinearizer::try_new(&context, 0, &relin_key0).unwrap();
     let mut relin1 = BfvRelinearizer::try_new(&context, 1, &relin_key1).unwrap();
+    let mut request0 = primus_bfv::BfvMultiplication::try_new(&context, &relin_key0).unwrap();
+    let mut request1 = primus_bfv::BfvMultiplication::try_new(&context, &relin_key1).unwrap();
+    let (fresh, count) = observe(|| client.encrypt(&input, &mut rng));
+    assert_eq!(count, 1);
+    client.decrypt_to(&fresh, 0, &mut output);
+    assert_eq!(output, input);
+    let (fresh, count) = observe(|| client.encrypt_centered(&input, &mut rng));
+    assert_eq!(count, 1);
+    client.decrypt_to(&fresh, 0, &mut output);
+    assert_eq!(output, input);
     let mut automorphism = BfvAutomorphism::try_new(&context, 1, &auto_key).unwrap();
     let mut key_switcher = BfvKeySwitcher::try_new(&context, 1, &switch_key).unwrap();
     let mut drop0 = BfvModulusSwitch::new(&context, 0);
@@ -350,17 +358,15 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
         evaluator.mul_plain_to(&evaluated, &negative_one, &mut combined, embedding);
         evaluator.mul_plain_assign(&mut combined, &negative_one, embedding);
         client.decrypt_to(&combined, 0, &mut output);
-        reference.multiply_to(&combined, &combined, &mut tensor0);
-        reference.square_to(&combined, &mut tensor0);
-        multiplier0.mul_raw_to(&combined, &combined, &mut raw);
-        multiplier0.scale_and_round_to(&raw, &mut tensor0);
-        multiplier0.square_raw_to(&combined, &mut raw);
-        multiplier0.scale_and_round_to(&raw, &mut tensor0);
         multiplier0.multiply_to(&combined, &combined, &mut tensor0);
         relin0.relinearize_to(&tensor0, &mut squared0);
+        request0.multiply_to(&combined, &combined, &mut squared0);
         drop0.switch_to(&squared0, &mut reduced1);
         multiplier1.square_to(&reduced1, &mut tensor1);
         relin1.relinearize_to(&tensor1, &mut squared1);
+        request1.square_to(&reduced1, &mut squared1);
+        squared1.as_mut().copy_from_slice(reduced1.as_ref());
+        request1.square_assign(&mut squared1);
         automorphism.apply_to(&squared1, &mut rotated1);
         key_switcher.switch_to(&rotated1, &mut switched1);
         drop1.switch_to(&switched1, &mut reduced2);

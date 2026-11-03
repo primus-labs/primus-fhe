@@ -6,7 +6,9 @@
 //! phase and reduces modulo p; it never invokes a BFV decoder.
 //!
 //! Shared [`BgvContext`] resources are borrowed by clients and prepared public
-//! encryptors. [`BgvEvaluator`] writes explicit quadratic products; role-specific
+//! encryptors. [`BgvMultiplication`] combines multiplication and relinearization
+//! using prepared scratch. Advanced [`BgvEvaluator`] writes explicit quadratic
+//! products; role-specific
 //! [`BgvRelinearizer`], [`BgvKeySwitcher`] and [`BgvAutomorphism`] apply
 //! p-preserving gadget products. [`BgvModulusSwitch`] drops an adjacent prime
 //! using the exact p-constrained quotient. All prepared operations reuse scratch.
@@ -24,6 +26,7 @@ mod context;
 mod evaluation_key;
 mod evaluator;
 mod modulus_switch;
+mod multiplication;
 mod parameters;
 mod public_key;
 mod quadratic;
@@ -38,6 +41,7 @@ pub use evaluation_key::{
 };
 pub use evaluator::BgvEvaluator;
 pub use modulus_switch::BgvModulusSwitch;
+pub use multiplication::BgvMultiplication;
 pub use parameters::{BgvParameters, BgvParametersError};
 pub use primus_encoding::PlaintextEmbedding;
 pub use public_key::{BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError};

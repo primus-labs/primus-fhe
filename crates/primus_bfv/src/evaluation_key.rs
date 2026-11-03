@@ -179,12 +179,6 @@ impl NativeEvaluationKey {
             level,
         )
     }
-
-    fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BfvCiphertext<&[u64]>> {
-        self.columns
-            .chunks_exact(self.size.rns_glwe_size().rns_glwe_len())
-            .map(BfvCiphertext::new)
-    }
 }
 
 /// Public unscaled columns encrypting gadget multiples of s² under s.
@@ -197,19 +191,8 @@ pub struct BfvRelinearizationKey {
 impl BfvRelinearizationKey {
     /// Returns the level for which these columns were generated.
     #[must_use]
-    pub fn level(&self) -> usize {
+    pub(crate) fn level(&self) -> usize {
         self.key.level
-    }
-
-    /// Returns the actual signed decomposition and its circular residual bound.
-    #[must_use]
-    pub fn basis(&self) -> &BigUintApproxSignedBasis<u64> {
-        &self.key.basis
-    }
-
-    /// Borrows native public columns in increasing retained decomposition order.
-    pub fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BfvCiphertext<&[u64]>> {
-        self.key.ciphertexts()
     }
 }
 
@@ -218,55 +201,10 @@ pub struct BfvKeySwitchingKey {
     key: NativeEvaluationKey,
 }
 
-impl BfvKeySwitchingKey {
-    /// Returns the level for which these columns were generated.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.key.level
-    }
-
-    /// Returns the actual signed decomposition and its circular residual bound.
-    #[must_use]
-    pub fn basis(&self) -> &BigUintApproxSignedBasis<u64> {
-        &self.key.basis
-    }
-
-    /// Borrows native public columns in increasing retained decomposition order.
-    pub fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BfvCiphertext<&[u64]>> {
-        self.key.ciphertexts()
-    }
-}
-
 /// Public unscaled columns encrypting σ(s) under s for one odd automorphism.
 pub struct BfvAutomorphismKey {
     key: NativeEvaluationKey,
-    exponent: usize,
     permutation: NttAutomorphismPermutation,
-}
-
-impl BfvAutomorphismKey {
-    /// Returns the level for which these columns were generated.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.key.level
-    }
-
-    /// Returns k for the substitution X -> X^k.
-    #[must_use]
-    pub fn exponent(&self) -> usize {
-        self.exponent
-    }
-
-    /// Returns the actual signed decomposition and its circular residual bound.
-    #[must_use]
-    pub fn basis(&self) -> &BigUintApproxSignedBasis<u64> {
-        &self.key.basis
-    }
-
-    /// Borrows native public columns in increasing retained decomposition order.
-    pub fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BfvCiphertext<&[u64]>> {
-        self.key.ciphertexts()
-    }
 }
 
 impl BfvClient<'_> {
@@ -336,7 +274,6 @@ impl BfvClient<'_> {
         }
         Ok(BfvAutomorphismKey {
             key: key.encrypt(self, &transformed, rng),
-            exponent,
             permutation,
         })
     }
@@ -471,18 +408,7 @@ impl<'a> BfvRelinearizer<'a> {
     /// Writes `[t0+P0,t1+P1]` for P encrypting t2*s².
     ///
     /// The input has already undergone BFV scale-and-round. A computation-only
-    /// raw tensor has a distinct type and cannot be supplied here.
-    ///
-    /// ```compile_fail
-    /// use primus_bfv::{BfvCiphertext, BfvRawTensor, BfvRelinearizer};
-    /// fn premature_relin(
-    ///     relin: &mut BfvRelinearizer<'_>,
-    ///     raw: &BfvRawTensor,
-    ///     output: &mut BfvCiphertext<Vec<u64>>,
-    /// ) {
-    ///     relin.relinearize_to(raw, output);
-    /// }
-    /// ```
+    /// raw tensor is private to the multiplier and cannot be supplied here.
     ///
     /// # Correctness
     /// Input components are canonical residues using this actual secret,
@@ -684,3 +610,6 @@ fn validate_numeric_context(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

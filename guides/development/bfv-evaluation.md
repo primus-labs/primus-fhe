@@ -24,8 +24,8 @@ only in Q has discarded the multiples of Q needed by the scaling operation.
 The scale is `t/Q`, even though encryption uses `Delta=floor(Q/t)`; it is not
 division by Delta. Q is odd, so these rational values have no half-integer ties.
 
-`BfvRawTensor` stores the unscaled tensor in Q and an auxiliary basis P, with
-private numerical binding metadata. It is created by a prepared multiplier.
+The multiplier retains the unscaled product in private QP scratch; independent
+raw/scaled representation oracles live in private tests.
 `BfvQuadraticCiphertext` stores the already-scaled `[u0,u1,u2]` in Q. It can only
 be consumed by relinearization, storage/views or explicit advanced inspection.
 Ordinary degree-one evaluators, decryption, switching and automorphisms require
@@ -61,13 +61,23 @@ compute it exactly. This route needs P>NQ because it recovers k before multiplyi
 by t. A route that reconstructs the final scaled integer in P would need a
 different bound involving t. These bounds are not interchangeable.
 
-`BfvReferenceMultiplier` retains a separate signed integer schoolbook tensor and
-exact scaling implementation. It needs no auxiliary basis and serves as a
-fallback and executable reference. Both prepared paths allocate no memory per
-operation. The default multiplier uses the RNS NTT path; reference selection is
-explicit. The [multiplication benchmark](../../crates/primus_bfv/benches/multiplication.rs)
-compares their exact output on identical inputs and times both paths separately
-from a complete fresh request.
+A private integer schoolbook implementation retains a separate signed integer
+tensor and exact scaling algorithm as an independent test oracle. It needs no
+auxiliary basis and is not a runtime fallback or a public benchmark interface.
+Mathematical independence comes from the separate algorithm, rather than public
+visibility of keys or raw buffers. The production path uses exact RNS NTT.
+
+For ordinary degree-one requests, prepare
+`BfvMultiplication::try_new(context,&relinearization_key)`. It derives the actual
+level from the key, selects compatible computation-only primes and owns the scaled
+quadratic/relinearization scratch. `multiply_to` and `square_to` return degree-one
+outputs; `square_assign` overwrites one ciphertext using the same internal scratch.
+Advanced callers can explicitly choose the auxiliary basis with
+`try_with_auxiliary_moduli(context,key,&primes)`, or retain the separate
+`BfvMultiplier` → scaled quadratic → `BfvRelinearizer` flow.
+The [multiplication benchmark](../../crates/primus_bfv/benches/multiplication.rs)
+uses the combined public request and explicit historical P to keep its full fresh
+request comparable. It does not expose internal oracles solely for measurement.
 
 ## Phase error and fixed Delta
 
@@ -120,7 +130,8 @@ rotation/swap uses the encoder's actual automorphism exponents; spare slots and
 off-stride coefficients remain zero in the complete examples.
 
 Context owns the unique Q tables/codecs/samplers. A multiplier owns P and its
-tables, constants and mutable arithmetic scratch. Reference scratch is owned only
-when the reference multiplier is requested. Prepared key products own decomposition
-scratch and borrow existing Q tables/bases/immutable keys. No per-operation resource
+tables, constants and mutable arithmetic scratch. The ordinary multiplication
+owner additionally reuses a scaled quadratic and relinearization scratch. Private
+reference scratch is constructed only by mathematical tests. Prepared key products
+own decomposition scratch and borrow existing Q tables/bases/immutable keys. No per-operation resource
 cloning, sampler construction or domain wrapper is required.

@@ -4,6 +4,7 @@ use primus_glwe_rns::{DcrtGlwePublicKeyWorkspace, RnsDomainError};
 use primus_lattice::RnsGlweSize;
 use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
+use zeroize::Zeroize;
 
 use crate::{BfvCiphertext, BfvParameters, BfvSecretKeyContext};
 
@@ -32,12 +33,6 @@ impl BfvPublicKey {
             size: parameters.size(),
             moduli: parameters.codec().moduli_values().to_vec(),
         }
-    }
-
-    /// Borrows the native `[c0,c1]` zero encryption without interpreting it as raw GLWE.
-    #[must_use]
-    pub fn ciphertext(&self) -> BfvCiphertext<&[u64]> {
-        self.ciphertext.as_view()
     }
 
     fn validate(&self, parameters: &BfvParameters) -> Result<(), RnsDomainError<u64>> {
@@ -75,6 +70,7 @@ impl BfvPublicKey {
 /// Mutable access serializes reuse of its erasing workspace. Independent
 /// concurrent operations share keys/parameters/tables with separate encryptors.
 /// Public-key noise needs its own recovery bound beyond parameter construction.
+/// [`Zeroize::zeroize`] erases ephemeral scratch without releasing its allocation.
 pub struct BfvPublicKeyEncryptor<'a> {
     key: &'a BfvPublicKey,
     parameters: &'a BfvParameters,
@@ -103,15 +99,34 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         })
     }
 
-    /// Returns the retained ephemeral geometry and erasure contract.
+    /// Encrypts N canonical coefficients in `[0,t)`, allocating the returned ciphertext.
+    /// Uses unsigned embedding and the pre-sampling input checks of [`Self::encrypt_to`].
     #[must_use]
-    pub fn workspace(&self) -> &DcrtGlwePublicKeyWorkspace<u64> {
-        &self.workspace
+    pub fn encrypt<R, A>(&mut self, input: &Polynomial<A>, rng: &mut R) -> BfvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = BfvCiphertext::zero(self.parameters.size().rns_glwe_len());
+        self.encrypt_to(input, &mut output, rng);
+        output
     }
 
-    /// Borrows scratch for explicit erasure without releasing its allocation.
-    pub fn workspace_mut(&mut self) -> &mut DcrtGlwePublicKeyWorkspace<u64> {
-        &mut self.workspace
+    /// Encrypts N canonical coefficients with centered embedding, allocating the result.
+    /// Input and panic conditions are [`Self::encrypt_to`]'s.
+    #[must_use]
+    pub fn encrypt_centered<R, A>(
+        &mut self,
+        input: &Polynomial<A>,
+        rng: &mut R,
+    ) -> BfvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = BfvCiphertext::zero(self.parameters.size().rns_glwe_len());
+        self.encrypt_centered_to(input, &mut output, rng);
+        output
     }
 
     /// Encrypts unscaled CRT plaintext lifts, allocating only the returned ciphertext.
@@ -275,11 +290,6 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
             parameters.size().rns_glwe_len(),
             "BFV ciphertext length mismatch"
         );
-        assert_eq!(
-            self.workspace.size(),
-            parameters.size(),
-            "BFV public workspace shape mismatch"
-        );
         let ephemeral = self.workspace.as_mut_slice();
         let sampling = parameters.encryption_parameters();
         primus_distr::sample_crt_sparse_ternary_values_to(
@@ -301,3 +311,12 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
         c1.add_mul_assign(&ephemeral, &pk1, n, parameters.base_q().moduli());
     }
 }
+
+impl Zeroize for BfvPublicKeyEncryptor<'_> {
+    fn zeroize(&mut self) {
+        self.workspace.zeroize();
+    }
+}
+
+#[cfg(test)]
+mod tests;

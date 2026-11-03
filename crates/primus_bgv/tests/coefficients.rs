@@ -2,16 +2,12 @@
 use dashu_int::UBig;
 use primus_bgv::{BgvCiphertext, BgvClient, BgvContext, BgvParameters, BgvParametersError};
 use primus_distr::ErrorDistribution;
-use primus_glwe_rns::{
-    DcrtGlwePublicKeyWorkspace, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
-};
-use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
+use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
-use primus_poly::{DcrtPolynomial, Polynomial};
+use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use zeroize::Zeroize;
 
 const N: usize = 32;
 const P: u64 = 193;
@@ -113,20 +109,6 @@ fn phase_oracle(ciphertext: &[u64], secret: &[i64], count: usize) -> Vec<i128> {
     }
     output
 }
-fn product(a: &[i128], b: &[i128]) -> Vec<i128> {
-    let mut out = vec![0; N];
-    for (i, &a) in a.iter().enumerate() {
-        for (j, &b) in b.iter().enumerate() {
-            let k = i + j;
-            if k < N {
-                out[k] += a * b;
-            } else {
-                out[k - N] -= a * b;
-            }
-        }
-    }
-    out
-}
 
 #[test]
 fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
@@ -179,76 +161,6 @@ fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
 }
 
 #[test]
-fn public_key_and_public_encryption_use_p_scaled_error_and_full_ring_secret() {
-    let context = context(3, ErrorDistribution::CenteredBinomial { eta: 21 });
-    let secret: Vec<_> = (0..N).map(|i| [-1, 1, 0, 1, 0][i % 5]).collect();
-    let mut client = client(&context, &secret);
-    let mut setup_rng = StdRng::seed_from_u64(333);
-    let key = client.public_key(&mut setup_rng);
-    let pkphase = phase_oracle(key.ciphertext().as_ref(), &secret, 3);
-    let pkerror: Vec<_> = pkphase[..N]
-        .iter()
-        .map(|&x| {
-            assert_eq!(x % i128::from(P), 0);
-            x / i128::from(P)
-        })
-        .collect();
-    assert!(pkerror.iter().all(|&e| e.abs() <= 21));
-    let mut encryptor = context.public_key_encryptor(&key).unwrap();
-    let mut rng = StdRng::seed_from_u64(99);
-    let mut coins = StdRng::seed_from_u64(99);
-    let mut r = Vec::new();
-    for _ in 0..N / 16 {
-        let word = coins.next_u32();
-        for j in 0..16 {
-            r.push([0, 0, 1, -1][((word >> (2 * j)) & 3) as usize]);
-        }
-    }
-    let mut e0 = vec![0i64; N];
-    let mut e1 = vec![0i64; N];
-    let sampler = context
-        .parameters()
-        .encryption_parameters()
-        .noise_distribution();
-    sampler.sample_signed_to(&mut e0, &mut coins);
-    sampler.sample_signed_to(&mut e1, &mut coins);
-    let first = product(&pkerror, &r);
-    let second = product(
-        &e1.iter().map(|&e| i128::from(e)).collect::<Vec<_>>(),
-        &secret.iter().map(|&s| i128::from(s)).collect::<Vec<_>>(),
-    );
-    let message = Polynomial(
-        (0..N)
-            .map(|i| if i % 3 == 0 { P - 1 } else { i as u64 })
-            .collect::<Vec<_>>(),
-    );
-    let mut ciphertext = context.new_ciphertext(0);
-    encryptor.encrypt_centered_to(&message, &mut ciphertext, &mut rng);
-    assert_eq!(rng.next_u64(), coins.next_u64());
-    for limb in phase_oracle(ciphertext.as_ref(), &secret, 3)
-        .as_chunks::<N>()
-        .0
-        .iter()
-    {
-        for i in 0..N {
-            let m = if message.as_ref()[i] > P / 2 {
-                i128::from(message.as_ref()[i]) - i128::from(P)
-            } else {
-                i128::from(message.as_ref()[i])
-            };
-            assert_eq!(
-                limb[i],
-                m + i128::from(P) * (first[i] + i128::from(e0[i]) + second[i])
-            );
-        }
-    }
-    assert_eq!(client.decrypt(&ciphertext, 0), message);
-    encryptor.workspace_mut().zeroize();
-    encryptor.encrypt_to(&message, &mut ciphertext, &mut rng);
-    assert_eq!(client.decrypt(&ciphertext, 0), message);
-}
-
-#[test]
 fn exact_centered_recovery_handles_150_bit_q_and_half_interval_boundaries() {
     let context = context(3, ErrorDistribution::CenteredBinomial { eta: 1 });
     let secret = vec![1; N];
@@ -287,12 +199,8 @@ fn exact_centered_recovery_handles_150_bit_q_and_half_interval_boundaries() {
         }
     }
     context.table().transform_slice(c0.as_mut());
-    let c0_expected = c0.as_ref().to_vec();
     assert_eq!(client.decrypt(&ciphertext, 0), expected);
     assert_eq!(expected.as_ref()[5], P - 1); // canonical Q-1 modulo p is zero; centered phase is -1.
-    let mut phase = DcrtPolynomial::<Vec<u64>>::zero(context.rns_poly_len(0));
-    client.phase_to(&ciphertext, 0, &mut phase);
-    assert_eq!(phase.as_ref(), c0_expected);
 }
 
 #[test]
@@ -345,40 +253,17 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
 
     let public = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public).unwrap();
-    let wrong_rank = RnsGlweSize::try_new(
-        GlweSize::try_new(GlweDimension::new(2), PolyLength::new(N)).unwrap(),
-        1,
-    )
-    .unwrap();
-    for size in [
-        self::context(2, ErrorDistribution::CenteredBinomial { eta: 1 })
-            .parameters()
-            .size(),
-        wrong_rank, // Same ephemeral length, but a different complete geometry.
-    ] {
-        *encryptor.workspace_mut() = DcrtGlwePublicKeyWorkspace::new(size);
-        encryptor.workspace_mut().as_mut_slice().fill(55);
-        output.as_mut().fill(77);
-        let mut rng = StdRng::seed_from_u64(5);
-        let mut expected_rng = StdRng::seed_from_u64(5);
-        assert!(
-            catch_unwind(AssertUnwindSafe(|| encryptor.encrypt_to(
-                &valid,
-                &mut output,
-                &mut rng
-            )))
-            .is_err()
-        );
-        assert!(output.as_ref().iter().all(|&x| x == 77));
-        assert!(
-            encryptor
-                .workspace_mut()
-                .as_mut_slice()
-                .iter()
-                .all(|&x| x == 55)
-        );
-        assert_eq!(rng.next_u64(), expected_rng.next_u64());
-    }
+    let mut expected_rng = StdRng::seed_from_u64(5);
+    let mut rng = StdRng::seed_from_u64(5);
+    output.as_mut().fill(77);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            encryptor.encrypt_to(&invalid, &mut output, &mut rng)
+        }))
+        .is_err()
+    );
+    assert!(output.as_ref().iter().all(|&x| x == 77));
+    assert_eq!(rng.next_u64(), expected_rng.next_u64());
 }
 
 #[test]

@@ -60,9 +60,9 @@ impl<'a> BfvClient<'a> {
         })
     }
 
-    /// Borrows the single highest-level secret for explicit advanced composition.
+    /// Borrows the single highest-level secret for native evaluation-key generation.
     #[must_use]
-    pub fn secret_key(&self) -> &DcrtGlweSecretKey<u64> {
+    pub(crate) fn secret_key(&self) -> &DcrtGlweSecretKey<u64> {
         &self.key
     }
 
@@ -80,6 +80,41 @@ impl<'a> BfvClient<'a> {
     #[must_use]
     pub fn public_key<R: rand::Rng + rand::CryptoRng>(&self, rng: &mut R) -> BfvPublicKey {
         BfvPublicKey::new(&self.secret_context(), rng)
+    }
+
+    /// Allocates a level-zero ciphertext and encrypts canonical coefficients.
+    ///
+    /// Inherits [`Self::encrypt_to`]'s representation and input checks. Only the
+    /// output is allocated; use `_to` to reuse caller-owned output storage.
+    ///
+    /// # Panics
+    /// Rejects invalid plaintext before RNG consumption; allocation can precede
+    /// the validation. See [`Self::encrypt_to`] for partial-write conditions.
+    #[must_use]
+    pub fn encrypt<R, A>(&self, input: &Polynomial<A>, rng: &mut R) -> BfvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = self.context.new_ciphertext(0);
+        self.encrypt_to(input, &mut output, rng);
+        output
+    }
+
+    /// Allocates and encrypts using centered lift; see [`Self::encrypt`].
+    #[must_use]
+    pub fn encrypt_centered<R, A>(
+        &self,
+        input: &Polynomial<A>,
+        rng: &mut R,
+    ) -> BfvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = self.context.new_ciphertext(0);
+        self.encrypt_centered_to(input, &mut output, rng);
+        output
     }
 
     /// Encrypts N canonical plaintext coefficients at level zero with unsigned lift.

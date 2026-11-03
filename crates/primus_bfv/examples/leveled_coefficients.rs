@@ -2,7 +2,7 @@
 
 use primus_bfv::{
     BfvAutomorphism, BfvClient, BfvContext, BfvEvaluator, BfvKeySwitcher, BfvModulusSwitch,
-    BfvMultiplier, BfvParameters, BfvRelinearizer, PlaintextEmbedding,
+    BfvMultiplication, BfvParameters, PlaintextEmbedding,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
@@ -58,19 +58,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let relin_key = alice.relinearization_key(0, config, &mut rng)?;
     let auto_key = alice.automorphism_key(1, 5, config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
-    let mut relin = BfvRelinearizer::try_new(&context, 0, &relin_key)?;
     let mut auto = BfvAutomorphism::try_new(&context, 1, &auto_key)?;
     let mut switch = BfvKeySwitcher::try_new(&context, 1, &switch_key)?;
-    // These extra primes are computation-only; they do not enlarge the secret/key modulus.
-    let mut multiplier = BfvMultiplier::try_new(
-        &context,
-        0,
-        &[
-            1_152_921_504_606_584_833,
-            1_152_921_504_598_720_513,
-            1_152_921_504_592_429_057,
-        ],
-    )?;
+    let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
     let mut lower_evaluator = BfvEvaluator::new(&context, 1);
     let mut drop_first = BfvModulusSwitch::new(&context, 0);
     let mut drop_second = BfvModulusSwitch::new(&context, 1);
@@ -80,7 +70,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     one.as_mut()[0] = 1;
     let mut encrypted_a = context.new_ciphertext(0);
     let mut encrypted_b = context.new_ciphertext(0);
-    let mut quadratic = context.new_quadratic_ciphertext(0);
     let mut linear = context.new_ciphertext(0);
     let mut lower = context.new_ciphertext(1);
     let mut transformed = context.new_ciphertext(1);
@@ -89,10 +78,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     encryptor.encrypt_centered_to(&a, &mut encrypted_a, &mut rng);
     encryptor.encrypt_centered_to(&b, &mut encrypted_b, &mut rng);
-    multiplier.multiply_to(&encrypted_a, &encrypted_b, &mut quadratic);
-    relin.relinearize_to(&quadratic, &mut linear);
-    multiplier.square_to(&linear, &mut quadratic);
-    relin.relinearize_to(&quadratic, &mut linear);
+    multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut linear);
+    multiplication.square_assign(&mut linear);
     drop_first.switch_to(&linear, &mut lower);
     auto.apply_to(&lower, &mut transformed);
     switch.switch_to(&transformed, &mut switched);

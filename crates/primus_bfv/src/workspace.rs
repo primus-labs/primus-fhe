@@ -32,7 +32,7 @@ impl BfvDecryptWorkspace {
 
     /// Returns the retained geometry; basis identity is established by context.
     #[must_use]
-    pub fn size(&self) -> RnsGlweSize {
+    pub(crate) fn size(&self) -> RnsGlweSize {
         self.size
     }
 

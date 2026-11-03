@@ -30,11 +30,13 @@
 //! Optional `batching` uses shared slot encoding and plaintext subring embedding
 //! from `primus_encoding`; secrets and ciphertexts retain their full ring.
 //! [`BfvMultiplier`] computes exact integer tensors with a computation-only
-//! auxiliary basis before `round(t*T/Q)`. [`BfvReferenceMultiplier`] retains a
-//! separate exact integer schoolbook path. [`BfvRawTensor`] and the already-scaled
-//! [`BfvQuadraticCiphertext`] represent distinct stages; only the latter enters
+//! auxiliary basis before `round(t*T/Q)`. An independent reference retains a
+//! separate exact integer schoolbook oracle in private tests. The raw integer
+//! stage is internal; the scaled [`BfvQuadraticCiphertext`] alone enters
 //! [`BfvRelinearizer`]. Native gadget keys also support key switching and
-//! encrypted automorphisms at each prepared level.
+//! encrypted automorphisms at each prepared level. Ordinary requests use
+//! [`BfvMultiplication`] to prepare multiplication and relinearization together,
+//! deriving the level from the key and reusing all intermediate storage.
 
 #![deny(missing_docs)]
 
@@ -44,6 +46,7 @@ mod context;
 mod evaluation_key;
 mod evaluator;
 mod modulus_switch;
+mod multiplication;
 mod multiply;
 mod parameters;
 mod public_key;
@@ -60,7 +63,8 @@ pub use evaluation_key::{
 };
 pub use evaluator::BfvEvaluator;
 pub use modulus_switch::BfvModulusSwitch;
-pub use multiply::{BfvMultiplier, BfvMultiplyError, BfvRawTensor, BfvReferenceMultiplier};
+pub use multiplication::BfvMultiplication;
+pub use multiply::{BfvMultiplier, BfvMultiplyError};
 pub use parameters::{BfvParameters, BfvParametersError};
 pub use primus_encoding::PlaintextEmbedding;
 pub use public_key::{BfvPublicKey, BfvPublicKeyEncryptor};

@@ -52,7 +52,7 @@ tfhe: (lint "primus_tfhe*" "ntt,fourier,rustfft,tfhe-fft") (test "primus_tfhe*" 
 
 tfhe-simd: (simd "primus_tfhe*")
 
-# BFV/BGV optional batching, independent from the default coefficient workflow.
+# BFV/BGV ordinary requests, advanced batching, and normal external consumers.
 schemes:
   cargo clippy -p primus_encoding -p primus_bfv -p primus_bgv --all-targets --features rns,batching -- -D warnings
   cargo nextest run -p primus_encoding -p primus_bfv -p primus_bgv --lib --tests --features rns,batching
@@ -60,9 +60,13 @@ schemes:
   cargo run -p primus_bgv --example slots --features batching
   cargo run -p primus_bgv --example leveled_coefficients
   cargo run -p primus_bgv --example leveled_slots --features batching
+  cargo run -p primus_bfv --example coefficients
+  cargo run -p primus_bfv --example explicit_coefficients
   cargo run -p primus_bfv --example slots --features batching
+  cargo run -p primus_bfv --example subring_slots --features batching
   cargo run -p primus_bfv --example leveled_coefficients
   cargo run -p primus_bfv --example leveled_slots --features batching
+  python3 scripts/check_scheme_consumers.py
 
 # Explicit crate-local workload.
 bench package target *cargo-args:

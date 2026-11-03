@@ -5,7 +5,8 @@ use primus_poly::DcrtPolynomial;
 ///
 /// Each component has already undergone exact BFV `round(t*T/Q)` scaling.
 /// This is a degree-two ciphertext under one secret, not rank-two GLWE.
-/// An unscaled [`crate::BfvRawTensor`] cannot be passed to a relinearizer.
+/// The unscaled integer tensor is private to the multiplication owner; only
+/// this scaled stage can be supplied to a relinearizer.
 /// It must be relinearized before use with degree-one evaluators, switching,
 /// automorphisms or recovery. Each component has the same modulus-major NTT
 /// layout; the consuming operation establishes its complete geometry.

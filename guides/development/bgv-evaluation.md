@@ -11,6 +11,18 @@ residues and transform identity remain caller contracts after numerical checks.
 
 ## Tensor and degree lifecycle
 
+Ordinary requests prepare `BgvMultiplication::try_new(context,&relinearization_key)`.
+The operation derives the actual level from the key and owns reusable quadratic
+and relinearization scratch. `multiply_to` and `square_to` write ordinary
+degree-one ciphertexts; `square_assign` overwrites one input after its tensor
+has been retained internally. This prepared request is allocation-free and does
+not require the caller to manage an intermediate degree-two buffer. Public and
+private encryptors also provide allocating `encrypt`/`encrypt_centered` methods;
+prepared `*_to` entries retain explicit output reuse.
+
+The advanced split lifecycle remains available for callers that need its actual
+unscaled quadratic intermediate:
+
 `BgvEvaluator::mul_to` writes `[c0*d0,c0*d1+c1*d0,c1*d1]`; `square_to` uses
 `[c0²,2*c0*c1,c1²]`. Their phase is the product of the input phases. This is
 ordinary multiplication in R_Q, with no BFV scale-and-round. If integer message
@@ -64,8 +76,8 @@ instead gives the p-preserving residual identity.
 
 `DecompositionConfig::level_count=None` means the maximum available digit count,
 not necessarily zero residual. Q's bit width need not be divisible by log_basis.
-Each key owns its actual basis and columns. A lower modulus level has different
-Q/weights/drop bits and needs newly generated columns; slicing an upper key's
+Each key privately owns its actual basis and columns. A lower modulus level has
+different Q/weights/drop bits and needs newly generated columns; slicing an upper key's
 RNS limbs does not create the lower key. The distinct role types prevent passing
 a key with the wrong semantic role; binding checks N,p,ordered Q and level index.
 Those checks cannot authenticate same-parameter actual secrets or NTT conventions.
@@ -131,7 +143,10 @@ Prepared evaluators own their mutable scratch and borrow immutable keys/context;
 independent concurrent requests need independent evaluators. Complete boundary
 lengths are checked before output/scratch writes. Arithmetic/RNG/NTT failures can
 leave partial output. The complete prepared request is allocation-free; returned
-convenience results and key/setup construction allocate. Public evaluation
-columns remain public; temporary secrets/secret products and client recovery
-scratch follow their erasure contracts. Evaluation-key security and full circuit
-noise analysis are separate from passing deterministic functionality fixtures.
+convenience results and key/setup construction allocate. Evaluation-key basis/column
+inspection and phase oracles live in private tests;
+independent mathematics does not require exposing representation getters.
+Temporary secrets/secret products and client recovery scratch follow their
+erasure contracts. Public encryptors implement `Zeroize` to clear their
+ephemeral scratch while preserving allocation and geometry. Evaluation-key security
+and full circuit noise analysis are separate from passing deterministic functionality fixtures.

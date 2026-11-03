@@ -2,8 +2,8 @@
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_bgv::{
-    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch,
-    BgvParameters, BgvRelinearizer,
+    BgvAutomorphism, BgvClient, BgvContext, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
+    BgvParameters,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
@@ -54,10 +54,9 @@ fn leveled(c: &mut Criterion) {
         .automorphism_key(1, batching.rotation_exponent(1), config, &mut rng)
         .unwrap();
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng).unwrap();
-    let mut relin = BgvRelinearizer::try_new(&context, 0, &relin_key).unwrap();
+    let mut multiplication = BgvMultiplication::try_new(&context, &relin_key).unwrap();
     let mut rotate = BgvAutomorphism::try_new(&context, 1, &rotate_key).unwrap();
     let mut switch = BgvKeySwitcher::try_new(&context, 1, &switch_key).unwrap();
-    let evaluator = BgvEvaluator::new(&context, 0);
     let mut drop_first = BgvModulusSwitch::new(&context, 0);
     let mut drop_second = BgvModulusSwitch::new(&context, 1);
     let values: Vec<_> = (0..ACTIVE).map(|i| (7 * i as u64 + 1) % P).collect();
@@ -67,7 +66,6 @@ fn leveled(c: &mut Criterion) {
     let mut b = Polynomial::<Vec<u64>>::zero(N);
     let mut encrypted_a = context.new_ciphertext(0);
     let mut encrypted_b = context.new_ciphertext(0);
-    let mut quadratic = context.new_quadratic_ciphertext(0);
     let mut linear = context.new_ciphertext(0);
     let mut lower = context.new_ciphertext(1);
     let mut rotated = context.new_ciphertext(1);
@@ -87,10 +85,8 @@ fn leveled(c: &mut Criterion) {
             batching.embed_to(&small, b.as_mut());
             encryptor.encrypt_centered_to(&a, &mut encrypted_a, &mut rng);
             encryptor.encrypt_centered_to(&b, &mut encrypted_b, &mut rng);
-            evaluator.mul_to(&encrypted_a, &encrypted_b, &mut quadratic);
-            relin.relinearize_to(&quadratic, &mut linear);
-            evaluator.square_to(&linear, &mut quadratic);
-            relin.relinearize_to(&quadratic, &mut linear);
+            multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut linear);
+            multiplication.square_assign(&mut linear);
             drop_first.switch_to(&linear, &mut lower);
             rotate.apply_to(&lower, &mut rotated);
             switch.switch_to(&rotated, &mut switched);

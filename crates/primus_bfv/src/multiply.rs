@@ -1,6 +1,5 @@
+#[cfg(test)]
 mod reference;
-
-pub use reference::BfvReferenceMultiplier;
 
 use core::cmp::Ordering;
 
@@ -43,6 +42,12 @@ pub enum BfvMultiplyError {
     /// The auxiliary product must be strictly greater than NQ.
     #[error("BFV multiplication auxiliary product must be greater than NQ")]
     InsufficientAuxiliaryProduct,
+    /// No further NTT primes were found in the automatic 60-bit search range.
+    #[error("BFV multiplication could not prepare a sufficient automatic auxiliary basis")]
+    AuxiliarySearchExhausted,
+    /// An evaluation key is incompatible with the requested computation.
+    #[error(transparent)]
+    EvaluationKey(#[from] crate::BfvEvaluationKeyError),
     /// A complete prepared storage length is not representable.
     #[error("BFV multiplication workspace length overflow")]
     LengthOverflow,
@@ -52,73 +57,6 @@ pub enum BfvMultiplyError {
     /// Invalid auxiliary NTT parameters.
     #[error(transparent)]
     Transform(#[from] NttError<u64>),
-}
-
-/// Exact, unscaled integer BFV tensor represented in the computation basis QP.
-///
-/// Each of the three components occupies `(cipher_moduli.len() +
-/// auxiliary_moduli.len()) * N` entries, with Q limbs followed by P limbs, in
-/// modulus-major NTT order. The mathematical coefficients are the integer
-/// negacyclic products of centered Q representatives, before reduction or
-/// scaling. The complete product QP is greater than NQ², so it distinguishes
-/// every coefficient of one tensor. Only its owning compatible multiplier may
-/// overwrite or scale this storage; arbitrary accumulation would require a
-/// stronger coefficient bound.
-///
-/// This is a computation artifact, not a ciphertext under an enlarged secret
-/// modulus. In particular it cannot be supplied to relinearization or recovery.
-#[derive(Clone, Debug)]
-pub struct BfvRawTensor {
-    data: Vec<u64>,
-    n: usize,
-    level: usize,
-    t: u64,
-    q: Vec<u64>,
-    p: Vec<u64>,
-}
-
-impl BfvRawTensor {
-    /// Returns the full secret/ciphertext ring dimension N.
-    #[must_use]
-    pub fn poly_length(&self) -> usize {
-        self.n
-    }
-
-    /// Returns the bound ciphertext level.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.level
-    }
-
-    /// Returns the plaintext modulus used for subsequent scaling.
-    #[must_use]
-    pub fn plain_modulus(&self) -> u64 {
-        self.t
-    }
-
-    /// Borrows the ordered ciphertext basis.
-    #[must_use]
-    pub fn cipher_moduli(&self) -> &[u64] {
-        &self.q
-    }
-
-    /// Borrows the ordered computation-only auxiliary basis.
-    #[must_use]
-    pub fn auxiliary_moduli(&self) -> &[u64] {
-        &self.p
-    }
-
-    /// Returns the complete QP polynomial length of one component.
-    #[must_use]
-    pub fn rns_poly_len(&self) -> usize {
-        self.data.len() / 3
-    }
-}
-
-impl AsRef<[u64]> for BfvRawTensor {
-    fn as_ref(&self) -> &[u64] {
-        &self.data
-    }
 }
 
 /// Prepared exact RNS/NTT BFV multiplication at one ciphertext level.
@@ -168,6 +106,30 @@ struct MultiplyWorkspace {
 }
 
 impl<'a> BfvMultiplier<'a> {
+    /// Prepares computation-only 60-bit NTT primes automatically.
+    ///
+    /// Chooses distinct primes coprime to Q until their exact product exceeds
+    /// NQ. Prime search and all tables/scratch are prepared here, never online.
+    /// This selects arithmetic resources, not encryption or security parameters.
+    /// Use [`Self::try_new`] for an explicitly chosen computation basis.
+    ///
+    /// # Errors
+    /// Rejects an unprepared level, overflowing geometry, exhausted search range
+    /// or unsupported transform parameters.
+    pub fn try_with_default_basis(
+        context: &'a BfvContext,
+        level: usize,
+    ) -> Result<Self, BfvMultiplyError> {
+        if level >= context.level_count() {
+            return Err(BfvMultiplyError::Level {
+                requested: level,
+                maximum: context.level_count(),
+            });
+        }
+        let primes = default_auxiliary_moduli(context, level)?;
+        Self::try_new(context, level, &primes)
+    }
+
     /// Prepares an explicit computation basis whose product P is greater than NQ.
     ///
     /// The auxiliary basis is pairwise coprime and coprime to Q. Its primes must
@@ -280,104 +242,11 @@ impl<'a> BfvMultiplier<'a> {
         self.lift.base_p.moduli_values()
     }
 
-    /// Allocates zeroed raw tensor storage with this multiplier's numeric binding.
-    #[must_use]
-    pub fn new_raw_tensor(&self) -> BfvRawTensor {
-        BfvRawTensor {
-            data: vec![0; self.raw.len()],
-            n: self.context.parameters().poly_length().get(),
-            level: self.level,
-            t: self.context.codec(self.level).t(),
-            q: self
-                .context
-                .codec(self.level)
-                .base_q()
-                .moduli_values()
-                .to_vec(),
-            p: self.auxiliary_moduli().to_vec(),
-        }
-    }
-
-    /// Writes the exact unscaled tensor of centered component lifts in QP.
-    ///
-    /// # Panics
-    /// Rejects either complete input length or any raw-output metadata mismatch
-    /// before writing output or scratch.
-    pub fn mul_raw_to<A, B>(
-        &mut self,
-        lhs: &BfvCiphertext<A>,
-        rhs: &BfvCiphertext<B>,
-        output: &mut BfvRawTensor,
-    ) where
-        A: Data<Elem = u64>,
-        B: Data<Elem = u64>,
-    {
-        self.validate_input(lhs.as_ref());
-        self.validate_input(rhs.as_ref());
-        self.validate_raw(output);
-        self.workspace.tensor(
-            self.context,
-            self.level,
-            &self.lift,
-            lhs.as_ref(),
-            rhs.as_ref(),
-            false,
-            &mut output.data,
-        );
-    }
-
-    /// Writes the exact raw square, reusing one set of lifted input transforms.
-    ///
-    /// Inherits [`Self::mul_raw_to`]'s representation and prewrite checks.
-    pub fn square_raw_to<A>(&mut self, input: &BfvCiphertext<A>, output: &mut BfvRawTensor)
-    where
-        A: Data<Elem = u64>,
-    {
-        self.validate_input(input.as_ref());
-        self.validate_raw(output);
-        self.workspace.tensor(
-            self.context,
-            self.level,
-            &self.lift,
-            input.as_ref(),
-            input.as_ref(),
-            true,
-            &mut output.data,
-        );
-    }
-
-    /// Scales each complete raw component as `round(t*z/Q) mod Q`.
-    ///
-    /// Q is odd, so an integer `t*z` cannot be exactly halfway between multiples
-    /// of Q. Nearest rounding therefore has no tie ambiguity, including for
-    /// negative z. The result uses the original Q basis and NTT convention.
-    ///
-    /// # Panics
-    /// Rejects raw metadata or the complete quadratic-output length before any
-    /// output or scratch writes.
-    pub fn scale_and_round_to<C>(
-        &mut self,
-        input: &BfvRawTensor,
-        output: &mut BfvQuadraticCiphertext<C>,
-    ) where
-        C: DataMut<Elem = u64>,
-    {
-        self.validate_raw(input);
-        self.validate_output(output.as_ref());
-        self.workspace.scale(
-            self.context,
-            self.level,
-            &self.lift,
-            input.as_ref(),
-            output.as_mut(),
-        );
-    }
-
     /// Writes the scaled degree-two product, using prepared internal raw storage.
     ///
     /// # Panics
     /// Rejects every complete input/output length before any writes. Inherits
-    /// [`Self::mul_raw_to`] and [`Self::scale_and_round_to`]'s math contracts.
+    /// the centered integer lift and exact scaling contracts described above.
     pub fn multiply_to<A, B, C>(
         &mut self,
         lhs: &BfvCiphertext<A>,
@@ -446,18 +315,6 @@ impl<'a> BfvMultiplier<'a> {
 
     fn validate_output(&self, output: &[u64]) {
         assert_eq!(output.len(), 3 * self.context.rns_poly_len(self.level));
-    }
-
-    fn validate_raw(&self, raw: &BfvRawTensor) {
-        assert_eq!(raw.n, self.context.parameters().poly_length().get());
-        assert_eq!(raw.level, self.level);
-        assert_eq!(raw.t, self.context.codec(self.level).t());
-        assert_eq!(
-            raw.q,
-            self.context.codec(self.level).base_q().moduli_values()
-        );
-        assert_eq!(raw.p, self.auxiliary_moduli());
-        assert_eq!(raw.data.len(), self.raw.len());
     }
 }
 
@@ -723,6 +580,86 @@ impl ScalarQuotient {
     }
 }
 
+// This is arithmetic preparation, not parameter/security selection. Search
+// downward in the 60-bit NTT progression, keeping the exact product in words.
+// One owner chooses P; the normal explicit constructor validates/prepares it.
+fn default_auxiliary_moduli(
+    context: &BfvContext,
+    level: usize,
+) -> Result<Vec<u64>, BfvMultiplyError> {
+    let n = context.parameters().poly_length().get();
+    let step = u64::try_from(n)
+        .ok()
+        .and_then(|n| n.checked_mul(2))
+        .filter(|&step| step < (1 << 60))
+        .ok_or(BfvMultiplyError::LengthOverflow)?;
+    let base = context.codec(level).base_q();
+    let mut target = vec![0; base.big_uint_value_len() + 1];
+    mul_scalar_to(base.moduli_product().digits(), n as u64, &mut target);
+    let mut product = vec![1];
+    let mut primes = Vec::new();
+    let mut candidate = ((1u64 << 60) - 2) / step * step + 1;
+    while cmp_words(&product, &target) != Ordering::Greater {
+        while candidate > (1 << 59)
+            && (!is_prime(candidate)
+                || base.moduli_values().iter().any(|&q| gcd(candidate, q) != 1))
+        {
+            candidate = candidate.saturating_sub(step);
+        }
+        if candidate <= (1 << 59) {
+            return Err(BfvMultiplyError::AuxiliarySearchExhausted);
+        }
+        primes.push(candidate);
+        let mut next = vec![0; product.len() + 1];
+        mul_scalar_to(&product, candidate, &mut next);
+        product = next;
+        candidate = candidate.saturating_sub(step);
+    }
+    Ok(primes)
+}
+
+// Deterministic Miller-Rabin for u64; modular products fit u128. These seven
+// bases cover n<2^64 (also used in SymPy's deterministic isprime branch):
+// https://github.com/sympy/sympy/blob/master/sympy/ntheory/primetest.py
+// This helper is private to setup; no new public number-theory API is needed.
+fn is_prime(n: u64) -> bool {
+    if n < 2 || n.is_multiple_of(2) {
+        return n == 2;
+    }
+    let powers = (n - 1).trailing_zeros();
+    let odd = (n - 1) >> powers;
+    for base in [2u64, 325, 9_375, 28_178, 450_775, 9_780_504, 1_795_265_022] {
+        let mut base = base % n;
+        if base == 0 {
+            continue;
+        }
+        let mut exponent = odd;
+        let mut value = 1u64;
+        while exponent != 0 {
+            if exponent & 1 != 0 {
+                value = (value as u128 * base as u128 % n as u128) as u64;
+            }
+            base = (base as u128 * base as u128 % n as u128) as u64;
+            exponent >>= 1;
+        }
+        if value == 1 || value == n - 1 {
+            continue;
+        }
+        let mut passed = false;
+        for _ in 1..powers {
+            value = (value as u128 * value as u128 % n as u128) as u64;
+            if value == n - 1 {
+                passed = true;
+                break;
+            }
+        }
+        if !passed {
+            return false;
+        }
+    }
+    true
+}
+
 fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b != 0 {
         (a, b) = (b, a % b);
@@ -855,3 +792,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod tests_tensor;

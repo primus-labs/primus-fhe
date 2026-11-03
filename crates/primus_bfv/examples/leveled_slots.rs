@@ -1,8 +1,8 @@
 //! Complete leveled BFV slots in a plaintext subring with full-ring secrets.
 
 use primus_bfv::{
-    BfvAutomorphism, BfvClient, BfvContext, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplier,
-    BfvParameters, BfvRelinearizer,
+    BfvAutomorphism, BfvClient, BfvContext, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
+    BfvParameters,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
@@ -41,28 +41,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = StdRng::seed_from_u64(0x10b6_5107);
     let alice = BfvClient::generate(&context, &mut rng);
     let mut bob = BfvClient::generate(&context, &mut rng);
-    assert_eq!(alice.secret_key().rns_glwe_size().poly_length().get(), N);
-    assert_eq!(bob.secret_key().rns_glwe_size().poly_length().get(), N);
     let public_key = alice.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
     let relin_key = alice.relinearization_key(0, config, &mut rng)?;
     let rotate_key = alice.automorphism_key(1, batching.rotation_exponent(1), config, &mut rng)?;
     let swap_key = alice.automorphism_key(1, batching.row_swap_exponent(), config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
-    let mut relin = BfvRelinearizer::try_new(&context, 0, &relin_key)?;
     let mut rotate = BfvAutomorphism::try_new(&context, 1, &rotate_key)?;
     let mut swap = BfvAutomorphism::try_new(&context, 1, &swap_key)?;
     let mut switch = BfvKeySwitcher::try_new(&context, 1, &switch_key)?;
-    // These extra primes are computation-only; they do not enlarge the secret/key modulus.
-    let mut multiplier = BfvMultiplier::try_new(
-        &context,
-        0,
-        &[
-            1_152_921_504_606_584_833,
-            1_152_921_504_598_720_513,
-            1_152_921_504_592_429_057,
-        ],
-    )?;
+    let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
     let mut drop_first = BfvModulusSwitch::new(&context, 0);
     let mut drop_second = BfvModulusSwitch::new(&context, 1);
     let values: Vec<_> = (0..ACTIVE).map(|i| 7 * i as u64 + 1).collect();
@@ -76,7 +64,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     batching.embed_to(&small, b.as_mut());
     let mut encrypted_a = context.new_ciphertext(0);
     let mut encrypted_b = context.new_ciphertext(0);
-    let mut quadratic = context.new_quadratic_ciphertext(0);
     let mut linear = context.new_ciphertext(0);
     let mut lower = context.new_ciphertext(1);
     let mut rotated = context.new_ciphertext(1);
@@ -85,10 +72,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut lowest = context.new_ciphertext(2);
     encryptor.encrypt_centered_to(&a, &mut encrypted_a, &mut rng);
     encryptor.encrypt_centered_to(&b, &mut encrypted_b, &mut rng);
-    multiplier.multiply_to(&encrypted_a, &encrypted_b, &mut quadratic);
-    relin.relinearize_to(&quadratic, &mut linear);
-    multiplier.square_to(&linear, &mut quadratic);
-    relin.relinearize_to(&quadratic, &mut linear);
+    multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut linear);
+    multiplication.square_assign(&mut linear);
     drop_first.switch_to(&linear, &mut lower);
     rotate.apply_to(&lower, &mut rotated);
     swap.apply_to(&rotated, &mut swapped);

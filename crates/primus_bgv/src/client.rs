@@ -63,7 +63,7 @@ impl<'a> BgvClient<'a> {
 
     /// Borrows the one full-ring secret for explicit advanced composition.
     #[must_use]
-    pub fn secret_key(&self) -> &DcrtGlweSecretKey<u64> {
+    pub(crate) fn secret_key(&self) -> &DcrtGlweSecretKey<u64> {
         &self.key
     }
 
@@ -71,6 +71,36 @@ impl<'a> BgvClient<'a> {
     #[must_use]
     pub fn public_key<R: rand::Rng + rand::CryptoRng>(&self, rng: &mut R) -> BgvPublicKey {
         BgvPublicKey::generate(self, self.context, rng)
+    }
+
+    /// Encrypts coefficients, allocating only the returned level-zero ciphertext.
+    /// See [`Self::encrypt_to`] for input, phase and failure contracts.
+    #[must_use]
+    pub fn encrypt<R, A>(&self, input: &Polynomial<A>, rng: &mut R) -> BgvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = self.context.new_ciphertext(0);
+        self.encrypt_to(input, &mut output, rng);
+        output
+    }
+
+    /// Encrypts centered lifts, allocating only the returned ciphertext.
+    /// See [`Self::encrypt_centered_to`] for the input and phase contracts.
+    #[must_use]
+    pub fn encrypt_centered<R, A>(
+        &self,
+        input: &Polynomial<A>,
+        rng: &mut R,
+    ) -> BgvCiphertext<Vec<u64>>
+    where
+        R: rand::Rng + rand::CryptoRng,
+        A: Data<Elem = u64>,
+    {
+        let mut output = self.context.new_ciphertext(0);
+        self.encrypt_centered_to(input, &mut output, rng);
+        output
     }
 
     /// Encrypts N canonical coefficients using their unsigned integer lifts.
@@ -175,30 +205,6 @@ impl<'a> BgvClient<'a> {
             n,
             base.moduli(),
         );
-    }
-
-    /// Writes the native DCRT phase c0+c1*s at a prepared level without decoding.
-    ///
-    /// # Correctness
-    /// Input has canonical per-limb residues and uses this actual secret and
-    /// context's ordered Q and NTT convention.
-    /// # Panics
-    /// Rejects an unprepared level or incorrect complete lengths before writes.
-    pub fn phase_to<A, B>(
-        &self,
-        input: &BgvCiphertext<A>,
-        level: usize,
-        output: &mut DcrtPolynomial<B>,
-    ) where
-        A: Data<Elem = u64>,
-        B: DataMut<Elem = u64>,
-    {
-        assert_eq!(
-            output.as_ref().len(),
-            self.context.rns_poly_len(level),
-            "BGV phase output length mismatch"
-        );
-        phase_to(self.context, &self.key, input, level, output);
     }
 
     /// Recovers N coefficients at a prepared level by exact centered CRT modulo p.
@@ -362,6 +368,46 @@ pub(crate) fn add_plaintext(
                 message
             };
             *value = q.reduce_add(*value, lift);
+        }
+    }
+}
+
+#[cfg(all(test, feature = "batching"))]
+mod tests {
+    use crate::{BgvClient, BgvContext, BgvParameters};
+    use primus_glwe_rns::SecretKeyDistr;
+    use primus_modulus::BarrettModulus;
+    use primus_shape::PolyLength;
+    use rand::{SeedableRng, rngs::StdRng};
+
+    #[test]
+    fn batching_does_not_embed_a_smaller_secret() {
+        const M: usize = 32;
+        for n in [64, 128] {
+            let context = BgvContext::try_new(
+                BgvParameters::try_coefficients(
+                    PolyLength::new(n),
+                    BarrettModulus::new(193),
+                    &[BarrettModulus::new(1_125_899_906_248_961)],
+                    SecretKeyDistr::SparseTernary,
+                    0.849,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let mut rng = StdRng::seed_from_u64(0x09_5107 + n as u64);
+            let client = BgvClient::generate(&context, &mut rng);
+            assert_eq!(client.secret_key().rns_glwe_size().poly_length().get(), n);
+            let key = client.secret_key().iter_dcrt_poly().next().unwrap();
+            let mut coefficients = key.as_ref().to_vec();
+            context.table().inverse_transform_slice(&mut coefficients);
+            assert!(
+                coefficients[..n]
+                    .iter()
+                    .enumerate()
+                    .any(|(i, &x)| i % (n / M) != 0 && x != 0),
+                "the secret must not be obtained by embedding a smaller-ring secret"
+            );
         }
     }
 }

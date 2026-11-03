@@ -2,7 +2,7 @@
 
 use primus_bgv::{
     BgvAutomorphism, BgvClient, BgvContext, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch,
-    BgvParameters, BgvRelinearizer, PlaintextEmbedding,
+    BgvMultiplication, BgvParameters, PlaintextEmbedding,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
@@ -58,10 +58,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let relin_key = alice.relinearization_key(0, config, &mut rng)?;
     let auto_key = alice.automorphism_key(1, 5, config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
-    let mut relin = BgvRelinearizer::try_new(&context, 0, &relin_key)?;
+    let mut multiplication = BgvMultiplication::try_new(&context, &relin_key)?;
     let mut auto = BgvAutomorphism::try_new(&context, 1, &auto_key)?;
     let mut switch = BgvKeySwitcher::try_new(&context, 1, &switch_key)?;
-    let evaluator = BgvEvaluator::new(&context, 0);
     let mut lower_evaluator = BgvEvaluator::new(&context, 1);
     let mut drop_first = BgvModulusSwitch::new(&context, 0);
     let mut drop_second = BgvModulusSwitch::new(&context, 1);
@@ -71,7 +70,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     one.as_mut()[0] = 1;
     let mut encrypted_a = context.new_ciphertext(0);
     let mut encrypted_b = context.new_ciphertext(0);
-    let mut quadratic = context.new_quadratic_ciphertext(0);
     let mut linear = context.new_ciphertext(0);
     let mut lower = context.new_ciphertext(1);
     let mut transformed = context.new_ciphertext(1);
@@ -80,10 +78,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     encryptor.encrypt_centered_to(&a, &mut encrypted_a, &mut rng);
     encryptor.encrypt_centered_to(&b, &mut encrypted_b, &mut rng);
-    evaluator.mul_to(&encrypted_a, &encrypted_b, &mut quadratic);
-    relin.relinearize_to(&quadratic, &mut linear);
-    evaluator.square_to(&linear, &mut quadratic);
-    relin.relinearize_to(&quadratic, &mut linear);
+    multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut linear);
+    multiplication.square_assign(&mut linear);
     drop_first.switch_to(&linear, &mut lower);
     auto.apply_to(&lower, &mut transformed);
     switch.switch_to(&transformed, &mut switched);

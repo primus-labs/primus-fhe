@@ -9,27 +9,34 @@ Coefficient p 可以是合数；batching 另有明文素数要求。
 
 ## 使用流程
 
-从[多级系数示例](examples/leveled_coefficients.rs)开始，或启用 `batching` 运行
-[多级槽示例](examples/leveled_slots.rs)。较小的[系数](examples/coefficients.rs)和
-[槽](examples/slots.rs)示例保留不使用 evaluation keys 的加密/明文求值流程。
+从[系数示例](examples/coefficients.rs)开始：公钥加密 `3+2X` 和 `5+X`，
+做一次乘法，再恢复 `15+13X+2X²`。启用 `batching` 后运行
+[槽示例](examples/slots.rs)：n=N 的密文逐槽乘法与行旋转。
+[多级系数示例](examples/leveled_coefficients.rs)和
+[多级槽示例](examples/leveled_slots.rs)展示 square、自同构、秘密切换和两次
+prime drop；后者也展示 n<N 子环。
 
 1. 用 `BgvParameters::try_coefficients` 构造参数，或用
-   `try_with_error_distribution` 显式选择 Gaussian/CBD。将参数消费进
-   `BgvContext::try_with_levels(parameters,count)`；`try_new` 只准备一层。
-2. 用 `BgvClient::generate(&context,rng)` 生成 client，各自拥有一份完整 N 秘密和
-   可复用、drop 时擦除的恢复 scratch。Fresh 私钥/公钥加密在 level0；调用者保留
-   `client.public_key(rng)` 后，用 `context.public_key_encryptor(&key)` 绑定公钥。
-3. 预先准备 `context.new_ciphertext(level)` 和 `BgvEvaluator::new(&context,level)`。
-   add/sub/neg 操作两个组件；add_plain 只改 c0，mul_plain 乘两个组件。明文使用
-   unscaled lift，显式选择 unsigned/centered `PlaintextEmbedding`。
-4. `mul_to`/`square_to` 写入 `context.new_quadratic_ciphertext(level)` 返回的
-   `BgvQuadraticCiphertext`，phase 为同一个秘密下的 `c0+c1*s+c2*s²`。生成
-   `relinearization_key` 并绑定 `BgvRelinearizer`，恢复两组件表示。
+   `try_with_error_distribution` 显式选择 Gaussian/CBD。`BgvContext::try_new`
+   准备一层；`try_with_levels(parameters,count)` 准备显式降模链。
+2. `BgvClient::generate(&context,rng)` 拥有一份完整 N 秘密和可复用、drop 时擦除的
+   恢复 scratch。保留 `client.public_key(rng)`，用
+   `context.public_key_encryptor(&key)` 绑定公钥。Client 与公钥 encryptor 都提供
+   `encrypt`/`encrypt_centered`，只分配返回密文；预备输出使用对应 `_to` 接口。
+3. 生成 `relinearization_key(level,config,rng)`，然后绑定
+   `BgvMultiplication::try_new(&context,&key)`。Level 由 key 推导；
+   `multiply_to`、`square_to` 和 `square_assign` 复用内部 scratch 完成 tensor
+   乘法与重线性化，在线不分配。
+4. 线性/明文运算使用 `BgvEvaluator::new(&context,level)`。add/sub/neg 操作两个
+   组件，add_plain 只改 c0，mul_plain 乘两个组件；显式选择 unsigned/centered
+   `PlaintextEmbedding`。高级分阶段流程仍可用 `mul_to`/`square_to` 写显式
+   `BgvQuadraticCiphertext`，再由 `BgvRelinearizer` 恢复两组件密文。
 5. 只生成实际需要的 `automorphism_key`、`key_switching_key`，预先绑定
    `BgvAutomorphism` 或 `BgvKeySwitcher`。由目标 client 从 source client 生成换钥
-   材料；自同构 key 则把 σ(s) 切换回 s。
-6. 用 `BgvModulusSwitch::new(&context,level).switch_to` 丢弃相邻末 prime，随后用
-   `client.decrypt_to(input,level,&mut output)` 恢复；便利 `decrypt` 只额外分配结果。
+   材料；自同构 key 把 σ(s) 切换回 s。
+6. `BgvModulusSwitch::new(&context,level).switch_to` 丢弃相邻末 prime。随后用
+   `client.decrypt_to(input,level,&mut output)` 恢复；便利 `decrypt` 只分配结果。
+   这些操作不自动选择噪声策略或降模时机。
 
 Level0 使用全部有序 primes；level l 丢弃最后 l 个。Context 拥有一张 full-Q NTT 表
 及各 prefix 的真实 CRT base/恢复常数；单份 full-Q secret 按 prefix 借用，N 不变。
@@ -46,8 +53,8 @@ Level0 使用全部有序 primes；level l 丢弃最后 l 个。Context 拥有�
 被切换组件 a 在分解前先乘 Q 下的 p^-1；column phase 为 `p*g_j*h+p*e_j`，
 h 分别为 s²、source secret 或 σ(s)。Digit noise 与近似 residual 都成为 p 倍误差，
 不能直接照搬普通截断 BFV/GLWE 切换。三种 key 类型防止 relin/换钥/自同构角色误配；
-构造器拒绝错误 level、N、p 或有序 Q。公开 `basis()`/`ciphertexts()` 为噪声分析
-提供真实分解和 columns；同参数下的实际 secret 身份仍是 caller 契约。
+构造器拒绝错误 level、N、p 或有序 Q；实际 decomposition 和 columns 由各 role
+实现持有。同参数下的实际 secret 身份仍是 caller 契约。
 
 丢末 prime q 的每组件精确商为 `(x-p*center_q(x*p^-1 mod q))/q mod (Q/q)`。
 只需 dropped limb INTT、一份 N scratch、各 retained limb correction NTT 和 inverse
@@ -78,7 +85,8 @@ wrap 可能改变模 p 消息。
 可选 `batching` 使用 BFV 同样消费的共享 `primus_encoding::BatchingEncoder`。
 素数 p≡1 mod 2n 提供 ±5^j 两行的 n 槽。`encode_to` 对槽前缀补零，`embed_to`
 映射 f(Y)→f(X^(N/n))；只有明文使用 n，实际秘密、误差、变换和密文保持 N。
-Full-N 恢复后用 `extract_to` 验证子环支撑，再用 caller scratch decode。p 不必
+基础 n=N 示例直接编码到完整明文多项式，恢复后直接 decode。n<N 流程在 Full-N
+恢复后用 `extract_to` 验证子环支撑，再用 caller scratch decode；此时 p 不必
 支持 full-N plaintext NTT。
 
 用 `rotation_exponent(k)` 或 `row_swap_exponent()` 选择奇数 full-ring automorphism
@@ -91,12 +99,15 @@ n32/N128/p193，旋转/交换两行并换到第二个 full-N secret；spare slot
 Context 拥有 sampler/bases/table，client/evaluator/prepared key operations 借用它。
 Prepared 加密、tensor/square、线性/明文求值、relin/换钥/auto、相邻 prime drop 和
 恢复均不新增分配。秘密、生成时 secret-square/automorphism 临时值、公钥 ephemeral
-及恢复存储按契约擦除；caller 明文/输出/batching buffers 由其拥有者管理。不新增
+及恢复存储按契约擦除。可用 `Zeroize::zeroize` 显式擦除公钥 encryptor ephemeral，
+保留完整预备 allocation；caller 明文/输出/batching buffers 由其拥有者管理。不新增
 Domain 或系数字类型泛型。
 
 默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly SIMD 后端。
 
 ```sh
+cargo run -p primus_bgv --example coefficients
+cargo run -p primus_bgv --example slots --features batching
 cargo run -p primus_bgv --example leveled_coefficients
 cargo run -p primus_bgv --example leveled_slots --features batching
 cargo test -p primus_bgv --features batching --lib --tests

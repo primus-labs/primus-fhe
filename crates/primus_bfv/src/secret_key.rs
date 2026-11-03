@@ -161,7 +161,7 @@ impl<'a> BfvSecretKeyContext<'a> {
     /// # Panics
     /// Checks the complete output before sampling. RNG/NTT panics may leave
     /// partially written output.
-    pub fn encrypt_zeros_to<R, B>(&self, output: &mut BfvCiphertext<B>, rng: &mut R)
+    pub(crate) fn encrypt_zeros_to<R, B>(&self, output: &mut BfvCiphertext<B>, rng: &mut R)
     where
         R: rand::Rng + rand::CryptoRng,
         B: DataMut<Elem = u64>,
@@ -176,7 +176,7 @@ impl<'a> BfvSecretKeyContext<'a> {
     ///
     /// # Panics
     /// Rejects incorrect input/output lengths before writes.
-    pub fn phase_to<A, B>(&self, input: &BfvCiphertext<A>, output: &mut DcrtPolynomial<B>)
+    fn phase_to<A, B>(&self, input: &BfvCiphertext<A>, output: &mut DcrtPolynomial<B>)
     where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,

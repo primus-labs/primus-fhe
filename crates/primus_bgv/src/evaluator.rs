@@ -272,16 +272,7 @@ impl<'a> BgvEvaluator<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
-        let length = self.plaintext.as_ref().len();
-        let (l0, l1) = lhs.c0_c1(length);
-        let (r0, r1) = rhs.c0_c1(length);
-        let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
-        let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.base_q(self.level).moduli();
-        l0.mul_to(&r0, &mut o0, n, moduli);
-        l0.mul_to(&r1, &mut o1, n, moduli);
-        o1.add_mul_assign(&l1, &r0, n, moduli);
-        l1.mul_to(&r1, &mut o2, n, moduli);
+        tensor_to(self.context, self.level, lhs, rhs, output);
     }
 
     /// Writes `[c0², 2*c0*c1, c1²]` using three polynomial products.
@@ -293,20 +284,7 @@ impl<'a> BgvEvaluator<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        use primus_reduce::ReduceAdd;
-        let length = self.plaintext.as_ref().len();
-        let (c0, c1) = input.c0_c1(length);
-        let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
-        let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.base_q(self.level).moduli();
-        c0.mul_to(&c0, &mut o0, n, moduli);
-        c0.mul_to(&c1, &mut o1, n, moduli);
-        for (limb, q) in o1.as_mut().chunks_exact_mut(n).zip(moduli) {
-            for value in limb {
-                *value = q.reduce_add(*value, *value);
-            }
-        }
-        c1.mul_to(&c1, &mut o2, n, moduli);
+        square_to(self.context, self.level, input, output);
     }
 
     fn prepare_plaintext<A>(&mut self, plain: &Polynomial<A>, embedding: PlaintextEmbedding)
@@ -341,4 +319,56 @@ impl<'a> BgvEvaluator<'a> {
             table.transform_slice(limb);
         }
     }
+}
+
+// Shared tensor kernels keep the ordinary multiplication request independent of
+// the evaluator's plaintext scratch. Public callers establish their own output
+// shape before invoking these functions; all input/component lengths are checked
+// before the first arithmetic write.
+pub(crate) fn tensor_to<A, B, C>(
+    context: &BgvContext,
+    level: usize,
+    lhs: &BgvCiphertext<A>,
+    rhs: &BgvCiphertext<B>,
+    output: &mut BgvQuadraticCiphertext<C>,
+) where
+    A: Data<Elem = u64>,
+    B: Data<Elem = u64>,
+    C: DataMut<Elem = u64>,
+{
+    let length = context.rns_poly_len(level);
+    let (l0, l1) = lhs.c0_c1(length);
+    let (r0, r1) = rhs.c0_c1(length);
+    let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
+    let n = context.parameters().poly_length().get();
+    let moduli = context.base_q(level).moduli();
+    l0.mul_to(&r0, &mut o0, n, moduli);
+    l0.mul_to(&r1, &mut o1, n, moduli);
+    o1.add_mul_assign(&l1, &r0, n, moduli);
+    l1.mul_to(&r1, &mut o2, n, moduli);
+}
+
+pub(crate) fn square_to<A, B>(
+    context: &BgvContext,
+    level: usize,
+    input: &BgvCiphertext<A>,
+    output: &mut BgvQuadraticCiphertext<B>,
+) where
+    A: Data<Elem = u64>,
+    B: DataMut<Elem = u64>,
+{
+    use primus_reduce::ReduceAdd;
+    let length = context.rns_poly_len(level);
+    let (c0, c1) = input.c0_c1(length);
+    let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
+    let n = context.parameters().poly_length().get();
+    let moduli = context.base_q(level).moduli();
+    c0.mul_to(&c0, &mut o0, n, moduli);
+    c0.mul_to(&c1, &mut o1, n, moduli);
+    for (limb, q) in o1.as_mut().chunks_exact_mut(n).zip(moduli) {
+        for value in limb {
+            *value = q.reduce_add(*value, *value);
+        }
+    }
+    c1.mul_to(&c1, &mut o2, n, moduli);
 }

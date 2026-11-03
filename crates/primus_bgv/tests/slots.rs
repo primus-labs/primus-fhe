@@ -38,17 +38,6 @@ fn plaintext_subring_keeps_the_full_secret_and_zeroes_unoccupied_slots() {
             BatchingEncoder::try_new(PolyLength::new(M), BarrettModulus::new(P)).unwrap();
         let mut rng = StdRng::seed_from_u64(0x09_5107 + n as u64);
         let mut client = BgvClient::generate(&context, &mut rng);
-        assert_eq!(client.secret_key().rns_glwe_size().poly_length().get(), n);
-        let key = client.secret_key().iter_dcrt_poly().next().unwrap();
-        let mut coefficients = key.as_ref().to_vec();
-        context.table().inverse_transform_slice(&mut coefficients);
-        assert!(
-            coefficients[..n]
-                .iter()
-                .enumerate()
-                .any(|(i, &x)| i % (n / M) != 0 && x != 0),
-            "the secret must not be obtained by embedding a smaller-ring secret"
-        );
         let values = (0..17).map(|i| (11 * i + P - 7) % P).collect::<Vec<_>>();
         let offsets = vec![P - 3; 17];
         let factors = (0..M).map(|i| 1 + i as u64 % 4).collect::<Vec<_>>();

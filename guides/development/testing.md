@@ -14,7 +14,7 @@
 | `just test [package] [features]` | nextest 普通测试，显式使用 `--lib --tests` |
 | `just test-doc [package]` | doctest，与 nextest 分开执行 |
 | `just simd [package]` | nightly、all-features 的 Clippy 与普通测试 |
-| `just schemes` | BFV/BGV 与共享编码的 batching 编译/lint/普通测试，并实际执行系数/子环槽示例 |
+| `just schemes` | BFV/BGV 与共享编码的 batching 编译/lint/普通测试，并执行普通系数/槽、高级子环示例及独立普通依赖消费者 |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者选择 NTT 和双 FFT，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
 | `just ci` | 在 `just` 之上执行 doctest、BFV/BGV batching 流程、可选依赖隔离编译和 Barrett derive 回归 |
@@ -87,15 +87,19 @@ cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 
 ```sh
 just schemes
+cargo run -p primus_bgv --example coefficients
+cargo run -p primus_bgv --example slots --features batching
+cargo run -p primus_bfv --example coefficients
+cargo run -p primus_bfv --example slots --features batching
 cargo run -p primus_bgv --example leveled_coefficients
 cargo run -p primus_bgv --example leveled_slots --features batching
-cargo run -p primus_bfv --example slots --features batching
 cargo run -p primus_bfv --example leveled_coefficients
 cargo run -p primus_bfv --example leveled_slots --features batching
 cargo check -p primus_bgv --lib --no-default-features
 cargo check -p primus_encoding --lib --no-default-features --features batching
 just bench-smoke primus_bgv leveled --features batching
 just bench-smoke primus_bfv multiplication --features batching
+python3 scripts/check_scheme_consumers.py
 ```
 
 BGV `workflow` 的一次迭代包含 encode/embed、真实公钥加密、plain-add、dense
@@ -108,15 +112,22 @@ plain-mul、精确恢复和 extract/decode，预分配与建钥在计时外。�
 [BGV](../../crates/primus_bgv/README.zh_CN.md)、[BFV](../../crates/primus_bfv/README.zh_CN.md)
 及[共享编码](../../crates/primus_encoding/README.zh_CN.md)。
 
-BFV `multiplication` 单独比较相同密文上的 exact RNS NTT 与 integer schoolbook
-乘法，再测量包含 encode/embed、两次 fresh 公钥加密、mul/square/relin、行旋转、
-跨 client 换钥、两次 BFV rounded drop 和恢复/decode 的完整请求。计时不包含
-context、auxiliary P、keys 与 scratch 准备；`-- --test` 只是正确性 smoke，不能
-替代统计采样。RNS NTT 默认路径精确保留 integer tensor，P>NQ 在构造时检查；
-reference fallback 独立分配其整数 workspace。完整代数与固定 Delta 误差见
-[BFV 求值契约](bfv-evaluation.md)。普通测试分开核对 raw/scaled 组件、任意宽
+BFV `multiplication` 消费普通 `BfvMultiplication` 预备入口，测量包含 encode/embed、
+两次 fresh 公钥加密、mul/square/relin、行旋转、跨 client 换钥、两次 BFV rounded
+drop 和恢复/decode 的完整请求。为可比历史完整请求，它显式指定相同的 computation-only
+P；普通示例由入口自动准备 P。计时不包含 context、auxiliary P、keys 与 scratch 准备；
+`-- --test` 只是正确性 smoke，不能替代统计采样。RNS NTT 路径精确保留 integer
+tensor，P>NQ 在构造时检查。独立 integer schoolbook 及 raw/scaled/key-column 检查
+留在私有数学测试，默认 API 不为 test/bench 暴露内部表示，数学独立性不依赖可见性。
+完整代数与固定 Delta 误差见 [BFV 求值契约](bfv-evaluation.md)。普通测试核对任意宽
 schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配；不得
 把成功的解密往返当作整数取整或噪声证明。
+
+基础 `coefficients`、`slots` 只演示一次公钥计算与恢复；slots 先使用 n=N。
+显式 borrowed-secret/workspace、n<N 子环及跨 client 多级链留在高级例。
+`just schemes` 还运行 `scripts/check_scheme_consumers.py`：在临时 workspace 中，
+只用 examples 实际所需的普通依赖分别执行 BFV/BGV 的两条基础请求，避免 dev-dependencies
+或 workspace feature 合并掩盖接口问题。脚本不是公开验证 API。
 
 ## TFHE benchmarks
 
