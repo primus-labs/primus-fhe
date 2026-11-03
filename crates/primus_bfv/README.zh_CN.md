@@ -2,87 +2,129 @@
 
 [English](README.md) | 简体中文
 
-采用原生物理组件 `[c0,c1]`、phase `c0+c1*s` 的 BFV 系数加密与恢复。
-Rank-one 后端使用 `u64` 残数、`BarrettModulus<u64>` 和 `U64DcrtTable`；总模数
-Q 可以超过64位。与 `primus_glwe_rns` 共享数值秘密存储时，不改变实际系数秘密。
+采用原生组件 `[c0,c1]`、phase `c0+c1*s` 的 BFV 系数加密、线性/明文求值与
+rounded modulus switching。Rank-one 后端使用 `u64` 残数、`BarrettModulus<u64>`
+和 `U64DcrtTable`；总模数 Q 可以超过 64 位。与 `primus_glwe_rns` 共享秘密存储
+时，实际系数秘密不变。
 
-本 crate 负责 BFV 参数、密文/公钥语义、私钥/公钥消息加密和明文恢复。
-尚未提供完整 leveled evaluator、密文乘法/重线性化、slots 或模数链操作。
-唯一系数 codec 保留在 `primus_encoding`；RNS 算术、NTT、sampler 和秘密存储复用
-底层实现。
+本 crate 负责 BFV 参数、context、密文/公钥语义、client 和 evaluator。
+尚未提供密文乘法/重线性化和 SIMD slots。系数 codec 保留在 `primus_encoding`；
+算术、NTT、sampler 和秘密存储复用底层实现。
 
 ## 系数工作流
 
-运行完整[示例](examples/coefficients.rs)：
+运行完整的[多级示例](examples/leveled_coefficients.rs)：
 
 ```sh
-cargo run -p primus_bfv --example coefficients
+cargo run -p primus_bfv --example leveled_coefficients
 ```
 
-1. 用 `BfvParameters::try_new(N, t, gamma, &Q, secret_law, sigma)` 构造参数；
-   显式 Gaussian/CBD 分布使用 `try_with_error_distribution`。
-2. 根据 `poly_length()` 和 `base_q().moduli()` 准备一个 `U64DcrtTable`。
-   用 `encryption_parameters().secret_key_sampler()` 生成系数秘密，再用
-   `DcrtGlweSecretKey::from_coeff_secret_key` 转换。
-3. 绑定 `BfvSecretKeyContext::try_new(&key, &parameters, &table)`。需要时用
-   `BfvPublicKey::new(&client, rng)` 生成原生公钥，再构造
-   `BfvPublicKeyEncryptor::try_new(&public, &parameters, &table)`。
-4. 一次性分配 `BfvCiphertext`、明文输出和
-   `BfvDecryptWorkspace::new(&parameters)`，通过 `encrypt_to`、
-   `encrypt_centered_to`、`decrypt_to` 复用。
+1. 用 `BfvParameters::try_coefficients(N, t, &Q, secret_law, sigma)` 构造参数，
+   默认解码辅助模数为 `gamma=2^61-1`。高级调用方可通过 `try_new` 指定 gamma，
+   或通过 `try_with_error_distribution` 指定 gamma 和 Gaussian/CBD 误差分布。
+   所有构造器都会验证 codec 的互素/恢复条件；便利入口要求 `t < gamma`。
+2. 将参数移入 `BfvContext::try_new`，只准备最高层；或者通过
+   `try_with_levels(parameters, level_count)` 准备前缀模数链。数量包含第 0 层：
+   level 0 使用完整 Q，level `l` 去掉末尾 `l` 个 prime。只准备请求的低层 codec。
+3. 用 `BfvClient::generate(&context, rng)` 生成 client，或通过
+   `try_from_secret_key` 移入已有的变换域秘密。公钥加密先调用
+   `client.public_key(rng)`，再绑定 `context.public_key_encryptor(&public)`。
+4. 用 `context.new_ciphertext(level)` 和 N 系数明文输出一次性分配缓冲区，
+   通过 `client.encrypt_to`、`encrypt_centered_to` 和
+   `decrypt_to(ciphertext, level, output)` 复用。
+5. 用 `BfvEvaluator::new(&context, level)` 绑定密文加、减、取负，以及明文加法
+   和稠密 negacyclic 明文乘法。准备 `BfvModulusSwitch::new(&context, source_level)`，
+   通过 `switch_to` 去掉最后一个 prime，输出到下一个已准备的 level。
 
-两种系数入口都接受恰好 N 个 `[0,t)` 中的规范值。Unsigned 将 m 提升为 m；
+两种系数 embedding 都接受恰好 N 个 `[0,t)` 中的规范值。Unsigned 将 m 提升为 m；
 centered 使用 `[-floor(t/2), ceil(t/2))`。解密返回 `[0,t)` 中的规范值。
-这些是多项式系数，不是 SIMD slots。
+这些是系数，不是 slots。`BfvCiphertext::as_view` 和 `as_mut_view` 借用原始存储，
+无需复制。
 
-## 缩放与表示
+## 缩放与求值
 
 加密满足 `c0+c1*s = delta*lift(m)+e (mod Q)`，其中 `delta=floor(Q/t)`。
 私钥加密直接计算 `c0=delta*lift(m)+e-c1*s`，在 c0 唯一一次 NTT 前将编码
 融合进系数噪声。原生公钥加密计算 `c0=pk0*u+e0+delta*lift(m)`、
-`c1=pk1*u+e1`，复用一个 ephemeral 多项式，每个含噪组件只变换一次。
-普通操作不将整份密文转回 raw GLWE。
+`c1=pk1*u+e1`，复用一个 ephemeral 多项式，每个含噪组件变换一次。
+普通操作保持原生 BFV 存储。
+
+线性运算分别作用于两个组件。`add_plain_to`/`add_plain_assign` 将当前层
+乘过 delta 的明文 lift 加入 c0，保留 c1。`mul_plain_to`/`mul_plain_assign`
+用**未缩放**的明文 lift 乘两个组件，实现 `Z_t[X]/(X^N+1)` 中的乘法。
+明文运算显式传入 `PlaintextEmbedding`；centered lift 可以降低噪声放大。
+当 `delta*t != Q` 时，消息算术模 t 约简会引入编码漂移。
+
+从 Q 到 `Q'=Q/p` 的 switch 对每个组件执行精确的系数级最近舍入
+`round(c_i/p) mod Q'`。p 为奇数，整数输入不存在半整数平局。
+实现使用被丢弃残数的精确 centered lift，不使用 approximate Hybrid-RNS ModDown；
+只对被丢弃 limb 执行 INTT，再将其修正项变换到保留 limbs。
+Switch 引入组件舍入和缩放差异误差；每个目标层都需要独立满足完整恢复界限。
+代数、符号和噪声贡献见
+[RNS phase 约定](../../guides/development/rns-phase-conventions.md)（English）。
+
+## 恢复与层级
+
+每层拥有一个 `delta=floor(Q_level/t)`、共享 t/gamma 的 codec。恢复通过
+`{t,gamma}` 快速基转换和辅助修正实现，**在 codec 的恢复界限内得到精确消息**；
+它不是任意 phase 的精确舍入 oracle。系数 phase 为 `delta*m+e` 时，充分条件为
+`abs(t*e-(Q_level % t)*m)/Q_level + k/gamma < 1/2`，k 为该层 prime 数量。
+`codec(level).validate_noise_bound` 根据完整误差幅度与 embedding 验证覆盖所有
+消息的保守界限。
+
+参数构造检查 sampling/basis 配对，并用误差分布的完整支撑验证 fresh 私钥恢复
+充分条件。低层构造检查 noiseless codec 恢复。两者都不证明安全级别或公钥/求值后
+恢复。目标层的完整误差必须包含公钥噪声、全部求值/漂移项，以及每次 switch 的
+舍入误差。一次 fresh 加密成功不能证明整条链计算后的恢复。
+
+密文携带存储，不携带已认证的 level、密钥或变换身份。操作检查完整长度，构造器
+检查数值模数顺序和 geometry；调用方仍需保证实际 level、规范 NTT 残数、相同的
+实际系数秘密，以及 context 的 roots/evaluation order。相同长度和模数不能证明
+这些身份。优化 u64 NTT 后端要求 Q prime 小于 `2^62` 且与 N 兼容。
+
+## 高级显式工作流
+
+[加密示例](examples/coefficients.rs) 展示较低层的 `BfvSecretKeyContext`、
+显式 `U64DcrtTable` 和 `BfvDecryptWorkspace` 绑定。`size()` 维护 geometry；
+`base_q()` 维护 basis 算术；`codec()` 维护缩放/恢复常量；
+`encryption_parameters()` 维护 sampler。其他工作流已有这些资源时，仍可使用
+显式绑定。
 
 `encrypt_plaintext_lift_crt_to` 接受**未缩放**的规范 CRT lifts，采用系数域、
 modulus-major Q 顺序，恰好乘一次 delta。`encrypt_encoded_crt_to` 接受
 **已经缩放**的规范 phase（包括 codec 输出），不再乘 delta。将已编码输出传入
-lift 入口会重复缩放。方法名明确区分两种语义，不增加中间多项式。
-
-`phase_to` 输出一个 **DCRT** 多项式，不执行 INTT 或解码。`decrypt_to` 计算
-phase、执行 INTT，再调用唯一 BFV codec。`size()` 维护存储几何；`base_q()`
-维护 basis 算术；`codec()` 维护缩放/恢复常量；`encryption_parameters()` 维护
-预备 sampler。BFV 不再逐项转发底层访问器。
+lift 入口会重复缩放。`phase_to` 输出 DCRT，不执行 INTT 或解码；较低层
+`decrypt_to` 使用显式 scratch 完成这些操作。
 
 Raw GLWE 保留 `[a,b]` 与 `b-a*s`。`write_raw_glwe_to` 显式写出
 `[a=-c1,b=c0]`；`set_from_raw_glwe` 导入 `[c0=b,c1=-a]`。边界转换复制并取负
 规范残数，不分配、不执行 NTT。[Hybrid-RNS 示例](examples/hybrid_rns_key_switch.rs)
 及 raw 对照基准使用这些桥接，因为现有 switching/GGSW 密钥保持 raw 语义。
-`gadget_parameters` 为这些 raw 消费者准备分解权重，不携带加密 sampler，也不是
-原生 BFV evaluator。
-
-组件、tensor、求值密钥和 opening 的符号推导见
-[RNS phase 约定](../../guides/development/rns-phase-conventions.md)（English）。
+`gadget_parameters` 为这些 raw 消费者准备不含 codec 的分解权重，它不是原生
+BFV 求值密钥。
 
 ## 资源与验证
 
-Prepared `*_to` 调用不分配临时存储。公钥 `encrypt_plaintext_lift_crt` 和私钥
-`decrypt` 便利方法只分配返回结果。公钥 encryptor 拥有一个 ephemeral workspace，
-需要可变访问；并发使用不同 encryptor，共享密钥、参数和 table。解密复用一个
-phase buffer 和恰好 `codec().decode_scratch_len(N)` 个转换元素，单 Q prime 的
-转换 buffer 长度为零。
+Context 拥有一份完整 basis 的 NTT table、一份最高层参数，以及每个请求的低层
+各一份 codec。Client/evaluator 借用这些资源。Client 拥有一份最高层变换域秘密
+和一份恢复 workspace；低层恢复借用它们的前缀，不复制秘密、不新建 sampler。
+Workspace 包含 phase buffer，以及恰好最高层 codec 的 `decode_scratch_len(N)`
+个转换元素；低层 codec 复用对应前缀。单 prime codec 不需要转换元素。
 
-Ephemeral/解密 scratch 在 drop 时擦除。显式 `workspace_mut().zeroize()` 或
-`Zeroize::zeroize(&mut decrypt_workspace)` 擦除内容并保留 allocation/geometry。
-调用会覆盖 scratch，不在每次操作后额外扫描擦除。
+Evaluator 拥有一个可复用明文多项式；switch 拥有一个 N 系数 dropped-limb buffer
+及预备常量。Prepared `*_to` 和 `*_assign` 操作不分配临时存储。
+`new_ciphertext` 和 `decrypt` 分配返回结果。公钥 encryptor 拥有一个 ephemeral
+workspace。并发操作使用独立的可变 workspace owner，可以共享不可变 context/
+密钥资源。秘密和 ephemeral/恢复 scratch 在 drop 时擦除。显式
+`workspace_mut().zeroize()` 或 `Zeroize::zeroize(&mut decrypt_workspace)`
+保留 allocation/geometry；调用会覆盖 scratch，不在每次操作后额外扫描擦除。
 
-参数构造验证 sampling/basis 配对，并用误差分布的完整支撑验证 fresh 私钥恢复
-充分条件。它不证明公钥/求值后的恢复条件或安全级别。实际秘密和 NTT
-root/evaluation identity 由调用方保证。操作绑定只检查一次 geometry 和数值模数
-顺序，不再引入独立公开 Domain 类型。优化 u64 NTT 后端要求 Q prime 小于 `2^62`
-且与 N 兼容。
-
-完整长度错误在采样/写入前拒绝。Codec 在采样噪声后、c0 NTT 前检查系数范围；
-codec/RNG/NTT panic 可能留下部分输出或 scratch。精确契约以方法 rustdoc 为准。
+完整长度错误在输出/scratch 写入或采样前拒绝。`BfvClient` 还在消耗 RNG 前检查
+全部明文系数。较低层 `BfvSecretKeyContext` 和 `BfvPublicKeyEncryptor` 的系数
+入口通过 codec 在噪声采样后、c0 NTT 前检查数值。Evaluator 明文入口在输出/
+scratch 写入前检查全部数值。密文和 CRT 输入的表示/残数范围仍是未检查的数学
+前提。RNG/NTT/codec panic 可能留下部分输出或 scratch；精确契约以方法 rustdoc
+为准。
 
 ## Features 与检查
 
@@ -91,14 +133,16 @@ codec/RNG/NTT panic 可能留下部分输出或 scratch。精确契约以方法 
 ```sh
 cargo check -p primus_bfv --all-targets
 cargo test -p primus_bfv --lib --tests
+cargo run -p primus_bfv --example leveled_coefficients
 cargo run -p primus_bfv --example coefficients
 cargo run -p primus_bfv --example hybrid_rns_key_switch
 cargo clippy -p primus_bfv --all-targets -- -D warnings
+cargo bench -p primus_bfv --bench leveled
 cargo bench -p primus_bfv --bench public_encryption
 cargo bench -p primus_bfv --bench key_switching
 ```
 
-测试使用小规模功能参数。Direct-DFT/u128 oracle 根据真实系数秘密检查原生组件
-符号、共同 RNS 残差、公钥 phase、embedding 和精确恢复；还覆盖显式 raw 桥接、
-错误重复缩放负例、完整长度/basis 检查、错误来源、workspace 复用/擦除及独立分配
-契约。Criterion 测量明确工作流；raw 对照计时不包含 setup 中的桥接。
+小规模功能测试通过独立 direct-DFT/schoolbook 和整数舍入 oracle 检查 phase、
+稠密乘法、embedding、边界值与多级计算，还覆盖 raw 桥接、错误重复缩放、完整
+检查、workspace 复用/擦除及分配契约。Criterion 在资源预备后测量独立操作和完整
+加密/求值/两次 switch/解密请求。Raw 对照计时不包含 setup 中完成的桥接。

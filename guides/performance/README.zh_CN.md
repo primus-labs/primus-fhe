@@ -8,6 +8,7 @@
 
 | 主题 | 正文语言 | 保留价值 |
 | --- | --- | --- |
+| [BFV 系数工作流](bfv-leveled-coefficients.md) | English | 精确舍入降模的资源选择与完整系数请求成本 |
 | [Sparse算术与调度](sparse-arithmetic.md) | English | 当前聚合、canonical NTT边界、16 KiB tile、4/2/1所有权及负向控制 |
 | [NTRU投影](ntru-projection-fusion.md) | English | NTT四策略、Fourier paired/共享成本，以及历史binary完整请求未达门槛的证据 |
 | [Fourier GLWE建钥](fourier-glwe-keygen.md) | 中文 | 精确native行修复、旧密钥更换、准备/存储成本与浮点限制 |

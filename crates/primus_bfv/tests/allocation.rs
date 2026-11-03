@@ -1,8 +1,8 @@
 //! Allocation contracts are checked separately from performance measurements.
 
 use primus_bfv::{
-    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
-    BfvSecretKeyContext, PlaintextEmbedding,
+    BfvCiphertext, BfvClient, BfvContext, BfvDecryptWorkspace, BfvEvaluator, BfvModulusSwitch,
+    BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor, BfvSecretKeyContext, PlaintextEmbedding,
 };
 use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
@@ -177,4 +177,79 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         0
     );
     assert_eq!(output, input);
+}
+
+#[test]
+fn prepared_leveled_request_and_each_evaluator_family_allocate_nothing() {
+    let parameters = BfvParameters::new(
+        PolyLength::new(32),
+        BarrettModulus::new(257),
+        BarrettModulus::new(2_199_023_190_017),
+        &[
+            1_125_899_906_826_241,
+            1_125_899_906_629_633,
+            1_125_899_906_031_617,
+        ]
+        .map(BarrettModulus::new),
+        SecretKeyDistr::UniformBinary,
+        1.0,
+    );
+    let context = BfvContext::try_with_levels(parameters, 3).unwrap();
+    let mut rng = StdRng::seed_from_u64(0x6063);
+    let mut client = BfvClient::generate(&context, &mut rng);
+    let mut evaluator = BfvEvaluator::new(&context, 0);
+    let mut first_drop = BfvModulusSwitch::new(&context, 0);
+    let mut second_drop = BfvModulusSwitch::new(&context, 1);
+    let message = Polynomial(vec![1; 32]);
+    let multiplier = Polynomial(vec![256; 32]);
+    let mut input = context.new_ciphertext(0);
+    let mut output = context.new_ciphertext(0);
+    let mut middle = context.new_ciphertext(1);
+    let mut final_ciphertext = context.new_ciphertext(2);
+    let mut decoded = Polynomial::<Vec<u64>>::zero(32);
+    let embedding = PlaintextEmbedding::Centered;
+    client.encrypt_centered_to(&message, &mut input, &mut rng);
+    assert_eq!(
+        observe(|| evaluator.add_to(&input, &input, &mut output)).1,
+        0
+    );
+    assert_eq!(observe(|| evaluator.add_assign(&mut output, &input)).1, 0);
+    assert_eq!(
+        observe(|| evaluator.sub_to(&input, &input, &mut output)).1,
+        0
+    );
+    assert_eq!(observe(|| evaluator.sub_assign(&mut output, &input)).1, 0);
+    assert_eq!(observe(|| evaluator.neg_to(&input, &mut output)).1, 0);
+    assert_eq!(observe(|| evaluator.neg_assign(&mut output)).1, 0);
+    assert_eq!(
+        observe(|| evaluator.add_plain_to(&input, &message, &mut output, embedding)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| evaluator.add_plain_assign(&mut output, &message, embedding)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| evaluator.mul_plain_to(&input, &multiplier, &mut output, embedding)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| evaluator.mul_plain_assign(&mut output, &multiplier, embedding)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| {
+            client.encrypt_centered_to(&message, &mut input, &mut rng);
+            evaluator.add_plain_assign(&mut input, &message, embedding);
+            evaluator.mul_plain_to(&input, &multiplier, &mut output, embedding);
+            first_drop.switch_to(&output, &mut middle);
+            second_drop.switch_to(&middle, &mut final_ciphertext);
+            client.decrypt_to(&final_ciphertext, 2, &mut decoded);
+        })
+        .1,
+        0
+    );
+    let (allocated, count) = observe(|| client.decrypt(&final_ciphertext, 2));
+    assert_eq!(count, 1);
+    assert_eq!(allocated, decoded);
 }

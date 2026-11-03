@@ -8,11 +8,13 @@ primus_data = { path = "../primus_data" }
 primus_decompose = { path = "../primus_decompose" }
 primus_distr = { path = "../primus_distr" }
 primus_encoding = { path = "../primus_encoding", features = ["rns"] }
+primus_factor = { path = "../primus_factor" }
 primus_glwe_rns = { path = "../primus_glwe_rns" }
 primus_lattice = { path = "../primus_lattice", features = ["rns"] }
 primus_modulus = { path = "../primus_modulus" }
 primus_ntt = { path = "../primus_ntt" }
 primus_poly = { path = "../primus_poly" }
+primus_reduce = { path = "../primus_reduce" }
 primus_rns = { path = "../primus_rns" }
 primus_shape = { path = "../primus_shape" }
 rand = { workspace = true }
@@ -21,6 +23,7 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+dashu-int = { workspace = true }
 
 [features]
 default = []
@@ -32,4 +35,8 @@ harness = false
 
 [[bench]]
 name = "public_encryption"
+harness = false
+
+[[bench]]
+name = "leveled"
 harness = false

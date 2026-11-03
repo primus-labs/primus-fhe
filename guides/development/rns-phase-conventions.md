@@ -25,11 +25,71 @@ storage, without allocating or transforming. It is not a cast. It does not negat
 the secret or change a binary secret distribution into `{0,-1}`. Basis, canonical
 residues, secret identity and NTT conventions remain caller requirements.
 
-Native BFV encryption/recovery, physical components and this bridge are implemented.
-Native BFV evaluation keys/evaluators, BFV ciphertext multiplication/relinearization,
-BGV, and collective SSLE opening protocols are **not** implemented by this change.
-The following equations specify future work and explain existing raw consumers;
+Native BFV encryption/recovery, linear/plaintext evaluation, exact rounded prime
+drop, physical components and this bridge are implemented. Native BFV evaluation
+keys, ciphertext multiplication/relinearization, BGV, and collective SSLE opening
+protocols are **not** implemented. The tensor/key equations below specify future
+work and explain existing raw consumers;
 they do not claim that a native GGSW/relinearization backend exists.
+
+## Coefficient evaluation, recovery and exact prime drop
+
+[BfvContext](../../crates/primus_bfv/src/context.rs) owns one highest-level sampler
+and NTT table, plus one codec for each requested ordered Q prefix. Level zero uses
+all primes. [BfvClient](../../crates/primus_bfv/src/client.rs) stores one full-basis
+secret and borrows its prefix for lower-level recovery. Each level retains N and t;
+level selection does not reduce the secret's coefficient ring.
+
+For `Delta=floor(Q/t)`, let `r=Q mod t` and `phase=Delta*m+e mod Q`, where m is an
+integer polynomial lift. Linear operations add/subtract/negate both components.
+Plaintext addition injects `Delta*u` only into c0; plaintext multiplication
+multiplies **both** components by the unscaled lift u. No additional Delta enters
+that multiplication. If the resulting integer message v is replaced by a chosen
+canonical/centered lift `m_out` with `v=m_out+t*h`, its error becomes
+
+```text
+linear/plain-mul:  e_out = e_operation - r*h  (mod Q).
+plain-mul:        e_operation = e*u.
+```
+
+The term `-r*h` follows from `Delta*t=Q-r`; omitting it incorrectly reuses fresh
+encryption bounds after message reduction. For a recoverable phase the unique
+fast codec returns the exact plaintext. Its sufficient condition is
+`abs(t*e-r*m)/Q + k/gamma < 1/2` coefficientwise, where k is the number of Q primes.
+This bounded decoder is not an exact `round(t*x/Q)` function on arbitrary phases.
+`codec.validate_noise_bound(E, embedding)` checks a conservative uniform version;
+it does not measure an evaluated ciphertext's noise.
+
+[BfvModulusSwitch](../../crates/primus_bfv/src/modulus_switch.rs) drops the last
+odd prime p, taking `Q'=Q/p`. For a component coefficient x in `[0,Q)`, let
+`z=centered(x mod p)`; the exact result is
+
+```text
+x' mod qi = (x mod qi - z mod qi) * p^-1 mod qi
+           = round(x/p) mod qi.
+```
+
+Only the dropped input limb is inverse-transformed. The centered correction is
+lifted and forward-transformed in each retained limb; those input limbs stay in
+NTT form. This uses one reusable N-element buffer, no online big integers and no
+approximate CRT lift. For integer x and odd a,b, nearest rounding composes exactly:
+`R_b(R_a(x))=R_(a*b)(x)`, since `(a-1)/2+a*(b-1)/2=(a*b-1)/2`. Reduction modulo
+the intermediate Q prefix does not change the final residue. Thus consecutive
+exact prime drops agree with division by the product, including wrap to zero.
+
+Let `rho_i=round(c_i/p)-c_i/p` using unreduced integer output lifts, so
+`abs(rho_i)<1/2`. With `Delta'=floor(Q'/t)`, the destination phase error satisfies
+
+```text
+e' = e/p + (Delta/p-Delta')*m + rho_0 + rho_1*s  (mod Q').
+```
+
+Rho times s is negacyclic multiplication. A sufficient magnitude bound includes
+`(1+||s||_1)/2` as well as the scaled old error and encoding drift. Equivalently,
+`eta=t*e-r*m` obeys `eta'=eta/p+t*(rho_0+rho_1*s)`. Apply this at every level and
+check the destination codec margin. A valid context alone establishes neither
+this complete evaluated bound nor a security level. For a complete public API
+workflow, see [leveled coefficients](../../crates/primus_bfv/examples/leveled_coefficients.rs).
 
 ## Tensor products and relinearization
 

@@ -1,6 +1,7 @@
 use primus_data::{Data, DataMut};
 use primus_encoding::PlaintextEmbedding;
 use primus_glwe_rns::{DcrtGlweSecretKey, RnsDomainError};
+use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial, PolynomialOwned};
 
@@ -34,6 +35,18 @@ impl<'a> BfvSecretKeyContext<'a> {
             parameters,
             table,
         })
+    }
+
+    pub(crate) fn from_validated(
+        key: &'a DcrtGlweSecretKey<u64>,
+        parameters: &'a BfvParameters,
+        table: &'a U64DcrtTable,
+    ) -> Self {
+        Self {
+            key,
+            parameters,
+            table,
+        }
     }
 
     pub(crate) fn parameters(&self) -> &'a BfvParameters {
@@ -166,11 +179,14 @@ impl<'a> BfvSecretKeyContext<'a> {
             self.parameters.size().rns_poly_len(),
             "BFV phase output length mismatch"
         );
-        let (c0, c1) = input.c0_c1(self.parameters.size().rns_poly_len());
-        output.as_mut().copy_from_slice(c0.as_ref());
-        output.add_mul_assign(
-            &c1,
-            &self.key.iter_dcrt_poly().next().expect("rank-one secret"),
+        phase_with_secret_to(
+            input,
+            self.key
+                .iter_dcrt_poly()
+                .next()
+                .expect("rank-one secret")
+                .as_ref(),
+            output,
             self.parameters.poly_length().get(),
             self.parameters.base_q().moduli(),
         );
@@ -299,4 +315,21 @@ impl<'a> BfvSecretKeyContext<'a> {
             parameters.base_q().moduli(),
         );
     }
+}
+
+// Both public entry points establish full geometry. Lower-level recovery borrows
+// the already validated highest-level secret prefix rather than copying a key.
+pub(crate) fn phase_with_secret_to<A, B>(
+    input: &BfvCiphertext<A>,
+    secret: &[u64],
+    output: &mut DcrtPolynomial<B>,
+    n: usize,
+    moduli: &[BarrettModulus<u64>],
+) where
+    A: Data<Elem = u64>,
+    B: DataMut<Elem = u64>,
+{
+    let (c0, c1) = input.c0_c1(secret.len());
+    output.as_mut().copy_from_slice(c0.as_ref());
+    output.add_mul_assign(&c1, &DcrtPolynomial(secret), n, moduli);
 }

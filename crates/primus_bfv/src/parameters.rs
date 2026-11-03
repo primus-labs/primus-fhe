@@ -44,6 +44,33 @@ pub struct BfvParameters {
 }
 
 impl BfvParameters {
+    /// Prepares Gaussian coefficient parameters with the default decoder modulus.
+    ///
+    /// Uses the prime `gamma = 2^61 - 1`, so the ordinary coefficient workflow
+    /// does not require an auxiliary-modulus choice. This requires `t < gamma`
+    /// and the usual codec coprimality/recovery conditions. Use [`Self::try_new`]
+    /// or [`Self::try_with_error_distribution`] for an explicit auxiliary modulus
+    /// or error law. This convenience establishes no security level.
+    ///
+    /// # Errors
+    /// Returns the same parameter, sampling and recovery errors as [`Self::try_new`].
+    pub fn try_coefficients(
+        poly_length: PolyLength,
+        plain_modulus: BarrettModulus<u64>,
+        cipher_moduli: &[BarrettModulus<u64>],
+        secret_key_distr: SecretKeyDistr,
+        noise_standard_deviation: f64,
+    ) -> Result<Self, BfvParametersError> {
+        Self::try_new(
+            poly_length,
+            plain_modulus,
+            BarrettModulus::new((1 << 61) - 1),
+            cipher_moduli,
+            secret_key_distr,
+            noise_standard_deviation,
+        )
+    }
+
     /// Prepares Gaussian BFV parameters, panicking on [`Self::try_new`]'s errors.
     #[must_use]
     pub fn new(

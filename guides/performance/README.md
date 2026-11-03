@@ -10,6 +10,7 @@ and [benchmark guide](../development/testing.md#tfhe-benchmarks).
 
 | Topic | Language | What remains useful |
 | --- | --- | --- |
+| [BFV coefficient workflow](bfv-leveled-coefficients.md) | English | Exact rounded prime-drop resources and complete coefficient-request costs |
 | [Sparse arithmetic and scheduling](sparse-arithmetic.md) | English | Current grouping, canonical NTT boundaries, 16 KiB tiles, 4/2/1 ownership and retained negative controls |
 | [NTRU projection](ntru-projection-fusion.md) | English | Four NTT strategies, Fourier paired/sharing costs and historical binary full-request failure gate |
 | [Fourier GLWE key generation](fourier-glwe-keygen.md) | 中文 | Exact native-row repair, key replacement, setup/storage costs and floating-point limits |
