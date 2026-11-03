@@ -33,7 +33,7 @@ impl<'a> BfvMultiplication<'a> {
         context: &'a BfvContext,
         key: &'a BfvRelinearizationKey,
     ) -> Result<Self, BfvMultiplyError> {
-        let relinearizer = BfvRelinearizer::try_new(context, key.level(), key)?;
+        let relinearizer = BfvRelinearizer::try_new(context, key)?;
         Ok(Self {
             multiplier: BfvMultiplier::try_with_default_basis(context, key.level())?,
             relinearizer,
@@ -54,7 +54,7 @@ impl<'a> BfvMultiplication<'a> {
         key: &'a BfvRelinearizationKey,
         auxiliary_moduli: &[u64],
     ) -> Result<Self, BfvMultiplyError> {
-        let relinearizer = BfvRelinearizer::try_new(context, key.level(), key)?;
+        let relinearizer = BfvRelinearizer::try_new(context, key)?;
         Ok(Self {
             multiplier: BfvMultiplier::try_new(context, key.level(), auxiliary_moduli)?,
             relinearizer,

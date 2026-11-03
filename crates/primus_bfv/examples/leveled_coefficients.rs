@@ -58,8 +58,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let relin_key = alice.relinearization_key(0, config, &mut rng)?;
     let auto_key = alice.automorphism_key(1, 5, config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
-    let mut auto = BfvAutomorphism::try_new(&context, 1, &auto_key)?;
-    let mut switch = BfvKeySwitcher::try_new(&context, 1, &switch_key)?;
+    let mut auto = BfvAutomorphism::try_new(&context, &auto_key)?;
+    let mut switch = BfvKeySwitcher::try_new(&context, &switch_key)?;
     let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
     let mut lower_evaluator = BfvEvaluator::new(&context, 1);
     let mut drop_first = BfvModulusSwitch::new(&context, 0);

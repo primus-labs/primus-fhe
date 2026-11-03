@@ -50,7 +50,9 @@ Rounded 编码对整数提升舍入，中点远离零。两种单模数 codec �
 
 启用 `batching` 后，对满足 `p = 1 mod 2n` 的素数明文模数，构造并复用 `BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(p))`。已有 `U64NttTable` 要求 `p < 2^62`，`PolyLength` 支持范围从 `n = 32` 开始。与底层 NTT 相同，素性是调用方前提；构造器检查变换是否可用。
 
-布局有两行，每行 `n/2` 个槽，分别在最小本原 `2n` 次单位根的 `5^j` 和 `-5^j` 次幂上求值。`encode_to(slots, coefficients)` 接受不超过 `n` 个槽的前缀，将缺省槽清零，并输出恰好 `n` 个系数。`decode_to(coefficients, slots, scratch)` 要求三个切片长度均恰好为 `n`。这些 prepared 调用不分配内存，并在写入前检查明文规范范围与完整长度。
+布局有两行，每行 `n/2` 个槽，分别在最小本原 `2n` 次单位根的 `5^j` 和 `-5^j` 次幂上求值。普通调用可用 `encode(slots)` 返回 `n` 个系数，将槽前缀的缺省部分补零；`decode(coefficients)` 从恰好 `n` 个规范系数返回全部 `n` 个有序槽。编码分配一个结果向量；解码分配结果及一个临时 `n` 元素变换缓冲区。两种入口都要求输入值在 `[0,p)` 内，并复用下面的 prepared 操作。
+
+`encode_to(slots, coefficients)` 接受不超过 `n` 个槽的前缀，将缺省槽清零，并输出恰好 `n` 个系数。`decode_to(coefficients, slots, scratch)` 要求三个切片长度均恰好为 `n`。这些 prepared 调用不分配内存，并在写入前检查明文规范范围与完整长度。
 
 `rotation_exponent(k)` 返回使每行向左移动 `k` 个槽的多项式自同构指数；负数表示向右旋转。`row_swap_exponent()` 交换两行而不反转行内顺序。`automorphism_slots_to` 执行对应的**明文**置换。密文自同构及密钥切换属于方案层。
 

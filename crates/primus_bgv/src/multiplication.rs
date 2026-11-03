@@ -27,7 +27,7 @@ impl<'a> BgvMultiplication<'a> {
         key: &'a BgvRelinearizationKey,
     ) -> Result<Self, BgvEvaluationKeyError> {
         let level = key.level();
-        let relinearizer = BgvRelinearizer::try_new(context, level, key)?;
+        let relinearizer = BgvRelinearizer::try_new(context, key)?;
         Ok(Self {
             context,
             level,

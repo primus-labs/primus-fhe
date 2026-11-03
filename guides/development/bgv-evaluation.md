@@ -82,6 +82,21 @@ RNS limbs does not create the lower key. The distinct role types prevent passing
 a key with the wrong semantic role; binding checks N,p,ordered Q and level index.
 Those checks cannot authenticate same-parameter actual secrets or NTT conventions.
 
+`BgvRelinearizer::try_new(context,key)`, `BgvKeySwitcher::try_new(context,key)`
+and `BgvAutomorphism::try_new(context,key)` derive the level from the key, just
+like `BgvMultiplication`. The context must prepare that level and match N, p and
+ordered Q. Key generation, linear evaluators, decryption and modulus switching
+still require an explicit level; storage alone cannot establish one.
+
+With `batching`, use `context.batching_encoder()` for full-ring slots without
+repeating N/p. A smaller encoder remains an explicit advanced choice.
+`client.row_rotation_key(level,&encoder,steps,config,rng)` uses signed row-left
+steps modulo the row length, while `row_swap_key(level,&encoder,config,rng)`
+exchanges rows. They validate the encoder's p and capacity before sampling and
+return the existing automorphism-key type. The encoder's exponent algorithm,
+native key generation and prepared operation are shared with the explicit
+`automorphism_key` entry; no extra table or operation owner is retained.
+
 ## Exact plaintext-preserving prime drop
 
 Let q be the last prime, Q'=Q/q and x any coefficient lift of a component.

@@ -5,7 +5,6 @@ use primus_bfv::{BfvClient, BfvContext, BfvMultiplication, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
-use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -35,18 +34,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
 
-    let mut message = Polynomial::<Vec<u64>>::zero(N);
+    // Setup and the multiplication/output owner are reused across requests.
+    let mut message = context.new_plaintext();
     message.as_mut()[..3].copy_from_slice(&[1, 2, 3]);
-    let mut factor = Polynomial::<Vec<u64>>::zero(N);
-    factor.as_mut()[0] = 7;
-    let encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
-    let encrypted_factor = encryptor.encrypt_centered(&factor, &mut rng);
+    let mut factor = context.new_plaintext();
+    let mut expected = context.new_plaintext();
     let mut product = context.new_ciphertext(0);
-    multiplication.multiply_to(&encrypted_message, &encrypted_factor, &mut product);
-    let recovered = client.decrypt(&product, 0);
-    let mut expected = vec![0; N];
-    expected[..3].copy_from_slice(&[7, 14, 21]);
-    assert_eq!(recovered.as_ref(), expected);
-    println!("BFV: (1 + 2X + 3X²) × 7 = 7 + 14X + 21X²");
+    for scalar in [7, 11] {
+        factor.as_mut()[0] = scalar;
+        let encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
+        let encrypted_factor = encryptor.encrypt_centered(&factor, &mut rng);
+        multiplication.multiply_to(&encrypted_message, &encrypted_factor, &mut product);
+        let recovered = client.decrypt(&product, 0);
+        expected.as_mut()[..3].copy_from_slice(&[scalar, 2 * scalar, 3 * scalar]);
+        assert_eq!(recovered, expected);
+    }
+    println!("BFV: reused one setup to multiply (1 + 2X + 3X²) by 7 and 11");
     Ok(())
 }

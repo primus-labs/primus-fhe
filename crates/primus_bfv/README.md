@@ -11,7 +11,7 @@ shared with the lower crates. Optional `batching` adds shared slot encoding.
 ## Coefficient workflow
 
 Start with [coefficients](examples/coefficients.rs): public encryption, one
-ciphertext multiplication and coefficient recovery.
+ciphertext multiplication and coefficient recovery, with one setup reused for two requests.
 
 ```sh
 cargo run -p primus_bfv --example coefficients
@@ -21,12 +21,16 @@ cargo run -p primus_bfv --example coefficients
    it into `BfvContext::try_new(parameters)`.
 2. Generate `BfvClient::generate(&context,rng)`, create `client.public_key(rng)`
    and bind `context.public_key_encryptor(&public_key)`.
-3. Encrypt a polynomial with `encryptor.encrypt_centered(&message,rng)`.
+3. Prepare plaintexts with `context.new_plaintext()` and ciphertext outputs with
+   `context.new_ciphertext(level)`; their lengths come from the context.
 4. Generate `client.relinearization_key(level,config,rng)` and prepare
    `BfvMultiplication::try_new(&context,&relin_key)` once. Its `multiply_to`
    and `square_to` return ordinary degree-one ciphertexts; `square_assign`
    overwrites the input. Internal scale/relinearization scratch is reused.
-5. Recover the result with `client.decrypt(&ciphertext,level)`.
+5. Reuse setup and the prepared multiplication for each request. The basic
+   example uses `encrypt_centered` and `decrypt`, which allocate their results;
+   `multiply_to` reuses its output. Use `encrypt_centered_to` and `decrypt_to`
+   when caller-owned buffers and zero online allocation are needed.
 
 The multiplication takes its level from the key and prepares computation-only
 auxiliary primes automatically. They never enlarge the encryption/key modulus.
@@ -43,18 +47,29 @@ one-off calls; prepared `*_to` calls reuse caller-owned outputs.
 
 Enable `batching` and run [slots](examples/slots.rs). It uses `n=N`, directly
 encodes two slot vectors, multiplies them and rotates each row by one under
-an encrypted automorphism key.
+an encrypted automorphism key. Two requests reuse setup, prepared operations
+and evaluation outputs; `encode`, `decode`, encryption and recovery allocate
+their results. Advanced examples and benches use `*_to` with reusable scratch.
 
 ```sh
 cargo run -p primus_bfv --example slots --features batching
 ```
 
-`BatchingEncoder` maps slots into two ±5^j rows. Use its `rotation_exponent`
-and `row_swap_exponent` with `BfvAutomorphism`; these execute ciphertext
-operations. The advanced [subring slots](examples/subring_slots.rs) and
+`context.batching_encoder()` prepares the existing `BatchingEncoder` from N/t;
+it owns one plaintext NTT table and is not cached or cloned by the context.
+Use `client.row_rotation_key(level,&encoder,steps,config,rng)` for a signed
+left rotation, with negative steps rotating right and wrapping within each row.
+`row_swap_key` exchanges the rows. Bind either key with
+`BfvAutomorphism::try_new(&context,&key)`, which derives its level from the key.
+Encoder modulus/capacity mismatches are rejected before random sampling.
+
+The advanced [subring slots](examples/subring_slots.rs) and
 [leveled slots](examples/leveled_slots.rs) examples embed `n<N` plaintexts
-while retaining full-N secrets and ciphertexts. Unused slots and off-stride
-padding are zero.
+while retaining full-N secrets and ciphertexts. These explicit encoders can
+support `n<N` even when full-N batching is unavailable for the chosen plaintext
+modulus. Unused slots and off-stride padding are zero. Generic
+`automorphism_key` and the encoder's exponent methods remain available for
+explicit polynomial substitutions.
 
 ## Evaluation and levels
 
@@ -71,7 +86,10 @@ using exact coefficientwise nearest rounding. Each destination has its own
 codec and must satisfy its complete error bound.
 
 Native role keys implement relinearization, source-to-recipient key switching
-and encrypted automorphisms. Generate a fresh key for every actual level used.
+and encrypted automorphisms. Their prepared constructors take `(&context,&key)`
+and derive the bound level. Key generation, unkeyed linear evaluation, prime drops
+and recovery still select their actual level explicitly. Generate a fresh key for
+every actual level used.
 BFV key columns have phase `g_j*h+e_j`; truncated decomposition residual and key
 noise both consume recovery margin. The maximum digit count need not remove
 all radix remainder bits. The complete [leveled coefficient](examples/leveled_coefficients.rs)

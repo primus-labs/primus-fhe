@@ -11,7 +11,8 @@ Coefficient p 可以是合数；batching 另有明文素数要求。
 
 从[系数示例](examples/coefficients.rs)开始：公钥加密 `3+2X` 和 `5+X`，
 做一次乘法，再恢复 `15+13X+2X²`。启用 `batching` 后运行
-[槽示例](examples/slots.rs)：n=N 的密文逐槽乘法与行旋转。
+[槽示例](examples/slots.rs)：n=N 的密文逐槽乘法与行旋转。两个基础例都只准备一次
+keys 和操作 scratch，然后使用分配便利接口执行两次请求。
 [多级系数示例](examples/leveled_coefficients.rs)和
 [多级槽示例](examples/leveled_slots.rs)展示 square、自同构、秘密切换和两次
 prime drop；后者也展示 n<N 子环。
@@ -19,6 +20,7 @@ prime drop；后者也展示 n<N 子环。
 1. 用 `BgvParameters::try_coefficients` 构造参数，或用
    `try_with_error_distribution` 显式选择 Gaussian/CBD。`BgvContext::try_new`
    准备一层；`try_with_levels(parameters,count)` 准备显式降模链。
+   `context.new_plaintext()` 从 context 推导 N，分配完整系数明文。
 2. `BgvClient::generate(&context,rng)` 拥有一份完整 N 秘密和可复用、drop 时擦除的
    恢复 scratch。保留 `client.public_key(rng)`，用
    `context.public_key_encryptor(&key)` 绑定公钥。Client 与公钥 encryptor 都提供
@@ -31,9 +33,12 @@ prime drop；后者也展示 n<N 子环。
    组件，add_plain 只改 c0，mul_plain 乘两个组件；显式选择 unsigned/centered
    `PlaintextEmbedding`。高级分阶段流程仍可用 `mul_to`/`square_to` 写显式
    `BgvQuadraticCiphertext`，再由 `BgvRelinearizer` 恢复两组件密文。
-5. 只生成实际需要的 `automorphism_key`、`key_switching_key`，预先绑定
-   `BgvAutomorphism` 或 `BgvKeySwitcher`。由目标 client 从 source client 生成换钥
-   材料；自同构 key 把 σ(s) 切换回 s。
+5. 槽行旋转使用 `client.row_rotation_key(level,&encoder,steps,config,rng)`，steps
+   支持正负；交换两行使用 `row_swap_key`。一般多项式映射保留 `automorphism_key`，
+   秘密切换使用 `key_switching_key`。预先绑定
+   `BgvAutomorphism::try_new(&context,&key)` 或 `BgvKeySwitcher::try_new(&context,&key)`，
+   这两者与 `BgvRelinearizer` 均从 role key 推导 level。由目标 client 从 source client
+   生成换钥材料；自同构 key 把 σ(s) 切换回 s。
 6. `BgvModulusSwitch::new(&context,level).switch_to` 丢弃相邻末 prime。随后用
    `client.decrypt_to(input,level,&mut output)` 恢复；便利 `decrypt` 只分配结果。
    这些操作不自动选择噪声策略或降模时机。
@@ -53,7 +58,7 @@ Level0 使用全部有序 primes；level l 丢弃最后 l 个。Context 拥有�
 被切换组件 a 在分解前先乘 Q 下的 p^-1；column phase 为 `p*g_j*h+p*e_j`，
 h 分别为 s²、source secret 或 σ(s)。Digit noise 与近似 residual 都成为 p 倍误差，
 不能直接照搬普通截断 BFV/GLWE 切换。三种 key 类型防止 relin/换钥/自同构角色误配；
-构造器拒绝错误 level、N、p 或有序 Q；实际 decomposition 和 columns 由各 role
+构造器拒绝未准备的 key level 或不同的 N、p、有序 Q；实际 decomposition 和 columns 由各 role
 实现持有。同参数下的实际 secret 身份仍是 caller 契约。
 
 丢末 prime q 的每组件精确商为 `(x-p*center_q(x*p^-1 mod q))/q mod (Q/q)`。
@@ -82,26 +87,31 @@ wrap 可能改变模 p 消息。
 
 ## 槽与子环
 
-可选 `batching` 使用 BFV 同样消费的共享 `primus_encoding::BatchingEncoder`。
-素数 p≡1 mod 2n 提供 ±5^j 两行的 n 槽。`encode_to` 对槽前缀补零，`embed_to`
+启用 `batching` 后，`context.batching_encoder()` 从已有 N/p 准备 BFV 同样消费的
+共享 `primus_encoding::BatchingEncoder`。Context 不缓存第二份 encoder 或明文表；
+p 不支持 full-N roots 时 factory 返回错误，系数算术仍可使用。显式 n<N packing
+使用 `BatchingEncoder::try_new(n,context.parameters().plain_modulus())`。
+素数 p≡1 mod 2n 提供 ±5^j 两行的 n 槽。`encode`、`decode` 分配返回结果（decode
+另分配临时 scratch）；准备输出和 scratch 后使用 `encode_to`、`decode_to`。`encode_to` 对槽前缀补零，`embed_to`
 映射 f(Y)→f(X^(N/n))；只有明文使用 n，实际秘密、误差、变换和密文保持 N。
 基础 n=N 示例直接编码到完整明文多项式，恢复后直接 decode。n<N 流程在 Full-N
 恢复后用 `extract_to` 验证子环支撑，再用 caller scratch decode；此时 p 不必
 支持 full-N plaintext NTT。
 
-用 `rotation_exponent(k)` 或 `row_swap_exponent()` 选择奇数 full-ring automorphism
-key，再由 `BgvAutomorphism::apply_to` 真正执行密文操作并切回原秘密。多级槽例使用
+`row_rotation_key` 将正负 steps 按 n/2 归一化；`row_swap_key` 交换两行而不反转。
+两者在消费 RNG 前验证 encoder 的 p 与 n≤N。`BgvAutomorphism::apply_to` 执行密文
+操作并切回原 full-N 秘密；一般指数选择仍显式调用 `automorphism_key`。多级槽例使用
 n32/N128/p193，旋转/交换两行并换到第二个 full-N secret；spare slots 在置换后的
 位置仍全部为零。
 
 ## 资源与命令
 
 Context 拥有 sampler/bases/table，client/evaluator/prepared key operations 借用它。
-Prepared 加密、tensor/square、线性/明文求值、relin/换钥/auto、相邻 prime drop 和
+Prepared `_to`/`_assign` 加密、tensor/square、线性/明文求值、relin/换钥/auto、相邻 prime drop 和
 恢复均不新增分配。秘密、生成时 secret-square/automorphism 临时值、公钥 ephemeral
 及恢复存储按契约擦除。可用 `Zeroize::zeroize` 显式擦除公钥 encryptor ephemeral，
-保留完整预备 allocation；caller 明文/输出/batching buffers 由其拥有者管理。不新增
-Domain 或系数字类型泛型。
+保留完整预备 allocation；caller 明文/输出/batching buffers 由其拥有者管理。基础例
+选择分配便利接口；高级例和基准保留 prepared 输出复用。不新增 Domain 或系数字类型泛型。
 
 默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly SIMD 后端。
 

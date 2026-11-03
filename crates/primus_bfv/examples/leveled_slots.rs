@@ -44,12 +44,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public_key = alice.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
     let relin_key = alice.relinearization_key(0, config, &mut rng)?;
-    let rotate_key = alice.automorphism_key(1, batching.rotation_exponent(1), config, &mut rng)?;
-    let swap_key = alice.automorphism_key(1, batching.row_swap_exponent(), config, &mut rng)?;
+    let rotate_key = alice.row_rotation_key(1, &batching, 1, config, &mut rng)?;
+    let swap_key = alice.row_swap_key(1, &batching, config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
-    let mut rotate = BfvAutomorphism::try_new(&context, 1, &rotate_key)?;
-    let mut swap = BfvAutomorphism::try_new(&context, 1, &swap_key)?;
-    let mut switch = BfvKeySwitcher::try_new(&context, 1, &switch_key)?;
+    let mut rotate = BfvAutomorphism::try_new(&context, &rotate_key)?;
+    let mut swap = BfvAutomorphism::try_new(&context, &swap_key)?;
+    let mut switch = BfvKeySwitcher::try_new(&context, &switch_key)?;
     let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
     let mut drop_first = BfvModulusSwitch::new(&context, 0);
     let mut drop_second = BfvModulusSwitch::new(&context, 1);

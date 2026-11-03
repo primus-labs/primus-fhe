@@ -2,6 +2,7 @@ use primus_encoding::{BfvRnsCodec, BfvRnsCodecError};
 use primus_glwe_rns::RnsDomainError;
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttError, U64DcrtTable};
+use primus_poly::Polynomial;
 use primus_rns::RNSBase;
 
 use crate::{
@@ -128,6 +129,30 @@ impl BfvContext {
     #[must_use]
     pub fn rns_poly_len(&self, level: usize) -> usize {
         self.codec(level).moduli_count() * self.parameters.poly_length().get()
+    }
+
+    /// Allocates N zero coefficients using this context's full plaintext ring.
+    #[must_use]
+    pub fn new_plaintext(&self) -> Polynomial<Vec<u64>> {
+        Polynomial::zero(self.parameters.poly_length().get())
+    }
+
+    /// Prepares a full-ring slot encoder from this context's N and plaintext modulus.
+    ///
+    /// The returned encoder owns the single plaintext NTT table; this context
+    /// does not cache another copy. Prepare it once and reuse it. For a smaller
+    /// plaintext subring, construct [`primus_encoding::BatchingEncoder`] explicitly.
+    ///
+    /// # Correctness
+    /// The plaintext modulus must be prime, as required by the encoder.
+    /// # Errors
+    /// Rejects a plaintext modulus that cannot support full-ring batching.
+    #[cfg(feature = "batching")]
+    pub fn batching_encoder(&self) -> Result<primus_encoding::BatchingEncoder, NttError<u64>> {
+        primus_encoding::BatchingEncoder::try_new(
+            self.parameters.poly_length(),
+            BarrettModulus::new(self.parameters.codec().t()),
+        )
     }
 
     /// Allocates a zeroed ciphertext with the complete shape of a prepared level.

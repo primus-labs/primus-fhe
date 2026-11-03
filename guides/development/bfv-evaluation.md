@@ -120,6 +120,13 @@ contracts. Source and destination clients may share immutable context resources.
 The shared GLev kernel only decomposes and accumulates components; it does not
 interpret a native BFV ciphertext as raw GLWE or apply a phase sign conversion.
 
+`BfvRelinearizer::try_new(context,key)`, `BfvKeySwitcher::try_new(context,key)`
+and `BfvAutomorphism::try_new(context,key)` derive the level from the bound key,
+as does `BfvMultiplication`. The context must have prepared that level and match
+the key's N, t and ordered Q. Key generation, ordinary linear evaluation,
+decryption and prime drop still select their levels explicitly; ciphertext
+storage does not carry the metadata needed to infer them.
+
 ## Levels, slots and resources
 
 Relinearize before exact BFV prime drop. The existing componentwise rounded drop
@@ -128,6 +135,15 @@ multipliers are prepared for each level where they are used. Full-ring secrets
 remain full N when shared batching embeds a smaller plaintext subring. Row
 rotation/swap uses the encoder's actual automorphism exponents; spare slots and
 off-stride coefficients remain zero in the complete examples.
+
+With `batching`, `context.batching_encoder()` prepares an existing shared encoder
+for N slots using the context's t. Construct a smaller encoder explicitly for an
+embedded plaintext subring. `client.row_rotation_key(level,&encoder,steps,config,rng)`
+accepts signed row-left steps, normalized modulo the encoder's row length;
+`row_swap_key(level,&encoder,config,rng)` exchanges rows. Both validate the
+encoder's plaintext modulus and capacity before sampling, then generate ordinary
+automorphism keys. They neither retain another encoder nor resize the secret.
+The direct exponent-based `automorphism_key` remains the general ring operation.
 
 Context owns the unique Q tables/codecs/samplers. A multiplier owns P and its
 tables, constants and mutable arithmetic scratch. The ordinary multiplication

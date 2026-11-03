@@ -59,8 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auto_key = alice.automorphism_key(1, 5, config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
     let mut multiplication = BgvMultiplication::try_new(&context, &relin_key)?;
-    let mut auto = BgvAutomorphism::try_new(&context, 1, &auto_key)?;
-    let mut switch = BgvKeySwitcher::try_new(&context, 1, &switch_key)?;
+    let mut auto = BgvAutomorphism::try_new(&context, &auto_key)?;
+    let mut switch = BgvKeySwitcher::try_new(&context, &switch_key)?;
     let mut lower_evaluator = BgvEvaluator::new(&context, 1);
     let mut drop_first = BgvModulusSwitch::new(&context, 0);
     let mut drop_second = BgvModulusSwitch::new(&context, 1);

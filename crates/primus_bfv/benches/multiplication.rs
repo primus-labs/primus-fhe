@@ -51,11 +51,11 @@ fn leveled(c: &mut Criterion) {
     let mut encryptor = context.public_key_encryptor(&public_key).unwrap();
     let relin_key = alice.relinearization_key(0, config, &mut rng).unwrap();
     let rotate_key = alice
-        .automorphism_key(1, batching.rotation_exponent(1), config, &mut rng)
+        .row_rotation_key(1, &batching, 1, config, &mut rng)
         .unwrap();
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng).unwrap();
-    let mut rotate = BfvAutomorphism::try_new(&context, 1, &rotate_key).unwrap();
-    let mut switch = BfvKeySwitcher::try_new(&context, 1, &switch_key).unwrap();
+    let mut rotate = BfvAutomorphism::try_new(&context, &rotate_key).unwrap();
+    let mut switch = BfvKeySwitcher::try_new(&context, &switch_key).unwrap();
     // Keep this explicit P for equivalent-workload historical comparisons.
     let mut multiplication = BfvMultiplication::try_with_auxiliary_moduli(
         &context,

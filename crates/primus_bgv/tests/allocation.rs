@@ -80,14 +80,19 @@ fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
     };
     let relin_key0 = client.relinearization_key(0, config, &mut rng).unwrap();
     let relin_key1 = client.relinearization_key(1, config, &mut rng).unwrap();
+    #[cfg(feature = "batching")]
+    let auto_key = client
+        .row_rotation_key(1, &context.batching_encoder().unwrap(), 1, config, &mut rng)
+        .unwrap();
+    #[cfg(not(feature = "batching"))]
     let auto_key = client.automorphism_key(1, 5, config, &mut rng).unwrap();
     let switch_key = recipient
         .key_switching_key(&client, 1, config, &mut rng)
         .unwrap();
     let mut multiplication0 = BgvMultiplication::try_new(&context, &relin_key0).unwrap();
     let mut multiplication1 = BgvMultiplication::try_new(&context, &relin_key1).unwrap();
-    let mut automorphism = BgvAutomorphism::try_new(&context, 1, &auto_key).unwrap();
-    let mut key_switcher = BgvKeySwitcher::try_new(&context, 1, &switch_key).unwrap();
+    let mut automorphism = BgvAutomorphism::try_new(&context, &auto_key).unwrap();
+    let mut key_switcher = BgvKeySwitcher::try_new(&context, &switch_key).unwrap();
     let mut drop0 = BgvModulusSwitch::new(&context, 0);
     let mut drop1 = BgvModulusSwitch::new(&context, 1);
     let mut squared0 = context.new_ciphertext(0);

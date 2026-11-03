@@ -60,10 +60,10 @@ def check_consumers(output_dir: Path) -> None:
             dependencies = [dependency(f"primus_{scheme}", batching)]
             dependencies.extend(dependency(crate) for crate in (
                 "primus_decompose", "primus_glwe_rns", "primus_modulus",
-                "primus_poly", "primus_shape",
+                "primus_shape",
             ))
             if batching:
-                dependencies.append(dependency("primus_encoding", batching=True))
+                dependencies.append(dependency("primus_poly"))
             dependencies.append(f"rand = {json.dumps(rand_version)}")
             manifest = (
                 f'[package]\nname = "primus_scheme_consumer_{name}"\n'
@@ -95,6 +95,8 @@ def check_consumers(output_dir: Path) -> None:
                 raise RuntimeError(f"{name}: test/benchmark dependency leaked into normal tree")
             if not batching and 'feature "batching"' in tree:
                 raise RuntimeError(f"{name}: coefficient consumer unexpectedly enabled batching")
+            if batching and 'primus_encoding feature "batching"' not in tree:
+                raise RuntimeError(f"{name}: scheme batching did not enable the shared encoder")
             run(["cargo", "run", "--offline", "--locked"], directory, "run.log", env)
             print(f"{name}: normal dependency request passed; no criterion/dashu-int", flush=True)
 

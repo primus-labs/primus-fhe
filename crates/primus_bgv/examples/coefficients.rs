@@ -3,7 +3,6 @@ use primus_bgv::{BgvClient, BgvContext, BgvMultiplication, BgvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
-use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -36,18 +35,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut rng,
     )?;
     let mut multiplication = BgvMultiplication::try_new(&context, &relin_key)?;
-    let mut a = Polynomial::<Vec<u64>>::zero(N);
-    let mut b = Polynomial::<Vec<u64>>::zero(N);
-    a.as_mut()[..2].copy_from_slice(&[3, 2]);
+    // Reuse setup and multiplication scratch across two ordinary requests.
+    let mut a = context.new_plaintext();
+    let mut b = context.new_plaintext();
     b.as_mut()[..2].copy_from_slice(&[5, 1]);
-    let encrypted_a = encryptor.encrypt(&a, &mut rng);
-    let encrypted_b = encryptor.encrypt(&b, &mut rng);
     let mut product = context.new_ciphertext(0);
-    multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut product);
-    let recovered = client.decrypt(&product, 0);
-    let mut expected = vec![0; N];
-    expected[..3].copy_from_slice(&[15, 13, 2]);
-    assert_eq!(recovered.as_ref(), expected);
-    println!("BGV: (3+2X)(5+X) = 15+13X+2X² modulo 193");
+    let mut expected = context.new_plaintext();
+    for (left, answer) in [([3, 2], [15, 13, 2]), ([4, 1], [20, 9, 1])] {
+        a.as_mut()[..2].copy_from_slice(&left);
+        let encrypted_a = encryptor.encrypt(&a, &mut rng);
+        let encrypted_b = encryptor.encrypt(&b, &mut rng);
+        multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut product);
+        let recovered = client.decrypt(&product, 0);
+        expected.as_mut()[..3].copy_from_slice(&answer);
+        assert_eq!(recovered, expected);
+    }
+    println!("BGV: two coefficient products recovered using one prepared setup");
     Ok(())
 }

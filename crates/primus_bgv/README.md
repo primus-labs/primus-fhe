@@ -13,13 +13,15 @@ Coefficient p can be composite; batching requires its own plaintext prime.
 Start with [coefficients](examples/coefficients.rs): public encryption of
 `3+2X` and `5+X`, one multiplication, and recovery of `15+13X+2X²`. Enable
 `batching` for [slots](examples/slots.rs): encrypted element-wise multiplication
-and a row rotation with n=N. The advanced [leveled coefficients](examples/leveled_coefficients.rs)
+and a row rotation with n=N. Both basic examples prepare keys and operation
+scratch once, then execute two requests using allocating conveniences. The advanced [leveled coefficients](examples/leveled_coefficients.rs)
 and [leveled slots](examples/leveled_slots.rs) combine square, automorphism,
 secret change and two prime drops; the latter also demonstrates an n<N subring.
 
 1. Prepare `BgvParameters::try_coefficients` or explicitly select Gaussian/CBD
    with `try_with_error_distribution`. `BgvContext::try_new` prepares one level;
    `try_with_levels(parameters, count)` prepares an explicit prime-drop chain.
+   `context.new_plaintext()` allocates an N-coefficient plaintext without repeating N.
 2. `BgvClient::generate(&context,rng)` owns one full-N secret and erasing recovery
    scratch. Retain `client.public_key(rng)` and bind `context.public_key_encryptor`.
    Both client and public encryptor provide `encrypt`/`encrypt_centered`, which
@@ -34,9 +36,12 @@ secret change and two prime drops; the latter also demonstrates an n<N subring.
    `PlaintextEmbedding` explicitly. Advanced staged evaluation remains available:
    `mul_to`/`square_to` write an explicit `BgvQuadraticCiphertext`, then a
    `BgvRelinearizer` returns it to degree one.
-5. Generate only the required `automorphism_key` and `key_switching_key` roles.
-   Prepare `BgvAutomorphism` or `BgvKeySwitcher` once. The target client generates
-   a switch key from the source client; an automorphism key returns σ(s) to s.
+5. For packed rows use `client.row_rotation_key(level,&encoder,steps,config,rng)`
+   with signed steps, or `row_swap_key` for a row swap. General polynomial maps
+   retain `automorphism_key`; secret changes use `key_switching_key`. Prepare
+   `BgvAutomorphism::try_new(&context,&key)` or `BgvKeySwitcher::try_new(&context,&key)`
+   once. Their level, like `BgvRelinearizer`'s, comes from the role key. The target
+   client generates a switch key from the source client; an automorphism key returns σ(s) to s.
 6. `BgvModulusSwitch::new(&context,level).switch_to` performs one adjacent prime
    drop. Recover with `client.decrypt_to(input,level,&mut output)`; `decrypt`
    allocates only the returned polynomial. These operations do not choose a
@@ -62,7 +67,7 @@ Columns have phase `p*g_j*h+p*e_j`, with h=s², the source secret, or σ(s).
 Both digit noise and approximation residual therefore enter as p-multiple error.
 Ordinary truncated BFV/GLWE switching does not establish this property. Three
 role types prevent accidental relin/switch/automorphism-key substitution;
-constructors reject different levels, N, p and ordered Q. Decomposition and key
+constructors reject an unprepared key level or different N, p and ordered Q. Decomposition and key
 columns remain owned by the role-specific implementation.
 Same-parameter actual-secret identity remains a caller contract.
 
@@ -97,8 +102,14 @@ the current u64 NTT backend (q_i<2^62); rootability checks do not prove primalit
 
 ## Slots and subrings
 
-Optional `batching` consumes the shared `primus_encoding::BatchingEncoder`, also
-used by BFV. A prime p≡1 mod 2n supplies n plaintext slots in two ±5^j rows.
+With `batching`, `context.batching_encoder()` derives full-ring N and p to prepare
+one shared `primus_encoding::BatchingEncoder`, also used by BFV. The context does
+not retain a second encoder or plaintext table. The factory returns an error when
+p lacks full-ring roots; coefficient arithmetic can still work. Explicit n<N
+packing uses `BatchingEncoder::try_new(n,context.parameters().plain_modulus())`.
+A prime p≡1 mod 2n supplies n plaintext slots in two ±5^j rows. `encode` and
+`decode` allocate results (decode also allocates temporary scratch); prepared
+calls use `encode_to` and `decode_to` with caller-owned buffers.
 `encode_to` zero-pads a slot prefix; `embed_to` maps f(Y) to f(X^(N/n)). Only the
 plaintext uses n: actual secret, error, transforms and ciphertext retain N.
 The basic n=N example encodes directly into the full plaintext polynomial and
@@ -106,22 +117,24 @@ decodes it after recovery. For n<N, `extract_to` checks subring membership after
 full-N recovery, then `decode_to` recovers slots using caller scratch. p need not
 support a full-N plaintext NTT in the subring workflow.
 
-Use `rotation_exponent(k)` or `row_swap_exponent()` to choose an odd full-ring
-automorphism key. `BgvAutomorphism::apply_to` executes the encrypted operation
-and switches back to the original secret. The leveled slot example uses n32,
-N128,p193, rotates/swaps rows and changes to a second full-N secret. All spare
-slots remain zero at their permuted positions.
+`row_rotation_key` normalizes positive/negative steps modulo n/2, while
+`row_swap_key` swaps the two rows without reversing them. Both validate the
+encoder's p and n≤N before consuming randomness. `BgvAutomorphism::apply_to`
+executes the encrypted operation and switches back to the original full-N secret.
+General exponent selection through `automorphism_key` remains explicit. The
+leveled slot example uses n32,N128,p193, rotates/swaps rows and changes to a second
+full-N secret. All spare slots remain zero at their permuted positions.
 
 ## Resources and commands
 
 Context owns sampling/bases/table; clients, evaluators and prepared key operations
-borrow it. Prepared encryption, tensor/square, linear/plaintext operations,
+borrow it. Prepared `_to`/`_assign` encryption, tensor/square, linear/plaintext operations,
 relin/switch/auto, adjacent prime drop and recovery allocate no memory. Secret,
 secret-square/automorphism generation temporaries, public ephemeral and recovery
 storage are erased on drop. `Zeroize::zeroize` explicitly erases a public
-encryptor’s ephemeral while retaining its prepared allocation. Caller-owned
-plaintext/output/batching buffers remain
-under their owner's control. No Domain or generic coefficient type is added.
+encryptor’s ephemeral while retaining its prepared allocation. Caller-owned plaintext/output/batching buffers remain under their owner's control.
+The basic examples choose allocating conveniences; the advanced examples and
+benchmarks retain prepared output buffers. No Domain or generic coefficient type is added.
 
 Default features are empty. `batching` enables shared slot encoding; `simd`
 forwards to the existing nightly SIMD backends.

@@ -422,7 +422,7 @@ fn exact_and_truncated_switch_keys_preserve_p_and_match_integer_residuals() {
                 let expected =
                     switched_phase(&message, &c1, &source_big, &row_errors, count, config, p);
                 let mut output = context.new_ciphertext(level);
-                let mut switch = BgvKeySwitcher::try_new(&context, level, &key).unwrap();
+                let mut switch = BgvKeySwitcher::try_new(&context, &key).unwrap();
                 switch.switch_to(&input, &mut output);
                 assert_eq!(phase(output.as_ref(), &target_big, count), expected);
                 for (actual, message) in expected.iter().zip(&message) {
@@ -489,7 +489,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
         let quadratic = BgvQuadraticCiphertext::new(encode(&components, count));
         assert_eq!(phase(quadratic.as_ref(), &secret_big, count), before);
         let mut linear = context.new_ciphertext(level);
-        BgvRelinearizer::try_new(&context, level, &key)
+        BgvRelinearizer::try_new(&context, &key)
             .unwrap()
             .relinearize_to(&quadratic, &mut linear);
         assert_eq!(phase(linear.as_ref(), &secret_big, count), expected);
@@ -521,7 +521,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
                 config,
                 P,
             );
-            BgvAutomorphism::try_new(&context, level, &key)
+            BgvAutomorphism::try_new(&context, &key)
                 .unwrap()
                 .apply_to(&source, &mut linear);
             assert_eq!(phase(linear.as_ref(), &secret_big, count), expected);
@@ -547,14 +547,33 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         make_context(P, &Q, 64),
     ];
     for wrong in &wrong_contexts {
-        assert!(BgvKeySwitcher::try_new(wrong, 0, &switch_key).is_err());
-        assert!(BgvRelinearizer::try_new(wrong, 0, &relin_key).is_err());
-        assert!(BgvAutomorphism::try_new(wrong, 0, &auto_key).is_err());
+        assert!(BgvKeySwitcher::try_new(wrong, &switch_key).is_err());
+        assert!(BgvRelinearizer::try_new(wrong, &relin_key).is_err());
+        assert!(BgvAutomorphism::try_new(wrong, &auto_key).is_err());
     }
-    for wrong_level in [1, 2, 3, usize::MAX] {
-        assert!(BgvKeySwitcher::try_new(&context, wrong_level, &switch_key).is_err());
-        assert!(BgvRelinearizer::try_new(&context, wrong_level, &relin_key).is_err());
-        assert!(BgvAutomorphism::try_new(&context, wrong_level, &auto_key).is_err());
+    let unprepared = BgvContext::try_new(
+        BgvParameters::try_with_error_distribution(
+            PolyLength::new(N),
+            BarrettModulus::new(P),
+            &Q.map(BarrettModulus::new),
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 1 },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    for level in [1, 2] {
+        let switch_key = client
+            .key_switching_key(&client, level, config, &mut rng)
+            .unwrap();
+        let relin_key = client.relinearization_key(level, config, &mut rng).unwrap();
+        let auto_key = client.automorphism_key(level, 5, config, &mut rng).unwrap();
+        assert!(matches!(BgvKeySwitcher::try_new(&unprepared, &switch_key),
+            Err(crate::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
+        assert!(matches!(BgvRelinearizer::try_new(&unprepared, &relin_key),
+            Err(crate::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
+        assert!(matches!(BgvAutomorphism::try_new(&unprepared, &auto_key),
+            Err(crate::BgvEvaluationKeyError::Level { requested, available: 1 }) if requested == level));
     }
     for exponent in [0, 2, 2 * N, usize::MAX] {
         assert!(
@@ -563,9 +582,9 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
                 .is_err()
         );
     }
-    let mut switch = BgvKeySwitcher::try_new(&context, 0, &switch_key).unwrap();
-    let mut relin = BgvRelinearizer::try_new(&context, 0, &relin_key).unwrap();
-    let mut auto = BgvAutomorphism::try_new(&context, 0, &auto_key).unwrap();
+    let mut switch = BgvKeySwitcher::try_new(&context, &switch_key).unwrap();
+    let mut relin = BgvRelinearizer::try_new(&context, &relin_key).unwrap();
+    let mut auto = BgvAutomorphism::try_new(&context, &auto_key).unwrap();
     let length = context.rns_poly_len(0);
     for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
         let input = BgvCiphertext::new(vec![0; bad_length]);

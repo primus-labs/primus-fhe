@@ -80,7 +80,7 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         let evaluator = BgvEvaluator::new(&context, level);
         let mut quadratic = context.new_quadratic_ciphertext(level);
         let mut staged = context.new_ciphertext(level);
-        let mut relin = BgvRelinearizer::try_new(&context, level, &key).unwrap();
+        let mut relin = BgvRelinearizer::try_new(&context, &key).unwrap();
         evaluator.mul_to(&left, &right, &mut quadratic);
         relin.relinearize_to(&quadratic, &mut staged);
         assert_eq!(output.as_ref(), staged.as_ref());

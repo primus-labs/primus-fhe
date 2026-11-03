@@ -83,7 +83,7 @@ fn plaintext_subring_keeps_the_full_secret_and_zeroes_unoccupied_slots() {
         if n == 128 {
             // p supports 2M-th roots while it has no primitive 2N-th root:
             // plaintext capacity is distinct from secret/ciphertext dimension.
-            assert!(BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(P)).is_err());
+            assert!(context.batching_encoder().is_err());
         }
     }
 }

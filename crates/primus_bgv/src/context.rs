@@ -5,6 +5,7 @@ use crate::{
 use primus_integer::BigUint;
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttError, U64DcrtTable};
+use primus_poly::Polynomial;
 use primus_reduce::Reduce;
 use primus_rns::RNSBase;
 
@@ -136,6 +137,30 @@ impl BgvContext {
     #[must_use]
     pub fn rns_poly_len(&self, level: usize) -> usize {
         self.base_q(level).moduli_count() * self.parameters.poly_length().get()
+    }
+
+    /// Allocates a zeroed full-ring coefficient plaintext using this context's N.
+    #[must_use]
+    pub fn new_plaintext(&self) -> Polynomial<Vec<u64>> {
+        Polynomial::zero(self.parameters.poly_length().get())
+    }
+
+    /// Prepares full-ring slot packing using this context's N and plaintext p.
+    ///
+    /// The returned encoder owns its one plaintext transform table; the context
+    /// does not cache another copy. Explicit n<N packing remains available through
+    /// [`primus_encoding::BatchingEncoder::try_new`].
+    /// # Correctness
+    /// p must be prime; see [`primus_encoding::BatchingEncoder`].
+    /// # Errors
+    /// Returns the encoder's plaintext transform or missing-root error. A context
+    /// supporting coefficient arithmetic need not support full-ring batching.
+    #[cfg(feature = "batching")]
+    pub fn batching_encoder(&self) -> Result<primus_encoding::BatchingEncoder, NttError<u64>> {
+        primus_encoding::BatchingEncoder::try_new(
+            self.parameters.poly_length(),
+            self.parameters.plain_modulus(),
+        )
     }
 
     /// Allocates a zeroed native degree-one ciphertext at a prepared level.

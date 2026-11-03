@@ -310,12 +310,17 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
     };
     let relin_key0 = client.relinearization_key(0, config, &mut rng).unwrap();
     let relin_key1 = client.relinearization_key(1, config, &mut rng).unwrap();
+    #[cfg(feature = "batching")]
+    let auto_key = client
+        .row_rotation_key(1, &context.batching_encoder().unwrap(), 1, config, &mut rng)
+        .unwrap();
+    #[cfg(not(feature = "batching"))]
     let auto_key = client.automorphism_key(1, 5, config, &mut rng).unwrap();
     let switch_key = recipient
         .key_switching_key(&client, 1, config, &mut rng)
         .unwrap();
-    let mut relin0 = BfvRelinearizer::try_new(&context, 0, &relin_key0).unwrap();
-    let mut relin1 = BfvRelinearizer::try_new(&context, 1, &relin_key1).unwrap();
+    let mut relin0 = BfvRelinearizer::try_new(&context, &relin_key0).unwrap();
+    let mut relin1 = BfvRelinearizer::try_new(&context, &relin_key1).unwrap();
     let mut request0 = primus_bfv::BfvMultiplication::try_new(&context, &relin_key0).unwrap();
     let mut request1 = primus_bfv::BfvMultiplication::try_new(&context, &relin_key1).unwrap();
     let (fresh, count) = observe(|| client.encrypt(&input, &mut rng));
@@ -326,8 +331,8 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
     assert_eq!(count, 1);
     client.decrypt_to(&fresh, 0, &mut output);
     assert_eq!(output, input);
-    let mut automorphism = BfvAutomorphism::try_new(&context, 1, &auto_key).unwrap();
-    let mut key_switcher = BfvKeySwitcher::try_new(&context, 1, &switch_key).unwrap();
+    let mut automorphism = BfvAutomorphism::try_new(&context, &auto_key).unwrap();
+    let mut key_switcher = BfvKeySwitcher::try_new(&context, &switch_key).unwrap();
     let mut drop0 = BfvModulusSwitch::new(&context, 0);
     let mut drop1 = BfvModulusSwitch::new(&context, 1);
     let mut tensor0 = context.new_quadratic_ciphertext(0);

@@ -50,7 +50,9 @@ Each input residue must be canonical under its basis modulus. Custom modulus con
 
 With `batching`, construct `BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(p))` once for a prime plaintext modulus with `p = 1 mod 2n`. The existing `U64NttTable` imposes `p < 2^62` and the supported `PolyLength` range starts at `n = 32`. Primality is a caller precondition, as for the underlying NTT; the constructor checks transform availability.
 
-The layout has two rows of `n/2` slots, at the smallest primitive `2n`-th root raised to `5^j` and `-5^j`. `encode_to(slots, coefficients)` accepts a prefix of at most `n` slots, zeroes the missing slots, and writes exactly `n` coefficients. `decode_to(coefficients, slots, scratch)` requires exactly `n` elements in each slice. These prepared calls allocate nothing and validate canonical plaintext values and complete lengths before writing.
+The layout has two rows of `n/2` slots, at the smallest primitive `2n`-th root raised to `5^j` and `-5^j`. For ordinary calls, `encode(slots)` returns `n` coefficients, zero-padding a slot prefix; `decode(coefficients)` returns all `n` ordered slots from exactly `n` canonical coefficients. Encoding allocates one result vector; decoding allocates the result and one temporary `n`-entry transform buffer. Both entries require values in `[0,p)` and reuse the prepared operations below.
+
+`encode_to(slots, coefficients)` accepts a prefix of at most `n` slots, zeroes the missing slots, and writes exactly `n` coefficients. `decode_to(coefficients, slots, scratch)` requires exactly `n` elements in each slice. These prepared calls allocate nothing and validate canonical plaintext values and complete lengths before writing.
 
 `rotation_exponent(k)` gives the polynomial automorphism exponent that rotates each row left by `k`; negative steps rotate right. `row_swap_exponent()` swaps rows without reversing them. `automorphism_slots_to` applies the corresponding **plaintext** permutation. Ciphertext automorphism and key switching belong to the scheme.
 

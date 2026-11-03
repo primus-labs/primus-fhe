@@ -25,14 +25,6 @@ pub enum BfvEvaluationKeyError {
         /// Number of prepared levels.
         available: usize,
     },
-    /// A key was generated for a different level index.
-    #[error("BFV key level mismatch: expected {expected}, got {actual}")]
-    KeyLevel {
-        /// Bound key level.
-        expected: usize,
-        /// Requested evaluator level.
-        actual: usize,
-    },
     /// The full ciphertext polynomial length differs.
     #[error("BFV polynomial length mismatch: expected {expected}, got {actual}")]
     PolynomialLength {
@@ -48,6 +40,15 @@ pub enum BfvEvaluationKeyError {
         expected: u64,
         /// Supplied t.
         actual: u64,
+    },
+    /// A batching encoder's plaintext capacity exceeds the ciphertext ring.
+    #[cfg(feature = "batching")]
+    #[error("BFV slot capacity {actual} exceeds full polynomial length {maximum}")]
+    SlotCapacity {
+        /// Largest supported plaintext capacity.
+        maximum: usize,
+        /// Supplied plaintext capacity.
+        actual: usize,
     },
     /// Ordered Q bases have different lengths.
     #[error("BFV modulus count mismatch: expected {expected}, got {actual}")]
@@ -163,20 +164,14 @@ impl NativeEvaluationKey {
         self
     }
 
-    fn validate(&self, context: &BfvContext, level: usize) -> Result<(), BfvEvaluationKeyError> {
-        validate_level(context, level)?;
-        if self.level != level {
-            return Err(BfvEvaluationKeyError::KeyLevel {
-                expected: self.level,
-                actual: level,
-            });
-        }
+    fn validate(&self, context: &BfvContext) -> Result<(), BfvEvaluationKeyError> {
+        validate_level(context, self.level)?;
         validate_numeric_context(
             self.size.rns_glwe_size().poly_length().get(),
             self.t,
             &self.moduli,
             context,
-            level,
+            self.level,
         )
     }
 }
@@ -278,6 +273,62 @@ impl BfvClient<'_> {
         })
     }
 
+    /// Generates a key rotating each plaintext row left by signed `steps`.
+    ///
+    /// Negative steps rotate right; steps wrap modulo half the encoder capacity.
+    /// A smaller plaintext subring is supported without resizing the secret or
+    /// ciphertext ring. The key retains the selected level and can be bound with
+    /// [`BfvAutomorphism::try_new`]. No encoder table or scratch is cloned.
+    ///
+    /// # Errors
+    /// Rejects a different plaintext modulus or capacity above N, then applies
+    /// [`Self::automorphism_key`]'s checks. All errors precede random sampling.
+    #[cfg(feature = "batching")]
+    pub fn row_rotation_key<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        level: usize,
+        encoder: &primus_encoding::BatchingEncoder,
+        steps: isize,
+        config: DecompositionConfig,
+        rng: &mut R,
+    ) -> Result<BfvAutomorphismKey, BfvEvaluationKeyError> {
+        self.validate_batching_encoder(encoder)?;
+        self.automorphism_key(level, encoder.rotation_exponent(steps), config, rng)
+    }
+
+    /// Generates a key swapping the encoder's two rows without reversing them.
+    /// The geometry, level and pre-sampling error checks are
+    /// [`Self::row_rotation_key`]'s; no rotation-step configuration is needed.
+    #[cfg(feature = "batching")]
+    pub fn row_swap_key<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        level: usize,
+        encoder: &primus_encoding::BatchingEncoder,
+        config: DecompositionConfig,
+        rng: &mut R,
+    ) -> Result<BfvAutomorphismKey, BfvEvaluationKeyError> {
+        self.validate_batching_encoder(encoder)?;
+        self.automorphism_key(level, encoder.row_swap_exponent(), config, rng)
+    }
+
+    #[cfg(feature = "batching")]
+    fn validate_batching_encoder(
+        &self,
+        encoder: &primus_encoding::BatchingEncoder,
+    ) -> Result<(), BfvEvaluationKeyError> {
+        let expected = self.context.parameters().codec().t();
+        let actual = encoder.plain_modulus();
+        if actual != expected {
+            return Err(BfvEvaluationKeyError::PlainModulus { expected, actual });
+        }
+        let maximum = self.context.parameters().poly_length().get();
+        let actual = encoder.slot_capacity();
+        if actual > maximum {
+            return Err(BfvEvaluationKeyError::SlotCapacity { maximum, actual });
+        }
+        Ok(())
+    }
+
     /// Generates a key switching source ciphertexts to this client's secret.
     ///
     /// # Correctness
@@ -330,10 +381,10 @@ struct NativeGadgetProduct<'a> {
 impl<'a> NativeGadgetProduct<'a> {
     fn try_new(
         context: &'a BfvContext,
-        level: usize,
         key: &'a NativeEvaluationKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
-        key.validate(context, level)?;
+        key.validate(context)?;
+        let level = key.level;
         let base = context.codec(level).base_q();
         Ok(Self {
             context,
@@ -392,16 +443,15 @@ pub struct BfvRelinearizer<'a> {
 }
 
 impl<'a> BfvRelinearizer<'a> {
-    /// Binds actual key metadata before allocating reusable scratch.
+    /// Binds the key's level and numerical metadata before allocating reusable scratch.
     /// # Errors
-    /// Rejects a different level, N, t or ordered Q basis.
+    /// Rejects an unprepared key level or different N, t or ordered Q basis.
     pub fn try_new(
         context: &'a BfvContext,
-        level: usize,
         key: &'a BfvRelinearizationKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
         Ok(Self {
-            product: NativeGadgetProduct::try_new(context, level, &key.key)?,
+            product: NativeGadgetProduct::try_new(context, &key.key)?,
         })
     }
 
@@ -451,16 +501,15 @@ pub struct BfvKeySwitcher<'a> {
 }
 
 impl<'a> BfvKeySwitcher<'a> {
-    /// Binds actual key metadata before allocating reusable scratch.
+    /// Binds the key's level and numerical metadata before allocating reusable scratch.
     /// # Errors
-    /// Rejects a different level, N, t or ordered Q basis.
+    /// Rejects an unprepared key level or different N, t or ordered Q basis.
     pub fn try_new(
         context: &'a BfvContext,
-        level: usize,
         key: &'a BfvKeySwitchingKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
         Ok(Self {
-            product: NativeGadgetProduct::try_new(context, level, &key.key)?,
+            product: NativeGadgetProduct::try_new(context, &key.key)?,
         })
     }
 
@@ -503,16 +552,15 @@ pub struct BfvAutomorphism<'a> {
 }
 
 impl<'a> BfvAutomorphism<'a> {
-    /// Binds actual key metadata and its permutation before allocating scratch.
+    /// Binds the key's level, numerical metadata and permutation before allocating scratch.
     /// # Errors
-    /// Rejects a different level, N, t or ordered Q basis.
+    /// Rejects an unprepared key level or different N, t or ordered Q basis.
     pub fn try_new(
         context: &'a BfvContext,
-        level: usize,
         key: &'a BfvAutomorphismKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
         Ok(Self {
-            product: NativeGadgetProduct::try_new(context, level, &key.key)?,
+            product: NativeGadgetProduct::try_new(context, &key.key)?,
             permutation: &key.permutation,
         })
     }

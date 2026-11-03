@@ -67,3 +67,29 @@ cargo bench -p primus_bgv --bench leveled --features batching -- bgv_leveled_slo
 ```
 
 参数、编译器、流程或默认 P 改变后，需要新测量，不能将本记录当成当前 HEAD 验证。
+
+## Context 与 key 推导的后续验证
+
+同日再次收敛参数与槽工作流：`context.batching_encoder()` 推导 N/p，三个
+key-bound 求值操作从 key 推导 level，signed row-key 入口复用既有自同构算法。
+共享 encoder 新增分配式 `encode/decode`，普通例复用 setup；严格复用负载继续
+使用 `_to`。这里测量的是后者，不能将其零分配结论套到普通分配式便利调用。
+
+本次基线是已提交的 `3d1cf47c3cafda238bd2d51f23c19658d78807ee`；新版本是
+该提交上的当前工作树，[完整数据](data/bfv-bgv-context-workflows-2026-11-03.json)
+包含源码 SHA、真实 artifact、环境、资源与全部进程；[CSV](data/bfv-bgv-context-workflows-2026-11-03.csv)
+保留全部 480 个原始样本。保持上文 N/Q/P、seed、完整在线负载、CPU0、单 worker
+和 stable native release。先 ABBA 再 BAAB，每方案每版四个进程，各 30 samples；
+反向顺序用于检查首轮小幅耗时差异，没有丢弃首轮或挑选最快结果。
+
+| 方案 | 基线→当前均值（ms） | 两轮分别变化 | 合并变化 |
+| --- | --- | --- | --- |
+| BFV | 1.30467→1.30063 | +0.40% / −1.02% | −0.31% |
+| BGV | 0.45695→0.46010 | +1.03% / +0.35% | +0.69% |
+
+BFV 变化方向在两轮间反转；BGV 的本机样本略慢，不能声称完全等速或优化加速。
+本次没有新增在线计算、缓冲或分配：28 个相关在线源码域逐字/归一化方法体相同，
+密文结果相同，prepared multiplication heap/inline 仍分别为 BFV 803496/712、
+BGV 156720/272 bytes；在线 allocation/额外 peak/live delta 均为 0。
+保留接口收敛，并记录这些小幅时间差异及实际边界；参数、工具链或机器改变后重测，
+不以单次波动调整数学实现或给出跨库速度倍率。

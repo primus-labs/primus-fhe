@@ -10,7 +10,7 @@ BFV 系数和槽加密/求值采用原生组件 `[c0,c1]`，phase 为
 
 ## 系数工作流
 
-先运行[系数示例](examples/coefficients.rs)：公钥加密、一次密文乘法、恢复系数。
+先运行[系数示例](examples/coefficients.rs)：一次 setup 复用两次公钥加密、密文乘法和系数恢复请求。
 
 ```sh
 cargo run -p primus_bfv --example coefficients
@@ -20,12 +20,15 @@ cargo run -p primus_bfv --example coefficients
    移入 `BfvContext::try_new(parameters)`。
 2. 生成 `BfvClient::generate(&context,rng)`，调用 `client.public_key(rng)`，
    绑定 `context.public_key_encryptor(&public_key)`。
-3. 用 `encryptor.encrypt_centered(&message,rng)` 加密多项式。
+3. 用 `context.new_plaintext()`、`context.new_ciphertext(level)` 准备输出，
+   从 context 推导完整长度。
 4. 生成 `client.relinearization_key(level,config,rng)`，一次性准备
    `BfvMultiplication::try_new(&context,&relin_key)`。`multiply_to`、`square_to`
    输出普通 degree-one 密文；`square_assign` 复用输入输出。
    缩放及重线性化所需的内部 scratch 可持续复用。
-5. 用 `client.decrypt(&ciphertext,level)` 恢复结果。
+5. 每次请求复用 setup 和预备乘法 owner。基础例使用分配结果的 `encrypt_centered`、
+   `decrypt`，`multiply_to` 复用输出；需要调用方缓冲区和在线零分配时改用
+   `encrypt_centered_to`、`decrypt_to`。
 
 乘法从 key 推导 level，自动准备仅用于计算的辅助 primes；它们不扩大加密/密钥模数。
 示例参数只演示功能，不是安全参数配置。完整电路恢复需要覆盖全部累积误差的界限。
@@ -38,16 +41,25 @@ centered 使用 `[-floor(t/2),ceil(t/2))`。恢复返回 `[0,t)` 中的规范系
 ## 槽
 
 启用 `batching`，运行[槽示例](examples/slots.rs)。它先使用 `n=N`，直接编码两个
-槽向量，执行密文乘法，再通过加密自同构密钥将每行旋转一位。
+槽向量，执行密文乘法，再通过加密自同构密钥将每行旋转一位。两次请求复用 setup、
+预备操作和求值输出；`encode`、`decode`、加密和恢复则分配各自结果。高级例和
+benchmark 用 `*_to` 配合可复用 scratch。
 
 ```sh
 cargo run -p primus_bfv --example slots --features batching
 ```
 
-`BatchingEncoder` 使用 ±5^j 两行布局。其 `rotation_exponent`、
-`row_swap_exponent` 交给 `BfvAutomorphism` 执行真实密文操作。
+`context.batching_encoder()` 从 context 的 N/t 准备已有 `BatchingEncoder`，
+由它拥有唯一 plaintext NTT table，context 不另存缓存或 clone。
+`client.row_rotation_key(level,&encoder,steps,config,rng)` 按 signed steps
+生成行旋转密钥：正值向左、负值向右，按每行长度环绕；`row_swap_key` 交换两行。
+两者都用 `BfvAutomorphism::try_new(&context,&key)` 绑定，自动从 key 推导 level。
+Encoder 的模数或容量错配在随机采样前拒绝。
+
 高级[子环槽示例](examples/subring_slots.rs)和[多级槽示例](examples/leveled_slots.rs)
-将 `n<N` 明文嵌入完整环，秘密和密文仍为 N。未使用槽及 off-stride padding 为零。
+将 `n<N` 明文嵌入完整环，秘密和密文仍为 N；即使当前明文模数不支持 full-N
+batching，仍可显式准备合法的较小 encoder。未使用槽及 off-stride padding 为零。
+一般 `automorphism_key` 和 encoder 的 exponent 方法继续供显式多项式替换使用。
 
 ## 求值与层级
 
@@ -61,6 +73,8 @@ cargo run -p primus_bfv --example slots --features batching
 去掉最后一个 prime。各目标层有自己的 codec，必须满足该层完整误差界限。
 
 原生角色密钥分别实现重线性化、source→recipient 换钥和加密自同构。
+Prepared 构造器接收 `(&context,&key)`，从 key 推导适用 level；key generation、
+不绑定 key 的线性求值、降模和恢复仍显式选择实际 level。
 每个实际使用的 level 都要独立建钥。BFV key column 的 phase 为 `g_j*h+e_j`；
 截断分解 residual 和 key noise 都消耗恢复余量，最大 digit 数也不一定消除全部
 radix 余位。[多级系数](examples/leveled_coefficients.rs)和

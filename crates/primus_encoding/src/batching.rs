@@ -10,7 +10,9 @@ use primus_shape::PolyLength;
 /// slot whose exponent is `k` times slot `i`'s exponent modulo `2n`.
 ///
 /// This codec owns one ordinary [`U64NttTable`] and its slot permutations.
-/// Prepared operations allocate nothing. It changes neither a scheme's scale
+/// Prepared `*_to` operations allocate nothing; `encode` and `decode` allocate
+/// their returned output and, for decoding, temporary transform scratch.
+/// It changes neither a scheme's scale
 /// nor a secret/ciphertext ring. In particular, embedding its `n` coefficients
 /// into a larger `N`-coefficient ring does not reduce the secret dimension.
 ///
@@ -77,6 +79,21 @@ impl BatchingEncoder {
         2 * reverse_index(self.slot_to_ntt[slot], self.slot_capacity()) + 1
     }
 
+    /// Allocates exactly `n` canonical coefficients for an initial slot prefix.
+    ///
+    /// Accepts at most `n` canonical values in `[0,p)` and pads missing slots
+    /// with zero. Allocates one output vector; use [`Self::encode_to`] to reuse
+    /// caller-owned storage without allocating.
+    ///
+    /// # Panics
+    /// Panics if the slot count exceeds `n` or a slot is not canonical modulo p.
+    #[must_use]
+    pub fn encode(&self, slots: &[u64]) -> Vec<u64> {
+        let mut coefficients = vec![0; self.slot_capacity()];
+        self.encode_to(slots, &mut coefficients);
+        coefficients
+    }
+
     /// Packs an initial slot prefix into exactly `n` canonical coefficients.
     ///
     /// Missing slots are zero, including after reuse of a nonzero output. The
@@ -99,6 +116,24 @@ impl BatchingEncoder {
             coefficients[index] = value;
         }
         self.table.inverse_transform_slice(coefficients);
+    }
+
+    /// Allocates all `n` ordered slots from exactly `n` canonical coefficients.
+    ///
+    /// Coefficients remain unchanged. Allocates one result vector and one
+    /// temporary `n`-entry transform buffer, which is released before returning.
+    /// Use [`Self::decode_to`] with caller-owned output and scratch to allocate
+    /// nothing during decoding.
+    ///
+    /// # Panics
+    /// Panics if the coefficient count differs from `n` or any coefficient is
+    /// not canonical modulo p.
+    #[must_use]
+    pub fn decode(&self, coefficients: &[u64]) -> Vec<u64> {
+        let mut slots = vec![0; self.slot_capacity()];
+        let mut scratch = vec![0; self.slot_capacity()];
+        self.decode_to(coefficients, &mut slots, &mut scratch);
+        slots
     }
 
     /// Decodes exactly `n` canonical coefficients into all `n` ordered slots.

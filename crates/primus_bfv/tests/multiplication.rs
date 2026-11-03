@@ -70,7 +70,7 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         let mut multiplier = BfvMultiplier::try_with_default_basis(&context, level).unwrap();
         let mut quadratic = context.new_quadratic_ciphertext(level);
         let mut staged = context.new_ciphertext(level);
-        let mut relin = BfvRelinearizer::try_new(&context, level, &key).unwrap();
+        let mut relin = BfvRelinearizer::try_new(&context, &key).unwrap();
         multiplier.multiply_to(&left, &right, &mut quadratic);
         relin.relinearize_to(&quadratic, &mut staged);
         assert_eq!(output.as_ref(), staged.as_ref());

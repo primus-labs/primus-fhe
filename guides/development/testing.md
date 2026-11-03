@@ -95,6 +95,7 @@ cargo run -p primus_bgv --example leveled_coefficients
 cargo run -p primus_bgv --example leveled_slots --features batching
 cargo run -p primus_bfv --example leveled_coefficients
 cargo run -p primus_bfv --example leveled_slots --features batching
+cargo check -p primus_bfv --lib --no-default-features
 cargo check -p primus_bgv --lib --no-default-features
 cargo check -p primus_encoding --lib --no-default-features --features batching
 just bench-smoke primus_bgv leveled --features batching
@@ -107,7 +108,9 @@ plain-mul、精确恢复和 extract/decode，预分配与建钥在计时外。�
 请求，不能与仅测 evaluator 的结果直接比较。`leveled` 另外测两次 fresh public
 加密、ct×ct/square/relin、密文旋转、Alice→Bob 换钥、两次 p-corrected prime drop
 和 slot 恢复的完整请求。模数 level 与 gadget digits 是两种参数，各层 key 独立生成；
-编码器的 rotation exponent 交由 `BgvAutomorphism` 执行真实密文操作。推导见
+`row_rotation_key` / `row_swap_key` 复用编码器的槽布局，生成由
+`BgvAutomorphism` 执行的真实密文操作。求值操作从 key 推导 level；没有绑定
+key 的操作仍显式选择 level。推导见
 [BGV 求值契约](bgv-evaluation.md)。参数、布局和当前接口见
 [BGV](../../crates/primus_bgv/README.zh_CN.md)、[BFV](../../crates/primus_bfv/README.zh_CN.md)
 及[共享编码](../../crates/primus_encoding/README.zh_CN.md)。
@@ -123,11 +126,14 @@ tensor，P>NQ 在构造时检查。独立 integer schoolbook 及 raw/scaled/key-
 schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配；不得
 把成功的解密往返当作整数取整或噪声证明。
 
-基础 `coefficients`、`slots` 只演示一次公钥计算与恢复；slots 先使用 n=N。
+基础 `coefficients`、`slots` 展示 setup 后复用 prepared 操作，连续执行完整
+公钥计算与恢复；slots 先使用 n=N，由 context 推导编码器的 N/p。基础例的
+分配式编码、加解密入口隐藏临时缓冲；高级例和 allocation 测试验证 `_to` 的复用契约。
 显式 borrowed-secret/workspace、n<N 子环及跨 client 多级链留在高级例。
 `just schemes` 还运行 `scripts/check_scheme_consumers.py`：在临时 workspace 中，
 只用 examples 实际所需的普通依赖分别执行 BFV/BGV 的两条基础请求，避免 dev-dependencies
-或 workspace feature 合并掩盖接口问题。脚本不是公开验证 API。
+或 workspace feature 合并掩盖接口问题。系数消费者不启用 batching；槽消费者只需
+启用方案的 batching feature，由该方案传递到共享编码器。脚本不是公开验证 API。
 
 ## TFHE benchmarks
 

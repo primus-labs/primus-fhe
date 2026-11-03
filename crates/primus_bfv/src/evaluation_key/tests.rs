@@ -404,7 +404,7 @@ fn exact_and_truncated_switch_keys_match_integer_residuals() {
                 let expected =
                     switched_phase(&message, &c1, &source_big, &row_errors, count, config);
                 let mut output = context.new_ciphertext(level);
-                let mut switch = BfvKeySwitcher::try_new(&context, level, &key).unwrap();
+                let mut switch = BfvKeySwitcher::try_new(&context, &key).unwrap();
                 switch.switch_to(&input, &mut output);
                 assert_eq!(phase(output.as_ref(), &target_big, count), expected);
                 // A zero switched component has all-zero digits even for a
@@ -459,7 +459,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
         let quadratic = BfvQuadraticCiphertext::new(encode(&components, count));
         assert_eq!(phase(quadratic.as_ref(), &secret_big, count), before);
         let mut linear = context.new_ciphertext(level);
-        BfvRelinearizer::try_new(&context, level, &key)
+        BfvRelinearizer::try_new(&context, &key)
             .unwrap()
             .relinearize_to(&quadratic, &mut linear);
         assert_eq!(phase(linear.as_ref(), &secret_big, count), expected);
@@ -489,7 +489,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
                 count,
                 config,
             );
-            BfvAutomorphism::try_new(&context, level, &key)
+            BfvAutomorphism::try_new(&context, &key)
                 .unwrap()
                 .apply_to(&source, &mut linear);
             assert_eq!(phase(linear.as_ref(), &secret_big, count), expected);

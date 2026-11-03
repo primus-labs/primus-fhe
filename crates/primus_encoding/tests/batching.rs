@@ -90,9 +90,7 @@ fn encode_and_decode_match_independent_dft_with_zero_padding() {
             .map(|i| (17 * i as u64 * i as u64 + 31 * i as u64 + p - 1) % p)
             .collect();
         let expected = evaluate(&coefficients, p);
-        let mut slots = vec![p - 1; n];
-        let mut scratch = vec![p - 1; n];
-        encoder.decode_to(&coefficients, &mut slots, &mut scratch);
+        let slots = encoder.decode(&coefficients);
         assert_eq!(slots, expected);
 
         // Encode is checked by direct evaluation, rather than an NTT roundtrip.
@@ -118,10 +116,8 @@ fn slot_products_and_subring_embedding_match_negacyclic_convolution() {
         let encoder = BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(p)).unwrap();
         let lhs: Vec<_> = (0..n).map(|i| (3 * i as u64 + 7) % p).collect();
         let rhs: Vec<_> = (0..n).map(|i| (i as u64 * i as u64 + p - 1) % p).collect();
-        let mut left = vec![0; n];
-        let mut right = vec![0; n];
-        encoder.encode_to(&lhs, &mut left);
-        encoder.encode_to(&rhs, &mut right);
+        let left = encoder.encode(&lhs);
+        let right = encoder.encode(&rhs);
         let product = convolution(&left, &right, p);
         let expected: Vec<_> = lhs.iter().zip(&rhs).map(|(&a, &b)| a * b % p).collect();
         assert_eq!(evaluate(&product, p), expected);

@@ -87,14 +87,26 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         make_context(P, &Q, 64),
     ];
     for wrong in &wrong_contexts {
-        assert!(BfvKeySwitcher::try_new(wrong, 0, &switch_key).is_err());
-        assert!(BfvRelinearizer::try_new(wrong, 0, &relin_key).is_err());
-        assert!(BfvAutomorphism::try_new(wrong, 0, &auto_key).is_err());
+        assert!(BfvKeySwitcher::try_new(wrong, &switch_key).is_err());
+        assert!(BfvRelinearizer::try_new(wrong, &relin_key).is_err());
+        assert!(BfvAutomorphism::try_new(wrong, &auto_key).is_err());
     }
-    for wrong_level in [1, 2, 3, usize::MAX] {
-        assert!(BfvKeySwitcher::try_new(&context, wrong_level, &switch_key).is_err());
-        assert!(BfvRelinearizer::try_new(&context, wrong_level, &relin_key).is_err());
-        assert!(BfvAutomorphism::try_new(&context, wrong_level, &auto_key).is_err());
+    let limited = BfvContext::try_new(context.parameters().clone()).unwrap();
+    for level in [1, 2] {
+        let switch = client
+            .key_switching_key(&client, level, config, &mut rng)
+            .unwrap();
+        let relin = client.relinearization_key(level, config, &mut rng).unwrap();
+        let auto = client.automorphism_key(level, 5, config, &mut rng).unwrap();
+        assert!(
+            matches!(BfvKeySwitcher::try_new(&limited, &switch), Err(primus_bfv::BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
+        );
+        assert!(
+            matches!(BfvRelinearizer::try_new(&limited, &relin), Err(primus_bfv::BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
+        );
+        assert!(
+            matches!(BfvAutomorphism::try_new(&limited, &auto), Err(primus_bfv::BfvEvaluationKeyError::Level { requested, available: 1 }) if requested == level)
+        );
     }
     for exponent in [0, 2, 2 * N, usize::MAX] {
         assert!(
@@ -103,9 +115,9 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
                 .is_err()
         );
     }
-    let mut switch = BfvKeySwitcher::try_new(&context, 0, &switch_key).unwrap();
-    let mut relin = BfvRelinearizer::try_new(&context, 0, &relin_key).unwrap();
-    let mut auto = BfvAutomorphism::try_new(&context, 0, &auto_key).unwrap();
+    let mut switch = BfvKeySwitcher::try_new(&context, &switch_key).unwrap();
+    let mut relin = BfvRelinearizer::try_new(&context, &relin_key).unwrap();
+    let mut auto = BfvAutomorphism::try_new(&context, &auto_key).unwrap();
     let length = context.rns_poly_len(0);
     for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
         let input = BfvCiphertext::new(vec![0; bad_length]);

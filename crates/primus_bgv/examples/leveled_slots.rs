@@ -8,7 +8,6 @@ use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
-use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -33,7 +32,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?,
         3,
     )?;
-    let batching = BatchingEncoder::try_new(PolyLength::new(SLOTS), BarrettModulus::new(P))?;
+    let batching =
+        BatchingEncoder::try_new(PolyLength::new(SLOTS), context.parameters().plain_modulus())?;
     let config = DecompositionConfig {
         log_basis: DecompositionBaseLog::new(8),
         level_count: None,
@@ -44,20 +44,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public_key = alice.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
     let relin_key = alice.relinearization_key(0, config, &mut rng)?;
-    let rotate_key = alice.automorphism_key(1, batching.rotation_exponent(1), config, &mut rng)?;
-    let swap_key = alice.automorphism_key(1, batching.row_swap_exponent(), config, &mut rng)?;
+    let rotate_key = alice.row_rotation_key(1, &batching, 1, config, &mut rng)?;
+    let swap_key = alice.row_swap_key(1, &batching, config, &mut rng)?;
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng)?;
     let mut multiplication = BgvMultiplication::try_new(&context, &relin_key)?;
-    let mut rotate = BgvAutomorphism::try_new(&context, 1, &rotate_key)?;
-    let mut swap = BgvAutomorphism::try_new(&context, 1, &swap_key)?;
-    let mut switch = BgvKeySwitcher::try_new(&context, 1, &switch_key)?;
+    let mut rotate = BgvAutomorphism::try_new(&context, &rotate_key)?;
+    let mut swap = BgvAutomorphism::try_new(&context, &swap_key)?;
+    let mut switch = BgvKeySwitcher::try_new(&context, &switch_key)?;
     let mut drop_first = BgvModulusSwitch::new(&context, 0);
     let mut drop_second = BgvModulusSwitch::new(&context, 1);
     let values: Vec<_> = (0..ACTIVE).map(|i| 7 * i as u64 + 1).collect();
     let factors: Vec<_> = (0..SLOTS).map(|i| 1 + i as u64 % 3).collect();
     let mut small = vec![0; SLOTS];
-    let mut a = Polynomial::<Vec<u64>>::zero(N);
-    let mut b = Polynomial::<Vec<u64>>::zero(N);
+    let mut a = context.new_plaintext();
+    let mut b = context.new_plaintext();
     batching.encode_to(&values, &mut small);
     batching.embed_to(&small, a.as_mut());
     batching.encode_to(&factors, &mut small);

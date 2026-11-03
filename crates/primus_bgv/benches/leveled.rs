@@ -9,7 +9,6 @@ use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
-use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 use std::hint::black_box;
@@ -39,7 +38,8 @@ fn leveled(c: &mut Criterion) {
     )
     .unwrap();
     let batching =
-        BatchingEncoder::try_new(PolyLength::new(SLOTS), BarrettModulus::new(P)).unwrap();
+        BatchingEncoder::try_new(PolyLength::new(SLOTS), context.parameters().plain_modulus())
+            .unwrap();
     let config = DecompositionConfig {
         log_basis: DecompositionBaseLog::new(8),
         level_count: None,
@@ -51,19 +51,19 @@ fn leveled(c: &mut Criterion) {
     let mut encryptor = context.public_key_encryptor(&public_key).unwrap();
     let relin_key = alice.relinearization_key(0, config, &mut rng).unwrap();
     let rotate_key = alice
-        .automorphism_key(1, batching.rotation_exponent(1), config, &mut rng)
+        .row_rotation_key(1, &batching, 1, config, &mut rng)
         .unwrap();
     let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng).unwrap();
     let mut multiplication = BgvMultiplication::try_new(&context, &relin_key).unwrap();
-    let mut rotate = BgvAutomorphism::try_new(&context, 1, &rotate_key).unwrap();
-    let mut switch = BgvKeySwitcher::try_new(&context, 1, &switch_key).unwrap();
+    let mut rotate = BgvAutomorphism::try_new(&context, &rotate_key).unwrap();
+    let mut switch = BgvKeySwitcher::try_new(&context, &switch_key).unwrap();
     let mut drop_first = BgvModulusSwitch::new(&context, 0);
     let mut drop_second = BgvModulusSwitch::new(&context, 1);
     let values: Vec<_> = (0..ACTIVE).map(|i| (7 * i as u64 + 1) % P).collect();
     let factors: Vec<_> = (0..SLOTS).map(|i| 1 + i as u64 % 3).collect();
     let mut small = vec![0; SLOTS];
-    let mut a = Polynomial::<Vec<u64>>::zero(N);
-    let mut b = Polynomial::<Vec<u64>>::zero(N);
+    let mut a = context.new_plaintext();
+    let mut b = context.new_plaintext();
     let mut encrypted_a = context.new_ciphertext(0);
     let mut encrypted_b = context.new_ciphertext(0);
     let mut linear = context.new_ciphertext(0);
@@ -71,7 +71,7 @@ fn leveled(c: &mut Criterion) {
     let mut rotated = context.new_ciphertext(1);
     let mut switched = context.new_ciphertext(1);
     let mut lowest = context.new_ciphertext(2);
-    let mut recovered = Polynomial::<Vec<u64>>::zero(N);
+    let mut recovered = context.new_plaintext();
     let mut slots = vec![0; SLOTS];
     let mut scratch = vec![0; SLOTS];
 
