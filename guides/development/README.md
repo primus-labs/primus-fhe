@@ -17,7 +17,7 @@ Choose the lowest-level crate that owns your operation. For complete TFHE applic
 | Messages, encoding and phase diagnostics | [primus_encoding](../../crates/primus_encoding/README.md) |
 | Standalone encryption and key switching | [LWE](../../crates/primus_lwe/README.md), [GLWE](../../crates/primus_glwe/README.md), [NTRU](../../crates/primus_ntru/README.md) |
 | RNS conversion, raw GLWE and gadget evaluation | [primus_rns](../../crates/primus_rns/README.md), [primus_glwe_rns](../../crates/primus_glwe_rns/README.md) |
-| BFV coefficient/slot encryption, linear/plaintext evaluation and rounded prime drop | [primus_bfv](../../crates/primus_bfv/README.md) |
+| BFV coefficient/slot encryption, exact multiplication, relin, rotation and levels | [primus_bfv](../../crates/primus_bfv/README.md) |
 | BGV coefficient/slot encryption, multiplication, relin, rotation and levels | [primus_bgv](../../crates/primus_bgv/README.md) |
 | PBS, ManyLUT, MVB, CBS and Boolean gates | [Operation selection](../../crates/primus_tfhe/README.md), then [GLWE NTT](../../crates/primus_tfhe_glwe_ntt/README.md), [GLWE Fourier](../../crates/primus_tfhe_glwe_fourier/README.md), [NTRU NTT](../../crates/primus_tfhe_ntru_ntt/README.md) or [NTRU Fourier](../../crates/primus_tfhe_ntru_fourier/README.md) |
 | One-hot selectors | [NTRU CBS and one-hot](../../crates/primus_tfhe_ntru/README.md#one-hot-cbs), then the backend examples |
@@ -34,6 +34,7 @@ The index is bilingual; the topic language is shown below. External tools mainta
 | --- | --- |
 | Domains, representations, borrowing, phases and reusable state | [Composing libraries](composition.md) (English) |
 | Native BFV/raw GLWE component signs, keys and explicit bridges | [RNS phase conventions](rns-phase-conventions.md) (English) |
+| Native BFV integer tensor, exact scaling, unscaled keys and degree lifecycle | [BFV evaluation](bfv-evaluation.md) (English) |
 | Native BGV key roles, p-preserving gadget residuals and exact prime drop | [BGV evaluation](bgv-evaluation.md) (English) |
 | Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) (English) |
 | Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) (English) |

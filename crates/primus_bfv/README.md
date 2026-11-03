@@ -2,15 +2,15 @@
 
 English | [简体中文](README.zh_CN.md)
 
-BFV coefficient encryption, linear/plaintext evaluation and rounded modulus
-switching with native components `[c0,c1]` and phase `c0+c1*s`. The rank-one
+BFV coefficient/slot encryption, linear/plaintext evaluation, exact integer
+ciphertext multiplication and rounded modulus switching with native components `[c0,c1]` and phase `c0+c1*s`. The rank-one
 backend uses `u64` residues, `BarrettModulus<u64>` and `U64DcrtTable`; the product
 Q may exceed 64 bits. Sharing secret storage with `primus_glwe_rns` preserves
 the actual coefficient secret.
 
 The crate owns BFV parameters, context, ciphertext/public-key semantics, clients
-and evaluators. Optional `batching` consumes shared slot encoding; ciphertext
-multiplication/relinearization and encrypted rotations remain subsequent work.
+and evaluators. Optional `batching` consumes shared slot encoding. Native
+relinearization, key switching and encrypted automorphisms use role-specific keys.
 The coefficient codec remains in `primus_encoding`; arithmetic, NTTs,
 samplers and secret storage are reused from lower layers.
 
@@ -72,6 +72,34 @@ and scale-mismatch error; every destination level needs its own complete
 recovery bound. Algebra, signs and noise contributions are explained in
 [RNS phase conventions](../../guides/development/rns-phase-conventions.md).
 
+## Ciphertext multiplication and keys
+
+Prepare `BfvMultiplier::try_new(&context,level,&auxiliary_primes)` once. Its
+computation-only NTT basis P must satisfy `P>N*Q`; construction verifies the
+bound, coprimality and transform compatibility. These primes are independent of
+secrets, keys, the codec and the level chain. `multiply_to` and `square_to` write
+`context.new_quadratic_ciphertext(level)` with exact `round(t*T_i/Q)` scaling.
+`new_raw_tensor`, `mul_raw_to`/`square_raw_to` and `scale_and_round_to` expose the
+two stages when needed. Raw tensors cannot enter a relinearizer. The already-scaled
+degree-two output must be relinearized before ordinary evaluators or recovery.
+
+The default path uses exact centered CRT lifting, auxiliary NTT multiplication
+and exact quotient recovery. It does not approximate half-boundaries using
+floating point or discard the integer tensor by reducing it modulo Q first.
+`BfvReferenceMultiplier::new(&context,level)` provides an independent prepared
+integer schoolbook fallback with the same scaled output and no auxiliary basis.
+The [evaluation contract](../../guides/development/bfv-evaluation.md) derives the
+lift bound, exact quotient identity, fixed-Delta drift and complete phase errors.
+
+Generate `client.relinearization_key(level,config,rng)` and bind
+`BfvRelinearizer::try_new(&context,level,&key)`; `relinearize_to` converts degree
+two to degree one. `recipient.key_switching_key(&source,level,config,rng)`
+creates a source-to-recipient key for `BfvKeySwitcher`. `automorphism_key` takes
+an odd exponent below 2N and is consumed by `BfvAutomorphism`. Each actual level
+uses its own key. BFV columns encrypt `g_j*h+e_j`, without the BGV p factor or
+p^-1 preprocessing. Truncated decomposition residual and key noise consume the
+BFV recovery margin; maximum digit count can still drop radix remainder bits.
+
 ## Recovery and levels
 
 Each level owns a codec with `delta=floor(Q_level/t)` and the same t/gamma.
@@ -129,7 +157,11 @@ samplers. The workspace has a phase buffer plus exactly the top codec's
 `decode_scratch_len(N)` conversion elements; lower codecs reuse its prefix.
 A single-prime codec needs no conversion elements.
 
-An evaluator owns one reusable plaintext polynomial; a switch owns one
+A multiplier owns only its auxiliary base/table, constants and reusable scratch;
+it borrows Q resources. The explicit reference owner alone allocates its
+integer schoolbook workspace. Prepared key products borrow context/key resources
+and own decomposition scratch. An evaluator owns one reusable plaintext
+polynomial; a switch owns one
 N-coefficient dropped-limb buffer and prepared constants. Prepared `*_to` and
 `*_assign` operations allocate no temporary storage. `new_ciphertext` and
 `decrypt` allocate their returned result. Public encryptors own one ephemeral
@@ -160,6 +192,8 @@ cargo run -p primus_bfv --example leveled_coefficients
 cargo run -p primus_bfv --example coefficients
 cargo run -p primus_bfv --example hybrid_rns_key_switch
 cargo clippy -p primus_bfv --all-targets -- -D warnings
+cargo run -p primus_bfv --example leveled_slots --features batching
+cargo bench -p primus_bfv --bench multiplication --features batching
 cargo bench -p primus_bfv --bench leveled
 cargo bench -p primus_bfv --bench public_encryption
 cargo bench -p primus_bfv --bench key_switching
@@ -169,8 +203,13 @@ Small functional tests use independent direct-DFT/schoolbook and integer-roundin
 oracles for phases, dense products, embeddings, boundary values and multiple
 levels. They also protect raw bridges, wrong-scaling cases, complete checks,
 workspace reuse/erasure and allocation contracts. Criterion measures individual
-operations and a complete encrypt/evaluate/two-switch/decrypt request with
-prepared resources. Raw comparison timings exclude bridges performed during setup.
+operations and complete fresh requests with prepared resources. The multiplication
+benchmark compares exact RNS NTT and integer schoolbook kernels on identical
+ciphertexts, then measures encode/public-encrypt/mul/square/relin/rotate/key-switch/
+two-drop/recover/decode as one request. Raw comparison timings exclude bridges performed during setup.
+
+Measured exact RNS/reference and full-request costs are recorded in the
+[performance report](../../guides/performance/bfv-multiplication.md).
 
 ## Slots and plaintext subrings
 
@@ -178,8 +217,9 @@ Enable `batching` to use the same `primus_encoding::BatchingEncoder` as BGV:
 map slots in two ±5^j rows and embed a small-n polynomial into a full-N plaintext.
 Secrets and ciphertexts remain full N; unused slots and off-stride padding are zero.
 The [slots example](examples/slots.rs) runs public encryption, plaintext add/mul,
-exact prime drop, full-N recovery and extract/decode. It does not perform encrypted
-rotation or ciphertext multiplication.
+exact prime drop, full-N recovery and extract/decode. The complete
+[leveled slots example](examples/leveled_slots.rs) additionally performs ct×ct,
+square, relinearization, row rotation/swap, cross-client switching and two drops.
 
 ```sh
 cargo run -p primus_bfv --example slots --features batching

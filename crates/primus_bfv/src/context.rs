@@ -4,7 +4,9 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::{NttError, U64DcrtTable};
 use primus_rns::RNSBase;
 
-use crate::{BfvCiphertext, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor};
+use crate::{
+    BfvCiphertext, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor, BfvQuadraticCiphertext,
+};
 
 /// Invalid transform parameters, prefix codec or requested number of levels.
 #[derive(Debug, thiserror::Error)]
@@ -135,6 +137,18 @@ impl BfvContext {
     #[must_use]
     pub fn new_ciphertext(&self, level: usize) -> BfvCiphertext<Vec<u64>> {
         BfvCiphertext::zero(2 * self.rns_poly_len(level))
+    }
+
+    /// Allocates an already-scaled degree-two ciphertext at a prepared level.
+    ///
+    /// The storage is intended for [`crate::BfvMultiplier`] output; it is not an
+    /// unscaled integer tensor. Relinearize it before degree-one operations.
+    ///
+    /// # Panics
+    /// Panics if the requested level is not prepared.
+    #[must_use]
+    pub fn new_quadratic_ciphertext(&self, level: usize) -> BfvQuadraticCiphertext<Vec<u64>> {
+        BfvQuadraticCiphertext::zero(3 * self.rns_poly_len(level))
     }
 
     /// Prepares public encryption at level zero, reusing the owned resources.

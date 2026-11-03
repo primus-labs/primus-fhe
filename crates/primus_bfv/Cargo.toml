@@ -10,6 +10,7 @@ primus_distr = { path = "../primus_distr" }
 primus_encoding = { path = "../primus_encoding", features = ["rns"] }
 primus_factor = { path = "../primus_factor" }
 primus_glwe_rns = { path = "../primus_glwe_rns" }
+primus_integer = { path = "../primus_integer" }
 primus_lattice = { path = "../primus_lattice", features = ["rns"] }
 primus_modulus = { path = "../primus_modulus" }
 primus_ntt = { path = "../primus_ntt" }
@@ -44,4 +45,13 @@ harness = false
 
 [[example]]
 name = "slots"
+required-features = ["batching"]
+
+[[bench]]
+name = "multiplication"
+harness = false
+required-features = ["batching"]
+
+[[example]]
+name = "leveled_slots"
 required-features = ["batching"]

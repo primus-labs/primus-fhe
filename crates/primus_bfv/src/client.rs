@@ -13,7 +13,7 @@ use crate::{BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvPublicKey, BfvSec
 /// Fresh secret/public encryption is at level zero; evaluation and switching do
 /// not require this client. Mutable access serializes recovery workspace reuse.
 pub struct BfvClient<'a> {
-    context: &'a BfvContext,
+    pub(crate) context: &'a BfvContext,
     key: DcrtGlweSecretKey<u64>,
     workspace: BfvDecryptWorkspace,
 }
@@ -129,6 +129,47 @@ impl<'a> BfvClient<'a> {
         assert!(
             input.as_ref().iter().all(|&x| x < t),
             "BFV plaintext coefficient is not canonical"
+        );
+    }
+
+    /// Samples native unscaled key-column noise at one prepared prefix level.
+    /// The context owns the unique sampler and each limb receives the same
+    /// integer error; this does not create lower-level plaintext encryptors.
+    pub(crate) fn encrypt_zeros_at_level_to<R, B>(
+        &self,
+        output: &mut BfvCiphertext<B>,
+        level: usize,
+        rng: &mut R,
+    ) where
+        R: rand::Rng + rand::CryptoRng,
+        B: DataMut<Elem = u64>,
+    {
+        let codec = self.context.codec(level);
+        let n = self.context.parameters().poly_length().get();
+        let sampling = self.context.parameters().encryption_parameters();
+        let length = self.context.rns_poly_len(level);
+        let (mut c0, mut c1) = output.c0_c1_mut(length);
+        sampling.sample_noise_to(c0.as_mut(), codec.moduli_values(), rng);
+        for (table, limb) in self
+            .context
+            .table()
+            .iter()
+            .zip(c0.as_mut().chunks_exact_mut(n))
+        {
+            table.transform_slice(limb);
+        }
+        primus_distr::sample_crt_uniform_values_to(
+            c1.as_mut(),
+            n,
+            &sampling.cipher_moduli_uniform_distr()[..codec.moduli_count()],
+            rng,
+        );
+        let secret = self.key.iter_dcrt_poly().next().expect("rank-one secret");
+        c0.sub_mul_assign(
+            &c1,
+            &DcrtPolynomial(&secret.as_ref()[..length]),
+            n,
+            codec.base_q().moduli(),
         );
     }
 

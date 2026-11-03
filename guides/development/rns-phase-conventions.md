@@ -26,14 +26,13 @@ the secret or change a binary secret distribution into `{0,-1}`. Basis, canonica
 residues, secret identity and NTT conventions remain caller requirements.
 
 Native BFV encryption/recovery, linear/plaintext evaluation, exact rounded prime
-drop, physical components and this bridge are implemented. Native BFV evaluation
-keys and full BFV ciphertext multiplication/relinearization remain subsequent
-work. Native BGV now provides quadratic products, p-preserving relin/key switch/
+drop, physical components and this bridge are implemented. Native BFV unscaled evaluation keys and full ciphertext multiplication/
+relinearization are specified in [BFV evaluation](bfv-evaluation.md). Native BGV now provides quadratic products, p-preserving relin/key switch/
 automorphism and exact prefix prime drop; its distinct key/residual equations are
 specified in [BGV evaluation](bgv-evaluation.md). Collective Flexilect setup and
 opening remain separate future work; existing Relect opening uses raw shares.
 The unscaled tensor/key equations below also explain existing raw consumers;
-they do not establish the still-unimplemented BFV scale-and-round backend.
+BFV scale-and-round is verified separately against its integer tensor oracle.
 
 ## Coefficient evaluation, recovery and exact prime drop
 
@@ -161,7 +160,8 @@ BGV implements this using p-scaled columns and a p^-1 preprocessing step as
 specified in [its evaluation contract](bgv-evaluation.md). Exporting BFV to raw,
 using the existing raw evaluator and importing its output remains an explicit
 supported composition; its decomposition input/noise need not match a native
-algorithm. No native BFV switching backend is implied by that composition.
+algorithm. Ordinary BFV instead uses the native unscaled gadget path described in
+[BFV evaluation](bfv-evaluation.md).
 
 Hybrid raw keys use partition selectors `E_j` (one in their own Q partition,
 zero in the other Q limbs) and have phase `P*E_j*s_in+e_j` over QP.

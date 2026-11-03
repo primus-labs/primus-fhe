@@ -2,13 +2,13 @@
 
 [English](README.md) | 简体中文
 
-采用原生组件 `[c0,c1]`、phase `c0+c1*s` 的 BFV 系数加密、线性/明文求值与
+采用原生组件 `[c0,c1]`、phase `c0+c1*s` 的 BFV 系数/槽加密、线性/明文求值、精确整数密文乘法与
 rounded modulus switching。Rank-one 后端使用 `u64` 残数、`BarrettModulus<u64>`
 和 `U64DcrtTable`；总模数 Q 可以超过 64 位。与 `primus_glwe_rns` 共享秘密存储
 时，实际系数秘密不变。
 
 本 crate 负责 BFV 参数、context、密文/公钥语义、client 和 evaluator。
-可选 `batching` 消费共享槽编码；密文乘法/重线性化及密文旋转尚待实现。
+可选 `batching` 消费共享槽编码；原生重线性化、换钥和密文自同构使用各自角色的密钥。
 系数 codec 保留在 `primus_encoding`；
 算术、NTT、sampler 和秘密存储复用底层实现。
 
@@ -64,6 +64,31 @@ Switch 引入组件舍入和缩放差异误差；每个目标层都需要独立�
 代数、符号和噪声贡献见
 [RNS phase 约定](../../guides/development/rns-phase-conventions.md)（English）。
 
+## 密文乘法与求值密钥
+
+一次性准备 `BfvMultiplier::try_new(&context,level,&auxiliary_primes)`。
+计算用 NTT 辅助基 P 要求 `P>N*Q`；构造器检查容量、互素和变换兼容性。
+这些 primes 不进入秘密、密钥、codec 或 level chain。`multiply_to` 和 `square_to`
+输出到 `context.new_quadratic_ciphertext(level)`，逐组件精确执行
+`round(t*T_i/Q)`。需要分阶段使用时，通过 `new_raw_tensor`、`mul_raw_to`/
+`square_raw_to` 和 `scale_and_round_to` 保留整数乘积。Raw tensor 不能传入
+relinearizer；已缩放的 degree-two 输出也必须先重线性化才能普通求值或恢复。
+
+默认路径采用精确 centered CRT lift、辅助 NTT 乘法与精确商恢复；不用浮点近似
+half 边界，也不先模 Q 丢掉整数乘积。`BfvReferenceMultiplier::new(&context,level)`
+保留独立的整数 schoolbook fallback，输出相同缩放结果，无需辅助基。
+[求值契约](../../guides/development/bfv-evaluation.md)（English）推导 lift 容量、
+精确商恒等式、fixed-Delta 漂移和完整 phase 误差。
+
+生成 `client.relinearization_key(level,config,rng)` 后绑定
+`BfvRelinearizer::try_new(&context,level,&key)`，用 `relinearize_to` 把 degree two
+转为 degree one。`recipient.key_switching_key(&source,level,config,rng)` 为
+`BfvKeySwitcher` 创建 source→recipient 换钥密钥。`automorphism_key` 接受小于
+2N 的奇数指数，交给 `BfvAutomorphism` 使用。每个实际 level 独立生成密钥。
+BFV columns 加密 `g_j*h+e_j`，没有 BGV 的 p 倍因子或 p^-1 预处理。
+截断分解 residual 和 key noise 都消耗 BFV 恢复余量；最大 digit 数仍可能丢弃
+radix 余下的低位。
+
 ## 恢复与层级
 
 每层拥有一个 `delta=floor(Q_level/t)`、共享 t/gamma 的 codec。恢复通过
@@ -112,7 +137,9 @@ Context 拥有一份完整 basis 的 NTT table、一份最高层参数，以及�
 Workspace 包含 phase buffer，以及恰好最高层 codec 的 `decode_scratch_len(N)`
 个转换元素；低层 codec 复用对应前缀。单 prime codec 不需要转换元素。
 
-Evaluator 拥有一个可复用明文多项式；switch 拥有一个 N 系数 dropped-limb buffer
+Multiplier 拥有辅助 base/table、常量和可复用 scratch，借用现有 Q 资源；只有显式
+reference owner 分配整数 schoolbook workspace。Prepared key products 借用 context/
+key 资源，自持分解 scratch。Evaluator 拥有一个可复用明文多项式；switch 拥有一个 N 系数 dropped-limb buffer
 及预备常量。Prepared `*_to` 和 `*_assign` 操作不分配临时存储。
 `new_ciphertext` 和 `decrypt` 分配返回结果。公钥 encryptor 拥有一个 ephemeral
 workspace。并发操作使用独立的可变 workspace owner，可以共享不可变 context/
@@ -138,6 +165,8 @@ cargo run -p primus_bfv --example leveled_coefficients
 cargo run -p primus_bfv --example coefficients
 cargo run -p primus_bfv --example hybrid_rns_key_switch
 cargo clippy -p primus_bfv --all-targets -- -D warnings
+cargo run -p primus_bfv --example leveled_slots --features batching
+cargo bench -p primus_bfv --bench multiplication --features batching
 cargo bench -p primus_bfv --bench leveled
 cargo bench -p primus_bfv --bench public_encryption
 cargo bench -p primus_bfv --bench key_switching
@@ -146,7 +175,12 @@ cargo bench -p primus_bfv --bench key_switching
 小规模功能测试通过独立 direct-DFT/schoolbook 和整数舍入 oracle 检查 phase、
 稠密乘法、embedding、边界值与多级计算，还覆盖 raw 桥接、错误重复缩放、完整
 检查、workspace 复用/擦除及分配契约。Criterion 在资源预备后测量独立操作和完整
-加密/求值/两次 switch/解密请求。Raw 对照计时不包含 setup 中完成的桥接。
+加密/求值/两次 switch/解密请求。新 multiplication 基准在相同密文上比较精确 RNS NTT
+与整数 schoolbook，再测量 encode/公钥加密/mul/square/relin/rotate/换钥/两次降模/
+恢复/decode 的完整 fresh 请求。Raw 对照计时不包含 setup 中完成的桥接。
+
+精确 RNS/reference 和完整请求的实际成本见
+[性能报告](../../guides/performance/bfv-multiplication.md)（English）。
 
 ## 槽与明文子环
 
@@ -154,7 +188,8 @@ cargo bench -p primus_bfv --bench key_switching
 按 ±5^j 两行转换 slot/coefficient，并把 small-n 多项式嵌入 full-N 明文。
 秘密和密文仍为 N，未用 slots 和 off-stride padding 均为零。
 [slots 示例](examples/slots.rs) 展示公钥加密→plaintext add/mul→精确 prime drop→
-full-N 解密→extract/decode；不执行密文旋转或 ct×ct。
+full-N 解密→extract/decode。[完整多级槽示例](examples/leveled_slots.rs) 还执行
+ct×ct、square、relin、行旋转/交换、跨 client 换钥和两次降模。
 
 ```sh
 cargo run -p primus_bfv --example slots --features batching

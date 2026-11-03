@@ -90,9 +90,12 @@ just schemes
 cargo run -p primus_bgv --example leveled_coefficients
 cargo run -p primus_bgv --example leveled_slots --features batching
 cargo run -p primus_bfv --example slots --features batching
+cargo run -p primus_bfv --example leveled_coefficients
+cargo run -p primus_bfv --example leveled_slots --features batching
 cargo check -p primus_bgv --lib --no-default-features
 cargo check -p primus_encoding --lib --no-default-features --features batching
 just bench-smoke primus_bgv leveled --features batching
+just bench-smoke primus_bfv multiplication --features batching
 ```
 
 BGV `workflow` 的一次迭代包含 encode/embed、真实公钥加密、plain-add、dense
@@ -104,6 +107,16 @@ plain-mul、精确恢复和 extract/decode，预分配与建钥在计时外。�
 [BGV 求值契约](bgv-evaluation.md)。参数、布局和当前接口见
 [BGV](../../crates/primus_bgv/README.zh_CN.md)、[BFV](../../crates/primus_bfv/README.zh_CN.md)
 及[共享编码](../../crates/primus_encoding/README.zh_CN.md)。
+
+BFV `multiplication` 单独比较相同密文上的 exact RNS NTT 与 integer schoolbook
+乘法，再测量包含 encode/embed、两次 fresh 公钥加密、mul/square/relin、行旋转、
+跨 client 换钥、两次 BFV rounded drop 和恢复/decode 的完整请求。计时不包含
+context、auxiliary P、keys 与 scratch 准备；`-- --test` 只是正确性 smoke，不能
+替代统计采样。RNS NTT 默认路径精确保留 integer tensor，P>NQ 在构造时检查；
+reference fallback 独立分配其整数 workspace。完整代数与固定 Delta 误差见
+[BFV 求值契约](bfv-evaluation.md)。普通测试分开核对 raw/scaled 组件、任意宽
+schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配；不得
+把成功的解密往返当作整数取整或噪声证明。
 
 ## TFHE benchmarks
 
