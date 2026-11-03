@@ -8,6 +8,8 @@ thiserror.workspace = true
 primus_data = { path = "../primus_data", optional = true }
 primus_poly = { path = "../primus_poly", optional = true }
 primus_rns = { path = "../primus_rns", optional = true }
+primus_ntt = { path = "../primus_ntt", optional = true }
+primus_shape = { path = "../primus_shape", optional = true }
 primus_integer = { path = "../primus_integer" }
 primus_reduce = { path = "../primus_reduce" }
 primus_modulus = { path = "../primus_modulus" }
@@ -19,7 +21,9 @@ criterion.workspace = true
 [features]
 default = []
 rns = ["dep:primus_data", "dep:primus_poly", "dep:primus_rns"]
+batching = ["dep:primus_ntt", "dep:primus_shape"]
 simd = [
+    "primus_ntt?/simd",
     "primus_poly?/simd",
     "primus_rns?/simd",
     "primus_integer/simd",

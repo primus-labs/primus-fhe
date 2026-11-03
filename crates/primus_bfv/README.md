@@ -9,8 +9,9 @@ Q may exceed 64 bits. Sharing secret storage with `primus_glwe_rns` preserves
 the actual coefficient secret.
 
 The crate owns BFV parameters, context, ciphertext/public-key semantics, clients
-and evaluators. Ciphertext multiplication/relinearization and SIMD slots are not
-provided. The coefficient codec remains in `primus_encoding`; arithmetic, NTTs,
+and evaluators. Optional `batching` consumes shared slot encoding; ciphertext
+multiplication/relinearization and encrypted rotations remain subsequent work.
+The coefficient codec remains in `primus_encoding`; arithmetic, NTTs,
 samplers and secret storage are reused from lower layers.
 
 ## Coefficient workflow
@@ -170,3 +171,16 @@ levels. They also protect raw bridges, wrong-scaling cases, complete checks,
 workspace reuse/erasure and allocation contracts. Criterion measures individual
 operations and a complete encrypt/evaluate/two-switch/decrypt request with
 prepared resources. Raw comparison timings exclude bridges performed during setup.
+
+## Slots and plaintext subrings
+
+Enable `batching` to use the same `primus_encoding::BatchingEncoder` as BGV:
+map slots in two ±5^j rows and embed a small-n polynomial into a full-N plaintext.
+Secrets and ciphertexts remain full N; unused slots and off-stride padding are zero.
+The [slots example](examples/slots.rs) runs public encryption, plaintext add/mul,
+exact prime drop, full-N recovery and extract/decode. It does not perform encrypted
+rotation or ciphertext multiplication.
+
+```sh
+cargo run -p primus_bfv --example slots --features batching
+```

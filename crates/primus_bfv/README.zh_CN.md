@@ -8,7 +8,8 @@ rounded modulus switching。Rank-one 后端使用 `u64` 残数、`BarrettModulus
 时，实际系数秘密不变。
 
 本 crate 负责 BFV 参数、context、密文/公钥语义、client 和 evaluator。
-尚未提供密文乘法/重线性化和 SIMD slots。系数 codec 保留在 `primus_encoding`；
+可选 `batching` 消费共享槽编码；密文乘法/重线性化及密文旋转尚待实现。
+系数 codec 保留在 `primus_encoding`；
 算术、NTT、sampler 和秘密存储复用底层实现。
 
 ## 系数工作流
@@ -146,3 +147,15 @@ cargo bench -p primus_bfv --bench key_switching
 稠密乘法、embedding、边界值与多级计算，还覆盖 raw 桥接、错误重复缩放、完整
 检查、workspace 复用/擦除及分配契约。Criterion 在资源预备后测量独立操作和完整
 加密/求值/两次 switch/解密请求。Raw 对照计时不包含 setup 中完成的桥接。
+
+## 槽与明文子环
+
+启用 `batching` 后，使用与 BGV 共用的 `primus_encoding::BatchingEncoder`，
+按 ±5^j 两行转换 slot/coefficient，并把 small-n 多项式嵌入 full-N 明文。
+秘密和密文仍为 N，未用 slots 和 off-stride padding 均为零。
+[slots 示例](examples/slots.rs) 展示公钥加密→plaintext add/mul→精确 prime drop→
+full-N 解密→extract/decode；不执行密文旋转或 ct×ct。
+
+```sh
+cargo run -p primus_bfv --example slots --features batching
+```

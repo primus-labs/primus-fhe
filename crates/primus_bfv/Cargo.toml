@@ -27,6 +27,7 @@ dashu-int = { workspace = true }
 
 [features]
 default = []
+batching = ["primus_encoding/batching"]
 simd = ["primus_glwe_rns/simd", "primus_encoding/simd"]
 
 [[bench]]
@@ -40,3 +41,7 @@ harness = false
 [[bench]]
 name = "leveled"
 harness = false
+
+[[example]]
+name = "slots"
+required-features = ["batching"]

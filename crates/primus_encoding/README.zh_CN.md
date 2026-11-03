@@ -5,7 +5,7 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-Primus FHE 的明文系数编码与解码。
+Primus FHE 的明文系数编码、解码与整数槽打包。
 
 ## API
 
@@ -14,12 +14,13 @@ Primus FHE 的明文系数编码与解码。
 | `RoundedCodec<T,M>` | `round(lift(m)*q/t) mod q` | LWE 和 TFHE 查找表 |
 | `ScaledCodec<T,M>` | `lift(m)*round(q/t) mod q` | 单模数 GLWE/NTRU |
 | `BfvRnsCodec<T,M>` | `lift(m)*floor(Q/t) mod Q` | RNS 系数缩放（`rns` feature） |
+| `BatchingEncoder` | `w^(±5^j)` 上的两行求值 | BFV/BGV 共享整数槽（`batching` feature，`u64`） |
 
 单模数构造器为 `new(plaintext_modulus, ciphertext_modulus)`，例如 `RoundedCodec::new(256u64, NativeModulus::new())` 或 `RoundedCodec::new(7u64, BarrettModulus::new(131))`。构造一次后复用 codec。`t` 整除 `q` 时两种编码都使用精确尺度 `q/t`；否则 Rounded 对每个消息舍入，Scaled 使用统一的整数尺度。
 
 TFHE 普通 LUT 的输出 `RoundedCodec` 使用 accumulator 模数，明文模数可与输入不同。解码使用返回密文模数下、相同输出明文模数的 codec；NTRU 的 Q→q 路径尤其需要区分二者。见[输出编码指南](../primus_tfhe/README.zh_CN.md#选择输出编码)。
 
-这些类型负责系数编码。目前未实现 BFV/BGV 整数槽打包、BGV 的无缩放明文提升，以及 CKKS 的典范嵌入。
+前三种类型负责系数编码。`BatchingEncoder` 在方案执行各自的消息提升前，转换明文槽与系数。目前未实现 CKKS 的典范嵌入。
 
 ## 编码契约
 
@@ -44,6 +45,18 @@ Rounded 编码对整数提升舍入，中点远离零。两种单模数 codec �
 `encode_coeffs_to` 按基的顺序输出系数域 `CrtPolynomial`；`add_encode_coeffs_assign` 加到已有的规范累加器上。多项式长度由明文切片决定。`decode_coeffs_to` 会覆盖系数域输入，并要求工作区恰好包含 `decode_scratch_len(output.len())` 个元素：单模数基为零，其他基为一个 RNS 多项式的大小。变换域数据须先做逆 NTT 再解码。
 
 每个输入 residue 必须是其对应基模数下的规范剩余。自定义模数 context 还须满足 codec 继承的[跨模数基转换契约](../primus_rns/README.zh_CN.md#基转换)；提供的 Barrett context 已满足该条件。该编码器是 BFV 的组成部分，并非完整 BFV 方案。
+
+## 整数槽与子环
+
+启用 `batching` 后，对满足 `p = 1 mod 2n` 的素数明文模数，构造并复用 `BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(p))`。已有 `U64NttTable` 要求 `p < 2^62`，`PolyLength` 支持范围从 `n = 32` 开始。与底层 NTT 相同，素性是调用方前提；构造器检查变换是否可用。
+
+布局有两行，每行 `n/2` 个槽，分别在最小本原 `2n` 次单位根的 `5^j` 和 `-5^j` 次幂上求值。`encode_to(slots, coefficients)` 接受不超过 `n` 个槽的前缀，将缺省槽清零，并输出恰好 `n` 个系数。`decode_to(coefficients, slots, scratch)` 要求三个切片长度均恰好为 `n`。这些 prepared 调用不分配内存，并在写入前检查明文规范范围与完整长度。
+
+`rotation_exponent(k)` 返回使每行向左移动 `k` 个槽的多项式自同构指数；负数表示向右旋转。`row_swap_exponent()` 交换两行而不反转行内顺序。`automorphism_slots_to` 执行对应的**明文**置换。密文自同构及密钥切换属于方案层。
+
+明文槽容量 `n` 可以小于密文环维数 `N`。`embed_to` 输出 `f(X^(N/n))`，非 `N/n` 倍数位置的系数全部清零；`extract_to` 在方案解密并解码系数后检查并反转该嵌入。只要求 `2n` 整除 `p-1`，无需 `p` 支持完整 `N` 维明文变换。这两个辅助函数都不改变密文或完整 `N` 维秘密。例如 `n=32, N=128, p=193` 支持 32 个子环槽，尽管模 193 不支持 128 槽变换。嵌入与提取都要求 `N >= n` 且 `N` 为二次幂。
+
+通过 `cargo test -p primus_encoding --features batching --test batching --test batching_allocation` 运行独立直接求值、负循环卷积、自同构及分配检查。
 
 ## 相位误差诊断
 
@@ -72,4 +85,5 @@ assert_eq!(phase_error_magnitude(phase, expected_phase, modulus), 64);
 
 - 默认：单模数编码器与相位误差诊断。
 - `rns`：启用 BFV RNS 系数编码与解码。
-- `simd`：启用 nightly SIMD 算术，不会单独启用 `rns`。
+- `batching`：独立于 `rns`，启用固定 `u64` 整数槽与明文子环嵌入。
+- `simd`：启用 nightly SIMD 算术，不会单独启用 `rns` 或 `batching`。

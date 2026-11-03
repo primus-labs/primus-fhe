@@ -5,7 +5,7 @@ English | [简体中文](README.zh_CN.md)
 > [!WARNING]
 > This crate is part of the experimental [Primus FHE](../../README.md) workspace. Its API and numerical contracts are unstable and may change incompatibly at any time.
 
-Plaintext coefficient encoding and decoding for Primus FHE.
+Plaintext coefficient encoding, decoding and integer slot packing for Primus FHE.
 
 ## APIs
 
@@ -14,12 +14,13 @@ Plaintext coefficient encoding and decoding for Primus FHE.
 | `RoundedCodec<T,M>` | `round(lift(m)*q/t) mod q` | LWE and TFHE lookup tables |
 | `ScaledCodec<T,M>` | `lift(m)*round(q/t) mod q` | Single-modulus GLWE/NTRU |
 | `BfvRnsCodec<T,M>` | `lift(m)*floor(Q/t) mod Q` | RNS coefficient scaling (`rns` feature) |
+| `BatchingEncoder` | Two-row evaluations at `w^(±5^j)` | Shared BFV/BGV integer slots (`batching` feature, `u64`) |
 
 Single-modulus constructors use `new(plaintext_modulus, ciphertext_modulus)`, for example `RoundedCodec::new(256u64, NativeModulus::new())` or `RoundedCodec::new(7u64, BarrettModulus::new(131))`. Construct once and reuse the codec. When `t` divides `q`, both encodings use the exact scale `q/t`; otherwise Rounded rounds each message while Scaled uses one integer scale.
 
 The output `RoundedCodec` for ordinary TFHE LUTs uses the accumulator modulus and may choose a different plaintext modulus from the input. Decode with the same output plaintext modulus at the returned ciphertext modulus, especially for NTRU Q→q. See the [output encoding guide](../primus_tfhe/README.md#choosing-the-output-encoding).
 
-These are coefficient codecs. BFV/BGV integer slot packing, BGV's unscaled plaintext lifting, and CKKS canonical embedding are not implemented.
+The first three types encode coefficients. `BatchingEncoder` converts between plaintext slots and coefficients before a scheme applies its own message lifting. CKKS canonical embedding is not implemented.
 
 ## Encoding contracts
 
@@ -44,6 +45,18 @@ For a complete phase-noise magnitude bound `E`, call `validate_noise_bound(E, em
 `encode_coeffs_to` produces coefficient-domain `CrtPolynomial` data in the basis order; `add_encode_coeffs_assign` adds to an existing canonical accumulator. Polynomial length comes from the plaintext slice. `decode_coeffs_to` overwrites its coefficient-domain input and needs exactly `decode_scratch_len(output.len())` scratch elements: zero for a single-modulus basis, one RNS polynomial otherwise. Perform inverse NTT before decoding transformed data.
 
 Each input residue must be canonical under its basis modulus. Custom modulus contexts must also satisfy the [cross-modulus base-conversion contract](../primus_rns/README.md#base-conversion) inherited by the codec; the supplied Barrett contexts meet it. This codec is a BFV building block, not a complete BFV scheme.
+
+## Integer slots and subrings
+
+With `batching`, construct `BatchingEncoder::try_new(PolyLength::new(n), BarrettModulus::new(p))` once for a prime plaintext modulus with `p = 1 mod 2n`. The existing `U64NttTable` imposes `p < 2^62` and the supported `PolyLength` range starts at `n = 32`. Primality is a caller precondition, as for the underlying NTT; the constructor checks transform availability.
+
+The layout has two rows of `n/2` slots, at the smallest primitive `2n`-th root raised to `5^j` and `-5^j`. `encode_to(slots, coefficients)` accepts a prefix of at most `n` slots, zeroes the missing slots, and writes exactly `n` coefficients. `decode_to(coefficients, slots, scratch)` requires exactly `n` elements in each slice. These prepared calls allocate nothing and validate canonical plaintext values and complete lengths before writing.
+
+`rotation_exponent(k)` gives the polynomial automorphism exponent that rotates each row left by `k`; negative steps rotate right. `row_swap_exponent()` swaps rows without reversing them. `automorphism_slots_to` applies the corresponding **plaintext** permutation. Ciphertext automorphism and key switching belong to the scheme.
+
+The plaintext slot capacity `n` can be smaller than the ciphertext ring dimension `N`. `embed_to` writes `f(X^(N/n))`, with zero coefficients outside multiples of `N/n`; `extract_to` checks and reverses that embedding after scheme decryption and coefficient decoding. Only `2n` must divide `p-1`; `p` need not admit a full-`N` plaintext transform. Neither helper resizes a ciphertext or its full-`N` secret. For example, `n=32, N=128, p=193` supports 32 subring slots, even though a 128-slot transform modulo 193 is unavailable. Both the embedding and extraction require power-of-two `N >= n`.
+
+Run the independent direct-evaluation, negacyclic multiplication, automorphism and allocation checks with `cargo test -p primus_encoding --features batching --test batching --test batching_allocation`.
 
 ## Phase error diagnostics
 
@@ -83,4 +96,5 @@ The [public API sources](src/lib.rs) document method contracts. Commands and mea
 
 - Default: single-modulus codecs and phase error diagnostics.
 - `rns`: enables BFV RNS coefficient encoding and decoding.
-- `simd`: enables nightly SIMD arithmetic; does not enable `rns` by itself.
+- `batching`: enables fixed-`u64` integer slots and plaintext subring embedding, independently of `rns`.
+- `simd`: enables nightly SIMD arithmetic; does not enable `rns` or `batching` by itself.

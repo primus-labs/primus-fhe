@@ -4,7 +4,7 @@ export RUSTDOCFLAGS := "-D warnings"
 default: fmt-check (lint "*" "ntt,fourier,rustfft,tfhe-fft") (test "*" "ntt,fourier,rustfft,tfhe-fft")
 
 # CI selects stable; local commands use the active toolchain.
-ci: default test-doc
+ci: default test-doc schemes
   cargo check -p primus_data --lib --no-default-features
   cargo check -p primus_fft -p primus_lwe -p primus_tfhe_glwe -p primus_tfhe_ntru --lib --no-default-features
   cargo check -p 'primus_tfhe*_ntt' -p primus_glwe_rns --lib --no-default-features
@@ -48,6 +48,14 @@ simd package="*":
 tfhe: (lint "primus_tfhe*" "ntt,fourier,rustfft,tfhe-fft") (test "primus_tfhe*" "ntt,fourier,rustfft,tfhe-fft")
 
 tfhe-simd: (simd "primus_tfhe*")
+
+# BFV/BGV optional batching, independent from the default coefficient workflow.
+schemes:
+  cargo clippy -p primus_encoding -p primus_bfv -p primus_bgv --all-targets --features rns,batching -- -D warnings
+  cargo nextest run -p primus_encoding -p primus_bfv -p primus_bgv --lib --tests --features rns,batching
+  cargo run -p primus_bgv --example coefficients
+  cargo run -p primus_bgv --example slots --features batching
+  cargo run -p primus_bfv --example slots --features batching
 
 # Explicit crate-local workload.
 bench package target *cargo-args:

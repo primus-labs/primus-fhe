@@ -8,6 +8,7 @@
 
 | 主题 | 正文语言 | 保留价值 |
 | --- | --- | --- |
+| [BGV 系数与子环槽](bgv-basic.md) | English | 精确 centered 恢复的资源选择与完整 packed 请求基线 |
 | [BFV 系数工作流](bfv-leveled-coefficients.md) | English | 精确舍入降模的资源选择与完整系数请求成本 |
 | [Sparse算术与调度](sparse-arithmetic.md) | English | 当前聚合、canonical NTT边界、16 KiB tile、4/2/1所有权及负向控制 |
 | [NTRU投影](ntru-projection-fusion.md) | English | NTT四策略、Fourier paired/共享成本，以及历史binary完整请求未达门槛的证据 |

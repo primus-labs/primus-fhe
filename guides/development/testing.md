@@ -14,9 +14,10 @@
 | `just test [package] [features]` | nextest 普通测试，显式使用 `--lib --tests` |
 | `just test-doc [package]` | doctest，与 nextest 分开执行 |
 | `just simd [package]` | nightly、all-features 的 Clippy 与普通测试 |
+| `just schemes` | BFV/BGV 与共享编码的 batching 编译/lint/普通测试，并实际执行系数/子环槽示例 |
 | `just tfhe` / `just tfhe-simd` | 所有 `primus_tfhe*` 包的 Clippy 与普通测试；前者选择 NTT 和双 FFT，后者使用 nightly、all-features |
 | `just` | 格式检查、workspace Clippy 与普通测试，选择 `ntt,fourier,rustfft,tfhe-fft` |
-| `just ci` | 在 `just` 之上执行 doctest、可选依赖隔离编译和 Barrett derive 回归 |
+| `just ci` | 在 `just` 之上执行 doctest、BFV/BGV batching 流程、可选依赖隔离编译和 Barrett derive 回归 |
 | `just ci-nightly` | workspace 全 features 的 Clippy、普通测试、doctest、严格 private rustdoc 和 SIMD-only 编译 |
 
 上表可选的 `package` 默认为 `*`，也接受包名或加引号的 Cargo glob。单独调用 `check`、`lint`、`test` 时，`features` 默认空字符串，即只使用各包的默认 features；它们不会自动选择 `just` 的 NTT/双 FFT 组合。例如：
@@ -38,6 +39,7 @@ all-targets 只编译或 lint 示例与基准，不执行它们。nextest 不执
 | `primus_fft` | 默认不启用 FFT 引擎；用 `rustfft`、`tfhe-fft` 或两者 |
 | `primus_lattice`、`primus_glwe`、`primus_ntru` | 按需选择 `ntt`、`rustfft`、`tfhe-fft`；FFT 引擎 feature 同时启用 Fourier 能力 |
 | 两个 TFHE Fourier 后端 | 默认 RustFFT；加 `--features tfhe-fft` 启用双引擎；用 `--no-default-features --features tfhe-fft` 单选 TFHE-FFT |
+| `primus_encoding`、`primus_bfv`、`primus_bgv` | 默认无 batching；显式选 `batching` 启用共享槽编码，BGV 系数工作流无需 `encoding/rns`；BFV 正常依赖显式启用 `encoding/rns` |
 | GLWE Split35 trace | 低层 `primus_glwe` 需显式添加 `split-trace`；GLWE Fourier 后端默认启用此能力，ordinary 仍是默认表示。关闭后端默认 features 后按需添加 `split-trace`；GLWE Fourier 本身包含系数建钥用的内部辅助 NTT/CRT 依赖，不启用 NTT GLWE API |
 
 稳定工具链上的其他可选功能包括 `primus_data/aligned-vec`、integer/lattice 的 `serde`、`primus_modulus/derive`、`primus_distr/high_precision` 及 lattice/encoding 的 `rns`。独立包验证须显式选择需要的功能，不能依赖其他 workspace 消费者合并 features。
@@ -51,7 +53,7 @@ cargo nextest run -p primus_modulus --lib --tests --features derive -E 'binary(d
 ```
 
 workspace 的普通 `just` 已因 raw `primus_glwe_rns` 的依赖启用 `primus_lattice/rns`，
-并因 `primus_bfv` 的依赖启用 `primus_encoding/rns`，包含相关条件测试；单独选择这两个包时仍需显式启用 `rns`。BFV 系数工作流与无 codec 的 raw GLWE 分别在所属 crate 验证，不能以 workspace feature 合并替代各自的独立依赖检查。
+并因 `primus_bfv` 的依赖启用 `primus_encoding/rns`，包含相关条件测试；单独选择这两个包时仍需显式启用 `rns`。BFV/BGV 系数工作流与无 codec 的 raw GLWE 分别在所属 crate 验证，不能以 workspace feature 合并替代各自的独立依赖检查。BGV 的 phase 为 `c0+c1*s=m+p*e`，使用精确 centered CRT 恢复；共享 batching 不包含 BFV 解码器。`just schemes` 额外选择 `rns,batching`，覆盖 BFV/BGV 槽例及小明文子环嵌入。只准备明文 n 不会改变实际密文/秘密的 N。
 
 ```sh
 cargo nextest run -p primus_fft --lib --tests --features rustfft,tfhe-fft
@@ -78,6 +80,27 @@ cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 ```
 
 其他操作的示例见各后端 README。当前 Fourier 示例明确使用 RustFFT，需要 `rustfft` feature；切换 bench/test 的 FFT 引擎不会自动改写示例中的引擎类型。
+
+## BFV/BGV 工作流与基准
+
+在本仓库根目录运行：
+
+```sh
+just schemes
+cargo run -p primus_bgv --example coefficients
+cargo run -p primus_bgv --example slots --features batching
+cargo run -p primus_bfv --example slots --features batching
+cargo check -p primus_bgv --lib --no-default-features
+cargo check -p primus_encoding --lib --no-default-features --features batching
+just bench-smoke primus_bgv workflow --features batching
+```
+
+BGV `workflow` 的一次迭代包含 encode/embed、真实公钥加密、plain-add、dense
+plain-mul、精确恢复和 extract/decode，预分配与建钥在计时外。它测完整单次 packed
+请求，不能与仅测 evaluator 的结果直接比较。旋转映射属于明文编码；BGV 密文旋转、
+ct×ct/relin 与降模尚未开放。参数、布局和当前接口见
+[BGV](../../crates/primus_bgv/README.zh_CN.md)、[BFV](../../crates/primus_bfv/README.zh_CN.md)
+及[共享编码](../../crates/primus_encoding/README.zh_CN.md)。
 
 ## TFHE benchmarks
 

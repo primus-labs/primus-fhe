@@ -27,8 +27,10 @@
 //! [`BfvSecretKeyContext`], [`BfvPublicKeyEncryptor`] and explicit raw-GLWE
 //! bridges remain available for existing resource owners. Raw GLWE uses
 //! mask/body order and `b-a*s`; ordinary BFV operations never pass through it.
-//! Ciphertext multiplication/relinearization and SIMD slot encoding are not
-//! implemented.
+//! Optional `batching` uses shared slot encoding and plaintext subring embedding
+//! from `primus_encoding`; secrets and ciphertexts retain their full ring.
+//! Ciphertext multiplication/relinearization and encrypted rotations remain
+//! subsequent work.
 
 #![deny(missing_docs)]
 
