@@ -1,10 +1,11 @@
 use primus_data::{Data, DataMut};
+use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial};
 
 use crate::client::validate_plaintext;
-use crate::{BgvCiphertext, BgvContext, PlaintextEmbedding};
+use crate::{BgvCiphertext, BgvContext, BgvQuadraticCiphertext, PlaintextEmbedding};
 
-/// Prepared BGV linear and unscaled plaintext operations over the context's Q.
+/// Prepared BGV linear, plaintext and quadratic operations at one Q level.
 ///
 /// The evaluator borrows immutable parameters/tables and owns one reusable
 /// plaintext polynomial. It retains no key or RNG and allocates nothing after
@@ -20,16 +21,21 @@ use crate::{BgvCiphertext, BgvContext, PlaintextEmbedding};
 /// a bound for public encryption or a complete evaluated circuit.
 pub struct BgvEvaluator<'a> {
     context: &'a BgvContext,
+    level: usize,
     plaintext: DcrtPolynomial<Vec<u64>>,
 }
 
 impl<'a> BgvEvaluator<'a> {
-    /// Borrows the context and allocates one reusable CRT/NTT plaintext buffer.
+    /// Binds one prepared level and allocates a reusable CRT/NTT plaintext buffer.
+    ///
+    /// # Panics
+    /// Rejects an unprepared level before allocating.
     #[must_use]
-    pub fn new(context: &'a BgvContext) -> Self {
+    pub fn new(context: &'a BgvContext, level: usize) -> Self {
         Self {
             context,
-            plaintext: DcrtPolynomial::zero(context.parameters().size().rns_poly_len()),
+            level,
+            plaintext: DcrtPolynomial::zero(context.rns_poly_len(level)),
         }
     }
 
@@ -52,7 +58,7 @@ impl<'a> BgvEvaluator<'a> {
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         lhs0.add_to(&rhs0, &mut output0, n, moduli);
         lhs1.add_to(&rhs1, &mut output1, n, moduli);
     }
@@ -70,7 +76,7 @@ impl<'a> BgvEvaluator<'a> {
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut input0, mut input1) = input.c0_c1_mut(length);
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         input0.add_assign(&rhs0, n, moduli);
         input1.add_assign(&rhs1, n, moduli);
     }
@@ -94,7 +100,7 @@ impl<'a> BgvEvaluator<'a> {
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         lhs0.sub_to(&rhs0, &mut output0, n, moduli);
         lhs1.sub_to(&rhs1, &mut output1, n, moduli);
     }
@@ -112,7 +118,7 @@ impl<'a> BgvEvaluator<'a> {
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut input0, mut input1) = input.c0_c1_mut(length);
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         input0.sub_assign(&rhs0, n, moduli);
         input1.sub_assign(&rhs1, n, moduli);
     }
@@ -130,7 +136,7 @@ impl<'a> BgvEvaluator<'a> {
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         input0.neg_to(&mut output0, n, moduli);
         input1.neg_to(&mut output1, n, moduli);
     }
@@ -145,7 +151,7 @@ impl<'a> BgvEvaluator<'a> {
     {
         let (mut input0, mut input1) = input.c0_c1_mut(self.plaintext.as_ref().len());
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         input0.neg_assign(n, moduli);
         input1.neg_assign(n, moduli);
     }
@@ -177,7 +183,7 @@ impl<'a> BgvEvaluator<'a> {
             &self.plaintext,
             &mut output0,
             self.context.parameters().poly_length().get(),
-            self.context.parameters().base_q().moduli(),
+            self.context.base_q(self.level).moduli(),
         );
         output1.as_mut().copy_from_slice(input1.as_ref());
     }
@@ -198,7 +204,7 @@ impl<'a> BgvEvaluator<'a> {
         input0.add_assign(
             &self.plaintext,
             self.context.parameters().poly_length().get(),
-            self.context.parameters().base_q().moduli(),
+            self.context.base_q(self.level).moduli(),
         );
     }
 
@@ -223,7 +229,7 @@ impl<'a> BgvEvaluator<'a> {
         let (mut output0, mut output1) = output.c0_c1_mut(length);
         self.prepare_plaintext(plain, embedding);
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         input0.mul_to(&self.plaintext, &mut output0, n, moduli);
         input1.mul_to(&self.plaintext, &mut output1, n, moduli);
     }
@@ -242,9 +248,65 @@ impl<'a> BgvEvaluator<'a> {
         let (mut input0, mut input1) = input.c0_c1_mut(self.plaintext.as_ref().len());
         self.prepare_plaintext(plain, embedding);
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.parameters().base_q().moduli();
+        let moduli = self.context.base_q(self.level).moduli();
         input0.mul_assign(&self.plaintext, n, moduli);
         input1.mul_assign(&self.plaintext, n, moduli);
+    }
+
+    /// Writes the exact quadratic tensor of two native degree-one inputs.
+    ///
+    /// Output components are `[l0*r0, l0*r1+l1*r0, l1*r1]`, with phase
+    /// `(l0+l1*s)*(r0+r1*s)`. There is no BFV scale-and-round. Use a prepared
+    /// relinearizer to obtain a degree-one ciphertext. The complete product
+    /// phase must remain in the centered recovery interval.
+    ///
+    /// # Panics
+    /// All complete input/output lengths are checked before any output writes.
+    pub fn mul_to<A, B, C>(
+        &self,
+        lhs: &BgvCiphertext<A>,
+        rhs: &BgvCiphertext<B>,
+        output: &mut BgvQuadraticCiphertext<C>,
+    ) where
+        A: Data<Elem = u64>,
+        B: Data<Elem = u64>,
+        C: DataMut<Elem = u64>,
+    {
+        let length = self.plaintext.as_ref().len();
+        let (l0, l1) = lhs.c0_c1(length);
+        let (r0, r1) = rhs.c0_c1(length);
+        let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
+        let n = self.context.parameters().poly_length().get();
+        let moduli = self.context.base_q(self.level).moduli();
+        l0.mul_to(&r0, &mut o0, n, moduli);
+        l0.mul_to(&r1, &mut o1, n, moduli);
+        o1.add_mul_assign(&l1, &r0, n, moduli);
+        l1.mul_to(&r1, &mut o2, n, moduli);
+    }
+
+    /// Writes `[c0², 2*c0*c1, c1²]` using three polynomial products.
+    ///
+    /// This is the square specialization of [`Self::mul_to`], with the same
+    /// representation, recovery-bound and complete-length panic contracts.
+    pub fn square_to<A, B>(&self, input: &BgvCiphertext<A>, output: &mut BgvQuadraticCiphertext<B>)
+    where
+        A: Data<Elem = u64>,
+        B: DataMut<Elem = u64>,
+    {
+        use primus_reduce::ReduceAdd;
+        let length = self.plaintext.as_ref().len();
+        let (c0, c1) = input.c0_c1(length);
+        let (mut o0, mut o1, mut o2) = output.c0_c1_c2_mut(length);
+        let n = self.context.parameters().poly_length().get();
+        let moduli = self.context.base_q(self.level).moduli();
+        c0.mul_to(&c0, &mut o0, n, moduli);
+        c0.mul_to(&c1, &mut o1, n, moduli);
+        for (limb, q) in o1.as_mut().chunks_exact_mut(n).zip(moduli) {
+            for value in limb {
+                *value = q.reduce_add(*value, *value);
+            }
+        }
+        c1.mul_to(&c1, &mut o2, n, moduli);
     }
 
     fn prepare_plaintext<A>(&mut self, plain: &Polynomial<A>, embedding: PlaintextEmbedding)
@@ -259,7 +321,7 @@ impl<'a> BgvEvaluator<'a> {
         for (limb, &q) in self
             .plaintext
             .iter_each_modulus_mut(n)
-            .zip(parameters.base_q().moduli_values())
+            .zip(self.context.base_q(self.level).moduli_values())
         {
             match embedding {
                 PlaintextEmbedding::Unsigned => limb.copy_from_slice(plain.as_ref()),
@@ -270,8 +332,13 @@ impl<'a> BgvEvaluator<'a> {
                 }
             }
         }
-        self.context
+        for (table, limb) in self
+            .context
             .table()
-            .transform_slice(self.plaintext.as_mut());
+            .iter()
+            .zip(self.plaintext.as_mut().chunks_exact_mut(n))
+        {
+            table.transform_slice(limb);
+        }
     }
 }

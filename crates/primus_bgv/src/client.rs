@@ -4,6 +4,7 @@ use crate::{BgvCiphertext, BgvContext, BgvPublicKey};
 use primus_data::{Data, DataMut};
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, RnsDomainError};
 use primus_integer::BigUint;
+use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial, PolynomialOwned};
 use primus_reduce::{Reduce, ReduceMul, ReduceSub};
 use primus_rns::Residues;
@@ -11,7 +12,7 @@ use primus_rns::Residues;
 /// One full-ring secret and erasing recovery workspace borrowing a BGV context.
 /// The complete N-coefficient secret is independent of plaintext slot capacity.
 pub struct BgvClient<'a> {
-    context: &'a BgvContext,
+    pub(crate) context: &'a BgvContext,
     key: DcrtGlweSecretKey<u64>,
     workspace: BgvDecryptWorkspace,
 }
@@ -118,22 +119,27 @@ impl<'a> BgvClient<'a> {
         B: DataMut<Elem = u64>,
     {
         validate_plaintext(self.context, input.as_ref());
-        self.encrypt_with_c0_to(output, rng, |c0| {
+        self.encrypt_with_c0_to(output, 0, rng, |c0| {
             add_plaintext(self.context, input.as_ref(), c0, centered)
         });
     }
 
-    pub(crate) fn encrypt_zeros_to<R, B>(&self, output: &mut BgvCiphertext<B>, rng: &mut R)
-    where
+    pub(crate) fn encrypt_zeros_at_level_to<R, B>(
+        &self,
+        output: &mut BgvCiphertext<B>,
+        level: usize,
+        rng: &mut R,
+    ) where
         R: rand::Rng + rand::CryptoRng,
         B: DataMut<Elem = u64>,
     {
-        self.encrypt_with_c0_to(output, rng, |_| {});
+        self.encrypt_with_c0_to(output, level, rng, |_| {});
     }
 
     fn encrypt_with_c0_to<R, B>(
         &self,
         output: &mut BgvCiphertext<B>,
+        level: usize,
         rng: &mut R,
         inject: impl FnOnce(&mut [u64]),
     ) where
@@ -143,45 +149,59 @@ impl<'a> BgvClient<'a> {
         let parameters = self.context.parameters();
         let n = parameters.poly_length().get();
         let sampling = parameters.encryption_parameters();
-        let (mut c0, mut c1) = output.c0_c1_mut(self.context.rns_poly_len());
-        sample_scaled_noise(self.context, c0.as_mut(), rng);
+        let base = self.context.base_q(level);
+        let length = self.context.rns_poly_len(level);
+        let (mut c0, mut c1) = output.c0_c1_mut(length);
+        sample_scaled_noise(self.context, level, c0.as_mut(), rng);
         inject(c0.as_mut());
-        self.context.table().transform_slice(c0.as_mut());
+        for (table, limb) in self
+            .context
+            .table()
+            .iter()
+            .zip(c0.as_mut().chunks_exact_mut(n))
+        {
+            table.transform_slice(limb);
+        }
         primus_distr::sample_crt_uniform_values_to(
             c1.as_mut(),
             n,
-            sampling.cipher_moduli_uniform_distr(),
+            &sampling.cipher_moduli_uniform_distr()[..base.moduli_count()],
             rng,
         );
+        let key = self.key.iter_dcrt_poly().next().expect("rank-one secret");
         c0.sub_mul_assign(
             &c1,
-            &self.key.iter_dcrt_poly().next().expect("rank-one secret"),
+            &DcrtPolynomial(&key.as_ref()[..length]),
             n,
-            parameters.base_q().moduli(),
+            base.moduli(),
         );
     }
 
-    /// Writes the native DCRT phase c0+c1*s without transform or decoding.
+    /// Writes the native DCRT phase c0+c1*s at a prepared level without decoding.
     ///
     /// # Correctness
     /// Input has canonical per-limb residues and uses this actual secret and
     /// context's ordered Q and NTT convention.
     /// # Panics
-    /// Rejects incorrect complete lengths before output writes.
-    pub fn phase_to<A, B>(&self, input: &BgvCiphertext<A>, output: &mut DcrtPolynomial<B>)
-    where
+    /// Rejects an unprepared level or incorrect complete lengths before writes.
+    pub fn phase_to<A, B>(
+        &self,
+        input: &BgvCiphertext<A>,
+        level: usize,
+        output: &mut DcrtPolynomial<B>,
+    ) where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
         assert_eq!(
             output.as_ref().len(),
-            self.context.rns_poly_len(),
+            self.context.rns_poly_len(level),
             "BGV phase output length mismatch"
         );
-        phase_to(self.context, &self.key, input, output);
+        phase_to(self.context, &self.key, input, level, output);
     }
 
-    /// Recovers N coefficients by exact centered CRT reconstruction modulo p.
+    /// Recovers N coefficients at a prepared level by exact centered CRT modulo p.
     /// Q may exceed 128 bits; no floating-point or BFV scaling/decoder is used.
     ///
     /// # Correctness
@@ -190,18 +210,24 @@ impl<'a> BgvClient<'a> {
     /// integer phase m+p*e must remain in the centered Q interval. Fresh private
     /// bounds do not automatically cover public or evaluated ciphertext noise.
     /// # Panics
-    /// Rejects incorrect complete input/output lengths before writes. NTT/RNS
+    /// Rejects an unprepared level or incorrect complete lengths before writes. NTT/RNS
     /// failures may partially overwrite output and erasing scratch.
-    pub fn decrypt_to<A, B>(&mut self, input: &BgvCiphertext<A>, output: &mut Polynomial<B>)
-    where
+    pub fn decrypt_to<A, B>(
+        &mut self,
+        input: &BgvCiphertext<A>,
+        level: usize,
+        output: &mut Polynomial<B>,
+    ) where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
         let parameters = self.context.parameters();
         let n = parameters.poly_length().get();
+        let base = self.context.base_q(level);
+        let length = self.context.rns_poly_len(level);
         assert_eq!(
             input.as_ref().len(),
-            parameters.size().rns_glwe_len(),
+            2 * length,
             "BGV ciphertext length mismatch"
         );
         assert_eq!(
@@ -209,27 +235,36 @@ impl<'a> BgvClient<'a> {
             n,
             "BGV plaintext output length mismatch"
         );
-        phase_to(self.context, &self.key, input, &mut self.workspace.phase);
-        self.context
+        let mut phase = DcrtPolynomial(&mut self.workspace.phase.as_mut()[..length]);
+        phase_to(self.context, &self.key, input, level, &mut phase);
+        for (table, limb) in self
+            .context
             .table()
-            .inverse_transform_slice(self.workspace.phase.as_mut());
+            .iter()
+            .zip(phase.as_mut().chunks_exact_mut(n))
+        {
+            table.inverse_transform_slice(limb);
+        }
         let p = parameters.plain_modulus();
+        let count = base.moduli_count();
+        let width = base.big_uint_value_len();
+        let half_q = self.context.half_q(level);
+        let q_mod_p = self.context.q_mod_p(level);
         for (index, output) in output.as_mut().iter_mut().enumerate() {
-            for (residue, limb) in self
-                .workspace
-                .residues
+            for (residue, limb) in self.workspace.residues[..count]
                 .iter_mut()
-                .zip(self.workspace.phase.as_ref().chunks_exact(n))
+                .zip(phase.as_ref().chunks_exact(n))
             {
                 *residue = limb[index];
             }
-            parameters.base_q().compose_to(
-                Residues(&self.workspace.residues),
-                BigUint(&mut self.workspace.value[..]),
+            base.compose_to(
+                Residues(&self.workspace.residues[..count]),
+                BigUint(&mut self.workspace.value[..width]),
             );
-            let canonical = p.reduce(self.workspace.value.as_slice());
-            *output = if compare_words(&self.workspace.value, &parameters.half_q).is_gt() {
-                p.reduce_sub(canonical, parameters.q_mod_p)
+            let value = &self.workspace.value[..width];
+            let canonical = p.reduce(value);
+            *output = if compare_words(value, half_q).is_gt() {
+                p.reduce_sub(canonical, q_mod_p)
             } else {
                 canonical
             };
@@ -242,9 +277,10 @@ impl<'a> BgvClient<'a> {
     pub fn decrypt<A: Data<Elem = u64>>(
         &mut self,
         input: &BgvCiphertext<A>,
+        level: usize,
     ) -> PolynomialOwned<u64> {
         let mut output = PolynomialOwned::zero(self.context.parameters().poly_length().get());
-        self.decrypt_to(input, &mut output);
+        self.decrypt_to(input, level, &mut output);
         output
     }
 }
@@ -253,18 +289,21 @@ fn phase_to<A, B>(
     context: &BgvContext,
     key: &DcrtGlweSecretKey<u64>,
     input: &BgvCiphertext<A>,
+    level: usize,
     output: &mut DcrtPolynomial<B>,
 ) where
     A: Data<Elem = u64>,
     B: DataMut<Elem = u64>,
 {
-    let (c0, c1) = input.c0_c1(context.rns_poly_len());
+    let length = context.rns_poly_len(level);
+    let (c0, c1) = input.c0_c1(length);
     output.as_mut().copy_from_slice(c0.as_ref());
+    let secret = key.iter_dcrt_poly().next().expect("rank-one secret");
     output.add_mul_assign(
         &c1,
-        &key.iter_dcrt_poly().next().expect("rank-one secret"),
+        &DcrtPolynomial(&secret.as_ref()[..length]),
         context.parameters().poly_length().get(),
-        context.parameters().base_q().moduli(),
+        context.base_q(level).moduli(),
     );
 }
 
@@ -284,18 +323,18 @@ pub(crate) fn validate_plaintext(context: &BgvContext, input: &[u64]) {
 
 pub(crate) fn sample_scaled_noise<R: rand::Rng + rand::CryptoRng>(
     context: &BgvContext,
+    level: usize,
     output: &mut [u64],
     rng: &mut R,
 ) {
     let parameters = context.parameters();
-    parameters.encryption_parameters().sample_noise_to(
-        output,
-        parameters.base_q().moduli_values(),
-        rng,
-    );
+    let base = context.base_q(level);
+    parameters
+        .encryption_parameters()
+        .sample_noise_to(output, base.moduli_values(), rng);
     for (limb, q) in output
         .chunks_exact_mut(parameters.poly_length().get())
-        .zip(parameters.base_q().moduli())
+        .zip(base.moduli())
     {
         for value in limb {
             *value = q.reduce_mul(*value, parameters.plain_modulus().value());

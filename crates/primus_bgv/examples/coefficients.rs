@@ -31,10 +31,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     addend.as_mut()[0] = p - 2;
     let mut multiplier = Polynomial::<Vec<u64>>::zero(n);
     multiplier.as_mut()[1] = 3;
-    let mut ciphertext = context.new_ciphertext();
-    let mut output = context.new_ciphertext();
+    let mut ciphertext = context.new_ciphertext(0);
+    let mut output = context.new_ciphertext(0);
     encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
-    let mut evaluator = BgvEvaluator::new(&context);
+    let mut evaluator = BgvEvaluator::new(&context, 0);
     evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
     evaluator.mul_plain_to(
         &ciphertext,
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut output,
         PlaintextEmbedding::Centered,
     );
-    let result = client.decrypt(&output);
+    let result = client.decrypt(&output, 0);
     let mut expected = vec![0; n];
     for (i, &value) in input.as_ref().iter().enumerate() {
         let value = (value + if i == 0 { p - 2 } else { 0 }) % p;

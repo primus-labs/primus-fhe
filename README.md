@@ -47,7 +47,7 @@ See the [capability table](crates/primus_tfhe/README.md#crate-map-and-capabiliti
 | BFV/BGV coefficients and slots | [primus_bfv](crates/primus_bfv/README.md): BFV parameters, scaling and recovery; [primus_bgv](crates/primus_bgv/README.md): p-scaled error and exact centered recovery; both consume shared batching |
 | TFHE | [primus_tfhe](crates/primus_tfhe/README.md): shared external LWE clients, LUTs, PBS traits, and Boolean evaluation; the two family crates and four backends above bind parameters, keys, and execution |
 
-BFV supports coefficient/slot linear and plaintext evaluation with exact rounded prime drop. BGV supports coefficient/slot private/public encryption, linear/plaintext evaluation and exact centered recovery for q_i≡1 mod p. Ciphertext multiplication/relinearization, BGV levels/rotations and CKKS remain subsequent work.
+BFV supports coefficient/slot linear and plaintext evaluation with exact rounded prime drop. BGV supports coefficient/slot private/public encryption, multiplication/square, p-preserving relin/key switching/rotations, prefix levels and exact centered recovery for q_i≡1 mod p. BFV ciphertext multiplication/relinearization and CKKS remain subsequent work.
 
 Application libraries live in separate sibling repositories: [primus_omr](../primus_omr/README.md) provides clue detection, board encoding and message recovery; [primus_high_prec_lut](../primus_high_prec_lut/README.md) provides high-precision lookup over independently encrypted chunks. Run their examples, tests and benchmarks from their own repository roots. They are not workspace members.
 

@@ -1,6 +1,6 @@
 # RNS ciphertext phases and explicit representation boundaries
 
-This note fixes the algebra used by the current BFV/raw boundary. All equations
+This note fixes the algebra used by the current BFV/BGV/raw boundaries. All equations
 are in `R_Q = Z_Q[X]/(X^N+1)`; products are negacyclic polynomial products.
 They also hold pointwise in one agreed NTT representation. Equal numerical
 moduli alone do not establish matching roots, evaluation order or actual secrets.
@@ -27,10 +27,13 @@ residues, secret identity and NTT conventions remain caller requirements.
 
 Native BFV encryption/recovery, linear/plaintext evaluation, exact rounded prime
 drop, physical components and this bridge are implemented. Native BFV evaluation
-keys, ciphertext multiplication/relinearization, BGV, and collective SSLE opening
-protocols are **not** implemented. The tensor/key equations below specify future
-work and explain existing raw consumers;
-they do not claim that a native GGSW/relinearization backend exists.
+keys and full BFV ciphertext multiplication/relinearization remain subsequent
+work. Native BGV now provides quadratic products, p-preserving relin/key switch/
+automorphism and exact prefix prime drop; its distinct key/residual equations are
+specified in [BGV evaluation](bgv-evaluation.md). Collective Flexilect setup and
+opening remain separate future work; existing Relect opening uses raw shares.
+The unscaled tensor/key equations below also explain existing raw consumers;
+they do not establish the still-unimplemented BFV scale-and-round backend.
 
 ## Coefficient evaluation, recovery and exact prime drop
 
@@ -153,10 +156,12 @@ phase(out) = b-hat(a)*s_in-sum(d_l*e_l)
 ```
 
 See [ordinary switching](../../crates/primus_glwe_rns/src/key_switch/dcrt.rs).
-A future native plus switch would instead add keys decomposed from `c1` to
-`(c0,0)`. Exporting a native ciphertext to raw, using the existing evaluator and
-importing its output is an explicit supported composition; it is not a native
-plus evaluator and need not have the same noise/ciphertext as a future one.
+A native plus switch adds the gadget result from `c1` to `(c0,0)`.
+BGV implements this using p-scaled columns and a p^-1 preprocessing step as
+specified in [its evaluation contract](bgv-evaluation.md). Exporting BFV to raw,
+using the existing raw evaluator and importing its output remains an explicit
+supported composition; its decomposition input/noise need not match a native
+algorithm. No native BFV switching backend is implied by that composition.
 
 Hybrid raw keys use partition selectors `E_j` (one in their own Q partition,
 zero in the other Q limbs) and have phase `P*E_j*s_in+e_j` over QP.

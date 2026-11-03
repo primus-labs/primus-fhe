@@ -10,6 +10,7 @@ and [benchmark guide](../development/testing.md#tfhe-benchmarks).
 
 | Topic | Language | What remains useful |
 | --- | --- | --- |
+| [BGV leveled slot requests](bgv-leveled.md) | English | Multiplication/relin/rotation/key-change/drop pipeline and equivalent previous-workflow ABBA control |
 | [BGV coefficient and subring slots](bgv-basic.md) | English | Exact centered recovery resources and complete packed-request baseline |
 | [BFV coefficient workflow](bfv-leveled-coefficients.md) | English | Exact rounded prime-drop resources and complete coefficient-request costs |
 | [Sparse arithmetic and scheduling](sparse-arithmetic.md) | English | Current grouping, canonical NTT boundaries, 16 KiB tiles, 4/2/1 ownership and retained negative controls |

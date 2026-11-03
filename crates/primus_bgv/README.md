@@ -2,95 +2,134 @@
 
 English | [简体中文](README.zh_CN.md)
 
-Fixed-u64, rank-one BGV coefficient and optional packed-slot workflows. Native
-ciphertexts store `[c0,c1]` with phase `c0+c1*s = lift(m)+p*e`. The initial
-ciphertext family requires every q_i to be 1 modulo p. Private/public encryption,
-linear operations and unscaled plaintext addition/multiplication are supported;
-ciphertext multiplication, relinearization, encrypted rotations and modulus
-switching are subsequent work.
+Fixed-u64, rank-one leveled BGV over the q_i≡1 mod p family. Native ciphertexts
+store `[c0,c1]` with phase `c0+c1*s=lift(m)+p*e`. The crate supports private/public
+encryption, linear/plaintext operations, multiplication/square, p-preserving
+relinearization/key switching/automorphisms, exact prime drop and optional slots.
+Coefficient p can be composite; batching requires its own plaintext prime.
 
 ## Workflow
 
-1. Construct `BgvParameters::try_coefficients(N,p,&moduli,secret_law,sigma)`, or
-   select the existing Gaussian/CBD error law with `try_with_error_distribution`.
-2. Consume parameters into one `BgvContext`. `BgvClient::generate` samples one
-   full-N secret and owns reusable erasing recovery scratch. Advanced callers
-   can transfer an existing transformed secret with `try_from_secret_key`.
-3. Prepare outputs with `context.new_ciphertext()`. Use the client's private
-   encryptor, or generate `client.public_key(rng)` and bind
-   `context.public_key_encryptor(&key)` for public encryption.
-4. Prepare `BgvEvaluator::new(&context)` once. Evaluate add/sub/neg and
-   add_plain/mul_plain with `_to` or `_assign`, selecting unsigned or centered
-   `PlaintextEmbedding`. Both native components participate in multiplication;
-   plaintext lifts have no BFV Delta or extra p factor.
-5. Recover canonical coefficients with `client.decrypt_to(input,&mut output)`.
-   The convenience `decrypt` allocates the returned polynomial.
+Start with [leveled coefficients](examples/leveled_coefficients.rs), or enable
+`batching` for the complete [leveled slots](examples/leveled_slots.rs) workflow.
+The smaller [coefficients](examples/coefficients.rs) and [slots](examples/slots.rs)
+examples show encryption and plaintext evaluation without evaluation keys.
 
-See [coefficients](examples/coefficients.rs) for a complete public-encryption,
-plaintext-evaluation and exact-recovery example. Plaintext and output lengths
-are checked before RNG or writes. Ciphertext canonical residues, actual secret,
-ordered basis and NTT identity remain mathematical caller contracts.
+1. Prepare `BgvParameters::try_coefficients` or explicitly select Gaussian/CBD
+   with `try_with_error_distribution`. Consume parameters into
+   `BgvContext::try_with_levels(parameters, count)`; `try_new` prepares one level.
+2. Generate clients with `BgvClient::generate(&context,rng)`. Each owns one full-N
+   secret and reusable erasing recovery scratch. Fresh private/public encryption
+   is at level zero; `context.public_key_encryptor(&client.public_key(rng))`
+   binds a public key retained by the caller.
+3. Prepare `context.new_ciphertext(level)` and
+   `BgvEvaluator::new(&context,level)` once. Add/sub/neg operate on both components;
+   `add_plain` changes c0, while `mul_plain` multiplies both components. Plaintext
+   lifts are unscaled; choose unsigned/centered `PlaintextEmbedding` explicitly.
+4. `mul_to`/`square_to` write a `BgvQuadraticCiphertext` from
+   `context.new_quadratic_ciphertext(level)`. Its phase is `c0+c1*s+c2*s²` under
+   one secret. Bind `BgvRelinearizer` to a generated `relinearization_key` to
+   recover the two-component representation.
+5. Generate only the required `automorphism_key` and `key_switching_key` roles.
+   Prepare `BgvAutomorphism` or `BgvKeySwitcher` once. The target client generates
+   a switch key from the source client; an automorphism key returns σ(s) to s.
+6. Use `BgvModulusSwitch::new(&context,level).switch_to` for each adjacent prime
+   drop. Recover with `client.decrypt_to(input,level,&mut output)`; `decrypt`
+   allocates only the returned polynomial.
+
+Level zero contains all ordered primes; level l omits the last l primes. Context
+owns one full-Q NTT table and distinct prefix CRT bases/recovery constants. The
+single full-Q secret is borrowed by prefix. Level selection never changes N.
+Storage wrappers check complete lengths but do not certify actual key, ordered
+basis, canonical ciphertext residues or NTT identity; callers maintain them.
+
+## Evaluation keys and exact prime drop
+
+Use the existing `DecompositionConfig` to select radix and retained digits. Each
+role key owns its actual decomposition and belongs to one modulus level; generate
+keys separately for the levels used. Truncating a higher-level key's limbs cannot
+produce a lower-level key, because Q, weights and dropped bits have changed.
+`None` selects all available gadget digits, which can still discard low bits
+when log_basis does not divide Q's bit width.
+
+The switched component a is multiplied by p^-1 modulo Q **before decomposition**.
+Columns have phase `p*g_j*h+p*e_j`, with h=s², the source secret, or σ(s).
+Both digit noise and approximation residual therefore enter as p-multiple error.
+Ordinary truncated BFV/GLWE switching does not establish this property. Three
+role types prevent accidental relin/switch/automorphism-key substitution;
+constructors reject different levels, N, p and ordered Q. Public `basis()` and
+`ciphertexts()` expose the actual decomposition and columns for noise analysis.
+Same-parameter actual-secret identity remains a caller contract.
+
+Dropping the final prime q uses the exact componentwise quotient
+`(x-p*center_q(x*p^-1 mod q))/q mod (Q/q)`. It needs only the dropped limb's INTT,
+one reusable N-element scratch, retained-limb correction NTTs and inverse factors.
+It is not BFV nearest rounding. Since q≡1 mod p, the supported chain needs no
+additional plaintext correction factor. General-prime chains are rejected.
+See [BGV evaluation contracts](../../guides/development/bgv-evaluation.md) for
+phase/residual/noise derivations and the shared componentwise GLev adapter.
 
 ## Exact recovery and noise
 
-One coefficient error is sampled once, encoded across all RNS limbs, then scaled
-by p. Gaussian and CBD use the backend's actual distributions. Public ephemeral
-r uses CBD1 independently of the recipient secret law. Public-key phase is
-p*e_pk; a fresh public ciphertext has full error
-`p*(e_pk*r+e0+e1*s)`, with products in the full negacyclic ring.
+One signed coefficient error is sampled once across all RNS limbs and multiplied
+by p. Gaussian/CBD use the actual configured laws; public ephemeral r is exact
+CBD1, independently of the recipient secret law. Public-key phase is p*e_pk;
+fresh public phase is `lift(m)+p*(e_pk*r+e0+e1*s)` in the full negacyclic ring.
 
-Decryption computes the phase, inverse NTT, and exact CRT composition x in [0,Q).
-It returns x mod p below the centered threshold and `(x-Q) mod p` above it.
-The latter correction is necessary even though Q mod p=1. Q may exceed 128 bits;
-reconstruction uses existing multi-limb arithmetic, with no BFV decoder, floating
-point approximation or BigInt normal dependency.
+Recovery inverse-transforms the full phase at the selected level, composes x∈[0,Q)
+exactly, and returns x mod p below the centered threshold or (x-Q) mod p above it.
+Q can exceed 128 bits. There is no BFV decoder, floating approximation or external
+BigInt normal dependency. The intended integer phase at **each level** must stay
+in (-Q/2,Q/2); crossing Q can change the plaintext modulo p.
 
-The intended integer phase must remain in (-Q/2,Q/2). Reducing an overflowing
-phase by Q can change its message modulo p. Parameter construction checks the
-fresh-private sufficient bound `p*maximum_error+(p-1) <= floor(Q/2)`, covering
-both unsigned and centered lifts. Public/evaluated bounds must additionally
-include public-key error, full-ring convolutions, plaintext carries and every
-operation; private admission does not certify those circuits or security.
-Ciphertext moduli must be primes compatible with the current u64 NTT backend
-(q_i < 2^62); rootability checks are not primality certification.
+Parameter construction checks the fresh-private sufficient bound
+`p*maximum_error+(p-1) <= floor(Q/2)`. Lower-level preparation, evaluation-key
+generation and functional examples do not certify public/evaluated noise or
+security. Include full-ring convolutions, message carries, every decomposition
+residual and every prime-drop correction. Correlated evaluation keys also have
+their own security assumptions. Ciphertext moduli must be primes compatible with
+the current u64 NTT backend (q_i<2^62); rootability checks do not prove primality.
 
 ## Slots and subrings
 
-Enable `batching` to use the shared `primus_encoding::BatchingEncoder`, also
-consumed by BFV. A prime p congruent to 1 modulo 2n supplies n slots in two
-rows indexed by ±5^j. The encoder owns the small-n plaintext NTT; its slot
-rotation mapping does not apply encrypted rotation or generate evaluation keys.
+Optional `batching` consumes the shared `primus_encoding::BatchingEncoder`, also
+used by BFV. A prime p≡1 mod 2n supplies n plaintext slots in two ±5^j rows.
+`encode_to` zero-pads a slot prefix; `embed_to` maps f(Y) to f(X^(N/n)). Only the
+plaintext uses n: actual secret, error, transforms and ciphertext retain N.
+After full-N recovery, `extract_to` checks subring membership and `decode_to`
+recovers slots using caller scratch. p need not support a full-N plaintext NTT.
 
-Encode a prefix of slots (unused slots become zero), then `embed_to` maps
-f(Y) to f(X^(N/n)) with all off-stride coefficients zero. Only the plaintext
-uses the smaller ring. The actual secret, error, NTT and ciphertext retain N.
-After full-N decryption, `extract_to` validates the subring and `decode_to`
-recovers slots with prepared scratch. p need only support the plaintext n,
-while each ciphertext q_i must support the full N. The [slots example](examples/slots.rs)
-uses n32, N128, p193, where a full-N plaintext NTT is unavailable.
+Use `rotation_exponent(k)` or `row_swap_exponent()` to choose an odd full-ring
+automorphism key. `BgvAutomorphism::apply_to` executes the encrypted operation
+and switches back to the original secret. The leveled slot example uses n32,
+N128,p193, rotates/swaps rows and changes to a second full-N secret. All spare
+slots remain zero at their permuted positions.
 
 ## Resources and commands
 
-Context owns one ordered basis, sampling state and full-N transform table.
-Clients/evaluators/public encryptors borrow it. Prepared coefficient encryption,
-exact recovery and evaluator operations allocate no memory; secret, ephemeral
-and recovery storage is erased on drop. Ciphertext/view wrappers keep storage
-semantics without adding a Domain or generic coefficient type.
+Context owns sampling/bases/table; clients, evaluators and prepared key operations
+borrow it. Prepared encryption, tensor/square, linear/plaintext operations,
+relin/switch/auto, adjacent prime drop and recovery allocate no memory. Secret,
+secret-square/automorphism generation temporaries, public ephemeral and recovery
+storage are erased on drop. Caller-owned plaintext/output/batching buffers remain
+under their owner's control. No Domain or generic coefficient type is added.
 
 Default features are empty. `batching` enables shared slot encoding; `simd`
 forwards to the existing nightly SIMD backends.
 
 ```sh
-cargo run -p primus_bgv --example coefficients
-cargo run -p primus_bgv --example slots --features batching
+cargo run -p primus_bgv --example leveled_coefficients
+cargo run -p primus_bgv --example leveled_slots --features batching
 cargo test -p primus_bgv --features batching --lib --tests
 cargo clippy -p primus_bgv --all-targets --features batching -- -D warnings
-cargo bench -p primus_bgv --bench workflow --features batching
+cargo bench -p primus_bgv --bench leveled --features batching
 ```
 
-Tests use independent DFT, schoolbook phase and multi-limb integer oracles,
-including even-p centered halves and 150-bit Q. The benchmark measures a whole
-packed request, including actual sampling, encode/embed, public encryption,
-plaintext evaluation, exact recovery and slot extraction/decoding. Resource
-preparation is outside timing. Parameters and fixed seeds are functional fixtures,
-not security presets.
+Tests use direct DFT, schoolbook convolution and independent arbitrary-width
+integer oracles for key phases, signed gadget digits/residuals, exact quotients
+and even-p boundaries. The `leveled` benchmark measures one complete fresh packed
+request through multiplication/square/relin, rotation, a secret change, two prime
+drops and slot recovery. Setup/key generation/allocation and final assertions
+stay outside timing. The smaller `workflow` benchmark retains the basic
+public-encrypt/plaintext-evaluate/recover workload. Parameters are functional
+fixtures, not security presets.

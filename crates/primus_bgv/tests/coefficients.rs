@@ -155,7 +155,7 @@ fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
                     .encryption_parameters()
                     .noise_distribution()
                     .sample_signed_to(&mut errors, &mut coins);
-                let mut ciphertext = context.new_ciphertext();
+                let mut ciphertext = context.new_ciphertext(0);
                 if centered {
                     client.encrypt_centered_to(&message, &mut ciphertext, &mut rng);
                 } else {
@@ -172,7 +172,7 @@ fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
                         assert_eq!(actual, m + i128::from(P) * i128::from(e));
                     }
                 }
-                assert_eq!(client.decrypt(&ciphertext), message);
+                assert_eq!(client.decrypt(&ciphertext, 0), message);
             }
         }
     }
@@ -222,7 +222,7 @@ fn public_key_and_public_encryption_use_p_scaled_error_and_full_ring_secret() {
             .map(|i| if i % 3 == 0 { P - 1 } else { i as u64 })
             .collect::<Vec<_>>(),
     );
-    let mut ciphertext = context.new_ciphertext();
+    let mut ciphertext = context.new_ciphertext(0);
     encryptor.encrypt_centered_to(&message, &mut ciphertext, &mut rng);
     assert_eq!(rng.next_u64(), coins.next_u64());
     for limb in phase_oracle(ciphertext.as_ref(), &secret, 3)
@@ -242,10 +242,10 @@ fn public_key_and_public_encryption_use_p_scaled_error_and_full_ring_secret() {
             );
         }
     }
-    assert_eq!(client.decrypt(&ciphertext), message);
+    assert_eq!(client.decrypt(&ciphertext, 0), message);
     encryptor.workspace_mut().zeroize();
     encryptor.encrypt_to(&message, &mut ciphertext, &mut rng);
-    assert_eq!(client.decrypt(&ciphertext), message);
+    assert_eq!(client.decrypt(&ciphertext, 0), message);
 }
 
 #[test]
@@ -279,8 +279,8 @@ fn exact_centered_recovery_handles_150_bit_q_and_half_interval_boundaries() {
             })
             .collect::<Vec<_>>(),
     );
-    let mut ciphertext = context.new_ciphertext();
-    let (mut c0, _) = ciphertext.c0_c1_mut(context.rns_poly_len());
+    let mut ciphertext = context.new_ciphertext(0);
+    let (mut c0, _) = ciphertext.c0_c1_mut(context.rns_poly_len(0));
     for (limb, &prime) in c0.as_mut().as_chunks_mut::<N>().0.iter_mut().zip(&Q) {
         for (out, x) in limb.iter_mut().zip(&values) {
             *out = u64::try_from(x % UBig::from(prime)).unwrap();
@@ -288,10 +288,10 @@ fn exact_centered_recovery_handles_150_bit_q_and_half_interval_boundaries() {
     }
     context.table().transform_slice(c0.as_mut());
     let c0_expected = c0.as_ref().to_vec();
-    assert_eq!(client.decrypt(&ciphertext), expected);
+    assert_eq!(client.decrypt(&ciphertext, 0), expected);
     assert_eq!(expected.as_ref()[5], P - 1); // canonical Q-1 modulo p is zero; centered phase is -1.
-    let mut phase = DcrtPolynomial::<Vec<u64>>::zero(context.rns_poly_len());
-    client.phase_to(&ciphertext, &mut phase);
+    let mut phase = DcrtPolynomial::<Vec<u64>>::zero(context.rns_poly_len(0));
+    client.phase_to(&ciphertext, 0, &mut phase);
     assert_eq!(phase.as_ref(), c0_expected);
 }
 
@@ -316,7 +316,7 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
     let mut rng = StdRng::seed_from_u64(2);
     let client = BgvClient::generate(&context, &mut rng);
     let invalid = Polynomial(vec![P; N]);
-    let mut output = context.new_ciphertext();
+    let mut output = context.new_ciphertext(0);
     output.as_mut().fill(77);
     let mut rng = StdRng::seed_from_u64(3);
     let mut expected_rng = StdRng::seed_from_u64(3);
@@ -331,7 +331,7 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
     assert!(output.as_ref().iter().all(|&x| x == 77));
     assert_eq!(rng.next_u64(), expected_rng.next_u64());
     let valid = Polynomial(vec![1u64; N]);
-    let mut short = BgvCiphertext::new(vec![77; 2 * context.rns_poly_len() - 1]);
+    let mut short = BgvCiphertext::new(vec![77; 2 * context.rns_poly_len(0) - 1]);
     let mut rng = StdRng::seed_from_u64(4);
     let mut expected_rng = StdRng::seed_from_u64(4);
     assert!(
@@ -425,7 +425,7 @@ fn centered_embedding_maps_the_even_plaintext_half_to_a_negative_integer() {
     let secret = vec![1; N];
     let mut client = client(&context, &secret);
     let message = Polynomial(vec![p / 2; N]);
-    let mut ciphertext = context.new_ciphertext();
+    let mut ciphertext = context.new_ciphertext(0);
     let mut rng = StdRng::seed_from_u64(823);
     let mut coins = StdRng::seed_from_u64(823);
     let mut errors = vec![0i64; N];
@@ -439,5 +439,5 @@ fn centered_embedding_maps_the_even_plaintext_half_to_a_negative_integer() {
     for (&actual, &error) in phase.iter().zip(&errors) {
         assert_eq!(actual, -1 + i128::from(p) * i128::from(error));
     }
-    assert_eq!(client.decrypt(&ciphertext), message);
+    assert_eq!(client.decrypt(&ciphertext, 0), message);
 }

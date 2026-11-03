@@ -35,8 +35,8 @@ impl BgvPublicKey {
         context: &BgvContext,
         rng: &mut R,
     ) -> Self {
-        let mut ciphertext = context.new_ciphertext();
-        client.encrypt_zeros_to(&mut ciphertext, rng);
+        let mut ciphertext = context.new_ciphertext(0);
+        client.encrypt_zeros_at_level_to(&mut ciphertext, 0, rng);
         Self {
             ciphertext,
             size: context.parameters().size(),
@@ -174,7 +174,7 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
             "BGV public workspace shape mismatch"
         );
         let n = parameters.poly_length().get();
-        let (mut c0, mut c1) = output.c0_c1_mut(self.context.rns_poly_len());
+        let (mut c0, mut c1) = output.c0_c1_mut(self.context.rns_poly_len(0));
         let sampling = parameters.encryption_parameters();
         let ephemeral = self.workspace.as_mut_slice();
         primus_distr::sample_crt_sparse_ternary_values_to(
@@ -185,12 +185,12 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
         );
         self.context.table().transform_slice(ephemeral);
         let ephemeral = DcrtPolynomial(&*ephemeral);
-        let (pk0, pk1) = self.key.ciphertext.c0_c1(self.context.rns_poly_len());
-        sample_scaled_noise(self.context, c0.as_mut(), rng);
+        let (pk0, pk1) = self.key.ciphertext.c0_c1(self.context.rns_poly_len(0));
+        sample_scaled_noise(self.context, 0, c0.as_mut(), rng);
         add_plaintext(self.context, input.as_ref(), c0.as_mut(), centered);
         self.context.table().transform_slice(c0.as_mut());
         c0.add_mul_assign(&ephemeral, &pk0, n, parameters.base_q().moduli());
-        sample_scaled_noise(self.context, c1.as_mut(), rng);
+        sample_scaled_noise(self.context, 0, c1.as_mut(), rng);
         self.context.table().transform_slice(c1.as_mut());
         c1.add_mul_assign(&ephemeral, &pk1, n, parameters.base_q().moduli());
     }

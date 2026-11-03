@@ -64,12 +64,12 @@ fn plaintext_subring_keeps_the_full_secret_and_zeroes_unoccupied_slots() {
         batching.embed_to(&small, multiplier.as_mut());
         let public_key = client.public_key(&mut rng);
         let mut encryptor = context.public_key_encryptor(&public_key).unwrap();
-        let mut ciphertext = context.new_ciphertext();
+        let mut ciphertext = context.new_ciphertext(0);
         encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
-        let mut evaluator = BgvEvaluator::new(&context);
+        let mut evaluator = BgvEvaluator::new(&context, 0);
         evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
         evaluator.mul_plain_assign(&mut ciphertext, &multiplier, PlaintextEmbedding::Centered);
-        let decoded = client.decrypt(&ciphertext);
+        let decoded = client.decrypt(&ciphertext, 0);
         assert!(
             decoded
                 .as_ref()

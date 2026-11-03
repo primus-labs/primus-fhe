@@ -46,9 +46,9 @@ fn bench(c: &mut Criterion) {
     let mut client = BgvClient::generate(&context, &mut rng);
     let key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&key).unwrap();
-    let mut evaluator = BgvEvaluator::new(&context);
-    let mut ciphertext = context.new_ciphertext();
-    let mut output = context.new_ciphertext();
+    let mut evaluator = BgvEvaluator::new(&context, 0);
+    let mut ciphertext = context.new_ciphertext(0);
+    let mut output = context.new_ciphertext(0);
     {
         let mut request = || {
             batching.encode_to(black_box(&values), &mut small);
@@ -61,7 +61,7 @@ fn bench(c: &mut Criterion) {
                 &mut output,
                 PlaintextEmbedding::Centered,
             );
-            client.decrypt_to(&output, &mut recovered);
+            client.decrypt_to(&output, 0, &mut recovered);
             batching.extract_to(recovered.as_ref(), &mut small);
             batching.decode_to(&small, &mut slots, &mut scratch);
             black_box(&slots);

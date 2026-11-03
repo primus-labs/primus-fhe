@@ -46,10 +46,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(client.secret_key().rns_glwe_size().poly_length().get(), N);
     let public_key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
-    let mut ciphertext = context.new_ciphertext();
-    let mut output = context.new_ciphertext();
+    let mut ciphertext = context.new_ciphertext(0);
+    let mut output = context.new_ciphertext(0);
     encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
-    let mut evaluator = BgvEvaluator::new(&context);
+    let mut evaluator = BgvEvaluator::new(&context, 0);
     evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
     evaluator.mul_plain_to(
         &ciphertext,
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut output,
         PlaintextEmbedding::Centered,
     );
-    let decoded = client.decrypt(&output);
+    let decoded = client.decrypt(&output, 0);
     batching.extract_to(decoded.as_ref(), &mut small);
     let mut slots = vec![0; SLOTS];
     let mut scratch = vec![0; SLOTS];

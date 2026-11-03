@@ -163,7 +163,7 @@ fn check(
         assert_eq!(phase(ciphertext, limb), expected);
     }
     assert_eq!(
-        client.decrypt(ciphertext).as_ref(),
+        client.decrypt(ciphertext, 0).as_ref(),
         expected
             .iter()
             .map(|value| value.rem_euclid(i128::from(p)) as u64)
@@ -176,14 +176,14 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
     for p in [2, 254, 257] {
         let context = context(p);
         let mut client = client(&context);
-        let mut evaluator = BgvEvaluator::new(&context);
+        let mut evaluator = BgvEvaluator::new(&context, 0);
         let lhs_message: [u64; N] =
             std::array::from_fn(|i| [0, p - 1, p / 2, p.div_ceil(2), 1][i % 5]);
         let rhs_message: [u64; N] =
             std::array::from_fn(|i| [p - 1, p / 2, 1, 0, p.div_ceil(2)][i % 5]);
         let (lhs, lhs_phase) = fixture(&lhs_message, p, PlaintextEmbedding::Centered, 7);
         let (rhs, rhs_phase) = fixture(&rhs_message, p, PlaintextEmbedding::Unsigned, 29);
-        let mut output = context.new_ciphertext();
+        let mut output = context.new_ciphertext(0);
         check(&mut client, &lhs, &lhs_phase, p);
         check(&mut client, &rhs, &rhs_phase, p);
 
@@ -242,7 +242,7 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
 #[test]
 fn invalid_lengths_and_plaintext_values_leave_outputs_unchanged() {
     let context = context(257);
-    let mut evaluator = BgvEvaluator::new(&context);
+    let mut evaluator = BgvEvaluator::new(&context, 0);
     let (input, _) = fixture(&[3; N], 257, PlaintextEmbedding::Centered, 7);
     let plain = Polynomial(vec![1; N]);
     let embedding = PlaintextEmbedding::Centered;

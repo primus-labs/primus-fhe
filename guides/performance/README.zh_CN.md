@@ -8,6 +8,7 @@
 
 | 主题 | 正文语言 | 保留价值 |
 | --- | --- | --- |
+| [BGV 多级槽请求](bgv-leveled.md) | English | 乘法/relin/旋转/换钥/drop 完整流水线及原工作流 ABBA 控制 |
 | [BGV 系数与子环槽](bgv-basic.md) | English | 精确 centered 恢复的资源选择与完整 packed 请求基线 |
 | [BFV 系数工作流](bfv-leveled-coefficients.md) | English | 精确舍入降模的资源选择与完整系数请求成本 |
 | [Sparse算术与调度](sparse-arithmetic.md) | English | 当前聚合、canonical NTT边界、16 KiB tile、4/2/1所有权及负向控制 |

@@ -87,18 +87,21 @@ cargo run --release -p primus_tfhe_glwe_ntt --example ntt_basic
 
 ```sh
 just schemes
-cargo run -p primus_bgv --example coefficients
-cargo run -p primus_bgv --example slots --features batching
+cargo run -p primus_bgv --example leveled_coefficients
+cargo run -p primus_bgv --example leveled_slots --features batching
 cargo run -p primus_bfv --example slots --features batching
 cargo check -p primus_bgv --lib --no-default-features
 cargo check -p primus_encoding --lib --no-default-features --features batching
-just bench-smoke primus_bgv workflow --features batching
+just bench-smoke primus_bgv leveled --features batching
 ```
 
 BGV `workflow` 的一次迭代包含 encode/embed、真实公钥加密、plain-add、dense
 plain-mul、精确恢复和 extract/decode，预分配与建钥在计时外。它测完整单次 packed
-请求，不能与仅测 evaluator 的结果直接比较。旋转映射属于明文编码；BGV 密文旋转、
-ct×ct/relin 与降模尚未开放。参数、布局和当前接口见
+请求，不能与仅测 evaluator 的结果直接比较。`leveled` 另外测两次 fresh public
+加密、ct×ct/square/relin、密文旋转、Alice→Bob 换钥、两次 p-corrected prime drop
+和 slot 恢复的完整请求。模数 level 与 gadget digits 是两种参数，各层 key 独立生成；
+编码器的 rotation exponent 交由 `BgvAutomorphism` 执行真实密文操作。推导见
+[BGV 求值契约](bgv-evaluation.md)。参数、布局和当前接口见
 [BGV](../../crates/primus_bgv/README.zh_CN.md)、[BFV](../../crates/primus_bfv/README.zh_CN.md)
 及[共享编码](../../crates/primus_encoding/README.zh_CN.md)。
 

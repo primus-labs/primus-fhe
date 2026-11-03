@@ -10,6 +10,8 @@ ci: default test-doc schemes
   cargo check -p 'primus_tfhe*_ntt' -p primus_glwe_rns --lib --no-default-features
   cargo check -p 'primus_tfhe*_fourier' --lib --no-default-features --features rustfft
   cargo check -p primus_encoding --lib --no-default-features
+  cargo check -p primus_encoding --lib --no-default-features --features batching
+  cargo check -p primus_bgv --lib --no-default-features
   cargo check -p primus_modulus --all-targets --features derive
   cargo nextest run -p primus_modulus --lib --tests --features derive -E 'binary(derives)'
   cargo check -p primus_distr --lib --features high_precision
@@ -55,6 +57,8 @@ schemes:
   cargo nextest run -p primus_encoding -p primus_bfv -p primus_bgv --lib --tests --features rns,batching
   cargo run -p primus_bgv --example coefficients
   cargo run -p primus_bgv --example slots --features batching
+  cargo run -p primus_bgv --example leveled_coefficients
+  cargo run -p primus_bgv --example leveled_slots --features batching
   cargo run -p primus_bfv --example slots --features batching
 
 # Explicit crate-local workload.

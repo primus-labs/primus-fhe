@@ -5,8 +5,10 @@ edition = "2024"
 
 [dependencies]
 primus_data = { path = "../primus_data" }
+primus_decompose = { path = "../primus_decompose" }
 primus_distr = { path = "../primus_distr" }
 primus_encoding = { path = "../primus_encoding" }
+primus_factor = { path = "../primus_factor" }
 primus_glwe_rns = { path = "../primus_glwe_rns" }
 primus_integer = { path = "../primus_integer" }
 primus_lattice = { path = "../primus_lattice", features = ["rns"] }
@@ -35,5 +37,14 @@ required-features = ["batching"]
 
 [[bench]]
 name = "workflow"
+harness = false
+required-features = ["batching"]
+
+[[example]]
+name = "leveled_slots"
+required-features = ["batching"]
+
+[[bench]]
+name = "leveled"
 harness = false
 required-features = ["batching"]
