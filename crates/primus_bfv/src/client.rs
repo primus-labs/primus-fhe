@@ -99,7 +99,6 @@ impl<'a> BfvClient<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        self.validate_plaintext(input);
         self.secret_context().encrypt_to(input, output, rng);
     }
 
@@ -114,22 +113,8 @@ impl<'a> BfvClient<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
-        self.validate_plaintext(input);
         self.secret_context()
             .encrypt_centered_to(input, output, rng);
-    }
-
-    fn validate_plaintext<A: Data<Elem = u64>>(&self, input: &Polynomial<A>) {
-        assert_eq!(
-            input.as_ref().len(),
-            self.context.parameters().poly_length().get(),
-            "BFV plaintext length mismatch"
-        );
-        let t = self.context.parameters().codec().t();
-        assert!(
-            input.as_ref().iter().all(|&x| x < t),
-            "BFV plaintext coefficient is not canonical"
-        );
     }
 
     /// Samples native unscaled key-column noise at one prepared prefix level.

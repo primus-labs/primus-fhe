@@ -59,9 +59,9 @@ impl<'a> BfvSecretKeyContext<'a> {
     /// before c0's sole forward NTT. No scratch allocation occurs.
     ///
     /// # Panics
-    /// Complete input/output lengths are checked before sampling or writes.
-    /// Invalid coefficient values are rejected by the codec after noise sampling;
-    /// codec, RNG or transform panics can leave partial output.
+    /// Complete input/output lengths and canonical coefficients are checked
+    /// before sampling or writes. Codec, RNG or transform panics can leave
+    /// partial output.
     pub fn encrypt_to<R, A, B>(
         &self,
         input: &Polynomial<A>,
@@ -105,6 +105,13 @@ impl<'a> BfvSecretKeyContext<'a> {
             input.as_ref().len(),
             self.parameters.poly_length().get(),
             "BFV plaintext length mismatch"
+        );
+        assert!(
+            input
+                .as_ref()
+                .iter()
+                .all(|&x| x < self.parameters.codec().t()),
+            "BFV plaintext coefficient is not canonical"
         );
         self.encrypt_with_c0_to(output, rng, |c0| {
             self.parameters

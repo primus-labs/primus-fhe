@@ -171,10 +171,9 @@ erased on drop. Explicit `workspace_mut().zeroize()` or
 `Zeroize::zeroize(&mut decrypt_workspace)` preserves allocation and geometry;
 calls overwrite scratch without adding an erasure scan after every operation.
 
-Complete length errors are rejected before output/scratch writes or sampling.
-`BfvClient` additionally checks all plaintext values before RNG consumption.
-The lower-level `BfvSecretKeyContext` and `BfvPublicKeyEncryptor` coefficient
-entries check values through the codec after noise sampling and before c0's NTT.
+Coefficient encryption entries check complete lengths and all canonical
+plaintext values before RNG consumption or output/scratch writes. This includes
+`BfvClient`, `BfvSecretKeyContext` and `BfvPublicKeyEncryptor`, for both embeddings.
 Evaluator plaintext entries check all values before output/scratch writes.
 Representation/range contracts for ciphertexts and CRT input remain unchecked
 mathematical requirements. RNG/NTT/codec panics may leave partial output or

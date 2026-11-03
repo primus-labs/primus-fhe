@@ -393,6 +393,58 @@ fn plaintext_product_keeps_bfv_scaling() {
 }
 
 #[test]
+fn noncanonical_coefficients_preserve_randomness_output_and_public_scratch() {
+    for count in [1, 2] {
+        let parameters = parameters(count, 257, ErrorDistribution::CenteredBinomial { eta: 1 });
+        let table =
+            U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+        let mut setup_rng = StdRng::seed_from_u64(0x4246_5682);
+        let coefficient_key = GlweSecretKey::generate(
+            parameters.size().glwe_size(),
+            parameters.encryption_parameters().secret_key_sampler(),
+            &mut setup_rng,
+        );
+        let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
+        let public = BfvPublicKey::new(
+            &BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap(),
+            &mut setup_rng,
+        );
+        let secret = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+        let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
+        for (index, value) in [(0, 257), (N - 1, u64::MAX)] {
+            let mut input = Polynomial(vec![1; N]);
+            input.as_mut()[index] = value;
+            for mode in 0..4 {
+                let mut rng = StdRng::seed_from_u64(0x4246_5683);
+                let mut reference_rng = StdRng::seed_from_u64(0x4246_5683);
+                let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len()]);
+                let workspace = encryptor.workspace_mut().as_mut_slice();
+                workspace.fill(73);
+                let workspace_pointer = workspace.as_ptr();
+                let workspace_length = workspace.len();
+                assert!(
+                    catch_unwind(AssertUnwindSafe(|| match mode {
+                        0 => secret.encrypt_to(&input, &mut output, &mut rng),
+                        1 => secret.encrypt_centered_to(&input, &mut output, &mut rng),
+                        2 => encryptor.encrypt_to(&input, &mut output, &mut rng),
+                        _ => encryptor.encrypt_centered_to(&input, &mut output, &mut rng),
+                    }))
+                    .is_err()
+                );
+                assert!(output.as_ref().iter().all(|&value| value == 99));
+                let workspace = encryptor.workspace_mut().as_mut_slice();
+                assert_eq!(workspace.as_ptr(), workspace_pointer);
+                assert_eq!(workspace.len(), workspace_length);
+                assert!(workspace.iter().all(|&value| value == 73));
+                for _ in 0..4 {
+                    assert_eq!(rng.next_u64(), reference_rng.next_u64());
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     let parameters = parameters(2, 257, ErrorDistribution::CenteredBinomial { eta: 1 });
     let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();

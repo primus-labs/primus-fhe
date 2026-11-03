@@ -147,10 +147,10 @@ workspace。并发操作使用独立的可变 workspace owner，可以共享不�
 `workspace_mut().zeroize()` 或 `Zeroize::zeroize(&mut decrypt_workspace)`
 保留 allocation/geometry；调用会覆盖 scratch，不在每次操作后额外扫描擦除。
 
-完整长度错误在输出/scratch 写入或采样前拒绝。`BfvClient` 还在消耗 RNG 前检查
-全部明文系数。较低层 `BfvSecretKeyContext` 和 `BfvPublicKeyEncryptor` 的系数
-入口通过 codec 在噪声采样后、c0 NTT 前检查数值。Evaluator 明文入口在输出/
-scratch 写入前检查全部数值。密文和 CRT 输入的表示/残数范围仍是未检查的数学
+系数加密入口在消耗 RNG 或写入输出/scratch 前检查完整长度和全部 canonical 明文
+系数；两种 embedding 的 `BfvClient`、`BfvSecretKeyContext` 和
+`BfvPublicKeyEncryptor` 均遵循此边界。Evaluator 明文入口在输出/scratch 写入前
+检查全部数值。密文和 CRT 输入的表示/残数范围仍是未检查的数学
 前提。RNG/NTT/codec panic 可能留下部分输出或 scratch；精确契约以方法 rustdoc
 为准。
 

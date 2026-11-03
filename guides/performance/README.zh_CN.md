@@ -8,6 +8,7 @@
 
 | 主题 | 正文语言 | 保留价值 |
 | --- | --- | --- |
+| [BFV 系数输入检查](bfv-coefficient-validation.md) | English | 统一加密入口的 early rejection 及完整请求 ABBA 性能验证 |
 | [BFV 精确密文乘法](bfv-multiplication.md) | English | 精确 RNS NTT/reference 对照、完整 fresh 槽请求与未改系数负载对照 |
 | [BGV 多级槽请求](bgv-leveled.md) | English | 乘法/relin/旋转/换钥/drop 完整流水线及原工作流 ABBA 控制 |
 | [BGV 系数与子环槽](bgv-basic.md) | English | 精确 centered 恢复的资源选择与完整 packed 请求基线 |

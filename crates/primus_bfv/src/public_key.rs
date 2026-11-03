@@ -172,9 +172,9 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
     /// Encoding is fused before c0's single NTT; no temporary storage is allocated.
     ///
     /// # Panics
-    /// Incorrect complete lengths are rejected before sampling. The codec checks
-    /// coefficient values after noise sampling. Codec/RNG/NTT panics may leave
-    /// partial output and scratch.
+    /// Incorrect complete lengths and noncanonical coefficients are rejected
+    /// before sampling or writes. Codec/RNG/NTT panics may leave partial output
+    /// and scratch.
     pub fn encrypt_to<R, A, B>(
         &mut self,
         input: &Polynomial<A>,
@@ -218,6 +218,10 @@ impl<'a> BfvPublicKeyEncryptor<'a> {
             input.as_ref().len(),
             parameters.poly_length().get(),
             "BFV plaintext length mismatch"
+        );
+        assert!(
+            input.as_ref().iter().all(|&x| x < parameters.codec().t()),
+            "BFV plaintext coefficient is not canonical"
         );
         self.encrypt_with_c0_to(output, rng, |c0| {
             parameters
