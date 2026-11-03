@@ -2,10 +2,10 @@
 //! Run: cargo run -p primus_bfv --example hybrid_rns_key_switch
 //! These parameters demonstrate composition, not a security level.
 
-use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext};
+use primus_bfv::{BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext};
 use primus_glwe_rns::{
     DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
-    HybridRnsGlweKeySwitchingKey, HybridRnsKeySwitchDomain, SecretKeyDistr,
+    HybridRnsGlweKeySwitchingKey, SecretKeyDistr,
 };
 use primus_lattice::glwe::DcrtGlwe;
 use primus_modulus::BarrettModulus;
@@ -36,18 +36,17 @@ fn main() {
         3.20,
     );
     let hybrid_rns = HybridRNS::new(&q_moduli, &p_moduli, 2).unwrap();
-    let domain = HybridRnsKeySwitchDomain::try_new(&hybrid_rns, &qp_table).unwrap();
 
     // Client: generate both secrets and the switching key supplied to the server.
     let mut rng = StdRng::seed_from_u64(0x4859_4252_4944_524e);
     let input_key = GlweSecretKey::generate(
         glwe_parameters.size().glwe_size(),
-        glwe_parameters.secret_key_sampler(),
+        glwe_parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
     let output_key = GlweSecretKey::generate(
         glwe_parameters.size().glwe_size(),
-        glwe_parameters.secret_key_sampler(),
+        glwe_parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
     let input_dcrt_key = DcrtGlweSecretKey::from_coeff_secret_key(&input_key, &q_table);
@@ -56,26 +55,35 @@ fn main() {
         &input_key,
         glwe_parameters.encryption_parameters(),
         &output_key,
-        &domain,
+        &hybrid_rns,
+        &qp_table,
         &mut rng,
     );
 
     let plaintext: Polynomial<Vec<Value>> =
         Polynomial::random(poly_length.get(), plaintext_modulus, &mut rng);
-    let mut input: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(glwe_parameters.rns_glwe_len());
-    let mut output: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(glwe_parameters.rns_glwe_len());
+    let mut input: DcrtGlwe<Vec<Value>> =
+        DcrtGlweCiphertext::zero(glwe_parameters.size().rns_glwe_len());
+    let mut output: DcrtGlwe<Vec<Value>> =
+        DcrtGlweCiphertext::zero(glwe_parameters.size().rns_glwe_len());
     let input_dcrt_key_context =
         BfvSecretKeyContext::try_new(&input_dcrt_key, &glwe_parameters, &q_table).unwrap();
-    input_dcrt_key_context.encrypt_to(&plaintext, &mut input, &mut rng);
+    let mut native = BfvCiphertext::zero(glwe_parameters.size().rns_glwe_len());
+    input_dcrt_key_context.encrypt_to(&plaintext, &mut native, &mut rng);
+    // The raw switching key retains b-a*s. Cross this legacy boundary explicitly;
+    // ordinary BFV encryption/decryption use native [c0,c1] throughout.
+    native.write_raw_glwe_to(&mut input, &glwe_parameters);
 
-    // Server: bind the evaluation key and domain once, allocating its reusable scratch.
-    let mut key_switch_evaluator = HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &domain);
+    // Server: bind evaluation resources once, allocating reusable scratch.
+    let mut key_switch_evaluator =
+        HybridRnsGlweKeySwitchEvaluator::new(&switching_key, &hybrid_rns, &qp_table);
     key_switch_evaluator.key_switch_to(&input, &mut output);
 
     // Client: decrypt under the output secret using its bound parameters and table.
     let mut decrypt_workspace = BfvDecryptWorkspace::new(&glwe_parameters);
     let output_dcrt_key_context =
         BfvSecretKeyContext::try_new(&output_dcrt_key, &glwe_parameters, &q_table).unwrap();
-    let decrypted = output_dcrt_key_context.decrypt(&output, &mut decrypt_workspace);
+    native.set_from_raw_glwe(&output, &glwe_parameters);
+    let decrypted = output_dcrt_key_context.decrypt(&native, &mut decrypt_workspace);
     assert_eq!(decrypted, plaintext);
 }

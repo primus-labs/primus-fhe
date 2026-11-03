@@ -4,7 +4,8 @@ use primus_decompose::{ApproxSignedBasisError, big_integer::BigUintApproxSignedB
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweEncryptionParametersError, DcrtGadgetDomain, RnsDomainError, SecretKeyDistr,
+    CrtGlweEncryptionParametersError, DcrtGlweSecretKey, GlweSecretKey, RnsDomainError,
+    SecretKeyDistr,
 };
 use primus_integer::BigUint;
 use primus_lattice::{GlweDimension, GlweSize, GlweSizeError, RnsGlweSize};
@@ -12,7 +13,6 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::UintDcrtTable;
 use primus_rns::RNSBase;
 use primus_shape::PolyLength;
-use std::sync::Arc;
 
 #[test]
 fn noise_support_must_fit_every_rns_modulus() {
@@ -251,7 +251,7 @@ fn gadget_parameters_check_basis_and_composed_lengths() {
     );
     assert!(
         CrtGlevParameters::try_new(
-            Arc::clone(&glwe.core),
+            glwe.core.size(),
             glwe.base.clone(),
             DecompositionBaseLog::new(4),
             None
@@ -260,14 +260,14 @@ fn gadget_parameters_check_basis_and_composed_lengths() {
     );
     for log_basis in [5, 6] {
         assert!(matches!(
-            CrtGlevParameters::try_new(Arc::clone(&glwe.core), glwe.base.clone(), DecompositionBaseLog::new(log_basis), None),
+            CrtGlevParameters::try_new(glwe.core.size(), glwe.base.clone(), DecompositionBaseLog::new(log_basis), None),
             Err(CrtGlevParametersError::BasisNotSmallerThanModulus { basis, modulus: 17, index: 1 })
                 if basis == 1 << log_basis
         ));
     }
     assert!(matches!(
         CrtGlevParameters::try_new(
-            Arc::clone(&glwe.core),
+            glwe.core.size(),
             glwe.base.clone(),
             DecompositionBaseLog::new(64),
             None
@@ -288,7 +288,7 @@ fn gadget_parameters_check_basis_and_composed_lengths() {
     );
     assert!(matches!(
         CrtGlevParameters::try_new(
-            Arc::clone(&large_layout.core),
+            large_layout.core.size(),
             large_layout.base.clone(),
             DecompositionBaseLog::new(4),
             None
@@ -300,10 +300,11 @@ fn gadget_parameters_check_basis_and_composed_lengths() {
 }
 
 #[test]
-fn prepared_parts_require_the_same_ordered_base_and_product() {
+fn prepared_gadget_parts_check_layout_count_and_product_representation() {
     let moduli = [97u32, 17].map(BarrettModulus::new);
     let base_q = RNSBase::new(&moduli).unwrap();
     let glwe_size = GlweSize::new(GlweDimension::new(1), PolyLength::new(32));
+    let size = RnsGlweSize::new(glwe_size, 2);
     assert!(matches!(
         CrtGlweEncryptionParameters::try_new(
             RnsGlweSize::new(glwe_size, 3),
@@ -314,62 +315,55 @@ fn prepared_parts_require_the_same_ordered_base_and_product() {
         Err(CrtGlweEncryptionParametersError::Domain(
             RnsDomainError::ModuliCountMismatch {
                 expected: 3,
-                actual: 2,
+                actual: 2
             }
         ))
-    ));
-    let inner = Arc::new(CrtGlweEncryptionParameters::new(
-        RnsGlweSize::new(glwe_size, 2),
-        &base_q,
-        SecretKeyDistr::UniformBinary,
-        1.0,
     ));
     let basis = || {
         BigUintApproxSignedBasis::new(base_q.moduli_product(), DecompositionBaseLog::new(4), None)
     };
-
-    // Equal products, equal limb counts and valid individual bases do not prove
-    // that their samplers/decomposition buffers use the same ordered Q.
-    for values in [&[17, 97][..], &[97, 19], &[97]] {
-        let foreign = RNSBase::new(
-            &values
-                .iter()
-                .copied()
-                .map(BarrettModulus::new)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-        assert!(matches!(
-            CrtGlevParameters::try_from_parts(Arc::clone(&inner), foreign.clone(), basis()),
-            Err(CrtGlevParametersError::Domain(_))
-        ));
-    }
+    assert!(matches!(
+        CrtGlevParameters::try_from_parts(RnsGlweSize::new(glwe_size, 3), base_q.clone(), basis()),
+        Err(CrtGlevParametersError::Domain(
+            RnsDomainError::ModuliCountMismatch {
+                expected: 3,
+                actual: 2
+            }
+        ))
+    ));
+    let foreign_base = RNSBase::new(&[97u32, 19].map(BarrettModulus::new)).unwrap();
+    assert!(matches!(
+        CrtGlevParameters::try_from_parts(size, foreign_base, basis()),
+        Err(CrtGlevParametersError::BasisModulusMismatch)
+    ));
     for modulus in [&[97 * 17 + 1][..], &[97 * 17, 1]] {
         let foreign_basis =
             BigUintApproxSignedBasis::new(BigUint(modulus), DecompositionBaseLog::new(4), None);
         assert!(matches!(
-            CrtGlevParameters::try_from_parts(Arc::clone(&inner), base_q.clone(), foreign_basis),
+            CrtGlevParameters::try_from_parts(size, base_q.clone(), foreign_basis),
             Err(CrtGlevParametersError::BasisModulusMismatch)
         ));
     }
 
-    let gadget =
-        CrtGlevParameters::try_from_parts(Arc::clone(&inner), base_q.clone(), basis()).unwrap();
-    let derived = CrtGlevParameters::new(
-        Arc::clone(&inner),
-        base_q.clone(),
-        DecompositionBaseLog::new(3),
-        None,
-    );
-    for params in [&gadget, &derived, &gadget.clone()] {
-        assert!(std::ptr::eq(inner.as_ref(), params.encryption_parameters()));
+    // Decomposition depends on Q's product; cached weights still follow the
+    // supplied base order. There is no sampler whose order could constrain it.
+    let reversed_base = RNSBase::new(&[17u32, 97].map(BarrettModulus::new)).unwrap();
+    let gadget = CrtGlevParameters::try_from_parts(size, base_q.clone(), basis()).unwrap();
+    let reversed = CrtGlevParameters::try_from_parts(size, reversed_base, basis()).unwrap();
+    assert_eq!(gadget.size().rns_glwe_size(), size);
+    for (ordinary, reversed) in gadget
+        .scalar_residue_iter()
+        .zip(reversed.scalar_residue_iter())
+    {
+        assert_eq!(
+            ordinary.as_ref(),
+            &[reversed.as_ref()[1], reversed.as_ref()[0]]
+        );
+    }
+    for params in [&gadget, &gadget.clone()] {
         assert!(std::ptr::eq(
             base_q.moduli_product().0,
             params.base_q().moduli_product().0
-        ));
-        assert!(std::ptr::eq(
-            inner.noise_distribution(),
-            params.noise_distribution()
         ));
     }
 }
@@ -443,7 +437,7 @@ fn cached_weights_and_centered_digits_follow_rns_order() {
 
 // Equal limb counts and lengths do not imply equal ordered evaluation domains.
 #[test]
-fn domain_rejects_modulus_order_mismatch() {
+fn gadget_encryption_binding_rejects_table_modulus_order_mismatch() {
     let moduli_values = [1_125_899_906_826_241u64, 1_125_899_906_629_633];
     let moduli = moduli_values.map(BarrettModulus::new);
     let crt_glwe = support::RawParameters::new(
@@ -456,8 +450,20 @@ fn domain_rejects_modulus_order_mismatch() {
     let crt_gadget = crt_glwe.gadget(DecompositionBaseLog::new(20), None);
     let reversed = [moduli[1], moduli[0]];
     let wrong_order_table = UintDcrtTable::new(PolyLength::new(32), &reversed).unwrap();
+    use rand::{SeedableRng, rngs::StdRng};
+    let table = UintDcrtTable::new(PolyLength::new(32), &moduli).unwrap();
+    let secret = GlweSecretKey::generate(
+        crt_glwe.glwe_size(),
+        crt_glwe.secret_key_sampler(),
+        &mut StdRng::seed_from_u64(913),
+    );
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
     assert!(matches!(
-        DcrtGadgetDomain::try_new(&crt_gadget, &wrong_order_table),
+        key.try_bind_gadget(
+            &crt_gadget,
+            crt_glwe.encryption_parameters(),
+            &wrong_order_table
+        ),
         Err(RnsDomainError::ModulusOrderMismatch { index: 0, .. })
     ));
 }

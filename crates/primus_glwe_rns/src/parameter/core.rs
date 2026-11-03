@@ -1,7 +1,7 @@
 //! Immutable layout and sampling precomputation shared by RNS parameter roles.
 
 use primus_distr::{ErrorDistribution, ErrorSampler, SecretKeySampler};
-use primus_integer::{BigUint, FheUint};
+use primus_integer::FheUint;
 use primus_lattice::RnsGlweSize;
 use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
@@ -10,15 +10,13 @@ use rand::distr::Uniform;
 use super::{CrtGlweEncryptionParametersError, RnsDomainError, validate_moduli};
 use crate::SecretKeyDistr;
 
-/// Layout and sampling state shared by ordinary and gadget parameters.
+/// Layout and sampling precomputation for raw and gadget encryption.
 ///
-/// Base-dependent caches follow the immutable ordered base owned by each outer
-/// type: the ordinary codec or the gadget base. No second RNSBase is stored here.
-/// Arc sharing retains the same prepared error and secret samplers when
-/// gadget parameters are derived, instead of cloning those precomputations.
+/// The ordered RNS basis remains owned by the caller. Evaluators do not depend
+/// on this sampling state; gadget encryption receives it separately from the
+/// decomposition parameters.
 pub struct CrtGlweEncryptionParameters<T: FheUint> {
     pub(super) size: RnsGlweSize,
-    pub(super) cipher_modulus_minus_one: BigUint<Vec<T>>,
     pub(super) cipher_moduli_minus_one: Vec<T>,
     pub(super) cipher_moduli_uniform_distr: Vec<Uniform<T>>,
     pub(super) secret_key_sampler: SecretKeySampler<T>,
@@ -97,12 +95,8 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
             noise_distribution.validate_modulus(modulus_minus_one)?;
         }
 
-        let mut cipher_modulus_minus_one = BigUint(base_q.moduli_product().0.to_vec());
-        let borrow = cipher_modulus_minus_one.sub_value_assign(T::ONE);
-        debug_assert!(!borrow);
         Ok(Self {
             size,
-            cipher_modulus_minus_one,
             cipher_moduli_minus_one: base_q.moduli().iter().map(|q| q.minus_one()).collect(),
             cipher_moduli_uniform_distr: base_q
                 .moduli()
@@ -161,7 +155,7 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
     /// The coefficient count is this core's N. `moduli` may be its Q basis or
     /// an auxiliary expanded basis such as QP; every limb receives the same
     /// logical signed sample. This method checks output shape and support, not
-    /// the basis identity bound by an encryption/evaluation domain.
+    /// the ordered basis checked by an encryptor/evaluator constructor.
     ///
     /// # Panics
     /// Inherits [`ErrorSampler::sample_crt_to`]'s layout and modulus checks.

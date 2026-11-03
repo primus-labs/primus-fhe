@@ -32,6 +32,7 @@ The index is bilingual; the topic language is shown below. External tools mainta
 | Topic | Guide |
 | --- | --- |
 | Domains, representations, borrowing, phases and reusable state | [Composing libraries](composition.md) (English) |
+| Native BFV/raw GLWE component signs, keys and explicit bridges | [RNS phase conventions](rns-phase-conventions.md) (English) |
 | Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) (English) |
 | Current experimental configurations and their evidence limits | [TFHE parameter directory](tfhe-parameters.md) (English) |
 | Offline NTRU CBS noise scenarios and gadget search | [Parameter analysis tool](../../../primus_high_prec_lut/tools/parameter_selection/ntru_cbs/README.md) |

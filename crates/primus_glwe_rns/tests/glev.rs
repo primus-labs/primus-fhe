@@ -2,8 +2,8 @@ mod support;
 
 use primus_decompose::{DecompositionBaseLog, big_integer::BigUintApproxSignedBasis};
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGadgetDomain, DcrtGlweSecretKey,
-    GlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweSecretKey, GlweSecretKey,
+    RnsDomainError, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_lattice::{glev::DcrtGlev, glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace};
@@ -48,7 +48,7 @@ fn test_rns_glev() {
     ));
     let basis =
         BigUintApproxSignedBasis::new(base_q.moduli_product(), DecompositionBaseLog::new(20), None);
-    let glev_params = CrtGlevParameters::try_from_parts(Arc::clone(&inner), base_q, basis).unwrap();
+    let glev_params = CrtGlevParameters::try_from_parts(size, base_q, basis).unwrap();
     let sk = GlweSecretKey::generate(size.glwe_size(), inner.secret_key_sampler(), &mut rng);
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
@@ -61,7 +61,6 @@ fn test_rns_glev() {
     let base_q = glev_params.base_q();
     let big_uint_poly_len = glev_params.big_uint_poly_len();
 
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
     let rns_glev_len = glev_params.rns_glev_len();
 
     let mut glev_workspace = DcrtGlevMulWorkspace::new(glev_params.size(), glev_params.base_q());
@@ -88,7 +87,30 @@ fn test_rns_glev() {
             .collect::<Vec<_>>(),
     );
 
-    let encryptor = dcrt_sk.try_bind_gadget(&domain).unwrap();
+    // Sampling is an independent encryption input, not gadget arithmetic state.
+    // Reject an otherwise valid sampler from a different layout or basis.
+    let foreign_size = RnsGlweSize::new(
+        GlweSize::new(GlweDimension::new(dimension + 1), table.poly_length()),
+        size.moduli_count(),
+    );
+    let foreign_sampling =
+        CrtGlweEncryptionParameters::new(foreign_size, base_q, SecretKeyDistr::SparseTernary, 3.2);
+    assert!(matches!(
+        dcrt_sk.try_bind_gadget(&glev_params, &foreign_sampling, &table),
+        Err(RnsDomainError::DimensionMismatch { .. })
+    ));
+    let reversed_moduli = [moduli[1], moduli[0]];
+    let reversed_base = RNSBase::new(&reversed_moduli).unwrap();
+    let reversed_sampling =
+        CrtGlweEncryptionParameters::new(size, &reversed_base, SecretKeyDistr::SparseTernary, 3.2);
+    assert!(matches!(
+        dcrt_sk.try_bind_gadget(&glev_params, &reversed_sampling, &table),
+        Err(RnsDomainError::ModulusOrderMismatch { .. })
+    ));
+
+    let encryptor = dcrt_sk
+        .try_bind_gadget(&glev_params, &inner, &table)
+        .unwrap();
 
     // Both representations reject incomplete or oversized layouts before they
     // consume coins or touch even a borrowed, dirty destination.
@@ -179,8 +201,11 @@ fn test_rns_glev() {
         &mut glev_workspace,
     );
 
-    let bound =
-        support::switch_error_bound(&glev_params, message1.iter().map(|value| value.abs()).sum());
+    let bound = support::switch_error_bound(
+        &glev_params,
+        &inner,
+        message1.iter().map(|value| value.abs()).sum(),
+    );
     support::assert_probe_phase(&dcrt_sk, &parameters, &table, &c1, &desired, bound);
 
     // Reuse the dirty workspace. A zero product must overwrite scratch data

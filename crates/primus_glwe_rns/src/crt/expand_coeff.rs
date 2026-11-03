@@ -1,12 +1,13 @@
+use crate::CrtGlweEncryptionParameters;
 use primus_data::{Data, DataMut};
 use primus_factor::ShoupFactor;
 use primus_integer::{AsInto, BigUint, FheUint};
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 use primus_rns::ResidueFactors;
 use rayon::prelude::*;
 
-use crate::{CrtGlweCiphertext, DcrtGadgetDomain, DcrtGlweSecretKey, GlweSecretKey};
+use crate::{CrtGlevParameters, CrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey};
 
 use super::automorphism::CrtGlweAutoKeyData;
 use super::trace::CrtGlweTraceWorkspace;
@@ -20,7 +21,7 @@ pub use evaluator::{CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffParallelEvalu
 /// Automorphism keys used to expand CRT GLWE coefficients into ciphertexts.
 pub struct CrtGlweExpandCoeffKey<T: FheUint> {
     metadata: AutomorphismKeyMetadata<T>,
-    // All entries are generated here from the same domain; no foreign entry can
+    // All entries are generated here from the same parameters; no foreign entry can
     // bypass the single metadata check at evaluator construction.
     auto_keys: Vec<CrtGlweAutoKeyData<T>>,
     inv_count_residues_by_level: Vec<ResidueFactors<Vec<ShoupFactor<T>>>>,
@@ -30,14 +31,16 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
     /// Generates the automorphism keys required for coefficient expansion.
     ///
     /// # Panics
-    /// Panics if secret layouts or ordered moduli do not match the domain.
+    /// Panics if secret layouts or ordered moduli do not match the supplied parameters.
     ///
     /// # Correctness
     /// Both secret representations must describe the same key, with the DCRT
-    /// secret using the domain table's NTT representation.
+    /// secret using the supplied table's NTT representation.
     #[must_use]
     pub fn new<M, Table, R>(
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        sampling_parameters: &CrtGlweEncryptionParameters<T>,
+        table: &DcrtTable<Table>,
         sk: &GlweSecretKey<T>,
         dcrt_sk: &DcrtGlweSecretKey<T>,
         rng: &mut R,
@@ -47,10 +50,18 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let log_n = params.poly_length().log_n();
         let degrees = (1..=log_n).rev().map(|x| (1usize << x) + 1);
-        let auto_keys = CrtGlweAutoKeyData::generate_key_set(domain, degrees, sk, dcrt_sk, rng);
+        let auto_keys = CrtGlweAutoKeyData::generate_key_set(
+            parameters,
+            sampling_parameters,
+            table,
+            degrees,
+            sk,
+            dcrt_sk,
+            rng,
+        );
 
         let base_q = params.base_q();
 
@@ -71,7 +82,7 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
             .collect();
 
         Self {
-            metadata: AutomorphismKeyMetadata::new(domain),
+            metadata: AutomorphismKeyMetadata::new(parameters),
             auto_keys,
             inv_count_residues_by_level,
         }
@@ -85,14 +96,15 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         &self,
         ciphertext: CrtGlweCiphertext<&[T]>,
         result: &mut [CrtGlweCiphertext<B>],
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
         workspace: &mut CrtGlweTraceWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
         B: DataMut<Elem = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let poly_length = params.poly_length().get();
         let count = result.len();
 
@@ -107,7 +119,7 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
             params.cipher_moduli_value(),
         );
 
-        let (crt_glwe, auto_workspace) = workspace.as_mut();
+        let (scratch, auto_workspace) = workspace.as_mut();
         for (i, auto_key) in self.auto_keys.iter().enumerate().take(log_d) {
             let level_len = 1 << i;
             let end = (level_len * 2).min(count);
@@ -121,8 +133,9 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
                     b_0.as_mut_view(),
                     auto_key,
                     monomial_degree,
-                    domain,
-                    crt_glwe.as_mut_view(),
+                    parameters,
+                    table,
+                    scratch.as_mut_view(),
                     auto_workspace,
                 );
             });
@@ -130,7 +143,7 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
             // support is already constant; double to finish B=next_pow2(k)
             // normalization without introducing another key-switch error.
             for leaf in constant {
-                Self::double_leaf_kernel(leaf, domain);
+                Self::double_leaf_kernel(leaf, parameters);
             }
         }
     }
@@ -142,14 +155,15 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
         &self,
         ciphertext: CrtGlweCiphertext<&[T]>,
         result: &mut [CrtGlweCiphertext<B>],
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
         workspace_pool: &WorkspacePool<CrtGlweTraceWorkspace<T>>,
     ) where
         M: FieldContext<T> + Sync,
         B: DataMut<Elem = T> + Send,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let poly_length = params.poly_length().get();
         let count = result.len();
 
@@ -177,15 +191,16 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
                 .zip(upper.par_chunks_mut(chunk_size))
                 .for_each(|(left, right)| {
                     let mut guard = workspace_pool.acquire();
-                    let (crt_glwe, auto_workspace) = guard.workspace_mut().as_mut();
+                    let (scratch, auto_workspace) = guard.workspace_mut().as_mut();
                     for (a_0, b_0) in left.iter_mut().zip(right) {
                         Self::expand_pair_kernel(
                             a_0.as_mut_view(),
                             b_0.as_mut_view(),
                             auto_key,
                             monomial_degree,
-                            domain,
-                            crt_glwe.as_mut_view(),
+                            parameters,
+                            table,
+                            scratch.as_mut_view(),
                             auto_workspace,
                         );
                     }
@@ -194,7 +209,7 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
             // support is already constant; double to finish B=next_pow2(k)
             // normalization without introducing another key-switch error.
             for leaf in constant {
-                Self::double_leaf_kernel(leaf, domain);
+                Self::double_leaf_kernel(leaf, parameters);
             }
         }
     }
@@ -203,39 +218,47 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
     /// `rhs = X^degree * (c - auto(c))`.
     /// Serial and parallel traversal borrow each output separately, avoiding an
     /// allocated collection of views. Operands and scratch must have the complete
-    /// domain layout; `scratch` and the automorphism workspace are overwritten.
+    /// parameter layout; every workspace buffer is overwritten.
+    // Keep the disjoint slice scratch borrows across the traversal. An owning
+    // workspace here changes the hot arithmetic specialization and borrow boundary.
+    #[allow(clippy::too_many_arguments)]
     fn expand_pair_kernel<M, Table>(
         mut lhs: CrtGlweCiphertext<&mut [T]>,
         mut rhs: CrtGlweCiphertext<&mut [T]>,
         auto_key: &CrtGlweAutoKeyData<T>,
         monomial_degree: usize,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
         mut scratch: CrtGlweCiphertext<&mut [T]>,
         auto_workspace: &mut AutomorphismWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let poly_length = params.poly_length().get();
         let rns_poly_len = params.rns_poly_len();
         let moduli = params.cipher_moduli();
 
-        auto_key.automorphism_kernel(lhs.as_view(), scratch.as_mut_view(), domain, auto_workspace);
+        auto_key.automorphism_kernel(
+            lhs.as_view(),
+            scratch.as_mut_view(),
+            parameters,
+            table,
+            auto_workspace,
+        );
         lhs.sub_to(&scratch, &mut rhs, poly_length, rns_poly_len, moduli);
         rhs.mul_monomial_assign(monomial_degree, poly_length, rns_poly_len, moduli);
         lhs.add_assign(&scratch, poly_length, rns_poly_len, moduli);
     }
 
-    fn double_leaf_kernel<M, Table, B>(
+    fn double_leaf_kernel<M, B>(
         leaf: &mut CrtGlweCiphertext<B>,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
     ) where
         M: FieldContext<T>,
-        Table: NttTable<ValueT = T>,
         B: DataMut<Elem = T>,
     {
-        let parameters = domain.parameters();
         for mut polynomial in leaf.iter_crt_poly_mut(parameters.rns_poly_len()) {
             for (limb, &modulus) in polynomial
                 .iter_each_modulus_mut(parameters.poly_length().get())

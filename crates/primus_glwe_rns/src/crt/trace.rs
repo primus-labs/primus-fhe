@@ -1,14 +1,13 @@
+use crate::CrtGlweEncryptionParameters;
 use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 
 use super::automorphism::CrtGlweAutoKeyData;
 use crate::RnsDomainError;
 use crate::automorphism::{AutomorphismKeyMetadata, AutomorphismWorkspace};
-use crate::{
-    CrtGlevParameters, CrtGlweCiphertext, DcrtGadgetDomain, DcrtGlweSecretKey, GlweSecretKey,
-};
+use crate::{CrtGlevParameters, CrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey};
 
 /// Owned ciphertext and automorphism scratch for bound trace/expansion operations.
 pub(super) struct CrtGlweTraceWorkspace<T: FheUint> {
@@ -50,14 +49,16 @@ impl<T: FheUint> CrtGlweTraceKey<T> {
     /// Generates the automorphism keys required by the trace.
     ///
     /// # Panics
-    /// Panics if secret layouts or ordered moduli do not match the domain.
+    /// Panics if secret layouts or ordered moduli do not match the supplied parameters.
     ///
     /// # Correctness
     /// Both secret representations must describe the same key, with the DCRT
-    /// secret using the domain table's NTT representation.
+    /// secret using the supplied table's NTT representation.
     #[must_use]
     pub fn new<M, Table, R>(
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        sampling_parameters: &CrtGlweEncryptionParameters<T>,
+        table: &DcrtTable<Table>,
         sk: &GlweSecretKey<T>,
         dcrt_sk: &DcrtGlweSecretKey<T>,
         rng: &mut R,
@@ -67,29 +68,38 @@ impl<T: FheUint> CrtGlweTraceKey<T> {
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let log_n = domain.parameters().poly_length().log_n();
+        let log_n = parameters.poly_length().log_n();
         let degrees = (1..=log_n).rev().map(|x| (1usize << x) + 1);
-        let auto_keys = CrtGlweAutoKeyData::generate_key_set(domain, degrees, sk, dcrt_sk, rng);
+        let auto_keys = CrtGlweAutoKeyData::generate_key_set(
+            parameters,
+            sampling_parameters,
+            table,
+            degrees,
+            sk,
+            dcrt_sk,
+            rng,
+        );
         Self {
-            metadata: AutomorphismKeyMetadata::new(domain),
+            metadata: AutomorphismKeyMetadata::new(parameters),
             auto_keys,
         }
     }
 
     /// Copies the complete input before applying the ordered automorphisms.
-    /// The caller maintains matching key/domain/workspace resources; scratch is
+    /// The caller maintains matching key/parameter/workspace resources; scratch is
     /// overwritten and reborrowed for each step, with no ownership transfer.
     fn trace_kernel_to<M, Table>(
         &self,
         ciphertext: CrtGlweCiphertext<&[T]>,
         mut result: CrtGlweCiphertext<&mut [T]>,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
         workspace: &mut CrtGlweTraceWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let poly_length = params.poly_length().get();
         let crt_poly_length = params.rns_poly_len();
         let moduli = params.cipher_moduli();
@@ -102,7 +112,8 @@ impl<T: FheUint> CrtGlweTraceKey<T> {
             auto_key.automorphism_kernel(
                 result.as_view(),
                 crt_glwe.as_mut_view(),
-                domain,
+                parameters,
+                table,
                 auto_workspace,
             );
             result.add_assign(crt_glwe, poly_length, crt_poly_length, moduli);
@@ -110,7 +121,7 @@ impl<T: FheUint> CrtGlweTraceKey<T> {
     }
 }
 
-/// CRT trace, bound to one key, numerical domain and owned scratch.
+/// CRT trace, bound to one key, gadget parameters, table and owned scratch.
 ///
 /// Construct once and reuse. Numerical checks do not establish secret identity
 /// or agreement on the table's NTT representation; callers maintain both.
@@ -122,7 +133,8 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a CrtGlweTraceKey<T>,
-    domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlevParameters<T, M>,
+    table: &'a DcrtTable<Table>,
     workspace: CrtGlweTraceWorkspace<T>,
 }
 
@@ -132,29 +144,35 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
-    /// Creates a new [`CrtGlweTraceEvaluator`] for a compatible key and domain.
+    /// Creates a new [`CrtGlweTraceEvaluator`] for a compatible key, gadget parameters and table.
     ///
     /// # Panics
     /// Panics if [`Self::try_new`] rejects the binding.
     #[must_use]
-    pub fn new(key: &'a CrtGlweTraceKey<T>, domain: &'a DcrtGadgetDomain<'a, T, M, Table>) -> Self {
-        Self::try_new(key, domain)
+    pub fn new(
+        key: &'a CrtGlweTraceKey<T>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
+    ) -> Self {
+        Self::try_new(key, parameters, table)
             .unwrap_or_else(|error| panic!("invalid CRT trace binding: {error}"))
     }
 
     /// Checks layout, ordered Q, radix and retained levels before allocating scratch.
     ///
     /// # Errors
-    /// Returns [`RnsDomainError`] if the key and domain are numerically incompatible.
+    /// Returns [`RnsDomainError`] if the key, gadget parameters and table are numerically incompatible.
     pub fn try_new(
         key: &'a CrtGlweTraceKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<Self, RnsDomainError<T>> {
-        key.metadata.validate(domain)?;
-        let workspace = CrtGlweTraceWorkspace::from_parameters(domain.parameters());
+        key.metadata.validate(parameters, table)?;
+        let workspace = CrtGlweTraceWorkspace::from_parameters(parameters);
         Ok(Self {
             key,
-            domain,
+            parameters,
+            table,
             workspace,
         })
     }
@@ -165,7 +183,7 @@ where
     /// The output and reusable internal scratch are overwritten.
     ///
     /// # Correctness
-    /// Both ciphertexts must match the domain's complete RNS GLWE layout,
+    /// Both ciphertexts must match the parameters' complete RNS GLWE layout,
     /// coefficient representation and the key's secret.
     ///
     /// # Panics
@@ -175,13 +193,14 @@ where
         input: &CrtGlweCiphertext<A>,
         output: &mut CrtGlweCiphertext<B>,
     ) {
-        let len = self.domain.parameters().rns_glwe_len();
+        let len = self.parameters.rns_glwe_len();
         assert_eq!(input.as_ref().len(), len);
         assert_eq!(output.as_ref().len(), len);
         self.key.trace_kernel_to(
             input.as_view(),
             output.as_mut_view(),
-            self.domain,
+            self.parameters,
+            self.table,
             &mut self.workspace,
         );
     }

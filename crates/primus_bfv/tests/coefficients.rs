@@ -1,11 +1,11 @@
 //! Scheme-boundary identities and independent integer/DFT recovery oracles.
 
-use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvPublicKeyEncryptor, BfvSecretKeyContext};
-use primus_distr::ErrorDistribution;
-use primus_glwe_rns::{
-    DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlwePublicKey, DcrtGlweSecretKey, GlweSecretKey,
-    SecretKeyDistr,
+use primus_bfv::{
+    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
+    BfvSecretKeyContext,
 };
+use primus_distr::ErrorDistribution;
+use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
@@ -74,9 +74,9 @@ fn phase_oracle(ciphertext: &[u64], secret: &[i64], count: usize) -> Vec<u64> {
                     (mul(acc, point, q) + i128::from(coefficient).rem_euclid(i128::from(q)) as u64)
                         % q
                 });
-                let a = ciphertext[limb * N + index];
-                let b = ciphertext[length + limb * N + index];
-                (b + q - mul(a, s, q)) % q
+                let c0 = ciphertext[limb * N + index];
+                let c1 = ciphertext[length + limb * N + index];
+                (c0 + mul(c1, s, q)) % q
             })
             .collect();
         let inverse_n = pow(N as u64, (q - 2) as usize, q);
@@ -138,28 +138,21 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
     ] {
         let parameters = parameters(count, t, error);
         let table =
-            U64DcrtTable::new(parameters.poly_length(), parameters.cipher_moduli()).unwrap();
+            U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
         let secret: Vec<i64> = (0..N).map(|index| [-1, 0, 1][index % 3]).collect();
         let coefficient_key = GlweSecretKey::new(
             secret.clone(),
-            parameters.glwe_size(),
+            parameters.size().glwe_size(),
             SecretKeyDistr::SparseTernary,
         );
         let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
         let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
-        let domain = DcrtGlweDomain::try_new(
-            parameters.encryption_parameters(),
-            parameters.base_q(),
-            &table,
-        )
-        .unwrap();
-        let raw = key.try_bind_raw(&domain).unwrap();
         let message = Polynomial(
             (0..N)
                 .map(|index| [0, 1, t / 2, (t / 2 + 1).min(t - 1), t - 1][index % 5])
                 .collect::<Vec<_>>(),
         );
-        let mut ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+        let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
         let mut expected_ciphertext = ciphertext.clone();
         let mut workspace = BfvDecryptWorkspace::new(&parameters);
         for centered in [false, true] {
@@ -171,7 +164,7 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
                 context.encrypt_to(&message.as_view(), &mut ciphertext.as_mut_view(), &mut rng);
             }
             let encoded = independently_encoded(message.as_ref(), count, t, centered);
-            raw.encrypt_encoded_crt_to(
+            context.encrypt_encoded_crt_to(
                 &CrtPolynomial(&encoded[..]),
                 &mut expected_ciphertext,
                 &mut expected_rng,
@@ -187,7 +180,13 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
                 let residual = (actual + product - encoded) % product;
                 let magnitude = residual.min(product - residual);
                 assert!(
-                    magnitude <= u128::from(parameters.noise_distribution().maximum_magnitude())
+                    magnitude
+                        <= u128::from(
+                            parameters
+                                .encryption_parameters()
+                                .noise_distribution()
+                                .maximum_magnitude()
+                        )
                 );
                 let exact_decoded =
                     ((u128::from(t) * actual + product / 2) / product) % u128::from(t);
@@ -212,7 +211,7 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
                         .collect::<Vec<_>>(),
                 );
                 let mut rng = StdRng::seed_from_u64(0x4246_5601);
-                context.encrypt_plaintext_crt_to(
+                context.encrypt_plaintext_lift_crt_to(
                     &lifted.as_view(),
                     &mut expected_ciphertext.as_mut_view(),
                     &mut rng,
@@ -248,20 +247,30 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
             3.2,
         );
         let table =
-            U64DcrtTable::new(parameters.poly_length(), parameters.cipher_moduli()).unwrap();
+            U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
         let key = GlweSecretKey::generate(
-            parameters.glwe_size(),
-            parameters.secret_key_sampler(),
+            parameters.size().glwe_size(),
+            parameters.encryption_parameters().secret_key_sampler(),
             &mut rng,
         );
+        let signed_secret = key.iter().next().unwrap().to_vec();
         let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
-        let public = DcrtGlwePublicKey::new(
-            &key,
-            parameters.encryption_parameters(),
-            parameters.base_q(),
-            &table,
+        let public = BfvPublicKey::new(
+            &BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap(),
             &mut rng,
         );
+        let pk_phase = phase_oracle(public.ciphertext().as_ref(), &signed_secret, count);
+        let product: u128 = Q[..count].iter().map(|&q| u128::from(q)).product();
+        let error_bound = u128::from(
+            parameters
+                .encryption_parameters()
+                .noise_distribution()
+                .maximum_magnitude(),
+        );
+        for degree in 0..N {
+            let error = compose(&pk_phase, degree, count);
+            assert!(error.min(product - error) <= error_bound);
+        }
         let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
         let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
         let mut workspace = BfvDecryptWorkspace::new(&parameters);
@@ -270,7 +279,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
                 .map(|index| [0, 1, t / 2, (t / 2 + 1).min(t - 1), t - 1][index % 5])
                 .collect::<Vec<_>>(),
         );
-        let mut output = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+        let mut output = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
         for centered in [false, true] {
             let lifted = CrtPolynomial(
                 Q[..count]
@@ -293,9 +302,23 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
             } else {
                 encryptor.encrypt_to(&message, &mut output, &mut coefficient_rng);
             }
-            let expected = encryptor.encrypt_plaintext_crt(&lifted, &mut crt_rng);
+            let expected = encryptor.encrypt_plaintext_lift_crt(&lifted, &mut crt_rng);
             assert_eq!(output.as_ref(), expected.as_ref());
             assert_eq!(coefficient_rng.next_u64(), crt_rng.next_u64());
+            let phase = phase_oracle(output.as_ref(), &signed_secret, count);
+            let encoded = independently_encoded(message.as_ref(), count, t, centered);
+            let secret_max = signed_secret
+                .iter()
+                .map(|v| v.unsigned_abs())
+                .max()
+                .unwrap();
+            let complete_bound = error_bound * (N as u128 + 1 + N as u128 * u128::from(secret_max));
+            for degree in 0..N {
+                let residual = (compose(&phase, degree, count) + product
+                    - compose(&encoded, degree, count))
+                    % product;
+                assert!(residual.min(product - residual) <= complete_bound);
+            }
             assert_eq!(context.decrypt(&output, &mut workspace), message);
             encryptor.workspace_mut().zeroize();
         }
@@ -305,11 +328,11 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
 #[test]
 fn plaintext_product_keeps_bfv_scaling() {
     let parameters = parameters(2, 257, ErrorDistribution::CenteredBinomial { eta: 21 });
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.cipher_moduli()).unwrap();
+    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
     let mut rng = StdRng::seed_from_u64(81);
     let key = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
+        parameters.size().glwe_size(),
+        parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
@@ -329,15 +352,27 @@ fn plaintext_product_keeps_bfv_scaling() {
         .flat_map(|_| multiplier.as_ref().iter().copied())
         .collect::<Vec<_>>();
     table.transform_slice(&mut multiplier_ntt);
-    let mut input = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+    let mut input = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
     let mut output = input.clone();
     context.encrypt_to(&message, &mut input, &mut rng);
-    input.mul_dcrt_polynomial_to(
-        &DcrtPolynomial(multiplier_ntt),
-        &mut output,
-        N,
-        parameters.cipher_moduli(),
-    );
+    // This representation test applies plaintext multiplication directly to
+    // both native components; it does not introduce a BFV evaluator API.
+    for (input_component, output_component) in input
+        .as_ref()
+        .chunks_exact(parameters.size().rns_poly_len())
+        .zip(
+            output
+                .as_mut()
+                .chunks_exact_mut(parameters.size().rns_poly_len()),
+        )
+    {
+        DcrtPolynomial(input_component).mul_to(
+            &DcrtPolynomial(&multiplier_ntt[..]),
+            &mut DcrtPolynomial(output_component),
+            N,
+            parameters.base_q().moduli(),
+        );
+    }
     let mut expected = vec![0i128; N];
     for (i, &left) in message.as_ref().iter().enumerate() {
         for (j, &right) in multiplier.as_ref().iter().enumerate() {
@@ -360,19 +395,16 @@ fn plaintext_product_keeps_bfv_scaling() {
 #[test]
 fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     let parameters = parameters(2, 257, ErrorDistribution::CenteredBinomial { eta: 1 });
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.cipher_moduli()).unwrap();
+    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
     let mut setup_rng = StdRng::seed_from_u64(82);
     let coefficient_key = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
+        parameters.size().glwe_size(),
+        parameters.encryption_parameters().secret_key_sampler(),
         &mut setup_rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let public = DcrtGlwePublicKey::new(
-        &key,
-        parameters.encryption_parameters(),
-        parameters.base_q(),
-        &table,
+    let public = BfvPublicKey::new(
+        &BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap(),
         &mut setup_rng,
     );
     let secret = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
@@ -382,7 +414,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
         for mode in 0..4 {
             let mut rng = StdRng::seed_from_u64(83);
             let mut reference_rng = StdRng::seed_from_u64(83);
-            let mut output = DcrtGlweCiphertext::new(vec![99; parameters.rns_glwe_len()]);
+            let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len()]);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| match mode {
                     0 => secret.encrypt_to(&input, &mut output, &mut rng),
@@ -398,15 +430,15 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     }
     for length in [
         0,
-        parameters.rns_poly_len() - 1,
-        parameters.rns_poly_len() + 1,
+        parameters.size().rns_poly_len() - 1,
+        parameters.size().rns_poly_len() + 1,
     ] {
         let input = CrtPolynomial(vec![0; length]);
         let mut rng = StdRng::seed_from_u64(84);
         let mut reference_rng = StdRng::seed_from_u64(84);
-        let mut output = DcrtGlweCiphertext::new(vec![99; parameters.rns_glwe_len()]);
+        let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len()]);
         assert!(
-            catch_unwind(AssertUnwindSafe(|| secret.encrypt_plaintext_crt_to(
+            catch_unwind(AssertUnwindSafe(|| secret.encrypt_plaintext_lift_crt_to(
                 &input,
                 &mut output,
                 &mut rng
@@ -414,11 +446,9 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
             .is_err()
         );
         assert!(
-            catch_unwind(AssertUnwindSafe(|| encryptor.encrypt_plaintext_crt_to(
-                &input,
-                &mut output,
-                &mut rng
-            )))
+            catch_unwind(AssertUnwindSafe(
+                || encryptor.encrypt_plaintext_lift_crt_to(&input, &mut output, &mut rng)
+            ))
             .is_err()
         );
         assert!(output.as_ref().iter().all(|&value| value == 99));
@@ -427,7 +457,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     let input = Polynomial(vec![0; N]);
     let mut rng = StdRng::seed_from_u64(85);
     let mut reference_rng = StdRng::seed_from_u64(85);
-    let mut output = DcrtGlweCiphertext::new(vec![99; parameters.rns_glwe_len() - 1]);
+    let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len() - 1]);
     assert!(
         catch_unwind(AssertUnwindSafe(|| secret.encrypt_to(
             &input,
@@ -453,7 +483,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     assert!(BfvPublicKeyEncryptor::try_new(&public, &parameters, &wrong_table).is_err());
     let foreign = parameters_with_length(64);
     let mut workspace = BfvDecryptWorkspace::new(&foreign);
-    let ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+    let ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
     let mut plaintext = Polynomial(vec![99; N]);
     assert!(
         catch_unwind(AssertUnwindSafe(|| secret.decrypt_to(
@@ -475,7 +505,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     );
     assert_eq!(short_plaintext.as_ref(), vec![99; N - 1]);
 
-    let short_ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len() - 1);
+    let short_ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len() - 1);
     assert!(
         catch_unwind(AssertUnwindSafe(|| {
             secret.decrypt_to(&short_ciphertext, &mut plaintext, &mut workspace)
@@ -494,4 +524,89 @@ fn parameters_with_length(n: usize) -> BfvParameters {
         SecretKeyDistr::SparseTernary,
         3.2,
     )
+}
+
+#[test]
+fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge() {
+    let parameters = BfvParameters::try_with_error_distribution(
+        PolyLength::new(N),
+        BarrettModulus::new(257),
+        BarrettModulus::new(2_199_023_190_017),
+        &Q.map(BarrettModulus::new),
+        SecretKeyDistr::UniformBinary,
+        ErrorDistribution::CenteredBinomial { eta: 1 },
+    )
+    .unwrap();
+    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let secret: Vec<i64> = (0..N).map(|index| i64::from(index % 3 == 0)).collect();
+    let coefficient_key = GlweSecretKey::new(
+        secret.clone(),
+        parameters.size().glwe_size(),
+        SecretKeyDistr::UniformBinary,
+    );
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
+    let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+    let message = Polynomial((0..N).map(|i| (i * 13 % 257) as u64).collect::<Vec<_>>());
+    let mut ciphertext = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    context.encrypt_to(
+        &message,
+        &mut ciphertext,
+        &mut StdRng::seed_from_u64(0x4246_5630),
+    );
+    let phase = phase_oracle(ciphertext.as_ref(), &secret, 2);
+    let encoded = independently_encoded(message.as_ref(), 2, 257, false);
+    for degree in 0..N {
+        let product = u128::from(Q[0]) * u128::from(Q[1]);
+        let residual =
+            (compose(&phase, degree, 2) + product - compose(&encoded, degree, 2)) % product;
+        assert!(residual.min(product - residual) <= 1);
+    }
+    // Negating an asymmetric {0,1} secret would change the declared secret law
+    // and gives a large error under this independent c0+c1*s oracle.
+    let flipped: Vec<_> = secret.iter().map(|&value| -value).collect();
+    assert_ne!(phase_oracle(ciphertext.as_ref(), &flipped, 2), phase);
+    let mut raw = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    ciphertext.write_raw_glwe_to(&mut raw, &parameters);
+    let length = parameters.size().rns_poly_len();
+    for (limb, &q) in Q.iter().enumerate() {
+        for i in 0..N {
+            assert_eq!(
+                raw.as_ref()[length + limb * N + i],
+                ciphertext.as_ref()[limb * N + i]
+            );
+            assert_eq!(
+                raw.as_ref()[limb * N + i],
+                (q - ciphertext.as_ref()[length + limb * N + i]) % q
+            );
+        }
+    }
+    let mut recovered = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    recovered.set_from_raw_glwe(&raw, &parameters);
+    assert_eq!(recovered, ciphertext);
+    let mut raw_phase = DcrtPolynomial::<Vec<u64>>::zero(length);
+    key.phase_to(&raw, &mut raw_phase, parameters.base_q().moduli());
+    table.inverse_transform_slice(raw_phase.as_mut());
+    assert_eq!(raw_phase.as_ref(), phase);
+}
+
+#[test]
+fn encoded_phase_entry_does_not_apply_delta_again() {
+    let parameters = parameters(1, 257, ErrorDistribution::CenteredBinomial { eta: 1 });
+    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let key = GlweSecretKey::new(
+        vec![0i64; N],
+        parameters.size().glwe_size(),
+        SecretKeyDistr::UniformBinary,
+    );
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
+    let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+    let message = Polynomial(vec![3; N]);
+    let encoded = CrtPolynomial(independently_encoded(message.as_ref(), 1, 257, false));
+    let mut proper = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    let mut wrong = proper.clone();
+    context.encrypt_encoded_crt_to(&encoded, &mut proper, &mut StdRng::seed_from_u64(27));
+    context.encrypt_plaintext_lift_crt_to(&encoded, &mut wrong, &mut StdRng::seed_from_u64(27));
+    let mut workspace = BfvDecryptWorkspace::new(&parameters);
+    assert_eq!(context.decrypt(&proper, &mut workspace), message);
+    assert_ne!(context.decrypt(&wrong, &mut workspace), message);
 }

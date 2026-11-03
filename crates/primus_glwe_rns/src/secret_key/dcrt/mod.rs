@@ -6,13 +6,13 @@ mod raw;
 
 use primus_integer::FheUint;
 use primus_lattice::RnsGlweSize;
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_poly::DcrtPolynomialIter;
 use primus_reduce::FieldContext;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::parameter::{validate_glwe_size, validate_moduli};
-use crate::{DcrtGadgetDomain, RnsDomainError, SecretKeyDistr};
+use crate::parameter::{validate_dcrt_table, validate_glwe_size, validate_moduli};
+use crate::{CrtGlevParameters, CrtGlweEncryptionParameters, RnsDomainError, SecretKeyDistr};
 
 pub use raw::DcrtGlweRawSecretKeyContext;
 
@@ -65,27 +65,48 @@ impl<T: FheUint> DcrtGlweSecretKey<T> {
         DcrtPolynomialIter::new(self.key.as_slice(), self.size.rns_poly_len())
     }
 
-    /// Binds this key to a checked gadget domain before encrypting GLev entries.
+    /// Binds gadget arithmetic, sampling state and transforms for GLev encryption.
     ///
     /// # Errors
     /// Returns [`RnsDomainError`] for an incompatible layout or ordered basis.
     pub fn try_bind_gadget<'a, M, Table>(
         &'a self,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        sampling_parameters: &'a CrtGlweEncryptionParameters<T>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<DcrtGlevEncryptor<'a, T, M, Table>, RnsDomainError<T>>
     where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        self.validate_parameters(
-            domain.size().rns_glwe_size(),
-            domain.parameters().cipher_moduli(),
+        validate_glwe_size(
+            parameters.size().rns_glwe_size(),
+            sampling_parameters.size(),
         )?;
-        Ok(DcrtGlevEncryptor { key: self, domain })
+        sampling_parameters.validate_base(parameters.base_q())?;
+        validate_dcrt_table(parameters.poly_length(), parameters.cipher_moduli(), table)?;
+        self.validate_parameters(
+            parameters.size().rns_glwe_size(),
+            parameters.cipher_moduli(),
+        )?;
+        Ok(DcrtGlevEncryptor {
+            key: self,
+            parameters,
+            sampling_parameters,
+            table,
+        })
     }
 
-    /// Checks the owned key geometry and modulus order at resource binding.
-    pub(crate) fn validate_parameters<M: FieldContext<T>>(
+    /// Checks this key's complete geometry and ordered numerical modulus basis.
+    ///
+    /// Scheme-specific resource owners can validate the key without constructing
+    /// an encryption context. No key data is cloned or transformed.
+    ///
+    /// # Errors
+    /// Returns [`RnsDomainError`] for a layout or ordered modulus mismatch.
+    /// Matching moduli do not establish NTT roots, evaluation order or secret
+    /// identity; consumers must uphold those representation requirements.
+    pub fn validate_parameters<M: FieldContext<T>>(
         &self,
         size: RnsGlweSize,
         moduli: &[M],
@@ -98,7 +119,7 @@ impl<T: FheUint> DcrtGlweSecretKey<T> {
     }
 }
 
-/// A secret key bound to one checked GLev encryption domain.
+/// A secret key bound to the arithmetic and sampling resources for GLev encryption.
 ///
 /// Construct with [`DcrtGlweSecretKey::try_bind_gadget`] and reuse across
 /// key rows. Full input/output layouts and transform identity remain caller contracts.
@@ -109,5 +130,7 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a DcrtGlweSecretKey<T>,
-    domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlevParameters<T, M>,
+    sampling_parameters: &'a CrtGlweEncryptionParameters<T>,
+    table: &'a DcrtTable<Table>,
 }

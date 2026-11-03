@@ -7,7 +7,8 @@ use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 
 use super::{DcrtGlwePublicKey, DcrtGlwePublicKeyWorkspace};
-use crate::{CrtGlweEncryptionParameters, DcrtGlweDomain, RnsDomainError};
+use crate::parameter::validate_dcrt_table;
+use crate::{CrtGlweEncryptionParameters, RnsDomainError};
 
 /// Resources numerically checked once before an encryptor allocates its scratch.
 pub(super) struct PublicEncryptionResources<'a, T, M, Table>
@@ -34,7 +35,8 @@ where
         rns_base: &'a RNSBase<T, M>,
         table: &'a DcrtTable<Table>,
     ) -> Result<Self, RnsDomainError<T>> {
-        DcrtGlweDomain::try_new(parameters, rns_base, table)?;
+        parameters.validate_base(rns_base)?;
+        validate_dcrt_table(parameters.size().poly_length(), rns_base.moduli(), table)?;
         key.validate_parameters(parameters.size(), rns_base.moduli())?;
         Ok(Self {
             key,

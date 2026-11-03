@@ -1,4 +1,4 @@
-use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext};
+use primus_bfv::{BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvSecretKeyContext};
 use primus_shape::PolyLength;
 // cargo bench -p primus_bfv --bench key_switching
 
@@ -7,9 +7,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use primus_glwe_rns::{
-    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
-    DcrtGlweSecretKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
-    HybridRnsGlweKeySwitchingKey, HybridRnsKeySwitchDomain, SecretKeyDistr,
+    DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey, DcrtGlweSecretKey,
+    GlweSecretKey, HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey, SecretKeyDistr,
 };
 use primus_lattice::glwe::DcrtGlwe;
 use primus_modulus::BarrettModulus;
@@ -53,46 +52,52 @@ fn bench_key_switching(c: &mut Criterion) {
         );
         let input_sk = GlweSecretKey::generate(
             glwe_params.size().glwe_size(),
-            glwe_params.secret_key_sampler(),
+            glwe_params.encryption_parameters().secret_key_sampler(),
             &mut rng,
         );
         let input_dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&input_sk, &q_table);
         let output_sk = GlweSecretKey::generate(
             glwe_params.size().glwe_size(),
-            glwe_params.secret_key_sampler(),
+            glwe_params.encryption_parameters().secret_key_sampler(),
             &mut rng,
         );
         let output_dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&output_sk, &q_table);
 
         let glev_params =
             glwe_params.gadget_parameters(DecompositionBaseLog::new(DECOMPOSITION_BASE_LOG), None);
-        let dcrt_domain = DcrtGadgetDomain::try_new(&glev_params, &q_table).unwrap();
 
         // Key generation is intentionally outside the timed region.
         let crt_ksk = DcrtGlweKeySwitchingKey::generate(
             &input_sk,
             glwe_params.encryption_parameters(),
             &output_dcrt_sk,
-            &dcrt_domain,
+            &glev_params,
+            glwe_params.encryption_parameters(),
+            &q_table,
             &mut rng,
         );
-        let rns_glwe_len = glwe_params.rns_glwe_len();
+        let rns_glwe_len = glwe_params.size().rns_glwe_len();
         let input: Polynomial<Vec<Value>> = Polynomial::random(poly_length.get(), mod_t, &mut rng);
         let mut input_ciphertext: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(rns_glwe_len);
         let input_dcrt_sk_context =
             BfvSecretKeyContext::try_new(&input_dcrt_sk, &glwe_params, &q_table).unwrap();
-        input_dcrt_sk_context.encrypt_to(&input, &mut input_ciphertext, &mut rng);
+        let mut native = BfvCiphertext::zero(rns_glwe_len);
+        input_dcrt_sk_context.encrypt_to(&input, &mut native, &mut rng);
+        // Timings below measure the existing raw switching workload; explicit
+        // native/raw bridges are setup/validation, outside Criterion iterations.
+        native.write_raw_glwe_to(&mut input_ciphertext, &glwe_params);
         let input_coeff = input_ciphertext.clone().into_coeff_form(&q_table);
 
         let mut crt_output: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-        let mut crt_evaluator = DcrtGlweKeySwitchEvaluator::new(&crt_ksk, &dcrt_domain);
+        let mut crt_evaluator = DcrtGlweKeySwitchEvaluator::new(&crt_ksk, &glev_params, &q_table);
         // Validate the CRT path before measuring it.
         crt_evaluator.key_switch_to(&input_coeff, &mut crt_output);
         let mut decrypt_workspace = BfvDecryptWorkspace::new(&glwe_params);
         let output_dcrt_sk_context =
             BfvSecretKeyContext::try_new(&output_dcrt_sk, &glwe_params, &q_table).unwrap();
+        native.set_from_raw_glwe(&crt_output, &glwe_params);
         assert_eq!(
-            output_dcrt_sk_context.decrypt(&crt_output, &mut decrypt_workspace),
+            output_dcrt_sk_context.decrypt(&native, &mut decrypt_workspace),
             input,
         );
         group.throughput(Throughput::Elements(poly_length.get() as u64));
@@ -106,21 +111,22 @@ fn bench_key_switching(c: &mut Criterion) {
 
         for (partition_label, decomposition_count) in HYBRID_CASES {
             let hybrid_rns = HybridRNS::new(&q_moduli, &p_moduli, decomposition_count).unwrap();
-            let hybrid_domain = HybridRnsKeySwitchDomain::try_new(&hybrid_rns, &qp_table).unwrap();
             let hybrid_ksk = HybridRnsGlweKeySwitchingKey::generate(
                 &input_sk,
                 glwe_params.encryption_parameters(),
                 &output_sk,
-                &hybrid_domain,
+                &hybrid_rns,
+                &qp_table,
                 &mut rng,
             );
             let mut hybrid_output: DcrtGlwe<Vec<Value>> = DcrtGlweCiphertext::zero(rns_glwe_len);
             let mut hybrid_evaluator =
-                HybridRnsGlweKeySwitchEvaluator::new(&hybrid_ksk, &hybrid_domain);
+                HybridRnsGlweKeySwitchEvaluator::new(&hybrid_ksk, &hybrid_rns, &qp_table);
 
             hybrid_evaluator.key_switch_to(&input_ciphertext, &mut hybrid_output);
+            native.set_from_raw_glwe(&hybrid_output, &glwe_params);
             assert_eq!(
-                output_dcrt_sk_context.decrypt(&hybrid_output, &mut decrypt_workspace),
+                output_dcrt_sk_context.decrypt(&native, &mut decrypt_workspace),
                 input,
             );
 

@@ -14,11 +14,8 @@ use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 
-use crate::parameter::{validate_glwe_size, validate_moduli};
-use crate::{
-    CrtGlweEncryptionParameters, DcrtGadgetDomain, DcrtGlweDomain, DcrtGlweSecretKey,
-    RnsDomainError,
-};
+use crate::parameter::{validate_dcrt_table, validate_glwe_size, validate_moduli};
+use crate::{CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweSecretKey, RnsDomainError};
 
 use encryption::PublicEncryptionResources;
 
@@ -74,7 +71,10 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
         R: rand::Rng + rand::CryptoRng,
         M: FieldContext<T>,
     {
-        DcrtGlweDomain::try_new(parameters, base_q, table)
+        parameters
+            .validate_base(base_q)
+            .expect("public-key sampling parameters and basis are incompatible");
+        validate_dcrt_table(parameters.size().poly_length(), base_q.moduli(), table)
             .expect("public-key sampling parameters and table are incompatible");
         secret_key
             .validate_parameters(parameters.size(), base_q.moduli())
@@ -101,24 +101,21 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
         }
     }
 
-    /// Binds a codec-free domain and allocates one reusable ephemeral polynomial.
+    /// Checks codec-free resources, then allocates one reusable ephemeral polynomial.
     ///
     /// # Errors
     /// Returns [`RnsDomainError`] if the key layout or ordered basis differs.
     pub fn try_bind_raw<'a, M, Table>(
         &'a self,
-        domain: &DcrtGlweDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlweEncryptionParameters<T>,
+        rns_base: &'a RNSBase<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<DcrtGlweRawPublicKeyEncryptor<'a, T, M, Table>, RnsDomainError<T>>
     where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let resources = PublicEncryptionResources::try_new(
-            self,
-            domain.parameters(),
-            domain.rns_base(),
-            domain.table(),
-        )?;
+        let resources = PublicEncryptionResources::try_new(self, parameters, rns_base, table)?;
         let workspace = DcrtGlwePublicKeyWorkspace::new(resources.size());
         Ok(DcrtGlweRawPublicKeyEncryptor {
             resources,
@@ -132,22 +129,28 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
     /// Returns [`RnsDomainError`] for an incompatible layout or ordered basis.
     pub fn try_bind_gadget<'a, M, Table>(
         &'a self,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        sampling_parameters: &'a CrtGlweEncryptionParameters<T>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<DcrtGgswEncryptor<'a, T, M, Table>, RnsDomainError<T>>
     where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
+        validate_glwe_size(
+            parameters.size().rns_glwe_size(),
+            sampling_parameters.size(),
+        )?;
         let resources = PublicEncryptionResources::try_new(
             self,
-            domain.parameters().encryption_parameters(),
-            domain.rns_base(),
-            domain.table(),
+            sampling_parameters,
+            parameters.base_q(),
+            table,
         )?;
         let workspace = DcrtGlwePublicKeyWorkspace::new(resources.size());
         Ok(DcrtGgswEncryptor {
             resources,
-            domain,
+            parameters,
             workspace,
         })
     }

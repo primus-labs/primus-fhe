@@ -3,10 +3,11 @@
 //! Run: cargo run -p primus_bfv --example coefficients
 //! This small ring is an API example, not a security parameter preset.
 
-use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvPublicKeyEncryptor, BfvSecretKeyContext};
-use primus_glwe_rns::{
-    DcrtGlweCiphertext, DcrtGlwePublicKey, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+use primus_bfv::{
+    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
+    BfvSecretKeyContext,
 };
+use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::Polynomial;
@@ -22,25 +23,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         SecretKeyDistr::SparseTernary,
         3.2,
     )?;
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.cipher_moduli())?;
+    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli())?;
     let mut rng = rand::rng();
     let coefficient_key = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
+        parameters.size().glwe_size(),
+        parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let public = DcrtGlwePublicKey::new(
-        &key,
-        parameters.encryption_parameters(),
-        parameters.base_q(),
-        &table,
-        &mut rng,
-    );
     let client = BfvSecretKeyContext::try_new(&key, &parameters, &table)?;
+    let public = BfvPublicKey::new(&client, &mut rng);
     let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table)?;
     let mut workspace = BfvDecryptWorkspace::new(&parameters);
-    let mut ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
     let mut decoded = Polynomial::<Vec<u64>>::zero(parameters.poly_length().get());
 
     for value in [3, 256] {
@@ -51,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(decoded, message);
 
         // Reuse ciphertext and ephemeral scratch, applying delta before the
-        // body's one NTT rather than materializing an encoded CRT polynomial.
+        // c0's one NTT rather than materializing an encoded CRT polynomial.
         encryptor.encrypt_to(&message, &mut ciphertext, &mut rng);
         client.decrypt_to(&ciphertext, &mut decoded, &mut workspace);
         assert_eq!(decoded, message);

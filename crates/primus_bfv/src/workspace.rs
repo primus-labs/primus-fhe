@@ -20,7 +20,7 @@ impl BfvDecryptWorkspace {
     pub fn new(parameters: &BfvParameters) -> Self {
         Self {
             size: parameters.size(),
-            phase: DcrtPolynomial::zero(parameters.rns_poly_len()),
+            phase: DcrtPolynomial::zero(parameters.size().rns_poly_len()),
             conversion: vec![
                 0;
                 parameters
@@ -83,7 +83,10 @@ mod tests {
             let conversion_length = workspace.conversion.len();
             workspace.zeroize();
             assert_eq!(workspace.size(), parameters.size());
-            assert_eq!(workspace.phase.as_ref(), vec![0; parameters.rns_poly_len()]);
+            assert_eq!(
+                workspace.phase.as_ref(),
+                vec![0; parameters.size().rns_poly_len()]
+            );
             assert_eq!(workspace.conversion, vec![0; conversion_length]);
             assert_eq!(workspace.phase.as_ref().as_ptr(), phase_pointer);
             assert_eq!(workspace.conversion.as_ptr(), conversion_pointer);

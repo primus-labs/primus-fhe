@@ -3,9 +3,8 @@ mod support;
 
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
-    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey,
-    DcrtGlweSecretKey, GlweSecretKey, HybridRnsGlweKeySwitchEvaluator,
-    HybridRnsGlweKeySwitchingKey, HybridRnsKeySwitchDomain, SecretKeyDistr,
+    DcrtGlweCiphertext, DcrtGlweKeySwitchEvaluator, DcrtGlweKeySwitchingKey, DcrtGlweSecretKey,
+    GlweSecretKey, HybridRnsGlweKeySwitchEvaluator, HybridRnsGlweKeySwitchingKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
 use primus_lattice::{GlweSize, glwe::DcrtGlwe};
@@ -22,7 +21,7 @@ fn hybrid_generation_rejects_input_secret_layout_before_sampling() {
     let p = [193u64].map(BarrettModulus::new);
     let table = UintDcrtTable::new(PolyLength::new(32), &[q[0], p[0]]).unwrap();
     let hybrid = primus_rns::HybridRNS::new(&q, &p, 1).unwrap();
-    let domain = HybridRnsKeySwitchDomain::try_new(&hybrid, &table).unwrap();
+
     let parameters = support::RawParameters::new(
         GlweDimension::new(2),
         PolyLength::new(32),
@@ -52,7 +51,8 @@ fn hybrid_generation_rejects_input_secret_layout_before_sampling() {
                 &input_secret,
                 parameters.encryption_parameters(),
                 &output_secret,
-                &domain,
+                &hybrid,
+                &table,
                 &mut rng,
             )
         }));
@@ -73,7 +73,7 @@ fn hybrid_noise_support_must_fit_auxiliary_moduli() {
     let qp = [q[0], p[0]];
     let table = UintDcrtTable::new(PolyLength::new(32), &qp).unwrap();
     let hybrid = primus_rns::HybridRNS::new(&q, &p, 1).unwrap();
-    let domain = HybridRnsKeySwitchDomain::try_new(&hybrid, &table).unwrap();
+
     let mut rng = StdRng::seed_from_u64(0x5150);
     for (sigma, valid) in [(21.375, true), (21.4375, false), (21.5, false)] {
         let params = support::RawParameters::new(
@@ -92,7 +92,8 @@ fn hybrid_noise_support_must_fit_auxiliary_moduli() {
                 &secret,
                 params.encryption_parameters(),
                 &secret,
-                &domain,
+                &hybrid,
+                &table,
                 &mut rng,
             )
         }));
@@ -150,23 +151,30 @@ fn test_rns_glwe_ksk() {
     let dcrt_sk_2 = DcrtGlweSecretKey::from_coeff_secret_key(&sk_2, &table);
 
     let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
 
     let key_switching_key = DcrtGlweKeySwitchingKey::generate(
         &sk_1,
         glwe_params.encryption_parameters(),
         &dcrt_sk_2,
-        &domain,
+        &glev_params,
+        glwe_params.encryption_parameters(),
+        &table,
         &mut rng,
     );
 
     let input: Polynomial<Vec<ValueT>> = Polynomial::random(poly_length.get(), mod_t, &mut rng);
     let mut c1: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut c2: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-    let mut ksk_evaluator = DcrtGlweKeySwitchEvaluator::new(&key_switching_key, &domain);
+    let mut ksk_evaluator =
+        DcrtGlweKeySwitchEvaluator::new(&key_switching_key, &glev_params, &table);
 
-    let raw_domain = glwe_params.domain(&table);
-    let dcrt_sk_1_context = dcrt_sk_1.try_bind_raw(&raw_domain).unwrap();
+    let dcrt_sk_1_context = dcrt_sk_1
+        .try_bind_raw(
+            glwe_params.encryption_parameters(),
+            glwe_params.base_q(),
+            &table,
+        )
+        .unwrap();
     dcrt_sk_1_context.encrypt_encoded_crt_to(
         &support::unsigned_probe(input.as_ref(), &glwe_params),
         &mut c1,
@@ -180,7 +188,11 @@ fn test_rns_glwe_ksk() {
 
     let expected: Vec<_> = input.iter().map(|&value| i128::from(value)).collect();
     let bound = i128::from(glwe_params.core.noise_distribution().maximum_magnitude())
-        + support::switch_error_bound(&glev_params, dimension as i128 * poly_length.get() as i128);
+        + support::switch_error_bound(
+            &glev_params,
+            glwe_params.encryption_parameters(),
+            dimension as i128 * poly_length.get() as i128,
+        );
     support::assert_probe_phase(&dcrt_sk_2, &glwe_params, &table, &c2, &expected, bound);
 }
 
@@ -220,7 +232,6 @@ fn test_rns_glwe_ksk_hybrid() {
 
     let decomposition_count = 2;
     let hybrid_rns = primus_rns::HybridRNS::new(&q_moduli, &p_moduli, decomposition_count).unwrap();
-    let hybrid_domain = HybridRnsKeySwitchDomain::try_new(&hybrid_rns, &qp_table).unwrap();
 
     let sk_1 = GlweSecretKey::generate(
         glwe_params.size().glwe_size(),
@@ -240,7 +251,8 @@ fn test_rns_glwe_ksk_hybrid() {
         &sk_1,
         glwe_params.encryption_parameters(),
         &sk_2,
-        &hybrid_domain,
+        &hybrid_rns,
+        &qp_table,
         &mut rng,
     );
 
@@ -250,8 +262,13 @@ fn test_rns_glwe_ksk_hybrid() {
     let mut c1: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut c2: DcrtGlwe<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
 
-    let raw_domain = glwe_params.domain(&q_table);
-    let dcrt_sk_1_context = dcrt_sk_1.try_bind_raw(&raw_domain).unwrap();
+    let dcrt_sk_1_context = dcrt_sk_1
+        .try_bind_raw(
+            glwe_params.encryption_parameters(),
+            glwe_params.base_q(),
+            &q_table,
+        )
+        .unwrap();
     dcrt_sk_1_context.encrypt_encoded_crt_to(
         &support::unsigned_probe(input.as_ref(), &glwe_params),
         &mut c1,
@@ -259,7 +276,7 @@ fn test_rns_glwe_ksk_hybrid() {
     );
 
     let mut hybrid_evaluator =
-        HybridRnsGlweKeySwitchEvaluator::new(&key_switching_key, &hybrid_domain);
+        HybridRnsGlweKeySwitchEvaluator::new(&key_switching_key, &hybrid_rns, &qp_table);
 
     hybrid_evaluator.key_switch_to(&c1.as_view(), &mut c2.as_mut_view());
 

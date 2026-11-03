@@ -5,7 +5,7 @@ mod support;
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
     CrtGlweExpandCoeffEvaluator, CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator,
-    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
+    DcrtGlweCiphertext, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
     DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::GlweDimension;
@@ -57,15 +57,22 @@ fn crt_expansion_matches_parallel_and_plaintext() {
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
     let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
 
-    let expand_key = CrtGlweExpandCoeffKey::new(&domain, &sk, &dcrt_sk, &mut rng);
+    let expand_key = CrtGlweExpandCoeffKey::new(
+        &glev_params,
+        glwe_params.encryption_parameters(),
+        &table,
+        &sk,
+        &dcrt_sk,
+        &mut rng,
+    );
 
     let mut input1: Polynomial<Vec<ValueT>> = Polynomial::random(n, mod_t, &mut rng);
     let mut c1: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut c_expand: Vec<CrtGlwe<Vec<ValueT>>> = vec![CrtGlwe::zero(rns_glwe_len); n];
-    let mut evaluator = CrtGlweExpandCoeffEvaluator::new(&expand_key, &domain);
-    let mut parallel_evaluator = CrtGlweExpandCoeffParallelEvaluator::new(&expand_key, &domain, 2);
+    let mut evaluator = CrtGlweExpandCoeffEvaluator::new(&expand_key, &glev_params, &table);
+    let mut parallel_evaluator =
+        CrtGlweExpandCoeffParallelEvaluator::new(&expand_key, &glev_params, &table, 2);
     let mut parallel_output = c_expand.clone();
     // Use a local pool so this small correctness test does not create a worker
     // per CI core. Parallel evaluations reuse the two preallocated workspaces.
@@ -75,9 +82,14 @@ fn crt_expansion_matches_parallel_and_plaintext() {
         .unwrap();
     let mut transformed = DcrtGlweCiphertext::<Vec<ValueT>>::zero(rns_glwe_len);
 
-    let raw_domain = glwe_params.domain(&table);
-    let dcrt_sk_context = dcrt_sk.try_bind_raw(&raw_domain).unwrap();
-    let bound = support::tree_error_bound(&glev_params);
+    let dcrt_sk_context = dcrt_sk
+        .try_bind_raw(
+            glwe_params.encryption_parameters(),
+            glwe_params.base_q(),
+            &table,
+        )
+        .unwrap();
+    let bound = support::tree_error_bound(&glev_params, glwe_params.encryption_parameters());
     dcrt_sk_context.encrypt_encoded_crt_to(
         &support::unsigned_probe(input1.as_ref(), &glwe_params),
         &mut c1,
@@ -237,16 +249,22 @@ fn dcrt_expansion_matches_parallel_and_plaintext() {
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
     let glev_params = glwe_params.gadget(DecompositionBaseLog::new(20), None);
-    let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
 
-    let expand_key = DcrtGlweExpandCoeffKey::new(&domain, &dcrt_sk, &mut rng);
+    let expand_key = DcrtGlweExpandCoeffKey::new(
+        &glev_params,
+        glwe_params.encryption_parameters(),
+        &table,
+        &dcrt_sk,
+        &mut rng,
+    );
 
     let mut input1: Polynomial<Vec<ValueT>> = Polynomial::random(n, mod_t, &mut rng);
     let mut c1: DcrtGlweCiphertext<Vec<ValueT>> = DcrtGlweCiphertext::zero(rns_glwe_len);
     let mut c_expand: Vec<DcrtGlweCiphertext<Vec<ValueT>>> =
         vec![DcrtGlweCiphertext::zero(rns_glwe_len); n];
-    let mut evaluator = DcrtGlweExpandCoeffEvaluator::new(&expand_key, &domain);
-    let mut parallel_evaluator = DcrtGlweExpandCoeffParallelEvaluator::new(&expand_key, &domain, 2);
+    let mut evaluator = DcrtGlweExpandCoeffEvaluator::new(&expand_key, &glev_params, &table);
+    let mut parallel_evaluator =
+        DcrtGlweExpandCoeffParallelEvaluator::new(&expand_key, &glev_params, &table, 2);
     let mut parallel_output = c_expand.clone();
     // Use a local pool so this small correctness test does not create a worker
     // per CI core. Parallel evaluations reuse the two preallocated workspaces.
@@ -255,9 +273,14 @@ fn dcrt_expansion_matches_parallel_and_plaintext() {
         .build()
         .unwrap();
 
-    let raw_domain = glwe_params.domain(&table);
-    let dcrt_sk_context = dcrt_sk.try_bind_raw(&raw_domain).unwrap();
-    let bound = support::tree_error_bound(&glev_params);
+    let dcrt_sk_context = dcrt_sk
+        .try_bind_raw(
+            glwe_params.encryption_parameters(),
+            glwe_params.base_q(),
+            &table,
+        )
+        .unwrap();
+    let bound = support::tree_error_bound(&glev_params, glwe_params.encryption_parameters());
     dcrt_sk_context.encrypt_encoded_crt_to(
         &support::unsigned_probe(input1.as_ref(), &glwe_params),
         &mut c1,
@@ -447,18 +470,37 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         &mut rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    let raw_domain = parameters.domain(&table);
-    let context = key.try_bind_raw(&raw_domain).unwrap();
+
+    let context = key
+        .try_bind_raw(
+            parameters.encryption_parameters(),
+            parameters.base_q(),
+            &table,
+        )
+        .unwrap();
     let gadget = parameters.gadget(DecompositionBaseLog::new(20), None);
-    let bound = support::tree_error_bound(&gadget);
-    let domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
-    let dcrt_key = DcrtGlweExpandCoeffKey::new(&domain, &key, &mut rng);
-    let crt_key = CrtGlweExpandCoeffKey::new(&domain, &secret, &key, &mut rng);
-    let mut serial = DcrtGlweExpandCoeffEvaluator::new(&dcrt_key, &domain);
-    let mut parallel_one = DcrtGlweExpandCoeffParallelEvaluator::new(&dcrt_key, &domain, 1);
-    let mut parallel_two = DcrtGlweExpandCoeffParallelEvaluator::new(&dcrt_key, &domain, 2);
-    let mut crt_serial = CrtGlweExpandCoeffEvaluator::new(&crt_key, &domain);
-    let mut crt_parallel = CrtGlweExpandCoeffParallelEvaluator::new(&crt_key, &domain, 1);
+    let bound = support::tree_error_bound(&gadget, parameters.encryption_parameters());
+
+    let dcrt_key = DcrtGlweExpandCoeffKey::new(
+        &gadget,
+        parameters.encryption_parameters(),
+        &table,
+        &key,
+        &mut rng,
+    );
+    let crt_key = CrtGlweExpandCoeffKey::new(
+        &gadget,
+        parameters.encryption_parameters(),
+        &table,
+        &secret,
+        &key,
+        &mut rng,
+    );
+    let mut serial = DcrtGlweExpandCoeffEvaluator::new(&dcrt_key, &gadget, &table);
+    let mut parallel_one = DcrtGlweExpandCoeffParallelEvaluator::new(&dcrt_key, &gadget, &table, 1);
+    let mut parallel_two = DcrtGlweExpandCoeffParallelEvaluator::new(&dcrt_key, &gadget, &table, 2);
+    let mut crt_serial = CrtGlweExpandCoeffEvaluator::new(&crt_key, &gadget, &table);
+    let mut crt_parallel = CrtGlweExpandCoeffParallelEvaluator::new(&crt_key, &gadget, &table, 1);
     let workers = rayon::ThreadPoolBuilder::new()
         .num_threads(4)
         .build()

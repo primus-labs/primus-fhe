@@ -1,17 +1,15 @@
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
-use primus_distr::{ErrorDistribution, ErrorSampler, SecretKeySampler};
+use primus_distr::ErrorDistribution;
 use primus_encoding::{BfvRnsCodec, BfvRnsCodecError, PlaintextEmbedding};
-use primus_factor::ShoupFactor;
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
     CrtGlweEncryptionParametersError, RnsDomainError, SecretKeyDistr,
 };
-use primus_integer::BigUint;
 use primus_lattice::{GlweDimension, GlweSize, GlweSizeError, RnsGlweSize};
 use primus_modulus::BarrettModulus;
-use primus_rns::{RNSBase, ResidueFactors, RnsError};
+use primus_ntt::{NttTable, U64DcrtTable};
+use primus_rns::{RNSBase, RnsError};
 use primus_shape::PolyLength;
-use rand::distr::Uniform;
 use std::sync::Arc;
 
 /// Invalid BFV geometry, codec, sampling state or fresh private recovery bound.
@@ -36,7 +34,7 @@ pub enum BfvParametersError {
 
 /// BFV coefficient parameters with rank-one `u64` RNS storage.
 ///
-/// Immutable layout/samplers are shared with derived gadget parameters. The
+/// Sampling state has one owner shared only by explicit parameter composition. The
 /// codec owns the ordered Q basis and its encoding/decoding constants. Total Q
 /// may exceed 64 bits; `u64` describes each residue, not the product modulus.
 #[derive(Clone)]
@@ -159,7 +157,7 @@ impl BfvParameters {
         })
     }
 
-    /// Derives codec-free gadget parameters sharing these immutable samplers.
+    /// Derives codec-free decomposition parameters for explicit raw-GLWE consumers.
     ///
     /// # Panics
     /// Panics if [`Self::try_gadget_parameters`] rejects the decomposition.
@@ -173,7 +171,7 @@ impl BfvParameters {
             .expect("invalid BFV gadget parameters")
     }
 
-    /// Derives gadget layout and weights without cloning codec/sampling tables.
+    /// Derives gadget layout and weights without carrying encryption samplers.
     ///
     /// # Errors
     /// Rejects invalid decomposition or radix/size conditions of
@@ -183,24 +181,13 @@ impl BfvParameters {
         log_basis: DecompositionBaseLog,
         level_count: Option<DecompositionLevelCount>,
     ) -> Result<CrtGlevParameters<u64, BarrettModulus<u64>>, CrtGlevParametersError<u64>> {
-        CrtGlevParameters::try_new(
-            Arc::clone(&self.encryption_parameters),
-            self.base_q().clone(),
-            log_basis,
-            level_count,
-        )
+        CrtGlevParameters::try_new(self.size(), self.base_q().clone(), log_basis, level_count)
     }
 
-    /// Returns shared codec-free layout and sampling state.
+    /// Returns prepared secret/error/uniform sampling state for explicit advanced use.
     #[must_use]
     pub fn encryption_parameters(&self) -> &CrtGlweEncryptionParameters<u64> {
         &self.encryption_parameters
-    }
-
-    /// Returns the fixed rank-one GLWE dimension.
-    #[must_use]
-    pub fn dimension(&self) -> GlweDimension {
-        self.size().dimension()
     }
 
     /// Returns N.
@@ -209,135 +196,52 @@ impl BfvParameters {
         self.size().poly_length()
     }
 
-    /// Returns t.
-    #[must_use]
-    pub fn plain_modulus_value(&self) -> u64 {
-        self.codec.t()
-    }
-
-    /// Returns the multi-limb product Q.
-    #[must_use]
-    pub fn cipher_modulus(&self) -> BigUint<&[u64]> {
-        self.base_q().moduli_product()
-    }
-
-    /// Returns the ordered Q arithmetic contexts.
-    #[must_use]
-    pub fn cipher_moduli(&self) -> &[BarrettModulus<u64>] {
-        self.base_q().moduli()
-    }
-
-    /// Returns the ordered q_i values.
-    #[must_use]
-    pub fn cipher_moduli_value(&self) -> &[u64] {
-        self.codec.moduli_values()
-    }
-
-    /// Returns q_i-1 in sampler order.
-    #[must_use]
-    pub fn cipher_moduli_minus_one(&self) -> &[u64] {
-        self.encryption_parameters.cipher_moduli_minus_one()
-    }
-
-    /// Returns the number of RNS limbs.
-    #[must_use]
-    pub fn cipher_moduli_count(&self) -> usize {
-        self.codec.moduli_count()
-    }
-
-    /// Returns prepared uniform mask samplers in Q order.
-    #[must_use]
-    pub fn cipher_moduli_uniform_distr(&self) -> &[Uniform<u64>] {
-        self.encryption_parameters.cipher_moduli_uniform_distr()
-    }
-
-    /// Returns the fixed-width limb count used for big-integer coefficients.
-    #[must_use]
-    pub fn big_uint_value_len(&self) -> usize {
-        self.base_q().big_uint_value_len()
-    }
-
-    /// Returns the configured coefficient secret law.
-    #[must_use]
-    pub fn secret_key_distr(&self) -> SecretKeyDistr {
-        self.encryption_parameters.secret_key_distr()
-    }
-
-    /// Returns prepared coefficient secret sampling state.
-    #[must_use]
-    pub fn secret_key_sampler(&self) -> &SecretKeySampler<u64> {
-        self.encryption_parameters.secret_key_sampler()
-    }
-
-    /// Returns the actual error law and its complete support bound.
-    #[must_use]
-    pub fn noise_distribution(&self) -> &ErrorSampler<u64> {
-        self.encryption_parameters.noise_distribution()
-    }
-
-    /// Returns Gaussian scale or the exact CBD standard deviation sqrt(eta/2).
-    #[must_use]
-    pub fn noise_standard_deviation(&self) -> f64 {
-        self.noise_distribution().standard_deviation()
-    }
-
-    /// Returns delta=floor(Q/t).
-    #[must_use]
-    pub fn delta(&self) -> BigUint<&[u64]> {
-        self.codec.delta()
-    }
-
-    /// Returns prepared delta multiplication factors in Q order.
-    #[must_use]
-    pub fn delta_factor_mod_q(&self) -> ResidueFactors<&[ShoupFactor<u64>]> {
-        self.codec.delta_factor_mod_q()
-    }
-
-    /// Returns the immutable ordered Q basis.
+    /// Returns the unique ordered Q basis, including its arithmetic and size metadata.
     #[must_use]
     pub fn base_q(&self) -> &RNSBase<u64, BarrettModulus<u64>> {
         self.codec.base_q()
     }
 
-    /// Returns the unique coefficient codec, including advanced CRT operations.
+    /// Returns the unique coefficient codec and its scaling/recovery constants.
     #[must_use]
     pub fn codec(&self) -> &BfvRnsCodec<u64, BarrettModulus<u64>> {
         &self.codec
     }
 
-    /// Returns complete rank-one RNS geometry.
+    /// Returns complete rank-one RNS geometry and derived storage lengths.
     #[must_use]
     pub fn size(&self) -> RnsGlweSize {
         self.encryption_parameters.size()
     }
 
-    /// Returns the number of limbs in a big-integer polynomial.
-    #[must_use]
-    pub fn big_uint_poly_len(&self) -> usize {
-        self.poly_length().get() * self.big_uint_value_len()
-    }
-
-    /// Returns N times the Q limb count.
-    #[must_use]
-    pub fn rns_poly_len(&self) -> usize {
-        self.size().rns_poly_len()
-    }
-
-    /// Returns the complete DCRT ciphertext length.
-    #[must_use]
-    pub fn rns_glwe_len(&self) -> usize {
-        self.size().rns_glwe_len()
-    }
-
-    /// Returns the DCRT secret storage length.
-    #[must_use]
-    pub fn secret_key_len(&self) -> usize {
-        self.size().rns_mask_len()
-    }
-
-    /// Returns the rank-one single-modulus geometry.
-    #[must_use]
-    pub fn glwe_size(&self) -> GlweSize {
-        self.size().glwe_size()
+    // Sampling/base pairing was checked at parameter construction. Operational
+    // bindings only establish the table's numerical compatibility once.
+    pub(crate) fn validate_table(&self, table: &U64DcrtTable) -> Result<(), RnsDomainError<u64>> {
+        let expected = self.poly_length().get();
+        let actual = table.poly_length().get();
+        if expected != actual {
+            return Err(RnsDomainError::PolynomialLengthMismatch { expected, actual });
+        }
+        let expected = self.base_q().moduli_count();
+        let actual = table.ntt_tables().len();
+        if expected != actual {
+            return Err(RnsDomainError::ModuliCountMismatch { expected, actual });
+        }
+        for (index, (&expected, actual)) in self
+            .codec()
+            .moduli_values()
+            .iter()
+            .zip(table.iter().map(NttTable::modulus))
+            .enumerate()
+        {
+            if expected != actual {
+                return Err(RnsDomainError::ModulusOrderMismatch {
+                    index,
+                    expected,
+                    actual,
+                });
+            }
+        }
+        Ok(())
     }
 }

@@ -92,16 +92,13 @@ fn parts_require_rank_one_and_an_identical_ordered_base() {
                 parameters.encryption_parameters(),
                 core.as_ref()
             ));
-            assert!(std::ptr::eq(
-                parameters.encryption_parameters(),
-                gadget.encryption_parameters()
-            ));
+            assert_eq!(gadget.size().rns_glwe_size(), parameters.size());
             assert!(std::ptr::eq(
                 parameters.base_q().moduli_product().0,
                 gadget.base_q().moduli_product().0
             ));
             assert!(std::ptr::eq(
-                parameters.cipher_moduli_value(),
+                parameters.codec().moduli_values(),
                 gadget.cipher_moduli_value()
             ));
             for values in [&[17, 97][..], &[97, 19], &[97]] {
@@ -172,7 +169,7 @@ fn parameter_errors_keep_their_own_sources() {
 }
 
 #[test]
-fn explicit_cbd_law_is_shared_with_gadget_parameters() {
+fn explicit_cbd_law_is_preserved() {
     let parameters = BfvParameters::try_with_error_distribution(
         PolyLength::new(32),
         BarrettModulus::new(3),
@@ -183,13 +180,17 @@ fn explicit_cbd_law_is_shared_with_gadget_parameters() {
     )
     .unwrap();
     assert_eq!(
-        parameters.noise_distribution().distribution(),
+        parameters
+            .encryption_parameters()
+            .noise_distribution()
+            .distribution(),
         ErrorDistribution::CenteredBinomial { eta: 21 }
     );
-    assert_eq!(parameters.noise_distribution().maximum_magnitude(), 21);
-    let gadget = parameters.gadget_parameters(DecompositionBaseLog::new(3), None);
-    assert!(std::ptr::eq(
-        parameters.noise_distribution(),
-        gadget.noise_distribution()
-    ));
+    assert_eq!(
+        parameters
+            .encryption_parameters()
+            .noise_distribution()
+            .maximum_magnitude(),
+        21
+    );
 }

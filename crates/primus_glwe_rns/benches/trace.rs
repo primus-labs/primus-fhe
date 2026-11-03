@@ -12,9 +12,8 @@ use std::{hint::black_box, sync::Arc};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlweEncryptionParameters, CrtGlweTraceEvaluator, CrtGlweTraceKey,
-    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlweRevTraceEvaluator,
-    DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey,
-    GlweSecretKey, SecretKeyDistr,
+    DcrtGlweCiphertext, DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey, DcrtGlweSecretKey,
+    DcrtGlweTraceEvaluator, DcrtGlweTraceKey, GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::glwe::{CrtGlwe, DcrtGlwe};
 use primus_modulus::BarrettModulus;
@@ -60,20 +59,21 @@ fn bench_trace(c: &mut Criterion) {
         let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
         let glev_params = CrtGlevParameters::new(
-            Arc::clone(&sampling),
+            sampling.size(),
             base_q.clone(),
             DecompositionBaseLog::new(20),
             None,
         );
 
-        let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
-
         // Trace keys
-        let crt_trace_key = CrtGlweTraceKey::new(&domain, &sk, &dcrt_sk, &mut rng);
+        let crt_trace_key =
+            CrtGlweTraceKey::new(&glev_params, &sampling, &table, &sk, &dcrt_sk, &mut rng);
 
-        let dcrt_trace_key = DcrtGlweTraceKey::new(&domain, &dcrt_sk, &mut rng);
+        let dcrt_trace_key =
+            DcrtGlweTraceKey::new(&glev_params, &sampling, &table, &dcrt_sk, &mut rng);
 
-        let dcrt_rev_trace_key = DcrtGlweRevTraceKey::new(&domain, &dcrt_sk, &mut rng);
+        let dcrt_rev_trace_key =
+            DcrtGlweRevTraceKey::new(&glev_params, &sampling, &table, &dcrt_sk, &mut rng);
 
         let table_ref = &table;
 
@@ -83,8 +83,8 @@ fn bench_trace(c: &mut Criterion) {
         let mut c_ntt: DcrtGlwe<Vec<V>> = DcrtGlweCiphertext::zero(rns_glwe_len);
 
         base_q.wrapping_decompose_small_values_to(input.as_ref(), msg.as_mut(), phase_modulus);
-        let raw_domain = DcrtGlweDomain::try_new(&sampling, &base_q, table_ref).unwrap();
-        let dcrt_sk_context = dcrt_sk.try_bind_raw(&raw_domain).unwrap();
+
+        let dcrt_sk_context = dcrt_sk.try_bind_raw(&sampling, &base_q, table_ref).unwrap();
         dcrt_sk_context.encrypt_encoded_crt_to(&msg, &mut c_ntt, &mut rng);
 
         let c_coeff: CrtGlwe<Vec<V>> = {
@@ -95,10 +95,12 @@ fn bench_trace(c: &mut Criterion) {
         // Buffers
         let mut crt_result: CrtGlwe<Vec<V>> = CrtGlwe::zero(rns_glwe_len);
         let mut dcrt_result: DcrtGlweCiphertext<Vec<V>> = DcrtGlweCiphertext::zero(rns_glwe_len);
-        let mut crt_trace_evaluator = CrtGlweTraceEvaluator::new(&crt_trace_key, &domain);
-        let mut dcrt_trace_evaluator = DcrtGlweTraceEvaluator::new(&dcrt_trace_key, &domain);
+        let mut crt_trace_evaluator =
+            CrtGlweTraceEvaluator::new(&crt_trace_key, &glev_params, &table);
+        let mut dcrt_trace_evaluator =
+            DcrtGlweTraceEvaluator::new(&dcrt_trace_key, &glev_params, &table);
         let mut dcrt_rev_trace_evaluator =
-            DcrtGlweRevTraceEvaluator::new(&dcrt_rev_trace_key, &domain);
+            DcrtGlweRevTraceEvaluator::new(&dcrt_rev_trace_key, &glev_params, &table);
 
         let n_label = format!("N={n}");
 

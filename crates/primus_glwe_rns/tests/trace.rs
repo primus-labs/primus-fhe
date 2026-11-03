@@ -3,9 +3,9 @@ mod support;
 
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{
-    CrtGlweTraceEvaluator, CrtGlweTraceKey, DcrtGadgetDomain, DcrtGlweCiphertext,
-    DcrtGlweRevTraceEvaluator, DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator,
-    DcrtGlweTraceKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlweTraceEvaluator, CrtGlweTraceKey, DcrtGlweCiphertext, DcrtGlweRevTraceEvaluator,
+    DcrtGlweRevTraceKey, DcrtGlweSecretKey, DcrtGlweTraceEvaluator, DcrtGlweTraceKey,
+    GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, glwe::CrtGlwe};
 use primus_modulus::BarrettModulus;
@@ -35,16 +35,41 @@ fn trace_and_reverse_trace_match_raw_phase_projection() {
         &mut rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&secret, &table);
-    let raw_domain = parameters.domain(&table);
-    let context = key.try_bind_raw(&raw_domain).unwrap();
+
+    let context = key
+        .try_bind_raw(
+            parameters.encryption_parameters(),
+            parameters.base_q(),
+            &table,
+        )
+        .unwrap();
     let gadget = parameters.gadget(DecompositionBaseLog::new(20), None);
-    let domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
-    let crt_key = CrtGlweTraceKey::new(&domain, &secret, &key, &mut rng);
-    let dcrt_key = DcrtGlweTraceKey::new(&domain, &key, &mut rng);
-    let rev_key = DcrtGlweRevTraceKey::new(&domain, &key, &mut rng);
-    let mut crt = CrtGlweTraceEvaluator::new(&crt_key, &domain);
-    let mut dcrt = DcrtGlweTraceEvaluator::new(&dcrt_key, &domain);
-    let mut reverse = DcrtGlweRevTraceEvaluator::new(&rev_key, &domain);
+
+    let crt_key = CrtGlweTraceKey::new(
+        &gadget,
+        parameters.encryption_parameters(),
+        &table,
+        &secret,
+        &key,
+        &mut rng,
+    );
+    let dcrt_key = DcrtGlweTraceKey::new(
+        &gadget,
+        parameters.encryption_parameters(),
+        &table,
+        &key,
+        &mut rng,
+    );
+    let rev_key = DcrtGlweRevTraceKey::new(
+        &gadget,
+        parameters.encryption_parameters(),
+        &table,
+        &key,
+        &mut rng,
+    );
+    let mut crt = CrtGlweTraceEvaluator::new(&crt_key, &gadget, &table);
+    let mut dcrt = DcrtGlweTraceEvaluator::new(&dcrt_key, &gadget, &table);
+    let mut reverse = DcrtGlweRevTraceEvaluator::new(&rev_key, &gadget, &table);
     let message: Vec<_> = (0..n.get()).map(|i| (i % 9) as i128 + 1).collect();
     let mut input = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
     context.encrypt_encoded_crt_to(
@@ -55,7 +80,12 @@ fn trace_and_reverse_trace_match_raw_phase_projection() {
     let mut crt_output = CrtGlwe::<Vec<u64>>::zero(parameters.rns_glwe_len());
     let mut output = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
     let e = i128::from(parameters.core.noise_distribution().maximum_magnitude());
-    let bound = n.get() as i128 * (e + support::switch_error_bound(&gadget, 2 * n.get() as i128));
+    let bound = n.get() as i128
+        * (e + support::switch_error_bound(
+            &gadget,
+            parameters.encryption_parameters(),
+            2 * n.get() as i128,
+        ));
     let inverses = Residues(values.map(|q| BarrettModulus::new(q).reduce_inv(n.get() as u64)));
     for normalized in [false, true] {
         let mut input = input.clone();

@@ -4,15 +4,17 @@
 //! Each iteration encrypts once with prepared key/context/output/scratch.
 //! Fixed diagnostic parameters exercise 50-bit limbs, not a security preset.
 
-use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvPublicKeyEncryptor, BfvSecretKeyContext};
+use primus_bfv::{
+    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
+    BfvSecretKeyContext,
+};
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use primus_decompose::DecompositionBaseLog;
 use primus_encoding::PlaintextEmbedding;
 use primus_glwe_rns::{
-    DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlwePublicKey, DcrtGlweSecretKey,
-    GlweSecretKey, SecretKeyDistr,
+    DcrtGlweCiphertext, DcrtGlwePublicKey, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::{ggsw::DcrtGgsw, workspace::DcrtGlevMulWorkspace};
 use primus_modulus::BarrettModulus;
@@ -38,17 +40,10 @@ fn bench_public_encryption(c: &mut Criterion) {
         3.2,
     );
     let gadget = parameters.gadget_parameters(DecompositionBaseLog::new(20), None);
-    let raw_domain = DcrtGlweDomain::try_new(
-        parameters.encryption_parameters(),
-        parameters.base_q(),
-        &table,
-    )
-    .unwrap();
-    let gadget_domain = DcrtGadgetDomain::try_new(&gadget, &table).unwrap();
     let mut setup_rng = StdRng::seed_from_u64(SEED);
     let coefficient_key = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
+        parameters.size().glwe_size(),
+        parameters.encryption_parameters().secret_key_sampler(),
         &mut setup_rng,
     );
     let secret = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
@@ -59,9 +54,19 @@ fn bench_public_encryption(c: &mut Criterion) {
         &table,
         &mut setup_rng,
     );
-    let mut ordinary = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
-    let mut raw = public.try_bind_raw(&raw_domain).unwrap();
-    let mut monomial = public.try_bind_gadget(&gadget_domain).unwrap();
+    let secret_context = BfvSecretKeyContext::try_new(&secret, &parameters, &table).unwrap();
+    let native_public = BfvPublicKey::new(&secret_context, &mut setup_rng);
+    let mut ordinary = BfvPublicKeyEncryptor::try_new(&native_public, &parameters, &table).unwrap();
+    let mut raw = public
+        .try_bind_raw(
+            parameters.encryption_parameters(),
+            parameters.base_q(),
+            &table,
+        )
+        .unwrap();
+    let mut monomial = public
+        .try_bind_gadget(&gadget, parameters.encryption_parameters(), &table)
+        .unwrap();
     let mut ordinary_rng = StdRng::seed_from_u64(SEED ^ 1);
     let mut raw_rng = StdRng::seed_from_u64(SEED ^ 2);
     let mut monomial_rng = StdRng::seed_from_u64(SEED ^ 3);
@@ -69,35 +74,39 @@ fn bench_public_encryption(c: &mut Criterion) {
     for (index, coefficient) in message.as_mut().iter_mut().take(8).enumerate() {
         *coefficient = index as u64 + 1;
     }
-    let mut plaintext = CrtPolynomial::<Vec<u64>>::zero(parameters.rns_poly_len());
+    let mut plaintext = CrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
     parameters
         .base_q()
         .wrapping_decompose_small_values_to(message.as_ref(), plaintext.as_mut(), T);
-    let mut encoded = CrtPolynomial::<Vec<u64>>::zero(parameters.rns_poly_len());
+    let mut encoded = CrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
     parameters
         .codec()
         .encode_coeffs_to(&message, &mut encoded, PlaintextEmbedding::Unsigned);
-    let mut ordinary_output = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
-    let mut raw_output = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
+    let mut ordinary_output = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let mut raw_output = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
     let mut ggsw_output = DcrtGgsw::<Vec<u64>>::zero(gadget.rns_ggsw_len());
     let coefficient = Residues([1_u64, 1]);
 
     // Validate the same public workflows before any Criterion observation.
-    let secret_context = BfvSecretKeyContext::try_new(&secret, &parameters, &table).unwrap();
     let mut decrypt_workspace = BfvDecryptWorkspace::new(&parameters);
-    ordinary.encrypt_plaintext_crt_to(&plaintext, &mut ordinary_output, &mut ordinary_rng);
+    ordinary.encrypt_plaintext_lift_crt_to(&plaintext, &mut ordinary_output, &mut ordinary_rng);
     assert_eq!(
         secret_context.decrypt(&ordinary_output, &mut decrypt_workspace),
         message,
     );
     raw.encrypt_encoded_crt_to(&encoded, &mut raw_output, &mut raw_rng);
+    let mut native_result = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    native_result.set_from_raw_glwe(&raw_output, &parameters);
     assert_eq!(
-        secret_context.decrypt(&raw_output, &mut decrypt_workspace),
-        message,
+        secret_context.decrypt(&native_result, &mut decrypt_workspace),
+        message
     );
     monomial.encrypt_monomial_ggsw_to(&coefficient, DEGREE, &mut ggsw_output, &mut monomial_rng);
-    let mut encrypted_message = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
-    secret_context.encrypt_to(&message, &mut encrypted_message, &mut setup_rng);
+    let mut native_message = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    secret_context.encrypt_to(&message, &mut native_message, &mut setup_rng);
+    let mut encrypted_message =
+        DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    native_message.write_raw_glwe_to(&mut encrypted_message, &parameters);
     let encrypted_message = encrypted_message.into_coeff_form(&table);
     let mut external_workspace = DcrtGlevMulWorkspace::new(gadget.size(), parameters.base_q());
     ggsw_output.external_product_to(
@@ -113,15 +122,16 @@ fn bench_public_encryption(c: &mut Criterion) {
     for coefficient in &mut expected.as_mut()[..DEGREE] {
         *coefficient = (T - *coefficient) % T;
     }
+    native_result.set_from_raw_glwe(&raw_output, &parameters);
     assert_eq!(
-        secret_context.decrypt(&raw_output, &mut decrypt_workspace),
-        expected,
+        secret_context.decrypt(&native_result, &mut decrypt_workspace),
+        expected
     );
 
     let mut group = c.benchmark_group("public_encryption/N1024/u64/rank1");
     group.bench_function("ordinary_to", |b| {
         b.iter(|| {
-            ordinary.encrypt_plaintext_crt_to(
+            ordinary.encrypt_plaintext_lift_crt_to(
                 black_box(&plaintext),
                 black_box(&mut ordinary_output),
                 &mut ordinary_rng,

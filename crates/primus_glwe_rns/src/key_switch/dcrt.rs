@@ -1,6 +1,6 @@
 //! GLWE key switching with signed digit decomposition over an RNS basis.
 
-use crate::parameter::{validate_glwe_size, validate_moduli};
+use crate::parameter::{validate_dcrt_table, validate_glwe_size, validate_moduli};
 use primus_data::{Data, DataMut};
 use primus_decompose::DecompositionBaseLog;
 use primus_integer::FheUint;
@@ -9,14 +9,14 @@ use primus_lattice::{
     glev::{DcrtGlevIter, DcrtGlevIterMut},
     workspace::DcrtGlevMulWorkspace,
 };
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_poly::{CrtPolynomial, DcrtPolynomial};
 use primus_reduce::FieldContext;
 use zeroize::Zeroizing;
 
 use crate::secret_key::encode_secret_polynomial_to_rns;
 use crate::{
-    CrtGlweCiphertext, CrtGlweEncryptionParameters, DcrtGadgetDomain, DcrtGlweCiphertext,
+    CrtGlevParameters, CrtGlweCiphertext, CrtGlweEncryptionParameters, DcrtGlweCiphertext,
     DcrtGlweSecretKey, GlweSecretKey, RnsDomainError,
 };
 
@@ -32,7 +32,7 @@ pub struct DcrtGlweKeySwitchingKey<T: FheUint> {
 impl<T: FheUint> DcrtGlweKeySwitchingKey<T> {
     /// Generates a key from a coefficient-domain input key to a DCRT output key.
     /// Input layout and ordered Q come from codec-free sampling parameters; output
-    /// noise and gadget scales come from the bound output domain.
+    /// noise and gadget scales come from the supplied output sampling and gadget parameters.
     ///
     /// # Panics
     /// Panics if secret layouts, polynomial lengths or ordered moduli are
@@ -46,7 +46,9 @@ impl<T: FheUint> DcrtGlweKeySwitchingKey<T> {
         input_sk: &GlweSecretKey<T>,
         input_params: &CrtGlweEncryptionParameters<T>,
         output_sk: &DcrtGlweSecretKey<T>,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        sampling_parameters: &CrtGlweEncryptionParameters<T>,
+        table: &DcrtTable<Table>,
         rng: &mut R,
     ) -> Self
     where
@@ -54,18 +56,18 @@ impl<T: FheUint> DcrtGlweKeySwitchingKey<T> {
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let ksk_params = domain.parameters();
+        let ksk_params = parameters;
         input_params
-            .validate_base(domain.rns_base())
-            .expect("DCRT key-switch input parameters and output domain are incompatible");
+            .validate_base(parameters.base_q())
+            .expect("DCRT key-switch input parameters and output basis are incompatible");
         assert_eq!(
             input_params.size().poly_length(),
-            domain.size().rns_glwe_size().poly_length(),
+            parameters.size().rns_glwe_size().poly_length(),
             "DCRT key-switch input and output polynomial lengths differ"
         );
         let encryptor = output_sk
-            .try_bind_gadget(domain)
-            .expect("DCRT key-switch output secret and domain are incompatible");
+            .try_bind_gadget(parameters, sampling_parameters, table)
+            .expect("DCRT key-switch output secret and parameters/table are incompatible");
         assert_eq!(input_sk.glwe_size(), input_params.size().glwe_size());
 
         let dcrt_glev_len = ksk_params.rns_glev_len();
@@ -120,21 +122,20 @@ impl<T: FheUint> DcrtGlweKeySwitchingKey<T> {
         DcrtGlevIter::new(self.key.as_slice(), self.output_size.rns_glev_len())
     }
 
-    /// Uses the evaluator's established key/domain/workspace binding. Operand layouts
+    /// Uses the evaluator's established key/parameter/workspace binding. Operand layouts
     /// and representation remain caller contracts; no numerical rebinding occurs here.
     fn key_switch_kernel_to<M, Table>(
         &self,
         input: CrtGlweCiphertext<&[T]>,
         mut output: DcrtGlweCiphertext<&mut [T]>,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
         workspace: &mut DcrtGlweKeySwitchingWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let parameters = domain.parameters();
-        let table = domain.table();
-        let rns_base = domain.rns_base();
+        let rns_base = parameters.base_q();
         let basis = parameters.basis();
         let poly_length = self.input_size.poly_length().get();
         let rns_poly_len = self.input_size.rns_poly_len();
@@ -175,7 +176,7 @@ impl<T: FheUint> DcrtGlweKeySwitchingKey<T> {
     }
 }
 
-/// DCRT key switching bound to its key, numerical domain and owned workspace.
+/// DCRT key switching bound to its key, gadget parameters, table and owned workspace.
 ///
 /// Construct once with [`Self::try_new`] and reuse for all compatible inputs.
 /// Inputs must use the key's secret and coefficient representation; modulus
@@ -187,7 +188,8 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a DcrtGlweKeySwitchingKey<T>,
-    domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlevParameters<T, M>,
+    table: &'a DcrtTable<Table>,
     workspace: DcrtGlweKeySwitchingWorkspace<T>,
 }
 
@@ -197,53 +199,57 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
-    /// Creates a new [`DcrtGlweKeySwitchEvaluator`] for a compatible key and domain.
+    /// Creates a new [`DcrtGlweKeySwitchEvaluator`] for a compatible key, gadget parameters and table.
     ///
     /// # Panics
     /// Panics if [`Self::try_new`] rejects the binding.
     #[must_use]
     pub fn new(
         key: &'a DcrtGlweKeySwitchingKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Self {
-        Self::try_new(key, domain)
+        Self::try_new(key, parameters, table)
             .unwrap_or_else(|error| panic!("invalid DCRT key-switch binding: {error}"))
     }
 
-    /// Binds the key and domain before allocating reusable scratch.
+    /// Binds the key, parameters and table before allocating reusable scratch.
     ///
     /// # Errors
     /// Returns [`RnsDomainError`] for a different gadget layout, ordered basis or radix.
     pub fn try_new(
         key: &'a DcrtGlweKeySwitchingKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<Self, RnsDomainError<T>> {
+        validate_dcrt_table(parameters.poly_length(), parameters.cipher_moduli(), table)?;
         validate_glwe_size(
             key.output_size.rns_glwe_size(),
-            domain.size().rns_glwe_size(),
+            parameters.size().rns_glwe_size(),
         )?;
         let expected = key.output_size.level_count().get();
-        let actual = domain.size().level_count().get();
+        let actual = parameters.size().level_count().get();
         if expected != actual {
             return Err(RnsDomainError::DecompositionLevelCountMismatch { expected, actual });
         }
         validate_moduli(
             key.moduli.iter().copied(),
-            domain.parameters().cipher_moduli_value().iter().copied(),
+            parameters.cipher_moduli_value().iter().copied(),
         )?;
-        if key.log_basis != domain.basis().log_basis() {
+        if key.log_basis != parameters.basis().log_basis() {
             return Err(RnsDomainError::DecompositionBaseLogMismatch {
                 expected: key.log_basis.get(),
-                actual: domain.basis().log_basis().get(),
+                actual: parameters.basis().log_basis().get(),
             });
         }
         let workspace = DcrtGlweKeySwitchingWorkspace {
             transformed_polynomial: CrtPolynomial::zero(key.input_size.rns_poly_len()),
-            glev_workspace: DcrtGlevMulWorkspace::new(key.output_size, domain.rns_base()),
+            glev_workspace: DcrtGlevMulWorkspace::new(key.output_size, parameters.base_q()),
         };
         Ok(Self {
             key,
-            domain,
+            parameters,
+            table,
             workspace,
         })
     }
@@ -269,13 +275,14 @@ where
         self.key.key_switch_kernel_to(
             input.as_view(),
             output.as_mut_view(),
-            self.domain,
+            self.parameters,
+            self.table,
             &mut self.workspace,
         );
     }
 }
 
-/// Owned scratch with no independent key or domain binding; the evaluator owns that contract.
+/// Owned scratch with no independent key or table binding; the evaluator owns that contract.
 struct DcrtGlweKeySwitchingWorkspace<T: FheUint> {
     transformed_polynomial: CrtPolynomial<Vec<T>>,
     glev_workspace: DcrtGlevMulWorkspace<T>,

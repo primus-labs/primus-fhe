@@ -12,9 +12,9 @@ use std::{hint::black_box, sync::Arc};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlweEncryptionParameters, CrtGlweExpandCoeffEvaluator,
-    CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator, DcrtGadgetDomain,
-    DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey,
-    DcrtGlweExpandCoeffParallelEvaluator, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlweExpandCoeffKey, CrtGlweExpandCoeffParallelEvaluator, DcrtGlweCiphertext,
+    DcrtGlweExpandCoeffEvaluator, DcrtGlweExpandCoeffKey, DcrtGlweExpandCoeffParallelEvaluator,
+    DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::glwe::{CrtGlwe, DcrtGlwe};
 use primus_modulus::BarrettModulus;
@@ -63,18 +63,18 @@ fn bench_expand_coeff(c: &mut Criterion) {
         let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
         let glev_params = CrtGlevParameters::new(
-            Arc::clone(&sampling),
+            sampling.size(),
             base_q.clone(),
             DecompositionBaseLog::new(20),
             None,
         );
 
-        let domain = DcrtGadgetDomain::try_new(&glev_params, &table).unwrap();
-
         // Expand keys
-        let crt_expand_key = CrtGlweExpandCoeffKey::new(&domain, &sk, &dcrt_sk, &mut rng);
+        let crt_expand_key =
+            CrtGlweExpandCoeffKey::new(&glev_params, &sampling, &table, &sk, &dcrt_sk, &mut rng);
 
-        let dcrt_expand_key = DcrtGlweExpandCoeffKey::new(&domain, &dcrt_sk, &mut rng);
+        let dcrt_expand_key =
+            DcrtGlweExpandCoeffKey::new(&glev_params, &sampling, &table, &dcrt_sk, &mut rng);
 
         let table_ref = &table;
 
@@ -84,8 +84,8 @@ fn bench_expand_coeff(c: &mut Criterion) {
         let mut c_ntt: DcrtGlwe<Vec<V>> = DcrtGlweCiphertext::zero(rns_glwe_len);
 
         base_q.wrapping_decompose_small_values_to(input.as_ref(), msg.as_mut(), phase_modulus);
-        let raw_domain = DcrtGlweDomain::try_new(&sampling, &base_q, table_ref).unwrap();
-        let dcrt_sk_context = dcrt_sk.try_bind_raw(&raw_domain).unwrap();
+
+        let dcrt_sk_context = dcrt_sk.try_bind_raw(&sampling, &base_q, table_ref).unwrap();
         dcrt_sk_context.encrypt_encoded_crt_to(&msg, &mut c_ntt, &mut rng);
 
         let c_coeff: CrtGlwe<Vec<V>> = {
@@ -98,14 +98,21 @@ fn bench_expand_coeff(c: &mut Criterion) {
         let mut dcrt_result: Vec<DcrtGlweCiphertext<Vec<V>>> =
             vec![DcrtGlweCiphertext::zero(rns_glwe_len); n];
 
-        let mut crt_evaluator = CrtGlweExpandCoeffEvaluator::new(&crt_expand_key, &domain);
-        let mut dcrt_evaluator = DcrtGlweExpandCoeffEvaluator::new(&dcrt_expand_key, &domain);
+        let mut crt_evaluator =
+            CrtGlweExpandCoeffEvaluator::new(&crt_expand_key, &glev_params, &table);
+        let mut dcrt_evaluator =
+            DcrtGlweExpandCoeffEvaluator::new(&dcrt_expand_key, &glev_params, &table);
 
-        let mut crt_parallel_evaluator =
-            CrtGlweExpandCoeffParallelEvaluator::new(&crt_expand_key, &domain, current_num_threads);
+        let mut crt_parallel_evaluator = CrtGlweExpandCoeffParallelEvaluator::new(
+            &crt_expand_key,
+            &glev_params,
+            &table,
+            current_num_threads,
+        );
         let mut dcrt_parallel_evaluator = DcrtGlweExpandCoeffParallelEvaluator::new(
             &dcrt_expand_key,
-            &domain,
+            &glev_params,
+            &table,
             current_num_threads,
         );
 

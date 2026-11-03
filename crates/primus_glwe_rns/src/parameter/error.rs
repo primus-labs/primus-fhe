@@ -2,7 +2,7 @@ use primus_decompose::ApproxSignedBasisError;
 use primus_integer::FheUint;
 use primus_lattice::GlweSizeError;
 
-/// Invalid codec-free RNS GLWE sampling state or its ordered domain.
+/// Invalid codec-free RNS GLWE sampling state or its ordered basis.
 #[derive(Debug, thiserror::Error)]
 pub enum CrtGlweEncryptionParametersError<T: FheUint> {
     /// The supplied layout and ordered sampler basis differ.
@@ -22,7 +22,7 @@ pub enum CrtGlevParametersError<T: FheUint> {
     /// A derived gadget storage length is not representable.
     #[error(transparent)]
     Layout(#[from] GlweSizeError),
-    /// The supplied ordered base does not match the prepared sampler domain.
+    /// The supplied GLWE layout and ordered base have different modulus counts.
     #[error(transparent)]
     Domain(#[from] super::RnsDomainError<T>),
     /// The decomposition basis has a different product modulus or limb width.

@@ -1,13 +1,13 @@
 use primus_data::{Data, DataMut};
 use primus_integer::FheUint;
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 
 use super::{CrtGlweExpandCoeffKey, CrtGlweTraceWorkspace, assert_expansion_layout};
 use crate::workspace_pool::WorkspacePool;
-use crate::{CrtGlweCiphertext, DcrtGadgetDomain, RnsDomainError};
+use crate::{CrtGlevParameters, CrtGlweCiphertext, RnsDomainError};
 
-/// CRT serial coefficient expansion, bound to one key, numerical domain and owned scratch.
+/// CRT serial coefficient expansion, bound to one key, gadget parameters, table and owned scratch.
 ///
 /// Construct once and reuse. Numerical checks do not establish secret identity
 /// or agreement on the table's NTT representation; callers maintain both.
@@ -19,7 +19,8 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a CrtGlweExpandCoeffKey<T>,
-    domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlevParameters<T, M>,
+    table: &'a DcrtTable<Table>,
     workspace: CrtGlweTraceWorkspace<T>,
 }
 
@@ -29,32 +30,35 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
-    /// Creates a new [`CrtGlweExpandCoeffEvaluator`] for a compatible key and domain.
+    /// Creates a new [`CrtGlweExpandCoeffEvaluator`] for a compatible key, gadget parameters and table.
     ///
     /// # Panics
     /// Panics if [`Self::try_new`] rejects the binding.
     #[must_use]
     pub fn new(
         key: &'a CrtGlweExpandCoeffKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Self {
-        Self::try_new(key, domain)
+        Self::try_new(key, parameters, table)
             .unwrap_or_else(|error| panic!("invalid CRT coefficient expansion binding: {error}"))
     }
 
     /// Checks layout, ordered Q, radix and retained levels before allocating scratch.
     ///
     /// # Errors
-    /// Returns [`RnsDomainError`] if the key and domain are numerically incompatible.
+    /// Returns [`RnsDomainError`] if the key, gadget parameters and table are numerically incompatible.
     pub fn try_new(
         key: &'a CrtGlweExpandCoeffKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<Self, RnsDomainError<T>> {
-        key.metadata.validate(domain)?;
-        let workspace = CrtGlweTraceWorkspace::from_parameters(domain.parameters());
+        key.metadata.validate(parameters, table)?;
+        let workspace = CrtGlweTraceWorkspace::from_parameters(parameters);
         Ok(Self {
             key,
-            domain,
+            parameters,
+            table,
             workspace,
         })
     }
@@ -79,16 +83,17 @@ where
     ) {
         assert_eq!(
             output.len(),
-            self.domain.parameters().poly_length().get(),
+            self.parameters.poly_length().get(),
             "full coefficient expansion requires N outputs"
         );
-        assert_expansion_layout(
-            input.as_ref().len(),
+        assert_expansion_layout(input.as_ref().len(), output, self.parameters.rns_glwe_len());
+        self.key.expand_kernel_to(
+            input.as_view(),
             output,
-            self.domain.parameters().rns_glwe_len(),
+            self.parameters,
+            self.table,
+            &mut self.workspace,
         );
-        self.key
-            .expand_kernel_to(input.as_view(), output, self.domain, &mut self.workspace);
     }
 
     /// Extracts residue classes modulo a power-of-two output count `d`.
@@ -112,18 +117,19 @@ where
         input: &CrtGlweCiphertext<A>,
         output: &mut [CrtGlweCiphertext<B>],
     ) {
-        let n = self.domain.parameters().poly_length().get();
+        let n = self.parameters.poly_length().get();
         assert!(
             output.len().is_power_of_two() && output.len() <= n,
             "coefficient expansion output count must be a power of two in 1..=N"
         );
-        assert_expansion_layout(
-            input.as_ref().len(),
+        assert_expansion_layout(input.as_ref().len(), output, self.parameters.rns_glwe_len());
+        self.key.expand_kernel_to(
+            input.as_view(),
             output,
-            self.domain.parameters().rns_glwe_len(),
+            self.parameters,
+            self.table,
+            &mut self.workspace,
         );
-        self.key
-            .expand_kernel_to(input.as_view(), output, self.domain, &mut self.workspace);
     }
 
     /// Expands a publicly known plaintext support prefix of any length `1..=N`.
@@ -152,20 +158,21 @@ where
         output: &mut [CrtGlweCiphertext<B>],
     ) {
         assert!(
-            !output.is_empty() && output.len() <= self.domain.parameters().poly_length().get(),
+            !output.is_empty() && output.len() <= self.parameters.poly_length().get(),
             "supported coefficient expansion count must be in 1..=N",
         );
-        assert_expansion_layout(
-            input.as_ref().len(),
+        assert_expansion_layout(input.as_ref().len(), output, self.parameters.rns_glwe_len());
+        self.key.expand_kernel_to(
+            input.as_view(),
             output,
-            self.domain.parameters().rns_glwe_len(),
+            self.parameters,
+            self.table,
+            &mut self.workspace,
         );
-        self.key
-            .expand_kernel_to(input.as_view(), output, self.domain, &mut self.workspace);
     }
 }
 
-/// CRT parallel coefficient expansion, bound to one key, numerical domain and owned scratch.
+/// CRT parallel coefficient expansion, bound to one key, gadget parameters, table and owned scratch.
 ///
 /// Construct once and reuse. Numerical checks do not establish secret identity
 /// or agreement on the table's NTT representation; callers maintain both.
@@ -177,7 +184,8 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a CrtGlweExpandCoeffKey<T>,
-    domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlevParameters<T, M>,
+    table: &'a DcrtTable<Table>,
     workspace: WorkspacePool<CrtGlweTraceWorkspace<T>>,
 }
 
@@ -187,7 +195,7 @@ where
     M: FieldContext<T> + Sync,
     Table: NttTable<ValueT = T>,
 {
-    /// Creates a new [`CrtGlweExpandCoeffParallelEvaluator`] for a compatible key and domain.
+    /// Creates a new [`CrtGlweExpandCoeffParallelEvaluator`] for a compatible key, gadget parameters and table.
     ///
     /// `worker_count` is the maximum number of concurrent scratch-bearing jobs.
     /// Each level is divided into at most that many chunks. The caller's Rayon
@@ -199,37 +207,40 @@ where
     #[must_use]
     pub fn new(
         key: &'a CrtGlweExpandCoeffKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
         worker_count: usize,
     ) -> Self {
-        Self::try_new(key, domain, worker_count)
+        Self::try_new(key, parameters, table, worker_count)
             .unwrap_or_else(|error| panic!("invalid CRT coefficient expansion binding: {error}"))
     }
 
     /// Checks layout, ordered Q, radix and retained levels before allocating scratch.
     ///
     /// # Errors
-    /// Returns [`RnsDomainError`] if the key and domain are numerically incompatible.
+    /// Returns [`RnsDomainError`] if the key, gadget parameters and table are numerically incompatible.
     ///
     /// # Panics
     /// Panics if `worker_count` is zero.
     pub fn try_new(
         key: &'a CrtGlweExpandCoeffKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
         worker_count: usize,
     ) -> Result<Self, RnsDomainError<T>> {
-        key.metadata.validate(domain)?;
+        key.metadata.validate(parameters, table)?;
         assert!(
             worker_count > 0,
             "coefficient expansion needs at least one worker workspace"
         );
         let workspaces = (0..worker_count)
-            .map(|_| CrtGlweTraceWorkspace::from_parameters(domain.parameters()))
+            .map(|_| CrtGlweTraceWorkspace::from_parameters(parameters))
             .collect();
         let workspace = WorkspacePool::new(workspaces);
         Ok(Self {
             key,
-            domain,
+            parameters,
+            table,
             workspace,
         })
     }
@@ -258,16 +269,17 @@ where
     ) {
         assert_eq!(
             output.len(),
-            self.domain.parameters().poly_length().get(),
+            self.parameters.poly_length().get(),
             "full coefficient expansion requires N outputs"
         );
-        assert_expansion_layout(
-            input.as_ref().len(),
+        assert_expansion_layout(input.as_ref().len(), output, self.parameters.rns_glwe_len());
+        self.key.expand_parallel_kernel_to(
+            input.as_view(),
             output,
-            self.domain.parameters().rns_glwe_len(),
+            self.parameters,
+            self.table,
+            &self.workspace,
         );
-        self.key
-            .expand_parallel_kernel_to(input.as_view(), output, self.domain, &self.workspace);
     }
 
     /// Extracts residue classes modulo a power-of-two output count `d`.
@@ -295,18 +307,19 @@ where
         input: &CrtGlweCiphertext<A>,
         output: &mut [CrtGlweCiphertext<B>],
     ) {
-        let n = self.domain.parameters().poly_length().get();
+        let n = self.parameters.poly_length().get();
         assert!(
             output.len().is_power_of_two() && output.len() <= n,
             "coefficient expansion output count must be a power of two in 1..=N"
         );
-        assert_expansion_layout(
-            input.as_ref().len(),
+        assert_expansion_layout(input.as_ref().len(), output, self.parameters.rns_glwe_len());
+        self.key.expand_parallel_kernel_to(
+            input.as_view(),
             output,
-            self.domain.parameters().rns_glwe_len(),
+            self.parameters,
+            self.table,
+            &self.workspace,
         );
-        self.key
-            .expand_parallel_kernel_to(input.as_view(), output, self.domain, &self.workspace);
     }
 
     /// Expands a publicly known plaintext support prefix of any length `1..=N`.
@@ -335,15 +348,16 @@ where
         output: &mut [CrtGlweCiphertext<B>],
     ) {
         assert!(
-            !output.is_empty() && output.len() <= self.domain.parameters().poly_length().get(),
+            !output.is_empty() && output.len() <= self.parameters.poly_length().get(),
             "supported coefficient expansion count must be in 1..=N",
         );
-        assert_expansion_layout(
-            input.as_ref().len(),
+        assert_expansion_layout(input.as_ref().len(), output, self.parameters.rns_glwe_len());
+        self.key.expand_parallel_kernel_to(
+            input.as_view(),
             output,
-            self.domain.parameters().rns_glwe_len(),
+            self.parameters,
+            self.table,
+            &self.workspace,
         );
-        self.key
-            .expand_parallel_kernel_to(input.as_view(), output, self.domain, &self.workspace);
     }
 }

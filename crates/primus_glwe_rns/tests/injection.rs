@@ -3,8 +3,8 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use primus_glwe_rns::{
-    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweDomain, DcrtGlwePublicKey,
-    DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+    CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlwePublicKey, DcrtGlweSecretKey,
+    GlweSecretKey, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
 use primus_modulus::BarrettModulus;
@@ -36,13 +36,9 @@ fn injections_match_raw_encoded_inputs_and_validate_before_callbacks() {
         &table,
         &mut StdRng::seed_from_u64(2),
     );
-    // The returned contexts borrow the resources, not these temporary domain values.
-    let secret_context = key
-        .try_bind_raw(&DcrtGlweDomain::try_new(&sampling, &base, &table).unwrap())
-        .unwrap();
-    let mut public_context = public
-        .try_bind_raw(&DcrtGlweDomain::try_new(&sampling, &base, &table).unwrap())
-        .unwrap();
+    // Returned contexts borrow the actual resources directly.
+    let secret_context = key.try_bind_raw(&sampling, &base, &table).unwrap();
+    let mut public_context = public.try_bind_raw(&sampling, &base, &table).unwrap();
     let message = CrtPolynomial::new(
         (0..size.rns_poly_len())
             .map(|i| (i % 17) as u64)

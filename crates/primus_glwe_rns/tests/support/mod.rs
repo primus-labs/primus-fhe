@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use primus_decompose::{DecompositionBaseLog, DecompositionLevelCount};
 use primus_glwe_rns::{
-    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweDomain,
-    DcrtGlweSecretKey, SecretKeyDistr,
+    CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweSecretKey,
+    SecretKeyDistr,
 };
 use primus_integer::FheUint;
 use primus_lattice::{GlweDimension, GlweSize, RnsGlweSize};
@@ -74,13 +74,7 @@ where
         log: DecompositionBaseLog,
         levels: Option<DecompositionLevelCount>,
     ) -> CrtGlevParameters<T, BarrettModulus<T>> {
-        CrtGlevParameters::new(Arc::clone(&self.core), self.base.clone(), log, levels)
-    }
-    pub fn domain<'a, Table: NttTable<ValueT = T>>(
-        &'a self,
-        table: &'a DcrtTable<Table>,
-    ) -> DcrtGlweDomain<'a, T, BarrettModulus<T>, Table> {
-        DcrtGlweDomain::try_new(&self.core, &self.base, table).unwrap()
+        CrtGlevParameters::new(self.size(), self.base.clone(), log, levels)
     }
 }
 
@@ -108,15 +102,18 @@ pub fn unsigned_probe(message: &[u64], parameters: &RawParameters<u64>) -> CrtPo
     )
 }
 
-pub fn tree_error_bound(gadget: &CrtGlevParameters<u64, BarrettModulus<u64>>) -> i128 {
-    let size = gadget.encryption_parameters().size();
+pub fn tree_error_bound(
+    gadget: &CrtGlevParameters<u64, BarrettModulus<u64>>,
+    sampling: &CrtGlweEncryptionParameters<u64>,
+) -> i128 {
+    let size = gadget.size().rns_glwe_size();
     let n = size.poly_length().get() as i128;
     // The complete normalized subtrees select signed coefficient positions;
     // their modular inverses do not leave fractional input error at a leaf.
     // Unnormalized sums can duplicate a switch error at most N times. The
     // geometric sum of their multiplicities is at most N-1.
-    n * (i128::from(gadget.noise_distribution().maximum_magnitude())
-        + switch_error_bound(gadget, size.dimension().get() as i128 * n))
+    n * (i128::from(sampling.noise_distribution().maximum_magnitude())
+        + switch_error_bound(gadget, sampling, size.dimension().get() as i128 * n))
 }
 
 pub fn assert_scalar_probe<Table: NttTable<ValueT = u64>>(
@@ -138,10 +135,8 @@ pub fn phase<Table: NttTable<ValueT = u64>>(
     table: &DcrtTable<Table>,
     ciphertext: &DcrtGlweCiphertext<Vec<u64>>,
 ) -> Vec<u64> {
-    let domain = parameters.domain(table);
-    let context = key.try_bind_raw(&domain).unwrap();
     let mut output = DcrtPolynomial::new(vec![0; parameters.rns_poly_len()]);
-    context.phase_to(ciphertext, &mut output);
+    key.phase_to(ciphertext, &mut output, parameters.base.moduli());
     table.inverse_transform_slice(output.as_mut());
     output.into_inner()
 }
@@ -209,10 +204,11 @@ pub fn assert_phase_residues(actual: &[u64], moduli: &[u64], expected: &[i128], 
 /// the decomposition residual is at most 2^(drop_bits-1) times the secret L1.
 pub fn switch_error_bound(
     gadget: &CrtGlevParameters<u64, BarrettModulus<u64>>,
+    sampling: &CrtGlweEncryptionParameters<u64>,
     secret_l1: i128,
 ) -> i128 {
-    let size = gadget.encryption_parameters().size();
-    let e = i128::from(gadget.noise_distribution().maximum_magnitude());
+    let size = gadget.size().rns_glwe_size();
+    let e = i128::from(sampling.noise_distribution().maximum_magnitude());
     let digit = i128::from(gadget.basis().basis_value() / 2);
     let residual = if gadget.basis().drop_bits() == 0 {
         0

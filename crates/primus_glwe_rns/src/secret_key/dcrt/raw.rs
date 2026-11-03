@@ -9,7 +9,8 @@ use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 
 use super::DcrtGlweSecretKey;
-use crate::{CrtGlweEncryptionParameters, DcrtGlweCiphertext, DcrtGlweDomain, RnsDomainError};
+use crate::parameter::{validate_dcrt_table, validate_moduli};
+use crate::{CrtGlweEncryptionParameters, DcrtGlweCiphertext, RnsDomainError};
 
 /// A secret key bound to codec-free sampling, an ordered RNS base and a table.
 ///
@@ -23,29 +24,112 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a DcrtGlweSecretKey<T>,
-    domain: DcrtGlweDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlweEncryptionParameters<T>,
+    rns_base: &'a RNSBase<T, M>,
+    table: &'a DcrtTable<Table>,
 }
 
 impl<T: FheUint> DcrtGlweSecretKey<T> {
-    /// Binds this secret to a checked codec-free GLWE domain.
+    /// Binds codec-free encryption resources and checks their compatibility once.
     ///
     /// # Errors
     /// Returns [`RnsDomainError`] if the key layout or ordered moduli differ
-    /// from the domain. Equal moduli do not establish NTT representation identity;
+    /// from the sampling state or table. Equal moduli do not establish NTT representation identity;
     /// the secret and table must use the same roots and evaluation order.
     pub fn try_bind_raw<'a, M, Table>(
         &'a self,
-        domain: &DcrtGlweDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlweEncryptionParameters<T>,
+        rns_base: &'a RNSBase<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<DcrtGlweRawSecretKeyContext<'a, T, M, Table>, RnsDomainError<T>>
     where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        self.validate_parameters(domain.size(), domain.rns_base().moduli())?;
+        parameters.validate_base(rns_base)?;
+        validate_dcrt_table(parameters.size().poly_length(), rns_base.moduli(), table)?;
+        self.validate_parameters(parameters.size(), rns_base.moduli())?;
         Ok(DcrtGlweRawSecretKeyContext {
             key: self,
-            domain: *domain,
+            parameters,
+            rns_base,
+            table,
         })
+    }
+
+    /// Writes the DCRT phase `b - sum(a_i*s_i)` using only the ordered moduli.
+    ///
+    /// No sampling state, transform table, inverse transform or allocation is
+    /// needed. Output is overwritten. The complete input and output layouts and
+    /// numerical modulus order are checked before writes.
+    ///
+    /// # Correctness
+    /// Input canonical residues and its NTT roots/evaluation order must match
+    /// this key. Matching numerical moduli alone does not prove that convention.
+    ///
+    /// # Panics
+    /// Panics before writes if the ordered moduli or complete layouts differ
+    /// from the key's layout.
+    pub fn phase_to<M, A, B>(
+        &self,
+        input: &DcrtGlweCiphertext<A>,
+        output: &mut DcrtPolynomial<B>,
+        moduli: &[M],
+    ) where
+        M: FieldContext<T>,
+        A: Data<Elem = T>,
+        B: DataMut<Elem = T>,
+    {
+        self.phase_with_moduli_to(input, output, moduli, true);
+    }
+
+    /// Writes `-sum(a_i*s_i)`, excluding the body, without sampling or transforms.
+    ///
+    /// Sum additive-secret shares and add the ciphertext body exactly once.
+    /// This adds no privacy noise or one-use policy; those belong to the protocol.
+    /// Representation and validation contracts match [`Self::phase_to`].
+    ///
+    /// # Panics
+    /// Panics before writes if the ordered moduli or complete layouts differ
+    /// from the key's layout.
+    pub fn partial_phase_to<M, A, B>(
+        &self,
+        input: &DcrtGlweCiphertext<A>,
+        output: &mut DcrtPolynomial<B>,
+        moduli: &[M],
+    ) where
+        M: FieldContext<T>,
+        A: Data<Elem = T>,
+        B: DataMut<Elem = T>,
+    {
+        self.phase_with_moduli_to(input, output, moduli, false);
+    }
+
+    fn phase_with_moduli_to<M, A, B>(
+        &self,
+        input: &DcrtGlweCiphertext<A>,
+        output: &mut DcrtPolynomial<B>,
+        moduli: &[M],
+        include_body: bool,
+    ) where
+        M: FieldContext<T>,
+        A: Data<Elem = T>,
+        B: DataMut<Elem = T>,
+    {
+        validate_moduli(
+            self.moduli.iter().copied(),
+            moduli.iter().map(|m| m.value()),
+        )
+        .expect("DCRT phase modulus order does not match the secret key");
+        assert_phase_layout(self.size, input.as_ref().len(), output.as_ref().len());
+        phase_kernel_to(
+            self,
+            self.size,
+            moduli,
+            input.as_view(),
+            output.as_mut_view(),
+            include_body,
+        );
     }
 }
 
@@ -84,9 +168,9 @@ where
         self.assert_output_length(output.as_ref().len());
         encrypt_kernel_to(
             self.key,
-            self.domain.parameters(),
-            self.domain.rns_base(),
-            self.domain.table(),
+            self.parameters,
+            self.rns_base,
+            self.table,
             output.as_mut_view(),
             rng,
             inject_body,
@@ -110,9 +194,9 @@ where
         self.assert_output_length(output.as_ref().len());
         encrypt_kernel_to(
             self.key,
-            self.domain.parameters(),
-            self.domain.rns_base(),
-            self.domain.table(),
+            self.parameters,
+            self.rns_base,
+            self.table,
             output.as_mut_view(),
             rng,
             |_| {},
@@ -121,7 +205,7 @@ where
 
     /// Encrypts an already-encoded coefficient-domain CRT phase polynomial.
     ///
-    /// The input has exactly one complete RNS polynomial in the domain's modulus
+    /// The input has exactly one complete RNS polynomial in the sampling state's modulus
     /// order, with canonical coefficients in each limb. It is added directly to
     /// coefficient noise before the body's single NTT; neither BFV scaling nor
     /// gadget weights are applied. Output is overwritten without scratch allocation.
@@ -143,7 +227,7 @@ where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
     {
-        let size = self.domain.size();
+        let size = self.parameters.size();
         assert_eq!(
             input.as_ref().len(),
             size.rns_poly_len(),
@@ -152,18 +236,12 @@ where
         self.assert_output_length(output.as_ref().len());
         encrypt_kernel_to(
             self.key,
-            self.domain.parameters(),
-            self.domain.rns_base(),
-            self.domain.table(),
+            self.parameters,
+            self.rns_base,
+            self.table,
             output.as_mut_view(),
             rng,
-            |body| {
-                body.add_assign(
-                    input,
-                    size.poly_length().get(),
-                    self.domain.rns_base().moduli(),
-                )
-            },
+            |body| body.add_assign(input, size.poly_length().get(), self.rns_base.moduli()),
         );
     }
 
@@ -211,7 +289,7 @@ where
     fn assert_output_length(&self, length: usize) {
         assert_eq!(
             length,
-            self.domain.size().rns_glwe_len(),
+            self.parameters.size().rns_glwe_len(),
             "raw DCRT GLWE output length mismatch"
         );
     }
@@ -225,26 +303,31 @@ where
         A: Data<Elem = T>,
         B: DataMut<Elem = T>,
     {
-        let size = self.domain.size();
-        assert_eq!(
-            input.as_ref().len(),
-            size.rns_glwe_len(),
-            "raw DCRT GLWE input length mismatch"
-        );
-        assert_eq!(
-            output.as_ref().len(),
-            size.rns_poly_len(),
-            "DCRT phase output length mismatch"
-        );
+        let size = self.parameters.size();
+        assert_phase_layout(size, input.as_ref().len(), output.as_ref().len());
         phase_kernel_to(
             self.key,
             size,
-            self.domain.rns_base().moduli(),
+            self.rns_base.moduli(),
             input.as_view(),
             output.as_mut_view(),
             include_body,
         );
     }
+}
+
+/// Validates complete layouts before either phase path writes output.
+fn assert_phase_layout(size: RnsGlweSize, input_len: usize, output_len: usize) {
+    assert_eq!(
+        input_len,
+        size.rns_glwe_len(),
+        "raw DCRT GLWE input length mismatch"
+    );
+    assert_eq!(
+        output_len,
+        size.rns_poly_len(),
+        "DCRT phase output length mismatch"
+    );
 }
 
 /// Shared body/mask encryption kernel. The owning context has established layout,

@@ -1,7 +1,8 @@
+use crate::CrtGlweEncryptionParameters;
 use primus_data::{Data, DataMut};
 use primus_factor::ShoupFactor;
 use primus_integer::FheUint;
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 use primus_rns::ResidueFactors;
 
@@ -9,7 +10,7 @@ use super::automorphism::DcrtGlweAutoKeyData;
 use super::trace::DcrtGlweTraceWorkspace;
 use crate::RnsDomainError;
 use crate::automorphism::AutomorphismKeyMetadata;
-use crate::{DcrtGadgetDomain, DcrtGlweCiphertext, DcrtGlweSecretKey};
+use crate::{CrtGlevParameters, DcrtGlweCiphertext, DcrtGlweSecretKey};
 
 #[derive(Clone)]
 /// Automorphism keys for reverse tracing a DCRT GLWE ciphertext.
@@ -23,13 +24,15 @@ impl<T: FheUint> DcrtGlweRevTraceKey<T> {
     /// Generates the automorphism keys required by the reverse trace.
     ///
     /// # Panics
-    /// Panics if secret layouts or ordered moduli do not match the domain.
+    /// Panics if secret layouts or ordered moduli do not match the supplied parameters.
     ///
     /// # Correctness
-    /// The secret must use the domain table's NTT representation.
+    /// The secret must use the supplied table's NTT representation.
     #[must_use]
     pub fn new<M, Table, R>(
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        sampling_parameters: &CrtGlweEncryptionParameters<T>,
+        table: &DcrtTable<Table>,
         dcrt_sk: &DcrtGlweSecretKey<T>,
         rng: &mut R,
     ) -> Self
@@ -38,12 +41,19 @@ impl<T: FheUint> DcrtGlweRevTraceKey<T> {
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let log_n = params.poly_length().log_n();
 
         // Reversed order: degrees 3, 5, 9, ..., 2^logN + 1
         let degrees = (1..=log_n).map(|x| (1usize << x) + 1);
-        let auto_keys = DcrtGlweAutoKeyData::generate_key_set(domain, degrees, dcrt_sk, rng);
+        let auto_keys = DcrtGlweAutoKeyData::generate_key_set(
+            parameters,
+            sampling_parameters,
+            table,
+            degrees,
+            dcrt_sk,
+            rng,
+        );
 
         // Precompute 2^{-1} mod q_i for each RNS modulus.
         // For odd prime q_i, inv(2) = (q_i + 1) / 2.
@@ -56,7 +66,7 @@ impl<T: FheUint> DcrtGlweRevTraceKey<T> {
         );
 
         Self {
-            metadata: AutomorphismKeyMetadata::new(domain),
+            metadata: AutomorphismKeyMetadata::new(parameters),
             auto_keys,
             inv_2_residues,
         }
@@ -64,18 +74,19 @@ impl<T: FheUint> DcrtGlweRevTraceKey<T> {
 
     /// Applies the reversed automorphism order, halving modulo each q_i before
     /// computing both operands of each sum. The caller maintains matching complete
-    /// key/domain/workspace resources; scratch is overwritten and reborrowed.
+    /// key/parameter/workspace resources; scratch is overwritten and reborrowed.
     fn trace_kernel_to<M, Table>(
         &self,
         ciphertext: DcrtGlweCiphertext<&[T]>,
         mut result: DcrtGlweCiphertext<&mut [T]>,
-        domain: &DcrtGadgetDomain<'_, T, M, Table>,
+        parameters: &CrtGlevParameters<T, M>,
+        table: &DcrtTable<Table>,
         workspace: &mut DcrtGlweTraceWorkspace<T>,
     ) where
         M: FieldContext<T>,
         Table: NttTable<ValueT = T>,
     {
-        let params = domain.parameters();
+        let params = parameters;
         let poly_length = params.poly_length().get();
         let rns_poly_len = params.rns_poly_len();
         let moduli = params.cipher_moduli();
@@ -98,7 +109,8 @@ impl<T: FheUint> DcrtGlweRevTraceKey<T> {
             auto_key.automorphism_kernel(
                 result.as_view(),
                 dcrt_glwe.as_mut_view(),
-                domain,
+                parameters,
+                table,
                 auto_workspace,
             );
 
@@ -108,7 +120,7 @@ impl<T: FheUint> DcrtGlweRevTraceKey<T> {
     }
 }
 
-/// DCRT normalized reverse trace, bound to one key, numerical domain and owned scratch.
+/// DCRT normalized reverse trace, bound to one key, gadget parameters, table and owned scratch.
 ///
 /// Construct once and reuse. Numerical checks do not establish secret identity
 /// or agreement on the table's NTT representation; callers maintain both.
@@ -120,7 +132,8 @@ where
     Table: NttTable<ValueT = T>,
 {
     key: &'a DcrtGlweRevTraceKey<T>,
-    domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+    parameters: &'a CrtGlevParameters<T, M>,
+    table: &'a DcrtTable<Table>,
     workspace: DcrtGlweTraceWorkspace<T>,
 }
 
@@ -130,32 +143,35 @@ where
     M: FieldContext<T>,
     Table: NttTable<ValueT = T>,
 {
-    /// Creates a new [`DcrtGlweRevTraceEvaluator`] for a compatible key and domain.
+    /// Creates a new [`DcrtGlweRevTraceEvaluator`] for a compatible key, gadget parameters and table.
     ///
     /// # Panics
     /// Panics if [`Self::try_new`] rejects the binding.
     #[must_use]
     pub fn new(
         key: &'a DcrtGlweRevTraceKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Self {
-        Self::try_new(key, domain)
+        Self::try_new(key, parameters, table)
             .unwrap_or_else(|error| panic!("invalid DCRT reverse trace binding: {error}"))
     }
 
     /// Checks layout, ordered Q, radix and retained levels before allocating scratch.
     ///
     /// # Errors
-    /// Returns [`RnsDomainError`] if the key and domain are numerically incompatible.
+    /// Returns [`RnsDomainError`] if the key, gadget parameters and table are numerically incompatible.
     pub fn try_new(
         key: &'a DcrtGlweRevTraceKey<T>,
-        domain: &'a DcrtGadgetDomain<'a, T, M, Table>,
+        parameters: &'a CrtGlevParameters<T, M>,
+        table: &'a DcrtTable<Table>,
     ) -> Result<Self, RnsDomainError<T>> {
-        key.metadata.validate(domain)?;
-        let workspace = DcrtGlweTraceWorkspace::from_parameters(domain.parameters());
+        key.metadata.validate(parameters, table)?;
+        let workspace = DcrtGlweTraceWorkspace::from_parameters(parameters);
         Ok(Self {
             key,
-            domain,
+            parameters,
+            table,
             workspace,
         })
     }
@@ -186,7 +202,7 @@ where
     /// The output and reusable internal scratch are overwritten.
     ///
     /// # Correctness
-    /// Both ciphertexts must match the domain's complete RNS GLWE layout,
+    /// Both ciphertexts must match the parameters' complete RNS GLWE layout,
     /// NTT representation and the key's secret. Input residues must be canonical.
     /// The caller must budget projected input/evaluation errors against the
     /// message scale, including nonconstant errors used by later operations.
@@ -198,13 +214,14 @@ where
         input: &DcrtGlweCiphertext<A>,
         output: &mut DcrtGlweCiphertext<B>,
     ) {
-        let len = self.domain.parameters().rns_glwe_len();
+        let len = self.parameters.rns_glwe_len();
         assert_eq!(input.as_ref().len(), len);
         assert_eq!(output.as_ref().len(), len);
         self.key.trace_kernel_to(
             input.as_view(),
             output.as_mut_view(),
-            self.domain,
+            self.parameters,
+            self.table,
             &mut self.workspace,
         );
     }

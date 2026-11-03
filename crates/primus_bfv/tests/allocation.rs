@@ -1,9 +1,10 @@
 //! Allocation contracts are checked separately from performance measurements.
 
-use primus_bfv::{BfvDecryptWorkspace, BfvParameters, BfvPublicKeyEncryptor, BfvSecretKeyContext};
-use primus_glwe_rns::{
-    DcrtGlweCiphertext, DcrtGlwePublicKey, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr,
+use primus_bfv::{
+    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
+    BfvSecretKeyContext, PlaintextEmbedding,
 };
+use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial};
@@ -90,28 +91,27 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         SecretKeyDistr::SparseTernary,
         1.0,
     );
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.cipher_moduli()).unwrap();
+    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
     let mut rng = StdRng::seed_from_u64(91);
     let key = GlweSecretKey::generate(
-        parameters.glwe_size(),
-        parameters.secret_key_sampler(),
+        parameters.size().glwe_size(),
+        parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
-    let public = DcrtGlwePublicKey::new(
-        &key,
-        parameters.encryption_parameters(),
-        parameters.base_q(),
-        &table,
-        &mut rng,
-    );
     let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+    let public = BfvPublicKey::new(&context, &mut rng);
     let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
     let mut workspace = BfvDecryptWorkspace::new(&parameters);
     let input = Polynomial(vec![3; 32]);
-    let crt = CrtPolynomial(vec![3; parameters.rns_poly_len()]);
-    let mut ciphertext = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.rns_glwe_len());
-    let mut phase = DcrtPolynomial::<Vec<u64>>::zero(parameters.rns_poly_len());
+    let crt = CrtPolynomial(vec![3; parameters.size().rns_poly_len()]);
+    let mut encoded = CrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
+    parameters
+        .codec()
+        .encode_coeffs_to(&input, &mut encoded, PlaintextEmbedding::Unsigned);
+    let mut raw = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let mut phase = DcrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
     let mut output = Polynomial::<Vec<u64>>::zero(32);
 
     assert_eq!(
@@ -123,7 +123,19 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         0
     );
     assert_eq!(
-        observe(|| context.encrypt_plaintext_crt_to(&crt, &mut ciphertext, &mut rng)).1,
+        observe(|| context.encrypt_plaintext_lift_crt_to(&crt, &mut ciphertext, &mut rng)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| context.encrypt_encoded_crt_to(&encoded, &mut ciphertext, &mut rng)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| ciphertext.write_raw_glwe_to(&mut raw, &parameters)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| ciphertext.set_from_raw_glwe(&raw, &parameters)).1,
         0
     );
     assert_eq!(observe(|| context.phase_to(&ciphertext, &mut phase)).1, 0);
@@ -148,11 +160,15 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         0
     );
     assert_eq!(
-        observe(|| encryptor.encrypt_plaintext_crt_to(&crt, &mut ciphertext, &mut rng)).1,
+        observe(|| encryptor.encrypt_plaintext_lift_crt_to(&crt, &mut ciphertext, &mut rng)).1,
+        0
+    );
+    assert_eq!(
+        observe(|| encryptor.encrypt_encoded_crt_to(&encoded, &mut ciphertext, &mut rng)).1,
         0
     );
     assert_eq!(observe(|| encryptor.workspace_mut().zeroize()).1, 0);
-    let (ciphertext, count) = observe(|| encryptor.encrypt_plaintext_crt(&crt, &mut rng));
+    let (ciphertext, count) = observe(|| encryptor.encrypt_plaintext_lift_crt(&crt, &mut rng));
     assert_eq!(count, 1);
     assert_eq!(context.decrypt(&ciphertext, &mut workspace), input);
     workspace.zeroize();

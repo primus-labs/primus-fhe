@@ -1,15 +1,14 @@
 use primus_distr::sample_crt_uniform_values_to;
 use primus_integer::FheUint;
 use primus_lattice::RnsGlweSize;
-use primus_ntt::NttTable;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_poly::DcrtPolynomial;
 use primus_reduce::FieldContext;
+use primus_rns::HybridRNS;
 use rand::distr::Uniform;
 
 use super::HybridRnsGlweKeySwitchingKey;
-use crate::{
-    CrtGlweEncryptionParameters, DcrtGlweSecretKey, GlweSecretKey, HybridRnsKeySwitchDomain,
-};
+use crate::{CrtGlweEncryptionParameters, DcrtGlweSecretKey, GlweSecretKey};
 
 impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
     /// Generates a hybrid-RNS key-switching key in the NTT domain over `QP`.
@@ -31,7 +30,8 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
         input_secret_key: &GlweSecretKey<T>,
         input_parameters: &CrtGlweEncryptionParameters<T>,
         output_secret_key: &GlweSecretKey<T>,
-        domain: &HybridRnsKeySwitchDomain<'_, T, M, QpTable>,
+        hybrid_rns: &HybridRNS<T, M>,
+        qp_table: &DcrtTable<QpTable>,
         rng: &mut R,
     ) -> Self
     where
@@ -44,9 +44,6 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
         let poly_length = input_size.poly_length().get();
         let q_moduli_count = input_size.moduli_count();
 
-        let hybrid_rns = domain.hybrid_rns();
-        let qp_table = domain.table();
-
         // Validate the complete input layout before zip can truncate a key row
         // or its coefficients, and before consuming randomness.
         assert_eq!(
@@ -58,7 +55,12 @@ impl<T: FheUint> HybridRnsGlweKeySwitchingKey<T> {
             .validate_base(hybrid_rns.q_base())
             .expect("hybrid input parameters and Q basis are incompatible");
         assert_eq!(output_secret_key.poly_length().get(), poly_length);
-        assert_eq!(qp_table.poly_length().get(), poly_length);
+        crate::parameter::validate_dcrt_table(
+            input_size.poly_length(),
+            hybrid_rns.qp_base().moduli(),
+            qp_table,
+        )
+        .expect("hybrid QP table and basis are incompatible");
 
         let qp_moduli = hybrid_rns.qp_base().moduli();
         let noise_distribution = input_parameters.noise_distribution();

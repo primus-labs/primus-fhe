@@ -1,9 +1,9 @@
 //! CRT/DCRT GLWE operations and Hybrid-RNS key switching.
 //!
 //! [`CrtGlweEncryptionParameters`] prepares layout and sampling without plaintext
-//! encoding. Bind it with [`DcrtGlweDomain`] for raw encryption and phase shares.
-//! [`CrtGlevParameters`] binds it to an ordered RNS base and gadget
-//! decomposition. Message encoding and recovery belong to scheme crates.
+//! encoding. Raw encryption binds sampling, basis and transform resources directly.
+//! [`CrtGlevParameters`] owns an ordered RNS base and gadget decomposition,
+//! independently of encryption sampling. Message encoding and recovery belong to scheme crates.
 
 #![deny(missing_docs)]
 
@@ -37,8 +37,7 @@ pub use key_switch::{
 };
 pub use parameter::{
     CrtGgswParameters, CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweEncryptionParametersError, DcrtGadgetDomain, DcrtGlweDomain, HybridRnsKeySwitchDomain,
-    RnsDomainError,
+    CrtGlweEncryptionParametersError, RnsDomainError,
 };
 pub use primus_glwe::{GlweSecretKey, SecretKeyDistr};
 pub use primus_lattice::{RnsGadgetSize, RnsGlweSize};
