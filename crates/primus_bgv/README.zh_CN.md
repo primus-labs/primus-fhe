@@ -152,3 +152,8 @@ gadget digits/residuals、精确商和偶数 p 边界。`leveled` 基准测一�
 请求，包含乘法/square/relin、旋转、秘密切换、两次 prime drop 和槽恢复；setup/
 建钥/分配与最终断言在计时外。较小的 `workflow` 保留原公钥加密/明文求值/恢复负载。
 参数为功能 fixtures，不是安全预设。
+
+高级 owner 角色转移可消费 `client.into_secret_key()`，将唯一 transformed secret allocation
+交给另一已验证角色的 `BgvClient::try_from_secret_key`。原 client 被消费，恢复 scratch 随之
+擦除并释放；跨方案移动前须验证完整 geometry 与实际 NTT roots/order。此接口转移所有权，
+不复制私有 share。

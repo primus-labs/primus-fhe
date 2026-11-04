@@ -190,3 +190,8 @@ cargo bench -p primus_bfv --bench multiplication --features batching
 私有测试模块。覆盖 phase、稠密乘积、边界、raw 桥接、错误检查、workspace
 复用/擦除及分配契约。Criterion 测量公开预备操作和完整 fresh 请求，setup 位于计时外。
 历史测量及其源码/负载限制见[性能报告](../../guides/performance/bfv-multiplication.md)（English）。
+
+高级 owner 角色转移可消费 `client.into_secret_key()`，将唯一 transformed secret allocation
+交给另一已验证角色的 `BfvClient::try_from_secret_key`。原 client 被消费，恢复 scratch 随之
+擦除并释放；跨方案移动前须验证完整 geometry 与实际 NTT roots/order。此接口转移所有权，
+不复制私有 share。

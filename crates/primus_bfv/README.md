@@ -232,3 +232,9 @@ erasure and allocation contracts. Criterion measures public prepared operations
 and complete fresh requests; setup stays outside timing. Historical measurements
 and their source/workload limits are in the
 [performance report](../../guides/performance/bfv-multiplication.md).
+
+Advanced owner handoffs can consume `client.into_secret_key()` and pass the
+single transformed allocation to `BfvClient::try_from_secret_key` in another
+validated role. Recovery scratch is dropped and erased; the source client is
+consumed. Complete geometry and actual NTT roots/order must match before a
+cross-scheme move. This transfers ownership and does not clone a private share.

@@ -25,6 +25,18 @@ impl<'a> BfvClient<'a> {
         self.context
     }
 
+    /// Consumes this client and transfers its single transformed secret owner.
+    ///
+    /// This is the owned counterpart of [`Self::try_from_secret_key`], useful
+    /// when one party changes scheme roles without cloning its private share.
+    /// Recovery scratch is dropped and erased. The receiving role must check
+    /// complete geometry and use the key's actual NTT roots and order; moving
+    /// storage does not establish cross-scheme transform compatibility.
+    #[must_use]
+    pub fn into_secret_key(self) -> DcrtGlweSecretKey<u64> {
+        self.key
+    }
+
     /// Samples one coefficient secret and transforms it once into the full basis.
     /// The temporary coefficient secret is securely erased when it is dropped.
     #[must_use]

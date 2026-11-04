@@ -248,6 +248,8 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
         r1.finalize_lookup(sum).unwrap()
     };
     // The final owner retains no setup/R1 workspace.
+    assert!(core::ptr::eq(key.context(), &context));
+    assert_eq!(key.level(), 1);
     let lookup = key.prepare();
     let mut output = context.new_ciphertext(1);
     lookup

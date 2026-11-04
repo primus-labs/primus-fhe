@@ -184,3 +184,9 @@ drops and slot recovery. Setup/key generation/allocation and final assertions
 stay outside timing. The smaller `workflow` benchmark retains the basic
 public-encrypt/plaintext-evaluate/recover workload. Parameters are functional
 fixtures, not security presets.
+
+Advanced owner handoffs can consume `client.into_secret_key()` and pass the
+single transformed allocation to `BgvClient::try_from_secret_key` in another
+validated role. Recovery scratch is dropped and erased; the source client is
+consumed. Complete geometry and actual NTT roots/order must match before a
+cross-scheme move. This transfers ownership and does not clone a private share.

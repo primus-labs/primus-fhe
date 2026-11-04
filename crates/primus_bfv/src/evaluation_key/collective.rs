@@ -973,6 +973,19 @@ impl<'a> BfvRawQuadraticAggregate<'a> {
     }
 }
 impl<'a> BfvFreshLookupKey<'a> {
+    /// Returns the actual numerical context owned by this fresh key's setup.
+    /// This establishes neither a protocol key identity nor input provenance.
+    #[must_use]
+    pub fn context(&self) -> &'a BfvContext {
+        self.context
+    }
+
+    /// Returns the native prefix level at which this unscaled key is consumed.
+    #[must_use]
+    pub fn level(&self) -> usize {
+        self.key.level
+    }
+
     /// Takes ownership of the fresh key and prepares scratch in its bound context.
     /// Finalization has already established the numerical binding; there is no
     /// external context or mutable key metadata to revalidate here.
