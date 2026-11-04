@@ -382,7 +382,7 @@ impl<'c> BgvCollectivePublicKey<'c> {
     }
 }
 
-/// One centered additive-input domain with an independently derived common A.
+/// One centered additive-input domain with an independent public common A.
 /// The caller consumes its per-party input authorization before `contribute`.
 pub struct BgvSeededInput<'c> {
     binding: Binding<'c>,
@@ -390,12 +390,31 @@ pub struct BgvSeededInput<'c> {
 }
 
 impl<'c> BgvSeededInput<'c> {
+    /// Samples a fresh uniform public NTT mask from caller-owned random words.
+    ///
+    /// The prepared integer distributions use unbiased rejection sampling.
+    /// Public mask values may be published; this does not publish the random
+    /// generator's internal seed/state or authorize reuse as a public-key mask.
+    /// # Errors
+    /// Rejects an unsupported sampling family before allocating or sampling.
+    pub fn try_new(
+        context: &'c BgvContext,
+        rng: &mut impl rand::CryptoRng,
+    ) -> Result<Self, BgvCollectiveError> {
+        let binding = Binding::new(context, 0, 1)?;
+        let mut mask = vec![0; binding.words];
+        uniform(context, 0, &mut mask, rng);
+        Ok(Self { binding, mask })
+    }
+
     /// Imports the public uniform common mask in this exact NTT convention.
     /// # Correctness
-    /// A must be uniformly expanded from approved independent public seed material.
+    /// Authenticated setup must establish a fresh, independent uniform A. A
+    /// public short seed and deterministic expansion do not establish that
+    /// statistical distribution; neither does a canonical-storage check.
     /// # Errors
     /// Rejects wrong family, full length or canonical range.
-    pub fn try_new(
+    pub fn try_from_common_mask(
         context: &'c BgvContext,
         common_mask: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
@@ -411,6 +430,12 @@ impl<'c> BgvSeededInput<'c> {
     #[must_use]
     pub fn common_mask(&self) -> &[u64] {
         &self.mask
+    }
+
+    /// Borrows the actual numerical context that owns this input's NTT tables.
+    #[must_use]
+    pub const fn context(&self) -> &'c BgvContext {
+        self.binding.context
     }
 
     /// Produces `B_i=-A*s_i+center(m_i)+p*e_i` from this owner's share.

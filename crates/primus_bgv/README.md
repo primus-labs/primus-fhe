@@ -73,7 +73,12 @@ exact frozen first-round result. Finalization consumes the sum and returns the
 existing native role key, retaining no setup workspace. Actual gadget weights and
 columns remain private.
 
-`BgvSeededInput` adds centered input bodies and inserts one common mask.
+`BgvSeededInput::try_new(context, rng)` samples a fresh complete public mask with
+the prepared unbiased CRT distributions. `try_from_common_mask` imports an
+authenticated array whose independent uniform provenance is caller-owned.
+Centered input bodies are added and the shared mask is inserted once. Publishing
+the array does not publish the RNG's internal seed/state or authorize reuse of a
+public-key mask; a short public seed is not a full-ring statistical certificate.
 `BgvClient::partial_phase_to` writes only `c1*s_i`, without c0 or privacy noise;
 these are arithmetic building blocks, not an authenticated opening protocol.
 Callers own independent common-seed derivation, single-use policy, full-roster

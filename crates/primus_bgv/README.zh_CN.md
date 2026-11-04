@@ -64,7 +64,10 @@ setup 实例和轮次，重复、缺失 owner 由协议拒绝。两轮私有 sta
 Finalize 消费公开聚合，直接生成已有 native role key，不保留 setup workspace；实际
 gadget weights 和 columns 不公开。
 
-`BgvSeededInput` 聚合 centered input bodies，并只插入一次 common mask。
+`BgvSeededInput::try_new(context, rng)` 用 prepared 无偏 CRT distributions 新鲜采样
+完整公共 mask；`try_from_common_mask` 导入已认证的数组，其独立均匀来源由调用方保证。
+聚合 centered input bodies 后只插入一次 shared mask。公开数组不等于公开 RNG 内部
+seed/state，也不授权复用 public-key mask；短公共 seed 本身不是 full-ring 统计证书。
 `BgvClient::partial_phase_to` 仅写 `c1*s_i`，不含 c0 或 privacy noise。这些是算术
 原语；独立 common seed、单次 policy、完整 roster、privacy flooding 和噪声/安全
 认证由协议负责。数值 input seed 不得依赖 selection 公钥或 fresh lookup key 的

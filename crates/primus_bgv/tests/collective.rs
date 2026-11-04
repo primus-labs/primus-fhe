@@ -154,7 +154,7 @@ fn collective_public_input_and_partial_phase_have_one_mask_and_shared_integer_no
         assert!(errors.iter().all(|&x| x == errors[0]));
         assert!(errors[0].abs() <= 63)
     }
-    let input = BgvSeededInput::try_new(&context, setup.common_mask().to_vec()).unwrap();
+    let input = BgvSeededInput::try_new(&context, &mut rng).unwrap();
     let mut aggregate = input.aggregate();
     let mut expected = vec![0; N];
     for (party, client) in clients.iter().enumerate() {
@@ -389,4 +389,47 @@ fn collective_linear_keys_and_rejection_boundaries() {
         BgvCollectivePublicKey::try_new(&gaussian, &mut rng),
         Err(BgvCollectiveError::Distribution)
     ));
+}
+
+#[test]
+fn fresh_input_masks_use_exact_full_limb_rejection_and_own_one_context() {
+    struct Words(std::vec::IntoIter<u64>);
+    impl rand::TryRng for Words {
+        type Error = core::convert::Infallible;
+        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+            Ok(self.0.next().expect("no extra mask sampling words"))
+        }
+        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+            panic!("uniform u64 residues use u64 words")
+        }
+        fn try_fill_bytes(&mut self, _: &mut [u8]) -> Result<(), Self::Error> {
+            panic!("uniform u64 residues use u64 words")
+        }
+    }
+    impl rand::TryCryptoRng for Words {}
+    let context = context();
+    let mut words = Words(
+        Q.iter()
+            .flat_map(|_| {
+                [0, u64::MAX]
+                    .into_iter()
+                    .chain(std::iter::repeat_n(1, N - 1))
+            })
+            .collect::<Vec<_>>()
+            .into_iter(),
+    );
+    let input = BgvSeededInput::try_new(&context, &mut words).unwrap();
+    assert!(core::ptr::eq(input.context(), &context));
+    assert_eq!(input.common_mask().len(), N * Q.len());
+    for (limb, q) in input.common_mask().as_chunks::<N>().0.iter().zip(Q) {
+        assert_eq!(limb[0], q - 1);
+        assert!(limb[1..].iter().all(|&x| x == 0));
+    }
+    assert_eq!(words.0.len(), 0);
+    let imported =
+        BgvSeededInput::try_from_common_mask(&context, input.common_mask().to_vec()).unwrap();
+    assert_eq!(imported.common_mask(), input.common_mask());
+    let mut malformed = input.common_mask().to_vec();
+    malformed[N] = Q[1];
+    assert!(BgvSeededInput::try_from_common_mask(&context, malformed).is_err());
 }
