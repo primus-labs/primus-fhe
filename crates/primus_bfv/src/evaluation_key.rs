@@ -109,6 +109,16 @@ impl NativeEvaluationKey {
         level: usize,
         config: DecompositionConfig,
     ) -> Result<Self, BfvEvaluationKeyError> {
+        let mut key = Self::prepare_metadata(context, level, config)?;
+        key.columns.resize(key.size.rns_glev_len(), 0);
+        Ok(key)
+    }
+
+    fn prepare_metadata(
+        context: &BfvContext,
+        level: usize,
+        config: DecompositionConfig,
+    ) -> Result<Self, BfvEvaluationKeyError> {
         validate_level(context, level)?;
         let base = context.codec(level).base_q();
         let basis = BigUintApproxSignedBasis::try_new(
@@ -134,7 +144,7 @@ impl NativeEvaluationKey {
             moduli: base.moduli_values().to_vec(),
             size,
             basis,
-            columns: vec![0; size.rns_glev_len()],
+            columns: Vec::new(),
         })
     }
 
@@ -196,10 +206,33 @@ pub struct BfvKeySwitchingKey {
     key: NativeEvaluationKey,
 }
 
+impl BfvKeySwitchingKey {
+    /// Returns the exact prepared level at which this key is consumed.
+    #[must_use]
+    pub fn level(&self) -> usize {
+        self.key.level
+    }
+}
+
 /// Public unscaled columns encrypting σ(s) under s for one odd automorphism.
 pub struct BfvAutomorphismKey {
     key: NativeEvaluationKey,
+    exponent: usize,
     permutation: NttAutomorphismPermutation,
+}
+
+impl BfvAutomorphismKey {
+    /// Returns the exact prepared level at which this key is consumed.
+    #[must_use]
+    pub fn level(&self) -> usize {
+        self.key.level
+    }
+
+    /// Returns the odd substitution exponent in `X -> X^exponent`.
+    #[must_use]
+    pub fn exponent(&self) -> usize {
+        self.exponent
+    }
 }
 
 impl BfvClient<'_> {
@@ -269,6 +302,7 @@ impl BfvClient<'_> {
         }
         Ok(BfvAutomorphismKey {
             key: key.encrypt(self, &transformed, rng),
+            exponent,
             permutation,
         })
     }
@@ -661,3 +695,6 @@ fn validate_numeric_context(
 
 #[cfg(test)]
 mod tests;
+
+mod collective;
+pub use collective::*;

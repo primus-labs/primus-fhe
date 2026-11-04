@@ -96,6 +96,39 @@ all radix remainder bits. The complete [leveled coefficient](examples/leveled_co
 and [leveled slot](examples/leveled_slots.rs) examples combine multiplication,
 square, rotation, Alice→Bob switching and two drops.
 
+## Collective keys and one-use raw lookup
+
+`BfvCollectivePublicKey`, `BfvCollectiveSwitchingKey` and
+`BfvCollectiveAutomorphismKey` accept one owner's individual shares per
+`contribute` call. `aggregate(expected)` allocates a public sum; `add` checks
+the actual local setup instance and count, and `finalize` consumes a complete
+sum into the ordinary native role key. Transport uses `common_mask`,
+`as_residues` and checked `try_import_contribution`; no private key columns
+are public. This first construction requires exact CBD1 shares and CBD21
+errors. Imported secret distribution metadata does not prove CBD1 coefficients.
+
+`BfvCollectiveRelinearization::start` returns a public first message and a
+noncloneable, erasing private state. Freeze the complete first-round sum with
+`freeze_round1`, then consume each state with `round2`. The frozen result's
+second accumulator must use the same roster size. Finalization includes all
+cross terms of `(Σs_i)²`; it never accepts a vector of private shares or
+constructs the aggregate secret. The calling protocol authenticates owners,
+rejects duplicates, binds source/target/session identities and prevents reuse.
+Arithmetic count checks alone do not establish those properties.
+
+For a separately sampled fresh lookup setup, use `finalize_lookup` and
+`BfvFreshLookupKey::prepare`. `apply_to` consumes this prepared key and a
+checked `BfvRawQuadraticAggregate`, applies one **unscaled** relin and performs
+no ordinary BFV scale-and-round. Key errors and ephemeral values must be
+independent of selector inputs, including indirect public-key/transcript seed
+dependencies. Ordinary `BfvQuadraticCiphertext` remains the scaled-input type.
+
+`client.partial_phase_to` writes only `c1*s_i`, without c0, decoding or privacy
+noise. The protocol must consume its opening authorization and add a complete
+wide-integer flood before releasing this phase. `client.try_embed_secret`
+checks and embeds only its own CBD1 target share as `s_i(X²)` for split-switch;
+it does not perform the subsequent even/odd ciphertext split.
+
 ## Exact multiplication and recovery
 
 Multiplication retains centered **integer** negacyclic component products before
@@ -124,6 +157,12 @@ law. Constructors check the codec conditions and sufficient fresh private
 recovery using the complete sampler support. They do not prove a security level,
 public encryption recovery or evaluated recovery. Include public-key noise,
 fixed-delta drift, all evaluation terms and every drop's rounding error.
+
+After an explicit scheme bridge in another owner's actual NTT table,
+`BfvModulusSwitch::try_from_parts` borrows that table and checked adjacent
+ordered bases to prepare the same rounded kernel without a second BFV context.
+The enclosing protocol retains the original request/secret authorization and
+accounts for component rounding and message-lift drift.
 
 ## Advanced explicit workflows
 

@@ -48,6 +48,28 @@ Level0 使用全部有序 primes；level l 丢弃最后 l 个。Context 拥有�
 存储 wrapper 检查完整长度，但实际 key、有序 basis、canonical ciphertext residues
 及 NTT 身份仍由调用者保证。
 
+## Collective 算术
+
+[collective](examples/collective.rs) 展示两个 owner 准备 native 公钥与两轮
+relinearization key，然后直接使用已有 evaluator；不会构造聚合秘密。
+`BgvCollectivePublicKey`、`BgvCollectiveSwitchingKey`、
+`BgvCollectiveAutomorphismKey` 和 `BgvCollectiveRelinearization` 各自拥有具体
+common-mask/basis setup，每方只提供自己的 share。首版要求精确 CBD1
+（`SparseTernary`）share 与 CBD21 error；一般单方 API 仍使用原配置分布。
+
+公开 contribution 只导出后端拥有格式的规范 residue。调用方认证 context、role、
+source/target identity 与 roster 后，再经对应 setup 导入。Accumulator 检查具体
+setup 实例和轮次，重复、缺失 owner 由协议拒绝。两轮私有 state 借用本方 client、不可克隆，在消费或
+丢弃时擦除 CBD1 ephemeral；第二轮绑定准确冻结的第一轮结果。
+Finalize 消费公开聚合，直接生成已有 native role key，不保留 setup workspace；实际
+gadget weights 和 columns 不公开。
+
+`BgvSeededInput` 聚合 centered input bodies，并只插入一次 common mask。
+`BgvClient::partial_phase_to` 仅写 `c1*s_i`，不含 c0 或 privacy noise。这些是算术
+原语；独立 common seed、单次 policy、完整 roster、privacy flooding 和噪声/安全
+认证由协议负责。数值 input seed 不得依赖 selection 公钥或 fresh lookup key 的
+bytes/digest。
+
 ## 求值密钥与精确降模
 
 使用已有 `DecompositionConfig` 选择 radix 和 retained digits。每个 role key 拥有

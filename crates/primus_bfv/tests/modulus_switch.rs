@@ -386,3 +386,33 @@ fn invalid_levels_and_complete_shapes_fail_before_output_writes() {
     switch.switch_to(&input, &mut output);
     assert!(output.as_ref().iter().all(|&value| value == 0));
 }
+
+#[test]
+fn borrowed_parts_check_the_actual_table_and_exact_unique_prefix() {
+    let context = context(&SMALL_Q);
+    let source = context.codec(0).base_q().moduli();
+    let target = context.codec(1).base_q().moduli();
+    let values: Vec<_> = (0..2 * N)
+        .map(|i| i as u128 * u128::from(SMALL_Q[2]) + u128::from(SMALL_Q[2] / 2) + (i % 2) as u128)
+        .collect();
+    let input = encode_u128(&context, &values);
+    let mut output = context.new_ciphertext(1);
+    BfvModulusSwitch::try_from_parts(context.table(), source, target)
+        .unwrap()
+        .switch_to(&input, &mut output);
+    let expected: Vec<_> = values
+        .iter()
+        .map(|&x| (x + u128::from(SMALL_Q[2] / 2)) / u128::from(SMALL_Q[2]))
+        .collect();
+    let actual = integer_components(&context, 1, &output);
+    assert_eq!(actual[0], expected[..N]);
+    assert_eq!(actual[1], expected[N..]);
+
+    assert!(BfvModulusSwitch::try_from_parts(context.table(), source, &[]).is_err());
+    assert!(BfvModulusSwitch::try_from_parts(context.table(), source, &source[..1]).is_err());
+    let reordered = [target[1], target[0]];
+    assert!(BfvModulusSwitch::try_from_parts(context.table(), source, &reordered).is_err());
+    let repeated = [source[0], source[0]];
+    let repeated_table = primus_ntt::U64DcrtTable::new(PolyLength::new(N), &repeated).unwrap();
+    assert!(BfvModulusSwitch::try_from_parts(&repeated_table, &repeated, &repeated[..1]).is_err());
+}

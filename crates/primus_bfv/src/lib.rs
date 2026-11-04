@@ -62,7 +62,7 @@ pub use evaluation_key::{
     BfvRelinearizationKey, BfvRelinearizer,
 };
 pub use evaluator::BfvEvaluator;
-pub use modulus_switch::BfvModulusSwitch;
+pub use modulus_switch::{BfvModulusSwitch, BfvModulusSwitchError};
 pub use multiplication::BfvMultiplication;
 pub use multiply::{BfvMultiplier, BfvMultiplyError};
 pub use parameters::{BfvParameters, BfvParametersError};
@@ -71,3 +71,10 @@ pub use public_key::{BfvPublicKey, BfvPublicKeyEncryptor};
 pub use quadratic::BfvQuadraticCiphertext;
 pub use secret_key::BfvSecretKeyContext;
 pub use workspace::BfvDecryptWorkspace;
+
+pub use evaluation_key::{
+    BfvCollectiveAggregate, BfvCollectiveAutomorphismKey, BfvCollectiveContribution,
+    BfvCollectiveError, BfvCollectivePublicKey, BfvCollectiveRelinearization,
+    BfvCollectiveRelinearizationRound1, BfvCollectiveRelinearizationState,
+    BfvCollectiveSwitchingKey, BfvFreshLookup, BfvFreshLookupKey, BfvRawQuadraticAggregate,
+};

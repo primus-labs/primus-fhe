@@ -7,7 +7,7 @@ use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
-use primus_poly::Polynomial;
+use primus_poly::{DcrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -101,9 +101,14 @@ fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
     let mut rotated1 = context.new_ciphertext(1);
     let mut switched1 = context.new_ciphertext(1);
     let mut reduced2 = context.new_ciphertext(2);
+    let mut partial_phase = DcrtPolynomial(vec![0; context.rns_poly_len(0)]);
     ALLOCATIONS.with(|count| count.set(0));
     ACTIVE.with(|enabled| enabled.set(true));
     client.encrypt_to(&input, &mut ciphertext, &mut rng);
+    client
+        .partial_phase_to(&ciphertext, 0, &mut partial_phase)
+        .unwrap();
+    std::hint::black_box(&partial_phase);
     client.decrypt_to(&ciphertext, 0, &mut output);
     encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
     client.decrypt_to(&ciphertext, 0, &mut output);

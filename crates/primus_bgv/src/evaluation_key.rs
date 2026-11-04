@@ -110,6 +110,16 @@ impl NativeEvaluationKey {
         level: usize,
         config: DecompositionConfig,
     ) -> Result<Self, BgvEvaluationKeyError> {
+        let mut key = Self::prepare_metadata(context, level, config)?;
+        key.columns = vec![0; key.size.rns_glev_len()];
+        Ok(key)
+    }
+
+    fn prepare_metadata(
+        context: &BgvContext,
+        level: usize,
+        config: DecompositionConfig,
+    ) -> Result<Self, BgvEvaluationKeyError> {
         validate_level(context, level)?;
         let base = context.base_q(level);
         let basis = BigUintApproxSignedBasis::try_new(
@@ -135,7 +145,7 @@ impl NativeEvaluationKey {
             moduli: base.moduli_values().to_vec(),
             size,
             basis,
-            columns: vec![0; size.rns_glev_len()],
+            columns: Vec::new(),
         })
     }
 
@@ -198,7 +208,7 @@ pub struct BgvRelinearizationKey {
 impl BgvRelinearizationKey {
     /// Returns the level for which these columns were generated.
     #[must_use]
-    pub(crate) fn level(&self) -> usize {
+    pub fn level(&self) -> usize {
         self.key.level
     }
 }
@@ -211,7 +221,22 @@ pub struct BgvKeySwitchingKey {
 /// Public p-scaled columns encrypting σ(s) under s for one odd automorphism.
 pub struct BgvAutomorphismKey {
     key: NativeEvaluationKey,
+    exponent: usize,
     permutation: NttAutomorphismPermutation,
+}
+
+impl BgvAutomorphismKey {
+    /// Returns the native level (the number of removed tail primes).
+    #[must_use]
+    pub fn level(&self) -> usize {
+        self.key.level
+    }
+
+    /// Returns the odd exponent in `X -> X^exponent`.
+    #[must_use]
+    pub fn exponent(&self) -> usize {
+        self.exponent
+    }
 }
 
 impl BgvClient<'_> {
@@ -281,6 +306,7 @@ impl BgvClient<'_> {
         }
         Ok(BgvAutomorphismKey {
             key: key.encrypt(self, &transformed, rng),
+            exponent,
             permutation,
         })
     }
@@ -665,3 +691,6 @@ fn validate_numeric_context(
 
 #[cfg(test)]
 mod tests;
+
+mod collective;
+pub use collective::*;

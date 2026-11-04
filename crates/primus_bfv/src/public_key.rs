@@ -18,6 +18,18 @@ pub struct BfvPublicKey {
 }
 
 impl BfvPublicKey {
+    /// Canonical native public zero-encryption payload `[c0,c1]` for authenticated transport or binding.
+    #[must_use]
+    pub fn as_residues(&self) -> &[u64] {
+        self.ciphertext.as_ref()
+    }
+
+    /// Borrows the public native zero encryption, with no private secret or evaluation columns.
+    #[must_use]
+    pub fn as_ciphertext(&self) -> BfvCiphertext<&[u64]> {
+        BfvCiphertext::new(self.ciphertext.as_ref())
+    }
+
     /// Generates a native public key using an already checked private binding.
     /// Allocation is confined to persistent key storage and its basis metadata.
     #[must_use]
@@ -32,6 +44,14 @@ impl BfvPublicKey {
             ciphertext,
             size: parameters.size(),
             moduli: parameters.codec().moduli_values().to_vec(),
+        }
+    }
+
+    pub(crate) fn from_collective(context: &crate::BfvContext, coefficients: Vec<u64>) -> Self {
+        Self {
+            ciphertext: BfvCiphertext::new(coefficients),
+            size: context.parameters().size(),
+            moduli: context.parameters().codec().moduli_values().to_vec(),
         }
     }
 

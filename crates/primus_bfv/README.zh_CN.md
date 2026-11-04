@@ -80,6 +80,37 @@ Prepared 构造器接收 `(&context,&key)`，从 key 推导适用 level；key ge
 radix 余位。[多级系数](examples/leveled_coefficients.rs)和
 [多级槽](examples/leveled_slots.rs)组合演示乘法、square、旋转、Alice→Bob 换钥及两次降模。
 
+## Collective 密钥与一次性 raw lookup
+
+`BfvCollectivePublicKey`、`BfvCollectiveSwitchingKey` 和
+`BfvCollectiveAutomorphismKey` 的每次 `contribute` 只接收本 owner 的个别 share。
+`aggregate(expected)` 准备公共累加器，`add` 核对实际本地 setup 实例和数量，
+`finalize` 消耗完整聚合并产出现有 native 角色密钥。传输使用 `common_mask`、
+`as_residues` 和 checked `try_import_contribution`；不公开私有 key columns。
+首版要求精确 CBD1 shares、CBD21 errors；导入秘密的分布 metadata 不证明系数确实为 CBD1。
+
+`BfvCollectiveRelinearization::start` 返回公共第一轮消息及不可 Clone、会擦除的私有 state。
+用 `freeze_round1` 冻结完整首轮聚合，再通过 `round2` 消耗每份 state。
+冻结结果的第二轮累加器要求相同 roster 数量。Finalize 包含 `(Σs_i)²` 的全部交叉项；
+接口不接收私有 shares 向量，也不构造聚合秘密。调用协议负责认证 owner、拒绝重复、
+绑定 source/target/session 身份并防止复用；算术数量检查不能建立这些属性。
+
+独立采样的 fresh lookup setup 使用 `finalize_lookup` 和 `BfvFreshLookupKey::prepare`。
+`apply_to` 消耗 prepared key 及 checked `BfvRawQuadraticAggregate`，只执行一次
+**unscaled** relin，不执行普通 BFV scale-and-round。其 key errors/ephemeral
+必须独立于 selector 输入，包括经公钥或 transcript seed 间接引入的依赖。
+普通 `BfvQuadraticCiphertext` 仍只表示已缩放输入。
+
+`client.partial_phase_to` 只计算 `c1*s_i`，不含 c0、decode 或隐私 noise。
+协议必须先消耗 opening 授权并加入完整宽整数 flood，才能发布该 phase。
+`client.try_embed_secret` 检查并只嵌入自己的 CBD1 目标 share 为 `s_i(X²)`，
+供 split-switch 使用；它不执行后续密文 even/odd 分离。
+
+在其它 owner 的实际 NTT table 中完成显式方案 bridge 后，可用
+`BfvModulusSwitch::try_from_parts` 借用同一 table 和校验过的相邻有序 basis，
+准备相同 rounded 内核，避免重建第二份 BFV context。外围协议须保留原始请求/secret
+授权，并计入 component rounding 和 message-lift drift。
+
 ## 精确乘法与恢复
 
 乘法先保留 centered **整数** negacyclic 组件乘积，再精确计算

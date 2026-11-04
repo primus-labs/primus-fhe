@@ -53,6 +53,33 @@ single full-Q secret is borrowed by prefix. Level selection never changes N.
 Storage wrappers check complete lengths but do not certify actual key, ordered
 basis, canonical ciphertext residues or NTT identity; callers maintain them.
 
+## Collective arithmetic
+
+[collective](examples/collective.rs) demonstrates two owners preparing a native
+public key and two-round relinearization key, then using the existing evaluator.
+No aggregate secret is constructed. `BgvCollectivePublicKey`,
+`BgvCollectiveSwitchingKey`, `BgvCollectiveAutomorphismKey` and
+`BgvCollectiveRelinearization` own concrete common-mask/basis setup. Each owner
+contributes only its share. The initial family requires exact CBD1
+(`SparseTernary`) shares and CBD21 errors; existing general single-owner APIs keep
+their configured distributions.
+
+Public contributions export opaque canonical residues; import through the exact
+setup after authenticating context, role, source/target identity and roster.
+Accumulators bind setup instances and rounds, while callers reject duplicate or
+missing owners. Two-round state borrows its owner client and is non-cloneable;
+consuming or dropping it erases its private CBD1 ephemeral. The second round binds the
+exact frozen first-round result. Finalization consumes the sum and returns the
+existing native role key, retaining no setup workspace. Actual gadget weights and
+columns remain private.
+
+`BgvSeededInput` adds centered input bodies and inserts one common mask.
+`BgvClient::partial_phase_to` writes only `c1*s_i`, without c0 or privacy noise;
+these are arithmetic building blocks, not an authenticated opening protocol.
+Callers own independent common-seed derivation, single-use policy, full-roster
+checks, privacy flooding and noise/security certification. Numeric input seeds
+must not depend on selection public-key or fresh lookup-key bytes/digests.
+
 ## Evaluation keys and exact prime drop
 
 Use the existing `DecompositionConfig` to select radix and retained digits. Each

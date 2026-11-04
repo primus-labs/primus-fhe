@@ -19,6 +19,12 @@ pub struct BfvClient<'a> {
 }
 
 impl<'a> BfvClient<'a> {
+    /// Shared numerical resources borrowed by this individual owner.
+    #[must_use]
+    pub fn context(&self) -> &'a BfvContext {
+        self.context
+    }
+
     /// Samples one coefficient secret and transforms it once into the full basis.
     /// The temporary coefficient secret is securely erased when it is dropped.
     #[must_use]

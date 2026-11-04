@@ -18,6 +18,12 @@ pub struct BgvClient<'a> {
 }
 
 impl<'a> BgvClient<'a> {
+    /// Borrows the exact shared context without exposing any secret material.
+    #[must_use]
+    pub fn context(&self) -> &'a BgvContext {
+        self.context
+    }
+
     /// Samples the complete coefficient secret and transforms it once into Q.
     /// Temporary coefficient secret storage is securely erased on drop.
     #[must_use]

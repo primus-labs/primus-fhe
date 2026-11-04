@@ -39,6 +39,12 @@ pub use evaluation_key::{
     BgvAutomorphism, BgvAutomorphismKey, BgvEvaluationKeyError, BgvKeySwitcher, BgvKeySwitchingKey,
     BgvRelinearizationKey, BgvRelinearizer,
 };
+pub use evaluation_key::{
+    BgvCollectiveAggregate, BgvCollectiveAutomorphismKey, BgvCollectiveContribution,
+    BgvCollectiveError, BgvCollectivePublicKey, BgvCollectiveRelinearization,
+    BgvCollectiveRelinearizationState, BgvCollectiveRoundOne, BgvCollectiveSwitchingKey,
+    BgvSeededInput,
+};
 pub use evaluator::BgvEvaluator;
 pub use modulus_switch::BgvModulusSwitch;
 pub use multiplication::BgvMultiplication;

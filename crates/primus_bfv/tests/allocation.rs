@@ -412,3 +412,56 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
     }
     assert_eq!(output.as_ref(), expected);
 }
+
+#[test]
+fn collective_partial_phase_and_consuming_prepared_lookup_allocate_nothing() {
+    use primus_bfv::{BfvCollectiveRelinearization, BfvRawQuadraticAggregate};
+    use primus_distr::ErrorDistribution;
+    use primus_poly::DcrtPolynomial;
+    let context = BfvContext::try_new(
+        BfvParameters::try_with_error_distribution(
+            PolyLength::new(32),
+            BarrettModulus::new(257),
+            BarrettModulus::new((1 << 61) - 1),
+            &[1_125_899_906_248_961, 1_125_899_906_051_329].map(BarrettModulus::new),
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 21 },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut rng = StdRng::seed_from_u64(0x0015_bf03);
+    let client = BfvClient::generate(&context, &mut rng);
+    let plan = BfvCollectiveRelinearization::try_new(
+        &context,
+        0,
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(10),
+            level_count: None,
+        },
+        &mut rng,
+    )
+    .unwrap();
+    let (message, state) = plan.start(&client, &mut rng).unwrap();
+    let mut sum = plan.aggregate(1).unwrap();
+    sum.add(&message).unwrap();
+    let round1 = plan.freeze_round1(sum).unwrap();
+    let message = state.round2(&round1, &mut rng).unwrap();
+    let mut sum = round1.aggregate(1).unwrap();
+    sum.add(&message).unwrap();
+    let lookup = round1
+        .finalize_lookup(sum)
+        .unwrap()
+        .prepare(&context)
+        .unwrap();
+    let len = context.rns_poly_len(0);
+    let tensor = BfvRawQuadraticAggregate::try_new(&context, 0, vec![1; 3 * len]).unwrap();
+    let mut output = context.new_ciphertext(0);
+    let mut partial = DcrtPolynomial(vec![0; len]);
+    let (result, count) = observe(|| lookup.apply_to(tensor, &mut output));
+    result.unwrap();
+    assert_eq!(count, 0);
+    let (result, count) = observe(|| client.partial_phase_to(&output, 0, &mut partial));
+    result.unwrap();
+    assert_eq!(count, 0);
+}
