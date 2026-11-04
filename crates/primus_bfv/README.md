@@ -134,9 +134,9 @@ wide-integer flood before releasing this phase. `client.try_embed_secret`
 checks and embeds only its own CBD1 target share as `s_i(X²)` for split-switch;
 it does not perform the subsequent even/odd ciphertext split.
 
-## Exact multiplication and recovery
+## Multiplication backends and recovery
 
-Multiplication retains centered **integer** negacyclic component products before
+The default `Exact` backend retains centered **integer** negacyclic component products before
 exactly computing `round(t*T_i/Q) mod Q`. The RNS NTT implementation prepares an
 auxiliary basis P satisfying `P>N*Q`; reducing the tensor modulo Q before scaling
 would lose required integer multiples. It uses exact CRT and quotient recovery,
@@ -151,6 +151,19 @@ intermediate is needed. Construction checks capacity, coprimality and NTT
 compatibility; actual primality of supplied primes remains a caller precondition.
 The [evaluation contract](../../guides/development/bfv-evaluation.md) derives
 integer lift bounds, exact quotient recovery and the complete phase error.
+
+For the optimized backend, keep the same request and choose
+`BfvMultiplication::try_with_backend(context,key,BfvMultiplicationBackend::HpsPOverQ)`.
+It performs one-sided P/Q prescaling, a QP tensor and exact t/P scale-and-round;
+its bounded residual and centered wrap are part of the evaluated error.
+`try_with_backend_and_auxiliary_moduli` selects an explicit P under that backend's
+own condition (`P>2*#Q`, without `P>NQ`). Automatic P reserves a bound for the
+prescaling residual using the sampler's supported secret magnitude; it does not
+certify the complete circuit. Only the selected backend owns P/tables/scratch,
+and `backend()`/`auxiliary_moduli()` describe that resource. Both backends reuse
+the same native relinearization and allocate nothing online. The default stays
+`Exact`; see the [algorithm and error contract](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
+and [complete-request comparison](../../guides/performance/bfv-hps-over-q.md).
 
 The codec recovers the exact message **within its recovery bound**. It is not an
 exact-rounding oracle for arbitrary phases. For `delta*m+e`, a sufficient

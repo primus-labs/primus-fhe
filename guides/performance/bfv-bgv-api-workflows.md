@@ -14,8 +14,9 @@ level，拥有并复用中间 quadratic 与求值 scratch，提供 `multiply_to`
 高级分阶段操作继续可用；独立 schoolbook、raw 阶段和密钥列诊断留在私有测试，
 不为基准提供额外默认 public API。
 
-BFV 的自动 P 只准备计算资源：在 setup 中选择满足 NTT 条件且与 Q 互素的 60-bit
-素数，精确检查 P>NQ；不改变密文、secret 或 key 的模数。下面的对照保留原显式 P，
+BFV 默认 Exact 后端的自动 P 只准备计算资源：在 setup 中选择满足 NTT 条件且与 Q 互素的 60-bit
+素数，精确检查 P>NQ；可选 HPSPOVERQ 的独立辅助基/误差条件见[专题](bfv-hps-over-q.md)。该选择
+不改变密文、secret 或 key 的模数。下面的对照保留原显式 P，
 隔离普通请求组合的变化；不据此声称自动 prime search 的 setup 最优。
 
 ## 完整 fresh 槽请求

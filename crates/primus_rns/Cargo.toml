@@ -14,6 +14,7 @@ thiserror = { workspace = true }
 itertools = { workspace = true }
 
 [dev-dependencies]
+dashu-int = { workspace = true }
 criterion = { workspace = true }
 
 [features]

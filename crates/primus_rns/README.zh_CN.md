@@ -16,6 +16,8 @@
 | `RNSBase<T, M>` | 非空、模数两两互素的 RNS 基及其 CRT 预计算 |
 | `BaseConverter<T, M>` | 在两个 RNS 基之间执行 fast 或 corrected 转换的预计算 |
 | `CorrectedConversionWorkspace<T>` | corrected 批量转换使用的可复用 workspace |
+| `HpsRns` | u64 HPS 的精确 centered 扩展、P/Q 预缩放和 t/P 舍入预计算 |
+| `HpsRnsWorkspace` | HPS 的复用 batch scratch，包括精确边界 fallback |
 | `HybridRNSPartitioning` | 在 modulus chain 各层之间共享的固定 full-`Q` 分区规则 |
 | `HybridRNS<T, M>` | 一个 active Hybrid-RNS level 的基与预计算 |
 | `HybridRNSPartition<T, M>` | 一个连续 `Q` 分区及其 approximate ModUp converter |
@@ -119,3 +121,14 @@ cargo bench -p primus_rns --bench decompose
 ## 许可证
 
 本 crate 可由你选择使用 [Apache License, Version 2.0](../../LICENSE-APACHE-2.0) 或 [MIT License](../../LICENSE-MIT)。
+
+## HPS 系数运算
+
+`HpsRns::try_new(&base_q,&base_p,t)` 为小于 `2^62` 的互素奇 u64 bases
+准备常量；不可变 handle 共享已有 CRT 预计算。一次准备 `workspace(value_count)`，
+复用 modulus-major batch scratch，在线不分配。`expand_q_to_p`、`expand_p_to_q`
+选择精确 centered 代表：浮点修正经区间认证，临界点走精确多字整数 fallback。
+`scale_q_to_p` 使用 HPS 的有界单侧 P/Q residual 规则，不是 nearest rounding。
+`scale_and_round` 从一致的 Q/P residues 精确计算 `nearest(t*z/P) mod Q`。
+这些运算不认证 NTT primes 或 BFV 电路噪声；[BFV 契约](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
+说明实际消费算法及辅助基/误差条件（English）。

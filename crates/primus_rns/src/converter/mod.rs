@@ -63,9 +63,9 @@ enum BaseConversionKernel<T> {
 #[derive(Clone)]
 pub struct BaseConverter<T: FheUint, M: FieldContext<T>> {
     /// Source basis for incoming residues.
-    input_base: RNSBase<T, M>,
+    pub(crate) input_base: RNSBase<T, M>,
     /// Destination basis for converted residues.
-    output_base: RNSBase<T, M>,
+    pub(crate) output_base: RNSBase<T, M>,
     kernel: BaseConversionKernel<T>,
 }
 

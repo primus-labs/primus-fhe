@@ -31,7 +31,9 @@ pub use residues::Residues;
 
 mod base;
 mod converter;
+pub mod hps;
 pub mod hybrid;
+pub use hps::{HpsRns, HpsRnsWorkspace};
 
 pub use error::RnsError;
 

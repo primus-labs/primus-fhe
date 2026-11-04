@@ -16,6 +16,8 @@ English | [简体中文](README.zh_CN.md)
 | `RNSBase<T, M>` | A non-empty, pairwise-coprime modulus basis and its CRT precomputations |
 | `BaseConverter<T, M>` | Precomputed fast or corrected conversion between two RNS bases |
 | `CorrectedConversionWorkspace<T>` | Reusable workspace for corrected batched conversion |
+| `HpsRns` | u64 HPS exact centered expansion, P/Q prescaling and t/P rounding precomputation |
+| `HpsRnsWorkspace` | Reusable HPS batch scratch, including exact boundary fallback |
 | `HybridRNSPartitioning` | Fixed full-`Q` partition rule shared across modulus-chain levels |
 | `HybridRNS<T, M>` | Bases and precomputations for one active hybrid-RNS level |
 | `HybridRNSPartition<T, M>` | One contiguous `Q` partition and its approximate ModUp converter |
@@ -119,3 +121,16 @@ cargo bench -p primus_rns --bench decompose
 ## License
 
 Licensed under either the [Apache License, Version 2.0](../../LICENSE-APACHE-2.0) or the [MIT License](../../LICENSE-MIT), at your option.
+
+## HPS coefficient operations
+
+`HpsRns::try_new(&base_q,&base_p,t)` prepares disjoint odd u64 bases below
+`2^62`; its immutable handles share existing CRT precomputation. Prepare one
+`workspace(value_count)` and reuse it for allocation-free modulus-major batches.
+`expand_q_to_p` and `expand_p_to_q` select exact centered representatives, with
+a certified floating point correction and exact multiword boundary fallback.
+`scale_q_to_p` uses HPS's bounded one-sided P/Q residual rule; it is not nearest
+rounding. `scale_and_round` computes exact `nearest(t*z/P) mod Q` from coherent
+Q/P residues. These operations do not certify NTT primes or BFV circuit noise;
+the [BFV contract](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
+records the consuming algorithm and auxiliary-basis/error conditions.

@@ -115,9 +115,9 @@ share owner。另一 context 的参数相同不能证明其实际 transform owne
 准备相同 rounded 内核，避免重建第二份 BFV context。外围协议须保留原始请求/secret
 授权，并计入 component rounding 和 message-lift drift。
 
-## 精确乘法与恢复
+## 乘法后端与恢复
 
-乘法先保留 centered **整数** negacyclic 组件乘积，再精确计算
+默认 `Exact` 后端先保留 centered **整数** negacyclic 组件乘积，再精确计算
 `round(t*T_i/Q) mod Q`。RNS NTT 实现准备满足 `P>N*Q` 的辅助基 P；
 若先把 tensor 模 Q，就会丢失缩放所需的整数倍数。实现采用精确 CRT 和商恢复，
 不用浮点舍入。独立整数 schoolbook 算法和 raw tensor 检查保留为私有数学验证，
@@ -128,6 +128,17 @@ share owner。另一 context 的参数相同不能证明其实际 transform owne
 `BfvRelinearizer`。构造器检查容量、互素及 NTT 兼容性；自选 prime 的素性仍是
 调用方前提。[求值契约](../../guides/development/bfv-evaluation.md)（English）
 推导整数 lift 界限、精确商恢复和完整 phase 误差。
+
+优化后端沿用同一请求接口，通过
+`BfvMultiplication::try_with_backend(context,key,BfvMultiplicationBackend::HpsPOverQ)`
+选择。它执行单侧 P/Q 预缩放、QP tensor 和精确 t/P scale-and-round；
+有界 residual 与 centered wrap 都计入求值误差。
+`try_with_backend_and_auxiliary_moduli` 按该后端条件指定 P（`P>2*#Q`，
+不要求 `P>NQ`）。自动 P 用 sampler 的秘密幅度支撑为预缩放 residual 预留界限，
+不认证完整电路。仅选中的后端拥有 P/tables/scratch，`backend()` 和
+`auxiliary_moduli()` 描述实际资源。两后端复用同一 native relin，在线均不分配。
+默认仍为 `Exact`；详见[算法与误差契约](../../guides/development/bfv-evaluation.md#hpspoverq-backend)
+和[完整请求对照](../../guides/performance/bfv-hps-over-q.md)（English）。
 
 Codec **在恢复界限内得到精确消息**，不是任意 phase 的精确舍入 oracle。
 对于 `delta*m+e`，充分条件为 `abs(t*e-(Q%t)*m)/Q+k/gamma<1/2`，k 为 Q 的 prime 数。

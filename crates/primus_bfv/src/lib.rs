@@ -37,6 +37,10 @@
 //! encrypted automorphisms at each prepared level. Ordinary requests use
 //! [`BfvMultiplication`] to prepare multiplication and relinearization together,
 //! deriving the level from the key and reusing all intermediate storage.
+//! [`BfvMultiplication::try_with_backend`] additionally selects HPSPOVERQ,
+//! whose one-sided P/Q scaling has an explicit bounded residual and centered
+//! wrap correction. Its computation-only basis follows its own arithmetic
+//! budget; it does not inherit the exact backend's P>NQ requirement.
 
 #![deny(missing_docs)]
 
@@ -63,7 +67,7 @@ pub use evaluation_key::{
 };
 pub use evaluator::BfvEvaluator;
 pub use modulus_switch::{BfvModulusSwitch, BfvModulusSwitchError};
-pub use multiplication::BfvMultiplication;
+pub use multiplication::{BfvMultiplication, BfvMultiplicationBackend};
 pub use multiply::{BfvMultiplier, BfvMultiplyError};
 pub use parameters::{BfvParameters, BfvParametersError};
 pub use primus_encoding::PlaintextEmbedding;

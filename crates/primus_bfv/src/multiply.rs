@@ -1,3 +1,5 @@
+pub(crate) mod hps;
+
 #[cfg(test)]
 mod reference;
 
@@ -12,7 +14,7 @@ use primus_rns::{RNSBase, Residues, RnsError};
 
 use crate::{BfvCiphertext, BfvContext, BfvQuadraticCiphertext};
 
-/// Invalid level or computation-only basis for exact BFV multiplication.
+/// Invalid level or computation-only basis for ordinary BFV multiplication.
 #[derive(Debug, thiserror::Error)]
 pub enum BfvMultiplyError {
     /// The requested ciphertext level was not prepared.
@@ -42,6 +44,9 @@ pub enum BfvMultiplyError {
     /// The auxiliary product must be strictly greater than NQ.
     #[error("BFV multiplication auxiliary product must be greater than NQ")]
     InsufficientAuxiliaryProduct,
+    /// HPS's auxiliary product must exceed twice the ciphertext-prime count.
+    #[error("BFV HPS multiplication auxiliary product must exceed twice the Q prime count")]
+    InsufficientHpsAuxiliaryProduct,
     /// No further NTT primes were found in the automatic 60-bit search range.
     #[error("BFV multiplication could not prepare a sufficient automatic auxiliary basis")]
     AuxiliarySearchExhausted,
