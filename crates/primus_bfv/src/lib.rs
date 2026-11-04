@@ -62,8 +62,8 @@ pub use ciphertext::BfvCiphertext;
 pub use client::BfvClient;
 pub use context::{BfvContext, BfvContextError};
 pub use evaluation_key::{
-    BfvAutomorphism, BfvAutomorphismKey, BfvEvaluationKeyError, BfvKeySwitcher, BfvKeySwitchingKey,
-    BfvRelinearizationKey, BfvRelinearizer,
+    BfvAutomorphism, BfvAutomorphismKey, BfvEvaluationKeyConfig, BfvEvaluationKeyError,
+    BfvKeySwitcher, BfvKeySwitchingKey, BfvRelinearizationKey, BfvRelinearizer,
 };
 pub use evaluator::BfvEvaluator;
 pub use modulus_switch::{BfvModulusSwitch, BfvModulusSwitchError};

@@ -1,5 +1,5 @@
 //! One public-key multiplication: (3+2X)(5+X) = 15+13X+2X².
-use primus_bgv::{BgvClient, BgvContext, BgvMultiplication, BgvParameters};
+use primus_bgv::{BgvClient, BgvContext, BgvEvaluationKeyConfig, BgvMultiplication, BgvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -26,14 +26,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = BgvClient::generate(&context, &mut rng);
     let public_key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
-    let relin_key = client.relinearization_key(
-        0,
+    let config: BgvEvaluationKeyConfig = if std::env::args().any(|arg| arg == "--hybrid") {
+        context
+            .hybrid_key_parameters(0, moduli.len(), &[1_152_921_504_606_830_593])?
+            .into()
+    } else {
         DecompositionConfig {
             log_basis: DecompositionBaseLog::new(8),
             level_count: None,
-        },
-        &mut rng,
-    )?;
+        }
+        .into()
+    };
+    let relin_key = client.relinearization_key(0, config, &mut rng)?;
     let mut multiplication = BgvMultiplication::try_new(&context, &relin_key)?;
     // Reuse setup and multiplication scratch across two ordinary requests.
     let mut a = context.new_plaintext();

@@ -1,7 +1,8 @@
 //! Public encryption and one BFV coefficient multiplication.
+//! Optional native key backend: append `-- --hybrid`.
 //! Run: cargo run -p primus_bfv --example coefficients
 
-use primus_bfv::{BfvClient, BfvContext, BfvMultiplication, BfvParameters};
+use primus_bfv::{BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvMultiplication, BfvParameters};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -24,14 +25,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = BfvClient::generate(&context, &mut rng);
     let public_key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
-    let relin_key = client.relinearization_key(
-        0,
+    let hybrid = match std::env::args().nth(1).as_deref() {
+        None => false,
+        Some("--hybrid") => true,
+        Some(_) => return Err("expected optional --hybrid".into()),
+    };
+    let config: BfvEvaluationKeyConfig = if hybrid {
+        context
+            .hybrid_key_parameters(0, context.codec(0).moduli_count(), &[1_099_511_626_049])?
+            .into()
+    } else {
         DecompositionConfig {
             log_basis: DecompositionBaseLog::new(8),
             level_count: None,
-        },
-        &mut rng,
-    )?;
+        }
+        .into()
+    };
+    let relin_key = client.relinearization_key(0, config, &mut rng)?;
     let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
 
     // Setup and the multiplication/output owner are reused across requests.

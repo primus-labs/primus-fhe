@@ -178,8 +178,8 @@ demonstration/benchmark parameters do not certify security or arbitrary depth.
 
 ## Native unscaled gadget keys
 
-At each actual modulus level, role-specific keys encrypt `g_j*h+e_j` under the
-destination secret. Here h is s² for relinearization, the source secret for
+At each actual modulus level, the signed-radix backend's role-specific keys
+encrypt `g_j*h+e_j` under the destination secret. Here h is s² for relinearization, the source secret for
 key switching, or the transformed secret for automorphisms. BFV uses ordinary
 unscaled key noise. There is no BGV p^-1 preprocessing or p-scaled key column.
 
@@ -203,6 +203,21 @@ as does `BfvMultiplication`. The context must have prepared that level and match
 the key's N, t and ordered Q. Key generation, ordinary linear evaluation,
 decryption and prime drop still select their levels explicitly; ciphertext
 storage does not carry the metadata needed to infer them.
+
+For Hybrid keys, prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)`
+and pass its shared `Arc` to the same role-key constructors. QP columns have
+phase `P*projector_j*h+e_j`; the native product divides by key P with exact
+centered coefficient corrections. This removes the Hybrid decomposition's P,
+not BFV's Delta, and applies no ordinary multiplication t/Q scale. Relinearization
+still returns `[t0+P0,t1+P1]` under s. Key P changes the evaluation-key RLWE domain
+and is independent of Exact/HPS multiplication's computation-only basis.
+
+The [native Hybrid contract](native-hybrid-keys.md) gives the actual weights,
+ModUp digits, exact correction/error identity, source-highest-Q secret extension
+and QP collective S² contributions. Fresh lookup uses its separately sampled,
+consuming raw-key role and one unscaled relin; ordinary multiplication backends
+remain separate. Full lookup/noise/flood/security conditions must be renewed
+when changing the key domain or its error budget.
 
 ## Levels, slots and resources
 

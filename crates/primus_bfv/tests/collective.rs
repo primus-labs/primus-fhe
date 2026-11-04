@@ -79,105 +79,122 @@ fn decode(context: &BfvContext, mut phase: Vec<u64>, level: usize) -> Vec<u64> {
 #[test]
 fn collective_keys_feed_existing_native_consumers_without_aggregate_secret() {
     let context = context(N);
-    let mut rng = StdRng::seed_from_u64(0x15bf00);
-    let clients: Vec<_> = (0..3)
-        .map(|_| BfvClient::generate(&context, &mut rng))
-        .collect();
-    let target: Vec<_> = (0..3)
-        .map(|_| BfvClient::generate(&context, &mut rng))
-        .collect();
-    let public = BfvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
-    let mut sum = public.aggregate(3).unwrap();
-    for client in &clients {
-        sum.add(&public.contribute(client, &mut rng).unwrap())
-            .unwrap();
-    }
-    let pk = public.finalize(sum).unwrap();
-    let mut encryptor = context.public_key_encryptor(&pk).unwrap();
-    let message: Vec<_> = (0..N).map(|i| (i % 7) as u64).collect();
-    let input = encryptor.encrypt(&Polynomial(&message), &mut rng);
-    assert_eq!(
-        decode(&context, phase(&context, &clients, &input, 0), 0),
-        message
-    );
-    let switching = BfvCollectiveSwitchingKey::try_new(&context, 0, config(), &mut rng).unwrap();
-    let mut sum = switching.aggregate(3).unwrap();
-    for (source, target) in clients.iter().zip(&target) {
-        sum.add(&switching.contribute(source, target, &mut rng).unwrap())
-            .unwrap();
-    }
-    let key = switching.finalize(sum).unwrap();
-    let mut evaluator = BfvKeySwitcher::try_new(&context, &key).unwrap();
-    let mut output = context.new_ciphertext(0);
-    evaluator.switch_to(&input, &mut output);
-    assert_eq!(
-        decode(&context, phase(&context, &target, &output, 0), 0),
-        message
-    );
-    let auto = BfvCollectiveAutomorphismKey::try_new(&context, 0, 5, config(), &mut rng).unwrap();
-    let mut sum = auto.aggregate(3).unwrap();
-    for client in &clients {
-        sum.add(&auto.contribute(client, &mut rng).unwrap())
-            .unwrap();
-    }
-    let key = auto.finalize(sum).unwrap();
-    BfvAutomorphism::try_new(&context, &key)
-        .unwrap()
-        .apply_to(&input, &mut output);
-    let mut expected = vec![0; N];
-    for (i, &value) in message.iter().enumerate() {
-        let exponent = i * 5;
-        expected[exponent % N] = if (exponent / N).is_multiple_of(2) {
-            value
+    for hybrid in [false, true] {
+        let config: BfvEvaluationKeyConfig = if hybrid {
+            context
+                .hybrid_key_parameters(
+                    0,
+                    2,
+                    &[1_152_921_504_606_830_593, 1_152_921_504_606_748_673],
+                )
+                .unwrap()
+                .into()
         } else {
-            (257 - value) % 257
+            config().into()
         };
-    }
-    assert_eq!(
-        decode(&context, phase(&context, &clients, &output, 0), 0),
-        expected
-    );
-    let plan = BfvCollectiveRelinearization::try_new(&context, 0, config(), &mut rng).unwrap();
-    let mut sum = plan.aggregate(3).unwrap();
-    let mut states = Vec::new();
-    for client in &clients {
-        let (message, state) = plan.start(client, &mut rng).unwrap();
-        sum.add(&message).unwrap();
-        states.push(state);
-    }
-    let round1 = plan.freeze_round1(sum).unwrap();
-    assert!(round1.aggregate(2).is_err());
-    let mut sum = round1.aggregate(3).unwrap();
-    for state in states {
-        sum.add(&state.round2(&round1, &mut rng).unwrap()).unwrap();
-    }
-    let key = round1.finalize(sum).unwrap();
-    let mut quadratic = context.new_quadratic_ciphertext(0);
-    quadratic.as_mut()[..input.as_ref().len()].copy_from_slice(input.as_ref());
-    BfvRelinearizer::try_new(&context, &key)
-        .unwrap()
-        .relinearize_to(&quadratic, &mut output);
-    assert_eq!(
-        decode(&context, phase(&context, &clients, &output, 0), 0),
-        message
-    );
-    let mut multiplication = BfvMultiplication::try_new(&context, &key).unwrap();
-    multiplication.square_to(&input, &mut output);
-    let mut expected = vec![0i64; N];
-    for (i, &a) in message.iter().enumerate() {
-        for (j, &b) in message.iter().enumerate() {
-            let term = (a * b) as i64;
-            expected[(i + j) % N] += if i + j < N { term } else { -term };
+        let mut rng = StdRng::seed_from_u64(0x15bf00);
+        let clients: Vec<_> = (0..3)
+            .map(|_| BfvClient::generate(&context, &mut rng))
+            .collect();
+        let target: Vec<_> = (0..3)
+            .map(|_| BfvClient::generate(&context, &mut rng))
+            .collect();
+        let public = BfvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
+        let mut sum = public.aggregate(3).unwrap();
+        for client in &clients {
+            sum.add(&public.contribute(client, &mut rng).unwrap())
+                .unwrap();
         }
+        let pk = public.finalize(sum).unwrap();
+        let mut encryptor = context.public_key_encryptor(&pk).unwrap();
+        let message: Vec<_> = (0..N).map(|i| (i % 7) as u64).collect();
+        let input = encryptor.encrypt(&Polynomial(&message), &mut rng);
+        assert_eq!(
+            decode(&context, phase(&context, &clients, &input, 0), 0),
+            message
+        );
+        let switching =
+            BfvCollectiveSwitchingKey::try_new(&context, 0, config.clone(), &mut rng).unwrap();
+        let mut sum = switching.aggregate(3).unwrap();
+        for (source, target) in clients.iter().zip(&target) {
+            sum.add(&switching.contribute(source, target, &mut rng).unwrap())
+                .unwrap();
+        }
+        let key = switching.finalize(sum).unwrap();
+        let mut evaluator = BfvKeySwitcher::try_new(&context, &key).unwrap();
+        let mut output = context.new_ciphertext(0);
+        evaluator.switch_to(&input, &mut output);
+        assert_eq!(
+            decode(&context, phase(&context, &target, &output, 0), 0),
+            message
+        );
+        let auto = BfvCollectiveAutomorphismKey::try_new(&context, 0, 5, config.clone(), &mut rng)
+            .unwrap();
+        let mut sum = auto.aggregate(3).unwrap();
+        for client in &clients {
+            sum.add(&auto.contribute(client, &mut rng).unwrap())
+                .unwrap();
+        }
+        let key = auto.finalize(sum).unwrap();
+        BfvAutomorphism::try_new(&context, &key)
+            .unwrap()
+            .apply_to(&input, &mut output);
+        let mut expected = vec![0; N];
+        for (i, &value) in message.iter().enumerate() {
+            let exponent = i * 5;
+            expected[exponent % N] = if (exponent / N).is_multiple_of(2) {
+                value
+            } else {
+                (257 - value) % 257
+            };
+        }
+        assert_eq!(
+            decode(&context, phase(&context, &clients, &output, 0), 0),
+            expected
+        );
+        let plan =
+            BfvCollectiveRelinearization::try_new(&context, 0, config.clone(), &mut rng).unwrap();
+        let mut sum = plan.aggregate(3).unwrap();
+        let mut states = Vec::new();
+        for client in &clients {
+            let (message, state) = plan.start(client, &mut rng).unwrap();
+            sum.add(&message).unwrap();
+            states.push(state);
+        }
+        let round1 = plan.freeze_round1(sum).unwrap();
+        assert!(round1.aggregate(2).is_err());
+        let mut sum = round1.aggregate(3).unwrap();
+        for state in states {
+            sum.add(&state.round2(&round1, &mut rng).unwrap()).unwrap();
+        }
+        let key = round1.finalize(sum).unwrap();
+        let mut quadratic = context.new_quadratic_ciphertext(0);
+        quadratic.as_mut()[..input.as_ref().len()].copy_from_slice(input.as_ref());
+        BfvRelinearizer::try_new(&context, &key)
+            .unwrap()
+            .relinearize_to(&quadratic, &mut output);
+        assert_eq!(
+            decode(&context, phase(&context, &clients, &output, 0), 0),
+            message
+        );
+        let mut multiplication = BfvMultiplication::try_new(&context, &key).unwrap();
+        multiplication.square_to(&input, &mut output);
+        let mut expected = vec![0i64; N];
+        for (i, &a) in message.iter().enumerate() {
+            for (j, &b) in message.iter().enumerate() {
+                let term = (a * b) as i64;
+                expected[(i + j) % N] += if i + j < N { term } else { -term };
+            }
+        }
+        let expected: Vec<_> = expected
+            .into_iter()
+            .map(|x| x.rem_euclid(257) as u64)
+            .collect();
+        assert_eq!(
+            decode(&context, phase(&context, &clients, &output, 0), 0),
+            expected
+        );
     }
-    let expected: Vec<_> = expected
-        .into_iter()
-        .map(|x| x.rem_euclid(257) as u64)
-        .collect();
-    assert_eq!(
-        decode(&context, phase(&context, &clients, &output, 0), 0),
-        expected
-    );
 }
 
 #[test]

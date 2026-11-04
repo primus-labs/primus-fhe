@@ -57,6 +57,31 @@ where
 
         let q_base = RNSBase::new(q_moduli)?;
         let p_base = RNSBase::new(p_moduli)?;
+        Self::from_bases(&q_base, &p_base, partitioning)
+    }
+
+    /// Prepares one active level while sharing existing immutable Q/P bases.
+    ///
+    /// The active Q must be the caller's actual ordered prefix of the full
+    /// basis. The partitioning fixes the full-chain maximum partition size.
+    ///
+    /// # Errors
+    /// Rejects an oversized active Q or incompatible combined bases.
+    pub fn from_bases(
+        q_base: &RNSBase<T, M>,
+        p_base: &RNSBase<T, M>,
+        partitioning: HybridRNSPartitioning,
+    ) -> Result<Self, RnsError> {
+        if q_base.moduli_count() > partitioning.full_q_moduli_count() {
+            return Err(RnsError::ActiveBaseTooLarge {
+                actual: q_base.moduli_count(),
+                maximum: partitioning.full_q_moduli_count(),
+            });
+        }
+        let q_moduli = q_base.moduli();
+        let p_moduli = p_base.moduli();
+        let q_base = q_base.clone();
+        let p_base = p_base.clone();
         let qp_base = q_base.extend_with(&p_base)?;
 
         let partition_moduli_count = partitioning.partition_moduli_count();

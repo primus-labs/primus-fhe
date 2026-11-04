@@ -1,5 +1,7 @@
+mod centered;
 mod corrected;
 mod fast;
+pub use centered::{CenteredBaseConverter, CenteredConversionWorkspace};
 pub use corrected::CorrectedConversionWorkspace;
 pub(crate) use fast::FastConversionLimb;
 
@@ -63,9 +65,9 @@ enum BaseConversionKernel<T> {
 #[derive(Clone)]
 pub struct BaseConverter<T: FheUint, M: FieldContext<T>> {
     /// Source basis for incoming residues.
-    pub(crate) input_base: RNSBase<T, M>,
+    input_base: RNSBase<T, M>,
     /// Destination basis for converted residues.
-    pub(crate) output_base: RNSBase<T, M>,
+    output_base: RNSBase<T, M>,
     kernel: BaseConversionKernel<T>,
 }
 

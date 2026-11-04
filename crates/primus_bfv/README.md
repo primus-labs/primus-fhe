@@ -90,11 +90,27 @@ and encrypted automorphisms. Their prepared constructors take `(&context,&key)`
 and derive the bound level. Key generation, unkeyed linear evaluation, prime drops
 and recovery still select their actual level explicitly. Generate a fresh key for
 every actual level used.
-BFV key columns have phase `g_j*h+e_j`; truncated decomposition residual and key
+Radix BFV key columns have phase `g_j*h+e_j`; truncated decomposition residual and key
 noise both consume recovery margin. The maximum digit count need not remove
 all radix remainder bits. The complete [leveled coefficient](examples/leveled_coefficients.rs)
 and [leveled slot](examples/leveled_slots.rs) examples combine multiplication,
 square, rotation, Alice→Bob switching and two drops.
+
+## Native Hybrid keys
+
+The default examples use signed-radix Q keys. Add `-- --hybrid` to the
+coefficient or slot command to select native partitioned QP keys. In code,
+prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)` once,
+then pass its cloned `Arc` to `relinearization_key`, `key_switching_key` or
+`automorphism_key`/row-key generation. The existing prepared operations and
+ciphertext types consume either backend. `BfvEvaluationKeyConfig` stores
+`Radix(DecompositionConfig)` or `Hybrid(Arc<NativeHybridParameters>)` explicitly.
+
+Key P enlarges the evaluation-key modulus to QP and needs its own security and
+complete-error budget. It is separate from BFV multiplication's computation-only
+auxiliary basis. Only the selected backend's key/scratch is prepared; roles at
+one level share immutable P resources. See the [native Hybrid contract](../../guides/development/native-hybrid-keys.md)
+for exact correction, partitions, bounded-secret extension and collective keys.
 
 ## Collective keys and one-use raw lookup
 
@@ -104,7 +120,9 @@ square, rotation, Alice→Bob switching and two drops.
 the actual local setup instance and count, and `finalize` consumes a complete
 sum into the ordinary native role key. Transport uses `common_mask`,
 `as_residues` and checked `try_import_contribution`; no private key columns
-are public. This first construction requires exact CBD1 shares and CBD21
+are public. Evaluation-key config can also select Hybrid: its common masks, contributions
+and final columns use actual QP; public-key setup remains Q. This construction
+requires exact CBD1 shares and CBD21
 errors. Imported secret distribution metadata does not prove CBD1 coefficients.
 
 `BfvCollectiveRelinearization::start` returns a public first message and a

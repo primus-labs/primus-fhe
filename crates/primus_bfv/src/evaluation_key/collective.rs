@@ -59,8 +59,8 @@ impl BfvCollectiveContribution<'_> {
 /// owners; this arithmetic owner enforces only binding and the declared count.
 pub struct BfvCollectiveAggregate<'a> {
     binding: &'a Binding,
-    context: &'a BfvContext,
-    level: usize,
+    moduli: Vec<BarrettModulus<u64>>,
+    n: usize,
     expected: usize,
     count: usize,
     residues: Vec<u64>,
@@ -77,12 +77,13 @@ impl BfvCollectiveAggregate<'_> {
         if self.count == self.expected {
             return Err(BfvCollectiveError::Count);
         }
-        add_polynomials(
-            self.context,
-            self.level,
-            &mut self.residues,
-            &message.residues,
-        );
+        for (out, input) in self
+            .residues
+            .chunks_exact_mut(self.n * self.moduli.len())
+            .zip(message.residues.chunks_exact(self.n * self.moduli.len()))
+        {
+            DcrtPolynomial(out).add_assign(&DcrtPolynomial(input), self.n, &self.moduli);
+        }
         self.count += 1;
         Ok(())
     }
@@ -103,13 +104,28 @@ fn aggregate<'a>(
     len: usize,
     expected: usize,
 ) -> Result<BfvCollectiveAggregate<'a>, BfvCollectiveError> {
+    aggregate_basis(
+        binding,
+        context.parameters().poly_length().get(),
+        context.codec(level).moduli_values(),
+        len,
+        expected,
+    )
+}
+fn aggregate_basis<'a>(
+    binding: &'a Binding,
+    n: usize,
+    moduli: &[u64],
+    len: usize,
+    expected: usize,
+) -> Result<BfvCollectiveAggregate<'a>, BfvCollectiveError> {
     if expected == 0 {
         return Err(BfvCollectiveError::Count);
     }
     Ok(BfvCollectiveAggregate {
         binding,
-        context,
-        level,
+        moduli: moduli.iter().copied().map(BarrettModulus::new).collect(),
+        n,
         expected,
         count: 0,
         residues: vec![0; len],
@@ -132,16 +148,24 @@ fn canonical(
     len: usize,
 ) -> Result<(), BfvCollectiveError> {
     validate_level(context, level)?;
-    if values.len() != len {
+    canonical_basis(
+        context.parameters().poly_length().get(),
+        context.codec(level).moduli_values(),
+        values,
+        len,
+    )
+}
+fn canonical_basis(
+    n: usize,
+    moduli: &[u64],
+    values: &[u64],
+    len: usize,
+) -> Result<(), BfvCollectiveError> {
+    if values.len() != len || !len.is_multiple_of(n * moduli.len()) {
         return Err(BfvCollectiveError::Payload);
     }
-    let n = context.parameters().poly_length().get();
-    let poly_len = context.rns_poly_len(level);
-    for poly in values.chunks_exact(poly_len) {
-        for (limb, &q) in poly
-            .chunks_exact(n)
-            .zip(context.codec(level).moduli_values())
-        {
+    for poly in values.chunks_exact(n * moduli.len()) {
+        for (limb, &q) in poly.chunks_exact(n).zip(moduli) {
             if limb.iter().any(|&x| x >= q) {
                 return Err(BfvCollectiveError::Payload);
             }
@@ -323,12 +347,20 @@ impl<'a> EvaluationSetup<'a> {
     fn new<R: rand::Rng + rand::CryptoRng>(
         context: &'a BfvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<Self, BfvCollectiveError> {
         distribution(context)?;
         let native = NativeEvaluationKey::prepare_metadata(context, level, config)?;
-        let masks = masks(context, level, native.basis.level_count().get(), rng);
+        let mut masks = vec![0; native.key_len() / 2];
+        let uniforms: Vec<_> = native
+            .key_moduli_values(context)
+            .iter()
+            .map(|&q| rand::distr::Uniform::new(0, q).expect("validated modulus"))
+            .collect();
+        for poly in masks.chunks_exact_mut(native.key_poly_len()) {
+            primus_distr::sample_crt_uniform_values_to(poly, native.n, &uniforms, rng);
+        }
         Ok(Self {
             context,
             native,
@@ -339,12 +371,17 @@ impl<'a> EvaluationSetup<'a> {
     fn from_mask(
         context: &'a BfvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BfvCollectiveError> {
         distribution(context)?;
         let native = NativeEvaluationKey::prepare_metadata(context, level, config)?;
-        canonical(context, level, &masks, native.size.rns_glev_len() / 2)?;
+        canonical_basis(
+            native.n,
+            native.key_moduli_values(context),
+            &masks,
+            native.key_len() / 2,
+        )?;
         Ok(Self {
             context,
             native,
@@ -356,20 +393,39 @@ impl<'a> EvaluationSetup<'a> {
         &self,
         values: Vec<u64>,
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
-        import(
-            &self.binding,
-            self.context,
-            self.native.level,
-            self.masks.len(),
-            values,
-        )
+        self.import_len(&self.binding, self.masks.len(), values)
+    }
+    fn import_len<'p>(
+        &self,
+        binding: &'p Binding,
+        len: usize,
+        values: Vec<u64>,
+    ) -> Result<BfvCollectiveContribution<'p>, BfvCollectiveError> {
+        canonical_basis(
+            self.native.n,
+            self.native.key_moduli_values(self.context),
+            &values,
+            len,
+        )?;
+        Ok(BfvCollectiveContribution {
+            binding,
+            residues: values,
+        })
     }
     fn aggregate(&self, expected: usize) -> Result<BfvCollectiveAggregate<'_>, BfvCollectiveError> {
-        aggregate(
-            &self.binding,
-            self.context,
-            self.native.level,
-            self.masks.len(),
+        self.aggregate_len(&self.binding, self.masks.len(), expected)
+    }
+    fn aggregate_len<'p>(
+        &self,
+        binding: &'p Binding,
+        len: usize,
+        expected: usize,
+    ) -> Result<BfvCollectiveAggregate<'p>, BfvCollectiveError> {
+        aggregate_basis(
+            binding,
+            self.native.n,
+            self.native.key_moduli_values(self.context),
+            len,
             expected,
         )
     }
@@ -379,48 +435,30 @@ impl<'a> EvaluationSetup<'a> {
         target: &[u64],
         rng: &mut R,
     ) -> Vec<u64> {
-        let context = self.context;
-        let level = self.native.level;
-        let len = context.rns_poly_len(level);
-        let n = context.parameters().poly_length().get();
-        let base = context.codec(level).base_q();
+        let len = self.native.key_poly_len();
+        let n = self.native.n;
+        let moduli = self.native.key_moduli(self.context);
         let mut output = Vec::with_capacity(self.masks.len());
-        let mut weights = vec![0; base.moduli_count()];
-        for (scalar, mask) in self
-            .native
-            .basis
-            .scalar_iter()
-            .zip(self.masks.chunks_exact(len))
-        {
-            base.decompose_to(primus_integer::BigUint(scalar), Residues(&mut weights));
-            let mut body = noise(context, level, rng);
+        for (index, mask) in self.masks.chunks_exact(len).enumerate() {
+            let mut body = self.native.noise(self.context, rng);
             let mut poly = DcrtPolynomial(body.as_mut_slice());
-            poly.sub_mul_assign(
-                &DcrtPolynomial(mask),
-                &DcrtPolynomial(target),
+            poly.sub_mul_assign(&DcrtPolynomial(mask), &DcrtPolynomial(target), n, moduli);
+            poly.add_mul_scalar_assign(
+                &DcrtPolynomial(source),
+                self.native.weights(index),
                 n,
-                base.moduli(),
+                moduli,
             );
-            poly.add_mul_scalar_assign(&DcrtPolynomial(source), &weights, n, base.moduli());
             output.extend(body);
         }
         output
     }
     fn empty_key(&self) -> NativeEvaluationKey {
-        // Recreate only public metadata; never sample a dummy full secret/key.
-        NativeEvaluationKey::prepare(
-            self.context,
-            self.native.level,
-            DecompositionConfig {
-                log_basis: self.native.basis.log_basis(),
-                level_count: Some(self.native.basis.level_count()),
-            },
-        )
-        .expect("established basis")
+        self.native.empty()
     }
     fn key(&self, bodies: Vec<u64>, masks: &[u64]) -> NativeEvaluationKey {
         let mut key = self.empty_key();
-        let len = self.context.rns_poly_len(self.native.level);
+        let len = self.native.key_poly_len();
         for ((out, body), mask) in key
             .columns
             .chunks_exact_mut(2 * len)
@@ -445,7 +483,7 @@ impl<'a> BfvCollectiveSwitchingKey<'a> {
     pub fn try_new<R: rand::Rng + rand::CryptoRng>(
         context: &'a BfvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<Self, BfvCollectiveError> {
         Ok(Self {
@@ -456,7 +494,7 @@ impl<'a> BfvCollectiveSwitchingKey<'a> {
     pub fn try_from_common_mask(
         context: &'a BfvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BfvCollectiveError> {
         Ok(Self {
@@ -482,11 +520,9 @@ impl<'a> BfvCollectiveSwitchingKey<'a> {
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
         owner(source, self.setup.context)?;
         owner(target, self.setup.context)?;
-        let len = self.setup.context.rns_poly_len(self.setup.native.level);
-        self.setup.import(
-            self.setup
-                .linear(secret(source, len), secret(target, len), rng),
-        )
+        let source = self.setup.native.secret(source)?;
+        let target = self.setup.native.secret(target)?;
+        self.setup.import(self.setup.linear(&source, &target, rng))
     }
     /// Checks and binds a transported body payload.
     pub fn try_import_contribution(
@@ -527,7 +563,7 @@ impl<'a> BfvCollectiveAutomorphismKey<'a> {
         context: &'a BfvContext,
         level: usize,
         exponent: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<Self, BfvCollectiveError> {
         let n = context.parameters().poly_length().get();
@@ -552,7 +588,7 @@ impl<'a> BfvCollectiveAutomorphismKey<'a> {
         context: &'a BfvContext,
         level: usize,
         exponent: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BfvCollectiveError> {
         let n = context.parameters().poly_length().get();
@@ -590,16 +626,13 @@ impl<'a> BfvCollectiveAutomorphismKey<'a> {
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
         owner(client, self.setup.context)?;
         let n = self.setup.context.parameters().poly_length().get();
-        let len = self.setup.context.rns_poly_len(self.setup.native.level);
-        let mut transformed = Zeroizing::new(vec![0; len]);
-        for (input, output) in secret(client, len)
-            .chunks_exact(n)
-            .zip(transformed.chunks_exact_mut(n))
-        {
+        let secret = self.setup.native.secret(client)?;
+        let mut transformed = Zeroizing::new(vec![0; self.setup.native.key_poly_len()]);
+        for (input, output) in secret.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
             self.permutation.apply_to(input, output);
         }
         self.setup
-            .import(self.setup.linear(&transformed, secret(client, len), rng))
+            .import(self.setup.linear(&transformed, &secret, rng))
     }
     /// Checks and binds a transported body payload.
     pub fn try_import_contribution(
@@ -643,7 +676,7 @@ impl<'a> BfvCollectiveRelinearization<'a> {
     pub fn try_new<R: rand::Rng + rand::CryptoRng>(
         context: &'a BfvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<Self, BfvCollectiveError> {
         Ok(Self {
@@ -654,7 +687,7 @@ impl<'a> BfvCollectiveRelinearization<'a> {
     pub fn try_from_common_mask(
         context: &'a BfvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BfvCollectiveError> {
         Ok(Self {
@@ -686,50 +719,41 @@ impl<'a> BfvCollectiveRelinearization<'a> {
     > {
         owner(client, self.setup.context)?;
         let context = self.setup.context;
-        let level = self.setup.native.level;
-        let len = context.rns_poly_len(level);
-        let n = context.parameters().poly_length().get();
-        let base = context.codec(level).base_q();
+        let len = self.setup.native.key_poly_len();
+        let n = self.setup.native.n;
+        let moduli = self.setup.native.key_moduli(context);
+        let secret = self.setup.native.secret(client)?;
         let mut ephemeral = Zeroizing::new(vec![0; len]);
-        primus_distr::sample_crt_sparse_ternary_values_to(
-            &mut ephemeral,
-            n,
-            &context
-                .parameters()
-                .encryption_parameters()
-                .cipher_moduli_minus_one()[..base.moduli_count()],
-            rng,
-        );
-        transform(context, &mut ephemeral, false);
-        let mut values = Vec::with_capacity(2 * self.setup.masks.len());
-        let mut weights = vec![0; base.moduli_count()];
-        for (scalar, mask) in self
+        let minus_one: Vec<_> = self
             .setup
             .native
-            .basis
-            .scalar_iter()
-            .zip(self.setup.masks.chunks_exact(len))
-        {
-            base.decompose_to(primus_integer::BigUint(scalar), Residues(&mut weights));
-            let mut h0 = noise(context, level, rng);
-            let mut h1 = noise(context, level, rng);
+            .key_moduli_values(context)
+            .iter()
+            .map(|&q| q - 1)
+            .collect();
+        primus_distr::sample_crt_sparse_ternary_values_to(&mut ephemeral, n, &minus_one, rng);
+        self.setup.native.transform(context, &mut ephemeral, false);
+        let mut values = Vec::with_capacity(2 * self.setup.masks.len());
+        for (index, mask) in self.setup.masks.chunks_exact(len).enumerate() {
+            let mut h0 = self.setup.native.noise(context, rng);
+            let mut h1 = self.setup.native.noise(context, rng);
             DcrtPolynomial(h0.as_mut_slice()).sub_mul_assign(
                 &DcrtPolynomial(mask),
                 &DcrtPolynomial(ephemeral.as_slice()),
                 n,
-                base.moduli(),
+                moduli,
             );
             DcrtPolynomial(h0.as_mut_slice()).add_mul_scalar_assign(
-                &DcrtPolynomial(secret(client, len)),
-                &weights,
+                &DcrtPolynomial(secret.as_slice()),
+                self.setup.native.weights(index),
                 n,
-                base.moduli(),
+                moduli,
             );
             DcrtPolynomial(h1.as_mut_slice()).add_mul_assign(
                 &DcrtPolynomial(mask),
-                &DcrtPolynomial(secret(client, len)),
+                &DcrtPolynomial(secret.as_slice()),
                 n,
-                base.moduli(),
+                moduli,
             );
             values.extend(h0);
             values.extend(h1);
@@ -751,26 +775,16 @@ impl<'a> BfvCollectiveRelinearization<'a> {
         &self,
         values: Vec<u64>,
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
-        import(
-            &self.setup.binding,
-            self.setup.context,
-            self.setup.native.level,
-            2 * self.setup.masks.len(),
-            values,
-        )
+        self.setup
+            .import_len(&self.setup.binding, 2 * self.setup.masks.len(), values)
     }
     /// Allocates the first-round sum for one complete authenticated roster.
     pub fn aggregate(
         &self,
         expected: usize,
     ) -> Result<BfvCollectiveAggregate<'_>, BfvCollectiveError> {
-        aggregate(
-            &self.setup.binding,
-            self.setup.context,
-            self.setup.native.level,
-            2 * self.setup.masks.len(),
-            expected,
-        )
+        self.setup
+            .aggregate_len(&self.setup.binding, 2 * self.setup.masks.len(), expected)
     }
     /// Consumes the complete round-one sum; no partial roster can enter round two.
     pub fn freeze_round1(
@@ -806,29 +820,29 @@ impl BfvCollectiveRelinearizationState<'_, '_> {
             return Err(BfvCollectiveError::Binding);
         }
         let context = self.setup.context;
-        let level = self.setup.native.level;
-        let len = context.rns_poly_len(level);
-        let n = context.parameters().poly_length().get();
-        let base = context.codec(level).base_q();
+        let len = self.setup.native.key_poly_len();
+        let n = self.setup.native.n;
+        let moduli = self.setup.native.key_moduli(context);
+        let secret = self.setup.native.secret(self.client)?;
         DcrtPolynomial(self.ephemeral.as_mut_slice()).sub_assign(
-            &DcrtPolynomial(secret(self.client, len)),
+            &DcrtPolynomial(secret.as_slice()),
             n,
-            base.moduli(),
+            moduli,
         );
         let mut values = Vec::with_capacity(self.setup.masks.len());
         for pair in round1.residues.chunks_exact(2 * len) {
-            let mut z = noise(context, level, rng);
+            let mut z = self.setup.native.noise(context, rng);
             DcrtPolynomial(z.as_mut_slice()).add_mul_assign(
-                &DcrtPolynomial(secret(self.client, len)),
+                &DcrtPolynomial(secret.as_slice()),
                 &DcrtPolynomial(&pair[..len]),
                 n,
-                base.moduli(),
+                moduli,
             );
             DcrtPolynomial(z.as_mut_slice()).add_mul_assign(
                 &DcrtPolynomial(self.ephemeral.as_slice()),
                 &DcrtPolynomial(&pair[len..]),
                 n,
-                base.moduli(),
+                moduli,
             );
             values.extend(z);
         }
@@ -857,13 +871,8 @@ impl<'c> BfvCollectiveRelinearizationRound1<'_, 'c> {
         &self,
         values: Vec<u64>,
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
-        import(
-            &self.binding,
-            self.setup.context,
-            self.setup.native.level,
-            self.setup.masks.len(),
-            values,
-        )
+        self.setup
+            .import_len(&self.binding, self.setup.masks.len(), values)
     }
     /// Allocates the second-round sum for the same authenticated roster size.
     /// The caller must check that its identities match the frozen first round.
@@ -874,20 +883,15 @@ impl<'c> BfvCollectiveRelinearizationRound1<'_, 'c> {
         if expected != self.expected {
             return Err(BfvCollectiveError::Count);
         }
-        aggregate(
-            &self.binding,
-            self.setup.context,
-            self.setup.native.level,
-            self.setup.masks.len(),
-            expected,
-        )
+        self.setup
+            .aggregate_len(&self.binding, self.setup.masks.len(), expected)
     }
     fn finalize_native(
         &self,
         aggregate: BfvCollectiveAggregate<'_>,
     ) -> Result<NativeEvaluationKey, BfvCollectiveError> {
         let bodies = aggregate.finish(&self.binding)?;
-        let len = self.setup.context.rns_poly_len(self.setup.native.level);
+        let len = self.setup.native.key_poly_len();
         let mut key = self.setup.empty_key();
         for ((output, body), pair) in key
             .columns
@@ -933,7 +937,7 @@ pub struct BfvFreshLookup<'a> {
     context: &'a BfvContext,
     key: NativeEvaluationKey,
     coefficient: Vec<u64>,
-    workspace: DcrtGlevMulWorkspace<u64>,
+    workspace: NativeProductWorkspace<'a>,
 }
 /// Checked raw mixed-tensor sum `[t0,t1,t2]` in one actual context/level.
 /// It is deliberately distinct from the ordinary scaled BFV quadratic type.
@@ -999,8 +1003,8 @@ impl<'a> BfvFreshLookupKey<'a> {
         let context = self.context;
         debug_assert!(self.key.validate(context).is_ok());
         let len = context.rns_poly_len(self.key.level);
-        let workspace =
-            DcrtGlevMulWorkspace::new(self.key.size, context.codec(self.key.level).base_q());
+        let workspace = NativeProductWorkspace::try_new(context, &self.key)
+            .expect("validated native lookup key resources");
         BfvFreshLookup {
             context,
             key: self.key,
@@ -1030,15 +1034,14 @@ impl BfvFreshLookup<'_> {
         if output.as_ref().len() != 2 * len {
             return Err(BfvCollectiveError::Payload);
         }
-        self.coefficient.copy_from_slice(&input.residues[2 * len..]);
-        transform(self.context, &mut self.coefficient, true);
-        DcrtGlev(self.key.columns.as_slice()).mul_crt_polynomial_to(
-            &CrtPolynomial(self.coefficient.as_slice()),
-            &mut DcrtGlwe(output.as_mut()),
-            &self.key.basis,
-            self.context.table(),
-            self.context.codec(self.key.level).base_q(),
+        native_product_to(
+            self.context,
+            &self.key,
+            &mut self.coefficient,
             &mut self.workspace,
+            &input.residues[2 * len..],
+            None,
+            output,
         );
         add_polynomials(
             self.context,

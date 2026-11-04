@@ -330,3 +330,57 @@ fn scale_and_round_resolves_wide_and_single_limb_p_half_boundaries() {
         }
     }
 }
+
+#[test]
+fn centered_converter_has_its_own_exact_batch_and_workspace_contract() {
+    use primus_rns::CenteredBaseConverter;
+    let q = big_product(&WIDE_Q);
+    let half = &q / 2_u8;
+    let values = vec![
+        &half - 1_u8,
+        half.clone(),
+        &half + 1_u8,
+        &q - 1_u8,
+        IBig::ZERO,
+        IBig::from((1u64 << 53) + 1),
+    ];
+    let centered: Vec<_> = values
+        .iter()
+        .map(|x| {
+            let r = x % &q;
+            if r > half { r - &q } else { r }
+        })
+        .collect();
+    let converter = CenteredBaseConverter::try_new(&base(&WIDE_Q), &base(&WIDE_P)).unwrap();
+    let input = big_residues(&values, &WIDE_Q);
+    let mut output = vec![0; WIDE_P.len() * values.len()];
+    let mut workspace = converter.workspace(values.len());
+    converter.convert_to(&input, &mut output, values.len(), &mut workspace);
+    assert_eq!(output, big_residues(&centered, &WIDE_P));
+    for bad_len in [0, input.len() - 1, input.len() + 1] {
+        output.fill(77);
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| converter.convert_to(
+                &vec![0; bad_len],
+                &mut output,
+                values.len(),
+                &mut workspace
+            )))
+            .is_err()
+        );
+        assert!(output.iter().all(|&x| x == 77));
+    }
+    let mut wrong = converter.workspace(values.len() - 1);
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| converter.convert_to(
+            &input,
+            &mut output,
+            values.len(),
+            &mut wrong
+        )))
+        .is_err()
+    );
+    assert!(output.iter().all(|&x| x == 77));
+    converter.convert_to(&[], &mut [], 0, &mut converter.workspace(0));
+    assert!(CenteredBaseConverter::try_new(&base(&[16]), &base(&[19])).is_err());
+}

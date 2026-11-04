@@ -53,6 +53,22 @@ single full-Q secret is borrowed by prefix. Level selection never changes N.
 Storage wrappers check complete lengths but do not certify actual key, ordered
 basis, canonical ciphertext residues or NTT identity; callers maintain them.
 
+## Native Hybrid keys
+
+The default examples use signed-radix Q keys. Add `-- --hybrid` to the
+coefficient or slot command to select native partitioned QP keys. In code,
+prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)` once,
+then pass its cloned `Arc` to `relinearization_key`, `key_switching_key` or
+`automorphism_key`/row-key generation. The existing prepared operations and
+ciphertext types consume either backend. `BgvEvaluationKeyConfig` stores
+`Radix(DecompositionConfig)` or `Hybrid(Arc<NativeHybridParameters>)` explicitly.
+
+Key P enlarges the evaluation-key modulus to QP and needs its own security and
+complete-error budget. It is separate from BFV multiplication's computation-only
+auxiliary basis. Only the selected backend's key/scratch is prepared; roles at
+one level share immutable P resources. See the [native Hybrid contract](../../guides/development/native-hybrid-keys.md)
+for exact correction, partitions, bounded-secret extension and collective keys.
+
 ## Collective arithmetic
 
 [collective](examples/collective.rs) demonstrates two owners preparing a native
@@ -67,11 +83,13 @@ their configured distributions.
 Public contributions export opaque canonical residues; import through the exact
 setup after authenticating context, role, source/target identity and roster.
 Accumulators bind setup instances and rounds, while callers reject duplicate or
-missing owners. Two-round state borrows its owner client and is non-cloneable;
-consuming or dropping it erases its private CBD1 ephemeral. The second round binds the
+missing owners. Two-round state retains an erasing copy of its owner's key-domain
+share and is non-cloneable; consuming or dropping it erases that share and its
+private CBD1 ephemeral. The second round binds the
 exact frozen first-round result. Finalization consumes the sum and returns the
 existing native role key, retaining no setup workspace. Actual gadget weights and
-columns remain private.
+columns remain private. Hybrid evaluation-key masks, contributions and final
+columns use actual QP; public-key and additive-input arithmetic remain Q.
 
 `BgvSeededInput::try_new(context, rng)` samples a fresh complete public mask with
 the prepared unbiased CRT distributions. `try_from_common_mask` imports an
@@ -87,14 +105,15 @@ coins must not be derived from selection public-key or fresh lookup-key bytes/di
 
 ## Evaluation keys and exact prime drop
 
-Use the existing `DecompositionConfig` to select radix and retained digits. Each
+Use `DecompositionConfig` to select radix and retained digits. The radix formulas
+below belong to that backend. Each
 role key owns its actual decomposition and belongs to one modulus level; generate
-keys separately for the levels used. Truncating a higher-level key's limbs cannot
-produce a lower-level key, because Q, weights and dropped bits have changed.
+keys separately for the levels used. Slicing a higher-level matrix is not a supported lower-level key constructor:
+radix Q/weights/drop bits change; Hybrid must retain its actual P/partition/level binding.
 `None` selects all available gadget digits, which can still discard low bits
 when log_basis does not divide Q's bit width.
 
-The switched component a is multiplied by p^-1 modulo Q **before decomposition**.
+For radix, the switched component a is multiplied by p^-1 modulo Q **before decomposition**.
 Columns have phase `p*g_j*h+p*e_j`, with h=s², the source secret, or σ(s).
 Both digit noise and approximation residual therefore enter as p-multiple error.
 Ordinary truncated BFV/GLWE switching does not establish this property. Three

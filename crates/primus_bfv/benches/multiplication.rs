@@ -2,8 +2,8 @@
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use primus_bfv::{
-    BfvAutomorphism, BfvClient, BfvContext, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
-    BfvMultiplicationBackend, BfvParameters,
+    BfvAutomorphism, BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvKeySwitcher,
+    BfvModulusSwitch, BfvMultiplication, BfvMultiplicationBackend, BfvParameters,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_encoding::BatchingEncoder;
@@ -19,11 +19,13 @@ fn leveled(c: &mut Criterion) {
         BfvMultiplicationBackend::Exact,
         BfvMultiplicationBackend::HpsPOverQ,
     ] {
-        leveled_backend(c, backend);
+        for hybrid_keys in [false, true] {
+            leveled_backend(c, backend, hybrid_keys);
+        }
     }
 }
 
-fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend) {
+fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_keys: bool) {
     const N: usize = 1024;
     const SLOTS: usize = 256;
     const ACTIVE: usize = 113;
@@ -53,16 +55,34 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend) {
         log_basis: DecompositionBaseLog::new(8),
         level_count: None,
     };
+    let key_config: BfvEvaluationKeyConfig = if hybrid_keys {
+        context
+            .hybrid_key_parameters(0, moduli.len(), &[1_152_921_504_606_584_833])
+            .unwrap()
+            .into()
+    } else {
+        config.into()
+    };
+    let lower_key_config: BfvEvaluationKeyConfig = if hybrid_keys {
+        context
+            .hybrid_key_parameters(1, moduli.len(), &[1_152_921_504_606_584_833])
+            .unwrap()
+            .into()
+    } else {
+        config.into()
+    };
     let mut rng = StdRng::seed_from_u64(0x10b6_be0c);
     let alice = BfvClient::generate(&context, &mut rng);
     let mut bob = BfvClient::generate(&context, &mut rng);
     let public_key = alice.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key).unwrap();
-    let relin_key = alice.relinearization_key(0, config, &mut rng).unwrap();
+    let relin_key = alice.relinearization_key(0, key_config, &mut rng).unwrap();
     let rotate_key = alice
-        .row_rotation_key(1, &batching, 1, config, &mut rng)
+        .row_rotation_key(1, &batching, 1, lower_key_config.clone(), &mut rng)
         .unwrap();
-    let switch_key = bob.key_switching_key(&alice, 1, config, &mut rng).unwrap();
+    let switch_key = bob
+        .key_switching_key(&alice, 1, lower_key_config, &mut rng)
+        .unwrap();
     let mut rotate = BfvAutomorphism::try_new(&context, &rotate_key).unwrap();
     let mut switch = BfvKeySwitcher::try_new(&context, &switch_key).unwrap();
     // Keep this explicit P for equivalent-workload historical comparisons.
@@ -98,7 +118,10 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend) {
     let mut slots = vec![0; SLOTS];
     let mut scratch = vec![0; SLOTS];
 
-    let mut group = c.benchmark_group(format!("bfv_leveled_slots/{backend:?}"));
+    let mut group = c.benchmark_group(format!(
+        "bfv_leveled_slots/{backend:?}/{}",
+        if hybrid_keys { "Hybrid" } else { "Radix" }
+    ));
     group.throughput(Throughput::Elements(1));
     {
         let mut request = || {

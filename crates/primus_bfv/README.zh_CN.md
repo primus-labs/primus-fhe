@@ -75,10 +75,24 @@ batching，仍可显式准备合法的较小 encoder。未使用槽及 off-strid
 原生角色密钥分别实现重线性化、source→recipient 换钥和加密自同构。
 Prepared 构造器接收 `(&context,&key)`，从 key 推导适用 level；key generation、
 不绑定 key 的线性求值、降模和恢复仍显式选择实际 level。
-每个实际使用的 level 都要独立建钥。BFV key column 的 phase 为 `g_j*h+e_j`；
+每个实际使用的 level 都要按该层配置建钥。Radix BFV key column 的 phase 为 `g_j*h+e_j`；
 截断分解 residual 和 key noise 都消耗恢复余量，最大 digit 数也不一定消除全部
 radix 余位。[多级系数](examples/leveled_coefficients.rs)和
 [多级槽](examples/leveled_slots.rs)组合演示乘法、square、旋转、Alice→Bob 换钥及两次降模。
+
+## Native Hybrid 密钥
+
+默认示例使用 signed-radix Q keys；在系数或槽命令后加 `-- --hybrid`，可选择原生
+partitioned QP keys。代码中一次准备
+`context.hybrid_key_parameters(level,decomposition_count,&key_p)`，将克隆的 `Arc`
+传给 `relinearization_key`、`key_switching_key`、`automorphism_key` 或 row-key
+生成入口。原 prepared 操作及密文类型可消费两种后端；`BfvEvaluationKeyConfig`
+显式保存 `Radix(DecompositionConfig)` 或 `Hybrid(Arc<NativeHybridParameters>)`。
+
+Key P 将求值密钥模数扩大为 QP，须独立检查安全性和完整误差；它与 BFV 乘法的
+computation-only 辅助基分开。仅准备选中后端的 key/scratch；同层角色共享不可变
+P 资源。精确 correction、分区、bounded-secret 扩展和 collective 契约见
+[Native Hybrid 指南](../../guides/development/native-hybrid-keys.md)（English）。
 
 ## Collective 密钥与一次性 raw lookup
 
@@ -87,7 +101,8 @@ radix 余位。[多级系数](examples/leveled_coefficients.rs)和
 `aggregate(expected)` 准备公共累加器，`add` 核对实际本地 setup 实例和数量，
 `finalize` 消耗完整聚合并产出现有 native 角色密钥。传输使用 `common_mask`、
 `as_residues` 和 checked `try_import_contribution`；不公开私有 key columns。
-首版要求精确 CBD1 shares、CBD21 errors；导入秘密的分布 metadata 不证明系数确实为 CBD1。
+求值密钥的 config 也可选择 Hybrid，其 common masks、贡献和最终 columns 使用实际 QP；
+公钥仍使用 Q。首版要求精确 CBD1 shares、CBD21 errors；导入秘密的分布 metadata 不证明系数确实为 CBD1。
 
 `BfvCollectiveRelinearization::start` 返回公共第一轮消息及不可 Clone、会擦除的私有 state。
 用 `freeze_round1` 冻结完整首轮聚合，再通过 `round2` 消耗每份 state。

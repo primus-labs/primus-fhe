@@ -14,6 +14,10 @@
 //! using the exact p-constrained quotient. All prepared operations reuse scratch.
 //! Modulus levels and retained gadget digits are different quantities; each
 //! evaluation key belongs to one prepared level and its actual decomposition.
+//! [`BgvContext::hybrid_key_parameters`] prepares a shared QP owner for native
+//! Hybrid role keys. Pass that handle to key generation in place of a radix
+//! configuration; existing requests keep their shape and p-preserving phase.
+//! Key-modulus security and complete evaluated noise require separate budgets.
 //! Parameter construction checks a fresh private recovery margin, not security
 //! or public/evaluated noise. Ciphertexts carry storage rather than runtime key
 //! identity; the actual secret and NTT convention remain caller contracts.
@@ -36,8 +40,8 @@ pub use ciphertext::BgvCiphertext;
 pub use client::BgvClient;
 pub use context::{BgvContext, BgvContextError};
 pub use evaluation_key::{
-    BgvAutomorphism, BgvAutomorphismKey, BgvEvaluationKeyError, BgvKeySwitcher, BgvKeySwitchingKey,
-    BgvRelinearizationKey, BgvRelinearizer,
+    BgvAutomorphism, BgvAutomorphismKey, BgvEvaluationKeyConfig, BgvEvaluationKeyError,
+    BgvKeySwitcher, BgvKeySwitchingKey, BgvRelinearizationKey, BgvRelinearizer,
 };
 pub use evaluation_key::{
     BgvCollectiveAggregate, BgvCollectiveAutomorphismKey, BgvCollectiveContribution,

@@ -1,7 +1,11 @@
 //! Public BFV slot multiplication followed by one encrypted row rotation.
+//! Optional native key backend: append `-- --hybrid`.
 //! Run: cargo run -p primus_bfv --example slots --features batching
 
-use primus_bfv::{BfvAutomorphism, BfvClient, BfvContext, BfvMultiplication, BfvParameters};
+use primus_bfv::{
+    BfvAutomorphism, BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvMultiplication,
+    BfvParameters,
+};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -22,15 +26,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         0.849,
     )?)?;
     let batching = context.batching_encoder()?;
-    let config = DecompositionConfig {
-        log_basis: DecompositionBaseLog::new(8),
-        level_count: None,
+    let hybrid = match std::env::args().nth(1).as_deref() {
+        None => false,
+        Some("--hybrid") => true,
+        Some(_) => return Err("expected optional --hybrid".into()),
+    };
+    let config: BfvEvaluationKeyConfig = if hybrid {
+        context
+            .hybrid_key_parameters(0, context.codec(0).moduli_count(), &[1_099_511_626_049])?
+            .into()
+    } else {
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(8),
+            level_count: None,
+        }
+        .into()
     };
     let mut rng = StdRng::seed_from_u64(0x12bf_5107);
     let mut client = BfvClient::generate(&context, &mut rng);
     let public_key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
-    let relin_key = client.relinearization_key(0, config, &mut rng)?;
+    let relin_key = client.relinearization_key(0, config.clone(), &mut rng)?;
     let rotation_key = client.row_rotation_key(0, &batching, 1, config, &mut rng)?;
     let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
     let mut rotation = BfvAutomorphism::try_new(&context, &rotation_key)?;

@@ -38,5 +38,7 @@ pub use hps::{HpsRns, HpsRnsWorkspace};
 pub use error::RnsError;
 
 pub use base::RNSBase;
-pub use converter::{BaseConverter, CorrectedConversionWorkspace};
+pub use converter::{
+    BaseConverter, CenteredBaseConverter, CenteredConversionWorkspace, CorrectedConversionWorkspace,
+};
 pub use hybrid::{HybridRNS, HybridRNSPartition, HybridRNSPartitioning};

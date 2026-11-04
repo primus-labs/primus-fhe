@@ -48,6 +48,20 @@ Level0 使用全部有序 primes；level l 丢弃最后 l 个。Context 拥有�
 存储 wrapper 检查完整长度，但实际 key、有序 basis、canonical ciphertext residues
 及 NTT 身份仍由调用者保证。
 
+## Native Hybrid 密钥
+
+默认示例使用 signed-radix Q keys；在系数或槽命令后加 `-- --hybrid`，可选择原生
+partitioned QP keys。代码中一次准备
+`context.hybrid_key_parameters(level,decomposition_count,&key_p)`，将克隆的 `Arc`
+传给 `relinearization_key`、`key_switching_key`、`automorphism_key` 或 row-key
+生成入口。原 prepared 操作及密文类型可消费两种后端；`BgvEvaluationKeyConfig`
+显式保存 `Radix(DecompositionConfig)` 或 `Hybrid(Arc<NativeHybridParameters>)`。
+
+Key P 将求值密钥模数扩大为 QP，须独立检查安全性和完整误差；它与 BFV 乘法的
+computation-only 辅助基分开。仅准备选中后端的 key/scratch；同层角色共享不可变
+P 资源。精确 correction、分区、bounded-secret 扩展和 collective 契约见
+[Native Hybrid 指南](../../guides/development/native-hybrid-keys.md)（English）。
+
 ## Collective 算术
 
 [collective](examples/collective.rs) 展示两个 owner 准备 native 公钥与两轮
@@ -59,10 +73,12 @@ common-mask/basis setup，每方只提供自己的 share。首版要求精确 CB
 
 公开 contribution 只导出后端拥有格式的规范 residue。调用方认证 context、role、
 source/target identity 与 roster 后，再经对应 setup 导入。Accumulator 检查具体
-setup 实例和轮次，重复、缺失 owner 由协议拒绝。两轮私有 state 借用本方 client、不可克隆，在消费或
-丢弃时擦除 CBD1 ephemeral；第二轮绑定准确冻结的第一轮结果。
+setup 实例和轮次，重复、缺失 owner 由协议拒绝。两轮私有 state 保存本方会擦除的
+key-domain share、不可克隆，在消费或丢弃时擦除该 share 和 CBD1 ephemeral；
+第二轮绑定准确冻结的第一轮结果。
 Finalize 消费公开聚合，直接生成已有 native role key，不保留 setup workspace；实际
-gadget weights 和 columns 不公开。
+gadget weights 和 columns 不公开。Hybrid 求值密钥的 common masks/贡献/最终 columns
+均使用实际 QP；公钥和输入算术仍在 Q，不能按 Q 长度导入 QP payload。
 
 `BgvSeededInput::try_new(context, rng)` 用 prepared 无偏 CRT distributions 新鲜采样
 完整公共 mask；`try_from_common_mask` 导入已认证的数组，其独立均匀来源由调用方保证。
@@ -75,12 +91,12 @@ bytes/digest数值派生。
 
 ## 求值密钥与精确降模
 
-使用已有 `DecompositionConfig` 选择 radix 和 retained digits。每个 role key 拥有
-实际 decomposition，并属于一个 modulus level；按所需 level 分别生成。不能截断
-高层 key 的 limbs 冒充低层 key，因为 Q、weights 和 dropped bits 已改变。`None`
+使用已有 `DecompositionConfig` 选择 radix 和 retained digits。以下分解公式属于该 radix 后端。每个 role key 拥有
+实际 decomposition，并属于一个 modulus level；按所需 level 分别生成。不能截断高层 key 的 limbs 作为受支持的低层建钥入口；radix 的 Q、weights 和
+dropped bits 会改变，Hybrid 也须保持实际 P/partition/level 绑定。`None`
 选择全部可用 gadget digits；当 log_basis 不整除 Q 位宽时，仍会丢弃低 bits。
 
-被切换组件 a 在分解前先乘 Q 下的 p^-1；column phase 为 `p*g_j*h+p*e_j`，
+Radix 的被切换组件 a 在分解前先乘 Q 下的 p^-1；column phase 为 `p*g_j*h+p*e_j`，
 h 分别为 s²、source secret 或 σ(s)。Digit noise 与近似 residual 都成为 p 倍误差，
 不能直接照搬普通截断 BFV/GLWE 切换。三种 key 类型防止 relin/换钥/自同构角色误配；
 构造器拒绝未准备的 key level 或不同的 N、p、有序 Q；实际 decomposition 和 columns 由各 role

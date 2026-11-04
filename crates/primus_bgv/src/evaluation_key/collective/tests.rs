@@ -122,7 +122,7 @@ fn check_linear_columns(
     for (column, scalar) in key
         .columns
         .chunks_exact(2 * len)
-        .zip(key.basis.scalar_iter())
+        .zip(key.radix_basis().scalar_iter())
     {
         base.decompose_to(primus_integer::BigUint(scalar), Residues(&mut weights));
         let phase = phase_coefficients(context, column, target, level);
@@ -181,7 +181,7 @@ fn collective_two_round_columns_match_full_secret_square() {
         .key
         .columns
         .chunks_exact(2 * len)
-        .zip(key.key.basis.scalar_iter())
+        .zip(key.key.radix_basis().scalar_iter())
     {
         context
             .base_q(0)

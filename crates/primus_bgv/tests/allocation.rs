@@ -1,7 +1,7 @@
 //! Prepared coefficient operations retain their full-ring allocations.
 use primus_bgv::{
-    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch,
-    BgvMultiplication, BgvParameters, PlaintextEmbedding,
+    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluationKeyConfig, BgvEvaluator, BgvKeySwitcher,
+    BgvModulusSwitch, BgvMultiplication, BgvParameters, PlaintextEmbedding,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
@@ -35,6 +35,11 @@ unsafe impl GlobalAlloc for Counting {
 static ALLOCATOR: Counting = Counting;
 #[test]
 fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
+    for hybrid in [false, true] {
+        prepared_request(hybrid);
+    }
+}
+fn prepared_request(hybrid: bool) {
     let moduli = [
         1_125_899_906_248_961,
         1_125_899_906_051_329,
@@ -78,16 +83,42 @@ fn private_public_and_exact_wide_recovery_reuse_prepared_storage() {
         log_basis: DecompositionBaseLog::new(8),
         level_count: None,
     };
-    let relin_key0 = client.relinearization_key(0, config, &mut rng).unwrap();
-    let relin_key1 = client.relinearization_key(1, config, &mut rng).unwrap();
+    let config0: BgvEvaluationKeyConfig = if hybrid {
+        context
+            .hybrid_key_parameters(0, 3, &[1_152_921_504_606_830_593])
+            .unwrap()
+            .into()
+    } else {
+        config.into()
+    };
+    let config1: BgvEvaluationKeyConfig = if hybrid {
+        context
+            .hybrid_key_parameters(1, 3, &[1_152_921_504_606_830_593])
+            .unwrap()
+            .into()
+    } else {
+        config.into()
+    };
+    let relin_key0 = client.relinearization_key(0, config0, &mut rng).unwrap();
+    let relin_key1 = client
+        .relinearization_key(1, config1.clone(), &mut rng)
+        .unwrap();
     #[cfg(feature = "batching")]
     let auto_key = client
-        .row_rotation_key(1, &context.batching_encoder().unwrap(), 1, config, &mut rng)
+        .row_rotation_key(
+            1,
+            &context.batching_encoder().unwrap(),
+            1,
+            config1.clone(),
+            &mut rng,
+        )
         .unwrap();
     #[cfg(not(feature = "batching"))]
-    let auto_key = client.automorphism_key(1, 5, config, &mut rng).unwrap();
+    let auto_key = client
+        .automorphism_key(1, 5, config1.clone(), &mut rng)
+        .unwrap();
     let switch_key = recipient
-        .key_switching_key(&client, 1, config, &mut rng)
+        .key_switching_key(&client, 1, config1.clone(), &mut rng)
         .unwrap();
     let mut multiplication0 = BgvMultiplication::try_new(&context, &relin_key0).unwrap();
     let mut multiplication1 = BgvMultiplication::try_new(&context, &relin_key1).unwrap();

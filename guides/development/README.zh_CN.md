@@ -36,6 +36,7 @@
 | 原生 BFV/raw GLWE 的组件符号、密钥与显式桥接 | [RNS phase 约定](rns-phase-conventions.md)（English） |
 | 原生 BFV 整数 tensor、精确缩放、unscaled keys 与 degree 生命周期 | [BFV 求值](bfv-evaluation.md)（English） |
 | 原生 BGV key roles、p-preserving gadget residual 与精确 prime drop | [BGV 求值](bgv-evaluation.md)（English） |
+| 原生 BFV/BGV Hybrid QP keys、分区、精确 correction 与 collective 角色 | [Native Hybrid 密钥](native-hybrid-keys.md)（English） |
 | 旋转舍入、q/Q 返回、CBS 精度/投影支持、Fourier 预算与 one-hot 误差条件 | [自举数值契约](bootstrapping-contracts.md)（English） |
 | 当前实验配置及其证据边界 | [TFHE 参数目录](tfhe-parameters.md)（English） |
 | 离线 NTRU CBS 噪声场景与 gadget 筛选 | [参数分析工具](../../../primus_high_prec_lut/tools/parameter_selection/ntru_cbs/README.zh_CN.md) |

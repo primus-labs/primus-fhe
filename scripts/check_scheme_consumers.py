@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the four basic BFV/BGV examples as isolated normal-dependency consumers.
+"""Run the basic BFV/BGV examples with radix and native Hybrid keys as isolated normal-dependency consumers.
 
 No workspace development dependencies or feature selections are inherited. Use
 --output-dir outside this repository to retain source, manifests, lockfiles,
@@ -98,7 +98,8 @@ def check_consumers(output_dir: Path) -> None:
             if batching and 'primus_encoding feature "batching"' not in tree:
                 raise RuntimeError(f"{name}: scheme batching did not enable the shared encoder")
             run(["cargo", "run", "--offline", "--locked"], directory, "run.log", env)
-            print(f"{name}: normal dependency request passed; no criterion/dashu-int", flush=True)
+            run(["cargo", "run", "--offline", "--locked", "--", "--hybrid"], directory, "run-hybrid.log", env)
+            print(f"{name}: radix and Hybrid normal requests passed; no criterion/dashu-int", flush=True)
 
 
 def main() -> None:

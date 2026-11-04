@@ -16,6 +16,7 @@
 | `RNSBase<T, M>` | 非空、模数两两互素的 RNS 基及其 CRT 预计算 |
 | `BaseConverter<T, M>` | 在两个 RNS 基之间执行 fast 或 corrected 转换的预计算 |
 | `CorrectedConversionWorkspace<T>` | corrected 批量转换使用的可复用 workspace |
+| `CenteredBaseConverter` / `CenteredConversionWorkspace` | u64 精确 centered 基转换，认证快速修正及整数临界 fallback |
 | `HpsRns` | u64 HPS 的精确 centered 扩展、P/Q 预缩放和 t/P 舍入预计算 |
 | `HpsRnsWorkspace` | HPS 的复用 batch scratch，包括精确边界 fallback |
 | `HybridRNSPartitioning` | 在 modulus chain 各层之间共享的固定 full-`Q` 分区规则 |
@@ -76,10 +77,12 @@ assert_eq!(base.decompose(value.view()).as_ref(), [2, 4, 6]);
 
 转换面向运行时或派生 Barrett context。多模数转换的跨模数点积须接受可能超过目标模数的源 residue；Barrett 接受小于 `2^(T::BITS - 2)` 的操作数。自定义 context 须满足[转换器算术契约](src/converter/fast.rs)，`FieldContext` 本身不保证这些范围。
 
-两类转换具有不同的数学契约：
+不同转换入口具有不同的数学契约：
 
 - `fast_convert` 和 `fast_convert_array` 执行 SEAL 风格的 approximate CRT lift。输入基包含多个模数时，结果表示某个整数 `x + kQ`，通常不等于规范的 `x mod p_j`。只有外层算法会消去或允许这个 `Q` 倍数项时才能使用。单模数输入 使用精确的直接约简。
 - `corrected_convert_array` 应用商修正，将输入解释为 `[-Q/2, Q/2)` 中的居中代表元，要求输出基恰好包含一个模数。多模数输入的修正使用 `f64`，靠近居中边界时仍可能相差一个 `Q` 的倍数，需要在此边界精确转换的应用须采用更高精度方法。完整契约见[修正转换 API](src/converter/corrected.rs)。
+
+- `CenteredBaseConverter::try_new(&input,&output)` 为小于 2^62 的奇 u64 bases 准备精确 centered 转换，也支持多个输出模数。`workspace(value_count)` 与 `convert_to` 复用全部存储：保守浮点区间认证快速 CRT 商，临界半界转精确多字组合。HPS 和 native Hybrid correction 共享该原语，不为转换器准备无关 HPS scaling 资源。
 
 通过 `corrected_conversion_workspace` 创建 `CorrectedConversionWorkspace`，在同一 converter 和长度下复用。Fast conversion 接收由 `fast_convert_scratch_len` 或 `fast_convert_array_scratch_len` 确定大小的 scratch slice；空批量不写入数据；corrected 转换仍要求单模数输出基及形状匹配的工作区。每个并发操作使用独立的可变工作区。
 
@@ -97,7 +100,9 @@ alpha = ceil(full_q_moduli_count / dnum)
 
 每个分区支持 approximate ModUp 到 `Q || P`；streaming ModUp 只生成转换后的 complement limb，原分区 limb 由调用方提供。ModDown 将 `P` correction 转换到 `Q`，执行减法，再乘以 `P^-1 mod q_i`。
 
-方案需要自定义 correction 时，可组合 `approx_convert_p_to_q_to` 和 `approx_mod_down_from_correction_q_assign`；调用方负责 correction 的来源、符号、缩放及相同 Q 基顺序。这并不自动构成 BFV、BGV 或 CKKS 的降模规则。零长度 Hybrid 运算不写入数据，也不触发流式回调。完整契约见 [hybrid API](src/hybrid)。
+方案需要自定义 correction 时，可组合 `approx_convert_p_to_q_to` 和 `approx_mod_down_from_correction_q_assign`；调用方负责 correction 的来源、符号、缩放及相同 Q 基顺序。这并不自动构成 BFV、BGV 或 CKKS 的降模规则。零长度 Hybrid 运算不写入数据，也不触发流式回调。完整契约见 [hybrid API](src/hybrid)。原生 BFV/BGV 在独立拥有的
+[Native Hybrid product](../../guides/development/native-hybrid-keys.md) 中复用 partitioned ModUp
+并使用精确 centered P correction；原 approximate ModDown 入口没有被静默改成该方案规则。
 
 ## 调用方契约与 workspace
 

@@ -5,9 +5,9 @@
 > [!WARNING]
 > 本 crate 属于实验性的 [Primus FHE](../../README.zh_CN.md) workspace。其 API 和数值契约尚不稳定，可能随时发生不兼容修改。
 
-`primus_lattice` 为 [Primus FHE](../../README.zh_CN.md) 提供密文存储、表示转换和底层格运算，由 GLWE/NTRU × Fourier/NTT 四条 TFHE 路径以及 RNS GLWE 实现共同使用。
+`primus_lattice` 为 [Primus FHE](../../README.zh_CN.md) 提供密文存储、表示转换和底层格运算，由 GLWE/NTRU × Fourier/NTT 四条 TFHE 路径、RNS GLWE 实现和原生 BFV/BGV Hybrid product 共同使用。
 
-密钥生成、加密参数、编码策略、噪声管理和完整同态计算由 [`primus_glwe`](../primus_glwe)、[`primus_ntru`](../primus_ntru)、[`primus_glwe_rns`](../primus_glwe_rns) 等更高层负责。
+密钥生成、加密参数、编码策略、噪声管理和完整同态计算由 [`primus_glwe`](../primus_glwe)、[`primus_ntru`](../primus_ntru)、[`primus_glwe_rns`](../primus_glwe_rns)、[`primus_bfv`](../primus_bfv)、[`primus_bgv`](../primus_bgv) 等更高层负责。
 
 ## 密文类型
 
@@ -24,6 +24,9 @@
 | `Nlev` / `Ngsw` | 按分解顺序排列的 `L` 个 NTRU 多项式 | 系数、NTT、Fourier |
 
 RLWE、RLev 和 RGSW 分别使用 `Glwe`、`Glev` 和 `Ggsw`，并配合 `GlweSize::new(GlweDimension::new(1), PolyLength::new(N))`；NTT 和 CRT/DCRT 表示同样使用维度为 1 的布局。
+
+这里的通用 RLWE 布局使用 mask/body 顺序。原生 BFV/BGV 的 `[c0,c1]` plus-phase
+存储遵循方案层和 native Hybrid 契约；借用 view 不会自动转换这两种约定。
 
 类型通过对应模块导出，例如 `glwe::Glwe`、`ggsw::NttGgsw`、`ngsw::FourierNgsw`。前缀表示数据形式。`Torus*` 是系数类型在 native torus 场景下的别名，不会强制模数，也不执行编码。
 
@@ -77,6 +80,16 @@ NLev 与 NGSW 的存储形状相同，但语义不同：`beta` 的 NLev 各层�
 NLev 的 `external_product_sum_to` 和 GGSW/NGSW 的 `cmux_k_to` 接收数量匹配的精确长度迭代器。可传入借用的 gadget 和多项式/密文视图；输出用 `output.as_mut_view()`，CMux 默认分支用 `default.as_view()`。候选项可来自 `GlweIter` / `NtruIter` 或借用的密文集合，无需收集视图。空求和写零，空 CMux 复制默认分支。Fourier 对聚合结果统一舍入，可能与逐项转回系数后相加不同。
 
 完整 GLWE 抽取将全部 mask 多项式展平为 LWE mask；紧凑抽取要求省略的秘密后缀为零。`MultiMsgLwe` 保存按常数项抽取顺序排列的共享 mask，其抽取接口通过负循环旋转 mask 得到各个保留 body 系数的样本。逆抽取嵌入常数项 LWE 样本并将未使用位置清零，不恢复原 GLWE 明文的全部系数。
+
+## Native Hybrid RNS product
+
+启用 `rns` 后，`hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
+为 BFV/BGV keys 提供固定 u64、rank-one `[c0,c1]` plus-phase 算术。参数共享不可变
+CRT bases，仅自持 P NTT tables，实际 Q NTT 资源仍由方案拥有。Prepared product
+共享该参数 owner，并复用全部可变 scratch。`HybridModDown::Centered` 和
+`PlaintextPreserving(p)` 保持不同 correction；不新增密文类型族或 raw GLWE bridge。
+方案层仍生成/检查角色 keys 并建立完整误差与安全条件；共享 setup 扩展先恢复唯一
+受支撑的实际系数秘密，再构造 P limbs。详见[Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
 
 ## 正确性与工作区契约
 

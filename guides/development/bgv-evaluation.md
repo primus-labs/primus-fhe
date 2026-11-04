@@ -36,6 +36,9 @@ The backend does not silently reduce an unrelinearized tensor as rank-two GLWE.
 
 ## Why division by p precedes gadget decomposition
 
+This section describes the signed-radix Q backend. Hybrid uses a separate QP
+identity and does not preprocess its input by p^-1; see below.
+
 Let h be the source secret, σ(s), or s². At one modulus level, evaluation-key
 columns K_j have native phase `p*g_j*h+p*e_j`. Let
 
@@ -76,9 +79,9 @@ instead gives the p-preserving residual identity.
 
 `DecompositionConfig::level_count=None` means the maximum available digit count,
 not necessarily zero residual. Q's bit width need not be divisible by log_basis.
-Each key privately owns its actual basis and columns. A lower modulus level has
-different Q/weights/drop bits and needs newly generated columns; slicing an upper key's
-RNS limbs does not create the lower key. The distinct role types prevent passing
+Each key privately owns its actual basis and columns. Radix Q/weights/drop bits
+change at lower levels. The API binds keys to their actual level; slicing a
+matrix is not a supported constructor for a new radix or Hybrid key. The distinct role types prevent passing
 a key with the wrong semantic role; binding checks N,p,ordered Q and level index.
 Those checks cannot authenticate same-parameter actual secrets or NTT conventions.
 
@@ -96,6 +99,22 @@ exchanges rows. They validate the encoder's p and capacity before sampling and
 return the existing automorphism-key type. The encoder's exponent algorithm,
 native key generation and prepared operation are shared with the explicit
 `automorphism_key` entry; no extra table or operation owner is retained.
+
+## Native Hybrid keys
+
+Prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)` and
+pass its shared `Arc` to ordinary or collective role-key generation. The actual
+key domain is QP, while ciphertexts remain in Q and native plus phase. Columns
+have phase `P*projector_j*h+p*e_j`; input digits are partitioned Q residues, with
+no radix p^-1 preprocessing. After QP accumulation, subtract p times the exact
+centered P lift of `p^-1*T_P`, then multiply by `P^-1` in Q. The resulting error
+remains a p multiple, including the component corrections.
+
+The [native Hybrid contract](native-hybrid-keys.md) derives the exact identity,
+digit/key/ModDown bounds, fixed full-chain partitions and source-secret recovery
+from its actual highest Q. It also distinguishes key P from multiplication-only
+bases and describes QP collective linear/S² contributions. Choosing a key backend
+does not establish security, complete noise or a valid recovery/drop schedule.
 
 ## Exact plaintext-preserving prime drop
 

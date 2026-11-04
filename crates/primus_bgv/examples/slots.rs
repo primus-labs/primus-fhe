@@ -1,5 +1,8 @@
 //! One full-ring packed request: multiply two encrypted vectors, rotate, recover.
-use primus_bgv::{BgvAutomorphism, BgvClient, BgvContext, BgvMultiplication, BgvParameters};
+use primus_bgv::{
+    BgvAutomorphism, BgvClient, BgvContext, BgvEvaluationKeyConfig, BgvMultiplication,
+    BgvParameters,
+};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
@@ -25,15 +28,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         0.849,
     )?)?;
     let batching = context.batching_encoder()?;
-    let config = DecompositionConfig {
-        log_basis: DecompositionBaseLog::new(8),
-        level_count: None,
+    let config: BgvEvaluationKeyConfig = if std::env::args().any(|arg| arg == "--hybrid") {
+        context
+            .hybrid_key_parameters(0, moduli.len(), &[1_152_921_504_606_830_593])?
+            .into()
+    } else {
+        DecompositionConfig {
+            log_basis: DecompositionBaseLog::new(8),
+            level_count: None,
+        }
+        .into()
     };
     let mut rng = StdRng::seed_from_u64(0x09b6_5107);
     let mut client = BgvClient::generate(&context, &mut rng);
     let public_key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
-    let relin_key = client.relinearization_key(0, config, &mut rng)?;
+    let relin_key = client.relinearization_key(0, config.clone(), &mut rng)?;
     let rotate_key = client.row_rotation_key(0, &batching, 1, config, &mut rng)?;
     let mut multiplication = BgvMultiplication::try_new(&context, &relin_key)?;
     let mut rotation = BgvAutomorphism::try_new(&context, &rotate_key)?;

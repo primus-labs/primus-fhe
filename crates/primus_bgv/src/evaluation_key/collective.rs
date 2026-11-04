@@ -3,16 +3,18 @@
 
 use super::{
     BgvAutomorphismKey, BgvEvaluationKeyError, BgvKeySwitchingKey, BgvRelinearizationKey,
-    NativeEvaluationKey,
+    EvaluationKeyConfig, KeyBase, NativeEvaluationKey, scale_with_p,
 };
 use crate::{BgvCiphertext, BgvClient, BgvContext, BgvPublicKey};
 use primus_data::{Data, DataMut};
+#[cfg(test)]
 use primus_decompose::DecompositionConfig;
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
 use primus_ntt::{NttAutomorphismPermutation, NttTable};
 use primus_poly::{DcrtPolynomial, Polynomial};
-use primus_reduce::{ReduceAdd, ReduceMul};
+use primus_reduce::ReduceAdd;
+#[cfg(test)]
 use primus_rns::Residues;
 use zeroize::Zeroizing;
 
@@ -51,8 +53,8 @@ pub enum BgvCollectiveError {
 // equal numeric parameters. Import authenticates no remote identity by itself.
 struct Binding<'c> {
     context: &'c BgvContext,
-    level: usize,
     words: usize,
+    base: KeyBase,
 }
 
 impl<'c> Binding<'c> {
@@ -65,11 +67,32 @@ impl<'c> Binding<'c> {
         super::validate_level(context, level)?;
         Ok(Self {
             context,
-            level,
+            base: context.base_q(level).clone(),
             words: context
                 .rns_poly_len(level)
                 .checked_mul(polynomials)
                 .expect("collective payload length overflow"),
+        })
+    }
+
+    fn with_base(
+        context: &'c BgvContext,
+        level: usize,
+        polynomials: usize,
+        base: &KeyBase,
+    ) -> Result<Self, BgvCollectiveError> {
+        validate_distribution(context)?;
+        super::validate_level(context, level)?;
+        Ok(Self {
+            context,
+            words: context
+                .parameters()
+                .poly_length()
+                .get()
+                .checked_mul(base.moduli_count())
+                .and_then(|x| x.checked_mul(polynomials))
+                .expect("collective payload length overflow"),
+            base: base.clone(),
         })
     }
 
@@ -81,7 +104,7 @@ impl<'c> Binding<'c> {
             });
         }
         let n = self.context.parameters().poly_length().get();
-        let moduli = self.context.base_q(self.level).moduli_values();
+        let moduli = self.base.moduli_values();
         if values
             .chunks_exact(n)
             .enumerate()
@@ -183,7 +206,7 @@ impl BgvCollectiveAggregate<'_> {
         }
         let context = self.binding.context;
         let n = context.parameters().poly_length().get();
-        let moduli = context.base_q(self.binding.level).moduli();
+        let moduli = self.binding.base.moduli();
         for (i, (output, input)) in self
             .values
             .chunks_exact_mut(n)
@@ -235,14 +258,6 @@ fn check_sum(
     Ok(())
 }
 
-fn noise(context: &BgvContext, level: usize, output: &mut [u64], rng: &mut impl rand::CryptoRng) {
-    context
-        .parameters()
-        .encryption_parameters()
-        .sample_noise_to(output, context.base_q(level).moduli_values(), rng);
-    transform(context, output);
-}
-
 fn transform(context: &BgvContext, output: &mut [u64]) {
     for (table, limb) in context
         .table()
@@ -273,17 +288,6 @@ fn secret<'a>(client: &'a BgvClient<'_>, level: usize) -> &'a [u64] {
         .next()
         .expect("rank-one secret")
         .0[..client.context.rns_poly_len(level)]
-}
-
-fn scale_p(context: &BgvContext, level: usize, values: &mut [u64]) {
-    let n = context.parameters().poly_length().get();
-    let moduli = context.base_q(level).moduli();
-    for (i, limb) in values.chunks_exact_mut(n).enumerate() {
-        let q = moduli[i % moduli.len()];
-        for value in limb {
-            *value = q.reduce_mul(*value, context.parameters().plain_modulus().value());
-        }
-    }
 }
 
 /// Common-mask public-key setup with native phase `p*sum(e_i)`.
@@ -506,20 +510,24 @@ struct LinearPlan<'c> {
     template: NativeEvaluationKey,
     masks: Vec<u64>,
 }
-
 impl<'c> LinearPlan<'c> {
     fn new(
         context: &'c BgvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         validate_distribution(context)?;
         let template = NativeEvaluationKey::prepare_metadata(context, level, config)?;
-        let binding = Binding::new(context, level, template.basis.level_count().get())?;
+        let binding = Binding::with_base(
+            context,
+            level,
+            template.digit_count(),
+            template.base(context),
+        )?;
         let mut masks = vec![0; binding.words];
-        for mask in masks.chunks_exact_mut(context.rns_poly_len(level)) {
-            uniform(context, level, mask, rng)
+        for mask in masks.chunks_exact_mut(template.poly_len(context)) {
+            template.uniform(context, mask, rng);
         }
         Ok(Self {
             binding,
@@ -527,16 +535,20 @@ impl<'c> LinearPlan<'c> {
             masks,
         })
     }
-
     fn from_masks(
         context: &'c BgvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         validate_distribution(context)?;
         let template = NativeEvaluationKey::prepare_metadata(context, level, config)?;
-        let binding = Binding::new(context, level, template.basis.level_count().get())?;
+        let binding = Binding::with_base(
+            context,
+            level,
+            template.digit_count(),
+            template.base(context),
+        )?;
         binding.validate(&masks, binding.words)?;
         Ok(Self {
             binding,
@@ -544,7 +556,6 @@ impl<'c> LinearPlan<'c> {
             masks,
         })
     }
-
     fn contribute(
         &self,
         source: &BgvClient<'_>,
@@ -555,30 +566,29 @@ impl<'c> LinearPlan<'c> {
         self.binding.client(source)?;
         self.binding.client(target)?;
         let context = self.binding.context;
-        let level = self.binding.level;
-        let len = context.rns_poly_len(level);
+        let key = &self.template;
+        let len = key.poly_len(context);
         let n = context.parameters().poly_length().get();
-        let base = context.base_q(level);
+        let base = key.base(context);
+        let source = key.secret(source)?;
+        let target = key.secret(target)?;
         let mut transformed = Zeroizing::new(vec![0; len]);
         if let Some(permutation) = permutation {
-            for (input, output) in secret(source, level)
-                .chunks_exact(n)
-                .zip(transformed.chunks_exact_mut(n))
-            {
-                permutation.apply_to(input, output)
+            for (input, output) in source.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
+                permutation.apply_to(input, output);
             }
         } else {
-            transformed.copy_from_slice(secret(source, level))
+            transformed.copy_from_slice(&source);
         }
         let mut values = vec![0; self.binding.words];
         let mut weights = vec![0; base.moduli_count()];
-        for ((body, mask), scalar) in values
+        for (digit, (body, mask)) in values
             .chunks_exact_mut(len)
             .zip(self.masks.chunks_exact(len))
-            .zip(self.template.basis.scalar_iter())
+            .enumerate()
         {
-            noise(context, level, body, rng);
-            base.decompose_to(primus_integer::BigUint(scalar), Residues(&mut weights));
+            key.noise(context, body, rng);
+            key.weights_to(context, digit, &mut weights);
             let mut body = DcrtPolynomial(body);
             body.add_mul_scalar_assign(
                 &DcrtPolynomial(transformed.as_slice()),
@@ -588,22 +598,24 @@ impl<'c> LinearPlan<'c> {
             );
             body.sub_mul_assign(
                 &DcrtPolynomial(mask),
-                &DcrtPolynomial(secret(target, level)),
+                &DcrtPolynomial(target.as_slice()),
                 n,
                 base.moduli(),
             );
         }
-        scale_p(context, level, &mut values);
+        if !key.is_hybrid() {
+            scale_with_p(key.p, n, base, &mut values);
+        }
         self.binding.message(values, 0, None)
     }
-
     fn finish(
         &self,
         aggregate: BgvCollectiveAggregate<'_>,
     ) -> Result<NativeEvaluationKey, BgvCollectiveError> {
         check_sum(&self.binding, &aggregate, 0, None)?;
         let context = self.binding.context;
-        let len = context.rns_poly_len(self.binding.level);
+        let key = &self.template;
+        let len = key.poly_len(context);
         let mut columns = vec![0; 2 * self.binding.words];
         for ((column, body), mask) in columns
             .chunks_exact_mut(2 * len)
@@ -613,21 +625,20 @@ impl<'c> LinearPlan<'c> {
             let (c0, c1) = column.split_at_mut(len);
             c0.copy_from_slice(body);
             c1.copy_from_slice(mask);
-            scale_p(context, self.binding.level, c1)
+            if !key.is_hybrid() {
+                scale_with_p(
+                    key.p,
+                    context.parameters().poly_length().get(),
+                    key.base(context),
+                    c1,
+                );
+            }
         }
-        Ok(copy_template(&self.template, columns))
+        Ok(copy_template(key, columns))
     }
 }
-
 fn copy_template(template: &NativeEvaluationKey, columns: Vec<u64>) -> NativeEvaluationKey {
-    NativeEvaluationKey {
-        level: template.level,
-        p: template.p,
-        moduli: template.moduli.clone(),
-        size: template.size,
-        basis: template.basis.clone(),
-        columns,
-    }
+    template.clone_metadata(columns)
 }
 
 /// Concrete collective identity switch from source shares to target shares.
@@ -643,7 +654,7 @@ impl<'c> BgvCollectiveSwitchingKey<'c> {
     pub fn try_new(
         context: &'c BgvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         Ok(Self {
@@ -659,7 +670,7 @@ impl<'c> BgvCollectiveSwitchingKey<'c> {
     pub fn try_from_common_masks(
         context: &'c BgvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         Ok(Self {
@@ -728,7 +739,7 @@ impl<'c> BgvCollectiveAutomorphismKey<'c> {
         context: &'c BgvContext,
         level: usize,
         exponent: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         validate_exponent(context, exponent)?;
@@ -750,7 +761,7 @@ impl<'c> BgvCollectiveAutomorphismKey<'c> {
         context: &'c BgvContext,
         level: usize,
         exponent: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         validate_exponent(context, exponent)?;
@@ -842,10 +853,11 @@ impl BgvCollectiveRoundOne<'_> {
     }
 }
 /// Private, non-cloneable state for exactly one owner's second-round response.
-/// The owner client remains borrowed; consuming/dropping state securely erases u.
+/// The actual source share is copied into erasing Q/QP setup storage; consuming
+/// or dropping the state erases both that storage and u.
 pub struct BgvCollectiveRelinearizationState<'p, 'c> {
     plan: &'p BgvCollectiveRelinearization<'c>,
-    secret: &'p [u64],
+    secret: Zeroizing<Vec<u64>>,
     ephemeral: Zeroizing<Vec<u64>>,
 }
 impl<'c> BgvCollectiveRelinearization<'c> {
@@ -855,12 +867,16 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     pub fn try_new(
         context: &'c BgvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<Self, BgvCollectiveError> {
         let plan = LinearPlan::new(context, level, config, rng)?;
-        let round_one_binding =
-            Binding::new(context, level, 2 * plan.template.basis.level_count().get())?;
+        let round_one_binding = Binding::with_base(
+            context,
+            level,
+            2 * plan.template.digit_count(),
+            plan.template.base(context),
+        )?;
         Ok(Self {
             plan,
             round_one_binding,
@@ -874,12 +890,16 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     pub fn try_from_common_masks(
         context: &'c BgvContext,
         level: usize,
-        config: DecompositionConfig,
+        config: impl Into<EvaluationKeyConfig>,
         masks: Vec<u64>,
     ) -> Result<Self, BgvCollectiveError> {
         let plan = LinearPlan::from_masks(context, level, config, masks)?;
-        let round_one_binding =
-            Binding::new(context, level, 2 * plan.template.basis.level_count().get())?;
+        let round_one_binding = Binding::with_base(
+            context,
+            level,
+            2 * plan.template.digit_count(),
+            plan.template.base(context),
+        )?;
         Ok(Self {
             plan,
             round_one_binding,
@@ -890,7 +910,9 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     pub fn common_masks(&self) -> &[u64] {
         &self.plan.masks
     }
-    /// Samples private CBD1 u_i and produces `(g*s_i-A*u_i+e0,A*s_i+e1)`.
+    /// Samples private CBD1 u_i and produces the two-round key-domain response.
+    /// Radix uses g*s_i/E errors in Q before final p scaling; Hybrid uses
+    /// P*projector_j*s_i/pE errors directly in QP.
     /// # Errors
     /// Rejects a different client context before sampling. Returned private state
     /// is single-use; caller additionally enforces its roster/setup policy.
@@ -907,44 +929,41 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     > {
         self.plan.binding.client(client)?;
         let context = self.plan.binding.context;
-        let level = self.plan.binding.level;
         let n = context.parameters().poly_length().get();
-        let len = context.rns_poly_len(level);
-        let base = context.base_q(level);
-        let secret = secret(client, level);
+        let key = &self.plan.template;
+        let len = key.poly_len(context);
+        let base = key.base(context);
+        let secret = key.secret(client)?;
         let mut ephemeral = Zeroizing::new(vec![0; len]);
-        primus_distr::sample_crt_sparse_ternary_values_to(
-            &mut ephemeral,
-            n,
-            &context
-                .parameters()
-                .encryption_parameters()
-                .cipher_moduli_minus_one()[..base.moduli_count()],
-            rng,
-        );
-        transform(context, &mut ephemeral);
+        let minus_one: Vec<_> = base.moduli_values().iter().map(|&q| q - 1).collect();
+        primus_distr::sample_crt_sparse_ternary_values_to(&mut ephemeral, n, &minus_one, rng);
+        key.transform(context, &mut ephemeral);
         let mut values = vec![0; self.round_one_binding.words];
         let mut weights = vec![0; base.moduli_count()];
-        for ((column, mask), scalar) in values
+        for (digit, (column, mask)) in values
             .chunks_exact_mut(2 * len)
             .zip(self.plan.masks.chunks_exact(len))
-            .zip(self.plan.template.basis.scalar_iter())
+            .enumerate()
         {
             let (h0, h1) = column.split_at_mut(len);
-            noise(context, level, h0, rng);
-            noise(context, level, h1, rng);
-            base.decompose_to(primus_integer::BigUint(scalar), Residues(&mut weights));
-            let mut h0 = DcrtPolynomial(h0);
-            h0.add_mul_scalar_assign(&DcrtPolynomial(secret), &weights, n, base.moduli());
-            h0.sub_mul_assign(
+            key.noise(context, h0, rng);
+            key.noise(context, h1, rng);
+            key.weights_to(context, digit, &mut weights);
+            DcrtPolynomial(h0).add_mul_scalar_assign(
+                &DcrtPolynomial(secret.as_slice()),
+                &weights,
+                n,
+                base.moduli(),
+            );
+            DcrtPolynomial(&mut column[..len]).sub_mul_assign(
                 &DcrtPolynomial(mask),
                 &DcrtPolynomial(ephemeral.as_slice()),
                 n,
                 base.moduli(),
             );
-            DcrtPolynomial(h1).add_mul_assign(
+            DcrtPolynomial(&mut column[len..]).add_mul_assign(
                 &DcrtPolynomial(mask),
-                &DcrtPolynomial(secret),
+                &DcrtPolynomial(secret.as_slice()),
                 n,
                 base.moduli(),
             );
@@ -1031,7 +1050,8 @@ impl<'c> BgvCollectiveRelinearization<'c> {
         }
         self.plan.binding.message(values, 2, Some(&frozen.values))
     }
-    /// Produces p-scaled native columns `(p*Z,p*H1)` from complete rounds.
+    /// Produces native columns from complete rounds in the selected key domain.
+    /// Radix scales `(Z,H1)` by p; Hybrid uses `(Z,H1)` in QP directly.
     /// # Errors
     /// Rejects empty/mismatched rounds. Both authenticated round rosters must be
     /// complete and identical; contributions' identity remains caller-owned.
@@ -1048,8 +1068,8 @@ impl<'c> BgvCollectiveRelinearization<'c> {
             return Err(BgvCollectiveError::Binding);
         }
         let context = self.plan.binding.context;
-        let level = self.plan.binding.level;
-        let len = context.rns_poly_len(level);
+        let key = &self.plan.template;
+        let len = key.poly_len(context);
         let mut columns = vec![0; 2 * self.plan.binding.words];
         for ((column, z), first) in columns
             .chunks_exact_mut(2 * len)
@@ -1059,7 +1079,14 @@ impl<'c> BgvCollectiveRelinearization<'c> {
             let (c0, c1) = column.split_at_mut(len);
             c0.copy_from_slice(z);
             c1.copy_from_slice(&first[len..]);
-            scale_p(context, level, column)
+            if !key.is_hybrid() {
+                scale_with_p(
+                    key.p,
+                    context.parameters().poly_length().get(),
+                    key.base(context),
+                    column,
+                );
+            }
         }
         Ok(BgvRelinearizationKey {
             key: copy_template(&self.plan.template, columns),
@@ -1067,7 +1094,8 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     }
 }
 impl BgvCollectiveRelinearizationState<'_, '_> {
-    /// Consumes private u_i, borrows s_i, and returns `s_i*H0+(u_i-s_i)*H1+e2`.
+    /// Consumes private u_i and its key-domain share, returning
+    /// `s_i*H0+(u_i-s_i)*H1+e2` (p*e2 for Hybrid).
     /// # Errors
     /// Rejects a different first-round setup; the private state remains consumed
     /// on every return/unwind. The protocol authenticates the complete round.
@@ -1084,12 +1112,12 @@ impl BgvCollectiveRelinearizationState<'_, '_> {
             return Err(BgvCollectiveError::Binding);
         }
         let context = plan.plan.binding.context;
-        let level = plan.plan.binding.level;
-        let len = context.rns_poly_len(level);
+        let key = &plan.plan.template;
+        let len = key.poly_len(context);
         let n = context.parameters().poly_length().get();
-        let base = context.base_q(level);
+        let base = key.base(context);
         DcrtPolynomial(self.ephemeral.as_mut_slice()).sub_assign(
-            &DcrtPolynomial(self.secret),
+            &DcrtPolynomial(self.secret.as_slice()),
             n,
             base.moduli(),
         );
@@ -1098,11 +1126,11 @@ impl BgvCollectiveRelinearizationState<'_, '_> {
             .chunks_exact_mut(len)
             .zip(frozen.values.chunks_exact(2 * len))
         {
-            noise(context, level, body, rng);
+            key.noise(context, body, rng);
             let (h0, h1) = first.split_at(len);
             let mut body = DcrtPolynomial(body);
             body.add_mul_assign(
-                &DcrtPolynomial(self.secret),
+                &DcrtPolynomial(self.secret.as_slice()),
                 &DcrtPolynomial(h0),
                 n,
                 base.moduli(),
@@ -1137,8 +1165,8 @@ impl BgvClient<'_> {
         let len = self.context.rns_poly_len(level);
         let binding = Binding {
             context: self.context,
-            level,
             words: len,
+            base: self.context.base_q(level).clone(),
         };
         binding.validate(input.as_ref(), 2 * len)?;
         if output.as_ref().len() != len {

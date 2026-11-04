@@ -1,11 +1,10 @@
 //! u64 coefficient-domain basis operations for HPS-family BFV multiplication.
 
 use primus_factor::{FactorMul, ShoupFactor};
-use primus_integer::BigUint;
 use primus_modulus::BarrettModulus;
-use primus_reduce::{Reduce, ReduceDotProduct, ReduceInv, ReduceMul, ReduceNeg, ReduceSub};
+use primus_reduce::{Reduce, ReduceDotProduct, ReduceInv, ReduceNeg, ReduceSub};
 
-use crate::{BaseConverter, RNSBase, Residues, RnsError};
+use crate::{CenteredBaseConverter, CenteredConversionWorkspace, RNSBase, RnsError};
 
 type Base = RNSBase<u64, BarrettModulus<u64>>;
 
@@ -18,8 +17,8 @@ type Base = RNSBase<u64, BarrettModulus<u64>>;
 /// [`Self::scale_q_to_p`], rather than the exact multiplication requirement P>NQ.
 /// A BFV caller must establish its own noise and auxiliary-basis conditions.
 pub struct HpsRns {
-    q_to_p: CenteredConversion,
-    p_to_q: CenteredConversion,
+    q_to_p: CenteredBaseConverter,
+    p_to_q: CenteredBaseConverter,
     negative_p_q_hat_inverse: Vec<ShoupFactor<u64>>,
     q_inverse_mod_p: Vec<u64>,
     p_inverse_mod_q: Vec<ShoupFactor<u64>>,
@@ -35,23 +34,8 @@ pub struct HpsRns {
 pub struct HpsRnsWorkspace {
     value_count: usize,
     max_moduli: usize,
-    conversion: ConversionWorkspace,
+    conversion: CenteredConversionWorkspace,
     scaled_p: Vec<u64>,
-}
-
-struct ConversionWorkspace {
-    adjusted: Vec<u64>,
-    corrections: Vec<u64>,
-    residues: Vec<u64>,
-    value: Vec<u64>,
-}
-
-struct CenteredConversion {
-    converter: BaseConverter<u64, BarrettModulus<u64>>,
-    product_mod_output: Vec<u64>,
-    half_product: Vec<u64>,
-    inverse_moduli: Vec<f64>,
-    quotient_error: f64,
 }
 
 impl HpsRns {
@@ -115,8 +99,8 @@ impl HpsRns {
         let t_mod_q = scale_factors(base_q, t);
         let t_mod_p = scale_factors(base_p, t);
         Ok(Self {
-            q_to_p: CenteredConversion::new(base_q, base_p),
-            p_to_q: CenteredConversion::new(base_p, base_q),
+            q_to_p: CenteredBaseConverter::new(base_q, base_p),
+            p_to_q: CenteredBaseConverter::new(base_p, base_q),
             negative_p_q_hat_inverse,
             q_inverse_mod_p,
             p_inverse_mod_q,
@@ -135,7 +119,7 @@ impl HpsRns {
         HpsRnsWorkspace {
             value_count,
             max_moduli,
-            conversion: ConversionWorkspace {
+            conversion: CenteredConversionWorkspace {
                 adjusted: vec![
                     0;
                     max_moduli
@@ -300,10 +284,10 @@ impl HpsRns {
     }
 
     fn q(&self) -> &Base {
-        &self.q_to_p.converter.input_base
+        self.q_to_p.input_base()
     }
     fn p(&self) -> &Base {
-        &self.q_to_p.converter.output_base
+        self.q_to_p.output_base()
     }
 
     fn validate(
@@ -344,127 +328,6 @@ impl HpsRns {
             self.p().moduli_count() * n,
             "HPS workspace P shape mismatch"
         );
-    }
-}
-
-impl CenteredConversion {
-    fn new(input: &Base, output: &Base) -> Self {
-        let product = input.moduli_product();
-        let words = product.digits();
-        let half_product = words
-            .iter()
-            .enumerate()
-            .map(|(i, &word)| (word >> 1) | (words.get(i + 1).copied().unwrap_or(0) << 63))
-            .collect();
-        let count = input.moduli_count() as f64;
-        Self {
-            converter: BaseConverter::new(input, output),
-            product_mod_output: output.moduli().iter().map(|p| p.reduce(words)).collect(),
-            half_product,
-            inverse_moduli: input
-                .moduli_values()
-                .iter()
-                .map(|&q| 1.0 / q as f64)
-                .collect(),
-            // With u=2^-53 the cast/reciprocal/multiply chain contributes <5u
-            // absolute error per term in [0,1]. Sequential addition contributes
-            // <2u*k^2 for k*u<1/4. This deliberately larger bound also covers
-            // the rounding in sum+0.5 and the boundary-distance comparison.
-            // For larger k it exceeds 1/2, so every value takes exact fallback.
-            quotient_error: (count + 2.0) * (count + 2.0) * 2.0_f64.powi(-48),
-        }
-    }
-
-    fn expand(
-        &self,
-        input: &[u64],
-        output: &mut [u64],
-        n: usize,
-        workspace: &mut ConversionWorkspace,
-    ) {
-        if n == 0 {
-            return;
-        }
-        let source = &self.converter.input_base;
-        let destination = &self.converter.output_base;
-        let count = source.moduli_count();
-        if count == 1 {
-            let q = source.moduli_values()[0];
-            for ((chunk, p), &q_mod_p) in output
-                .chunks_exact_mut(n)
-                .zip(destination.moduli())
-                .zip(&self.product_mod_output)
-            {
-                for (out, &value) in chunk.iter_mut().zip(input) {
-                    let value_p = p.reduce(value);
-                    *out = if value > q / 2 {
-                        p.reduce_sub(value_p, q_mod_p)
-                    } else {
-                        value_p
-                    };
-                }
-            }
-            return;
-        }
-        let adjusted = &mut workspace.adjusted[..input.len()];
-        self.converter
-            .fast_convert_array(input, output, n, adjusted);
-        for (correction, residues) in workspace
-            .corrections
-            .iter_mut()
-            .zip(adjusted.chunks_exact(count))
-        {
-            let sum = residues
-                .iter()
-                .zip(&self.inverse_moduli)
-                .map(|(&x, &inverse)| x as f64 * inverse)
-                .sum::<f64>();
-            let nearest = (sum + 0.5).floor();
-            *correction = if (sum - nearest).abs() + self.quotient_error < 0.5 {
-                nearest as u64
-            } else {
-                u64::MAX
-            };
-        }
-        for ((chunk, p), &product) in output
-            .chunks_exact_mut(n)
-            .zip(destination.moduli())
-            .zip(&self.product_mod_output)
-        {
-            for (out, &correction) in chunk.iter_mut().zip(&workspace.corrections) {
-                if correction != u64::MAX {
-                    *out = p.reduce_sub(*out, p.reduce_mul(p.reduce(correction), product));
-                }
-            }
-        }
-        for (index, &correction) in workspace.corrections.iter().enumerate() {
-            if correction != u64::MAX {
-                continue;
-            }
-            let residues = &mut workspace.residues[..count];
-            for (residue, chunk) in residues.iter_mut().zip(input.chunks_exact(n)) {
-                *residue = chunk[index];
-            }
-            let value = &mut workspace.value[..source.big_uint_value_len()];
-            source.compose_to(Residues(residues), BigUint(value));
-            let negative = value
-                .iter()
-                .rev()
-                .cmp(self.half_product.iter().rev())
-                .is_gt();
-            for ((chunk, p), &product) in output
-                .chunks_exact_mut(n)
-                .zip(destination.moduli())
-                .zip(&self.product_mod_output)
-            {
-                let reduced = p.reduce(&*value);
-                chunk[index] = if negative {
-                    p.reduce_sub(reduced, product)
-                } else {
-                    reduced
-                };
-            }
-        }
     }
 }
 

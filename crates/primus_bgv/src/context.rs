@@ -107,6 +107,36 @@ impl BgvContext {
         &self.table
     }
 
+    /// Prepares one native Hybrid key domain using this context's actual prefix.
+    ///
+    /// The auxiliary QP basis is for evaluation keys, not ciphertext encryption.
+    /// Construction establishes arithmetic geometry, not a security or noise budget.
+    /// # Correctness
+    /// Auxiliary moduli must be actual NTT primes; transform preparation does not
+    /// certify primality. See [`primus_lattice::hybrid::NativeHybridParameters::try_new`].
+    /// # Errors
+    /// Rejects an unprepared level or invalid Hybrid bases/partition/transforms.
+    pub fn hybrid_key_parameters(
+        &self,
+        level: usize,
+        decomposition_count: usize,
+        auxiliary_moduli: &[u64],
+    ) -> Result<
+        std::sync::Arc<primus_lattice::hybrid::NativeHybridParameters>,
+        crate::BgvEvaluationKeyError,
+    > {
+        super::evaluation_key::validate_level(self, level)?;
+        Ok(std::sync::Arc::new(
+            primus_lattice::hybrid::NativeHybridParameters::try_new(
+                self.parameters().poly_length(),
+                self.base_q(level),
+                self.parameters().base_q().moduli_count(),
+                auxiliary_moduli,
+                decomposition_count,
+            )?,
+        ))
+    }
+
     /// Returns the number of prepared levels, including level zero.
     #[must_use]
     pub fn level_count(&self) -> usize {
