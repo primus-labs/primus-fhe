@@ -449,11 +449,7 @@ fn collective_partial_phase_and_consuming_prepared_lookup_allocate_nothing() {
     let message = state.round2(&round1, &mut rng).unwrap();
     let mut sum = round1.aggregate(1).unwrap();
     sum.add(&message).unwrap();
-    let lookup = round1
-        .finalize_lookup(sum)
-        .unwrap()
-        .prepare(&context)
-        .unwrap();
+    let lookup = round1.finalize_lookup(sum).unwrap().prepare();
     let len = context.rns_poly_len(0);
     let tensor = BfvRawQuadraticAggregate::try_new(&context, 0, vec![1; 3 * len]).unwrap();
     let mut output = context.new_ciphertext(0);

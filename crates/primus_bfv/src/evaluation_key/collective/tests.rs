@@ -225,8 +225,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
         }
         let mut output = context.new_ciphertext(level);
         let first_column = key.key.columns[..2 * len].to_vec();
-        key.prepare(&context)
-            .unwrap()
+        key.prepare()
             .apply_to(
                 BfvRawQuadraticAggregate::try_new(&context, level, tensor).unwrap(),
                 &mut output,

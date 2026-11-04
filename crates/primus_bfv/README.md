@@ -116,8 +116,13 @@ constructs the aggregate secret. The calling protocol authenticates owners,
 rejects duplicates, binds source/target/session identities and prevents reuse.
 Arithmetic count checks alone do not establish those properties.
 
+Source/target switching uses one actual context; `contribute` still receives
+the two distinct share owners. Matching parameters in another context are not
+accepted as proof of the same transform owner.
+
 For a separately sampled fresh lookup setup, use `finalize_lookup` and
-`BfvFreshLookupKey::prepare`. `apply_to` consumes this prepared key and a
+`BfvFreshLookupKey::prepare()`, which derives the context from the finalized key.
+`apply_to` consumes this prepared key and a
 checked `BfvRawQuadraticAggregate`, applies one **unscaled** relin and performs
 no ordinary BFV scale-and-round. Key errors and ephemeral values must be
 independent of selector inputs, including indirect public-key/transcript seed

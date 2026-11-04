@@ -95,7 +95,11 @@ radix 余位。[多级系数](examples/leveled_coefficients.rs)和
 接口不接收私有 shares 向量，也不构造聚合秘密。调用协议负责认证 owner、拒绝重复、
 绑定 source/target/session 身份并防止复用；算术数量检查不能建立这些属性。
 
-独立采样的 fresh lookup setup 使用 `finalize_lookup` 和 `BfvFreshLookupKey::prepare`。
+Source/target switching 只绑定一个实际 context；`contribute` 仍明确接收两份不同角色的
+share owner。另一 context 的参数相同不能证明其实际 transform owner 相同。
+
+独立采样的 fresh lookup setup 使用 `finalize_lookup` 和 `BfvFreshLookupKey::prepare()`，
+后者从已 finalized key 推导实际 context。
 `apply_to` 消耗 prepared key 及 checked `BfvRawQuadraticAggregate`，只执行一次
 **unscaled** relin，不执行普通 BFV scale-and-round。其 key errors/ephemeral
 必须独立于 selector 输入，包括经公钥或 transcript seed 间接引入的依赖。

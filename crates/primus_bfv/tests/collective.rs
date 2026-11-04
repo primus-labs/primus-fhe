@@ -7,7 +7,7 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
-use rand::{SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 const N: usize = 32;
 const Q: [u64; 3] = [
@@ -100,8 +100,7 @@ fn collective_keys_feed_existing_native_consumers_without_aggregate_secret() {
         decode(&context, phase(&context, &clients, &input, 0), 0),
         message
     );
-    let switching =
-        BfvCollectiveSwitchingKey::try_new(&context, &context, 0, config(), &mut rng).unwrap();
+    let switching = BfvCollectiveSwitchingKey::try_new(&context, 0, config(), &mut rng).unwrap();
     let mut sum = switching.aggregate(3).unwrap();
     for (source, target) in clients.iter().zip(&target) {
         sum.add(&switching.contribute(source, target, &mut rng).unwrap())
@@ -220,6 +219,21 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
     let embedded = client.try_embed_secret(&large).unwrap();
     assert!(std::ptr::eq(embedded.context(), &large));
     assert!(client.try_embed_secret(&context).is_err());
+    // Switching keys have one actual numerical owner, but source and target
+    // secrets remain separate clients. Equal parameters in another owner do
+    // not establish the same transform/context identity. Reject before RNG.
+    let foreign_context = crate::context(N);
+    let foreign = BfvClient::generate(&foreign_context, &mut rng);
+    let switching = BfvCollectiveSwitchingKey::try_new(&context, 0, config(), &mut rng).unwrap();
+    for (source, target) in [(&foreign, &client), (&client, &foreign)] {
+        let mut request_rng = StdRng::seed_from_u64(0x17_bf_01);
+        let mut expected_rng = StdRng::seed_from_u64(0x17_bf_01);
+        assert!(matches!(
+            switching.contribute(source, target, &mut request_rng),
+            Err(BfvCollectiveError::Binding)
+        ));
+        assert_eq!(request_rng.next_u64(), expected_rng.next_u64());
+    }
     // A fresh lookup is prepared from its independent setup and consumes both
     // its key and raw aggregate. The all-zero tensor has exact zero output.
     let key = {
@@ -234,7 +248,7 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
         r1.finalize_lookup(sum).unwrap()
     };
     // The final owner retains no setup/R1 workspace.
-    let lookup = key.prepare(&context).unwrap();
+    let lookup = key.prepare();
     let mut output = context.new_ciphertext(1);
     lookup
         .apply_to(

@@ -434,64 +434,33 @@ impl<'a> EvaluationSetup<'a> {
     }
 }
 
-/// Collective unscaled source-to-target switching setup. Source and target
-/// context references distinguish actual NTT conventions; secret IDs remain a
-/// protocol contract even if both references are equal.
+/// Collective unscaled source-to-target switching in one actual NTT context.
+/// Source and target shares may differ; their secret IDs remain a protocol
+/// contract and are supplied separately to [`Self::contribute`].
 pub struct BfvCollectiveSwitchingKey<'a> {
     setup: EvaluationSetup<'a>,
-    source: &'a BfvContext,
 }
 impl<'a> BfvCollectiveSwitchingKey<'a> {
-    /// Checks source/target ordered Q and prepares independent public masks.
+    /// Prepares independent masks in the source/target shares' common context.
     pub fn try_new<R: rand::Rng + rand::CryptoRng>(
-        source: &'a BfvContext,
-        target: &'a BfvContext,
+        context: &'a BfvContext,
         level: usize,
         config: DecompositionConfig,
         rng: &mut R,
     ) -> Result<Self, BfvCollectiveError> {
-        validate_level(source, level)?;
-        validate_level(target, level)?;
-        validate_numeric_context(
-            target.parameters().poly_length().get(),
-            target.parameters().codec().t(),
-            target.codec(level).moduli_values(),
-            source,
-            level,
-        )?;
-        // Different contexts may have different random NTT roots. Require the
-        // actual shared table, rather than treating matching moduli as proof.
-        if !ptr::eq(source.table(), target.table()) {
-            return Err(BfvCollectiveError::Binding);
-        }
         Ok(Self {
-            setup: EvaluationSetup::new(target, level, config, rng)?,
-            source,
+            setup: EvaluationSetup::new(context, level, config, rng)?,
         })
     }
     /// Imports canonical common masks; sender authentication/uniformity are external.
     pub fn try_from_common_mask(
-        source: &'a BfvContext,
-        target: &'a BfvContext,
+        context: &'a BfvContext,
         level: usize,
         config: DecompositionConfig,
         masks: Vec<u64>,
     ) -> Result<Self, BfvCollectiveError> {
-        validate_level(source, level)?;
-        validate_level(target, level)?;
-        validate_numeric_context(
-            target.parameters().poly_length().get(),
-            target.parameters().codec().t(),
-            target.codec(level).moduli_values(),
-            source,
-            level,
-        )?;
-        if !ptr::eq(source.table(), target.table()) {
-            return Err(BfvCollectiveError::Binding);
-        }
         Ok(Self {
-            setup: EvaluationSetup::from_mask(target, level, config, masks)?,
-            source,
+            setup: EvaluationSetup::from_mask(context, level, config, masks)?,
         })
     }
     /// Public common masks in backend-defined payload order.
@@ -511,7 +480,7 @@ impl<'a> BfvCollectiveSwitchingKey<'a> {
         target: &BfvClient<'_>,
         rng: &mut R,
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
-        owner(source, self.source)?;
+        owner(source, self.setup.context)?;
         owner(target, self.setup.context)?;
         let len = self.setup.context.rns_poly_len(self.setup.native.level);
         self.setup.import(
@@ -1003,22 +972,28 @@ impl<'a> BfvRawQuadraticAggregate<'a> {
         Ok(())
     }
 }
-impl BfvFreshLookupKey<'_> {
-    /// Takes ownership of the fresh key and prepares all scratch before lookup.
-    pub fn prepare(self, context: &BfvContext) -> Result<BfvFreshLookup<'_>, BfvCollectiveError> {
-        if !ptr::eq(self.context, context) {
-            return Err(BfvCollectiveError::Binding);
-        }
-        self.key.validate(context)?;
+impl<'a> BfvFreshLookupKey<'a> {
+    /// Takes ownership of the fresh key and prepares scratch in its bound context.
+    /// Finalization has already established the numerical binding; there is no
+    /// external context or mutable key metadata to revalidate here.
+    ///
+    /// # Correctness
+    /// The enclosing protocol must use independently sampled fresh setup whose
+    /// errors/ephemeral do not enter raw tensor inputs, including through seeds
+    /// or transcripts. Preparation does not certify this provenance or noise.
+    #[must_use]
+    pub fn prepare(self) -> BfvFreshLookup<'a> {
+        let context = self.context;
+        debug_assert!(self.key.validate(context).is_ok());
         let len = context.rns_poly_len(self.key.level);
         let workspace =
             DcrtGlevMulWorkspace::new(self.key.size, context.codec(self.key.level).base_q());
-        Ok(BfvFreshLookup {
+        BfvFreshLookup {
             context,
             key: self.key,
             coefficient: vec![0; len],
             workspace,
-        })
+        }
     }
 }
 impl BfvFreshLookup<'_> {
