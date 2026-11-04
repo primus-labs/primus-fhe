@@ -213,6 +213,8 @@ Per-method rustdoc owns precise contracts and partial-write behavior.
 
 Default features are empty. `simd` forwards to shared backends and follows their
 nightly requirements.
+Runtime NTT intrinsic dispatch is independent of this Cargo feature; disabling
+`simd` does not force scalar NTT. See the [feature boundary](../../guides/development/testing.md#features-与独立消费者).
 
 ```sh
 cargo check -p primus_bfv --all-targets --features batching

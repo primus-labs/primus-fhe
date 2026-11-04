@@ -174,6 +174,8 @@ scratch。独立并发请求使用独立的可变操作 owner。预备后的 `*_
 精确契约和 partial-write 行为以方法 rustdoc 为准。
 
 默认 features 为空。`simd` 转发到底层后端，遵循其 nightly 要求。
+NTT intrinsic按运行时CPU能力分派，独立于此Cargo feature；关闭`simd`不表示强制scalar
+NTT，见[feature边界](../../guides/development/testing.md#features-与独立消费者)。
 
 ```sh
 cargo check -p primus_bfv --all-targets --features batching

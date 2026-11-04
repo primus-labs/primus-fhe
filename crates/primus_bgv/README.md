@@ -81,9 +81,9 @@ the array does not publish the RNG's internal seed/state or authorize reuse of a
 public-key mask; a short public seed is not a full-ring statistical certificate.
 `BgvClient::partial_phase_to` writes only `c1*s_i`, without c0 or privacy noise;
 these are arithmetic building blocks, not an authenticated opening protocol.
-Callers own independent common-seed derivation, single-use policy, full-roster
-checks, privacy flooding and noise/security certification. Numeric input seeds
-must not depend on selection public-key or fresh lookup-key bytes/digests.
+Callers own independent common-mask generation, single-use policy, full-roster
+checks, privacy flooding and noise/security certification. Input masks and private
+coins must not be derived from selection public-key or fresh lookup-key bytes/digests.
 
 ## Evaluation keys and exact prime drop
 
@@ -170,6 +170,8 @@ benchmarks retain prepared output buffers. No Domain or generic coefficient type
 
 Default features are empty. `batching` enables shared slot encoding; `simd`
 forwards to the existing nightly SIMD backends.
+Runtime NTT intrinsic dispatch is independent of this Cargo feature; disabling
+`simd` does not force scalar NTT. See the [feature boundary](../../guides/development/testing.md#features-与独立消费者).
 
 ```sh
 cargo run -p primus_bgv --example coefficients

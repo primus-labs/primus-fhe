@@ -117,5 +117,6 @@ Reverse trace 在每次自同构及相加前乘 `2^-1 mod q_i`，保持 Q 和环
 ## Feature 与进一步阅读
 
 默认 features 为空，`simd` 向算术依赖转发 nightly SIMD。本 crate 已启用所需的 RNS features，无需另设 `rns` 开关。
+NTT intrinsic按运行时CPU能力分派，独立于此Cargo feature；关闭`simd`不表示强制scalar NTT，见[feature边界](../../guides/development/testing.md#features-与独立消费者)。
 
 [公开 API 源码](src/lib.rs) · [RNS 基与转换](../primus_rns/README.zh_CN.md) · [库使用导航](../../guides/development/README.zh_CN.md) · [测试指南](../../guides/development/testing.md)

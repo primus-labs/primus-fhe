@@ -117,5 +117,6 @@ Parallel calls use the caller's Rayon pool and divide each level into at most `w
 ## Features and further reading
 
 Default features are empty. `simd` forwards nightly SIMD support to arithmetic dependencies. This crate enables the RNS features it needs without a separate `rns` switch.
+Runtime NTT intrinsic dispatch is independent of this Cargo feature; disabling `simd` does not force scalar NTT. See the [feature boundary](../../guides/development/testing.md#features-与独立消费者).
 
 [Public API sources](src/lib.rs) · [RNS bases and conversion](../primus_rns/README.md) · [Library usage guide](../../guides/development/README.md) · [Testing guide](../../guides/development/testing.md)

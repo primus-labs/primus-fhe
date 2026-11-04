@@ -69,9 +69,9 @@ gadget weights 和 columns 不公开。
 聚合 centered input bodies 后只插入一次 shared mask。公开数组不等于公开 RNG 内部
 seed/state，也不授权复用 public-key mask；短公共 seed 本身不是 full-ring 统计证书。
 `BgvClient::partial_phase_to` 仅写 `c1*s_i`，不含 c0 或 privacy noise。这些是算术
-原语；独立 common seed、单次 policy、完整 roster、privacy flooding 和噪声/安全
-认证由协议负责。数值 input seed 不得依赖 selection 公钥或 fresh lookup key 的
-bytes/digest。
+原语；独立 common mask 的生成、单次 policy、完整 roster、privacy flooding 和噪声/安全
+认证由协议负责。Input masks和私有coins不得从selection公钥或fresh lookup key的
+bytes/digest数值派生。
 
 ## 求值密钥与精确降模
 
@@ -139,6 +139,8 @@ Prepared `_to`/`_assign` 加密、tensor/square、线性/明文求值、relin/�
 选择分配便利接口；高级例和基准保留 prepared 输出复用。不新增 Domain 或系数字类型泛型。
 
 默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly SIMD 后端。
+NTT intrinsic按运行时CPU能力分派，独立于此Cargo feature；关闭`simd`不表示强制scalar
+NTT，见[feature边界](../../guides/development/testing.md#features-与独立消费者)。
 
 ```sh
 cargo run -p primus_bgv --example coefficients

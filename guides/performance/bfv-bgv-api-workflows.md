@@ -26,7 +26,7 @@ Alice→Bob 换钥、两次 prime drop、恢复与解码。构造、建钥、缓
 在计时外。BFV 和 BGV 使用各自原 Q 链，不作跨方案速度归因。
 
 每方案独立 ABBA 四个进程，每进程 30 samples，warmup1s/measurement3s，
-CPU affinity 0、单 Rayon worker、stable native release、无 SIMD。所有构建和其他
+CPU affinity 0、单 Rayon worker、stable native release、未启用Cargo `simd`（NTT保留运行时intrinsic分派）。所有构建和其他
 验证在采样前结束。每个 artifact 的同负载 smoke 通过，测量前后源码和 binary SHA
 保持不变。
 
