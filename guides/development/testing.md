@@ -135,6 +135,26 @@ schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配�
 或 workspace feature 合并掩盖接口问题。系数消费者不启用 batching；槽消费者只需
 启用方案的 batching feature，由该方案传递到共享编码器。脚本不是公开验证 API。
 
+## BFV临时工作基
+
+`working_evaluation_keys`用独立整数CRT/nearest-round/scaled-embed oracle检查全部prefix、
+Radix/Hybrid及selected-component relin/switch/auto。`leveled_multiplication`核对真实
+multiply/square/alias与恢复外部Q；`leveled_parameters`检查有限family/depth准入与实际
+ordinary client/key绑定。分配检查复用allocation test的既有harness。
+
+```sh
+cargo test -p primus_bfv --test working_evaluation_keys --test leveled_multiplication --test leveled_parameters
+cargo run -p primus_bfv --example working_basis
+cargo bench -p primus_bfv --bench working_basis -- --test
+```
+
+普通行为主要用小环；工厂绑定与示例需要一份实际N16384 family。外部consumer额外复制
+该例子，以正常依赖验证两keybackend。BFV的dashu-int现用于精确冷参数认证，是正常
+运行依赖；BGV仍独立，不依赖BFV planner。Criterion不进入任何normal tree。
+
+工作基不是永久modulus drop。普通参数证书不涵盖collective/raw/mixed输入，增加其他
+运算后须重计噪声，见[完整契约](bfv-working-basis.md)。
+
 ## TFHE benchmarks
 
 四后端的基准位于各自 `benches/`，每个文件就地组织参数和准备工作。选择一个包与操作：

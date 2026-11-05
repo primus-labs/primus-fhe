@@ -41,6 +41,13 @@
 //! whose one-sided P/Q scaling has an explicit bounded residual and centered
 //! wrap correction. Its computation-only basis follows its own arithmetic
 //! budget; it does not inherit the exact backend's P>NQ requirement.
+//!
+//! [`BfvLeveledMultiplication`] temporarily rounds both inputs to a smaller
+//! working prefix, multiplies and relinearizes there, then scales back into the
+//! unchanged external Q basis. [`BfvLeveledParameters`] admits finite ordinary
+//! CBD1/CBD21 circuit families with complete deterministic error bounds and
+//! shared immutable key resources. It does not certify collective/raw SSLE
+//! keys, arbitrary imported secrets, or an RLWE security level.
 
 #![deny(missing_docs)]
 
@@ -49,6 +56,8 @@ mod client;
 mod context;
 mod evaluation_key;
 mod evaluator;
+mod leveled_multiplication;
+mod leveled_parameters;
 mod modulus_switch;
 mod multiplication;
 mod multiply;
@@ -56,6 +65,7 @@ mod parameters;
 mod public_key;
 mod quadratic;
 mod secret_key;
+mod working_basis;
 mod workspace;
 
 pub use ciphertext::BfvCiphertext;
@@ -66,6 +76,11 @@ pub use evaluation_key::{
     BfvKeySwitcher, BfvKeySwitchingKey, BfvRelinearizationKey, BfvRelinearizer,
 };
 pub use evaluator::BfvEvaluator;
+pub use leveled_multiplication::BfvLeveledMultiplication;
+pub use leveled_parameters::{
+    BfvLeveledKeyBackend, BfvLeveledParameterError, BfvLeveledParameters, BfvLeveledProfile,
+    BfvLeveledStep,
+};
 pub use modulus_switch::{BfvModulusSwitch, BfvModulusSwitchError};
 pub use multiplication::{BfvMultiplication, BfvMultiplicationBackend};
 pub use multiply::{BfvMultiplier, BfvMultiplyError};

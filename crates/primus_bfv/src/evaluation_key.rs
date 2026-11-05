@@ -22,6 +22,9 @@ use primus_rns::Residues;
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
+mod working;
+use working::WorkingKeyProduct;
+
 /// Invalid BFV evaluation-key parameters or numerical binding.
 #[derive(Debug, thiserror::Error)]
 pub enum BfvEvaluationKeyError {
@@ -32,6 +35,16 @@ pub enum BfvEvaluationKeyError {
         requested: usize,
         /// Number of prepared levels.
         available: usize,
+    },
+    /// A temporary working basis must be a prefix of the external basis.
+    #[error(
+        "BFV working level {working} must remove at least as many tail primes as external level {external}"
+    )]
+    WorkingLevel {
+        /// Public input/output level in the context.
+        external: usize,
+        /// Requested internal level, counting removed tail primes.
+        working: usize,
     },
     /// The full ciphertext polynomial length differs.
     #[error("BFV polynomial length mismatch: expected {expected}, got {actual}")]
@@ -433,6 +446,31 @@ impl BfvRelinearizationKey {
     pub(crate) fn level(&self) -> usize {
         self.key.level
     }
+
+    // Cold finite-family admission reads actual immutable metadata; it does not
+    // recreate Hybrid NTT owners or infer a sampler/secret relation from it.
+    pub(crate) fn matches_leveled_backend(
+        &self,
+        backend: crate::BfvLeveledKeyBackend,
+        auxiliary_p: &[u64],
+    ) -> bool {
+        match (backend, &self.key.basis) {
+            (crate::BfvLeveledKeyBackend::Radix16, NativeEvaluationBasis::Radix(metadata)) => {
+                metadata.basis.log_basis().get() == 16 && metadata.basis.drop_bits() < 16
+            }
+            (
+                crate::BfvLeveledKeyBackend::HybridAlpha1,
+                NativeEvaluationBasis::Hybrid(parameters),
+            ) => {
+                let rns = parameters.hybrid_rns();
+                rns.partition_moduli_count() == 1
+                    && rns.partitioning().full_q_moduli_count()
+                        == self.key.moduli.len() + self.key.level
+                    && rns.p_base().moduli_values() == auxiliary_p
+            }
+            _ => false,
+        }
+    }
 }
 
 /// Public role columns encrypting a source secret under the target secret.
@@ -726,7 +764,7 @@ impl<'a> NativeGadgetProduct<'a> {
 
 /// Reusable s²-to-s relinearization at one BFV prefix level.
 pub struct BfvRelinearizer<'a> {
-    product: NativeGadgetProduct<'a>,
+    product: WorkingKeyProduct<'a>,
 }
 
 impl<'a> BfvRelinearizer<'a> {
@@ -737,8 +775,31 @@ impl<'a> BfvRelinearizer<'a> {
         context: &'a BfvContext,
         key: &'a BfvRelinearizationKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
+        Self::try_with_working_level(context, key.level(), key)
+    }
+
+    /// Prepares a temporary smaller basis for the switched quadratic component.
+    ///
+    /// The key's actual level is the internal working level; `external_level`
+    /// is the unchanged input/output basis. Only c2 is rounded down, its native
+    /// key product is multiplied by D=Q/Q_l and zero-extended, then the original
+    /// external c0/c1 are added. This is not a permanent ciphertext modulus drop.
+    ///
+    /// # Correctness
+    /// The key encrypts the same actual s² under s at its working level. If A
+    /// bounds native working-key error and H bounds ||s||_1, the extra error is
+    /// at most D*(A+H²/2); budget it in addition to the input quadratic phase.
+    /// Metadata does not certify these bounds or a circuit's recoverability.
+    /// # Errors
+    /// Rejects unavailable levels, a working basis larger than the external
+    /// basis, or an incompatible actual key. Equal levels retain the old path.
+    pub fn try_with_working_level(
+        context: &'a BfvContext,
+        external_level: usize,
+        key: &'a BfvRelinearizationKey,
+    ) -> Result<Self, BfvEvaluationKeyError> {
         Ok(Self {
-            product: NativeGadgetProduct::try_new(context, &key.key)?,
+            product: WorkingKeyProduct::try_new(context, external_level, &key.key)?,
         })
     }
 
@@ -771,11 +832,11 @@ impl<'a> BfvRelinearizer<'a> {
         let (t0, t1, t2) = input.c0_c1_c2(len);
         self.product.product_to(t2.as_ref(), None, output);
         let (mut c0, mut c1) = output.c0_c1_mut(len);
-        let n = self.product.context.parameters().poly_length().get();
+        let n = self.product.context().parameters().poly_length().get();
         let moduli = self
             .product
-            .context
-            .codec(self.product.key.level)
+            .context()
+            .codec(self.product.external_level())
             .base_q()
             .moduli();
         c0.add_assign(&t0, n, moduli);
@@ -785,7 +846,7 @@ impl<'a> BfvRelinearizer<'a> {
 
 /// Reusable switch from a designated source secret to the target secret.
 pub struct BfvKeySwitcher<'a> {
-    product: NativeGadgetProduct<'a>,
+    product: WorkingKeyProduct<'a>,
 }
 
 impl<'a> BfvKeySwitcher<'a> {
@@ -796,8 +857,27 @@ impl<'a> BfvKeySwitcher<'a> {
         context: &'a BfvContext,
         key: &'a BfvKeySwitchingKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
+        Self::try_with_working_level(context, key.level(), key)
+    }
+
+    /// Temporarily rounds c1 to the key's actual working basis, switches there,
+    /// restores its product by D=Q/Q_l, then adds the original external c0.
+    /// The returned ciphertext retains `external_level` and its ordinary scale.
+    ///
+    /// # Correctness
+    /// Source/target secrets and actual roots agree across both bases. If A is
+    /// the native working-key error and H bounds the source secret's l1 norm,
+    /// the added external error is at most D*(A+H/2). Caller-supplied bounds
+    /// and complete recoverability are not established by numeric checks.
+    /// # Errors
+    /// Rejects unavailable/non-prefix levels or incompatible actual key metadata.
+    pub fn try_with_working_level(
+        context: &'a BfvContext,
+        external_level: usize,
+        key: &'a BfvKeySwitchingKey,
+    ) -> Result<Self, BfvEvaluationKeyError> {
         Ok(Self {
-            product: NativeGadgetProduct::try_new(context, &key.key)?,
+            product: WorkingKeyProduct::try_new(context, external_level, &key.key)?,
         })
     }
 
@@ -823,10 +903,10 @@ impl<'a> BfvKeySwitcher<'a> {
         let (mut out0, _) = output.c0_c1_mut(len);
         out0.add_assign(
             &c0,
-            self.product.context.parameters().poly_length().get(),
+            self.product.context().parameters().poly_length().get(),
             self.product
-                .context
-                .codec(self.product.key.level)
+                .context()
+                .codec(self.product.external_level())
                 .base_q()
                 .moduli(),
         );
@@ -835,7 +915,7 @@ impl<'a> BfvKeySwitcher<'a> {
 
 /// Reusable X -> X^k transformation and unscaled switch back to s.
 pub struct BfvAutomorphism<'a> {
-    product: NativeGadgetProduct<'a>,
+    product: WorkingKeyProduct<'a>,
     permutation: &'a NttAutomorphismPermutation,
 }
 
@@ -847,8 +927,27 @@ impl<'a> BfvAutomorphism<'a> {
         context: &'a BfvContext,
         key: &'a BfvAutomorphismKey,
     ) -> Result<Self, BfvEvaluationKeyError> {
+        Self::try_with_working_level(context, key.level(), key)
+    }
+
+    /// Prepares ordinary automorphism with temporary working-basis switching.
+    /// Only c1 is rounded; its permuted key product is restored to external Q
+    /// and added to the original permuted c0. No external level is consumed.
+    ///
+    /// # Correctness
+    /// The actual key encrypts σ(s) under s at its working level. For native
+    /// working-key error A and H>=||s||_1, extra error is bounded by D*(A+H/2).
+    /// Rounding commutes with this signed coefficient permutation because D is
+    /// odd. All other representation/recovery conditions of `apply_to` remain.
+    /// # Errors
+    /// Rejects unavailable/non-prefix levels or incompatible actual key metadata.
+    pub fn try_with_working_level(
+        context: &'a BfvContext,
+        external_level: usize,
+        key: &'a BfvAutomorphismKey,
+    ) -> Result<Self, BfvEvaluationKeyError> {
         Ok(Self {
-            product: NativeGadgetProduct::try_new(context, &key.key)?,
+            product: WorkingKeyProduct::try_new(context, external_level, &key.key)?,
             permutation: &key.permutation,
         })
     }
@@ -875,24 +974,9 @@ impl<'a> BfvAutomorphism<'a> {
         let (c0, c1) = input.c0_c1(len);
         self.product
             .product_to(c1.as_ref(), Some(self.permutation), output);
-        let n = self.product.context.parameters().poly_length().get();
-        for (input, scratch) in c0
-            .as_ref()
-            .chunks_exact(n)
-            .zip(self.product.coefficient.chunks_exact_mut(n))
-        {
-            self.permutation.apply_to(input, scratch);
-        }
         let (mut out0, _) = output.c0_c1_mut(len);
-        out0.add_assign(
-            &DcrtPolynomial(self.product.coefficient.as_slice()),
-            n,
-            self.product
-                .context
-                .codec(self.product.key.level)
-                .base_q()
-                .moduli(),
-        );
+        self.product
+            .add_permuted_to(c0.as_ref(), self.permutation, out0.as_mut());
     }
 }
 

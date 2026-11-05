@@ -1,5 +1,7 @@
 # BFV HPSPOVERQ: complete requests and resource costs
 
+> 本文保留当时HPSPOVERQ的历史测量范围；当前新增的临时工作基、深度准入与完整请求对照见[HPSPOVERQLEVELED](bfv-hps-over-q-leveled.md)，Native Hybrid见[专题](native-hybrid-keys.md)。
+
 HPSPOVERQ is an explicit ordinary BFV multiplication choice. The default
 `BfvMultiplication::try_new` remains `Exact`; select the optimized backend with
 `try_with_backend(context,key,BfvMultiplicationBackend::HpsPOverQ)`. Each owner

@@ -627,7 +627,7 @@ fn default_auxiliary_moduli(
 // bases cover n<2^64 (also used in SymPy's deterministic isprime branch):
 // https://github.com/sympy/sympy/blob/master/sympy/ntheory/primetest.py
 // This helper is private to setup; no new public number-theory API is needed.
-fn is_prime(n: u64) -> bool {
+pub(crate) fn is_prime(n: u64) -> bool {
     if n < 2 || n.is_multiple_of(2) {
         return n == 2;
     }

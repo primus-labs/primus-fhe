@@ -66,6 +66,8 @@ schemes:
   cargo run -p primus_bfv --example subring_slots --features batching
   cargo run -p primus_bfv --example leveled_coefficients
   cargo run -p primus_bfv --example leveled_slots --features batching
+  cargo run -p primus_bfv --example working_basis
+  cargo run -p primus_bfv --example working_basis -- --radix
   cargo run -p primus_bgv --example coefficients -- --hybrid
   cargo run -p primus_bgv --example slots --features batching -- --hybrid
   cargo run -p primus_bfv --example coefficients -- --hybrid

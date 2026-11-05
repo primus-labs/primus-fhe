@@ -200,6 +200,30 @@ ordered bases to prepare the same rounded kernel without a second BFV context.
 The enclosing protocol retains the original request/secret authorization and
 accounts for component rounding and message-lift drift.
 
+## Temporary working basis
+
+`BfvLeveledParameters::try_new(&context, depth, backend)` checks a finite ordinary
+CBD1/CBD21 family and selects actual working levels, computation P and complete
+integer error bounds. Build a context with
+`BfvLeveledProfile::N16384Q240.create_context(65537)?`, generate ordinary keys
+through each step, then call `step.prepare(&key)`. The complete
+[working-basis example](examples/working_basis.rs) keeps external level zero
+through three square layers; `--radix` selects the other reviewed key backend.
+
+`BfvLeveledMultiplication` implements the explicit Algorithm3 path: nearest-round
+both inputs into Q_l, multiply/relinearize there, then scaled-embed by Q/Q_l back
+into Q. Advanced `try_with_working_level` constructors on the existing
+relinearizer, key switcher and automorphism instead reduce only the component
+being switched. Data-Q tables/codecs are borrowed from one context; operations own computation-P
+resources and Hybrid key-P parameters are shared by Arc. Online methods reuse scratch. This is different from a permanent level drop.
+
+The factory covers the prescribed ordinary multiplication chain, not collective
+keys or raw/mixed SSLE. Inserted rotations, switches or other operations need
+additional error accounting. Key metadata cannot prove actual secret or honest
+sampling identity. Profiles are arithmetic admissions, not a full security-level
+search. See the [working-basis contract](../../guides/development/bfv-working-basis.md).
+Exact remains the default; these paths are explicitly selected.
+
 ## Advanced explicit workflows
 
 [Explicit coefficients](examples/explicit_coefficients.rs) demonstrates borrowed

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dashu-int = { workspace = true }
 primus_data = { path = "../primus_data" }
 primus_decompose = { path = "../primus_decompose" }
 primus_distr = { path = "../primus_distr" }
@@ -24,7 +25,6 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-dashu-int = { workspace = true }
 
 [features]
 default = []
@@ -51,6 +51,10 @@ required-features = ["batching"]
 name = "multiplication"
 harness = false
 required-features = ["batching"]
+
+[[bench]]
+name = "working_basis"
+harness = false
 
 [[example]]
 name = "leveled_slots"

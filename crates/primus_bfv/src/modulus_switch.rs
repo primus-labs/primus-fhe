@@ -146,7 +146,7 @@ impl<'a> BfvModulusSwitch<'a> {
     // Let r be the canonical dropped residue and r_c its centered lift. The
     // integer x-r_c is divisible by p, and differs from p*round(x/p) only by a
     // multiple of Q. NTT linearity lets us keep all retained x limbs transformed.
-    fn switch_component(&mut self, input: &[u64], output: &mut [u64]) {
+    pub(crate) fn switch_component(&mut self, input: &[u64], output: &mut [u64]) {
         let n = self.table.poly_length().get();
         let dropped_index = self.source.len() - 1;
         let prime = self.source[dropped_index].value();

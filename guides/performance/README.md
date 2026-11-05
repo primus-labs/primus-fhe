@@ -12,6 +12,7 @@ and [benchmark guide](../development/testing.md#tfhe-benchmarks).
 | --- | --- | --- |
 | [BFV/BGV ordinary workflows](bfv-bgv-api-workflows.md) | 中文 | Combined prepared multiplication, private diagnostics, same-request ABBA and allocation/storage comparison |
 | [BFV HPSPOVERQ](bfv-hps-over-q.md) | English | Exact reference, bounded prescaling/wrap, same-parameter complete requests and owned-resource costs |
+| [BFV HPSPOVERQLEVELED](bfv-hps-over-q-leveled.md) | Chinese | Temporary working bases, certified-depth comparisons and complete-request/resource tradeoffs |
 | [Native Hybrid keys](native-hybrid-keys.md) | English | Same-data BFV/BGV complete requests, explicit QP exposure, key preparation and scratch costs |
 | [BFV coefficient input checks](bfv-coefficient-validation.md) | English | Early rejection at encryption boundaries and complete-request ABBA guard |
 | [Exact BFV multiplication](bfv-multiplication.md) | English | Exact RNS NTT/reference comparison, complete fresh slot requests and unchanged coefficient control |

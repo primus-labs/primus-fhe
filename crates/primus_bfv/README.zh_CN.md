@@ -164,6 +164,24 @@ Codec **在恢复界限内得到精确消息**，不是任意 phase 的精确舍
 不证明安全级别、公钥加密恢复或求值恢复。必须计入公钥噪声、fixed-delta 漂移、
 全部求值项和每次降模的舍入误差。
 
+## 临时工作基
+
+`BfvLeveledParameters::try_new(&context, depth, backend)`检查有限的普通CBD1/CBD21
+参数族，选择真实working levels、计算P和完整整数误差界。先用
+`BfvLeveledProfile::N16384Q240.create_context(65537)?`建立context，逐step生成普通key，
+再调用`step.prepare(&key)`。[工作基示例](examples/working_basis.rs)在external level0
+完成三层square；`--radix`切换另一种已检查key后端。
+
+`BfvLeveledMultiplication`走显式Algorithm3路径：两输入nearest-round到Q_l，在Q_l
+乘法/relin，再乘Q/Q_l作scaled embedding恢复Q。现有relin、switch与automorphism的
+高级`try_with_working_level`构造器则只缩减被换钥的分量。Data-Q tables/codecs借自同一context；operation拥有计算P资源，Hybrid key-P参数由Arc共享。
+在线复用scratch。这与永久level drop不同。
+
+工厂覆盖规定的ordinary乘法链，不涵盖collective keys或raw/mixed SSLE。插入rotation、
+switch或其它运算须另计误差；key数字metadata不能证明真实secret/诚实采样来源。
+这些是有限算术准入，不是完整安全等级搜索。详见[工作基契约](../../guides/development/bfv-working-basis.md)。
+默认仍Exact，这些路径须显式选择。
+
 ## 高级显式工作流
 
 [显式系数示例](examples/explicit_coefficients.rs) 展示 borrowed

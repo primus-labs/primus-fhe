@@ -156,6 +156,14 @@ middle terms are equal. All prepared online methods allocate nothing. See the
 [performance comparison](../performance/bfv-hps-over-q.md) for complete requests,
 resource costs and the current selection policy.
 
+## Temporary working-basis HPSPOVERQLEVELED
+
+The [working-basis contract](bfv-working-basis.md) specifies exact temporary reduction,
+scaled restoration into unchanged external Q, actual lower-level keys, finite
+depth-aware ordinary parameters and complete deterministic error accounting.
+It also covers the selected-component working-key relin/rotation/switch paths.
+These are opt-in ordinary BFV operations; raw mixed SSLE does not use them.
+
 ## Phase error and fixed Delta
 
 Integer products, errors and carries below are negacyclic polynomials. Write

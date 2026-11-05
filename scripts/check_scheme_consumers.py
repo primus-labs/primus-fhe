@@ -20,7 +20,7 @@ import tempfile
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN = re.compile(r'\b(?:criterion|dashu-int)(?: v[0-9]| feature ")')
+FORBIDDEN = re.compile(r'\bcriterion(?: v[0-9]| feature ")')
 
 
 def dependency(name: str, batching: bool = False) -> str:
@@ -52,7 +52,7 @@ def check_consumers(output_dir: Path) -> None:
     env = os.environ.copy()
     env["CARGO_TARGET_DIR"] = str(ROOT / "target" / "scheme-consumers")
     for scheme in ("bfv", "bgv"):
-        for example in ("coefficients", "slots"):
+        for example in (("coefficients", "slots", "working_basis") if scheme == "bfv" else ("coefficients", "slots")):
             name = f"{scheme}_{example}"
             directory = output_dir / name
             (directory / "src").mkdir(parents=True, exist_ok=True)
@@ -62,7 +62,7 @@ def check_consumers(output_dir: Path) -> None:
                 "primus_decompose", "primus_glwe_rns", "primus_modulus",
                 "primus_shape",
             ))
-            if batching:
+            if batching or example == "working_basis":
                 dependencies.append(dependency("primus_poly"))
             dependencies.append(f"rand = {json.dumps(rand_version)}")
             manifest = (
@@ -93,13 +93,18 @@ def check_consumers(output_dir: Path) -> None:
             )
             if FORBIDDEN.search(tree):
                 raise RuntimeError(f"{name}: test/benchmark dependency leaked into normal tree")
+            if scheme == "bgv" and "dashu-int" in tree:
+                raise RuntimeError(f"{name}: independent BGV unexpectedly resolves the BFV parameter planner")
             if not batching and 'feature "batching"' in tree:
                 raise RuntimeError(f"{name}: coefficient consumer unexpectedly enabled batching")
             if batching and 'primus_encoding feature "batching"' not in tree:
                 raise RuntimeError(f"{name}: scheme batching did not enable the shared encoder")
-            run(["cargo", "run", "--offline", "--locked"], directory, "run.log", env)
-            run(["cargo", "run", "--offline", "--locked", "--", "--hybrid"], directory, "run-hybrid.log", env)
-            print(f"{name}: radix and Hybrid normal requests passed; no criterion/dashu-int", flush=True)
+            command = ["cargo", "run", "--offline", "--locked"]
+            if example == "working_basis":
+                command.append("--release")
+            run(command, directory, "run.log", env)
+            run([*command, "--", "--radix" if example == "working_basis" else "--hybrid"], directory, "run-other-backend.log", env)
+            print(f"{name}: radix and Hybrid normal requests passed; no criterion", flush=True)
 
 
 def main() -> None:

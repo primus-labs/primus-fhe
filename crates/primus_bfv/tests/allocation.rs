@@ -2,8 +2,8 @@
 
 use primus_bfv::{
     BfvAutomorphism, BfvCiphertext, BfvClient, BfvContext, BfvDecryptWorkspace, BfvEvaluator,
-    BfvKeySwitcher, BfvModulusSwitch, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
-    BfvRelinearizer, BfvSecretKeyContext, PlaintextEmbedding,
+    BfvKeySwitcher, BfvLeveledMultiplication, BfvModulusSwitch, BfvMultiplier, BfvParameters,
+    BfvPublicKey, BfvPublicKeyEncryptor, BfvRelinearizer, BfvSecretKeyContext, PlaintextEmbedding,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
@@ -81,6 +81,75 @@ fn observe<T>(operation: impl FnOnce() -> T) -> (T, usize) {
     let count = COUNT.with(|count| count.get().unwrap());
     drop(guard);
     (output, count)
+}
+
+#[test]
+fn temporary_working_basis_multiply_and_key_operations_allocate_nothing() {
+    let parameters = BfvParameters::new(
+        PolyLength::new(32),
+        BarrettModulus::new(193),
+        BarrettModulus::new((1 << 61) - 1),
+        &[
+            1_125_899_906_248_961,
+            1_125_899_906_051_329,
+            1_125_899_904_322_049,
+        ]
+        .map(BarrettModulus::new),
+        SecretKeyDistr::SparseTernary,
+        1.0,
+    );
+    let context = BfvContext::try_with_levels(parameters, 3).unwrap();
+    let mut rng = StdRng::seed_from_u64(0x26_a110c);
+    let client = BfvClient::generate(&context, &mut rng);
+    let target = BfvClient::generate(&context, &mut rng);
+    let input = client.encrypt_centered(&Polynomial::new(vec![1; 32]), &mut rng);
+    let mut output = context.new_ciphertext(0);
+    let mut multiplier = BfvMultiplier::try_with_default_basis(&context, 0).unwrap();
+    let mut quadratic = context.new_quadratic_ciphertext(0);
+    multiplier.square_to(&input, &mut quadratic);
+    for working in [1, 2] {
+        for hybrid in [false, true] {
+            let config = if hybrid {
+                context
+                    .hybrid_key_parameters(working, 3, &[1_152_921_504_606_830_593])
+                    .unwrap()
+                    .into()
+            } else {
+                primus_bfv::BfvEvaluationKeyConfig::Radix(DecompositionConfig {
+                    log_basis: DecompositionBaseLog::new(8),
+                    level_count: None,
+                })
+            };
+            let relin_key = client
+                .relinearization_key(working, config.clone(), &mut rng)
+                .unwrap();
+            let switch_key = client
+                .key_switching_key(&target, working, config.clone(), &mut rng)
+                .unwrap();
+            let auto_key = client
+                .automorphism_key(working, 5, config, &mut rng)
+                .unwrap();
+            let mut request = BfvLeveledMultiplication::try_new(&context, 0, &relin_key).unwrap();
+            let mut relin =
+                BfvRelinearizer::try_with_working_level(&context, 0, &relin_key).unwrap();
+            let mut switch =
+                BfvKeySwitcher::try_with_working_level(&context, 0, &switch_key).unwrap();
+            let mut auto = BfvAutomorphism::try_with_working_level(&context, 0, &auto_key).unwrap();
+            let mut inplace = input.clone();
+            assert_eq!(
+                observe(|| request.multiply_to(&input, &input, &mut output)).1,
+                0
+            );
+            assert_eq!(observe(|| request.square_to(&input, &mut output)).1, 0);
+            assert_eq!(observe(|| request.square_assign(&mut inplace)).1, 0);
+            assert_eq!(
+                observe(|| relin.relinearize_to(&quadratic, &mut output)).1,
+                0
+            );
+            assert_eq!(observe(|| switch.switch_to(&input, &mut output)).1, 0);
+            assert_eq!(observe(|| auto.apply_to(&input, &mut output)).1, 0);
+        }
+    }
 }
 
 #[test]
