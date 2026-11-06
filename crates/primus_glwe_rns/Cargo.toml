@@ -42,6 +42,7 @@ harness = false
 
 [features]
 default = []
+parallel = ["primus_ntt/parallel", "primus_lattice/parallel"]
 simd = [
     "primus_glwe/simd",
     "primus_integer/simd",

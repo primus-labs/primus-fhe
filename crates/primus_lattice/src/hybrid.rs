@@ -431,18 +431,13 @@ impl NativeHybridParameters {
         Ok(output)
     }
     fn transform_qp_kernel(&self, table_q: &U64DcrtTable, polynomial: &mut [u64], inverse: bool) {
-        let n = self.poly_length.get();
-        for (table, values) in table_q
-            .iter()
-            .take(self.hybrid.q_moduli_count())
-            .chain(self.table_p.iter())
-            .zip(polynomial.chunks_exact_mut(n))
-        {
-            if inverse {
-                table.inverse_transform_slice(values)
-            } else {
-                table.transform_slice(values)
-            }
+        let (q, p) = polynomial.split_at_mut(self.q_len);
+        if inverse {
+            table_q.inverse_transform_prefix_slice(q);
+            self.table_p.inverse_transform_prefix_slice(p);
+        } else {
+            table_q.transform_prefix_slice(q);
+            self.table_p.transform_prefix_slice(p);
         }
     }
 }

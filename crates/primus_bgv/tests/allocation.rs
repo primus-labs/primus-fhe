@@ -78,6 +78,7 @@ fn prepared_request(hybrid: bool) {
     let negative_one = Polynomial(negative_one);
     let embedding = PlaintextEmbedding::Centered;
     let mut evaluator = BgvEvaluator::new(&context, 0);
+    let mut plaintext_scratch = vec![u64::MAX; context.rns_poly_len(0)];
     let mut recipient = BgvClient::generate(&context, &mut rng);
     let config = DecompositionConfig {
         log_basis: DecompositionBaseLog::new(8),
@@ -147,6 +148,15 @@ fn prepared_request(hybrid: bool) {
     // linear/plaintext/recovery workflow reuses persistent prepared storage.
     client.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
     encryptor.encrypt_to(&input, &mut second, &mut rng);
+    {
+        // A worker can bind an already allocated dirty prefix for one call;
+        // neither this lightweight constructor nor the operation allocates.
+        let mut borrowed =
+            BgvEvaluator::with_plaintext_scratch(&context, 0, plaintext_scratch.as_mut_slice());
+        borrowed.mul_plain_to(&ciphertext, &negative_one, &mut combined, embedding);
+        evaluator.mul_plain_to(&ciphertext, &negative_one, &mut evaluated, embedding);
+        assert_eq!(combined, evaluated);
+    }
     evaluator.add_to(&ciphertext, &second, &mut combined);
     evaluator.add_assign(&mut combined, &ciphertext);
     evaluator.sub_to(&combined, &ciphertext, &mut evaluated);

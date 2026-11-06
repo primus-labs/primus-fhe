@@ -137,6 +137,12 @@ Default features are empty. `batching` enables shared slot encoding. `simd`
 forwards the shared nightly backends; runtime NTT intrinsic dispatch is separate,
 so disabling `simd` does not force scalar NTT. See the [feature boundary](../../guides/development/testing.md#features-与独立消费者).
 
+`parallel` enables bounded DCRT prefix forward/inverse NTT scheduling in the
+connected key-generation and gadget-product paths. Each prefix with N≥4096 and
+at least two limbs uses at most four contiguous tasks; bound total pool threads
+with `RAYON_NUM_THREADS` or `ThreadPool::install`. It is off by default, leaving
+this NTT path serial without pool initialization. Random sampling stays serial.
+
 ## Checks
 
 ```sh

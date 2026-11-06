@@ -271,12 +271,10 @@ impl NativeEvaluationKey {
     fn transform(&self, context: &BfvContext, poly: &mut [u64], inverse: bool) {
         match &self.basis {
             NativeEvaluationBasis::Radix(_) => {
-                for (table, limb) in context.table().iter().zip(poly.chunks_exact_mut(self.n)) {
-                    if inverse {
-                        table.inverse_transform_slice(limb);
-                    } else {
-                        table.transform_slice(limb);
-                    }
+                if inverse {
+                    context.table().inverse_transform_prefix_slice(poly);
+                } else {
+                    context.table().transform_prefix_slice(poly);
                 }
             }
             NativeEvaluationBasis::Hybrid(p) => {

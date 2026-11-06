@@ -7,8 +7,9 @@ use crate::{BgvCiphertext, BgvContext, BgvQuadraticCiphertext, PlaintextEmbeddin
 
 /// Prepared BGV linear, plaintext and quadratic operations at one Q level.
 ///
-/// The evaluator borrows immutable parameters/tables and owns one reusable
-/// plaintext polynomial. It retains no key or RNG and allocates nothing after
+/// The evaluator borrows immutable parameters/tables and uses one reusable
+/// plaintext polynomial, owned by default or borrowed from a worker. It retains
+/// no key or RNG and allocates nothing after
 /// construction. Both addition and multiplication lift plaintext without a
 /// BFV Delta or another factor of p.
 ///
@@ -19,10 +20,10 @@ use crate::{BgvCiphertext, BgvContext, BgvQuadraticCiphertext, PlaintextEmbeddin
 /// in (-Q/2,Q/2): reducing a phase by Q can change its residue modulo p even
 /// when each q_i is 1 modulo p. Parameter fresh-private bounds do not establish
 /// a bound for public encryption or a complete evaluated circuit.
-pub struct BgvEvaluator<'a> {
+pub struct BgvEvaluator<'a, S: DataMut<Elem = u64> = Vec<u64>> {
     context: &'a BgvContext,
     level: usize,
-    plaintext: DcrtPolynomial<Vec<u64>>,
+    plaintext: DcrtPolynomial<S>,
 }
 
 impl<'a> BgvEvaluator<'a> {
@@ -32,10 +33,33 @@ impl<'a> BgvEvaluator<'a> {
     /// Rejects an unprepared level before allocating.
     #[must_use]
     pub fn new(context: &'a BgvContext, level: usize) -> Self {
+        Self::with_plaintext_scratch(context, level, vec![0; context.rns_poly_len(level)])
+    }
+}
+
+impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
+    /// Borrows or owns one complete plaintext scratch polynomial at this level.
+    ///
+    /// Scratch may contain arbitrary words. Construction and linear operations
+    /// leave it untouched; each plaintext operation overwrites all active words
+    /// before reading them. A worker can reuse one maximum-sized allocation by
+    /// lending an exact prefix to one operation at a time. This constructor
+    /// allocates nothing and does not change the context's numerical binding.
+    ///
+    /// # Panics
+    /// Rejects an unprepared level or a scratch length other than N times the
+    /// active modulus count, before touching the supplied storage.
+    #[must_use]
+    pub fn with_plaintext_scratch(context: &'a BgvContext, level: usize, plaintext: S) -> Self {
+        assert_eq!(
+            plaintext.len(),
+            context.rns_poly_len(level),
+            "BGV evaluator plaintext scratch length mismatch"
+        );
         Self {
             context,
             level,
-            plaintext: DcrtPolynomial::zero(context.rns_poly_len(level)),
+            plaintext: DcrtPolynomial(plaintext),
         }
     }
 

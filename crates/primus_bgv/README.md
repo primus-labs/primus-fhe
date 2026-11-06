@@ -134,6 +134,10 @@ scratch follow their erasure contracts; `Zeroize` can clear the public encryptor
 without discarding its allocation. Consuming `into_secret_key` transfers the
 sole allocation; cross-scheme use still requires matching actual roots/order.
 
+`BgvEvaluator::new` owns its plaintext scratch and is the simplest default.
+For sequential operations sharing a worker buffer, `with_plaintext_scratch`
+borrows its exact active N·|Q| prefix; do not lend that buffer concurrently.
+
 Public entries check their documented complete lengths and plaintext conditions
 before writes/RNG consumption. Storage types do not authenticate level, secret,
 canonical ciphertext residues or NTT identity. Per-method rustdoc owns exact
@@ -142,6 +146,12 @@ panic, correctness and partial-write contracts.
 Default features are empty. `batching` enables shared slot encoding; `simd`
 forwards the existing nightly backends. Runtime NTT intrinsic dispatch is
 independent of that feature: disabling `simd` does not force scalar NTT.
+
+`parallel` enables bounded DCRT prefix forward/inverse NTT scheduling in the
+connected key-generation and gadget-product paths. Each prefix with N≥4096 and
+at least two limbs uses at most four contiguous tasks; bound total pool threads
+with `RAYON_NUM_THREADS` or `ThreadPool::install`. It is off by default, leaving
+this NTT path serial without pool initialization. Random sampling stays serial.
 
 ```sh
 cargo test -p primus_bgv --lib --tests --features batching

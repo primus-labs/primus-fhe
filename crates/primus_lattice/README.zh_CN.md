@@ -151,6 +151,11 @@ assert_eq!(sample.b(), 76);
 - `fourier` 启用对应的 Fourier 泛型接口，不选择具体 FFT 引擎。
 - `rustfft` / `tfhe-fft` 同时启用 `fourier` 和对应 FFT 实现，可叠加使用。
 - `rns` 启用 CRT/DCRT 密文及乘法工作区；DCRT 需要的 `ntt` 一并启用。
+- `parallel` 向已启用的 NTT 依赖转发有界 prefix 正逆变换调度，涵盖 GLev product
+  和 Hybrid Q/P 变换；它不激活 `ntt` 或 `rns`，须另行选择所需表示。每次 prefix
+  的 N≥4096 且至少两条 limb 时使用至多4个连续任务，总线程数须由
+  `RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 串行路径
+  不初始化 pool，随机采样不并行。
 - `simd` 仅向已启用的算术依赖传播 nightly SIMD，不激活后端、FFT 引擎或 `rns`。
 - `RnsGlweSize` 和 `RnsGadgetSize` 不依赖 `rns` feature。
 

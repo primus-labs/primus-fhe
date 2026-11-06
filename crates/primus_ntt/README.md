@@ -88,13 +88,20 @@ Custom `MonomialNttTable` implementations must supply the documented root values
  ...]
 ```
 
-This matches `CrtPolynomial` and `DcrtPolynomial` in [`primus_poly`](../primus_poly/README.md). DCRT callers must maintain the exact total length, modulus order, coefficient ranges and component transform conventions; total-length checks are debug diagnostics only. See the [DCRT API](src/dcrt/mod.rs).
+This matches `CrtPolynomial` and `DcrtPolynomial` in [`primus_poly`](../primus_poly/README.md). DCRT callers must maintain the exact total length, modulus order, coefficient ranges and component transform conventions; full-polynomial total-length checks are debug diagnostics only. See the [DCRT API](src/dcrt/mod.rs).
 
 `DcrtTable` provides full-polynomial forward/inverse transforms and `transform_coeff_one_monomial` for all limbs. Use `iter()` or `ntt_tables()` to access component tables for their lazy and general monomial operations.
 
 ## SIMD backends and build target
 
 Default features are empty. Specialized x86-64 tables select available scalar or SIMD kernels at runtime; these kernels do not require the optional `simd` feature. Other architectures use scalar implementations. The `simd` feature enables portable-SIMD support in dependencies and requires nightly Rust.
+
+`parallel` enables bounded scheduling for the checked DCRT prefix forward/inverse
+transforms: each prefix with N≥4096 and at least two limbs uses at most four
+contiguous tasks in the current Rayon pool. Bound the pool's total threads with
+`RAYON_NUM_THREADS` or `ThreadPool::install`; the task cap does not resize it.
+This feature is off by default, leaving that NTT path serial without pool
+initialization. Random sampling is not parallelized.
 
 The repository [build configuration](../../.cargo/config.toml) uses `target-cpu=native`. Override its rustflags when producing portable binaries; runtime dispatch alone does not make a host-targeted build portable.
 

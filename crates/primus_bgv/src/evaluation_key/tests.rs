@@ -21,6 +21,42 @@ const Q: [u64; 3] = [
     1_125_899_904_322_049,
 ];
 
+#[test]
+fn p_scaling_overwrites_dirty_columns_and_matches_wide_percent_reference() {
+    // The small first prime checks that p is reduced even in an auxiliary
+    // modulus below p. This is a private arithmetic test, not a scheme preset.
+    let base = super::KeyBase::new(&[97, 65537, Q[0]].map(BarrettModulus::new)).unwrap();
+    for components in [1, 3] {
+        let mut input = vec![0; components * N * base.moduli_count()];
+        for (index, limb) in input.as_chunks_mut::<N>().0.iter_mut().enumerate() {
+            let q = base.moduli_values()[index % base.moduli_count()];
+            let boundary = [0, 1, q - 1, q, q + 1, 2 * q, 4 * q - 1, u64::MAX];
+            for (i, value) in limb.iter_mut().enumerate() {
+                *value = boundary[(i + index) % boundary.len()];
+            }
+        }
+        let mut output = vec![u64::MAX; input.len()];
+        for p in [0, 1, 193, 65537, u64::MAX] {
+            let expected = input
+                .as_chunks::<N>()
+                .0
+                .iter()
+                .enumerate()
+                .flat_map(|(index, limb)| {
+                    let q = base.moduli_values()[index % base.moduli_count()];
+                    limb.iter().map(move |&value| multiply(value, p, q))
+                })
+                .collect::<Vec<_>>();
+            super::scale_with_p_to(p, N, &base, &input, &mut output);
+            assert_eq!(output, expected);
+            let mut assigned = input.clone();
+            super::scale_with_p(p, N, &base, &mut assigned);
+            assert_eq!(assigned, expected);
+            output.fill(17);
+        }
+    }
+}
+
 fn make_context(p: u64, moduli: &[u64], n: usize) -> BgvContext {
     BgvContext::try_with_levels(
         BgvParameters::try_with_error_distribution(

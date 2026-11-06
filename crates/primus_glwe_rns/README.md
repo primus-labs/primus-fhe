@@ -142,5 +142,11 @@ Default features are empty; RNS dependencies are enabled without a separate
 `rns` switch. `simd` forwards nightly SIMD features. Runtime NTT intrinsic dispatch
 is independent of that flag; disabling it does not force scalar NTT.
 
+`parallel` enables bounded DCRT prefix forward/inverse NTT scheduling in the
+shared GLev and Hybrid paths. Each prefix with N≥4096 and at least two limbs
+uses at most four contiguous tasks; bound the current pool's total threads with
+`RAYON_NUM_THREADS` or `ThreadPool::install`. It is off by default, leaving this
+NTT path serial without pool initialization. Random sampling is not parallelized.
+
 [Public API sources](src/lib.rs) · [Library usage guide](../../guides/development/README.md)
 · [Testing and feature boundaries](../../guides/development/testing.md)

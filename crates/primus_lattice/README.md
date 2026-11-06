@@ -154,6 +154,13 @@ Default features are empty: coefficient storage, layouts and basic arithmetic do
 - `fourier` enables the corresponding generic Fourier APIs without selecting an FFT engine.
 - `rustfft` / `tfhe-fft` enable `fourier` and the corresponding FFT implementation; they can be combined.
 - `rns` enables CRT/DCRT ciphertexts and multiplication workspaces, including the `ntt` capability required by DCRT.
+- `parallel` forwards bounded DCRT prefix forward/inverse NTT scheduling to an
+  active NTT dependency, including GLev products and Hybrid Q/P transforms. It
+  does not activate `ntt` or `rns`; enable the needed representation separately.
+  Prefixes with N≥4096 and two or more limbs use at most four contiguous tasks;
+  bound total pool threads with `RAYON_NUM_THREADS` or `ThreadPool::install`.
+  It is off by default, with no pool initialization on this serial NTT path;
+  random sampling is not parallelized.
 - `simd` propagates nightly SIMD only to active arithmetic dependencies; it does not activate a backend, FFT engine or `rns`.
 - `RnsGlweSize` and `RnsGadgetSize` remain available without `rns`.
 

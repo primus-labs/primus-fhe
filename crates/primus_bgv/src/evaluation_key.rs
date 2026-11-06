@@ -5,6 +5,7 @@ use primus_data::{Data, DataMut};
 #[cfg(test)]
 use primus_decompose::big_integer::BigUintApproxSignedBasis;
 use primus_decompose::{ApproxSignedBasisError, DecompositionConfig};
+use primus_factor::{FactorSliceOps, ShoupFactor};
 use primus_glwe_rns::DcrtGlweSecretKey;
 use primus_lattice::hybrid::{
     EvaluationKeyConfig, HybridModDown, NativeHybridError, NativeHybridParameters,
@@ -261,13 +262,7 @@ impl NativeEvaluationKey {
     fn transform(&self, context: &BgvContext, values: &mut [u64]) {
         match &self.decomposition {
             KeyDecomposition::Radix(_) => {
-                for (table, limb) in context
-                    .table()
-                    .iter()
-                    .zip(values.chunks_exact_mut(context.parameters().poly_length().get()))
-                {
-                    table.transform_slice(limb);
-                }
+                context.table().transform_prefix_slice(values);
             }
             KeyDecomposition::Hybrid(p) => p.transform_qp_assign(context.table(), values),
         }
@@ -410,10 +405,23 @@ impl NativeEvaluationKey {
 fn scale_with_p(p: u64, n: usize, base: &KeyBase, values: &mut [u64]) {
     for (i, limb) in values.chunks_exact_mut(n).enumerate() {
         let q = base.moduli()[i % base.moduli_count()];
-        let scalar = q.reduce(p);
-        for value in limb {
-            *value = q.reduce_mul(*value, scalar);
-        }
+        // p may exceed an auxiliary prime. Prepare its canonical factor once
+        // per limb, then use the native batch kernel for the complete limb.
+        ShoupFactor::new(q.reduce(p), q.value()).factor_mul_slice_assign(limb, q.value());
+    }
+}
+
+// Final key columns must be copied out of the authenticated sums. Fuse that
+// copy with Radix p-scaling instead of reading and writing the column twice.
+fn scale_with_p_to(p: u64, n: usize, base: &KeyBase, values: &[u64], output: &mut [u64]) {
+    debug_assert_eq!(values.len(), output.len());
+    for (i, (input, output)) in values
+        .chunks_exact(n)
+        .zip(output.chunks_exact_mut(n))
+        .enumerate()
+    {
+        let q = base.moduli()[i % base.moduli_count()];
+        ShoupFactor::new(q.reduce(p), q.value()).factor_mul_slice_to(input, output, q.value());
     }
 }
 

@@ -116,12 +116,21 @@ ephemeral 和恢复 scratch 遵守各自擦除合同；公钥 encryptor 可用 `
 保留 allocation。消费式 `into_secret_key` 转交唯一 allocation；跨方案使用仍须匹配
 实际 roots/order。
 
+`BgvEvaluator::new` 自持 plaintext scratch，是最简单的默认用法。顺序操作需要共享
+worker buffer 时，可用 `with_plaintext_scratch` 借用准确的 active N·|Q| 前缀；
+同一 buffer 不能借给并发操作。
+
 公开入口按各自合同在写入/RNG 前检查完整长度及明文条件。存储类型不认证 level、
 秘密、canonical ciphertext residues 或 NTT 身份；准确 panic、correctness 和
 partial-write 合同由逐方法 rustdoc 维护。
 
 默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly 后端。
 运行期 NTT intrinsic 分派独立于该 feature；关闭 `simd` 不表示强制 scalar NTT。
+
+`parallel` 启用已接入的建钥与 gadget-product 路径中的有界 DCRT prefix 正逆 NTT
+调度。每次 prefix 的 N≥4096 且至少两条 limb 时使用至多4个连续任务；总线程数须由
+`RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 路径保持串行
+且不初始化 pool；随机采样保持串行。
 
 ```sh
 cargo test -p primus_bgv --lib --tests --features batching

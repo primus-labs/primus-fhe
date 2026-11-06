@@ -88,13 +88,18 @@ Lazy 值表示模 `q` 的剩余类，但其更宽的整数范围属于调用契�
  ...]
 ```
 
-这与 [`primus_poly`](../primus_poly/README.zh_CN.md) 中 `CrtPolynomial` 和 `DcrtPolynomial` 的布局一致。DCRT 调用方须维持精确总长度、模数顺序、系数范围与各分量的变换约定，总长度检查仅作 debug 诊断。完整契约见 [DCRT API](src/dcrt/mod.rs)。
+这与 [`primus_poly`](../primus_poly/README.zh_CN.md) 中 `CrtPolynomial` 和 `DcrtPolynomial` 的布局一致。DCRT 调用方须维持精确总长度、模数顺序、系数范围与各分量的变换约定，完整多项式接口的总长度检查仅作 debug 诊断。完整契约见 [DCRT API](src/dcrt/mod.rs)。
 
 `DcrtTable` 提供完整多项式的正逆变换，以及作用于所有分量的 `transform_coeff_one_monomial`。通过 `iter()` 或 `ntt_tables()` 访问分量 table，可使用各自的 lazy 和一般 monomial 操作。
 
 ## SIMD backend 与编译目标
 
 默认 feature 集为空。专用 x86-64 table 在运行时选择可用的 scalar 或 SIMD 内核，无需启用可选的 `simd` feature；其他架构使用 scalar 实现。`simd` feature 启用依赖中的 portable-SIMD 支持，需要 nightly Rust。
+
+`parallel` 启用 checked DCRT prefix 正逆 NTT 的有界调度：每次 prefix 的 N≥4096
+且至少两条 limb 时，在当前 Rayon pool 中使用至多4个连续任务。总线程数须由
+`RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制，任务上限不会调整 pool 大小。
+该 feature 默认关闭，此 NTT 路径保持串行且不初始化 pool；随机采样不并行。
 
 仓库[编译配置](../../.cargo/config.toml) 使用 `target-cpu=native`。构建可移植二进制时须覆盖其 rustflags；仅有运行时分派不能使面向本机编译的产物可移植。
 

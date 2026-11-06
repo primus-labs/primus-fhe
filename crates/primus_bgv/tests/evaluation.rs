@@ -240,6 +240,43 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
 }
 
 #[test]
+fn borrowed_plaintext_storage_checks_geometry_and_preserves_dirty_linear_scratch() {
+    let context = context(257);
+    let len = context.rns_poly_len(0);
+    let (input, _) = fixture(&[3; N], 257, PlaintextEmbedding::Centered, 7);
+    let mut output = context.new_ciphertext(0);
+    let mut storage = vec![u64::MAX; len + 1];
+    for length in [0, len - 1, len + 1] {
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = BgvEvaluator::with_plaintext_scratch(&context, 0, &mut storage[..length]);
+            }))
+            .is_err()
+        );
+        assert!(storage.iter().all(|&value| value == u64::MAX));
+    }
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            let _ = BgvEvaluator::with_plaintext_scratch(
+                &context,
+                context.level_count(),
+                &mut storage[..len],
+            );
+        }))
+        .is_err()
+    );
+    {
+        let evaluator = BgvEvaluator::with_plaintext_scratch(&context, 0, &mut storage[..len]);
+        evaluator.add_to(&input, &input, &mut output);
+        for (index, (&input, &actual)) in input.as_ref().iter().zip(output.as_ref()).enumerate() {
+            let q = Q[(index / N) % Q.len()];
+            assert_eq!(actual, (2 * u128::from(input) % u128::from(q)) as u64);
+        }
+    }
+    assert!(storage.iter().all(|&value| value == u64::MAX));
+}
+
+#[test]
 fn invalid_lengths_and_plaintext_values_leave_outputs_unchanged() {
     let context = context(257);
     let mut evaluator = BgvEvaluator::new(&context, 0);

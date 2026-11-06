@@ -99,6 +99,7 @@ required-features = ["rns"]
 
 [features]
 default = []
+parallel = ["primus_ntt?/parallel"]
 serde = ["dep:serde"]
 ntt = ["dep:primus_ntt"]
 fourier = ["dep:primus_fft", "dep:num-complex"]

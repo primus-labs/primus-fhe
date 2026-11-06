@@ -1,5 +1,7 @@
 use primus_reduce::FieldContext;
 use primus_shape::PolyLength;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 use crate::{MonomialNttTable, NttError, NttTable, U32NttTable, U64NttTable, UintNttTable};
 
@@ -57,6 +59,13 @@ where
             .iter()
             .map(|&modulus| Ntt::new(poly_length, modulus))
             .collect::<Result<Vec<_>, _>>()?;
+
+        // Prepare the opted-in scheduler with the table, rather than lazily
+        // allocating its thread pool during a prepared arithmetic request.
+        #[cfg(feature = "parallel")]
+        if poly_length.get() >= 4096 && ntt_tables.len() >= 2 {
+            let _ = rayon::current_num_threads();
+        }
 
         Ok(Self {
             ntt_tables,
@@ -128,6 +137,74 @@ where
         self.iter()
             .zip(poly.chunks_exact_mut(poly_length))
             .for_each(|(table, values)| table.inverse_transform_slice(values));
+    }
+
+    /// Transforms one nonempty ordered prefix of this table's CRT limbs.
+    ///
+    /// With the `parallel` feature, N>=4096 and at least two limbs, this uses
+    /// at most four contiguous tasks in the current Rayon pool. Configure that
+    /// pool with `RAYON_NUM_THREADS` or `ThreadPool::install` to bound its total
+    /// thread count; the task cap does not resize the pool. Smaller inputs
+    /// and single-worker pools stay serial. Existing limbs are borrowed in
+    /// place; no ciphertext scratch or random sampling is introduced. Without
+    /// that feature no thread pool is initialized.
+    ///
+    /// # Panics
+    /// Rejects an empty, partial-limb or overlong prefix before writes.
+    ///
+    /// # Correctness
+    /// Each limb inherits [`NttTable::transform_slice`]'s canonical input and
+    /// representation contract, using the first `poly.len()/N` ordered tables.
+    #[inline]
+    pub fn transform_prefix_slice(&self, poly: &mut [Ntt::ValueT]) {
+        self.transform_prefix_kernel::<false>(poly);
+    }
+
+    /// Inversely transforms a nonempty ordered CRT prefix in place.
+    ///
+    /// Scheduling and complete-prefix checks match [`Self::transform_prefix_slice`].
+    /// # Panics
+    /// Rejects an empty, partial-limb or overlong prefix before writes.
+    /// # Correctness
+    /// Each limb inherits [`NttTable::inverse_transform_slice`]'s input range,
+    /// originating table, root order and normalization contract.
+    #[inline]
+    pub fn inverse_transform_prefix_slice(&self, poly: &mut [Ntt::ValueT]) {
+        self.transform_prefix_kernel::<true>(poly);
+    }
+
+    fn transform_prefix_kernel<const INVERSE: bool>(&self, poly: &mut [Ntt::ValueT]) {
+        let n = self.poly_length.get();
+        assert!(
+            !poly.is_empty() && poly.len().is_multiple_of(n) && poly.len() <= self.rns_poly_len,
+            "DCRT transform requires a nonempty complete limb prefix"
+        );
+        let tables = &self.ntt_tables[..poly.len() / n];
+        #[cfg(feature = "parallel")]
+        if n >= 4096 && tables.len() >= 2 {
+            let workers = rayon::current_num_threads().min(4).min(tables.len());
+            if workers > 1 {
+                let limbs_per_task = tables.len().div_ceil(workers);
+                tables
+                    .par_chunks(limbs_per_task)
+                    .zip(poly.par_chunks_mut(limbs_per_task * n))
+                    .for_each(|(tables, values)| {
+                        Self::transform_limbs::<INVERSE>(tables, values, n)
+                    });
+                return;
+            }
+        }
+        Self::transform_limbs::<INVERSE>(tables, poly, n);
+    }
+
+    fn transform_limbs<const INVERSE: bool>(tables: &[Ntt], values: &mut [Ntt::ValueT], n: usize) {
+        for (table, limb) in tables.iter().zip(values.chunks_exact_mut(n)) {
+            if INVERSE {
+                table.inverse_transform_slice(limb);
+            } else {
+                table.transform_slice(limb);
+            }
+        }
     }
 }
 

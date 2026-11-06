@@ -8,7 +8,7 @@
 
 use super::{
     BgvAutomorphismKey, BgvEvaluationKeyError, BgvKeySwitchingKey, BgvRelinearizationKey,
-    EvaluationKeyConfig, KeyBase, NativeEvaluationKey, scale_with_p,
+    EvaluationKeyConfig, KeyBase, NativeEvaluationKey, scale_with_p, scale_with_p_to,
 };
 use crate::{BgvCiphertext, BgvClient, BgvContext, BgvPublicKey};
 use primus_data::{Data, DataMut};
@@ -710,12 +710,14 @@ impl<'c> LinearPlan<'c> {
         {
             let (c0, c1) = column.split_at_mut(len);
             c0.copy_from_slice(body);
-            c1.copy_from_slice(mask);
-            if !key.is_hybrid() {
-                scale_with_p(
+            if key.is_hybrid() {
+                c1.copy_from_slice(mask);
+            } else {
+                scale_with_p_to(
                     key.p,
                     context.parameters().poly_length().get(),
                     key.base(context),
+                    mask,
                     c1,
                 );
             }
@@ -1168,15 +1170,13 @@ impl<'c> BgvCollectiveRelinearization<'c> {
             .zip(frozen.values.chunks_exact(2 * len))
         {
             let (c0, c1) = column.split_at_mut(len);
-            c0.copy_from_slice(z);
-            c1.copy_from_slice(&first[len..]);
-            if !key.is_hybrid() {
-                scale_with_p(
-                    key.p,
-                    context.parameters().poly_length().get(),
-                    key.base(context),
-                    column,
-                );
+            if key.is_hybrid() {
+                c0.copy_from_slice(z);
+                c1.copy_from_slice(&first[len..]);
+            } else {
+                let n = context.parameters().poly_length().get();
+                scale_with_p_to(key.p, n, key.base(context), z, c0);
+                scale_with_p_to(key.p, n, key.base(context), &first[len..], c1);
             }
         }
         Ok(BgvRelinearizationKey {

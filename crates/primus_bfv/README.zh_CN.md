@@ -121,6 +121,11 @@ residue、roots/order 或实际 secret；这些关系由调用方维护，同尺
 运行时 NTT intrinsic 分派独立于此 feature，关闭 `simd` 不表示强制 scalar NTT。
 见 [feature 边界](../../guides/development/testing.md#features-与独立消费者)。
 
+`parallel` 启用已接入的建钥与 gadget-product 路径中的有界 DCRT prefix 正逆 NTT
+调度。每次 prefix 的 N≥4096 且至少两条 limb 时使用至多4个连续任务；总线程数须由
+`RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 路径保持串行
+且不初始化 pool；随机采样保持串行。
+
 ## 验证入口
 
 ```sh

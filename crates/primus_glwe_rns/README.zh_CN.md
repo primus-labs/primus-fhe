@@ -122,5 +122,10 @@ Reverse trace 是**模 Q 除2**，不是舍入或 modulus switch；后续 switch
 默认 features 为空；已启用所需 RNS 依赖，无需另设 `rns` 开关。`simd` 转发 nightly
 SIMD feature。Runtime NTT intrinsic dispatch 独立于此 flag，关闭它不表示强制 scalar NTT。
 
+`parallel` 启用共享 GLev/Hybrid 路径中的有界 DCRT prefix 正逆 NTT 调度。每次
+prefix 的 N≥4096 且至少两条 limb 时使用至多4个连续任务；总线程数须由
+`RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制。默认关闭，此 NTT 路径保持串行
+且不初始化 pool；随机采样不并行。
+
 [公开 API 源码](src/lib.rs) · [库使用导航](../../guides/development/README.zh_CN.md)
 · [测试与 feature 边界](../../guides/development/testing.md)
