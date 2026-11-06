@@ -22,7 +22,8 @@ fn injections_match_raw_encoded_inputs_and_validate_before_callbacks() {
     let table = U64DcrtTable::new(n, &moduli).unwrap();
     let size = RnsGlweSize::new(GlweSize::new(GlweDimension::new(2), n), 2);
     let sampling =
-        CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
+        CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+            .unwrap();
     let coefficient_key = GlweSecretKey::<u64>::generate(
         size.glwe_size(),
         sampling.secret_key_sampler(),

@@ -68,10 +68,13 @@ schemes:
   cargo run -p primus_bfv --example leveled_slots --features batching
   cargo run -p primus_bfv --example working_basis
   cargo run -p primus_bfv --example working_basis -- --radix
-  cargo run -p primus_bgv --example coefficients -- --hybrid
-  cargo run -p primus_bgv --example slots --features batching -- --hybrid
-  cargo run -p primus_bfv --example coefficients -- --hybrid
-  cargo run -p primus_bfv --example slots --features batching -- --hybrid
+  cargo run -p primus_bgv --example ciphertext_multiplication
+  cargo run -p primus_bgv --example ciphertext_multiplication -- --hybrid
+  cargo run -p primus_bfv --example ciphertext_multiplication
+  cargo run -p primus_bfv --example ciphertext_multiplication -- --hybrid
+  cargo run -p primus_glwe_rns --example raw_encryption
+  cargo run -p primus_glwe_rns --example public_encryption
+  cargo run -p primus_glwe_rns --example gadget_encryption
   python3 scripts/check_scheme_consumers.py
 
 # Explicit crate-local workload.

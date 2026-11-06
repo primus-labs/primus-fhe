@@ -91,6 +91,8 @@ cargo run -p primus_bgv --example coefficients
 cargo run -p primus_bgv --example slots --features batching
 cargo run -p primus_bfv --example coefficients
 cargo run -p primus_bfv --example slots --features batching
+cargo run -p primus_bgv --example ciphertext_multiplication -- --hybrid
+cargo run -p primus_bfv --example ciphertext_multiplication -- --hybrid
 cargo run -p primus_bgv --example leveled_coefficients
 cargo run -p primus_bgv --example leveled_slots --features batching
 cargo run -p primus_bfv --example leveled_coefficients
@@ -126,13 +128,16 @@ tensor，P>NQ 在构造时检查。独立 integer schoolbook 及 raw/scaled/key-
 schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配；不得
 把成功的解密往返当作整数取整或噪声证明。
 
-基础 `coefficients`、`slots` 展示 setup 后复用 prepared 操作，连续执行完整
-公钥计算与恢复；slots 先使用 n=N，由 context 推导编码器的 N/p。基础例的
-分配式编码、加解密入口隐藏临时缓冲；高级例和 allocation 测试验证 `_to` 的复用契约。
+基础 `coefficients`、`slots` 只展示公钥加密、明文加/乘与恢复，两次请求复用 setup 和
+求值输出，不需要 evaluation key 或 backend 选项。Slots 使用 n=N，由 context 推导
+编码器的 N/p，`encode_to` 直接写 plaintext；加密/恢复使用分配式便利入口。
+`ciphertext_multiplication` 单独引入 relin 与 Radix/Hybrid；高级例和 allocation 测试
+验证 `_to` 的复用契约。
 显式 borrowed-secret/workspace、n<N 子环及跨 client 多级链留在高级例。
 `just schemes` 还运行 `scripts/check_scheme_consumers.py`：在临时 workspace 中，
-只用 examples 实际所需的普通依赖分别执行 BFV/BGV 的两条基础请求，避免 dev-dependencies
-或 workspace feature 合并掩盖接口问题。系数消费者不启用 batching；槽消费者只需
+只用 examples 实际所需的普通依赖执行四个基础流程、两方案的密文乘法双后端和 BFV
+working-basis 双后端，避免 dev-dependencies 或 workspace feature 合并掩盖接口问题。
+系数消费者不启用 batching；槽消费者只需
 启用方案的 batching feature，由该方案传递到共享编码器。脚本不是公开验证 API。
 
 ## BFV临时工作基

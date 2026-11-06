@@ -25,21 +25,6 @@ pub struct CrtGlweEncryptionParameters<T: FheUint> {
 }
 
 impl<T: FheUint> CrtGlweEncryptionParameters<T> {
-    /// Prepares a [`CrtGlweEncryptionParameters`] without BFV encoding.
-    ///
-    /// # Panics
-    /// Panics on the layout/base or sampler errors of [`Self::try_new`].
-    #[must_use]
-    pub fn new<M: FieldContext<T>>(
-        size: RnsGlweSize,
-        base_q: &RNSBase<T, M>,
-        secret_key_distr: SecretKeyDistr,
-        noise_standard_deviation: f64,
-    ) -> Self {
-        Self::try_new(size, base_q, secret_key_distr, noise_standard_deviation)
-            .expect("invalid CRT GLWE sampling parameters")
-    }
-
     /// Prepares the complete kN secret and noise domains, without t or gamma.
     /// The base remains owned by the caller; cached samplers follow its exact order.
     /// Mask/noise samplers serve both ordinary and gadget encryption. Different

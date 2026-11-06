@@ -1,4 +1,5 @@
-//! Complete leveled BGV slots in a plaintext subring with full-ring secrets.
+//! Advanced: subring slots, row operations, key switching and two prime drops.
+//! Run: cargo run -p primus_bgv --example leveled_slots --features batching
 
 use primus_bgv::{
     BgvAutomorphism, BgvClient, BgvContext, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,

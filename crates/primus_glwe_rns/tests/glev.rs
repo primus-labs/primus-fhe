@@ -40,12 +40,10 @@ fn test_rns_glev() {
         GlweSize::new(GlweDimension::new(dimension), table.poly_length()),
         base_q.moduli_count(),
     );
-    let inner = Arc::new(CrtGlweEncryptionParameters::new(
-        size,
-        &base_q,
-        SecretKeyDistr::SparseTernary,
-        3.20,
-    ));
+    let inner = Arc::new(
+        CrtGlweEncryptionParameters::try_new(size, &base_q, SecretKeyDistr::SparseTernary, 3.20)
+            .unwrap(),
+    );
     let basis =
         BigUintApproxSignedBasis::new(base_q.moduli_product(), DecompositionBaseLog::new(20), None);
     let glev_params = CrtGlevParameters::try_from_parts(size, base_q, basis).unwrap();
@@ -93,16 +91,26 @@ fn test_rns_glev() {
         GlweSize::new(GlweDimension::new(dimension + 1), table.poly_length()),
         size.moduli_count(),
     );
-    let foreign_sampling =
-        CrtGlweEncryptionParameters::new(foreign_size, base_q, SecretKeyDistr::SparseTernary, 3.2);
+    let foreign_sampling = CrtGlweEncryptionParameters::try_new(
+        foreign_size,
+        base_q,
+        SecretKeyDistr::SparseTernary,
+        3.2,
+    )
+    .unwrap();
     assert!(matches!(
         dcrt_sk.try_bind_gadget(&glev_params, &foreign_sampling, &table),
         Err(RnsDomainError::DimensionMismatch { .. })
     ));
     let reversed_moduli = [moduli[1], moduli[0]];
     let reversed_base = RNSBase::new(&reversed_moduli).unwrap();
-    let reversed_sampling =
-        CrtGlweEncryptionParameters::new(size, &reversed_base, SecretKeyDistr::SparseTernary, 3.2);
+    let reversed_sampling = CrtGlweEncryptionParameters::try_new(
+        size,
+        &reversed_base,
+        SecretKeyDistr::SparseTernary,
+        3.2,
+    )
+    .unwrap();
     assert!(matches!(
         dcrt_sk.try_bind_gadget(&glev_params, &reversed_sampling, &table),
         Err(RnsDomainError::ModulusOrderMismatch { .. })

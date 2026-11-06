@@ -28,18 +28,18 @@ Constructors accept each choice through `Into`; ordinary prepared requests still
 bind their level from the finalized role key. A mixed configuration can be
 stored in that enum without introducing a second ciphertext type.
 
-The [coefficient](../../crates/primus_bfv/examples/coefficients.rs) and
-[slot](../../crates/primus_bfv/examples/slots.rs) BFV examples, and the matching
-BGV examples, accept one optional `--hybrid` argument. Their small parameters
-are functional examples. BFV's multiplication backend is a separate choice:
+The advanced ciphertext-multiplication examples for
+[BFV](../../crates/primus_bfv/examples/ciphertext_multiplication.rs) and
+[BGV](../../crates/primus_bgv/examples/ciphertext_multiplication.rs) accept
+`--hybrid`. Basic coefficient/slot examples use linear plaintext operations and
+need no evaluation keys or backend choice. These small parameters are functional
+examples. BFV's multiplication backend is a separate choice:
 selecting a Hybrid relinearization key does not implicitly select HPSPOVERQ,
 and selecting HPSPOVERQ does not choose an evaluation-key backend.
 
 ```sh
-cargo run -p primus_bfv --example coefficients -- --hybrid
-cargo run -p primus_bfv --example slots --features batching -- --hybrid
-cargo run -p primus_bgv --example coefficients -- --hybrid
-cargo run -p primus_bgv --example slots --features batching -- --hybrid
+cargo run -p primus_bfv --example ciphertext_multiplication -- --hybrid
+cargo run -p primus_bgv --example ciphertext_multiplication -- --hybrid
 ```
 
 ## Bases, partitions and ownership

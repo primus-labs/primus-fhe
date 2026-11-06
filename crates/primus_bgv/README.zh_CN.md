@@ -2,187 +2,134 @@
 
 [English](README.md) | 简体中文
 
-固定 u64、rank-one 的 leveled BGV，支持 q_i≡1 mod p 参数族。原生密文为
-`[c0,c1]`，phase 是 `c0+c1*s=lift(m)+p*e`。支持私钥/公钥加密、线性/明文求值、
-乘法/square、p-preserving relin/换钥/自同构、精确 prime drop 和可选槽工作流。
-Coefficient p 可以是合数；batching 另有明文素数要求。
+固定 u64、rank-one 的 leveled BGV，支持 `q_i ≡ 1 (mod p)` 参数族。原生密文为
+`[c0,c1]`，phase 是 `c0+c1*s=lift(m)+p*e`。提供私钥/公钥加密、线性/明文求值、
+乘法、重线性化、换钥、自同构、prime drop 和可选槽工作流。
 
-## 使用流程
+## 从系数或槽开始
 
-从[系数示例](examples/coefficients.rs)开始：公钥加密 `3+2X` 和 `5+X`，
-做一次乘法，再恢复 `15+13X+2X²`。启用 `batching` 后运行
-[槽示例](examples/slots.rs)：n=N 的密文逐槽乘法与行旋转。两个基础例都只准备一次
-keys 和操作 scratch，然后使用分配便利接口执行两次请求。
-[多级系数示例](examples/leveled_coefficients.rs)和
-[多级槽示例](examples/leveled_slots.rs)展示 square、自同构、秘密切换和两次
-prime drop；后者也展示 n<N 子环。
-
-1. 用 `BgvParameters::try_coefficients` 构造参数，或用
-   `try_with_error_distribution` 显式选择 Gaussian/CBD。`BgvContext::try_new`
-   准备一层；`try_with_levels(parameters,count)` 准备显式降模链。
-   `context.new_plaintext()` 从 context 推导 N，分配完整系数明文。
-2. `BgvClient::generate(&context,rng)` 拥有一份完整 N 秘密和可复用、drop 时擦除的
-   恢复 scratch。保留 `client.public_key(rng)`，用
-   `context.public_key_encryptor(&key)` 绑定公钥。Client 与公钥 encryptor 都提供
-   `encrypt`/`encrypt_centered`，只分配返回密文；预备输出使用对应 `_to` 接口。
-3. 生成 `relinearization_key(level,config,rng)`，然后绑定
-   `BgvMultiplication::try_new(&context,&key)`。Level 由 key 推导；
-   `multiply_to`、`square_to` 和 `square_assign` 复用内部 scratch 完成 tensor
-   乘法与重线性化，在线不分配。
-4. 线性/明文运算使用 `BgvEvaluator::new(&context,level)`。add/sub/neg 操作两个
-   组件，add_plain 只改 c0，mul_plain 乘两个组件；显式选择 unsigned/centered
-   `PlaintextEmbedding`。高级分阶段流程仍可用 `mul_to`/`square_to` 写显式
-   `BgvQuadraticCiphertext`，再由 `BgvRelinearizer` 恢复两组件密文。
-5. 槽行旋转使用 `client.row_rotation_key(level,&encoder,steps,config,rng)`，steps
-   支持正负；交换两行使用 `row_swap_key`。一般多项式映射保留 `automorphism_key`，
-   秘密切换使用 `key_switching_key`。预先绑定
-   `BgvAutomorphism::try_new(&context,&key)` 或 `BgvKeySwitcher::try_new(&context,&key)`，
-   这两者与 `BgvRelinearizer` 均从 role key 推导 level。由目标 client 从 source client
-   生成换钥材料；自同构 key 把 σ(s) 切换回 s。
-6. `BgvModulusSwitch::new(&context,level).switch_to` 丢弃相邻末 prime。随后用
-   `client.decrypt_to(input,level,&mut output)` 恢复；便利 `decrypt` 只分配结果。
-   这些操作不自动选择噪声策略或降模时机。
-
-Level0 使用全部有序 primes；level l 丢弃最后 l 个。Context 拥有一张 full-Q NTT 表
-及各 prefix 的真实 CRT base/恢复常数；单份 full-Q secret 按 prefix 借用，N 不变。
-存储 wrapper 检查完整长度，但实际 key、有序 basis、canonical ciphertext residues
-及 NTT 身份仍由调用者保证。
-
-## Native Hybrid 密钥
-
-默认示例使用 signed-radix Q keys；在系数或槽命令后加 `-- --hybrid`，可选择原生
-partitioned QP keys。代码中一次准备
-`context.hybrid_key_parameters(level,decomposition_count,&key_p)`，将克隆的 `Arc`
-传给 `relinearization_key`、`key_switching_key`、`automorphism_key` 或 row-key
-生成入口。原 prepared 操作及密文类型可消费两种后端。多个 radix 角色可一次准备
-`context.radix_key_parameters(level,config)`，再传入克隆的 `Arc`。
-`BgvEvaluationKeyConfig` 接受分解配置、共享 radix metadata 或共享 Hybrid 参数。
-数值 metadata 可在匹配的 BFV/BGV context 间共享，但不证明实际 secret 或 transform 身份。
-
-Key P 将求值密钥模数扩大为 QP，须独立检查安全性和完整误差；它与 BFV 乘法的
-computation-only 辅助基分开。仅准备选中后端的 key/scratch；同层角色共享不可变
-P 资源。精确 correction、分区、bounded-secret 扩展和 collective 契约见
-[Native Hybrid 指南](../../guides/development/native-hybrid-keys.md)（English）。
-
-## Collective 算术
-
-[collective](examples/collective.rs) 展示两个 owner 准备 native 公钥与两轮
-relinearization key，然后直接使用已有 evaluator；不会构造聚合秘密。
-`BgvCollectivePublicKey`、`BgvCollectiveSwitchingKey`、
-`BgvCollectiveAutomorphismKey` 和 `BgvCollectiveRelinearization` 各自拥有具体
-common-mask/basis setup，每方只借用自己的 `&DcrtGlweSecretKey<u64>`，context 由 plan 持有。
-建钥期间保持唯一原生秘密 owner，真正执行输入/恢复时再消费进 Client。采样前检查
-geometry、有序 Q 和声明的秘密分布；实际 NTT 约定和秘密来源由调用方保证。
-在线 `BgvSeededInput::contribute` 仍使用 Client。首版要求精确 CBD1
-（`SparseTernary`）share 与 CBD21 error；一般单方 API 仍使用原配置分布。
-
-公开 contribution 只导出后端拥有格式的规范 residue。调用方认证 context、role、
-source/target identity 与 roster 后，再经对应 setup 导入。Accumulator 检查具体
-setup 实例和轮次，重复、缺失 owner 由协议拒绝。两轮私有 state 保存本方会擦除的
-key-domain share、不可克隆，在消费或丢弃时擦除该 share 和 CBD1 ephemeral；
-第二轮绑定准确冻结的第一轮结果。
-Finalize 消费公开聚合，直接生成已有 native role key，不保留 setup workspace；实际
-gadget weights 和 columns 不公开。Hybrid 求值密钥的 common masks/贡献/最终 columns
-均使用实际 QP；公钥和输入算术仍在 Q，不能按 Q 长度导入 QP payload。
-
-`BgvSeededInput::try_new(context, rng)` 用 prepared 无偏 CRT distributions 新鲜采样
-完整公共 mask；`try_from_common_mask` 导入已认证的数组，其独立均匀来源由调用方保证。
-聚合 centered input bodies 后只插入一次 shared mask。公开数组不等于公开 RNG 内部
-seed/state，也不授权复用 public-key mask；短公共 seed 本身不是 full-ring 统计证书。
-`BgvClient::partial_phase_to` 仅写 `c1*s_i`，不含 c0 或 privacy noise。这些是算术
-原语；独立 common mask 的生成、单次 policy、完整 roster、privacy flooding 和噪声/安全
-认证由协议负责。Input masks和私有coins不得从selection公钥或fresh lookup key的
-bytes/digest数值派生。
-
-## 求值密钥与精确降模
-
-使用已有 `DecompositionConfig` 选择 radix 和 retained digits。以下分解公式属于该 radix 后端。每个 role key 拥有
-实际 decomposition，并属于一个 modulus level；按所需 level 分别生成。不能截断高层 key 的 limbs 作为受支持的低层建钥入口；radix 的 Q、weights 和
-dropped bits 会改变，Hybrid 也须保持实际 P/partition/level 绑定。`None`
-选择全部可用 gadget digits；当 log_basis 不整除 Q 位宽时，仍会丢弃低 bits。
-
-Radix 的被切换组件 a 在分解前先乘 Q 下的 p^-1；column phase 为 `p*g_j*h+p*e_j`，
-h 分别为 s²、source secret 或 σ(s)。Digit noise 与近似 residual 都成为 p 倍误差，
-不能直接照搬普通截断 BFV/GLWE 切换。三种 key 类型防止 relin/换钥/自同构角色误配；
-构造器拒绝未准备的 key level 或不同的 N、p、有序 Q；实际 decomposition 和 columns 由各 role
-实现持有。同参数下的实际 secret 身份仍是 caller 契约。
-
-丢末 prime q 的每组件精确商为 `(x-p*center_q(x*p^-1 mod q))/q mod (Q/q)`。
-只需 dropped limb INTT、一份 N scratch、各 retained limb correction NTT 和 inverse
-factors；它不同于 BFV nearest rounding。q≡1 mod p 使目标链无需额外明文 correction
-factor，一般 primes 仍被拒绝。[BGV 求值契约](../../guides/development/bgv-evaluation.md)
-给出 phase/residual/noise 推导及共享 componentwise GLev adapter 的边界。
-
-## 精确恢复与噪声
-
-每个 signed error coefficient 在所有 RNS limbs 中共享一次真实采样，随后乘 p。
-Gaussian/CBD 使用实际配置分布；公钥 ephemeral r 独立采用准确 CBD1。公钥 phase 是
-p*e_pk，fresh public phase 为完整 negacyclic 环中的
-`lift(m)+p*(e_pk*r+e0+e1*s)`。
-
-恢复在所选 level 计算 phase/INTT，精确重构 x∈[0,Q)：下半区返回 x mod p，上半区
-返回 (x-Q) mod p。Q 可超过 128 位，不调用 BFV decoder、浮点近似或外部 BigInt
-normal 依赖。**每一层**的 intended integer phase 都必须位于 (-Q/2,Q/2)，跨 Q 的
-wrap 可能改变模 p 消息。
-
-参数构造只检查 fresh-private 充分界 `p*maximum_error+(p-1) <= floor(Q/2)`。
-准备低层、生成 evaluation key 和跑通功能例子，不证明 public/evaluated 噪声或安全性。
-分析须包括 full-ring 卷积、message carry、每次分解 residual 和 prime-drop correction；
-相关 evaluation keys 另有对应安全假设。密文 q_i 必须是适配当前 u64 NTT 的素数
-（q_i<2^62），rootability 检查不等于素性认证。
-
-## 槽与子环
-
-启用 `batching` 后，`context.batching_encoder()` 从已有 N/p 准备 BFV 同样消费的
-共享 `primus_encoding::BatchingEncoder`。Context 不缓存第二份 encoder 或明文表；
-p 不支持 full-N roots 时 factory 返回错误，系数算术仍可使用。显式 n<N packing
-使用 `BatchingEncoder::try_new(n,context.parameters().plain_modulus())`。
-素数 p≡1 mod 2n 提供 ±5^j 两行的 n 槽。`encode`、`decode` 分配返回结果（decode
-另分配临时 scratch）；准备输出和 scratch 后使用 `encode_to`、`decode_to`。`encode_to` 对槽前缀补零，`embed_to`
-映射 f(Y)→f(X^(N/n))；只有明文使用 n，实际秘密、误差、变换和密文保持 N。
-基础 n=N 示例直接编码到完整明文多项式，恢复后直接 decode。n<N 流程在 Full-N
-恢复后用 `extract_to` 验证子环支撑，再用 caller scratch decode；此时 p 不必
-支持 full-N plaintext NTT。
-
-`row_rotation_key` 将正负 steps 按 n/2 归一化；`row_swap_key` 交换两行而不反转。
-两者在消费 RNG 前验证 encoder 的 p 与 n≤N。`BgvAutomorphism::apply_to` 执行密文
-操作并切回原 full-N 秘密；一般指数选择仍显式调用 `automorphism_key`。多级槽例使用
-n32/N128/p193，旋转/交换两行并换到第二个 full-N secret；spare slots 在置换后的
-位置仍全部为零。
-
-## 资源与命令
-
-Context 拥有 sampler 和恢复 basis。`shared_table()` 与
-`try_with_table(parameters,level_count,table)` 允许配对的 BFV/BGV context 共享实际
-full-Q 变换，不复制 roots。外部 table 仍检查 N 和有序 Q，恢复常量保持方案各自语义。
-低层 basis 从已检查前缀派生，不重做互素检查。Client/evaluator/prepared key operations 借用 context。
-Prepared `_to`/`_assign` 加密、tensor/square、线性/明文求值、relin/换钥/auto、相邻 prime drop 和
-恢复均不新增分配。秘密、生成时 secret-square/automorphism 临时值、公钥 ephemeral
-及恢复存储按契约擦除。可用 `Zeroize::zeroize` 显式擦除公钥 encryptor ephemeral，
-保留完整预备 allocation；caller 明文/输出/batching buffers 由其拥有者管理。基础例
-选择分配便利接口；高级例和基准保留 prepared 输出复用。不新增 Domain 或系数字类型泛型。
-
-默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly SIMD 后端。
-NTT intrinsic按运行时CPU能力分派，独立于此Cargo feature；关闭`simd`不表示强制scalar
-NTT，见[feature边界](../../guides/development/testing.md#features-与独立消费者)。
+[系数示例](examples/coefficients.rs) 两次计算 `(message+1)*scalar`；
+[槽示例](examples/slots.rs) 在 `n=N` 下逐槽执行相同运算。
+它们复用 context、公钥、evaluator 和输出；密文乘法与求值密钥配置单独介绍。
 
 ```sh
 cargo run -p primus_bgv --example coefficients
 cargo run -p primus_bgv --example slots --features batching
+```
+
+1. 用 `BgvParameters::try_coefficients(N,p,&Q,secret_law,sigma)` 构造参数，随后消费进
+   `BgvContext::try_new(parameters)`。显式 Gaussian/CBD 分布用
+   `try_with_error_distribution` 选择。
+2. 生成 `BgvClient::generate(&context,rng)`，保留 `client.public_key(rng)`，
+   通过 `context.public_key_encryptor(&key)` 绑定公钥。
+3. 准备 `BgvEvaluator::new(&context,0)`、`context.new_plaintext()` 和
+   `context.new_ciphertext(0)`。公钥加密使用 `encrypt_centered`；线性求值使用
+   `add_plain_assign`、`mul_plain_to`，并显式选择 `PlaintextEmbedding`。
+   随后用 `client.decrypt(&result,level)` 恢复。
+4. 启用 `batching` 时，一次准备 `context.batching_encoder()`。通过 `encode_to`
+   直接写入 context 分配的明文，再对恢复的多项式调用 `decode`。
+5. 复用预备资源，只更换明文并使用新鲜加密随机性。基础示例选择分配返回结果的
+   加密/解密便利入口；对应 `*_to` 可复用调用方输出。
+
+两种加密 embedding 都接收 `[0,p)` 中的 N 个规范系数；`Unsigned` 直接提升，
+`Centered` 使用 `[-floor(p/2),ceil(p/2))`，恢复结果为规范系数。
+示例参数只验证功能，不是安全预设。
+
+## 进阶工作流
+
+| 示例 | 新增概念 |
+| --- | --- |
+| [ciphertext_multiplication](examples/ciphertext_multiplication.rs) | 一把 relin key 与 `BgvMultiplication`；两次密文系数乘法复用同一操作 |
+| [leveled_coefficients](examples/leveled_coefficients.rs) | Square、`X→X^5`、Alice→Bob 换钥、明文加法和两次 prime drop |
+| [leveled_slots](examples/leveled_slots.rs) | 显式 `n<N` 编码、行旋转/交换、换钥与两次 prime drop，复用输出 |
+| [collective](examples/collective.rs) | 个别原生 share、公钥贡献、两轮 relin 与在线 client 交付 |
+
+```sh
+cargo run -p primus_bgv --example ciphertext_multiplication
+cargo run -p primus_bgv --example ciphertext_multiplication -- --hybrid
 cargo run -p primus_bgv --example leveled_coefficients
 cargo run -p primus_bgv --example leveled_slots --features batching
-cargo test -p primus_bgv --features batching --lib --tests
+cargo run -p primus_bgv --example collective
+```
+
+密文乘法示例默认使用 signed-radix Q keys，`--hybrid` 选择 partitioned QP keys；
+基础示例不接收参数。代码中可通过克隆的 `Arc`，在各角色 key 间共享
+`context.radix_key_parameters(level,config)` 或
+`context.hybrid_key_parameters(level,decomposition_count,&key_p)`。
+Key P 须独立纳入安全/误差预算；数值 metadata 不证明实际秘密或变换来源。
+见 [Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
+
+## Level、槽与数值契约
+
+Level0 使用完整有序 Q，level l 丢弃最后 l 个 primes，N 不变。
+`try_with_levels(parameters,count)` 只准备请求的前缀。各实际 level 分别生成角色 key；
+不能截断高层 key 矩阵作为低层建钥入口。Prepared multiplication、relinearizer、
+switcher 与 automorphism 从角色 key 推导 level；线性求值、恢复、建钥和 prime drop
+仍显式选择 level。
+
+Radix keys 在分解前先将被切换组件乘 `p^-1 mod Q`，column phase 为
+`p*g_j*h+p*e_j`，近似 residual 与 key noise 都保持 p 倍数。
+每组件精确 prime drop 为 `(x-p*center_q(x*p^-1 mod q))/q mod (Q/q)`；
+它不同于 BFV nearest rounding，一般 prime 链不受支持。
+Signed digits、截断 residual、Hybrid correction 与完整 drop 界见
+[BGV 求值契约](../../guides/development/bgv-evaluation.md)（English）。
+
+恢复精确组合所选 level 的 phase，再对 centered lift 模 p；Q 可超过128位。
+**每层**的 intended integer phase 都须位于 `(-Q/2,Q/2)`。参数构造只检查
+fresh-private 充分界 `p*maximum_error+(p-1) <= floor(Q/2)`；公钥及求值恢复需要
+完整噪声界。每个 signed error coefficient 在所有 RNS limbs 中共享一次采样。
+公钥 ephemeral r 为精确 CBD1，fresh public phase 在完整 negacyclic 环中为
+`lift(m)+p*(e_pk*r+e0+e1*s)`。密文 primes 须支持实际 NTT 且满足 `q_i<2^62`；
+rootability 检查不证明素性或安全性。
+
+系数 p 可为合数。槽要求素数 `p≡1 mod 2n`；context 工厂选择 `n=N`，
+`leveled_slots` 展示显式小 encoder。`embed_to` 映射 `f(Y)` 到 `f(X^(N/n))`，
+秘密/误差和密文仍是完整 N。恢复后 `extract_to` 检查子环支撑，再 decode。
+`encode_to` 对槽前缀补零；`encode`/`decode` 分配结果，`decode_to` 使用 caller scratch。
+行旋转按 `n/2` 归一化有符号左移 steps；行交换不反转顺序。Encoder 不兼容在建钥 RNG 前
+拒绝。完整契约见[编码 crate](../primus_encoding/README.zh_CN.md)和建钥 rustdoc。
+
+## Collective 与一次性协议职责
+
+Collective plan 借用每个 owner 的 `DcrtGlweSecretKey<u64>`，采样前检查数值 geometry、
+有序 Q 和声明的 law。该族要求精确 CBD1（`SparseTernary`）share 与 CBD21 error。
+建钥期间唯一持有原生秘密，实际输入/恢复时再消费进 client。两轮 state 不可克隆，
+各退出路径均擦除 key-domain share 与 ephemeral。Hybrid key 的 masks/贡献使用 QP，
+公钥和 additive input 仍使用 Q。
+
+在 checked import 前认证 context、role、source/target、roster 和 round。
+调用方拒绝重复/缺失 owner，绑定准确冻结的首轮结果并执行单次策略；metadata 不证明
+实际 NTT 约定、CBD1 抽样或秘密关系。`BgvSeededInput` 采样独立完整均匀 A；
+`try_from_common_mask` 导入已认证数组，其来源由调用方保证。公开短 seed 不是 full-ring
+统计证书，A 不得复用公钥 mask，也不能从 selection/lookup key bytes 派生。
+`partial_phase_to` 只产生 `c1*s_i`；外围协议负责 c0、privacy flooding、完整噪声/安全界
+及 opening 授权。这些算术原语本身不构成认证 opening 协议。
+
+## 资源与验证
+
+Context 拥有 sampler/恢复 basis 和共享的 immutable full-Q table。
+`shared_table()` / `try_with_table` 在 N/有序 Q 检查后支持 BFV/BGV 配对 context，
+恢复常量仍保持各方案语义。Client 拥有一份变换域秘密和会擦除的恢复 workspace。
+Prepared 操作借 context/key 并拥有 mutable scratch；并发请求各自需要操作 owner。
+Prepared `*_to`/`*_assign` 求值和恢复不分配临时存储。秘密、生成时临时量、公钥
+ephemeral 和恢复 scratch 遵守各自擦除合同；公钥 encryptor 可用 `Zeroize` 擦除而
+保留 allocation。消费式 `into_secret_key` 转交唯一 allocation；跨方案使用仍须匹配
+实际 roots/order。
+
+公开入口按各自合同在写入/RNG 前检查完整长度及明文条件。存储类型不认证 level、
+秘密、canonical ciphertext residues 或 NTT 身份；准确 panic、correctness 和
+partial-write 合同由逐方法 rustdoc 维护。
+
+默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly 后端。
+运行期 NTT intrinsic 分派独立于该 feature；关闭 `simd` 不表示强制 scalar NTT。
+
+```sh
+cargo test -p primus_bgv --lib --tests --features batching
 cargo clippy -p primus_bgv --all-targets --features batching -- -D warnings
 cargo bench -p primus_bgv --bench leveled --features batching
 ```
 
-测试用 direct DFT、schoolbook 卷积和独立任意宽整数 oracle 检查 key phases、signed
-gadget digits/residuals、精确商和偶数 p 边界。`leveled` 基准测一次完整 fresh packed
-请求，包含乘法/square/relin、旋转、秘密切换、两次 prime drop 和槽恢复；setup/
-建钥/分配与最终断言在计时外。较小的 `workflow` 保留原公钥加密/明文求值/恢复负载。
-参数为功能 fixtures，不是安全预设。
-
-高级 owner 角色转移可消费 `client.into_secret_key()`，将唯一 transformed secret allocation
-交给另一已验证角色的 `BgvClient::try_from_secret_key`。原 client 被消费，恢复 scratch 随之
-擦除并释放；跨方案移动前须验证完整 geometry 与实际 NTT roots/order。此接口转移所有权，
-不复制私有 share。
+聚焦 `workflow` bench 测公钥加密/明文求值/恢复，`leveled` 测完整 packed 请求；
+setup 和 validation 在计时外。独立 DFT、schoolbook 和宽整数 oracle 保护 phase、
+residual、精确商和边界契约。Feature 与独立 consumer 检查见
+[测试指南](../../guides/development/testing.md)。

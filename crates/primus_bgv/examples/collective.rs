@@ -1,6 +1,7 @@
 //! Local two-owner arithmetic demonstration, not a distributed protocol or
 //! parameter certificate. Native shares are consumed into online clients only
 //! after key generation. Each owner keeps its own secret; no sum is built.
+//! Run: cargo run -p primus_bgv --example collective
 use primus_bgv::{
     BgvClient, BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvContext, BgvMultiplication,
     BgvParameters,

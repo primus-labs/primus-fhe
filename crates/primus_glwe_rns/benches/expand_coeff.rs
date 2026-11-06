@@ -53,7 +53,8 @@ fn bench_expand_coeff(c: &mut Criterion) {
     );
     let base_q = RNSBase::new(&moduli).unwrap();
     let sampling =
-        CrtGlweEncryptionParameters::new(size, &base_q, SecretKeyDistr::SparseTernary, 3.20);
+        CrtGlweEncryptionParameters::try_new(size, &base_q, SecretKeyDistr::SparseTernary, 3.20)
+            .unwrap();
 
     let crt_poly_len = size.rns_poly_len();
     let rns_glwe_len = size.rns_glwe_len();
@@ -61,12 +62,13 @@ fn bench_expand_coeff(c: &mut Criterion) {
     let sk = GlweSecretKey::generate(size.glwe_size(), sampling.secret_key_sampler(), &mut rng);
     let dcrt_sk = DcrtGlweSecretKey::from_coeff_secret_key(&sk, &table);
 
-    let glev_params = CrtGlevParameters::new(
+    let glev_params = CrtGlevParameters::try_new(
         sampling.size(),
         base_q.clone(),
         DecompositionBaseLog::new(20),
         None,
-    );
+    )
+    .unwrap();
 
     // Expand keys
     let crt_expand_key =

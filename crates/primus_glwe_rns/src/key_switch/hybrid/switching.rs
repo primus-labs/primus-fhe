@@ -417,7 +417,8 @@ mod tests {
             base.moduli_count(),
         );
         let parameters =
-            CrtGlweEncryptionParameters::new(size, &base, SecretKeyDistr::SparseTernary, 3.2);
+            CrtGlweEncryptionParameters::try_new(size, &base, SecretKeyDistr::SparseTernary, 3.2)
+                .unwrap();
         let mut rng = StdRng::seed_from_u64(0x4859_4252_4944);
         let input_key = GlweSecretKey::generate(
             parameters.size().glwe_size(),

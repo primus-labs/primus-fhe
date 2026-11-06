@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the basic BFV/BGV examples with radix and native Hybrid keys as isolated normal-dependency consumers.
+"""Run basic BFV/BGV workflows and advanced key backends as isolated normal-dependency consumers.
 
 No workspace development dependencies or feature selections are inherited. Use
 --output-dir outside this repository to retain source, manifests, lockfiles,
@@ -52,18 +52,23 @@ def check_consumers(output_dir: Path) -> None:
     env = os.environ.copy()
     env["CARGO_TARGET_DIR"] = str(ROOT / "target" / "scheme-consumers")
     for scheme in ("bfv", "bgv"):
-        for example in (("coefficients", "slots", "working_basis") if scheme == "bfv" else ("coefficients", "slots")):
+        examples = ["coefficients", "slots", "ciphertext_multiplication"]
+        if scheme == "bfv":
+            examples.append("working_basis")
+        for example in examples:
             name = f"{scheme}_{example}"
             directory = output_dir / name
             (directory / "src").mkdir(parents=True, exist_ok=True)
             batching = example == "slots"
             dependencies = [dependency(f"primus_{scheme}", batching)]
-            dependencies.extend(dependency(crate) for crate in (
-                "primus_decompose", "primus_glwe_rns", "primus_modulus",
-                "primus_shape",
-            ))
-            if batching or example == "working_basis":
+            if example == "working_basis":
                 dependencies.append(dependency("primus_poly"))
+            else:
+                dependencies.extend(dependency(crate) for crate in (
+                    "primus_glwe_rns", "primus_modulus", "primus_shape",
+                ))
+            if example == "ciphertext_multiplication":
+                dependencies.append(dependency("primus_decompose"))
             dependencies.append(f"rand = {json.dumps(rand_version)}")
             manifest = (
                 f'[package]\nname = "primus_scheme_consumer_{name}"\n'
@@ -103,8 +108,14 @@ def check_consumers(output_dir: Path) -> None:
             if example == "working_basis":
                 command.append("--release")
             run(command, directory, "run.log", env)
-            run([*command, "--", "--radix" if example == "working_basis" else "--hybrid"], directory, "run-other-backend.log", env)
-            print(f"{name}: radix and Hybrid normal requests passed; no criterion", flush=True)
+            if example in ("ciphertext_multiplication", "working_basis"):
+                argument = "--radix" if example == "working_basis" else "--hybrid"
+                run([*command, "--", argument], directory, "run-other-backend.log", env)
+                scope = "radix and Hybrid requests"
+            else:
+                (directory / "run-other-backend.log").unlink(missing_ok=True)
+                scope = "two linear requests with one setup"
+            print(f"{name}: {scope} passed; no criterion", flush=True)
 
 
 def main() -> None:

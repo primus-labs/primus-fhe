@@ -1,9 +1,7 @@
-//! Public encryption and one BFV coefficient multiplication.
-//! Optional native key backend: append `-- --hybrid`.
+//! Basic BFV coefficients: public encryption, plaintext addition/multiplication and recovery.
 //! Run: cargo run -p primus_bfv --example coefficients
 
-use primus_bfv::{BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvMultiplication, BfvParameters};
-use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
+use primus_bfv::{BfvClient, BfvContext, BfvEvaluator, BfvParameters, PlaintextEmbedding};
 use primus_glwe_rns::SecretKeyDistr;
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
@@ -12,6 +10,11 @@ use rand::{SeedableRng, rngs::StdRng};
 const N: usize = 32;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args_os().nth(1).is_some() {
+        return Err(
+            "coefficients takes no options; see ciphertext_multiplication for --hybrid".into(),
+        );
+    }
     // Small functional parameters, not a security preset.
     let parameters = BfvParameters::try_coefficients(
         PolyLength::new(N),
@@ -25,40 +28,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = BfvClient::generate(&context, &mut rng);
     let public_key = client.public_key(&mut rng);
     let mut encryptor = context.public_key_encryptor(&public_key)?;
-    let hybrid = match std::env::args().nth(1).as_deref() {
-        None => false,
-        Some("--hybrid") => true,
-        Some(_) => return Err("expected optional --hybrid".into()),
-    };
-    let config: BfvEvaluationKeyConfig = if hybrid {
-        context
-            .hybrid_key_parameters(0, context.codec(0).moduli_count(), &[1_099_511_626_049])?
-            .into()
-    } else {
-        DecompositionConfig {
-            log_basis: DecompositionBaseLog::new(8),
-            level_count: None,
-        }
-        .into()
-    };
-    let relin_key = client.relinearization_key(0, config, &mut rng)?;
-    let mut multiplication = BfvMultiplication::try_new(&context, &relin_key)?;
+    let mut evaluator = BfvEvaluator::new(&context, 0);
 
-    // Setup and the multiplication/output owner are reused across requests.
+    // Reuse setup, evaluator and output buffers; encryption/recovery conveniences
+    // allocate their returned values. No evaluation keys are needed here.
     let mut message = context.new_plaintext();
     message.as_mut()[..3].copy_from_slice(&[1, 2, 3]);
+    let mut offset = context.new_plaintext();
+    offset.as_mut()[0] = 1;
     let mut factor = context.new_plaintext();
     let mut expected = context.new_plaintext();
+    let mut shifted = context.new_ciphertext(0);
     let mut product = context.new_ciphertext(0);
     for scalar in [7, 11] {
         factor.as_mut()[0] = scalar;
         let encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
-        let encrypted_factor = encryptor.encrypt_centered(&factor, &mut rng);
-        multiplication.multiply_to(&encrypted_message, &encrypted_factor, &mut product);
+        evaluator.add_plain_to(
+            &encrypted_message,
+            &offset,
+            &mut shifted,
+            PlaintextEmbedding::Centered,
+        );
+        evaluator.mul_plain_to(
+            &shifted,
+            &factor,
+            &mut product,
+            PlaintextEmbedding::Centered,
+        );
         let recovered = client.decrypt(&product, 0);
-        expected.as_mut()[..3].copy_from_slice(&[scalar, 2 * scalar, 3 * scalar]);
+        expected.as_mut()[..3].copy_from_slice(&[2 * scalar, 2 * scalar, 3 * scalar]);
         assert_eq!(recovered, expected);
     }
-    println!("BFV: reused one setup to multiply (1 + 2X + 3X²) by 7 and 11");
+    println!("BFV: reused one setup to evaluate scalar * ((1 + 2X + 3X²) + 1) for 7 and 11");
     Ok(())
 }
