@@ -455,11 +455,12 @@ pub struct NativeHybridProduct<'a> {
     t_inv_p: Vec<ShoupFactor<u64>>,
     t_mod_q: Vec<ShoupFactor<u64>>,
     p_inv_q: Vec<ShoupFactor<u64>>,
-    q_coefficients: Vec<u64>,
+    // Partition ModUp reads Q coefficients before ModDown overwrites this
+    // complete buffer with each component's P-to-Q correction.
+    q_scratch: Vec<u64>,
     accumulator: Vec<u64>,
     mod_up_limb: Vec<u64>,
     mod_up_scratch: Vec<u64>,
-    correction_q: Vec<u64>,
     conversion: CenteredConversionWorkspace,
 }
 impl<'a> NativeHybridProduct<'a> {
@@ -507,7 +508,7 @@ impl<'a> NativeHybridProduct<'a> {
             t_inv_p,
             t_mod_q,
             p_inv_q,
-            q_coefficients: vec![0; parameters.q_len],
+            q_scratch: vec![0; parameters.q_len],
             accumulator: vec![0; 2 * parameters.qp_len],
             mod_up_limb: vec![0; parameters.poly_length.get()],
             mod_up_scratch: vec![
@@ -516,7 +517,6 @@ impl<'a> NativeHybridProduct<'a> {
                     .hybrid
                     .max_mod_up_scratch_len(parameters.poly_length.get())
             ],
-            correction_q: vec![0; parameters.q_len],
             conversion: parameters.p_to_q.workspace(parameters.poly_length.get()),
         })
     }
@@ -535,13 +535,9 @@ impl<'a> NativeHybridProduct<'a> {
         assert_eq!(columns.len(), p.key_len);
         assert_eq!(output.len(), 2 * p.q_len);
         let n = p.poly_length.get();
-        self.q_coefficients.copy_from_slice(input);
+        self.q_scratch.copy_from_slice(input);
         self.accumulator.fill(0);
-        for (table, values) in self
-            .table_q
-            .iter()
-            .zip(self.q_coefficients.chunks_exact_mut(n))
-        {
+        for (table, values) in self.table_q.iter().zip(self.q_scratch.chunks_exact_mut(n)) {
             table.inverse_transform_slice(values)
         }
         for (partition, column) in p
@@ -561,7 +557,7 @@ impl<'a> NativeHybridProduct<'a> {
             }
             let scratch_len = partition.mod_up_scratch_len(n);
             partition.for_each_approx_mod_up_complement_limb(
-                &self.q_coefficients,
+                &self.q_scratch,
                 &mut self.mod_up_limb,
                 n,
                 &mut self.mod_up_scratch[..scratch_len],
@@ -603,11 +599,11 @@ impl<'a> NativeHybridProduct<'a> {
                 }
             }
             p.p_to_q
-                .convert_to(acc_p, &mut self.correction_q, n, &mut self.conversion);
+                .convert_to(acc_p, &mut self.q_scratch, n, &mut self.conversion);
             for (index, ((((table, correction), acc), out), (scale, inverse))) in self
                 .table_q
                 .iter()
-                .zip(self.correction_q.chunks_exact_mut(n))
+                .zip(self.q_scratch.chunks_exact_mut(n))
                 .zip(acc_q.chunks_exact(n))
                 .zip(output.chunks_exact_mut(n))
                 .zip(self.t_mod_q.iter().zip(&self.p_inv_q))

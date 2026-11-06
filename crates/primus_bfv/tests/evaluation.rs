@@ -219,7 +219,6 @@ fn linear_and_plaintext_operations_match_independent_phases_and_negacyclic_messa
         for level in 0..context.level_count() {
             let count = Q.len() - level;
             let mut evaluator = BfvEvaluator::new(&context, level);
-            assert_eq!(evaluator.level(), level);
             let lhs = ciphertext(
                 &context,
                 level,

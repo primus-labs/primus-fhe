@@ -38,12 +38,6 @@ impl<'a> BfvEvaluator<'a> {
         }
     }
 
-    /// Returns the bound level, with zero denoting the complete Q basis.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.level
-    }
-
     /// Writes the component-wise ciphertext sum.
     ///
     /// # Panics

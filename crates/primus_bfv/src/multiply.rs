@@ -232,12 +232,6 @@ impl<'a> BfvMultiplier<'a> {
         })
     }
 
-    /// Returns the bound ciphertext level.
-    #[must_use]
-    pub fn level(&self) -> usize {
-        self.level
-    }
-
     /// Borrows the computation-only ordered auxiliary moduli.
     #[must_use]
     pub fn auxiliary_moduli(&self) -> &[u64] {
