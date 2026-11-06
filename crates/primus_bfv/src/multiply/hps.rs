@@ -133,8 +133,10 @@ impl<'a> HpsMultiplier<'a> {
         assert_eq!(lhs.as_ref().len(), 2 * q_length);
         assert_eq!(rhs.as_ref().len(), 2 * q_length);
         assert_eq!(output.as_ref().len(), 3 * q_length);
-        self.prepare_lhs(lhs.as_ref());
-        self.prepare_rhs(rhs.as_ref());
+        self.inverse_q_coefficients(lhs.as_ref());
+        self.prepare_lhs_coefficients();
+        self.inverse_q_coefficients(rhs.as_ref());
+        self.prepare_rhs_coefficients();
         self.tensor(lhs.as_ref());
         self.scale(output.as_mut());
     }
@@ -147,10 +149,18 @@ impl<'a> HpsMultiplier<'a> {
         A: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
-        // HPSPOVERQ is asymmetric: the right copy is pre-scaled and the left
-        // copy is only expanded. Reusing exact square's three products would
-        // silently discard the distinct scaling residuals of the components.
-        self.multiply_to(input, input, output);
+        let q_length = self.context.rns_poly_len(self.level);
+        assert_eq!(input.as_ref().len(), 2 * q_length);
+        assert_eq!(output.as_ref().len(), 3 * q_length);
+        // HPSPOVERQ still needs both asymmetric lifts: the right copy is
+        // pre-scaled and the left is only expanded. Their shared coefficient
+        // input is read-only, so one copy/INTT serves both without identifying
+        // their distinct scaling residuals or using exact square's products.
+        self.inverse_q_coefficients(input.as_ref());
+        self.prepare_lhs_coefficients();
+        self.prepare_rhs_coefficients();
+        self.tensor(input.as_ref());
+        self.scale(output.as_mut());
     }
 
     fn inverse_q_coefficients(&mut self, input: &[u64]) {
@@ -169,8 +179,7 @@ impl<'a> HpsMultiplier<'a> {
         }
     }
 
-    fn prepare_lhs(&mut self, input: &[u64]) {
-        self.inverse_q_coefficients(input);
+    fn prepare_lhs_coefficients(&mut self) {
         let n = self.context.parameters().poly_length().get();
         let q_length = self.context.rns_poly_len(self.level);
         let p_length = self.table_p.rns_poly_len();
@@ -185,8 +194,7 @@ impl<'a> HpsMultiplier<'a> {
         }
     }
 
-    fn prepare_rhs(&mut self, input: &[u64]) {
-        self.inverse_q_coefficients(input);
+    fn prepare_rhs_coefficients(&mut self) {
         let n = self.context.parameters().poly_length().get();
         let q_length = self.context.rns_poly_len(self.level);
         let combined_length = q_length + self.table_p.rns_poly_len();

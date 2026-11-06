@@ -65,6 +65,10 @@ Batched big integers use the opposite grouping: each value occupies one contiguo
 
 Cloning an `RNSBase` shares immutable precomputations without copying buffers. `extend` / `extend_with` create a new base and leave the original unchanged. Reuse a prepared base rather than independently constructing the same basis.
 
+`prefix(count)` derives a nonempty ordered prefix without repeating inherited
+coprimality checks. A shorter prefix prepares its distinct CRT constants; the
+full prefix shares the existing owner. It panics for zero or an excessive count.
+
 Use `compose*` and `decompose*` for CRT conversion. Single-value operations accept borrowed `Residues` / `BigUint` views; obtain these through `view()` or `view_mut()` on owned storage. Single-value decomposition does not impose Q's limb width; the modulus implementation's limb-slice contract still applies. Batched big integers use the fixed width described above. Empty batches perform no writes, with the documented output, factor and scratch lengths still required.
 
 `wrapping_decompose*` performs centered lifting from a smaller modulus `t`: values below `ceil(t / 2)` are nonnegative and the rest are negative representatives. For `t = 2`, both `0` and `1` are preserved, so `1` is not lifted as `-1`.

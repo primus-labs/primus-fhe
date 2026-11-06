@@ -44,12 +44,11 @@ impl<'a> BfvModulusSwitch<'a> {
             .checked_add(1)
             .filter(|&level| level < context.level_count())
             .expect("BFV modulus switch needs an available next level");
-        Self::try_from_parts(
+        Self::from_parts(
             context.table(),
             context.codec(source_level).base_q().moduli(),
             context.codec(target_level).base_q().moduli(),
         )
-        .expect("context levels establish an exact ordered prefix")
     }
 
     /// Prepares the same rounded operation while borrowing an existing table
@@ -86,6 +85,16 @@ impl<'a> BfvModulusSwitch<'a> {
         {
             return Err(BfvModulusSwitchError);
         }
+        Ok(Self::from_parts(table, source, target))
+    }
+
+    // Context levels or the public parts boundary establish the exact prefix.
+    // This prepares only the operation-specific constants and scratch.
+    fn from_parts(
+        table: &'a U64DcrtTable,
+        source: &'a [BarrettModulus<u64>],
+        target: &'a [BarrettModulus<u64>],
+    ) -> Self {
         let prime = source.last().expect("checked nonempty source").value();
         let prime_mod_q: Vec<_> = target
             .iter()
@@ -96,14 +105,14 @@ impl<'a> BfvModulusSwitch<'a> {
             .zip(&prime_mod_q)
             .map(|(&modulus, &value)| ShoupFactor::new(modulus.reduce_inv(value), modulus.value()))
             .collect();
-        Ok(Self {
+        Self {
             table,
             source,
             target,
             inverse_prime,
             prime_mod_q,
             dropped_coefficients: vec![0; table.poly_length().get()],
-        })
+        }
     }
 
     /// Overwrites a complete next-level ciphertext without allocating.

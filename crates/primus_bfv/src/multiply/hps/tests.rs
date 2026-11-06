@@ -250,6 +250,12 @@ fn integer_tensor_wrap_and_complete_phase_residual_hold_across_prefixes() {
                         .iter()
                         .map(|component| component.iter().map(|z| nearest(&(z * t), &p)).collect())
                         .collect();
+                    // Each asymmetric lift must fully overwrite its own
+                    // output even when square reuses one coefficient/INTT pass.
+                    multiplier.coefficients.fill(u64::MAX);
+                    multiplier.lhs_p.fill(u64::MAX);
+                    multiplier.rhs_qp.fill(u64::MAX);
+                    multiplier.tensor.fill(u64::MAX);
                     if square {
                         multiplier.square_to(&left, &mut output);
                     } else {

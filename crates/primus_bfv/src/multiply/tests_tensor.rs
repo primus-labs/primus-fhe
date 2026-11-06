@@ -162,11 +162,15 @@ impl BfvMultiplier<'_> {
     {
         self.validate_raw(input);
         self.validate_output(output.as_ref());
+        // Preserve the test's NTT tensor for its independent component oracle.
+        // Production consumes its own tensor in place; this test reuses that
+        // existing allocation rather than adding a production-only copy buffer.
+        self.raw.copy_from_slice(input.as_ref());
         self.workspace.scale(
             self.context,
             self.level,
             &self.lift,
-            input.as_ref(),
+            &mut self.raw,
             output.as_mut(),
         );
     }
@@ -460,6 +464,12 @@ fn dense_monomial_and_square_products_match_exact_integer_tensor_at_all_levels()
                 let left = ciphertext(&lhs, moduli);
                 let right = ciphertext(&rhs, moduli);
                 let expected_raw = tensor(&lhs, &rhs);
+                // The shared coefficient buffer and consumed raw tensor must
+                // not depend on initialization or the preceding request.
+                multiplier.workspace.coefficients.fill(u64::MAX);
+                multiplier.workspace.lhs_p.fill(u64::MAX);
+                multiplier.workspace.rhs_p.fill(u64::MAX);
+                multiplier.raw.fill(u64::MAX);
                 multiplier.mul_raw_to(&left.as_view(), &right.as_view(), &mut raw);
                 verify_components(raw.as_ref(), &expected_raw, &extended);
                 // Exercise actual 300-bit recovery, rather than checking only

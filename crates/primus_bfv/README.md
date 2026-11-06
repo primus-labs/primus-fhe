@@ -103,8 +103,11 @@ coefficient or slot command to select native partitioned QP keys. In code,
 prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)` once,
 then pass its cloned `Arc` to `relinearization_key`, `key_switching_key` or
 `automorphism_key`/row-key generation. The existing prepared operations and
-ciphertext types consume either backend. `BfvEvaluationKeyConfig` stores
-`Radix(DecompositionConfig)` or `Hybrid(Arc<NativeHybridParameters>)` explicitly.
+ciphertext types consume either backend. For repeated radix roles, prepare
+`context.radix_key_parameters(level,config)` once and pass its cloned `Arc`.
+`BfvEvaluationKeyConfig` accepts a decomposition request, shared radix metadata
+or shared Hybrid parameters. Numerical metadata can be shared across matching
+BFV/BGV contexts; it does not prove actual secret or transform identity.
 
 Key P enlarges the evaluation-key modulus to QP and needs its own security and
 complete-error budget. It is separate from BFV multiplication's computation-only
@@ -116,7 +119,9 @@ for exact correction, partitions, bounded-secret extension and collective keys.
 
 `BfvCollectivePublicKey`, `BfvCollectiveSwitchingKey` and
 `BfvCollectiveAutomorphismKey` accept one owner's individual shares per
-`contribute` call. `aggregate(expected)` allocates a public sum; `add` checks
+`contribute` call as `&DcrtGlweSecretKey<u64>`; the plan supplies the context.
+Keep the sole raw secret owner during setup and move it into a client only when
+encryption/recovery is needed. `aggregate(expected)` allocates a public sum; `add` checks
 the actual local setup instance and count, and `finalize` consumes a complete
 sum into the ordinary native role key. Transport uses `common_mask`,
 `as_residues` and checked `try_import_contribution`; no private key columns
@@ -134,9 +139,10 @@ constructs the aggregate secret. The calling protocol authenticates owners,
 rejects duplicates, binds source/target/session identities and prevents reuse.
 Arithmetic count checks alone do not establish those properties.
 
-Source/target switching uses one actual context; `contribute` still receives
-the two distinct share owners. Matching parameters in another context are not
-accepted as proof of the same transform owner.
+Source/target switching uses one actual context; `contribute` receives the two
+distinct raw shares. Complete geometry, ordered Q and the declared secret law
+are checked before sampling. Actual NTT convention, secret provenance and
+source/target ownership remain caller contracts.
 
 For a separately sampled fresh lookup setup, use `finalize_lookup` and
 `BfvFreshLookupKey::prepare()`, which derives the context from the finalized key.
@@ -148,8 +154,9 @@ dependencies. Ordinary `BfvQuadraticCiphertext` remains the scaled-input type.
 
 `client.partial_phase_to` writes only `c1*s_i`, without c0, decoding or privacy
 noise. The protocol must consume its opening authorization and add a complete
-wide-integer flood before releasing this phase. `client.try_embed_secret`
-checks and embeds only its own CBD1 target share as `s_i(X²)` for split-switch;
+wide-integer flood before releasing this phase.
+`destination.try_embed_secret_from(source,&share)` checks and embeds an
+individual CBD1 target share as a raw `s_i(X²)` key for split-switch;
 it does not perform the subsequent even/odd ciphertext split.
 
 ## Multiplication backends and recovery
@@ -227,16 +234,17 @@ Exact remains the default; these paths are explicitly selected.
 ## Advanced explicit workflows
 
 [Explicit coefficients](examples/explicit_coefficients.rs) demonstrates borrowed
-`BfvSecretKeyContext`, an explicit `U64DcrtTable`, reusable outputs and
+`BfvSecretKeyContext::try_new(&key,&context)`, reusable outputs and
 `BfvDecryptWorkspace`. These are useful when another workflow already owns the
-transformed secret/table. `size()` owns geometry, `base_q()` basis arithmetic,
+transformed secret. New keys are checked against the complete context;
+parameters and the table are already bound. `size()` owns geometry, `base_q()` basis arithmetic,
 `codec()` scaling/recovery constants and `encryption_parameters()` samplers.
 
 Raw GLWE retains `[a,b]` and phase `b-a*s`. `write_raw_glwe_to` writes
 `[a=-c1,b=c0]`; `set_from_raw_glwe` imports `[c0=b,c1=-a]`. Both copy/negate
 canonical residues without allocation or NTT. The
 [Hybrid-RNS example](examples/hybrid_rns_key_switch.rs) consumes these bridges
-because its switching/GGSW keys retain raw semantics. `gadget_parameters`
+because its switching/GGSW keys retain raw semantics. `try_gadget_parameters`
 prepares codec-free decomposition weights for these real raw consumers.
 The explicit secret/public encryption bindings also accept coefficient-domain CRT
 inputs: `encrypt_plaintext_lift_crt_to` takes an **unscaled** canonical lift and
@@ -249,7 +257,12 @@ Signs and noise contributions are explained in
 
 ## Resources and checks
 
-Contexts own Q tables, samplers and the requested codecs. Clients own one
+Contexts own samplers and the requested codecs. Q tables are immutable shared
+owners: `shared_table()` and `try_with_table(parameters,level_count,table)` let
+paired BFV/BGV contexts reuse the actual transform without copying its roots.
+The supplied table's N and ordered Q are checked; codecs remain scheme specific.
+Lower bases derive checked prefixes without repeating coprimality checks.
+Clients own one
 highest-level transformed secret and recovery workspace; lower recovery borrows
 their prefixes. Prepared operations borrow immutable context/key resources and
 own mutable scratch. Independent concurrent requests use separate mutable

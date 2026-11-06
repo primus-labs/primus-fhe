@@ -20,8 +20,11 @@ let rotation_key = client.row_rotation_key(level, &encoder, 1, hybrid, rng)?;
 
 Both schemes expose their shared configuration as
 `BfvEvaluationKeyConfig` / `BgvEvaluationKeyConfig`, with
-`Radix(DecompositionConfig)` and `Hybrid(Arc<NativeHybridParameters>)` variants.
-Constructors accept either through `Into`; ordinary prepared requests still
+`Radix(DecompositionConfig)`, `PreparedRadix(Arc<NativeRadixParameters>)` and
+`Hybrid(Arc<NativeHybridParameters>)` variants. For repeated radix roles, call
+`context.radix_key_parameters(level,config)` once and share that numerical owner.
+It stores signed decomposition and CRT weights, without secret or NTT provenance.
+Constructors accept each choice through `Into`; ordinary prepared requests still
 bind their level from the finalized role key. A mixed configuration can be
 stored in that enum without introducing a second ciphertext type.
 
@@ -157,6 +160,13 @@ unscaled; BGV multiplies them by p exactly once. Native column encryption uses
 Collective setup selects the same radix/Hybrid configuration as ordinary keys.
 Public-key setup remains in Q. Evaluation-key common masks, contributions,
 canonical import, sums and final columns use the selected actual Q or QP domain.
+Each `contribute`/relinearization `start` borrows the owner's existing
+`DcrtGlweSecretKey<u64>`; setup plans supply the scheme context. Geometry,
+ordered Q and declared secret-law metadata are checked before RNG consumption.
+The actual key must use that context's NTT convention and prescribed sampling;
+metadata cannot prove either provenance. A setup owner can retain the sole raw
+allocation across paired BFV/BGV roles and move it into an online client once.
+The online BGV additive-input entry continues to borrow its client.
 Transport authenticates the backend, active Q, key P, partitions, actual NTT
 convention, role, session and source/target identities before import.
 

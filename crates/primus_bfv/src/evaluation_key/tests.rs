@@ -693,7 +693,7 @@ fn hybrid_secret_extension_uses_full_owner_q_when_the_first_prime_is_ambiguous()
             .hybrid_key_parameters(level, 2, &[1_099_511_626_049])
             .unwrap();
         let key = NativeEvaluationKey::prepare_metadata(target_context, level, params).unwrap();
-        let extended = key.secret(&source).unwrap();
+        let extended = key.secret(&source_context, source.secret_key()).unwrap();
         for (limb, &q) in extended
             .as_chunks::<N>()
             .0

@@ -1,8 +1,8 @@
 //! Scheme-boundary identities and independent integer/DFT recovery oracles.
 
 use primus_bfv::{
-    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
-    BfvSecretKeyContext,
+    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
+    BfvPublicKeyEncryptor, BfvSecretKeyContext,
 };
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
@@ -137,16 +137,17 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
         (2, 12_289, ErrorDistribution::CenteredBinomial { eta: 21 }),
     ] {
         let parameters = parameters(count, t, error);
-        let table =
-            U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+        let owner = BfvContext::try_new(parameters).unwrap();
+        let parameters = owner.parameters();
+        let table = owner.table();
         let secret: Vec<i64> = (0..N).map(|index| [-1, 0, 1][index % 3]).collect();
         let coefficient_key = GlweSecretKey::new(
             secret.clone(),
             parameters.size().glwe_size(),
             SecretKeyDistr::SparseTernary,
         );
-        let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-        let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+        let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
+        let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
         let message = Polynomial(
             (0..N)
                 .map(|index| [0, 1, t / 2, (t / 2 + 1).min(t - 1), t - 1][index % 5])
@@ -154,7 +155,7 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
         );
         let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
         let mut expected_ciphertext = ciphertext.clone();
-        let mut workspace = BfvDecryptWorkspace::new(&parameters);
+        let mut workspace = BfvDecryptWorkspace::new(parameters);
         for centered in [false, true] {
             let mut rng = StdRng::seed_from_u64(0x4246_5601);
             let mut expected_rng = StdRng::seed_from_u64(0x4246_5601);
@@ -225,15 +226,17 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
 #[test]
 fn plaintext_product_keeps_bfv_scaling() {
     let parameters = parameters(2, 257, ErrorDistribution::CenteredBinomial { eta: 21 });
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let owner = BfvContext::try_new(parameters).unwrap();
+    let parameters = owner.parameters();
+    let table = owner.table();
     let mut rng = StdRng::seed_from_u64(81);
     let key = GlweSecretKey::generate(
         parameters.size().glwe_size(),
         parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
-    let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, table);
+    let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
     let message = Polynomial(
         (0..N)
             .map(|index| (index * 7 % 257) as u64)
@@ -283,7 +286,7 @@ fn plaintext_product_keeps_bfv_scaling() {
         .collect();
     assert_eq!(
         context
-            .decrypt(&output, &mut BfvDecryptWorkspace::new(&parameters))
+            .decrypt(&output, &mut BfvDecryptWorkspace::new(parameters))
             .as_ref(),
         expected
     );
@@ -292,20 +295,22 @@ fn plaintext_product_keeps_bfv_scaling() {
 #[test]
 fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     let parameters = parameters(2, 257, ErrorDistribution::CenteredBinomial { eta: 1 });
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let owner = BfvContext::try_new(parameters).unwrap();
+    let parameters = owner.parameters();
+    let table = owner.table();
     let mut setup_rng = StdRng::seed_from_u64(82);
     let coefficient_key = GlweSecretKey::generate(
         parameters.size().glwe_size(),
         parameters.encryption_parameters().secret_key_sampler(),
         &mut setup_rng,
     );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
     let public = BfvPublicKey::new(
-        &BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap(),
+        &BfvSecretKeyContext::try_new(&key, &owner).unwrap(),
         &mut setup_rng,
     );
-    let secret = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
-    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
+    let secret = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
+    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &owner).unwrap();
     for length in [0, N - 1, N + 1] {
         let input = Polynomial(vec![0; length]);
         for mode in 0..4 {
@@ -376,8 +381,24 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
 
     let reversed = [BarrettModulus::new(Q[1]), BarrettModulus::new(Q[0])];
     let wrong_table = U64DcrtTable::new(parameters.poly_length(), &reversed).unwrap();
-    assert!(BfvSecretKeyContext::try_new(&key, &parameters, &wrong_table).is_err());
-    assert!(BfvPublicKeyEncryptor::try_new(&public, &parameters, &wrong_table).is_err());
+    assert!(
+        BfvContext::try_with_table(parameters.clone(), 1, std::sync::Arc::new(wrong_table))
+            .is_err()
+    );
+    let foreign_context = BfvContext::try_new(
+        BfvParameters::try_with_error_distribution(
+            parameters.poly_length(),
+            BarrettModulus::new(257),
+            BarrettModulus::new(2_199_023_190_017),
+            &reversed,
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 1 },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(BfvSecretKeyContext::try_new(&key, &foreign_context).is_err());
+    assert!(BfvPublicKeyEncryptor::try_new(&public, &foreign_context).is_err());
     let foreign = parameters_with_length(64);
     let mut workspace = BfvDecryptWorkspace::new(&foreign);
     let ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
@@ -392,7 +413,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     );
     assert_eq!(plaintext.as_ref(), vec![99; N]);
 
-    let mut workspace = BfvDecryptWorkspace::new(&parameters);
+    let mut workspace = BfvDecryptWorkspace::new(parameters);
     let mut short_plaintext = Polynomial(vec![99; N - 1]);
     assert!(
         catch_unwind(AssertUnwindSafe(|| {
@@ -413,7 +434,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
 }
 
 fn parameters_with_length(n: usize) -> BfvParameters {
-    BfvParameters::new(
+    BfvParameters::try_new(
         PolyLength::new(n),
         BarrettModulus::new(257),
         BarrettModulus::new(2_199_023_190_017),
@@ -421,6 +442,7 @@ fn parameters_with_length(n: usize) -> BfvParameters {
         SecretKeyDistr::SparseTernary,
         3.2,
     )
+    .unwrap()
 }
 
 #[test]
@@ -434,15 +456,17 @@ fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge()
         ErrorDistribution::CenteredBinomial { eta: 1 },
     )
     .unwrap();
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let owner = BfvContext::try_new(parameters).unwrap();
+    let parameters = owner.parameters();
+    let table = owner.table();
     let secret: Vec<i64> = (0..N).map(|index| i64::from(index % 3 == 0)).collect();
     let coefficient_key = GlweSecretKey::new(
         secret.clone(),
         parameters.size().glwe_size(),
         SecretKeyDistr::UniformBinary,
     );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
+    let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
     let message = Polynomial((0..N).map(|i| (i * 13 % 257) as u64).collect::<Vec<_>>());
     let mut ciphertext = BfvCiphertext::zero(parameters.size().rns_glwe_len());
     context.encrypt_to(
@@ -463,7 +487,7 @@ fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge()
     let flipped: Vec<_> = secret.iter().map(|&value| -value).collect();
     assert_ne!(phase_oracle(ciphertext.as_ref(), &flipped, 2), phase);
     let mut raw = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
-    ciphertext.write_raw_glwe_to(&mut raw, &parameters);
+    ciphertext.write_raw_glwe_to(&mut raw, parameters);
     let length = parameters.size().rns_poly_len();
     for (limb, &q) in Q.iter().enumerate() {
         for i in 0..N {
@@ -478,7 +502,7 @@ fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge()
         }
     }
     let mut recovered = BfvCiphertext::zero(parameters.size().rns_glwe_len());
-    recovered.set_from_raw_glwe(&raw, &parameters);
+    recovered.set_from_raw_glwe(&raw, parameters);
     assert_eq!(recovered, ciphertext);
     let mut raw_phase = DcrtPolynomial::<Vec<u64>>::zero(length);
     key.phase_to(&raw, &mut raw_phase, parameters.base_q().moduli());
@@ -489,21 +513,23 @@ fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge()
 #[test]
 fn encoded_phase_entry_does_not_apply_delta_again() {
     let parameters = parameters(1, 257, ErrorDistribution::CenteredBinomial { eta: 1 });
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    let owner = BfvContext::try_new(parameters).unwrap();
+    let parameters = owner.parameters();
+    let table = owner.table();
     let key = GlweSecretKey::new(
         vec![0i64; N],
         parameters.size().glwe_size(),
         SecretKeyDistr::UniformBinary,
     );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
-    let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, table);
+    let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
     let message = Polynomial(vec![3; N]);
     let encoded = CrtPolynomial(independently_encoded(message.as_ref(), 1, 257, false));
     let mut proper = BfvCiphertext::zero(parameters.size().rns_glwe_len());
     let mut wrong = proper.clone();
     context.encrypt_encoded_crt_to(&encoded, &mut proper, &mut StdRng::seed_from_u64(27));
     context.encrypt_plaintext_lift_crt_to(&encoded, &mut wrong, &mut StdRng::seed_from_u64(27));
-    let mut workspace = BfvDecryptWorkspace::new(&parameters);
+    let mut workspace = BfvDecryptWorkspace::new(parameters);
     assert_eq!(context.decrypt(&proper, &mut workspace), message);
     assert_ne!(context.decrypt(&wrong, &mut workspace), message);
 }

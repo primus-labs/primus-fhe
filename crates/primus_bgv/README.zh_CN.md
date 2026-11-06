@@ -54,8 +54,10 @@ Level0 使用全部有序 primes；level l 丢弃最后 l 个。Context 拥有�
 partitioned QP keys。代码中一次准备
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)`，将克隆的 `Arc`
 传给 `relinearization_key`、`key_switching_key`、`automorphism_key` 或 row-key
-生成入口。原 prepared 操作及密文类型可消费两种后端；`BgvEvaluationKeyConfig`
-显式保存 `Radix(DecompositionConfig)` 或 `Hybrid(Arc<NativeHybridParameters>)`。
+生成入口。原 prepared 操作及密文类型可消费两种后端。多个 radix 角色可一次准备
+`context.radix_key_parameters(level,config)`，再传入克隆的 `Arc`。
+`BgvEvaluationKeyConfig` 接受分解配置、共享 radix metadata 或共享 Hybrid 参数。
+数值 metadata 可在匹配的 BFV/BGV context 间共享，但不证明实际 secret 或 transform 身份。
 
 Key P 将求值密钥模数扩大为 QP，须独立检查安全性和完整误差；它与 BFV 乘法的
 computation-only 辅助基分开。仅准备选中后端的 key/scratch；同层角色共享不可变
@@ -68,7 +70,10 @@ P 资源。精确 correction、分区、bounded-secret 扩展和 collective 契�
 relinearization key，然后直接使用已有 evaluator；不会构造聚合秘密。
 `BgvCollectivePublicKey`、`BgvCollectiveSwitchingKey`、
 `BgvCollectiveAutomorphismKey` 和 `BgvCollectiveRelinearization` 各自拥有具体
-common-mask/basis setup，每方只提供自己的 share。首版要求精确 CBD1
+common-mask/basis setup，每方只借用自己的 `&DcrtGlweSecretKey<u64>`，context 由 plan 持有。
+建钥期间保持唯一原生秘密 owner，真正执行输入/恢复时再消费进 Client。采样前检查
+geometry、有序 Q 和声明的秘密分布；实际 NTT 约定和秘密来源由调用方保证。
+在线 `BgvSeededInput::contribute` 仍使用 Client。首版要求精确 CBD1
 （`SparseTernary`）share 与 CBD21 error；一般单方 API 仍使用原配置分布。
 
 公开 contribution 只导出后端拥有格式的规范 residue。调用方认证 context、role、
@@ -147,7 +152,10 @@ n32/N128/p193，旋转/交换两行并换到第二个 full-N secret；spare slot
 
 ## 资源与命令
 
-Context 拥有 sampler/bases/table，client/evaluator/prepared key operations 借用它。
+Context 拥有 sampler 和恢复 basis。`shared_table()` 与
+`try_with_table(parameters,level_count,table)` 允许配对的 BFV/BGV context 共享实际
+full-Q 变换，不复制 roots。外部 table 仍检查 N 和有序 Q，恢复常量保持方案各自语义。
+低层 basis 从已检查前缀派生，不重做互素检查。Client/evaluator/prepared key operations 借用 context。
 Prepared `_to`/`_assign` 加密、tensor/square、线性/明文求值、relin/换钥/auto、相邻 prime drop 和
 恢复均不新增分配。秘密、生成时 secret-square/automorphism 临时值、公钥 ephemeral
 及恢复存储按契约擦除。可用 `Zeroize::zeroize` 显式擦除公钥 encryptor ephemeral，

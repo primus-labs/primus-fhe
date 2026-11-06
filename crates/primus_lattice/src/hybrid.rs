@@ -21,11 +21,13 @@ use primus_shape::PolyLength;
 
 type Base = RNSBase<u64, BarrettModulus<u64>>;
 
-/// Selected evaluation-key representation; Hybrid handles share actual resources.
+/// Selected evaluation-key representation; prepared handles share numerical resources.
 #[derive(Clone)]
 pub enum EvaluationKeyConfig {
     /// Signed radix columns in the ciphertext modulus.
     Radix(DecompositionConfig),
+    /// Signed radix columns with shared complete numerical preparation.
+    PreparedRadix(Arc<crate::radix::NativeRadixParameters>),
     /// Partitioned QP columns with one shared immutable numerical owner.
     Hybrid(Arc<NativeHybridParameters>),
 }
@@ -34,6 +36,12 @@ impl From<DecompositionConfig> for EvaluationKeyConfig {
         Self::Radix(value)
     }
 }
+impl From<Arc<crate::radix::NativeRadixParameters>> for EvaluationKeyConfig {
+    fn from(value: Arc<crate::radix::NativeRadixParameters>) -> Self {
+        Self::PreparedRadix(value)
+    }
+}
+
 impl From<Arc<NativeHybridParameters>> for EvaluationKeyConfig {
     fn from(value: Arc<NativeHybridParameters>) -> Self {
         Self::Hybrid(value)

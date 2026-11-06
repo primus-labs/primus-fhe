@@ -42,7 +42,7 @@ fn expected_product(lhs: &[u64], rhs: &[u64], modulus: u64) -> Polynomial<Vec<u6
 fn bench_leveled(c: &mut Criterion) {
     const N: usize = 1024;
     const T: u64 = 12_289;
-    let parameters = BfvParameters::new(
+    let parameters = BfvParameters::try_new(
         PolyLength::new(N),
         BarrettModulus::new(T),
         BarrettModulus::new(2_199_023_190_017),
@@ -54,7 +54,8 @@ fn bench_leveled(c: &mut Criterion) {
         .map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
         3.2,
-    );
+    )
+    .unwrap();
     let context = BfvContext::try_with_levels(parameters, 3).unwrap();
     let mut rng = StdRng::seed_from_u64(0x4246_565f_4245_4e43);
     let mut client = BfvClient::generate(&context, &mut rng);
@@ -109,11 +110,6 @@ fn bench_leveled(c: &mut Criterion) {
     group.bench_function("rounded_drop_3_to_2", |b| {
         b.iter(|| {
             switch_zero.switch_to(black_box(&product), black_box(&mut level_one));
-        });
-    });
-    group.bench_function("rounded_drop_2_to_1", |b| {
-        b.iter(|| {
-            switch_one.switch_to(black_box(&level_one), black_box(&mut level_two));
         });
     });
     group.bench_function("private_encrypt_linear_mul_two_drops_decrypt_to", |b| {

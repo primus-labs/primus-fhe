@@ -4,6 +4,9 @@
 //!
 //! Individual imported shares must actually follow CBD1 for the stated
 //! distribution contract; a secret's distribution metadata cannot prove this.
+//! Native shares must use the plan context's actual NTT convention. Matching
+//! geometry and ordered Q are checked before sampling, but do not prove the
+//! secret's NTT or sampling provenance.
 //! Setup masks are public uniform common randomness, independent of private
 //! errors. Checked import validates canonical geometry, not provenance.
 
@@ -183,21 +186,20 @@ fn distribution(context: &BfvContext) -> Result<(), BfvCollectiveError> {
     }
     Ok(())
 }
-fn owner(client: &BfvClient<'_>, context: &BfvContext) -> Result<(), BfvCollectiveError> {
-    if !ptr::eq(client.context, context) {
-        return Err(BfvCollectiveError::Binding);
-    }
-    if client.secret_key().distr() != SecretKeyDistr::SparseTernary {
+fn owner(share: &DcrtGlweSecretKey<u64>, context: &BfvContext) -> Result<(), BfvCollectiveError> {
+    share
+        .validate_parameters(
+            context.parameters().size(),
+            context.parameters().base_q().moduli(),
+        )
+        .map_err(|_| BfvCollectiveError::Binding)?;
+    if share.distr() != SecretKeyDistr::SparseTernary {
         return Err(BfvCollectiveError::Distribution);
     }
     Ok(())
 }
-fn secret<'a>(client: &'a BfvClient<'_>, len: usize) -> &'a [u64] {
-    let DcrtPolynomial(values) = client
-        .secret_key()
-        .iter_dcrt_poly()
-        .next()
-        .expect("rank-one secret");
+fn secret(share: &DcrtGlweSecretKey<u64>, len: usize) -> &[u64] {
+    let DcrtPolynomial(values) = share.iter_dcrt_poly().next().expect("rank-one secret");
     &values[..len]
 }
 fn add_polynomials(context: &BfvContext, level: usize, output: &mut [u64], input: &[u64]) {
@@ -298,19 +300,23 @@ impl<'a> BfvCollectivePublicKey<'a> {
     /// Samples only this party's body contribution using its individual share.
     pub fn contribute<R: rand::Rng + rand::CryptoRng>(
         &self,
-        client: &BfvClient<'_>,
+        share: &DcrtGlweSecretKey<u64>,
         rng: &mut R,
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
-        owner(client, self.context)?;
+        owner(share, self.context)?;
         let mut body = noise(self.context, 0, rng);
         let len = body.len();
         DcrtPolynomial(body.as_mut_slice()).sub_mul_assign(
             &DcrtPolynomial(&self.mask),
-            &DcrtPolynomial(secret(client, len)),
+            &DcrtPolynomial(secret(share, len)),
             self.context.parameters().poly_length().get(),
             self.context.codec(0).base_q().moduli(),
         );
-        self.try_import_contribution(body)
+        // Native NTT and modular kernels produce canonical residues.
+        Ok(BfvCollectiveContribution {
+            binding: &self.binding,
+            residues: body,
+        })
     }
     /// Checks a transported body before rebinding it to this setup instance.
     pub fn try_import_contribution(
@@ -434,7 +440,7 @@ impl<'a> EvaluationSetup<'a> {
         source: &[u64],
         target: &[u64],
         rng: &mut R,
-    ) -> Vec<u64> {
+    ) -> BfvCollectiveContribution<'_> {
         let len = self.native.key_poly_len();
         let n = self.native.n;
         let moduli = self.native.key_moduli(self.context);
@@ -451,7 +457,11 @@ impl<'a> EvaluationSetup<'a> {
             );
             output.extend(body);
         }
-        output
+        // Every column was produced by canonical native modular operations.
+        BfvCollectiveContribution {
+            binding: &self.binding,
+            residues: output,
+        }
     }
     fn empty_key(&self) -> NativeEvaluationKey {
         self.native.empty()
@@ -514,15 +524,15 @@ impl<'a> BfvCollectiveSwitchingKey<'a> {
     /// Creates one contribution from this owner's source and target shares only.
     pub fn contribute<R: rand::Rng + rand::CryptoRng>(
         &self,
-        source: &BfvClient<'_>,
-        target: &BfvClient<'_>,
+        source: &DcrtGlweSecretKey<u64>,
+        target: &DcrtGlweSecretKey<u64>,
         rng: &mut R,
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
         owner(source, self.setup.context)?;
         owner(target, self.setup.context)?;
-        let source = self.setup.native.secret(source)?;
-        let target = self.setup.native.secret(target)?;
-        self.setup.import(self.setup.linear(&source, &target, rng))
+        let source = self.setup.native.secret(self.setup.context, source)?;
+        let target = self.setup.native.secret(self.setup.context, target)?;
+        Ok(self.setup.linear(&source, &target, rng))
     }
     /// Checks and binds a transported body payload.
     pub fn try_import_contribution(
@@ -621,18 +631,17 @@ impl<'a> BfvCollectiveAutomorphismKey<'a> {
     /// Samples one owner's automorphed-source contribution under its own share.
     pub fn contribute<R: rand::Rng + rand::CryptoRng>(
         &self,
-        client: &BfvClient<'_>,
+        share: &DcrtGlweSecretKey<u64>,
         rng: &mut R,
     ) -> Result<BfvCollectiveContribution<'_>, BfvCollectiveError> {
-        owner(client, self.setup.context)?;
+        owner(share, self.setup.context)?;
         let n = self.setup.context.parameters().poly_length().get();
-        let secret = self.setup.native.secret(client)?;
+        let secret = self.setup.native.secret(self.setup.context, share)?;
         let mut transformed = Zeroizing::new(vec![0; self.setup.native.key_poly_len()]);
         for (input, output) in secret.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
             self.permutation.apply_to(input, output);
         }
-        self.setup
-            .import(self.setup.linear(&transformed, &secret, rng))
+        Ok(self.setup.linear(&transformed, &secret, rng))
     }
     /// Checks and binds a transported body payload.
     pub fn try_import_contribution(
@@ -708,7 +717,7 @@ impl<'a> BfvCollectiveRelinearization<'a> {
     /// `(g*s_i-A*u_i+e0, A*s_i+e1)` plus an erasing, noncloneable private state.
     pub fn start<'p, R: rand::Rng + rand::CryptoRng>(
         &'p self,
-        client: &'p BfvClient<'a>,
+        share: &'p DcrtGlweSecretKey<u64>,
         rng: &mut R,
     ) -> Result<
         (
@@ -717,12 +726,12 @@ impl<'a> BfvCollectiveRelinearization<'a> {
         ),
         BfvCollectiveError,
     > {
-        owner(client, self.setup.context)?;
+        owner(share, self.setup.context)?;
         let context = self.setup.context;
         let len = self.setup.native.key_poly_len();
         let n = self.setup.native.n;
         let moduli = self.setup.native.key_moduli(context);
-        let secret = self.setup.native.secret(client)?;
+        let secret = self.setup.native.secret(self.setup.context, share)?;
         let mut ephemeral = Zeroizing::new(vec![0; len]);
         let minus_one: Vec<_> = self
             .setup
@@ -765,7 +774,7 @@ impl<'a> BfvCollectiveRelinearization<'a> {
             },
             BfvCollectiveRelinearizationState {
                 setup: &self.setup,
-                client,
+                share,
                 ephemeral,
             },
         ))
@@ -805,7 +814,7 @@ impl<'a> BfvCollectiveRelinearization<'a> {
 /// on success, errors and unwind; it has no Clone/Debug/serialization interface.
 pub struct BfvCollectiveRelinearizationState<'p, 'c> {
     setup: &'p EvaluationSetup<'c>,
-    client: &'p BfvClient<'c>,
+    share: &'p DcrtGlweSecretKey<u64>,
     ephemeral: Zeroizing<Vec<u64>>,
 }
 impl BfvCollectiveRelinearizationState<'_, '_> {
@@ -823,7 +832,7 @@ impl BfvCollectiveRelinearizationState<'_, '_> {
         let len = self.setup.native.key_poly_len();
         let n = self.setup.native.n;
         let moduli = self.setup.native.key_moduli(context);
-        let secret = self.setup.native.secret(self.client)?;
+        let secret = self.setup.native.secret(self.setup.context, self.share)?;
         DcrtPolynomial(self.ephemeral.as_mut_slice()).sub_assign(
             &DcrtPolynomial(secret.as_slice()),
             n,
@@ -1070,35 +1079,45 @@ impl<'a> BfvClient<'a> {
         }
         output.as_mut().copy_from_slice(&input.as_ref()[len..]);
         output.mul_assign(
-            &DcrtPolynomial(secret(self, len)),
+            &DcrtPolynomial(secret(self.secret_key(), len)),
             self.context.parameters().poly_length().get(),
             self.context.codec(level).base_q().moduli(),
         );
         Ok(())
     }
-    /// Embeds this owner's exact CBD1 N/2 secret as `s_i(X²)` in the destination
-    /// N ring. INTT temporary secrets are erased. Every limb is checked against
-    /// the same signed {-1,0,1} coefficients before importing/transformation.
-    pub fn try_embed_secret<'b>(
+}
+
+impl BfvContext {
+    /// Embeds an individual CBD1 N/2 secret as `s_i(X²)` in this N ring.
+    ///
+    /// The source key is borrowed without constructing a recovery client. The
+    /// source/target contexts must use the intended actual NTT conventions.
+    /// Geometry and declared secret support are checked before conversion; every
+    /// coefficient limb must encode the same signed {-1,0,1} values. This checks
+    /// support, not the private share's probability distribution. Temporary
+    /// coefficient and embedded secrets are erased on return or unwind.
+    pub fn try_embed_secret_from(
         &self,
-        destination: &'b BfvContext,
-    ) -> Result<BfvClient<'b>, BfvCollectiveError> {
-        distribution(destination)?;
-        let n = self.context.parameters().poly_length().get();
-        if destination.parameters().poly_length().get() != 2 * n
-            || destination.parameters().codec().t() != self.context.parameters().codec().t()
+        source: &BfvContext,
+        share: &DcrtGlweSecretKey<u64>,
+    ) -> Result<DcrtGlweSecretKey<u64>, BfvCollectiveError> {
+        distribution(self)?;
+        owner(share, source)?;
+        let n = source.parameters().poly_length().get();
+        if self.parameters().poly_length().get() != 2 * n
+            || self.parameters().codec().t() != source.parameters().codec().t()
         {
             return Err(BfvCollectiveError::Embedding);
         }
-        let mut coefficients = Zeroizing::new(secret(self, self.context.rns_poly_len(0)).to_vec());
-        transform(self.context, &mut coefficients, true);
+        let mut coefficients = Zeroizing::new(secret(share, source.rns_poly_len(0)).to_vec());
+        transform(source, &mut coefficients, true);
         let mut embedded = Zeroizing::new(vec![0i64; 2 * n]);
         for (index, &value) in coefficients[..n].iter().enumerate() {
             embedded[2 * index] = if value == 0 {
                 0
             } else if value == 1 {
                 1
-            } else if value == self.context.codec(0).moduli_values()[0] - 1 {
+            } else if value == source.codec(0).moduli_values()[0] - 1 {
                 -1
             } else {
                 return Err(BfvCollectiveError::Embedding);
@@ -1106,7 +1125,7 @@ impl<'a> BfvClient<'a> {
         }
         for (limb, &q) in coefficients
             .chunks_exact(n)
-            .zip(self.context.codec(0).moduli_values())
+            .zip(source.codec(0).moduli_values())
         {
             if limb.iter().enumerate().any(|(i, &x)| {
                 x != match embedded[2 * i] {
@@ -1120,11 +1139,13 @@ impl<'a> BfvClient<'a> {
         }
         let coefficient_key = GlweSecretKey::new(
             embedded.to_vec(),
-            destination.parameters().size().glwe_size(),
+            self.parameters().size().glwe_size(),
             SecretKeyDistr::SparseTernary,
         );
-        let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, destination.table());
-        BfvClient::try_from_secret_key(destination, key).map_err(|_| BfvCollectiveError::Embedding)
+        Ok(DcrtGlweSecretKey::from_coeff_secret_key(
+            &coefficient_key,
+            self.table(),
+        ))
     }
 }
 

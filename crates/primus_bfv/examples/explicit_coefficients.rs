@@ -4,12 +4,11 @@
 //! This small ring is an API example, not a security parameter preset.
 
 use primus_bfv::{
-    BfvCiphertext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey, BfvPublicKeyEncryptor,
-    BfvSecretKeyContext,
+    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
+    BfvPublicKeyEncryptor, BfvSecretKeyContext,
 };
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
-use primus_ntt::U64DcrtTable;
 use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use zeroize::Zeroize;
@@ -23,18 +22,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         SecretKeyDistr::SparseTernary,
         3.2,
     )?;
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli())?;
+    let context = BfvContext::try_new(parameters)?;
+    let parameters = context.parameters();
+    let table = context.table();
     let mut rng = rand::rng();
     let coefficient_key = GlweSecretKey::generate(
         parameters.size().glwe_size(),
         parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, &table);
-    let client = BfvSecretKeyContext::try_new(&key, &parameters, &table)?;
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
+    let client = BfvSecretKeyContext::try_new(&key, &context)?;
     let public = BfvPublicKey::new(&client, &mut rng);
-    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table)?;
-    let mut workspace = BfvDecryptWorkspace::new(&parameters);
+    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &context)?;
+    let mut workspace = BfvDecryptWorkspace::new(parameters);
     let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
     let mut decoded = Polynomial::<Vec<u64>>::zero(parameters.poly_length().get());
 

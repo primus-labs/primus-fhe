@@ -6,11 +6,12 @@ use primus_poly::Polynomial;
 use primus_shape::PolyLength;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::Arc;
 
 const Q: [u64; 2] = [1_125_899_906_826_241, 1_125_899_906_629_633];
 
 fn parameters(n: usize, q: &[u64]) -> BfvParameters {
-    BfvParameters::new(
+    BfvParameters::try_new(
         PolyLength::new(n),
         BarrettModulus::new(257),
         BarrettModulus::new(2_199_023_190_017),
@@ -21,6 +22,7 @@ fn parameters(n: usize, q: &[u64]) -> BfvParameters {
         SecretKeyDistr::UniformBinary,
         1.0,
     )
+    .unwrap()
 }
 
 #[test]
@@ -44,6 +46,9 @@ fn context_and_import_reject_incompatible_resources() {
     ));
 
     let context = BfvContext::try_with_levels(parameters(32, &Q), 2).unwrap();
+    let shared = BfvContext::try_with_table(parameters(32, &Q), 2, context.shared_table()).unwrap();
+    assert!(std::ptr::eq(context.table(), shared.table()));
+    assert_eq!(shared.codec(1).moduli_values(), &Q[..1]);
     let mut rng = StdRng::seed_from_u64(0x6060);
     for (n, q) in [(64, Q.to_vec()), (32, vec![Q[1], Q[0]]), (32, vec![Q[0]])] {
         let foreign = parameters(n, &q);
@@ -55,6 +60,10 @@ fn context_and_import_reject_incompatible_resources() {
         );
         let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
         assert!(BfvClient::try_from_secret_key(&context, key).is_err());
+        assert!(matches!(
+            BfvContext::try_with_table(parameters(32, &Q), 2, Arc::new(table)),
+            Err(BfvContextError::Binding(_))
+        ));
     }
 }
 

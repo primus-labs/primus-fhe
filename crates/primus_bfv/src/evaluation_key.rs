@@ -4,21 +4,21 @@
 
 use crate::{BfvCiphertext, BfvClient, BfvContext, BfvQuadraticCiphertext};
 use primus_data::{Data, DataMut};
-use primus_decompose::{ApproxSignedBasisError, big_integer::BigUintApproxSignedBasis};
+use primus_decompose::{ApproxSignedBasisError, DecompositionConfig};
+use primus_glwe_rns::DcrtGlweSecretKey;
 pub use primus_lattice::hybrid::EvaluationKeyConfig as BfvEvaluationKeyConfig;
 use primus_lattice::hybrid::{
     EvaluationKeyConfig, HybridModDown, NativeHybridError, NativeHybridParameters,
     NativeHybridProduct,
 };
+use primus_lattice::radix::{NativeRadixError, NativeRadixParameters};
 use primus_lattice::{
-    GlweSizeError, RnsGadgetSize, RnsGlweSize, glev::DcrtGlev, glwe::DcrtGlwe,
-    workspace::DcrtGlevMulWorkspace,
+    GlweSizeError, glev::DcrtGlev, glwe::DcrtGlwe, workspace::DcrtGlevMulWorkspace,
 };
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttAutomorphismPermutation, NttTable};
 use primus_poly::{CrtPolynomial, DcrtPolynomial};
 use primus_reduce::{ReduceAdd, ReduceMul, ReduceSub};
-use primus_rns::Residues;
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
@@ -124,6 +124,35 @@ pub enum BfvEvaluationKeyError {
     Layout(#[from] GlweSizeError),
 }
 
+impl From<NativeRadixError> for BfvEvaluationKeyError {
+    fn from(error: NativeRadixError) -> Self {
+        match error {
+            NativeRadixError::Decomposition(error) => Self::Decomposition(error),
+            NativeRadixError::Layout(error) => Self::Layout(error),
+            NativeRadixError::Radix { radix, modulus } => Self::Radix { radix, modulus },
+        }
+    }
+}
+
+impl BfvContext {
+    /// Prepares shared signed-radix metadata for role keys at one active Q level.
+    /// The owner binds numerical geometry, not secret or NTT provenance.
+    /// # Errors
+    /// Rejects an unknown level, unsupported decomposition or overflowing shape.
+    pub fn radix_key_parameters(
+        &self,
+        level: usize,
+        config: DecompositionConfig,
+    ) -> Result<Arc<NativeRadixParameters>, BfvEvaluationKeyError> {
+        validate_level(self, level)?;
+        Ok(Arc::new(NativeRadixParameters::try_new(
+            self.parameters().poly_length(),
+            self.codec(level).base_q(),
+            config,
+        )?))
+    }
+}
+
 /// One native BFV key's actual Q level, decomposition and public columns.
 /// Radix metadata and Hybrid P tables are shared immutable owners; the actual
 /// Q NTT tables remain borrowed from the context.
@@ -138,14 +167,8 @@ struct NativeEvaluationKey {
 
 #[derive(Clone)]
 enum NativeEvaluationBasis {
-    Radix(Arc<RadixMetadata>),
+    Radix(Arc<NativeRadixParameters>),
     Hybrid(Arc<NativeHybridParameters>),
-}
-
-struct RadixMetadata {
-    size: RnsGadgetSize,
-    basis: BigUintApproxSignedBasis<u64>,
-    weights: Vec<u64>,
 }
 
 impl NativeEvaluationKey {
@@ -169,38 +192,17 @@ impl NativeEvaluationKey {
         let n = context.parameters().poly_length().get();
         let basis = match config.into() {
             EvaluationKeyConfig::Radix(config) => {
-                let basis = BigUintApproxSignedBasis::try_new(
-                    base.moduli_product(),
-                    config.log_basis,
-                    config.level_count,
+                NativeEvaluationBasis::Radix(context.radix_key_parameters(level, config)?)
+            }
+            EvaluationKeyConfig::PreparedRadix(parameters) => {
+                validate_numeric_context(
+                    parameters.poly_length().get(),
+                    context.codec(level).t(),
+                    parameters.base_q().moduli_values(),
+                    context,
+                    level,
                 )?;
-                for q in base.moduli() {
-                    if basis.basis_value() >= q.value() {
-                        return Err(BfvEvaluationKeyError::Radix {
-                            radix: basis.basis_value(),
-                            modulus: q.value(),
-                        });
-                    }
-                }
-                let size = RnsGadgetSize::try_new(
-                    RnsGlweSize::try_new(
-                        context.parameters().size().glwe_size(),
-                        base.moduli_count(),
-                    )?,
-                    basis.level_count(),
-                )?;
-                let mut weights = vec![0; basis.level_count().get() * base.moduli_count()];
-                for (scalar, out) in basis
-                    .scalar_iter()
-                    .zip(weights.chunks_exact_mut(base.moduli_count()))
-                {
-                    base.decompose_to(primus_integer::BigUint(scalar), Residues(out));
-                }
-                NativeEvaluationBasis::Radix(Arc::new(RadixMetadata {
-                    size,
-                    basis,
-                    weights,
-                }))
+                NativeEvaluationBasis::Radix(parameters)
             }
             EvaluationKeyConfig::Hybrid(parameters) => {
                 validate_numeric_context(
@@ -241,7 +243,7 @@ impl NativeEvaluationKey {
     }
     fn column_count(&self) -> usize {
         match &self.basis {
-            NativeEvaluationBasis::Radix(p) => p.basis.level_count().get(),
+            NativeEvaluationBasis::Radix(p) => p.basis().level_count().get(),
             NativeEvaluationBasis::Hybrid(p) => p.partition_count(),
         }
     }
@@ -262,9 +264,7 @@ impl NativeEvaluationKey {
     }
     fn weights(&self, index: usize) -> &[u64] {
         match &self.basis {
-            NativeEvaluationBasis::Radix(p) => {
-                &p.weights[index * self.moduli.len()..(index + 1) * self.moduli.len()]
-            }
+            NativeEvaluationBasis::Radix(p) => p.key_weights(index),
             NativeEvaluationBasis::Hybrid(p) => p.key_weights(index),
         }
     }
@@ -297,12 +297,12 @@ impl NativeEvaluationKey {
         self.transform(context, &mut out, false);
         out
     }
-    fn secret(&self, client: &BfvClient<'_>) -> Result<Zeroizing<Vec<u64>>, BfvEvaluationKeyError> {
-        let input = client
-            .secret_key()
-            .iter_dcrt_poly()
-            .next()
-            .expect("rank-one secret");
+    fn secret(
+        &self,
+        context: &BfvContext,
+        key: &DcrtGlweSecretKey<u64>,
+    ) -> Result<Zeroizing<Vec<u64>>, BfvEvaluationKeyError> {
+        let input = key.iter_dcrt_poly().next().expect("rank-one secret");
         if matches!(self.basis, NativeEvaluationBasis::Radix(_)) {
             return Ok(Zeroizing::new(
                 input.as_ref()[..self.n * self.moduli.len()].to_vec(),
@@ -311,16 +311,15 @@ impl NativeEvaluationKey {
         let NativeEvaluationBasis::Hybrid(parameters) = &self.basis else {
             unreachable!("established Hybrid branch");
         };
-        let bound = client
-            .context
+        let bound = context
             .parameters()
             .encryption_parameters()
             .secret_key_sampler()
             .maximum_magnitude();
         Ok(parameters.extend_bounded_secret_to_qp(
             input.as_ref(),
-            client.context.parameters().base_q(),
-            client.context.table(),
+            context.parameters().base_q(),
+            context.table(),
             bound,
         )?)
     }
@@ -339,9 +338,7 @@ impl NativeEvaluationKey {
                     BfvCiphertext::new(&mut self.columns[index * 2 * len..(index + 1) * 2 * len]);
                 client.encrypt_zeros_at_level_to(&mut output, self.level, rng);
                 let weights = match &self.basis {
-                    NativeEvaluationBasis::Radix(p) => {
-                        &p.weights[index * self.moduli.len()..(index + 1) * self.moduli.len()]
-                    }
+                    NativeEvaluationBasis::Radix(p) => p.key_weights(index),
                     _ => unreachable!(),
                 };
                 let (mut c0, _) = output.c0_c1_mut(len);
@@ -353,7 +350,7 @@ impl NativeEvaluationKey {
                 );
             }
         } else {
-            let target = self.secret(client)?;
+            let target = self.secret(client.context, client.secret_key())?;
             let len = self.key_poly_len();
             let uniforms: Vec<_> = self
                 .key_moduli_values(context)
@@ -456,7 +453,7 @@ impl BfvRelinearizationKey {
     ) -> bool {
         match (backend, &self.key.basis) {
             (crate::BfvLeveledKeyBackend::Radix16, NativeEvaluationBasis::Radix(metadata)) => {
-                metadata.basis.log_basis().get() == 16 && metadata.basis.drop_bits() < 16
+                metadata.basis().log_basis().get() == 16 && metadata.basis().drop_bits() < 16
             }
             (
                 crate::BfvLeveledKeyBackend::HybridAlpha1,
@@ -524,7 +521,7 @@ impl BfvClient<'_> {
         rng: &mut R,
     ) -> Result<BfvRelinearizationKey, BfvEvaluationKeyError> {
         let key = NativeEvaluationKey::prepare(self.context, level, config)?;
-        let secret = key.secret(self)?;
+        let secret = key.secret(self.context, self.secret_key())?;
         let mut square = Zeroizing::new(secret.to_vec());
         DcrtPolynomial(square.as_mut_slice()).mul_assign(
             &DcrtPolynomial(secret.as_slice()),
@@ -558,7 +555,7 @@ impl BfvClient<'_> {
         let key = NativeEvaluationKey::prepare(self.context, level, config)?;
         let permutation =
             NttAutomorphismPermutation::new(exponent, self.context.parameters().poly_length());
-        let secret = key.secret(self)?;
+        let secret = key.secret(self.context, self.secret_key())?;
         let mut transformed = Zeroizing::new(vec![0; key.key_poly_len()]);
         for (input, output) in secret.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
             permutation.apply_to(input, output);
@@ -650,7 +647,7 @@ impl BfvClient<'_> {
             level,
         )?;
         let key = NativeEvaluationKey::prepare(self.context, level, config)?;
-        let secret = key.secret(source)?;
+        let secret = key.secret(source.context, source.secret_key())?;
         Ok(BfvKeySwitchingKey {
             key: key.encrypt(self, &secret, rng)?,
         })
@@ -678,7 +675,7 @@ impl<'a> NativeProductWorkspace<'a> {
     ) -> Result<Self, BfvEvaluationKeyError> {
         Ok(match &key.basis {
             NativeEvaluationBasis::Radix(p) => Self::Radix(DcrtGlevMulWorkspace::new(
-                p.size,
+                p.size(),
                 context.codec(key.level).base_q(),
             )),
             NativeEvaluationBasis::Hybrid(p) => Self::Hybrid(NativeHybridProduct::try_new(
@@ -699,6 +696,12 @@ fn native_product_to<B: DataMut<Elem = u64>>(
     permutation: Option<&NttAutomorphismPermutation>,
     output: &mut BfvCiphertext<B>,
 ) {
+    if permutation.is_none()
+        && let NativeProductWorkspace::Hybrid(product) = &mut *workspace
+    {
+        product.product_to(input, &key.columns, output.as_mut());
+        return;
+    }
     let n = key.n;
     if let Some(permutation) = permutation {
         for (input, output) in input.chunks_exact(n).zip(coefficient.chunks_exact_mut(n)) {
@@ -715,7 +718,7 @@ fn native_product_to<B: DataMut<Elem = u64>>(
             DcrtGlev(key.columns.as_slice()).mul_crt_polynomial_to(
                 &CrtPolynomial(&*coefficient),
                 &mut DcrtGlwe(output.as_mut()),
-                &p.basis,
+                p.basis(),
                 context.table(),
                 context.codec(key.level).base_q(),
                 workspace,

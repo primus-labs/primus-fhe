@@ -86,8 +86,10 @@ radix 余位。[多级系数](examples/leveled_coefficients.rs)和
 partitioned QP keys。代码中一次准备
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)`，将克隆的 `Arc`
 传给 `relinearization_key`、`key_switching_key`、`automorphism_key` 或 row-key
-生成入口。原 prepared 操作及密文类型可消费两种后端；`BfvEvaluationKeyConfig`
-显式保存 `Radix(DecompositionConfig)` 或 `Hybrid(Arc<NativeHybridParameters>)`。
+生成入口。原 prepared 操作及密文类型可消费两种后端。多个 radix 角色可一次准备
+`context.radix_key_parameters(level,config)`，再传入克隆的 `Arc`。
+`BfvEvaluationKeyConfig` 接受分解配置、共享 radix metadata 或共享 Hybrid 参数。
+数值 metadata 可在匹配的 BFV/BGV context 间共享，但不证明实际 secret 或 transform 身份。
 
 Key P 将求值密钥模数扩大为 QP，须独立检查安全性和完整误差；它与 BFV 乘法的
 computation-only 辅助基分开。仅准备选中后端的 key/scratch；同层角色共享不可变
@@ -97,7 +99,9 @@ P 资源。精确 correction、分区、bounded-secret 扩展和 collective 契�
 ## Collective 密钥与一次性 raw lookup
 
 `BfvCollectivePublicKey`、`BfvCollectiveSwitchingKey` 和
-`BfvCollectiveAutomorphismKey` 的每次 `contribute` 只接收本 owner 的个别 share。
+`BfvCollectiveAutomorphismKey` 的每次 `contribute` 只借用本 owner 的
+`&DcrtGlweSecretKey<u64>`，context 由 plan 持有。建钥期间保持唯一原生秘密 owner，
+真正需要加密/恢复时再消费进 Client。
 `aggregate(expected)` 准备公共累加器，`add` 核对实际本地 setup 实例和数量，
 `finalize` 消耗完整聚合并产出现有 native 角色密钥。传输使用 `common_mask`、
 `as_residues` 和 checked `try_import_contribution`；不公开私有 key columns。
@@ -110,8 +114,9 @@ P 资源。精确 correction、分区、bounded-secret 扩展和 collective 契�
 接口不接收私有 shares 向量，也不构造聚合秘密。调用协议负责认证 owner、拒绝重复、
 绑定 source/target/session 身份并防止复用；算术数量检查不能建立这些属性。
 
-Source/target switching 只绑定一个实际 context；`contribute` 仍明确接收两份不同角色的
-share owner。另一 context 的参数相同不能证明其实际 transform owner 相同。
+Source/target switching 只绑定一个实际 context；`contribute` 接收两份不同角色的原生 share。
+采样前检查完整 geometry、有序 Q 和声明的秘密分布。实际 NTT 约定、秘密来源和
+source/target 所有权仍由调用方保证。
 
 独立采样的 fresh lookup setup 使用 `finalize_lookup` 和 `BfvFreshLookupKey::prepare()`，
 后者从已 finalized key 推导实际 context。
@@ -122,7 +127,8 @@ share owner。另一 context 的参数相同不能证明其实际 transform owne
 
 `client.partial_phase_to` 只计算 `c1*s_i`，不含 c0、decode 或隐私 noise。
 协议必须先消耗 opening 授权并加入完整宽整数 flood，才能发布该 phase。
-`client.try_embed_secret` 检查并只嵌入自己的 CBD1 目标 share 为 `s_i(X²)`，
+`destination.try_embed_secret_from(source,&share)` 检查并将单方 CBD1 目标 share
+嵌入为原生 `s_i(X²)` 密钥，
 供 split-switch 使用；它不执行后续密文 even/odd 分离。
 
 在其它 owner 的实际 NTT table 中完成显式方案 bridge 后，可用
@@ -185,8 +191,9 @@ switch或其它运算须另计误差；key数字metadata不能证明真实secret
 ## 高级显式工作流
 
 [显式系数示例](examples/explicit_coefficients.rs) 展示 borrowed
-`BfvSecretKeyContext`、显式 `U64DcrtTable`、复用输出和 `BfvDecryptWorkspace`。
-其他工作流已经拥有变换域秘密/table 时可使用这些绑定。`size()` 维护 geometry；
+`BfvSecretKeyContext::try_new(&key,&context)`、复用输出和 `BfvDecryptWorkspace`。
+其他工作流已经拥有变换域秘密时可使用这些绑定。新密钥仍按完整 context 检查，
+不重新绑定 context 已持有的参数与 table。`size()` 维护 geometry；
 `base_q()` 维护 basis 算术；`codec()` 维护缩放/恢复常量；
 `encryption_parameters()` 维护 sampler。
 
@@ -194,7 +201,7 @@ Raw GLWE 保留 `[a,b]` 和 phase `b-a*s`。`write_raw_glwe_to` 写出
 `[a=-c1,b=c0]`；`set_from_raw_glwe` 导入 `[c0=b,c1=-a]`，复制并取负规范残数，
 不分配、不执行 NTT。[Hybrid-RNS 示例](examples/hybrid_rns_key_switch.rs)的
 switching/GGSW keys 保持 raw 语义，因此消费这些桥接。
-`gadget_parameters` 为这些真实 raw 消费者准备不含 codec 的分解权重。
+`try_gadget_parameters` 为这些真实 raw 消费者准备不含 codec 的分解权重。
 显式 secret/public 加密绑定还接受系数域 CRT 输入：
 `encrypt_plaintext_lift_crt_to` 接受**未缩放**的 canonical lift，恰好乘一次 delta；
 `encrypt_encoded_crt_to` 接受**已经缩放**的 phase，不再乘 delta。将 codec 输出传入
@@ -204,7 +211,10 @@ lift 入口会重复缩放。CRT limbs 按 modulus-major Q 顺序排列。
 
 ## 资源与检查
 
-Context 拥有 Q tables、samplers 和请求的 codecs。Client 拥有一份最高层变换域秘密
+Context 拥有 samplers 和请求的 codecs。Q table 使用不可变共享 owner：
+`shared_table()` 与 `try_with_table(parameters,level_count,table)` 允许配对的 BFV/BGV
+context 复用实际变换，不复制 roots。外部 table 仍检查 N 和有序 Q，codec 保持方案各自语义。
+低层 basis 从已检查前缀派生，不重做互素检查。Client 拥有一份最高层变换域秘密
 及恢复 workspace；低层恢复借用其前缀。预备操作借用不可变 context/key，自持可变
 scratch。独立并发请求使用独立的可变操作 owner。预备后的 `*_to`、`*_assign`
 不分配临时存储；构造器及分配式加密/解密会分配。秘密和 ephemeral/恢复 scratch

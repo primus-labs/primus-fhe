@@ -65,6 +65,9 @@ assert_eq!(base.decompose(value.view()).as_ref(), [2, 4, 6]);
 
 克隆 `RNSBase` 共享不可变预计算，不复制缓冲区；`extend` / `extend_with` 创建新基，原基保持不变。应复用已准备的基，避免独立重复构造相同基。
 
+`prefix(count)` 从非空有序前缀派生，不重做继承的互素检查。较短前缀准备其不同的
+CRT 常量；完整前缀共享原 owner。数量为零或超出原基时 panic。
+
 `compose*` 和 `decompose*` 执行 CRT 转换。单值入口接受借用的 `Residues` / `BigUint` 视图，可通过拥有存储的 `view()` 或 `view_mut()` 获得。单值分解不限定为 Q 的 limb 宽度，但须遵循模数实现对 limb slice 的契约；批量大整数则使用上述固定宽度。空批量不写入数据，但仍须满足文档中的输出、因子与 scratch 长度要求。
 
 `wrapping_decompose*` 从较小模数 `t` 执行居中提升：小于 `ceil(t / 2)` 的值解释为非负，其余解释为负代表元。`t = 2` 时直接保留 `0` 和 `1`，不会将 `1` 提升为 `-1`。

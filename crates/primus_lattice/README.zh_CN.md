@@ -83,6 +83,11 @@ NLev 的 `external_product_sum_to` 和 GGSW/NGSW 的 `cmux_k_to` 接收数量匹
 
 ## Native Hybrid RNS product
 
+启用 `rns` 时，`radix::NativeRadixParameters` 在 BFV/BGV 角色密钥间共享不可变
+signed decomposition、已检查的列 geometry 和 CRT weights。它绑定 N 和有序 Q，
+不认证 secret 或 transform 身份。方案建钥入口通过
+`EvaluationKeyConfig::PreparedRadix` 消费此资源。
+
 启用 `rns` 后，`hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
 为 BFV/BGV keys 提供固定 u64、rank-one `[c0,c1]` plus-phase 算术。参数共享不可变
 CRT bases，仅自持 P NTT tables，实际 Q NTT 资源仍由方案拥有。Prepared product

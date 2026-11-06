@@ -84,6 +84,11 @@ Full GLWE extraction flattens all mask polynomials into an LWE mask; compact ext
 
 ## Native Hybrid RNS products
 
+With `rns`, `radix::NativeRadixParameters` shares immutable rank-one signed
+decomposition, checked column geometry and CRT weights across BFV/BGV role
+keys. It binds N and ordered Q, without certifying secret or transform identity.
+Scheme key generators accept it through `EvaluationKeyConfig::PreparedRadix`.
+
 With `rns`, `hybrid::{EvaluationKeyConfig,NativeHybridParameters,NativeHybridProduct}`
 provides fixed-u64 rank-one `[c0,c1]` plus-phase arithmetic for BFV/BGV keys.
 Parameters share immutable CRT bases and own only P NTT tables; actual Q NTT

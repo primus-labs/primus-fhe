@@ -3,6 +3,7 @@
 use primus_distr::{ErrorDistribution, ErrorSampler, SecretKeySampler};
 use primus_integer::FheUint;
 use primus_lattice::RnsGlweSize;
+use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 use rand::distr::Uniform;
@@ -186,6 +187,28 @@ impl<T: FheUint> CrtGlweEncryptionParameters<T> {
                 .iter()
                 .map(|&q_minus_one| q_minus_one + T::ONE),
             base_q.moduli().iter().map(|q| q.value()),
+        )
+    }
+
+    /// Checks a prepared transform table against this owner's N and ordered Q.
+    ///
+    /// Reuses the existing sampling metadata without rebuilding a basis. Actual
+    /// root/evaluation order and key identity remain caller contracts.
+    ///
+    /// # Errors
+    /// Returns [`RnsDomainError`] for a polynomial-length or ordered-moduli mismatch.
+    pub fn validate_table<Table: NttTable<ValueT = T>>(
+        &self,
+        table: &DcrtTable<Table>,
+    ) -> Result<(), RnsDomainError<T>> {
+        let expected = self.size.poly_length().get();
+        let actual = table.poly_length().get();
+        if expected != actual {
+            return Err(RnsDomainError::PolynomialLengthMismatch { expected, actual });
+        }
+        validate_moduli(
+            self.cipher_moduli_minus_one.iter().map(|&q| q + T::ONE),
+            table.iter().map(NttTable::modulus),
         )
     }
 }

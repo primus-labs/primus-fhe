@@ -1,12 +1,13 @@
 //! Local two-owner arithmetic demonstration, not a distributed protocol or
-//! parameter certificate. Each client owns only its own secret; no sum is built.
+//! parameter certificate. Native shares are consumed into online clients only
+//! after key generation. Each owner keeps its own secret; no sum is built.
 use primus_bgv::{
     BgvClient, BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvContext, BgvMultiplication,
     BgvParameters,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
-use primus_glwe_rns::SecretKeyDistr;
+use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_poly::{DcrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
@@ -21,8 +22,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ErrorDistribution::CenteredBinomial { eta: 21 },
     )?)?;
     let mut rng = StdRng::seed_from_u64(15);
-    let alice = BgvClient::generate(&context, &mut rng);
-    let bob = BgvClient::generate(&context, &mut rng);
+    let mut generate_share = || {
+        let coefficient = GlweSecretKey::generate(
+            context.parameters().size().glwe_size(),
+            context
+                .parameters()
+                .encryption_parameters()
+                .secret_key_sampler(),
+            &mut rng,
+        );
+        DcrtGlweSecretKey::from_coeff_secret_key(&coefficient, context.table())
+    };
+    let alice = generate_share();
+    let bob = generate_share();
 
     let public_setup = BgvCollectivePublicKey::try_new(&context, &mut rng)?;
     let mut public_sum = public_setup.aggregate();
@@ -49,6 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     second_sum.add(&alice_state.round2(&first, &mut rng)?)?;
     second_sum.add(&bob_state.round2(&first, &mut rng)?)?;
     let relinearization_key = setup.finalize(&first, second_sum)?;
+    let alice = BgvClient::try_from_secret_key(&context, alice)?;
+    let bob = BgvClient::try_from_secret_key(&context, bob)?;
 
     let mut message = context.new_plaintext();
     message.as_mut()[..2].copy_from_slice(&[3, 2]);

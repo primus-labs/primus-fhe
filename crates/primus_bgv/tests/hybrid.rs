@@ -132,11 +132,7 @@ fn hybrid_collective_qp_messages_and_square_cross_terms_use_native_roles() {
                 context.parameters().size().glwe_size(),
                 SecretKeyDistr::SparseTernary,
             );
-            BgvClient::try_from_secret_key(
-                &context,
-                DcrtGlweSecretKey::from_coeff_secret_key(&coeff, context.table()),
-            )
-            .unwrap()
+            DcrtGlweSecretKey::from_coeff_secret_key(&coeff, context.table())
         })
         .collect();
     let combined: Vec<i64> = (0..N).map(|i| shares.iter().map(|s| s[i]).sum()).collect();

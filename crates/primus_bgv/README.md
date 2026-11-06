@@ -60,8 +60,11 @@ coefficient or slot command to select native partitioned QP keys. In code,
 prepare `context.hybrid_key_parameters(level,decomposition_count,&key_p)` once,
 then pass its cloned `Arc` to `relinearization_key`, `key_switching_key` or
 `automorphism_key`/row-key generation. The existing prepared operations and
-ciphertext types consume either backend. `BgvEvaluationKeyConfig` stores
-`Radix(DecompositionConfig)` or `Hybrid(Arc<NativeHybridParameters>)` explicitly.
+ciphertext types consume either backend. For repeated radix roles, prepare
+`context.radix_key_parameters(level,config)` once and pass its cloned `Arc`.
+`BgvEvaluationKeyConfig` accepts a decomposition request, shared radix metadata
+or shared Hybrid parameters. Numerical metadata can be shared across matching
+BFV/BGV contexts; it does not prove actual secret or transform identity.
 
 Key P enlarges the evaluation-key modulus to QP and needs its own security and
 complete-error budget. It is separate from BFV multiplication's computation-only
@@ -76,7 +79,12 @@ public key and two-round relinearization key, then using the existing evaluator.
 No aggregate secret is constructed. `BgvCollectivePublicKey`,
 `BgvCollectiveSwitchingKey`, `BgvCollectiveAutomorphismKey` and
 `BgvCollectiveRelinearization` own concrete common-mask/basis setup. Each owner
-contributes only its share. The initial family requires exact CBD1
+contributes a borrowed `&DcrtGlweSecretKey<u64>`; the plan supplies the context.
+Keep the sole raw secret owner during setup, then move it into a client for
+actual input/recovery. Geometry, ordered Q and declared secret law are checked
+before sampling; actual NTT convention and secret provenance remain caller
+contracts. `BgvSeededInput::contribute` uses the online client.
+The initial family requires exact CBD1
 (`SparseTernary`) shares and CBD21 errors; existing general single-owner APIs keep
 their configured distributions.
 
@@ -178,8 +186,12 @@ full-N secret. All spare slots remain zero at their permuted positions.
 
 ## Resources and commands
 
-Context owns sampling/bases/table; clients, evaluators and prepared key operations
-borrow it. Prepared `_to`/`_assign` encryption, tensor/square, linear/plaintext operations,
+Context owns sampling and recovery bases. `shared_table()` and
+`try_with_table(parameters,level_count,table)` let paired BFV/BGV contexts share
+the actual immutable full-Q transform without copying its roots. Supplied N and
+ordered Q are checked; recovery constants remain scheme specific. Lower bases
+derive checked prefixes without repeating coprimality checks. Clients, evaluators
+and prepared key operations borrow the context. Prepared `_to`/`_assign` encryption, tensor/square, linear/plaintext operations,
 relin/switch/auto, adjacent prime drop and recovery allocate no memory. Secret,
 secret-square/automorphism generation temporaries, public ephemeral and recovery
 storage are erased on drop. `Zeroize::zeroize` explicitly erases a public

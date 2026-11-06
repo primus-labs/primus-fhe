@@ -108,7 +108,12 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
             let columns = plan.setup.native.column_count();
             let secrets: Vec<_> = clients
                 .iter()
-                .map(|c| key_coefficients(&plan.setup, &plan.setup.native.secret(c).unwrap()))
+                .map(|c| {
+                    key_coefficients(
+                        &plan.setup,
+                        &plan.setup.native.secret(&context, c.secret_key()).unwrap(),
+                    )
+                })
                 .collect();
             let masks: Vec<_> = plan
                 .setup
@@ -121,7 +126,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
             let mut u = Vec::new();
             let mut r1 = Vec::new();
             for client in &clients {
-                let (message, state) = plan.start(client, &mut rng).unwrap();
+                let (message, state) = plan.start(client.secret_key(), &mut rng).unwrap();
                 u.push(key_coefficients(&plan.setup, &state.ephemeral));
                 r1.push(
                     message

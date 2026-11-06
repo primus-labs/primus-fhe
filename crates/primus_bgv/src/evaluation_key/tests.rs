@@ -898,7 +898,12 @@ fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
                 .unwrap();
         let mut sum = plan.aggregate();
         for c in &clients {
-            sum.add(&plan.contribute(c, c, &mut rng).unwrap()).unwrap();
+            sum.add(
+                &plan
+                    .contribute(c.secret_key(), c.secret_key(), &mut rng)
+                    .unwrap(),
+            )
+            .unwrap();
         }
         let key = plan.finalize(sum).unwrap();
         hybrid_column_errors(&key.key, &context, &source, &source, 63);
@@ -907,7 +912,8 @@ fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
                 .unwrap();
         let mut sum = plan.aggregate();
         for c in &clients {
-            sum.add(&plan.contribute(c, &mut rng).unwrap()).unwrap();
+            sum.add(&plan.contribute(c.secret_key(), &mut rng).unwrap())
+                .unwrap();
         }
         let key = plan.finalize(sum).unwrap();
         hybrid_column_errors(&key.key, &context, &automorphism(&source, 5), &source, 63);
@@ -916,7 +922,7 @@ fn hybrid_collective_columns_include_all_s_squared_cross_terms_in_qp() {
         let mut first = plan.round_one_aggregate();
         let mut states = Vec::new();
         for c in &clients {
-            let (m, s) = plan.start(c, &mut rng).unwrap();
+            let (m, s) = plan.start(c.secret_key(), &mut rng).unwrap();
             first.add(&m).unwrap();
             states.push(s);
         }

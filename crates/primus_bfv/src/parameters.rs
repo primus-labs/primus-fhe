@@ -3,11 +3,10 @@ use primus_distr::ErrorDistribution;
 use primus_encoding::{BfvRnsCodec, BfvRnsCodecError, PlaintextEmbedding};
 use primus_glwe_rns::{
     CrtGlevParameters, CrtGlevParametersError, CrtGlweEncryptionParameters,
-    CrtGlweEncryptionParametersError, RnsDomainError, SecretKeyDistr,
+    CrtGlweEncryptionParametersError, SecretKeyDistr,
 };
 use primus_lattice::{GlweDimension, GlweSize, GlweSizeError, RnsGlweSize};
 use primus_modulus::BarrettModulus;
-use primus_ntt::{NttTable, U64DcrtTable};
 use primus_rns::{RNSBase, RnsError};
 use primus_shape::PolyLength;
 use std::sync::Arc;
@@ -21,9 +20,6 @@ pub enum BfvParametersError {
     /// The supplied ciphertext moduli do not define a valid RNS basis.
     #[error("invalid BFV ciphertext RNS basis")]
     RnsBase(#[from] RnsError),
-    /// Sampling state uses a different ordered basis or a rank other than one.
-    #[error(transparent)]
-    Domain(#[from] RnsDomainError<u64>),
     /// Invalid codec parameters or insufficient fresh private recovery margin.
     #[error(transparent)]
     Encoding(#[from] BfvRnsCodecError<u64>),
@@ -34,7 +30,7 @@ pub enum BfvParametersError {
 
 /// BFV coefficient parameters with rank-one `u64` RNS storage.
 ///
-/// Sampling state has one owner shared only by explicit parameter composition. The
+/// Clones share the prepared sampling state. The
 /// codec owns the ordered Q basis and its encoding/decoding constants. Total Q
 /// may exceed 64 bits; `u64` describes each residue, not the product modulus.
 #[derive(Clone)]
@@ -69,27 +65,6 @@ impl BfvParameters {
             secret_key_distr,
             noise_standard_deviation,
         )
-    }
-
-    /// Prepares Gaussian BFV parameters, panicking on [`Self::try_new`]'s errors.
-    #[must_use]
-    pub fn new(
-        poly_length: PolyLength,
-        plain_modulus: BarrettModulus<u64>,
-        gamma_modulus: BarrettModulus<u64>,
-        cipher_moduli: &[BarrettModulus<u64>],
-        secret_key_distr: SecretKeyDistr,
-        noise_standard_deviation: f64,
-    ) -> Self {
-        Self::try_new(
-            poly_length,
-            plain_modulus,
-            gamma_modulus,
-            cipher_moduli,
-            secret_key_distr,
-            noise_standard_deviation,
-        )
-        .expect("invalid BFV parameters")
     }
 
     /// Prepares rank-one geometry, Gaussian error sampling and the BFV codec.
@@ -144,51 +119,14 @@ impl BfvParameters {
             secret_key_distr,
             error_distribution,
         )?;
-        Self::try_from_parts(Arc::new(sampling), codec)
-    }
-
-    /// Combines independently prepared codec-free state and the unique codec.
-    ///
-    /// # Errors
-    /// Rejects non-rank-one geometry, a different ordered Q basis or insufficient
-    /// fresh private recovery margin. No samplers or base tables are rebuilt.
-    fn try_from_parts(
-        encryption_parameters: Arc<CrtGlweEncryptionParameters<u64>>,
-        codec: BfvRnsCodec<u64, BarrettModulus<u64>>,
-    ) -> Result<Self, BfvParametersError> {
-        let rank = encryption_parameters.size().dimension().get();
-        if rank != 1 {
-            return Err(RnsDomainError::DimensionMismatch {
-                expected: 1,
-                actual: rank,
-            }
-            .into());
-        }
-        encryption_parameters.validate_base(codec.base_q())?;
         codec.validate_noise_bound(
-            encryption_parameters
-                .noise_distribution()
-                .maximum_magnitude(),
+            sampling.noise_distribution().maximum_magnitude(),
             PlaintextEmbedding::Unsigned,
         )?;
         Ok(Self {
-            encryption_parameters,
+            encryption_parameters: Arc::new(sampling),
             codec,
         })
-    }
-
-    /// Derives codec-free decomposition parameters for explicit raw-GLWE consumers.
-    ///
-    /// # Panics
-    /// Panics if [`Self::try_gadget_parameters`] rejects the decomposition.
-    #[must_use]
-    pub fn gadget_parameters(
-        &self,
-        log_basis: DecompositionBaseLog,
-        level_count: Option<DecompositionLevelCount>,
-    ) -> CrtGlevParameters<u64, BarrettModulus<u64>> {
-        self.try_gadget_parameters(log_basis, level_count)
-            .expect("invalid BFV gadget parameters")
     }
 
     /// Derives gadget layout and weights without carrying encryption samplers.
@@ -233,38 +171,4 @@ impl BfvParameters {
     pub fn size(&self) -> RnsGlweSize {
         self.encryption_parameters.size()
     }
-
-    // Sampling/base pairing was checked at parameter construction. Operational
-    // bindings only establish the table's numerical compatibility once.
-    pub(crate) fn validate_table(&self, table: &U64DcrtTable) -> Result<(), RnsDomainError<u64>> {
-        let expected = self.poly_length().get();
-        let actual = table.poly_length().get();
-        if expected != actual {
-            return Err(RnsDomainError::PolynomialLengthMismatch { expected, actual });
-        }
-        let expected = self.base_q().moduli_count();
-        let actual = table.ntt_tables().len();
-        if expected != actual {
-            return Err(RnsDomainError::ModuliCountMismatch { expected, actual });
-        }
-        for (index, (&expected, actual)) in self
-            .codec()
-            .moduli_values()
-            .iter()
-            .zip(table.iter().map(NttTable::modulus))
-            .enumerate()
-        {
-            if expected != actual {
-                return Err(RnsDomainError::ModulusOrderMismatch {
-                    index,
-                    expected,
-                    actual,
-                });
-            }
-        }
-        Ok(())
-    }
 }
-
-#[cfg(test)]
-mod tests;

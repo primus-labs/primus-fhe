@@ -5,7 +5,7 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, DcrtPolynomial, Polynomial, PolynomialOwned};
 
-use crate::{BfvCiphertext, BfvDecryptWorkspace, BfvParameters};
+use crate::{BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters};
 
 /// A secret key bound to rank-one BFV parameters and their ordered NTT table.
 ///
@@ -19,33 +19,24 @@ pub struct BfvSecretKeyContext<'a> {
 }
 
 impl<'a> BfvSecretKeyContext<'a> {
-    /// Binds one compatible secret, BFV parameter set and transform table.
+    /// Binds one compatible secret to a prepared BFV context.
     ///
     /// # Errors
-    /// Rejects different key geometry or ordered parameter/table moduli.
+    /// Rejects different key geometry or ordered context moduli.
     pub fn try_new(
         key: &'a DcrtGlweSecretKey<u64>,
-        parameters: &'a BfvParameters,
-        table: &'a U64DcrtTable,
+        context: &'a BfvContext,
     ) -> Result<Self, RnsDomainError<u64>> {
-        parameters.validate_table(table)?;
+        let parameters = context.parameters();
         key.validate_parameters(parameters.size(), parameters.base_q().moduli())?;
-        Ok(Self {
-            key,
-            parameters,
-            table,
-        })
+        Ok(Self::from_validated(key, context))
     }
 
-    pub(crate) fn from_validated(
-        key: &'a DcrtGlweSecretKey<u64>,
-        parameters: &'a BfvParameters,
-        table: &'a U64DcrtTable,
-    ) -> Self {
+    pub(crate) fn from_validated(key: &'a DcrtGlweSecretKey<u64>, context: &'a BfvContext) -> Self {
         Self {
             key,
-            parameters,
-            table,
+            parameters: context.parameters(),
+            table: context.table(),
         }
     }
 

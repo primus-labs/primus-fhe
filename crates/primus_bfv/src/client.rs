@@ -87,11 +87,7 @@ impl<'a> BfvClient<'a> {
     fn secret_context(&self) -> BfvSecretKeyContext<'_> {
         // Generation/import established the key pairing; the context owns the
         // one checked table. Rebuilding this borrow performs no repeated checks.
-        BfvSecretKeyContext::from_validated(
-            &self.key,
-            self.context.parameters(),
-            self.context.table(),
-        )
+        BfvSecretKeyContext::from_validated(&self.key, self.context)
     }
 
     /// Creates a native public key at level zero without cloning the secret.

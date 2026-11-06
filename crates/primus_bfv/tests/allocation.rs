@@ -8,7 +8,6 @@ use primus_bfv::{
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_glwe_rns::{DcrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
-use primus_ntt::U64DcrtTable;
 use primus_poly::{CrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
@@ -85,7 +84,7 @@ fn observe<T>(operation: impl FnOnce() -> T) -> (T, usize) {
 
 #[test]
 fn temporary_working_basis_multiply_and_key_operations_allocate_nothing() {
-    let parameters = BfvParameters::new(
+    let parameters = BfvParameters::try_new(
         PolyLength::new(32),
         BarrettModulus::new(193),
         BarrettModulus::new((1 << 61) - 1),
@@ -97,7 +96,8 @@ fn temporary_working_basis_multiply_and_key_operations_allocate_nothing() {
         .map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
         1.0,
-    );
+    )
+    .unwrap();
     let context = BfvContext::try_with_levels(parameters, 3).unwrap();
     let mut rng = StdRng::seed_from_u64(0x26_a110c);
     let client = BfvClient::generate(&context, &mut rng);
@@ -154,26 +154,29 @@ fn temporary_working_basis_multiply_and_key_operations_allocate_nothing() {
 
 #[test]
 fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
-    let parameters = BfvParameters::new(
+    let parameters = BfvParameters::try_new(
         PolyLength::new(32),
         BarrettModulus::new(17),
         BarrettModulus::new(257),
         &[65_537, 114_689].map(BarrettModulus::new),
         SecretKeyDistr::SparseTernary,
         1.0,
-    );
-    let table = U64DcrtTable::new(parameters.poly_length(), parameters.base_q().moduli()).unwrap();
+    )
+    .unwrap();
+    let owner = BfvContext::try_new(parameters).unwrap();
+    let parameters = owner.parameters();
+    let table = owner.table();
     let mut rng = StdRng::seed_from_u64(91);
     let key = GlweSecretKey::generate(
         parameters.size().glwe_size(),
         parameters.encryption_parameters().secret_key_sampler(),
         &mut rng,
     );
-    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, &table);
-    let context = BfvSecretKeyContext::try_new(&key, &parameters, &table).unwrap();
+    let key = DcrtGlweSecretKey::from_coeff_secret_key(&key, table);
+    let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
     let public = BfvPublicKey::new(&context, &mut rng);
-    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &parameters, &table).unwrap();
-    let mut workspace = BfvDecryptWorkspace::new(&parameters);
+    let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &owner).unwrap();
+    let mut workspace = BfvDecryptWorkspace::new(parameters);
     let input = Polynomial(vec![3; 32]);
     let crt = CrtPolynomial(vec![3; parameters.size().rns_poly_len()]);
     let mut encoded = CrtPolynomial::<Vec<u64>>::zero(parameters.size().rns_poly_len());
@@ -201,11 +204,11 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         0
     );
     assert_eq!(
-        observe(|| ciphertext.write_raw_glwe_to(&mut raw, &parameters)).1,
+        observe(|| ciphertext.write_raw_glwe_to(&mut raw, parameters)).1,
         0
     );
     assert_eq!(
-        observe(|| ciphertext.set_from_raw_glwe(&raw, &parameters)).1,
+        observe(|| ciphertext.set_from_raw_glwe(&raw, parameters)).1,
         0
     );
     assert_eq!(
@@ -239,9 +242,6 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
     let (fresh, count) = observe(|| encryptor.encrypt_centered(&input, &mut rng));
     assert_eq!(count, 1);
     assert_eq!(context.decrypt(&fresh, &mut workspace), input);
-    let (ciphertext, count) = observe(|| encryptor.encrypt_plaintext_lift_crt(&crt, &mut rng));
-    assert_eq!(count, 1);
-    assert_eq!(context.decrypt(&ciphertext, &mut workspace), input);
     workspace.zeroize();
     assert_eq!(
         observe(|| context.decrypt_to(&ciphertext, &mut output, &mut workspace)).1,
@@ -252,7 +252,7 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
 
 #[test]
 fn prepared_leveled_request_and_each_evaluator_family_allocate_nothing() {
-    let parameters = BfvParameters::new(
+    let parameters = BfvParameters::try_new(
         PolyLength::new(32),
         BarrettModulus::new(257),
         BarrettModulus::new(2_199_023_190_017),
@@ -264,7 +264,8 @@ fn prepared_leveled_request_and_each_evaluator_family_allocate_nothing() {
         .map(BarrettModulus::new),
         SecretKeyDistr::UniformBinary,
         1.0,
-    );
+    )
+    .unwrap();
     let context = BfvContext::try_with_levels(parameters, 3).unwrap();
     let mut rng = StdRng::seed_from_u64(0x6063);
     let mut client = BfvClient::generate(&context, &mut rng);
@@ -500,7 +501,7 @@ fn collective_partial_phase_and_consuming_prepared_lookup_allocate_nothing() {
     )
     .unwrap();
     let mut rng = StdRng::seed_from_u64(0x0015_bf03);
-    let client = BfvClient::generate(&context, &mut rng);
+    let key = BfvClient::generate(&context, &mut rng).into_secret_key();
     let plan = BfvCollectiveRelinearization::try_new(
         &context,
         0,
@@ -511,7 +512,7 @@ fn collective_partial_phase_and_consuming_prepared_lookup_allocate_nothing() {
         &mut rng,
     )
     .unwrap();
-    let (message, state) = plan.start(&client, &mut rng).unwrap();
+    let (message, state) = plan.start(&key, &mut rng).unwrap();
     let mut sum = plan.aggregate(1).unwrap();
     sum.add(&message).unwrap();
     let round1 = plan.freeze_round1(sum).unwrap();
@@ -526,6 +527,7 @@ fn collective_partial_phase_and_consuming_prepared_lookup_allocate_nothing() {
     let (result, count) = observe(|| lookup.apply_to(tensor, &mut output));
     result.unwrap();
     assert_eq!(count, 0);
+    let client = BfvClient::try_from_secret_key(&context, key).unwrap();
     let (result, count) = observe(|| client.partial_phase_to(&output, 0, &mut partial));
     result.unwrap();
     assert_eq!(count, 0);

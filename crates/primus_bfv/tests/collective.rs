@@ -2,7 +2,7 @@
 use primus_bfv::*;
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
-use primus_glwe_rns::SecretKeyDistr;
+use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
 use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial};
@@ -36,9 +36,21 @@ fn config() -> DecompositionConfig {
         level_count: None,
     }
 }
+fn share(context: &BfvContext, rng: &mut StdRng) -> DcrtGlweSecretKey<u64> {
+    let coefficient = GlweSecretKey::generate(
+        context.parameters().size().glwe_size(),
+        context
+            .parameters()
+            .encryption_parameters()
+            .secret_key_sampler(),
+        rng,
+    );
+    DcrtGlweSecretKey::from_coeff_secret_key(&coefficient, context.table())
+}
+
 fn phase(
     context: &BfvContext,
-    clients: &[BfvClient<'_>],
+    clients: &[DcrtGlweSecretKey<u64>],
     ct: &BfvCiphertext<Vec<u64>>,
     level: usize,
 ) -> Vec<u64> {
@@ -47,7 +59,13 @@ fn phase(
     let mut output = ct.as_ref()[..len].to_vec();
     let mut partial = DcrtPolynomial(vec![0; len]);
     for client in clients {
-        client.partial_phase_to(ct, level, &mut partial).unwrap();
+        partial.as_mut().copy_from_slice(&ct.as_ref()[len..]);
+        let key = client.iter_dcrt_poly().next().unwrap();
+        partial.mul_assign(
+            &DcrtPolynomial(&key.as_ref()[..len]),
+            n,
+            context.codec(level).base_q().moduli(),
+        );
         for ((out, input), &q) in output
             .chunks_exact_mut(n)
             .zip(partial.as_ref().chunks_exact(n))
@@ -90,15 +108,11 @@ fn collective_keys_feed_existing_native_consumers_without_aggregate_secret() {
                 .unwrap()
                 .into()
         } else {
-            config().into()
+            context.radix_key_parameters(0, config()).unwrap().into()
         };
         let mut rng = StdRng::seed_from_u64(0x15bf00);
-        let clients: Vec<_> = (0..3)
-            .map(|_| BfvClient::generate(&context, &mut rng))
-            .collect();
-        let target: Vec<_> = (0..3)
-            .map(|_| BfvClient::generate(&context, &mut rng))
-            .collect();
+        let clients: Vec<_> = (0..3).map(|_| share(&context, &mut rng)).collect();
+        let target: Vec<_> = (0..3).map(|_| share(&context, &mut rng)).collect();
         let public = BfvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
         let mut sum = public.aggregate(3).unwrap();
         for client in &clients {
@@ -201,7 +215,15 @@ fn collective_keys_feed_existing_native_consumers_without_aggregate_secret() {
 fn checked_payloads_instances_levels_and_own_share_embedding() {
     let context = context(N);
     let mut rng = StdRng::seed_from_u64(0x15bf01);
-    let client = BfvClient::generate(&context, &mut rng);
+    let client = share(&context, &mut rng);
+    let prepared_at_level_one = context.radix_key_parameters(1, config()).unwrap();
+    let mut request_rng = StdRng::seed_from_u64(0x17_bf_02);
+    let mut expected_rng = StdRng::seed_from_u64(0x17_bf_02);
+    assert!(
+        BfvCollectiveSwitchingKey::try_new(&context, 0, prepared_at_level_one, &mut request_rng)
+            .is_err()
+    );
+    assert_eq!(request_rng.next_u64(), expected_rng.next_u64());
     let a = BfvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
     let b =
         BfvCollectivePublicKey::try_from_common_mask(&context, a.common_mask().to_vec()).unwrap();
@@ -220,27 +242,61 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
     let mut bad = vec![0; context.rns_poly_len(0)];
     bad[0] = Q[0];
     assert!(a.try_import_contribution(bad).is_err());
+    let client_owner = BfvClient::try_from_secret_key(&context, client).unwrap();
     let mut partial = DcrtPolynomial(vec![42; context.rns_poly_len(0)]);
     assert!(
-        client
+        client_owner
             .partial_phase_to(&BfvCiphertext::zero(1), 0, &mut partial)
             .is_err()
     );
     assert!(partial.as_ref().iter().all(|&x| x == 42));
     assert!(
-        client
+        client_owner
             .partial_phase_to(&context.new_ciphertext(0), 3, &mut partial)
             .is_err()
     );
+    let client = client_owner.into_secret_key();
     let large = crate::context(2 * N);
-    let embedded = client.try_embed_secret(&large).unwrap();
-    assert!(std::ptr::eq(embedded.context(), &large));
-    assert!(client.try_embed_secret(&context).is_err());
-    // Switching keys have one actual numerical owner, but source and target
-    // secrets remain separate clients. Equal parameters in another owner do
-    // not establish the same transform/context identity. Reject before RNG.
-    let foreign_context = crate::context(N);
-    let foreign = BfvClient::generate(&foreign_context, &mut rng);
+    let embedded = large.try_embed_secret_from(&context, &client).unwrap();
+    embedded
+        .validate_parameters(
+            large.parameters().size(),
+            large.parameters().base_q().moduli(),
+        )
+        .unwrap();
+    let source = client.iter_dcrt_poly().next().unwrap();
+    let destination = embedded.iter_dcrt_poly().next().unwrap();
+    for ((source, destination), (source_table, destination_table)) in source
+        .as_ref()
+        .as_chunks::<N>()
+        .0
+        .iter()
+        .zip(destination.as_ref().as_chunks::<{ 2 * N }>().0)
+        .zip(context.table().iter().zip(large.table().iter()))
+    {
+        let mut source = source.to_vec();
+        let mut destination = destination.to_vec();
+        source_table.inverse_transform_slice(&mut source);
+        destination_table.inverse_transform_slice(&mut destination);
+        for i in 0..N {
+            assert_eq!(destination[2 * i], source[i]);
+            assert_eq!(destination[2 * i + 1], 0);
+        }
+    }
+    let unsupported = DcrtGlweSecretKey::from_coeff_secret_key(
+        &GlweSecretKey::new(
+            vec![2i64; N],
+            context.parameters().size().glwe_size(),
+            SecretKeyDistr::SparseTernary,
+        ),
+        context.table(),
+    );
+    assert!(large.try_embed_secret_from(&context, &unsupported).is_err());
+    assert!(context.try_embed_secret_from(&context, &client).is_err());
+    // Raw keys preserve numerical geometry checks before RNG. Their actual
+    // NTT provenance remains a generation/import contract, not pointer identity.
+    let foreign_context = crate::context(2 * N);
+    let foreign = share(&foreign_context, &mut rng);
     let switching = BfvCollectiveSwitchingKey::try_new(&context, 0, config(), &mut rng).unwrap();
     for (source, target) in [(&foreign, &client), (&client, &foreign)] {
         let mut request_rng = StdRng::seed_from_u64(0x17_bf_01);

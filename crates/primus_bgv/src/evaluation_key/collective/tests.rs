@@ -3,6 +3,7 @@ use crate::BgvParameters;
 use primus_decompose::DecompositionBaseLog;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey};
 use primus_modulus::BarrettModulus;
+use primus_rns::Residues;
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -160,7 +161,7 @@ fn collective_two_round_columns_match_full_secret_square() {
     let mut first = setup.round_one_aggregate();
     let mut states = Vec::new();
     for client in &clients {
-        let (message, state) = setup.start(client, &mut rng).unwrap();
+        let (message, state) = setup.start(client.secret_key(), &mut rng).unwrap();
         first.add(&message).unwrap();
         states.push(state)
     }
@@ -225,7 +226,9 @@ fn collective_linear_columns_have_shared_p_scaled_noise() {
     let setup = BgvCollectiveSwitchingKey::try_new(&context, 1, config(), &mut rng).unwrap();
     let mut aggregate = setup.aggregate();
     for (client, target) in clients.iter().zip(&targets) {
-        let message = setup.contribute(client, target, &mut rng).unwrap();
+        let message = setup
+            .contribute(client.secret_key(), target.secret_key(), &mut rng)
+            .unwrap();
         aggregate.add(&message).unwrap();
     }
     let key = setup.finalize(aggregate).unwrap();
@@ -234,7 +237,7 @@ fn collective_linear_columns_have_shared_p_scaled_noise() {
     let mut aggregate = auto.aggregate();
     for client in &clients {
         aggregate
-            .add(&auto.contribute(client, &mut rng).unwrap())
+            .add(&auto.contribute(client.secret_key(), &mut rng).unwrap())
             .unwrap()
     }
     let key = auto.finalize(aggregate).unwrap();

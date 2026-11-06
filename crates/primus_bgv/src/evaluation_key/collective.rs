@@ -1,5 +1,10 @@
 //! Collective arithmetic. Authentication, roster completeness and single-use
 //! protocol policy belong to the caller; no method receives every private share.
+//!
+//! Key-generation plans borrow native secret shares. Their complete numerical
+//! geometry, ordered Q and declared CBD1 law are checked before sampling. Actual
+//! CBD1 randomness and the plan context's NTT convention are caller contracts;
+//! distribution metadata and matching moduli cannot prove either provenance.
 
 use super::{
     BgvAutomorphismKey, BgvEvaluationKeyError, BgvKeySwitchingKey, BgvRelinearizationKey,
@@ -10,12 +15,10 @@ use primus_data::{Data, DataMut};
 #[cfg(test)]
 use primus_decompose::DecompositionConfig;
 use primus_distr::ErrorDistribution;
-use primus_glwe_rns::SecretKeyDistr;
+use primus_glwe_rns::{DcrtGlweSecretKey, SecretKeyDistr};
 use primus_ntt::{NttAutomorphismPermutation, NttTable};
 use primus_poly::{DcrtPolynomial, Polynomial};
 use primus_reduce::ReduceAdd;
-#[cfg(test)]
-use primus_rns::Residues;
 use zeroize::Zeroizing;
 
 /// Invalid collective context, message or arithmetic setup.
@@ -120,6 +123,19 @@ impl<'c> Binding<'c> {
             return Err(BgvCollectiveError::Binding);
         }
         if client.secret_key().distr() != SecretKeyDistr::SparseTernary {
+            return Err(BgvCollectiveError::Distribution);
+        }
+        Ok(())
+    }
+
+    fn secret(&self, share: &DcrtGlweSecretKey<u64>) -> Result<(), BgvCollectiveError> {
+        share
+            .validate_parameters(
+                self.context.parameters().size(),
+                self.context.parameters().base_q().moduli(),
+            )
+            .map_err(|_| BgvCollectiveError::Binding)?;
+        if share.distr() != SecretKeyDistr::SparseTernary {
             return Err(BgvCollectiveError::Distribution);
         }
         Ok(())
@@ -281,13 +297,8 @@ fn uniform(context: &BgvContext, level: usize, output: &mut [u64], rng: &mut imp
     );
 }
 
-fn secret<'a>(client: &'a BgvClient<'_>, level: usize) -> &'a [u64] {
-    &client
-        .secret_key()
-        .iter_dcrt_poly()
-        .next()
-        .expect("rank-one secret")
-        .0[..client.context.rns_poly_len(level)]
+fn secret(share: &DcrtGlweSecretKey<u64>, len: usize) -> &[u64] {
+    &share.iter_dcrt_poly().next().expect("rank-one secret").0[..len]
 }
 
 /// Common-mask public-key setup with native phase `p*sum(e_i)`.
@@ -333,24 +344,31 @@ impl<'c> BgvCollectivePublicKey<'c> {
 
     /// Produces `-A*s_i+p*e_i` from one owner's share.
     /// # Errors
-    /// Rejects a client belonging to another exact context before sampling.
+    /// Rejects incompatible geometry, ordered Q or declared support before sampling.
+    /// Actual share sampling and NTT provenance remain caller contracts.
     pub fn contribute<'p>(
         &'p self,
-        client: &BgvClient<'_>,
+        share: &DcrtGlweSecretKey<u64>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<BgvCollectiveContribution<'p>, BgvCollectiveError> {
-        self.binding.client(client)?;
+        self.binding.secret(share)?;
         let context = self.binding.context;
         let mut body = vec![0; self.binding.words];
         crate::client::sample_scaled_noise(context, 0, &mut body, rng);
         transform(context, &mut body);
         DcrtPolynomial(body.as_mut_slice()).sub_mul_assign(
             &DcrtPolynomial(self.mask.as_slice()),
-            &DcrtPolynomial(secret(client, 0)),
+            &DcrtPolynomial(secret(share, context.rns_poly_len(0))),
             context.parameters().poly_length().get(),
             context.base_q(0).moduli(),
         );
-        self.binding.message(body, 0, None)
+        // Native NTT and modular kernels produce canonical residues.
+        Ok(BgvCollectiveContribution {
+            binding: &self.binding,
+            values: body,
+            round: 0,
+            frozen: None,
+        })
     }
 
     /// Imports a public body after protocol identity/metadata validation.
@@ -468,7 +486,7 @@ impl<'c> BgvSeededInput<'c> {
         transform(context, &mut body);
         DcrtPolynomial(body.as_mut_slice()).sub_mul_assign(
             &DcrtPolynomial(self.mask.as_slice()),
-            &DcrtPolynomial(secret(client, 0)),
+            &DcrtPolynomial(secret(client.secret_key(), context.rns_poly_len(0))),
             parameters.poly_length().get(),
             context.base_q(0).moduli(),
         );
@@ -558,47 +576,45 @@ impl<'c> LinearPlan<'c> {
     }
     fn contribute(
         &self,
-        source: &BgvClient<'_>,
-        target: &BgvClient<'_>,
-        permutation: Option<&NttAutomorphismPermutation>,
+        source: &DcrtGlweSecretKey<u64>,
+        target: &DcrtGlweSecretKey<u64>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<BgvCollectiveContribution<'_>, BgvCollectiveError> {
-        self.binding.client(source)?;
-        self.binding.client(target)?;
+        self.binding.secret(source)?;
+        self.binding.secret(target)?;
+        let context = self.binding.context;
+        let source = self.template.secret(context, source)?;
+        let target = self.template.secret(context, target)?;
+        Ok(self.linear(&source, &target, rng))
+    }
+    fn linear(
+        &self,
+        source: &[u64],
+        target: &[u64],
+        rng: &mut impl rand::CryptoRng,
+    ) -> BgvCollectiveContribution<'_> {
         let context = self.binding.context;
         let key = &self.template;
         let len = key.poly_len(context);
         let n = context.parameters().poly_length().get();
         let base = key.base(context);
-        let source = key.secret(source)?;
-        let target = key.secret(target)?;
-        let mut transformed = Zeroizing::new(vec![0; len]);
-        if let Some(permutation) = permutation {
-            for (input, output) in source.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
-                permutation.apply_to(input, output);
-            }
-        } else {
-            transformed.copy_from_slice(&source);
-        }
         let mut values = vec![0; self.binding.words];
-        let mut weights = vec![0; base.moduli_count()];
         for (digit, (body, mask)) in values
             .chunks_exact_mut(len)
             .zip(self.masks.chunks_exact(len))
             .enumerate()
         {
             key.noise(context, body, rng);
-            key.weights_to(context, digit, &mut weights);
             let mut body = DcrtPolynomial(body);
             body.add_mul_scalar_assign(
-                &DcrtPolynomial(transformed.as_slice()),
-                &weights,
+                &DcrtPolynomial(source),
+                key.weights(digit),
                 n,
                 base.moduli(),
             );
             body.sub_mul_assign(
                 &DcrtPolynomial(mask),
-                &DcrtPolynomial(target.as_slice()),
+                &DcrtPolynomial(target),
                 n,
                 base.moduli(),
             );
@@ -606,7 +622,13 @@ impl<'c> LinearPlan<'c> {
         if !key.is_hybrid() {
             scale_with_p(key.p, n, base, &mut values);
         }
-        self.binding.message(values, 0, None)
+        // Every column was produced by canonical native modular operations.
+        BgvCollectiveContribution {
+            binding: &self.binding,
+            values,
+            round: 0,
+            frozen: None,
+        }
     }
     fn finish(
         &self,
@@ -686,14 +708,14 @@ impl<'c> BgvCollectiveSwitchingKey<'c> {
 
     /// Produces p-scaled switching bodies from only this party's two shares.
     /// # Errors
-    /// Rejects clients outside this exact context before sampling.
+    /// Rejects incompatible native shares before sampling.
     pub fn contribute(
         &self,
-        source: &BgvClient<'_>,
-        target: &BgvClient<'_>,
+        source: &DcrtGlweSecretKey<u64>,
+        target: &DcrtGlweSecretKey<u64>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<BgvCollectiveContribution<'_>, BgvCollectiveError> {
-        self.plan.contribute(source, target, None, rng)
+        self.plan.contribute(source, target, rng)
     }
 
     /// Imports an authenticated opaque body payload.
@@ -781,14 +803,21 @@ impl<'c> BgvCollectiveAutomorphismKey<'c> {
     }
     /// Produces this owner's automorphism-switch body contribution.
     /// # Errors
-    /// Rejects a client outside the exact context before sampling.
+    /// Rejects incompatible native share geometry, ordered Q or declared support before sampling.
     pub fn contribute(
         &self,
-        client: &BgvClient<'_>,
+        share: &DcrtGlweSecretKey<u64>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<BgvCollectiveContribution<'_>, BgvCollectiveError> {
-        self.plan
-            .contribute(client, client, Some(&self.permutation), rng)
+        self.plan.binding.secret(share)?;
+        let context = self.plan.binding.context;
+        let n = context.parameters().poly_length().get();
+        let secret = self.plan.template.secret(context, share)?;
+        let mut transformed = Zeroizing::new(vec![0; self.plan.template.poly_len(context)]);
+        for (input, output) in secret.chunks_exact(n).zip(transformed.chunks_exact_mut(n)) {
+            self.permutation.apply_to(input, output);
+        }
+        Ok(self.plan.linear(&transformed, &secret, rng))
     }
     /// Imports an authenticated public contribution.
     /// # Errors
@@ -914,11 +943,11 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     /// Radix uses g*s_i/E errors in Q before final p scaling; Hybrid uses
     /// P*projector_j*s_i/pE errors directly in QP.
     /// # Errors
-    /// Rejects a different client context before sampling. Returned private state
+    /// Rejects an incompatible native share before sampling. Returned private state
     /// is single-use; caller additionally enforces its roster/setup policy.
     pub fn start<'p>(
         &'p self,
-        client: &'p BgvClient<'_>,
+        share: &'p DcrtGlweSecretKey<u64>,
         rng: &mut impl rand::CryptoRng,
     ) -> Result<
         (
@@ -927,19 +956,18 @@ impl<'c> BgvCollectiveRelinearization<'c> {
         ),
         BgvCollectiveError,
     > {
-        self.plan.binding.client(client)?;
+        self.plan.binding.secret(share)?;
         let context = self.plan.binding.context;
         let n = context.parameters().poly_length().get();
         let key = &self.plan.template;
         let len = key.poly_len(context);
         let base = key.base(context);
-        let secret = key.secret(client)?;
+        let secret = key.secret(context, share)?;
         let mut ephemeral = Zeroizing::new(vec![0; len]);
         let minus_one: Vec<_> = base.moduli_values().iter().map(|&q| q - 1).collect();
         primus_distr::sample_crt_sparse_ternary_values_to(&mut ephemeral, n, &minus_one, rng);
         key.transform(context, &mut ephemeral);
         let mut values = vec![0; self.round_one_binding.words];
-        let mut weights = vec![0; base.moduli_count()];
         for (digit, (column, mask)) in values
             .chunks_exact_mut(2 * len)
             .zip(self.plan.masks.chunks_exact(len))
@@ -948,10 +976,9 @@ impl<'c> BgvCollectiveRelinearization<'c> {
             let (h0, h1) = column.split_at_mut(len);
             key.noise(context, h0, rng);
             key.noise(context, h1, rng);
-            key.weights_to(context, digit, &mut weights);
             DcrtPolynomial(h0).add_mul_scalar_assign(
                 &DcrtPolynomial(secret.as_slice()),
-                &weights,
+                key.weights(digit),
                 n,
                 base.moduli(),
             );
@@ -1178,7 +1205,7 @@ impl BgvClient<'_> {
         let (_, c1) = input.c0_c1(len);
         output.as_mut().copy_from_slice(c1.as_ref());
         output.mul_assign(
-            &DcrtPolynomial(secret(self, level)),
+            &DcrtPolynomial(secret(self.secret_key(), len)),
             self.context.parameters().poly_length().get(),
             self.context.base_q(level).moduli(),
         );

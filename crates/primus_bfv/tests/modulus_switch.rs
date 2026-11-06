@@ -278,7 +278,7 @@ fn same_actual_secret_recovers_after_every_drop_and_matches_rounding_phase() {
         SecretKeyDistr::UniformBinary,
     );
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, context.table());
-    let encryptor = BfvSecretKeyContext::try_new(&key, parameters, context.table()).unwrap();
+    let encryptor = BfvSecretKeyContext::try_new(&key, &context).unwrap();
     let message = Polynomial(
         (0..N)
             .map(|index| (index * 7 % 17) as u64)

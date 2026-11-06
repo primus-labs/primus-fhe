@@ -12,7 +12,7 @@ use primus_modulus::BarrettModulus;
 use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial};
 use primus_shape::PolyLength;
-use rand::{SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 const N: usize = 32;
 const P: u64 = 193;
@@ -37,18 +37,18 @@ fn config() -> DecompositionConfig {
         level_count: None,
     }
 }
-fn owner<'a>(context: &'a BgvContext, coeff: &[i64]) -> BgvClient<'a> {
+fn share(context: &BgvContext, coeff: &[i64]) -> DcrtGlweSecretKey<u64> {
     let coefficient = GlweSecretKey::new(
         coeff.to_vec(),
         context.parameters().size().glwe_size(),
         SecretKeyDistr::SparseTernary,
     );
-    BgvClient::try_from_secret_key(
-        context,
-        DcrtGlweSecretKey::from_coeff_secret_key(&coefficient, context.table()),
-    )
-    .unwrap()
+    DcrtGlweSecretKey::from_coeff_secret_key(&coefficient, context.table())
 }
+fn owner<'a>(context: &'a BgvContext, coeff: &[i64]) -> BgvClient<'a> {
+    BgvClient::try_from_secret_key(context, share(context, coeff)).unwrap()
+}
+
 fn fixture() -> [Vec<i64>; 3] {
     std::array::from_fn(|party| {
         (0..N)
@@ -129,7 +129,7 @@ fn collective_public_input_and_partial_phase_have_one_mask_and_shared_integer_no
     let shares = fixture();
     let clients = shares
         .iter()
-        .map(|s| owner(&context, s))
+        .map(|s| share(&context, s))
         .collect::<Vec<_>>();
     let secret = sum(&shares);
     let mut rng = StdRng::seed_from_u64(0x15_1001);
@@ -154,6 +154,10 @@ fn collective_public_input_and_partial_phase_have_one_mask_and_shared_integer_no
         assert!(errors.iter().all(|&x| x == errors[0]));
         assert!(errors[0].abs() <= 63)
     }
+    let clients: Vec<_> = clients
+        .into_iter()
+        .map(|key| BgvClient::try_from_secret_key(&context, key).unwrap())
+        .collect();
     let input = BgvSeededInput::try_new(&context, &mut rng).unwrap();
     let mut aggregate = input.aggregate();
     let mut expected = vec![0; N];
@@ -210,12 +214,13 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
     let shares = fixture();
     let clients = shares
         .iter()
-        .map(|s| owner(&context, s))
+        .map(|s| share(&context, s))
         .collect::<Vec<_>>();
     let combined = sum(&shares);
     let mut oracle = owner(&context, &combined);
     let mut rng = StdRng::seed_from_u64(0x15_2002);
-    let setup = BgvCollectiveRelinearization::try_new(&context, 0, config(), &mut rng).unwrap();
+    let prepared = context.radix_key_parameters(0, config()).unwrap();
+    let setup = BgvCollectiveRelinearization::try_new(&context, 0, prepared, &mut rng).unwrap();
     let mut first = setup.round_one_aggregate();
     let mut states = Vec::new();
     for client in &clients {
@@ -269,7 +274,7 @@ fn collective_linear_keys_and_rejection_boundaries() {
     let shares = fixture();
     let clients = shares
         .iter()
-        .map(|s| owner(&context, s))
+        .map(|s| share(&context, s))
         .collect::<Vec<_>>();
     let combined = sum(&shares);
     let mut source = owner(&context, &combined);
@@ -279,7 +284,7 @@ fn collective_linear_keys_and_rejection_boundaries() {
         .collect::<Vec<_>>();
     let targets = target_shares
         .iter()
-        .map(|s| owner(&context, s))
+        .map(|s| share(&context, s))
         .collect::<Vec<_>>();
     let mut target = owner(&context, &sum(&target_shares));
     let mut rng = StdRng::seed_from_u64(0x15_3003);
@@ -338,9 +343,24 @@ fn collective_linear_keys_and_rejection_boundaries() {
     let mut bad = vec![0; context.rns_poly_len(0)];
     bad[0] = Q[0];
     assert!(pk.try_import(bad).is_err());
-    let second_context = self::context();
-    let different = owner(&second_context, &shares[0]);
-    assert!(pk.contribute(&different, &mut rng).is_err());
+    let different = DcrtGlweSecretKey::from_coeff_secret_key(
+        &GlweSecretKey::new(
+            vec![0i64; N],
+            context.parameters().size().glwe_size(),
+            SecretKeyDistr::UniformBinary,
+        ),
+        context.table(),
+    );
+    let mut request_rng = StdRng::seed_from_u64(0x17_b6_02);
+    let mut expected_rng = StdRng::seed_from_u64(0x17_b6_02);
+    assert!(pk.contribute(&different, &mut request_rng).is_err());
+    assert_eq!(request_rng.next_u64(), expected_rng.next_u64());
+    let prepared_at_level_one = context.radix_key_parameters(1, config()).unwrap();
+    assert!(
+        BgvCollectiveSwitchingKey::try_new(&context, 0, prepared_at_level_one, &mut request_rng)
+            .is_err()
+    );
+    assert_eq!(request_rng.next_u64(), expected_rng.next_u64());
     let relin = BgvCollectiveRelinearization::try_new(&context, 1, config(), &mut rng).unwrap();
     let (message, state) = relin.start(&clients[0], &mut rng).unwrap();
     let mut aggregate = relin.round_one_aggregate();

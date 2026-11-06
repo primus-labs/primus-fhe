@@ -67,14 +67,15 @@ mod tests {
     fn explicit_erasure_preserves_both_allocations_and_geometry() {
         for count in [1, 2] {
             let moduli = [65_537, 114_689].map(BarrettModulus::new);
-            let parameters = BfvParameters::new(
+            let parameters = BfvParameters::try_new(
                 PolyLength::new(32),
                 BarrettModulus::new(17),
                 BarrettModulus::new(257),
                 &moduli[..count],
                 SecretKeyDistr::SparseTernary,
                 1.0,
-            );
+            )
+            .unwrap();
             let mut workspace = BfvDecryptWorkspace::new(&parameters);
             workspace.phase.as_mut().fill(0xfeed);
             workspace.conversion.fill(0xbeef);

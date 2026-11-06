@@ -281,4 +281,42 @@ fn extending_a_base_matches_fresh_construction() {
         1_125_899_906_588_673,
     ]);
     assert_equivalent(&extended, &direct, &[1, 2, 3, 4]);
+
+    // Every prefix needs its own product and CRT constants, including when
+    // truncation changes the product's word count. Compare with an independently
+    // checked construction rather than composing with the original full basis.
+    for count in 1..=extended.moduli_count() {
+        let prefix = extended.prefix(count);
+        let values = &direct.moduli_values()[..count];
+        let fresh = base(values);
+        for residues in [
+            vec![0; count],
+            values.iter().map(|&modulus| modulus - 1).collect(),
+            (1..=count).map(|value| value as Value).collect(),
+        ] {
+            assert_equivalent(&prefix, &fresh, &residues);
+        }
+
+        // 2^64 is independent of both CRT implementations. The singleton
+        // reduces it modulo q; every longer prefix represents it exactly.
+        let wide = BigUint(&[0, 1][..]);
+        let residues: Vec<_> = values
+            .iter()
+            .map(|&modulus| ((1u128 << 64) % u128::from(modulus)) as Value)
+            .collect();
+        assert_eq!(prefix.decompose(wide).as_ref(), residues);
+        assert_eq!(fresh.decompose(wide).as_ref(), residues);
+        let mut expected = vec![0; fresh.big_uint_value_len()];
+        if count == 1 {
+            expected[0] = residues[0];
+        } else {
+            expected[1] = 1;
+        }
+        assert_eq!(prefix.compose(Residues(&residues)).digits(), expected);
+        assert_eq!(fresh.compose(Residues(&residues)).digits(), expected);
+    }
+
+    for invalid_count in [0, extended.moduli_count() + 1] {
+        assert!(std::panic::catch_unwind(|| extended.prefix(invalid_count)).is_err());
+    }
 }
