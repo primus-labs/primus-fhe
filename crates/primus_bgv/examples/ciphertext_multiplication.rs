@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let encrypted_a = encryptor.encrypt(&a, &mut rng);
         let encrypted_b = encryptor.encrypt(&b, &mut rng);
         multiplication.multiply_to(&encrypted_a, &encrypted_b, &mut product);
-        let recovered = client.decrypt(&product, 0);
+        let recovered = client.decrypt(&product);
         expected.as_mut()[..3].copy_from_slice(&answer);
         assert_eq!(recovered, expected);
     }

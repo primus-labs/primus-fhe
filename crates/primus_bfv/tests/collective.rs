@@ -246,7 +246,7 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
     let mut partial = DcrtPolynomial(vec![42; context.rns_poly_len(0)]);
     assert!(
         client_owner
-            .partial_phase_to(&BfvCiphertext::zero(1), 0, &mut partial)
+            .partial_phase_to(&BfvCiphertext::zero_raw(1), 0, &mut partial)
             .is_err()
     );
     assert!(partial.as_ref().iter().all(|&x| x == 42));

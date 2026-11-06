@@ -453,7 +453,7 @@ fn exact_and_truncated_switch_keys_preserve_p_and_match_integer_residuals() {
                     .zip(&product)
                     .map(|(m, value)| m - value)
                     .collect();
-                let input = BgvCiphertext::new(encode(&[c0, c1.clone()], count));
+                let input = BgvCiphertext::from_raw(encode(&[c0, c1.clone()], count));
                 assert_eq!(phase(input.as_ref(), &source_big, count), message);
                 let expected =
                     switched_phase(&message, &c1, &source_big, &row_errors, count, config, p);
@@ -465,7 +465,7 @@ fn exact_and_truncated_switch_keys_preserve_p_and_match_integer_residuals() {
                     assert_eq!(modulo(actual, &IBig::from(p)), *message);
                 }
                 assert_eq!(
-                    target_client.decrypt(&output, level).as_ref(),
+                    target_client.decrypt_at_level(&output, level).as_ref(),
                     message
                         .iter()
                         .map(|value| u64::try_from(value).unwrap())
@@ -474,9 +474,9 @@ fn exact_and_truncated_switch_keys_preserve_p_and_match_integer_residuals() {
                 // A zero switched component has all-zero digits even for a
                 // truncated gadget, so no key error or residual is injected.
                 let constant =
-                    BgvCiphertext::new(encode(&[message.clone(), vec![IBig::ZERO; N]], count));
+                    BgvCiphertext::from_raw(encode(&[message.clone(), vec![IBig::ZERO; N]], count));
                 switch.switch_to(&constant, &mut output);
-                assert_eq!(output, constant);
+                assert_eq!(output.as_ref(), constant.as_ref());
             }
         }
     }
@@ -522,7 +522,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
             config,
             P,
         );
-        let quadratic = BgvQuadraticCiphertext::new(encode(&components, count));
+        let quadratic = BgvQuadraticCiphertext::from_raw(encode(&components, count));
         assert_eq!(phase(quadratic.as_ref(), &secret_big, count), before);
         let mut linear = context.new_ciphertext(level);
         BgvRelinearizer::try_new(&context, &key)
@@ -542,7 +542,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
                 config,
                 P,
             );
-            let source = BgvCiphertext::new(encode(&components[..2], count));
+            let source = BgvCiphertext::from_raw(encode(&components[..2], count));
             let before = automorphism(
                 &add(&components[0], &product(&components[1], &secret_big)),
                 exponent,
@@ -623,16 +623,16 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
     let mut auto = BgvAutomorphism::try_new(&context, &auto_key).unwrap();
     let length = context.rns_poly_len(0);
     for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
-        let input = BgvCiphertext::new(vec![0; bad_length]);
-        let mut output = BgvCiphertext::new(vec![0xfeed; 2 * length]);
+        let input = BgvCiphertext::from_raw(vec![0; bad_length]);
+        let mut output = BgvCiphertext::from_raw(vec![0xfeed; 2 * length]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
     }
     for bad_length in [0, 3 * length - 1, 3 * length + 1, 2 * length] {
-        let input = BgvQuadraticCiphertext::new(vec![0; bad_length]);
-        let mut output = BgvCiphertext::new(vec![0xfeed; 2 * length]);
+        let input = BgvQuadraticCiphertext::from_raw(vec![0; bad_length]);
+        let mut output = BgvCiphertext::from_raw(vec![0xfeed; 2 * length]);
         assert!(
             catch_unwind(AssertUnwindSafe(
                 || relin.relinearize_to(&input, &mut output)
@@ -644,7 +644,7 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
     let input = context.new_ciphertext(0);
     let quadratic = context.new_quadratic_ciphertext(0);
     for bad_length in [0, 2 * length - 1, 2 * length + 1] {
-        let mut output = BgvCiphertext::new(vec![0xfeed; bad_length]);
+        let mut output = BgvCiphertext::from_raw(vec![0xfeed; bad_length]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());
@@ -798,7 +798,7 @@ fn hybrid_qp_role_columns_and_plaintext_preserving_component_quotients_match_int
                 .zip(mask_phase)
                 .map(|(m, a)| centered(&(m - a), &q))
                 .collect();
-            let input = BgvCiphertext::new(encode(&[body.clone(), x.clone()], count));
+            let input = BgvCiphertext::from_raw(encode(&[body.clone(), x.clone()], count));
             let moduli = switch.key.base(&context).moduli_values();
             let mut accumulator = vec![vec![IBig::ZERO; N]; 2];
             let mut epsilon = vec![IBig::ZERO; N];

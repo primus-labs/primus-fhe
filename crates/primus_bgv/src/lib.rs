@@ -19,11 +19,14 @@
 //! configuration; existing requests keep their shape and p-preserving phase.
 //! Key-modulus security and complete evaluated noise require separate budgets.
 //! Parameter construction checks a fresh private recovery margin, not security
-//! or public/evaluated noise. Ciphertexts carry storage rather than runtime key
-//! identity; the actual secret and NTT convention remain caller contracts.
+//! or public/evaluated noise. Context-created ciphertexts retain local context
+//! and level provenance, while explicit raw storage remains available for
+//! advanced composition. Neither provenance nor matching geometry proves an
+//! actual secret relationship; raw NTT conventions remain caller contracts.
 
 #![deny(missing_docs)]
 
+mod binding;
 mod ciphertext;
 mod client;
 mod context;
@@ -36,7 +39,7 @@ mod public_key;
 mod quadratic;
 mod workspace;
 
-pub use ciphertext::BgvCiphertext;
+pub use ciphertext::{BgvCiphertext, BgvCiphertextBindingError};
 pub use client::BgvClient;
 pub use context::{BgvContext, BgvContextError};
 pub use evaluation_key::{

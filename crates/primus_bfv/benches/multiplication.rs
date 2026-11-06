@@ -137,7 +137,7 @@ fn leveled_backend(c: &mut Criterion, backend: BfvMultiplicationBackend, hybrid_
             rotate.apply_to(&lower, &mut rotated);
             switch.switch_to(&rotated, &mut switched);
             drop_second.switch_to(&switched, &mut lowest);
-            bob.decrypt_to(&lowest, 2, &mut recovered);
+            bob.decrypt_at_level_to(&lowest, 2, &mut recovered);
             batching.extract_to(recovered.as_ref(), &mut small);
             batching.decode_to(&small, &mut slots, &mut scratch);
             black_box(&slots);

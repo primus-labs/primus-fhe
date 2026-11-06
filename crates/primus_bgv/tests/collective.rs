@@ -179,7 +179,7 @@ fn collective_public_input_and_partial_phase_have_one_mask_and_shared_integer_no
         input.common_mask()
     );
     let mut oracle = owner(&context, &secret);
-    assert_eq!(oracle.decrypt(&cipher, 0).as_ref(), expected);
+    assert_eq!(oracle.decrypt_at_level(&cipher, 0).as_ref(), expected);
     let len = context.rns_poly_len(0);
     let mut total = DcrtPolynomial(cipher.as_ref()[..len].to_vec());
     let mut partial = DcrtPolynomial(vec![0; len]);
@@ -205,7 +205,10 @@ fn collective_public_input_and_partial_phase_have_one_mask_and_shared_integer_no
     let mut encryptor = context.public_key_encryptor(&key).unwrap();
     let message = Polynomial::new((0..N).map(|i| i as u64).collect::<Vec<_>>());
     let cipher = encryptor.encrypt(&message, &mut rng);
-    assert_eq!(oracle.decrypt(&cipher, 0).as_ref(), message.as_ref());
+    assert_eq!(
+        oracle.decrypt_at_level(&cipher, 0).as_ref(),
+        message.as_ref()
+    );
 }
 
 #[test]
@@ -260,7 +263,7 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
             .collect::<Vec<_>>(),
     );
     assert_eq!(
-        oracle.decrypt(&output, 0).as_ref(),
+        oracle.decrypt_at_level(&output, 0).as_ref(),
         expected
             .iter()
             .map(|x| x.rem_euclid(i128::from(P)) as u64)
@@ -315,7 +318,10 @@ fn collective_linear_keys_and_rejection_boundaries() {
     BgvKeySwitcher::try_new(&context, &key)
         .unwrap()
         .switch_to(&input, &mut output);
-    assert_eq!(target.decrypt(&output, 1).as_ref(), message.as_ref());
+    assert_eq!(
+        target.decrypt_at_level(&output, 1).as_ref(),
+        message.as_ref()
+    );
     let auto = BgvCollectiveAutomorphismKey::try_new(&context, 1, 5, config(), &mut rng).unwrap();
     let mut aggregate = auto.aggregate();
     for client in &clients {
@@ -336,7 +342,10 @@ fn collective_linear_keys_and_rejection_boundaries() {
     BgvAutomorphism::try_new(&context, &key)
         .unwrap()
         .apply_to(&input, &mut output);
-    assert_eq!(source.decrypt(&output, 1).as_ref(), transformed_message);
+    assert_eq!(
+        source.decrypt_at_level(&output, 1).as_ref(),
+        transformed_message
+    );
     let pk = BgvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
     assert!(pk.finalize(pk.aggregate()).is_err());
     assert!(pk.try_import(vec![]).is_err());
@@ -380,7 +389,7 @@ fn collective_linear_keys_and_rejection_boundaries() {
     assert!(relin.try_import_round_two(&frozen, vec![]).is_err());
     let mut partial = DcrtPolynomial(vec![17; context.rns_poly_len(1)]);
     let before = partial.as_ref().to_vec();
-    let mut bad_input = BgvCiphertext::new(input.as_ref().to_vec());
+    let mut bad_input = BgvCiphertext::from_raw(input.as_ref().to_vec());
     bad_input.as_mut()[0] = Q[0];
     assert!(
         source

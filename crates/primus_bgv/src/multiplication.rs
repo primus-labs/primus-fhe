@@ -18,10 +18,10 @@ pub struct BgvMultiplication<'a> {
 }
 
 impl<'a> BgvMultiplication<'a> {
-    /// Validates the key's level, N, p and ordered Q, then prepares reusable storage.
+    /// Checks the key's exact context and level, then prepares reusable storage.
     ///
     /// # Errors
-    /// Rejects a key whose numerical parameters do not match this context.
+    /// Rejects a foreign-context key, including numerically identical contexts.
     pub fn try_new(
         context: &'a BgvContext,
         key: &'a BgvRelinearizationKey,
@@ -43,7 +43,7 @@ impl<'a> BgvMultiplication<'a> {
     /// level basis and NTT convention. The complete product and relinearization
     /// error must remain in the centered Q recovery interval.
     /// # Panics
-    /// Incorrect complete input/output lengths are rejected before writes.
+    /// Recorded context/level mismatches and incorrect lengths are rejected before writes.
     /// Arithmetic failure may partially overwrite output and internal scratch.
     pub fn multiply_to<A, B, C>(
         &mut self,
@@ -77,7 +77,7 @@ impl<'a> BgvMultiplication<'a> {
     /// The input is fully consumed into internal quadratic scratch before output
     /// writes. See [`Self::multiply_to`] for representation and phase bounds.
     /// # Panics
-    /// Rejects an incorrect complete length before writes; arithmetic failure may
+    /// Rejects recorded context/level or complete length mismatches before writes; failure may
     /// partially overwrite internal scratch or the ciphertext.
     pub fn square_assign<A: DataMut<Elem = u64>>(&mut self, input: &mut BgvCiphertext<A>) {
         square_to(self.context, self.level, input, &mut self.quadratic);
@@ -85,6 +85,7 @@ impl<'a> BgvMultiplication<'a> {
     }
 
     fn validate_output<B: Data<Elem = u64>>(&self, output: &BgvCiphertext<B>) {
+        output.check_binding(self.context, self.level);
         assert_eq!(
             output.as_ref().len(),
             2 * self.context.rns_poly_len(self.level),

@@ -34,6 +34,7 @@
 | --- | --- |
 | 数值域、表示、借用、phase 与可复用状态 | [跨库组合](composition.md)（English） |
 | 原生 BFV/raw GLWE 的组件符号、密钥与显式桥接 | [RNS phase 约定](rns-phase-conventions.md)（English） |
+| BFV/BGV 本地 context/level 绑定、raw 导入及 collective 分工 | [方案绑定与互操作](scheme-context-binding.md)（中文） |
 | 原生 BFV 整数 tensor、精确缩放、unscaled keys 与 degree 生命周期 | [BFV 求值](bfv-evaluation.md)（English） |
 | 普通BFV临时Q_l与恢复、深度/误差准入 | [临时工作基](bfv-working-basis.md) |
 | 原生 BGV key roles、p-preserving gadget residual 与精确 prime drop | [BGV 求值](bgv-evaluation.md)（English） |

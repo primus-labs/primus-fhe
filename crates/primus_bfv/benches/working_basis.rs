@@ -99,7 +99,7 @@ fn benchmark(c: &mut Criterion) {
                     encryptor.encrypt_centered_to(&a, &mut ca, &mut rng);
                     encryptor.encrypt_centered_to(&b, &mut cb, &mut rng);
                     operations.apply(&ca, &cb, &mut out);
-                    client.decrypt_to(&out, 0, &mut recovered);
+                    client.decrypt_at_level_to(&out, 0, &mut recovered);
                     assert_eq!(&recovered.as_ref()[..5], &[36, 12, 65526, 65535, 1]);
                     assert!(recovered.as_ref()[5..].iter().all(|&x| x == 0));
                     black_box(&out);

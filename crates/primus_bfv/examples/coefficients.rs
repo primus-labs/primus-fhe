@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &mut product,
             PlaintextEmbedding::Centered,
         );
-        let recovered = client.decrypt(&product, 0);
+        let recovered = client.decrypt(&product);
         expected.as_mut()[..3].copy_from_slice(&[2 * scalar, 2 * scalar, 3 * scalar]);
         assert_eq!(recovered, expected);
     }

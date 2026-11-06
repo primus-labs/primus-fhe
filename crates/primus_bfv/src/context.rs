@@ -39,10 +39,12 @@ pub enum BfvContextError {
 /// they do not clone codecs, tables or sampling state.
 ///
 /// Level zero uses all primes; level `l` omits the last `l` primes. A ciphertext
-/// is still a zero-copy storage container: operations check its complete length,
-/// but callers must supply its actual level, this context's NTT convention and
-/// the appropriate actual secret. Equal lengths alone do not prove identity.
+/// allocated by this owner retains its local context provenance and level.
+/// Operations reject foreign bound storage even when its shape is identical.
+/// Explicit raw storage retains caller-owned representation/secret contracts;
+/// local provenance does not prove the actual coefficient secret or noise bound.
 pub struct BfvContext {
+    identity: Arc<()>,
     parameters: BfvParameters,
     table: Arc<U64DcrtTable>,
     lower_codecs: Vec<BfvRnsCodec<u64, BarrettModulus<u64>>>,
@@ -124,10 +126,15 @@ impl BfvContext {
             )?);
         }
         Ok(Self {
+            identity: Arc::new(()),
             parameters,
             table,
             lower_codecs,
         })
+    }
+
+    pub(crate) fn identity(&self) -> &Arc<()> {
+        &self.identity
     }
 
     /// Borrows the highest-level parameters, including the unique sampling state.
@@ -200,13 +207,80 @@ impl BfvContext {
         )
     }
 
-    /// Allocates a zeroed ciphertext with the complete shape of a prepared level.
+    /// Allocates zeroed output with this immutable context/level provenance.
     ///
     /// # Panics
     /// Panics if the requested level is not prepared.
     #[must_use]
     pub fn new_ciphertext(&self, level: usize) -> BfvCiphertext<Vec<u64>> {
-        BfvCiphertext::zero(2 * self.rns_poly_len(level))
+        BfvCiphertext::bound(vec![0; 2 * self.rns_poly_len(level)], self, level)
+    }
+
+    /// Checks local provenance, level and complete shape without scanning words.
+    ///
+    /// A bound ciphertext must have this owner and exact level. For explicit raw
+    /// storage this checks only geometry; ordered Q, actual NTT, scale and secret
+    /// remain caller contracts. This does not certify canonical residues.
+    /// # Errors
+    /// Rejects an unavailable level, foreign provenance or incomplete storage.
+    pub fn check_ciphertext<C: primus_data::Data<Elem = u64>>(
+        &self,
+        ciphertext: &BfvCiphertext<C>,
+        level: usize,
+    ) -> Result<(), crate::BfvCiphertextBindingError> {
+        use crate::BfvCiphertextBindingError as E;
+        if level >= self.level_count() {
+            return Err(E::Level {
+                requested: level,
+                available: self.level_count(),
+            });
+        }
+        ciphertext.validate_binding(self, level)?;
+        let expected = 2 * self.rns_poly_len(level);
+        let actual = ciphertext.as_ref().len();
+        if actual != expected {
+            return Err(E::Length { expected, actual });
+        }
+        Ok(())
+    }
+
+    /// Adopts a complete canonical raw ciphertext into this local context/level.
+    ///
+    /// This consumes the original storage without copying its words. Already
+    /// bound storage cannot be retagged to another owner or level. Explicit adoption
+    /// scans canonical residues once, including already bound mutable storage;
+    /// later arithmetic checks provenance and geometry in O(1).
+    ///
+    /// # Correctness
+    /// For raw storage the caller attests this context's actual ordered Q, NTT,
+    /// BFV scale and intended secret. Canonical words do not prove these facts.
+    /// # Errors
+    /// Rejects unavailable/foreign levels, context provenance, incomplete shape,
+    /// or noncanonical raw residues before assigning any local provenance.
+    pub fn try_bind_ciphertext<C: primus_data::Data<Elem = u64>>(
+        &self,
+        mut ciphertext: BfvCiphertext<C>,
+        level: usize,
+    ) -> Result<BfvCiphertext<C>, crate::BfvCiphertextBindingError> {
+        self.check_ciphertext(&ciphertext, level)?;
+        let n = self.parameters.poly_length().get();
+        let qs = self.codec(level).moduli_values();
+        for (limb_index, limb) in ciphertext.as_ref().chunks_exact(n).enumerate() {
+            let modulus = qs[limb_index % qs.len()];
+            for (offset, &value) in limb.iter().enumerate() {
+                if value >= modulus {
+                    return Err(crate::BfvCiphertextBindingError::NonCanonical {
+                        index: limb_index * n + offset,
+                        value,
+                        modulus,
+                    });
+                }
+            }
+        }
+        if ciphertext.binding.is_none() {
+            ciphertext.binding = Some(crate::ciphertext::Binding::new(self, level));
+        }
+        Ok(ciphertext)
     }
 
     /// Allocates an already-scaled degree-two ciphertext at a prepared level.
@@ -218,18 +292,18 @@ impl BfvContext {
     /// Panics if the requested level is not prepared.
     #[must_use]
     pub fn new_quadratic_ciphertext(&self, level: usize) -> BfvQuadraticCiphertext<Vec<u64>> {
-        BfvQuadraticCiphertext::zero(3 * self.rns_poly_len(level))
+        BfvQuadraticCiphertext::bound(vec![0; 3 * self.rns_poly_len(level)], self, level)
     }
 
     /// Prepares public encryption at level zero, reusing the owned resources.
     ///
     /// # Errors
-    /// Rejects a public key with different geometry or ordered moduli. Matching
-    /// numbers do not establish actual key identity or NTT convention.
+    /// Rejects a public key from another local context, or incompatible shape.
+    /// Local provenance does not prove the actual secret or key-noise bound.
     pub fn public_key_encryptor<'a>(
         &'a self,
         key: &'a BfvPublicKey,
-    ) -> Result<BfvPublicKeyEncryptor<'a>, RnsDomainError<u64>> {
+    ) -> Result<BfvPublicKeyEncryptor<'a>, crate::BfvPublicKeyError> {
         BfvPublicKeyEncryptor::try_new(key, self)
     }
 }

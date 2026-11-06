@@ -65,7 +65,7 @@ fn bench_key_switching(c: &mut Criterion) {
         let key = bob.key_switching_key(&alice, 0, config, &mut rng).unwrap();
         let mut switcher = BfvKeySwitcher::try_new(&context, &key).unwrap();
         switcher.switch_to(&input, &mut output);
-        bob.decrypt_to(&output, 0, &mut recovered);
+        bob.decrypt_at_level_to(&output, 0, &mut recovered);
         assert_eq!(recovered, message);
 
         group.bench_function(label, |b| {

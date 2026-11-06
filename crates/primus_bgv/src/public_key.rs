@@ -9,6 +9,9 @@ use zeroize::Zeroize;
 /// A mismatched BGV public-key basis, geometry or plaintext scale.
 #[derive(Debug, thiserror::Error)]
 pub enum BgvPublicKeyError {
+    /// The key was created for another context owner.
+    #[error("BGV public key belongs to another context")]
+    ContextMismatch,
     /// Geometry or ordered ciphertext moduli differ.
     #[error(transparent)]
     Rns(#[from] RnsDomainError<u64>),
@@ -35,13 +38,14 @@ impl BgvPublicKey {
     /// The payload alone does not identify its NTT/context or recipient secret.
     #[must_use]
     pub fn as_ciphertext(&self) -> BgvCiphertext<&[u64]> {
-        BgvCiphertext::new(self.ciphertext.as_ref())
+        self.ciphertext.as_view()
     }
 
     pub(crate) fn from_collective(
         context: &BgvContext,
-        ciphertext: BgvCiphertext<Vec<u64>>,
+        mut ciphertext: BgvCiphertext<Vec<u64>>,
     ) -> Self {
+        ciphertext.bind_context(context, 0);
         Self {
             ciphertext,
             size: context.parameters().size(),
@@ -64,12 +68,15 @@ impl BgvPublicKey {
             p: context.parameters().plain_modulus().value(),
         }
     }
-    /// Checks public-key polynomial geometry, p and the complete ordered Q basis.
-    /// This metadata-only check allocates nothing. Actual recipient identity and
-    /// NTT roots/evaluation order remain caller contracts.
+    /// Checks the exact context owner, without allocating or rescanning a known key.
+    /// Numeric mismatches of external contexts retain their precise diagnostics.
+    /// Local provenance does not establish an actual recipient secret relationship.
     /// # Errors
-    /// Rejects different geometry, plaintext modulus or ordered ciphertext basis.
+    /// Rejects another context, including one with identical N, p, Q and tables.
     pub fn validate_context(&self, context: &BgvContext) -> Result<(), BgvPublicKeyError> {
+        if self.ciphertext.is_bound_to(context, 0) {
+            return Ok(());
+        }
         let parameters = context.parameters();
         let expected = parameters.poly_length().get();
         let actual = self.size.poly_length().get();
@@ -103,7 +110,7 @@ impl BgvPublicKey {
                 actual: self.p,
             });
         }
-        Ok(())
+        Err(BgvPublicKeyError::ContextMismatch)
     }
 }
 
@@ -118,8 +125,8 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
     /// Checks key geometry, ordered Q and p, then allocates one full-ring ephemeral.
     ///
     /// # Errors
-    /// Rejects a different layout, Q order or plaintext error scale. Actual secret
-    /// and NTT convention remain caller contracts after numerical checks.
+    /// Rejects another context or a different numerical key layout. Imported key
+    /// material's actual secret and NTT convention remain caller contracts.
     pub fn try_new(
         key: &'a BgvPublicKey,
         context: &'a BgvContext,
@@ -167,8 +174,8 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
     /// # Correctness
     /// Public error must remain in the centered Q recovery interval.
     /// # Panics
-    /// Rejects incorrect complete lengths and noncanonical plaintext before RNG
-    /// or writes. RNG/transform failure may partially write scratch and output.
+    /// Rejects recorded output context/level, incorrect lengths and noncanonical plaintext
+    /// before RNG or writes. RNG/transform failure may partially write scratch and output.
     pub fn encrypt_to<R, A, B>(
         &mut self,
         input: &Polynomial<A>,
@@ -206,6 +213,7 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
         B: DataMut<Elem = u64>,
     {
         validate_plaintext(self.context, input.as_ref());
+        output.check_binding(self.context, 0);
         let parameters = self.context.parameters();
         assert_eq!(
             self.workspace.size(),

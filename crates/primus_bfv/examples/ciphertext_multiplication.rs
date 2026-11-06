@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let encrypted_message = encryptor.encrypt_centered(&message, &mut rng);
         let encrypted_factor = encryptor.encrypt_centered(&factor, &mut rng);
         multiplication.multiply_to(&encrypted_message, &encrypted_factor, &mut product);
-        let recovered = client.decrypt(&product, 0);
+        let recovered = client.decrypt(&product);
         expected.as_mut()[..3].copy_from_slice(&[scalar, 2 * scalar, 3 * scalar]);
         assert_eq!(recovered, expected);
     }

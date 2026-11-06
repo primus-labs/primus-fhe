@@ -102,6 +102,10 @@ contiguous tasks in the current Rayon pool. Bound the pool's total threads with
 `RAYON_NUM_THREADS` or `ThreadPool::install`; the task cap does not resize it.
 This feature is off by default, leaving that NTT path serial without pool
 initialization. Random sampling is not parallelized.
+Eligible table construction prepares the current pool registry, but does not
+wait for every worker to finish starting. For kernel-only allocation measurements,
+make the configured pool ready first, for example with `ThreadPool::broadcast`;
+the transform itself need not be warmed up.
 
 The repository [build configuration](../../.cargo/config.toml) uses `target-cpu=native`. Override its rustflags when producing portable binaries; runtime dispatch alone does not make a host-targeted build portable.
 

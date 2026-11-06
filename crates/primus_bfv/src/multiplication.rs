@@ -30,7 +30,9 @@ enum MultiplicationKernel<'a> {
 /// The key determines the level. This owner keeps one scaled quadratic buffer,
 /// the selected backend's multiplication resources and the relinearization scratch.
 /// Online methods allocate nothing and return ordinary degree-one ciphertexts;
-/// no modulus drop or noise-dependent policy is implicit.
+/// no modulus drop or noise-dependent policy is implicit. Bound operands must
+/// use this local context and the key's level; explicit raw operands retain
+/// caller-attested representation and actual-secret contracts.
 ///
 /// # Correctness
 /// Inputs must use the key's actual secret, ordered Q basis and NTT convention.
@@ -167,8 +169,8 @@ impl<'a> BfvMultiplication<'a> {
     /// Writes the scaled and relinearized product, reusing prepared storage.
     ///
     /// # Panics
-    /// All complete input/output lengths are checked before output or scratch
-    /// writes. A transform panic can leave intermediate scratch modified.
+    /// Recorded context/level conflicts and all complete input/output lengths
+    /// are checked before output or scratch writes. A transform panic can leave intermediate scratch modified.
     pub fn multiply_to<A, B, C>(
         &mut self,
         lhs: &BfvCiphertext<A>,
@@ -179,6 +181,18 @@ impl<'a> BfvMultiplication<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        lhs.check_binding(
+            self.relinearizer.context(),
+            self.relinearizer.external_level(),
+        );
+        rhs.check_binding(
+            self.relinearizer.context(),
+            self.relinearizer.external_level(),
+        );
+        output.check_binding(
+            self.relinearizer.context(),
+            self.relinearizer.external_level(),
+        );
         self.validate_output(output.as_ref());
         match &mut self.multiplier {
             MultiplicationKernel::Exact(multiplier) => {
@@ -199,6 +213,14 @@ impl<'a> BfvMultiplication<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        input.check_binding(
+            self.relinearizer.context(),
+            self.relinearizer.external_level(),
+        );
+        output.check_binding(
+            self.relinearizer.context(),
+            self.relinearizer.external_level(),
+        );
         self.validate_output(output.as_ref());
         match &mut self.multiplier {
             MultiplicationKernel::Exact(multiplier) => {
@@ -217,11 +239,16 @@ impl<'a> BfvMultiplication<'a> {
     /// first write to it. Inherits [`Self::multiply_to`]'s representation contract.
     ///
     /// # Panics
-    /// Rejects an incorrect complete length before output or scratch writes.
+    /// Rejects recorded context/level conflicts or incorrect lengths before
+    /// output or scratch writes.
     pub fn square_assign<A>(&mut self, input: &mut BfvCiphertext<A>)
     where
         A: DataMut<Elem = u64>,
     {
+        input.check_binding(
+            self.relinearizer.context(),
+            self.relinearizer.external_level(),
+        );
         match &mut self.multiplier {
             MultiplicationKernel::Exact(multiplier) => {
                 multiplier.square_to(input, &mut self.quadratic)

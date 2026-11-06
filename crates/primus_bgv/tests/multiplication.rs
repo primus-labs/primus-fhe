@@ -63,7 +63,7 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         // prime-drop algorithm. Actual drops are tested via BgvModulusSwitch.
         let prefix = |input: &BgvCiphertext<Vec<u64>>| {
             let (c0, c1) = input.c0_c1(full_len);
-            BgvCiphertext::new([&c0.as_ref()[..length], &c1.as_ref()[..length]].concat())
+            BgvCiphertext::from_raw([&c0.as_ref()[..length], &c1.as_ref()[..length]].concat())
         };
         let left = prefix(&encrypted_a);
         let right = prefix(&encrypted_b);
@@ -75,7 +75,7 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         request.multiply_to(&left, &right, &mut output);
         let mut expected = vec![0; N];
         expected[..3].copy_from_slice(&[15, 13, 2]);
-        assert_eq!(client.decrypt(&output, level).as_ref(), expected);
+        assert_eq!(client.decrypt_at_level(&output, level).as_ref(), expected);
 
         let evaluator = BgvEvaluator::new(&context, level);
         let mut quadratic = context.new_quadratic_ciphertext(level);
@@ -89,7 +89,7 @@ fn prepared_request_derives_each_level_and_matches_staged_operations() {
         request.square_assign(&mut inplace);
         assert_eq!(output.as_ref(), inplace.as_ref());
         expected[..3].copy_from_slice(&[9, 12, 4]);
-        assert_eq!(client.decrypt(&inplace, level).as_ref(), expected);
+        assert_eq!(client.decrypt_at_level(&inplace, level).as_ref(), expected);
     }
 }
 
@@ -111,8 +111,8 @@ fn numerical_binding_and_complete_lengths_reject_before_output_writes() {
     let valid = context.new_ciphertext(2);
     let length = valid.as_ref().len();
     for bad in [0, length - 1, length + 1, 2 * length] {
-        let mut malformed = BgvCiphertext::new(vec![77; bad]);
-        let mut output = BgvCiphertext::new(vec![55; length]);
+        let mut malformed = BgvCiphertext::from_raw(vec![77; bad]);
+        let mut output = BgvCiphertext::from_raw(vec![55; length]);
         for left_is_bad in [false, true] {
             let (lhs, rhs) = if left_is_bad {
                 (&malformed, &valid)

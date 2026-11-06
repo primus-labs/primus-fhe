@@ -1,7 +1,8 @@
 use crate::{
-    BgvCiphertext, BgvParameters, BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError,
-    BgvQuadraticCiphertext,
+    BgvCiphertext, BgvCiphertextBindingError, BgvParameters, BgvPublicKey, BgvPublicKeyEncryptor,
+    BgvPublicKeyError, BgvQuadraticCiphertext,
 };
+use primus_data::Data;
 use primus_glwe_rns::RnsDomainError;
 use primus_integer::BigUint;
 use primus_modulus::BarrettModulus;
@@ -39,6 +40,7 @@ struct LowerLevel {
 /// One immutable owner of full-ring BGV parameters and a shared DCRT NTT table.
 /// Clients, evaluators and public encryptors borrow this owner without cloning.
 pub struct BgvContext {
+    identity: Arc<()>,
     parameters: BgvParameters,
     table: Arc<U64DcrtTable>,
     lower_levels: Vec<LowerLevel>,
@@ -125,10 +127,15 @@ impl BgvContext {
             });
         }
         Self {
+            identity: Arc::new(()),
             parameters,
             table,
             lower_levels,
         }
+    }
+
+    pub(crate) fn identity(&self) -> &Arc<()> {
+        &self.identity
     }
 
     /// Borrows the unique parameters and sampler state.
@@ -241,7 +248,69 @@ impl BgvContext {
     /// Rejects an unprepared level.
     #[must_use]
     pub fn new_ciphertext(&self, level: usize) -> BgvCiphertext<Vec<u64>> {
-        BgvCiphertext::zero(2 * self.rns_poly_len(level))
+        BgvCiphertext::from_bound(vec![0; 2 * self.rns_poly_len(level)], self, level)
+    }
+
+    /// Consumes complete native storage and binds it to this context and level.
+    ///
+    /// Existing context/level provenance must match; this never retags a foreign
+    /// bound object. All public residues are checked once without copying or
+    /// allocating storage. Raw input asserts this context's actual NTT order and
+    /// intended secret; neither canonical residues nor local identity prove them.
+    ///
+    /// # Errors
+    /// Rejects an unavailable level, conflicting provenance, wrong complete
+    /// geometry or the first noncanonical residue before changing the binding.
+    pub fn try_bind_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        mut ciphertext: BgvCiphertext<C>,
+        level: usize,
+    ) -> Result<BgvCiphertext<C>, BgvCiphertextBindingError> {
+        self.check_ciphertext(&ciphertext, level)?;
+        let n = self.parameters().poly_length().get();
+        let qs = self.base_q(level).moduli_values();
+        for (limb_index, limb) in ciphertext.as_ref().chunks_exact(n).enumerate() {
+            let modulus = qs[limb_index % qs.len()];
+            for (offset, &value) in limb.iter().enumerate() {
+                if value >= modulus {
+                    return Err(BgvCiphertextBindingError::NonCanonical {
+                        index: limb_index * n + offset,
+                        value,
+                        modulus,
+                    });
+                }
+            }
+        }
+        ciphertext.bind_context(self, level);
+        Ok(ciphertext)
+    }
+
+    /// Checks complete geometry and any recorded context/level without scanning residues.
+    ///
+    /// Raw storage explicitly attests this context, level, NTT convention and
+    /// intended secret; this check does not establish those raw properties.
+    /// Canonical residues remain an arithmetic caller contract, or can be
+    /// checked once with [`Self::try_bind_ciphertext`].
+    /// # Errors
+    /// Rejects an unavailable level, foreign recorded provenance or wrong full length.
+    pub fn check_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        ciphertext: &BgvCiphertext<C>,
+        level: usize,
+    ) -> Result<(), BgvCiphertextBindingError> {
+        if level >= self.level_count() {
+            return Err(BgvCiphertextBindingError::Level {
+                requested: level,
+                available: self.level_count(),
+            });
+        }
+        ciphertext.validate_binding(self, level)?;
+        let expected = 2 * self.rns_poly_len(level);
+        let actual = ciphertext.as_ref().len();
+        if actual != expected {
+            return Err(BgvCiphertextBindingError::Length { expected, actual });
+        }
+        Ok(())
     }
 
     /// Allocates a degree-two tensor output with phase `c0+c1*s+c2*s²`.
@@ -250,10 +319,15 @@ impl BgvContext {
     /// Rejects an unprepared level or overflowing storage length.
     #[must_use]
     pub fn new_quadratic_ciphertext(&self, level: usize) -> BgvQuadraticCiphertext<Vec<u64>> {
-        BgvQuadraticCiphertext::zero(
-            self.rns_poly_len(level)
-                .checked_mul(3)
-                .expect("BGV quadratic length overflow"),
+        BgvQuadraticCiphertext::from_bound(
+            vec![
+                0;
+                self.rns_poly_len(level)
+                    .checked_mul(3)
+                    .expect("BGV quadratic length overflow")
+            ],
+            self,
+            level,
         )
     }
 

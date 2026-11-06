@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         operation.square_assign(&mut ciphertext);
     }
     let mut recovered = Polynomial::<Vec<u64>>::zero(message.as_ref().len());
-    client.decrypt_to(&ciphertext, 0, &mut recovered);
+    client.decrypt_to(&ciphertext, &mut recovered);
     let coefficients = [256, 1024, 1792, 1792, 1120, 448, 112, 16, 1];
     assert_eq!(&recovered.as_ref()[..9], &coefficients);
     assert!(recovered.as_ref()[9..].iter().all(|&x| x == 0));

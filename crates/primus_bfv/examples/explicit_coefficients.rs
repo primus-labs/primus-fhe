@@ -4,7 +4,7 @@
 //! This small ring is an API example, not a security parameter preset.
 
 use primus_bfv::{
-    BfvCiphertext, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
+    BfvCiphertext, BfvClient, BfvContext, BfvDecryptWorkspace, BfvParameters, BfvPublicKey,
     BfvPublicKeyEncryptor, BfvSecretKeyContext,
 };
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public = BfvPublicKey::new(&client, &mut rng);
     let mut encryptor = BfvPublicKeyEncryptor::try_new(&public, &context)?;
     let mut workspace = BfvDecryptWorkspace::new(parameters);
-    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
     let mut decoded = Polynomial::<Vec<u64>>::zero(parameters.poly_length().get());
 
     for value in [3, 256] {
@@ -56,6 +56,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     workspace.zeroize();
     client.decrypt_to(&ciphertext, &mut decoded, &mut workspace);
     assert!(decoded.as_ref().iter().all(|&value| value == 256));
-    println!("BFV private/public coefficient encryption and workspace reuse verified");
+
+    // This array was produced with the context's actual transform and key.
+    // Checked binding validates storage/canonicality; that provenance remains
+    // our caller contract. The ordinary client then infers the bound level.
+    let ciphertext = context.try_bind_ciphertext(ciphertext, 0)?;
+    let mut owner = BfvClient::try_from_secret_key(&context, key)?;
+    assert_eq!(owner.decrypt(&ciphertext), decoded);
+    println!("BFV raw workspace reuse and checked ordinary recovery verified");
     Ok(())
 }

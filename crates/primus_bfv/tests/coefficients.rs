@@ -153,7 +153,7 @@ fn private_embeddings_apply_delta_once_and_match_exact_recovery() {
                 .map(|index| [0, 1, t / 2, (t / 2 + 1).min(t - 1), t - 1][index % 5])
                 .collect::<Vec<_>>(),
         );
-        let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+        let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
         let mut expected_ciphertext = ciphertext.clone();
         let mut workspace = BfvDecryptWorkspace::new(parameters);
         for centered in [false, true] {
@@ -252,7 +252,7 @@ fn plaintext_product_keeps_bfv_scaling() {
         .flat_map(|_| multiplier.as_ref().iter().copied())
         .collect::<Vec<_>>();
     table.transform_slice(&mut multiplier_ntt);
-    let mut input = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let mut input = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
     let mut output = input.clone();
     context.encrypt_to(&message, &mut input, &mut rng);
     // This representation test applies plaintext multiplication directly to
@@ -316,7 +316,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
         for mode in 0..4 {
             let mut rng = StdRng::seed_from_u64(83);
             let mut reference_rng = StdRng::seed_from_u64(83);
-            let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len()]);
+            let mut output = BfvCiphertext::from_raw(vec![99; parameters.size().rns_glwe_len()]);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| match mode {
                     0 => secret.encrypt_to(&input, &mut output, &mut rng),
@@ -338,7 +338,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
         let input = CrtPolynomial(vec![0; length]);
         let mut rng = StdRng::seed_from_u64(84);
         let mut reference_rng = StdRng::seed_from_u64(84);
-        let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len()]);
+        let mut output = BfvCiphertext::from_raw(vec![99; parameters.size().rns_glwe_len()]);
         assert!(
             catch_unwind(AssertUnwindSafe(|| secret.encrypt_plaintext_lift_crt_to(
                 &input,
@@ -359,7 +359,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     let input = Polynomial(vec![0; N]);
     let mut rng = StdRng::seed_from_u64(85);
     let mut reference_rng = StdRng::seed_from_u64(85);
-    let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len() - 1]);
+    let mut output = BfvCiphertext::from_raw(vec![99; parameters.size().rns_glwe_len() - 1]);
     assert!(
         catch_unwind(AssertUnwindSafe(|| secret.encrypt_to(
             &input,
@@ -401,7 +401,7 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     assert!(BfvPublicKeyEncryptor::try_new(&public, &foreign_context).is_err());
     let foreign = parameters_with_length(64);
     let mut workspace = BfvDecryptWorkspace::new(&foreign);
-    let ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let ciphertext = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
     let mut plaintext = Polynomial(vec![99; N]);
     assert!(
         catch_unwind(AssertUnwindSafe(|| secret.decrypt_to(
@@ -423,7 +423,8 @@ fn invalid_complete_layouts_are_rejected_before_randomness_or_output_writes() {
     );
     assert_eq!(short_plaintext.as_ref(), vec![99; N - 1]);
 
-    let short_ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len() - 1);
+    let short_ciphertext =
+        BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len() - 1);
     assert!(
         catch_unwind(AssertUnwindSafe(|| {
             secret.decrypt_to(&short_ciphertext, &mut plaintext, &mut workspace)
@@ -468,7 +469,7 @@ fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge()
     let key = DcrtGlweSecretKey::from_coeff_secret_key(&coefficient_key, table);
     let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
     let message = Polynomial((0..N).map(|i| (i * 13 % 257) as u64).collect::<Vec<_>>());
-    let mut ciphertext = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    let mut ciphertext = BfvCiphertext::zero_raw(parameters.size().rns_glwe_len());
     context.encrypt_to(
         &message,
         &mut ciphertext,
@@ -501,7 +502,7 @@ fn native_components_preserve_the_actual_binary_secret_and_explicit_raw_bridge()
             );
         }
     }
-    let mut recovered = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    let mut recovered = BfvCiphertext::zero_raw(parameters.size().rns_glwe_len());
     recovered.set_from_raw_glwe(&raw, parameters);
     assert_eq!(recovered, ciphertext);
     let mut raw_phase = DcrtPolynomial::<Vec<u64>>::zero(length);
@@ -525,7 +526,7 @@ fn encoded_phase_entry_does_not_apply_delta_again() {
     let context = BfvSecretKeyContext::try_new(&key, &owner).unwrap();
     let message = Polynomial(vec![3; N]);
     let encoded = CrtPolynomial(independently_encoded(message.as_ref(), 1, 257, false));
-    let mut proper = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+    let mut proper = BfvCiphertext::zero_raw(parameters.size().rns_glwe_len());
     let mut wrong = proper.clone();
     context.encrypt_encoded_crt_to(&encoded, &mut proper, &mut StdRng::seed_from_u64(27));
     context.encrypt_plaintext_lift_crt_to(&encoded, &mut wrong, &mut StdRng::seed_from_u64(27));

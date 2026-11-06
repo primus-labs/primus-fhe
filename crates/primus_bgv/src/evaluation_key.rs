@@ -30,6 +30,9 @@ use zeroize::Zeroizing;
 /// Invalid BGV evaluation-key parameters or numerical binding.
 #[derive(Debug, thiserror::Error)]
 pub enum BgvEvaluationKeyError {
+    /// A native key or source client belongs to a different context owner.
+    #[error("BGV evaluation key or source client belongs to another context")]
+    ContextMismatch,
     /// A requested context level was not prepared.
     #[error("BGV key level {requested} is outside the {available} prepared levels")]
     Level {
@@ -155,6 +158,7 @@ enum KeyDecomposition {
 
 /// Native key columns with exactly one chosen decomposition owner.
 struct NativeEvaluationKey {
+    context: Arc<()>,
     n: usize,
     level: usize,
     p: u64,
@@ -223,6 +227,7 @@ impl NativeEvaluationKey {
             }
         };
         Ok(Self {
+            context: Arc::clone(context.identity()),
             n: context.parameters().poly_length().get(),
             level,
             p: context.parameters().plain_modulus().value(),
@@ -375,11 +380,16 @@ impl NativeEvaluationKey {
         Ok(self)
     }
     fn validate(&self, context: &BgvContext) -> Result<(), BgvEvaluationKeyError> {
+        if Arc::ptr_eq(&self.context, context.identity()) {
+            return Ok(());
+        }
         validate_level(context, self.level)?;
-        validate_numeric_context(self.n, self.p, &self.moduli, context, self.level)
+        validate_numeric_context(self.n, self.p, &self.moduli, context, self.level)?;
+        Err(BgvEvaluationKeyError::ContextMismatch)
     }
     fn clone_metadata(&self, columns: Vec<u64>) -> Self {
         Self {
+            context: Arc::clone(&self.context),
             n: self.n,
             level: self.level,
             p: self.p,
@@ -398,7 +408,7 @@ impl NativeEvaluationKey {
     #[cfg(test)]
     fn ciphertexts(&self) -> impl ExactSizeIterator<Item = BgvCiphertext<&[u64]>> {
         let len = self.columns.len() / self.digit_count();
-        self.columns.chunks_exact(len).map(BgvCiphertext::new)
+        self.columns.chunks_exact(len).map(BgvCiphertext::from_raw)
     }
 }
 
@@ -612,6 +622,9 @@ impl BgvClient<'_> {
             source.context,
             level,
         )?;
+        if !Arc::ptr_eq(self.context.identity(), source.context.identity()) {
+            return Err(BgvEvaluationKeyError::ContextMismatch);
+        }
         let key = NativeEvaluationKey::prepare(self.context, level, config)?;
         let secret = key.secret(source.context, source.secret_key())?;
         Ok(BgvKeySwitchingKey {
@@ -733,9 +746,9 @@ pub struct BgvRelinearizer<'a> {
 }
 
 impl<'a> BgvRelinearizer<'a> {
-    /// Binds the key's level and numerical metadata before allocating reusable scratch.
+    /// Checks the key's exact context and level before allocating reusable scratch.
     /// # Errors
-    /// Rejects an unprepared key level or different N, p or ordered Q basis.
+    /// Rejects a foreign context, unprepared key level or different N, p or ordered Q.
     pub fn try_new(
         context: &'a BgvContext,
         key: &'a BgvRelinearizationKey,
@@ -754,13 +767,15 @@ impl<'a> BgvRelinearizer<'a> {
     /// p-scaled error;
     /// the intended output phase must stay in the centered Q interval.
     /// # Panics
-    /// Rejects incomplete input/output lengths before writes. Prepared calls
+    /// Rejects recorded context/level mismatches or incomplete lengths before writes. Calls
     /// allocate nothing; transform/RNS failure may partially overwrite scratch/output.
     pub fn relinearize_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
         &mut self,
         input: &BgvQuadraticCiphertext<A>,
         output: &mut BgvCiphertext<B>,
     ) {
+        input.check_binding(self.product.context, self.product.key.level);
+        output.check_binding(self.product.context, self.product.key.level);
         let len = self.product.poly_len();
         assert_eq!(
             input.as_ref().len(),
@@ -784,9 +799,9 @@ pub struct BgvKeySwitcher<'a> {
 }
 
 impl<'a> BgvKeySwitcher<'a> {
-    /// Binds the key's level and numerical metadata before allocating reusable scratch.
+    /// Checks the key's exact context and level before allocating reusable scratch.
     /// # Errors
-    /// Rejects an unprepared key level or different N, p or ordered Q basis.
+    /// Rejects a foreign context, unprepared key level or different N, p or ordered Q.
     pub fn try_new(
         context: &'a BgvContext,
         key: &'a BgvKeySwitchingKey,
@@ -803,13 +818,15 @@ impl<'a> BgvKeySwitcher<'a> {
     /// secret and the bound ordered Q/NTT convention. The output's intended
     /// phase must stay inside centered Q.
     /// # Panics
-    /// Rejects incomplete input/output lengths before writes. Prepared calls
+    /// Rejects recorded context/level mismatches or incomplete lengths before writes. Calls
     /// allocate nothing; arithmetic failure may partially overwrite scratch/output.
     pub fn switch_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
         &mut self,
         input: &BgvCiphertext<A>,
         output: &mut BgvCiphertext<B>,
     ) {
+        input.check_binding(self.product.context, self.product.key.level);
+        output.check_binding(self.product.context, self.product.key.level);
         let len = self.product.poly_len();
         assert_eq!(input.as_ref().len(), 2 * len, "BGV input length mismatch");
         assert_eq!(output.as_ref().len(), 2 * len, "BGV output length mismatch");
@@ -831,9 +848,9 @@ pub struct BgvAutomorphism<'a> {
 }
 
 impl<'a> BgvAutomorphism<'a> {
-    /// Binds the key's level, numerical metadata and permutation before allocating scratch.
+    /// Checks the key's exact context, level and permutation before allocating scratch.
     /// # Errors
-    /// Rejects an unprepared key level or different N, p or ordered Q basis.
+    /// Rejects a foreign context, unprepared key level or different N, p or ordered Q.
     pub fn try_new(
         context: &'a BgvContext,
         key: &'a BgvAutomorphismKey,
@@ -852,13 +869,15 @@ impl<'a> BgvAutomorphism<'a> {
     /// The output's intended phase must stay in centered Q. This operates on the
     /// full ciphertext ring; batching row maps choose the appropriate exponent.
     /// # Panics
-    /// Rejects incomplete input/output lengths before writes. Prepared calls
+    /// Rejects recorded context/level mismatches or incomplete lengths before writes. Calls
     /// allocate nothing; arithmetic failure may partially overwrite scratch/output.
     pub fn apply_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
         &mut self,
         input: &BgvCiphertext<A>,
         output: &mut BgvCiphertext<B>,
     ) {
+        input.check_binding(self.product.context, self.product.key.level);
+        output.check_binding(self.product.context, self.product.key.level);
         let len = self.product.poly_len();
         assert_eq!(input.as_ref().len(), 2 * len, "BGV input length mismatch");
         assert_eq!(output.as_ref().len(), 2 * len, "BGV output length mismatch");

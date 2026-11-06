@@ -4,29 +4,154 @@ use primus_poly::DcrtPolynomial;
 
 use crate::BfvParameters;
 
+/// Rejected raw-storage adoption or local context/level provenance.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum BfvCiphertextBindingError {
+    /// Bound storage was created by a different context owner.
+    #[error("BFV context provenance mismatch")]
+    ContextMismatch,
+    /// The requested level was not prepared.
+    #[error("BFV level {requested} is outside {available} prepared levels")]
+    Level {
+        /// Requested prefix level.
+        requested: usize,
+        /// Number of prepared prefix levels.
+        available: usize,
+    },
+    /// Bound storage has another immutable level.
+    #[error("BFV ciphertext level mismatch: expected {expected}, got {actual}")]
+    BoundLevel {
+        /// Level requested by the consuming operation.
+        expected: usize,
+        /// Level stored with the ciphertext.
+        actual: usize,
+    },
+    /// Complete physical ciphertext length differs.
+    #[error("BFV ciphertext length mismatch: expected {expected}, got {actual}")]
+    Length {
+        /// Required word count.
+        expected: usize,
+        /// Supplied word count.
+        actual: usize,
+    },
+    /// A raw residue is not canonical for its ordered modulus limb.
+    #[error("BFV residue {value} at word {index} is not below {modulus}")]
+    NonCanonical {
+        /// Physical word index in component-major, modulus-major order.
+        index: usize,
+        /// Supplied residue.
+        value: u64,
+        /// Required exclusive modulus bound.
+        modulus: u64,
+    },
+}
+
+// A local construction claim, not a proof of the actual secret or payload.
+#[derive(Clone, Debug)]
+pub(crate) struct Binding {
+    context: std::sync::Arc<()>,
+    pub(crate) level: usize,
+}
+impl Binding {
+    pub(crate) fn new(context: &crate::BfvContext, level: usize) -> Self {
+        Self {
+            context: std::sync::Arc::clone(context.identity()),
+            level,
+        }
+    }
+    pub(crate) fn validate(
+        &self,
+        context: &crate::BfvContext,
+        level: usize,
+    ) -> Result<(), BfvCiphertextBindingError> {
+        if !std::sync::Arc::ptr_eq(&self.context, context.identity()) {
+            return Err(BfvCiphertextBindingError::ContextMismatch);
+        }
+        if self.level != level {
+            return Err(BfvCiphertextBindingError::BoundLevel {
+                expected: level,
+                actual: self.level,
+            });
+        }
+        Ok(())
+    }
+    pub(crate) fn check(&self, context: &crate::BfvContext, level: usize) {
+        self.validate(context, level)
+            .expect("BFV ciphertext binding mismatch");
+    }
+}
+impl PartialEq for Binding {
+    fn eq(&self, other: &Self) -> bool {
+        self.level == other.level && std::sync::Arc::ptr_eq(&self.context, &other.context)
+    }
+}
+impl Eq for Binding {}
+
 /// A rank-one BFV ciphertext in physical component order `[c0, c1]`.
 ///
 /// Each component is one modulus-major DCRT polynomial. Its phase is
 /// `c0 + c1*s`; this is distinct from raw GLWE's mask/body representation.
-/// Complete geometry is checked by the consuming operation, so a container
-/// alone establishes neither its Q basis nor its NTT evaluation convention.
+/// Context allocation records immutable local context/level provenance. Raw
+/// storage explicitly constructed with [`Self::from_raw`] instead retains the
+/// caller's ordered Q, actual NTT and secret contracts; metadata proves none of
+/// those mathematical facts about arbitrary imported words.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BfvCiphertext<C> {
     data: C,
+    pub(crate) binding: Option<crate::ciphertext::Binding>,
 }
 
 impl<C: Data<Elem = u64>> BfvCiphertext<C> {
-    /// Wraps storage carrying the BFV `[c0,c1]` interpretation.
-    /// Operations validate its complete length against their bound parameters.
+    /// Wraps explicit raw storage carrying the BFV `[c0,c1]` interpretation.
+    ///
+    /// No context or level is inferred. A consuming operation checks geometry;
+    /// the caller attests its ordered basis, actual NTT, scale and secret. Use
+    /// [`crate::BfvContext::new_ciphertext`] for normal bound output storage.
     #[must_use]
-    pub fn new(data: C) -> Self {
-        Self { data }
+    pub fn from_raw(data: C) -> Self {
+        Self {
+            data,
+            binding: None,
+        }
+    }
+
+    pub(crate) fn bound(data: C, context: &crate::BfvContext, level: usize) -> Self {
+        Self {
+            data,
+            binding: Some(crate::ciphertext::Binding::new(context, level)),
+        }
+    }
+
+    pub(crate) fn validate_binding(
+        &self,
+        context: &crate::BfvContext,
+        level: usize,
+    ) -> Result<(), BfvCiphertextBindingError> {
+        self.binding
+            .as_ref()
+            .map_or(Ok(()), |binding| binding.validate(context, level))
+    }
+    pub(crate) fn check_binding(&self, context: &crate::BfvContext, level: usize) {
+        self.validate_binding(context, level)
+            .expect("BFV ciphertext binding mismatch");
+    }
+
+    pub(crate) fn bound_level(&self, context: &crate::BfvContext) -> usize {
+        let binding = self
+            .binding
+            .as_ref()
+            .expect("raw BFV storage needs explicit level recovery");
+        binding.check(context, binding.level);
+        binding.level
     }
 
     /// Borrows the physical `[c0,c1]` storage.
     #[must_use]
     pub fn as_view(&self) -> BfvCiphertext<&[u64]> {
-        BfvCiphertext::new(self.as_ref())
+        BfvCiphertext {
+            data: self.as_ref(),
+            binding: self.binding.clone(),
+        }
     }
 
     /// Borrows both DCRT components, checking the full ciphertext length.
@@ -80,10 +205,10 @@ impl<C: Data<Elem = u64>> BfvCiphertext<C> {
 }
 
 impl BfvCiphertext<Vec<u64>> {
-    /// Allocates zeroed `[c0,c1]` storage of the requested complete length.
+    /// Allocates explicit unbound raw `[c0,c1]` storage of the complete length.
     #[must_use]
-    pub fn zero(length: usize) -> Self {
-        Self::new(vec![0; length])
+    pub fn zero_raw(length: usize) -> Self {
+        Self::from_raw(vec![0; length])
     }
 }
 
@@ -91,7 +216,11 @@ impl<C: DataMut<Elem = u64>> BfvCiphertext<C> {
     /// Borrows mutable `[c0,c1]` storage.
     #[must_use]
     pub fn as_mut_view(&mut self) -> BfvCiphertext<&mut [u64]> {
-        BfvCiphertext::new(self.as_mut())
+        let binding = self.binding.clone();
+        BfvCiphertext {
+            data: self.data.as_mut_slice(),
+            binding,
+        }
     }
 
     /// Borrows both mutable DCRT components after checking their full length.

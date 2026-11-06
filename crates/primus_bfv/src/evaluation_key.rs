@@ -28,6 +28,9 @@ use working::WorkingKeyProduct;
 /// Invalid BFV evaluation-key parameters or numerical binding.
 #[derive(Debug, thiserror::Error)]
 pub enum BfvEvaluationKeyError {
+    /// A key or source owner was created by another local context.
+    #[error("BFV evaluation key context provenance mismatch")]
+    ContextMismatch,
     /// A requested context level was not prepared.
     #[error("BFV key level {requested} is outside the {available} prepared levels")]
     Level {
@@ -155,8 +158,10 @@ impl BfvContext {
 
 /// One native BFV key's actual Q level, decomposition and public columns.
 /// Radix metadata and Hybrid P tables are shared immutable owners; the actual
-/// Q NTT tables remain borrowed from the context.
+/// Q NTT tables remain borrowed from the context. Ordinary keys retain that
+/// local generating context and cannot be prepared under a foreign owner.
 struct NativeEvaluationKey {
+    context: Arc<()>,
     level: usize,
     t: u64,
     moduli: Vec<u64>,
@@ -226,6 +231,7 @@ impl NativeEvaluationKey {
             }
         };
         Ok(Self {
+            context: Arc::clone(context.identity()),
             level,
             t: context.codec(level).t(),
             moduli: base.moduli_values().to_vec(),
@@ -332,8 +338,9 @@ impl NativeEvaluationKey {
         if matches!(self.basis, NativeEvaluationBasis::Radix(_)) {
             let len = self.key_poly_len();
             for index in 0..self.column_count() {
-                let mut output =
-                    BfvCiphertext::new(&mut self.columns[index * 2 * len..(index + 1) * 2 * len]);
+                let mut output = BfvCiphertext::from_raw(
+                    &mut self.columns[index * 2 * len..(index + 1) * 2 * len],
+                );
                 client.encrypt_zeros_at_level_to(&mut output, self.level, rng);
                 let weights = match &self.basis {
                     NativeEvaluationBasis::Radix(p) => p.key_weights(index),
@@ -388,6 +395,7 @@ impl NativeEvaluationKey {
     }
     fn empty(&self) -> Self {
         Self {
+            context: Arc::clone(&self.context),
             level: self.level,
             t: self.t,
             moduli: self.moduli.clone(),
@@ -398,7 +406,13 @@ impl NativeEvaluationKey {
     }
     fn validate(&self, context: &BfvContext) -> Result<(), BfvEvaluationKeyError> {
         validate_level(context, self.level)?;
-        validate_numeric_context(self.n, self.t, &self.moduli, context, self.level)
+        if !Arc::ptr_eq(&self.context, context.identity()) {
+            // A foreign owner never becomes compatible by matching numbers.
+            // Retain detailed numerical diagnostics only on this error path.
+            validate_numeric_context(self.n, self.t, &self.moduli, context, self.level)?;
+            return Err(BfvEvaluationKeyError::ContextMismatch);
+        }
+        Ok(())
     }
 }
 
@@ -436,6 +450,15 @@ pub struct BfvRelinearizationKey {
 }
 
 impl BfvRelinearizationKey {
+    // Compound working-basis construction must reject a foreign key before
+    // allocating its independent shrink/restore resources.
+    pub(crate) fn validate_context(
+        &self,
+        context: &BfvContext,
+    ) -> Result<(), BfvEvaluationKeyError> {
+        self.key.validate(context)
+    }
+
     /// Returns the level for which these columns were generated.
     #[must_use]
     pub(crate) fn level(&self) -> usize {
@@ -635,6 +658,9 @@ impl BfvClient<'_> {
         config: impl Into<EvaluationKeyConfig>,
         rng: &mut R,
     ) -> Result<BfvKeySwitchingKey, BfvEvaluationKeyError> {
+        if !Arc::ptr_eq(self.context.identity(), source.context.identity()) {
+            return Err(BfvEvaluationKeyError::ContextMismatch);
+        }
         validate_level(self.context, level)?;
         validate_level(source.context, level)?;
         validate_numeric_context(
@@ -769,9 +795,17 @@ pub struct BfvRelinearizer<'a> {
 }
 
 impl<'a> BfvRelinearizer<'a> {
+    pub(crate) fn context(&self) -> &'a BfvContext {
+        self.product.context()
+    }
+    pub(crate) fn external_level(&self) -> usize {
+        self.product.external_level()
+    }
+
     /// Binds the key's level and numerical metadata before allocating reusable scratch.
     /// # Errors
-    /// Rejects an unprepared key level or different N, t or ordered Q basis.
+    /// Rejects an unprepared key level or a foreign local generating context.
+    /// Foreign numerical mismatches retain their detailed diagnostics.
     pub fn try_new(
         context: &'a BfvContext,
         key: &'a BfvRelinearizationKey,
@@ -816,13 +850,16 @@ impl<'a> BfvRelinearizer<'a> {
     /// the BFV phase-error margin;
     /// the complete evaluated error must satisfy the level codec recovery bound.
     /// # Panics
-    /// Rejects incomplete input/output lengths before writes. Prepared calls
+    /// Rejects recorded context/level conflicts and incomplete storage before
+    /// writes. Prepared calls
     /// allocate nothing; transform/RNS failure may partially overwrite scratch/output.
     pub fn relinearize_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
         &mut self,
         input: &BfvQuadraticCiphertext<A>,
         output: &mut BfvCiphertext<B>,
     ) {
+        input.check_binding(self.product.context(), self.product.external_level());
+        output.check_binding(self.product.context(), self.product.external_level());
         let len = self.product.poly_len();
         assert_eq!(
             input.as_ref().len(),
@@ -853,7 +890,8 @@ pub struct BfvKeySwitcher<'a> {
 impl<'a> BfvKeySwitcher<'a> {
     /// Binds the key's level and numerical metadata before allocating reusable scratch.
     /// # Errors
-    /// Rejects an unprepared key level or different N, t or ordered Q basis.
+    /// Rejects an unprepared key level or a foreign local generating context.
+    /// Foreign numerical mismatches retain their detailed diagnostics.
     pub fn try_new(
         context: &'a BfvContext,
         key: &'a BfvKeySwitchingKey,
@@ -889,13 +927,16 @@ impl<'a> BfvKeySwitcher<'a> {
     /// secret and the bound ordered Q/NTT convention. The complete evaluated
     /// error must satisfy the level codec recovery bound.
     /// # Panics
-    /// Rejects incomplete input/output lengths before writes. Prepared calls
+    /// Rejects recorded context/level conflicts and incomplete storage before
+    /// writes. Prepared calls
     /// allocate nothing; arithmetic failure may partially overwrite scratch/output.
     pub fn switch_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
         &mut self,
         input: &BfvCiphertext<A>,
         output: &mut BfvCiphertext<B>,
     ) {
+        input.check_binding(self.product.context(), self.product.external_level());
+        output.check_binding(self.product.context(), self.product.external_level());
         let len = self.product.poly_len();
         assert_eq!(input.as_ref().len(), 2 * len, "BFV input length mismatch");
         assert_eq!(output.as_ref().len(), 2 * len, "BFV output length mismatch");
@@ -923,7 +964,8 @@ pub struct BfvAutomorphism<'a> {
 impl<'a> BfvAutomorphism<'a> {
     /// Binds the key's level, numerical metadata and permutation before allocating scratch.
     /// # Errors
-    /// Rejects an unprepared key level or different N, t or ordered Q basis.
+    /// Rejects an unprepared key level or a foreign local generating context.
+    /// Foreign numerical mismatches retain their detailed diagnostics.
     pub fn try_new(
         context: &'a BfvContext,
         key: &'a BfvAutomorphismKey,
@@ -962,13 +1004,16 @@ impl<'a> BfvAutomorphism<'a> {
     /// operates on the full ciphertext ring; batching row maps choose the
     /// appropriate exponent.
     /// # Panics
-    /// Rejects incomplete input/output lengths before writes. Prepared calls
+    /// Rejects recorded context/level conflicts and incomplete storage before
+    /// writes. Prepared calls
     /// allocate nothing; arithmetic failure may partially overwrite scratch/output.
     pub fn apply_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
         &mut self,
         input: &BfvCiphertext<A>,
         output: &mut BfvCiphertext<B>,
     ) {
+        input.check_binding(self.product.context(), self.product.external_level());
+        output.check_binding(self.product.context(), self.product.external_level());
         let len = self.product.poly_len();
         assert_eq!(input.as_ref().len(), 2 * len, "BFV input length mismatch");
         assert_eq!(output.as_ref().len(), 2 * len, "BFV output length mismatch");

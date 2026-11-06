@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let mut reduced = context.new_ciphertext(1);
     BfvModulusSwitch::new(&context, 0).switch_to(&output, &mut reduced);
-    let decoded = client.decrypt(&reduced, 1);
+    let decoded = client.decrypt(&reduced);
     batching.extract_to(decoded.as_ref(), &mut small);
     let mut slots = vec![0; SLOTS];
     let mut scratch = vec![0; SLOTS];

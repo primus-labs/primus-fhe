@@ -306,7 +306,7 @@ fn dense_same_secret_native_phase_and_constants_recover_across_all_levels() {
                 .map(|(z, a)| canonical(&(z - a), &total))
                 .collect();
             let mut input = encode(&context, &[c0, c1]);
-            assert_eq!(client.decrypt(&input, 0).as_ref(), expected);
+            assert_eq!(client.decrypt_at_level(&input, 0).as_ref(), expected);
             for level in 0..2 {
                 let source = coefficients(&context, level, &input);
                 let drop = IBig::from(moduli[2 - level]);
@@ -340,7 +340,10 @@ fn dense_same_secret_native_phase_and_constants_recover_across_all_levels() {
                 for ((a, b), z) in actual[0].iter().zip(as_secret).zip(&phase) {
                     assert_eq!(centered(&(a + b), &target), *z);
                 }
-                assert_eq!(client.decrypt(&output, level + 1).as_ref(), expected);
+                assert_eq!(
+                    client.decrypt_at_level(&output, level + 1).as_ref(),
+                    expected
+                );
                 input = output;
             }
         }
@@ -356,7 +359,7 @@ fn unavailable_levels_and_malformed_storage_are_rejected_before_output_writes() 
     let valid = context.new_ciphertext(0);
     let mut switch = BgvModulusSwitch::new(&context, 0);
     for length in [0, 1, valid.as_ref().len() - 1, valid.as_ref().len() + 1] {
-        let malformed = BgvCiphertext::new(vec![0; length]);
+        let malformed = BgvCiphertext::from_raw(vec![0; length]);
         let mut output = context.new_ciphertext(1);
         output.as_mut().fill(73);
         let before = output.clone();
@@ -370,7 +373,7 @@ fn unavailable_levels_and_malformed_storage_are_rejected_before_output_writes() 
     }
     let target_len = context.new_ciphertext(1).as_ref().len();
     for length in [0, 1, target_len - 1, target_len + 1] {
-        let mut output = BgvCiphertext::new(vec![73; length]);
+        let mut output = BgvCiphertext::from_raw(vec![73; length]);
         let before = output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| {

@@ -242,13 +242,16 @@ fn real_radix_and_hybrid_chains_keep_external_geometry_and_recover_every_coeffic
                 assert_eq!(request.working_level(), working);
                 let mut output = context.new_ciphertext(external);
                 request.multiply_to(&left, &right, &mut output);
-                assert_eq!(client.decrypt(&output, external).as_ref(), expected);
+                assert_eq!(
+                    client.decrypt_at_level(&output, external).as_ref(),
+                    expected
+                );
                 let mut in_place = left.clone();
                 request.square_to(&left, &mut output);
                 request.square_assign(&mut in_place);
                 assert_eq!(output.as_ref(), in_place.as_ref());
                 assert_eq!(
-                    client.decrypt(&output, external).as_ref(),
+                    client.decrypt_at_level(&output, external).as_ref(),
                     plaintext_product(a.as_ref(), a.as_ref())
                 );
                 // A full-Q output is immediately accepted by ordinary full-Q
@@ -264,7 +267,7 @@ fn real_radix_and_hybrid_chains_keep_external_geometry_and_recover_every_coeffic
                 .unwrap();
                 ordinary.multiply_to(&output, &right, &mut in_place);
                 assert_eq!(
-                    client.decrypt(&in_place, external).as_ref(),
+                    client.decrypt_at_level(&in_place, external).as_ref(),
                     plaintext_product(&plaintext_product(a.as_ref(), a.as_ref()), b.as_ref())
                 );
             }
@@ -287,7 +290,7 @@ fn real_radix_and_hybrid_chains_keep_external_geometry_and_recover_every_coeffic
     for _ in 0..3 {
         request.square_assign(&mut current);
         values = plaintext_product(&values, &values);
-        assert_eq!(client.decrypt(&current, 0).as_ref(), values);
+        assert_eq!(client.decrypt_at_level(&current, 0).as_ref(), values);
         assert_eq!(current.as_ref().len(), 2 * context.rns_poly_len(0));
     }
 }
@@ -313,8 +316,8 @@ fn reversed_levels_wrong_keys_and_malformed_storage_fail_before_writes() {
     let valid = context.new_ciphertext(0);
     let length = valid.as_ref().len();
     for malformed_length in [0, length - 1, length + 1, 2 * length] {
-        let mut malformed = BfvCiphertext::new(vec![77; malformed_length]);
-        let mut output = BfvCiphertext::new(vec![55; length]);
+        let mut malformed = BfvCiphertext::from_raw(vec![77; malformed_length]);
+        let mut output = BfvCiphertext::from_raw(vec![55; length]);
         for (lhs, rhs) in [(&valid, &malformed), (&malformed, &valid)] {
             assert!(
                 catch_unwind(AssertUnwindSafe(|| request.multiply_to(

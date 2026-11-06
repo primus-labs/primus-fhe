@@ -143,7 +143,8 @@ schoolbook/CRT/direct DFT、key phase、截断 residual 和 prepared 零分配�
 显式 borrowed-secret/workspace、n<N 子环及跨 client 多级链留在高级例。
 `just schemes` 还运行 `scripts/check_scheme_consumers.py`：在临时 workspace 中，
 只用 examples 实际所需的普通依赖执行四个基础流程、两方案的密文乘法双后端和 BFV
-working-basis 双后端，避免 dev-dependencies 或 workspace feature 合并掩盖接口问题。
+working-basis 双后端，另用一个BGV三层系数流程覆盖drop、自同构与换钥，共8个独立包。
+这避免 dev-dependencies 或 workspace feature 合并掩盖接口问题，不展开完整参数矩阵。
 系数消费者不启用 batching；槽消费者只需
 启用方案的 batching feature，由该方案传递到共享编码器。脚本不是公开验证 API。
 
@@ -163,6 +164,15 @@ cargo bench -p primus_bfv --bench working_basis -- --test
 普通行为主要用小环；工厂绑定与示例需要一份实际N16384 family。外部consumer额外复制
 该例子，以正常依赖验证两keybackend。BFV的dashu-int现用于精确冷参数认证，是正常
 运行依赖；BGV仍独立，不依赖BFV planner。Criterion不进入任何normal tree。
+
+## Context/level 与 raw 边界
+
+普通密文由context分配，clone和借用view保留本地context/level；自动恢复从密文取level。
+同形不同context、错level、错误输出在写入/RNG前拒绝。`from_raw` / `zero_raw`及显式
+level恢复仍有独立caller合同，`try_bind_ciphertext`对已知来源的raw数组执行一次完整
+长度/canonical检查，不证明真实secret或外部NTT来源。普通role key的prepare也检查
+同一context，但同context不同actual secret仍由调用方匹配，详见
+[方案绑定与互操作](scheme-context-binding.md)。
 
 工作基不是永久modulus drop。普通参数证书不涵盖collective/raw/mixed输入，增加其他
 运算后须重计噪声，见[完整契约](bfv-working-basis.md)。

@@ -71,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut output: DcrtGlwe<Vec<Value>> =
         DcrtGlweCiphertext::zero(glwe_parameters.size().rns_glwe_len());
     let input_dcrt_key_context = BfvSecretKeyContext::try_new(&input_dcrt_key, &context)?;
-    let mut native = BfvCiphertext::zero(glwe_parameters.size().rns_glwe_len());
+    let mut native = BfvCiphertext::zero_raw(glwe_parameters.size().rns_glwe_len());
     input_dcrt_key_context.encrypt_to(&plaintext, &mut native, &mut rng);
     // The raw switching key retains b-a*s. Cross this legacy boundary explicitly;
     // ordinary BFV encryption/decryption use native [c0,c1] throughout.

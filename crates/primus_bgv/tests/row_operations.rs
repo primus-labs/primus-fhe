@@ -86,7 +86,7 @@ fn signed_rotations_and_swaps_preserve_full_ring_and_subring_slots_at_each_level
                 BgvAutomorphism::try_new(&context, &key)
                     .unwrap()
                     .apply_to(&input, &mut output);
-                let recovered = client.decrypt(&output, level);
+                let recovered = client.decrypt_at_level(&output, level);
                 let mut small = vec![0; CAPACITY];
                 batching.extract_to(recovered.as_ref(), &mut small);
                 let actual = batching.decode(&small);
@@ -102,7 +102,7 @@ fn signed_rotations_and_swaps_preserve_full_ring_and_subring_slots_at_each_level
             BgvAutomorphism::try_new(&context, &key)
                 .unwrap()
                 .apply_to(&input, &mut output);
-            let recovered = client.decrypt(&output, level);
+            let recovered = client.decrypt_at_level(&output, level);
             let mut small = vec![0; CAPACITY];
             batching.extract_to(recovered.as_ref(), &mut small);
             let actual = batching.decode(&small);

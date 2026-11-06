@@ -120,16 +120,16 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
     let mut auto = BfvAutomorphism::try_new(&context, &auto_key).unwrap();
     let length = context.rns_poly_len(0);
     for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
-        let input = BfvCiphertext::new(vec![0; bad_length]);
-        let mut output = BfvCiphertext::new(vec![0xfeed; 2 * length]);
+        let input = BfvCiphertext::from_raw(vec![0; bad_length]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; 2 * length]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
     }
     for bad_length in [0, 3 * length - 1, 3 * length + 1, 2 * length] {
-        let input = BfvQuadraticCiphertext::new(vec![0; bad_length]);
-        let mut output = BfvCiphertext::new(vec![0xfeed; 2 * length]);
+        let input = BfvQuadraticCiphertext::from_raw(vec![0; bad_length]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; 2 * length]);
         assert!(
             catch_unwind(AssertUnwindSafe(
                 || relin.relinearize_to(&input, &mut output)
@@ -139,9 +139,9 @@ fn evaluation_keys_reject_numeric_mismatches_and_bad_storage_before_writes() {
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
     }
     let input = context.new_ciphertext(0);
-    let quadratic = BfvQuadraticCiphertext::zero(3 * length);
+    let quadratic = BfvQuadraticCiphertext::zero_raw(3 * length);
     for bad_length in [0, 2 * length - 1, 2 * length + 1] {
-        let mut output = BfvCiphertext::new(vec![0xfeed; bad_length]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; bad_length]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&input, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         assert!(catch_unwind(AssertUnwindSafe(|| auto.apply_to(&input, &mut output))).is_err());

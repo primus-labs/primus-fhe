@@ -1,3 +1,4 @@
+use crate::{BgvContext, binding::Binding};
 use primus_data::{Data, DataMut};
 use primus_poly::DcrtPolynomial;
 
@@ -6,23 +7,45 @@ use primus_poly::DcrtPolynomial;
 /// This is a degree-two ciphertext under one secret, not rank-two GLWE.
 /// It must be relinearized before use with degree-one evaluators, switching,
 /// automorphisms or recovery. Each component has the same modulus-major NTT
-/// layout; the consuming operation establishes its complete geometry.
+/// layout. Context-created tensors retain their exact local owner and level;
+/// explicit raw storage inherits the consuming operation's caller contracts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BgvQuadraticCiphertext<C> {
     data: C,
+    binding: Option<Binding>,
 }
 
 impl<C: Data<Elem = u64>> BgvQuadraticCiphertext<C> {
-    /// Wraps storage with the native degree-two interpretation.
+    /// Wraps raw degree-two storage for explicit advanced interoperability.
+    /// The caller supplies its exact context, level, NTT convention and secret.
     #[must_use]
-    pub fn new(data: C) -> Self {
-        Self { data }
+    pub fn from_raw(data: C) -> Self {
+        Self {
+            data,
+            binding: None,
+        }
+    }
+
+    pub(crate) fn from_bound(data: C, context: &BgvContext, level: usize) -> Self {
+        Self {
+            data,
+            binding: Some(Binding::new(context, level)),
+        }
+    }
+
+    pub(crate) fn check_binding(&self, context: &BgvContext, level: usize) {
+        if let Some(binding) = &self.binding {
+            binding.check(context, level);
+        }
     }
 
     /// Borrows storage without copying or changing its representation.
     #[must_use]
     pub fn as_view(&self) -> BgvQuadraticCiphertext<&[u64]> {
-        BgvQuadraticCiphertext::new(self.as_ref())
+        BgvQuadraticCiphertext {
+            data: self.as_ref(),
+            binding: self.binding.clone(),
+        }
     }
 
     /// Borrows all three complete DCRT components.
@@ -47,10 +70,10 @@ impl<C: Data<Elem = u64>> BgvQuadraticCiphertext<C> {
 }
 
 impl BgvQuadraticCiphertext<Vec<u64>> {
-    /// Allocates zeroed native tensor storage.
+    /// Allocates raw zeroed tensor storage without context or level provenance.
     #[must_use]
-    pub fn zero(length: usize) -> Self {
-        Self::new(vec![0; length])
+    pub fn zero_raw(length: usize) -> Self {
+        Self::from_raw(vec![0; length])
     }
 }
 
@@ -58,7 +81,11 @@ impl<C: DataMut<Elem = u64>> BgvQuadraticCiphertext<C> {
     /// Borrows mutable degree-two storage.
     #[must_use]
     pub fn as_mut_view(&mut self) -> BgvQuadraticCiphertext<&mut [u64]> {
-        BgvQuadraticCiphertext::new(self.as_mut())
+        let binding = self.binding.clone();
+        BgvQuadraticCiphertext {
+            data: self.as_mut(),
+            binding,
+        }
     }
 
     /// Borrows three mutable components after checking the complete length.

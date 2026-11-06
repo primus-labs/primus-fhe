@@ -154,7 +154,7 @@ fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
                         assert_eq!(actual, m + i128::from(P) * i128::from(e));
                     }
                 }
-                assert_eq!(client.decrypt(&ciphertext, 0), message);
+                assert_eq!(client.decrypt_at_level(&ciphertext, 0), message);
             }
         }
     }
@@ -199,7 +199,7 @@ fn exact_centered_recovery_handles_150_bit_q_and_half_interval_boundaries() {
         }
     }
     context.table().transform_slice(c0.as_mut());
-    assert_eq!(client.decrypt(&ciphertext, 0), expected);
+    assert_eq!(client.decrypt_at_level(&ciphertext, 0), expected);
     assert_eq!(expected.as_ref()[5], P - 1); // canonical Q-1 modulo p is zero; centered phase is -1.
 }
 
@@ -239,7 +239,7 @@ fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
     assert!(output.as_ref().iter().all(|&x| x == 77));
     assert_eq!(rng.next_u64(), expected_rng.next_u64());
     let valid = Polynomial(vec![1u64; N]);
-    let mut short = BgvCiphertext::new(vec![77; 2 * context.rns_poly_len(0) - 1]);
+    let mut short = BgvCiphertext::from_raw(vec![77; 2 * context.rns_poly_len(0) - 1]);
     let mut rng = StdRng::seed_from_u64(4);
     let mut expected_rng = StdRng::seed_from_u64(4);
     assert!(
@@ -324,5 +324,5 @@ fn centered_embedding_maps_the_even_plaintext_half_to_a_negative_integer() {
     for (&actual, &error) in phase.iter().zip(&errors) {
         assert_eq!(actual, -1 + i128::from(p) * i128::from(error));
     }
-    assert_eq!(client.decrypt(&ciphertext, 0), message);
+    assert_eq!(client.decrypt_at_level(&ciphertext, 0), message);
 }

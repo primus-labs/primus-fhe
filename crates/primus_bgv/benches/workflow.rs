@@ -61,7 +61,7 @@ fn bench(c: &mut Criterion) {
                 &mut output,
                 PlaintextEmbedding::Centered,
             );
-            client.decrypt_to(&output, 0, &mut recovered);
+            client.decrypt_at_level_to(&output, 0, &mut recovered);
             batching.extract_to(recovered.as_ref(), &mut small);
             batching.decode_to(&small, &mut slots, &mut scratch);
             black_box(&slots);

@@ -26,7 +26,8 @@ cargo run -p primus_bfv --example slots --features batching
 3. 用 `context.new_plaintext()` 和 `context.new_ciphertext(level)` 准备输入/输出，
    一次构造 `BfvEvaluator::new(&context,level)`。
 4. 加密后，用 `add_plain_to` / `mul_plain_to` 显式选择 `PlaintextEmbedding`，
-   最后 `client.decrypt(ciphertext,level)`。下个请求复用 setup 和输出，重新采样加密随机性。
+   最后 `client.decrypt(&ciphertext)` 按密文绑定的 level 恢复。下个请求复用 setup 和输出，
+   重新采样加密随机性。
 
 [Slots](examples/slots.rs) 增加一个 `context.batching_encoder()`，采用 n=N。
 `encode_to` 直接写入 context 的明文多项式；解密后用 `decode` 恢复 slots。
@@ -55,14 +56,14 @@ cargo run -p primus_bfv --example leveled_slots --features batching
 ```
 
 Role-key operation 接 `(&context,&key)` 并从 key 推导 level；建钥、线性求值、
-prime drop 和恢复仍显式选择实际 level。`try_with_levels(parameters,count)` 的数量
+prime drop 仍显式选择实际 level；普通恢复从密文绑定推导 level。`try_with_levels(parameters,count)` 的数量
 包含 level0；level l 移除最后 l 个 primes。每个使用的 level 都须生成对应 key。
 `row_rotation_key` 的正步数在每行内左移，负步数右移；`row_swap_key` 交换两行。
 一般多项式替换继续使用 `automorphism_key`。
 
 多个角色可以一次准备 `context.radix_key_parameters(level,config)` 或
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)`，共享其 `Arc`。
-数值 metadata 不证明实际 secret 或 NTT 身份。Key P 将求值密钥模数扩大到 QP，
+共享数值 metadata 本身不证明外部导入的 secret 或变换来源。Key P 将求值密钥模数扩大到 QP，
 须有独立误差/安全预算，与 BFV 乘法的 computation-only P 分开。
 精确契约见 [Native Hybrid 指南](../../guides/development/native-hybrid-keys.md)（English）。
 
@@ -113,8 +114,13 @@ scratch；低层恢复借前缀。Prepared operation 借 context/key 并自持 m
 秘密、ephemeral 和恢复 scratch 在 drop 时擦除。`into_secret_key` 消费 client，供下一
 checked owner handoff 使用，不克隆秘密 share。
 
-公开 coefficient 输入在 RNG 或写出前检查。存储 wrapper 不认证 level、canonical NTT
-residue、roots/order 或实际 secret；这些关系由调用方维护，同尺寸/模数不足以证明。
+公开 coefficient 输入在 RNG 或写出前检查。Context 创建的密文及其 clone/view 保留
+本地 context 与 level；prepared key 必须来自同一 context，已绑定的错 context/level
+输入和输出在写前拒绝。`client.decrypt(&ciphertext)` 直接使用该绑定，但它不证明实际
+secret 关系，也不认证通过 `AsMut` 改写的 residues。显式 `from_raw` / `zero_raw` 容器与
+`decrypt_at_level` / `decrypt_at_level_to` 保留高级互操作的调用方合同。
+`context.try_bind_ciphertext(raw,level)` 一次检查存储与规范性，实际变换和 secret 来源
+仍由调用方保证。详见[context、level 与 raw 互操作](../../guides/development/scheme-context-binding.md)。
 每个方法的准确输入、scratch 与 partial-write 契约以其 rustdoc 为准。
 
 默认 features 为空。`batching` 启用共享 slot 编码；`simd` 转发共享 nightly 后端。

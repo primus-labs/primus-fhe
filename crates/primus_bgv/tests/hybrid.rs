@@ -84,14 +84,17 @@ fn hybrid_native_roles_and_prepared_multiplication_recover_at_every_prefix() {
         let mut request = BgvMultiplication::try_new(&context, &key).unwrap();
         let mut output = context.new_ciphertext(level);
         request.square_to(&input, &mut output);
-        assert_eq!(alice.decrypt(&output, level).as_ref(), square);
+        assert_eq!(alice.decrypt_at_level(&output, level).as_ref(), square);
         let switch = bob
             .key_switching_key(&alice, level, parameters.clone(), &mut rng)
             .unwrap();
         BgvKeySwitcher::try_new(&context, &switch)
             .unwrap()
             .switch_to(&input, &mut output);
-        assert_eq!(bob.decrypt(&output, level).as_ref(), plaintext.as_ref());
+        assert_eq!(
+            bob.decrypt_at_level(&output, level).as_ref(),
+            plaintext.as_ref()
+        );
         let auto = alice
             .automorphism_key(level, 2 * N - 1, parameters, &mut rng)
             .unwrap();
@@ -99,7 +102,7 @@ fn hybrid_native_roles_and_prepared_multiplication_recover_at_every_prefix() {
             .unwrap()
             .apply_to(&input, &mut output);
         assert_eq!(
-            alice.decrypt(&output, level).as_ref(),
+            alice.decrypt_at_level(&output, level).as_ref(),
             automorphism(plaintext.as_ref(), 2 * N - 1)
         );
         if level < 2 {
@@ -175,7 +178,7 @@ fn hybrid_collective_qp_messages_and_square_cross_terms_use_native_roles() {
         .unwrap()
         .square_to(&input, &mut output);
     assert_eq!(
-        aggregate_client.decrypt(&output, 0).as_ref(),
+        aggregate_client.decrypt_at_level(&output, 0).as_ref(),
         product(plaintext.as_ref(), plaintext.as_ref())
     );
     let setup =
@@ -190,7 +193,7 @@ fn hybrid_collective_qp_messages_and_square_cross_terms_use_native_roles() {
         .unwrap()
         .switch_to(&input, &mut output);
     assert_eq!(
-        aggregate_client.decrypt(&output, 0).as_ref(),
+        aggregate_client.decrypt_at_level(&output, 0).as_ref(),
         plaintext.as_ref()
     );
     let setup =
@@ -205,7 +208,7 @@ fn hybrid_collective_qp_messages_and_square_cross_terms_use_native_roles() {
         .unwrap()
         .apply_to(&input, &mut output);
     assert_eq!(
-        aggregate_client.decrypt(&output, 0).as_ref(),
+        aggregate_client.decrypt_at_level(&output, 0).as_ref(),
         automorphism(plaintext.as_ref(), 5)
     );
     let mut malformed = setup.common_masks().to_vec();
@@ -235,8 +238,8 @@ fn hybrid_binding_and_prewrite_rejections_do_not_consume_randomness_or_output() 
     let key = alice.relinearization_key(0, p, &mut rng).unwrap();
     let mut request = BgvMultiplication::try_new(&context, &key).unwrap();
     let len = context.new_ciphertext(0).as_ref().len();
-    let bad = BgvCiphertext::new(vec![0; len - 1]);
-    let mut output = BgvCiphertext::new(vec![17; len]);
+    let bad = BgvCiphertext::from_raw(vec![0; len - 1]);
+    let mut output = BgvCiphertext::from_raw(vec![17; len]);
     assert!(catch_unwind(AssertUnwindSafe(|| request.square_to(&bad, &mut output))).is_err());
     assert!(output.as_ref().iter().all(|&x| x == 17));
     assert!(context.hybrid_key_parameters(0, 2, &[Q[0]]).is_err());
@@ -295,7 +298,7 @@ fn hybrid_secret_extension_handles_the_configured_gaussian_hard_support() {
         .unwrap()
         .square_to(&encrypted, &mut output);
     assert_eq!(
-        alice.decrypt(&output, 0).as_ref(),
+        alice.decrypt_at_level(&output, 0).as_ref(),
         product(input.as_ref(), input.as_ref())
     );
 }
@@ -353,7 +356,7 @@ fn hybrid_secret_lift_uses_complete_stored_q_when_the_first_prime_is_ambiguous()
         .switch_to(&input, &mut output);
     let mut expected = vec![0; N];
     expected[0] = 1;
-    assert_eq!(client.decrypt(&output, 0).as_ref(), expected);
+    assert_eq!(client.decrypt_at_level(&output, 0).as_ref(), expected);
     // A lower-level role still derives its actual secret from the complete
     // stored highest Q, even though active Q cannot disambiguate +/-250.
     client

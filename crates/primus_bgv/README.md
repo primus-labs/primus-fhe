@@ -27,7 +27,7 @@ cargo run -p primus_bgv --example slots --features batching
 3. Prepare `BgvEvaluator::new(&context,0)`, `context.new_plaintext()` and
    `context.new_ciphertext(0)`. Public encryption is `encrypt_centered`; linear
    evaluation uses `add_plain_assign` and `mul_plain_to` with an explicit
-   `PlaintextEmbedding`. Recover with `client.decrypt(&result,level)`.
+   `PlaintextEmbedding`. Recover with `client.decrypt(&result)`, using its bound level.
 4. With `batching`, prepare `context.batching_encoder()` once. Use `encode_to`
    directly on context-sized plaintexts and `decode` on the recovered polynomial.
 5. Reuse prepared resources with new messages and fresh encryption coins.
@@ -61,7 +61,7 @@ selects partitioned QP keys; basic examples take no arguments. In code, share
 `context.radix_key_parameters(level,config)` or
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)` through cloned
 `Arc`s across role keys. Key P needs its own security/error budget. Shared
-numerical metadata establishes neither actual secret nor transform provenance;
+numerical metadata alone does not prove an imported secret or transform's provenance;
 see the [native Hybrid contract](../../guides/development/native-hybrid-keys.md).
 
 ## Levels, slots and numerical contracts
@@ -71,7 +71,8 @@ changing N. `try_with_levels(parameters,count)` prepares only the requested
 prefixes. Generate role keys at each actual level; slicing a higher-level key
 matrix is not a lower-level key constructor. Prepared multiplication,
 relinearizer, switcher and automorphism derive their level from their role key.
-Linear evaluation, decryption, key generation and prime drops select it explicitly.
+Linear evaluation, key generation and prime drops select it explicitly.
+Ordinary decryption reads the ciphertext's bound level.
 
 Radix keys multiply the switched component by `p^-1 mod Q` before decomposition
 and use phases `p*g_j*h+p*e_j`; approximation residual and key noise stay
@@ -139,9 +140,16 @@ For sequential operations sharing a worker buffer, `with_plaintext_scratch`
 borrows its exact active N·|Q| prefix; do not lend that buffer concurrently.
 
 Public entries check their documented complete lengths and plaintext conditions
-before writes/RNG consumption. Storage types do not authenticate level, secret,
-canonical ciphertext residues or NTT identity. Per-method rustdoc owns exact
-panic, correctness and partial-write contracts.
+before writes/RNG consumption. Context-created ciphertexts, clones and views
+retain the local context and level. Prepared keys must belong to that same
+context; bound foreign-context or wrong-level values reject before writes.
+`client.decrypt(&ciphertext)` uses its bound level. This does not prove the actual
+same-secret relationship or authenticate residues edited through `AsMut`. Explicit
+`from_raw` / `zero_raw` containers and `decrypt_at_level` / `decrypt_at_level_to`
+preserve advanced caller contracts. `context.try_bind_ciphertext(raw,level)` checks
+storage and canonicality once; the caller still attests its actual transform and
+secret. See [context, level and raw interoperability](../../guides/development/scheme-context-binding.md).
+Per-method rustdoc owns exact panic, correctness and partial-write contracts.
 
 Default features are empty. `batching` enables shared slot encoding; `simd`
 forwards the existing nightly backends. Runtime NTT intrinsic dispatch is

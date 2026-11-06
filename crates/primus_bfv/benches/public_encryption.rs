@@ -38,7 +38,7 @@ fn bench_public_encryption(c: &mut Criterion) {
     let mut output = context.new_ciphertext(0);
 
     encryptor.encrypt_to(&message, &mut output, &mut rng);
-    assert_eq!(client.decrypt(&output, 0), message);
+    assert_eq!(client.decrypt_at_level(&output, 0), message);
 
     let mut group = c.benchmark_group("public_encryption/N1024/u64/rank1");
     group.bench_function("ordinary_coefficients_to", |b| {

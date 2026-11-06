@@ -28,6 +28,13 @@ Constructors accept each choice through `Into`; ordinary prepared requests still
 bind their level from the finalized role key. A mixed configuration can be
 stored in that enum without introducing a second ciphertext type.
 
+Finalized scheme keys also retain their local context binding; prepare rejects
+a same-shaped key from another context. Shared numerical parameters alone do
+not establish that relation. Context-created ciphertexts and their views retain
+context/level, while explicit raw adoption keeps its caller provenance contract;
+see [context binding](scheme-context-binding.md). Same-context actual secret
+relationships remain a caller requirement.
+
 The advanced ciphertext-multiplication examples for
 [BFV](../../crates/primus_bfv/examples/ciphertext_multiplication.rs) and
 [BGV](../../crates/primus_bgv/examples/ciphertext_multiplication.rs) accept
@@ -187,6 +194,11 @@ a conservative coefficient bound on the error inside nu is
 justification. Noncloneable private state is consumed before round two and
 cleared on all exits. Count checks do not authenticate a roster; protocol
 callers reject missing/duplicate owners and bind the exact frozen round.
+The finalized key targets aggregate S, not one share client's secret. Local plan
+identity prevents accidental arithmetic mixing; it does not supply sender
+authentication or a safe opening. A bare `partial_phase_to` result is c1*s_i and
+must not be published without the enclosing protocol's authorization, fresh
+privacy flooding and complete bounds.
 
 BFV fresh mixed lookup retains a separately sampled, consuming
 `BfvFreshLookupKey`. Its raw degree-two aggregate is distinct from an ordinary

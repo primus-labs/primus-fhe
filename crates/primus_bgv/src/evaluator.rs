@@ -16,7 +16,9 @@ use crate::{BgvCiphertext, BgvContext, BgvQuadraticCiphertext, PlaintextEmbeddin
 /// # Correctness
 /// Ciphertexts must use this context's ordered basis, canonical NTT residues,
 /// actual secret and transform convention. Matching lengths do not establish
-/// these conditions. The centered integer phase after all operations must fit
+/// these conditions. Context-created inputs/outputs are checked against this
+/// exact context and level; explicit raw inputs attest those numerical contracts.
+/// Neither path proves the intended secret. The centered phase must fit
 /// in (-Q/2,Q/2): reducing a phase by Q can change its residue modulo p even
 /// when each q_i is 1 modulo p. Parameter fresh-private bounds do not establish
 /// a bound for public encryption or a complete evaluated circuit.
@@ -66,7 +68,7 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// Writes the component-wise ciphertext sum.
     ///
     /// # Panics
-    /// Every complete input/output length is checked before any output writes.
+    /// Recorded context/level and every complete length are checked before writes.
     pub fn add_to<A, B, C>(
         &self,
         lhs: &BgvCiphertext<A>,
@@ -77,6 +79,9 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        lhs.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (lhs0, lhs1) = lhs.c0_c1(length);
         let (rhs0, rhs1) = rhs.c0_c1(length);
@@ -90,12 +95,14 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// Adds `rhs` to both components of `input` in place.
     ///
     /// # Panics
-    /// Rejects either incorrect complete length before writes.
+    /// Rejects recorded context/level mismatches or incorrect complete lengths before writes.
     pub fn add_assign<A, B>(&self, input: &mut BgvCiphertext<A>, rhs: &BgvCiphertext<B>)
     where
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut input0, mut input1) = input.c0_c1_mut(length);
@@ -108,7 +115,7 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// Writes the component-wise ciphertext difference.
     ///
     /// # Panics
-    /// Every complete input/output length is checked before any output writes.
+    /// Recorded context/level and every complete length are checked before writes.
     pub fn sub_to<A, B, C>(
         &self,
         lhs: &BgvCiphertext<A>,
@@ -119,6 +126,9 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        lhs.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (lhs0, lhs1) = lhs.c0_c1(length);
         let (rhs0, rhs1) = rhs.c0_c1(length);
@@ -132,12 +142,14 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// Subtracts `rhs` from both components of `input` in place.
     ///
     /// # Panics
-    /// Rejects either incorrect complete length before writes.
+    /// Rejects recorded context/level mismatches or incorrect complete lengths before writes.
     pub fn sub_assign<A, B>(&self, input: &mut BgvCiphertext<A>, rhs: &BgvCiphertext<B>)
     where
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (rhs0, rhs1) = rhs.c0_c1(length);
         let (mut input0, mut input1) = input.c0_c1_mut(length);
@@ -150,12 +162,14 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// Writes the component-wise ciphertext negation.
     ///
     /// # Panics
-    /// Rejects either incorrect complete length before writes.
+    /// Rejects recorded context/level mismatches or incorrect complete lengths before writes.
     pub fn neg_to<A, B>(&self, input: &BgvCiphertext<A>, output: &mut BgvCiphertext<B>)
     where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
@@ -168,11 +182,12 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// Negates both ciphertext components in place.
     ///
     /// # Panics
-    /// Rejects an incorrect complete length before writes.
+    /// Rejects recorded context/level mismatches or an incorrect complete length before writes.
     pub fn neg_assign<A>(&self, input: &mut BgvCiphertext<A>)
     where
         A: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
         let (mut input0, mut input1) = input.c0_c1_mut(self.plaintext.as_ref().len());
         let n = self.context.parameters().poly_length().get();
         let moduli = self.context.base_q(self.level).moduli();
@@ -186,8 +201,8 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// Its unsigned/centered lift is selected by `embedding`.
     ///
     /// # Panics
-    /// Complete ciphertext/plaintext lengths and all plaintext values are checked
-    /// before writes to output or scratch. Transform panics can modify scratch.
+    /// Recorded context/level, complete lengths and all plaintext values are checked
+    /// before output or scratch writes. Transform panics can modify scratch.
     pub fn add_plain_to<A, B, C>(
         &mut self,
         input: &BgvCiphertext<A>,
@@ -199,6 +214,8 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
@@ -223,6 +240,7 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
         let (mut input0, _) = input.c0_c1_mut(self.plaintext.as_ref().len());
         self.prepare_plaintext(plain, embedding);
         input0.add_assign(
@@ -248,6 +266,8 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let length = self.plaintext.as_ref().len();
         let (input0, input1) = input.c0_c1(length);
         let (mut output0, mut output1) = output.c0_c1_mut(length);
@@ -269,6 +289,7 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
         A: DataMut<Elem = u64>,
         B: Data<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
         let (mut input0, mut input1) = input.c0_c1_mut(self.plaintext.as_ref().len());
         self.prepare_plaintext(plain, embedding);
         let n = self.context.parameters().poly_length().get();
@@ -285,7 +306,7 @@ impl<'a, S: DataMut<Elem = u64>> BgvEvaluator<'a, S> {
     /// phase must remain in the centered recovery interval.
     ///
     /// # Panics
-    /// All complete input/output lengths are checked before any output writes.
+    /// Recorded context/level and all complete lengths are checked before writes.
     pub fn mul_to<A, B, C>(
         &self,
         lhs: &BgvCiphertext<A>,
@@ -360,6 +381,9 @@ pub(crate) fn tensor_to<A, B, C>(
     B: Data<Elem = u64>,
     C: DataMut<Elem = u64>,
 {
+    lhs.check_binding(context, level);
+    rhs.check_binding(context, level);
+    output.check_binding(context, level);
     let length = context.rns_poly_len(level);
     let (l0, l1) = lhs.c0_c1(length);
     let (r0, r1) = rhs.c0_c1(length);
@@ -381,6 +405,8 @@ pub(crate) fn square_to<A, B>(
     A: Data<Elem = u64>,
     B: DataMut<Elem = u64>,
 {
+    input.check_binding(context, level);
+    output.check_binding(context, level);
     use primus_reduce::ReduceAdd;
     let length = context.rns_poly_len(level);
     let (c0, c1) = input.c0_c1(length);

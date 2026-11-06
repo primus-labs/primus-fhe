@@ -81,15 +81,20 @@ instead gives the p-preserving residual identity.
 not necessarily zero residual. Q's bit width need not be divisible by log_basis.
 Each key privately owns its actual basis and columns. Radix Q/weights/drop bits
 change at lower levels. The API binds keys to their actual level; slicing a
-matrix is not a supported constructor for a new radix or Hybrid key. The distinct role types prevent passing
-a key with the wrong semantic role; binding checks N,p,ordered Q and level index.
-Those checks cannot authenticate same-parameter actual secrets or NTT conventions.
+matrix is not a supported constructor for a new radix or Hybrid key. The distinct
+role types prevent passing a key with the wrong semantic role; binding checks its
+local context, N,p,ordered Q and level index. That relation does not authenticate
+same-context actual secrets or the mathematical provenance of raw imported data.
 
 `BgvRelinearizer::try_new(context,key)`, `BgvKeySwitcher::try_new(context,key)`
 and `BgvAutomorphism::try_new(context,key)` derive the level from the key, just
-like `BgvMultiplication`. The context must prepare that level and match N, p and
-ordered Q. Key generation, linear evaluators, decryption and modulus switching
-still require an explicit level; storage alone cannot establish one.
+like `BgvMultiplication`. The key must belong to that context and its actual level
+must be prepared. Key generation, linear evaluators and modulus switching still
+select an explicit level. Context-created ciphertexts and their views retain the
+context/level; `client.decrypt(ciphertext)` / `decrypt_to(ciphertext,output)` use
+it directly. Advanced raw recovery uses `decrypt_at_level` / `decrypt_at_level_to`.
+See [context binding and raw interoperability](scheme-context-binding.md) for
+checked adoption and the remaining same-secret/NTT caller contracts.
 
 With `batching`, use `context.batching_encoder()` for full-ring slots without
 repeating N/p. A smaller encoder remains an explicit advanced choice.

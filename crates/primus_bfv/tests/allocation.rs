@@ -184,7 +184,7 @@ fn prepared_calls_allocate_nothing_and_convenience_allocates_only_the_result() {
         .codec()
         .encode_coeffs_to(&input, &mut encoded, PlaintextEmbedding::Unsigned);
     let mut raw = DcrtGlweCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
-    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+    let mut ciphertext = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
     let mut output = Polynomial::<Vec<u64>>::zero(32);
 
     assert_eq!(
@@ -316,12 +316,12 @@ fn prepared_leveled_request_and_each_evaluator_family_allocate_nothing() {
             evaluator.mul_plain_to(&input, &multiplier, &mut output, embedding);
             first_drop.switch_to(&output, &mut middle);
             second_drop.switch_to(&middle, &mut final_ciphertext);
-            client.decrypt_to(&final_ciphertext, 2, &mut decoded);
+            client.decrypt_at_level_to(&final_ciphertext, 2, &mut decoded);
         })
         .1,
         0
     );
-    let (allocated, count) = observe(|| client.decrypt(&final_ciphertext, 2));
+    let (allocated, count) = observe(|| client.decrypt_at_level(&final_ciphertext, 2));
     assert_eq!(count, 1);
     assert_eq!(allocated, decoded);
 }
@@ -395,11 +395,11 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
     let mut request1 = primus_bfv::BfvMultiplication::try_new(&context, &relin_key1).unwrap();
     let (fresh, count) = observe(|| client.encrypt(&input, &mut rng));
     assert_eq!(count, 1);
-    client.decrypt_to(&fresh, 0, &mut output);
+    client.decrypt_at_level_to(&fresh, 0, &mut output);
     assert_eq!(output, input);
     let (fresh, count) = observe(|| client.encrypt_centered(&input, &mut rng));
     assert_eq!(count, 1);
-    client.decrypt_to(&fresh, 0, &mut output);
+    client.decrypt_at_level_to(&fresh, 0, &mut output);
     assert_eq!(output, input);
     let mut automorphism = BfvAutomorphism::try_new(&context, &auto_key).unwrap();
     let mut key_switcher = BfvKeySwitcher::try_new(&context, &switch_key).unwrap();
@@ -415,9 +415,9 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
     let mut reduced2 = context.new_ciphertext(2);
     let (_, count) = observe(|| {
         client.encrypt_to(&input, &mut ciphertext, &mut rng);
-        client.decrypt_to(&ciphertext, 0, &mut output);
+        client.decrypt_at_level_to(&ciphertext, 0, &mut output);
         encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
-        client.decrypt_to(&ciphertext, 0, &mut output);
+        client.decrypt_at_level_to(&ciphertext, 0, &mut output);
         // All participants' public/private inputs are freshly encrypted; the entire
         // linear/plaintext/recovery workflow reuses persistent prepared storage.
         client.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
@@ -432,7 +432,7 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
         evaluator.add_plain_assign(&mut evaluated, &ones, embedding);
         evaluator.mul_plain_to(&evaluated, &negative_one, &mut combined, embedding);
         evaluator.mul_plain_assign(&mut combined, &negative_one, embedding);
-        client.decrypt_to(&combined, 0, &mut output);
+        client.decrypt_at_level_to(&combined, 0, &mut output);
         multiplier0.multiply_to(&combined, &combined, &mut tensor0);
         relin0.relinearize_to(&tensor0, &mut squared0);
         request0.multiply_to(&combined, &combined, &mut squared0);
@@ -445,7 +445,7 @@ fn complete_exact_multiplication_and_native_keys_reuse_prepared_storage() {
         automorphism.apply_to(&squared1, &mut rotated1);
         key_switcher.switch_to(&rotated1, &mut switched1);
         drop1.switch_to(&switched1, &mut reduced2);
-        recipient.decrypt_to(&reduced2, 2, &mut output);
+        recipient.decrypt_at_level_to(&reduced2, 2, &mut output);
     });
     assert_eq!(count, 0);
     let expected: Vec<_> = input

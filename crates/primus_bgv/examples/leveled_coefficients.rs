@@ -86,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     switch.switch_to(&transformed, &mut switched);
     lower_evaluator.add_plain_assign(&mut switched, &one, PlaintextEmbedding::Centered);
     drop_second.switch_to(&switched, &mut lowest);
-    let recovered = bob.decrypt(&lowest, 2);
+    let recovered = bob.decrypt(&lowest);
 
     let ab = product(a.as_ref(), b.as_ref());
     let squared = product(&ab, &ab);

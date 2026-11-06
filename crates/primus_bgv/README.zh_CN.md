@@ -25,7 +25,7 @@ cargo run -p primus_bgv --example slots --features batching
 3. 准备 `BgvEvaluator::new(&context,0)`、`context.new_plaintext()` 和
    `context.new_ciphertext(0)`。公钥加密使用 `encrypt_centered`；线性求值使用
    `add_plain_assign`、`mul_plain_to`，并显式选择 `PlaintextEmbedding`。
-   随后用 `client.decrypt(&result,level)` 恢复。
+   随后用 `client.decrypt(&result)` 按密文绑定的 level 恢复。
 4. 启用 `batching` 时，一次准备 `context.batching_encoder()`。通过 `encode_to`
    直接写入 context 分配的明文，再对恢复的多项式调用 `decode`。
 5. 复用预备资源，只更换明文并使用新鲜加密随机性。基础示例选择分配返回结果的
@@ -56,7 +56,7 @@ cargo run -p primus_bgv --example collective
 基础示例不接收参数。代码中可通过克隆的 `Arc`，在各角色 key 间共享
 `context.radix_key_parameters(level,config)` 或
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)`。
-Key P 须独立纳入安全/误差预算；数值 metadata 不证明实际秘密或变换来源。
+Key P 须独立纳入安全/误差预算；共享数值 metadata 本身不证明外部导入的秘密或变换来源。
 见 [Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
 
 ## Level、槽与数值契约
@@ -64,8 +64,8 @@ Key P 须独立纳入安全/误差预算；数值 metadata 不证明实际秘密
 Level0 使用完整有序 Q，level l 丢弃最后 l 个 primes，N 不变。
 `try_with_levels(parameters,count)` 只准备请求的前缀。各实际 level 分别生成角色 key；
 不能截断高层 key 矩阵作为低层建钥入口。Prepared multiplication、relinearizer、
-switcher 与 automorphism 从角色 key 推导 level；线性求值、恢复、建钥和 prime drop
-仍显式选择 level。
+switcher 与 automorphism 从角色 key 推导 level；线性求值、建钥和 prime drop
+仍显式选择 level，普通恢复则从密文绑定推导。
 
 Radix keys 在分解前先将被切换组件乘 `p^-1 mod Q`，column phase 为
 `p*g_j*h+p*e_j`，近似 residual 与 key noise 都保持 p 倍数。
@@ -120,9 +120,14 @@ ephemeral 和恢复 scratch 遵守各自擦除合同；公钥 encryptor 可用 `
 worker buffer 时，可用 `with_plaintext_scratch` 借用准确的 active N·|Q| 前缀；
 同一 buffer 不能借给并发操作。
 
-公开入口按各自合同在写入/RNG 前检查完整长度及明文条件。存储类型不认证 level、
-秘密、canonical ciphertext residues 或 NTT 身份；准确 panic、correctness 和
-partial-write 合同由逐方法 rustdoc 维护。
+公开入口按各自合同在写入/RNG 前检查完整长度及明文条件。Context 创建的密文及其
+clone/view 保留本地 context 与 level；prepared key 必须来自同一 context，已绑定的错
+context/level 输入和输出在写前拒绝。`client.decrypt(&ciphertext)` 直接使用该绑定，
+但不证明实际同 secret 关系，也不认证通过 `AsMut` 改写的 residues。显式
+`from_raw` / `zero_raw` 容器与 `decrypt_at_level` / `decrypt_at_level_to` 保留高级
+调用方合同。`context.try_bind_ciphertext(raw,level)` 一次检查存储与规范性；实际变换
+和 secret 来源仍由调用方保证。详见[context、level 与 raw 互操作](../../guides/development/scheme-context-binding.md)。
+准确 panic、correctness 和 partial-write 合同由逐方法 rustdoc 维护。
 
 默认 features 为空；`batching` 启用共享槽编码，`simd` 转发已有 nightly 后端。
 运行期 NTT intrinsic 分派独立于该 feature；关闭 `simd` 不表示强制 scalar NTT。

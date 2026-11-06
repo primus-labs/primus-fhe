@@ -55,19 +55,21 @@ def check_consumers(output_dir: Path) -> None:
         examples = ["coefficients", "slots", "ciphertext_multiplication"]
         if scheme == "bfv":
             examples.append("working_basis")
+        else:
+            examples.append("leveled_coefficients")
         for example in examples:
             name = f"{scheme}_{example}"
             directory = output_dir / name
             (directory / "src").mkdir(parents=True, exist_ok=True)
             batching = example == "slots"
             dependencies = [dependency(f"primus_{scheme}", batching)]
-            if example == "working_basis":
+            if example in ("working_basis", "leveled_coefficients"):
                 dependencies.append(dependency("primus_poly"))
-            else:
+            if example != "working_basis":
                 dependencies.extend(dependency(crate) for crate in (
                     "primus_glwe_rns", "primus_modulus", "primus_shape",
                 ))
-            if example == "ciphertext_multiplication":
+            if example in ("ciphertext_multiplication", "leveled_coefficients"):
                 dependencies.append(dependency("primus_decompose"))
             dependencies.append(f"rand = {json.dumps(rand_version)}")
             manifest = (
@@ -112,6 +114,9 @@ def check_consumers(output_dir: Path) -> None:
                 argument = "--radix" if example == "working_basis" else "--hybrid"
                 run([*command, "--", argument], directory, "run-other-backend.log", env)
                 scope = "radix and Hybrid requests"
+            elif example == "leveled_coefficients":
+                (directory / "run-other-backend.log").unlink(missing_ok=True)
+                scope = "three-level drop/automorphism/key-switch request"
             else:
                 (directory / "run-other-backend.log").unlink(missing_ok=True)
                 scope = "two linear requests with one setup"

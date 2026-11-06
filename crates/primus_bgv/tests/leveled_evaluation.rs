@@ -94,7 +94,7 @@ fn add(lhs: &[i128], rhs: &[i128]) -> Vec<i128> {
 }
 
 fn ciphertext(components: &[Vec<i128>; 2], count: usize) -> BgvCiphertext<Vec<u64>> {
-    BgvCiphertext::new(
+    BgvCiphertext::from_raw(
         components
             .iter()
             .flat_map(|component| Q[..count].iter().flat_map(|&q| dft(component, q)))
@@ -220,8 +220,8 @@ fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
         let input = context.new_ciphertext(level);
         let length = context.rns_poly_len(level);
         for bad_length in [0, 2 * length - 1, 2 * length + 1, 3 * length] {
-            let malformed = BgvCiphertext::new(vec![0; bad_length]);
-            let mut output = BgvQuadraticCiphertext::new(vec![0xfeed; 3 * length]);
+            let malformed = BgvCiphertext::from_raw(vec![0; bad_length]);
+            let mut output = BgvQuadraticCiphertext::from_raw(vec![0xfeed; 3 * length]);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| {
                     evaluator.mul_to(&malformed, &input, &mut output);
@@ -245,7 +245,7 @@ fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
             assert!(output.as_ref().iter().all(|&value| value == 0xfeed));
         }
         for bad_length in [0, 3 * length - 1, 3 * length + 1, 2 * length] {
-            let mut output = BgvQuadraticCiphertext::new(vec![0xfeed; bad_length]);
+            let mut output = BgvQuadraticCiphertext::from_raw(vec![0xfeed; bad_length]);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| evaluator.mul_to(
                     &input,
@@ -263,7 +263,7 @@ fn tensor_rejects_malformed_and_other_level_storage_before_writes() {
         }
         for other_level in (0..context.level_count()).filter(|&other| other != level) {
             let wrong_level = context.new_ciphertext(other_level);
-            let mut output = BgvQuadraticCiphertext::new(vec![0xfeed; 3 * length]);
+            let mut output = BgvQuadraticCiphertext::from_raw(vec![0xfeed; 3 * length]);
             assert!(
                 catch_unwind(AssertUnwindSafe(|| {
                     evaluator.mul_to(&input, &wrong_level, &mut output);

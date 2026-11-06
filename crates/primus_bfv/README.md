@@ -27,8 +27,8 @@ Both examples follow the same chain:
 3. Allocate plaintexts and outputs with `context.new_plaintext()` and
    `context.new_ciphertext(level)`. Prepare `BfvEvaluator::new(&context,level)`.
 4. Encrypt, use `add_plain_to` / `mul_plain_to` with `PlaintextEmbedding`, then
-   recover with `client.decrypt(ciphertext,level)`. Reuse setup and outputs for
-   the next request, with fresh encryption coins.
+   recover with `client.decrypt(&ciphertext)`, which uses the bound level. Reuse
+   setup and outputs for the next request, with fresh encryption coins.
 
 [Slots](examples/slots.rs) adds one `context.batching_encoder()` and uses n=N.
 `encode_to` writes directly into the context's plaintext polynomial; `decode`
@@ -59,8 +59,8 @@ cargo run -p primus_bfv --example leveled_slots --features batching
 ```
 
 Role-key operations take `(&context,&key)` and derive their level from that key;
-key generation, linear evaluation, prime drop and recovery select their actual
-level explicitly. `try_with_levels(parameters,count)` includes level zero;
+key generation, linear evaluation and prime drop select their actual level
+explicitly. Ordinary recovery reads the ciphertext's bound level. `try_with_levels(parameters,count)` includes level zero;
 level l omits the last l primes. Generate keys for each actual level used.
 A positive `row_rotation_key` step rotates left within each row, a negative one
 rotates right; `row_swap_key` exchanges the two rows. Generic polynomial
@@ -68,7 +68,7 @@ substitutions remain available through `automorphism_key`.
 
 For repeated roles, prepare `context.radix_key_parameters(level,config)` or
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)` once and share
-its `Arc`. Numerical metadata does not prove actual secret or NTT identity.
+its `Arc`. Shared numerical metadata alone does not prove an imported secret or transform's provenance.
 Key P enlarges the evaluation-key modulus to QP and needs its own error/security
 budget. It is separate from BFV multiplication's computation-only P. See the
 [native Hybrid contract](../../guides/development/native-hybrid-keys.md).
@@ -128,9 +128,16 @@ independent concurrent requests use separate operation owners. Prepared `*_to` /
 scratch are erased on drop. `into_secret_key` consumes a client for a checked
 owner handoff; it never clones a private share.
 
-Public coefficient inputs are checked before RNG consumption or writes. Storage
-wrappers do not authenticate level, canonical NTT residues, roots/order or actual
-secret. Callers maintain these identities; equal lengths/moduli are insufficient.
+Public coefficient inputs are checked before RNG consumption or writes.
+Context-created ciphertexts, their clones and views retain that local context and
+level. Prepared keys must belong to the same context; bound foreign-context or
+wrong-level inputs/outputs reject before writes. `client.decrypt(&ciphertext)`
+uses this binding. It does not prove the actual secret relationship or authenticate
+residues modified through `AsMut`. Explicit `from_raw` / `zero_raw` containers and
+`decrypt_at_level` / `decrypt_at_level_to` retain the advanced caller contract.
+`context.try_bind_ciphertext(raw,level)` checks storage and canonicality once;
+the caller still attests its actual transform and secret.
+See [context, level and raw interoperability](../../guides/development/scheme-context-binding.md).
 Per-method rustdoc specifies exact input, scratch and partial-write contracts.
 
 Default features are empty. `batching` enables shared slot encoding. `simd`

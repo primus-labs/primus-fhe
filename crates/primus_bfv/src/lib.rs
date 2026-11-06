@@ -10,9 +10,12 @@
 //!
 //! Level zero uses the complete Q basis. [`BfvContext::try_new`] prepares only
 //! that level; [`BfvContext::try_with_levels`] includes the requested lower
-//! prefixes in its level count. Storage/view types do not certify level, actual
-//! secret identity, canonical residues or NTT evaluation convention. Operations
-//! check complete lengths; those numerical identities remain caller contracts.
+//! prefixes in its level count. Context-allocated storage and views retain local
+//! context/level provenance; normal recovery infers its recorded level. Public
+//! and evaluation keys reject preparation under a foreign context owner.
+//! Explicit `from_raw` storage retains caller-owned NTT/scale/secret contracts;
+//! `try_bind_ciphertext` adopts canonical words without proving those facts.
+//! Even bound provenance does not certify actual secrets or evaluated noise.
 //!
 //! [`PlaintextEmbedding`] selects unsigned or centered integer lifts of N
 //! canonical coefficients in `[0,t)`. Plaintext addition applies the level's
@@ -68,7 +71,7 @@ mod secret_key;
 mod working_basis;
 mod workspace;
 
-pub use ciphertext::BfvCiphertext;
+pub use ciphertext::{BfvCiphertext, BfvCiphertextBindingError};
 pub use client::BfvClient;
 pub use context::{BfvContext, BfvContextError};
 pub use evaluation_key::{
@@ -86,7 +89,7 @@ pub use multiplication::{BfvMultiplication, BfvMultiplicationBackend};
 pub use multiply::{BfvMultiplier, BfvMultiplyError};
 pub use parameters::{BfvParameters, BfvParametersError};
 pub use primus_encoding::PlaintextEmbedding;
-pub use public_key::{BfvPublicKey, BfvPublicKeyEncryptor};
+pub use public_key::{BfvPublicKey, BfvPublicKeyEncryptor, BfvPublicKeyError};
 pub use quadratic::BfvQuadraticCiphertext;
 pub use secret_key::BfvSecretKeyContext;
 pub use workspace::BfvDecryptWorkspace;

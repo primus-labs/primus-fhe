@@ -58,7 +58,7 @@ fn plaintext_subring_keeps_the_full_secret_and_zeroes_unoccupied_slots() {
         let mut evaluator = BgvEvaluator::new(&context, 0);
         evaluator.add_plain_assign(&mut ciphertext, &addend, PlaintextEmbedding::Centered);
         evaluator.mul_plain_assign(&mut ciphertext, &multiplier, PlaintextEmbedding::Centered);
-        let decoded = client.decrypt(&ciphertext, 0);
+        let decoded = client.decrypt_at_level(&ciphertext, 0);
         assert!(
             decoded
                 .as_ref()

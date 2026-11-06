@@ -399,7 +399,7 @@ fn exact_and_truncated_switch_keys_match_integer_residuals() {
                     .zip(&product)
                     .map(|(m, value)| m - value)
                     .collect();
-                let input = BfvCiphertext::new(encode(&[c0, c1.clone()], count));
+                let input = BfvCiphertext::from_raw(encode(&[c0, c1.clone()], count));
                 assert_eq!(phase(input.as_ref(), &source_big, count), message);
                 let expected =
                     switched_phase(&message, &c1, &source_big, &row_errors, count, config);
@@ -410,9 +410,9 @@ fn exact_and_truncated_switch_keys_match_integer_residuals() {
                 // A zero switched component has all-zero digits even for a
                 // truncated gadget, so no key error or residual is injected.
                 let constant =
-                    BfvCiphertext::new(encode(&[message.clone(), vec![IBig::ZERO; N]], count));
+                    BfvCiphertext::from_raw(encode(&[message.clone(), vec![IBig::ZERO; N]], count));
                 switch.switch_to(&constant, &mut output);
-                assert_eq!(output, constant);
+                assert_eq!(output.as_ref(), constant.as_ref());
             }
         }
     }
@@ -456,7 +456,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
             count,
             config,
         );
-        let quadratic = BfvQuadraticCiphertext::new(encode(&components, count));
+        let quadratic = BfvQuadraticCiphertext::from_raw(encode(&components, count));
         assert_eq!(phase(quadratic.as_ref(), &secret_big, count), before);
         let mut linear = context.new_ciphertext(level);
         BfvRelinearizer::try_new(&context, &key)
@@ -475,7 +475,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
                 count,
                 config,
             );
-            let source = BfvCiphertext::new(encode(&components[..2], count));
+            let source = BfvCiphertext::from_raw(encode(&components[..2], count));
             let before = automorphism(
                 &add(&components[0], &product(&components[1], &secret_big)),
                 exponent,
@@ -500,7 +500,7 @@ fn relinearization_and_automorphisms_keep_native_plus_phase_at_every_level() {
 fn columns(key: &NativeEvaluationKey) -> impl ExactSizeIterator<Item = BfvCiphertext<&[u64]>> {
     key.columns
         .chunks_exact(2 * key.key_poly_len())
-        .map(BfvCiphertext::new)
+        .map(BfvCiphertext::from_raw)
 }
 
 #[test]
@@ -603,7 +603,7 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
                     );
                 }
             };
-            let input = BfvCiphertext::new(encode(&components[..2], count));
+            let input = BfvCiphertext::from_raw(encode(&components[..2], count));
             let mut output = context.new_ciphertext(level);
             BfvKeySwitcher::try_new(&context, &switch)
                 .unwrap()
@@ -613,7 +613,7 @@ fn hybrid_columns_and_all_native_role_phases_match_independent_dft_and_integer_b
                 phase(input.as_ref(), &source_big, count),
                 &target_big,
             );
-            let quadratic = BfvQuadraticCiphertext::new(encode(&components, count));
+            let quadratic = BfvQuadraticCiphertext::from_raw(encode(&components, count));
             BfvRelinearizer::try_new(&context, &relin)
                 .unwrap()
                 .relinearize_to(&quadratic, &mut output);

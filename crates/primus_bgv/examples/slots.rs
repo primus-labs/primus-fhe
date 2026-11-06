@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &mut output,
             PlaintextEmbedding::Centered,
         );
-        let recovered = client.decrypt(&output, 0);
+        let recovered = client.decrypt(&output);
         let slots = batching.decode(recovered.as_ref());
         let expected = values
             .iter()

@@ -125,7 +125,7 @@ impl<'a> BgvClient<'a> {
     /// Noise is p-scaled once; native c0 injection precedes its single NTT.
     ///
     /// # Panics
-    /// Rejects incomplete output, wrong input length or noncanonical coefficients
+    /// Rejects recorded output context/level, incomplete lengths or noncanonical input
     /// before randomness or writes. RNG/transform failure may partially write output.
     pub fn encrypt_to<R, A, B>(
         &self,
@@ -194,6 +194,7 @@ impl<'a> BgvClient<'a> {
         R: rand::Rng + rand::CryptoRng,
         B: DataMut<Elem = u64>,
     {
+        output.check_binding(self.context, level);
         let parameters = self.context.parameters();
         let n = parameters.poly_length().get();
         let sampling = parameters.encryption_parameters();
@@ -225,6 +226,22 @@ impl<'a> BgvClient<'a> {
         );
     }
 
+    /// Recovers coefficients using the ciphertext's recorded context and level.
+    ///
+    /// The intended centered phase must fit Q and use this client's actual secret.
+    /// Context provenance does not establish a secret-key relationship.
+    /// # Panics
+    /// Rejects a foreign context, raw input or wrong plaintext length before writes.
+    /// Raw interoperability uses [`Self::decrypt_at_level_to`].
+    pub fn decrypt_to<A, B>(&mut self, input: &BgvCiphertext<A>, output: &mut Polynomial<B>)
+    where
+        A: Data<Elem = u64>,
+        B: DataMut<Elem = u64>,
+    {
+        let level = input.bound_level(self.context);
+        self.decrypt_inner(input, level, output);
+    }
+
     /// Recovers N coefficients at a prepared level by exact centered CRT modulo p.
     /// Q may exceed 128 bits; no floating-point or BFV scaling/decoder is used.
     ///
@@ -234,9 +251,22 @@ impl<'a> BgvClient<'a> {
     /// integer phase m+p*e must remain in the centered Q interval. Fresh private
     /// bounds do not automatically cover public or evaluated ciphertext noise.
     /// # Panics
-    /// Rejects an unprepared level or incorrect complete lengths before writes. NTT/RNS
-    /// failures may partially overwrite output and erasing scratch.
-    pub fn decrypt_to<A, B>(
+    /// Rejects recorded context/level mismatches, unprepared levels or incorrect lengths
+    /// before writes. NTT/RNS failures may partially overwrite output and erasing scratch.
+    pub fn decrypt_at_level_to<A, B>(
+        &mut self,
+        input: &BgvCiphertext<A>,
+        level: usize,
+        output: &mut Polynomial<B>,
+    ) where
+        A: Data<Elem = u64>,
+        B: DataMut<Elem = u64>,
+    {
+        input.check_binding(self.context, level);
+        self.decrypt_inner(input, level, output);
+    }
+
+    fn decrypt_inner<A, B>(
         &mut self,
         input: &BgvCiphertext<A>,
         level: usize,
@@ -295,16 +325,32 @@ impl<'a> BgvClient<'a> {
         }
     }
 
-    /// Recovers coefficients, allocating only the returned full-ring polynomial.
-    /// See [`Self::decrypt_to`] for the representation and phase-bound contracts.
+    /// Recovers bound coefficients, allocating only the returned polynomial.
+    /// See [`Self::decrypt_to`] for provenance and phase-bound contracts.
     #[must_use]
     pub fn decrypt<A: Data<Elem = u64>>(
         &mut self,
         input: &BgvCiphertext<A>,
+    ) -> PolynomialOwned<u64> {
+        let level = input.bound_level(self.context);
+        let mut output = PolynomialOwned::zero(self.context.parameters().poly_length().get());
+        self.decrypt_inner(input, level, &mut output);
+        output
+    }
+
+    /// Recovers coefficients, allocating only the returned full-ring polynomial.
+    /// Raw input attests the supplied context, level, NTT order and actual secret.
+    /// An already bound input must still match; see [`Self::decrypt_at_level_to`].
+    #[must_use]
+    pub fn decrypt_at_level<A: Data<Elem = u64>>(
+        &mut self,
+        input: &BgvCiphertext<A>,
         level: usize,
     ) -> PolynomialOwned<u64> {
+        input.check_binding(self.context, level);
+        let _ = self.context.rns_poly_len(level);
         let mut output = PolynomialOwned::zero(self.context.parameters().poly_length().get());
-        self.decrypt_to(input, level, &mut output);
+        self.decrypt_inner(input, level, &mut output);
         output
     }
 }

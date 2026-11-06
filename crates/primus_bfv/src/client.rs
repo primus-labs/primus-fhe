@@ -136,7 +136,8 @@ impl<'a> BfvClient<'a> {
     /// Applies delta exactly once and allocates nothing.
     ///
     /// # Panics
-    /// Rejects noncanonical plaintext or incorrect complete lengths before RNG
+    /// Rejects recorded output context/level conflicts, noncanonical plaintext
+    /// or incorrect complete lengths before RNG
     /// consumption or output writes. RNG/NTT panics may leave partial output.
     pub fn encrypt_to<R, A, B>(
         &self,
@@ -169,6 +170,7 @@ impl<'a> BfvClient<'a> {
     /// Samples native unscaled key-column noise at one prepared prefix level.
     /// The context owns the unique sampler and each limb receives the same
     /// integer error; this does not create lower-level plaintext encryptors.
+    /// Recorded output context/level and complete shape are checked before RNG.
     pub(crate) fn encrypt_zeros_at_level_to<R, B>(
         &self,
         output: &mut BfvCiphertext<B>,
@@ -178,6 +180,7 @@ impl<'a> BfvClient<'a> {
         R: rand::Rng + rand::CryptoRng,
         B: DataMut<Elem = u64>,
     {
+        output.check_binding(self.context, level);
         let codec = self.context.codec(level);
         let n = self.context.parameters().poly_length().get();
         let sampling = self.context.parameters().encryption_parameters();
@@ -207,19 +210,47 @@ impl<'a> BfvClient<'a> {
         );
     }
 
+    /// Recovers normal bound ciphertext storage at its recorded level.
+    ///
+    /// # Panics
+    /// Rejects raw or foreign-context input before recovery writes. The actual
+    /// secret and complete evaluated recovery bound remain caller contracts.
+    pub fn decrypt_to<A: Data<Elem = u64>, B: DataMut<Elem = u64>>(
+        &mut self,
+        input: &BfvCiphertext<A>,
+        output: &mut Polynomial<B>,
+    ) {
+        let level = input.bound_level(self.context);
+        self.decrypt_at_level_to(input, level, output);
+    }
+
+    /// Allocates and recovers a normal bound ciphertext at its recorded level.
+    /// Inherits [`Self::decrypt_to`]'s representation and recovery contract.
+    #[must_use]
+    pub fn decrypt<A: Data<Elem = u64>>(
+        &mut self,
+        input: &BfvCiphertext<A>,
+    ) -> PolynomialOwned<u64> {
+        let level = input.bound_level(self.context);
+        self.decrypt_at_level(input, level)
+    }
+
     /// Recovers N plaintext coefficients at an explicit level without allocation.
     ///
     /// # Correctness
     /// Input uses this secret and context's NTT representation at `level`.
+    /// Explicit raw storage is caller-attested; bound input must match its
+    /// immutable local context and level, including through borrowed views.
     /// Recovery uses the level's unique fast codec. It returns the exact message
     /// under that codec's complete phase-error bound (including encoding drift
     /// and auxiliary-modulus margin); it is not arbitrary-phase exact rounding.
     /// Fresh bounds do not automatically cover public or evaluated ciphertexts.
     ///
     /// # Panics
-    /// Rejects an unprepared level or incorrect complete lengths before writes.
+    /// Rejects recorded context/level conflicts, an unprepared level or incorrect
+    /// complete lengths before writes.
     /// Transform/codec panics can leave partial scratch or output.
-    pub fn decrypt_to<A, B>(
+    pub fn decrypt_at_level_to<A, B>(
         &mut self,
         input: &BfvCiphertext<A>,
         level: usize,
@@ -228,6 +259,7 @@ impl<'a> BfvClient<'a> {
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, level);
         let codec = self.context.codec(level);
         let n = self.context.parameters().poly_length().get();
         let length = self.context.rns_poly_len(level);
@@ -267,15 +299,15 @@ impl<'a> BfvClient<'a> {
     }
 
     /// Recovers at an explicit level, allocating only the returned polynomial.
-    /// The representation, noise and panic contracts are [`Self::decrypt_to`]'s.
+    /// The representation, noise and panic contracts are [`Self::decrypt_at_level_to`]'s.
     #[must_use]
-    pub fn decrypt<A: Data<Elem = u64>>(
+    pub fn decrypt_at_level<A: Data<Elem = u64>>(
         &mut self,
         input: &BfvCiphertext<A>,
         level: usize,
     ) -> PolynomialOwned<u64> {
         let mut output = PolynomialOwned::zero(self.context.parameters().poly_length().get());
-        self.decrypt_to(input, level, &mut output);
+        self.decrypt_at_level_to(input, level, &mut output);
         output
     }
 }

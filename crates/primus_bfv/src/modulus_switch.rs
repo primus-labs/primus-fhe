@@ -25,6 +25,7 @@ pub struct BfvModulusSwitchError;
 /// input limbs stay in NTT form; the supplied output stores those corrections
 /// temporarily. Independent concurrent operations need separate switchers.
 pub struct BfvModulusSwitch<'a> {
+    binding: Option<(&'a BfvContext, usize)>,
     table: &'a U64DcrtTable,
     source: &'a [BarrettModulus<u64>],
     target: &'a [BarrettModulus<u64>],
@@ -44,11 +45,13 @@ impl<'a> BfvModulusSwitch<'a> {
             .checked_add(1)
             .filter(|&level| level < context.level_count())
             .expect("BFV modulus switch needs an available next level");
-        Self::from_parts(
+        let mut switch = Self::from_parts(
             context.table(),
             context.codec(source_level).base_q().moduli(),
             context.codec(target_level).base_q().moduli(),
-        )
+        );
+        switch.binding = Some((context, source_level));
+        switch
     }
 
     /// Prepares the same rounded operation while borrowing an existing table
@@ -65,7 +68,7 @@ impl<'a> BfvModulusSwitch<'a> {
     /// The supplied moduli are distinct primes, and input/output use this exact
     /// table's roots and order. The method checks numerical geometry, not
     /// primality, the ciphertext's secret identity or evaluated recovery.
-    pub fn try_from_parts(
+    pub fn try_from_raw_parts(
         table: &'a U64DcrtTable,
         source: &'a [BarrettModulus<u64>],
         target: &'a [BarrettModulus<u64>],
@@ -106,6 +109,7 @@ impl<'a> BfvModulusSwitch<'a> {
             .map(|(&modulus, &value)| ShoupFactor::new(modulus.reduce_inv(value), modulus.value()))
             .collect();
         Self {
+            binding: None,
             table,
             source,
             target,
@@ -136,13 +140,19 @@ impl<'a> BfvModulusSwitch<'a> {
     /// contribution at every step and use the destination codec's bound.
     ///
     /// # Panics
-    /// Both complete ciphertext lengths are checked before writes to output or
-    /// scratch. Transform panics can leave partial output and scratch.
+    /// The context constructor checks recorded source/destination provenance and
+    /// levels; the raw-parts constructor retains caller attestation. Both
+    /// complete lengths are checked before writes to output or scratch. Transform panics can leave partial output and scratch.
     pub fn switch_to<A, B>(&mut self, input: &BfvCiphertext<A>, output: &mut BfvCiphertext<B>)
     where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        if let Some((context, level)) = self.binding {
+            input.check_binding(context, level);
+            output.check_binding(context, level + 1);
+        }
+
         let n = self.table.poly_length().get();
         let source_len = n * self.source.len();
         let target_len = n * self.target.len();

@@ -103,22 +103,7 @@ impl<'c> Binding<'c> {
     }
 
     fn validate(&self, values: &[u64], words: usize) -> Result<(), BgvCollectiveError> {
-        if values.len() != words {
-            return Err(BgvCollectiveError::Length {
-                expected: words,
-                actual: values.len(),
-            });
-        }
-        let n = self.context.parameters().poly_length().get();
-        let moduli = self.base.moduli_values();
-        if values
-            .chunks_exact(n)
-            .enumerate()
-            .any(|(i, limb)| limb.iter().any(|&v| v >= moduli[i % moduli.len()]))
-        {
-            return Err(BgvCollectiveError::Residue);
-        }
-        Ok(())
+        validate_values(self.context, &self.base, values, words)
     }
 
     fn client(&self, client: &BgvClient<'_>) -> Result<(), BgvCollectiveError> {
@@ -169,6 +154,30 @@ impl<'c> Binding<'c> {
             failed: false,
         }
     }
+}
+
+fn validate_values(
+    context: &BgvContext,
+    base: &KeyBase,
+    values: &[u64],
+    words: usize,
+) -> Result<(), BgvCollectiveError> {
+    if values.len() != words {
+        return Err(BgvCollectiveError::Length {
+            expected: words,
+            actual: values.len(),
+        });
+    }
+    let n = context.parameters().poly_length().get();
+    let moduli = base.moduli_values();
+    if values
+        .chunks_exact(n)
+        .enumerate()
+        .any(|(i, limb)| limb.iter().any(|&v| v >= moduli[i % moduli.len()]))
+    {
+        return Err(BgvCollectiveError::Residue);
+    }
+    Ok(())
 }
 
 fn validate_distribution(context: &BgvContext) -> Result<(), BgvCollectiveError> {
@@ -463,7 +472,7 @@ impl<'c> BgvCollectivePublicKey<'c> {
         values.extend_from_slice(&self.mask);
         Ok(BgvPublicKey::from_collective(
             self.binding.context,
-            BgvCiphertext::new(values),
+            BgvCiphertext::from_raw(values),
         ))
     }
 }
@@ -583,7 +592,7 @@ impl<'c> BgvSeededInput<'c> {
         check_sum(&self.binding, &aggregate, 0, None)?;
         let mut values = aggregate.values;
         values.extend_from_slice(&self.mask);
-        Ok(BgvCiphertext::new(values))
+        Ok(BgvCiphertext::from_bound(values, self.binding.context, 0))
     }
 }
 
@@ -1253,13 +1262,16 @@ impl BgvClient<'_> {
         output: &mut DcrtPolynomial<B>,
     ) -> Result<(), BgvCollectiveError> {
         super::validate_level(self.context, level)?;
+        input
+            .validate_binding(self.context, level)
+            .map_err(|_| BgvCollectiveError::Binding)?;
         let len = self.context.rns_poly_len(level);
-        let binding = Binding {
-            context: self.context,
-            words: len,
-            base: self.context.base_q(level).clone(),
-        };
-        binding.validate(input.as_ref(), 2 * len)?;
+        validate_values(
+            self.context,
+            self.context.base_q(level),
+            input.as_ref(),
+            2 * len,
+        )?;
         if output.as_ref().len() != len {
             return Err(BgvCollectiveError::Length {
                 expected: len,

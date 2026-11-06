@@ -175,7 +175,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
                 .map(|index| [0, 1, t / 2, (t / 2 + 1).min(t - 1), t - 1][index % 5])
                 .collect::<Vec<_>>(),
         );
-        let mut output = BfvCiphertext::<Vec<u64>>::zero(parameters.size().rns_glwe_len());
+        let mut output = BfvCiphertext::<Vec<u64>>::zero_raw(parameters.size().rns_glwe_len());
         for centered in [false, true] {
             let lifted = CrtPolynomial(
                 Q[..count]
@@ -203,7 +203,7 @@ fn public_coefficient_and_unscaled_crt_entries_reuse_the_same_kernel() {
             } else {
                 encryptor.encrypt(&message, &mut crt_rng)
             };
-            let mut lifted_ciphertext = BfvCiphertext::zero(parameters.size().rns_glwe_len());
+            let mut lifted_ciphertext = BfvCiphertext::zero_raw(parameters.size().rns_glwe_len());
             encryptor.encrypt_plaintext_lift_crt_to(
                 &lifted,
                 &mut lifted_ciphertext,
@@ -267,7 +267,8 @@ fn noncanonical_coefficients_preserve_randomness_output_and_public_scratch() {
             for mode in 0..6 {
                 let mut rng = StdRng::seed_from_u64(0x4246_5683);
                 let mut reference_rng = StdRng::seed_from_u64(0x4246_5683);
-                let mut output = BfvCiphertext::new(vec![99; parameters.size().rns_glwe_len()]);
+                let mut output =
+                    BfvCiphertext::from_raw(vec![99; parameters.size().rns_glwe_len()]);
                 let workspace = encryptor.workspace.as_mut_slice();
                 workspace.fill(73);
                 let workspace_pointer = workspace.as_ptr();

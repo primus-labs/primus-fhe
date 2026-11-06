@@ -1039,6 +1039,9 @@ impl BfvFreshLookup<'_> {
         if !ptr::eq(self.context, input.context) || self.key.level != input.level {
             return Err(BfvCollectiveError::Binding);
         }
+        output
+            .validate_binding(self.context, self.key.level)
+            .map_err(|_| BfvCollectiveError::Binding)?;
         let len = self.coefficient.len();
         if output.as_ref().len() != 2 * len {
             return Err(BfvCollectiveError::Payload);
@@ -1071,6 +1074,9 @@ impl<'a> BfvClient<'a> {
         level: usize,
         output: &mut DcrtPolynomial<B>,
     ) -> Result<(), BfvCollectiveError> {
+        input
+            .validate_binding(self.context, level)
+            .map_err(|_| BfvCollectiveError::Binding)?;
         validate_level(self.context, level)?;
         let len = self.context.rns_poly_len(level);
         canonical(self.context, level, input.as_ref(), 2 * len)?;

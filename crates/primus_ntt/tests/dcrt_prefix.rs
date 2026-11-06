@@ -85,18 +85,24 @@ fn complete_prefix_transforms_match_serial_and_reject_geometry_before_writes() {
     #[cfg(not(feature = "parallel"))]
     let table = U64DcrtTable::new(PolyLength::new(N), &Q.map(BarrettModulus::new)).unwrap();
     #[cfg(feature = "parallel")]
-    let table = rayon::ThreadPoolBuilder::new()
-        .num_threads(1)
-        .build()
-        .unwrap()
-        .install(|| U64DcrtTable::new(PolyLength::new(N), &Q.map(BarrettModulus::new)).unwrap());
-    #[cfg(feature = "parallel")]
-    for workers in [1, 2, 4] {
-        rayon::ThreadPoolBuilder::new()
+    let pools = [1, 2, 4].map(|workers| {
+        let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers)
             .build()
-            .unwrap()
-            .install(|| compare_with_serial(&table));
+            .unwrap();
+        // build() may return while another worker is still initializing. Reach
+        // every worker before global allocation counting, and keep all pools
+        // alive until counting ends so startup/teardown cannot overlap it.
+        // This prepares only the scheduler, not the measured prefix kernel.
+        pool.broadcast(|_| {});
+        pool
+    });
+    #[cfg(feature = "parallel")]
+    let table = pools[0]
+        .install(|| U64DcrtTable::new(PolyLength::new(N), &Q.map(BarrettModulus::new)).unwrap());
+    #[cfg(feature = "parallel")]
+    for pool in &pools {
+        pool.install(|| compare_with_serial(&table));
     }
     #[cfg(not(feature = "parallel"))]
     compare_with_serial(&table);

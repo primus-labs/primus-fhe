@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     swap.apply_to(&rotated, &mut swapped);
     switch.switch_to(&swapped, &mut switched);
     drop_second.switch_to(&switched, &mut lowest);
-    let recovered = bob.decrypt(&lowest, 2);
+    let recovered = bob.decrypt(&lowest);
     assert!(
         recovered
             .as_ref()

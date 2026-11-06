@@ -304,7 +304,7 @@ fn integer_tensor_wrap_and_complete_phase_residual_hold_across_prefixes() {
                         .iter()
                         .map(|m| u64::try_from(modulo(m, &IBig::from(t))).unwrap())
                         .collect();
-                    assert_eq!(client.decrypt(&linear, level).as_ref(), canonical);
+                    assert_eq!(client.decrypt_at_level(&linear, level).as_ref(), canonical);
                     let final_phase = phase(
                         &decode_components(&context, level, linear.as_ref()),
                         &secret,

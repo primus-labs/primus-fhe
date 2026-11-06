@@ -141,9 +141,9 @@ fn prepared_request(hybrid: bool) {
         .partial_phase_to(&ciphertext, 0, &mut partial_phase)
         .unwrap();
     std::hint::black_box(&partial_phase);
-    client.decrypt_to(&ciphertext, 0, &mut output);
+    client.decrypt_at_level_to(&ciphertext, 0, &mut output);
     encryptor.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
-    client.decrypt_to(&ciphertext, 0, &mut output);
+    client.decrypt_at_level_to(&ciphertext, 0, &mut output);
     // All participants' public/private inputs are freshly encrypted; the entire
     // linear/plaintext/recovery workflow reuses persistent prepared storage.
     client.encrypt_centered_to(&input, &mut ciphertext, &mut rng);
@@ -167,7 +167,7 @@ fn prepared_request(hybrid: bool) {
     evaluator.add_plain_assign(&mut evaluated, &ones, embedding);
     evaluator.mul_plain_to(&evaluated, &negative_one, &mut combined, embedding);
     evaluator.mul_plain_assign(&mut combined, &negative_one, embedding);
-    client.decrypt_to(&combined, 0, &mut output);
+    client.decrypt_at_level_to(&combined, 0, &mut output);
     multiplication0.multiply_to(&combined, &combined, &mut squared0);
     drop0.switch_to(&squared0, &mut reduced1);
     multiplication1.square_to(&reduced1, &mut squared1);
@@ -175,7 +175,7 @@ fn prepared_request(hybrid: bool) {
     automorphism.apply_to(&squared1, &mut rotated1);
     key_switcher.switch_to(&rotated1, &mut switched1);
     drop1.switch_to(&switched1, &mut reduced2);
-    recipient.decrypt_to(&reduced2, 2, &mut output);
+    recipient.decrypt_at_level_to(&reduced2, 2, &mut output);
     ACTIVE.with(|enabled| enabled.set(false));
     let count = ALLOCATIONS.with(Cell::get);
     assert_eq!(count, 0);

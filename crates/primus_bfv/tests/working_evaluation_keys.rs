@@ -179,14 +179,17 @@ fn all_temporary_prefixes_match_independent_simultaneous_round_and_scaled_embedd
                     .collect::<Vec<_>>();
                 let full = encode(&c, external, &polys);
                 let l = N * qs.len();
-                let ct = BfvCiphertext::new(full[..2 * l].to_vec());
+                let ct = BfvCiphertext::from_raw(full[..2 * l].to_vec());
                 let low1 = polys[1].iter().map(|x| round(x, &d)).collect::<Vec<_>>();
                 let low2 = polys[2].iter().map(|x| round(x, &d)).collect::<Vec<_>>();
                 let zeros = vec![IBig::ZERO; N];
-                let lower = BfvCiphertext::new(encode(&c, working, &[zeros.clone(), low1]));
-                let quadratic = BfvQuadraticCiphertext::new(full.clone());
-                let low_quad =
-                    BfvQuadraticCiphertext::new(encode(&c, working, &[zeros.clone(), zeros, low2]));
+                let lower = BfvCiphertext::from_raw(encode(&c, working, &[zeros.clone(), low1]));
+                let quadratic = BfvQuadraticCiphertext::from_raw(full.clone());
+                let low_quad = BfvQuadraticCiphertext::from_raw(encode(
+                    &c,
+                    working,
+                    &[zeros.clone(), zeros, low2],
+                ));
                 let sk = target
                     .key_switching_key(&source, working, config(&c, working, hybrid), &mut rng)
                     .unwrap();
@@ -295,7 +298,7 @@ fn working_keys_preserve_real_messages_and_reject_levels_or_storage_before_write
             let mut relin = BfvRelinearizer::try_with_working_level(&c, 0, &rk).unwrap();
             let mut output = c.new_ciphertext(0);
             switch.switch_to(&ciphertext, &mut output);
-            assert_eq!(target.decrypt(&output, 0).as_ref(), m.as_ref());
+            assert_eq!(target.decrypt_at_level(&output, 0).as_ref(), m.as_ref());
             auto.apply_to(&ciphertext, &mut output);
             let want = permutation(
                 &m.as_ref()
@@ -306,9 +309,12 @@ fn working_keys_preserve_real_messages_and_reject_levels_or_storage_before_write
             .iter()
             .map(|x| residue(x, P))
             .collect::<Vec<_>>();
-            assert_eq!(source.decrypt(&output, 0).as_ref(), want);
+            assert_eq!(source.decrypt_at_level(&output, 0).as_ref(), want);
             relin.relinearize_to(&square, &mut output);
-            assert_eq!(source.decrypt(&output, 0).as_ref(), expected_square);
+            assert_eq!(
+                source.decrypt_at_level(&output, 0).as_ref(),
+                expected_square
+            );
             assert!(matches!(
                 BfvKeySwitcher::try_with_working_level(&c, Q.len(), &sk),
                 Err(BfvEvaluationKeyError::Level { .. })
@@ -323,10 +329,10 @@ fn working_keys_preserve_real_messages_and_reject_levels_or_storage_before_write
                 ));
             }
             let length = 2 * c.rns_poly_len(0);
-            let bad = BfvCiphertext::new(vec![0; length - 1]);
-            let quad = BfvQuadraticCiphertext::zero(length / 2 * 3 - 1);
+            let bad = BfvCiphertext::from_raw(vec![0; length - 1]);
+            let quad = BfvQuadraticCiphertext::zero_raw(length / 2 * 3 - 1);
             for role in 0..3 {
-                let mut sentinel = BfvCiphertext::new(vec![31; length]);
+                let mut sentinel = BfvCiphertext::from_raw(vec![31; length]);
                 assert!(
                     catch_unwind(AssertUnwindSafe(|| match role {
                         0 => switch.switch_to(&bad, &mut sentinel),
@@ -336,7 +342,7 @@ fn working_keys_preserve_real_messages_and_reject_levels_or_storage_before_write
                     .is_err()
                 );
                 assert!(sentinel.as_ref().iter().all(|&x| x == 31));
-                let mut bad_output = BfvCiphertext::new(vec![37; length - 1]);
+                let mut bad_output = BfvCiphertext::from_raw(vec![37; length - 1]);
                 assert!(
                     catch_unwind(AssertUnwindSafe(|| match role {
                         0 => switch.switch_to(&ciphertext, &mut bad_output),

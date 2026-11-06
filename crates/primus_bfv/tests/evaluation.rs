@@ -144,7 +144,7 @@ fn ciphertext(
         data[limb * N..(limb + 1) * N].copy_from_slice(&dft(&c0, limb));
         data[(count + limb) * N..(count + limb + 1) * N].copy_from_slice(&dft(&c1, limb));
     }
-    BfvCiphertext::new(data)
+    BfvCiphertext::from_raw(data)
 }
 
 fn phase(input: &BfvCiphertext<Vec<u64>>, count: usize) -> Vec<u64> {
@@ -203,7 +203,10 @@ fn check(
     expected_message: &[u64],
 ) {
     assert_eq!(phase(input, Q.len() - level), expected_phase);
-    assert_eq!(client.decrypt(input, level).as_ref(), expected_message);
+    assert_eq!(
+        client.decrypt_at_level(input, level).as_ref(),
+        expected_message
+    );
 }
 
 #[test]
@@ -247,7 +250,7 @@ fn linear_and_plaintext_operations_match_independent_phases_and_negacyclic_messa
             );
             let mut assigned = lhs.clone();
             evaluator.add_assign(&mut assigned.as_mut_view(), &rhs.as_view());
-            assert_eq!(assigned, output);
+            assert_eq!(assigned.as_ref(), output.as_ref());
 
             evaluator.sub_to(&lhs, &rhs, &mut output);
             check(
@@ -259,7 +262,7 @@ fn linear_and_plaintext_operations_match_independent_phases_and_negacyclic_messa
             );
             assigned = lhs.clone();
             evaluator.sub_assign(&mut assigned, &rhs);
-            assert_eq!(assigned, output);
+            assert_eq!(assigned.as_ref(), output.as_ref());
 
             evaluator.neg_to(&lhs, &mut output);
             check(
@@ -271,7 +274,7 @@ fn linear_and_plaintext_operations_match_independent_phases_and_negacyclic_messa
             );
             assigned = lhs.clone();
             evaluator.neg_assign(&mut assigned);
-            assert_eq!(assigned, output);
+            assert_eq!(assigned.as_ref(), output.as_ref());
 
             let plain = Polynomial(rhs_message.to_vec());
             for embedding in [PlaintextEmbedding::Unsigned, PlaintextEmbedding::Centered] {
@@ -295,7 +298,7 @@ fn linear_and_plaintext_operations_match_independent_phases_and_negacyclic_messa
                 );
                 assigned = lhs.clone();
                 evaluator.add_plain_assign(&mut assigned, &plain, embedding);
-                assert_eq!(assigned, output);
+                assert_eq!(assigned.as_ref(), output.as_ref());
 
                 evaluator.mul_plain_to(&lhs, &plain, &mut output, embedding);
                 let lifted: Vec<_> = rhs_message
@@ -341,7 +344,7 @@ fn linear_and_plaintext_operations_match_independent_phases_and_negacyclic_messa
                 );
                 assigned = lhs.clone();
                 evaluator.mul_plain_assign(&mut assigned, &plain, embedding);
-                assert_eq!(assigned, output);
+                assert_eq!(assigned.as_ref(), output.as_ref());
             }
         }
     }
@@ -357,8 +360,8 @@ fn rejected_boundaries_leave_complete_outputs_unchanged() {
     let plain = Polynomial(vec![1; N]);
     let embedding = PlaintextEmbedding::Centered;
     for length in [0, 2 * N - 1, 2 * N + 1, 4 * N] {
-        let wrong = BfvCiphertext::new(vec![0; length]);
-        let mut output = BfvCiphertext::new(vec![0xfeed; 2 * N]);
+        let wrong = BfvCiphertext::from_raw(vec![0; length]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; 2 * N]);
         let before = output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| evaluator.add_to(
@@ -400,7 +403,7 @@ fn rejected_boundaries_leave_complete_outputs_unchanged() {
             .is_err()
         );
         assert_eq!(output, before);
-        let mut wrong_output = BfvCiphertext::new(vec![0xfeed; length]);
+        let mut wrong_output = BfvCiphertext::from_raw(vec![0xfeed; length]);
         let before = wrong_output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| evaluator.add_to(
@@ -434,7 +437,7 @@ fn rejected_boundaries_leave_complete_outputs_unchanged() {
     }
     for values in [vec![], vec![0; N - 1], vec![0; N + 1], vec![257; N]] {
         let wrong = Polynomial(values);
-        let mut output = BfvCiphertext::new(vec![0xfeed; 2 * N]);
+        let mut output = BfvCiphertext::from_raw(vec![0xfeed; 2 * N]);
         let before = output.clone();
         assert!(
             catch_unwind(AssertUnwindSafe(|| evaluator.add_plain_to(

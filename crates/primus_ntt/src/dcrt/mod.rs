@@ -60,8 +60,9 @@ where
             .map(|&modulus| Ntt::new(poly_length, modulus))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Prepare the opted-in scheduler with the table, rather than lazily
-        // allocating its thread pool during a prepared arithmetic request.
+        // Prepare the opted-in registry with the table. Worker startup remains
+        // asynchronous; callers measuring kernel-only allocations must first
+        // synchronize their configured pool, rather than count its startup.
         #[cfg(feature = "parallel")]
         if poly_length.get() >= 4096 && ntt_tables.len() >= 2 {
             let _ = rayon::current_num_threads();

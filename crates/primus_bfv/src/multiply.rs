@@ -241,7 +241,8 @@ impl<'a> BfvMultiplier<'a> {
     /// Writes the scaled degree-two product, using prepared internal raw storage.
     ///
     /// # Panics
-    /// Rejects every complete input/output length before any writes. Inherits
+    /// Rejects recorded context/level conflicts and incorrect complete lengths
+    /// before any writes. Inherits
     /// the centered integer lift and exact scaling contracts described above.
     pub fn multiply_to<A, B, C>(
         &mut self,
@@ -253,6 +254,9 @@ impl<'a> BfvMultiplier<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        lhs.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         self.validate_input(lhs.as_ref());
         self.validate_input(rhs.as_ref());
         self.validate_output(output.as_ref());
@@ -285,6 +289,8 @@ impl<'a> BfvMultiplier<'a> {
         A: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         self.validate_input(input.as_ref());
         self.validate_output(output.as_ref());
         self.workspace.tensor(

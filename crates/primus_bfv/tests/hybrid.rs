@@ -80,13 +80,19 @@ fn hybrid_roles_recover_at_all_prefixes_with_a_smaller_auxiliary_basis() {
         let mut multiplication = BfvMultiplication::try_new(&context, &key).unwrap();
         let mut output = context.new_ciphertext(level);
         multiplication.square_to(&input, &mut output);
-        assert_eq!(alice.decrypt(&output, level).as_ref(), expected_square);
+        assert_eq!(
+            alice.decrypt_at_level(&output, level).as_ref(),
+            expected_square
+        );
         let switching_key = bob
             .key_switching_key(&alice, level, parameters.clone(), &mut rng)
             .unwrap();
         let mut switching = BfvKeySwitcher::try_new(&context, &switching_key).unwrap();
         switching.switch_to(&input, &mut output);
-        assert_eq!(bob.decrypt(&output, level).as_ref(), plaintext.as_ref());
+        assert_eq!(
+            bob.decrypt_at_level(&output, level).as_ref(),
+            plaintext.as_ref()
+        );
         let auto_key = alice
             .automorphism_key(level, 3, parameters, &mut rng)
             .unwrap();
@@ -100,7 +106,7 @@ fn hybrid_roles_recover_at_all_prefixes_with_a_smaller_auxiliary_basis() {
                 (T - x) % T
             };
         }
-        assert_eq!(alice.decrypt(&output, level).as_ref(), expected);
+        assert_eq!(alice.decrypt_at_level(&output, level).as_ref(), expected);
         if level + 1 < 3 {
             let mut lower = context.new_ciphertext(level + 1);
             BfvModulusSwitch::new(&context, level).switch_to(&input, &mut lower);
@@ -128,11 +134,11 @@ fn hybrid_binding_and_complete_lengths_reject_before_output_writes() {
     let mut switch = BfvKeySwitcher::try_new(&context, &key).unwrap();
     let valid = context.new_ciphertext(0);
     for size in [0, valid.as_ref().len() - 1, valid.as_ref().len() + 1] {
-        let bad = BfvCiphertext::new(vec![77; size]);
-        let mut output = BfvCiphertext::new(vec![55; valid.as_ref().len()]);
+        let bad = BfvCiphertext::from_raw(vec![77; size]);
+        let mut output = BfvCiphertext::from_raw(vec![55; valid.as_ref().len()]);
         assert!(catch_unwind(AssertUnwindSafe(|| switch.switch_to(&bad, &mut output))).is_err());
         assert!(output.as_ref().iter().all(|&x| x == 55));
-        let mut bad_output = BfvCiphertext::new(vec![55; size]);
+        let mut bad_output = BfvCiphertext::from_raw(vec![55; size]);
         assert!(
             catch_unwind(AssertUnwindSafe(
                 || switch.switch_to(&valid, &mut bad_output)

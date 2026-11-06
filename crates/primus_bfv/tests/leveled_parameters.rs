@@ -126,7 +126,7 @@ fn ordinary_unsigned_public_inputs_follow_the_admitted_external_q_square_chain()
             for (out, &coefficient) in expected.iter_mut().zip(&polynomial) {
                 *out = coefficient.rem_euclid(257) as u64;
             }
-            assert_eq!(client.decrypt(&output, 0).as_ref(), expected);
+            assert_eq!(client.decrypt_at_level(&output, 0).as_ref(), expected);
             encrypted = output;
             // Same geometry cannot authorize another actual decomposition.
             let wrong = client

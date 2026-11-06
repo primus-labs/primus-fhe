@@ -356,7 +356,7 @@ fn invalid_levels_and_complete_shapes_fail_before_output_writes() {
         2 * context.rns_poly_len(0) - 1,
         2 * context.rns_poly_len(0) + 1,
     ] {
-        let malformed = BfvCiphertext::new(vec![0; length]);
+        let malformed = BfvCiphertext::from_raw(vec![0; length]);
         let mut output = context.new_ciphertext(1);
         output.as_mut().fill(99);
         assert!(
@@ -372,7 +372,7 @@ fn invalid_levels_and_complete_shapes_fail_before_output_writes() {
         2 * context.rns_poly_len(1) - 1,
         2 * context.rns_poly_len(1) + 1,
     ] {
-        let mut output = BfvCiphertext::new(vec![99; length]);
+        let mut output = BfvCiphertext::from_raw(vec![99; length]);
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
                 switch.switch_to(&input, &mut output)
@@ -397,7 +397,7 @@ fn borrowed_parts_check_the_actual_table_and_exact_unique_prefix() {
         .collect();
     let input = encode_u128(&context, &values);
     let mut output = context.new_ciphertext(1);
-    BfvModulusSwitch::try_from_parts(context.table(), source, target)
+    BfvModulusSwitch::try_from_raw_parts(context.table(), source, target)
         .unwrap()
         .switch_to(&input, &mut output);
     let expected: Vec<_> = values
@@ -408,11 +408,13 @@ fn borrowed_parts_check_the_actual_table_and_exact_unique_prefix() {
     assert_eq!(actual[0], expected[..N]);
     assert_eq!(actual[1], expected[N..]);
 
-    assert!(BfvModulusSwitch::try_from_parts(context.table(), source, &[]).is_err());
-    assert!(BfvModulusSwitch::try_from_parts(context.table(), source, &source[..1]).is_err());
+    assert!(BfvModulusSwitch::try_from_raw_parts(context.table(), source, &[]).is_err());
+    assert!(BfvModulusSwitch::try_from_raw_parts(context.table(), source, &source[..1]).is_err());
     let reordered = [target[1], target[0]];
-    assert!(BfvModulusSwitch::try_from_parts(context.table(), source, &reordered).is_err());
+    assert!(BfvModulusSwitch::try_from_raw_parts(context.table(), source, &reordered).is_err());
     let repeated = [source[0], source[0]];
     let repeated_table = primus_ntt::U64DcrtTable::new(PolyLength::new(N), &repeated).unwrap();
-    assert!(BfvModulusSwitch::try_from_parts(&repeated_table, &repeated, &repeated[..1]).is_err());
+    assert!(
+        BfvModulusSwitch::try_from_raw_parts(&repeated_table, &repeated, &repeated[..1]).is_err()
+    );
 }

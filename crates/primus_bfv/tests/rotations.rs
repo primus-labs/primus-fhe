@@ -66,7 +66,7 @@ fn signed_row_keys_preserve_full_ring_and_subring_slot_maps_at_each_level() {
                 BfvAutomorphism::try_new(&context, &key)
                     .unwrap()
                     .apply_to(&input, &mut output);
-                let recovered = client.decrypt(&output, level);
+                let recovered = client.decrypt_at_level(&output, level);
                 encoder.extract_to(recovered.as_ref(), &mut small);
                 let actual = encoder.decode(&small);
                 let shift = steps.rem_euclid(half as isize) as usize;
@@ -84,7 +84,7 @@ fn signed_row_keys_preserve_full_ring_and_subring_slot_maps_at_each_level() {
             BfvAutomorphism::try_new(&context, &key)
                 .unwrap()
                 .apply_to(&input, &mut output);
-            encoder.extract_to(client.decrypt(&output, level).as_ref(), &mut small);
+            encoder.extract_to(client.decrypt_at_level(&output, level).as_ref(), &mut small);
             let expected: Vec<_> = (0..capacity)
                 .map(|i| values[(i + half) % capacity])
                 .collect();

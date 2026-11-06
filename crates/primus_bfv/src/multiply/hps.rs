@@ -129,6 +129,9 @@ impl<'a> HpsMultiplier<'a> {
         B: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        lhs.check_binding(self.context, self.level);
+        rhs.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let q_length = self.context.rns_poly_len(self.level);
         assert_eq!(lhs.as_ref().len(), 2 * q_length);
         assert_eq!(rhs.as_ref().len(), 2 * q_length);
@@ -149,6 +152,8 @@ impl<'a> HpsMultiplier<'a> {
         A: Data<Elem = u64>,
         C: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.level);
+        output.check_binding(self.context, self.level);
         let q_length = self.context.rns_poly_len(self.level);
         assert_eq!(input.as_ref().len(), 2 * q_length);
         assert_eq!(output.as_ref().len(), 3 * q_length);

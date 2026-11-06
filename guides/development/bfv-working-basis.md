@@ -44,8 +44,8 @@ backend/depth请求，与独立forward search一致。工厂实际准备并按wo
 不可变Hybrid参数；`step.key_config()`仅克隆配置/Arc，不重建NTT。计算P与key P角色
 分开；即使某些prime数值相同，也不把计算P算入密钥暴露模数。
 
-`step.relinearization_key`检查client的实际context指针。`step.prepare`检查key的数字
-level/backend，但不能证明不透明key的真实secret、采样来源或ordinary/collective身份。
+`step.relinearization_key`检查client的实际context指针。`step.prepare`检查key的本地
+context及实际level/backend，但不能证明不透明key的真实secret、采样来源或ordinary/collective身份。
 正确使用仍要求本context诚实生成的普通CBD1 client和CBD21 ordinary keys；不能把
 同geometry的collective key、不同secret或超出支撑的导入key借来使用此预算。
 

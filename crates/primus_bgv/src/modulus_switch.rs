@@ -89,19 +89,23 @@ impl<'a> BgvModulusSwitch<'a> {
     /// # Correctness
     /// Input and output use this context's source/adjacent ordered bases and
     /// NTT convention, with canonical residues and the same actual secret.
-    /// Length checks cannot establish these identities. The intended new phase
+    /// Local context/level provenance is checked when present; explicit raw
+    /// storage attests it. Neither provenance nor length proves the secret.
+    /// The intended new phase
     /// must lie in the target centered interval for exact BGV recovery; this
     /// operation does not establish an evaluated noise bound. It accepts
     /// ordinary two-component ciphertexts, not unrelinearized quadratic ones.
     ///
     /// # Panics
-    /// Both complete ciphertext lengths are checked before any output or
+    /// Recorded context/level and both complete lengths are checked before output or
     /// scratch writes. A transform panic may leave partially written buffers.
     pub fn switch_to<A, B>(&mut self, input: &BgvCiphertext<A>, output: &mut BgvCiphertext<B>)
     where
         A: Data<Elem = u64>,
         B: DataMut<Elem = u64>,
     {
+        input.check_binding(self.context, self.source_level);
+        output.check_binding(self.context, self.source_level + 1);
         let source_len = self.context.rns_poly_len(self.source_level);
         let target_len = self.context.rns_poly_len(self.source_level + 1);
         let (c0, c1) = input.c0_c1(source_len);

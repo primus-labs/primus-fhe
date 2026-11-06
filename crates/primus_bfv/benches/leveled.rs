@@ -93,7 +93,7 @@ fn bench_leveled(c: &mut Criterion) {
     );
     switch_zero.switch_to(&product, &mut level_one);
     switch_one.switch_to(&level_one, &mut level_two);
-    client.decrypt_to(&level_two, 2, &mut decoded);
+    client.decrypt_at_level_to(&level_two, 2, &mut decoded);
     assert_eq!(decoded, expected);
 
     let mut group = c.benchmark_group("leveled/N1024/u64/rank1/Q3x50/t12289");
@@ -124,7 +124,7 @@ fn bench_leveled(c: &mut Criterion) {
             );
             switch_zero.switch_to(&product, &mut level_one);
             switch_one.switch_to(&level_one, &mut level_two);
-            client.decrypt_to(&level_two, 2, black_box(&mut decoded));
+            client.decrypt_at_level_to(&level_two, 2, black_box(&mut decoded));
         });
     });
     group.finish();

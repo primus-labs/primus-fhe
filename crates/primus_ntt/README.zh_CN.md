@@ -100,6 +100,9 @@ Lazy 值表示模 `q` 的剩余类，但其更宽的整数范围属于调用契�
 且至少两条 limb 时，在当前 Rayon pool 中使用至多4个连续任务。总线程数须由
 `RAYON_NUM_THREADS` 或 `ThreadPool::install` 限制，任务上限不会调整 pool 大小。
 该 feature 默认关闭，此 NTT 路径保持串行且不初始化 pool；随机采样不并行。
+符合条件的table构造会准备当前pool registry，但不等待所有worker完成启动。
+仅测kernel分配时，应先同步配置好的pool，例如调用`ThreadPool::broadcast`；
+无需预跑变换来预热kernel。
 
 仓库[编译配置](../../.cargo/config.toml) 使用 `target-cpu=native`。构建可移植二进制时须覆盖其 rustflags；仅有运行时分派不能使面向本机编译的产物可移植。
 

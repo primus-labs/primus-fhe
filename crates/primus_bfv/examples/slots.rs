@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &mut product,
             PlaintextEmbedding::Centered,
         );
-        let slots = batching.decode(client.decrypt(&product, 0).as_ref());
+        let slots = batching.decode(client.decrypt(&product).as_ref());
         for (&actual, &value) in slots.iter().zip(&values) {
             assert_eq!(actual, scalar * (value + 1) % P);
         }
