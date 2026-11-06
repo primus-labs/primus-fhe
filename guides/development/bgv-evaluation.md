@@ -161,6 +161,81 @@ For consecutive supported odd divisors a,b, the centered correction sum obeys
 actual component quotients with arbitrary-width integer arithmetic, including
 canonical/centered boundaries, p2/p254 and 150-bit Q.
 
+## Public static circuit budgets
+
+`BgvParameterRequest::create_context` generates validated NTT primes from explicit
+N, p, prime width/count, levels and secret/error laws. Q primes are searched in
+the intersection `q=1 mod 2N` and `q=1 mod p`, including composite coefficient p.
+Generation and `BgvCircuitPlan::try_new` are separate: the latter validates all
+actual caller-selected Q/key-P primes and admits a topologically ordered ordinary
+static circuit. It is a bounded resource/admission workflow, not a search for an
+optimal Q or an automatic security certificate. A rejection identifies the first
+node, its actual prefix level, phase bound, capacity and required Q bit width.
+
+The budget tracks an intended integer phase z congruent to the ciphertext phase
+modulo the actual Q, and `Z >= ||z||_infinity`. At every node it checks
+`Z <= floor(Q/2)`, equivalently `2Z<Q` for odd Q. The recorded error envelope
+relative to the centered output message is `floor((Z+floor(p/2))/p)`.
+This keeps message carries in tensor/plaintext operations instead of silently
+replacing each integer product by a reduced message with zero carry.
+
+Let E be the actual error sampler's maximum magnitude, B_s the secret sampler's
+hard coefficient support, and H=N*B_s. These supports include Gaussian truncation
+as implemented; no independence, standard-deviation heuristic or tail-event
+estimate is used. Public encryption's ephemeral is always CBD1, even when the
+actual secret is Gaussian or follows another supported law. Full-range message
+lift M is `floor(p/2)` for centered and `p-1` for unsigned embedding.
+
+| Node | Sufficient full integer-phase bound |
+| --- | --- |
+| Fresh private | `M+p*E` |
+| Fresh public | `M+p*(N*E+E+H*E)` from `e_pk*r+e0+e1*s` |
+| Ciphertext add | `Z_left+Z_right`, at one level and under the same actual secret |
+| Add public plaintext a | `Z+||lift(a)||_infinity` |
+| Multiply public plaintext a | `||lift(a)||_1*Z` |
+| Tensor plus relin | `N*Z_left*Z_right` plus the actual relin-key terms below |
+| Automorphism | `Z` plus the actual automorphism-key terms |
+| Source-to-target switch | `Z` plus the actual switching-key terms |
+| Drop last q | `ceil(Z/q)+ceil(p*(q-1)*(1+H)/(2q))` |
+
+Public plaintext norms are scanned from the same canonical polynomial and lift
+passed to evaluation, so dense coefficients, sparse scalars and encoded slots
+retain their actual public norm. Reusing those norms for a different, larger
+plaintext violates the declared circuit contract. `Multiply` includes ordinary
+relinearization; using equal operand indices represents squaring. The bounds
+cover correlated inputs and reusing one actual role key across nodes.
+
+For signed radix B with L actual retained digits and circular residual R, the
+added phase contributions are `p*N*L*(B/2)*E` and `p*R*H_source`. The role norm
+is H for source switching/automorphism and H² for relinearization. The planner
+uses the actual level's prepared decomposition, including nonzero residual even
+when `level_count=None`. For Hybrid, let `Q_j` be the product in actual partition
+I_j and `A=N*sum_j(|I_j|*Q_j*E)`. It records
+`ceil(p*A/P)` plus `ceil(p*(P-1)*(1+H)/(2P))`. These follow the QP/centered
+ModDown identities above; it does not insert the radix branch's p^-1 preprocessor.
+The separate integer ceilings intentionally give a conservative sufficient bound.
+
+`plan.key_config(level)` returns the actual prepared Radix/Hybrid configuration
+used by these formulas. Pass it to the ordinary role-key generators rather than
+creating a different backend or smaller P. The plan borrows context and owns only
+public diagnostics and used numerical key configurations; it does not retain
+clients, secret observations or ciphertext scratch. Per-step terms sum to the
+reported full phase, and the exact remaining margin is `floor(Q/2)-Z`.
+
+The first security input records data Q; additional inputs record each actually
+used Hybrid key-level QP domain with the actual secret/error laws. Multiplying a
+BGV zero-encryption sample by p^-1 modulo its coprime modulus gives the unscaled
+error law recorded for RLWE attack estimation. Successful admission leaves these
+inputs `NotEvaluated`; a separate estimator result and correlated/circular-key
+assumptions remain necessary. This budget excludes collective/raw/SSLE keys,
+privacy flooding/openings, arbitrary imported secrets and arbitrary programs.
+It does not relax q_i=1 modulo p or introduce general-chain correction factors.
+
+The [leveled coefficient example](../../crates/primus_bgv/examples/leveled_coefficients.rs)
+consumes this plan for `(a*b)^2`, two prime drops, an automorphism, source-to-target
+switching and a plaintext addition using the actual planned keys. Its small N
+demonstrates functionality and public admission, not cryptographic hardness.
+
 ## Representation reuse and resource ownership
 
 Context owns the full sampling state/table and the distinct CRT prefix bases,

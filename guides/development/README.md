@@ -37,6 +37,7 @@ The index is bilingual; the topic language is shown below. External tools mainta
 | Local BFV/BGV context/level binding, raw adoption and collective responsibilities | [Scheme binding and interoperability](scheme-context-binding.md) (Chinese) |
 | Native BFV integer tensor, exact scaling, unscaled keys and degree lifecycle | [BFV evaluation](bfv-evaluation.md) (English) |
 | Ordinary BFV temporary Q_l and restoration, depth/error admission | [Working basis](bfv-working-basis.md) (Chinese) |
+| Ordinary BFV/BGV prime generation, circuit budgets and separate security references | [Parameter and budget entry points](ordinary-parameter-budgets.md) (Chinese) |
 | Native BGV key roles, p-preserving gadget residuals and exact prime drop | [BGV evaluation](bgv-evaluation.md) (English) |
 | Native BFV/BGV Hybrid QP keys, partitions, exact correction and collective roles | [Native Hybrid keys](native-hybrid-keys.md) (English) |
 | Rotation rounding, q/Q returns, CBS precision/projection support, Fourier budgets and one-hot error conditions | [Bootstrapping numerical contracts](bootstrapping-contracts.md) (English) |

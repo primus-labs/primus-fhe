@@ -80,8 +80,14 @@ prescaling、自有的 P>2·#Q 条件和残差；选择 Hybrid key 不会自动�
 [求值契约](../../guides/development/bfv-evaluation.md)（English）维护这些算法、
 截断 radix residual、精确 rounded prime drop 和误差推导。
 需要显式已缩放 quadratic 中间值时，继续使用 `BfvMultiplier` / `BfvRelinearizer`。
-[Working-basis 契约](../../guides/development/bfv-working-basis.md)覆盖有限的普通
-CBD1/CBD21 profiles；collective 或 raw SSLE 需要另外计入完整误差。
+[Working-basis 契约](../../guides/development/bfv-working-basis.md)覆盖 depth 1～8 的普通
+binary multiplication 族：用 `BfvLeveledRequest::create_context` 生成数值 context，
+再由 `BfvLeveledParameters::try_new` 完整准入目标深度；已有 context 可直接提交自选
+prime 链。预算基于真实 sampler 的公开 hard support，账本公开公钥误差、working HPS、
+rounding、key 残差、fixed-Delta 漂移和剩余容量。独立 `security_inputs()` 计入实际
+Hybrid QP 域，状态仍为 `NotEvaluated`；正确性准入不建立安全等级。
+Collective 或 raw SSLE 需要另外计入完整误差。完整流程与独立离线筛查见
+[参数与安全参考指南](../../guides/development/ordinary-parameter-budgets.md)。
 
 Codec 只在恢复界内精确，不是任意 phase 的精确舍入 oracle。
 `try_coefficients` 选择 gamma=2⁶¹−1 并要求 t<gamma；`try_new` 显式选择 gamma，

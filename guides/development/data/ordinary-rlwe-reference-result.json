@@ -1,0 +1,195 @@
+{
+  "provenance": {
+    "estimator_commit": "53da5982597709ba0fdf94ea37a84d822310fd84",
+    "estimator_dirty": false,
+    "estimator_python_sha256": "5c0b2b0ecbf21a80bac6f9b3852e6fa4d58bb3797fcf4a0c01a9039c5f46c620",
+    "sage": "10.9",
+    "adapter_sha256": "221b9090ed5cedc8e7b003deda57173a6dc6e62f2babbe25dabe7cb7e19fda0e",
+    "input_sha256": "86fa813469f636fdf8a6203d7ba1e3476f4691d08556d5ac38927ca9751143d8",
+    "attacks": [
+      "primal_usvp",
+      "primal_bdd",
+      "dual_hybrid"
+    ],
+    "models": [
+      "ADPS16",
+      "MATZOV"
+    ],
+    "primal_shape_model": "gsa",
+    "sample_assumption": "explicit independent bare-LWE proxy; not a count of independent RLWE ring rows",
+    "scope": "finite bare-LWE cost reference only; not RLWE, related-key or joint security"
+  },
+  "complete": true,
+  "input_domains": 3,
+  "results": [
+    {
+      "label": "bfv-profile-public-Q",
+      "n": 16384,
+      "data_q": [
+        1152921422732787713,
+        1152921409847689217,
+        1152921396962590721,
+        1152921311061934081
+      ],
+      "key_p": [],
+      "secret": {
+        "kind": "cbd",
+        "eta": 1
+      },
+      "error": {
+        "kind": "cbd",
+        "eta": 21
+      },
+      "samples": 268435456,
+      "target_bits": 128,
+      "exposed_modulus": "1766846332517816915738466588262416358496494158047983876502806958869381121",
+      "exposed_bits": 240,
+      "costs": [
+        {
+          "model": "ADPS16",
+          "attack": "primal_usvp",
+          "bits": 218.124
+        },
+        {
+          "model": "ADPS16",
+          "attack": "primal_bdd",
+          "bits": 218.20643232328555
+        },
+        {
+          "model": "ADPS16",
+          "attack": "dual_hybrid",
+          "bits": 217.248
+        },
+        {
+          "model": "MATZOV",
+          "attack": "primal_usvp",
+          "bits": 244.54565287392015
+        },
+        {
+          "model": "MATZOV",
+          "attack": "primal_bdd",
+          "bits": 244.28029100196403
+        },
+        {
+          "model": "MATZOV",
+          "attack": "dual_hybrid",
+          "bits": 244.1614123918994
+        }
+      ],
+      "minimum_reference_bits": 217.248,
+      "meets_reference_target": true
+    },
+    {
+      "label": "bfv-working-hybrid-QP",
+      "n": 16384,
+      "data_q": [
+        1152921422732787713,
+        1152921409847689217,
+        1152921396962590721
+      ],
+      "key_p": [
+        1152921504606584833
+      ],
+      "secret": {
+        "kind": "cbd",
+        "eta": 1
+      },
+      "error": {
+        "kind": "cbd",
+        "eta": 21
+      },
+      "samples": 268435456,
+      "target_bits": 128,
+      "exposed_modulus": "1766846629124058016995116715886407712124471301734154194437125656194711553",
+      "exposed_bits": 240,
+      "costs": [
+        {
+          "model": "ADPS16",
+          "attack": "primal_usvp",
+          "bits": 218.124
+        },
+        {
+          "model": "ADPS16",
+          "attack": "primal_bdd",
+          "bits": 218.20643232328555
+        },
+        {
+          "model": "ADPS16",
+          "attack": "dual_hybrid",
+          "bits": 217.248
+        },
+        {
+          "model": "MATZOV",
+          "attack": "primal_usvp",
+          "bits": 244.54565287392015
+        },
+        {
+          "model": "MATZOV",
+          "attack": "primal_bdd",
+          "bits": 244.28029100196403
+        },
+        {
+          "model": "MATZOV",
+          "attack": "dual_hybrid",
+          "bits": 244.1614123918994
+        }
+      ],
+      "minimum_reference_bits": 217.248,
+      "meets_reference_target": true
+    },
+    {
+      "label": "insecure-toy-Q",
+      "n": 128,
+      "data_q": [
+        1152921422732787713
+      ],
+      "key_p": [],
+      "secret": {
+        "kind": "cbd",
+        "eta": 1
+      },
+      "error": {
+        "kind": "cbd",
+        "eta": 21
+      },
+      "samples": 16384,
+      "target_bits": 128,
+      "exposed_modulus": "1152921422732787713",
+      "exposed_bits": 60,
+      "costs": [
+        {
+          "model": "ADPS16",
+          "attack": "primal_usvp",
+          "bits": 11.68
+        },
+        {
+          "model": "ADPS16",
+          "attack": "primal_bdd",
+          "bits": 14.42862303087635
+        },
+        {
+          "model": "ADPS16",
+          "attack": "dual_hybrid",
+          "bits": 11.959628732329335
+        },
+        {
+          "model": "MATZOV",
+          "attack": "primal_usvp",
+          "bits": 39.688805815514804
+        },
+        {
+          "model": "MATZOV",
+          "attack": "primal_bdd",
+          "bits": 39.71825222009299
+        },
+        {
+          "model": "MATZOV",
+          "attack": "dual_hybrid",
+          "bits": 41.8297470247354
+        }
+      ],
+      "minimum_reference_bits": 11.68,
+      "meets_reference_target": false
+    }
+  ]
+}

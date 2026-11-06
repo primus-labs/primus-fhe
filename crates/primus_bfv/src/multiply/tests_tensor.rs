@@ -655,20 +655,3 @@ fn automatic_basis_is_disjoint_and_exact_at_every_level() {
     }
     assert!(BfvMultiplier::try_with_default_basis(&context, usize::MAX).is_err());
 }
-
-#[test]
-fn prime_selection_rejects_strong_pseudoprimes() {
-    for n in 0u64..4096 {
-        let trial_division = n >= 2
-            && !(2..)
-                .take_while(|d| d * d <= n)
-                .any(|d| n.is_multiple_of(d));
-        assert_eq!(super::is_prime(n), trial_division, "n={n}");
-    }
-    for composite in [341_550_071_728_321, 3_825_123_056_546_413_051] {
-        assert!(!super::is_prime(composite));
-    }
-    for prime in Q.into_iter().chain(P).chain([2_305_843_009_213_693_951]) {
-        assert!(super::is_prime(prime));
-    }
-}

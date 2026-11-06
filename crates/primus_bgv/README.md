@@ -44,7 +44,7 @@ functionality and are not security presets.
 | Example | Additional concepts |
 | --- | --- |
 | [ciphertext_multiplication](examples/ciphertext_multiplication.rs) | One relin key and `BgvMultiplication`; two encrypted coefficient products reuse the operation |
-| [leveled_coefficients](examples/leveled_coefficients.rs) | Square, `X→X^5`, Alice→Bob key switching, plaintext addition and two prime drops |
+| [leveled_coefficients](examples/leveled_coefficients.rs) | Generated ordinary primes, a public circuit budget, square, `X→X^5`, Alice→Bob switching and two drops; `--hybrid` selects actual QP keys |
 | [leveled_slots](examples/leveled_slots.rs) | Explicit `n<N` packing, row rotation/swap, key switching and two prime drops with reusable outputs |
 | [collective](examples/collective.rs) | Individual raw shares, public-key contributions, two-round relin and online client handoff |
 
@@ -52,6 +52,7 @@ functionality and are not security presets.
 cargo run -p primus_bgv --example ciphertext_multiplication
 cargo run -p primus_bgv --example ciphertext_multiplication -- --hybrid
 cargo run -p primus_bgv --example leveled_coefficients
+cargo run -p primus_bgv --example leveled_coefficients -- --hybrid
 cargo run -p primus_bgv --example leveled_slots --features batching
 cargo run -p primus_bgv --example collective
 ```
@@ -63,6 +64,27 @@ selects partitioned QP keys; basic examples take no arguments. In code, share
 `Arc`s across role keys. Key P needs its own security/error budget. Shared
 numerical metadata alone does not prove an imported secret or transform's provenance;
 see the [native Hybrid contract](../../guides/development/native-hybrid-keys.md).
+
+## Generate parameters and admit a declared circuit
+
+`BgvParameterRequest::create_context` generates and validates actual NTT primes
+from explicit N, p, prime width/count, levels and sampler laws. Q primes retain
+`q_i≡1 (mod p)`. `BgvCircuitPlan::try_new(&context,&operations,backend)` separately
+admits a static ordinary circuit. It reports every node's full integer phase,
+error envelope, component contributions, centered capacity and remaining margin;
+a rejection names its node/level and required modulus bit width. This is a
+bounded arithmetic workflow: callers adjust the explicit resources when needed.
+
+Use `plan.key_config(level)` for the actual ordinary relin, automorphism and
+switching keys. `BgvBudgetBackend::hybrid` generates a distinct key P, and its
+actual per-level QP exposures are included in `plan.security_inputs()`. These
+are exact inputs for a separate security review and remain `NotEvaluated`.
+Successful generation, admission or decryption does not claim 128-bit security.
+The budget uses hard sampler supports and full-ring bounds, so correlated
+inputs/keys remain covered; it may conservatively reject feasible circuits.
+It covers the declared ordinary operations, excluding collective keys, raw SSLE
+arithmetic and privacy openings. See the [budget derivation](../../guides/development/bgv-evaluation.md#public-static-circuit-budgets)
+and [parameter/security-reference guide](../../guides/development/ordinary-parameter-budgets.md).
 
 ## Levels, slots and numerical contracts
 

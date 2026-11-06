@@ -2,7 +2,7 @@
 use dashu_int::UBig;
 use primus_bfv::{
     BfvClient, BfvContext, BfvEvaluationKeyConfig, BfvLeveledKeyBackend, BfvLeveledParameterError,
-    BfvLeveledParameters, BfvLeveledProfile, BfvParameters,
+    BfvLeveledParameters, BfvLeveledProfile, BfvLeveledRequest, BfvParameters,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
@@ -39,7 +39,7 @@ fn admitted_depth_reserves_all_future_layers_and_every_work_basis_is_smaller() {
                         continue;
                     };
                     greatest = depth;
-                    assert_eq!(plan.profile(), profile);
+                    assert_eq!(plan.profile(), Some(profile));
                     assert_eq!(integer(plan.fresh_error_bound()), UBig::from(fresh));
                     assert_eq!(plan.steps().len(), depth);
                     let mut previous = integer(plan.fresh_error_bound());
@@ -83,7 +83,7 @@ fn admitted_depth_reserves_all_future_layers_and_every_work_basis_is_smaller() {
                 for depth in [0, 9] {
                     assert!(matches!(
                         BfvLeveledParameters::try_new(&c, depth, backend),
-                        Err(BfvLeveledParameterError::Budget)
+                        Err(BfvLeveledParameterError::Unsupported { .. })
                     ));
                 }
             }
@@ -148,7 +148,7 @@ fn ordinary_unsigned_public_inputs_follow_the_admitted_external_q_square_chain()
 }
 
 #[test]
-fn finite_admission_rejects_another_noise_secret_gamma_or_context_owner() {
+fn admission_rejects_unsupported_gamma_incomplete_levels_or_context_owner() {
     let c = BfvLeveledProfile::N16384Q240.create_context(257).unwrap();
     let plan = BfvLeveledParameters::try_new(&c, 1, BfvLeveledKeyBackend::HybridAlpha1).unwrap();
     let q = c
@@ -160,8 +160,6 @@ fn finite_admission_rejects_another_noise_secret_gamma_or_context_owner() {
         .map(BarrettModulus::new)
         .collect::<Vec<_>>();
     for (secret, eta, gamma, levels) in [
-        (SecretKeyDistr::UniformTernary, 21, (1 << 61) - 1, 4),
-        (SecretKeyDistr::SparseTernary, 22, (1 << 61) - 1, 4),
         (SecretKeyDistr::SparseTernary, 21, (1 << 61) - 3, 4),
         (SecretKeyDistr::SparseTernary, 21, (1 << 61) - 1, 3),
     ] {
@@ -177,7 +175,7 @@ fn finite_admission_rejects_another_noise_secret_gamma_or_context_owner() {
         let wrong = BfvContext::try_with_levels(p, levels).unwrap();
         assert!(matches!(
             BfvLeveledParameters::try_new(&wrong, 1, BfvLeveledKeyBackend::HybridAlpha1),
-            Err(BfvLeveledParameterError::Model)
+            Err(BfvLeveledParameterError::Unsupported { .. })
         ));
     }
     let other = BfvLeveledProfile::N16384Q240.create_context(257).unwrap();
@@ -188,4 +186,188 @@ fn finite_admission_rejects_another_noise_secret_gamma_or_context_owner() {
         Err(BfvLeveledParameterError::Binding)
     ));
     assert!(BfvLeveledProfile::N16384Q240.create_context(17).is_err());
+}
+
+fn small_request(secret: SecretKeyDistr, error: ErrorDistribution) -> BfvLeveledRequest {
+    BfvLeveledRequest {
+        poly_length: PolyLength::new(32),
+        plaintext_modulus: 257,
+        require_batching: true,
+        ciphertext_prime_bits: 31,
+        ciphertext_prime_count: 4,
+        secret_distribution: secret,
+        error_distribution: error,
+    }
+}
+
+#[test]
+fn custom_laws_report_public_support_and_execute_the_admitted_binary_circuit() {
+    // Tiny rings exercise actual arithmetic and unsigned lifts; they are not
+    // security examples. A schoolbook plaintext oracle has no scheme kernels.
+    for (secret, error) in [
+        (
+            SecretKeyDistr::UniformBinary,
+            ErrorDistribution::CenteredBinomial { eta: 2 },
+        ),
+        (
+            SecretKeyDistr::FixedHammingWeightTernary { hamming_weight: 3 },
+            ErrorDistribution::Gaussian {
+                standard_deviation: 1.2,
+            },
+        ),
+        (
+            SecretKeyDistr::Gaussian {
+                standard_deviation: 1.2,
+            },
+            ErrorDistribution::CenteredBinomial { eta: 1 },
+        ),
+    ] {
+        let c = small_request(secret, error).create_context().unwrap();
+        let mut rng = StdRng::seed_from_u64(0x14_bf01);
+        let mut client = BfvClient::generate(&c, &mut rng);
+        let public_key = client.public_key(&mut rng);
+        let mut encryptor = c.public_key_encryptor(&public_key).unwrap();
+        let mut a = c.new_plaintext();
+        let mut b = c.new_plaintext();
+        a.as_mut()[..2].copy_from_slice(&[256, 2]);
+        b.as_mut()[..2].copy_from_slice(&[3, 256]);
+        for backend in [
+            BfvLeveledKeyBackend::Radix16,
+            BfvLeveledKeyBackend::HybridAlpha1,
+        ] {
+            let plan = BfvLeveledParameters::try_new(&c, 2, backend).unwrap();
+            assert!(plan.profile().is_none());
+            let h = match secret {
+                SecretKeyDistr::FixedHammingWeightTernary { hamming_weight } => {
+                    hamming_weight as u64
+                }
+                _ => {
+                    c.parameters()
+                        .encryption_parameters()
+                        .secret_key_sampler()
+                        .maximum_magnitude()
+                        * 32
+                }
+            };
+            let eta = c
+                .parameters()
+                .encryption_parameters()
+                .noise_distribution()
+                .maximum_magnitude();
+            assert_eq!(plan.secret_l1_bound(), h);
+            assert_eq!(plan.ephemeral_l1_bound(), 32);
+            let full_q = c
+                .parameters()
+                .base_q()
+                .moduli_values()
+                .iter()
+                .fold(UBig::ONE, |v, &q| v * q);
+            assert_eq!(
+                integer(plan.fresh_error_bound()),
+                UBig::from(eta) * (h + 33) + &full_q % 257u16
+            );
+            let encrypted_b = encryptor.encrypt(&b, &mut rng);
+            let mut encrypted = encryptor.encrypt(&a, &mut rng);
+            let mut expected = a.as_ref().to_vec();
+            for step in plan.steps() {
+                let key = step.relinearization_key(&client, &mut rng).unwrap();
+                let mut operation = step.prepare(&key).unwrap();
+                let mut output = c.new_ciphertext(0);
+                operation.multiply_to(&encrypted, &encrypted_b, &mut output);
+                let mut schoolbook = vec![0i128; 32];
+                for (i, &x) in expected.iter().enumerate() {
+                    for (j, &y) in b.as_ref().iter().enumerate() {
+                        let value = i128::from(x) * i128::from(y);
+                        if i + j < 32 {
+                            schoolbook[i + j] += value;
+                        } else {
+                            schoolbook[i + j - 32] -= value;
+                        }
+                    }
+                }
+                expected = schoolbook
+                    .into_iter()
+                    .map(|x| x.rem_euclid(257) as u64)
+                    .collect();
+                assert_eq!(client.decrypt(&output).as_ref(), expected);
+                let ledger = step.error_ledger();
+                assert_eq!(
+                    integer(&ledger.output_error),
+                    integer(&ledger.restored_error) + integer(&ledger.restoration_drift)
+                );
+                assert_eq!(
+                    integer(&ledger.remaining_error_capacity) + integer(&ledger.output_error),
+                    integer(plan.decoder_capacity())
+                );
+                assert_eq!(
+                    integer(&ledger.working_modulus) * integer(&ledger.restoration_multiplier),
+                    full_q
+                );
+                encrypted = output;
+            }
+            for security in plan.security_inputs() {
+                assert_eq!(
+                    security.ephemeral_distribution,
+                    Some(SecretKeyDistr::SparseTernary)
+                );
+                assert_eq!(security.secret_distribution, secret);
+                assert_eq!(security.error_distribution, error);
+            }
+            if backend == BfvLeveledKeyBackend::HybridAlpha1 {
+                assert!(
+                    plan.security_inputs()
+                        .iter()
+                        .any(|x| !x.key_auxiliary_moduli.is_empty())
+                );
+                assert!(plan.steps().iter().all(|s| {
+                    s.key_auxiliary_moduli()
+                        .iter()
+                        .all(|p| !c.parameters().base_q().moduli_values().contains(p))
+                }));
+            }
+        }
+    }
+}
+
+#[test]
+fn request_and_budget_failures_explain_public_conditions() {
+    let request = small_request(
+        SecretKeyDistr::SparseTernary,
+        ErrorDistribution::CenteredBinomial { eta: 1 },
+    );
+    let bad = BfvLeveledRequest {
+        plaintext_modulus: 15,
+        ..request
+    };
+    assert!(
+        matches!(bad.create_context(), Err(BfvLeveledParameterError::Unsupported { reason })
+        if reason.contains("batching"))
+    );
+    let small_radix = BfvLeveledRequest {
+        poly_length: PolyLength::new(32),
+        plaintext_modulus: 2,
+        require_batching: false,
+        ciphertext_prime_bits: 16,
+        ciphertext_prime_count: 3,
+        ..request
+    }
+    .create_context()
+    .unwrap();
+    assert!(matches!(
+        BfvLeveledParameters::try_new(&small_radix, 1, BfvLeveledKeyBackend::Radix16),
+        Err(BfvLeveledParameterError::Unsupported { reason }) if reason.contains("Radix16")
+    ));
+    let tiny = BfvLeveledRequest {
+        ciphertext_prime_bits: 20,
+        ciphertext_prime_count: 2,
+        require_batching: false,
+        ..request
+    }
+    .create_context()
+    .unwrap();
+    let result = BfvLeveledParameters::try_new(&tiny, 8, BfvLeveledKeyBackend::Radix16);
+    assert!(
+        matches!(result, Err(BfvLeveledParameterError::Budget { stage: 0, required, available, .. })
+        if integer(&required) > integer(&available))
+    );
 }

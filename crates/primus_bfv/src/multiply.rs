@@ -8,6 +8,7 @@ use core::cmp::Ordering;
 use primus_data::{Data, DataMut};
 use primus_integer::BigUint;
 use primus_modulus::BarrettModulus;
+pub(crate) use primus_modulus::is_prime_u64 as is_prime;
 use primus_ntt::{NttError, NttTable, U64DcrtTable};
 use primus_reduce::{Reduce, ReduceAdd, ReduceInv, ReduceMul, ReduceSub};
 use primus_rns::{RNSBase, Residues, RnsError};
@@ -618,48 +619,6 @@ fn default_auxiliary_moduli(
         candidate = candidate.saturating_sub(step);
     }
     Ok(primes)
-}
-
-// Deterministic Miller-Rabin for u64; modular products fit u128. These seven
-// bases cover n<2^64 (also used in SymPy's deterministic isprime branch):
-// https://github.com/sympy/sympy/blob/master/sympy/ntheory/primetest.py
-// This helper is private to setup; no new public number-theory API is needed.
-pub(crate) fn is_prime(n: u64) -> bool {
-    if n < 2 || n.is_multiple_of(2) {
-        return n == 2;
-    }
-    let powers = (n - 1).trailing_zeros();
-    let odd = (n - 1) >> powers;
-    for base in [2u64, 325, 9_375, 28_178, 450_775, 9_780_504, 1_795_265_022] {
-        let mut base = base % n;
-        if base == 0 {
-            continue;
-        }
-        let mut exponent = odd;
-        let mut value = 1u64;
-        while exponent != 0 {
-            if exponent & 1 != 0 {
-                value = (value as u128 * base as u128 % n as u128) as u64;
-            }
-            base = (base as u128 * base as u128 % n as u128) as u64;
-            exponent >>= 1;
-        }
-        if value == 1 || value == n - 1 {
-            continue;
-        }
-        let mut passed = false;
-        for _ in 1..powers {
-            value = (value as u128 * value as u128 % n as u128) as u64;
-            if value == n - 1 {
-                passed = true;
-                break;
-            }
-        }
-        if !passed {
-            return false;
-        }
-    }
-    true
 }
 
 fn gcd(mut a: u64, mut b: u64) -> u64 {

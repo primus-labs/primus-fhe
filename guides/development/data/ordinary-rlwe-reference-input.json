@@ -1,0 +1,63 @@
+[
+  {
+    "label": "bfv-profile-public-Q",
+    "n": 16384,
+    "data_q": [
+      1152921422732787713,
+      1152921409847689217,
+      1152921396962590721,
+      1152921311061934081
+    ],
+    "key_p": [],
+    "secret": {
+      "kind": "cbd",
+      "eta": 1
+    },
+    "error": {
+      "kind": "cbd",
+      "eta": 21
+    },
+    "samples": 268435456,
+    "target_bits": 128
+  },
+  {
+    "label": "bfv-working-hybrid-QP",
+    "n": 16384,
+    "data_q": [
+      1152921422732787713,
+      1152921409847689217,
+      1152921396962590721
+    ],
+    "key_p": [
+      1152921504606584833
+    ],
+    "secret": {
+      "kind": "cbd",
+      "eta": 1
+    },
+    "error": {
+      "kind": "cbd",
+      "eta": 21
+    },
+    "samples": 268435456,
+    "target_bits": 128
+  },
+  {
+    "label": "insecure-toy-Q",
+    "n": 128,
+    "data_q": [
+      1152921422732787713
+    ],
+    "key_p": [],
+    "secret": {
+      "kind": "cbd",
+      "eta": 1
+    },
+    "error": {
+      "kind": "cbd",
+      "eta": 21
+    },
+    "samples": 16384,
+    "target_bits": 128
+  }
+]

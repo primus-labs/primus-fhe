@@ -89,8 +89,16 @@ The [evaluation contract](../../guides/development/bfv-evaluation.md) owns these
 algorithms, truncated-radix residuals, exact rounded prime drops and error bounds.
 `BfvMultiplier` / `BfvRelinearizer` preserve an explicitly staged scaled quadratic
 workflow. The [working-basis contract](../../guides/development/bfv-working-basis.md)
-covers finite ordinary CBD1/CBD21 profiles; collective or raw SSLE needs separate
-accounting.
+covers ordinary binary-multiplication depths 1–8 using generated or explicit
+prime chains and the actual secret/error sampler's hard support. Start with
+`BfvLeveledRequest::create_context`, then admit the target depth with
+`BfvLeveledParameters::try_new`. The public ledger reports fresh public-key
+error, working HPS/rounding/key errors, fixed-Delta drift and remaining capacity.
+Separate `security_inputs()` include actual Hybrid QP domains and remain
+`NotEvaluated`; numerical admission does not establish a security level.
+Collective or raw SSLE needs separate accounting. See the
+[parameter and security-reference guide](../../guides/development/ordinary-parameter-budgets.md)
+for the supported workflow and independent offline screening.
 
 The codec is exact within its recovery bound, not an arbitrary-phase rounding
 oracle. `try_coefficients` selects gamma=2⁶¹−1 and requires t<gamma; `try_new`

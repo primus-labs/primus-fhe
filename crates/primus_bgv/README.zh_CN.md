@@ -40,7 +40,7 @@ cargo run -p primus_bgv --example slots --features batching
 | 示例 | 新增概念 |
 | --- | --- |
 | [ciphertext_multiplication](examples/ciphertext_multiplication.rs) | 一把 relin key 与 `BgvMultiplication`；两次密文系数乘法复用同一操作 |
-| [leveled_coefficients](examples/leveled_coefficients.rs) | Square、`X→X^5`、Alice→Bob 换钥、明文加法和两次 prime drop |
+| [leveled_coefficients](examples/leveled_coefficients.rs) | 生成普通 primes、公开电路预算、square、`X→X^5`、Alice→Bob 换钥与两次 drop；`--hybrid` 选择实际 QP keys |
 | [leveled_slots](examples/leveled_slots.rs) | 显式 `n<N` 编码、行旋转/交换、换钥与两次 prime drop，复用输出 |
 | [collective](examples/collective.rs) | 个别原生 share、公钥贡献、两轮 relin 与在线 client 交付 |
 
@@ -48,6 +48,7 @@ cargo run -p primus_bgv --example slots --features batching
 cargo run -p primus_bgv --example ciphertext_multiplication
 cargo run -p primus_bgv --example ciphertext_multiplication -- --hybrid
 cargo run -p primus_bgv --example leveled_coefficients
+cargo run -p primus_bgv --example leveled_coefficients -- --hybrid
 cargo run -p primus_bgv --example leveled_slots --features batching
 cargo run -p primus_bgv --example collective
 ```
@@ -58,6 +59,23 @@ cargo run -p primus_bgv --example collective
 `context.hybrid_key_parameters(level,decomposition_count,&key_p)`。
 Key P 须独立纳入安全/误差预算；共享数值 metadata 本身不证明外部导入的秘密或变换来源。
 见 [Native Hybrid 契约](../../guides/development/native-hybrid-keys.md)（English）。
+
+## 生成参数与声明电路的准入
+
+`BgvParameterRequest::create_context` 根据显式 N、p、prime 字宽/数量、levels
+与采样 law 生成并验证实际 NTT primes，保留 `q_i≡1 (mod p)`。
+随后 `BgvCircuitPlan::try_new(&context,&operations,backend)` 为声明的普通静态
+电路逐节点准入，给出完整整数 phase、误差包络、分项贡献、居中恢复容量及剩余
+margin。拒绝包含节点、level 与所需模数位数，调用方据此调整显式资源选择。
+
+通过 `plan.key_config(level)` 生成账本实际覆盖的普通 relin、自同构与换钥 key。
+`BgvBudgetBackend::hybrid` 生成独立 key P，并在 `plan.security_inputs()` 中列出
+实际使用各层的 QP 暴露域。这些是独立安全估算的精确公开输入，状态保持
+`NotEvaluated`；生成、准入或解密成功均不表示达到 128 位安全。
+预算采用采样硬支持与全环卷积界，覆盖重复/相关输入和 key，但可能保守地拒绝
+实际可运行电路。它仅覆盖声明的普通操作，不适用于 collective key、raw SSLE
+运算或隐私 opening。公式见[公开电路预算](../../guides/development/bgv-evaluation.md#public-static-circuit-budgets)（English），
+完整流程与离线筛查见[参数与安全参考指南](../../guides/development/ordinary-parameter-budgets.md)。
 
 ## Level、槽与数值契约
 

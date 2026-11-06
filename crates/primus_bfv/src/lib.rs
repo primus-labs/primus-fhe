@@ -48,7 +48,7 @@
 //! [`BfvLeveledMultiplication`] temporarily rounds both inputs to a smaller
 //! working prefix, multiplies and relinearizes there, then scales back into the
 //! unchanged external Q basis. [`BfvLeveledParameters`] admits finite ordinary
-//! CBD1/CBD21 circuit families with complete deterministic error bounds and
+//! binary circuit families with actual sampler-support deterministic error bounds and
 //! shared immutable key resources. It does not certify collective/raw SSLE
 //! keys, arbitrary imported secrets, or an RLWE security level.
 
@@ -81,7 +81,8 @@ pub use evaluation_key::{
 pub use evaluator::BfvEvaluator;
 pub use leveled_multiplication::BfvLeveledMultiplication;
 pub use leveled_parameters::{
-    BfvLeveledKeyBackend, BfvLeveledParameterError, BfvLeveledParameters, BfvLeveledProfile,
+    BfvLeveledErrorLedger, BfvLeveledFreshErrorLedger, BfvLeveledKeyBackend,
+    BfvLeveledParameterError, BfvLeveledParameters, BfvLeveledProfile, BfvLeveledRequest,
     BfvLeveledStep,
 };
 pub use modulus_switch::{BfvModulusSwitch, BfvModulusSwitchError};

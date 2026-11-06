@@ -1,17 +1,34 @@
 //! Checked ordinary BFV square chain, with temporary internal modulus reduction.
-use primus_bfv::{BfvClient, BfvLeveledKeyBackend, BfvLeveledParameters, BfvLeveledProfile};
+use primus_bfv::{BfvClient, BfvLeveledKeyBackend, BfvLeveledParameters, BfvLeveledRequest};
+use primus_distr::ErrorDistribution;
+use primus_glwe_rns::SecretKeyDistr;
 use primus_poly::Polynomial;
+use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     const T: u64 = 65537;
-    let context = BfvLeveledProfile::N16384Q240.create_context(T)?;
+    let context = BfvLeveledRequest {
+        poly_length: PolyLength::new(16384),
+        plaintext_modulus: T,
+        require_batching: true,
+        ciphertext_prime_bits: 60,
+        ciphertext_prime_count: 4,
+        secret_distribution: SecretKeyDistr::SparseTernary,
+        error_distribution: ErrorDistribution::CenteredBinomial { eta: 21 },
+    }
+    .create_context()?;
     let backend = if std::env::args().any(|x| x == "--radix") {
         BfvLeveledKeyBackend::Radix16
     } else {
         BfvLeveledKeyBackend::HybridAlpha1
     };
     let plan = BfvLeveledParameters::try_new(&context, 3, backend)?;
+    println!(
+        "Admitted {} layers; RLWE analysis status: {:?}.",
+        plan.steps().len(),
+        plan.security_inputs()[0].status
+    );
     let mut rng = StdRng::from_rng(&mut rand::rng());
     let mut client = BfvClient::generate(&context, &mut rng);
     let public_key = client.public_key(&mut rng);

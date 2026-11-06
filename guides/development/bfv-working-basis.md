@@ -15,7 +15,15 @@
 ## 普通入口与适用范围
 
 ```rust,ignore
-let context = BfvLeveledProfile::N16384Q240.create_context(65537)?;
+let context = BfvLeveledRequest {
+    poly_length: PolyLength::new(16384),
+    plaintext_modulus: 65537,
+    require_batching: true,
+    ciphertext_prime_bits: 60,
+    ciphertext_prime_count: 4,
+    secret_distribution: SecretKeyDistr::SparseTernary,
+    error_distribution: ErrorDistribution::CenteredBinomial { eta: 21 },
+}.create_context()?;
 let plan = BfvLeveledParameters::try_new(&context, 3, BfvLeveledKeyBackend::HybridAlpha1)?;
 // client由该实际context生成；每个step的key/operation在请求前准备。
 let keys = plan.steps().iter()
@@ -29,10 +37,31 @@ let mut operations = plan.steps().iter().zip(&keys)
 完整例子为[working_basis.rs](../../crates/primus_bfv/examples/working_basis.rs)。它验证
 三次square后在原外部level0恢复`(2+X)^8`；`--radix`切换普通key后端。
 
-有限工厂只接受实际N16384/Q240或N32768/Q360的规定60-bit prime族、t257/65537、
-CBD1 secret/ephemeral、CBD21 error、gamma=2^61−1及完整prefix codecs。它针对普通
-binary multiplication电路，计入完整公钥fresh误差及canonical消息界，并按剩余深度选
-工作基。每步实际drop，找不到完整可行schedule就拒绝，不静默退化为全Q策略。
+`BfvLeveledRequest::create_context`根据N、明文系数模数、Q的prime位宽和数量、
+secret/error law生成一个数值context；生成本身不承诺某个深度可行。设定
+`require_batching=true`时，还检查t为素数且`t=1 mod 2N`。普通系数明文不要求该条件。
+Q以及实际Hybrid key P验证素性、互异性、`2N` root条件和`q<2^62`；NTT表构造成功
+本身不能代替这些检查。自选prime链可由已有`BfvContext`直接进入同一`try_new`，
+不必先转成request再拆分重建。当前要求default gamma及完整prefix codecs。
+
+`BfvLeveledParameters::try_new`对depth 1..=8的普通binary multiplication族作完整
+预算：两输入都必须不超过上一层的error界；square是其特例。支持现有合法binary、
+ternary、fixed-weight/block及实际截断Gaussian secret sampler，以公开hard support
+计算L1界；支持CBD和实际截断Gaussian error sampler。public encryption的ephemeral
+仍固定CBD1，不能把它误写成与secret相同的law。每步实际drop；找不到完整可行schedule
+就返回包含stage、input、required、available的错误，不静默退化为全Q策略。
+
+计划公开`fresh_error_ledger`、每层`error_ledger`、codec capacity及剩余error capacity。
+它们分别列出公钥误差、fresh c0/c1误差、unsigned embedding漂移、输入round、HPS
+residual/centered wrap、phase quotients、tensor/component round、key采样与radix
+低位残差或Hybrid ModDown，以及scaled restoration和fixed-Delta drift。
+所有整数预算精确上取整。`security_inputs()`单独报告实际data Q和被使用的working
+Q/key-P域、secret/error laws和hard supports；状态为`NotEvaluated`，不是128位安全证书。
+计算P只参与正确性，不算作公开evaluation key的暴露模数。
+
+原`BfvLeveledProfile`保留两个有实际回归消费者的固定N/Q geometry；使用它们时，
+旧参数与算法不变。`plan.profile()`对匹配几何返回`Some(profile)`，自选几何返回`None`。
+以下是旧CBD1/CBD21、t257/65537配置的已认证结果，不是新搜索入口对全部law的保证：
 
 | profile | t257最大已认证深度 | t65537最大已认证深度 |
 | --- | ---: | ---: |
@@ -46,10 +75,11 @@ backend/depth请求，与独立forward search一致。工厂实际准备并按wo
 
 `step.relinearization_key`检查client的实际context指针。`step.prepare`检查key的本地
 context及实际level/backend，但不能证明不透明key的真实secret、采样来源或ordinary/collective身份。
-正确使用仍要求本context诚实生成的普通CBD1 client和CBD21 ordinary keys；不能把
+正确使用仍要求本context按照预算所列law诚实生成ordinary client和ordinary keys；
+旧profile数值表使用CBD1/CBD21，custom配置使用其报告的实际law。不能把
 同geometry的collective key、不同secret或超出支撑的导入key借来使用此预算。
 
-工厂的证书只覆盖给定binary链。插入rotation、switch、add或其它运算必须重算相应
+该计划只覆盖给定binary族。插入rotation、switch、add、permanent drop或其它运算必须重算相应
 误差；不能把本步输出E当作任意后续操作的授权。它也不搜索任意目标安全等级或证明
 相关密钥的计算安全。
 
@@ -94,7 +124,7 @@ Eout <= D*(W+Kwork) + r*Mout/t.
 
 ordinary full signed radix16的working key界为`N*d*2^15*eta+rho*hsource`，其中
 d=floor(bitlen(q)/16)、rho为未保留低位的半径；relin用hsource=h²。Hybrid alpha1为
-`ceil(N*eta*sum(qi-1)/Pkey+(1+h)/2)`。这里eta=21，不能用于collective的E0*S、
+`ceil(N*eta*sum(qi-1)/Pkey+(1+h)/2)`。eta是实际error sampler的hard support，不能用于collective的E0*S、
 (U−S)E1、E2聚合误差。工作key误差必须先加进W再乘D。
 
 Standalone working-key操作给输入误差另加`D*(Kwork+hsource/2)`；relin同样用h²，
@@ -104,8 +134,11 @@ switch/auto用source secret的L1界。完整外部codec检查采用严格整数�
 2*gamma*(t*Eout+r*Mout) + 2*Q*#Q < Q*gamma.
 ```
 
-Fresh public encryption使用`21*(2N+1)+r`，包括shared public-key error、e0/e1S以及
-unsigned到centered消息的fixed-Delta漂移。原生BFV plus phase始终为c0+c1*s。
+Fresh public encryption使用`eta*(Hu+1+Hs)+r`，其中`Hu=N`来自固定CBD1 ephemeral，
+`Hs`来自实际secret sampler的公开支撑（固定weight可使用其精确L1上界）。四项分别为
+`eta*Hu`的shared public-key error、`eta`的e0、`eta*Hs`的e1S及`r`的unsigned
+到centered fixed-Delta漂移。Gaussian界对应实现的有限截断支撑；这里没有另加概率尾界。
+原生BFV plus phase始终为c0+c1*s。
 
 ## 协议与性能边界
 

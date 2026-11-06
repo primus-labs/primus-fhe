@@ -45,6 +45,14 @@ For constant parameter descriptions, use `ModulusConfig<M>` with Native, PowOf2 
 
 Checked constructors validate their documented range. Direct construction or `.0` updates of `CompactModulus` and `UintModulus` must preserve that range; arithmetic methods do not generally revalidate it. Raw Barrett constructors additionally require the correct reciprocal; see [`BarrettModulus` and `from_parts`](src/barrett/mod.rs) for its little-endian representation and exact bounds.
 
+## Prime preparation
+
+`is_prime_u64(value)` is a deterministic primality test over the complete u64
+range, intended for public parameter construction. It does not change the
+contracts of the reducer constructors or `FieldContext`: those still do not
+prove primality. Primality alone does not establish NTT compatibility or a
+cryptographic security level.
+
 ## Features
 
 - `derive` re-exports the `Barrett` derive macro for compile-time constant moduli. See [`primus_barrett_derive`](../primus_barrett_derive/README.md).

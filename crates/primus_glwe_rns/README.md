@@ -136,6 +136,24 @@ Parallel expansion reserves a positive `worker_count` scratch budget and uses
 the caller's Rayon pool, without creating an inner pool. The budget need not
 equal thread count; complete input/output geometry is checked before writes.
 
+## Ordinary RLWE parameter preparation
+
+`rlwe_parameters` provides cold validation of caller-supplied u64 primes and
+bounded NTT-prime search, optionally requiring `q ≡ 1 (mod t)`. Validation checks
+distinct primes, `q < 2^62` and `2N | q-1`; plaintext and error budgets remain
+with BFV/BGV.
+
+`security_input` records each actual secret-bearing Q or Hybrid QP domain,
+its exact product and actual sampler laws for an external review. It borrows
+already-prepared rank-one sampling parameters without reconstructing Gaussian
+tables from separate distribution fields. The reported basis may differ from
+the original sampling basis; this diagnostic is not a context/key binding.
+It always returns `NotEvaluated`: the helper does not run a security estimator or
+establish a requested 128-bit target. BFV computation-only tensor/HPS primes
+are excluded. Retained top-Q public material and working-basis keys must be
+listed separately; drops do not erase earlier exposure. Ring-row independence,
+joint-material and circular/KDM assumptions still require review.
+
 ## Features and further reading
 
 Default features are empty; RNS dependencies are enabled without a separate

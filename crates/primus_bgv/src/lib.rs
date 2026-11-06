@@ -35,6 +35,7 @@ mod evaluator;
 mod modulus_switch;
 mod multiplication;
 mod parameters;
+mod planning;
 mod public_key;
 mod quadratic;
 mod workspace;
@@ -56,6 +57,10 @@ pub use evaluator::BgvEvaluator;
 pub use modulus_switch::BgvModulusSwitch;
 pub use multiplication::BgvMultiplication;
 pub use parameters::{BgvParameters, BgvParametersError};
+pub use planning::{
+    BgvBudgetBackend, BgvBudgetStep, BgvBudgetTerm, BgvCircuitOperation, BgvCircuitPlan,
+    BgvParameterRequest, BgvPlaintextBounds, BgvPlanningError,
+};
 pub use primus_encoding::PlaintextEmbedding;
 pub use public_key::{BgvPublicKey, BgvPublicKeyEncryptor, BgvPublicKeyError};
 pub use quadratic::BgvQuadraticCiphertext;

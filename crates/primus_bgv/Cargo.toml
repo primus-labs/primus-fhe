@@ -21,10 +21,10 @@ primus_shape = { path = "../primus_shape" }
 rand = { workspace = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
+dashu-int = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-dashu-int = { workspace = true }
 
 [features]
 default = []
