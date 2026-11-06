@@ -42,12 +42,22 @@ pub enum BgvCiphertextBindingError {
         /// Corresponding modulus.
         modulus: u64,
     },
+    /// The declared message factor must be a canonical unit modulo plaintext p.
+    #[error("BGV correction factor {factor} is not a canonical unit modulo {plaintext_modulus}")]
+    CorrectionFactor {
+        /// Declared factor.
+        factor: u64,
+        /// This context's plaintext modulus.
+        plaintext_modulus: u64,
+    },
 }
 
 /// A rank-one BGV ciphertext in physical component order `[c0, c1]`.
 ///
 /// Each component is one modulus-major DCRT polynomial. Its phase is
-/// `c0 + c1*s`; this is distinct from raw GLWE's mask/body representation.
+/// `c0 + c1*s`, congruent to `correction_factor * message` modulo plaintext p
+/// while the intended integer phase fits the centered Q interval. The factor
+/// follows the actual operation history, not just the modulus level.
 /// Context-created containers retain their exact local owner and level.
 /// Explicit raw containers instead inherit the consuming operation's caller
 /// contracts; neither local provenance nor geometry proves the actual secret.
@@ -55,6 +65,7 @@ pub enum BgvCiphertextBindingError {
 pub struct BgvCiphertext<C> {
     data: C,
     binding: Option<Binding>,
+    correction_factor: u64,
 }
 
 impl<C: Data<Elem = u64>> BgvCiphertext<C> {
@@ -62,12 +73,15 @@ impl<C: Data<Elem = u64>> BgvCiphertext<C> {
     ///
     /// This does not establish provenance. The caller supplies the consuming
     /// operation's exact context, level, NTT convention and actual secret.
-    /// Normal context-created ciphertexts carry and check context/level instead.
+    /// This constructor declares correction factor one. Import a different
+    /// factor through [`BgvContext::try_import_ciphertext`]. Normal context-created
+    /// ciphertexts carry and check context/level instead.
     #[must_use]
     pub fn from_raw(data: C) -> Self {
         Self {
             data,
             binding: None,
+            correction_factor: 1,
         }
     }
 
@@ -75,7 +89,19 @@ impl<C: Data<Elem = u64>> BgvCiphertext<C> {
         Self {
             data,
             binding: Some(Binding::new(context, level)),
+            correction_factor: 1,
         }
+    }
+
+    /// Returns the canonical invertible message multiplier modulo plaintext p.
+    /// Recovery removes this factor after exact centered CRT reduction modulo p.
+    #[must_use]
+    pub fn correction_factor(&self) -> u64 {
+        self.correction_factor
+    }
+
+    pub(crate) fn set_correction_factor(&mut self, factor: u64) {
+        self.correction_factor = factor;
     }
 
     pub(crate) fn check_binding(&self, context: &BgvContext, level: usize) {
@@ -121,6 +147,7 @@ impl<C: Data<Elem = u64>> BgvCiphertext<C> {
         BgvCiphertext {
             data: self.as_ref(),
             binding: self.binding.clone(),
+            correction_factor: self.correction_factor,
         }
     }
 
@@ -151,16 +178,6 @@ impl BgvCiphertext<Vec<u64>> {
 }
 
 impl<C: DataMut<Elem = u64>> BgvCiphertext<C> {
-    /// Borrows mutable `[c0,c1]` storage.
-    #[must_use]
-    pub fn as_mut_view(&mut self) -> BgvCiphertext<&mut [u64]> {
-        let binding = self.binding.clone();
-        BgvCiphertext {
-            data: self.as_mut(),
-            binding,
-        }
-    }
-
     /// Borrows both mutable DCRT components after checking their full length.
     ///
     /// # Panics

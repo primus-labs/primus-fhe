@@ -1,9 +1,11 @@
-//! Leveled BGV evaluation with native phase `c0+c1*s = m+p*e`.
+//! Leveled BGV evaluation with native phase `c0+c1*s = f*m+p*e (mod Q)`.
 //!
-//! The initial parameter family requires every ciphertext prime `q_i = 1 mod p`.
+//! Ciphertext primes must be coprime to the plaintext modulus `p`. Each ciphertext
+//! carries a unit correction factor `f`; adjacent prime drops update it, and
+//! addition aligns different factors. Fresh ciphertexts start at `f = 1`.
 //! This crate uses the full rank-one ciphertext ring for the secret, independently
 //! of a plaintext batching subring. Recovery reconstructs the exact centered CRT
-//! phase and reduces modulo p; it never invokes a BFV decoder.
+//! phase, reduces modulo p and removes `f`; it never invokes a BFV decoder.
 //!
 //! Shared [`BgvContext`] resources are borrowed by clients and prepared public
 //! encryptors. [`BgvMultiplication`] combines multiplication and relinearization
@@ -30,6 +32,7 @@ mod binding;
 mod ciphertext;
 mod client;
 mod context;
+mod correction;
 mod evaluation_key;
 mod evaluator;
 mod modulus_switch;

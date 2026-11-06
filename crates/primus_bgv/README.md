@@ -2,10 +2,7 @@
 
 English | [简体中文](README.zh_CN.md)
 
-Fixed-u64, rank-one leveled BGV for the `q_i ≡ 1 (mod p)` family. Native
-ciphertexts store `[c0,c1]` with phase `c0+c1*s=lift(m)+p*e`. The crate provides
-private/public encryption, linear/plaintext evaluation, multiplication,
-relinearization, key switching, automorphisms, prime drops and optional slots.
+Fixed-u64, rank-one leveled BGV with ciphertext primes coprime to plaintext p. Native ciphertexts store `[c0,c1]`, with phase `c0+c1*s`. Their intended integer representative is `z=lift(f*m mod p)+p*e`; recovery requires z in `(-Q/2,Q/2)`, where the centered native phase equals z. The canonical invertible correction factor f follows the ciphertext's operation history. The crate provides private/public encryption, linear/plaintext evaluation, multiplication, relinearization, key switching, automorphisms, prime drops and optional slots.
 
 ## Start with coefficients or slots
 
@@ -68,10 +65,7 @@ see the [native Hybrid contract](../../guides/development/native-hybrid-keys.md)
 ## Generate parameters and admit a declared circuit
 
 `BgvParameterRequest::create_context` generates and validates actual NTT primes
-from explicit N, p, prime width/count, levels and sampler laws. Q primes retain
-`q_i≡1 (mod p)`. `BgvCircuitPlan::try_new(&context,&operations,backend)` separately
-admits a static ordinary circuit. It reports every node's full integer phase,
-error envelope, component contributions, centered capacity and remaining margin;
+from explicit N, p, prime width/count, levels and sampler laws. Q primes support the full-ring NTT and need not be one modulo p. `BgvCircuitPlan::try_new(&context,&operations,backend)` separately admits a static ordinary circuit. It reports every node's correction factor, full integer phase, error envelope, component contributions, centered capacity and remaining margin;
 a rejection names its node/level and required modulus bit width. This is a
 bounded arithmetic workflow: callers adjust the explicit resources when needed.
 
@@ -93,20 +87,18 @@ changing N. `try_with_levels(parameters,count)` prepares only the requested
 prefixes. Generate role keys at each actual level; slicing a higher-level key
 matrix is not a lower-level key constructor. Prepared multiplication,
 relinearizer, switcher and automorphism derive their level from their role key.
-Linear evaluation, key generation and prime drops select it explicitly.
-Ordinary decryption reads the ciphertext's bound level.
+Linear evaluation, key generation and prime drops select it explicitly. Ordinary decryption reads the ciphertext's bound level.
+
+Fresh encryption has factor f=1. Multiplication multiplies the input factors modulo p, while a prime drop changes f to `f*q^-1 mod p`. Relinearization, secret switching and automorphisms preserve the factor. Same-level inputs can therefore have different factors; addition/subtraction automatically aligns them with public centered scalars before combining, and plaintext addition uses the factor-weighted message lift. These scalars contribute to the evaluated phase bound. Read `ciphertext.correction_factor()` when an external consumer needs the value; do not infer it from the level.
 
 Radix keys multiply the switched component by `p^-1 mod Q` before decomposition
 and use phases `p*g_j*h+p*e_j`; approximation residual and key noise stay
 p-multiples. The exact component prime drop is
-`(x-p*center_q(x*p^-1 mod q))/q mod (Q/q)`. It differs from BFV nearest rounding;
-general-prime chains are unsupported. Signed digits, truncated residuals,
-Hybrid correction and complete drop bounds are derived in
+`(x-p*center_q(x*p^-1 mod q))/q mod (Q/q)`. It differs from BFV nearest rounding and supports general coprime prime chains through the factor update above. Signed digits, truncated residuals, Hybrid correction and complete drop bounds are derived in
 [BGV evaluation](../../guides/development/bgv-evaluation.md).
 
 Recovery composes the selected-level phase exactly, including Q beyond 128 bits,
-and reduces its centered lift modulo p. The intended integer phase at **every
-level** must remain in `(-Q/2,Q/2)`. Parameter construction checks only a
+and reduces its centered lift modulo p, then removes f with its inverse modulo p. The intended integer phase at **every level** must remain in `(-Q/2,Q/2)`. Parameter construction checks only a
 sufficient fresh-private bound, `p*maximum_error+(p-1) <= floor(Q/2)`; public and
 evaluated recovery need their complete noise bounds. Errors are sampled once
 as signed coefficients across all RNS limbs. Public ephemeral r is exact CBD1;
@@ -114,7 +106,7 @@ fresh public phase is `lift(m)+p*(e_pk*r+e0+e1*s)` in the full negacyclic ring.
 Ciphertext primes must support the actual NTT and satisfy `q_i<2^62`;
 rootability checks do not certify primality or security.
 
-Coefficient p may be composite. Slots require prime `p≡1 mod 2n`; the context
+Coefficient p may be composite, but every ciphertext prime and correction factor must be coprime to p. Slots require prime `p≡1 mod 2n`; the context
 factory chooses `n=N`, while `leveled_slots` demonstrates an explicit smaller
 encoder. `embed_to` maps `f(Y)` to `f(X^(N/n))`, with full-N secrets/errors and
 ciphertexts. After recovery, `extract_to` verifies the subring before decoding.
@@ -123,6 +115,8 @@ ciphertexts. After recovery, `extract_to` verifies the subring before decoding.
 `n/2`; row swap exchanges rows without reversal. Encoder mismatches reject
 before key randomness. Their precise contracts are in the
 [encoding crate](../primus_encoding/README.md) and key-generation rustdoc.
+
+Flexilect retains its separate `q_i≡1 mod p` drop policy, factor-one ciphertexts and `Q=p*Delta+1` bridge/noise contracts. Its admission layer keeps those restrictions when using the more general ordinary BGV core.
 
 ## Collective and one-use protocol responsibilities
 
@@ -140,9 +134,7 @@ secret relation. `BgvSeededInput` samples an independent complete uniform A;
 `try_from_common_mask` imports an authenticated array with caller-owned
 provenance. A public short seed is not a full-ring statistical certificate, and
 A must not reuse a public-key mask or derive from selection/lookup key bytes.
-`partial_phase_to` produces only `c1*s_i`; an enclosing protocol supplies c0,
-privacy flooding, complete noise/security bounds and opening authorization.
-These primitives alone are not an authenticated opening protocol.
+`partial_phase_to` produces the physical contribution `c1*s_i`, without removing f. An enclosing protocol authenticates the factor with the complete ciphertext, supplies c0, privacy flooding, complete noise/security bounds and opening authorization. After combining all physical shares, it takes the centered phase modulo p and removes f once. These primitives alone are not an authenticated opening protocol.
 
 ## Resources and verification
 
@@ -163,15 +155,21 @@ borrows its exact active N·|Q| prefix; do not lend that buffer concurrently.
 
 Public entries check their documented complete lengths and plaintext conditions
 before writes/RNG consumption. Context-created ciphertexts, clones and views
-retain the local context and level. Prepared keys must belong to that same
+retain the local context, level and correction factor. Prepared keys must belong to that same
 context; bound foreign-context or wrong-level values reject before writes.
 `client.decrypt(&ciphertext)` uses its bound level. This does not prove the actual
 same-secret relationship or authenticate residues edited through `AsMut`. Explicit
 `from_raw` / `zero_raw` containers and `decrypt_at_level` / `decrypt_at_level_to`
-preserve advanced caller contracts. `context.try_bind_ciphertext(raw,level)` checks
-storage and canonicality once; the caller still attests its actual transform and
-secret. See [context, level and raw interoperability](../../guides/development/scheme-context-binding.md).
-Per-method rustdoc owns exact panic, correctness and partial-write contracts.
+preserve advanced caller contracts and declare factor one. `context.try_bind_ciphertext(raw,level)` checks storage and canonicality once. Import a different factor with `context.try_import_ciphertext(words,level,factor)`; it additionally requires `0<factor<p` and `gcd(factor,p)=1`, then binds the context/level. The caller still authenticates the scalar and attests the actual transform and secret.
+
+```rust,ignore
+let imported = context.try_import_ciphertext(received_words, level, received_factor)?;
+let message = client.decrypt(&imported);
+// Prepared outputs are passed directly; their factor is updated with their data.
+evaluator.add_to(&left, &right, &mut output);
+```
+
+`as_view()` preserves immutable metadata. Pass `&mut ciphertext` directly for prepared outputs; the former `as_mut_view()` convenience is retired so a metadata-changing operation cannot update a temporary copy while leaving its owner's factor stale. See [context, level and raw interoperability](../../guides/development/scheme-context-binding.md). Per-method rustdoc owns exact panic, correctness and partial-write contracts.
 
 Default features are empty. `batching` enables shared slot encoding; `simd`
 forwards the existing nightly backends. Runtime NTT intrinsic dispatch is

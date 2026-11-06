@@ -1,3 +1,4 @@
+use crate::correction::is_unit;
 use crate::{
     BgvCiphertext, BgvCiphertextBindingError, BgvParameters, BgvPublicKey, BgvPublicKeyEncryptor,
     BgvPublicKeyError, BgvQuadraticCiphertext,
@@ -249,6 +250,34 @@ impl BgvContext {
     #[must_use]
     pub fn new_ciphertext(&self, level: usize) -> BgvCiphertext<Vec<u64>> {
         BgvCiphertext::from_bound(vec![0; 2 * self.rns_poly_len(level)], self, level)
+    }
+
+    /// Imports canonical native storage with its declared plaintext correction.
+    ///
+    /// `correction_factor` must be a canonical unit modulo p. The caller declares
+    /// that the centered phase encodes `correction_factor*m` modulo p under this
+    /// context's actual secret and NTT convention. Validating public residues
+    /// and this scalar does not prove that semantic or secret relationship.
+    ///
+    /// # Errors
+    /// Rejects a noncanonical/noninvertible factor, an unavailable level,
+    /// incorrect complete geometry or noncanonical native residues.
+    pub fn try_import_ciphertext<C: Data<Elem = u64>>(
+        &self,
+        data: C,
+        level: usize,
+        correction_factor: u64,
+    ) -> Result<BgvCiphertext<C>, BgvCiphertextBindingError> {
+        let p = self.parameters.plain_modulus().value();
+        if !is_unit(correction_factor, p) {
+            return Err(BgvCiphertextBindingError::CorrectionFactor {
+                factor: correction_factor,
+                plaintext_modulus: p,
+            });
+        }
+        let mut ciphertext = BgvCiphertext::from_raw(data);
+        ciphertext.set_correction_factor(correction_factor);
+        self.try_bind_ciphertext(ciphertext, level)
     }
 
     /// Consumes complete native storage and binds it to this context and level.

@@ -763,6 +763,7 @@ impl<'a> BgvRelinearizer<'a> {
     /// # Correctness
     /// Input components are canonical residues using this actual secret,
     /// ordered level basis and NTT convention.
+    /// The output retains the tensor's plaintext correction factor.
     /// Radix residual/key noise or Hybrid key/ModDown corrections contribute
     /// p-scaled error;
     /// the intended output phase must stay in the centered Q interval.
@@ -790,6 +791,7 @@ impl<'a> BgvRelinearizer<'a> {
         let moduli = self.product.context.base_q(self.product.key.level).moduli();
         c0.add_assign(&t0, n, moduli);
         c1.add_assign(&t1, n, moduli);
+        output.set_correction_factor(input.correction_factor());
     }
 }
 
@@ -812,6 +814,7 @@ impl<'a> BgvKeySwitcher<'a> {
     }
 
     /// Writes a native ciphertext under the key's actual target secret.
+    /// Its plaintext correction factor is preserved.
     ///
     /// # Correctness
     /// Input components are canonical residues using the key's actual source
@@ -838,6 +841,7 @@ impl<'a> BgvKeySwitcher<'a> {
             self.product.context.parameters().poly_length().get(),
             self.product.context.base_q(self.product.key.level).moduli(),
         );
+        output.set_correction_factor(input.correction_factor());
     }
 }
 
@@ -862,6 +866,7 @@ impl<'a> BgvAutomorphism<'a> {
     }
 
     /// Writes σ(input) under the original secret, including the key-switch error.
+    /// The scalar plaintext correction is unchanged by the permutation.
     ///
     /// # Correctness
     /// Input components are canonical residues using the key's actual secret
@@ -898,6 +903,7 @@ impl<'a> BgvAutomorphism<'a> {
             n,
             self.product.context.base_q(self.product.key.level).moduli(),
         );
+        output.set_correction_factor(input.correction_factor());
     }
 }
 

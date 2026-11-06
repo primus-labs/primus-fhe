@@ -3,8 +3,8 @@
 use dashu_int::UBig;
 use primus_bgv::{
     BgvAutomorphism, BgvBudgetBackend, BgvCircuitOperation as Op, BgvCircuitPlan, BgvClient,
-    BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication, BgvParameterRequest,
-    BgvPlaintextBounds, BgvPlanningError, PlaintextEmbedding,
+    BgvContext, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
+    BgvParameterRequest, BgvParameters, BgvPlaintextBounds, BgvPlanningError, PlaintextEmbedding,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
@@ -273,4 +273,88 @@ fn public_ephemeral_support_is_independent_of_secret_support() {
         plan.security_inputs()[0].ephemeral_distribution,
         Some(SecretKeyDistr::SparseTernary)
     );
+}
+
+#[test]
+fn general_prime_plan_tracks_same_level_factor_histories_and_alignment() {
+    const PLAIN: u64 = 17;
+    let moduli = [12_289, 40_961, 65_537].map(BarrettModulus::new);
+    let context = BgvContext::try_with_levels(
+        BgvParameters::try_with_error_distribution(
+            PolyLength::new(N),
+            BarrettModulus::new(PLAIN),
+            &moduli,
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 1 },
+        )
+        .unwrap(),
+        3,
+    )
+    .unwrap();
+    let mut one = vec![0; N];
+    one[0] = 1;
+    let plain = BgvPlaintextBounds::try_new(
+        PolyLength::new(N),
+        BarrettModulus::new(PLAIN),
+        &one,
+        PlaintextEmbedding::Centered,
+    )
+    .unwrap();
+    let operations = [
+        Op::PrivateEncryption {
+            embedding: PlaintextEmbedding::Centered,
+        },
+        Op::Multiply { lhs: 0, rhs: 0 },
+        Op::DropPrime { input: 0 },
+        Op::DropPrime { input: 1 },
+        Op::Multiply { lhs: 2, rhs: 3 },
+        Op::Add { lhs: 2, rhs: 4 },
+        Op::AddPlain {
+            input: 2,
+            plaintext: plain.clone(),
+        },
+        Op::MultiplyPlain {
+            input: 6,
+            plaintext: plain,
+        },
+        Op::Automorphism {
+            input: 7,
+            exponent: 5,
+        },
+        Op::KeySwitch { input: 8 },
+        Op::DropPrime { input: 9 },
+        Op::Subtract { lhs: 2, rhs: 4 },
+    ];
+    let plan = BgvCircuitPlan::try_new(&context, &operations, radix()).unwrap();
+    let steps = plan.steps();
+    assert_eq!(steps[0].phase_bound, UBig::from(25u8));
+    assert_eq!(steps[0].correction_factor, 1);
+    assert_eq!(steps[1].correction_factor, 1);
+    // 65537 = 2 mod17, whose inverse is9. Squaring at this lower level
+    // gives factor13; thus a level alone cannot determine the message factor.
+    assert_eq!(steps[2].correction_factor, 9);
+    assert_eq!(steps[3].correction_factor, 9);
+    assert_eq!(steps[4].correction_factor, 13);
+    let inverse = |value| (1..PLAIN).find(|&x| value * x % PLAIN == 1).unwrap();
+    let factor = steps[5].correction_factor;
+    let left = factor * inverse(steps[2].correction_factor) % PLAIN;
+    let right = factor * inverse(steps[4].correction_factor) % PLAIN;
+    let norm = |scale: u64| scale.min(PLAIN - scale);
+    assert_eq!(
+        steps[5].phase_bound,
+        &steps[2].phase_bound * norm(left) + &steps[4].phase_bound * norm(right)
+    );
+    assert_eq!(steps[6].phase_bound, &steps[2].phase_bound + PLAIN / 2);
+    assert_eq!(steps[7].phase_bound, steps[6].phase_bound);
+    for step in &steps[6..10] {
+        assert_eq!(step.correction_factor, 9);
+    }
+    // The next dropped prime is8 mod17, with inverse15.
+    assert_eq!(steps[10].correction_factor, 16);
+    assert_eq!(steps[11].correction_factor, steps[5].correction_factor);
+    assert_eq!(steps[11].phase_bound, steps[5].phase_bound);
+    for step in steps {
+        assert!((1..PLAIN).contains(&step.correction_factor));
+        assert_eq!(&step.phase_bound + &step.margin, step.capacity);
+    }
 }

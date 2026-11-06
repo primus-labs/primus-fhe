@@ -1,5 +1,6 @@
 //! Public, deterministic integer-phase budgets for ordinary static BGV circuits.
 
+use crate::correction::{align, centered_abs, gcd, inverse, multiply};
 use dashu_int::{UBig, ops::BitTest};
 use primus_decompose::DecompositionConfig;
 use primus_distr::ErrorDistribution;
@@ -82,7 +83,8 @@ pub struct BgvParameterRequest {
 }
 
 impl BgvParameterRequest {
-    /// Generates q_i=1 modulo both 2N and p, validates them and prepares one context.
+    /// Generates ordinary NTT primes, validates them and prepares one context.
+    /// The ciphertext primes need not be one modulo the plaintext modulus.
     ///
     /// This establishes arithmetic compatibility and the constructor's fresh
     /// private recovery bound. Call [`BgvCircuitPlan::try_new`] for the complete
@@ -92,7 +94,7 @@ impl BgvParameterRequest {
             self.poly_length.get(),
             self.ciphertext_prime_bits,
             self.ciphertext_prime_count,
-            Some(self.plaintext_modulus),
+            None,
             &[],
         )?;
         let moduli = primes
@@ -180,6 +182,7 @@ pub struct BgvPlaintextBounds {
     p: u64,
     infinity: u64,
     one: UBig,
+    embedding: PlaintextEmbedding,
 }
 
 impl BgvPlaintextBounds {
@@ -213,6 +216,7 @@ impl BgvPlaintextBounds {
             p,
             infinity,
             one,
+            embedding,
         })
     }
 }
@@ -238,6 +242,13 @@ pub enum BgvCircuitOperation {
     },
     /// Adds two earlier degree-one results at the same level.
     Add {
+        /// Earlier left operand.
+        lhs: usize,
+        /// Earlier right operand.
+        rhs: usize,
+    },
+    /// Subtracts two earlier degree-one results with correction-factor alignment.
+    Subtract {
         /// Earlier left operand.
         lhs: usize,
         /// Earlier right operand.
@@ -276,7 +287,7 @@ pub enum BgvCircuitOperation {
         /// Earlier ciphertext operand under the source secret.
         input: usize,
     },
-    /// Drops exactly the last Q prime, retaining q_i=1 modulo p semantics.
+    /// Drops the last Q prime and updates the message correction factor.
     DropPrime {
         /// Earlier degree-one ciphertext operand.
         input: usize,
@@ -299,12 +310,15 @@ pub struct BgvBudgetStep {
     pub node: usize,
     /// Prefix level, counting removed tail primes.
     pub level: usize,
+    /// Canonical unit multiplying the logical message modulo p at this node.
+    pub correction_factor: u64,
     /// Additive contributions whose sum is `phase_bound`.
     pub terms: Vec<BgvBudgetTerm>,
     /// Upper bound on the intended integer phase, including message carries.
     pub phase_bound: UBig,
-    /// Error bound relative to the centered output message: floor((phase_bound+floor(p/2))/p).
-    /// This derived envelope includes the carry even if an input used unsigned lifting.
+    /// Error bound relative to the centered factor-encoded output message.
+    /// This is floor((phase_bound+floor(p/2))/p), including message carry even
+    /// if an input used unsigned lifting; logical recovery removes the factor.
     pub error_bound: UBig,
     /// Exact centered recovery capacity floor(Q/2).
     pub capacity: UBig,
@@ -314,8 +328,9 @@ pub struct BgvBudgetStep {
 
 /// A public deterministic budget for one declared ordinary static circuit.
 ///
-/// Tracks the full integer phase z, not just e in z=lift(m)+p*e: multiplication
-/// and plaintext operations therefore retain message carries automatically.
+/// Tracks the full integer phase z, not just e in z=lift(factor*m)+p*e:
+/// multiplication and plaintext operations retain message carries, while the
+/// factor records the logical message scale after data-prime drops.
 /// It uses hard sampler supports and full-ring convolution bounds, including
 /// repeated/correlated inputs and keys. It can conservatively reject circuits
 /// that would usually decrypt. It covers neither collective/raw/SSLE keys nor
@@ -384,7 +399,7 @@ impl<'a> BgvCircuitPlan<'a> {
         for (node, operation) in operations.iter().enumerate() {
             let mut terms = Vec::new();
             let mut add = |label, bound| terms.push(BgvBudgetTerm { label, bound });
-            let level = match operation {
+            let (level, correction_factor) = match operation {
                 BgvCircuitOperation::PublicEncryption { embedding } => {
                     add("message lift", UBig::from(message_bound(p, *embedding)));
                     add(
@@ -393,14 +408,15 @@ impl<'a> BgvCircuitPlan<'a> {
                     );
                     add("fresh body error", &e * p);
                     add("fresh mask error times secret", &h * &e * p);
-                    0
+                    (0, 1)
                 }
                 BgvCircuitOperation::PrivateEncryption { embedding } => {
                     add("message lift", UBig::from(message_bound(p, *embedding)));
                     add("fresh private error", &e * p);
-                    0
+                    (0, 1)
                 }
                 BgvCircuitOperation::Add { lhs, rhs }
+                | BgvCircuitOperation::Subtract { lhs, rhs }
                 | BgvCircuitOperation::Multiply { lhs, rhs } => {
                     let left = plan.operand(node, *lhs)?;
                     let right = plan.operand(node, *rhs)?;
@@ -411,10 +427,22 @@ impl<'a> BgvCircuitPlan<'a> {
                         });
                     }
                     let level = left.level;
-                    if matches!(operation, BgvCircuitOperation::Add { .. }) {
-                        add("left integer phase", left.phase_bound.clone());
-                        add("right integer phase", right.phase_bound.clone());
+                    let factor = if matches!(
+                        operation,
+                        BgvCircuitOperation::Add { .. } | BgvCircuitOperation::Subtract { .. }
+                    ) {
+                        let alignment = align(left.correction_factor, right.correction_factor, p);
+                        add(
+                            "left integer phase after factor alignment",
+                            &left.phase_bound * centered_abs(alignment.lhs_scale, p),
+                        );
+                        add(
+                            "right integer phase after factor alignment",
+                            &right.phase_bound * centered_abs(alignment.rhs_scale, p),
+                        );
+                        alignment.factor
                     } else {
+                        let factor = multiply(left.correction_factor, right.correction_factor, p);
                         add(
                             "tensor integer phase including plaintext carry",
                             UBig::from(n) * &left.phase_bound * &right.phase_bound,
@@ -422,8 +450,9 @@ impl<'a> BgvCircuitPlan<'a> {
                         for term in plan.key_terms(level, &backend, &e, &h, true)? {
                             add(term.label, term.bound);
                         }
-                    }
-                    level
+                        factor
+                    };
+                    (level, factor)
                 }
                 BgvCircuitOperation::AddPlain { input, plaintext }
                 | BgvCircuitOperation::MultiplyPlain { input, plaintext } => {
@@ -436,14 +465,22 @@ impl<'a> BgvCircuitPlan<'a> {
                     }
                     if matches!(operation, BgvCircuitOperation::AddPlain { .. }) {
                         add("input integer phase", input.phase_bound.clone());
-                        add("public plaintext lift", UBig::from(plaintext.infinity));
+                        let bound = if input.correction_factor == 1 {
+                            plaintext.infinity
+                        } else {
+                            // Norms alone do not determine the norm after a
+                            // factor multiplication modulo p. Use the complete
+                            // selected embedding range rather than guessing it.
+                            message_bound(p, plaintext.embedding)
+                        };
+                        add("factor-encoded public plaintext lift", UBig::from(bound));
                     } else {
                         add(
                             "input phase times public plaintext l1 norm",
                             &input.phase_bound * &plaintext.one,
                         );
                     }
-                    input.level
+                    (input.level, input.correction_factor)
                 }
                 BgvCircuitOperation::Automorphism { input, exponent } => {
                     if (*exponent).is_multiple_of(2) || *exponent >= n.saturating_mul(2) {
@@ -454,20 +491,22 @@ impl<'a> BgvCircuitPlan<'a> {
                     }
                     let input = plan.operand(node, *input)?;
                     let level = input.level;
+                    let factor = input.correction_factor;
                     add("signed coefficient permutation", input.phase_bound.clone());
                     for term in plan.key_terms(level, &backend, &e, &h, false)? {
                         add(term.label, term.bound);
                     }
-                    level
+                    (level, factor)
                 }
                 BgvCircuitOperation::KeySwitch { input } => {
                     let input = plan.operand(node, *input)?;
                     let level = input.level;
+                    let factor = input.correction_factor;
                     add("input integer phase", input.phase_bound.clone());
                     for term in plan.key_terms(level, &backend, &e, &h, false)? {
                         add(term.label, term.bound);
                     }
-                    level
+                    (level, factor)
                 }
                 BgvCircuitOperation::DropPrime { input } => {
                     let input = plan.operand(node, *input)?;
@@ -490,7 +529,10 @@ impl<'a> BgvCircuitPlan<'a> {
                         "p-preserving component corrections",
                         ceil(UBig::from(p) * (q - 1) * (&h + 1u8), UBig::from(q) * 2u8),
                     );
-                    input.level + 1
+                    (
+                        input.level + 1,
+                        multiply(input.correction_factor, inverse(q % p, p), p),
+                    )
                 }
             };
             let phase_bound = terms.iter().fold(UBig::ZERO, |sum, term| sum + &term.bound);
@@ -509,6 +551,7 @@ impl<'a> BgvCircuitPlan<'a> {
             plan.steps.push(BgvBudgetStep {
                 node,
                 level,
+                correction_factor,
                 terms,
                 phase_bound,
                 error_bound,
@@ -654,10 +697,4 @@ fn product(values: &[u64]) -> UBig {
 }
 fn ceil(numerator: UBig, denominator: UBig) -> UBig {
     (&numerator + &denominator - 1u8) / denominator
-}
-fn gcd(mut a: u64, mut b: u64) -> u64 {
-    while b != 0 {
-        (a, b) = (b, a % b);
-    }
-    a
 }

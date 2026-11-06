@@ -187,7 +187,7 @@ fn linear_and_plaintext_operations_preserve_native_bgv_phase_and_components() {
         check(&mut client, &lhs, &lhs_phase, p);
         check(&mut client, &rhs, &rhs_phase, p);
 
-        evaluator.add_to(&lhs.as_view(), &rhs.as_view(), &mut output.as_mut_view());
+        evaluator.add_to(&lhs.as_view(), &rhs.as_view(), &mut output);
         check(&mut client, &output, &combine(&lhs_phase, &rhs_phase, 1), p);
         let mut assigned = lhs.clone();
         evaluator.add_assign(&mut assigned, &rhs);

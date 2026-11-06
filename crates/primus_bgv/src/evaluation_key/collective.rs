@@ -583,6 +583,7 @@ impl<'c> BgvSeededInput<'c> {
     }
 
     /// Inserts A once and consumes the nonempty body aggregate.
+    /// The freshly encoded sum has plaintext correction factor one.
     /// # Errors
     /// Rejects an aborted, empty or differently bound sum. Caller checks complete roster.
     pub fn finalize(
@@ -1249,6 +1250,10 @@ impl BgvCollectiveRelinearizationState<'_, '_> {
 impl BgvClient<'_> {
     /// Writes only this owner's native partial phase `c1*s_i`, without c0.
     /// No privacy flooding, roster check or one-use authorization is implied.
+    /// This is a physical phase contribution, so it is not divided by the
+    /// ciphertext's plaintext correction factor. The caller authenticates that
+    /// factor with the complete ciphertext and applies its inverse once, after
+    /// recovering the aggregate centered phase modulo p.
     /// # Correctness
     /// Input uses this exact actual secret and context/NTT convention.
     /// # Errors

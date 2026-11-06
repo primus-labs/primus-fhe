@@ -9,20 +9,25 @@ use primus_poly::DcrtPolynomial;
 /// automorphisms or recovery. Each component has the same modulus-major NTT
 /// layout. Context-created tensors retain their exact local owner and level;
 /// explicit raw storage inherits the consuming operation's caller contracts.
+/// Its message multiplier is propagated by tensor multiplication and retained
+/// by relinearization; it need not equal that of another tensor at this level.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BgvQuadraticCiphertext<C> {
     data: C,
     binding: Option<Binding>,
+    correction_factor: u64,
 }
 
 impl<C: Data<Elem = u64>> BgvQuadraticCiphertext<C> {
     /// Wraps raw degree-two storage for explicit advanced interoperability.
-    /// The caller supplies its exact context, level, NTT convention and secret.
+    /// Declares correction factor one. The caller supplies its exact context,
+    /// level, NTT convention and secret.
     #[must_use]
     pub fn from_raw(data: C) -> Self {
         Self {
             data,
             binding: None,
+            correction_factor: 1,
         }
     }
 
@@ -30,7 +35,18 @@ impl<C: Data<Elem = u64>> BgvQuadraticCiphertext<C> {
         Self {
             data,
             binding: Some(Binding::new(context, level)),
+            correction_factor: 1,
         }
+    }
+
+    /// Returns the canonical plaintext message multiplier of this tensor.
+    #[must_use]
+    pub fn correction_factor(&self) -> u64 {
+        self.correction_factor
+    }
+
+    pub(crate) fn set_correction_factor(&mut self, factor: u64) {
+        self.correction_factor = factor;
     }
 
     pub(crate) fn check_binding(&self, context: &BgvContext, level: usize) {
@@ -45,6 +61,7 @@ impl<C: Data<Elem = u64>> BgvQuadraticCiphertext<C> {
         BgvQuadraticCiphertext {
             data: self.as_ref(),
             binding: self.binding.clone(),
+            correction_factor: self.correction_factor,
         }
     }
 
@@ -78,16 +95,6 @@ impl BgvQuadraticCiphertext<Vec<u64>> {
 }
 
 impl<C: DataMut<Elem = u64>> BgvQuadraticCiphertext<C> {
-    /// Borrows mutable degree-two storage.
-    #[must_use]
-    pub fn as_mut_view(&mut self) -> BgvQuadraticCiphertext<&mut [u64]> {
-        let binding = self.binding.clone();
-        BgvQuadraticCiphertext {
-            data: self.as_mut(),
-            binding,
-        }
-    }
-
     /// Borrows three mutable components after checking the complete length.
     ///
     /// # Panics

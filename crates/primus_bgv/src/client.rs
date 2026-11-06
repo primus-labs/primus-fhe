@@ -2,11 +2,12 @@ use crate::parameters::compare_words;
 use crate::workspace::BgvDecryptWorkspace;
 use crate::{BgvCiphertext, BgvContext, BgvPublicKey};
 use primus_data::{Data, DataMut};
+use primus_factor::{FactorSliceOps, ShoupFactor};
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, RnsDomainError};
 use primus_integer::BigUint;
 use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial, PolynomialOwned};
-use primus_reduce::{Reduce, ReduceMul, ReduceSub};
+use primus_reduce::{Reduce, ReduceInv, ReduceMul, ReduceSub};
 use primus_rns::Residues;
 
 /// One full-ring secret and erasing recovery workspace borrowing a BGV context.
@@ -224,6 +225,7 @@ impl<'a> BgvClient<'a> {
             n,
             base.moduli(),
         );
+        output.set_correction_factor(1);
     }
 
     /// Recovers coefficients using the ciphertext's recorded context and level.
@@ -248,7 +250,9 @@ impl<'a> BgvClient<'a> {
     /// # Correctness
     /// Input has canonical per-limb residues and uses this actual secret, ordered
     /// Q and NTT convention. Its intended
-    /// integer phase m+p*e must remain in the centered Q interval. Fresh private
+    /// integer phase lift(f*m)+p*e must remain in the centered Q interval, where
+    /// f is the ciphertext correction factor. Recovery first reduces that phase
+    /// modulo p, then applies f^-1. Fresh private
     /// bounds do not automatically cover public or evaluated ciphertext noise.
     /// # Panics
     /// Rejects recorded context/level mismatches, unprepared levels or incorrect lengths
@@ -322,6 +326,13 @@ impl<'a> BgvClient<'a> {
             } else {
                 canonical
             };
+        }
+        // Existing factor-one recovery retains its exact loop. Only a general
+        // chain's weighted message needs the final public scalar multiplication.
+        let factor = input.correction_factor();
+        if factor != 1 {
+            ShoupFactor::new(p.reduce_inv(factor), p.value())
+                .factor_mul_slice_assign(output.as_mut(), p.value());
         }
     }
 

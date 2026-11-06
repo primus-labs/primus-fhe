@@ -84,8 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let plan = BgvCircuitPlan::try_new(&context, &operations, backend)?;
     for step in plan.steps() {
         println!(
-            "node {}: level {}, phase <= {}, recovery margin {}",
-            step.node, step.level, step.phase_bound, step.margin
+            "node {}: level {}, factor {}, phase <= {}, recovery margin {}",
+            step.node, step.level, step.correction_factor, step.phase_bound, step.margin
         );
     }
     println!(

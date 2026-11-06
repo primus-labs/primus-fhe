@@ -1,27 +1,32 @@
 //! Local two-owner arithmetic demonstration, not a distributed protocol or
 //! parameter certificate. Native shares are consumed into online clients only
-//! after key generation. Each owner keeps its own secret; no sum is built.
+//! after key generation. Each owner keeps its own secret; no aggregate secret is built.
 //! Run: cargo run -p primus_bgv --example collective
 use primus_bgv::{
-    BgvClient, BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvContext, BgvMultiplication,
-    BgvParameters,
+    BgvClient, BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvContext, BgvModulusSwitch,
+    BgvMultiplication, BgvParameters,
 };
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{DcrtGlweSecretKey, GlweSecretKey, SecretKeyDistr};
 use primus_modulus::BarrettModulus;
+use primus_ntt::NttTable;
 use primus_poly::{DcrtPolynomial, Polynomial};
+use primus_reduce::{ReduceInv, ReduceMul};
 use primus_shape::PolyLength;
 use rand::{SeedableRng, rngs::StdRng};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let context = BgvContext::try_new(BgvParameters::try_with_error_distribution(
-        PolyLength::new(32),
-        BarrettModulus::new(193),
-        &[BarrettModulus::new(1_125_899_906_248_961)],
-        SecretKeyDistr::SparseTernary,
-        ErrorDistribution::CenteredBinomial { eta: 21 },
-    )?)?;
+    let context = BgvContext::try_with_levels(
+        BgvParameters::try_with_error_distribution(
+            PolyLength::new(32),
+            BarrettModulus::new(193),
+            &[1_125_899_905_351_681, 1_125_899_905_744_897].map(BarrettModulus::new),
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 21 },
+        )?,
+        2,
+    )?;
     let mut rng = StdRng::seed_from_u64(15);
     let mut generate_share = || {
         let coefficient = GlweSecretKey::generate(
@@ -72,19 +77,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .encrypt_centered(&message, &mut rng);
     let mut output = context.new_ciphertext(0);
     BgvMultiplication::try_new(&context, &relinearization_key)?.square_to(&input, &mut output);
+    let mut dropped = context.new_ciphertext(1);
+    BgvModulusSwitch::new(&context, 0).switch_to(&output, &mut dropped);
 
-    // Arithmetic-only opening for this tiny single-prime example. A real
+    // Arithmetic-only opening after dropping to one remaining data prime. A real
     // collective protocol additionally requires authenticated complete rosters,
     // fresh privacy flooding and one-use authorization before partial products.
-    let len = context.rns_poly_len(0);
-    let mut phase = DcrtPolynomial(output.as_ref()[..len].to_vec());
+    // Authenticate the correction factor with the same ciphertext/request;
+    // bare partial products do not authenticate it or provide privacy.
+    let len = context.rns_poly_len(1);
+    let mut phase = DcrtPolynomial(dropped.as_ref()[..len].to_vec());
     let mut partial = DcrtPolynomial(vec![0; len]);
-    alice.partial_phase_to(&output, 0, &mut partial)?;
-    phase.add_assign(&partial, 32, context.base_q(0).moduli());
-    bob.partial_phase_to(&output, 0, &mut partial)?;
-    phase.add_assign(&partial, 32, context.base_q(0).moduli());
-    context.table().inverse_transform_slice(phase.as_mut());
-    let q = i128::from(context.base_q(0).moduli_values()[0]);
+    alice.partial_phase_to(&dropped, 1, &mut partial)?;
+    phase.add_assign(&partial, 32, context.base_q(1).moduli());
+    bob.partial_phase_to(&dropped, 1, &mut partial)?;
+    phase.add_assign(&partial, 32, context.base_q(1).moduli());
+    context.table().ntt_tables()[0].inverse_transform_slice(phase.as_mut());
+    let q = i128::from(context.base_q(1).moduli_values()[0]);
+    let p = context.parameters().plain_modulus();
+    let inverse_factor = p.reduce_inv(dropped.correction_factor());
     let decoded = Polynomial::new(
         phase
             .as_ref()
@@ -92,12 +103,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|&x| {
                 let x = i128::from(x);
                 let centered = if x > q / 2 { x - q } else { x };
-                centered.rem_euclid(193) as u64
+                p.reduce_mul(centered.rem_euclid(193) as u64, inverse_factor)
             })
             .collect::<Vec<_>>(),
     );
     assert_eq!(&decoded.as_ref()[..3], &[9, 12, 4]);
     assert!(decoded.as_ref()[3..].iter().all(|&x| x == 0));
-    println!("collective (3+2X)^2 = 9+12X+4X²");
+    println!(
+        "collective (3+2X)^2 = 9+12X+4X² after prime drop, correction factor {}",
+        dropped.correction_factor()
+    );
     Ok(())
 }

@@ -141,7 +141,7 @@ fn private_native_phase_has_one_shared_p_scaled_error_for_all_limbs() {
                 if centered {
                     client.encrypt_centered_to(&message, &mut ciphertext, &mut rng);
                 } else {
-                    client.encrypt_to(&message.as_view(), &mut ciphertext.as_mut_view(), &mut rng);
+                    client.encrypt_to(&message.as_view(), &mut ciphertext, &mut rng);
                 }
                 let phase = phase_oracle(ciphertext.as_ref(), &secret, count);
                 for limb in phase.as_chunks::<N>().0.iter() {
@@ -205,20 +205,16 @@ fn exact_centered_recovery_handles_150_bit_q_and_half_interval_boundaries() {
 
 #[test]
 fn invalid_geometry_moduli_and_plaintext_are_rejected_before_writes_or_rng() {
-    let moduli = Q[..1]
-        .iter()
-        .copied()
-        .map(BarrettModulus::new)
-        .collect::<Vec<_>>();
+    let moduli = [BarrettModulus::new(35)];
     assert!(matches!(
         BgvParameters::try_coefficients(
             PolyLength::new(N),
-            BarrettModulus::new(17),
+            BarrettModulus::new(15),
             &moduli,
             SecretKeyDistr::SparseTernary,
             1.0
         ),
-        Err(BgvParametersError::PrimeCongruence { .. })
+        Err(BgvParametersError::PlaintextNotCoprime { .. })
     ));
     let context = context(1, ErrorDistribution::CenteredBinomial { eta: 1 });
     let mut rng = StdRng::seed_from_u64(2);

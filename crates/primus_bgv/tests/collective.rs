@@ -1,7 +1,8 @@
 use primus_bgv::{
     BgvAutomorphism, BgvCiphertext, BgvClient, BgvCollectiveAutomorphismKey, BgvCollectiveError,
     BgvCollectivePublicKey, BgvCollectiveRelinearization, BgvCollectiveSwitchingKey, BgvContext,
-    BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvParameters, BgvRelinearizer, BgvSeededInput,
+    BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication, BgvParameters,
+    BgvRelinearizer, BgvSeededInput,
 };
 use primus_decompose::DecompositionBaseLog;
 use primus_decompose::DecompositionConfig;
@@ -269,6 +270,107 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
             .map(|x| x.rem_euclid(i128::from(P)) as u64)
             .collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn collective_partial_recovery_preserves_general_prime_drop_correction() {
+    let qs = [1_125_899_905_351_681, 1_125_899_905_744_897];
+    assert!(qs.iter().all(|&q| q % P != 1));
+    let context = BgvContext::try_with_levels(
+        BgvParameters::try_with_error_distribution(
+            PolyLength::new(N),
+            BarrettModulus::new(P),
+            &qs.map(BarrettModulus::new),
+            SecretKeyDistr::SparseTernary,
+            ErrorDistribution::CenteredBinomial { eta: 21 },
+        )
+        .unwrap(),
+        2,
+    )
+    .unwrap();
+    let shares = fixture();
+    let combined = sum(&shares);
+    let mut oracle = owner(&context, &combined);
+    let keys = shares
+        .iter()
+        .map(|coefficients| share(&context, coefficients))
+        .collect::<Vec<_>>();
+    let mut rng = StdRng::seed_from_u64(0x22_c011);
+
+    let public_setup = BgvCollectivePublicKey::try_new(&context, &mut rng).unwrap();
+    let mut public_sum = public_setup.aggregate();
+    for key in &keys {
+        public_sum
+            .add(&public_setup.contribute(key, &mut rng).unwrap())
+            .unwrap();
+    }
+    let public_key = public_setup.finalize(public_sum).unwrap();
+
+    let setup = BgvCollectiveRelinearization::try_new(&context, 0, config(), &mut rng).unwrap();
+    let mut first = setup.round_one_aggregate();
+    let mut states = Vec::new();
+    for key in &keys {
+        let (message, state) = setup.start(key, &mut rng).unwrap();
+        first.add(&message).unwrap();
+        states.push(state);
+    }
+    let frozen = setup.freeze_round_one(first).unwrap();
+    let mut second = setup.round_two_aggregate(&frozen).unwrap();
+    for state in states {
+        second
+            .add(&state.round2(&frozen, &mut rng).unwrap())
+            .unwrap();
+    }
+    let relinearization = setup.finalize(&frozen, second).unwrap();
+    let clients = keys
+        .into_iter()
+        .map(|key| BgvClient::try_from_secret_key(&context, key).unwrap())
+        .collect::<Vec<_>>();
+    let mut message = context.new_plaintext();
+    message.as_mut()[0] = 3;
+    message.as_mut()[N - 1] = P - 2;
+    let input = context
+        .public_key_encryptor(&public_key)
+        .unwrap()
+        .encrypt_centered(&message, &mut rng);
+    let mut squared = context.new_ciphertext(0);
+    BgvMultiplication::try_new(&context, &relinearization)
+        .unwrap()
+        .square_to(&input, &mut squared);
+    let mut output = context.new_ciphertext(1);
+    BgvModulusSwitch::new(&context, 0).switch_to(&squared, &mut output);
+    assert_ne!(output.correction_factor(), 1);
+
+    let len = context.rns_poly_len(1);
+    let mut phase = DcrtPolynomial(output.as_ref()[..len].to_vec());
+    let mut partial = DcrtPolynomial(vec![0; len]);
+    for client in &clients {
+        client.partial_phase_to(&output, 1, &mut partial).unwrap();
+        phase.add_assign(&partial, N, context.base_q(1).moduli());
+    }
+    context.table().ntt_tables()[0].inverse_transform_slice(phase.as_mut());
+    // P is the fixed prime193. Fermat inversion and a single-limb centered
+    // decoder are independent of the production client's CRT/factor decoder.
+    let inverse_factor = (0..P - 2).fold(1, |value, _| value * output.correction_factor() % P);
+    assert_eq!(inverse_factor * output.correction_factor() % P, 1);
+    let q = qs[0];
+    let decoded = phase
+        .as_ref()
+        .iter()
+        .map(|&value| centered(i128::from(value), q).rem_euclid(i128::from(P)) as u64)
+        .map(|value| value * inverse_factor % P)
+        .collect::<Vec<_>>();
+    let coefficients = message
+        .as_ref()
+        .iter()
+        .map(|&value| i128::from(value))
+        .collect::<Vec<_>>();
+    let expected = convolution(&coefficients, &coefficients)
+        .into_iter()
+        .map(|value| value.rem_euclid(i128::from(P)) as u64)
+        .collect::<Vec<_>>();
+    assert_eq!(decoded, expected);
+    assert_eq!(oracle.decrypt_at_level(&output, 1).as_ref(), decoded);
 }
 
 #[test]

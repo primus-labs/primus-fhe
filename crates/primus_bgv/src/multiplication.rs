@@ -9,7 +9,8 @@ use primus_data::{Data, DataMut};
 ///
 /// The key selects one prepared modulus level. This request borrows the context
 /// and key, and owns one reusable quadratic buffer plus relinearization scratch.
-/// It applies no BFV scaling, prime drop or automatic noise policy.
+/// It applies no BFV scaling, prime drop or automatic noise policy. The output
+/// plaintext correction is the product of the two input corrections modulo p.
 pub struct BgvMultiplication<'a> {
     context: &'a BgvContext,
     level: usize,

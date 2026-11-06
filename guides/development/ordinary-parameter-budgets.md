@@ -16,10 +16,10 @@
 | 分布 | 实际 secret/error law；公开加密 ephemeral 固定 CBD1 | 同左 |
 | 电路 | 1…8 层普通二输入乘法，包含 square | 静态公开操作 DAG，操作数引用此前节点 |
 | 换钥后端 | signed Radix16 或 Hybrid alpha1 | 指定 signed radix 配置或实际 Hybrid 分区及 P |
-| 降模 | 每层内部缩基、HPSPOVERQ、恢复外部 level 0 | 显式 p-preserving prime drop |
+| 降模 | 每层内部缩基、HPSPOVERQ、恢复外部 level 0 | 显式 p-constrained drop，并更新密文 correction factor |
 
 生成器有限地搜索实际素数，并验证素性、互异性、`q < 2^62` 和 `2N | q−1`。
-BGV 还保留 `q_i ≡ 1 (mod p)`；Hybrid key P 与 Q、p 必须互素。
+普通 BGV 的 Q 须与 p 互素，不再要求 `q_i ≡ 1 (mod p)`；Hybrid key P 与 Q、p 必须互素。
 普通低层参数/context 构造器的原契约不因新增请求而变成通用 prime 认证或完整预算。
 带自选 Q 的 context 进入 planner 时同样验证 primes。
 
@@ -33,6 +33,16 @@ BFV 的每层两个输入均须满足上一层公开误差界，消息采用全�
 BGV 支持 fresh public/private、加法、明文加乘、乘法及 relinearization、automorphism、
 key switch 和 drop。后续操作须实际使用 plan 返回的相应 level key 配置。
 同一 context 的真实 secret 关系、实际消息和诚实建钥仍是调用方的语义前提。
+
+## BGV correction factor 与外部密文
+
+一般 BGV 密文携带规范可逆的 scalar f，其 intended integer phase 为 `z=lift(f*m mod p)+p*e`；z 须落在 `(-Q/2,Q/2)`，才与原生 phase 的 centered lift 相同。Fresh 加密 f=1；乘法把输入 factors 相乘，丢弃 prime q 将 f 更新为 `f*q^-1 mod p`；relinearization、换钥和自同构保留 f。相同 level 可以有不同历史和 factor，加减法会用公开 centered scalars 对齐后合并，明文加法也会使用 f 加权 lift。它们的额外整数尺度由 planner 与实际求值按同一策略处理。
+
+`BgvCircuitPlan::steps()` 中的每个节点同时报告 factor 与 phase 界；它不要求调用方手动改写消息。正常恢复先对物理 phase 做 centered CRT 与模 p，再应用 f 的逆。`BgvCiphertext::as_view()` 保留该标量，prepared 输出直接传 `&mut ciphertext`，避免 mutable view 复制元数据后发生丢写。
+
+外部 canonical NTT 数据通过 `context.try_import_ciphertext(words,level,factor)` 导入；它验证完整 shape、canonical residues，以及 `0<factor<p`、`gcd(factor,p)=1` 后绑定 context/level。明文 p 为合数时，仅非零不代表可逆。调用方仍须认证factor和实际secret/NTT约定；检查通过不证明这些关系。`from_raw`/`zero_raw` 明确声明 f=1，不能用它们丢弃一般链的factor。
+
+Collective 的 `partial_phase_to` 保持物理 `c1*s_i`，不分别去除 f；组合所有份额后只在最终 centered phase 恢复处应用一次逆factor。factor 认证、flooding及完整opening协议属于上层。Flexilect 的专门 `q_i≡1 mod p`、f=1及 `Q=p*Delta+1` 桥接仍由其准入层保留，普通BGV放宽不扩展该协议的参数证书。
 
 ## 预算的含义
 
@@ -51,8 +61,7 @@ tensor、component rounding、key sampling/residual 或 ModDown、scaled restora
 
 BGV 直接跟踪意图中的整数 phase 上界 Z，因此乘法的明文 carry 也在 `N*Z1*Z2`
 之内。每节点检查 `Z <= floor(Q/2)`，key residual 按 relin 的 s² 或其它角色的 s
-计入；drop 计入 p-preserving component corrections。账本列出每项、level、容量和余量。
-此界可以偏保守，但不会用一个未经证明的小误差替换整个乘法 phase。
+计入；drop 计入 p-constrained component corrections。不同factor的加减法使用实际对齐scalars的绝对值放大相应phase界；明文加法的加权lift也单独计入。账本列出每项、level、factor、容量和余量。`error_bound` 相对centered的factor-encoded消息，而非忽略factor后直接相对原逻辑m；消息carry仍包含在完整phase内。此界可以偏保守，但不会用一个未经证明的小误差替换整个乘法 phase。
 数学身份见 [BGV 求值](bgv-evaluation.md) 和 [Hybrid keys](native-hybrid-keys.md)。
 
 这些账本只准入所声明的普通单 owner 电路。Collective key、raw tensor、Flexilect 的
@@ -111,4 +120,4 @@ python3 scripts/check_scheme_consumers.py
 
 示例和测试把整数账本与真实 ciphertext 工作流一起核对；参数数学的独立 oracle、
 错误边界和既有在线分配检查各自保留。一次解密成功不替代预算或安全估算。
-新增计算均位于参数/准备阶段，Flexilect 默认参数和在线四轮路径保持原有契约。
+参数生成与电路准入位于准备阶段，实际BGV运算按需要传播/对齐factor。Flexilect 默认参数和在线四轮路径保持其专门契约。

@@ -177,7 +177,7 @@ fn dense_and_monomial_tensors_and_squares_match_independent_phases_at_every_leve
                 let right = ciphertext(&rhs, count);
                 let evaluator = BgvEvaluator::new(&context, level);
                 let mut output = context.new_quadratic_ciphertext(level);
-                evaluator.mul_to(&left.as_view(), &right.as_view(), &mut output.as_mut_view());
+                evaluator.mul_to(&left.as_view(), &right.as_view(), &mut output);
                 verify_quadratic(
                     &output,
                     &[

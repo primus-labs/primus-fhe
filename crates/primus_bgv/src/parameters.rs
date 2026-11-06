@@ -1,3 +1,4 @@
+use crate::correction::gcd;
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::{
     CrtGlweEncryptionParameters, CrtGlweEncryptionParametersError, SecretKeyDistr,
@@ -24,9 +25,9 @@ pub enum BgvParametersError {
     /// Plaintext modulus must be at least two and below every ciphertext prime.
     #[error("BGV plaintext modulus must satisfy 2 <= p < every q_i")]
     PlainModulus,
-    /// This initial family requires q_i congruent to one modulo p.
-    #[error("BGV ciphertext modulus {modulus} at index {index} is not 1 modulo p")]
-    PrimeCongruence {
+    /// A ciphertext modulus shares a factor with the plaintext modulus.
+    #[error("BGV ciphertext modulus {modulus} at index {index} is not coprime to p")]
+    PlaintextNotCoprime {
         /// Ordered basis index.
         index: usize,
         /// Rejected modulus.
@@ -37,12 +38,12 @@ pub enum BgvParametersError {
     FreshRecovery,
 }
 
-/// Rank-one fixed-u64 BGV parameters for the `q_i = 1 mod p` family.
+/// Rank-one fixed-u64 BGV parameters with ciphertext moduli coprime to p.
 ///
 /// Total Q may exceed 128 bits. One coefficient error is sampled and encoded
 /// under all limbs, then multiplied by p; these are correlated residues of the
 /// same signed integer, not independent per-limb errors. Plaintext p may be
-/// composite for coefficient arithmetic; ciphertext q_i must be prime for the
+/// composite for coefficient arithmetic and coprime to each q_i; ciphertext q_i must be prime for the
 /// NTT workflow. Parameter preparation does not certify their primality.
 pub struct BgvParameters {
     sampling: CrtGlweEncryptionParameters<u64>,
@@ -56,7 +57,7 @@ impl BgvParameters {
     /// Prepares coefficient parameters with the existing discrete Gaussian sampler.
     ///
     /// # Errors
-    /// Rejects invalid geometry, RNS/sampling parameters, unsupported congruences
+    /// Rejects invalid geometry, RNS/sampling parameters, noncoprime moduli
     /// or insufficient fresh private recovery margin. Establishes no security level.
     pub fn try_coefficients(
         poly_length: PolyLength,
@@ -79,7 +80,7 @@ impl BgvParameters {
     /// Prepares Gaussian or exact CBD coefficient error sampling.
     ///
     /// # Errors
-    /// The same geometry, congruence and recovery checks as [`Self::try_coefficients`]
+    /// The same geometry, coprimality and recovery checks as [`Self::try_coefficients`]
     /// apply. NTT compatibility is established by [`crate::BgvContext::try_new`].
     pub fn try_with_error_distribution(
         poly_length: PolyLength,
@@ -93,8 +94,8 @@ impl BgvParameters {
             return Err(BgvParametersError::PlainModulus);
         }
         for (index, q) in cipher_moduli.iter().enumerate() {
-            if q.value() % p != 1 {
-                return Err(BgvParametersError::PrimeCongruence {
+            if gcd(q.value(), p) != 1 {
+                return Err(BgvParametersError::PlaintextNotCoprime {
                     index,
                     modulus: q.value(),
                 });

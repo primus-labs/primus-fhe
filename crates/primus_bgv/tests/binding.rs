@@ -71,7 +71,7 @@ fn import_preserves_storage_and_views_keep_exact_owner_and_level() {
         Err(BgvCiphertextBindingError::ContextMismatch)
     ));
     assert!(matches!(
-        context.check_ciphertext(&bound.as_mut_view(), 0),
+        context.check_ciphertext(&bound.as_view(), 0),
         Err(BgvCiphertextBindingError::BoundLevel { .. })
     ));
     assert!(matches!(

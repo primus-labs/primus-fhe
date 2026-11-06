@@ -46,6 +46,7 @@ impl BgvPublicKey {
         mut ciphertext: BgvCiphertext<Vec<u64>>,
     ) -> Self {
         ciphertext.bind_context(context, 0);
+        ciphertext.set_correction_factor(1);
         Self {
             ciphertext,
             size: context.parameters().size(),
@@ -240,6 +241,7 @@ impl<'a> BgvPublicKeyEncryptor<'a> {
         sample_scaled_noise(self.context, 0, c1.as_mut(), rng);
         self.context.table().transform_slice(c1.as_mut());
         c1.add_mul_assign(&ephemeral, &pk1, n, parameters.base_q().moduli());
+        output.set_correction_factor(1);
     }
 }
 
