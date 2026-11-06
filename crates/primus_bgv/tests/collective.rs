@@ -453,3 +453,76 @@ fn fresh_input_masks_use_exact_full_limb_rejection_and_own_one_context() {
     malformed[N] = Q[1];
     assert!(BgvSeededInput::try_from_common_mask(&context, malformed).is_err());
 }
+
+#[test]
+fn streaming_import_matches_modular_sum_and_permanently_rejects_interrupted_bodies() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let context = context();
+    let len = context.rns_poly_len(0);
+    let plan = BgvSeededInput::try_from_common_mask(&context, vec![0; len]).unwrap();
+    let body: Vec<_> = Q
+        .iter()
+        .flat_map(|&q| (0..N).map(move |j| if j % 2 == 0 { q - 1 } else { j as u64 }))
+        .collect();
+    let message = plan.try_import(body.clone()).unwrap();
+    let mut streamed = plan.aggregate();
+    let mut ordinary = plan.aggregate();
+    for _ in 0..2 {
+        streamed.add_imported(body.iter().copied()).unwrap();
+        ordinary.add(&message).unwrap();
+    }
+    let streamed = plan.finalize(streamed).unwrap();
+    let ordinary = plan.finalize(ordinary).unwrap();
+    assert_eq!(streamed.as_ref(), ordinary.as_ref());
+    for ((actual, source), &q) in streamed.as_ref()[..len]
+        .as_chunks::<N>()
+        .0
+        .iter()
+        .zip(body.as_chunks::<N>().0)
+        .zip(&Q)
+    {
+        for (&actual, &value) in actual.iter().zip(source) {
+            assert_eq!(actual, (2 * u128::from(value) % u128::from(q)) as u64);
+        }
+    }
+    for mut invalid in [
+        body[..len - 1].to_vec(),
+        [body.clone(), vec![0]].concat(),
+        body.clone(),
+    ] {
+        if invalid.len() == len {
+            invalid[len - 1] = Q[Q.len() - 1];
+        }
+        let mut aggregate = plan.aggregate();
+        assert!(aggregate.add_imported(invalid).is_err());
+        assert!(matches!(
+            aggregate.add(&message),
+            Err(BgvCollectiveError::Aborted)
+        ));
+        assert!(matches!(
+            aggregate.add_imported(body.iter().copied()),
+            Err(BgvCollectiveError::Aborted)
+        ));
+        assert!(matches!(
+            plan.finalize(aggregate),
+            Err(BgvCollectiveError::Aborted)
+        ));
+    }
+    let mut aggregate = plan.aggregate();
+    let mut index = 0;
+    let interrupted = std::iter::from_fn(|| {
+        assert!(index + 1 < len, "interrupted importer");
+        let value = body[index];
+        index += 1;
+        Some(value)
+    });
+    assert!(catch_unwind(AssertUnwindSafe(|| aggregate.add_imported(interrupted))).is_err());
+    assert!(matches!(
+        aggregate.add(&message),
+        Err(BgvCollectiveError::Aborted)
+    ));
+    assert!(matches!(
+        plan.finalize(aggregate),
+        Err(BgvCollectiveError::Aborted)
+    ));
+}

@@ -44,6 +44,9 @@ pub enum BgvCollectiveError {
     /// Finalization of an empty sum is forbidden.
     #[error("collective BGV aggregate is empty")]
     Empty,
+    /// An interrupted or rejected streaming import permanently spent this sum.
+    #[error("collective BGV aggregate was aborted")]
+    Aborted,
     /// A plaintext is not N canonical field coefficients.
     #[error("collective BGV plaintext must have N canonical coefficients")]
     Plaintext,
@@ -163,6 +166,7 @@ impl<'c> Binding<'c> {
             round,
             frozen,
             count: 0,
+            failed: false,
         }
     }
 }
@@ -204,16 +208,20 @@ pub struct BgvCollectiveAggregate<'p> {
     round: u8,
     frozen: Option<&'p [u64]>,
     count: usize,
+    failed: bool,
 }
 
 impl BgvCollectiveAggregate<'_> {
     /// Adds a validated contribution without allocating or retaining its owner.
     /// # Errors
-    /// Rejects other setup instances, rounds or frozen round-one results before writes.
+    /// Rejects an aborted sum, other instances, rounds or frozen results before writes.
     pub fn add(
         &mut self,
         contribution: &BgvCollectiveContribution<'_>,
     ) -> Result<(), BgvCollectiveError> {
+        if self.failed {
+            return Err(BgvCollectiveError::Aborted);
+        }
         if !std::ptr::eq(self.binding, contribution.binding)
             || self.round != contribution.round
             || !same_frozen(self.frozen, contribution.frozen)
@@ -241,6 +249,59 @@ impl BgvCollectiveAggregate<'_> {
         Ok(())
     }
 
+    /// Checks and adds one complete imported body from a residue iterator.
+    ///
+    /// Uses this aggregate's actual ordered basis; protocol authentication and
+    /// sender uniqueness must have been checked before calling. Each residue
+    /// is checked immediately before its addition, without a temporary body.
+    /// An error or iterator panic permanently aborts the aggregate, including
+    /// every subsequent add and finalization. Earlier additions may have been
+    /// written when a later residue is rejected.
+    ///
+    /// # Errors
+    /// Rejects a short/long iterator or any value outside its exact modulus.
+    /// A long iterator is stopped at the first extra value; its reported
+    /// `actual` length is therefore a lower bound.
+    pub fn add_imported(
+        &mut self,
+        values: impl IntoIterator<Item = u64>,
+    ) -> Result<(), BgvCollectiveError> {
+        if self.failed {
+            return Err(BgvCollectiveError::Aborted);
+        }
+        self.failed = true;
+        let mut values = values.into_iter();
+        let n = self.binding.context.parameters().poly_length().get();
+        let moduli = self.binding.base.moduli();
+        let expected = self.values.len();
+        let mut actual = 0;
+        for (i, output) in self.values.chunks_exact_mut(n).enumerate() {
+            let q = moduli[i % moduli.len()];
+            for out in output {
+                let value = values
+                    .next()
+                    .ok_or(BgvCollectiveError::Length { expected, actual })?;
+                actual += 1;
+                if value >= q.value() {
+                    return Err(BgvCollectiveError::Residue);
+                }
+                *out = q.reduce_add(*out, value);
+            }
+        }
+        if values.next().is_some() {
+            return Err(BgvCollectiveError::Length {
+                expected,
+                actual: expected + 1,
+            });
+        }
+        self.count = self
+            .count
+            .checked_add(1)
+            .expect("collective count overflow");
+        self.failed = false;
+        Ok(())
+    }
+
     /// Number of mathematical contributions added; duplicates are a protocol check.
     #[must_use]
     pub fn contribution_count(&self) -> usize {
@@ -262,6 +323,9 @@ fn check_sum(
     round: u8,
     frozen: Option<&[u64]>,
 ) -> Result<(), BgvCollectiveError> {
+    if aggregate.failed {
+        return Err(BgvCollectiveError::Aborted);
+    }
     if !std::ptr::eq(binding, aggregate.binding)
         || aggregate.round != round
         || !same_frozen(aggregate.frozen, frozen)
@@ -389,7 +453,7 @@ impl<'c> BgvCollectivePublicKey<'c> {
 
     /// Consumes a nonempty, protocol-complete body sum into an existing native key.
     /// # Errors
-    /// Rejects another setup or an empty sum. Roster completeness is caller-owned.
+    /// Rejects an aborted, empty or differently bound sum. Roster completeness is caller-owned.
     pub fn finalize(
         &self,
         aggregate: BgvCollectiveAggregate<'_>,
@@ -511,7 +575,7 @@ impl<'c> BgvSeededInput<'c> {
 
     /// Inserts A once and consumes the nonempty body aggregate.
     /// # Errors
-    /// Rejects an empty or differently bound sum. Caller checks complete roster.
+    /// Rejects an aborted, empty or differently bound sum. Caller checks complete roster.
     pub fn finalize(
         &self,
         aggregate: BgvCollectiveAggregate<'_>,
@@ -736,7 +800,7 @@ impl<'c> BgvCollectiveSwitchingKey<'c> {
 
     /// Consumes a nonempty complete sum into the existing native role key.
     /// # Errors
-    /// Rejects wrong instance or an empty sum; protocol checks roster completeness.
+    /// Rejects an aborted, empty or differently bound sum; protocol checks the roster.
     pub fn finalize(
         &self,
         aggregate: BgvCollectiveAggregate<'_>,
@@ -835,7 +899,7 @@ impl<'c> BgvCollectiveAutomorphismKey<'c> {
     }
     /// Consumes the complete sum into the native automorphism role key.
     /// # Errors
-    /// Rejects an empty or mismatched sum; protocol checks the roster.
+    /// Rejects an aborted, empty or mismatched sum; protocol checks the roster.
     pub fn finalize(
         &self,
         aggregate: BgvCollectiveAggregate<'_>,
@@ -1020,7 +1084,7 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     }
     /// Freezes the complete first-round public sum for subsequent responses.
     /// # Errors
-    /// Rejects empty/mismatched sums. Caller authenticates the complete roster.
+    /// Rejects aborted, empty or mismatched sums. Caller authenticates the complete roster.
     pub fn freeze_round_one(
         &self,
         aggregate: BgvCollectiveAggregate<'_>,
@@ -1080,7 +1144,7 @@ impl<'c> BgvCollectiveRelinearization<'c> {
     /// Produces native columns from complete rounds in the selected key domain.
     /// Radix scales `(Z,H1)` by p; Hybrid uses `(Z,H1)` in QP directly.
     /// # Errors
-    /// Rejects empty/mismatched rounds. Both authenticated round rosters must be
+    /// Rejects aborted, empty or mismatched rounds. Both authenticated round rosters must be
     /// complete and identical; contributions' identity remains caller-owned.
     pub fn finalize(
         &self,
