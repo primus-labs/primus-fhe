@@ -73,7 +73,7 @@ assert_eq!(base.decompose(value.view()).as_ref(), [2, 4, 6]);
 
 ## 基转换
 
-`BaseConverter::new` 共享已准备的输入与输出基，`from_owned_bases` 接收基句柄的所有权。克隆多模数 converter 会复制转换矩阵，重复计算时应复用 converter。
+`BaseConverter::new` 共享已准备的输入与输出基，`from_owned_bases` 接收基句柄的所有权。克隆也共享不可变转换矩阵；通用converter为矩阵增加一个小型共享owner，单输入converter不保存矩阵。
 
 转换面向运行时或派生 Barrett context。多模数转换的跨模数点积须接受可能超过目标模数的源 residue；Barrett 接受小于 `2^(T::BITS - 2)` 的操作数。自定义 context 须满足[转换器算术契约](src/converter/fast.rs)，`FieldContext` 本身不保证这些范围。
 
@@ -83,6 +83,8 @@ assert_eq!(base.decompose(value.view()).as_ref(), [2, 4, 6]);
 - `corrected_convert_array` 应用商修正，将输入解释为 `[-Q/2, Q/2)` 中的居中代表元，要求输出基恰好包含一个模数。多模数输入的修正使用 `f64`，靠近居中边界时仍可能相差一个 `Q` 的倍数，需要在此边界精确转换的应用须采用更高精度方法。完整契约见[修正转换 API](src/converter/corrected.rs)。
 
 - `CenteredBaseConverter::try_new(&input,&output)` 为小于 2^62 的奇 u64 bases 准备精确 centered 转换，也支持多个输出模数。`workspace(value_count)` 与 `convert_to` 复用全部存储：保守浮点区间认证快速 CRT 商，临界半界转精确多字组合。HPS 和 native Hybrid correction 共享该原语，不为转换器准备无关 HPS scaling 资源。
+
+已有converter时，`CenteredBaseConverter::try_from_converter(converter)`保留其已准备的bases和矩阵，只增加centered lift常量。它仍检查centered算法的模数条件；近似converter本身并未建立这些条件。
 
 通过 `corrected_conversion_workspace` 创建 `CorrectedConversionWorkspace`，在同一 converter 和长度下复用。Fast conversion 接收由 `fast_convert_scratch_len` 或 `fast_convert_array_scratch_len` 确定大小的 scratch slice；空批量不写入数据；corrected 转换仍要求单模数输出基及形状匹配的工作区。每个并发操作使用独立的可变工作区。
 
@@ -97,6 +99,8 @@ alpha = ceil(full_q_moduli_count / dnum)
 固定分区大小必须恰好产生 `dnum` 个非空分区。例如五个 `Q` 模数和 `dnum = 3` 会产生 `[0..2, 2..4, 4..5]`；请求 `dnum = 4` 会被拒绝，因为相同 固定大小只能产生三个分区。
 
 在同一 modulus chain 的较短有序前缀 level 上，应使用 `HybridRNS::from_partitioning`，以保持与 key 兼容的固定分区边界。构造器只验证 active 模数数量；modulus chain 的所有者负责保证前缀关系。
+
+`HybridRNS::from_bases`复用已准备的Q/P句柄。分区覆盖全部active Q时，直接共享原有bases，不重建CRT表。`mod_down_converter()`借用已准备的近似P→Q converter；需要精确centered correction时，可clone后交给`CenteredBaseConverter::try_from_converter`。两种转换的数学语义仍然不同。
 
 每个分区支持 approximate ModUp 到 `Q || P`；streaming ModUp 只生成转换后的 complement limb，原分区 limb 由调用方提供。ModDown 将 `P` correction 转换到 `Q`，执行减法，再乘以 `P^-1 mod q_i`。
 

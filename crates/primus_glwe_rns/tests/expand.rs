@@ -540,8 +540,19 @@ fn supported_prefixes_prune_work_and_preserve_block_expansion() {
         if let Some(unit) = one_auto_work {
             assert_eq!(actual_work, (count - 1) * unit);
         }
-        for parallel in [&mut parallel_one, &mut parallel_two] {
-            workers.install(|| parallel.expand_supported_coefficients_to(&ciphertext, &mut other));
+        workers.install(|| {
+            parallel_two.expand_supported_coefficients_to(&ciphertext, &mut other);
+        });
+        for (expected, actual) in output.iter().zip(&other) {
+            assert_eq!(expected.as_ref(), actual.as_ref());
+        }
+        // Pool capacity does not change the tree mathematics. Keep one-workspace
+        // checks for the zero-work, first irregular and deepest irregular cases;
+        // two-workspace equivalence above still covers every support size.
+        if count == 1 || count == 3 || count == n.get() - 1 {
+            workers.install(|| {
+                parallel_one.expand_supported_coefficients_to(&ciphertext, &mut other);
+            });
             for (expected, actual) in output.iter().zip(&other) {
                 assert_eq!(expected.as_ref(), actual.as_ref());
             }

@@ -14,7 +14,7 @@ use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 use primus_rns::RNSBase;
 
-use crate::parameter::{validate_dcrt_table, validate_glwe_size, validate_moduli};
+use crate::parameter::{validate_glwe_size, validate_moduli};
 use crate::{CrtGlevParameters, CrtGlweEncryptionParameters, DcrtGlweSecretKey, RnsDomainError};
 
 use encryption::PublicEncryptionResources;
@@ -71,29 +71,12 @@ impl<T: FheUint> DcrtGlwePublicKey<T> {
         R: rand::Rng + rand::CryptoRng,
         M: FieldContext<T>,
     {
-        parameters
-            .validate_base(base_q)
-            .expect("public-key sampling parameters and basis are incompatible");
-        validate_dcrt_table(parameters.size().poly_length(), base_q.moduli(), table)
-            .expect("public-key sampling parameters and table are incompatible");
-        secret_key
-            .validate_parameters(parameters.size(), base_q.moduli())
-            .expect("public-key secret and parameters are incompatible");
+        let encryptor = secret_key
+            .try_bind_raw(parameters, base_q, table)
+            .expect("public-key secret, sampling parameters, basis or table are incompatible");
         let size = parameters.size();
-        let poly_length = size.poly_length().get();
         let mut data = DcrtGlwe::zero(size.rns_glwe_len());
-        let (mask, mut body) = data.a_b_mut(size.rns_poly_len());
-        parameters.sample_noise_to(body.as_mut(), base_q.moduli_values(), rng);
-        table.transform_slice(body.as_mut());
-        for (secret, polynomial) in secret_key.iter_dcrt_poly().zip(mask) {
-            primus_distr::sample_crt_uniform_values_to(
-                polynomial.0,
-                poly_length,
-                parameters.cipher_moduli_uniform_distr(),
-                rng,
-            );
-            body.add_mul_assign(&polynomial, &secret, poly_length, base_q.moduli());
-        }
+        encryptor.encrypt_zeros_to(&mut data, rng);
         Self {
             key: data,
             size,

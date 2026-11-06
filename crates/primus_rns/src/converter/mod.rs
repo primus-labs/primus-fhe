@@ -7,6 +7,7 @@ pub(crate) use fast::FastConversionLimb;
 
 use primus_integer::FheUint;
 use primus_reduce::FieldContext;
+use std::sync::Arc;
 
 use crate::RNSBase;
 
@@ -19,13 +20,14 @@ use crate::RNSBase;
 #[derive(Clone)]
 enum BaseConversionKernel<T> {
     SingleInput,
-    General { base_change_matrix: Vec<T> },
+    // Keep the constructed Vec allocation when introducing shared ownership.
+    General { base_change_matrix: Arc<Vec<T>> },
 }
 
 /// Precomputed converter between two RNS bases.
 ///
-/// The converter owns input and output base handles, sharing their immutable
-/// CRT precomputations with other handles. A multi-modulus source
+/// Clones share input/output CRT precomputations and the immutable conversion
+/// matrix. A multi-modulus source
 /// stores the matrix `(Q / q_i) mod p_j`, where `q_i` are input-base moduli,
 /// `p_j` are output-base moduli, and `Q` is the input-base product. A
 /// one-modulus source uses a direct-reduction kernel and stores no matrix.
@@ -85,7 +87,7 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
     ///
     /// Moves `input_base` and `output_base`, avoiding the two Arc reference-count
     /// increments of [`Self::new`]. Both constructors share existing base tables;
-    /// only the conversion-specific matrix is allocated for a multi-modulus source.
+    /// a multi-modulus source prepares its conversion matrix and shared owner.
     ///
     /// # Panics
     ///
@@ -118,7 +120,9 @@ impl<T: FheUint, M: FieldContext<T>> BaseConverter<T, M> {
                 }
             }
 
-            BaseConversionKernel::General { base_change_matrix }
+            BaseConversionKernel::General {
+                base_change_matrix: Arc::new(base_change_matrix),
+            }
         };
 
         Self {

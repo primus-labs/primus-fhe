@@ -1,7 +1,7 @@
 use crate::CrtGlweEncryptionParameters;
 use primus_data::{Data, DataMut};
 use primus_factor::ShoupFactor;
-use primus_integer::{AsInto, BigUint, FheUint};
+use primus_integer::FheUint;
 use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 use primus_rns::ResidueFactors;
@@ -12,6 +12,7 @@ use crate::{CrtGlevParameters, CrtGlweCiphertext, DcrtGlweSecretKey, GlweSecretK
 use super::automorphism::CrtGlweAutoKeyData;
 use super::trace::CrtGlweTraceWorkspace;
 use crate::automorphism::{AutomorphismKeyMetadata, AutomorphismWorkspace};
+use crate::expansion::normalization_factors;
 use crate::workspace_pool::WorkspacePool;
 
 mod evaluator;
@@ -63,23 +64,7 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
             rng,
         );
 
-        let base_q = params.base_q();
-
-        let inv_count_residues_by_level = (0..=log_n)
-            .map(|log_count| {
-                let count = 1usize << log_count;
-                let n = count.as_into();
-                let n_residue = base_q.decompose(BigUint(&[n]));
-
-                ResidueFactors(
-                    n_residue
-                        .iter()
-                        .zip(base_q.moduli())
-                        .map(|(&n, m)| ShoupFactor::new(m.reduce_inv(n), m.value()))
-                        .collect(),
-                )
-            })
-            .collect();
+        let inv_count_residues_by_level = normalization_factors(parameters);
 
         Self {
             metadata: AutomorphismKeyMetadata::new(parameters),
@@ -268,22 +253,4 @@ impl<T: FheUint> CrtGlweExpandCoeffKey<T> {
             }
         }
     }
-}
-
-/// Validate the entire batch before normalization can write its first output.
-fn assert_expansion_layout<T: FheUint, B: Data<Elem = T>>(
-    input_length: usize,
-    output: &[CrtGlweCiphertext<B>],
-    expected_length: usize,
-) {
-    assert_eq!(
-        input_length, expected_length,
-        "expansion input layout mismatch"
-    );
-    assert!(
-        output
-            .iter()
-            .all(|ciphertext| ciphertext.as_ref().len() == expected_length),
-        "expansion output layout mismatch",
-    );
 }

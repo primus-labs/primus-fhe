@@ -169,7 +169,7 @@ impl NativeHybridParameters {
         Ok(Self {
             poly_length,
             table_p: U64DcrtTable::new(poly_length, base_p.moduli())?,
-            p_to_q: CenteredBaseConverter::try_new(&base_p, base_q)?,
+            p_to_q: CenteredBaseConverter::try_from_converter(hybrid.mod_down_converter().clone())?,
             hybrid,
             weights,
             q_len,

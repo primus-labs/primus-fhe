@@ -333,7 +333,7 @@ fn scale_and_round_resolves_wide_and_single_limb_p_half_boundaries() {
 
 #[test]
 fn centered_converter_has_its_own_exact_batch_and_workspace_contract() {
-    use primus_rns::CenteredBaseConverter;
+    use primus_rns::{BaseConverter, CenteredBaseConverter};
     let q = big_product(&WIDE_Q);
     let half = &q / 2_u8;
     let values = vec![
@@ -351,7 +351,10 @@ fn centered_converter_has_its_own_exact_batch_and_workspace_contract() {
             if r > half { r - &q } else { r }
         })
         .collect();
-    let converter = CenteredBaseConverter::try_new(&base(&WIDE_Q), &base(&WIDE_P)).unwrap();
+    // The centered lift reuses the same direction's approximate conversion
+    // resources; it must still resolve exact multiword half boundaries.
+    let approximate = BaseConverter::new(&base(&WIDE_Q), &base(&WIDE_P));
+    let converter = CenteredBaseConverter::try_from_converter(approximate.clone()).unwrap();
     let input = big_residues(&values, &WIDE_Q);
     let mut output = vec![0; WIDE_P.len() * values.len()];
     let mut workspace = converter.workspace(values.len());
@@ -383,4 +386,6 @@ fn centered_converter_has_its_own_exact_batch_and_workspace_contract() {
     assert!(output.iter().all(|&x| x == 77));
     converter.convert_to(&[], &mut [], 0, &mut converter.workspace(0));
     assert!(CenteredBaseConverter::try_new(&base(&[16]), &base(&[19])).is_err());
+    let unsupported = BaseConverter::new(&base(&[16]), &base(&[19]));
+    assert!(CenteredBaseConverter::try_from_converter(unsupported).is_err());
 }

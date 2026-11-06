@@ -41,12 +41,33 @@ impl CenteredBaseConverter {
     /// # Errors
     /// Rejects even moduli or moduli outside [3,2^62).
     pub fn try_new(input: &Base, output: &Base) -> Result<Self, RnsError> {
+        Self::validate_bases(input, output)?;
+        Ok(Self::new(input, output))
+    }
+
+    /// Adds exact centered correction to an already prepared base converter.
+    ///
+    /// The converter's bases and conversion matrix are retained, so an existing
+    /// approximate converter can share the same resources with this exact lift.
+    /// Only the centered product, half-boundary and quotient-error constants are
+    /// prepared here.
+    ///
+    /// # Errors
+    /// Rejects even moduli or moduli outside [3,2^62), as [`Self::try_new`].
+    pub fn try_from_converter(
+        converter: BaseConverter<u64, BarrettModulus<u64>>,
+    ) -> Result<Self, RnsError> {
+        Self::validate_bases(&converter.input_base, &converter.output_base)?;
+        Ok(Self::from_converter(converter))
+    }
+
+    fn validate_bases(input: &Base, output: &Base) -> Result<(), RnsError> {
         for &modulus in input.moduli_values().iter().chain(output.moduli_values()) {
             if !(3..(1 << 62)).contains(&modulus) || modulus & 1 == 0 {
                 return Err(RnsError::UnsupportedHpsModulus { modulus });
             }
         }
-        Ok(Self::new(input, output))
+        Ok(())
     }
 
     /// Prepares reusable scratch for one exact batch length.
@@ -108,6 +129,12 @@ impl CenteredBaseConverter {
         self.expand(input, output, value_count, workspace);
     }
     pub(crate) fn new(input: &Base, output: &Base) -> Self {
+        Self::from_converter(BaseConverter::new(input, output))
+    }
+
+    fn from_converter(converter: BaseConverter<u64, BarrettModulus<u64>>) -> Self {
+        let input = &converter.input_base;
+        let output = &converter.output_base;
         let product = input.moduli_product();
         let words = product.digits();
         let half_product = words
@@ -116,15 +143,17 @@ impl CenteredBaseConverter {
             .map(|(i, &word)| (word >> 1) | (words.get(i + 1).copied().unwrap_or(0) << 63))
             .collect();
         let count = input.moduli_count() as f64;
+        let product_mod_output = output.moduli().iter().map(|p| p.reduce(words)).collect();
+        let inverse_moduli = input
+            .moduli_values()
+            .iter()
+            .map(|&q| 1.0 / q as f64)
+            .collect();
         Self {
-            converter: BaseConverter::new(input, output),
-            product_mod_output: output.moduli().iter().map(|p| p.reduce(words)).collect(),
+            converter,
+            product_mod_output,
             half_product,
-            inverse_moduli: input
-                .moduli_values()
-                .iter()
-                .map(|&q| 1.0 / q as f64)
-                .collect(),
+            inverse_moduli,
             // With u=2^-53 the cast/reciprocal/multiply chain contributes <5u
             // absolute error per term in [0,1]. Sequential addition contributes
             // <2u*k^2 for k*u<1/4. This deliberately larger bound also covers

@@ -94,6 +94,8 @@ Prepare automorphism material with `DcrtGlweAutoKey::new(&gadget, &sampling, &ta
 
 Both provide online `key_switch_to(&input, &mut output)`. Hybrid key generation takes its key noise from the input encryption parameters and checks its support against every QP modulus; both secrets' magnitudes must also fit every QP modulus. Partitioning and ModUp/ModDown contracts are in [`primus_rns`](../primus_rns/README.md#hybrid-rns).
 
+The Hybrid evaluator reuses one conversion-scratch allocation sized to the larger of its ModUp and ModDown requirements. These phases run sequentially and overwrite their required prefixes. The accumulator and other simultaneously live buffers remain separate; independent workers still need independent evaluators.
+
 ## Trace and coefficient expansion
 
 These evaluators borrow the key, gadget parameters and table and own reusable scratch. Inputs remain unchanged; outputs and scratch are overwritten. Target messages below omit evaluation error.

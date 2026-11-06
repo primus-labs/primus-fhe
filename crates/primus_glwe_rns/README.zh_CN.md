@@ -94,6 +94,8 @@ Client 生成公钥及求值密钥并交给 server，密钥生成显式接收采
 
 两者的在线调用均为 `key_switch_to(&input, &mut output)`。Hybrid 密钥生成从输入加密参数取得密钥噪声，检查其支持范围是否适用于每个 QP 模数；两个秘密的幅度也必须小于每个 QP 模数。分区及 ModUp/ModDown 契约见 [`primus_rns`](../primus_rns/README.zh_CN.md#hybrid-rns)。
 
+Hybrid evaluator的转换scratch只有一份，容量取ModUp与ModDown需求的较大值；两阶段顺序执行，分别覆盖所需前缀。Accumulator及其他同时活跃的buffer仍独立保存，不同worker也仍需独立evaluator。
+
 ## Trace 与系数展开
 
 这些 evaluator 借用密钥、gadget 参数与 table，并拥有可复用 scratch。输入保持不变，输出及 scratch 被覆盖。下表目标消息省略求值误差。

@@ -73,7 +73,7 @@ The two `add_*decompose_small_values_scaled_assign` operations add weighted resi
 
 ## Base conversion
 
-`BaseConverter::new` shares the prepared input and output bases; `from_owned_bases` takes ownership of their handles. Cloning a multi-modulus converter copies its conversion matrix, so reuse the converter in repeated paths.
+`BaseConverter::new` shares the prepared input and output bases; `from_owned_bases` takes ownership of their handles. Cloning also shares the immutable conversion matrix. A general converter uses a small shared owner for that matrix; a single-input converter stores no matrix.
 
 Conversion is intended for runtime or derived Barrett contexts. Multi-modulus conversion requires cross-modulus dot products accepting source residues even when they exceed the destination modulus; Barrett accepts operands below `2^(T::BITS - 2)`. Custom contexts must satisfy the [converter arithmetic contract](src/converter/fast.rs); `FieldContext` alone does not establish these ranges.
 
@@ -83,6 +83,8 @@ Conversion operations have different mathematical contracts:
 - `corrected_convert_array` applies a quotient correction, interprets the input through its centered representative in `[-Q/2, Q/2)`, and requires exactly one output modulus. For multi-modulus inputs, correction uses `f64`, so values near the centered boundary may differ by one multiple of `Q` modulo the output modulus; applications requiring exactness there need a higher-precision method. See the [corrected-conversion API](src/converter/corrected.rs).
 
 - `CenteredBaseConverter::try_new(&input,&output)` prepares exact centered conversion for odd u64 bases below 2^62, including multiple output moduli. `workspace(value_count)` and `convert_to` reuse all storage. A conservative floating interval certifies the fast CRT quotient; uncertain half boundaries use exact multiword composition. This is shared by HPS and native Hybrid correction, without preparing unrelated HPS scaling resources.
+
+When a converter already exists, `CenteredBaseConverter::try_from_converter(converter)` retains its prepared bases and matrix, adding only the centered-lift constants. It still checks the centered algorithm's modulus requirements; an approximate converter does not establish them.
 
 Create a `CorrectedConversionWorkspace` through `corrected_conversion_workspace` and reuse it with the same converter and length. Fast conversion accepts a scratch slice sized by `fast_convert_scratch_len` or `fast_convert_array_scratch_len`. Empty batches perform no writes; corrected conversion still requires one output modulus and a workspace of the matching shape. Each concurrent operation needs separate mutable workspace.
 
@@ -97,6 +99,8 @@ alpha = ceil(full_q_moduli_count / dnum)
 The fixed size must produce exactly `dnum` non-empty partitions. For example, five `Q` moduli with `dnum = 3` produce ranges `[0..2, 2..4, 4..5]`; requesting `dnum = 4` is rejected because the same fixed size would produce only three partitions.
 
 Use `HybridRNS::from_partitioning` at shorter, ordered-prefix levels of the same modulus chain so key-compatible partition boundaries remain fixed. The constructor validates the active modulus count; the owner of the modulus chain must preserve the prefix relationship.
+
+`HybridRNS::from_bases` reuses prepared Q/P handles. A partition covering all active Q shares those same bases rather than rebuilding their CRT tables. `mod_down_converter()` borrows the prepared approximate P→Q converter; clone it into `CenteredBaseConverter::try_from_converter` when exact centered correction is needed. The two conversion semantics remain distinct.
 
 Each partition supports approximate ModUp into `Q || P`; streaming ModUp emits only converted complement limbs, leaving the caller to supply unchanged partition limbs. ModDown converts the `P` correction into `Q`, subtracts it, and multiplies by `P^-1 mod q_i`.
 

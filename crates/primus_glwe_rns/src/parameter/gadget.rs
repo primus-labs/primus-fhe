@@ -243,6 +243,3 @@ where
         self.poly_length().get() * self.big_uint_value_len()
     }
 }
-
-/// CRT GGSW parameters, sharing the GLev decomposition configuration.
-pub type CrtGgswParameters<T, M> = CrtGlevParameters<T, M>;

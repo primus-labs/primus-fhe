@@ -38,7 +38,7 @@ impl<T: FheUint> DcrtGlwePublicKeyWorkspace<T> {
             self.size, size,
             "public encryption workspace layout mismatch"
         );
-        assert_eq!(
+        debug_assert_eq!(
             self.ephemeral.len(),
             size.rns_poly_len(),
             "public encryption ephemeral length mismatch"

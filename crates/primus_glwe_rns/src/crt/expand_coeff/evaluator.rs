@@ -3,7 +3,8 @@ use primus_integer::FheUint;
 use primus_ntt::{DcrtTable, NttTable};
 use primus_reduce::FieldContext;
 
-use super::{CrtGlweExpandCoeffKey, CrtGlweTraceWorkspace, assert_expansion_layout};
+use super::{CrtGlweExpandCoeffKey, CrtGlweTraceWorkspace};
+use crate::expansion::assert_expansion_layout;
 use crate::workspace_pool::WorkspacePool;
 use crate::{CrtGlevParameters, CrtGlweCiphertext, RnsDomainError};
 

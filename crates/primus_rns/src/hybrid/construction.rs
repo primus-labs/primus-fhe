@@ -64,6 +64,8 @@ where
     ///
     /// The active Q must be the caller's actual ordered prefix of the full
     /// basis. The partitioning fixes the full-chain maximum partition size.
+    /// A digit covering all active Q shares that Q basis and the existing P
+    /// complement, without preparing their CRT data again.
     ///
     /// # Errors
     /// Rejects an oversized active Q or incompatible combined bases.
@@ -92,14 +94,21 @@ where
         {
             let start = partition_index * partition_moduli_count;
             let end = start + partition_moduli.len();
-            let partition_base = RNSBase::new(partition_moduli)?;
-            let complement_moduli = q_moduli[..start]
-                .iter()
-                .chain(&q_moduli[end..])
-                .chain(p_moduli)
-                .copied()
-                .collect();
-            let complement_base = RNSBase::from_owned_moduli(complement_moduli)?;
+            let (partition_base, complement_base) = if start == 0 && end == q_moduli.len() {
+                // This digit is all of Q, so its complement is exactly P. Keep
+                // the already checked CRT resources instead of rebuilding them.
+                (q_base.clone(), p_base.clone())
+            } else {
+                let partition_base = RNSBase::new(partition_moduli)?;
+                let complement_moduli = q_moduli[..start]
+                    .iter()
+                    .chain(&q_moduli[end..])
+                    .chain(p_moduli)
+                    .copied()
+                    .collect();
+                let complement_base = RNSBase::from_owned_moduli(complement_moduli)?;
+                (partition_base, complement_base)
+            };
 
             partitions.push(HybridRNSPartition {
                 q_range: (start..end).into(),
