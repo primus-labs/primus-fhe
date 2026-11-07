@@ -4,9 +4,15 @@
 //! secrets or process-local identities. Structural checks do not authenticate a
 //! sender, prove an actual secret relation, or establish a security/noise bound.
 
-use primus_distr::{BlockOccupancy, ErrorDistribution, SecretKeyDistr};
+use primus_distr::{ErrorDistribution, SecretKeyDistr};
 use primus_ntt::{MonomialNttTable, U64DcrtTable};
 use sha2::{Digest, Sha256};
+
+mod context;
+mod evaluation_key;
+
+pub use context::PublicContextDescription;
+pub use evaluation_key::{DecodedEvaluationKey, EvaluationKeyRole};
 
 /// Application-selected bounds, checked before preparing imported resources.
 #[derive(Clone, Copy, Debug)]
@@ -104,13 +110,13 @@ pub enum PublicObjectError {
     Binding,
     /// A checked numerical owner rejected the imported parameters.
     #[error("invalid public object parameters: {0}")]
-    Parameters(String),
+    Parameters(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl PublicObjectError {
-    /// Preserves a checked constructor's diagnostic without exposing its type.
-    pub fn parameters(error: impl std::fmt::Display) -> Self {
-        Self::Parameters(error.to_string())
+    /// Retains the checked constructor's original error as a typed source.
+    pub fn parameters(error: impl std::error::Error + Send + Sync + 'static) -> Self {
+        Self::Parameters(Box::new(error))
     }
 }
 
@@ -249,9 +255,11 @@ impl<'a> PublicObjectReader<'a> {
                 .checked_mul(8)
                 .ok_or(PublicObjectError::Limit("payload bytes"))?,
         )?;
-        for (index, word) in bytes.as_chunks::<8>().0.iter().enumerate() {
-            if u64::from_le_bytes(*word) >= moduli[(index / n) % moduli.len()] {
-                return Err(PublicObjectError::Malformed("noncanonical residue"));
+        for poly in bytes.as_chunks::<8>().0.chunks_exact(polynomial) {
+            for (limb, &modulus) in poly.chunks_exact(n).zip(moduli) {
+                if limb.iter().any(|&word| u64::from_le_bytes(word) >= modulus) {
+                    return Err(PublicObjectError::Malformed("noncanonical residue"));
+                }
             }
         }
         Ok(bytes)
@@ -301,167 +309,4 @@ pub fn ntt_fingerprint(table: &U64DcrtTable) -> [u8; 32] {
         }
     }
     hash.finalize().into()
-}
-
-/// Stores the complete public secret/error sampler descriptions, not samples.
-pub fn write_sampling(
-    writer: &mut PublicObjectWriter,
-    secret: SecretKeyDistr,
-    error: ErrorDistribution,
-) {
-    use SecretKeyDistr::*;
-    match secret {
-        UniformBinary => writer.u64(0),
-        Binary { one_probability } => {
-            writer.u64(1);
-            writer.u64(one_probability.to_bits());
-        }
-        SparseTernary => writer.u64(2),
-        UniformTernary => writer.u64(3),
-        Ternary {
-            negative_one_probability,
-            one_probability,
-        } => {
-            writer.u64(4);
-            writer.u64(negative_one_probability.to_bits());
-            writer.u64(one_probability.to_bits());
-        }
-        FixedHammingWeightBinary { hamming_weight } => {
-            writer.u64(5);
-            writer.usize(hamming_weight);
-        }
-        BlockBinary {
-            block_size,
-            occupancy,
-        } => {
-            writer.u64(6);
-            writer.usize(block_size);
-            writer.u64(u64::from(occupancy == BlockOccupancy::ExactlyOne));
-        }
-        FixedHammingWeightTernary { hamming_weight } => {
-            writer.u64(7);
-            writer.usize(hamming_weight);
-        }
-        FixedCompositionTernary {
-            negative_one_weight,
-            one_weight,
-        } => {
-            writer.u64(8);
-            writer.usize(negative_one_weight);
-            writer.usize(one_weight);
-        }
-        Gaussian { standard_deviation } => {
-            writer.u64(9);
-            writer.u64(standard_deviation.to_bits());
-        }
-    }
-    match error {
-        ErrorDistribution::Gaussian { standard_deviation } => {
-            writer.u64(0);
-            writer.u64(standard_deviation.to_bits());
-        }
-        ErrorDistribution::CenteredBinomial { eta } => {
-            writer.u64(1);
-            writer.u64(u64::from(eta));
-        }
-    }
-}
-
-/// Reads bounded sampler descriptions before any Gaussian preparation.
-pub fn read_sampling(
-    reader: &mut PublicObjectReader<'_>,
-    n: usize,
-    limits: PublicObjectLimits,
-) -> Result<(SecretKeyDistr, ErrorDistribution), PublicObjectError> {
-    fn gaussian(
-        reader: &mut PublicObjectReader<'_>,
-        limits: PublicObjectLimits,
-    ) -> Result<f64, PublicObjectError> {
-        let x = f64::from_bits(reader.u64()?);
-        if !x.is_finite()
-            || x <= 0.0
-            || !limits.max_gaussian_standard_deviation.is_finite()
-            || x > limits.max_gaussian_standard_deviation
-        {
-            return Err(PublicObjectError::Limit("Gaussian scale"));
-        }
-        Ok(x)
-    }
-    fn probability(reader: &mut PublicObjectReader<'_>) -> Result<f64, PublicObjectError> {
-        let x = f64::from_bits(reader.u64()?);
-        if !x.is_finite() || !(0.0..=1.0).contains(&x) {
-            return Err(PublicObjectError::Malformed("secret probability"));
-        }
-        Ok(x)
-    }
-    use SecretKeyDistr::*;
-    let secret = match reader.u64()? {
-        0 => UniformBinary,
-        1 => Binary {
-            one_probability: probability(reader)?,
-        },
-        2 => SparseTernary,
-        3 => UniformTernary,
-        4 => {
-            let negative_one_probability = probability(reader)?;
-            let one_probability = probability(reader)?;
-            if negative_one_probability > 1.0 - one_probability {
-                return Err(PublicObjectError::Malformed("secret probabilities"));
-            }
-            Ternary {
-                negative_one_probability,
-                one_probability,
-            }
-        }
-        5 => FixedHammingWeightBinary {
-            hamming_weight: reader.usize(n)?,
-        },
-        6 => {
-            let block_size = reader.usize(n)?;
-            let occupancy = match reader.u64()? {
-                0 => BlockOccupancy::AtMostOne,
-                1 => BlockOccupancy::ExactlyOne,
-                _ => return Err(PublicObjectError::Malformed("block occupancy")),
-            };
-            if block_size == 0 || !n.is_multiple_of(block_size) {
-                return Err(PublicObjectError::Malformed("block size"));
-            }
-            BlockBinary {
-                block_size,
-                occupancy,
-            }
-        }
-        7 => FixedHammingWeightTernary {
-            hamming_weight: reader.usize(n)?,
-        },
-        8 => {
-            let negative_one_weight = reader.usize(n)?;
-            let one_weight = reader.usize(n)?;
-            if negative_one_weight > n - one_weight {
-                return Err(PublicObjectError::Malformed("composition weights"));
-            }
-            FixedCompositionTernary {
-                negative_one_weight,
-                one_weight,
-            }
-        }
-        9 => Gaussian {
-            standard_deviation: gaussian(reader, limits)?,
-        },
-        _ => return Err(PublicObjectError::Malformed("secret distribution")),
-    };
-    let error = match reader.u64()? {
-        0 => ErrorDistribution::Gaussian {
-            standard_deviation: gaussian(reader, limits)?,
-        },
-        1 => {
-            let eta = reader.usize(32)?;
-            if eta == 0 {
-                return Err(PublicObjectError::Malformed("CBD eta"));
-            }
-            ErrorDistribution::CenteredBinomial { eta: eta as u32 }
-        }
-        _ => return Err(PublicObjectError::Malformed("error distribution")),
-    };
-    Ok((secret, error))
 }

@@ -4,11 +4,12 @@ use dashu_int::UBig;
 use primus_bgv::evaluation::{
     BgvAutomorphism, BgvEvaluator, BgvKeySwitcher, BgvModulusSwitch, BgvMultiplication,
 };
+use primus_bgv::keys::BgvEvaluationKeyConfig;
 use primus_bgv::planning::{
     BgvBudgetBackend, BgvCircuitOperation as Op, BgvCircuitPlan, BgvParameterRequest,
     BgvPlaintextBounds, BgvPlanningError,
 };
-use primus_bgv::{BgvClient, BgvContext, BgvParameters, PlaintextEmbedding};
+use primus_bgv::{BgvClient, BgvContext, BgvParameters, BgvParametersError, PlaintextEmbedding};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -98,7 +99,18 @@ fn both_actual_key_backends_consume_the_full_public_dag() {
         radix(),
         BgvBudgetBackend::hybrid(&context, 3, 32, 1).unwrap(),
     ] {
+        let hybrid = matches!(backend, BgvBudgetBackend::Hybrid { .. });
         let plan = BgvCircuitPlan::try_new(&context, &operations, backend).unwrap();
+        if hybrid {
+            let (
+                Some(BgvEvaluationKeyConfig::Hybrid(top)),
+                Some(BgvEvaluationKeyConfig::Hybrid(lower)),
+            ) = (plan.key_config(0), plan.key_config(1))
+            else {
+                panic!("each key-bearing level must retain its Hybrid configuration");
+            };
+            assert!(std::sync::Arc::ptr_eq(top.auxiliary(), lower.auxiliary()));
+        }
         assert_eq!(plan.steps()[0].phase_bound, UBig::from(12_641u64));
         assert_eq!(plan.steps().last().unwrap().level, 2);
         assert!(plan.key_config(2).is_none());
@@ -176,6 +188,17 @@ fn both_actual_key_backends_consume_the_full_public_dag() {
 
 #[test]
 fn admission_rejections_and_composite_plaintext_key_generation() {
+    for plaintext_modulus in [0, 1, 1 << 62] {
+        let mut invalid = request(30, 2);
+        invalid.plaintext_modulus = plaintext_modulus;
+        assert!(matches!(
+            invalid.create_context(),
+            Err(BgvPlanningError::Parameters(
+                BgvParametersError::PlainModulus
+            ))
+        ));
+    }
+
     let context = request(18, 1).create_context().unwrap();
     let fresh = Op::PublicEncryption {
         embedding: PlaintextEmbedding::Centered,

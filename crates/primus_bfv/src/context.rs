@@ -45,7 +45,7 @@ pub enum BfvContextError {
 /// local provenance does not prove the actual coefficient secret or noise bound.
 pub struct BfvContext {
     identity: Arc<()>,
-    pub(crate) public_ntt_digest: std::sync::OnceLock<[u8; 32]>,
+    pub(crate) public_descriptor: std::sync::OnceLock<Vec<u8>>,
     parameters: BfvParameters,
     table: Arc<U64DcrtTable>,
     lower_codecs: Vec<BfvRnsCodec<u64, BarrettModulus<u64>>>,
@@ -123,7 +123,7 @@ impl BfvContext {
         }
         Ok(Self {
             identity: Arc::new(()),
-            public_ntt_digest: std::sync::OnceLock::new(),
+            public_descriptor: std::sync::OnceLock::new(),
             parameters,
             table,
             lower_codecs,
@@ -259,11 +259,27 @@ impl BfvContext {
         mut ciphertext: BfvCiphertext<C>,
         level: usize,
     ) -> Result<BfvCiphertext<C>, crate::BfvCiphertextBindingError> {
-        self.check_ciphertext(&ciphertext, level)?;
+        self.validate_canonical_ciphertext(&ciphertext, level)?;
+        if ciphertext.binding.is_none() {
+            ciphertext.binding = Some(crate::ciphertext::Binding::new(self, level));
+        }
+        Ok(ciphertext)
+    }
+
+    pub(crate) fn validate_canonical_ciphertext<C: primus_data::Data<Elem = u64>>(
+        &self,
+        ciphertext: &BfvCiphertext<C>,
+        level: usize,
+    ) -> Result<(), crate::BfvCiphertextBindingError> {
+        self.check_ciphertext(ciphertext, level)?;
         let n = self.parameters.poly_length().get();
         let qs = self.codec(level).moduli_values();
-        for (limb_index, limb) in ciphertext.as_ref().chunks_exact(n).enumerate() {
-            let modulus = qs[limb_index % qs.len()];
+        for (limb_index, (limb, &modulus)) in ciphertext
+            .as_ref()
+            .chunks_exact(n)
+            .zip(qs.iter().cycle())
+            .enumerate()
+        {
             for (offset, &value) in limb.iter().enumerate() {
                 if value >= modulus {
                     return Err(crate::BfvCiphertextBindingError::NonCanonical {
@@ -274,10 +290,7 @@ impl BfvContext {
                 }
             }
         }
-        if ciphertext.binding.is_none() {
-            ciphertext.binding = Some(crate::ciphertext::Binding::new(self, level));
-        }
-        Ok(ciphertext)
+        Ok(())
     }
 
     /// Allocates an already-scaled degree-two ciphertext at a prepared level.

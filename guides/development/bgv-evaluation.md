@@ -199,6 +199,10 @@ relative to the centered factor-encoded output message is
 This keeps message carries in tensor/plaintext operations instead of silently
 replacing each integer product by a reduced message with zero carry.
 
+Admission reads each level's centered capacity from its prepared context.
+Operations at that level reuse its key-error terms and key configuration.
+Hybrid levels share the key P basis and transform tables.
+
 Let E be the actual error sampler's maximum magnitude, B_s the secret sampler's
 hard coefficient support, and H=N*B_s. These supports include Gaussian truncation
 as implemented; no independence, standard-deviation heuristic or tail-event

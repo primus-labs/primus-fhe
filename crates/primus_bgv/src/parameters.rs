@@ -10,6 +10,9 @@ use primus_reduce::Reduce;
 use primus_rns::{RNSBase, RnsError};
 use primus_shape::PolyLength;
 
+mod request;
+pub use request::BgvParameterRequest;
+
 /// Invalid coefficient geometry, plaintext/ciphertext moduli or sampling law.
 #[derive(Debug, thiserror::Error)]
 pub enum BgvParametersError {
@@ -67,6 +70,22 @@ impl BgvParameters {
         secret_key_distr: SecretKeyDistr,
         error_distribution: ErrorDistribution,
     ) -> Result<Self, BgvParametersError> {
+        Self::try_with_owned_moduli(
+            poly_length,
+            plain_modulus,
+            cipher_moduli.to_vec(),
+            secret_key_distr,
+            error_distribution,
+        )
+    }
+
+    pub(crate) fn try_with_owned_moduli(
+        poly_length: PolyLength,
+        plain_modulus: BarrettModulus<u64>,
+        cipher_moduli: Vec<BarrettModulus<u64>>,
+        secret_key_distr: SecretKeyDistr,
+        error_distribution: ErrorDistribution,
+    ) -> Result<Self, BgvParametersError> {
         let p = plain_modulus.value();
         if p < 2 || cipher_moduli.iter().any(|q| q.value() <= p) {
             return Err(BgvParametersError::PlainModulus);
@@ -79,7 +98,7 @@ impl BgvParameters {
                 });
             }
         }
-        let base_q = RNSBase::new(cipher_moduli)?;
+        let base_q = RNSBase::from_owned_moduli(cipher_moduli)?;
         let geometry = GlweSize::try_new(GlweDimension::new(1), poly_length)?;
         let size = RnsGlweSize::try_new(geometry, base_q.moduli_count())?;
         let sampling = CrtGlweEncryptionParameters::try_with_error_distribution(

@@ -158,6 +158,8 @@ cargo clippy -p primus_bfv --all-targets --features batching -- -D warnings
 
 ## 公共对象持久化
 
+重复哈希或比较 context 时，用 `context.public_bytes()` 借用缓存的公开描述。
+
 `BfvContext::to_public_bytes()` 与 `from_public_bytes(bytes, limits)` 保存完整公共参数并重建新的本地 context；其 `export_*` / `import_*` 方法支持原生密文、公钥，以及 typed relinearization、switching、automorphism key，保留 Radix 或 Hybrid 的实际 Q/P 元数据。部署时设置 `PublicObjectLimits`；接收方在接受 owned 数据前检查版本、角色、完整几何、canonical residues 和实际 NTT 表示。BFV 保持独立的缩放和 decoder 参数。
 
 不保存 secret 或本地绑定指针。上层须认证公共对象及其实际 source/target 身份和预算声明；结构校验不证明诚实建钥或实际 secret 关系。多次独立 key 导入可能重复准备 numerical metadata/P 表，本接口没有隐式 key cache。

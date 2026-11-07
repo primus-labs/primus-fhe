@@ -210,6 +210,8 @@ residual, exact quotient and boundary contracts. See the
 
 ## Public storage
 
+Borrow the cached context description with `context.public_bytes()` when hashing or comparing it repeatedly.
+
 `BgvContext::to_public_bytes()` and `from_public_bytes(bytes, limits)` store complete public parameters and restore a new local context. Its `export_*` / `import_*` methods cover native ciphertexts, public keys and typed relinearization, switching and automorphism keys, including Radix and Hybrid Q/P metadata. Set `PublicObjectLimits` for your deployment; imports check version, role, full geometry, canonical residues and actual NTT representation before accepting owned data. BGV correction factors survive storage and are checked as canonical units.
 
 No secret or local binding pointer is serialized. Authenticate the public object together with its application source/target identities and declared budgets. Structural validation does not prove honest key generation or the claimed secret relationship. Independent key imports can repeat numerical metadata/P-table preparation; no implicit key cache is introduced.

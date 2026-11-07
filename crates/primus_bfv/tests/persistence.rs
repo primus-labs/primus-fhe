@@ -3,7 +3,9 @@ use primus_bfv::evaluation::{
     BfvAutomorphism, BfvKeySwitcher, BfvModulusSwitch, BfvMultiplication,
 };
 use primus_bfv::keys::BfvEvaluationKeyConfig;
-use primus_bfv::{BfvClient, BfvContext, BfvParameters, PublicObjectLimits};
+use primus_bfv::{
+    BfvCiphertextBindingError, BfvClient, BfvContext, BfvParameters, PublicObjectLimits,
+};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_distr::ErrorDistribution;
 use primus_glwe_rns::SecretKeyDistr;
@@ -179,6 +181,18 @@ fn malformed_storage_limits_context_role_and_sampler_descriptions_are_checked() 
     let pk = alice.public_key(&mut rng);
     let ct = context.new_ciphertext(0);
     let encoded = context.export_ciphertext(&ct, 0).unwrap();
+    let mut edited = ct;
+    edited.as_mut()[N] = Q[1];
+    let error = context.export_ciphertext(&edited, 0).unwrap_err();
+    assert!(matches!(
+        std::error::Error::source(&error)
+            .and_then(|source| source.downcast_ref::<BfvCiphertextBindingError>()),
+        Some(BfvCiphertextBindingError::NonCanonical {
+            index: N,
+            value,
+            modulus,
+        }) if *value == Q[1] && *modulus == Q[1]
+    ));
     let mut invalid = encoded.clone();
     store_u64(&mut invalid, encoded.len() - 8, u64::MAX);
     assert!(context.import_ciphertext(&invalid, limits).is_err());

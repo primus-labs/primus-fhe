@@ -41,7 +41,7 @@ struct LowerLevel {
 /// Clients, evaluators and public encryptors borrow this owner without cloning.
 pub struct BgvContext {
     identity: Arc<()>,
-    pub(crate) public_ntt_digest: std::sync::OnceLock<[u8; 32]>,
+    pub(crate) public_descriptor: std::sync::OnceLock<Vec<u8>>,
     parameters: BgvParameters,
     table: Arc<U64DcrtTable>,
     lower_levels: Vec<LowerLevel>,
@@ -129,7 +129,7 @@ impl BgvContext {
         }
         Self {
             identity: Arc::new(()),
-            public_ntt_digest: std::sync::OnceLock::new(),
+            public_descriptor: std::sync::OnceLock::new(),
             parameters,
             table,
             lower_levels,
@@ -287,8 +287,12 @@ impl BgvContext {
         self.validate_correction_factor(ciphertext.correction_factor())?;
         let n = self.parameters().poly_length().get();
         let qs = self.base_q(level).moduli_values();
-        for (limb_index, limb) in ciphertext.as_ref().chunks_exact(n).enumerate() {
-            let modulus = qs[limb_index % qs.len()];
+        for (limb_index, (limb, &modulus)) in ciphertext
+            .as_ref()
+            .chunks_exact(n)
+            .zip(qs.iter().cycle())
+            .enumerate()
+        {
             for (offset, &value) in limb.iter().enumerate() {
                 if value >= modulus {
                     return Err(BgvCiphertextBindingError::NonCanonical {

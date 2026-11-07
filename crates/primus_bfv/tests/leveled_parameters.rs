@@ -76,17 +76,27 @@ fn admitted_depth_reserves_all_future_layers_and_every_work_basis_is_smaller() {
                     assert_eq!(plan.steps().len(), depth);
                     let mut previous = integer(plan.fresh_error_bound());
                     let mut key_resources = std::collections::BTreeMap::new();
+                    let mut shared_key_p = None;
                     for step in plan.steps() {
-                        if let BfvEvaluationKeyConfig::Hybrid(parameters) = step.key_config() {
-                            let again = step.key_config();
-                            let BfvEvaluationKeyConfig::Hybrid(again) = again else {
-                                unreachable!()
-                            };
-                            assert!(std::sync::Arc::ptr_eq(&parameters, &again));
-                            if let Some(previous) =
-                                key_resources.insert(step.working_level(), parameters.clone())
-                            {
-                                assert!(std::sync::Arc::ptr_eq(&previous, &parameters));
+                        match step.key_config() {
+                            BfvEvaluationKeyConfig::Hybrid(parameters) => {
+                                let again = step.key_config();
+                                let BfvEvaluationKeyConfig::Hybrid(again) = again else {
+                                    unreachable!()
+                                };
+                                assert!(std::sync::Arc::ptr_eq(&parameters, &again));
+                                let first = shared_key_p
+                                    .get_or_insert_with(|| parameters.auxiliary().clone());
+                                assert!(std::sync::Arc::ptr_eq(first, parameters.auxiliary()));
+                                if let Some(previous) =
+                                    key_resources.insert(step.working_level(), parameters.clone())
+                                {
+                                    assert!(std::sync::Arc::ptr_eq(&previous, &parameters));
+                                }
+                            }
+                            BfvEvaluationKeyConfig::PreparedRadix(_) => {}
+                            BfvEvaluationKeyConfig::Radix(_) => {
+                                panic!("admission must share prepared radix metadata");
                             }
                         }
                         assert_eq!(integer(step.input_error_bound()), previous);

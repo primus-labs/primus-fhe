@@ -9,6 +9,9 @@ use primus_rns::{RNSBase, RnsError};
 use primus_shape::PolyLength;
 use std::sync::Arc;
 
+mod request;
+pub use request::BfvLeveledRequest;
+
 pub(crate) const DEFAULT_DECODER_MODULUS: u64 = (1 << 61) - 1;
 
 /// Invalid BFV geometry, codec, sampling state or fresh private recovery bound.
@@ -83,8 +86,51 @@ impl BfvParameters {
         secret_key_distr: SecretKeyDistr,
         error_distribution: ErrorDistribution,
     ) -> Result<Self, BfvParametersError> {
+        Self::try_with_owned_moduli(
+            poly_length,
+            plain_modulus,
+            gamma_modulus,
+            cipher_moduli.to_vec(),
+            secret_key_distr,
+            error_distribution,
+        )
+    }
+
+    pub(crate) fn try_with_owned_moduli(
+        poly_length: PolyLength,
+        plain_modulus: BarrettModulus<u64>,
+        gamma_modulus: BarrettModulus<u64>,
+        cipher_moduli: Vec<BarrettModulus<u64>>,
+        secret_key_distr: SecretKeyDistr,
+        error_distribution: ErrorDistribution,
+    ) -> Result<Self, BfvParametersError> {
+        Self::try_with_decoder_modulus_on_basis(
+            poly_length,
+            plain_modulus,
+            gamma_modulus,
+            RNSBase::from_owned_moduli(cipher_moduli)?,
+            secret_key_distr,
+            error_distribution,
+        )
+    }
+
+    /// Prepares parameters using an existing ordered Q basis and explicit gamma.
+    ///
+    /// Reuses the basis's CRT arithmetic. The BFV codec and samplers are
+    /// prepared for this scheme and its supplied sampling laws.
+    ///
+    /// # Errors
+    /// Rejects invalid layout, codec parameters, sampling laws or insufficient
+    /// fresh private recovery margin.
+    pub fn try_with_decoder_modulus_on_basis(
+        poly_length: PolyLength,
+        plain_modulus: BarrettModulus<u64>,
+        gamma_modulus: BarrettModulus<u64>,
+        base_q: RNSBase<u64, BarrettModulus<u64>>,
+        secret_key_distr: SecretKeyDistr,
+        error_distribution: ErrorDistribution,
+    ) -> Result<Self, BfvParametersError> {
         let glwe_size = GlweSize::try_new(GlweDimension::new(1), poly_length)?;
-        let base_q = RNSBase::new(cipher_moduli)?;
         let size = RnsGlweSize::try_new(glwe_size, base_q.moduli_count())?;
         let codec = BfvRnsCodec::try_new(plain_modulus, base_q, gamma_modulus)?;
         let sampling = CrtGlweEncryptionParameters::try_with_error_distribution(

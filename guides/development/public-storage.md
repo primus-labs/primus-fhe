@@ -9,6 +9,8 @@
 3. 在这个 context 上调用相应的 `import_*`。接口检查完整数值参数和实际 NTT 表示，再将 owned 结果绑定到接收进程的本地 context/level。
 4. Worker 通过正常 prepared evaluator 工作，导出结果密文；原 client 在原 context 上导入并恢复。不要直接将一个远端 context 的本地 owner 当成原 client 的 owner。
 
+重复认证或比较同一个 context 时，用 `context.public_bytes()` 借用其缓存的公开描述。所有对象的 context 字段也使用这份描述。`to_public_bytes()` 提供独立的字节所有权。方案构造器和对象校验返回的错误保留为类型化 source，可通过 `std::error::Error::source()` 读取。
+
 BGV 密文同时保存实际 correction factor，导入要求 `0<f<p`、`gcd(f,p)=1`。相同 level 的 factor 可以不同，不能只持久化 level/words 后默认 factor1。恢复仍先 centered CRT、模 p，再去除 factor。BFV 保存其独立的 plaintext 与 decoder gamma 参数，不借用 BGV 的消息尺度。
 
 目前保存 degree-one 密文。正常 typed quadratic 运算仍可用，但不额外提供 raw quadratic 公共存储入口；有真实部署消费者后再扩展。此格式不导入 SEAL/OpenFHE 的密文或 key。

@@ -73,8 +73,9 @@ Q/key-P域、secret/error laws和hard supports；状态为`NotEvaluated`，不�
 
 Radix16 和 Hybrid alpha1 均得到上表。按两组 N/Q、两种 t、两种后端和深度 1 至 8
 核对 64 个请求，其中 38 个通过，26 个因预算不足被拒绝。计划按工作层级共享已准备的
-不可变 Hybrid 参数，`step.key_config()` 仅克隆配置中的 Arc。计算P与key P角色
-分开；即使某些prime数值相同，也不把计算P算入密钥暴露模数。
+Radix 或 Hybrid 参数，Hybrid 的各层共用密钥 P 基和变换表。
+`step.key_config()` 仅克隆配置中的 Arc。安全估计使用实际密钥 QP 域，乘法计算 P
+单独用于 scale-and-round。
 
 `step.relinearization_key`检查client的实际context指针。`step.prepare`检查key的本地
 context及实际level/backend，但不能证明不透明key的真实secret、采样来源或ordinary/collective身份。

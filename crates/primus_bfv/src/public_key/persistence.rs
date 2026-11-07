@@ -7,7 +7,8 @@ use primus_glwe_rns::persistence::{
 impl BfvContext {
     /// Encodes a public zero-encryption key, preserving the exact native context.
     /// # Errors
-    /// Rejects a foreign owner, incomplete storage or noncanonical residues.
+    /// Rejects a foreign owner or incomplete storage. Generated and imported
+    /// keys already own canonical residues.
     pub fn export_public_key(&self, key: &BfvPublicKey) -> Result<Vec<u8>, Error> {
         self.check_ciphertext(&key.ciphertext, 0)
             .map_err(Error::parameters)?;
