@@ -12,7 +12,7 @@ use primus_decompose::DecompositionConfig;
 use primus_factor::{FactorMul, ShoupFactor};
 use primus_modulus::BarrettModulus;
 use primus_ntt::{NttError, NttTable, U64DcrtTable};
-use primus_reduce::{Reduce, ReduceAdd, ReduceInv, ReduceMul, ReduceSub};
+use primus_reduce::{Reduce, ReduceInv, ReduceMulAddSlice, ReduceSub};
 use primus_rns::{
     CenteredBaseConverter, CenteredConversionWorkspace, HybridRNS, HybridRNSPartitioning, RNSBase,
     Residues, RnsError,
@@ -701,13 +701,8 @@ fn add_limb(
     let start = index * digit.len();
     for component in 0..2 {
         let offset = component * qp_len + start;
-        for ((acc, &key), &digit) in accumulator[offset..offset + digit.len()]
-            .iter_mut()
-            .zip(&column[offset..offset + digit.len()])
-            .zip(digit)
-        {
-            *acc = modulus.reduce_add(*acc, modulus.reduce_mul(key, digit));
-        }
+        let range = offset..offset + digit.len();
+        modulus.reduce_add_mul_slice_assign(&mut accumulator[range.clone()], &column[range], digit);
     }
 }
 fn gcd(mut a: u64, mut b: u64) -> u64 {
