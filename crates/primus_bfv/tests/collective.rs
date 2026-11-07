@@ -339,3 +339,71 @@ fn checked_payloads_instances_levels_and_own_share_embedding() {
         .unwrap();
     assert!(output.as_ref().iter().all(|&x| x == 0));
 }
+
+#[test]
+fn relinearization_state_and_bodies_stay_bound_to_their_round_and_role() {
+    let context = context(N);
+    let mut rng = StdRng::seed_from_u64(0x05_bf21);
+    let owners = [share(&context, &mut rng), share(&context, &mut rng)];
+    let level = 1;
+    for config in [
+        BfvEvaluationKeyConfig::from(config()),
+        context
+            .hybrid_key_parameters(level, 1, &[1_099_511_626_049])
+            .unwrap()
+            .into(),
+    ] {
+        let plan = BfvCollectiveRelinearization::try_new(&context, level, config.clone(), &mut rng)
+            .unwrap();
+        let other = BfvCollectiveRelinearization::try_from_common_mask(
+            &context,
+            level,
+            config.clone(),
+            plan.common_mask().to_vec(),
+        )
+        .unwrap();
+        let (message, state) = plan.start(&owners[0], &mut rng).unwrap();
+        let mut other_sum = other.aggregate(2).unwrap();
+        assert!(matches!(
+            other_sum.add(&message),
+            Err(BfvCollectiveError::Binding)
+        ));
+        let mut pending = Vec::new();
+        for owner in &owners {
+            let (message, state) = other.start(owner, &mut rng).unwrap();
+            let received = other
+                .try_import_contribution(message.into_residues())
+                .unwrap();
+            other_sum.add(&received).unwrap();
+            pending.push(state);
+        }
+        let round1 = other.freeze_round1(other_sum).unwrap();
+        let mut rejected_rng = StdRng::seed_from_u64(0x05_bf22);
+        let mut untouched_rng = StdRng::seed_from_u64(0x05_bf22);
+        assert!(matches!(
+            state.round2(&round1, &mut rejected_rng),
+            Err(BfvCollectiveError::Binding)
+        ));
+        assert_eq!(rejected_rng.next_u64(), untouched_rng.next_u64());
+        assert!(matches!(
+            round1.aggregate(1),
+            Err(BfvCollectiveError::Count)
+        ));
+
+        let switching =
+            BfvCollectiveSwitchingKey::try_new(&context, level, config, &mut rng).unwrap();
+        let mut switch_sum = switching.aggregate(2).unwrap();
+        let mut round2_sum = round1.aggregate(2).unwrap();
+        for state in pending {
+            let message = state.round2(&round1, &mut rng).unwrap();
+            assert_eq!(message.as_residues().len(), switching.contribution_len());
+            assert!(matches!(
+                switch_sum.add(&message),
+                Err(BfvCollectiveError::Binding)
+            ));
+            round2_sum.add(&message).unwrap();
+        }
+        let key = round1.finalize(round2_sum).unwrap();
+        assert!(BfvRelinearizer::try_new(&context, &key).is_ok());
+    }
+}

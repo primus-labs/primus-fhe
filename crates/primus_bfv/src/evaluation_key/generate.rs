@@ -18,14 +18,13 @@ use super::{
 };
 
 impl NativeEvaluationKey {
-    pub(super) fn noise<R: rand::Rng + rand::CryptoRng>(
+    pub(super) fn noise_to<R: rand::Rng + rand::CryptoRng>(
         &self,
         context: &BfvContext,
+        output: &mut [u64],
         rng: &mut R,
-    ) -> Vec<u64> {
-        let mut output = vec![0; self.key_poly_len()];
-        sample_noise_to(&self.basis, context, &mut output, rng);
-        output
+    ) {
+        sample_noise_to(&self.basis, context, output, rng);
     }
 
     pub(super) fn secret(

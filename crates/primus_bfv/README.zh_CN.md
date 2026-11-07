@@ -103,7 +103,8 @@ Codec 只在恢复界内精确，不是任意 phase 的精确舍入 oracle。
 
 Collective plan 借用各方 `DcrtGlweSecretKey<u64>`，要求精确 CBD1/CBD21 分布。
 外围协议负责 roster/session/role 认证及实际 NTT/secret provenance；数量和分布 metadata
-不能证明这些来源。两轮私有 state 采用消费式语义并擦除。
+不能证明这些来源。用 `into_residues` 将公开载荷移入传输层。各方保留自己的秘密
+应答状态，在冻结首轮后消费该状态，状态销毁时擦除秘密缓冲区。
 Fresh lookup 独立使用 `BfvFreshLookupKey` 与 `BfvRawQuadraticAggregate`，只执行一次
 **unscaled** relin，不走普通 BFV scale-and-round；其 noise/ephemeral 必须独立于
 selector 输入，包括间接 seed 依赖。`partial_phase_to` 只写 c1*s_i，发布前仍须由协议

@@ -42,6 +42,7 @@ impl NativeEvaluationKey {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn digit_count(&self) -> usize {
         match &self.basis {
             NativeEvaluationBasis::Radix(parameters) => parameters.basis().level_count().get(),

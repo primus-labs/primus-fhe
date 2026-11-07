@@ -130,6 +130,9 @@ geometry, ordered Q and declared law before sampling. This family requires exact
 CBD1 (`SparseTernary`) shares and CBD21 errors. Keep the sole raw secret during
 setup, then consume it into a client for actual input/recovery. Two-round state
 is non-cloneable and erases its key-domain share and ephemeral on all exits.
+The coordinator freezes public contributions. Move their payload buffers into
+transport with `into_residues`, then consume each owner's private response
+state against the frozen first round.
 Hybrid key masks/contributions use QP; public-key and additive inputs remain Q.
 
 Authenticate context, role, source/target, roster and round before checked import.

@@ -232,7 +232,7 @@ fn collective_two_round_relinearization_matches_full_secret_square_and_native_co
     let mut states = Vec::new();
     for client in &clients {
         let (message, state) = setup.start(client, &mut rng).unwrap();
-        first.add(&message).unwrap();
+        first.add_imported(message.into_residues()).unwrap();
         states.push(state)
     }
     let frozen = setup.freeze_round_one(first).unwrap();
@@ -492,6 +492,22 @@ fn collective_linear_keys_and_rejection_boundaries() {
             .is_err()
     );
     assert!(relin.try_import_round_two(&frozen, vec![]).is_err());
+    let other_relin = BgvCollectiveRelinearization::try_from_common_masks(
+        &context,
+        1,
+        config(),
+        relin.common_masks().to_vec(),
+    )
+    .unwrap();
+    let foreign_frozen = other_relin
+        .try_import_frozen_round_one(frozen.as_residues().to_vec(), 1)
+        .unwrap();
+    let (_, pending) = relin.start(&clients[0], &mut rng).unwrap();
+    assert!(matches!(
+        pending.round2(&foreign_frozen, &mut request_rng),
+        Err(BgvCollectiveError::Binding)
+    ));
+    assert_eq!(request_rng.next_u64(), expected_rng.next_u64());
     let mut partial = DcrtPolynomial(vec![17; context.rns_poly_len(1)]);
     let before = partial.as_ref().to_vec();
     let mut bad_input = BgvCiphertext::from_raw(input.as_ref().to_vec());

@@ -1,5 +1,13 @@
+use super::super::BfvCollectiveRelinearization;
 use super::*;
-use crate::BfvParameters;
+use crate::{
+    BfvClient, BfvContext, BfvParameters, ErrorDistribution, SecretKeyDistr,
+    collective::BfvRawQuadraticAggregate,
+    evaluation_key::{
+        BfvEvaluationKeyConfig,
+        tests::{inverse, power},
+    },
+};
 use primus_decompose::{DecompositionBaseLog, DecompositionConfig};
 use primus_modulus::BarrettModulus;
 use primus_shape::PolyLength;
@@ -39,14 +47,14 @@ fn coefficients(context: &BfvContext, values: &[u64]) -> Vec<u64> {
     values
         .chunks_exact(n)
         .zip(context.codec(0).moduli_values())
-        .flat_map(|(values, &q)| super::super::tests::inverse(values, q))
+        .flat_map(|(values, &q)| inverse(values, q))
         .collect()
 }
 fn key_coefficients(setup: &EvaluationSetup<'_>, values: &[u64]) -> Vec<u64> {
     values
         .chunks_exact(setup.native.n)
         .zip(setup.native.key_moduli_values())
-        .flat_map(|(values, &q)| super::super::tests::inverse(values, q))
+        .flat_map(|(values, &q)| inverse(values, q))
         .collect()
 }
 fn signed(values: &[u64], q: u64) -> Vec<i64> {
@@ -305,7 +313,7 @@ fn two_round_cross_terms_and_error_law_match_independent_coefficient_oracle() {
                         .zip(&actual_limbs)
                         .zip(q_values.iter().map(|&q| &modulus / q))
                     {
-                        let inverse = super::super::tests::power(&hat % q, q - 2, q);
+                        let inverse = power(&hat % q, q - 2, q);
                         phase += IBig::from(values[i]) * inverse * &hat;
                     }
                     let mut error = (phase - &delta * square[i]) % &modulus;

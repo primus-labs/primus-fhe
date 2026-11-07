@@ -180,6 +180,11 @@ allocation across paired BFV/BGV roles and move it into an online client once.
 The online BGV additive-input entry continues to borrow its client.
 Transport authenticates the backend, active Q, key P, partitions, actual NTT
 convention, role, session and source/target identities before import.
+Use `as_residues` to borrow a contribution body or `into_residues` to move its
+public buffer into transport. The receiving plan validates the payload and
+assigns its own local binding. Round one returns the public contribution and
+a separate owner-local response state. The coordinator freezes the public sum,
+and `round2` consumes the owner's response state against that sum.
 
 For a common A_j and individual CBD1 shares/ephemeral s_i,u_i, Hybrid two-round
 S² generation uses

@@ -118,7 +118,9 @@ primes; NTT rootability does not prove primality. Optimized q_i must be below 2â
 Collective plans borrow individual `DcrtGlweSecretKey<u64>` shares and require
 exact CBD1/CBD21 laws. Protocol callers authenticate roster/session/role and
 actual NTT/secret provenance; count and distribution metadata cannot prove them.
-Two-round private states are consuming and erasing. Fresh lookup uses a separate
+Move public payloads into transport with `into_residues`. The owner retains the
+private response state and consumes it against the frozen first round. That
+state erases its secret scratch on drop. Fresh lookup uses a separate
 `BfvFreshLookupKey` and `BfvRawQuadraticAggregate` for one **unscaled** relin,
 without ordinary BFV scale-and-round; its noise/ephemeral must be independent of
 selector inputs, including indirect seed dependencies. `partial_phase_to` releases

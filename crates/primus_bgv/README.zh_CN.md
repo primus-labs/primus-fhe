@@ -113,8 +113,9 @@ Flexilect 仍采用独立的 `q_i≡1 mod p` 降模策略、factor1 密文及 `Q
 Collective plan 借用每个 owner 的 `DcrtGlweSecretKey<u64>`，采样前检查数值 geometry、
 有序 Q 和声明的 law。该族要求精确 CBD1（`SparseTernary`）share 与 CBD21 error。
 建钥期间唯一持有原生秘密，实际输入/恢复时再消费进 client。两轮 state 不可克隆，
-各退出路径均擦除 key-domain share 与 ephemeral。Hybrid key 的 masks/贡献使用 QP，
-公钥和 additive input 仍使用 Q。
+各退出路径均擦除 key-domain share 与 ephemeral。公开贡献用 `into_residues`
+将载荷移入传输层。协调方冻结首轮结果后，各方消费本地秘密应答状态。
+Hybrid key 的 masks/贡献使用 QP，公钥和 additive input 使用 Q。
 
 在 checked import 前认证 context、role、source/target、roster 和 round。
 调用方拒绝重复/缺失 owner，绑定准确冻结的首轮结果并执行单次策略；metadata 不证明
