@@ -597,15 +597,22 @@ fn streaming_import_matches_modular_sum_and_permanently_rejects_interrupted_bodi
         .flat_map(|&q| (0..N).map(move |j| if j % 2 == 0 { q - 1 } else { j as u64 }))
         .collect();
     let message = plan.try_import(body.clone()).unwrap();
+    let encoded: Vec<_> = body.iter().map(|value| value.to_le_bytes()).collect();
     let mut streamed = plan.aggregate();
+    let mut little_endian = plan.aggregate();
     let mut ordinary = plan.aggregate();
     for _ in 0..2 {
         streamed.add_imported(body.iter().copied()).unwrap();
+        little_endian.add_imported_le_words(&encoded).unwrap();
         ordinary.add(&message).unwrap();
     }
     let streamed = plan.finalize(streamed).unwrap();
     let ordinary = plan.finalize(ordinary).unwrap();
     assert_eq!(streamed.as_ref(), ordinary.as_ref());
+    assert_eq!(
+        plan.finalize(little_endian).unwrap().as_ref(),
+        ordinary.as_ref()
+    );
     for ((actual, source), &q) in streamed.as_ref()[..len]
         .as_chunks::<N>()
         .0
@@ -625,20 +632,32 @@ fn streaming_import_matches_modular_sum_and_permanently_rejects_interrupted_bodi
         if invalid.len() == len {
             invalid[len - 1] = Q[Q.len() - 1];
         }
-        let mut aggregate = plan.aggregate();
-        assert!(aggregate.add_imported(invalid).is_err());
-        assert!(matches!(
-            aggregate.add(&message),
-            Err(BgvCollectiveError::Aborted)
-        ));
-        assert!(matches!(
-            aggregate.add_imported(body.iter().copied()),
-            Err(BgvCollectiveError::Aborted)
-        ));
-        assert!(matches!(
-            plan.finalize(aggregate),
-            Err(BgvCollectiveError::Aborted)
-        ));
+        let invalid_encoded: Vec<_> = invalid.iter().map(|value| value.to_le_bytes()).collect();
+        for little_endian in [false, true] {
+            let mut aggregate = plan.aggregate();
+            let result = if little_endian {
+                aggregate.add_imported_le_words(&invalid_encoded)
+            } else {
+                aggregate.add_imported(invalid.iter().copied())
+            };
+            assert!(result.is_err());
+            assert!(matches!(
+                aggregate.add(&message),
+                Err(BgvCollectiveError::Aborted)
+            ));
+            assert!(matches!(
+                aggregate.add_imported(body.iter().copied()),
+                Err(BgvCollectiveError::Aborted)
+            ));
+            assert!(matches!(
+                aggregate.add_imported_le_words(&encoded),
+                Err(BgvCollectiveError::Aborted)
+            ));
+            assert!(matches!(
+                plan.finalize(aggregate),
+                Err(BgvCollectiveError::Aborted)
+            ));
+        }
     }
     let mut aggregate = plan.aggregate();
     let mut index = 0;
