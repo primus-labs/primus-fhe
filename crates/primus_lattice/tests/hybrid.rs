@@ -87,6 +87,16 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
     for (q_values, p_values, dnum) in [
         (vec![193, 257, 449], vec![577], 3),
         (
+            vec![1_152_921_422_732_787_713, 1_152_921_409_847_689_217],
+            vec![1_152_921_504_606_584_833],
+            2,
+        ),
+        (
+            vec![1_152_921_422_732_787_713, 1_125_874_136_383_489],
+            vec![1_125_899_904_679_937],
+            2,
+        ),
+        (
             vec![
                 1_125_899_906_248_961,
                 1_125_899_906_051_329,
@@ -148,6 +158,9 @@ fn native_hybrid_matches_integer_tensors_and_phase_bounds_at_all_prefixes() {
             for mode in [
                 HybridModDown::Centered,
                 HybridModDown::PlaintextPreserving(17),
+                HybridModDown::PlaintextPreserving(65537),
+                HybridModDown::PlaintextPreserving(q_values[0]),
+                HybridModDown::PlaintextPreserving(u64::MAX),
             ] {
                 let t = match mode {
                     HybridModDown::Centered => 1,
